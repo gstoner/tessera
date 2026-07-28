@@ -825,6 +825,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "fused per-parameter update kernel (generate-rocm-"
                             "optimizer-kernel, kind StrAttr-selected; host "
                             "computes the 1-β^t bias correction). f32",
+    "rocm_adafactor_compiled": "AMD GPU RDNA Adafactor — one compiler-owned "
+                            "ten-entry gfx1151 HSACO updates row and column or "
+                            "full moments and carries deterministic factored "
+                            "and full-moment adjoints. f32",
+    "rocm_adafactor_bwd_compiled": "AMD GPU RDNA Adafactor backward — ordered "
+                            "forward-state recompute followed by unique-owner "
+                            "mean/row/column reductions and elementwise VJP, "
+                            "or one-launch full-moment VJP. f32",
     "rocm_training_loss_sgd_compiled": "Compiler-generated gfx1151 one-launch "
                             "loss backward to SGD training fusion with dynamic "
                             "extent and no prediction-gradient allocation",
@@ -990,6 +998,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "gated_deltanet / kimi_delta_attention / "
                             "modified_delta_attention (erase/modified/gate/beta/"
                             "decay flags); f16/bf16/f32 storage, f32 compute",
+    "rocm_deltanet_bwd_compiled": "AMD GPU RDNA DeltaNet backward packaged as "
+                            "a compiler-generated five-entry FP32 program: "
+                            "checkpoint, affine chunk summary, deterministic "
+                            "prefix, parallel chunk fill, and reverse. One "
+                            "(batch,head) owner avoids atomics and produces "
+                            "dQ/dK/dV plus gate/beta/decay gradients, including "
+                            "the exact modified-normalization derivative",
     "x86_deltanet_compiled": "x86 CPU gated/delta linear-attention — the "
                             "hand-written AVX-512 causal delta-rule sequential "
                             "scan (avx512_deltanet_f32, runtime-loaded): per (b,h) "
@@ -998,6 +1013,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "kimi_delta_attention / modified_delta_attention. f32, "
                             "matches numpy _delta_attention_impl. The x86 analog "
                             "of rocm_deltanet_compiled",
+    "x86_deltanet_bwd_compiled": "AVX-512 DeltaNet backward with caller-owned "
+                            "resident workspace, exact modified-normalization "
+                            "derivatives, parallel affine chunk summaries, "
+                            "deterministic prefix composition, and reverse chunks",
     "rocm_rope_compiled":   "AMD GPU RDNA rotary-position-embedding the Tessera "
                             "compiler GENERATES (generate-rocm-rope-kernel -> "
                             "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
@@ -2696,6 +2715,34 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "one thread per element; the 1-β^t bias correction computed on "
                "host) HIP-launched. f32, matches the optim.py reference.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_adafactor_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_adafactor_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_adafactor_compiled", runtime_status="success",
+        reason="ROCm Adafactor runs an ordered row/column moment program or "
+               "lower-rank full-moment update from one compiler-owned "
+               "ten-entry gfx1151 HSACO. The physical ABI owns optimizer "
+               "state explicitly. f32.",
+        execution_mode="hip_runtime"),
+    ("rocm", "rocm_adafactor_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_adafactor_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_adafactor_bwd_compiled", runtime_status="success",
+        reason="Compiler-owned gfx1151 Adafactor adjoint recomputes updated "
+               "factored state, then uses deterministic unique-owner mean, "
+               "row, and column reductions before writing parameter, gradient, "
+               "and state VJPs; lower-rank full moments use one launch. f32.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="adafactor", device_proof="device_verified_jit",
+        evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_rocm_optimizer_compiled.py",
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="recompute_optimizer_state",
+        residual_tradeoff=(
+            "Factored backward recomputes updated row/column/mean state before "
+            "unique-owner reverse reductions; full-moment uses one VJP launch."
+        ),
+    ),
     ("rocm", "rocm_sgd_bwd_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_sgd_bwd_compiled",
         execution_kind="native_gpu", executable=True,
@@ -3178,6 +3225,28 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "recurrence for gated_deltanet / kimi_delta_attention / "
                "modified_delta_attention. f16/bf16/f32 storage, f32 compute.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_deltanet_bwd_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_deltanet_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_deltanet_bwd_compiled", runtime_status="success",
+        reason="ROCm DeltaNet VJP is a compiler-owned five-entry HSACO program: "
+               "FP32 checkpoint, affine chunk summary, deterministic prefix, "
+               "parallel chunk fill, and reverse scheduling with unique "
+               "(batch,head) gradient ownership. Modified normalization uses "
+               "its exact analytic derivative.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="gated_deltanet",
+        backward_aliases=("kimi_delta_attention", "modified_delta_attention"),
+        device_proof="device_verified_jit",
+        evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_rocm_deltanet_compiled.py",
+        proof_build="LLVM/MLIR 23; ROCm 7.14; gfx1151",
+        residual_policy="save_fp32_state_trajectory",
+        residual_tradeoff=(
+            "Checkpoint uses O((S+1)*Dk*Dv) FP32 workspace. Erase-free chunks "
+            "compose affine summaries in parallel; erase-dependent targets "
+            "retain the exact serial checkpoint dependency."
+        )),
     # x86 analog of the ROCm deltanet lane — the AVX-512 causal delta-rule scan
     # (avx512_deltanet_f32) for gated_deltanet / kimi_delta_attention /
     # modified_delta_attention. f32; matches numpy _delta_attention_impl.
@@ -3193,6 +3262,25 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "kimi_delta_attention / modified_delta_attention. f32, matches "
                "numpy _delta_attention_impl.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_deltanet_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_deltanet_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_deltanet_bwd_compiled", runtime_status="success",
+        reason="AVX-512 DeltaNet VJP uses caller-owned resident workspaces and "
+               "parallel affine chunk summaries with deterministic prefix "
+               "composition for erase-free recurrences; erase-dependent "
+               "checkpointing remains exact and parallelizes over batch/head.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="gated_deltanet",
+        backward_aliases=("kimi_delta_attention", "modified_delta_attention"),
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_x86_deltanet_compiled.py",
+        proof_build="clang 23 -mavx512f; x86_64 AVX-512",
+        residual_policy="resident_fp32_state_and_chunk_summaries",
+        residual_tradeoff=(
+            "Affine erase-free chunks consume O(chunks*Dk*Dv) summaries to "
+            "parallelize checkpoint construction; erase falls back exactly."
+        )),
     # Rotary position embedding — interleaved-pair RoPE over [M, D]. vs numpy.
     ("rocm", "rocm_rope_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_rope_compiled",

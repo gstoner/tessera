@@ -48,6 +48,818 @@ struct DeltaNetFlags {
   bool hasDecay = false;
 };
 
+static void emitDeltaNetCheckpointBody(OpBuilder &b, Location loc,
+                                       gpu::GPUFuncOp f, int64_t Dqk,
+                                       int64_t Dv, DeltaNetFlags fl) {
+  Type f32 = b.getF32Type();
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value K = f.getArgument(0), V = f.getArgument(1);
+  Value beta = f.getArgument(2), decay = f.getArgument(3);
+  Value hist = f.getArgument(4), S = f.getArgument(5);
+  Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  auto cf = [&](double v) {
+    return b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(v));
+  };
+  auto addi = [&](Value x, Value y) {
+    return b.create<arith::AddIOp>(loc, x, y).getResult();
+  };
+  auto muli = [&](Value x, Value y) {
+    return b.create<arith::MulIOp>(loc, x, y).getResult();
+  };
+  auto ld = [&](Value m, Value i) {
+    return b.create<memref::LoadOp>(loc, m, ValueRange{i}).getResult();
+  };
+  Value c0 = ci(0), c1 = ci(1), cDk = ci(Dqk), cDv = ci(Dv);
+  Value zero = cf(0.0), one = cf(1.0);
+  Value stateSize = muli(cDk, cDv);
+  Value histStride = muli(addi(S, c1), stateSize);
+  Value histBase = muli(bh, histStride);
+  Value qkBase = muli(muli(bh, S), cDk);
+  Value vBase = muli(muli(bh, S), cDv);
+  Value scalarBase = muli(bh, S);
+
+  auto init = b.create<scf::ForOp>(loc, c0, stateSize, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(init.getBody());
+    b.create<memref::StoreOp>(loc, zero, hist,
+                              ValueRange{addi(histBase, init.getInductionVar())});
+  }
+  auto tokens = b.create<scf::ForOp>(loc, c0, S, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(tokens.getBody());
+    Value t = tokens.getInductionVar();
+    Value oldBase = addi(histBase, muli(t, stateSize));
+    Value newBase = addi(oldBase, stateSize);
+    Value kRow = addi(qkBase, muli(t, cDk));
+    Value vRow = addi(vBase, muli(t, cDv));
+    Value scalar = addi(scalarBase, t);
+    Value a = fl.hasDecay ? ld(decay, scalar) : one;
+    Value bw = fl.hasBeta ? ld(beta, scalar) : one;
+    Value updateScale = one;
+    if (fl.modified) {
+      auto norm2 =
+          b.create<scf::ForOp>(loc, c0, stateSize, c1, ValueRange{zero});
+      {
+        OpBuilder::InsertionGuard gn(b);
+        b.setInsertionPointToStart(norm2.getBody());
+        Value de = norm2.getInductionVar();
+        Value d = b.create<arith::DivUIOp>(loc, de, cDv);
+        Value e = b.create<arith::RemUIOp>(loc, de, cDv);
+        Value target = ld(V, addi(vRow, e));
+        if (fl.erase) {
+          auto vh =
+              b.create<scf::ForOp>(loc, c0, cDk, c1, ValueRange{zero});
+          {
+            OpBuilder::InsertionGuard gv(b);
+            b.setInsertionPointToStart(vh.getBody());
+            Value rd = vh.getInductionVar();
+            Value term = b.create<arith::MulFOp>(
+                loc, ld(K, addi(kRow, rd)),
+                ld(hist, addi(oldBase, addi(muli(rd, cDv), e))));
+            b.create<scf::YieldOp>(
+                loc, ValueRange{b.create<arith::AddFOp>(
+                         loc, vh.getRegionIterArgs()[0], term)});
+          }
+          target = b.create<arith::SubFOp>(
+              loc, target,
+              b.create<arith::MulFOp>(loc, a, vh.getResult(0)));
+        }
+        Value update =
+            b.create<arith::MulFOp>(loc, ld(K, addi(kRow, d)), target);
+        b.create<scf::YieldOp>(
+            loc, ValueRange{b.create<arith::AddFOp>(
+                     loc, norm2.getRegionIterArgs()[0],
+                     b.create<arith::MulFOp>(loc, update, update))});
+      }
+      Value norm = b.create<math::SqrtOp>(loc, norm2.getResult(0));
+      updateScale = b.create<arith::DivFOp>(
+          loc, one, b.create<arith::AddFOp>(loc, one, norm));
+    }
+    auto dl = b.create<scf::ForOp>(loc, c0, cDk, c1);
+    {
+      OpBuilder::InsertionGuard g2(b);
+      b.setInsertionPointToStart(dl.getBody());
+      Value d = dl.getInductionVar();
+      Value kd = ld(K, addi(kRow, d));
+      auto el = b.create<scf::ForOp>(loc, c0, cDv, c1);
+      OpBuilder::InsertionGuard g3(b);
+      b.setInsertionPointToStart(el.getBody());
+      Value e = el.getInductionVar();
+      Value de = addi(muli(d, cDv), e);
+      Value target = ld(V, addi(vRow, e));
+      if (fl.erase) {
+        auto vh = b.create<scf::ForOp>(loc, c0, cDk, c1, ValueRange{zero});
+        {
+          OpBuilder::InsertionGuard g4(b);
+          b.setInsertionPointToStart(vh.getBody());
+          Value rd = vh.getInductionVar();
+          Value term = b.create<arith::MulFOp>(
+              loc, ld(K, addi(kRow, rd)),
+              ld(hist, addi(oldBase, addi(muli(rd, cDv), e))));
+          b.create<scf::YieldOp>(
+              loc, ValueRange{b.create<arith::AddFOp>(
+                       loc, vh.getRegionIterArgs()[0], term)});
+        }
+        target = b.create<arith::SubFOp>(
+            loc, target, b.create<arith::MulFOp>(loc, a, vh.getResult(0)));
+      }
+      Value old = ld(hist, addi(oldBase, de));
+      Value update = b.create<arith::MulFOp>(
+          loc, b.create<arith::MulFOp>(loc, bw, updateScale),
+          b.create<arith::MulFOp>(loc, kd, target));
+      b.create<memref::StoreOp>(
+          loc, b.create<arith::AddFOp>(
+                   loc, b.create<arith::MulFOp>(loc, a, old), update),
+          hist, ValueRange{addi(newBase, de)});
+    }
+  }
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitDeltaNetChunkSummaryBody(OpBuilder &b, Location loc,
+                                         gpu::GPUFuncOp f, int64_t Dqk,
+                                         int64_t Dv, int64_t chunkSize,
+                                         DeltaNetFlags fl) {
+  Type f32 = b.getF32Type();
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value K = f.getArgument(0), V = f.getArgument(1);
+  Value beta = f.getArgument(2), decay = f.getArgument(3);
+  Value scales = f.getArgument(4), updates = f.getArgument(5);
+  Value S = f.getArgument(6), chunks = f.getArgument(7);
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  auto cf = [&](double v) {
+    return b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(v));
+  };
+  auto addi = [&](Value x, Value y) {
+    return b.create<arith::AddIOp>(loc, x, y).getResult();
+  };
+  auto muli = [&](Value x, Value y) {
+    return b.create<arith::MulIOp>(loc, x, y).getResult();
+  };
+  auto ld = [&](Value m, Value i) {
+    return b.create<memref::LoadOp>(loc, m, ValueRange{i}).getResult();
+  };
+  Value c0 = ci(0), c1 = ci(1), cDv = ci(Dv), cDk = ci(Dqk);
+  Value cChunk = ci(chunkSize), zero = cf(0.0), one = cf(1.0);
+  Value stateSize = muli(cDk, cDv);
+  Value task = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value bh = b.create<arith::DivUIOp>(loc, task, chunks);
+  Value chunk = b.create<arith::RemUIOp>(loc, task, chunks);
+  Value begin = muli(chunk, cChunk);
+  Value candidateEnd = addi(begin, cChunk);
+  Value end = b.create<arith::SelectOp>(
+      loc, b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+                                   candidateEnd, S),
+      candidateEnd, S);
+  Value updateBase = muli(task, stateSize);
+  auto init = b.create<scf::ForOp>(loc, c0, stateSize, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(init.getBody());
+    b.create<memref::StoreOp>(
+        loc, zero, updates,
+        ValueRange{addi(updateBase, init.getInductionVar())});
+  }
+  auto tokens =
+      b.create<scf::ForOp>(loc, begin, end, c1, ValueRange{one});
+  {
+    OpBuilder::InsertionGuard gt(b);
+    b.setInsertionPointToStart(tokens.getBody());
+    Value t = tokens.getInductionVar();
+    Value qkRow = muli(addi(muli(bh, S), t), cDk);
+    Value vRow = muli(addi(muli(bh, S), t), cDv);
+    Value scalar = addi(muli(bh, S), t);
+    Value a = fl.hasDecay ? ld(decay, scalar) : one;
+    Value weight = fl.hasBeta ? ld(beta, scalar) : one;
+    Value inv = one;
+    if (fl.modified) {
+      auto norm2 =
+          b.create<scf::ForOp>(loc, c0, stateSize, c1, ValueRange{zero});
+      {
+        OpBuilder::InsertionGuard gn(b);
+        b.setInsertionPointToStart(norm2.getBody());
+        Value de = norm2.getInductionVar();
+        Value d = b.create<arith::DivUIOp>(loc, de, cDv);
+        Value e = b.create<arith::RemUIOp>(loc, de, cDv);
+        Value update = b.create<arith::MulFOp>(
+            loc, ld(K, addi(qkRow, d)), ld(V, addi(vRow, e)));
+        b.create<scf::YieldOp>(
+            loc, ValueRange{b.create<arith::AddFOp>(
+                     loc, norm2.getRegionIterArgs()[0],
+                     b.create<arith::MulFOp>(loc, update, update))});
+      }
+      inv = b.create<arith::DivFOp>(
+          loc, one,
+          b.create<arith::AddFOp>(
+              loc, one, b.create<math::SqrtOp>(loc, norm2.getResult(0))));
+    }
+    auto state = b.create<scf::ForOp>(loc, c0, stateSize, c1);
+    {
+      OpBuilder::InsertionGuard gs(b);
+      b.setInsertionPointToStart(state.getBody());
+      Value de = state.getInductionVar();
+      Value d = b.create<arith::DivUIOp>(loc, de, cDv);
+      Value e = b.create<arith::RemUIOp>(loc, de, cDv);
+      Value old = ld(updates, addi(updateBase, de));
+      Value update = b.create<arith::MulFOp>(
+          loc, b.create<arith::MulFOp>(loc, weight, inv),
+          b.create<arith::MulFOp>(
+              loc, ld(K, addi(qkRow, d)), ld(V, addi(vRow, e))));
+      b.create<memref::StoreOp>(
+          loc, b.create<arith::AddFOp>(
+                   loc, b.create<arith::MulFOp>(loc, a, old), update),
+          updates, ValueRange{addi(updateBase, de)});
+    }
+    b.create<scf::YieldOp>(
+        loc, ValueRange{b.create<arith::MulFOp>(
+                 loc, tokens.getRegionIterArgs()[0], a)});
+  }
+  b.create<memref::StoreOp>(loc, tokens.getResult(0), scales,
+                            ValueRange{task});
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitDeltaNetChunkPrefixBody(OpBuilder &b, Location loc,
+                                        gpu::GPUFuncOp f, int64_t Dqk,
+                                        int64_t Dv, int64_t chunkSize) {
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value scales = f.getArgument(0), updates = f.getArgument(1);
+  Value hist = f.getArgument(2), S = f.getArgument(3);
+  Value chunks = f.getArgument(4);
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  auto addi = [&](Value x, Value y) {
+    return b.create<arith::AddIOp>(loc, x, y).getResult();
+  };
+  auto muli = [&](Value x, Value y) {
+    return b.create<arith::MulIOp>(loc, x, y).getResult();
+  };
+  auto ld = [&](Value m, Value i) {
+    return b.create<memref::LoadOp>(loc, m, ValueRange{i}).getResult();
+  };
+  Value c0 = ci(0), c1 = ci(1), cDv = ci(Dv), cDk = ci(Dqk);
+  Value cChunk = ci(chunkSize);
+  Value stateSize = muli(cDk, cDv);
+  Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value histBase = muli(bh, muli(addi(S, c1), stateSize));
+  auto init = b.create<scf::ForOp>(loc, c0, stateSize, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(init.getBody());
+    b.create<memref::StoreOp>(
+        loc, b.create<arith::ConstantOp>(
+                 loc, b.getF32Type(), b.getF32FloatAttr(0.0)),
+        hist, ValueRange{addi(histBase, init.getInductionVar())});
+  }
+  auto prefix = b.create<scf::ForOp>(loc, c0, chunks, c1);
+  {
+    OpBuilder::InsertionGuard gp(b);
+    b.setInsertionPointToStart(prefix.getBody());
+    Value chunk = prefix.getInductionVar();
+    Value task = addi(muli(bh, chunks), chunk);
+    Value begin = muli(chunk, cChunk);
+    Value candidateEnd = addi(begin, cChunk);
+    Value end = b.create<arith::SelectOp>(
+        loc, b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+                                     candidateEnd, S),
+        candidateEnd, S);
+    Value oldBase = addi(histBase, muli(begin, stateSize));
+    Value nextBase = addi(histBase, muli(end, stateSize));
+    Value updateBase = muli(task, stateSize);
+    Value scale = ld(scales, task);
+    auto state = b.create<scf::ForOp>(loc, c0, stateSize, c1);
+    OpBuilder::InsertionGuard gs(b);
+    b.setInsertionPointToStart(state.getBody());
+    Value de = state.getInductionVar();
+    b.create<memref::StoreOp>(
+        loc, b.create<arith::AddFOp>(
+                 loc, b.create<arith::MulFOp>(
+                          loc, scale, ld(hist, addi(oldBase, de))),
+                 ld(updates, addi(updateBase, de))),
+        hist, ValueRange{addi(nextBase, de)});
+  }
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitDeltaNetChunkFillBody(OpBuilder &b, Location loc,
+                                      gpu::GPUFuncOp f, int64_t Dqk,
+                                      int64_t Dv, int64_t chunkSize,
+                                      DeltaNetFlags fl) {
+  Type f32 = b.getF32Type();
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value K = f.getArgument(0), V = f.getArgument(1);
+  Value beta = f.getArgument(2), decay = f.getArgument(3);
+  Value hist = f.getArgument(4), scratch = f.getArgument(5);
+  Value S = f.getArgument(6), chunks = f.getArgument(7);
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  auto cf = [&](double v) {
+    return b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(v));
+  };
+  auto addi = [&](Value x, Value y) {
+    return b.create<arith::AddIOp>(loc, x, y).getResult();
+  };
+  auto muli = [&](Value x, Value y) {
+    return b.create<arith::MulIOp>(loc, x, y).getResult();
+  };
+  auto ld = [&](Value m, Value i) {
+    return b.create<memref::LoadOp>(loc, m, ValueRange{i}).getResult();
+  };
+  Value c0 = ci(0), c1 = ci(1), cDv = ci(Dv), cDk = ci(Dqk);
+  Value cChunk = ci(chunkSize), zero = cf(0.0), one = cf(1.0);
+  Value stateSize = muli(cDk, cDv);
+  Value task = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value bh = b.create<arith::DivUIOp>(loc, task, chunks);
+  Value chunk = b.create<arith::RemUIOp>(loc, task, chunks);
+  Value begin = muli(chunk, cChunk);
+  Value candidateEnd = addi(begin, cChunk);
+  Value end = b.create<arith::SelectOp>(
+      loc, b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+                                   candidateEnd, S),
+      candidateEnd, S);
+  Value histBase = muli(bh, muli(addi(S, c1), stateSize));
+  Value boundary = addi(histBase, muli(begin, stateSize));
+  Value scratchBase = muli(task, stateSize);
+  auto copy = b.create<scf::ForOp>(loc, c0, stateSize, c1);
+  {
+    OpBuilder::InsertionGuard gc(b);
+    b.setInsertionPointToStart(copy.getBody());
+    Value de = copy.getInductionVar();
+    b.create<memref::StoreOp>(loc, ld(hist, addi(boundary, de)), scratch,
+                              ValueRange{addi(scratchBase, de)});
+  }
+  auto tokens = b.create<scf::ForOp>(loc, begin, end, c1);
+  {
+    OpBuilder::InsertionGuard gt(b);
+    b.setInsertionPointToStart(tokens.getBody());
+    Value t = tokens.getInductionVar();
+    Value qkRow = muli(addi(muli(bh, S), t), cDk);
+    Value vRow = muli(addi(muli(bh, S), t), cDv);
+    Value scalar = addi(muli(bh, S), t);
+    Value a = fl.hasDecay ? ld(decay, scalar) : one;
+    Value weight = fl.hasBeta ? ld(beta, scalar) : one;
+    Value inv = one;
+    if (fl.modified) {
+      auto norm2 =
+          b.create<scf::ForOp>(loc, c0, stateSize, c1, ValueRange{zero});
+      {
+        OpBuilder::InsertionGuard gn(b);
+        b.setInsertionPointToStart(norm2.getBody());
+        Value de = norm2.getInductionVar();
+        Value d = b.create<arith::DivUIOp>(loc, de, cDv);
+        Value e = b.create<arith::RemUIOp>(loc, de, cDv);
+        Value update = b.create<arith::MulFOp>(
+            loc, ld(K, addi(qkRow, d)), ld(V, addi(vRow, e)));
+        b.create<scf::YieldOp>(
+            loc, ValueRange{b.create<arith::AddFOp>(
+                     loc, norm2.getRegionIterArgs()[0],
+                     b.create<arith::MulFOp>(loc, update, update))});
+      }
+      inv = b.create<arith::DivFOp>(
+          loc, one,
+          b.create<arith::AddFOp>(
+              loc, one, b.create<math::SqrtOp>(loc, norm2.getResult(0))));
+    }
+    auto state = b.create<scf::ForOp>(loc, c0, stateSize, c1);
+    {
+      OpBuilder::InsertionGuard gs(b);
+      b.setInsertionPointToStart(state.getBody());
+      Value de = state.getInductionVar();
+      Value d = b.create<arith::DivUIOp>(loc, de, cDv);
+      Value e = b.create<arith::RemUIOp>(loc, de, cDv);
+      Value old = ld(scratch, addi(scratchBase, de));
+      Value next = b.create<arith::AddFOp>(
+          loc, b.create<arith::MulFOp>(loc, a, old),
+          b.create<arith::MulFOp>(
+              loc, b.create<arith::MulFOp>(loc, weight, inv),
+              b.create<arith::MulFOp>(
+                  loc, ld(K, addi(qkRow, d)), ld(V, addi(vRow, e)))));
+      b.create<memref::StoreOp>(loc, next, scratch,
+                                ValueRange{addi(scratchBase, de)});
+      Value notBoundary = b.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::slt, addi(t, c1), end);
+      auto store = b.create<scf::IfOp>(loc, notBoundary, false);
+      OpBuilder::InsertionGuard gi(b);
+      b.setInsertionPointToStart(store.thenBlock());
+      Value nextBase = addi(histBase, muli(addi(t, c1), stateSize));
+      b.create<memref::StoreOp>(loc, next, hist,
+                                ValueRange{addi(nextBase, de)});
+    }
+  }
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
+static void emitDeltaNetReverseBody(OpBuilder &b, Location loc,
+                                    gpu::GPUFuncOp f, int64_t Dqk, int64_t Dv,
+                                    int64_t chunkSize, DeltaNetFlags fl) {
+  Type f32 = b.getF32Type();
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value Q = f.getArgument(0), K = f.getArgument(1), V = f.getArgument(2);
+  Value gate = f.getArgument(3), beta = f.getArgument(4);
+  Value decay = f.getArgument(5), DY = f.getArgument(6);
+  Value hist = f.getArgument(7), DS = f.getArgument(8);
+  Value DN = f.getArgument(9), DU = f.getArgument(10);
+  Value DQ = f.getArgument(11), DK = f.getArgument(12);
+  Value DV = f.getArgument(13), DG = f.getArgument(14);
+  Value DB = f.getArgument(15), DA = f.getArgument(16);
+  Value S = f.getArgument(17);
+  Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  auto cf = [&](double v) {
+    return b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(v));
+  };
+  auto addi = [&](Value x, Value y) {
+    return b.create<arith::AddIOp>(loc, x, y).getResult();
+  };
+  auto muli = [&](Value x, Value y) {
+    return b.create<arith::MulIOp>(loc, x, y).getResult();
+  };
+  auto ld = [&](Value m, Value i) {
+    return b.create<memref::LoadOp>(loc, m, ValueRange{i}).getResult();
+  };
+  auto addf = [&](Value x, Value y) {
+    return b.create<arith::AddFOp>(loc, x, y).getResult();
+  };
+  auto mulf = [&](Value x, Value y) {
+    return b.create<arith::MulFOp>(loc, x, y).getResult();
+  };
+  Value c0 = ci(0), c1 = ci(1), cDk = ci(Dqk), cDv = ci(Dv);
+  Value cChunk = ci(chunkSize), zero = cf(0.0), one = cf(1.0);
+  Value stateSize = muli(cDk, cDv);
+  Value histBase = muli(bh, muli(addi(S, c1), stateSize));
+  Value dsBase = muli(bh, stateSize);
+  Value qkBase = muli(muli(bh, S), cDk);
+  Value vBase = muli(muli(bh, S), cDv);
+  Value scalarBase = muli(bh, S);
+  auto init = b.create<scf::ForOp>(loc, c0, stateSize, c1);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(init.getBody());
+    b.create<memref::StoreOp>(loc, zero, DS,
+                              ValueRange{addi(dsBase, init.getInductionVar())});
+  }
+  Value chunks = b.create<arith::DivUIOp>(
+      loc, addi(S, ci(chunkSize - 1)), cChunk);
+  auto chunksRev = b.create<scf::ForOp>(loc, c0, chunks, c1);
+  {
+    OpBuilder::InsertionGuard gc(b);
+    b.setInsertionPointToStart(chunksRev.getBody());
+    Value chunk = b.create<arith::SubIOp>(
+        loc, b.create<arith::SubIOp>(loc, chunks, c1),
+        chunksRev.getInductionVar());
+    Value start = muli(chunk, cChunk);
+    Value candidateEnd = addi(start, cChunk);
+    Value end = b.create<arith::SelectOp>(
+        loc, b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+                                     candidateEnd, S),
+        candidateEnd, S);
+    Value span = b.create<arith::SubIOp>(loc, end, start);
+    auto tokens = b.create<scf::ForOp>(loc, c0, span, c1);
+    {
+      OpBuilder::InsertionGuard gt(b);
+      b.setInsertionPointToStart(tokens.getBody());
+      Value t = b.create<arith::SubIOp>(
+          loc, b.create<arith::SubIOp>(loc, end, c1),
+          tokens.getInductionVar());
+      Value oldBase = addi(histBase, muli(t, stateSize));
+      Value newBase = addi(oldBase, stateSize);
+      Value qkRow = addi(qkBase, muli(t, cDk));
+      Value vRow = addi(vBase, muli(t, cDv));
+      Value scalar = addi(scalarBase, t);
+      Value a = fl.hasDecay ? ld(decay, scalar) : one;
+      Value bw = fl.hasBeta ? ld(beta, scalar) : one;
+      Value norm = zero, denom = one;
+      if (fl.modified) {
+        auto norm2 =
+            b.create<scf::ForOp>(loc, c0, stateSize, c1, ValueRange{zero});
+        {
+          OpBuilder::InsertionGuard gn(b);
+          b.setInsertionPointToStart(norm2.getBody());
+          Value de = norm2.getInductionVar();
+          Value d = b.create<arith::DivUIOp>(loc, de, cDv);
+          Value e = b.create<arith::RemUIOp>(loc, de, cDv);
+          Value target = ld(V, addi(vRow, e));
+          if (fl.erase) {
+            auto vh =
+                b.create<scf::ForOp>(loc, c0, cDk, c1, ValueRange{zero});
+            {
+              OpBuilder::InsertionGuard gv(b);
+              b.setInsertionPointToStart(vh.getBody());
+              Value rd = vh.getInductionVar();
+              Value term = mulf(
+                  ld(K, addi(qkRow, rd)),
+                  ld(hist, addi(oldBase, addi(muli(rd, cDv), e))));
+              b.create<scf::YieldOp>(
+                  loc, ValueRange{addf(vh.getRegionIterArgs()[0], term)});
+            }
+            target = b.create<arith::SubFOp>(
+                loc, target, mulf(a, vh.getResult(0)));
+          }
+          Value update = mulf(ld(K, addi(qkRow, d)), target);
+          b.create<scf::YieldOp>(
+              loc, ValueRange{addf(norm2.getRegionIterArgs()[0],
+                                   mulf(update, update))});
+        }
+        norm = b.create<math::SqrtOp>(loc, norm2.getResult(0));
+        denom = addf(one, norm);
+      }
+      // Inject output cotangents into the carried-state adjoint.
+      auto el = b.create<scf::ForOp>(loc, c0, cDv, c1);
+      {
+        OpBuilder::InsertionGuard ge(b);
+        b.setInsertionPointToStart(el.getBody());
+        Value e = el.getInductionVar();
+        Value ve = addi(vRow, e);
+        auto raw = b.create<scf::ForOp>(loc, c0, cDk, c1, ValueRange{zero});
+        {
+          OpBuilder::InsertionGuard gr(b);
+          b.setInsertionPointToStart(raw.getBody());
+          Value d = raw.getInductionVar();
+          Value term = mulf(ld(Q, addi(qkRow, d)),
+                            ld(hist, addi(newBase, addi(muli(d, cDv), e))));
+          b.create<scf::YieldOp>(
+              loc, ValueRange{addf(raw.getRegionIterArgs()[0], term)});
+        }
+        Value dy = ld(DY, ve);
+        if (fl.hasGate) {
+          Value gv = ld(gate, ve);
+          Value sig = b.create<arith::DivFOp>(
+              loc, one, addf(one, b.create<math::ExpOp>(
+                                      loc, b.create<arith::NegFOp>(loc, gv))));
+          b.create<memref::StoreOp>(
+              loc, mulf(mulf(dy, raw.getResult(0)),
+                        mulf(sig, b.create<arith::SubFOp>(loc, one, sig))),
+              DG, ValueRange{ve});
+          dy = mulf(dy, sig);
+        }
+        auto dl = b.create<scf::ForOp>(loc, c0, cDk, c1);
+        {
+          OpBuilder::InsertionGuard gd(b);
+          b.setInsertionPointToStart(dl.getBody());
+          Value d = dl.getInductionVar();
+          Value de = addi(muli(d, cDv), e);
+          Value dsi = addi(dsBase, de);
+          Value dnew = addf(ld(DS, dsi), mulf(ld(Q, addi(qkRow, d)), dy));
+          b.create<memref::StoreOp>(loc, dnew, DS, ValueRange{dsi});
+          b.create<memref::StoreOp>(loc, dnew, DN, ValueRange{dsi});
+        }
+      }
+
+      // Differentiate delta = update / (1 + ||update||). DU owns d(update).
+      // The safe-norm branch intentionally mirrors the shared analytic VJP.
+      Value projection = zero;
+      if (fl.modified) {
+        auto projectionLoop =
+            b.create<scf::ForOp>(loc, c0, stateSize, c1, ValueRange{zero});
+        {
+          OpBuilder::InsertionGuard gp(b);
+          b.setInsertionPointToStart(projectionLoop.getBody());
+          Value de = projectionLoop.getInductionVar();
+          Value d = b.create<arith::DivUIOp>(loc, de, cDv);
+          Value e = b.create<arith::RemUIOp>(loc, de, cDv);
+          Value target = ld(V, addi(vRow, e));
+          if (fl.erase) {
+            auto vh =
+                b.create<scf::ForOp>(loc, c0, cDk, c1, ValueRange{zero});
+            {
+              OpBuilder::InsertionGuard gv(b);
+              b.setInsertionPointToStart(vh.getBody());
+              Value rd = vh.getInductionVar();
+              Value term = mulf(
+                  ld(K, addi(qkRow, rd)),
+                  ld(hist, addi(oldBase, addi(muli(rd, cDv), e))));
+              b.create<scf::YieldOp>(
+                  loc, ValueRange{addf(vh.getRegionIterArgs()[0], term)});
+            }
+            target = b.create<arith::SubFOp>(
+                loc, target, mulf(a, vh.getResult(0)));
+          }
+          Value update = mulf(ld(K, addi(qkRow, d)), target);
+          Value ddelta = mulf(bw, ld(DN, addi(dsBase, de)));
+          b.create<scf::YieldOp>(
+              loc, ValueRange{addf(projectionLoop.getRegionIterArgs()[0],
+                                   mulf(ddelta, update))});
+        }
+        projection = projectionLoop.getResult(0);
+      }
+      auto updateGrad =
+          b.create<scf::ForOp>(loc, c0, stateSize, c1);
+      {
+        OpBuilder::InsertionGuard gu(b);
+        b.setInsertionPointToStart(updateGrad.getBody());
+        Value de = updateGrad.getInductionVar();
+        Value d = b.create<arith::DivUIOp>(loc, de, cDv);
+        Value e = b.create<arith::RemUIOp>(loc, de, cDv);
+        Value dupdate = mulf(bw, ld(DN, addi(dsBase, de)));
+        if (fl.modified) {
+          Value target = ld(V, addi(vRow, e));
+          if (fl.erase) {
+            auto vh =
+                b.create<scf::ForOp>(loc, c0, cDk, c1, ValueRange{zero});
+            {
+              OpBuilder::InsertionGuard gv(b);
+              b.setInsertionPointToStart(vh.getBody());
+              Value rd = vh.getInductionVar();
+              Value term = mulf(
+                  ld(K, addi(qkRow, rd)),
+                  ld(hist, addi(oldBase, addi(muli(rd, cDv), e))));
+              b.create<scf::YieldOp>(
+                  loc, ValueRange{addf(vh.getRegionIterArgs()[0], term)});
+            }
+            target = b.create<arith::SubFOp>(
+                loc, target, mulf(a, vh.getResult(0)));
+          }
+          Value update = mulf(ld(K, addi(qkRow, d)), target);
+          Value safeNorm =
+              b.create<arith::MaximumFOp>(loc, norm, one);
+          Value correction = b.create<arith::DivFOp>(
+              loc, mulf(update, projection),
+              mulf(safeNorm, mulf(denom, denom)));
+          correction = b.create<arith::SelectOp>(
+              loc, b.create<arith::CmpFOp>(
+                       loc, arith::CmpFPredicate::OGT, norm, zero),
+              correction, zero);
+          dupdate =
+              b.create<arith::SubFOp>(
+                  loc, b.create<arith::DivFOp>(loc, dupdate, denom),
+                  correction);
+        }
+        b.create<memref::StoreOp>(loc, dupdate, DU,
+                                  ValueRange{addi(dsBase, de)});
+      }
+
+      // dtarget[e] = sum_d beta * dstate[d,e] * k[d]. DV is both
+      // the unique-owner output and token-local reverse scratch.
+      auto targetLoop = b.create<scf::ForOp>(loc, c0, cDv, c1);
+      {
+        OpBuilder::InsertionGuard ge(b);
+        b.setInsertionPointToStart(targetLoop.getBody());
+        Value e = targetLoop.getInductionVar();
+        auto reduction =
+            b.create<scf::ForOp>(loc, c0, cDk, c1, ValueRange{zero});
+        {
+          OpBuilder::InsertionGuard gd(b);
+          b.setInsertionPointToStart(reduction.getBody());
+          Value d = reduction.getInductionVar();
+          Value term = mulf(
+              ld(DU, addi(dsBase, addi(muli(d, cDv), e))),
+              ld(K, addi(qkRow, d)));
+          b.create<scf::YieldOp>(
+              loc, ValueRange{addf(reduction.getRegionIterArgs()[0], term)});
+        }
+        b.create<memref::StoreOp>(loc, reduction.getResult(0), DV,
+                                  ValueRange{addi(vRow, e)});
+      }
+
+      // Unique d owner produces dQ/dK and advances the state adjoint.
+      auto dl = b.create<scf::ForOp>(loc, c0, cDk, c1);
+      {
+        OpBuilder::InsertionGuard gd(b);
+        b.setInsertionPointToStart(dl.getBody());
+        Value d = dl.getInductionVar();
+        Value kd = ld(K, addi(qkRow, d));
+        Value dq = zero, dk = zero;
+        auto el2 = b.create<scf::ForOp>(
+            loc, c0, cDv, c1, ValueRange{dq, dk});
+        {
+          OpBuilder::InsertionGuard ge(b);
+          b.setInsertionPointToStart(el2.getBody());
+          Value e = el2.getInductionVar();
+          Value de = addi(muli(d, cDv), e);
+          Value dnew = ld(DN, addi(dsBase, de));
+          Value old = ld(hist, addi(oldBase, de));
+          Value target = ld(V, addi(vRow, e));
+          Value vhat = zero;
+          if (fl.erase) {
+            auto vh = b.create<scf::ForOp>(
+                loc, c0, cDk, c1, ValueRange{zero});
+            {
+              OpBuilder::InsertionGuard gv(b);
+              b.setInsertionPointToStart(vh.getBody());
+              Value rd = vh.getInductionVar();
+              Value term = mulf(
+                  ld(K, addi(qkRow, rd)),
+                  ld(hist, addi(oldBase, addi(muli(rd, cDv), e))));
+              b.create<scf::YieldOp>(
+                  loc, ValueRange{addf(vh.getRegionIterArgs()[0], term)});
+            }
+            vhat = vh.getResult(0);
+            target = b.create<arith::SubFOp>(loc, target, mulf(a, vhat));
+          }
+          Value dtarget = ld(DV, addi(vRow, e));
+          Value ndk = addf(
+              el2.getRegionIterArgs()[1],
+              mulf(ld(DU, addi(dsBase, de)), target));
+          Value prev = mulf(a, dnew);
+          if (fl.erase) {
+            Value dvhat = b.create<arith::NegFOp>(loc, mulf(a, dtarget));
+            ndk = addf(ndk, mulf(old, dvhat));
+            prev = addf(prev, mulf(kd, dvhat));
+          }
+          b.create<memref::StoreOp>(loc, prev, DS,
+                                    ValueRange{addi(dsBase, de)});
+          Value dy = ld(DY, addi(vRow, e));
+          if (fl.hasGate) {
+            Value gv = ld(gate, addi(vRow, e));
+            Value sig = b.create<arith::DivFOp>(
+                loc, one,
+                addf(one, b.create<math::ExpOp>(
+                              loc, b.create<arith::NegFOp>(loc, gv))));
+            dy = mulf(dy, sig);
+          }
+          b.create<scf::YieldOp>(
+              loc, ValueRange{
+                       addf(el2.getRegionIterArgs()[0],
+                            mulf(ld(hist, addi(newBase, de)), dy)),
+                       ndk});
+        }
+        b.create<memref::StoreOp>(loc, el2.getResult(0), DQ,
+                                  ValueRange{addi(qkRow, d)});
+        b.create<memref::StoreOp>(loc, el2.getResult(1), DK,
+                                  ValueRange{addi(qkRow, d)});
+      }
+
+      // Scalar beta/decay gradients have one (b,h,t) owner.
+      auto scalarReduction = b.create<scf::ForOp>(
+          loc, c0, stateSize, c1, ValueRange{zero, zero});
+      {
+        OpBuilder::InsertionGuard gs(b);
+        b.setInsertionPointToStart(scalarReduction.getBody());
+        Value de = scalarReduction.getInductionVar();
+        Value d = b.create<arith::DivUIOp>(loc, de, cDv);
+        Value e = b.create<arith::RemUIOp>(loc, de, cDv);
+        Value old = ld(hist, addi(oldBase, de));
+        Value dnew = ld(DN, addi(dsBase, de));
+        Value dtarget = ld(DV, addi(vRow, e));
+        Value target = ld(V, addi(vRow, e));
+        Value vhat = zero;
+        if (fl.erase) {
+          auto vh =
+              b.create<scf::ForOp>(loc, c0, cDk, c1, ValueRange{zero});
+          {
+            OpBuilder::InsertionGuard gv(b);
+            b.setInsertionPointToStart(vh.getBody());
+            Value rd = vh.getInductionVar();
+            Value term = mulf(
+                ld(K, addi(qkRow, rd)),
+                ld(hist, addi(oldBase, addi(muli(rd, cDv), e))));
+            b.create<scf::YieldOp>(
+                loc, ValueRange{addf(vh.getRegionIterArgs()[0], term)});
+          }
+          vhat = vh.getResult(0);
+          target = b.create<arith::SubFOp>(loc, target, mulf(a, vhat));
+        }
+        Value nextDb = addf(
+            scalarReduction.getRegionIterArgs()[0],
+            b.create<arith::DivFOp>(
+                loc,
+                mulf(dnew, mulf(ld(K, addi(qkRow, d)), target)),
+                denom));
+        Value nextDa = addf(scalarReduction.getRegionIterArgs()[1],
+                            mulf(dnew, old));
+        b.create<scf::YieldOp>(loc, ValueRange{nextDb, nextDa});
+      }
+      Value da = scalarReduction.getResult(1);
+      if (fl.erase) {
+        auto eraseReduction =
+            b.create<scf::ForOp>(loc, c0, cDv, c1, ValueRange{zero});
+        {
+          OpBuilder::InsertionGuard ge(b);
+          b.setInsertionPointToStart(eraseReduction.getBody());
+          Value e = eraseReduction.getInductionVar();
+          auto vh =
+              b.create<scf::ForOp>(loc, c0, cDk, c1, ValueRange{zero});
+          {
+            OpBuilder::InsertionGuard gv(b);
+            b.setInsertionPointToStart(vh.getBody());
+            Value rd = vh.getInductionVar();
+            Value term = mulf(
+                ld(K, addi(qkRow, rd)),
+                ld(hist, addi(oldBase, addi(muli(rd, cDv), e))));
+            b.create<scf::YieldOp>(
+                loc, ValueRange{addf(vh.getRegionIterArgs()[0], term)});
+          }
+          b.create<scf::YieldOp>(
+              loc, ValueRange{addf(
+                       eraseReduction.getRegionIterArgs()[0],
+                       mulf(ld(DV, addi(vRow, e)), vh.getResult(0)))});
+        }
+        da = b.create<arith::SubFOp>(loc, da, eraseReduction.getResult(0));
+      }
+      b.create<memref::StoreOp>(loc, scalarReduction.getResult(0), DB,
+                                ValueRange{scalar});
+      b.create<memref::StoreOp>(loc, da, DA, ValueRange{scalar});
+    }
+  }
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
+
 void emitDeltaNetBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
                       int64_t Dqk, int64_t Dv, DeltaNetFlags fl) {
   MLIRContext *ctx = b.getContext();
@@ -301,6 +1113,9 @@ struct GenerateROCMDeltaNetKernelPass
       fl.hasGate = flag("has_gate");
       fl.hasBeta = flag("has_beta");
       fl.hasDecay = flag("has_decay");
+      bool backward = flag("backward");
+      int64_t chunkSize = dimAttr("chunk_size");
+      if (backward && chunkSize <= 0) chunkSize = 64;
 
       Type storeTy = b_storeType(op);
       if (!storeTy) return signalPassFailure();
@@ -314,6 +1129,60 @@ struct GenerateROCMDeltaNetKernelPass
       Type idxTy = b.getIndexType();
       auto store = MemRefType::get({ShapedType::kDynamic}, storeTy);
       auto f32mr = MemRefType::get({ShapedType::kDynamic}, b.getF32Type());
+      if (backward) {
+        if (!storeTy.isF32()) {
+          op->emitError("generate-rocm-deltanet-kernel: backward packaging "
+                        "currently requires f32 storage");
+          return signalPassFailure();
+        }
+        auto checkpointTy =
+            b.getFunctionType({f32mr, f32mr, f32mr, f32mr, f32mr, idxTy}, {});
+        auto chunkSummaryTy = b.getFunctionType(
+            {f32mr, f32mr, f32mr, f32mr, f32mr, f32mr, idxTy, idxTy}, {});
+        auto chunkPrefixTy = b.getFunctionType(
+            {f32mr, f32mr, f32mr, idxTy, idxTy}, {});
+        auto chunkFillTy = b.getFunctionType(
+            {f32mr, f32mr, f32mr, f32mr, f32mr, f32mr, idxTy, idxTy}, {});
+        SmallVector<Type> reverseArgs(17, f32mr);
+        reverseArgs.push_back(idxTy);
+        auto reverseTy = b.getFunctionType(reverseArgs, {});
+        auto checkpoint = b.create<gpu::GPUFuncOp>(
+            loc, kname + "_checkpoint", checkpointTy);
+        checkpoint->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
+                            b.getUnitAttr());
+        auto chunkSummary = b.create<gpu::GPUFuncOp>(
+            loc, kname + "_chunk_summary", chunkSummaryTy);
+        chunkSummary->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
+                              b.getUnitAttr());
+        auto chunkPrefix = b.create<gpu::GPUFuncOp>(
+            loc, kname + "_chunk_prefix", chunkPrefixTy);
+        chunkPrefix->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
+                             b.getUnitAttr());
+        auto chunkFill = b.create<gpu::GPUFuncOp>(
+            loc, kname + "_chunk_fill", chunkFillTy);
+        chunkFill->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
+                           b.getUnitAttr());
+        auto reverse =
+            b.create<gpu::GPUFuncOp>(loc, kname + "_reverse", reverseTy);
+        reverse->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
+                         b.getUnitAttr());
+        OpBuilder checkpointBody(checkpoint.getContext());
+        emitDeltaNetCheckpointBody(checkpointBody, loc, checkpoint, Dqk, Dv, fl);
+        OpBuilder chunkSummaryBody(chunkSummary.getContext());
+        emitDeltaNetChunkSummaryBody(chunkSummaryBody, loc, chunkSummary, Dqk,
+                                     Dv, chunkSize, fl);
+        OpBuilder chunkPrefixBody(chunkPrefix.getContext());
+        emitDeltaNetChunkPrefixBody(chunkPrefixBody, loc, chunkPrefix, Dqk, Dv,
+                                    chunkSize);
+        OpBuilder chunkFillBody(chunkFill.getContext());
+        emitDeltaNetChunkFillBody(chunkFillBody, loc, chunkFill, Dqk, Dv,
+                                  chunkSize, fl);
+        OpBuilder reverseBody(reverse.getContext());
+        emitDeltaNetReverseBody(reverseBody, loc, reverse, Dqk, Dv, chunkSize,
+                                fl);
+        op->erase();
+        continue;
+      }
       // (Q,K,V,O,gate : store, beta,decay : f32, S : index)
       auto fnTy = b.getFunctionType(
           {store, store, store, store, store, f32mr, f32mr, idxTy}, {});

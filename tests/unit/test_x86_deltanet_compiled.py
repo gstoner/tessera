@@ -17,6 +17,7 @@ import pytest
 
 import tessera as ts
 from tessera.compiler import execution_matrix as em
+from tessera.autodiff.vjp import get_vjp
 
 
 def test_execution_matrix_has_x86_deltanet_row():
@@ -49,6 +50,23 @@ def _artifact(rt, op_name, names, erase, has_gate, has_beta, has_decay):
                  "kwargs": {"causal": True, "erase": erase,
                             "has_gate": has_gate, "has_beta": has_beta,
                             "has_decay": has_decay}}]})
+
+
+def _backward_artifact(rt, op_name, names, erase):
+    return rt.RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_deltanet_bwd_compiled",
+        "executable": True, "execution_kind": "native_cpu",
+        "arg_names": names, "output_name": "grads",
+        "ops": [{
+            "op_name": f"tessera.{op_name}", "result": "grads",
+            "operands": names,
+            "kwargs": {
+                "causal": True, "erase": erase, "has_gate": True,
+                "has_beta": True, "has_decay": True,
+                "chunk_size": 2, "workers": 2,
+            },
+        }],
+    })
 
 
 @pytest.mark.parametrize("op_name", list(_OPS))
@@ -105,3 +123,37 @@ def test_x86_deltanet_rejects_non_causal():
     z = np.zeros((1, 1, 2, 2), np.float32)
     with pytest.raises(ValueError):
         rt._execute_x86_compiled_deltanet(art, (z, z, z))
+
+
+@pytest.mark.parametrize(
+    ("op_name", "erase"),
+    [
+        ("gated_deltanet", False),
+        ("gated_deltanet", True),
+        ("modified_delta_attention", False),
+        ("modified_delta_attention", True),
+    ],
+)
+def test_x86_deltanet_backward_matches_analytic_vjp(op_name, erase):
+    rt = _x86_or_skip()
+    rng = np.random.default_rng(20260728 + int(erase))
+    shape = (2, 2, 5, 3)
+    q = (rng.standard_normal(shape) * 0.2).astype(np.float32)
+    k = rng.standard_normal(shape).astype(np.float32)
+    k /= np.linalg.norm(k, axis=-1, keepdims=True) + 1e-6
+    v = (rng.standard_normal(shape) * 0.2).astype(np.float32)
+    gate = rng.standard_normal(shape).astype(np.float32)
+    beta = rng.uniform(0.2, 0.8, shape[:-1]).astype(np.float32)
+    decay = rng.uniform(0.7, 0.95, shape[:-1]).astype(np.float32)
+    dy = rng.standard_normal(shape).astype(np.float32)
+    values = (q, k, v, gate, beta, decay, dy)
+    names = ["q", "k", "v", "gate", "beta", "decay", "dy"]
+    result = rt.launch(
+        _backward_artifact(rt, op_name, names, erase), values
+    )
+    assert result["ok"] is True, result.get("reason")
+    expected = get_vjp(op_name)(
+        dy, q, k, v, gate, beta, decay, erase=erase
+    )
+    for actual, reference in zip(result["output"], expected):
+        np.testing.assert_allclose(actual, reference, rtol=3e-3, atol=3e-3)

@@ -1995,3 +1995,37 @@ unique-clock warmup/steady/cooldown dependency order after pipeline legality.
 Metal/runtime consumption and collective overlap remain Apple-owned follow-up;
 the structural carrier changes no Apple capability, selector, or exact-device
 claim.
+
+Cross-backend sync `CORE-COMPILER-RUNTIME-CLOSEOUT-2026-07-27` adds a shared
+runtime consumer for emitted 1F1B steps, including an independent collective
+transport executor; measured schedule records now alter physical Schedule/Tile
+attributes after target and evidence validation; and DeltaNet-family reverse
+mode is an analytic carried-state recurrence with explicit forward/backward
+schedule metadata. Apple can consume these shared contracts, but this change
+contains no multi-rank Metal transport packet, Apple capacity injection,
+measured Metal selector result, or sequence-mixer backward kernel. Those remain
+Apple-owned exact-device follow-ups.
+
+NVIDIA layout assignment now defaults on only because its named pipeline has an
+immediate physical Graph-cast consumer. Apple already owns a separate
+row-major/BHSD/NHWC Graph-layout materializer; no NVIDIA layout or execution
+claim transfers. ROCm's factored Adafactor HSACO and gfx1151 timing likewise do
+not transfer to Metal. An Apple factored optimizer implementation remains
+follow-up required.
+
+Cross-backend sync `CORE-PRODUCTION-EVIDENCE-2026-07-27` makes emitted pipeline
+steps own serializable collective descriptors and adds a shared
+replicated/rank-local OptimizerShard state machine. The runtime integration is
+portable, but this continuation has no Metal multi-device transport
+implementation or Apple exact-device packet. ROCm's physical Adafactor adjoint
+and reverse-chunk DeltaNet HSACO are AMD-specific and do not transfer. Apple
+sequence-mixer backward packaging and refreshed measured selector evidence
+remain architecture-owned follow-ups.
+
+Cross-backend sync `CORE-SEQUENCE-MIXER-PHYSICAL-BACKWARD-2026-07-28` adds the
+exact modified-Delta normalization VJP to physical ROCm and AVX-512 backward
+paths and proves affine parallel chunk composition for `erase=false`. This
+changes shared algorithm evidence, not Metal execution. The five-entry gfx1151
+HSACO, AVX-512 ABI, and their resident timing packets do not transfer to Apple.
+Metal sequence-mixer backward packaging, nonlinear/erase chunk scheduling, and
+a refreshed exact-Apple-host selector packet remain architecture-owned.

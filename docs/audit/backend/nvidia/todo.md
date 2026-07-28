@@ -1750,3 +1750,37 @@ unique-clock warmup/steady/cooldown dependency order after pipeline legality.
 CUDA runtime consumption and collective overlap remain NVIDIA-owned follow-up;
 the structural carrier changes no SM120 capability, PTX schedule, selector, or
 exact-device claim.
+
+Cross-backend sync `CORE-COMPILER-RUNTIME-CLOSEOUT-2026-07-27` supplies a shared
+runtime consumer for emitted 1F1B steps with independent collective transport,
+and makes measured schedule records alter the actual Schedule/Tile M/N/K,
+warp-count, and stage attributes after target/evidence validation. NVIDIA's
+named pipelines now default layout assignment on because the architecture-owned
+Graph-cast materializer immediately consumes the markers; focused structural
+proof covers ordering. A real CUDA multi-rank transport packet and measured
+SM120 selector application remain NVIDIA-owned exact-device follow-ups.
+
+The same sync replaces DeltaNet-family finite-difference reverse mode with an
+analytic carried-state recurrence and explicit reverse-token scheduling.
+Directional-derivative fixtures validate shared semantics only; CUDA backward
+packaging and device scheduling remain follow-up required. ROCm factored
+Adafactor HSACO, HIP capacity query, gfx1151 numerics, and WSL timing do not
+transfer to CUDA.
+
+Cross-backend sync `CORE-PRODUCTION-EVIDENCE-2026-07-27` serializes collective
+descriptors on emitted pipeline steps and binds OptimizerShard ownership
+transitions to the shared runtime. NCCL remains the CUDA-native executor, but
+this ROCm-host continuation contains no real multi-rank CUDA packet and changes
+no SM120 selector. The gfx1151 Adafactor adjoint and two-entry DeltaNet
+reverse-chunk HSACO (later superseded by the five-entry AMD package) are AMD
+schedules and do not transfer. CUDA sequence-mixer
+backward packaging and a refreshed measured selector packet remain
+NVIDIA-owned exact-device follow-ups.
+
+Cross-backend sync `CORE-SEQUENCE-MIXER-PHYSICAL-BACKWARD-2026-07-28` adds the
+exact modified-Delta normalization VJP to physical ROCm and AVX-512 backward
+paths and proves an affine parallel chunk-composition algorithm for
+`erase=false`. This changes shared algorithm evidence, not CUDA execution. The
+five-entry gfx1151 HSACO, AMD workgroup schedule, and WSL resident timings do
+not transfer to SM120. CUDA sequence-mixer backward packaging, nonlinear/erase
+chunk scheduling, and a refreshed exact-CUDA-host selector packet remain open.

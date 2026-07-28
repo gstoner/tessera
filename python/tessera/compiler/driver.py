@@ -358,7 +358,13 @@ def compile_graph_module(
     tool_invocations: list[ToolInvocation] = []
 
     start = time.perf_counter()
-    cpu_plan = build_cpu_plan(module, tile=cpu_tile, target_kind=target_kind)
+    measured_schedule = (options or {}).get("measured_schedule")
+    cpu_plan = build_cpu_plan(
+        module,
+        tile=cpu_tile,
+        target_kind=target_kind,
+        measured_schedule=measured_schedule,
+    )
     diagnostics.append(explain_cpu_plan(module, target=target_kind))
     elapsed_ms = (time.perf_counter() - start) * 1000.0
 

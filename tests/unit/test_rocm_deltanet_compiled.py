@@ -80,6 +80,17 @@ def _artifact(rt, op_name, operands, kwargs):
     }), tuple(operands)
 
 
+def _backward_artifact(rt, op_name, operands, kwargs):
+    names = [f"x{i}" for i in range(len(operands))]
+    return rt.RuntimeArtifact(metadata={
+        "target": "rocm", "compiler_path": "rocm_deltanet_bwd_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": names, "output_name": "grads",
+        "ops": [{"op_name": op_name, "result": "grads",
+                 "operands": names, "kwargs": kwargs}],
+    }), tuple(operands)
+
+
 _OPS = ["tessera.gated_deltanet", "tessera.kimi_delta_attention",
         "tessera.modified_delta_attention"]
 
@@ -213,3 +224,52 @@ def test_deltanet_codegen_bad_dims_rejected():
            'd_v = 16 : i64} : () -> ()\n}\n')
     r = _gen(bad, "--generate-rocm-deltanet-kernel")
     assert r.returncode != 0 and "d_qk and d_v must be positive" in r.stderr
+
+
+def test_deltanet_backward_codegen_packages_checkpoint_and_reverse_chunks():
+    directive = _directive(
+        backward=True, erase=True, has_gate=True, has_beta=True, has_decay=True
+    ).replace("dtype = \"f32\"", 'chunk_size = 4 : i64, dtype = "f32"')
+    result = _gen(directive, "--generate-rocm-deltanet-kernel")
+    assert result.returncode == 0, result.stderr
+    assert "gpu.func @dn_checkpoint" in result.stdout
+    assert "gpu.func @dn_reverse" in result.stdout
+    assert result.stdout.count("scf.for") >= 8
+
+
+@pytest.mark.parametrize(
+    ("op_name", "erase"),
+    [
+        ("tessera.gated_deltanet", False),
+        ("tessera.modified_delta_attention", False),
+        ("tessera.modified_delta_attention", True),
+    ],
+)
+def test_deltanet_backward_executes_on_gfx1151(op_name, erase):
+    rt = _dn_or_skip()
+    from tessera.autodiff.vjp import get_vjp
+
+    rng = np.random.default_rng(20260727)
+    shape = (1, 1, 5, 3)
+    q = (rng.standard_normal(shape) * 0.3).astype(np.float32)
+    k = _l2(rng.standard_normal(shape)).astype(np.float32)
+    v = (rng.standard_normal(shape) * 0.3).astype(np.float32)
+    gate = rng.standard_normal(shape).astype(np.float32)
+    beta = rng.uniform(0.2, 0.8, shape[:-1]).astype(np.float32)
+    decay = rng.uniform(0.7, 0.95, shape[:-1]).astype(np.float32)
+    dy = rng.standard_normal(shape).astype(np.float32)
+    kwargs = {
+        "causal": True, "erase": erase, "has_gate": True,
+        "has_beta": True, "has_decay": True, "chunk_size": 2,
+    }
+    artifact, operands = _backward_artifact(
+        rt, op_name,
+        [q, k, v, gate, beta, decay, dy], kwargs,
+    )
+    result = rt.launch(artifact, operands)
+    assert result["ok"] is True, result.get("reason")
+    expected = get_vjp(op_name.removeprefix("tessera."))(
+        dy, q, k, v, gate, beta, decay, erase=erase
+    )
+    for actual, reference in zip(result["output"], expected):
+        np.testing.assert_allclose(actual, reference, rtol=2e-3, atol=2e-3)

@@ -1587,11 +1587,67 @@ consumption remains open and inherits no AMD artifact or timing evidence.
      per-platform — they are *not* duplicative (per-target capability matrices),
      have heterogeneous schemas, and are cross-referenced by 8 per-platform audit
      docs (`backend/{apple,nvidia,rocm}/`); collapsing them would fight the
-     per-platform audit structure for a 3→1 saving. The `e2e_op_coverage` /
-     `s_series_status` rollups likewise stay standalone — they are distinct
-     MASTER_AUDIT truth views, and the registry already removed the duplication
-     that mattered (one regen/drift contract). Folding them is available if
-     desired but is low-value churn now.
+   per-platform audit structure for a 3→1 saving. The `e2e_op_coverage` /
+   `s_series_status` rollups likewise stay standalone — they are distinct
+   MASTER_AUDIT truth views, and the registry already removed the duplication
+   that mattered (one regen/drift contract). Folding them is available if
+   desired but is low-value churn now.
+
+## 2026-07-27 runtime and scheduling closeout synchronization
+
+`CORE-COMPILER-RUNTIME-CLOSEOUT-2026-07-27` advances six previously disconnected
+compiler/runtime seams:
+
+- ROCm Adafactor now has an explicit five-entry physical state program covering
+  factored and lower-rank full-moment updates, exact multi-step gfx1151 proof,
+  and operation-total benchmark evidence.
+- ROCm injects total/free bytes from the retained HIP context into the shared
+  model-derived rematerialization budget with bounded dynamic-parameter
+  validation.
+- compiler-emitted unique-clock 1F1B steps have a runtime consumer; selected
+  backward collectives can overlap later compute on an independent transport
+  executor and are joined before completion.
+- measured autotune records, when target/evidence/latency-valid, change actual
+  Schedule IR and Tile IR M/N/K, warp, and pipeline-depth attributes.
+- NVIDIA layout assignment defaults on now that its named lowering pipelines
+  immediately consume Graph layout casts; x86 remains default-on, Apple and
+  ROCm retain their architecture-owned layout boundaries.
+- DeltaNet/Kimi/modified-delta reverse mode is an analytic O(S) carried-state
+  recurrence rather than finite differences, with explicit FP32 state and
+  reverse-token scheduling metadata.
+
+The remaining gates are intentionally narrower: physical Adafactor adjoint
+execution; full-model measured rematerialization selection; real
+multi-rank collective/OptimizerShard transport on each GPU runtime; per-target
+measured selector packets; and physical sequence-mixer backward packaging and
+chunk-parallel scheduling.
+
+`CORE-PRODUCTION-EVIDENCE-2026-07-27` advances each seam without overstating
+exact-device scope. Typed collective descriptors are now attached to emitted
+steps, and runtime OptimizerShard execution has explicit replicated/rank-local
+ownership, normalization, rank order, overlap, and completion joins. NCCL and
+RCCL select CUDA versus HIP device runtimes behind the same collective ABI.
+Deterministic two-rank integration is fixture-backed; real multi-rank packets
+remain architecture-owned gates.
+
+The shared DeltaNet reverse recurrence now has direct ROCm and AVX-512
+consumers. `CORE-SEQUENCE-MIXER-PHYSICAL-BACKWARD-2026-07-28` extends the AMD
+package to five compiler-owned entries: checkpoint, affine chunk summary,
+deterministic prefix, parallel chunk fill, and reverse. The AVX-512 ABI uses
+caller-owned resident workspaces and the same affine composition law. Both
+physical paths implement the exact modified-Delta normalization VJP and match
+the analytic oracle below `4e-7`.
+
+Affine chunk composition is deliberately limited to `erase=false`, where a
+chunk is exactly `state_out = scale * state_in + update`. Erase-dependent
+targets read incoming state, so their checkpoint dependency remains serial
+while independent `(batch,head)` work stays parallel. Resident two-cohort
+packets choose chunk 16 on both hosts. The AVX-512 packet is not selector
+eligible because cohort medians differ by 12.0%; the stable gfx1151 packet is
+not selector eligible because WSL wall-clock timing is not bare-metal
+production evidence. CUDA/Apple physical backward packaging and bare-metal
+selector refreshes remain architecture-owned; no result transfers across
+targets.
 
 ## Source Material Consolidated
 

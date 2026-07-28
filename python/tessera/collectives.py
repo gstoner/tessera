@@ -64,24 +64,38 @@ def collective_topology(*, backend: str, world_size: int,
 
 
 def _native_probe(topology: CollectiveTopology) -> tuple[bool, str]:
-    nccl_name = ctypes.util.find_library("nccl" if topology.backend == "nccl" else "rccl")
-    cuda_name = ctypes.util.find_library("cudart")
-    if not nccl_name or not cuda_name:
-        return False, f"{topology.backend} and CUDA runtime libraries must both be loadable"
-    cuda = ctypes.CDLL(cuda_name)
+    collective_name = ctypes.util.find_library(topology.backend)
+    runtime_library = "cudart" if topology.backend == "nccl" else "amdhip64"
+    runtime_name = ctypes.util.find_library(runtime_library)
+    runtime_label = "CUDA" if topology.backend == "nccl" else "HIP"
+    if not collective_name or not runtime_name:
+        return False, (
+            f"{topology.backend} and {runtime_label} runtime libraries must both be loadable"
+        )
+    runtime = ctypes.CDLL(runtime_name)
     count = ctypes.c_int()
-    if cuda.cudaGetDeviceCount(ctypes.byref(count)) != 0:
-        return False, "CUDA device enumeration failed"
+    get_count = (
+        runtime.cudaGetDeviceCount
+        if topology.backend == "nccl"
+        else runtime.hipGetDeviceCount
+    )
+    if get_count(ctypes.byref(count)) != 0:
+        return False, f"{runtime_label} device enumeration failed"
     highest = max(topology.device_ordinals)
     if count.value <= highest:
         return False, (
-            f"topology requires CUDA device ordinal {highest}, but only {count.value} device(s) are visible"
+            f"topology requires {runtime_label} device ordinal {highest}, "
+            f"but only {count.value} device(s) are visible"
         )
     return True, ""
 
 
 class _NCCLExecutor:
-    """Synchronous host-array NCCL executor for an explicit local topology."""
+    """Synchronous NCCL-compatible executor for an explicit local topology.
+
+    RCCL intentionally exposes the NCCL collective ABI. The device runtime is
+    selected independently: CUDA for NCCL and HIP for RCCL.
+    """
 
     _F32 = 7
     _SUM = 0
@@ -93,16 +107,28 @@ class _NCCLExecutor:
         if not ready:
             raise RuntimeError(reason)
         self.topology = topology
-        self.cuda = ctypes.CDLL(ctypes.util.find_library("cudart"))
-        self.nccl = ctypes.CDLL(ctypes.util.find_library("nccl"))
+        is_hip = topology.backend == "rccl"
+        runtime_library = "amdhip64" if is_hip else "cudart"
+        self.cuda = ctypes.CDLL(ctypes.util.find_library(runtime_library))
+        self.nccl = ctypes.CDLL(ctypes.util.find_library(topology.backend))
+        self._runtime_label = "HIP" if is_hip else "CUDA"
+        self._collective_label = topology.backend.upper()
         void_p = ctypes.c_void_p
-        self.cuda.cudaSetDevice.argtypes = [ctypes.c_int]
-        self.cuda.cudaMalloc.argtypes = [ctypes.POINTER(void_p), ctypes.c_size_t]
-        self.cuda.cudaFree.argtypes = [void_p]
-        self.cuda.cudaMemcpy.argtypes = [void_p, void_p, ctypes.c_size_t, ctypes.c_int]
-        self.cuda.cudaStreamCreate.argtypes = [ctypes.POINTER(void_p)]
-        self.cuda.cudaStreamSynchronize.argtypes = [void_p]
-        self.cuda.cudaStreamDestroy.argtypes = [void_p]
+        prefix = "hip" if is_hip else "cuda"
+        self._set_device = getattr(self.cuda, f"{prefix}SetDevice")
+        self._malloc = getattr(self.cuda, f"{prefix}Malloc")
+        self._free = getattr(self.cuda, f"{prefix}Free")
+        self._memcpy = getattr(self.cuda, f"{prefix}Memcpy")
+        self._stream_create = getattr(self.cuda, f"{prefix}StreamCreate")
+        self._stream_synchronize = getattr(self.cuda, f"{prefix}StreamSynchronize")
+        self._stream_destroy = getattr(self.cuda, f"{prefix}StreamDestroy")
+        self._set_device.argtypes = [ctypes.c_int]
+        self._malloc.argtypes = [ctypes.POINTER(void_p), ctypes.c_size_t]
+        self._free.argtypes = [void_p]
+        self._memcpy.argtypes = [void_p, void_p, ctypes.c_size_t, ctypes.c_int]
+        self._stream_create.argtypes = [ctypes.POINTER(void_p)]
+        self._stream_synchronize.argtypes = [void_p]
+        self._stream_destroy.argtypes = [void_p]
         self.nccl.ncclCommInitAll.argtypes = [ctypes.POINTER(void_p), ctypes.c_int,
                                              ctypes.POINTER(ctypes.c_int)]
         self.nccl.ncclCommDestroy.argtypes = [void_p]
@@ -118,51 +144,54 @@ class _NCCLExecutor:
         devices = (ctypes.c_int * topology.world_size)(*topology.device_ordinals)
         self._check_nccl(self.nccl.ncclCommInitAll(self.comms, topology.world_size, devices), "communicator init")
 
-    def _check_cuda(self, rc: int, where: str) -> None:
+    def _check_device(self, rc: int, where: str) -> None:
         if rc:
-            raise RuntimeError(f"CUDA {where} failed with rc={rc}")
+            raise RuntimeError(f"{self._runtime_label} {where} failed with rc={rc}")
 
     def _check_nccl(self, rc: int, where: str) -> None:
         if rc:
             self.nccl.ncclGetErrorString.restype = ctypes.c_char_p
             detail = self.nccl.ncclGetErrorString(rc)
-            raise RuntimeError(f"NCCL {where} failed: {(detail or b'unknown').decode()}")
+            raise RuntimeError(
+                f"{self._collective_label} {where} failed: "
+                f"{(detail or b'unknown').decode()}"
+            )
 
     def _allocate(self, arrays: list[np.ndarray], output_shapes: list[tuple[int, ...]]):
         sends: list[ctypes.c_void_p] = []
         recvs: list[ctypes.c_void_p] = []
         streams: list[ctypes.c_void_p] = []
         for rank, (array, output_shape) in enumerate(zip(arrays, output_shapes)):
-            self._check_cuda(self.cuda.cudaSetDevice(self.topology.device_ordinals[rank]), "set device")
+            self._check_device(self._set_device(self.topology.device_ordinals[rank]), "set device")
             send = ctypes.c_void_p(); recv = ctypes.c_void_p(); stream = ctypes.c_void_p()
-            self._check_cuda(self.cuda.cudaMalloc(ctypes.byref(send), array.nbytes), "send allocation")
+            self._check_device(self._malloc(ctypes.byref(send), array.nbytes), "send allocation")
             output_bytes = int(np.prod(output_shape, dtype=np.int64)) * 4
-            self._check_cuda(self.cuda.cudaMalloc(ctypes.byref(recv), output_bytes), "receive allocation")
-            self._check_cuda(self.cuda.cudaStreamCreate(ctypes.byref(stream)), "stream creation")
-            self._check_cuda(self.cuda.cudaMemcpy(send, ctypes.c_void_p(array.ctypes.data), array.nbytes, self._H2D), "host-to-device copy")
+            self._check_device(self._malloc(ctypes.byref(recv), output_bytes), "receive allocation")
+            self._check_device(self._stream_create(ctypes.byref(stream)), "stream creation")
+            self._check_device(self._memcpy(send, ctypes.c_void_p(array.ctypes.data), array.nbytes, self._H2D), "host-to-device copy")
             sends.append(send); recvs.append(recv); streams.append(stream)
         return sends, recvs, streams
 
     def _finish(self, recvs, streams, output_shapes):
         outputs: list[np.ndarray] = []
         for rank, shape in enumerate(output_shapes):
-            self._check_cuda(self.cuda.cudaSetDevice(self.topology.device_ordinals[rank]), "set device")
-            self._check_cuda(self.cuda.cudaStreamSynchronize(streams[rank]), "stream synchronization")
+            self._check_device(self._set_device(self.topology.device_ordinals[rank]), "set device")
+            self._check_device(self._stream_synchronize(streams[rank]), "stream synchronization")
             output = np.empty(shape, np.float32)
-            self._check_cuda(self.cuda.cudaMemcpy(ctypes.c_void_p(output.ctypes.data), recvs[rank], output.nbytes, self._D2H), "device-to-host copy")
+            self._check_device(self._memcpy(ctypes.c_void_p(output.ctypes.data), recvs[rank], output.nbytes, self._D2H), "device-to-host copy")
             outputs.append(output)
         return outputs
 
     def _cleanup(self, sends, recvs, streams) -> None:
         for rank in range(self.topology.world_size):
-            self.cuda.cudaSetDevice(self.topology.device_ordinals[rank])
-            if sends[rank]: self.cuda.cudaFree(sends[rank])
-            if recvs[rank]: self.cuda.cudaFree(recvs[rank])
-            if streams[rank]: self.cuda.cudaStreamDestroy(streams[rank])
+            self._set_device(self.topology.device_ordinals[rank])
+            if sends[rank]: self._free(sends[rank])
+            if recvs[rank]: self._free(recvs[rank])
+            if streams[rank]: self._stream_destroy(streams[rank])
 
     def run(self, kind: str, values: list[Any], *, op: str = "sum") -> list[np.ndarray]:
         if op != "sum":
-            raise ValueError("NCCL v1 executor currently supports sum reductions only")
+            raise ValueError("native collective v1 executor supports sum reductions only")
         arrays = [np.ascontiguousarray(value, dtype=np.float32) for value in values]
         if any(array.shape != arrays[0].shape for array in arrays):
             raise ValueError("collective rank inputs must have identical shapes")
@@ -257,7 +286,7 @@ class CollectiveAdapter:
             return CollectiveBackendStatus(self.backend, "mock", world_size=self.world_size)
         if self.backend in {"mock", "single_process"} and self.world_size == 1:
             return CollectiveBackendStatus(self.backend, "single_process", world_size=1)
-        if self.backend == "nccl" and self._topology is not None:
+        if self.backend in {"nccl", "rccl"} and self._topology is not None:
             ready, reason = _native_probe(self._topology)
             return CollectiveBackendStatus(
                 self.backend,
@@ -269,7 +298,7 @@ class CollectiveAdapter:
                 ),
                 world_size=self.world_size,
             )
-        if self.backend in {"rccl", "mpi"}:
+        if self.backend == "mpi":
             return CollectiveBackendStatus(self.backend, "backend_unavailable",
                 reason=f"{self.backend} native collective runtime is not wired on this host",
                 world_size=self.world_size)
@@ -281,24 +310,24 @@ class CollectiveAdapter:
         )
 
     def all_reduce(self, values, *, op: str = "sum"):
-        if self.backend == "nccl" and self.world_size > 1:
+        if self.backend in {"nccl", "rccl"} and self.world_size > 1:
             return self._run_native("all_reduce", values, op=op)
         return self._run(lambda rank, value: rank.all_reduce(value, op=op), values)
 
     def reduce_scatter(self, values, *, axis: int = 0, op: str = "sum"):
-        if self.backend == "nccl" and self.world_size > 1:
+        if self.backend in {"nccl", "rccl"} and self.world_size > 1:
             if axis != 0: raise ValueError("NCCL reduce_scatter v1 requires axis=0")
             return self._run_native("reduce_scatter", values, op=op)
         return self._run(lambda rank, value: rank.reduce_scatter(value, axis=axis, op=op), values)
 
     def all_gather(self, values, *, axis: int = 0):
-        if self.backend == "nccl" and self.world_size > 1:
+        if self.backend in {"nccl", "rccl"} and self.world_size > 1:
             if axis != 0: raise ValueError("NCCL all_gather v1 requires axis=0")
             return self._run_native("all_gather", values)
         return self._run(lambda rank, value: rank.all_gather(value, axis=axis), values)
 
     def all_to_all(self, values, *, scatter_axis: int = 0, gather_axis: int = 0):
-        if self.backend == "nccl" and self.world_size > 1:
+        if self.backend in {"nccl", "rccl"} and self.world_size > 1:
             if scatter_axis != 0 or gather_axis != 0:
                 raise ValueError("NCCL all_to_all v1 requires scatter_axis=gather_axis=0")
             return self._run_native("all_to_all", values)

@@ -1890,3 +1890,74 @@ dependency order after proving stage and transport legality. This changes no
 AMDGPU schedule or HIP execution row yet: ROCm runtime consumption and
 collective overlap are follow-up required, and no CUDA/Apple physical evidence
 transfers.
+
+ROCm-owned continuation `CORE-COMPILER-RUNTIME-CLOSEOUT-2026-07-27` lands the
+physical Adafactor program on gfx1151. One compiler-owned HSACO contains
+deterministic row-moment, column-moment, ordered row-mean, factored parameter
+update, and lower-rank full-moment update entries with explicit state ABI.
+Three-step exact-device fixtures cover both factored and full-moment state and
+match `optim.adafactor`; a 30-sample `257x255` WSL
+operation-total packet records a 1.632 ms median and 1.775 ms p95 including
+allocation, copies, cache lookup, four launches, synchronization, and result
+copies. The packet is selector-ineligible. A physical Adafactor adjoint remains
+an explicit follow-up.
+
+The same continuation queries total/free bytes from the retained HIP context
+and injects the effective capacity, reserve, bounded dynamic parameters,
+gradient/optimizer copies, and persistent state into the shared
+rematerialization contract. Model-level static/dynamic validation is covered;
+full-graph measured rematerialization selection remains open.
+
+The shared unique-clock 1F1B carrier now has a runtime consumer: compute follows
+the emitted order while selected backward collectives execute on an independent
+transport executor and are joined before completion. This closes the missing
+runtime-consumption seam structurally; a real multi-rank ROCm transport packet
+and optimizer-shard collective mapping remain exact-device follow-ups.
+
+Measured schedule records can now override tile M/N/K, warp count, and pipeline
+depth in the actual Schedule IR and Tile IR, with target/evidence/latency
+validation. This removes the prior metadata-only autotune result path. ROCm
+kernel-specific candidate measurements and selector ratchets remain owned by
+their individual work items.
+
+The DeltaNet/Kimi/modified-delta family replaces finite-difference reverse mode
+with an analytic O(S) reverse recurrence for Q/K/V, gate, beta, decay, erase,
+modified normalization, and carried state. Schedule IR records FP32 carried
+state, chunked/recurrent forward, and reverse-token backward ordering.
+Directional-derivative fixtures prove the shared math. The physical-packaging
+follow-up in the next synchronization record supersedes this earlier open
+statement; the later `CORE-SEQUENCE-MIXER-PHYSICAL-BACKWARD-2026-07-28`
+record also supersedes the earlier parallel-chunk open statement.
+
+Continuation `CORE-PRODUCTION-EVIDENCE-2026-07-27` closes the physical
+factored/full Adafactor adjoint follow-up on gfx1151. The compiler-owned
+ten-entry HSACO now includes deterministic checkpoint/recompute, mean,
+row/column, finalize, and full-moment reverse entries; exact factored and
+full-moment fixtures match the shared analytic VJP. The operation-total packet
+records a 14.422 ms median and 15.038 ms p95 for `257x255`, including
+allocation, copies, cache lookup, seven launches, synchronization, and result
+copies. It is deliberately selector-ineligible.
+
+Emitted 1F1B steps now own serializable collective descriptors. The shared
+OptimizerShard runtime enforces replicated-to-rank-local reduce-scatter and
+rank-local-to-replicated all-gather transitions while transport overlaps
+compute. NCCL and RCCL use the same collective ABI with CUDA and HIP runtimes
+selected independently. Deterministic two-rank integration uses the exact
+descriptor path. This host exposes one gfx1151 and no loadable RCCL library, so
+real multi-rank RCCL evidence remains blocked rather than inferred.
+
+ROCm DeltaNet backward is physically packaged as a five-entry FP32 program:
+checkpoint, affine chunk summary, deterministic prefix, parallel chunk fill,
+and unique-`(batch,head)` reverse. Exact gfx1151 proof crosses chunk boundaries
+and matches dQ/dK/dV and gate/beta/decay derivatives for gated and modified
+recurrences, including the modified-normalization VJP. For `erase=false`, the
+compiler composes exact `state_out = scale * state_in + update` chunk summaries;
+state-dependent erase retains its exact serial checkpoint dependency.
+
+Cross-backend sync `CORE-SEQUENCE-MIXER-PHYSICAL-BACKWARD-2026-07-28` records a
+resident two-cohort gfx1151 packet for modified backward at `[2,8,128,16]`.
+Chunk 16 wins both cohorts (12.982 and 13.008 ms median) over the serial
+chunk-64 baseline (13.689 and 13.710 ms), with `2.21e-7` maximum error and
+0.20% cross-cohort variation. The packet is intentionally selector-ineligible:
+this exact gfx1151 host is WSL, so bare-metal timing remains the production
+selector gate. Apple/CUDA schedules are not inferred from this AMD package.

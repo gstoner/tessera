@@ -1745,7 +1745,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "runtime.launch() (rocm_moe_compiled).",
     },
     # Optimizer steps (P3) — fused per-parameter update on gfx1151
-    # (rocm_optimizer_compiled). adafactor (factored moments) is a follow-up.
+    # (rocm_optimizer_compiled).
     **{op: {
         "dtypes": ("fp32",),
         "feature_flags": ("optimizer",),
@@ -1754,6 +1754,15 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "thread per element; host computes the 1-β^t bias correction) on "
                  "gfx1151. Executes via runtime.launch() (rocm_optimizer_compiled).",
     } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    "adafactor": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("optimizer", "factored_state"),
+        "notes": "Optimizer adafactor — compiler-owned ten-entry gfx1151 "
+                 "HSACO updates explicit row/column or full moments and emits "
+                 "deterministic factored/full-moment VJPs. Executes via "
+                 "runtime.launch() (rocm_adafactor_compiled / "
+                 "rocm_adafactor_bwd_compiled).",
+    },
     # P3 tail — LAMB: device adam update + a per-tensor trust ratio ‖p‖/‖update‖
     # on host (the reduction the elementwise lane can't do).
     "lamb": {
@@ -2620,6 +2629,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     **{(op, "rocm"): "tests/unit/test_rocm_optimizer_compiled.py"
        for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    ("adafactor", "rocm"): "tests/unit/test_rocm_optimizer_compiled.py",
     ("lamb", "x86"): "tests/unit/test_x86_lamb_compiled.py",
     ("lamb", "rocm"): "tests/unit/test_rocm_lamb_compiled.py",
     ("muon", "x86"): "tests/unit/test_x86_muon_compiled.py",

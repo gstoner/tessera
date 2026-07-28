@@ -152,6 +152,27 @@ class TuningResult:
         return (f"TuningResult(tflops={self.tflops:.2f}, "
                 f"latency_ms={self.latency_ms:.4f}, config={self.config!r}{suffix})")
 
+    def to_measured_schedule(self, *, target: str) -> Dict[str, Any]:
+        """Return the lowering input only for a successful measured trial."""
+        if self.status != "ok":
+            raise ValueError(
+                f"cannot apply tuning result with status {self.status!r}"
+            )
+        if self.method != "measured":
+            raise ValueError(
+                "only device-measured tuning results may drive lowering"
+            )
+        if not math.isfinite(self.latency_ms) or self.latency_ms <= 0.0:
+            raise ValueError(
+                "measured tuning result requires positive finite latency"
+            )
+        return {
+            "method": "measured",
+            "target": str(target),
+            "latency_ms": float(self.latency_ms),
+            "config": self.config.to_dict(),
+        }
+
 
 @dataclass(frozen=True)
 class CandidateRejection:

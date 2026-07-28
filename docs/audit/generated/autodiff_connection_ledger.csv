@@ -2,7 +2,7 @@ family,category,python_reference,ir_adjoint,bwd_cpu_ir_oracle,bwd_target_lowered
 abs,numeric_helper,yes,none,,,,,,,python_reference=python-unit-registry,,,
 absolute,numeric_helper,yes,none,,,,,,,python_reference=python-unit-registry,,,
 acos,elementwise,yes,none,,,,,,,python_reference=python-unit-registry,,,
-adafactor,functional_optimizer_step,yes,none,,,,,,,python_reference=python-unit-registry,,,
+adafactor,functional_optimizer_step,yes,none,,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,rocm_gfx1151,,python_reference=python-unit-registry;device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151],native backward executes on rocm_gfx1151 (Phase 4),rocm_gfx1151=recompute_optimizer_state,rocm_gfx1151=dedicated
 adam,functional_optimizer_step,yes,native,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core,native compiler adjoint,,
 adamw,functional_optimizer_step,yes,none,,,,,,,python_reference=python-unit-registry,,,
 adaptive_pool,pooling,yes,none,,,,,,,python_reference=python-unit-registry,,,
@@ -109,7 +109,7 @@ floor_div,elementwise,yes,none,,,,,,,python_reference=python-unit-registry,,,
 focal_loss,loss,yes,none,,,,,,,python_reference=python-unit-registry,,,
 fused_epilogue,fused_epilogue,yes,none,,,,,,,python_reference=python-unit-registry,,,
 gated_attention,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
-gated_deltanet,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
+gated_deltanet,attention,yes,none,,rocm_gfx1151,"rocm_gfx1151,x86_avx512","rocm_gfx1151,x86_avx512",rocm_gfx1151,x86_avx512,python_reference=python-unit-registry;device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151];device[x86_avx512=clang 23 -mavx512f; x86_64 AVX-512],"native backward executes on rocm_gfx1151, x86_avx512 (Phase 4)",rocm_gfx1151=save_fp32_state_trajectory;x86_avx512=resident_fp32_state_and_chunk_summaries,rocm_gfx1151=dedicated;x86_avx512=dedicated
 gather,indexing,yes,none,,,,,,,python_reference=python-unit-registry,,,
 gelu,elementwise,yes,native,cpu,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;bwd_cpu_ir_oracle=llvm23-core,native compiler adjoint,,
 gemm,loop_nest,yes,none,,,,,,,python_reference=python-unit-registry,,,
@@ -133,7 +133,7 @@ interpolate,vision,yes,none,,,,,,,python_reference=python-unit-registry,,,
 irfft,spectral,yes,none,,,,,,,python_reference=python-unit-registry,,,
 istft,spectral,yes,none,,,,,,,python_reference=python-unit-registry,,,
 js_divergence,loss,yes,none,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+llvm23+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=save_inputs,nvidia_sm120=dedicated
-kimi_delta_attention,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
+kimi_delta_attention,attention,yes,none,,rocm_gfx1151,"rocm_gfx1151,x86_avx512","rocm_gfx1151,x86_avx512",rocm_gfx1151,x86_avx512,python_reference=python-unit-registry;device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151];device[x86_avx512=clang 23 -mavx512f; x86_64 AVX-512],"native backward executes on rocm_gfx1151, x86_avx512 (Phase 4)",rocm_gfx1151=save_fp32_state_trajectory;x86_avx512=resident_fp32_state_and_chunk_summaries,rocm_gfx1151=dedicated;x86_avx512=dedicated
 kl_divergence,loss,yes,none,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+llvm23+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=save_inputs,nvidia_sm120=dedicated
 label_smoothed_cross_entropy,loss,yes,none,,nvidia_sm120,nvidia_sm120,nvidia_sm120,nvidia_sm120,,python_reference=python-unit-registry;device[nvidia_sm120=cuda13.3+llvm23+sm120],native backward executes on nvidia_sm120 (Phase 4),nvidia_sm120=save_inputs,nvidia_sm120=dedicated
 lamb,optimizer,yes,none,,,,,,,python_reference=python-unit-registry,,,
@@ -172,7 +172,7 @@ minimum,numeric_helper,yes,none,,,,,,,python_reference=python-unit-registry,,,
 mla_decode,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
 mla_decode_fused,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
 mod,elementwise,yes,none,,,,,,,python_reference=python-unit-registry,,,
-modified_delta_attention,attention,yes,none,,,,,,,python_reference=python-unit-registry,,,
+modified_delta_attention,attention,yes,none,,rocm_gfx1151,"rocm_gfx1151,x86_avx512","rocm_gfx1151,x86_avx512",rocm_gfx1151,x86_avx512,python_reference=python-unit-registry;device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151];device[x86_avx512=clang 23 -mavx512f; x86_64 AVX-512],"native backward executes on rocm_gfx1151, x86_avx512 (Phase 4)",rocm_gfx1151=save_fp32_state_trajectory;x86_avx512=resident_fp32_state_and_chunk_summaries,rocm_gfx1151=dedicated;x86_avx512=dedicated
 moe,moe,yes,none,,,,,,,python_reference=python-unit-registry,,,
 moe_combine,moe_transport,yes,none,,,,,,,python_reference=python-unit-registry,,,
 moe_dispatch,moe_transport,yes,none,,,,,,,python_reference=python-unit-registry,,,

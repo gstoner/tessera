@@ -944,8 +944,12 @@ def run_fused_region(region: FusedRegion, A: np.ndarray, B: np.ndarray,
     # ~55-98x the scalar kernel and capturing the f16 throughput. Reduction
     # regions stay on the scalar stack/tiled path (cross-tile row reduce is v2).
     _is_bf16 = bf16 is not None and in_dtype == bf16
-    if coopmat_eligible(region) and (in_dtype in (np.float16, np.float32)
-                                     or _is_bf16):
+    _dtype_tag = ("bf16" if _is_bf16
+                  else "f16" if in_dtype == np.float16
+                  else "f32" if in_dtype == np.float32 else "other")
+    # Same predicate the emitter uses (`select_fused_variant`), so a kernel
+    # emitted through the generic build loop is the one this path would launch.
+    if select_fused_variant(region, _dtype_tag) == COOPMAT:
         # Pointwise regions run on the matrix units for f16/f32 AND bf16
         # (simdgroup_matrix<bfloat> — M2). A reduction region or an MSL-bfloat
         # miss falls through to the scalar bf16/f32 path below.
@@ -1951,14 +1955,58 @@ def autotune_coopmat_tile(region: FusedRegion, M: int, N: int, K: int, *,
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+#: Matmul-epilogue kernel variants, most preferred first. `run_fused_region`
+#: tries coopmat before the scalar stack because the matrix units are ~55-98x
+#: the scalar kernel (F2d); `AUTO` reproduces that order rather than inventing
+#: a second one.
+COOPMAT = "coopmat"
+TILED = "tiled"
+SCALAR = "scalar"
+AUTO = "auto"
+
+#: variant -> (synthesis callable, entry-point symbol) for a FusedRegion.
+_FUSED_VARIANTS: dict[str, tuple[Any, str]] = {
+    COOPMAT: (synthesize_matmul_epilogue_coopmat_msl, _ENTRY_COOPMAT),
+    TILED: (synthesize_matmul_epilogue_msl_tiled, _ENTRY_TILED),
+    SCALAR: (synthesize_matmul_epilogue_msl, _ENTRY),
+}
+
+#: Element types with a coopmat (`simdgroup_matrix`) path. bf16 rides
+#: `simdgroup_matrix<bfloat>` on M2+; f64 has no matrix form at all.
+_COOPMAT_DTYPES = frozenset({"f16", "f32", "bf16"})
+
+
+def select_fused_variant(region: FusedRegion, dtype: str = "f32") -> str:
+    """The matmul-epilogue variant this region/dtype should be emitted as.
+
+    One rule, two callers: `run_fused_region` picks a kernel to *launch* and
+    `AppleMSLEmitter.emit` picks a kernel to *emit*. They must agree, or routing
+    execution through the generic synth→compile→cache loop silently downgrades a
+    coopmat region to the scalar body — a scheduling regression the F4 oracle
+    would not catch, because both bodies compute the same numbers.
+
+    Returns the preferred variant only; it is not a claim the runtime will
+    succeed with it. `run_fused_region` still falls back on a compile/dispatch
+    miss, which is why the launch path keeps its own retry chain.
+    """
+    if coopmat_eligible(region) and dtype in _COOPMAT_DTYPES:
+        return COOPMAT
+    return SCALAR
+
+
 class AppleMSLEmitter(KernelEmitter):
     """Reference :class:`KernelEmitter` — wraps the ``synthesize_*_msl`` bodies.
 
     Dispatches an arch-agnostic fused ``region`` to its Metal Shading Language
-    source + entry-point name and returns a :class:`KernelSource`. Variant/tile
-    selection (tiled / coopmat / online) stays in the ``run_*`` dispatch path;
-    this emitter yields the canonical scalar source form for the region, which is
-    what the generic synth→compile→cache→launch loop (Workstream B4) consumes.
+    source + entry-point name and returns a :class:`KernelSource`.
+
+    For a :class:`FusedRegion` the emitter is **variant-aware**: ``variant=AUTO``
+    (the default) resolves through :func:`select_fused_variant`, the same rule
+    the ``run_*`` launch path uses, so the generic synth→compile→cache→launch
+    loop (Workstream B4) gets the coopmat body where the launch path would run
+    one. Passing an explicit variant pins it — that is the hook a measured
+    arbiter (Decision #28) uses to emit every candidate and time them, instead of
+    trusting this preference order.
     """
 
     target = _MSL_TARGET
@@ -1984,6 +2032,12 @@ class AppleMSLEmitter(KernelEmitter):
     def can_emit(self, region: Any) -> bool:
         return self._dispatch(region) is not None
 
+    def variant_for(self, region: Any, dtype: str = "f32") -> str | None:
+        """The variant :meth:`emit` would choose, or None for a single-form region."""
+        if not isinstance(region, FusedRegion):
+            return None
+        return select_fused_variant(region, dtype)
+
     def emit(
         self,
         region: Any,
@@ -1991,6 +2045,7 @@ class AppleMSLEmitter(KernelEmitter):
         spec: SpecPolicy = SpecPolicy.BUCKET,
         dtype: str = "f32",
         dims: tuple[int, ...] | None = None,
+        variant: str = AUTO,
     ) -> KernelSource:
         disp = self._dispatch(region)
         if disp is None:
@@ -2007,6 +2062,26 @@ class AppleMSLEmitter(KernelEmitter):
                 "(guarded runtime-dim emitter lands in Workstream W2); "
                 "request STATIC or BUCKET")
         synth, entry = disp
+        chosen = None
+        if isinstance(region, FusedRegion):
+            chosen = select_fused_variant(region, dtype) if variant == AUTO else variant
+            if chosen not in _FUSED_VARIANTS:
+                raise EmitError(
+                    f"unknown matmul-epilogue variant {variant!r}; known: "
+                    f"{', '.join(sorted(_FUSED_VARIANTS))} (or {AUTO!r})")
+            if chosen == COOPMAT and not coopmat_eligible(region):
+                # A pinned coopmat request on a reduction/residual/prologue
+                # region has no matrix form — refuse rather than hand back the
+                # scalar body under a coopmat label (Decision #21).
+                raise EmitError(
+                    "coopmat variant requested for a region the coopmat kernel "
+                    "cannot express (reduction, residual, or prologue present); "
+                    f"emit {SCALAR!r} or {AUTO!r} instead")
+            synth, entry = _FUSED_VARIANTS[chosen]
+        elif variant != AUTO:
+            raise EmitError(
+                f"{type(region).__name__} has a single emitted form; variant "
+                f"{variant!r} is only meaningful for a FusedRegion")
         source = synth(region, dtype=dtype)
         # B2c: record the shape-specialization key. Symbolic dim identity comes
         # from the region (dim_names) when present; STATIC/BUCKET key on `dims`.

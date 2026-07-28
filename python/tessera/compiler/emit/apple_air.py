@@ -168,6 +168,84 @@ def compile_msl_to_metallib(source: str, *, entry: str,
     return metallib
 
 
+def _metallib_coopmat_symbol() -> Any:
+    """ctypes binding for the AOT dispatch (`newLibraryWithURL:` + same body).
+
+    The JIT twin is `apple_msl._synth_coopmat_symbol`; both end in the same
+    `dispatch_matmul_epilogue_coopmat` in the runtime, so a timing difference
+    between them is the compile strategy and not a different dispatch.
+    """
+    import ctypes
+
+    from tessera.runtime import _load_apple_gpu_runtime
+
+    runtime = _load_apple_gpu_runtime()
+    symbol = getattr(
+        runtime, "tessera_apple_gpu_metallib_matmul_epilogue_coopmat", None)
+    if symbol is None:
+        return None
+    void_p = ctypes.c_void_p
+    symbol.argtypes = [ctypes.c_char_p, ctypes.c_char_p, void_p, void_p, void_p,
+                       void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+                       ctypes.c_int32, ctypes.c_int32, ctypes.c_int32]
+    symbol.restype = ctypes.c_int32
+    return symbol
+
+
+def run_fused_region_aot(region: Any, A: Any, B: Any, bias: Any = None, *,
+                         tile: int = 32) -> tuple[Any, str]:
+    """Run a coopmat region from a prebuilt `.metallib`.
+
+    Returns ``(output, execution)`` with ``execution`` one of
+    ``"metal_metallib"`` (the AOT kernel ran) or ``"reference"`` (numpy — no
+    device, no toolchain, or the dispatch declined). It never reports the AOT
+    tag for work the JIT lane did: the only device path here is the metallib
+    symbol.
+    """
+    import ctypes
+
+    import numpy as np
+
+    from tessera.compiler.emit import apple_msl
+
+    dtype = np.float16 if np.asarray(A).dtype == np.float16 else np.float32
+    a = np.ascontiguousarray(A, dtype)
+    b = np.ascontiguousarray(B, dtype)
+    m, k = a.shape
+    _, n = b.shape
+    out = np.empty((m, n), dtype)
+
+    symbol = _metallib_coopmat_symbol()
+    if symbol is not None and metal_toolchain_available():
+        source = get_emitter(AIR_TARGET).emit(
+            region, dtype="f16" if dtype == np.float16 else "f32",
+            dims=(m, n, k), variant=apple_msl.COOPMAT)
+        try:
+            metallib = compile_msl_to_metallib(source.source, entry=source.entry)
+        except MetalToolchainError:
+            metallib = None
+        if metallib is not None:
+            bias_arr = (np.ascontiguousarray(bias, dtype)
+                        if bias is not None else None)
+            pointer = (lambda arr: arr.ctypes.data_as(ctypes.c_void_p))
+            ok = symbol(
+                str(metallib).encode("utf-8"), source.entry.encode("utf-8"),
+                pointer(a), pointer(b),
+                pointer(bias_arr) if bias_arr is not None else None,
+                pointer(out), m, n, k, 1 if bias_arr is not None else 0,
+                dtype().itemsize, tile)
+            if ok:
+                return out, "metal_metallib"
+
+    # The region's own reference — the same one the F4 oracle compares against,
+    # so a fallback here is numerically identical to the JIT lane's fallback.
+    reference = region.reference(np.asarray(a, np.float32),
+                                 np.asarray(b, np.float32),
+                                 None if bias is None else np.asarray(bias, np.float32),
+                                 None)
+    return np.asarray(reference, dtype), "reference"
+
+
 def _apple_air_compile_fn(source: KernelSource) -> str:
     """The ``apple_gpu_air`` compile step — a real artifact, not a deferral.
 

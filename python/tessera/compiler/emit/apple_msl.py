@@ -2046,7 +2046,11 @@ class AppleMSLEmitter(KernelEmitter):
         dtype: str = "f32",
         dims: tuple[int, ...] | None = None,
         variant: str = AUTO,
+        **kwargs: Any,
     ) -> KernelSource:
+        if kwargs:
+            raise EmitError(
+                f"AppleMSLEmitter has no {sorted(kwargs)} emit option(s)")
         disp = self._dispatch(region)
         if disp is None:
             raise EmitError(

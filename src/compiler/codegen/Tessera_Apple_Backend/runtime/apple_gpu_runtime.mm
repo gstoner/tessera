@@ -9820,21 +9820,67 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
 // in the source), so no dynamic threadgroup memory is set here.  One 32x32
 // output tile per threadgroup, 128 threads (4 simdgroups).  Buffers: 0=A 1=B
 // 2=O 3=M 4=N 5=K, 6=bias(N) iff has_bias.  Returns 1 on GPU success, else 0.
-extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
-    const char* msl_source, const char* entry, const void* A, const void* B,
-    const void* bias, void* O, int32_t M, int32_t N, int32_t K,
-    int32_t has_bias, int32_t elem_size, int32_t tile_dim) {
-  if (!msl_source || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0 ||
-      (elem_size != 2 && elem_size != 4) || (tile_dim != 32 && tile_dim != 64))
-    return 0;
-  MetalDeviceContext &ctx = deviceContext();
-  if (!ctx.ok) return 0;
-  @autoreleasepool {
-    NSString *src = [NSString stringWithUTF8String:msl_source];
-    NSString *ep = [NSString stringWithUTF8String:entry];
-    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
-    if (!pso) return 0;
+// Load a compute pipeline from a prebuilt `.metallib` (the AOT lane) instead of
+// compiling MSL at launch. Mirrors `compile_msl_kernel`'s cache discipline —
+// same ctx.kernel_cache, keyed on path + '\x1f' + entry — so a repeated launch
+// of an AOT kernel is the same cheap lookup a JIT one gets, and the timing
+// difference measured against the JIT lane is the *compile*, not the caching.
+id<MTLComputePipelineState> load_metallib_kernel(MetalDeviceContext &ctx,
+                                                 NSString *path,
+                                                 NSString *entry_point) {
+  std::string key;
+  key.append("\x02metallib\x1f");  // namespace: a path is not MSL source
+  key.append([path UTF8String]);
+  key.push_back('\x1f');
+  key.append([entry_point UTF8String]);
 
+  {
+    std::lock_guard<std::mutex> lock(ctx.kernel_cache_mu);
+    auto it = ctx.kernel_cache.find(key);
+    if (it != ctx.kernel_cache.end()) return it->second;
+  }
+
+  NSError *error = nil;
+  NSURL *url = [NSURL fileURLWithPath:path];
+  id<MTLLibrary> library = [ctx.device newLibraryWithURL:url error:&error];
+  if (!library) {
+    ts_set_last_gpu_error(
+        3, "metallib_load",
+        error ? [[error localizedDescription] UTF8String]
+              : "newLibraryWithURL returned nil");
+    return nil;
+  }
+  id<MTLFunction> fn = [library newFunctionWithName:entry_point];
+  if (!fn) {
+    ts_set_last_gpu_error(3, "metallib_entry",
+                          "entry point not found in metallib");
+    return nil;
+  }
+  id<MTLComputePipelineState> pso =
+      [ctx.device newComputePipelineStateWithFunction:fn error:&error];
+  if (!pso) {
+    ts_set_last_gpu_error(
+        3, "metallib_pipeline",
+        error ? [[error localizedDescription] UTF8String]
+              : "newComputePipelineStateWithFunction returned nil");
+    return nil;
+  }
+  {
+    std::lock_guard<std::mutex> lock(ctx.kernel_cache_mu);
+    ctx.kernel_cache[key] = pso;
+  }
+  return pso;
+}
+
+// The dispatch half of the coopmat GEMM, factored out so the JIT (MSL source)
+// and AOT (metallib) entry points below differ ONLY in how they obtain the
+// pipeline. Two copies would drift, and then an AOT-vs-JIT measurement would be
+// comparing two dispatch paths while claiming to compare compile strategies.
+static int32_t dispatch_matmul_epilogue_coopmat(
+    MetalDeviceContext &ctx, id<MTLComputePipelineState> pso, const void* A,
+    const void* B, const void* bias, void* O, int32_t M, int32_t N, int32_t K,
+    int32_t has_bias, int32_t elem_size, int32_t tile_dim) {
+  @autoreleasepool {
     NSUInteger es = (NSUInteger)elem_size;
     NSUInteger aBytes = es * (NSUInteger)M * (NSUInteger)K;
     NSUInteger bBytes = es * (NSUInteger)K * (NSUInteger)N;
@@ -9876,6 +9922,49 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
     ts_record_pipeline_resources(pso, tg);
     std::memcpy(O, [bufO contents], oBytes);
     return 1;
+  }
+}
+
+// JIT lane: compile the MSL at launch, then dispatch.
+extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
+    const char* msl_source, const char* entry, const void* A, const void* B,
+    const void* bias, void* O, int32_t M, int32_t N, int32_t K,
+    int32_t has_bias, int32_t elem_size, int32_t tile_dim) {
+  if (!msl_source || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0 ||
+      (elem_size != 2 && elem_size != 4) || (tile_dim != 32 && tile_dim != 64))
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *src = [NSString stringWithUTF8String:msl_source];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = compile_msl_kernel(ctx, src, ep);
+    if (!pso) return 0;
+    return dispatch_matmul_epilogue_coopmat(ctx, pso, A, B, bias, O, M, N, K,
+                                            has_bias, elem_size, tile_dim);
+  }
+}
+
+// AOT lane: load a prebuilt `.metallib` (emit/apple_air.py built it via
+// `xcrun metal -c` + `xcrun metallib`), then run the SAME dispatch. Returning 0
+// means no GPU dispatch happened — the caller records a reference fallback
+// rather than attributing a JIT result to the AOT lane.
+extern "C" int32_t tessera_apple_gpu_metallib_matmul_epilogue_coopmat(
+    const char* metallib_path, const char* entry, const void* A, const void* B,
+    const void* bias, void* O, int32_t M, int32_t N, int32_t K,
+    int32_t has_bias, int32_t elem_size, int32_t tile_dim) {
+  if (!metallib_path || !entry || !A || !B || !O || M <= 0 || N <= 0 || K <= 0 ||
+      (elem_size != 2 && elem_size != 4) || (tile_dim != 32 && tile_dim != 64))
+    return 0;
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok) return 0;
+  @autoreleasepool {
+    NSString *path = [NSString stringWithUTF8String:metallib_path];
+    NSString *ep = [NSString stringWithUTF8String:entry];
+    id<MTLComputePipelineState> pso = load_metallib_kernel(ctx, path, ep);
+    if (!pso) return 0;
+    return dispatch_matmul_epilogue_coopmat(ctx, pso, A, B, bias, O, M, N, K,
+                                            has_bias, elem_size, tile_dim);
   }
 }
 

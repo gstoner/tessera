@@ -108,6 +108,55 @@ def test_bad_msl_raises_naming_the_stage_rather_than_returning_a_path(tmp_path):
             cache_dir=tmp_path)
 
 
+@requires_toolchain
+@pytest.mark.hardware_apple_gpu
+def test_aot_and_jit_lanes_are_numerically_identical() -> None:
+    """Same MSL, same dispatch body — only library creation differs.
+
+    Bit-identical is the right bar here, not a tolerance: if these two ever
+    disagree, the AOT lane is running a different kernel and any AOT-vs-JIT
+    timing is measuring the wrong thing.
+    """
+    import numpy as np
+
+    from tessera.compiler.emit import apple_msl
+
+    region = F.FusedRegion(epilogue=("gelu",))
+    rng = np.random.default_rng(0)
+    a = (rng.standard_normal((128, 128)) * 0.1).astype(np.float16)
+    b = (rng.standard_normal((128, 128)) * 0.1).astype(np.float16)
+
+    aot, aot_tag = apple_air.run_fused_region_aot(region, a, b)
+    jit, jit_tag = apple_msl.run_fused_region(region, a, b)
+    if aot_tag == "reference" or jit_tag != "metal_runtime":
+        pytest.skip(f"a lane declined the device (aot={aot_tag}, jit={jit_tag})")
+
+    assert aot_tag == "metal_metallib", "AOT tag must name the metallib lane"
+    np.testing.assert_array_equal(np.asarray(aot, np.float32),
+                                  np.asarray(jit, np.float32))
+    reference = region.reference(np.asarray(a, np.float32),
+                                 np.asarray(b, np.float32), None, None)
+    np.testing.assert_allclose(np.asarray(aot, np.float32), reference,
+                               atol=1e-3, rtol=1e-3)
+
+
+def test_aot_runner_reports_reference_when_the_device_declines(monkeypatch) -> None:
+    """Never label a numpy result as the metallib lane."""
+    import numpy as np
+
+    monkeypatch.setattr(apple_air, "_metallib_coopmat_symbol", lambda: None)
+    region = F.FusedRegion(epilogue=("gelu",))
+    a = np.ones((32, 32), np.float16)
+    b = np.ones((32, 32), np.float16)
+    out, tag = apple_air.run_fused_region_aot(region, a, b)
+    assert tag == "reference"
+    np.testing.assert_allclose(
+        np.asarray(out, np.float32),
+        region.reference(np.asarray(a, np.float32), np.asarray(b, np.float32),
+                         None, None),
+        atol=1e-2, rtol=1e-2)
+
+
 def test_missing_toolchain_declines_instead_of_falling_back(monkeypatch, tmp_path):
     """Never silently produce a JIT result under the AOT target's name."""
     monkeypatch.setattr(apple_air.metal_toolchain_available, "__wrapped__",

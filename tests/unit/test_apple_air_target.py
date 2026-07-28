@@ -157,6 +157,46 @@ def test_aot_runner_reports_reference_when_the_device_declines(monkeypatch) -> N
         atol=1e-2, rtol=1e-2)
 
 
+@requires_toolchain
+def test_nonce_control_defeats_metals_shader_cache(tmp_path) -> None:
+    """The benchmark's control: a unique nonce must yield a distinct artifact.
+
+    Metal keeps an on-disk shader cache that survives process exit — the same
+    kernel measured 140.8 ms in one process and 0.5 ms in the next. Every
+    AOT-vs-JIT number depends on each sample being a genuine cache miss. If a
+    toolchain change ever made the nonce not affect the artifact, the benchmark
+    would quietly start measuring cache hits and report a flattering result, so
+    the control is asserted here rather than trusted.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "benchmark_aot_vs_jit",
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/apple_gpu/benchmark_aot_vs_jit.py")
+    assert spec and spec.loader
+    bench = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bench)
+
+    source_a, entry_a = bench._nonce_source("111111")
+    source_b, entry_b = bench._nonce_source("222222")
+    assert source_a != source_b and entry_a != entry_b
+
+    lib_a = apple_air.compile_msl_to_metallib(source_a, entry=entry_a,
+                                              cache_dir=tmp_path)
+    lib_b = apple_air.compile_msl_to_metallib(source_b, entry=entry_b,
+                                              cache_dir=tmp_path)
+    assert lib_a != lib_b, "distinct sources collapsed to one metallib"
+    # The bar that matters. An earlier nonce was an *unused* `constant`; the
+    # Metal compiler dropped it as dead code and both samples produced
+    # byte-identical metallibs, so the AOT lane reloaded one artifact and its
+    # measured cost was ~13x too good. Renaming the entry point is what makes
+    # each sample a genuinely distinct library.
+    assert lib_a.read_bytes() != lib_b.read_bytes(), (
+        "distinct sources produced byte-identical metallibs — the nonce is "
+        "being optimized away and the benchmark's cache control is broken")
+
+
 def test_missing_toolchain_declines_instead_of_falling_back(monkeypatch, tmp_path):
     """Never silently produce a JIT result under the AOT target's name."""
     monkeypatch.setattr(apple_air.metal_toolchain_available, "__wrapped__",

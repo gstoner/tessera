@@ -8,6 +8,58 @@ last_updated: 2026-07-27
 
 # Apple compiler, exact-device, and performance plan
 
+## APPLE-AOT-1: `.metallib` pipeline creation measured against the JIT lane
+
+**Status: measured 2026-07-28 on the owning host (Apple M1 Max / apple7,
+macOS 26.5.2, SDK 26.5, Metal toolchain 32023.883, `air64-apple-darwin25.5.0`).
+Host-wall timing, not device-event evidence; not selector-eligible.**
+
+`apple_gpu_air` (`emit/apple_air.py`) compiles synthesized MSL ahead of time —
+`xcrun metal -c` → `.air` → `xcrun metallib` → `newLibraryWithURL:` — against
+the default `apple_gpu` lane's `newLibraryWithSource:`. Both run the same
+synthesized coopmat kernel and the same
+`dispatch_matmul_epilogue_coopmat` in the runtime, verified **bit-identical**
+(max |diff| exactly 0.0, both 1.2168e-4 from the f32 reference at f16 storage).
+
+Cold pipeline creation + one dispatch, 256×256×256 f16 coopmat, n=25, a
+never-before-compiled kernel per sample, device pre-warmed, lanes interleaved:
+
+| lane | min | p25 | median | p75 | max |
+|---|---|---|---|---|---|
+| JIT `newLibraryWithSource:` | 28.7 | 29.3 | **29.7** | 30.0 | 30.5 |
+| AOT `newLibraryWithURL:` | 14.9 | 15.1 | **15.2** | 15.4 | 15.8 |
+| AOT offline build (excluded) | 72.2 | 73.0 | **73.7** | 74.4 | 77.2 |
+
+**AOT roughly halves pipeline creation — ~14.5 ms saved, 1.95×.** The offline
+build costs ~73.7 ms once per kernel per machine and repays after ~5 cold
+launches. Warm steady state is a wash (0.36/0.39, 0.69/0.72, 1.61/1.53 ms at
+128/512/1024 cubes) — expected, since both are then a cache lookup into the
+same dispatch.
+
+**The measurement needs a control, and the obvious one is wrong.** Metal keeps
+an on-disk shader cache that survives process exit: the same kernel measured
+140.8 ms in one process and 0.5 ms in the next. Timing "first launch in a fresh
+process" therefore measures whether that kernel was ever built on this machine.
+A first attempt controlled it with a unique *unused `constant`* — which the
+Metal compiler drops as dead code, producing byte-identical metallibs, so the
+AOT lane reloaded one artifact and reported 1.2 ms (a 13× win). Renaming the
+kernel **entry point** per sample makes each library genuinely distinct and
+moves both lanes: JIT 15.7 → 29.7, AOT 1.2 → 15.2. The *saving* was stable
+across both methods (14.6 vs 14.5 ms); the *ratio* was not (13× vs 1.95×).
+`test_apple_air_target.py::test_nonce_control_defeats_metals_shader_cache`
+asserts the artifacts differ, so a toolchain change cannot silently restore the
+flattering number.
+
+**Strategic read for Decision #26a.** The ~15 ms AOT removes is the MSL
+front end. The ~15.2 ms that remains is AIR → GPU-ISA, which *any* AIR-based
+path still pays — so emitting AIR directly from LLVM IR would save the same
+~15 ms and no more. The ceiling on this whole direction is about half of cold
+pipeline creation, which should temper how much the undocumented-format and
+legal exposure of direct AIR emission is worth.
+
+Reproduce: `python3 benchmarks/apple_gpu/benchmark_aot_vs_jit.py --samples 25`.
+
+
 Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43
 self-resolving test files onto the shared `tests/_support/compiler_tool.py`
 driver contract and folds `CompilerToolchain` onto the same resolver and

@@ -10,11 +10,11 @@ Validated vs tessera.losses on gfx1151. Skip-clean: tessera-opt not built / no G
 
 from __future__ import annotations
 
-import os
 import numpy as np
 import pytest
 
 from tessera import losses
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _rocm_or_skip():
@@ -88,60 +88,45 @@ def test_canonical_dynamic_mse_reuses_shape_independent_hsaco():
 
 
 # ── GPU-free codegen gate (needs only tessera-opt) ───────────────────────────
-import subprocess  # noqa: E402
-from pathlib import Path  # noqa: E402
 
-_OPT = Path(os.environ.get(
-    "TESSERA_OPT",
-    Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt",
-))
+
+def _opt(directive, *passes):
+    """Skips when this build lacks a requested pass (see _support.compiler_tool)."""
+    return run_tessera_opt(directive, *passes)
 
 
 @pytest.mark.parametrize("kind", [0, 1, 2, 3, 4])
 def test_loss_codegen_and_lowers(kind):
-    if not _OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     d = ('module {\n  "tessera_rocm.pointwise_loss"() {name = "pl", '
          f'dtype = "f32", kind = {kind} : i64, param = 1.0 : f32}} '
          ': () -> ()\n}\n')
-    ir = subprocess.run([str(_OPT), "-", "--generate-rocm-pointwise-loss-kernel"],
-                        input=d, capture_output=True, text=True)
+    ir = _opt(d, "--generate-rocm-pointwise-loss-kernel")
     assert ir.returncode == 0, ir.stderr
     assert "gpu.func @pl" in ir.stdout
-    low = subprocess.run(
-        [str(_OPT), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-pointwise-loss-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=d, capture_output=True, text=True)
+    low = _opt(d, "--pass-pipeline=builtin.module(generate-rocm-pointwise-loss-kernel,"
+               "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+               "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout
 
 
 @pytest.mark.parametrize("kind", [0, 1, 2, 3])
 @pytest.mark.parametrize("reduction", ["none", "sum", "mean"])
 def test_regression_backward_codegen_and_lowers(kind, reduction):
-    if not _OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     directive = (
         'module {\n  "tessera_rocm.pointwise_loss"() {name = "pl_bwd", '
         f'dtype = "f32", kind = {kind} : i64, param = 0.75 : f32, '
         'backward = true, '
         f'reduction = "{reduction}"}} : () -> ()\n}}\n'
     )
-    generated = subprocess.run(
-        [str(_OPT), "-", "--generate-rocm-pointwise-loss-kernel"],
-        input=directive, capture_output=True, text=True,
-    )
+    generated = _opt(directive, "--generate-rocm-pointwise-loss-kernel")
     assert generated.returncode == 0, generated.stderr
     assert "gpu.func @pl_bwd" in generated.stdout
     assert generated.stdout.count("memref.store") == 2
-    lowered = subprocess.run(
-        [str(_OPT), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-pointwise-loss-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=directive, capture_output=True, text=True,
-    )
+    lowered = _opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-pointwise-loss-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert lowered.returncode == 0, lowered.stderr
     assert "llvm." in lowered.stdout
 

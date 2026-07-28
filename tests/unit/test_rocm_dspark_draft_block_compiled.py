@@ -3,6 +3,7 @@ import pytest
 
 from tessera import runtime as rt
 from tessera.stdlib import dspark
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _weights(vocab=8, hidden=6, seed=0):
@@ -127,20 +128,13 @@ def test_rocm_dspark_draft_block_native_gpu_matches_reference_on_hardware():
 
 
 def test_rocm_dspark_draft_block_codegen_lowers():
-    import subprocess
-    from pathlib import Path
-
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n'
         '  "tessera_rocm.dspark_draft_block"() {name = "ds"} : () -> ()\n'
         '}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-dspark-draft-block-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=directive, capture_output=True, text=True)
+    low = run_tessera_opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-dspark-draft-block-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout

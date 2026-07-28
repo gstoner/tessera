@@ -11,12 +11,12 @@ gfx1151. Skip-clean: tessera-opt not built / no GPU.
 
 from __future__ import annotations
 
-import os
 import numpy as np
 import pytest
 
 from tessera import optim
 from tessera.autodiff.vjp import get_vjp
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _rocm_or_skip():
@@ -349,110 +349,57 @@ def test_adafactor_full_backward_executes_on_gfx1151():
     )
 
 
+def _opt(directive, *passes):
+    """Skips when this build lacks a requested pass (see _support.compiler_tool)."""
+    return run_tessera_opt(directive, *passes)
+
+
 @pytest.mark.parametrize("kind", ["sgd", "momentum", "adam", "adamw", "lion"])
 def test_optimizer_codegen_lowers(kind):
-    import subprocess
-    from pathlib import Path
-    opt = Path(os.environ.get(
-        "TESSERA_OPT",
-        Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt",
-    ))
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     d = (f'module {{\n  "tessera_rocm.optimizer"() {{name = "o", kind = "{kind}"}} '
          ': () -> ()\n}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-optimizer-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=d, capture_output=True, text=True)
+    low = _opt(d, "--pass-pipeline=builtin.module(generate-rocm-optimizer-kernel,"
+               "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+               "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout
 
 
 def test_sgd_backward_codegen_lowers():
-    import subprocess
-    from pathlib import Path
-    opt = Path(os.environ.get(
-        "TESSERA_OPT",
-        Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt",
-    ))
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n  "tessera_rocm.optimizer"() {name = "sgd_bwd", '
         'kind = "sgd", backward = true} : () -> ()\n}\n'
     )
-    generated = subprocess.run(
-        [str(opt), "-", "--generate-rocm-optimizer-kernel"],
-        input=directive, capture_output=True, text=True,
-    )
+    generated = _opt(directive, "--generate-rocm-optimizer-kernel")
     assert generated.returncode == 0, generated.stderr
     assert "gpu.func @sgd_bwd" in generated.stdout
     assert generated.stdout.count("memref.store") == 2
-    lowered = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-optimizer-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=directive, capture_output=True, text=True,
-    )
+    lowered = _opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-optimizer-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert lowered.returncode == 0, lowered.stderr
     assert "llvm." in lowered.stdout
 
 
 @pytest.mark.parametrize("kind", ["adam", "adamw"])
 def test_adam_backward_codegen_lowers(kind):
-    import subprocess
-    from pathlib import Path
-
-    opt = Path(
-        os.environ.get(
-            "TESSERA_OPT",
-            Path(__file__).resolve().parents[2]
-            / "build/tools/tessera-opt/tessera-opt",
-        )
-    )
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n  "tessera_rocm.optimizer"() {name = "adam_bwd", '
         f'kind = "{kind}", backward = true}} : () -> ()\n}}\n'
     )
-    generated = subprocess.run(
-        [str(opt), "-", "--generate-rocm-optimizer-kernel"],
-        input=directive,
-        capture_output=True,
-        text=True,
-    )
+    generated = _opt(directive, "--generate-rocm-optimizer-kernel")
     assert generated.returncode == 0, generated.stderr
     assert "gpu.func @adam_bwd" in generated.stdout
     assert generated.stdout.count("memref.store") == 4
 
 
 def test_lion_backward_codegen_lowers_stop_sign_vjp():
-    import subprocess
-    from pathlib import Path
-
-    opt = Path(
-        os.environ.get(
-            "TESSERA_OPT",
-            Path(__file__).resolve().parents[2]
-            / "build/tools/tessera-opt/tessera-opt",
-        )
-    )
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n  "tessera_rocm.optimizer"() {name = "lion_bwd", '
         'kind = "lion", backward = true} : () -> ()\n}\n'
     )
-    generated = subprocess.run(
-        [str(opt), "-", "--generate-rocm-optimizer-kernel"],
-        input=directive,
-        capture_output=True,
-        text=True,
-    )
+    generated = _opt(directive, "--generate-rocm-optimizer-kernel")
     assert generated.returncode == 0, generated.stderr
     assert "gpu.func @lion_bwd" in generated.stdout
     assert generated.stdout.count("memref.store") == 3
@@ -461,29 +408,12 @@ def test_lion_backward_codegen_lowers_stop_sign_vjp():
 
 @pytest.mark.parametrize("backward", [False, True])
 def test_adafactor_codegen_lowers_factored_program(backward):
-    import subprocess
-    from pathlib import Path
-
-    opt = Path(
-        os.environ.get(
-            "TESSERA_OPT",
-            Path(__file__).resolve().parents[2]
-            / "build/tools/tessera-opt/tessera-opt",
-        )
-    )
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = (
         'module {\n  "tessera_rocm.optimizer"() {name = "ada", '
         f'kind = "adafactor", backward = {str(backward).lower()}}} '
         ': () -> ()\n}\n'
     )
-    generated = subprocess.run(
-        [str(opt), "-", "--generate-rocm-optimizer-kernel"],
-        input=directive,
-        capture_output=True,
-        text=True,
-    )
+    generated = _opt(directive, "--generate-rocm-optimizer-kernel")
     assert generated.returncode == 0, generated.stderr
     for suffix in (
         "row",
@@ -499,17 +429,10 @@ def test_adafactor_codegen_lowers_factored_program(backward):
     ):
         assert f"gpu.func @ada_{suffix}" in generated.stdout
     assert generated.stdout.count("memref.store") == 16
-    lowered = subprocess.run(
-        [
-            str(opt),
-            "-",
-            "--pass-pipeline=builtin.module(generate-rocm-optimizer-kernel,"
-            "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-            "reconcile-unrealized-casts))",
-        ],
-        input=directive,
-        capture_output=True,
-        text=True,
-    )
+    lowered = _opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-optimizer-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert lowered.returncode == 0, lowered.stderr
     assert lowered.stdout.count("llvm.func @ada_") == 10

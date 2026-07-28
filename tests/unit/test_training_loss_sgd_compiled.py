@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-import subprocess
-
 import numpy as np
 import pytest
+
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _artifact(rt, target: str, kind: str, reduction: str):
@@ -125,23 +123,14 @@ def test_training_loss_sgd_matches_unfused_contract(target, kind, reduction):
 
 
 def test_rocm_training_sgd_codegen_has_two_stores_and_runtime_lr():
-    opt = Path(os.environ.get(
-        "TESSERA_OPT",
-        Path(__file__).resolve().parents[2]
-        / "build/tools/tessera-opt/tessera-opt",
-    ))
-    if not opt.is_file():
-        pytest.skip("LLVM 23 tessera-opt is unavailable")
     directive = (
         'module {\n  "tessera_rocm.pointwise_loss"() '
         '{name = "training_sgd", dtype = "f32", kind = 2 : i64, '
         'param = 7.5e-1 : f32, training_sgd = true, '
         'reduction = "mean"} : () -> ()\n}\n'
     )
-    generated = subprocess.run(
-        [str(opt), "-", "--generate-rocm-pointwise-loss-kernel"],
-        input=directive, capture_output=True, text=True, check=False,
-    )
+    generated = run_tessera_opt(
+        directive, "--generate-rocm-pointwise-loss-kernel")
     assert generated.returncode == 0, generated.stderr
     assert "gpu.func @training_sgd" in generated.stdout
     assert generated.stdout.count("memref.store") == 2

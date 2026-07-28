@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 import tessera
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _rocm_or_skip():
@@ -94,17 +95,10 @@ def test_selective_ssm_gate_state():
 
 
 def test_ssm_codegen_lowers():
-    import subprocess
-    from pathlib import Path
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     d = ('module {\n  "tessera_rocm.selective_ssm"() {name = "ss"} '
          ': () -> ()\n}\n')
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-selective-ssm-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=d, capture_output=True, text=True)
+    low = run_tessera_opt(
+        d, "--pass-pipeline=builtin.module(generate-rocm-selective-ssm-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0 and "llvm." in low.stdout

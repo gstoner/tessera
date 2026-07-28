@@ -9,15 +9,11 @@ use memref.atomic_rmw addf. Validated on real gfx1151 vs the numpy VJP
 """
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
-from pathlib import Path
-
 import numpy as np
 import pytest
 
 from tessera.autodiff.vjp import vjp_selective_ssm
+from tests._support.compiler_tool import run_tessera_opt
 
 
 def _rocm_or_skip():
@@ -62,21 +58,15 @@ def test_rocm_ssm_backward_matches_vjp(n, a_1d, gate_on, state_on):
 def test_rocm_ssm_backward_codegen_lowers():
     # GPU-free: the bwd kernel emits the atomic cross-channel reductions and
     # lowers cleanly through ROCDL (atomic_rmw -> llvm.atomicrmw).
-    opt = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
-    if not opt.is_file():
-        pytest.skip("build tessera-opt")
     directive = ('module {\n  "tessera_rocm.selective_ssm_bwd"() {name = "ssb"} '
                  ': () -> ()\n}\n')
-    gen = subprocess.run(
-        [str(opt), "-", "--generate-rocm-selective-ssm-bwd-kernel"],
-        input=directive, capture_output=True, text=True)
+    gen = run_tessera_opt(directive, "--generate-rocm-selective-ssm-bwd-kernel")
     assert gen.returncode == 0, gen.stderr
     assert gen.stdout.count("memref.atomic_rmw") == 3   # dC, dB, dA2d
-    low = subprocess.run(
-        [str(opt), "-",
-         "--pass-pipeline=builtin.module(generate-rocm-selective-ssm-bwd-kernel,"
-         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-         "reconcile-unrealized-casts))"],
-        input=directive, capture_output=True, text=True)
+    low = run_tessera_opt(
+        directive,
+        "--pass-pipeline=builtin.module(generate-rocm-selective-ssm-bwd-kernel,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts))")
     assert low.returncode == 0, low.stderr
     assert "llvm.atomicrmw" in low.stdout

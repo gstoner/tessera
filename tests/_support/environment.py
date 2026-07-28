@@ -75,11 +75,13 @@ class CompilerToolchain:
 
     @classmethod
     def discover(cls) -> "CompilerToolchain":
+        from tests._support import compiler_tool
+
         return cls(
-            tessera_opt=_tool_path(
-                "TESSERA_OPT",
-                REPO_ROOT / "build/tools/tessera-opt/tessera-opt",
-            ),
+            # `compiler_tool` owns driver resolution for the whole tree — two
+            # search orders is how a fixture and a test end up running
+            # different binaries in the same session.
+            tessera_opt=compiler_tool.tessera_opt_path(),
             mlir_opt=_tool_path(
                 "MLIR_OPT",
                 "/usr/lib/llvm-23/bin/mlir-opt",
@@ -101,9 +103,12 @@ class CompilerToolchain:
         """Return tessera-opt, skipping unless it registers every named pass.
 
         Delegates the capability check to `tests._support.compiler_tool`, which
-        is the single resolver for the tree — the tool's registered pass set
+        is the single such check for the tree — the tool's registered pass set
         depends on how it was configured, and duplicating that knowledge is how
-        two call sites end up disagreeing about what a binary can do.
+        two call sites end up disagreeing about what a binary can do. The
+        missing-binary skip stays here because this dataclass can be
+        constructed with `tessera_opt=None` directly, independent of what the
+        resolver would find.
         """
         from tests._support import compiler_tool
 
@@ -111,15 +116,9 @@ class CompilerToolchain:
             pytest.skip(
                 "compiler-tool test requires tessera-opt; build it or set TESSERA_OPT"
             )
-        missing = [name for name in passes
-                   if name not in compiler_tool.registered_passes(self.tessera_opt)]
-        if missing:
-            pytest.skip(
-                f"{self.tessera_opt} does not register {', '.join(missing)} "
-                f"(build profile: {compiler_tool.build_profile(self.tessera_opt)}). "
-                "Point TESSERA_OPT at a build configured with the owning "
-                "backend, or rebuild this one."
-            )
+        reason = compiler_tool.capability_skip_reason(self.tessera_opt, *passes)
+        if reason is not None:
+            pytest.skip(reason)
         return self.tessera_opt
 
     def require_mlir_opt(self) -> Path:

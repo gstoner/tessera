@@ -9,6 +9,17 @@ scope: x86 AMX/AVX-512 backend implementation and exact-device proof
 
 # x86 backend TODO
 
+Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **not applicable**. Apple
+added `apple_gpu_air`, a precompiled-artifact lane behind the shared
+`register_compiler(target, compile_fn)` seam, and measured it against its
+compile-on-launch lane (cold pipeline creation 29.7 ms → 15.2 ms, ~1.95x,
+offline build repaying after ~5 cold launches; host-wall timing on Apple M1
+Max, not device-event evidence). x86 needs nothing here: `_x86_compile_fn`
+already returns a real `.so` from clang. Recorded so the fast-path shape is
+documented fleet-wide; the measurement method transfers when X86-1 is proven on
+a Zen 5 host. No shared IR, ABI, dtype/op registration, or numerical contract
+changed.
+
 The fourth architecture queue, alongside
 [`apple/todo.md`](../apple/todo.md), [`nvidia/todo.md`](../nvidia/todo.md), and
 [`rocm/todo.md`](../rocm/todo.md). Opened 2026-07-28 because x86 work was being

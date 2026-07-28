@@ -59,6 +59,24 @@ legal exposure of direct AIR emission is worth.
 
 Reproduce: `python3 benchmarks/apple_gpu/benchmark_aot_vs_jit.py --samples 25`.
 
+**Decision (2026-07-28): ship the AOT metallib lane; defer a direct AIR
+emitter.** `apple_gpu_air` is the fast path and stays on supported tooling. A
+direct LLVM IR → AIR emitter is not scheduled: it would save the same ~15 ms
+this lane already captures, because the residual cost is AIR → GPU-ISA which any
+AIR path pays. Its case is architectural — sharing the LLVM lowering with
+CUDA/ROCm/x86 — and should be reopened on that basis, with a measured need, not
+on compile-time grounds. SPIR-V → SPIRV-Cross → MSL is rejected: it cannot
+express `simdgroup_matrix`, so it would cap the Apple ceiling.
+
+**Cross-backend note.** This is the fleet's fast-path shape, not an Apple
+special case: a precompiled artifact behind `register_compiler(target,
+compile_fn)` plus the content-addressed cache. NVIDIA, ROCm, and x86 already
+return real artifacts (`.so` via nvcc / hipcc / clang); Apple was the only
+`deferred` compile-on-launch lane until now. The same AOT-vs-JIT question is
+expected on ROCm and CUDA as their performance work ramps — reuse this harness,
+and reuse its **cache control**: a never-before-compiled kernel per sample, or
+the number is the vendor's shader cache rather than the compile strategy.
+
 
 Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43
 self-resolving test files onto the shared `tests/_support/compiler_tool.py`

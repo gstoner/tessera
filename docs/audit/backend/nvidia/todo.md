@@ -8,6 +8,21 @@ last_updated: 2026-07-27
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **not applicable**. Apple
+added `apple_gpu_air`, a precompiled-artifact lane behind the shared
+`register_compiler(target, compile_fn)` seam, and measured it against its
+compile-on-launch lane (cold pipeline creation 29.7 ms → 15.2 ms, ~1.95x,
+offline build repaying after ~5 cold launches; host-wall timing on Apple M1
+Max, not device-event evidence). CUDA needs nothing here:
+`_nvidia_cuda_compile_fn` already returns a real `.so` from nvcc, so the NVIDIA
+synthesizer lane has always been precompiled — Apple was the lone compile-on-
+launch outlier. What does transfer is the *method*: when SM120 AOT-vs-JIT or
+cubin-caching questions arise, reuse
+`benchmarks/apple_gpu/benchmark_aot_vs_jit.py` and its cache control (a never-
+before-compiled kernel per sample), or the number will be the driver's cache
+rather than the compile strategy. No shared IR, ABI, dtype/op registration, or
+numerical contract changed.
+
 Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43
 self-resolving test files onto the shared `tests/_support/compiler_tool.py`
 driver contract, adds `--pass-pipeline=` inner-pass capability checking, and

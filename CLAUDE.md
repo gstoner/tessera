@@ -234,10 +234,32 @@ Per-phase deliverables and the open-work priority queue live in
     participation, and an AI-disclosure policy violation — and AIR itself is
     undocumented, so any AIR emitter is black-box-derived and needs Apple's
     tools to package the container. Do not write "no LLVM path to Apple GPU"
-    (the old claim) and do not treat AIR as a supported one. The open,
-    documented alternatives are **MSL-source synthesis** (`newLibraryWithSource:`,
-    what the runtime already does) and **MLIR SPIR-V dialect → SPIRV-Cross →
-    MSL**. Decide deliberately; record the decision here.
+    (the old claim) and do not treat AIR as a supported one.
+
+    **Decision (2026-07-28): a direct AIR emitter is deferred — add the
+    interface when a measured need appears.** SPIR-V → SPIRV-Cross → MSL is
+    rejected outright (it cannot express `simdgroup_matrix`, so it caps the
+    Apple ceiling the arbiter exists to protect). The shipped lane is
+    **MSL synthesis + AOT packaging**: `emit/apple_air.py` compiles synthesized
+    MSL through `xcrun metal -c` → `.air` → `xcrun metallib` and loads it with
+    `newLibraryWithURL:`, entirely on supported tooling. What killed the
+    urgency is the measurement (APPLE-AOT-1): AOT already captures the whole
+    front-end saving — cold pipeline creation 29.7 ms → 15.2 ms — and the
+    ~15.2 ms that remains is AIR → GPU-ISA, which *any* AIR-based path still
+    pays. So direct AIR emission would save **the same ~15 ms and no more**.
+    Its remaining case is architectural (sharing LLVM lowering with
+    CUDA/ROCm/x86), not performance; revisit on that basis, not on speed.
+
+    This is the fast-path pattern the whole fleet converges on — a precompiled
+    artifact behind the `register_compiler(target, compile_fn)` seam plus the
+    content-addressed cache. NVIDIA, ROCm, and x86 already return real
+    artifacts (`.so` via nvcc / hipcc / clang); Apple was the lone `deferred`
+    (compile-on-launch) outlier until `apple_gpu_air`, and now matches. Expect
+    the same AOT-vs-JIT question to surface on ROCm and CUDA as their
+    performance work ramps — the harness in
+    `benchmarks/apple_gpu/benchmark_aot_vs_jit.py` generalizes, **including its
+    cache control**: measure a never-before-compiled kernel per sample, or you
+    will measure the vendor's shader cache instead of your compile strategy.
 
 27. **Ground every Metal / Apple GPU API claim in a real source before declaring it possible or "blocked."** Authoritative sources, in reliability order: **(1) on-machine SDK headers** — `xcrun --show-sdk-path` → `…/System/Library/Frameworks/{Metal,MetalPerformanceShaders,MetalPerformanceShadersGraph,MetalPerformancePrimitives}.framework/Headers/`; **(2) user-provided doc dumps**; **(3) the `apple-metal-docs-urls` memory file**. **WebFetch caveat:** developer.apple.com is a JS-rendered SPA — `WebFetch` returns only the page title, not the API body — so it is NOT a reliable Metal-doc source. Anti-pattern: writing a "blocked / no API path" conclusion from absence of evidence in one source.
 

@@ -391,7 +391,7 @@ jobs:
             | gpg --dearmor \
             | sudo tee /usr/share/keyrings/apt.llvm.org.gpg >/dev/null
           . /etc/os-release
-          echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-23 main" \
+          echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME} main" \
             | sudo tee /etc/apt/sources.list.d/llvm23.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \

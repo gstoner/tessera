@@ -671,13 +671,42 @@ def registered_devices() -> list[str]:
     return sorted(_REGISTRY)
 
 
-# --- calibration corpus ------------------------------------------------------
+# --- two JSON artifacts, deliberately distinct -------------------------------
 #
-# A sweep on a fleet box writes JSON; this merges it as a measured overlay. The
-# corpus is the artifact that turns this module from a table of spec sheets into
-# a table of silicon.
+# A **calibration corpus** is a sparse overlay of *measured deltas* produced by a
+# sweep on one box: `{field: value}` per device, stamped with a date and host.
+# A **registry snapshot** is a dense dump of *whole profiles* for committing and
+# drift-diffing.
+#
+# They are not interchangeable, so they do not share a schema. An earlier version
+# gave the snapshot the corpus's `version` key and `devices` shape, which made a
+# snapshot look loadable by `apply_corpus` when it is not: the rows are full
+# profiles, not field overlays, and the required `measured_on` is absent. Each
+# now carries a `kind` discriminator so feeding one to the other's loader fails
+# by name instead of by a confusing downstream error.
 
 CORPUS_VERSION = 1
+SNAPSHOT_VERSION = 1
+
+KIND_CORPUS = "calibration_corpus"
+KIND_SNAPSHOT = "registry_snapshot"
+
+
+def _check_kind(payload: Mapping[str, Any], expected: str, other: str) -> None:
+    """Reject a payload that is plainly the *other* artifact. ``kind`` is optional
+    for hand-written corpora (the documented schema predates it); when present it
+    must match."""
+    kind = payload.get("kind")
+    if kind is None:
+        return
+    if kind == other:
+        raise ValueError(
+            f"this is a {other!r} payload, not a {expected!r}. Registry "
+            f"snapshots hold whole profiles and load via "
+            f"apply_registry_snapshot(); calibration corpora hold measured "
+            f"field overlays and load via apply_corpus().")
+    if kind != expected:
+        raise ValueError(f"unknown payload kind {kind!r}; expected {expected!r}")
 
 
 def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
@@ -686,7 +715,8 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
 
     Schema::
 
-        {"version": 1,
+        {"kind": "calibration_corpus",       # optional; checked when present
+         "version": 1,
          "measured_on": "2026-07-28",
          "host": "strix-halo",
          "devices": {"radeon_8060s": {"dram_bw_gbps": 214.3,
@@ -695,7 +725,14 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
     A row for an unregistered device, an unknown field, or a mismatched version
     raises — a calibration run that silently lands nowhere is worse than one that
     fails.
+
+    **Atomic.** Every replacement profile is built and validated before any is
+    registered, so a corpus whose third row names an unknown device leaves the
+    first two untouched. The registry is process-global; a half-applied
+    calibration that survives a caught exception would silently colour every
+    later lookup with a partial sweep.
     """
+    _check_kind(corpus, KIND_CORPUS, KIND_SNAPSHOT)
     version = corpus.get("version")
     if version != CORPUS_VERSION:
         raise ValueError(
@@ -705,48 +742,108 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
     if not on:
         raise ValueError("calibration corpus requires a 'measured_on' date")
     host = corpus.get("host")
-    updated: list[str] = []
-    for device, fields in dict(corpus.get("devices", {})).items():
-        perf = perf_for_device(device)  # raises, naming the gap
-        register_perf(perf.with_measured(fields, on=str(on), host=host))
-        updated.append(device)
-    return updated
+    # Phase 1 — build and validate everything. perf_for_device() raises on an
+    # unknown device, with_measured() raises on an unknown field.
+    staged: list[TargetPerf] = [
+        perf_for_device(device).with_measured(fields, on=str(on), host=host)
+        for device, fields in dict(corpus.get("devices", {})).items()
+    ]
+    # Phase 2 — commit. Nothing below can fail.
+    for perf in staged:
+        register_perf(perf)
+    return [perf.device for perf in staged]
 
 
 def load_corpus(path: str | Path) -> list[str]:
     """Read a calibration corpus JSON file and :func:`apply_corpus` it."""
-    p = Path(path)
-    try:
-        corpus = json.loads(p.read_text())
-    except FileNotFoundError:
-        raise TargetPerfError(
-            f"calibration corpus {p} not found; run the sweep first") from None
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"calibration corpus {p} is not valid JSON: {exc}") from None
-    return apply_corpus(corpus)
+    return apply_corpus(_read_json(path, "calibration corpus"))
 
 
-def corpus_from_registry() -> dict[str, Any]:
-    """Dump every registered device (spec + any overlay) as a JSON-ready dict —
-    for committing a fleet-shared snapshot and for drift-diffing."""
+def registry_snapshot() -> dict[str, Any]:
+    """Dump every registered device (spec + any overlay) as whole profiles —
+    for committing a fleet-shared snapshot and for drift-diffing.
+
+    Round-trips through :func:`apply_registry_snapshot`. This is **not** a
+    calibration corpus: it replaces profiles wholesale rather than overlaying
+    measured fields, and `apply_corpus` will refuse it by name.
+    """
     return {
-        "version": CORPUS_VERSION,
+        "kind": KIND_SNAPSHOT,
+        "version": SNAPSHOT_VERSION,
         "devices": {name: perf.to_dict() for name, perf in sorted(_REGISTRY.items())},
     }
 
 
+def apply_registry_snapshot(snapshot: Mapping[str, Any]) -> list[str]:
+    """Replace registered profiles from a :func:`registry_snapshot` payload.
+    Returns the device names registered.
+
+    Unlike :func:`apply_corpus` this may introduce devices the running build does
+    not know — a snapshot is the whole row, not a delta — which is what makes it
+    useful for restoring a fleet-shared table. Atomic for the same reason: every
+    row is parsed before any is registered.
+    """
+    _check_kind(snapshot, KIND_SNAPSHOT, KIND_CORPUS)
+    version = snapshot.get("version")
+    if version != SNAPSHOT_VERSION:
+        raise ValueError(
+            f"registry snapshot version {version!r} != expected "
+            f"{SNAPSHOT_VERSION}; regenerate it")
+    rows = dict(snapshot.get("devices", {}))
+    staged: list[TargetPerf] = []
+    for name, row in rows.items():
+        try:
+            perf = TargetPerf.from_dict(row)
+        except (KeyError, ValueError) as exc:
+            raise ValueError(
+                f"registry snapshot row {name!r} is not a valid profile: "
+                f"{exc}") from None
+        if perf.device != name:
+            raise ValueError(
+                f"registry snapshot key {name!r} does not match its row's "
+                f"device {perf.device!r}")
+        staged.append(perf)
+    for perf in staged:
+        register_perf(perf)
+    return [perf.device for perf in staged]
+
+
+def load_registry_snapshot(path: str | Path) -> list[str]:
+    """Read a registry snapshot JSON file and :func:`apply_registry_snapshot` it."""
+    return apply_registry_snapshot(_read_json(path, "registry snapshot"))
+
+
+def _read_json(path: str | Path, what: str) -> Mapping[str, Any]:
+    p = Path(path)
+    try:
+        payload = json.loads(p.read_text())
+    except FileNotFoundError:
+        raise TargetPerfError(
+            f"{what} {p} not found; generate it first") from None
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{what} {p} is not valid JSON: {exc}") from None
+    if not isinstance(payload, dict):
+        raise ValueError(f"{what} {p} must be a JSON object, got {type(payload).__name__}")
+    return payload
+
+
 __all__ = [
     "CORPUS_VERSION",
+    "KIND_CORPUS",
+    "KIND_SNAPSHOT",
     "Provenance",
+    "SNAPSHOT_VERSION",
     "TargetPerf",
     "TargetPerfError",
     "UNIT_MATRIX",
     "UNIT_VECTOR",
     "apply_corpus",
-    "corpus_from_registry",
+    "apply_registry_snapshot",
     "devices_for_target",
     "load_corpus",
+    "load_registry_snapshot",
     "peak_key",
+    "registry_snapshot",
     "perf_for_device",
     "perf_for_target",
     "register_perf",

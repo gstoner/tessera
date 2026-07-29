@@ -3,10 +3,52 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-27
+last_updated: 2026-07-28
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+## NVIDIA-RASTER-1: consume the shared block-rasterization contract
+
+Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning
+host NR2 Pro (RTX 5070 Ti, sm_120).**
+
+**Shared contract changed.** Schedule IR gained two attrs and two knobs —
+`raster_order` (`row_major` | `column_major` | `grouped_m` | `grouped_n`) and
+`raster_group` — carried on `schedule.tile` and `schedule.knob`, mirrored by
+`TuningConfig.raster_order`/`raster_group` and persisted in the SQLite tuning
+cache. The order is a *permutation of block ids onto the tile grid*, defined in
+the arch-neutral `compiler/tile_rasterization.py` with a `remap()` reference, an
+`emit_c()` snippet valid identically under CUDA and HIP, and `is_bijection()` as
+a total hardware-free oracle. Rationale and the 35%→72% L2 figure that motivated
+it: [`compiler/TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md)
+§3.2.
+
+**What is open here.** No NVIDIA emitter consumes it. The `mma.sync` GEMM in
+`python/tessera/compiler/emit/nvidia_cuda.py` launches a 2-D
+`dim3 grid((M+15)/16,(N+7)/8)` and computes `int mt=blockIdx.x*16,
+nt=blockIdx.y*8` directly; the gated-matmul kernel uses the same shape. Both are
+the sites where `emit_c()` drops in, flattening to a 1-D grid so the permutation
+has a single block id to remap.
+
+**Why it did not land in the contract PR.** Changing a hardware-verified
+`mma.sync` kernel without sm_120 silicon to measure the result would be an
+unverified edit to a proven path for no demonstrable gain. `row_major` is the
+default and reproduces the existing index arithmetic exactly, so today's emitted
+code is byte-identical.
+
+**Validation performed (host-free).** `tests/unit/test_tile_rasterization.py`
+proves the permutation property over ragged grids and **compiles the emitted C
+with host clang, running it against the Python reference for every block id**
+under `-Wall -Wshadow -Werror`. That covers the arithmetic and the emission's
+scoping, on any host.
+
+**Missing exact-device evidence.** Whether a swizzle moves sm_120 latency, and at
+which `raster_group`, for the GEMM shape buckets in the perf ratchet. Needs
+`ncu` L2 hit-rate deltas plus device-event timing on the NR2 Pro. Until then the
+axis is **carried, not swept** — nothing enumerates it, because the only
+hardware-free scorer (`autotune_v2._mock_latency`) does not model rasterization
+and would let TPE pick an arbitrary winner.
 
 Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **follow-up required**.
 Apple added `apple_gpu_air`, a precompiled-artifact lane behind the shared

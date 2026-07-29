@@ -26,11 +26,16 @@ from tessera.compiler.target_perf import (
     Provenance,
     TargetPerf,
     TargetPerfError,
+    KIND_CORPUS,
+    KIND_SNAPSHOT,
+    SNAPSHOT_VERSION,
     apply_corpus,
-    corpus_from_registry,
+    apply_registry_snapshot,
     devices_for_target,
     load_corpus,
+    load_registry_snapshot,
     peak_key,
+    registry_snapshot,
     perf_for_device,
     perf_for_target,
     register_perf,
@@ -314,17 +319,146 @@ def test_corpus_rejects_version_skew_unknown_device_and_missing_date() -> None:
 
 
 def test_load_corpus_names_a_missing_file(tmp_path) -> None:
-    with pytest.raises(TargetPerfError, match="run the sweep first"):
+    with pytest.raises(TargetPerfError, match="not found"):
         load_corpus(tmp_path / "absent.json")
 
 
-def test_registry_round_trips_through_json() -> None:
-    dumped = corpus_from_registry()
-    text = json.dumps(dumped)          # must be JSON-clean (no enums leaking)
+def test_apply_corpus_is_atomic_across_devices() -> None:
+    """Regression: the merge registered row-by-row, so a corpus whose later row
+    named an unknown device left the earlier rows applied. The registry is
+    process-global, so a caller that caught the error was left holding a
+    half-applied calibration silently colouring every later lookup."""
+    before = perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps")
+    try:
+        with pytest.raises(TargetPerfError, match="registered:"):
+            apply_corpus({
+                "version": CORPUS_VERSION, "measured_on": "2026-07-28",
+                "devices": {
+                    "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},  # valid, first
+                    "no_such_gpu": {"dram_bw_gbps": 1.0},        # invalid, later
+                },
+            })
+        assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == before
+        assert perf_for_device("a100_sxm4_80gb").measured == {}
+    finally:
+        reset_registry()
+
+
+def test_apply_corpus_is_atomic_across_bad_fields() -> None:
+    """Same guarantee when the second row's *field* is bad rather than its
+    device."""
+    before = perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps")
+    try:
+        with pytest.raises(ValueError, match="unknown measured field"):
+            apply_corpus({
+                "version": CORPUS_VERSION, "measured_on": "2026-07-28",
+                "devices": {
+                    "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},
+                    "h100_sxm5": {"dram_bandwidth": 3000.0},
+                },
+            })
+        assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == before
+    finally:
+        reset_registry()
+
+
+# --- registry snapshot (distinct from a calibration corpus) ------------------
+
+def test_registry_snapshot_round_trips_through_its_own_loader() -> None:
+    """Regression: the snapshot was shaped and versioned like a corpus but could
+    not be loaded by one — it omitted the required `measured_on` and its rows are
+    whole profiles, not measured-field overlays. Writing the documented
+    fleet-shared snapshot and reading it straight back raised."""
+    text = json.dumps(registry_snapshot())   # JSON-clean: no enums leaking
     reloaded = json.loads(text)
-    assert reloaded["version"] == CORPUS_VERSION
-    for name, row in reloaded["devices"].items():
-        assert TargetPerf.from_dict(row).device == name
+    assert reloaded["kind"] == KIND_SNAPSHOT
+    assert reloaded["version"] == SNAPSHOT_VERSION
+
+    try:
+        restored = apply_registry_snapshot(reloaded)
+        assert set(restored) == set(registered_devices())
+        # Provenance and overlays survive the trip.
+        ti = perf_for_device("rtx_5070_ti")
+        assert ti.provenance_of("smem_bytes_per_cu") is Provenance.MEASURED
+        assert ti.provenance_of("compute_units") is Provenance.SPEC
+    finally:
+        reset_registry()
+
+
+def test_snapshot_survives_a_calibration_overlay() -> None:
+    """A snapshot taken after a sweep must carry the measured values, else the
+    fleet-shared artifact loses exactly the data worth sharing."""
+    try:
+        apply_corpus({"version": CORPUS_VERSION, "measured_on": "2026-07-28",
+                      "host": "test-host",
+                      "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}}})
+        snap = json.loads(json.dumps(registry_snapshot()))
+        reset_registry()
+        assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == 2039.0
+
+        apply_registry_snapshot(snap)
+        after = perf_for_device("a100_sxm4_80gb")
+        assert after.value("dram_bw_gbps") == 1700.0
+        assert after.provenance_of("dram_bw_gbps") is Provenance.MEASURED
+        assert after.measured_host == "test-host"
+    finally:
+        reset_registry()
+
+
+def test_each_loader_refuses_the_other_artifact_by_name() -> None:
+    """The two payloads are not interchangeable; feeding one to the other must
+    say so rather than fail with a confusing downstream error."""
+    snap = registry_snapshot()
+    with pytest.raises(ValueError, match="apply_registry_snapshot"):
+        apply_corpus(snap)
+
+    corpus = {"kind": KIND_CORPUS, "version": CORPUS_VERSION,
+              "measured_on": "2026-07-28", "devices": {}}
+    with pytest.raises(ValueError, match="apply_corpus"):
+        apply_registry_snapshot(corpus)
+
+
+def test_snapshot_rejects_version_skew_and_malformed_rows() -> None:
+    with pytest.raises(ValueError, match="version"):
+        apply_registry_snapshot({"kind": KIND_SNAPSHOT, "version": 999,
+                                 "devices": {}})
+    with pytest.raises(ValueError, match="not a valid profile"):
+        apply_registry_snapshot({"kind": KIND_SNAPSHOT,
+                                 "version": SNAPSHOT_VERSION,
+                                 "devices": {"x": {"device": "x"}}})
+    with pytest.raises(ValueError, match="does not match"):
+        apply_registry_snapshot({
+            "kind": KIND_SNAPSHOT, "version": SNAPSHOT_VERSION,
+            "devices": {"mislabelled": {
+                "device": "other", "target": "x86",
+                "source": "a synthetic row long enough to pass"}}})
+
+
+def test_snapshot_is_atomic() -> None:
+    """A snapshot with a valid first row and a broken second must register
+    neither."""
+    good = perf_for_device("a100_sxm4_80gb").to_dict()
+    good["dram_bw_gbps"] = 1.0
+    try:
+        with pytest.raises(ValueError, match="not a valid profile"):
+            apply_registry_snapshot({
+                "kind": KIND_SNAPSHOT, "version": SNAPSHOT_VERSION,
+                "devices": {"a100_sxm4_80gb": good, "broken": {"device": "broken"}}})
+        assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == 2039.0
+    finally:
+        reset_registry()
+
+
+def test_load_registry_snapshot_reads_a_file(tmp_path) -> None:
+    path = tmp_path / "snapshot.json"
+    path.write_text(json.dumps(registry_snapshot()))
+    try:
+        assert "m1_max" in load_registry_snapshot(path)
+    finally:
+        reset_registry()
+
+    with pytest.raises(TargetPerfError, match="not found"):
+        load_registry_snapshot(tmp_path / "absent.json")
 
 
 # --- consumption: the schedule planner --------------------------------------

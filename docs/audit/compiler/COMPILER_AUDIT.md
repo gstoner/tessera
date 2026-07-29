@@ -78,6 +78,21 @@ was available here. Default is the identity, so nothing changed until it is. The
 tile-reuse-distance cache model (TILESIGHT §3.1 T1/T4) that would *replace*
 `_estimate_latency_ms` is likewise open.
 
+**Cross-backend synchronization key `RASTER-CONTRACT-2026-07-28`.** The
+rasterization knob is a shared Schedule IR contract, so all four architecture
+queues record a state (AGENTS.md, "active architecture queues"):
+
+| Queue | State | Owning item |
+|---|---|---|
+| [NVIDIA](../backend/nvidia/todo.md) | follow-up required — NR2 Pro (sm_120) | `NVIDIA-RASTER-1` |
+| [ROCm](../backend/rocm/todo.md) | follow-up required — Strix Halo (gfx1151) | `ROCM-RASTER-1` |
+| [Apple](../backend/apple/todo.md) | follow-up required — *reconciliation*, not implementation: Apple already carries an MLX-inherited `swizzle_log` hardcode, a second and incompatible spelling of the same lever | `APPLE-RASTER-1` |
+| [x86](../backend/x86/todo.md) | not applicable — the AMX/AVX-512 lane emits OpenMP loop nests with no launch grid, so there is no block id to permute; the *idea* still ports as cache blocking under T1, the *contract* does not | — |
+
+Validation performed is host-free and covers every queue: the permutation oracle
+plus a compile-and-run check of the emitted C against the Python reference for
+every block id. Missing exact-device evidence is per-queue and named there.
+
 ## Persistent attention LSE checkpoint (2026-07-27)
 
 Cross-backend sync `LSE-CHECKPOINT-CONTRACT-2026-07-27` closes the broken

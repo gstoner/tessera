@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <sys/stat.h>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -9898,9 +9899,27 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_f16(
 id<MTLComputePipelineState> load_metallib_kernel(MetalDeviceContext &ctx,
                                                  NSString *path,
                                                  NSString *entry_point) {
+  // Key on identity AND content-version, not path alone. A path is a mutable
+  // handle: rebuild a `.metallib` in place and a path-only key hands back the
+  // pipeline compiled from the previous bytes. Tessera's own artifacts are
+  // named by sha256(source, entry) so they never change under a path — but
+  // this is public C ABI and an external caller is under no such obligation.
+  // mtime+size is cheap and catches every in-place rewrite that matters.
+  struct stat st;
+  const char *path_utf8 = [path UTF8String];
+  long long mtime_ns = 0, size_bytes = -1;
+  if (path_utf8 && stat(path_utf8, &st) == 0) {
+    mtime_ns = (long long)st.st_mtimespec.tv_sec * 1000000000LL +
+               (long long)st.st_mtimespec.tv_nsec;
+    size_bytes = (long long)st.st_size;
+  }
   std::string key;
   key.append("\x02metallib\x1f");  // namespace: a path is not MSL source
-  key.append([path UTF8String]);
+  key.append(path_utf8 ? path_utf8 : "");
+  key.push_back('\x1f');
+  key.append(std::to_string(mtime_ns));
+  key.push_back('\x1f');
+  key.append(std::to_string(size_bytes));
   key.push_back('\x1f');
   key.append([entry_point UTF8String]);
 

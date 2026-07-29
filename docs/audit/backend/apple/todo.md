@@ -63,8 +63,11 @@ size/align/type/name), builtin descriptors for `thread_position_in_grid` and
 friends, plus module flags and `!air.version` / `!air.language_version`. Roughly
 five node kinds, all declarative.
 
-That is a *week-shaped* problem, not a quarter-shaped one — which is the
-question APPLE-AOT-2 asked and could not answer.
+On that basis it looks *week-shaped* rather than quarter-shaped — but flag
+that as an estimate, not a measurement. The 11 builtins and the IR sizes are
+counted; the effort figure is a judgement with no prototype behind it, and it
+sits next to measured numbers where it can borrow their credibility. Treat it
+as "small enough to try", not as a schedule.
 
 ### What still argues against doing it
 

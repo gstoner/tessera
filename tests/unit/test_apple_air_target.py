@@ -414,6 +414,63 @@ def test_aot_pointwise_does_not_depend_on_the_jit_symbol(monkeypatch) -> None:
     np.testing.assert_allclose(out, region.reference(a), atol=1e-6)
 
 
+@pytest.mark.hardware_apple_gpu
+def test_rebuilt_metallib_at_the_same_path_is_not_served_from_cache(tmp_path):
+    """A path is a mutable handle; the pipeline cache must not treat it as an id.
+
+    Tessera names its own artifacts by sha256(source, entry) so they never
+    change under a path — but `tessera_apple_gpu_metallib_*` is public C ABI and
+    an external caller is under no such obligation. Keyed on path alone, a
+    rebuild in place returns the pipeline compiled from the previous bytes.
+    """
+    _require_toolchain()
+    import ctypes
+    import subprocess
+    import time
+
+    import numpy as np
+
+    from tessera.runtime import _load_apple_gpu_runtime
+
+    template = (Path(__file__).resolve().parents[2]
+                / "tests/data/apple/handwritten_air.ll").read_text()
+    library = tmp_path / "same_path.metallib"
+
+    def build(multiplier: str) -> None:
+        ir = tmp_path / "k.ll"
+        ir.write_text(template.replace("fmul float %v, 3.000000e+00",
+                                       f"fmul float %v, {multiplier}"))
+        for command in (["xcrun", "metal", "-c", str(ir), "-o", str(tmp_path / "k.air")],
+                        ["xcrun", "metallib", str(tmp_path / "k.air"),
+                         "-o", str(library)]):
+            done = subprocess.run(command, capture_output=True, text=True)
+            assert done.returncode == 0, done.stderr
+
+    symbol = getattr(_load_apple_gpu_runtime(),
+                     "tessera_apple_gpu_metallib_elementwise_f32", None)
+    if symbol is None:
+        raise RuntimeError("stale libTesseraAppleRuntime — rebuild it")
+    symbol.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
+                       ctypes.POINTER(ctypes.c_float),
+                       ctypes.POINTER(ctypes.c_float), ctypes.c_int32]
+    symbol.restype = ctypes.c_int32
+    pointer = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+
+    x = np.full(16, 2.0, np.float32)
+    out = np.zeros(16, np.float32)
+
+    build("3.000000e+00")
+    assert symbol(str(library).encode(), b"tessera_handwritten",
+                  pointer(x), pointer(out), 16)
+    assert out[0] == 6.0
+
+    time.sleep(0.02)  # distinct mtime; the key is (path, mtime, size, entry)
+    build("5.000000e+00")
+    assert symbol(str(library).encode(), b"tessera_handwritten",
+                  pointer(x), pointer(out), 16)
+    assert out[0] == 10.0, "stale pipeline served for a rebuilt library"
+
+
 def test_missing_toolchain_declines_instead_of_falling_back(monkeypatch, tmp_path):
     """Never silently produce a JIT result under the AOT target's name."""
     monkeypatch.setattr(apple_air.metal_toolchain_available, "__wrapped__",

@@ -327,18 +327,20 @@ class AppleAIRRunner(KernelRunner):
     def run_fused_region(self, region: Any, *args: Any, **kwargs: Any):
         return run_fused_region_aot(region, *args, **kwargs)
 
-    def _decline(self, region: Any, reference: Any) -> tuple[Any, str]:
+    @staticmethod
+    def _decline(reference: Any) -> tuple[Any, str]:
+        """No AOT dispatch exists for this family — report it as such."""
         return reference, "reference"
 
     def run_fused_attention(self, region: Any, *args: Any, **kwargs: Any):
         from tessera.compiler.emit import apple_msl
         out, _ = apple_msl.run_fused_attention(region, *args, **kwargs)
-        return self._decline(region, out)
+        return self._decline(out)
 
     def run_gated_matmul_region(self, region: Any, *args: Any, **kwargs: Any):
         from tessera.compiler.emit import apple_msl
         out, _ = apple_msl.run_gated_matmul_region(region, *args, **kwargs)
-        return self._decline(region, out)
+        return self._decline(out)
 
     def run_pointwise_graph(self, region: Any, *args: Any, **kwargs: Any):
         return run_pointwise_graph_aot(region, *args, **kwargs)

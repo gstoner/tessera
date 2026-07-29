@@ -395,9 +395,11 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/llvm23.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            clang-23 llvm-23-dev llvm-23-tools mlir-23-tools libmlir-23-dev
+            clang-23 lld-23 llvm-23-dev llvm-23-tools \
+            mlir-23-tools libmlir-23-dev
           test -f /usr/lib/llvm-23/lib/cmake/llvm/LLVMConfig.cmake
           test -f /usr/lib/llvm-23/lib/cmake/mlir/MLIRConfig.cmake
+          test -x /usr/lib/llvm-23/bin/ld.lld
           echo "/usr/lib/llvm-23/bin" >> "$GITHUB_PATH"
 
       - name: Install compiler-test dependencies

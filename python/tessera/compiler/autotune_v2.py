@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from ..telemetry import make_event
 from .rounding import RTNE
+from .tile_rasterization import RASTER_ORDER_CHOICES
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +94,27 @@ class TuningConfig:
     tile_k: int
     num_warps: int = 4
     num_stages: int = 2
+    #: Block rasterization order — how the 1-D block id walks the 2-D tile grid
+    #: (``tile_rasterization.RasterOrder``). A permutation of block ids, so it is
+    #: semantics-preserving by construction and provable hardware-free. Defaults
+    #: to ``"row_major"``, which is the mapping every emitter already uses, so an
+    #: unset config is byte-identical to pre-knob behaviour.
+    #:
+    #: **Carried, not swept.** Neither ``LegalGEMMCandidateGenerator`` nor the
+    #: Optuna objective enumerates this axis, because the only scorer available
+    #: hardware-free is ``_mock_latency``, which does not model rasterization at
+    #: all — adding the axis would multiply the search space by ~20 for zero
+    #: signal and let TPE "discover" an arbitrary winner. It becomes a real
+    #: search dimension when a scorer can distinguish its values: an on-device
+    #: measurement, or the tile-reuse-distance model
+    #: (``docs/audit/compiler/TILESIGHT_ASSESSMENT.md`` §3.1 T1). Until then the
+    #: field exists so a measured or hand-set value round-trips end to end.
+    raster_order: str = "row_major"
+    #: Panel height for the grouped orders. 1 makes them degenerate to
+    #: row/column-major, keeping the identity reachable from anywhere in the
+    #: search space. Ignored by the non-grouped orders. Carried, not swept — see
+    #: :attr:`raster_order`.
+    raster_group: int = 1
 
     def __post_init__(self) -> None:
         for name, val in [("tile_m", self.tile_m), ("tile_n", self.tile_n),
@@ -103,6 +125,13 @@ class TuningConfig:
             raise ValueError(f"num_warps={self.num_warps} must be in {{1,2,4,8}}")
         if self.num_stages < 1:
             raise ValueError(f"num_stages={self.num_stages} must be >= 1")
+        if self.raster_order not in RASTER_ORDER_CHOICES:
+            raise ValueError(
+                f"raster_order={self.raster_order!r} must be one of "
+                f"{list(RASTER_ORDER_CHOICES)}")
+        if self.raster_group < 1:
+            raise ValueError(
+                f"raster_group={self.raster_group} must be >= 1")
 
     def smem_bytes(self) -> int:
         """Approximate shared-memory footprint (bytes, BF16)."""
@@ -112,22 +141,28 @@ class TuningConfig:
         return (
             f"{{tessera.tile_config = {{tile_m = {self.tile_m}, "
             f"tile_n = {self.tile_n}, tile_k = {self.tile_k}, "
-            f"num_warps = {self.num_warps}, num_stages = {self.num_stages}}}}}"
+            f"num_warps = {self.num_warps}, num_stages = {self.num_stages}, "
+            f'raster_order = "{self.raster_order}", '
+            f"raster_group = {self.raster_group}}}}}"
         )
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> Dict[str, object]:
         return {
             "tile_m": self.tile_m,
             "tile_n": self.tile_n,
             "tile_k": self.tile_k,
             "num_warps": self.num_warps,
             "num_stages": self.num_stages,
+            "raster_order": self.raster_order,
+            "raster_group": self.raster_group,
         }
 
     def __repr__(self) -> str:
         return (f"TuningConfig(tile_m={self.tile_m}, tile_n={self.tile_n}, "
                 f"tile_k={self.tile_k}, num_warps={self.num_warps}, "
-                f"num_stages={self.num_stages})")
+                f"num_stages={self.num_stages}, "
+                f"raster_order={self.raster_order!r}, "
+                f"raster_group={self.raster_group})")
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +307,7 @@ class BayesianAutotuner:
         self._results: List[TuningResult] = []
         self._best: Optional[TuningResult] = None
         self._rejections: List[CandidateRejection] = []
+        self._warm_start_skipped: List[str] = []
 
     # ------------------------------------------------------------------
     # Cache I/O
@@ -281,9 +317,12 @@ class BayesianAutotuner:
         """
         Load prior results from SQLite cache.
 
-        Compatible with the v1 schema; silently ignores missing tables/columns.
+        Compatible with the v1 schema; a missing table or column falls back to
+        that column's default rather than failing.
 
-        Returns the number of results loaded.
+        Returns the number of results loaded. Rows that could **not** be loaded
+        are recorded with a reason in :attr:`warm_start_skipped` — check it when
+        the count is lower than expected, rather than assuming a cold cache.
         """
         conn = None
         try:
@@ -295,6 +334,8 @@ class BayesianAutotuner:
                 "status": "'ok'",
                 "reason": "''",
                 "method": "'roofline'",
+                "raster_order": "'row_major'",
+                "raster_group": "1",
             }
             select_cols = [
                 "tile_m", "tile_n", "tile_k", "num_warps", "num_stages",
@@ -315,11 +356,25 @@ class BayesianAutotuner:
             )
             count = 0
             for row in cur.fetchall():
+                # A row written by a newer Tessera may name a rasterization order
+                # this build does not know. Its latency was measured *with* that
+                # order, so it cannot be re-labelled row_major — but dropping it
+                # into the generic "corrupted row" path below would make a valid
+                # measurement vanish with no diagnostic, which is the silent
+                # degrade the raster columns exist to prevent. Record it.
+                raster_order = str(row[12])
+                if raster_order not in RASTER_ORDER_CHOICES:
+                    self._warm_start_skipped.append(
+                        f"unknown raster_order {raster_order!r} (tile "
+                        f"{row[0]}x{row[1]}x{row[2]}) — row written by a build "
+                        f"with a rasterization order this one does not have")
+                    continue
                 try:
                     cfg = TuningConfig(
                         tile_m=int(row[0]), tile_n=int(row[1]),
                         tile_k=int(row[2]), num_warps=int(row[3]),
                         num_stages=int(row[4]),
+                        raster_order=raster_order, raster_group=int(row[13]),
                     )
                     res = TuningResult(
                         config=cfg,
@@ -335,8 +390,11 @@ class BayesianAutotuner:
                     if self._best is None or res.tflops > self._best.tflops:
                         self._best = res
                     count += 1
-                except (ValueError, TypeError):
-                    continue  # skip corrupted rows
+                except (ValueError, TypeError) as exc:
+                    self._warm_start_skipped.append(
+                        f"unusable cache row (tile {row[0]}x{row[1]}x{row[2]}): "
+                        f"{exc}")
+                    continue
             return count
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
             return 0
@@ -354,8 +412,9 @@ class BayesianAutotuner:
                     INSERT INTO tuning_results (
                         M, N, K, dtype, arch, layout, movement_json,
                         tile_m, tile_n, tile_k, num_warps, num_stages,
-                        latency_ms, tflops, sampled_at, trial_id, status, reason, method
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        latency_ms, tflops, sampled_at, trial_id, status, reason, method,
+                        raster_order, raster_group
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         self.workload.M, self.workload.N,
@@ -366,6 +425,7 @@ class BayesianAutotuner:
                         r.config.num_warps, r.config.num_stages,
                         r.latency_ms, r.tflops,
                         r.sampled_at, r.trial_id, r.status, r.reason, r.method,
+                        r.config.raster_order, r.config.raster_group,
                     ),
                 )
             conn.commit()
@@ -417,6 +477,17 @@ class BayesianAutotuner:
     @property
     def rejected_candidates(self) -> List[CandidateRejection]:
         return list(self._rejections)
+
+    @property
+    def warm_start_skipped(self) -> List[str]:
+        """Why each cache row was skipped during :meth:`warm_start_from_cache`.
+
+        A warm start that silently returns fewer rows than the cache holds is
+        indistinguishable from a cold one. Every skip lands here with a reason —
+        an unknown rasterization order (version skew) or an unusable row — so the
+        loss is visible rather than inferred from a low hit count.
+        """
+        return list(self._warm_start_skipped)
 
     def _candidate_generator(self) -> LegalGEMMCandidateGenerator:
         return LegalGEMMCandidateGenerator(
@@ -727,7 +798,9 @@ def _ensure_cache_schema(conn: sqlite3.Connection) -> None:
             sampled_at REAL, trial_id INT,
             status TEXT DEFAULT 'ok',
             reason TEXT DEFAULT '',
-            method TEXT DEFAULT 'roofline'
+            method TEXT DEFAULT 'roofline',
+            raster_order TEXT DEFAULT 'row_major',
+            raster_group INT DEFAULT 1
         )
         """
     )
@@ -739,6 +812,12 @@ def _ensure_cache_schema(conn: sqlite3.Connection) -> None:
         "status": "TEXT DEFAULT 'ok'",
         "reason": "TEXT DEFAULT ''",
         "method": "TEXT DEFAULT 'roofline'",
+        # Without these the cache would round-trip a tuned swizzle back to
+        # row-major: the config would reload as the identity and look like the
+        # swizzle simply did not help. Pre-existing rows migrate to the identity,
+        # which is what they actually measured.
+        "raster_order": "TEXT DEFAULT 'row_major'",
+        "raster_group": "INT DEFAULT 1",
     }
     for name, ddl in additions.items():
         if name not in columns:

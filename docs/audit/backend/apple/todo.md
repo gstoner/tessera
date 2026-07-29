@@ -3,10 +3,56 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-27
+last_updated: 2026-07-28
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## APPLE-RASTER-1: reconcile the MLX-inherited swizzle with the shared contract
+
+Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning
+host M1 Max (apple7).** Apple's follow-up is *reconciliation*, not
+implementation: it is the one backend that already had a threadblock swizzle
+before the shared contract existed.
+
+**Shared contract changed.** Schedule IR gained `raster_order` (`row_major` |
+`column_major` | `grouped_m` | `grouped_n`) and `raster_group` on
+`schedule.tile` / `schedule.knob`, mirrored by `TuningConfig` and the tuning
+cache, over the arch-neutral `compiler/tile_rasterization.py`. Rationale:
+[`compiler/TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md)
+§3.2.
+
+**The pre-existing divergence.** `compiler/apple_gemm_schedules.py` carries
+`swizzle_log`, inherited from MLX as a Metal function constant with a hardcoded
+heuristic — `swizzle_log = 0 if tm <= 3 else 1`, where `tm = ceil(M/bm)`. That is
+a two-valued, shape-derived rule, not a tuned axis, and it is expressed as a
+power-of-two tile block rather than the contract's panel height. So Apple is not
+missing the lever; it has a **second, incompatible spelling of it**, which is
+exactly the kind of drift the shared contract exists to stop.
+
+**Decision required (not yet made).** Either (a) express `swizzle_log` as
+`raster_order="grouped_m"` with `raster_group = 1 << swizzle_log` and retire the
+hardcode, or (b) record why the MLX form stays — e.g. if the Metal
+function-constant specialization is load-bearing for pipeline-state caching in a
+way the generic emission is not. Option (a) is preferred *only* if it measures
+neutral-or-better; MLX's heuristic is tuned against real Apple silicon and must
+not be displaced by a generic default on tidiness grounds (Theory §1 rule 2
+applies to inherited hand-tuning as much as to our own).
+
+**Note the shape of the win differs here.** M1 Max is unified-memory with a
+48 MB SLC, not a discrete L2 — the cache tier a swizzle protects behaves
+differently, so a group size ported from a discrete GPU is not evidence for this
+part. Measure locally or not at all.
+
+**Validation performed (host-free).** `tests/unit/test_tile_rasterization.py`
+proves the permutation property and compiles the emitted C against the Python
+reference for every block id. The emitted form is C, so it validates the ROCm and
+NVIDIA lanes; Apple's MSL synthesizer would need its own emission if option (a)
+is chosen — the C snippet is *not* MSL.
+
+**Missing exact-device evidence.** An M1 Max A/B of the MLX heuristic against
+`grouped_m` at matched group sizes across the GEMM shape buckets, with Metal
+counter evidence, before either spelling is declared canonical.
 
 ## APPLE-AOT-4: S1 probe — what an MLIR → AIR emitter would actually cost
 

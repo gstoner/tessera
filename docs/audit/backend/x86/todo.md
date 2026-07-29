@@ -9,6 +9,27 @@ scope: x86 AMX/AVX-512 backend implementation and exact-device proof
 
 # x86 backend TODO
 
+Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **not applicable, with an
+architecture-specific reason.** Schedule IR gained `raster_order` /
+`raster_group` on `schedule.tile` / `schedule.knob` (arch-neutral definition in
+`compiler/tile_rasterization.py`; rationale in
+[`compiler/TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md)
+§3.2). The knob permutes *block ids across a 2-D launch grid* so that the set of
+workgroups resident at one instant shares operand panels in a hardware-managed
+L2. The x86 AMX/AVX-512 lane has no launch grid: `tessera_x86_backend` emits
+loop nests over tiles executed by OpenMP threads, so there is no block id to
+permute and no equivalent of a wave of co-resident workgroups contending for a
+shared last-level cache in that pattern. The analogous x86 lever — loop order and
+cache blocking in the C/LLVM emitter — already exists as a separate mechanism and
+is not expressible as this permutation.
+
+**This is a not-applicable for the *contract*, not for the underlying idea.**
+Tile-granular reuse-distance analysis, the T1 item the same assessment proposes,
+*does* port to AMX/AVX-512 cache blocking — that literature is a CPU literature
+(Lam/Rothberg/Wolf 1991 on blocked algorithms). Revisit x86 when T1 is built, not
+when an emitter consumes `raster_order`. No exact-device evidence is owed here;
+nothing in the x86 lane changed and no x86 test was affected.
+
 Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **not applicable**. Apple
 added `apple_gpu_air`, a precompiled-artifact lane behind the shared
 `register_compiler(target, compile_fn)` seam, measured against its compile-on-

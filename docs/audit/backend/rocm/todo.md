@@ -1,11 +1,55 @@
 ---
-last_updated: 2026-07-27
+last_updated: 2026-07-28
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+## ROCM-RASTER-1: consume the shared block-rasterization contract
+
+Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning
+host Strix Halo (Ryzen AI Max+ 395, Radeon 8060S, gfx1151).**
+
+**Shared contract changed.** Schedule IR gained `raster_order` (`row_major` |
+`column_major` | `grouped_m` | `grouped_n`) and `raster_group` on
+`schedule.tile` / `schedule.knob`, mirrored by `TuningConfig` and persisted in
+the SQLite tuning cache. The order is a *permutation of block ids onto the tile
+grid*, defined arch-neutrally in `compiler/tile_rasterization.py`; `emit_c()`
+produces plain integer arithmetic valid identically under HIP and CUDA, so one
+emission serves both leads. Rationale:
+[`compiler/TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md)
+§3.2.
+
+**Do not confuse this with the existing LDS swizzle.** `compiler/rocm_lds.py`
+implements an XOR bank-conflict swizzle on *shared-memory addresses* — a
+different mechanism at a different level. The new knob orders *workgroups across
+the grid*. They compose; neither replaces the other.
+
+**What is open here.** No ROCm emitter consumes it — the HIP GEMM path in
+`python/tessera/compiler/emit/rocm_hip.py` computes its block index directly.
+
+**Why this matters more on gfx1151 than anywhere else in the fleet.** Strix Halo
+is a unified-memory APU: 256 GB/s of LPDDR5X shared with 16 Zen 5 cores, against
+a 32 MB MALL. Grid traversal order decides the concurrent working set, so the
+lever that keeps traffic inside MALL is worth more here than on a discrete part
+with HBM headroom. Note the counter-evidence in the source paper, though: its
+weakest result is CDNA2 (MI210, 23.4% MAPE) precisely because Composable Kernel
+exposes no rasterization control — that caveat does not bind us, since we own the
+emitter.
+
+**Validation performed (host-free).** `tests/unit/test_tile_rasterization.py`
+proves the permutation property over ragged grids and compiles the emitted C with
+host clang, checking it against the Python reference for every block id under
+`-Wall -Wshadow -Werror`.
+
+**Missing exact-device evidence.** gfx1151 latency and MALL/L2 hit-rate deltas
+per `raster_order` × `raster_group` across the GEMM shape buckets, via
+`rocprofv3` plus device-event timing. Until then the axis is **carried, not
+swept**: nothing enumerates it, because `autotune_v2._mock_latency` cannot score
+it. RDNA ISA truth for anything emitted here stays
+[`docs/reference/isa/rdna/`](../../../reference/isa/rdna/).
 
 Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **parity validated — ROCm
 is ahead**. Apple added `apple_gpu_air`, a precompiled-artifact lane behind the

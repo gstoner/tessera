@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-11
+last_updated: 2026-07-28
 audit_role: index
 ---
 
@@ -96,6 +96,7 @@ middle-end work; they supersede the pre-2026-07 "op-library" framing.
 | [compiler/EVALUATOR_PLAN.md](compiler/EVALUATOR_PLAN.md) | The scoring engine that gates every promotion in the plans above. |
 | [compiler/STAGE_A_EMIT_PLAN.md](compiler/STAGE_A_EMIT_PLAN.md) | Cross-vendor emit-ladder grounding. |
 | [compiler/AUTODIFF_UNIFICATION_PLAN.md](compiler/AUTODIFF_UNIFICATION_PLAN.md) | Front-end / IR / autodiff unification — make differentiation a compiler request with a native fwd+bwd execution path and a per-family × per-target proof ledger, replacing implicit-tape-reported-as-compiled. |
+| [compiler/TILESIGHT_ASSESSMENT.md](compiler/TILESIGHT_ASSESSMENT.md) | External assessment (analytical tile-centric cost modelling, arXiv:2607.22432) + the audit finding it surfaced: the hardware-free analytical cost model the arbiter falls back to was a mock. Records what to take, what to skip, the per-backend read, and a ranked reference list. `reference` role — not a status surface. |
 
 Governing rule across all of them: **ROCm/CUDA are the lead performance targets;
 the generic framework raises the floor and must never cap their ceiling** (Theory

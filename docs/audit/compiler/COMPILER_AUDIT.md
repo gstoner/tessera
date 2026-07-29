@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-27
+last_updated: 2026-07-28
 audit_role: theme
 ---
 
@@ -7,6 +7,91 @@ audit_role: theme
 
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
+
+## Cost-model foundations: target perf + rasterization knob (2026-07-28)
+
+An assessment of TileSight (arXiv:2607.22432) surfaced that **Tessera's
+hardware-free analytical cost model was a mock** —
+`schedule_planner._estimate_latency_ms` has no memory term (latency is FLOPs over
+a fudge-factored peak), `autotune_v2._mock_latency` is a hand-drawn bowl with
+`tile_m=128, tile_n=128` placed at its minimum by hand, and the target profiles
+carried capability data but **zero** performance data. Theory §4 step 3's
+"without silicon, score by the Tier 2 cost model" therefore ranked nothing. Full
+finding, verdict, and reference survey:
+[`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md).
+
+Two prerequisites landed; the cost model itself did **not** and is still open.
+
+**1. `compiler/target_perf.py` — calibrated performance parameters.**
+Per-device (not per-arch: `nvidia_sm120` covers a 5070 Ti and an RTX PRO 6000,
+>2x apart) peaks, DRAM bandwidth, LLC size, SMEM/CU, keyed by canonical
+`normalize_target()` ids. Two honesty rules are gated by
+`tests/unit/test_target_perf.py`: **provenance is per field** — literally, via
+`field_provenance` overrides on a row default, because a real row mixes kinds
+(the RTX 5070 Ti's FLOP identity is `DERIVED`, its core count `SPEC`, its SMEM
+capacity `MEASURED` on-silicon) and a row-level label would misreport at least
+one of them — and an absent value stays absent: accessors return `None`,
+`require()` raises `TargetPerfError` naming the gap. A `measured` overlay
+from a calibration sweep always beats spec and reports itself as measured, so a
+spec-based roofline cannot masquerade as a silicon-based one. All three fleet
+boxes are registered; `DERIVED` rows are checked against their stated identity by
+test. Deliberately unpopulated: bf16/fp8 **matrix** peaks on every fleet box, and
+all Zen5 peaks — no trustworthy public figure exists, so they wait for a sweep.
+`SchedulePlanner.for_target()` consumes it and **refuses** rather than falling
+back to the A100-shaped default. This is the missing input for **W7**.
+
+**2. `compiler/tile_rasterization.py` — block rasterization as a real knob.**
+Previously the only threadblock swizzle in the tree was Apple's MLX-inherited
+`swizzle_log = 0 if tm <= 3 else 1` hardcode; ROCm's "swizzle" is an unrelated
+LDS bank-conflict XOR; NVIDIA and x86 had none. TileSight reports this lever
+moving measured L2 hit rate 35% → 72%. Now: `ROW_MAJOR` (the identity — existing
+behaviour, byte-for-byte), `COLUMN_MAJOR`, `GROUPED_M`, `GROUPED_N`, wired as
+`schedule.knob` ops, `schedule.tile` attrs, and `TuningConfig.raster_order` /
+`raster_group` fields. Morton/Z-order is deliberately absent (clean bijection
+only on power-of-two square grids; no closed-form emission).
+
+**The axes are carried, not swept** (corrected 2026-07-28 — an earlier draft of
+this entry claimed "autotuner axes", which overstated it). Neither
+`LegalGEMMCandidateGenerator` nor the Optuna objective enumerates them, because
+the only hardware-free scorer is `_mock_latency`, which does not model
+rasterization at all: adding the axes would multiply the search space by ~20 for
+zero signal and let TPE "discover" an arbitrary winner. They become real search
+dimensions when a scorer can tell the values apart — an on-device measurement, or
+the T1 reuse-distance model. A test (`test_raster_axes_are_carried_but_not_swept`)
+pins this so the limit is a decision rather than a surprise.
+
+Because a rasterization order is a *permutation of block ids*, it is
+semantics-preserving by construction and has a **total, hardware-free oracle**:
+`is_bijection()` enumerates the grid and proves every tile is hit exactly once
+(the shape of proof `matmul_opt_ladder.verify_split_k_equivalence` uses).
+`tests/unit/test_tile_rasterization.py` additionally **compiles the emitted C
+snippet with the host clang and runs it against the Python reference for every
+block id** across ragged grids — so the device kernel and the model of it cannot
+drift, proven with no GPU (the snippet is plain integer arithmetic, valid
+identically under CUDA and HIP).
+
+**Explicitly not done.** No emitter consumes the knob yet: the NVIDIA `mma.sync`
+GEMM (`emit/nvidia_cuda.py`, the 2-D `dim3 grid((M+15)/16,(N+7)/8)` launches) and
+the ROCm GEMM path still compute `blockIdx` directly. That wiring needs a
+measurement on the NR2 Pro / Strix Halo boxes to be worth anything, and neither
+was available here. Default is the identity, so nothing changed until it is. The
+tile-reuse-distance cache model (TILESIGHT §3.1 T1/T4) that would *replace*
+`_estimate_latency_ms` is likewise open.
+
+**Cross-backend synchronization key `RASTER-CONTRACT-2026-07-28`.** The
+rasterization knob is a shared Schedule IR contract, so all four architecture
+queues record a state (AGENTS.md, "active architecture queues"):
+
+| Queue | State | Owning item |
+|---|---|---|
+| [NVIDIA](../backend/nvidia/todo.md) | follow-up required — NR2 Pro (sm_120) | `NVIDIA-RASTER-1` |
+| [ROCm](../backend/rocm/todo.md) | follow-up required — Strix Halo (gfx1151) | `ROCM-RASTER-1` |
+| [Apple](../backend/apple/todo.md) | follow-up required — *reconciliation*, not implementation: Apple already carries an MLX-inherited `swizzle_log` hardcode, a second and incompatible spelling of the same lever | `APPLE-RASTER-1` |
+| [x86](../backend/x86/todo.md) | not applicable — the AMX/AVX-512 lane emits OpenMP loop nests with no launch grid, so there is no block id to permute; the *idea* still ports as cache blocking under T1, the *contract* does not | — |
+
+Validation performed is host-free and covers every queue: the permutation oracle
+plus a compile-and-run check of the emitted C against the Python reference for
+every block id. Missing exact-device evidence is per-queue and named there.
 
 ## Persistent attention LSE checkpoint (2026-07-27)
 

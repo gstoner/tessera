@@ -1,0 +1,1703 @@
+{
+  "schema": "tessera.rocm.hardware_free_calibration.v1",
+  "sync_key": "COSTMODEL-CALIB-2026-07-29",
+  "architecture": "gfx1151",
+  "constants": {
+    "wave_size": 32,
+    "bank_count_per_wave32_domain": 32,
+    "bank_width_bytes": 4,
+    "phases": [
+      [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    ],
+    "source": "RDNA3.5 ISA 2.1 (wave32), 12.1 (64 WGP banks split into two 32-bank SIMD32-affiliated sets), and 12.5 (wave32 one-cycle indexed access absent conflicts)"
+  },
+  "inputs": {
+    "measurement": null,
+    "measurement_status": "unavailable: HIP event elapsed time returned zero on the live WSL gfx1151; no host-wall substitute was relabeled as device time",
+    "committed_retune": "/home/gstoner/projects/tessera/benchmarks/baselines/rocm_gfx1151_compiler_retune_2026_07_15.json",
+    "committed_retune_sha256": "80684a7cf834a89c46d99532c34c81ad98ebc088ed9b46811dd19c8d9fec0450",
+    "committed_hot_paths": "/home/gstoner/projects/tessera/benchmarks/baselines/rocm_gfx1151_hot_paths.json",
+    "committed_hot_paths_sha256": "a3c7846f9e9402353ff485c528d41618b6822600d36e43f9cdf7d6f9e603527e"
+  },
+  "quality": {
+    "comparison_grain": "within shape across the nine committed retune candidates; performance evidence is the committed winner partial order",
+    "candidate_rows": 54,
+    "shapes": 6,
+    "winner_reproduction_count": 0,
+    "hot_path_rows": 3,
+    "hot_path_identifiability": "summary-only: one production latency per shape and no alternative candidate descriptor; useful as a corpus identity check, not an independent within-shape rank",
+    "limitation": "non-winning pairwise latency order is unavailable in the committed summary, so winner-vs-rest is the only identifiable rank relation"
+  },
+  "gate": {
+    "minimum_shapes": 4,
+    "minimum_median_spearman": 0.5,
+    "minimum_positive_fraction": 0.75,
+    "observed_shapes": 6,
+    "median_spearman": -0.13808619268474853,
+    "positive_fraction": 0.0
+  },
+  "correlations": [
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "candidate_count": 9,
+      "committed_winner": [
+        2,
+        2
+      ],
+      "score_top_tile": [
+        1,
+        1
+      ],
+      "score_reproduces_winner": false,
+      "spearman_locality_vs_committed_winner_partial_order": -0.5523447707389941
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "candidate_count": 9,
+      "committed_winner": [
+        4,
+        4
+      ],
+      "score_top_tile": [
+        1,
+        1
+      ],
+      "score_reproduces_winner": false,
+      "spearman_locality_vs_committed_winner_partial_order": -0.13808619268474853
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "candidate_count": 9,
+      "committed_winner": [
+        4,
+        4
+      ],
+      "score_top_tile": [
+        1,
+        1
+      ],
+      "score_reproduces_winner": false,
+      "spearman_locality_vs_committed_winner_partial_order": -0.13808619268474853
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "candidate_count": 9,
+      "committed_winner": [
+        4,
+        4
+      ],
+      "score_top_tile": [
+        1,
+        1
+      ],
+      "score_reproduces_winner": false,
+      "spearman_locality_vs_committed_winner_partial_order": -0.13808619268474853
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "candidate_count": 9,
+      "committed_winner": [
+        4,
+        4
+      ],
+      "score_top_tile": [
+        1,
+        1
+      ],
+      "score_reproduces_winner": false,
+      "spearman_locality_vs_committed_winner_partial_order": -0.13808619268474853
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "candidate_count": 9,
+      "committed_winner": [
+        4,
+        4
+      ],
+      "score_top_tile": [
+        1,
+        1
+      ],
+      "score_reproduces_winner": false,
+      "spearman_locality_vs_committed_winner_partial_order": -0.13808619268474853
+    }
+  ],
+  "rows": [
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tile": [
+        1,
+        1
+      ],
+      "locality": {
+        "score": 1.0,
+        "a": {
+          "sequential": 255,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 255,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tile": [
+        2,
+        2
+      ],
+      "locality": {
+        "score": 0.7504892367906066,
+        "a": {
+          "sequential": 256,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 256,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": true,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tile": [
+        2,
+        4
+      ],
+      "locality": {
+        "score": 0.833767926988266,
+        "a": {
+          "sequential": 256,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tile": [
+        3,
+        4
+      ],
+      "locality": {
+        "score": 0.8575418994413407,
+        "a": {
+          "sequential": 512,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tile": [
+        4,
+        4
+      ],
+      "locality": {
+        "score": 0.875366568914956,
+        "a": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tile": [
+        4,
+        6
+      ],
+      "locality": {
+        "score": 0.900312744331509,
+        "a": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1280,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tile": [
+        6,
+        4
+      ],
+      "locality": {
+        "score": 0.900312744331509,
+        "a": {
+          "sequential": 1280,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tile": [
+        4,
+        8
+      ],
+      "locality": {
+        "score": 0.9169381107491856,
+        "a": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1792,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        256,
+        256,
+        256
+      ],
+      "tile": [
+        8,
+        4
+      ],
+      "locality": {
+        "score": 0.9169381107491856,
+        "a": {
+          "sequential": 1792,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tile": [
+        1,
+        1
+      ],
+      "locality": {
+        "score": 1.0,
+        "a": {
+          "sequential": 511,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 511,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tile": [
+        2,
+        2
+      ],
+      "locality": {
+        "score": 0.7502443792766373,
+        "a": {
+          "sequential": 512,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 512,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tile": [
+        2,
+        4
+      ],
+      "locality": {
+        "score": 0.8335504885993485,
+        "a": {
+          "sequential": 512,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tile": [
+        3,
+        4
+      ],
+      "locality": {
+        "score": 0.8573422668900056,
+        "a": {
+          "sequential": 1024,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tile": [
+        4,
+        4
+      ],
+      "locality": {
+        "score": 0.8751831949193942,
+        "a": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": true,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tile": [
+        4,
+        6
+      ],
+      "locality": {
+        "score": 0.9001563110590074,
+        "a": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 2560,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tile": [
+        6,
+        4
+      ],
+      "locality": {
+        "score": 0.9001563110590074,
+        "a": {
+          "sequential": 2560,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tile": [
+        4,
+        8
+      ],
+      "locality": {
+        "score": 0.9168023445131879,
+        "a": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3584,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        512,
+        512
+      ],
+      "tile": [
+        8,
+        4
+      ],
+      "locality": {
+        "score": 0.9168023445131879,
+        "a": {
+          "sequential": 3584,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tile": [
+        1,
+        1
+      ],
+      "locality": {
+        "score": 1.0,
+        "a": {
+          "sequential": 1023,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1023,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tile": [
+        2,
+        2
+      ],
+      "locality": {
+        "score": 0.7501221299462628,
+        "a": {
+          "sequential": 1024,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1024,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tile": [
+        2,
+        4
+      ],
+      "locality": {
+        "score": 0.8334418756105503,
+        "a": {
+          "sequential": 1024,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3072,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tile": [
+        3,
+        4
+      ],
+      "locality": {
+        "score": 0.8572425341892269,
+        "a": {
+          "sequential": 2048,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3072,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tile": [
+        4,
+        4
+      ],
+      "locality": {
+        "score": 0.8750915750915751,
+        "a": {
+          "sequential": 3072,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3072,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": true,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tile": [
+        4,
+        6
+      ],
+      "locality": {
+        "score": 0.9000781402617699,
+        "a": {
+          "sequential": 3072,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 5120,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tile": [
+        6,
+        4
+      ],
+      "locality": {
+        "score": 0.9000781402617699,
+        "a": {
+          "sequential": 5120,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3072,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tile": [
+        4,
+        8
+      ],
+      "locality": {
+        "score": 0.9167344945466385,
+        "a": {
+          "sequential": 3072,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 7168,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "tile": [
+        8,
+        4
+      ],
+      "locality": {
+        "score": 0.9167344945466385,
+        "a": {
+          "sequential": 7168,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3072,
+          "cache_line_jump": 1023,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "tile": [
+        1,
+        1
+      ],
+      "locality": {
+        "score": 1.0,
+        "a": {
+          "sequential": 255,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 255,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "tile": [
+        2,
+        2
+      ],
+      "locality": {
+        "score": 0.7504892367906066,
+        "a": {
+          "sequential": 256,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 256,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "tile": [
+        2,
+        4
+      ],
+      "locality": {
+        "score": 0.833767926988266,
+        "a": {
+          "sequential": 256,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "tile": [
+        3,
+        4
+      ],
+      "locality": {
+        "score": 0.8575418994413407,
+        "a": {
+          "sequential": 512,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "tile": [
+        4,
+        4
+      ],
+      "locality": {
+        "score": 0.875366568914956,
+        "a": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": true,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "tile": [
+        4,
+        6
+      ],
+      "locality": {
+        "score": 0.900312744331509,
+        "a": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1280,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "tile": [
+        6,
+        4
+      ],
+      "locality": {
+        "score": 0.900312744331509,
+        "a": {
+          "sequential": 1280,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "tile": [
+        4,
+        8
+      ],
+      "locality": {
+        "score": 0.9169381107491856,
+        "a": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1792,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        128,
+        512,
+        256
+      ],
+      "tile": [
+        8,
+        4
+      ],
+      "locality": {
+        "score": 0.9169381107491856,
+        "a": {
+          "sequential": 1792,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 768,
+          "cache_line_jump": 255,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "tile": [
+        1,
+        1
+      ],
+      "locality": {
+        "score": 1.0,
+        "a": {
+          "sequential": 511,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 511,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "tile": [
+        2,
+        2
+      ],
+      "locality": {
+        "score": 0.7502443792766373,
+        "a": {
+          "sequential": 512,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 512,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "tile": [
+        2,
+        4
+      ],
+      "locality": {
+        "score": 0.8335504885993485,
+        "a": {
+          "sequential": 512,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "tile": [
+        3,
+        4
+      ],
+      "locality": {
+        "score": 0.8573422668900056,
+        "a": {
+          "sequential": 1024,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "tile": [
+        4,
+        4
+      ],
+      "locality": {
+        "score": 0.8751831949193942,
+        "a": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": true,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "tile": [
+        4,
+        6
+      ],
+      "locality": {
+        "score": 0.9001563110590074,
+        "a": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 2560,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "tile": [
+        6,
+        4
+      ],
+      "locality": {
+        "score": 0.9001563110590074,
+        "a": {
+          "sequential": 2560,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "tile": [
+        4,
+        8
+      ],
+      "locality": {
+        "score": 0.9168023445131879,
+        "a": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3584,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        512,
+        1024,
+        512
+      ],
+      "tile": [
+        8,
+        4
+      ],
+      "locality": {
+        "score": 0.9168023445131879,
+        "a": {
+          "sequential": 3584,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1536,
+          "cache_line_jump": 511,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "tile": [
+        1,
+        1
+      ],
+      "locality": {
+        "score": 1.0,
+        "a": {
+          "sequential": 1008,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1008,
+          "cache_line_jump": 0,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "tile": [
+        2,
+        2
+      ],
+      "locality": {
+        "score": 0.7501239464551314,
+        "a": {
+          "sequential": 1009,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 1009,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "tile": [
+        2,
+        4
+      ],
+      "locality": {
+        "score": 0.8334434897554528,
+        "a": {
+          "sequential": 1009,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3027,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "tile": [
+        3,
+        4
+      ],
+      "locality": {
+        "score": 0.857244016428268,
+        "a": {
+          "sequential": 2018,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3027,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "tile": [
+        4,
+        4
+      ],
+      "locality": {
+        "score": 0.875092936802974,
+        "a": {
+          "sequential": 3027,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3027,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": true,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "tile": [
+        4,
+        6
+      ],
+      "locality": {
+        "score": 0.9000793021411578,
+        "a": {
+          "sequential": 3027,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 5045,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "tile": [
+        6,
+        4
+      ],
+      "locality": {
+        "score": 0.9000793021411578,
+        "a": {
+          "sequential": 5045,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3027,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "tile": [
+        4,
+        8
+      ],
+      "locality": {
+        "score": 0.9167355030563357,
+        "a": {
+          "sequential": 3027,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 7063,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    },
+    {
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "tile": [
+        8,
+        4
+      ],
+      "locality": {
+        "score": 0.9167355030563357,
+        "a": {
+          "sequential": 7063,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "b": {
+          "sequential": 3027,
+          "cache_line_jump": 1008,
+          "large_jump": 0
+        },
+        "definition": "transition-weighted mean of A/B Manhattan step-distance scores; <=1 scores 1, <=16 scores 0.5, larger scores 0"
+      },
+      "committed_winner": false,
+      "bank_conflict": null,
+      "bank_reason": "not applicable: the production f32 retune kernel has no LDS loads/stores, so there is no bank-address trace"
+    }
+  ],
+  "verdict": {
+    "locality": "reject",
+    "bank_conflict": "reject_as_latency_ranker",
+    "bank_conflict_scope": "retain only as a structural LDS-layout diagnostic when an explicit lane-address trace exists",
+    "terminal": true,
+    "policy": "home-architecture gate; a failed locality rank is rejected without coefficient retuning"
+  }
+}

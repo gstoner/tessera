@@ -82,7 +82,11 @@ def _device_ms(hip, hsaco: bytes, shape: tuple[int, int, int],
         elapsed = ctypes.c_float()
         hip.hipEventElapsedTime(ctypes.byref(elapsed), start, stop)
         hip.hipEventDestroy(start); hip.hipEventDestroy(stop)
-        samples.append(float(elapsed.value) / iterations)
+        sample = float(elapsed.value) / iterations
+        if not np.isfinite(sample) or sample <= 0.0:
+            raise RuntimeError(
+                f"invalid gfx1151 HIP-event timing sample: {sample} ms")
+        samples.append(sample)
     for ptr in ptrs:
         hip.hipFree(ptr)
     hip.hipModuleUnload(mod)

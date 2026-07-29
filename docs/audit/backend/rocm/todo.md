@@ -36,11 +36,29 @@ constant must be re-derived before a conflict count means anything on this part.
 ISA truth stays [`docs/reference/isa/rdna/`](../../../reference/isa/rdna/)
 (gfx1151 = RDNA 3.5).
 
-**Missing exact-device evidence.** Rank correlation between each score and the
-recorded gfx1151 latencies, over the retune corpus and hot-path ratchet rows. The
-grouped-GEMM selector is the most informative subject: its tile choice is already
-known to be size-adaptive under measurement, so a locality score that cannot
-reproduce that ordering has failed on its home ground.
+**Result — complete, terminal reject (2026-07-29).** gfx1151 uses wave32, one
+32-lane issue phase, a 32-bank SIMD32-affiliated conflict domain, and 4-byte
+banks. These constants are locked in
+`compiler/hardware_free_scores.py` from RDNA3.5 ISA §§2.1, 12.1, and 12.5; the
+GFX950 wave64/four-phase table was not reused.
+
+The frozen analysis
+[`benchmarks/baselines/rocm_gfx1151_hardware_free_calibration_2026_07_29.json`](../../../../benchmarks/baselines/rocm_gfx1151_hardware_free_calibration_2026_07_29.json)
+scores all nine f32 retune tiles within each of the six committed shapes. It
+reproduces **0/6** measured winners, always ranks 1x1 first, has median Spearman
+**-0.1381** against the identifiable committed winner partial order, and has
+**0%** positive shapes (gate: at least four shapes, median rho >=0.50, >=75%
+positive). The hot-path file has three f32 rows but only one production latency
+per shape, so it supplies corpus identity, not a second within-shape rank; that
+limitation is recorded rather than filled with cross-shape correlation.
+
+Verdict: **reject the step-distance locality score as a kernel latency/ranking
+signal and end this line without retuning it.** The bank-conflict score is also
+rejected as a latency ranker for this corpus: the measured f32 register-blocked
+kernel has no LDS address trace. Its exact analyzer remains useful only as a
+structural diagnostic for an explicit LDS layout. A fresh raw rerun was
+attempted, but this WSL runtime returned a zero HIP-event interval; synchronized
+host time was not relabeled as device time.
 ## ROCM-RASTER-1: consume the shared block-rasterization contract
 
 Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning
@@ -61,8 +79,13 @@ implements an XOR bank-conflict swizzle on *shared-memory addresses* — a
 different mechanism at a different level. The new knob orders *workgroups across
 the grid*. They compose; neither replaces the other.
 
-**What is open here.** No ROCm emitter consumes it — the HIP GEMM path in
-`python/tessera/compiler/emit/rocm_hip.py` computes its block index directly.
+**Implementation — complete (2026-07-29).** The Tier-3 WMMA candidate in
+`python/tessera/compiler/emit/rocm_hip.py` now carries `raster_order` and
+`raster_group` through `ROCmScheduleDescriptor`, the runtime HSACO cache and
+directive, and `GenerateWMMAGemmKernel.cpp`. The production generator remaps the
+2-D launch coordinates before computing the macro-tile origin. `row_major` is
+the default and retains the direct `block_id.y` / `block_id.x` identity path;
+the selector does not sweep or promote another order.
 
 **Why this matters more on gfx1151 than anywhere else in the fleet.** Strix Halo
 is a unified-memory APU: 256 GB/s of LPDDR5X shared with 16 Zen 5 cores, against
@@ -78,12 +101,17 @@ proves the permutation property over ragged grids and compiles the emitted C wit
 host clang, checking it against the Python reference for every block id under
 `-Wall -Wshadow -Werror`.
 
-**Missing exact-device evidence.** gfx1151 latency and MALL/L2 hit-rate deltas
-per `raster_order` × `raster_group` across the GEMM shape buckets, via
-`rocprofv3` plus device-event timing. Until then the axis is **carried, not
-swept**: nothing enumerates it, because `autotune_v2._mock_latency` cannot score
-it. RDNA ISA truth for anything emitted here stays
-[`docs/reference/isa/rdna/`](../../../reference/isa/rdna/).
+**Exact-device result — implementation retained, promotion blocked.** The
+gfx1151 artifact
+[`benchmarks/baselines/rocm_gfx1151_raster_2026_07_29.json`](../../../../benchmarks/baselines/rocm_gfx1151_raster_2026_07_29.json)
+executes square, wide, tall, and ragged buckets for row-major, column-major,
+grouped-M {4,8}, and grouped-N {4,8}: **24/24** exact-device correctness rows
+pass. HIP events return `0.0 ms` on this WSL stack, and
+`rocprofv3-avail list --pmc` reports `No pmc counters supported` /
+`Agent HW architecture is not supported`, so MALL/L2 evidence cannot be
+collected here. Per the promotion rule, **row-major remains selected**. The
+non-default choices are carried and executable, not promoted; a bare-metal or
+profiler-supported gfx1151 follow-up is required for performance selection.
 
 Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **parity validated — ROCm
 is ahead**. Apple added `apple_gpu_air`, a precompiled-artifact lane behind the
@@ -534,6 +562,8 @@ evidence and not evidence for any sibling architecture.
 | ROCM-SSA-LDS | complete | AMD async-copy, waitcnt, and matrix consumers use shared SSA allocation, token, and pipeline-state identity; compatibility readers are retired, shared/ROCm fixtures are SSA-only, host structural and compiler-benchmark gates pass, while exact-device performance remains intentionally unclaimed. |
 | ROCM-E2E-ATTENTION | complete on gfx1151 | FP16 and BF16 forward consume the canonical rank-4 recurrence with per-head bias, softcap, dropout, GQA/window/ragged policy, and exact numerical/timing proof. FP16 and BF16 backward consume the tensor-valued shared dQ/split-partial/ascending-reduction loops directly into the compiler-owned five-entry package; exact combined gradients and dtype-specific resident program-wall ratchets pass. |
 | ROCM-CORE-GEMM-KLOOP | complete on gfx1151 | Canonical M/N/K loops reach the compiler-owned register and LDS WMMA schedules only through SSA allocation/token/pipeline proof. Six aligned/ragged FP16/BF16/INT8 rows pass; measured LDS staging is retained but not selected because it loses all six wall-clock comparisons. |
+| ROCM-CALIB-1 | complete; terminal reject | Re-derived gfx1151 wave32/32-bank constants; the locality score reproduced 0/6 committed winners (median rho -0.1381, 0% positive), so the latency-ranking line ends without retuning. Bank conflict remains structural-only for explicit LDS traces. |
+| ROCM-RASTER-1 | implementation complete; promotion blocked | Shared raster fields reach the generated WMMA kernel and 24/24 live gfx1151 correctness rows pass. WSL HIP events are zero and rocprofv3 exposes no PMCs, so row-major remains selected pending valid device timing plus MALL/L2 evidence. |
 
 ## Recommended open-work order
 
@@ -543,17 +573,15 @@ named exact device can satisfy an execution gate.
 
 | Order | ID | Work | Access state | Completion gate |
 |---:|---|---|---|---|
-| 1 | ROCM-CALIB-1 | Calibrate the hardware-free scores on gfx1151 | Strix Halo `gfx1151`; re-derive wave32/bank constants before analysis | Rank correlations over the retune corpus and hot-path ratchet establish a retain/reject verdict; failure on the metric's home architecture ends the line of work. |
-| 2 | ROCM-RASTER-1 | Consume and measure the shared raster contract | Strix Halo `gfx1151`; host-free permutation/emission gate already landed | HIP emission preserves row-major identity, then `rocprofv3` counters and device timing establish any architecture-owned raster-order/group decision. |
-| 3 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
-| 4 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
-| 5 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
-| 6 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
-| 7 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
-| 8 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
-| 9 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
-| 10 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
-| 11 | ROCM-LSE-1 | Extend the landed gfx1151 LSE selector beyond WSL | **gfx1151 implementation and initial decision complete; bare-metal/CDNA follow-up gated** | The real shared checkpoint contract, selectable physical save/recompute paths, exact FP16/BF16 17/64/128/256 correctness sweep, retained host-wall evidence, and 128+ saved selector are landed. Revalidate on bare-metal gfx1151 and measure architecture-owned thresholds on gfx950/gfx1250; do not transfer the WSL threshold. |
+| 1 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
+| 2 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
+| 3 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
+| 4 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
+| 5 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
+| 6 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
+| 7 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
+| 8 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
+| 9 | ROCM-LSE-1 | Extend the landed gfx1151 LSE selector beyond WSL | **gfx1151 implementation and initial decision complete; bare-metal/CDNA follow-up gated** | The real shared checkpoint contract, selectable physical save/recompute paths, exact FP16/BF16 17/64/128/256 correctness sweep, retained host-wall evidence, and 128+ saved selector are landed. Revalidate on bare-metal gfx1151 and measure architecture-owned thresholds on gfx950/gfx1250; do not transfer the WSL threshold. |
 
 ### `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` verification result
 

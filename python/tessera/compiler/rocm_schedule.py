@@ -15,6 +15,7 @@ from .ownership_topology import OwnershipTopology
 from .rocm_lds import SoftwarePipeline, select_lds_layout
 from .rocm_target import AMDArch, ROCmTargetProfile
 from .rocm_tiling import TileCandidate, TileShape, estimate_vgpr_usage
+from .tile_rasterization import RASTER_ORDER_CHOICES
 
 
 _ARCH_BY_NAME = {a.name.lower().replace("_", ""): a for a in AMDArch}
@@ -47,12 +48,19 @@ class ROCmScheduleDescriptor:
     ownership: OwnershipTopology
     vgpr_estimate: int
     source: str
+    raster_order: str = "row_major"
+    raster_group: int = 1
 
     def __post_init__(self) -> None:
         if any(v < 1 for v in (*self.instruction_tile, *self.macro_tile)):
             raise ValueError("instruction and macro tile extents must be positive")
         if self.pipeline_stages < 1 or self.waves_per_cu < 1:
             raise ValueError("pipeline_stages and waves_per_cu must be positive")
+        if self.raster_order not in RASTER_ORDER_CHOICES:
+            raise ValueError(
+                f"unsupported ROCm raster order {self.raster_order!r}")
+        if self.raster_group < 1:
+            raise ValueError("raster_group must be positive")
 
     @property
     def mt(self) -> int:
@@ -72,6 +80,8 @@ class ROCmScheduleDescriptor:
             "schedule_ownership": self.ownership.value,
             "schedule_vgpr_estimate": self.vgpr_estimate,
             "schedule_source": self.source,
+            "schedule_raster_order": self.raster_order,
+            "schedule_raster_group": self.raster_group,
         }
 
     def cache_key(self) -> tuple[Any, ...]:
@@ -85,6 +95,8 @@ def select_rocm_gemm_schedule(
     *,
     dtype: str = "f16",
     arch: str = "gfx1151",
+    raster_order: str = "row_major",
+    raster_group: int = 1,
 ) -> ROCmScheduleDescriptor:
     """Return the measured gfx1151 production schedule plus modeled evidence."""
     if min(m, n, k) < 1:
@@ -137,6 +149,8 @@ def select_rocm_gemm_schedule(
         vgpr_estimate=vgprs,
         source=("gfx1151 ROCM-6 interleaved schedule matrix v1 + ROCm "
                 "assembler resource and budget models"),
+        raster_order=raster_order,
+        raster_group=raster_group,
     )
 
 

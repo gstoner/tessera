@@ -17,6 +17,8 @@ def test_gfx1151_schedule_preserves_measured_macro_tile_and_models_resources():
     assert large.macro_tile == (4, 4)
     assert large.target_ir_attrs()["schedule_ownership"] == "wave"
     assert large.target_ir_attrs()["schedule_lds_layout"] == "swizzle"
+    assert large.target_ir_attrs()["schedule_raster_order"] == "row_major"
+    assert large.target_ir_attrs()["schedule_raster_group"] == 1
     assert large.vgpr_estimate > small.vgpr_estimate
     assert select_rocm_gemm_schedule(
         64, 64, 64, dtype="int4", arch="gfx1151").vgpr_estimate > 0
@@ -44,6 +46,19 @@ def test_gfx1151_schedule_uses_promoted_shape_and_dtype_rows():
             m, n, k, dtype=dtype, arch="gfx1151")
         assert schedule.macro_tile == expected
         assert "interleaved schedule matrix" in schedule.source
+
+
+def test_gfx1151_schedule_carries_explicit_raster_without_promoting_it():
+    schedule = select_rocm_gemm_schedule(
+        1024, 4096, 1024, arch="gfx1151",
+        raster_order="grouped_m", raster_group=8)
+    assert schedule.macro_tile == (4, 4)
+    assert schedule.raster_order == "grouped_m"
+    assert schedule.raster_group == 8
+    assert schedule.target_ir_attrs()["schedule_raster_order"] == "grouped_m"
+    with pytest.raises(ValueError, match="unsupported ROCm raster order"):
+        select_rocm_gemm_schedule(
+            16, 16, 16, raster_order="morton", arch="gfx1151")
 
 
 @pytest.mark.parametrize(

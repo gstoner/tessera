@@ -285,6 +285,26 @@ def test_wmma_candidate_declines_unrepresentable_host_free():
     assert tag == "reference"
 
 
+def test_wmma_candidate_forwards_shared_raster_contract(monkeypatch):
+    from tessera import runtime as rt
+
+    seen = {}
+
+    def fake_fused(a, b, bias, activation, **kwargs):
+        seen.update(kwargs)
+        return np.zeros((a.shape[0], b.shape[1]), np.float32)
+
+    monkeypatch.setattr(rt, "_rocm_wmma_fused_2d", fake_fused)
+    wmma = {c.name: c for c in
+            C.candidates_for("rocm", OP_FUSED_REGION)}["rocm_wmma_gemm"]
+    region = F.FusedRegion(epilogue=("relu",))
+    _, tag = wmma.run(
+        region, np.zeros((8, 12)), np.zeros((12, 16)),
+        raster_order="grouped_m", raster_group=8)
+    assert tag == "rocm_wmma"
+    assert seen == {"raster_order": "grouped_m", "raster_group": 8}
+
+
 @pytest.mark.slow
 @pytest.mark.skipif(not _rocm_hip_live(),
                     reason="live gfx1151 + WMMA GEMM lane required")

@@ -10,8 +10,8 @@ last_updated: 2026-07-29
 
 ## APPLE-CALIB-1: contribute op breadth to the hardware-free score calibration
 
-Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **follow-up required, owning
-host M1 Max (apple7).** Apple is the *breadth* axis, not the sole site.
+Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **superseded by the terminal
+ROCm home-architecture rejection.** No Apple arbiter-score adoption work remains.
 
 **What is being calibrated.** Two static, device-free quality metrics found in
 production AMD code and recorded in
@@ -43,6 +43,13 @@ that split rather than one blended verdict.
 recorded M1 Max latency, per op family, over the families the Apple lane already
 measures. A score that does not rank measured Apple kernels correctly is not
 trustworthy for unmeasured kernels anywhere.
+
+**Fleet outcome (2026-07-29).** ROCM-CALIB-1 re-derived the metric on the AMD
+architecture it came from and reproduced 0/6 committed gfx1151 winners (median
+rho -0.1381, 0% positive). Per the shared rule, the locality-as-latency-ranker
+line ends without retuning; Apple no longer owes a promotion-calibration run.
+Metal banking remains not applicable. Existing Apple measurements may still be
+used for unrelated cache-model research, but cannot revive this rejected score.
 ## APPLE-RASTER-1: reconcile the MLX-inherited swizzle with the shared contract
 
 Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning

@@ -763,7 +763,10 @@ class RocmWmmaGemmCandidate(Candidate):
             Bh = np.ascontiguousarray(B, np.float16)
             bias_arr = (np.ascontiguousarray(bias, np.float32)
                         if has_bias else None)
-            out = rt._rocm_wmma_fused_2d(Ah, Bh, bias_arr, activation)
+            out = rt._rocm_wmma_fused_2d(
+                Ah, Bh, bias_arr, activation,
+                raster_order=k.get("raster_order", "row_major"),
+                raster_group=k.get("raster_group", 1))
             return np.asarray(out, np.float32), _WMMA_TAG
         except Exception:
             return region.reference(A, B, bias), "reference"

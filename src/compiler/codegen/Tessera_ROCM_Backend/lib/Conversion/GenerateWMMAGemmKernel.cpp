@@ -107,6 +107,8 @@ struct WmmaGemmRequest {
   bool raggedZeroPad = false;
   int64_t logicalTileM = 0, logicalTileN = 0, logicalTileK = 0;
   std::string accumulate;
+  std::string rasterOrder = "row_major";
+  int64_t rasterGroup = 1;
   tessera::tile::TilePackedFormatAttr storagePack;
 };
 
@@ -254,7 +256,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      Type outputType, bool portableABI = false,
                      bool viaTile = false, bool hasBias = false,
                      StringRef activation = "none",
-                     bool packedInt4Memory = false) {
+                     bool packedInt4Memory = false,
+                     StringRef rasterOrder = "row_major",
+                     int64_t rasterGroup = 1) {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
@@ -317,8 +321,45 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   Value bidY = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value c16mt = b.create<arith::ConstantIndexOp>(loc, 16 * mt);
   Value c16nt = b.create<arith::ConstantIndexOp>(loc, 16 * nt);
-  Value baseRow = b.create<arith::MulIOp>(loc, bidY, c16mt);
-  Value baseCol = b.create<arith::MulIOp>(loc, bidX, c16nt);
+  Value tileM = bidY, tileN = bidX;
+  if (rasterOrder != "row_major") {
+    Value gridM = b.create<arith::DivUIOp>(
+        loc, b.create<arith::AddIOp>(
+                 loc, M, b.create<arith::ConstantIndexOp>(loc, 16 * mt - 1)),
+        c16mt);
+    Value gridN = b.create<arith::DivUIOp>(
+        loc, b.create<arith::AddIOp>(
+                 loc, N, b.create<arith::ConstantIndexOp>(loc, 16 * nt - 1)),
+        c16nt);
+    Value flat = b.create<arith::AddIOp>(
+        loc, b.create<arith::MulIOp>(loc, bidY, gridN), bidX);
+    if (rasterOrder == "column_major") {
+      tileM = b.create<arith::RemUIOp>(loc, flat, gridM);
+      tileN = b.create<arith::DivUIOp>(loc, flat, gridM);
+    } else {
+      bool groupM = rasterOrder == "grouped_m";
+      Value gridMajor = groupM ? gridM : gridN;
+      Value gridMinor = groupM ? gridN : gridM;
+      Value group = b.create<arith::ConstantIndexOp>(loc, rasterGroup);
+      Value perPanel = b.create<arith::MulIOp>(loc, group, gridMinor);
+      Value panel = b.create<arith::DivUIOp>(loc, flat, perPanel);
+      Value firstMajor = b.create<arith::MulIOp>(loc, panel, group);
+      Value remaining = b.create<arith::SubIOp>(loc, gridMajor, firstMajor);
+      Value shortPanel = b.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::ult, remaining, group);
+      Value panelRows =
+          b.create<arith::SelectOp>(loc, shortPanel, remaining, group);
+      Value within = b.create<arith::RemUIOp>(loc, flat, perPanel);
+      Value major = b.create<arith::AddIOp>(
+          loc, firstMajor,
+          b.create<arith::RemUIOp>(loc, within, panelRows));
+      Value minor = b.create<arith::DivUIOp>(loc, within, panelRows);
+      tileM = groupM ? major : minor;
+      tileN = groupM ? minor : major;
+    }
+  }
+  Value baseRow = b.create<arith::MulIOp>(loc, tileM, c16mt);
+  Value baseCol = b.create<arith::MulIOp>(loc, tileN, c16nt);
 
   // Per-tile (loop-invariant) values.
   //   arK[mi]     = row*K              — A-fragment base offset (fast path).
@@ -844,7 +885,7 @@ struct GenerateWMMAGemmKernelPass
       return signalPassFailure();
     }
 
-    SmallVector<WmmaGemmRequest> requests;
+    SmallVector<WmmaGemmRequest, 2> requests;
 
     // Direct shared-contract adapter. Prefer the Tile form after the shared
     // async seam and ROCm ownership planner have materialized !tile.buffer,
@@ -966,6 +1007,10 @@ struct GenerateWMMAGemmKernelPass
         request.activation = a.getValue().str();
       if (auto a = op->getAttrOfType<StringAttr>("output"))
         request.output = a.getValue().str();
+      if (auto a = op->getAttrOfType<StringAttr>("schedule_raster_order"))
+        request.rasterOrder = a.getValue().str();
+      if (auto a = op->getAttrOfType<IntegerAttr>("schedule_raster_group"))
+        request.rasterGroup = a.getInt();
       request.storagePack =
           op->getAttrOfType<tessera::tile::TilePackedFormatAttr>(
               "tessera.storage_pack");
@@ -1026,6 +1071,19 @@ struct GenerateWMMAGemmKernelPass
                         "wave ownership");
           return signalPassFailure();
         }
+      }
+      if (request.rasterOrder != "row_major" &&
+          request.rasterOrder != "column_major" &&
+          request.rasterOrder != "grouped_m" &&
+          request.rasterOrder != "grouped_n") {
+        op->emitError("generate-wmma-gemm-kernel: schedule raster order must "
+                      "be row_major, column_major, grouped_m, or grouped_n");
+        return signalPassFailure();
+      }
+      if (request.rasterGroup < 1) {
+        op->emitError("generate-wmma-gemm-kernel: schedule raster group must "
+                      "be >= 1");
+        return signalPassFailure();
       }
 
       OpBuilder b(module.getBodyRegion());
@@ -1156,7 +1214,9 @@ struct GenerateWMMAGemmKernelPass
                        b.getUnitAttr());
       for (StringRef attrName : {"schedule_arch", "schedule_pipeline_stages",
                                  "schedule_lds_layout", "schedule_ownership",
-                                 "schedule_vgpr_estimate", "schedule_source"})
+                                 "schedule_vgpr_estimate", "schedule_source",
+                                 "schedule_raster_order",
+                                 "schedule_raster_group"})
         if (Attribute attr = op->getAttr(attrName))
           gpuFunc->setAttr((Twine("tessera.rocm.") + attrName).str(), attr);
       if (request.canonicalKLoop) {
@@ -1198,7 +1258,8 @@ struct GenerateWMMAGemmKernelPass
       } else {
         emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
                         portableContract, viaTile, hasBias, activation,
-                        packDesc && dt == "int4");
+                        packDesc && dt == "int4", request.rasterOrder,
+                        request.rasterGroup);
       }
 
       if (!llvm::is_contained(generatedOwners, request.eraseOwner))

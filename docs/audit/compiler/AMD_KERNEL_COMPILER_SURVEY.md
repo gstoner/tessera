@@ -582,6 +582,21 @@ that the analytical cost model our arbiter falls back on was a mock. A
 step-distance histogram over a materialized access order is cheap, needs no
 device, and is a real signal. **[I]**
 
+> **Calibration is owned across all four queues** under sync key
+> `COSTMODEL-CALIB-2026-07-29`, not by whichever backend happens to be nearest.
+> A score is only worth what it predicts, and one fitted against a single
+> architecture reproduces the overfit `TILESIGHT_ASSESSMENT.md` §5.2 records for
+> NeuSight — top of the table on the A100 it trained on, beaten on every newer
+> part. So: NVIDIA `NVIDIA-CALIB-1` (committed device-keyed sm_120 corpus —
+> shape depth, and the cheapest to land since it is an analysis pass over data
+> already recorded), ROCm `ROCM-CALIB-1` (gfx1151 retune corpus and hot-path
+> ratchet — and the metric's *home ground*, since it was extracted from
+> production AMD code), Apple `APPLE-CALIB-1` (widest F4-verified op-family
+> envelope — op breadth), x86 `X86-CALIB-1` (**split verdict**: the locality
+> histogram applies and adds a non-GPU architecture; the §3.8 bank-conflict
+> analyzer does not, as the AVX-512 lane has no software-managed scratchpad or
+> wave phases). **[I]**
+
 ### 3.8 Two worked swizzles — and what they prove about the algebra
 
 CK documents two independent bank-conflict swizzles. Both are built **entirely
@@ -1000,6 +1015,14 @@ And the phases are **not contiguous lane ranges**:
 | 0 | T0-3, T12-15, T20-23, T24-27 |
 | 1 | T32-35, T44-47, T52-55, T56-59 |
 | 2 | T4-7, T8-11, T16-19, T28-31 |
+| 3 | T36-39, T40-43, T48-51, T60-63 |
+
+All four phases are listed on purpose: the four are a *partition* of the 64 lanes,
+so an analyzer built from a three-row table would leave lanes 36–43, 48–51 and
+60–63 unmodelled and could accept a layout that conflicts on exactly those lanes.
+The structure is `phase 1 = phase 0 + 32` and `phase 3 = phase 2 + 32`, which is
+also the check that the rows are complete — the four sets are disjoint and cover
+0–63 exactly once. **[V]**
 
 Any conflict analysis that assumes lanes 0–15 form a phase will compute the wrong
 answer. **[V]**

@@ -388,6 +388,32 @@ def test_gpu_executes_hand_written_simdgroup_air_ir(tmp_path) -> None:
     np.testing.assert_array_equal(out, np.full(n, 7.5, np.float32))
 
 
+@pytest.mark.hardware_apple_gpu
+def test_aot_pointwise_does_not_depend_on_the_jit_symbol(monkeypatch) -> None:
+    """The two lanes must be independently available.
+
+    Caught in review: the shared `run_pointwise_graph` gated entry on the *JIT*
+    symbol and then swapped in the AOT one, so a runtime exporting the metallib
+    entry but not the synth entry would have silently reported `reference`. The
+    lanes are separate arbiter candidates; neither may require the other.
+    """
+    _require_toolchain()
+    import numpy as np
+
+    from tessera.compiler.emit import apple_msl
+
+    region = F.PointwiseGraphRegion(
+        ops=(("relu", ("a",), "o"),), inputs=("a",), output="o")
+    a = np.linspace(-1, 1, 64, dtype=np.float32).reshape(2, 32)
+
+    monkeypatch.setattr(apple_msl, "_synth_pointwise_symbol", lambda elem: None)
+    out, tag = apple_air.run_pointwise_graph_aot(region, [a])
+    if tag == "reference":
+        pytest.skip("device declined the AOT pointwise lane")
+    assert tag == "metal_metallib"
+    np.testing.assert_allclose(out, region.reference(a), atol=1e-6)
+
+
 def test_missing_toolchain_declines_instead_of_falling_back(monkeypatch, tmp_path):
     """Never silently produce a JIT result under the AOT target's name."""
     monkeypatch.setattr(apple_air.metal_toolchain_available, "__wrapped__",

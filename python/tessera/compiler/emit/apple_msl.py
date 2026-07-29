@@ -1304,21 +1304,25 @@ def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray],
         else:
             return region.reference(*arrays).astype(npdt), "reference"
 
-    sym = _synth_pointwise_symbol(elem)
+    # Resolve the symbol for the lane actually being used. Gating on the JIT
+    # symbol and then swapping in the AOT one would make the AOT lane's
+    # availability depend on the JIT lane's — wrong, and invisible until a
+    # runtime shipped one without the other.
+    if library is not None:
+        from tessera.compiler.emit import apple_air
+        sym = apple_air._metallib_pointwise_symbol(elem)
+        first, tag = library.encode("utf-8"), "metal_metallib"
+    else:
+        sym = _synth_pointwise_symbol(elem)
+        first, tag = None, "metal_runtime"
+
     if sym is not None and len(arrs) <= _PW_MAX_INPUTS:
         in_ptrs = (ctypes.c_void_p * len(arrs))(*[a.ctypes.data for a in arrs])
         count_arr = (ctypes.c_int32 * len(arrs))(*counts)
         out = np.zeros(out_shape, npdt)
-        if library is not None:
-            from tessera.compiler.emit import apple_air
-            sym = apple_air._metallib_pointwise_symbol(elem)
-            first, tag = library.encode("utf-8"), "metal_metallib"
-        else:
+        if first is None:
             first = synthesize_pointwise_graph_msl(
                 region, elem, tuple(bc)).encode("utf-8")
-            tag = "metal_runtime"
-        if sym is None:
-            return region.reference(*arrays).astype(npdt), "reference"
         rc = sym(first, _PW_ENTRY.encode("utf-8"),
                  ctypes.cast(in_ptrs, ctypes.POINTER(ctypes.c_void_p)),
                  ctypes.cast(count_arr, ctypes.POINTER(ctypes.c_int32)),

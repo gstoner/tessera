@@ -450,11 +450,11 @@ mlir::LogicalResult BlockDropoutOp::verify() {
 
 mlir::LogicalResult BackwardOp::verify() {
   auto ranked4 = [&](mlir::Type type, llvm::StringRef label)
-      -> mlir::FailureOr<mlir::RankedTensorType> {
+      -> mlir::RankedTensorType {
     auto ranked = mlir::dyn_cast<mlir::RankedTensorType>(type);
     if (!ranked || ranked.getRank() != 4) {
       emitOpError() << label << " must be a rank-4 [B,H,S,D] tensor";
-      return mlir::failure();
+      return {};
     }
     return ranked;
   };
@@ -466,18 +466,16 @@ mlir::LogicalResult BackwardOp::verify() {
   auto dKey = ranked4(getDKey().getType(), "d_key");
   auto dValue = ranked4(getDValue().getType(), "d_value");
   auto bias = mlir::dyn_cast<mlir::RankedTensorType>(getBias().getType());
-  if (mlir::failed(dOut) || mlir::failed(query) || mlir::failed(key) ||
-      mlir::failed(value) || mlir::failed(dQuery) || mlir::failed(dKey) ||
-      mlir::failed(dValue))
+  if (!dOut || !query || !key || !value || !dQuery || !dKey || !dValue)
     return mlir::failure();
   if (!bias || (bias.getRank() != 3 && bias.getRank() != 4) ||
       !bias.getElementType().isF32())
     return emitOpError(
         "bias must be an f32 tensor [B|1,Sq,Sk] or [B|1,Hq|1,Sq,Sk]");
-  auto q = *query;
-  auto k = *key;
-  auto v = *value;
-  auto go = *dOut;
+  auto q = query;
+  auto k = key;
+  auto v = value;
+  auto go = dOut;
   if (!attnDimsAgree(q.getDimSize(0), k.getDimSize(0)) ||
       !attnDimsAgree(q.getDimSize(0), v.getDimSize(0)) ||
       !attnDimsAgree(q.getDimSize(1), go.getDimSize(1)) ||
@@ -507,11 +505,11 @@ mlir::LogicalResult BackwardOp::verify() {
         return false;
     return true;
   };
-  if (!sameShape(q, *dQuery) || !sameShape(k, *dKey) ||
-      !sameShape(v, *dValue))
+  if (!sameShape(q, dQuery) || !sameShape(k, dKey) ||
+      !sameShape(v, dValue))
     return emitOpError("dQ/dK/dV shapes must match Q/K/V respectively");
-  if (!dQuery->getElementType().isF32() || !dKey->getElementType().isF32() ||
-      !dValue->getElementType().isF32())
+  if (!dQuery.getElementType().isF32() || !dKey.getElementType().isF32() ||
+      !dValue.getElementType().isF32())
     return emitOpError("dQ/dK/dV must use f32 accumulation");
   if (!getScale().isFinite() || getScale().convertToDouble() <= 0.0)
     return emitOpError("scale must be finite and positive");

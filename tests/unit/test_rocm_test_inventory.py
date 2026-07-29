@@ -5,8 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from scripts.run_rocm_host_free_compiler_tests import _llvm_runner_utils
-from tests._support.compiler_ownership import rocm_host_free_compiler_expression
+from scripts.run_rocm_host_free_compiler_tests import (
+    _llvm_runner_utils,
+    _pipeline_probe_error,
+    _rocm_only_capability_error,
+)
+from tests._support.compiler_ownership import (
+    CompilerBuildCapabilities,
+    rocm_host_free_compiler_expression,
+)
 
 
 def test_rocm_host_free_compiler_selection_excludes_foreign_owners() -> None:
@@ -56,3 +63,55 @@ def test_rocm_test1_requires_llvm_dir(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="does not declare LLVM_DIR"):
         _llvm_runner_utils(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("capabilities", "expected"),
+    (
+        (CompilerBuildCapabilities(False, False, True), None),
+        (
+            CompilerBuildCapabilities(True, False, True),
+            "disable Apple backend support",
+        ),
+        (
+            CompilerBuildCapabilities(False, True, True),
+            "disable NVIDIA backend support",
+        ),
+        (
+            CompilerBuildCapabilities(False, False, False),
+            "requires TESSERA_BUILD_ROCM_BACKEND=ON",
+        ),
+    ),
+)
+def test_rocm_test1_requires_rocm_only_capabilities(
+    capabilities: CompilerBuildCapabilities, expected: str | None,
+) -> None:
+    error = _rocm_only_capability_error(capabilities)
+    if expected is None:
+        assert error is None
+    else:
+        assert error is not None
+        assert expected in error
+
+
+@pytest.mark.parametrize(
+    ("available", "expected"),
+    (
+        ({"rocm": True, "nvidia": False, "apple": False}, None),
+        ({"rocm": False, "nvidia": False, "apple": False}, "ROCm pipeline"),
+        ({"rocm": True, "nvidia": True, "apple": False}, "nvidia"),
+        ({"rocm": True, "nvidia": False, "apple": True}, "apple"),
+    ),
+)
+def test_rocm_test1_requires_rocm_only_pipeline_registration(
+    available: dict[str, bool], expected: str | None,
+) -> None:
+    probes = {
+        name: {"available": value} for name, value in available.items()
+    }
+    error = _pipeline_probe_error(probes)
+    if expected is None:
+        assert error is None
+    else:
+        assert error is not None
+        assert expected in error

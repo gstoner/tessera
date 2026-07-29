@@ -1,7 +1,7 @@
 # Branch protection — required CI checks
 
 Tessera's `Validate` workflow (`.github/workflows/validate.yml`) is
-split into 6 lanes plus one aggregator job. The aggregator
+split into 7 lanes plus one aggregator job. The aggregator
 (`validate-required`) is the single status check we wire into branch
 protection — it succeeds iff every required lane succeeds.
 
@@ -12,14 +12,15 @@ status checks to pass before merging":
 
 | Check                | Source            | Why required                    |
 |----------------------|-------------------|---------------------------------|
-| `validate-required`  | `validate.yml`    | Fans in lint / unit / audit / build — one check, four lanes. |
+| `validate-required`  | `validate.yml`    | Fans in lint / unit / audit / build / ROCm compiler — one check, five lanes. |
 
 Selecting just `validate-required` is sufficient. Each underlying
 lane (`lint (ruff + mypy ratchet)`, `unit (pytest -m "not slow")`,
 `audit (drift + claim_lint + examples)`, `build (runtime +
-collectives)`) is still reported individually in the PR Checks tab so
-contributors can see which lane failed without expanding the
-aggregator log.
+collectives)`, and `rocm compiler (host-free LLVM/MLIR 23)`) is still reported
+individually in the PR Checks tab so contributors can see which lane failed
+without expanding the aggregator log. The required ROCm compiler lane is a
+host-free artifact and ownership proof; it does not claim AMD GPU execution.
 
 ## Opt-in lanes (NOT required for merge)
 
@@ -64,6 +65,7 @@ policy.)
 | unit         | ~2min             | `pytest -m "not slow"`, ~4300 tests. |
 | audit        | ~10s              | support_table drift + claim_lint + examples audit. |
 | build        | ~5min             | CMake runtime + collectives compile-check. |
+| ROCm compiler | ~25min            | LLVM/MLIR 23 ROCm-only build + backend lit + ownership gate. |
 | lit          | ~10min if installed | LLVM/MLIR 23 install + tessera-opt build + lit. |
 | sanitizer    | ~15min per matrix | asan + tsan + ubsan run in parallel. |
 
@@ -75,7 +77,7 @@ contributor doesn't have to wait 15+ minutes on every PR.
 `validate-required` uses `if: always()` and pulls `needs.<lane>.result`
 explicitly so a *skipped* required lane (which would normally pass
 GitHub's default status check logic) is treated as a failure. There's
-no escape hatch — the four named lanes must all `success`.
+no escape hatch — the five named lanes must all `success`.
 
 ## Adding a new required lane
 

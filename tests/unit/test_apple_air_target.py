@@ -25,11 +25,15 @@ from tessera.compiler.emit.kernel_cache import (
 from tessera.compiler.emit.kernel_emitter import SpecPolicy, get_emitter
 
 
-requires_toolchain = pytest.mark.skipif(
-    not apple_air.metal_toolchain_available(),
-    reason="Apple Metal toolchain unavailable (xcodebuild -downloadComponent "
-           "MetalToolchain)",
-)
+def _require_toolchain() -> None:
+    """Centralized capability gate — `tests/_support/apple.py` owns the probe.
+
+    An inline `skipif` here would be a second, drifting definition of "is the
+    Metal toolchain usable"; `test_apple_test_inventory` forbids exactly that.
+    """
+    from tests._support.apple import require_metal_compiler
+
+    require_metal_compiler()
 
 
 def test_air_target_registers_its_own_emitter_and_compiler() -> None:
@@ -53,8 +57,8 @@ def test_toolchain_hint_is_actionable() -> None:
     assert "MetalToolchain" in hint or "Xcode" in hint
 
 
-@requires_toolchain
 def test_air_build_produces_a_real_metallib_not_a_deferral(tmp_path) -> None:
+    _require_toolchain()
     cache = KernelCache()
     region = F.FusedRegion(epilogue=("gelu",))
     built = build(region, AIR_TARGET, SpecPolicy.BUCKET, dtype="f16",
@@ -72,13 +76,13 @@ def test_air_build_produces_a_real_metallib_not_a_deferral(tmp_path) -> None:
     assert jit.key != built.key
 
 
-@requires_toolchain
 def test_air_artifact_is_llvm_bitcode_behind_the_container(tmp_path) -> None:
     """`.air` is LLVM bitcode — the property the direct-emission path depends on.
 
     Checked here so a toolchain change that stopped producing bitcode is caught
     by the AOT lane rather than by whoever later tries to emit AIR directly.
     """
+    _require_toolchain()
     region = F.FusedRegion(epilogue=("gelu",))
     source = get_emitter(AIR_TARGET).emit(region, dtype="f16", dims=(64, 64, 64))
     apple_air.compile_msl_to_metallib(source.source, entry=source.entry,
@@ -87,8 +91,8 @@ def test_air_artifact_is_llvm_bitcode_behind_the_container(tmp_path) -> None:
     assert air.read_bytes()[:4] == b"\xde\xc0\x17\x0b", "AIR is not LLVM bitcode"
 
 
-@requires_toolchain
 def test_identical_source_compiles_once(tmp_path) -> None:
+    _require_toolchain()
     region = F.FusedRegion(epilogue=("gelu",))
     source = get_emitter(AIR_TARGET).emit(region, dtype="f16", dims=(64, 64, 64))
     first = apple_air.compile_msl_to_metallib(source.source, entry=source.entry,
@@ -99,16 +103,15 @@ def test_identical_source_compiles_once(tmp_path) -> None:
     assert second == first and second.stat().st_mtime_ns == stamp
 
 
-@requires_toolchain
 def test_bad_msl_raises_naming_the_stage_rather_than_returning_a_path(tmp_path):
     """Decision #21 — a failed compile must not look like a deferral."""
+    _require_toolchain()
     with pytest.raises(MetalToolchainError, match="metal -c"):
         apple_air.compile_msl_to_metallib(
             "kernel void broken( { this is not MSL", entry="broken",
             cache_dir=tmp_path)
 
 
-@requires_toolchain
 @pytest.mark.hardware_apple_gpu
 def test_aot_and_jit_lanes_are_numerically_identical() -> None:
     """Same MSL, same dispatch body — only library creation differs.
@@ -117,6 +120,7 @@ def test_aot_and_jit_lanes_are_numerically_identical() -> None:
     disagree, the AOT lane is running a different kernel and any AOT-vs-JIT
     timing is measuring the wrong thing.
     """
+    _require_toolchain()
     import numpy as np
 
     from tessera.compiler.emit import apple_msl
@@ -157,7 +161,6 @@ def test_aot_runner_reports_reference_when_the_device_declines(monkeypatch) -> N
         atol=1e-2, rtol=1e-2)
 
 
-@requires_toolchain
 def test_nonce_control_defeats_metals_shader_cache(tmp_path) -> None:
     """The benchmark's control: a unique nonce must yield a distinct artifact.
 
@@ -168,6 +171,7 @@ def test_nonce_control_defeats_metals_shader_cache(tmp_path) -> None:
     would quietly start measuring cache hits and report a flattering result, so
     the control is asserted here rather than trusted.
     """
+    _require_toolchain()
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
@@ -214,7 +218,6 @@ def test_air_runner_is_registered_without_stealing_the_default() -> None:
         "the AOT runner must not be the default; the arbiter selects it")
 
 
-@requires_toolchain
 @pytest.mark.hardware_apple_gpu
 def test_air_runner_reports_the_device_tag_only_when_it_dispatched() -> None:
     """The unimplemented methods must decline, not claim a device tag.
@@ -224,6 +227,7 @@ def test_air_runner_reports_the_device_tag_only_when_it_dispatched() -> None:
     reference by construction instead of comparing numpy against itself — and
     must not raise, which would stop the oracle gating those regions at all.
     """
+    _require_toolchain()
     import numpy as np
 
     from tessera.compiler.emit.kernel_emitter import (
@@ -246,7 +250,6 @@ def test_air_runner_reports_the_device_tag_only_when_it_dispatched() -> None:
         "F4 oracle to trust a kernel that never ran")
 
 
-@requires_toolchain
 @pytest.mark.hardware_apple_gpu
 def test_gpu_executes_hand_written_air_ir(tmp_path) -> None:
     """S0: the GPU runs LLVM IR we wrote, with no MSL front end in the chain.
@@ -256,6 +259,7 @@ def test_gpu_executes_hand_written_air_ir(tmp_path) -> None:
     numbers come out right, and that is the whole question for whether an
     MLIR → AIR emitter is a real direction or a dead end.
     """
+    _require_toolchain()
     import ctypes
     import subprocess
 
@@ -276,7 +280,13 @@ def test_gpu_executes_hand_written_air_ir(tmp_path) -> None:
     symbol = getattr(_load_apple_gpu_runtime(),
                      "tessera_apple_gpu_metallib_elementwise_f32", None)
     if symbol is None:
-        pytest.skip("runtime lacks the generic metallib dispatch (rebuild dylib)")
+        # Not a skip. A dylib without this symbol is stale, not a host lacking a
+        # capability — skipping would quietly drop the one test that proves the
+        # AIR path executes. Same convention as APPLE-E2E-1.
+        raise RuntimeError(
+            "libTesseraAppleRuntime is stale: no "
+            "tessera_apple_gpu_metallib_elementwise_f32. Rebuild with "
+            "`ninja -C build TesseraAppleRuntimeShared`.")
     symbol.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
                        ctypes.POINTER(ctypes.c_float),
                        ctypes.POINTER(ctypes.c_float), ctypes.c_int32]
@@ -291,6 +301,37 @@ def test_gpu_executes_hand_written_air_ir(tmp_path) -> None:
     assert ok, "dispatch of the hand-written AIR kernel declined"
     # The kernel body is `fmul float %v, 3.0` — exact in f32, so demand exact.
     np.testing.assert_array_equal(out, x * 3.0)
+
+
+@pytest.mark.hardware_apple_gpu
+def test_aot_pointwise_matches_the_jit_lane_bitwise() -> None:
+    """C2: the second family on the AOT lane.
+
+    Both lanes reach the same `synth_pointwise_impl` in the runtime and share
+    `run_pointwise_graph`'s operand preparation — only `acquire_pipeline`
+    differs. Bitwise equality is therefore the right bar: any divergence means
+    the lanes are dispatching different buffers, not compiling differently.
+    """
+    _require_toolchain()
+    import numpy as np
+
+    from tessera.compiler.emit import apple_msl
+
+    region = F.PointwiseGraphRegion(
+        ops=(("mul", ("a", "b"), "t"), ("relu", ("t",), "o")),
+        inputs=("a", "b"), output="o")
+    rng = np.random.default_rng(0)
+    a = rng.standard_normal((8, 32)).astype(np.float32)
+    b = rng.standard_normal((8, 32)).astype(np.float32)
+
+    jit_out, jit_tag = apple_msl.run_pointwise_graph(region, [a, b])
+    aot_out, aot_tag = apple_air.run_pointwise_graph_aot(region, [a, b])
+    if jit_tag != "metal_runtime" or aot_tag == "reference":
+        pytest.skip(f"a lane declined the device (jit={jit_tag}, aot={aot_tag})")
+
+    assert aot_tag == "metal_metallib"
+    np.testing.assert_array_equal(aot_out, jit_out)
+    np.testing.assert_allclose(aot_out, region.reference(a, b), atol=1e-6)
 
 
 def test_missing_toolchain_declines_instead_of_falling_back(monkeypatch, tmp_path):

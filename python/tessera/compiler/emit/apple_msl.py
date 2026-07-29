@@ -1264,12 +1264,21 @@ def _synth_pointwise_symbol(dtype: str) -> Any:
     return sym
 
 
-def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray]
+def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray],
+                        *, library: str | None = None
                         ) -> tuple[np.ndarray, str]:
     """Run the pointwise DAG as ONE Metal kernel. f32/f16 inputs; per-feature
     broadcast operands (bias/scale, shape ``(cols,)``/``(1,cols)``) fuse in place
     via ``gid % cols`` indexing (M4). Returns ``(out, "metal_runtime")`` on GPU
-    success, else the numpy reference."""
+    success, else the numpy reference.
+
+    ``library`` selects the AOT lane: a prebuilt ``.metallib`` path is dispatched
+    instead of compiling the MSL here, and success reports ``"metal_metallib"``.
+    The operand preparation above it — broadcast detection, per-input element
+    counts, output shaping — is deliberately shared rather than duplicated in
+    ``emit.apple_air``: two copies would drift, and then the AOT and JIT lanes
+    would be feeding different buffers while claiming to differ only in compile
+    strategy."""
     in_dtype = np.asarray(arrays[0]).dtype
     elem = "f16" if in_dtype == np.float16 else "f32"
     npdt = np.float16 if elem == "f16" else np.float32
@@ -1300,14 +1309,22 @@ def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray]
         in_ptrs = (ctypes.c_void_p * len(arrs))(*[a.ctypes.data for a in arrs])
         count_arr = (ctypes.c_int32 * len(arrs))(*counts)
         out = np.zeros(out_shape, npdt)
-        rc = sym(synthesize_pointwise_graph_msl(
-                     region, elem, tuple(bc)).encode("utf-8"),
-                 _PW_ENTRY.encode("utf-8"),
+        if library is not None:
+            from tessera.compiler.emit import apple_air
+            sym = apple_air._metallib_pointwise_symbol(elem)
+            first, tag = library.encode("utf-8"), "metal_metallib"
+        else:
+            first = synthesize_pointwise_graph_msl(
+                region, elem, tuple(bc)).encode("utf-8")
+            tag = "metal_runtime"
+        if sym is None:
+            return region.reference(*arrays).astype(npdt), "reference"
+        rc = sym(first, _PW_ENTRY.encode("utf-8"),
                  ctypes.cast(in_ptrs, ctypes.POINTER(ctypes.c_void_p)),
                  ctypes.cast(count_arr, ctypes.POINTER(ctypes.c_int32)),
                  len(arrs), out.ctypes.data, n, cols)
         if rc == 1:
-            return out, "metal_runtime"
+            return out, tag
     return region.reference(*arrays).astype(npdt), "reference"
 
 

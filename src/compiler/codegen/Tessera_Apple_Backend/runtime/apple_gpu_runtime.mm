@@ -9524,20 +9524,54 @@ extern "C" int32_t tessera_apple_gpu_synth_norm_chain_f16(
 // MSL indexes it ``[gid % cols]`` (the kernel reads ``cols`` from buffer
 // n_inputs+2). This lets the pointwise emitter fuse per-feature bias/scale (which
 // are ubiquitous) instead of bailing on the shape mismatch.
-static int32_t synth_pointwise_impl(const char *msl_source, const char *entry,
+// Defined further down, next to the metallib entry points it was introduced
+// for; declared here so `acquire_pipeline` can sit beside the earliest family
+// that uses it rather than the whole set moving.
+id<MTLComputePipelineState> load_metallib_kernel(MetalDeviceContext &ctx,
+                                                 NSString *path,
+                                                 NSString *entry_point);
+
+// Resolve a compute pipeline from EITHER MSL source (JIT, compiled now) or a
+// prebuilt `.metallib` (AOT, loaded now). Exactly one of the two must be
+// non-null; passing both is a caller bug and is rejected rather than silently
+// preferring one.
+//
+// This is what keeps a family's JIT and AOT entry points sharing one dispatch
+// body instead of becoming two copies that drift — the same discipline applied
+// to the coopmat GEMM, generalised so each additional AOT lane is a small
+// wrapper rather than a duplicate.
+static id<MTLComputePipelineState> acquire_pipeline(MetalDeviceContext &ctx,
+                                                    const char *msl_source,
+                                                    const char *metallib_path,
+                                                    const char *entry) {
+  if (!entry) return nil;
+  if (!msl_source == !metallib_path) {
+    ts_set_last_gpu_error(
+        3, "pipeline_source",
+        "exactly one of msl_source / metallib_path must be supplied");
+    return nil;
+  }
+  NSString *ep = [NSString stringWithUTF8String:entry];
+  if (msl_source)
+    return compile_msl_kernel(ctx, [NSString stringWithUTF8String:msl_source], ep);
+  return load_metallib_kernel(ctx, [NSString stringWithUTF8String:metallib_path],
+                              ep);
+}
+
+static int32_t synth_pointwise_impl(const char *msl_source,
+                                    const char *metallib_path, const char *entry,
                                     const void *const *inputs,
                                     const int32_t *in_counts, int32_t n_inputs,
                                     void *out, int32_t n_elements, int32_t cols,
                                     NSUInteger elem_bytes) {
-  if (!msl_source || !entry || !inputs || !in_counts || !out || n_inputs <= 0 ||
-      n_elements <= 0)
+  if ((!msl_source && !metallib_path) || !entry || !inputs || !in_counts ||
+      !out || n_inputs <= 0 || n_elements <= 0)
     return 0;
   MetalDeviceContext &ctx = deviceContext();
   if (!ctx.ok) return 0;
   @autoreleasepool {
-    id<MTLComputePipelineState> pso = compile_msl_kernel(
-        ctx, [NSString stringWithUTF8String:msl_source],
-        [NSString stringWithUTF8String:entry]);
+    id<MTLComputePipelineState> pso =
+        acquire_pipeline(ctx, msl_source, metallib_path, entry);
     if (!pso) return 0;
     NSUInteger outBytes = elem_bytes * (NSUInteger)n_elements;
     // Variable buffer count → a vector of move-only guards releases every
@@ -9587,34 +9621,36 @@ extern "C" int32_t tessera_apple_gpu_synth_pointwise_f32(
     const char *msl_source, const char *entry, const void *const *inputs,
     const int32_t *in_counts, int32_t n_inputs, void *out, int32_t n_elements,
     int32_t cols) {
-  return synth_pointwise_impl(msl_source, entry, inputs, in_counts, n_inputs,
-                              out, n_elements, cols, sizeof(float));
+  return synth_pointwise_impl(msl_source, nullptr, entry, inputs, in_counts,
+                              n_inputs, out, n_elements, cols,
+                              sizeof(float));
 }
 
 extern "C" int32_t tessera_apple_gpu_synth_pointwise_f16(
     const char *msl_source, const char *entry, const void *const *inputs,
     const int32_t *in_counts, int32_t n_inputs, void *out, int32_t n_elements,
     int32_t cols) {
-  return synth_pointwise_impl(msl_source, entry, inputs, in_counts, n_inputs,
-                              out, n_elements, cols, sizeof(uint16_t));
+  return synth_pointwise_impl(msl_source, nullptr, entry, inputs, in_counts,
+                              n_inputs, out, n_elements, cols,
+                              sizeof(uint16_t));
 }
 
 // M5 (2026-06-16) — fused pointwise -> plain row-reduction. A thread per output
 // row reduces over `cols`; each input is rows*cols, the output is rows. Collapses
 // the pointwise-emitter + MPSGraph-reduce two-kernel chain into one.
-static int32_t synth_pw_reduce_impl(const char *msl_source, const char *entry,
+static int32_t synth_pw_reduce_impl(const char *msl_source,
+                                    const char *metallib_path, const char *entry,
                                     const void *const *inputs, int32_t n_inputs,
                                     void *out, int32_t rows, int32_t cols,
                                     NSUInteger elem_bytes) {
-  if (!msl_source || !entry || !inputs || !out || n_inputs <= 0 || rows <= 0 ||
-      cols <= 0)
+  if ((!msl_source && !metallib_path) || !entry || !inputs || !out ||
+      n_inputs <= 0 || rows <= 0 || cols <= 0)
     return 0;
   MetalDeviceContext &ctx = deviceContext();
   if (!ctx.ok) return 0;
   @autoreleasepool {
-    id<MTLComputePipelineState> pso = compile_msl_kernel(
-        ctx, [NSString stringWithUTF8String:msl_source],
-        [NSString stringWithUTF8String:entry]);
+    id<MTLComputePipelineState> pso =
+        acquire_pipeline(ctx, msl_source, metallib_path, entry);
     if (!pso) return 0;
     NSUInteger inBytes = elem_bytes * (NSUInteger)rows * (NSUInteger)cols;
     NSUInteger outBytes = elem_bytes * (NSUInteger)rows;
@@ -9656,15 +9692,49 @@ static int32_t synth_pw_reduce_impl(const char *msl_source, const char *entry,
 extern "C" int32_t tessera_apple_gpu_synth_pointwise_reduce_f32(
     const char *msl_source, const char *entry, const void *const *inputs,
     int32_t n_inputs, void *out, int32_t rows, int32_t cols) {
-  return synth_pw_reduce_impl(msl_source, entry, inputs, n_inputs, out, rows,
-                              cols, sizeof(float));
+  return synth_pw_reduce_impl(msl_source, nullptr, entry, inputs, n_inputs,
+                              out, rows, cols, sizeof(float));
 }
 
 extern "C" int32_t tessera_apple_gpu_synth_pointwise_reduce_f16(
     const char *msl_source, const char *entry, const void *const *inputs,
     int32_t n_inputs, void *out, int32_t rows, int32_t cols) {
-  return synth_pw_reduce_impl(msl_source, entry, inputs, n_inputs, out, rows,
-                              cols, sizeof(uint16_t));
+  return synth_pw_reduce_impl(msl_source, nullptr, entry, inputs, n_inputs,
+                              out, rows, cols, sizeof(uint16_t));
+}
+
+// ── AOT (`.metallib`) twins ──────────────────────────────────────────────────
+// Each is a wrapper over the same `_impl` its JIT sibling uses, differing only
+// in which pipeline source `acquire_pipeline` resolves. Adding a lane costs a
+// wrapper, not a copy of the dispatch body.
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_f32(
+    const char *metallib_path, const char *entry, const void *const *inputs,
+    const int32_t *in_counts, int32_t n_inputs, void *out, int32_t n_elements,
+    int32_t cols) {
+  return synth_pointwise_impl(nullptr, metallib_path, entry, inputs, in_counts,
+                              n_inputs, out, n_elements, cols, sizeof(float));
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_f16(
+    const char *metallib_path, const char *entry, const void *const *inputs,
+    const int32_t *in_counts, int32_t n_inputs, void *out, int32_t n_elements,
+    int32_t cols) {
+  return synth_pointwise_impl(nullptr, metallib_path, entry, inputs, in_counts,
+                              n_inputs, out, n_elements, cols, sizeof(uint16_t));
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_reduce_f32(
+    const char *metallib_path, const char *entry, const void *const *inputs,
+    int32_t n_inputs, void *out, int32_t rows, int32_t cols) {
+  return synth_pw_reduce_impl(nullptr, metallib_path, entry, inputs, n_inputs,
+                              out, rows, cols, sizeof(float));
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_reduce_f16(
+    const char *metallib_path, const char *entry, const void *const *inputs,
+    int32_t n_inputs, void *out, int32_t rows, int32_t cols) {
+  return synth_pw_reduce_impl(nullptr, metallib_path, entry, inputs, n_inputs,
+                              out, rows, cols, sizeof(uint16_t));
 }
 
 // Generic SYNTHESIZED matmul -> pointwise(-> reduction) dispatch, THREADGROUP-

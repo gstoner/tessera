@@ -1228,6 +1228,30 @@ extern "C" int32_t tessera_apple_gpu_metallib_elementwise_f32(
   return 0;
 }
 
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_f32(
+    const char*, const char*, const void* const*, const int32_t*, int32_t,
+    void*, int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_f16(
+    const char*, const char*, const void* const*, const int32_t*, int32_t,
+    void*, int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_reduce_f32(
+    const char*, const char*, const void* const*, int32_t, void*, int32_t,
+    int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_reduce_f16(
+    const char*, const char*, const void* const*, int32_t, void*, int32_t,
+    int32_t) {
+  return 0;
+}
+
 extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_f16(
     const char*, const char*, const uint16_t*, const uint16_t*, float*,
     int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {

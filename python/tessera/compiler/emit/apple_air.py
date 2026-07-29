@@ -40,6 +40,7 @@ from typing import Any
 
 from tessera.compiler.emit.kernel_cache import CompileError, register_compiler
 from tessera.compiler.emit.kernel_emitter import (
+    EmitError,
     KernelEmitter,
     KernelRunner,
     KernelSource,
@@ -194,6 +195,57 @@ def _metallib_coopmat_symbol() -> Any:
     return symbol
 
 
+def _metallib_pointwise_symbol(elem: str) -> Any:
+    """ctypes binding for the AOT pointwise dispatch, per element type.
+
+    The JIT twin is `apple_msl._synth_pointwise_symbol`. Both land in the same
+    `synth_pointwise_impl` in the runtime — only `acquire_pipeline` differs — so
+    the two lanes cannot diverge on buffer layout or launch geometry.
+    """
+    import ctypes
+
+    from tessera.runtime import _load_apple_gpu_runtime
+
+    suffix = "f16" if elem == "f16" else "f32"
+    runtime = _load_apple_gpu_runtime()
+    symbol = getattr(runtime, f"tessera_apple_gpu_metallib_pointwise_{suffix}", None)
+    if symbol is None:
+        return None
+    symbol.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
+                       ctypes.POINTER(ctypes.c_void_p),
+                       ctypes.POINTER(ctypes.c_int32), ctypes.c_int32,
+                       ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32]
+    symbol.restype = ctypes.c_int32
+    return symbol
+
+
+def run_pointwise_graph_aot(region: Any, arrays: Any) -> tuple[Any, str]:
+    """Run a pointwise DAG from a prebuilt `.metallib`.
+
+    Reuses `apple_msl.run_pointwise_graph`'s operand preparation by handing it a
+    library path — the alternative, re-deriving broadcast flags and element
+    counts here, is how the two lanes would end up dispatching different
+    buffers while claiming to differ only in compile strategy.
+    """
+    from tessera.compiler.emit import apple_msl
+
+    import numpy as np
+
+    dtype = np.asarray(arrays[0]).dtype
+    elem = "f16" if dtype == np.float16 else "f32"
+    if not metal_toolchain_available():
+        return apple_msl.run_pointwise_graph(region, arrays)[0], "reference"
+    try:
+        source = get_emitter(AIR_TARGET).emit(region, dtype=elem)
+        metallib = compile_msl_to_metallib(source.source, entry=source.entry)
+    except (MetalToolchainError, EmitError):
+        # The emitter cannot express this region, or the toolchain declined.
+        # Report the reference honestly rather than letting the JIT lane answer
+        # under the AOT tag. Anything else is a real bug and must propagate.
+        return apple_msl.run_pointwise_graph(region, arrays)[0], "reference"
+    return apple_msl.run_pointwise_graph(region, arrays, library=str(metallib))
+
+
 def run_fused_region_aot(region: Any, A: Any, B: Any, bias: Any = None, *,
                          tile: int = 32) -> tuple[Any, str]:
     """Run a coopmat region from a prebuilt `.metallib`.
@@ -289,9 +341,7 @@ class AppleAIRRunner(KernelRunner):
         return self._decline(region, out)
 
     def run_pointwise_graph(self, region: Any, *args: Any, **kwargs: Any):
-        from tessera.compiler.emit import apple_msl
-        out, _ = apple_msl.run_pointwise_graph(region, *args, **kwargs)
-        return self._decline(region, out)
+        return run_pointwise_graph_aot(region, *args, **kwargs)
 
 
 # Not the process default: registering with `default=True` would silently move

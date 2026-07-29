@@ -272,8 +272,10 @@ def test_migrated_compiler_fixture_has_no_private_tool_probe():
     )
     assert "pytest.mark.compiler_tool" in text
     assert 'REPO / "build/tools/tessera-opt/tessera-opt"' not in text
-    # The shared resolver owns selection; the fixture names the passes it
-    # drives so a build without the ROCm backend skips instead of failing.
+    # Open paren, not `()` — the fixture should be *told which passes* it needs,
+    # so a build without them skips instead of failing inside MLIR. Requiring
+    # the empty-argument form would forbid exactly that. Naming the pipeline
+    # is what makes the requirement and the executed passes one string.
     assert "compiler_toolchain.require_tessera_opt(" in text
     assert "lower-tile-to-rocm" in text
 

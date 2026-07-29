@@ -226,6 +226,7 @@ def AppleCPU_CallOp : TesseraApple_Op<"cpu.call", [Pure]> {
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Apple GPU value call — dispatches to a custom MSL kernel C ABI symbol.
@@ -249,6 +250,7 @@ def AppleGPU_KernelCallOp : TesseraApple_Op<"gpu.kernel_call", [Pure]> {
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Apple GPU value call — dispatches through an authored .mtlpackage (PK8 lane).
@@ -272,6 +274,7 @@ def AppleGPU_PackageCallOp : TesseraApple_Op<"gpu.package_call", [Pure]> {
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 // Phase-G G-B — bounded control-flow loop Target-IR op. Value-preserving

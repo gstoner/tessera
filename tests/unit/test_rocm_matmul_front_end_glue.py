@@ -16,15 +16,13 @@ which exercise the identical op.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
-import pytest
+from tests._support.compiler_tool import run_tessera_opt
 
 import tessera
 
 REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
 
 
 @tessera.jit(target="rocm")
@@ -50,14 +48,11 @@ def test_ir_stack_directive_is_consumable_by_generate_pass():
     """The directive the IR stack produced expands through the SAME
     generate-wmma-gemm-kernel pass into a fragment-materialized WMMA kernel —
     closing Graph matmul -> Target-IR directive -> generated kernel."""
-    if not TESSERA_OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     tir = _rocm_mm.target_ir
     line = next(l.strip() for l in tir.splitlines()
                 if '"tessera_rocm.wmma_gemm"' in l)
     module = "module {\n  " + line + "\n}\n"
-    r = subprocess.run([str(TESSERA_OPT), "-", "--generate-wmma-gemm-kernel"],
-                       input=module, capture_output=True, text=True)
+    r = run_tessera_opt(module, "--generate-wmma-gemm-kernel")
     assert r.returncode == 0, r.stderr
     assert "gpu.func @gemm" in r.stdout       # the kernel the pass generated
     assert "tessera_rocm.wmma" in r.stdout     # the matrix op inside it

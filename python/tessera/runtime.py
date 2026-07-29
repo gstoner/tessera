@@ -15877,10 +15877,13 @@ def _execute_apple_gpu_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> 
     values = _bind_launch_args(args, arg_names)
     x = _as_numpy(values[operand_names[0]])
     red_kwargs = {"axis": kwargs.get("axis", None), "keepdims": bool(kwargs.get("keepdims", False))}
-    native = bool(DeviceTensor.is_metal() and _apple_gpu_mpsgraph_reduce_f32())
+    # The row describes the native MPSGraph route, but anything the dispatch
+    # actually computes in numpy — an unavailable device or ABI binding, and
+    # equally a non-float dtype or 0-d input — must be observable as reference
+    # execution at launch time. Ask the dispatch's own predicate, not a bare
+    # device probe, or the two disagree and numpy work reports `native_gpu`.
+    native = _apple_gpu_reduce_runs_on_device("tessera.reduce", x, red_kwargs, np)
     output = np.asarray(_apple_gpu_dispatch_reduce("tessera.reduce", [x], red_kwargs, np), np.float32)
-    # The row describes the native MPSGraph route, but an unavailable device or
-    # ABI binding must be observable as reference execution at launch time.
     return output if native else (output, "reference_cpu")
 
 
@@ -32685,11 +32688,44 @@ def _apple_gpu_dispatch_topk(op_name: str, operands: list[Any], kwargs: dict, np
     return vals, idx.astype(np.int64)
 
 
+def _apple_gpu_reduce_runs_on_device(op_name: str, x: Any, kwargs: Mapping[str, Any],
+                                     np: Any) -> bool:
+    """Whether the reduce/scan dispatch takes the MPSGraph path for this input.
+
+    `_apple_gpu_dispatch_reduce` decides per *input* — non-float dtypes, 0-d
+    input, a multi-axis arg-reduce, and a missing ABI binding all fall back to
+    numpy. A caller that labels placement must reach the same answer, so both
+    ask here instead of each deciding for itself. Probing only whether Metal is
+    available is what reported `native_gpu` for work numpy actually did.
+    """
+    kind, _op = _APPLE_GPU_REDUCE_OPS[op_name]
+    bf16 = _bfloat16_dtype()
+    if x.dtype not in (np.float32, np.float16) and not (bf16 is not None
+                                                        and x.dtype == bf16):
+        return False
+    if x.ndim == 0:
+        return False
+    if kind == "arg":
+        # Mirrors the body: an explicit multi-axis arg-reduce has no device form.
+        axis = kwargs.get("axis", None)
+        if axis is not None and not isinstance(axis, int) and len(tuple(axis)) != 1:
+            return False
+    if not DeviceTensor.is_metal():
+        return False
+    binding = {
+        "scan": _apple_gpu_mpsgraph_scan_f32,
+        "reduce": _apple_gpu_mpsgraph_reduce_f32,
+        "arg": _apple_gpu_mpsgraph_argreduce_f32,
+    }[kind]
+    return binding() is not None
+
+
 def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict, np: Any) -> Any:
     """Reductions / scans via the MPSGraph lane. Arbitrary axis/keepdims are
     folded to a [rows, cols] last-axis reduction by transposing the reduced
     axes to the end. f16/bf16 upcast to f32 (fp32 reduction numerics). Falls
-    back to numpy for non-float dtypes or when Metal is unavailable."""
+    back to numpy per `_apple_gpu_reduce_runs_on_device` — non-float dtypes,
+    0-d input, multi-axis arg-reduce, or an unavailable device/ABI binding."""
     x = np.asarray(operands[0])
     kind, op = _APPLE_GPU_REDUCE_OPS[op_name]
     axis = kwargs.get("axis", -1 if kind == "scan" else None)
@@ -32718,7 +32754,7 @@ def _apple_gpu_dispatch_reduce(op_name: str, operands: list[Any], kwargs: dict, 
         scan_fn = {0: np.cumsum, 1: np.cumprod, 2: np.maximum.accumulate, 3: np.minimum.accumulate}[op]
         return scan_fn(x, axis=axis)
 
-    if not is_float or x.ndim == 0:
+    if not _apple_gpu_reduce_runs_on_device(op_name, x, kwargs, np):
         return _ref()
     xf = np.ascontiguousarray(x.astype(np.float32))
     n = x.ndim

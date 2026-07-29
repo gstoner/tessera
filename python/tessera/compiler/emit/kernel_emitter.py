@@ -144,6 +144,7 @@ class KernelEmitter(ABC):
         spec: SpecPolicy = SpecPolicy.BUCKET,
         dtype: str = "f32",
         dims: tuple[int, ...] | None = None,
+        **kwargs: Any,
     ) -> KernelSource:
         """Emit a :class:`KernelSource` for ``region`` under ``spec``.
 
@@ -152,6 +153,15 @@ class KernelEmitter(ABC):
         (``None`` leaves it shape-anonymous). Raise :class:`EmitError` if the
         region or policy is unsupported — never return a kernel specialized
         differently than requested.
+
+        ``**kwargs`` carries backend-specific knobs — Apple's ``variant``
+        (scalar / tiled / coopmat) is the first, and is how an arbiter asks for
+        one *named* candidate rather than the backend's preferred one. Mirrors
+        :class:`KernelRunner`, whose ``run_*`` already accept extras so a
+        backend gaining a knob is not an interface break. An emitter that does
+        not recognise a keyword must raise :class:`EmitError`, never ignore it —
+        silently emitting the default under a requested name is the same class
+        of error as a wrong specialization.
         """
 
 

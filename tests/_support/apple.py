@@ -6,7 +6,6 @@ for a test that claims native Apple execution.
 """
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from typing import Any, Mapping
@@ -75,18 +74,22 @@ def require_apple_metal4() -> None:
 
 
 def metal_compiler_available() -> bool:
-    """Whether the offline Apple ``metal`` compiler is available on this host."""
-    if shutil.which("metal") is not None:
-        return True
+    """Whether the offline Apple ``metal`` compiler can actually *run* here.
+
+    Resolving the binary is not enough, and that distinction bit us: Xcode ships
+    a ``metal`` driver that `xcrun -f metal` finds happily and that then exits
+    with "cannot execute tool 'metal' due to missing Metal Toolchain" until
+    ``xcodebuild -downloadComponent MetalToolchain`` has been run. A presence
+    check therefore reports available on a host where every compile fails. Ask
+    for the version instead — it is the cheapest call that proves execution.
+    """
     try:
-        return bool(
-            subprocess.run(
-                ["xcrun", "-f", "metal"],
-                capture_output=True,
-                text=True,
-                timeout=20,
-            ).stdout.strip()
-        )
+        return subprocess.run(
+            ["xcrun", "metal", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        ).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
 
@@ -95,8 +98,10 @@ def require_metal_compiler() -> None:
     """Skip an offline MSL compiler test with one capability-specific reason."""
     if not metal_compiler_available():
         pytest.skip(
-            "compiler_tool requires the Apple `metal` compiler "
-            "(install Xcode or Command Line Tools)"
+            "compiler_tool requires a runnable Apple `metal` compiler — point "
+            "xcode-select at Xcode and run "
+            "`xcodebuild -downloadComponent MetalToolchain`; verify with "
+            "`xcrun metal --version`"
         )
 
 

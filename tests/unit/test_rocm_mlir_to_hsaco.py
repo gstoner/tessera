@@ -36,10 +36,15 @@ from pathlib import Path
 
 import pytest
 
+from tests._support.compiler_tool import require_tessera_opt
+
 np = pytest.importorskip("numpy")
 
 REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
+#: Passes these fixtures drive; a build without them skips rather than
+#: failing inside MLIR with an unknown-argument error.
+_ROCM_PASSES = ("--generate-wmma-gemm-kernel",
+                "--lower-tessera-target-to-rocdl")
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 # One-D element-wise kernels that tessera-to-linalg lowers; %OP% is the
@@ -186,8 +191,7 @@ def _launch_and_compare(hip, hsaco: bytes, a, b, ref) -> float:
 
 @pytest.mark.parametrize("op", list(_KERNELS))
 def test_tessera_kernel_compiles_through_mlir_and_executes(op):
-    if not TESSERA_OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
+    TESSERA_OPT = require_tessera_opt(*_ROCM_PASSES)
     mlir_opt = _find_mlir_opt()
     if mlir_opt is None:
         pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 23)")
@@ -213,8 +217,7 @@ def test_emit_rocdl_serializes_to_a_real_hsaco_elf():
     """The serialization half alone (no GPU needed): the lowered gpu.module
     serializes to a real AMD-GPU ELF (\\x7fELF magic). Proves the compile chain
     independent of device availability."""
-    if not TESSERA_OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
+    TESSERA_OPT = require_tessera_opt(*_ROCM_PASSES)
     mlir_opt = _find_mlir_opt()
     if mlir_opt is None:
         pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 23)")

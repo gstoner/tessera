@@ -8,6 +8,341 @@ last_updated: 2026-07-27
 
 # Apple compiler, exact-device, and performance plan
 
+## APPLE-AOT-4: S1 probe — what an MLIR → AIR emitter would actually cost
+
+**Status: probe complete 2026-07-28, owning host (M1 Max / apple7, Metal
+toolchain 32023.883). Capability findings, executed; not a perf claim.**
+
+S0 showed a GPU runs hand-written scalar AIR IR. The open question was whether
+that extends to the path that matters — `simdgroup_matrix`, the ceiling-setter
+and the reason SPIR-V was rejected. It does.
+
+### simdgroup_matrix is ordinary code, not a special form
+
+Dumping the real synthesized coopmat kernel with `metal -S -emit-llvm`:
+
+| MSL | AIR IR |
+|---|---|
+| `simdgroup_float8x8` | `<64 x float>` — a plain LLVM vector |
+| `make_filled_simdgroup_matrix` | `declare <64 x float> @air.simdgroup_matrix_8x8_init_filled.v64f32.f32(float)` |
+| `simdgroup_multiply_accumulate` | `declare <64 x float> @air.simdgroup_matrix_8x8_multiply_accumulate.v64f32.v64f16.v64f16.v64f32(...)` |
+| `threadgroup_barrier` | `@air.wg.barrier(i32, i32)` |
+
+These are **external function declarations, not intrinsics needing backend
+support**. Hand-written IR calling them — plus an `addrspace(3)` threadgroup
+global and a barrier — compiles, packages, loads, and **executes correctly**
+(fixture `tests/data/apple/handwritten_air_simdgroup.ll`, all 64 lanes exact).
+Everything here is expressible in MLIR's LLVM dialect without extension.
+
+### The builtin surface is 11 declarations
+
+Compiling every synthesizer family and collecting `air.*` references:
+
+| family | IR lines | builtins |
+|---|---|---|
+| coopmat | 408 | 7 |
+| tiled | 277 | 3 |
+| attention / attention-online | 244 / 235 | 2 / 2 |
+| gated-matmul | 194 | 1 |
+| matmul-epilogue | 183 | 2 |
+| norm-chain | 155 | 2 |
+| pointwise | 78 | 1 |
+
+**Union across all eight families: 11 distinct builtins** — four simdgroup
+matrix ops, six math (`convert`, `fast_clamp`, `fast_exp`, `fast_fmax`,
+`fast_rsqrt`, `fast_tanh`), one barrier. That is the entire `air.*` dependency
+an emitter must know how to name.
+
+### So what S1 costs
+
+Not the builtins (11 declarations) and not the codegen (MLIR's LLVM dialect
+already emits functions, calls, address spaces, vector types). The work is the
+**metadata emitter**: `!air.kernel` naming the function, one `!air.buffer`
+descriptor per argument (location index, access, address space, element
+size/align/type/name), builtin descriptors for `thread_position_in_grid` and
+friends, plus module flags and `!air.version` / `!air.language_version`. Roughly
+five node kinds, all declarative.
+
+On that basis it looks *week-shaped* rather than quarter-shaped — but flag
+that as an estimate, not a measurement. The 11 builtins and the IR sizes are
+counted; the effort figure is a judgement with no prototype behind it, and it
+sits next to measured numbers where it can borrow their credibility. Treat it
+as "small enough to try", not as a schedule.
+
+### What still argues against doing it
+
+Feasibility is no longer the constraint; **supported-ness is**. `.ll` input to
+`metal` is undocumented, `-x ir` is undocumented, AIR is undocumented by
+deliberate Apple choice, and there is no man page. An emitter would rest on an
+input path Apple can change or remove in any toolchain update, with no contract
+and no deprecation warning — while the MSL lane (`apple_gpu_air`) already
+captures the whole front-end saving through the supported input.
+
+The case for building it is therefore *architectural*: it puts Apple where ROCm
+already is — device code produced by the compiler rather than by a shell-out
+over synthesized source — and it is the only way Apple joins the MLIR/LLVM spine
+the other three backends share. Decision #26a names exactly that condition for
+revisiting. This probe supplies the missing cost and risk numbers; the call is
+a judgement about risk appetite, not about difficulty.
+
+Reproduce: `xcrun metal -S -emit-llvm <kernel>.metal` on any synthesizer output.
+
+## APPLE-AOT-3: S0 result — a GPU executes hand-written AIR IR
+
+**Status: PASSED 2026-07-28 on the owning host (Apple M1 Max / apple7, Metal
+toolchain 32023.883). Host-verified numerics, not a perf claim.**
+
+The four things APPLE-AOT-2 listed as unverified are now settled, three by
+experiment and one against me:
+
+| question | result |
+|---|---|
+| does a GPU *run* hand-written AIR IR? | **yes** — `o[i] = a[i]*3.0f` written directly as LLVM IR, no MSL front end, dispatched via `newLibraryWithURL:`; output bit-exact vs `x*3` over 1024 elements |
+| is `.ll` input to `metal` supported? | **no** — it works (`-x ir` too), but Apple documents MSL as the only supported input and deliberately does not document AIR |
+| is a `.metallib` portable across GPU families? | **not family-tagged** — `metal-lipo -info` reports `architecture: air64_v28`; the tag is the *AIR version*, which tracks deployment target (`-mmacos-version-min=14.0` → `air64_v26`, `15.0` → `v27`). GPU-specific compilation happens later, at pipeline creation — which is also why ~15.2 ms remains in the AOT lane. Cross-family *execution* untested: one machine. |
+| does the shared-dispatch refactor shrink runtime code? | **no — my prediction was wrong.** Measured: 58 lines before, 84 after (48 shared + 18 + 18) for two lanes. Duplication would have been 116, so the *marginal* cost per lane drops 58 → 18 lines (3.2×). It grows in absolute terms; it is cheaper than duplicating. |
+
+### What S0 changes
+
+The AIR path needs **no reverse engineering**. The stalled LLVM `air64` RFC was
+blocked because it reimplemented Apple's bitcode writer and container; emitting
+IR *into* `xcrun metal` requires neither. The metadata contract is declarative
+and legible — `!air.kernel` naming the function, one `!air.buffer` per argument
+(location index, access, address space, element size/align/type/name), the
+builtin descriptor for `thread_position_in_grid`, `addrspace(1)` device
+pointers. The fixture is `tests/data/apple/handwritten_air.ll`, exercised by
+`test_gpu_executes_hand_written_air_ir`.
+
+The shape is also ordinary rather than exotic: NVIDIA is MLIR → NVVM → PTX →
+**ptxas** → cubin. Apple would be MLIR → AIR IR → **metal/metallib** →
+metallib. A vendor assembler in the chain is normal.
+
+### The risk that decides it
+
+`.ll` input is **unsupported**. It is not in any Apple documentation, there is
+no man page, and AIR is undocumented by deliberate choice. So an MLIR → AIR
+emitter would rest on an input path Apple can change or remove in any toolchain
+update, with no contract and no deprecation warning. The MSL lane has no such
+exposure — MSL is the documented, supported input, and `apple_gpu_air` already
+captures the whole front-end saving through it.
+
+That is the trade to decide, and it is now a clean one: **structure (compiler-
+produced code, parity with ROCm's tessera-opt-emitted hsaco) against supported-
+ness.** Not, as Decision #26a assumed, feasibility — feasibility is settled.
+
+### C1 landed alongside
+
+`AppleAIRRunner` is registered, closing the gap that made `apple_gpu_air` the
+only registered target without a runner. It registers with `default=False` so it
+cannot become the process default by import side effect — that would silently
+move every F4 verification onto the AOT lane. Only `run_fused_region` has an AOT
+dispatch; the other three return a `REFERENCE_EXECUTIONS` tag so the oracle
+trusts the reference rather than comparing numpy against itself.
+
+New C ABI: `tessera_apple_gpu_metallib_elementwise_f32` — a generic 1-in/1-out
+metallib dispatch. Written for S0, but it is the shape most synthesized
+pointwise kernels take, so it is the first of the APPLE-AOT-2 phase-B entries
+rather than scaffolding.
+
+## APPLE-AOT-2: close out the `apple_gpu_air` lane
+
+**Status: open, plan of record 2026-07-28.** APPLE-AOT-1 proved the lane works
+and is worth ~14.5 ms per cold kernel. This is what it takes to make it a lane
+the compiler can actually *use* rather than a demonstrated capability.
+
+### Where it stands, measured not assumed
+
+| | emitter | compiler (`compile_fn`) | runner | dispatch symbols |
+|---|---|---|---|---|
+| `apple_gpu` | ✅ | deferred (`None`) | ✅ registered | 17 |
+| `apple_gpu_air` | ✅ (delegates) | ✅ real `.metallib` | ❌ **none** | **1** |
+| `nvidia` / `rocm` / `x86` | ✅ | ✅ real `.so` | ✅ registered | n/a |
+
+Two gaps carry everything else. `apple_gpu_air` is the **only registered target
+without a `KernelRunner`**, so it is invisible to `build()`'s execute half, to
+the F4 oracle, and to any future arbiter — the ad-hoc
+`apple_air.run_fused_region_aot` is the only way in. And the runtime has **1 of
+17** dispatch entry points in an AOT form, so the lane can only run a coopmat
+matmul-epilogue.
+
+### A1 — register an `AppleAIRRunner` *(small, unblocks everything else)*
+
+Implement the four `KernelRunner` methods over the metallib path and
+`register_runner(...)`. Set `accuracy_atol` (ROCm sets `0.005` for its f16
+budget; Apple's f16 coopmat measured 1.2e-4 against the f32 reference, so the
+f32 default is probably right — confirm, do not inherit by omission).
+
+Until this exists, nothing generic can select the AOT lane, which makes A3 and
+C untestable.
+
+### A2 — make the `artifact` / `deferred` contract safe
+
+Nothing outside `apple_air.py` and its tests currently reads
+`CompiledKernel.artifact` or `.deferred`. The moment an arbiter iterates targets
+and assumes `artifact` is a loadable path, it breaks on `apple_gpu` as a `None`
+surprise — and the three `.so`-returning backends make that assumption easy.
+Add an accessor that forces both cases to be handled, plus a guard test that
+every registered target either returns a path or sets `deferred`.
+
+### B — coverage: 1 → 17, without 17 copies
+
+The expensive way is a hand-written AOT twin per symbol. Do not do that. The
+pattern already used for coopmat is the cheap one: extract the dispatch body
+(`dispatch_matmul_epilogue_coopmat`) so the JIT and AOT entries differ *only* in
+how they obtain the pipeline, via `compile_msl_kernel` or `load_metallib_kernel`.
+Applying it to the remaining families makes the JIT entries thinner too, so
+total runtime code goes down rather than up.
+
+Families, in the order their value lands:
+
+1. `matmul_epilogue` scalar / tiled (f16, f32) — completes the region the lane
+   already serves.
+2. `pointwise` + `pointwise_reduce` (f16, f32) — the largest op population.
+3. `norm_chain` (f16, f32).
+4. `attention` (f16, f32) — the one where cold-compile cost is felt most, since
+   attention kernels are the biggest source the synthesizer emits.
+5. `gated_matmul` (f16, f32).
+6. `tile_simdgroup_gemm` (f16, bf16).
+
+Each new C ABI symbol needs its non-Darwin stub; the ratchet in
+`test_apple_runtime_stub_parity.py` fails the build if one is missed.
+
+### C — the arbiter *(the actual payoff, and fleet-wide)*
+
+Selection between `apple_gpu` and `apple_gpu_air` per
+`(op, shape-bucket, dtype, target)` on measured evidence — Decision #28's
+measured, accuracy-budgeted arbiter, for which this is the first backend with
+two genuinely comparable candidates. It needs a persisted decision record, and
+it must treat the offline build cost as amortised (~5 cold launches) rather than
+per-launch.
+
+This is where the Apple work stops being Apple-specific: the arbiter is shared
+infrastructure, and ROCm/CUDA will feed it candidates too.
+
+### D — cache maturity
+
+Artifacts live in `$TMPDIR/tessera-apple-air` with no eviction and no sharing.
+Before this is load-bearing: a durable location, an eviction policy, and a
+decision on whether artifacts are fleet-shareable (they are host-ISA-specific,
+so probably per-machine — but the `kernel_cache` key does *not* include host
+identity today, which is the same latent collision X86-1 flags for `-march=native`).
+
+### The real gap to ROCm and CUDA (corrected 2026-07-28)
+
+An earlier draft of this plan claimed ROCm and CUDA "have no JIT lane at all"
+and so had "nothing to catch up on". **That was wrong**, and wrong from
+absence-of-evidence: it was inferred from `nvrtc`/`hiprtc` not appearing in
+`emit/nvidia_cuda.py` and `emit/rocm_hip.py`. Those two files indeed have none —
+but the shipping runtime lanes do. `runtime.py` documents the ROCm WMMA lane as
+"HIPRTC-compiled for the device arch (gfx1151/gfx1100) **at load**" and the
+NVIDIA lane as "NVRTC-compiled warp-level mma.sync". There is a dedicated
+`nvrtc_jit.cpp` in the NVIDIA backend. Both vendors JIT.
+
+What each backend actually does, counted rather than assumed:
+
+| backend | AOT artifact | produced by | JIT path | weight |
+|---|---|---|---|---|
+| ROCm | **hsaco** | **`tessera-opt`** — `convert-gpu-to-rocdl` → `rocdl-attach-target` → `gpu-module-to-binary` | HIPRTC at load (WMMA lane) | hsaco dominant: 601 references |
+| NVIDIA | prebuilt `.so`, kernel NVRTC'd inside at load | cmake + NVRTC | NVRTC at load | JIT-dominant; no cubin/fatbin path in `runtime.py` |
+| Apple | `.metallib` | **`xcrun metal` shell-out from Python** | `newLibraryWithSource:` at launch | JIT-dominant; AOT at 1 of 17 |
+
+Three corrections follow, and they change the plan's framing:
+
+1. **Apple is behind ROCm on AOT, not ahead of it.** ROCm's precompiled lane is
+   the dominant one and has been for a long time; Apple's is one kernel old.
+2. **The gap to ROCm is architectural, not coverage.** ROCm's AOT artifact comes
+   *out of the MLIR pipeline* — the compiler produces the binary. Apple's comes
+   out of a Python subprocess calling a vendor CLI. Closing B gets Apple to
+   ROCm's *coverage*; it does not get Apple to ROCm's *structure*.
+3. **NVIDIA is the backend closest to Apple's position**, not the distant one —
+   its device code is NVRTC-compiled at load and it has no precompiled lane in
+   `runtime.py`. The AOT-vs-JIT question is genuinely open there, and the
+   measurement method (with its cache control) transfers directly.
+
+This also reframes the AIR deferral recorded in Decision #26a. That deferral
+rests on AIR saving no more than the ~15 ms `apple_gpu_air` already captures,
+which stands. But the *architectural* case is stronger than that framing
+suggested: an MLIR → AIR path would put Apple's AOT artifact where ROCm's
+already is — produced by the compiler rather than post-processed by a shell-out.
+Revisit on that basis, which is exactly the "architecture, not performance"
+condition #26a names.
+
+### Sequencing
+
+A1 → A2 → B1-B2 → C, with D before C ships. A1 is hours and unblocks the rest;
+B is mechanical but the bulk of the work; C is the only part that needs design
+discussion, and it should be designed fleet-wide rather than for Apple alone.
+
+## APPLE-AOT-1: `.metallib` pipeline creation measured against the JIT lane
+
+**Status: measured 2026-07-28 on the owning host (Apple M1 Max / apple7,
+macOS 26.5.2, SDK 26.5, Metal toolchain 32023.883, `air64-apple-darwin25.5.0`).
+Host-wall timing, not device-event evidence; not selector-eligible.**
+
+`apple_gpu_air` (`emit/apple_air.py`) compiles synthesized MSL ahead of time —
+`xcrun metal -c` → `.air` → `xcrun metallib` → `newLibraryWithURL:` — against
+the default `apple_gpu` lane's `newLibraryWithSource:`. Both run the same
+synthesized coopmat kernel and the same
+`dispatch_matmul_epilogue_coopmat` in the runtime, verified **bit-identical**
+(max |diff| exactly 0.0, both 1.2168e-4 from the f32 reference at f16 storage).
+
+Cold pipeline creation + one dispatch, 256×256×256 f16 coopmat, n=25, a
+never-before-compiled kernel per sample, device pre-warmed, lanes interleaved:
+
+| lane | min | p25 | median | p75 | max |
+|---|---|---|---|---|---|
+| JIT `newLibraryWithSource:` | 28.7 | 29.3 | **29.7** | 30.0 | 30.5 |
+| AOT `newLibraryWithURL:` | 14.9 | 15.1 | **15.2** | 15.4 | 15.8 |
+| AOT offline build (excluded) | 72.2 | 73.0 | **73.7** | 74.4 | 77.2 |
+
+**AOT roughly halves pipeline creation — ~14.5 ms saved, 1.95×.** The offline
+build costs ~73.7 ms once per kernel per machine and repays after ~5 cold
+launches. Warm steady state is a wash (0.36/0.39, 0.69/0.72, 1.61/1.53 ms at
+128/512/1024 cubes) — expected, since both are then a cache lookup into the
+same dispatch.
+
+**The measurement needs a control, and the obvious one is wrong.** Metal keeps
+an on-disk shader cache that survives process exit: the same kernel measured
+140.8 ms in one process and 0.5 ms in the next. Timing "first launch in a fresh
+process" therefore measures whether that kernel was ever built on this machine.
+A first attempt controlled it with a unique *unused `constant`* — which the
+Metal compiler drops as dead code, producing byte-identical metallibs, so the
+AOT lane reloaded one artifact and reported 1.2 ms (a 13× win). Renaming the
+kernel **entry point** per sample makes each library genuinely distinct and
+moves both lanes: JIT 15.7 → 29.7, AOT 1.2 → 15.2. The *saving* was stable
+across both methods (14.6 vs 14.5 ms); the *ratio* was not (13× vs 1.95×).
+`test_apple_air_target.py::test_nonce_control_defeats_metals_shader_cache`
+asserts the artifacts differ, so a toolchain change cannot silently restore the
+flattering number.
+
+**Strategic read for Decision #26a.** The ~15 ms AOT removes is the MSL
+front end. The ~15.2 ms that remains is AIR → GPU-ISA, which *any* AIR-based
+path still pays — so emitting AIR directly from LLVM IR would save the same
+~15 ms and no more. The ceiling on this whole direction is about half of cold
+pipeline creation, which should temper how much the undocumented-format and
+legal exposure of direct AIR emission is worth.
+
+Reproduce: `python3 benchmarks/apple_gpu/benchmark_aot_vs_jit.py --samples 25`.
+
+**Decision (2026-07-28): ship the AOT metallib lane; defer a direct AIR
+emitter.** `apple_gpu_air` is the fast path and stays on supported tooling. A
+direct LLVM IR → AIR emitter is not scheduled: it would save the same ~15 ms
+this lane already captures, because the residual cost is AIR → GPU-ISA which any
+AIR path pays. Its case is architectural — sharing the LLVM lowering with
+CUDA/ROCm/x86 — and should be reopened on that basis, with a measured need, not
+on compile-time grounds. SPIR-V → SPIRV-Cross → MSL is rejected: it cannot
+express `simdgroup_matrix`, so it would cap the Apple ceiling.
+
+**Cross-backend note.** This is the fleet's fast-path shape, not an Apple
+special case: a precompiled artifact behind `register_compiler(target,
+compile_fn)` plus the content-addressed cache. NVIDIA, ROCm, and x86 already
+return real artifacts (`.so` via nvcc / hipcc / clang); Apple was the only
+`deferred` compile-on-launch lane until now. The same AOT-vs-JIT question is
+expected on ROCm and CUDA as their performance work ramps — reuse this harness,
+and reuse its **cache control**: a never-before-compiled kernel per sample, or
+the number is the vendor's shader cache rather than the compile strategy.
+
+
 Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43
 self-resolving test files onto the shared `tests/_support/compiler_tool.py`
 driver contract and folds `CompilerToolchain` onto the same resolver and

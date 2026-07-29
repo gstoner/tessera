@@ -35,10 +35,15 @@ from pathlib import Path
 
 import pytest
 
+from tests._support.compiler_tool import require_tessera_opt
+
 np = pytest.importorskip("numpy")
 
 REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
+#: Passes these fixtures drive; a build without them skips rather than
+#: failing inside MLIR with an unknown-argument error.
+_ROCM_PASSES = ("--generate-wmma-gemm-kernel",
+                "--lower-tessera-target-to-rocdl")
 ORACLE_LIB = (REPO / "build" / "src" / "compiler" / "codegen"
               / "Tessera_ROCM_Backend" / "runtime" / "hip"
               / "libtessera_rocm_gemm.so")
@@ -108,8 +113,7 @@ def _extract_hsaco(text: str) -> bytes:
 
 
 def _build_hsaco(mt=1, nt=1) -> bytes:
-    if not TESSERA_OPT.is_file():
-        pytest.skip("build tessera-opt: ninja -C build tessera-opt")
+    TESSERA_OPT = require_tessera_opt(*_ROCM_PASSES)
     mlir_opt = _find_mlir_opt()
     if mlir_opt is None:
         pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 23)")

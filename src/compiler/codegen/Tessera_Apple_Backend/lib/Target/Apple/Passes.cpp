@@ -132,10 +132,44 @@ PassPipelineRegistration<> gAppleGPURuntimePipeline(
 } // namespace
 
 void registerTesseraAppleBackendPipelines() {
+  // Every Apple pass is registered standalone, not just the ones a pipeline
+  // happens to name. Each already declares a `getArgument()`; leaving it
+  // unregistered makes that string a dead label — `tessera-opt
+  // --tile-to-apple_gpu` does not exist, so a lit fixture cannot isolate one
+  // pass and a bisect has to run the whole pipeline to reach the suspect.
+  // Keep this list in step with Passes.h; `test_apple_pass_registration.py`
+  // fails when a factory is declared there and not registered here.
   registerPass([]() { return createMaterializeGraphLayoutToApplePass(); });
   registerPass([]() { return createAppleThreadgroupPipelinePass(); });
   registerPass([]() { return createCanonicalGemmToAppleGPUPass(); });
   registerPass([]() { return createStreamingAttentionToAppleGPUPass(); });
+  registerPass([]() { return createLowerDeclarativeFusionsToAppleGPUPass(); });
+  // Tile->Target artifact projection. The `-full` pipelines construct these
+  // with valueMode=true; standalone registration is the artifact form, which
+  // is what `tessera-lower-to-apple_{cpu,gpu}` runs.
+  registerPass([]() { return createLowerTileToAppleCPUPass(); });
+  registerPass([]() { return createLowerTileToAppleGPUPass(); });
+  registerPass([]() { return createLowerControlForToAppleGPUPass(); });
+  registerPass([]() { return createLowerControlIfToAppleGPUPass(); });
+  registerPass([]() { return createLowerControlWhileToAppleGPUPass(); });
+  registerPass([]() { return createLowerMatmulToAppleCPUPass(); });
+  registerPass([]() { return createLowerMatmulToAppleGPUPass(); });
+  registerPass([]() { return createLowerRopeToAppleGPUPass(); });
+  registerPass([]() { return createLowerFlashAttnToAppleGPUPass(); });
+  registerPass([]() { return createLowerSoftmaxToAppleGPUPass(); });
+  registerPass([]() { return createLowerGeluToAppleGPUPass(); });
+  registerPass([]() { return createLowerUnaryToAppleGPUPass(); });
+  registerPass([]() { return createLowerSiluMulToAppleGPUPass(); });
+  registerPass([]() { return createLowerRowOpToAppleGPUPass(); });
+  registerPass([]() { return createLowerMatmulSoftmaxFusionToAppleGPUPass(); });
+  registerPass([]() { return createLowerMatmulSoftmaxMatmulFusionToAppleGPUPass(); });
+  registerPass([]() { return createLowerMatmulGeluFusionToAppleGPUPass(); });
+  registerPass([]() { return createLowerMatmulRMSNormFusionToAppleGPUPass(); });
+  registerPass([]() { return createLowerSwigluFusionToAppleGPUPass(); });
+  registerPass([]() { return createLowerLinearAttnToAppleGPUPass(); });
+  registerPass([]() { return createLowerAttnLocalWindow2DToAppleGPUPass(); });
+  registerPass([]() { return createLowerMLADecodeFusionToAppleGPUPass(); });
+  registerPass([]() { return createLowerNSAFusionToAppleGPUPass(); });
   // Touch the static registration objects so the linker keeps them.
   (void)&gAppleCPUPipeline;
   (void)&gAppleGPUPipeline;

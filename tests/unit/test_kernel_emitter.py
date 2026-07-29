@@ -85,13 +85,93 @@ def test_msl_field_is_private_now():
 # ---- AppleMSLEmitter wraps synth faithfully ---------------------------------
 
 def test_apple_emitter_wraps_matmul_epilogue_byte_identical():
+    """Pinning a variant hands back that synthesizer's bytes, unaltered.
+
+    A pointwise-epilogue region now resolves to the coopmat body by default (see
+    the AUTO test below), so the scalar passthrough is checked by pinning it.
+    """
+    from tessera.compiler.emit.apple_msl import SCALAR
+
     region = F.FusedRegion(epilogue=("gelu",))
-    ks = emit_kernel(region, "apple_gpu", SpecPolicy.STATIC)
+    ks = get_emitter("apple_gpu").emit(
+        region, spec=SpecPolicy.STATIC, dtype="f32", variant=SCALAR)
     assert isinstance(ks, KernelSource)
     assert ks.lang == "msl" and ks.entry == _ENTRY
     assert ks.spec is SpecPolicy.STATIC
     # the emitter must NOT alter the synthesized source
     assert ks.source == synthesize_matmul_epilogue_msl(region, dtype="f32")
+
+
+def test_apple_emitter_auto_variant_matches_the_launch_path_choice():
+    """AUTO must emit the kernel `run_fused_region` would launch.
+
+    The emitter used to always yield the scalar body while the launch path
+    preferred coopmat for an eligible region. Routing execution through the
+    generic synth→compile→cache loop would then have silently downgraded a
+    matrix-unit kernel to the scalar one — same numbers, so the F4 oracle would
+    not have caught it.
+    """
+    from tessera.compiler.emit.apple_msl import (
+        COOPMAT, SCALAR, _ENTRY_COOPMAT, select_fused_variant,
+        synthesize_matmul_epilogue_coopmat_msl,
+    )
+
+    eligible = F.FusedRegion(epilogue=("gelu",))
+    for dtype in ("f16", "f32", "bf16"):
+        assert select_fused_variant(eligible, dtype) == COOPMAT, dtype
+        ks = emit_kernel(eligible, "apple_gpu", SpecPolicy.STATIC, dtype=dtype)
+        assert ks.entry == _ENTRY_COOPMAT, dtype
+        assert ks.source == synthesize_matmul_epilogue_coopmat_msl(
+            eligible, dtype=dtype), dtype
+        assert "simdgroup" in ks.source, dtype
+
+    # A reduction/residual region has no matrix form and stays scalar.
+    for region in (F.FusedRegion(epilogue=(), reduction="softmax"),
+                   F.FusedRegion(epilogue=("gelu",), residual=True)):
+        assert select_fused_variant(region, "f16") == SCALAR
+        assert emit_kernel(region, "apple_gpu", dtype="f16").entry == _ENTRY
+
+
+def test_generic_build_loop_yields_the_matrix_unit_kernel():
+    """The whole point of the migration: build() must not downgrade the kernel.
+
+    Also pins the two cache properties the loop exists to provide — dims in one
+    bucket share an entry, and a dtype variant does not alias to another.
+    """
+    from tessera.compiler.emit.apple_msl import _ENTRY_COOPMAT
+    from tessera.compiler.emit.kernel_cache import KernelCache, build
+
+    cache = KernelCache()
+    region = F.FusedRegion(epilogue=("gelu",))
+    built = build(region, "apple_gpu", SpecPolicy.BUCKET, dtype="f16",
+                  dims=(64, 64, 64), cache=cache)
+    assert built.entry == _ENTRY_COOPMAT
+    assert "simdgroup" in built.source.source
+    # Apple compiles at launch, so no ahead-of-time artifact — but `deferred`
+    # must say so rather than leaving `artifact is None` to be read as failure.
+    assert built.deferred is True and built.artifact is None
+
+    same_bucket = build(region, "apple_gpu", SpecPolicy.BUCKET, dtype="f16",
+                        dims=(33, 33, 33), cache=cache)
+    assert same_bucket.key == built.key and cache.hits == 1
+
+    other_dtype = build(region, "apple_gpu", SpecPolicy.BUCKET, dtype="f32",
+                        dims=(64, 64, 64), cache=cache)
+    assert other_dtype.key != built.key
+
+
+def test_apple_emitter_refuses_a_variant_the_region_cannot_express():
+    """Decision #21 — never hand back a different kernel than was asked for."""
+    from tessera.compiler.emit.apple_msl import COOPMAT
+
+    emitter = get_emitter("apple_gpu")
+    with pytest.raises(EmitError, match="coopmat kernel cannot express"):
+        emitter.emit(F.FusedRegion(epilogue=(), reduction="softmax"),
+                     dtype="f16", variant=COOPMAT)
+    with pytest.raises(EmitError, match="unknown matmul-epilogue variant"):
+        emitter.emit(F.FusedRegion(epilogue=("gelu",)), variant="nonsense")
+    with pytest.raises(EmitError, match="single emitted form"):
+        emitter.emit(F.NormChainRegion(norm="rmsnorm"), variant=COOPMAT)
 
 
 def test_apple_emitter_dispatches_norm_chain():

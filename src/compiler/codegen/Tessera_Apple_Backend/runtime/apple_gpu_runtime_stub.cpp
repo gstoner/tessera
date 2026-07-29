@@ -1211,6 +1211,47 @@ extern "C" int32_t tessera_apple_gpu_synth_matmul_epilogue_coopmat(
   return 0;
 }
 
+// AOT (`.metallib`) lane. Off Darwin there is no Metal to load a library into,
+// and — unlike the CPU-reference stubs elsewhere in this file — there is no
+// meaningful host fallback: the whole point of these entry points is that a
+// *prebuilt Apple GPU artifact* was loaded and dispatched. Returning 0 says "no
+// GPU dispatch happened", which is exactly what the Python lane needs to record
+// a reference fallback instead of attributing a host result to the AOT lane.
+extern "C" int32_t tessera_apple_gpu_metallib_matmul_epilogue_coopmat(
+    const char*, const char*, const void*, const void*, const void*,
+    void*, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_elementwise_f32(
+    const char*, const char*, const float*, float*, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_f32(
+    const char*, const char*, const void* const*, const int32_t*, int32_t,
+    void*, int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_f16(
+    const char*, const char*, const void* const*, const int32_t*, int32_t,
+    void*, int32_t, int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_reduce_f32(
+    const char*, const char*, const void* const*, int32_t, void*, int32_t,
+    int32_t) {
+  return 0;
+}
+
+extern "C" int32_t tessera_apple_gpu_metallib_pointwise_reduce_f16(
+    const char*, const char*, const void* const*, int32_t, void*, int32_t,
+    int32_t) {
+  return 0;
+}
+
 extern "C" int32_t tessera_apple_gpu_tile_simdgroup_gemm_f16(
     const char*, const char*, const uint16_t*, const uint16_t*, float*,
     int32_t, int32_t, int32_t, int32_t, int32_t, int32_t) {

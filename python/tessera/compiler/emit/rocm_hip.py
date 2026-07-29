@@ -128,7 +128,15 @@ class RocmHipEmitter(KernelEmitter):
         return isinstance(region, FusedRegion)
 
     def emit(self, region: Any, *, spec: SpecPolicy = SpecPolicy.BUCKET,
-             dtype: str = "f32", dims: tuple[int, ...] | None = None) -> KernelSource:
+             dtype: str = "f32", dims: tuple[int, ...] | None = None,
+             **kwargs: Any) -> KernelSource:
+        if kwargs:
+            # Reject rather than ignore: a caller that asked for a knob
+            # this backend does not have must not get the default kernel
+            # back as though the request had been honoured.
+            raise EmitError(
+                f"{type(self).__name__} has no "
+                f"{sorted(kwargs)} emit option(s)")
         if not isinstance(region, FusedRegion):
             raise EmitError(
                 f"RocmHipEmitter cannot emit a region of type "

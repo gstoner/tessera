@@ -34,6 +34,37 @@ hardware-gated proof row says otherwise — read the generated dashboards for wh
 is actually proven, never counts copied into prose (Decision #26). See
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md).
 
+**"Executes natively" is a runtime claim, not a compiler-maturity claim — read
+this before scoping Apple work (reviewed 2026-07-28).** The Apple GPU op
+envelope is delivered by the *runtime*, not by generated code:
+`runtime/apple_gpu_runtime.mm` is ~27k lines (≈69% of the whole Apple backend)
+holding ~123 **hand-written** MSL kernels as raw-string literals, reached by
+Python `runtime.launch()` → ctypes. The MLIR side is much smaller than the op
+counts suggest: the value-preserving Target-IR lane executes **9 GPU op kinds**
+(`runtime.py::_execute_apple_value_target_ir_gpu_artifact`), the lowering passes
+emit `func.call` to a C symbol rather than generated kernels, and
+`tessera_apple.gpu.msl_kernel` — the op that would carry compiler-synthesized
+MSL — has **no C++ producer at all** (only Python `compiler/target_ir.py` sets
+`msl_source`). Do not read "native" as "the MLIR pipeline generated it."
+
+**But the synthesizer is not missing — it is on the other side of a seam.**
+Decision #28 tier 1/2 *is* built, in Python under
+[`python/tessera/compiler/emit/`](python/tessera/compiler/emit/):
+`apple_msl.py` is the worked reference (matmul-epilogue plain/tiled/**coopmat
+`simdgroup_matrix`**, norm-chain, pointwise-graph, pointwise-reduce, attention
+incl. online-softmax, gated-matmul), alongside `nvidia_cuda.py`,
+`rocm_hip.py`, `x86_llvm.py`, over the arch-agnostic regions in
+`fusion_core.py` and the `KernelEmitter`/`compile_fn`/`KernelRunner` seams in
+`emit/kernel_emitter.py` + `emit/kernel_cache.py`. See
+[`WORKSTREAM_C_HANDOFF.md`](docs/audit/compiler/WORKSTREAM_C_HANDOFF.md).
+
+**So the real Apple gap is not "no emitter" — it is that the Python synthesizer
+and the C++ MLIR pipeline are two disconnected compilers.** The MLIR lane
+lowers to `func.call` on hand-written runtime symbols and never consults the
+synthesizer; the synthesizer emits and caches source without going through
+Target IR. Anyone scoping Apple work should be closing that seam, not writing a
+second MSL emitter.
+
 ---
 
 ## Four-Layer IR Stack
@@ -193,6 +224,51 @@ Per-phase deliverables and the open-work priority queue live in
     4. **`*/archive/` is provenance only** — not the current status surface.
     When you finish audit-relevant work, update the theme audit (and `MASTER_AUDIT.md` if the all-up picture shifts); let generated dashboards carry the numbers.
 
+26a. **There *is* an LLVM IR → AIR path to Apple GPUs; it is just not an open
+    one (researched 2026-07-28, direction not yet chosen).** Mojo compiles
+    Mojo → LLVM IR → **AIR bitcode** → `.metallib` via metal-cpp, requiring
+    Xcode 16+ and `xcodebuild -downloadComponent MetalToolchain`. AIR *is* LLVM
+    bitcode, so third parties can and do emit it. But the upstream
+    [LLVM `air64` backend RFC](https://discourse.llvm.org/t/rfc-add-an-apple-metal-air-backend-target/90936)
+    (May 2026) is **stalled** on reverse-engineering/legal exposure, no Apple
+    participation, and an AI-disclosure policy violation — and AIR itself is
+    undocumented, so any AIR emitter is black-box-derived and needs Apple's
+    tools to package the container. Do not write "no LLVM path to Apple GPU"
+    (the old claim) and do not treat AIR as a supported one.
+
+    **Decision (2026-07-28): a direct AIR emitter is deferred — add the
+    interface when a measured need appears.** SPIR-V → SPIRV-Cross → MSL is
+    rejected outright (it cannot express `simdgroup_matrix`, so it caps the
+    Apple ceiling the arbiter exists to protect). The shipped lane is
+    **MSL synthesis + AOT packaging**: `emit/apple_air.py` compiles synthesized
+    MSL through `xcrun metal -c` → `.air` → `xcrun metallib` and loads it with
+    `newLibraryWithURL:`, entirely on supported tooling. What killed the
+    urgency is the measurement (APPLE-AOT-1): AOT already captures the whole
+    front-end saving — cold pipeline creation 29.7 ms → 15.2 ms — and the
+    ~15.2 ms that remains is AIR → GPU-ISA, which *any* AIR-based path still
+    pays. So direct AIR emission would save **the same ~15 ms and no more**.
+    Its remaining case is architectural (sharing LLVM lowering with
+    CUDA/ROCm/x86), not performance; revisit on that basis, not on speed.
+
+    This is the fast-path pattern the whole fleet converges on — a precompiled
+    artifact plus a content-addressed cache — but **do not read Apple as the
+    leader here.** Counted 2026-07-28: ROCm's dominant lane is already
+    precompiled hsaco built by `tessera-opt` itself (`convert-gpu-to-rocdl` →
+    `rocdl-attach-target` → `gpu-module-to-binary`, ~601 references in
+    `runtime.py`), with a smaller HIPRTC-at-load WMMA lane; NVIDIA's device code
+    is NVRTC-compiled at load with no cubin lane in `runtime.py`. So ROCm is
+    *ahead* of Apple on AOT, NVIDIA is closest to Apple's JIT-dominant position,
+    and Apple's `.metallib` is one kernel old **and shelled out to `xcrun` from
+    Python rather than produced by the compiler** — which is the real
+    architectural gap, and the strongest remaining argument for an MLIR → AIR
+    path. Every backend has both a JIT and a precompiled capability; an earlier
+    claim here that NVIDIA/ROCm "have no JIT lane" was inferred from
+    `nvrtc`/`hiprtc` being absent from two Python files and is withdrawn.
+    When ROCm or CUDA reach the same AOT-vs-JIT question, reuse
+    `benchmarks/apple_gpu/benchmark_aot_vs_jit.py` **including its cache
+    control**: measure a never-before-compiled kernel per sample, or you will
+    measure the vendor's shader cache instead of your compile strategy.
+
 27. **Ground every Metal / Apple GPU API claim in a real source before declaring it possible or "blocked."** Authoritative sources, in reliability order: **(1) on-machine SDK headers** — `xcrun --show-sdk-path` → `…/System/Library/Frameworks/{Metal,MetalPerformanceShaders,MetalPerformanceShadersGraph,MetalPerformancePrimitives}.framework/Headers/`; **(2) user-provided doc dumps**; **(3) the `apple-metal-docs-urls` memory file**. **WebFetch caveat:** developer.apple.com is a JS-rendered SPA — `WebFetch` returns only the page title, not the API body — so it is NOT a reliable Metal-doc source. Anti-pattern: writing a "blocked / no API path" conclusion from absence of evidence in one source.
 
 28. **The forward compiler direction is the three-tier / measured-arbiter model — leads set the ceiling, the generic framework raises the floor.** (North star, 2026-07-02.) Kernels come from three tiers: **(1)** a generic synthesizer (arch-agnostic region-IR + F4 oracle + synth→compile→cache→launch loop), **(2)** a per-arch codegen plugin (`KernelEmitter`/`TargetPlugin`: MSL / PTX / AMDGCN / C-LLVM), **(3)** hand-tuned kernels. A **measured, accuracy-budgeted arbiter** picks the fastest *in-budget* candidate per `(op, shape-bucket, dtype, target)`. **ROCm and CUDA are the lead performance targets: shared infra must never cap their ceiling** — hand-emitted `wgmma`/`mma.sync`/MFMA/WMMA stay first-class arbiter candidates, displaced only when a compiled kernel is both faster and in accuracy budget. The synthesizer/plugin interface is **symbolic-dim-aware from day one** (`static | bucket | dynamic` policy; first impls bucket-specialize) so dynamic shapes never force an API break. Full model: [`docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md`](docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md); execution: [`docs/audit/compiler/COMPILER_REFACTOR_PLAN.md`](docs/audit/compiler/COMPILER_REFACTOR_PLAN.md). These are *direction*; MASTER_AUDIT + generated dashboards stay status truth.
@@ -243,9 +319,12 @@ python3 -m pytest tests/unit/test_X.py -v      # single file
 python3 -m pytest tests/unit/ -m "not slow"    # default sweep (excludes SuperBench/benchmark)
 mypy python/tessera/                            # type check (ratchet baseline: 0)
 
-# MLIR lit tests (requires tessera-opt built)
-python3 -m lit tests/tessera-ir/ -v
-python3 -m lit tests/tessera-ir/phase7/ -v      # one phase
+# MLIR lit tests (requires tessera-opt built). `python3 -m lit` does NOT work —
+# lit is a package, not a runnable module. Use the console script, and put the
+# matched LLVM bin on PATH or every fixture fails with `FileCheck: not found`.
+export PATH=/opt/homebrew/llvm-23.1.0-rc1/bin:$PATH
+lit tests/tessera-ir/ -v
+lit tests/tessera-ir/phase8/ -q                 # one phase
 
 bash scripts/validate.sh                         # CPU validation spine
 ```
@@ -257,14 +336,19 @@ Heavy SuperBench / benchmark-contract tests are marked `slow` and excluded by de
 ## Local Toolchain (Homebrew, off-venv)
 
 Everything needed for build / lint / typecheck / lit / unit-test is on Homebrew
-on this Mac under `/opt/homebrew/bin/`: `python3` (3.14.5), `ninja`, `cmake`,
-`pytest`, `mypy`, `ruff`, `black`, `isort`, `flake8`, `lit`. **LLVM/MLIR 23**
-is `/opt/homebrew/opt/llvm@23/` (`brew install llvm@23`). Run the Python flow directly
-with `python3 -m …` — no venv. `numpy`, `scipy`, `torch`, `transformers`,
-`ml_dtypes` are installed under `/opt/homebrew/lib/python3.14/site-packages/`.
+on this Mac under `/opt/homebrew/bin/`: `python3` (3.14.6), `ninja`, `cmake`,
+`pytest`, `mypy`, `ruff`, `black`, `isort`, `flake8`, `lit`. Run the Python flow
+directly with `python3 -m …` — no venv. `numpy`, `scipy`, `transformers`,
+`ml_dtypes` are under `/opt/homebrew/lib/python3.14/site-packages/`. **`torch` is
+not installed here** — anything importing it must `pytest.importorskip`.
 
-When pointing CMake at LLVM, use `/opt/homebrew/opt/llvm@23/lib/cmake/{llvm,mlir}`
-(NOT an older versioned keg that stale `build/` caches reference).
+**LLVM/MLIR 23 is a manual install at `/opt/homebrew/llvm-23.1.0-rc1/`**
+(`llvm-config --version` → `23.1.0git`). There is **no `llvm@23` Homebrew
+formula** on this machine — `brew install llvm@23` does not produce
+`/opt/homebrew/opt/llvm@23/`, and Homebrew's own `llvm` keg is 22.1.8, which the
+build rejects. Point CMake at
+`/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/{llvm,mlir}`, and put
+`/opt/homebrew/llvm-23.1.0-rc1/bin` on `PATH` for `FileCheck` before running lit.
 
 ### Ubuntu 24.04 (x86 + AMD ROCm 7.14)
 
@@ -285,10 +369,10 @@ for the full cross-platform matrix.
 ## C++ Build
 
 ```bash
-# Canonical local configure — CPU + Apple backend against Homebrew LLVM/MLIR 23 (Ninja)
+# Canonical local configure — CPU + Apple backend against LLVM/MLIR 23 (Ninja)
 cmake -S . -B build -G Ninja \
-  -DLLVM_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/llvm \
-  -DMLIR_DIR=/opt/homebrew/opt/llvm@23/lib/cmake/mlir \
+  -DLLVM_DIR=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/llvm \
+  -DMLIR_DIR=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/mlir \
   -DTESSERA_CPU_ONLY=ON -DTESSERA_BUILD_APPLE_BACKEND=ON
 ninja -C build tessera-opt        # ~150 targets, ~1-2 min cold
 
@@ -296,7 +380,7 @@ ninja -C build tessera-opt        # ~150 targets, ~1-2 min cold
 ninja -C build tessera-opt
 ./build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/apple_gpu_lowering.mlir \
   -tessera-lower-to-apple_gpu --allow-unregistered-dialect | \
-  /opt/homebrew/opt/llvm@23/bin/FileCheck tests/tessera-ir/phase8/apple_gpu_lowering.mlir
+  /opt/homebrew/llvm-23.1.0-rc1/bin/FileCheck tests/tessera-ir/phase8/apple_gpu_lowering.mlir
 
 # Other backend toggles (additive)
 cmake .. -DTESSERA_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda   # CUDA

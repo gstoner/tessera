@@ -28,18 +28,22 @@ def _lower(
     *,
     generic: bool = False,
 ) -> str:
-    tessera_opt = tools.require_tessera_opt(
-        "lower-tile-to-rocm", "lower-tessera-target-to-rocdl")
+    pipeline = (
+        "--pass-pipeline=builtin.module("
+        f"lower-tile-to-rocm{{arch={arch}}},lower-tessera-target-to-rocdl)"
+    )
+    # Name the pipeline in the requirement, not just the binary. Asking for the
+    # driver alone resolves any build, so a tessera-opt without the ROCm backend
+    # got this far and failed inside MLIR with "does not refer to a registered
+    # pass" — a build-selection problem wearing a compiler-error costume.
+    tessera_opt = tools.require_tessera_opt(pipeline)
     command = [
         str(tessera_opt), "-" if source is not None else str(FIXTURE),
         "--allow-unregistered-dialect",
     ]
     if generic:
         command.append("--mlir-print-op-generic")
-    command.append(
-            "--pass-pipeline=builtin.module("
-            f"lower-tile-to-rocm{{arch={arch}}},lower-tessera-target-to-rocdl)",
-    )
+    command.append(pipeline)
     result = subprocess.run(
         command,
         input=source, capture_output=True, text=True,
@@ -222,13 +226,15 @@ def test_gfx940_descriptor_path_lowers_to_real_mfma(compiler_toolchain):
 
 
 def test_family_mismatch_is_a_named_error(compiler_toolchain):
-    tessera_opt = compiler_toolchain.require_tessera_opt("lower-tile-to-rocm")
+    pipeline = "--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1201})"
+    # The point of this test is that the *pass* rejects the descriptor by name.
+    # Requiring only the binary let a non-ROCm build reach the assertion and
+    # fail on MLIR's "does not refer to a registered pass" instead — the same
+    # error shape, from a completely different cause.
+    tessera_opt = compiler_toolchain.require_tessera_opt(pipeline)
     source = FIXTURE.read_text().replace('family = "auto"', 'family = "mfma"')
     result = subprocess.run(
-        [
-            str(tessera_opt), "-", "--allow-unregistered-dialect",
-            "--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1201})",
-        ],
+        [str(tessera_opt), "-", "--allow-unregistered-dialect", pipeline],
         input=source, capture_output=True, text=True,
     )
     assert result.returncode != 0

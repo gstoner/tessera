@@ -8,6 +8,82 @@ last_updated: 2026-07-27
 
 # Apple compiler, exact-device, and performance plan
 
+## APPLE-AOT-4: S1 probe — what an MLIR → AIR emitter would actually cost
+
+**Status: probe complete 2026-07-28, owning host (M1 Max / apple7, Metal
+toolchain 32023.883). Capability findings, executed; not a perf claim.**
+
+S0 showed a GPU runs hand-written scalar AIR IR. The open question was whether
+that extends to the path that matters — `simdgroup_matrix`, the ceiling-setter
+and the reason SPIR-V was rejected. It does.
+
+### simdgroup_matrix is ordinary code, not a special form
+
+Dumping the real synthesized coopmat kernel with `metal -S -emit-llvm`:
+
+| MSL | AIR IR |
+|---|---|
+| `simdgroup_float8x8` | `<64 x float>` — a plain LLVM vector |
+| `make_filled_simdgroup_matrix` | `declare <64 x float> @air.simdgroup_matrix_8x8_init_filled.v64f32.f32(float)` |
+| `simdgroup_multiply_accumulate` | `declare <64 x float> @air.simdgroup_matrix_8x8_multiply_accumulate.v64f32.v64f16.v64f16.v64f32(...)` |
+| `threadgroup_barrier` | `@air.wg.barrier(i32, i32)` |
+
+These are **external function declarations, not intrinsics needing backend
+support**. Hand-written IR calling them — plus an `addrspace(3)` threadgroup
+global and a barrier — compiles, packages, loads, and **executes correctly**
+(fixture `tests/data/apple/handwritten_air_simdgroup.ll`, all 64 lanes exact).
+Everything here is expressible in MLIR's LLVM dialect without extension.
+
+### The builtin surface is 11 declarations
+
+Compiling every synthesizer family and collecting `air.*` references:
+
+| family | IR lines | builtins |
+|---|---|---|
+| coopmat | 408 | 7 |
+| tiled | 277 | 3 |
+| attention / attention-online | 244 / 235 | 2 / 2 |
+| gated-matmul | 194 | 1 |
+| matmul-epilogue | 183 | 2 |
+| norm-chain | 155 | 2 |
+| pointwise | 78 | 1 |
+
+**Union across all eight families: 11 distinct builtins** — four simdgroup
+matrix ops, six math (`convert`, `fast_clamp`, `fast_exp`, `fast_fmax`,
+`fast_rsqrt`, `fast_tanh`), one barrier. That is the entire `air.*` dependency
+an emitter must know how to name.
+
+### So what S1 costs
+
+Not the builtins (11 declarations) and not the codegen (MLIR's LLVM dialect
+already emits functions, calls, address spaces, vector types). The work is the
+**metadata emitter**: `!air.kernel` naming the function, one `!air.buffer`
+descriptor per argument (location index, access, address space, element
+size/align/type/name), builtin descriptors for `thread_position_in_grid` and
+friends, plus module flags and `!air.version` / `!air.language_version`. Roughly
+five node kinds, all declarative.
+
+That is a *week-shaped* problem, not a quarter-shaped one — which is the
+question APPLE-AOT-2 asked and could not answer.
+
+### What still argues against doing it
+
+Feasibility is no longer the constraint; **supported-ness is**. `.ll` input to
+`metal` is undocumented, `-x ir` is undocumented, AIR is undocumented by
+deliberate Apple choice, and there is no man page. An emitter would rest on an
+input path Apple can change or remove in any toolchain update, with no contract
+and no deprecation warning — while the MSL lane (`apple_gpu_air`) already
+captures the whole front-end saving through the supported input.
+
+The case for building it is therefore *architectural*: it puts Apple where ROCm
+already is — device code produced by the compiler rather than by a shell-out
+over synthesized source — and it is the only way Apple joins the MLIR/LLVM spine
+the other three backends share. Decision #26a names exactly that condition for
+revisiting. This probe supplies the missing cost and risk numbers; the call is
+a judgement about risk appetite, not about difficulty.
+
+Reproduce: `xcrun metal -S -emit-llvm <kernel>.metal` on any synthesizer output.
+
 ## APPLE-AOT-3: S0 result — a GPU executes hand-written AIR IR
 
 **Status: PASSED 2026-07-28 on the owning host (Apple M1 Max / apple7, Metal

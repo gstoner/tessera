@@ -334,6 +334,60 @@ def test_aot_pointwise_matches_the_jit_lane_bitwise() -> None:
     np.testing.assert_allclose(aot_out, region.reference(a, b), atol=1e-6)
 
 
+@pytest.mark.hardware_apple_gpu
+def test_gpu_executes_hand_written_simdgroup_air_ir(tmp_path) -> None:
+    """S1 probe: an emitter can reach the matrix units, not just scalar code.
+
+    `simdgroup_matrix` is Apple's ceiling-setter — it is why SPIR-V was rejected
+    as a path. If it were an opaque type or an intrinsic needing backend
+    support, an MLIR → AIR emitter would be bounded by whatever we could not
+    express. It is neither: `simdgroup_float8x8` is `<64 x float>` and the
+    operations are ordinary external functions, so this fixture reaches them
+    with plain `declare` + `call`.
+
+    Also exercises the two things a real kernel needs alongside them —
+    `addrspace(3)` threadgroup memory and `@air.wg.barrier`.
+    """
+    _require_toolchain()
+    import ctypes
+    import subprocess
+
+    import numpy as np
+
+    from tessera.runtime import _load_apple_gpu_runtime
+
+    ir = (Path(__file__).resolve().parents[2]
+          / "tests/data/apple/handwritten_air_simdgroup.ll")
+    assert ir.is_file(), f"fixture missing: {ir}"
+
+    air, lib = tmp_path / "sg.air", tmp_path / "sg.metallib"
+    for command in (["xcrun", "metal", "-c", str(ir), "-o", str(air)],
+                    ["xcrun", "metallib", str(air), "-o", str(lib)]):
+        done = subprocess.run(command, capture_output=True, text=True)
+        assert done.returncode == 0, f"{command[1]} failed:\n{done.stderr}"
+
+    symbol = getattr(_load_apple_gpu_runtime(),
+                     "tessera_apple_gpu_metallib_elementwise_f32", None)
+    if symbol is None:
+        raise RuntimeError(
+            "libTesseraAppleRuntime is stale: no "
+            "tessera_apple_gpu_metallib_elementwise_f32. Rebuild with "
+            "`ninja -C build TesseraAppleRuntimeShared`.")
+    symbol.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
+                       ctypes.POINTER(ctypes.c_float),
+                       ctypes.POINTER(ctypes.c_float), ctypes.c_int32]
+    symbol.restype = ctypes.c_int32
+
+    n = 64  # one 8x8 simdgroup tile
+    fill = np.full(n, 7.5, np.float32)
+    out = np.zeros(n, np.float32)
+    pointer = lambda arr: arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    ok = symbol(str(lib).encode("utf-8"), b"tessera_sg_probe",
+                pointer(fill), pointer(out), n)
+    assert ok, "dispatch of the hand-written simdgroup kernel declined"
+    np.testing.assert_array_equal(out, np.full(n, 7.5, np.float32))
+
+
 def test_missing_toolchain_declines_instead_of_falling_back(monkeypatch, tmp_path):
     """Never silently produce a JIT result under the AOT target's name."""
     monkeypatch.setattr(apple_air.metal_toolchain_available, "__wrapped__",

@@ -402,6 +402,18 @@ jobs:
           test -x /usr/lib/llvm-23/bin/ld.lld
           echo "/usr/lib/llvm-23/bin" >> "$GITHUB_PATH"
 
+      - name: Prepare host-free ROCm linker layout
+        run: |
+          # MLIR's ROCDL serializer resolves the linker as
+          # ${ROCM_PATH}/llvm/bin/ld.lld. The apt LLVM layout keeps it at
+          # /usr/lib/llvm-23/bin/ld.lld, so expose that linker through the
+          # toolkit layout without installing a GPU runtime or device stack.
+          rocm_toolkit="${RUNNER_TEMP}/rocm-toolkit"
+          mkdir -p "${rocm_toolkit}/llvm/bin"
+          ln -s /usr/lib/llvm-23/bin/ld.lld "${rocm_toolkit}/llvm/bin/ld.lld"
+          test -x "${rocm_toolkit}/llvm/bin/ld.lld"
+          echo "ROCM_PATH=${rocm_toolkit}" >> "$GITHUB_ENV"
+
       - name: Install compiler-test dependencies
         env:
           PYTHON: python

@@ -100,15 +100,21 @@ class CompilerToolchain:
         )
 
     def require_tessera_opt(self, *passes: str) -> Path:
-        """Return tessera-opt, skipping unless it registers every named pass.
+        """Return a tessera-opt registering every named pass, else skip.
 
-        Delegates the capability check to `tests._support.compiler_tool`, which
-        is the single such check for the tree — the tool's registered pass set
-        depends on how it was configured, and duplicating that knowledge is how
-        two call sites end up disagreeing about what a binary can do. The
-        missing-binary skip stays here because this dataclass can be
-        constructed with `tessera_opt=None` directly, independent of what the
-        resolver would find.
+        Both the capability check and the *selection* it feeds belong to
+        `tests._support.compiler_tool` — the tool's registered pass set depends
+        on how it was configured, and duplicating that knowledge is how two
+        call sites end up disagreeing about what a binary can do.
+
+        This field holds only the *preferred* driver. Checking it alone would
+        skip on a host that can run the test: a developer may hold a lean
+        in-repo build alongside a fuller binary on PATH, and preference is not
+        capability. So when the preferred driver cannot run `passes` we fall
+        through to the resolver, which walks every candidate and takes the
+        first capable one. The missing-binary skip stays here because this
+        dataclass can be constructed with `tessera_opt=None` directly,
+        independent of what the resolver would find.
         """
         from tests._support import compiler_tool
 
@@ -116,10 +122,11 @@ class CompilerToolchain:
             pytest.skip(
                 "compiler-tool test requires tessera-opt; build it or set TESSERA_OPT"
             )
-        reason = compiler_tool.capability_skip_reason(self.tessera_opt, *passes)
-        if reason is not None:
-            pytest.skip(reason)
-        return self.tessera_opt
+        if not passes:
+            return self.tessera_opt
+        if compiler_tool.capability_skip_reason(self.tessera_opt, *passes) is None:
+            return self.tessera_opt
+        return compiler_tool.require_tessera_opt(*passes)
 
     def require_mlir_opt(self) -> Path:
         if self.mlir_opt is None:

@@ -914,6 +914,41 @@ diagnostic so the fallback is visible without being noisy. That combination is a
 good template for our capability gates, which today tend to be binary
 supported/unsupported. **[I]**
 
+### 4.7 `rocisa` — the Python/C++ boundary, and what it costs
+
+TensileLite's assembly generator is not Python. `rocisa/` is a C++ module bound via
+**nanobind**, and `KernelWriter.py` calls into it to emit instructions. Reading its
+developer docs is worthwhile because it is the same hybrid we are: a Python compiler
+driving a C++ core. **[V]**
+
+- **IR nodes carry a mandatory deep-copy contract.** Anything inheriting `Item` or
+  `Instruction` must supply a copy constructor *and* override
+  `clone() -> std::shared_ptr<Item>`, with the instruction to "make sure you deepcopy any
+  pointer". Python-side `__deepcopy__` is wired explicitly per class. Deep copy is treated
+  as a first-class requirement of the node type, not an afterthought.
+- **The boundary is sharper than it looks.** *"Vector memory management between Python and
+  C++ is different, so exporting vectors to Python is copy instead of reference."* So
+  `module.items()` returns a **copy** — elements are `shared_ptr`, so you can mutate what
+  they point at, but **you cannot assign or replace an element** through that handle. That
+  is exactly the class of bug that is silent in Python and impossible to reason about from
+  the C++ side.
+- **Convenience costs throughput at the boundary.** `countType(module, Instruction)` is kept
+  because it is handy, with the explicit note that it *"runs slower than directly using
+  templates"* and that a templated `countInstruction(module)` should be added and exported
+  when it matters. Convenience wrappers are marked as prototyping tools rather than
+  quietly becoming the default.
+- **Staleness is a hard error, not a warning.** `rocisa/__init__.py` compares source
+  timestamps against a generated `_build_info.py`; if any `.cpp/.hpp/.h/.def/.inc` is newer
+  than the loaded `.so`, import raises with a rebuild message. Pre-built wheels omit
+  `_build_info.py` and skip the check.
+
+**[I]** Three of these are directly worth stealing for our own Python↔C++ seam. The
+import-time staleness check is the cheapest and highest-value — we have already lost time
+this session to a `tessera-opt` binary that silently did not match its sources, and an
+equivalent guard turns that from a confusing test failure into one clear message. The
+copy-not-reference boundary rule and the "convenience wrapper is for prototyping" note are
+both things better written down than rediscovered.
+
 ---
 
 ## 5. Concrete algorithms worth taking
@@ -1049,34 +1084,38 @@ the dominant tiling lever.
 13. **Reject-and-continue with warn-once** — §4.6. Capability gates that degrade
     to another algorithm and say so once, instead of binary supported/unsupported.
 
+14. **Import-time staleness check on the C++ extension** — §4.7. rocisa raises on
+    import if any source is newer than the built `.so`. We lost time this session to a
+    stale `tessera-opt`; this converts that into one clear message.
+
 **Take — larger, worth designing toward:**
 
-14. **Name Y-space** — §3.1. The algorithm's local view of its own work is the one
+15. **Name Y-space** — §3.1. The algorithm's local view of its own work is the one
    coordinate space our IR does not have, and it is what lets the distribution
    become a separate swappable object. Highest-leverage *conceptual* item in this
    document.
-15. **Distribution-as-a-value** — §3.3, §3.9. `tile_distribution_encoding` makes
+16. **Distribution-as-a-value** — §3.3, §3.9. `tile_distribution_encoding` makes
     the thread↔data mapping comparable and enumerable — a search coordinate for
     the autotuner rather than a code variant. §3.9 raises the stakes: vector
     width, access count, and traversal order are all **derived** from the
     encoding, so this is what makes the rest of the machinery generated rather
     than authored.
-16. **Derive the access pattern, don't author it** — §3.9. Only *which data is
+17. **Derive the access pattern, don't author it** — §3.9. Only *which data is
     mine* and *what to compute* are written; how to fetch it and in what order
     are consequences. Worth testing our tile lowering against: how many of those
     four are currently hand-specified?
-17. **Static shape / dynamic origin as the symbolic-dim seam** — §3.9. CK puts
+18. **Static shape / dynamic origin as the symbolic-dim seam** — §3.9. CK puts
     window *lengths* in the type and the *origin* in a runtime field. That is a
     clean, load-bearing instance of Decision #28's `static | bucket | dynamic`
     policy.
-18. **A closed transform operator set with bidirectional + incremental ops** —
+19. **A closed transform operator set with bidirectional + incremental ops** —
     §3.2. Especially `update_lower_index()`: a tile IR that can only recompute
     absolute coordinates pays for it in every loop.
-19. **The coordinate hypergraph as a representation** — §2.1. Take the index
+20. **The coordinate hypergraph as a representation** — §2.1. Take the index
     algebra; do *not* take the single-mutable-IR architecture, which trades away
     the verifiable stage boundaries our lit discipline depends on.
-20. **Serializable IR as cache key + fixture** — §2.6.
-21. **"New arch = data only, no source edits"** as an explicit acceptance test for
+21. **Serializable IR as cache key + fixture** — §2.6.
+22. **"New arch = data only, no source edits"** as an explicit acceptance test for
     the backend-plugin seam — §1.3.
 
 **Skip / already have:**
@@ -1127,8 +1166,8 @@ implementation.
 **Beyond these three**, still unread:
 
 1. **hipBLASLt kernel *generation*** — §4 read the selection side only.
-   `KernelWriter.py` / `KernelWriterAssembly.py`, the `rocisa` Nanobind assembly
-   module, `Components/` (modular MAC / global-read / scheduling blocks), and the
+   `KernelWriter.py` / `KernelWriterAssembly.py`, the `rocisa` C++ *sources* (its
+   developer docs are read in §4.7; `include/` and `src/` are not), `Components/` (modular MAC / global-read / scheduling blocks), and the
    three-phase `BenchmarkProblems → LibraryLogic → ClientWriter` tuning pipeline
    are all unread. `ContractionProblemPredicates.hpp` alone is 119 KB.
 2. **`ExactLogicLibrary` / `MapLibrary` / `CachingLibrary` internals** — §4.2
@@ -1160,7 +1199,8 @@ lds_index_swapping,tile_window,sweep_tile}.rst`.
 
 **hipBLASLt / TensileLite** (`projects/hipblaslt/`) — `CLAUDE.md`,
 `tensilelite/CLAUDE.md`; `tensilelite/include/Tensile/{SolutionLibrary,Distance,
-MatchingLibrary,GranularitySelectionLibrary,MLPClassification,MLFeatures}.hpp`.
+MatchingLibrary,GranularitySelectionLibrary,MLPClassification,MLFeatures}.hpp`;
+`tensilelite/rocisa/{README.md,docs/}`.
 
 **LLVM** (`ROCm/llvm-project@amd-staging`) — `llvm/lib/Target/AMDGPU/SISchedule.td`
 (the gfx1250/gfx1251 machine model, recorded in the gfx1250 target reference §2.5

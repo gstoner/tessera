@@ -1,11 +1,11 @@
 ---
-last_updated: 2026-07-13
+last_updated: 2026-07-28
 audit_role: reference
 ---
 
 # ROCm Backend — Patterns from the AMD ROCm Ecosystem
 
-> **Purpose.** A source-grounded survey of eight production AMD ROCm projects, read for
+> **Purpose.** A source-grounded survey of twelve production AMD ROCm projects, read for
 > *transferable patterns* that improve Tessera's ROCm backend and the compiler at large.
 > This is an **ideas + design-vocabulary** document, not a status surface — for status see
 > [`ROCM_AUDIT.md`](ROCM_AUDIT.md); for the hardware bring-up ladder see
@@ -24,7 +24,8 @@ audit_role: reference
 > [`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md).
 >
 > Surveyed: **AITER**, **ATOM**, **hipBLASLt**, **rocWMMA**, **Mori**, **Iris**, **XIO**,
-> and the **AMD Gluon GEMM tutorial**.
+> and the **AMD Gluon GEMM tutorial** (2026-06-18); plus **rocFFT**, **rocPRIM**,
+> **rocRAND**, and **rocALUTION**, with rocWMMA re-read (2026-07-28).
 >
 > _Researched 2026-06-18. Provenance is flagged per claim: **[V]** verified from
 > repo/docs/paper source, **[D]** DeepWiki summary (high-confidence, not source-exact),
@@ -58,7 +59,7 @@ original “artifact-only” frontier is obsolete.
 The patterns below are split into **(A) compiler objects that must reach a consumer**,
 **(B) measured kernel redesigns**, and **(C) the distributed/GPU-initiated-comm track**.
 
-The throughline across all eight projects: **AMD's stack has converged on "make the
+The throughline across all twelve projects: **AMD's stack has converged on "make the
 hardware concept a first-class object"** — layouts, fragments, symmetric heaps, epilogues,
 tuned-config rows. That is Tessera's founding thesis. Most of what follows is not new
 architecture; it is validation of the IR design plus a concrete vocabulary (exact enums,
@@ -156,6 +157,18 @@ Header-only C++ template lib modeled on `nvcuda::wmma`; lowers to `amdgcn_mfma_*
 - **One code path for MFMA vs WMMA.** Same `fragment` + `mma_sync(d,a,b,c)` transparently
   lowers per arch; wave width auto (64 CDNA / 32 RDNA). API: `fill_fragment`,
   `load_matrix_sync`, `store_matrix_sync`, `load_matrix_coop_sync`. **[V]**
+- **Collaborative fragments are a *movement* concept, not a compute one** (re-read
+  2026-07-28). Their data is distributed across participating waves in the same thread
+  block, to balance shared responsibility for collective transfers such as global→LDS —
+  and they are **explicitly not supported in MMA functions**. Wave collaboration is
+  expressed as fragment-scheduler metadata supplied by the developer, so the collaboration
+  policy travels with the *type* rather than the call site. **[V]**
+- **Partial and oversized tiles became the library's problem, not the caller's** —
+  from rocWMMA 2.0.0 (ROCm 7.0), `mma_sync` handles them piece-wise automatically, which is
+  why the performance samples now use larger tiles with simpler code. **[V]**
+- **Wavefront-centric contract:** all threads in a wavefront must be active or behaviour is
+  undefined; small edge-case blocks are auto-padded rather than thread-masked. That is a
+  precondition our Tile IR would have to guarantee, not merely hope for. **[I]**
 
 ### 1.5 Mori — modular RDMA framework  ([repo](https://github.com/ROCm/mori))
 
@@ -252,6 +265,105 @@ GEMM optimization ladder v0→v9 on MI350/gfx950 (512-VGPR budget), validated ag
 choices*, not micro-opts. The "obvious" double-buffer regressed badly; slicing the output
 tile to fit the VGPR budget was the real lever. Tiling and register allocation are coupled
 and must be co-designed.
+
+### 1.9 rocFFT — runtime compilation, and the best cache design in the ecosystem  ([repo](https://github.com/ROCm/rocm-libraries/tree/develop/projects/rocfft))
+
+Read 2026-07-28 for its `designdocs/`, which are unusually explicit about *why*. The RTC
+design is the most directly reusable thing in this section. **[V]**
+
+- **The motivation is variant explosion, and it is quantified.** Stockham kernels need a
+  variant per `{arch} × {6 interleaved/planar × in-place/out-of-place} × {fwd,inv} ×
+  {precisions} × {unit,non-unit stride} × {callbacks on/off}`. Beyond build time, this hits
+  a hard wall: the default `-fPIC` memory model caps shared objects at **2 GiB**, and they
+  were hitting build breaks. **[V]**
+- **The kernel *name* is the cache key.** Every differentiating parameter is encoded into
+  the function name — scheme, length, placement, direction, formats, precision, stride type,
+  twiddle base, callback type. Two consequences AMD calls out explicitly: profilers and logs
+  then name exactly which kernel ran even when it was runtime-compiled, and *"the caching
+  code needn't be aware of all the possible parameters that kernels could differ by. New
+  parameters can be added at any time, and as long as the kernel names are updated
+  accordingly, the cache will just work."* **[V]**
+- **Three more key fields guard staleness:** GPU architecture, HIP runtime version, and
+  **kernel generator version**. The last is the one that matters for a compiler — it
+  invalidates the cache when codegen changes. **[V]**
+- **Two-tier cache.** A read-only system cache shipped with the library
+  (`ROCFFT_RTC_SYS_CACHE_PATH`, located relative to the shared object) plus a read-write
+  user cache (`ROCFFT_RTC_CACHE_PATH`). Static linking breaks the relative lookup, so the
+  env var becomes required — but the user cache still works, so behaviour degrades rather
+  than fails. **[V]**
+- **The shipped cache is populated at build time by a helper executable** that shares the
+  generator and RTC code but is *not* installed, so no symbols are exported merely to serve
+  the build. *"The criteria for which kernels to pre-build can be arbitrary. Less common
+  choices will be runtime-compiled, and runtime compilation is still a fallback."* This is
+  AOT and JIT as one path with a policy knob, not two lanes. **[V]**
+- **Serialize/deserialize APIs exist for diskless and distributed runs** — rank 0 populates
+  the cache, broadcasts the buffer, other ranks deserialize in-memory. **[V]**
+- **A concrete gotcha worth knowing before we parallelize compilation:** hipRTC holds
+  process-wide locks, so multithreaded compilation does not help. rocFFT spawns a *helper
+  process* when a compile is already in flight, falling back to in-process if the helper
+  cannot be found. **[V]**
+
+**[I]** This maps almost one-for-one onto our compilation cache and the Apple AOT lane. The
+name-as-key idea is the cheapest and most valuable: it makes the cache schema-free and makes
+profiler output and cache identity the same string.
+
+### 1.10 rocPRIM — tuned configs as generated headers, with a typed fallback ladder  ([repo](https://github.com/ROCm/rocm-libraries/tree/develop/projects/rocprim))
+
+- **Tuning output is generated source.** `tuning/configs_header_generation.py` (~46 KB)
+  turns benchmark results into config headers compiled into the library; `run_tuning.py`
+  drives the sweep. Tuned configuration is therefore a build artifact under version control,
+  not a runtime database. **[V]**
+- **The idea worth taking is `fallback_config.json`** — what happens for a type nobody
+  tuned. Rather than a single global default, it defines a **typed fallback ladder**: each
+  entry names a representative `based_on_type` plus a predicate
+  (`sizeof_min_exclusive`, `sizeof_max_inclusive`, `is_floating_point`). An untuned 2-byte
+  float falls back to `rocprim::half`'s config; a 12-byte non-float falls back to
+  `int128_t`'s; and so on down through `float`, `int64_t`, `int`, `short`. **[V]**
+
+**[I]** That is *dtype bucketing* — the same move Decision #28 makes for shapes, applied to
+the type axis. It is how you tune a handful of representatives and still answer for the long
+tail of dtypes, which is precisely the problem our 15-name canonical dtype set plus planned
+low-precision formats will create.
+
+### 1.11 rocRAND — tuning that changes the answer, made an explicit contract  ([repo](https://github.com/ROCm/rocm-libraries/tree/develop/projects/rocrand))
+
+The important finding in this section, and a direct check on Decision #18.
+
+- Under `ROCRAND_ORDERING_PSEUDO_DYNAMIC`, rocRAND picks block and grid sizes to suit the
+  specific GPU model. AMD states the consequence plainly: *"the number of allocated
+  generators and the sequence of the generated numbers can also vary."* **[V]**
+- Tuning is a benchmark sweep over a block-size × grid-size matrix, fastest wins per device
+  (`benchmark_rocrand_tuning`, with `BENCHMARK_TUNING_{THREAD,BLOCK}_OPTIONS` and a
+  minimum-grid filter). Grid candidates are generated as **multiples of the device's CU
+  count** by a helper that shells out to `rocminfo`. **[V]**
+
+**[I]** So rocRAND treats *reproducibility versus performance* as a named, opt-in ordering
+mode rather than an emergent property. We should confirm the same is true for us: Decision
+#18 fixes `stream_id = global_seed * num_ranks + rank` with non-overlapping Philox counter
+offsets, and `@jit(deterministic=True)` is a declared knob — but if any tuned launch
+configuration ever feeds an RNG offset scheme, autotuning would silently change numerical
+output. That is a cheap thing to assert and an expensive thing to discover late.
+
+### 1.12 rocALUTION — runtime hardware abstraction with automatic host fallback  ([repo](https://github.com/ROCm/rocm-libraries/tree/develop/projects/rocalution))
+
+Sparse iterative solvers and preconditioners. Included as a deliberate **contrast** with our
+own design rules rather than as a pattern to copy. **[V]**
+
+- Objects (matrix, vector, solver) are allocated on the host and *moved* to an accelerator by
+  a call. Execution location is chosen at **run time via RTTI**, which AMD explicitly
+  contrasts with template-based libraries that decide at compile time. The stated goal is one
+  source that runs unchanged with or without an accelerator.
+- **Automatic fallback:** *"The library checks at run time whether a specific routine is
+  implemented on the selected accelerator. If the routine is not available, the associated
+  object is moved back to the host. The computation is then performed on the CPU
+  automatically."*
+
+**[I]** That last behaviour is the opposite of Decision #21, which requires a stable
+diagnostic naming the op and target rather than a silent fall-through. Both choices are
+defensible for their audience — rocALUTION optimizes for "it always runs", we optimize for
+"you always know where it ran" — but the contrast is worth having on record, because silent
+host migration is exactly how a performance cliff hides. Our `reference_cpu` labelling in the
+Apple audit is the same instinct as rocALUTION's fallback, made visible.
 
 ---
 

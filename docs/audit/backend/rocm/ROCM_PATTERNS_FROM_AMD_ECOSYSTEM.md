@@ -11,6 +11,18 @@ audit_role: reference
 > [`ROCM_AUDIT.md`](ROCM_AUDIT.md); for the hardware bring-up ladder see
 > [`STRIX_HALO_EXECUTION_PLAN.md`](STRIX_HALO_EXECUTION_PLAN.md).
 >
+> **gfx1250 / MI450 depth lives in a sibling document.** §1.8 below covers the Gluon
+> GEMM tutorial at survey depth; the primary-source target reference — hardware
+> constants, WMMA shapes/ABI/hazards, the three data-movement mechanisms, split wait
+> counters, workgroup clusters, device-initiated SDMA, and the UALink/IFoE fabric — is
+> [`GFX1250_MI450_COMPILER_REFERENCE.md`](GFX1250_MI450_COMPILER_REFERENCE.md).
+>
+> **AMD's two kernel *compilers* are surveyed separately.** This document covers
+> kernel *libraries*; StinkyTofu (asm-level pass optimizer, gfx1250+) and rocRoller
+> (dual-graph kernel generator) are read for compiler architecture, algorithms, and
+> codegen technique in
+> [`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md).
+>
 > Surveyed: **AITER**, **ATOM**, **hipBLASLt**, **rocWMMA**, **Mori**, **Iris**, **XIO**,
 > and the **AMD Gluon GEMM tutorial**.
 >

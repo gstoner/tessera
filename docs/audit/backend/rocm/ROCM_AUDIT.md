@@ -16,6 +16,9 @@ log. Detailed Strix Halo bring-up history lives in
 [`STRIX_HALO_EXECUTION_PLAN.md`](STRIX_HALO_EXECUTION_PLAN.md), and reusable AMD
 design guidance lives in
 [`ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md`](ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md).
+Primary-source gfx1250 / MI450 target facts — WMMA shapes and hazards, TDM,
+workgroup clusters, the split wait-counter model, device-initiated SDMA — live in
+[`GFX1250_MI450_COMPILER_REFERENCE.md`](GFX1250_MI450_COMPILER_REFERENCE.md).
 
 > **Status authority.** ROCm proof is recorded at exact-target granularity. The
 > generic `rocm` name is a family rollup and never inherits compile, execution,

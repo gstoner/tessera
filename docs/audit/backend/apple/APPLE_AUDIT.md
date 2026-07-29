@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-13
+last_updated: 2026-07-28
 audit_role: sub_audit
 ---
 
@@ -291,6 +291,29 @@ not current support counts.
    hardware-free bridge remains `python/tessera/compiler/microscaling.py`.
 7. **Cross-backend real-hardware proof** for NVIDIA / ROCm remains tracked in
    the per-platform audits, not here.
+8. **Be the validation site for the hardware-free cost model.** Added 2026-07-28
+   from the AMD kernel-compiler survey
+   ([`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md)),
+   which found two *static, device-free* quality metrics in production AMD code:
+   a step-distance locality histogram over a materialized access order (§3.7) and
+   a bank-conflict analyzer that computes N-way conflict from a descriptor alone
+   (§3.8). Both are computable on any target and neither needs silicon.
+
+   Apple is the only backend that executes broadly enough to say whether such a
+   metric *predicts anything*. The action is therefore not "add a metric" but
+   **calibrate one**: compute the locality/conflict score for kernel families the
+   Apple lane already measures, and check the score against recorded latency. A
+   metric that does not rank Apple kernels correctly should not be trusted to
+   rank ROCm or NVIDIA kernels we cannot measure. This is the concrete follow-on
+   to the mock-cost-model finding in
+   [`../../compiler/TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md)
+   §2, and it gates how much weight the arbiter's hardware-free tier can carry.
+
+   A second, smaller item from the same survey: the MSL synthesizer currently
+   *authors* access patterns, whereas CK *derives* vector width, access count and
+   traversal order from a distribution encoding (§3.9). That is a design question
+   for the synthesizer, not a task — record it when the codegen path is next
+   revisited, and do not treat it as blocking.
 
 ## Hardware capability reference (grounded 2026-06-17)
 

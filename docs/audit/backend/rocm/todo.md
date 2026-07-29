@@ -500,7 +500,8 @@ TableGen name collision, greedy-rewrite API split, tiling-interface alignment
 overload, vector multi-reduction API split, and MFMA control operands becoming
 attributes. Validation on the visible `gfx1151` device records:
 
-- ROCm Target IR lit: **32/32 pass**;
+- initial ROCm Target IR transition slice: **32/32 pass**; the current expanded
+  suite is **36/36** after the dtype-totality additions recorded below;
 - compiled ROCm correctness corpus on gfx1151: **1280/1280 pass**;
 - valid baseline/performance ratchets: **21/21 pass**;
 - combined paged-KV, ReplaySSM, portable Tile, grouped GEMM/SwiGLU, and
@@ -542,16 +543,17 @@ named exact device can satisfy an execution gate.
 
 | Order | ID | Work | Access state | Completion gate |
 |---:|---|---|---|---|
-| 1 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
-| 2 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
-| 3 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
-| 4 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
-| 5 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
-| 6 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
-| 8 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
-| 9 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
-| 10 | ROCM-LSE-1 | Extend the landed gfx1151 LSE selector beyond WSL | **gfx1151 implementation and initial decision complete; bare-metal/CDNA follow-up gated** | The real shared checkpoint contract, selectable physical save/recompute paths, exact FP16/BF16 17/64/128/256 correctness sweep, retained host-wall evidence, and 128+ saved selector are landed. Revalidate on bare-metal gfx1151 and measure architecture-owned thresholds on gfx950/gfx1250; do not transfer the WSL threshold. |
-| 11 | ROCM-VERIFY-TESSERA-OPT-1 | Verify the tessera-opt build-capability change on a real ROCm host | **complete on Strix Halo `gfx1151` (2026-07-27)** | The full and lean ROCm drivers, explicit conflict rejection, capability-aware helper, documented `TESSERA_OPT_BIN` lit invocation, streaming-attention fixtures, complete ROCm backend lit suite, ROCDL/HSACO lane, sealed packet, and generated docs pass. The completed request is archived at [`archive/ROCM_VERIFICATION_REQUEST_2026-07-27.md`](archive/ROCM_VERIFICATION_REQUEST_2026-07-27.md). |
+| 1 | ROCM-CALIB-1 | Calibrate the hardware-free scores on gfx1151 | Strix Halo `gfx1151`; re-derive wave32/bank constants before analysis | Rank correlations over the retune corpus and hot-path ratchet establish a retain/reject verdict; failure on the metric's home architecture ends the line of work. |
+| 2 | ROCM-RASTER-1 | Consume and measure the shared raster contract | Strix Halo `gfx1151`; host-free permutation/emission gate already landed | HIP emission preserves row-major identity, then `rocprofv3` counters and device timing establish any architecture-owned raster-order/group decision. |
+| 3 | ROCM-2 | Run the common P0 packet on Radeon AI PRO R9700 `gfx1201` | owner and reservation required | RDNA 4 WMMA-v2 f16/bf16 plus enabled FP8/integer forms assemble, launch, match aligned/ragged oracles, and record resources and timing. |
+| 4 | ROCM-1 | Run the common P0 packet on MI350-series `gfx950` | owner and reservation required | CDNA 4 matmul, flash attention, softmax, and GELU launch and compare; low-precision breadth advances only with physical-layout proof. |
+| 5 | ROCM-3 | Run the common P0 packet on MI455X `gfx1250` | owner and reservation required | The upstream-LLVM artifact joins to a launch/numerical proof; WMMA-v2 properties and fragment layout match the device. |
+| 6 | ROCM-6 | Revalidate G6-A/B/C with valid paired device timing | bare-metal gfx1151 or repaired event timing required | Original correctness, resource, aligned/ragged, dtype, device-time, and E2E gates are rerun under LLVM/MLIR 23 + ROCm 7.14 before reaffirming or changing production. |
+| 7 | ROCM-8 | Measure copy versus mapped-host memory on bare-metal `gfx1151` | bare-metal owner and reservation required | Repeated kernel-only and end-to-end measurements establish a stable crossover without using WSL evidence. |
+| 8 | ROCM-4b | Retain compatibility proof on MI300X/MI325X `gfx942` | owner and reservation required | f16/bf16 MFMA plus retained matmul/attention/softmax/GELU paths launch and compare. |
+| 9 | ROCM-4a | Add Radeon RX 9000 `gfx1200` exact-device proof | owner and reservation required | Matmul launches and compares; unsupported forms reject stably. |
+| 10 | ROCM-5 | Close the architecture-owned fragment umbrella | depends on ROCM-1 through ROCM-4b | Every enabled family/dtype has exact-device packing, numerical, resource, and timing evidence, or an explicit unsupported/deferred state. |
+| 11 | ROCM-LSE-1 | Extend the landed gfx1151 LSE selector beyond WSL | **gfx1151 implementation and initial decision complete; bare-metal/CDNA follow-up gated** | The real shared checkpoint contract, selectable physical save/recompute paths, exact FP16/BF16 17/64/128/256 correctness sweep, retained host-wall evidence, and 128+ saved selector are landed. Revalidate on bare-metal gfx1151 and measure architecture-owned thresholds on gfx950/gfx1250; do not transfer the WSL threshold. |
 
 ### `TESSERA-OPT-BUILD-CAPABILITY-2026-07-27` verification result
 

@@ -4,7 +4,7 @@ audit_role: plan
 plan_state: open
 owner: x86 backend
 target: x86_avx512
-scope: x86 AMX/AVX-512 backend implementation and exact-device proof
+scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
@@ -35,7 +35,7 @@ materialized access order is genuinely target-independent: it scores an access
 *order*, not a memory technology. This is also the metric with the strongest
 prior for CPUs, since blocked-algorithm cache analysis is a CPU literature
 (Lam/Rothberg/Wolf 1991, cited in the same assessment). x86 executes natively and
-has committed benchmarks (`benchmarks/benchmark_x86_e2e*.py`), so it can supply a
+has committed benchmarks (`benchmarks/x86/benchmark_x86_e2e*.py`), so it can supply a
 non-GPU architecture to the calibration — valuable precisely because a score that
 holds across CPU *and* GPU is far less likely to be fitting an accelerator
 artifact.
@@ -84,6 +84,12 @@ discovered on an Apple Silicon host, where none of it can be proven.
 AVX-512 (Core Ultra 7 265F has neither AVX-512 nor AMX; see the fleet notes).
 Nothing in this queue may be marked complete from a Mac. An arm64 host can
 author and structurally gate; it cannot produce device evidence.
+
+**Scope split.** The exact-device target of this queue is `x86_avx512`, proven
+on the Zen 5 host. AMX is **planned, access-gated**, and cannot inherit AVX-512
+evidence: no AMX-capable owning host is currently named. X86-3 may reconcile
+the compiler-lane architecture, but its AMX half remains open until a separate
+AMX host, target identity, numerical packet, and performance gate are recorded.
 
 ## X86-1: the plugin lane cannot report `x86_native` off x86 — 15 red tests
 
@@ -138,12 +144,15 @@ and an architecture decision second. Record the choice here.
 
 ## X86-3: reconcile the two x86 lanes
 
-**Status: open. Host: Zen 5 for the measured half.**
+**Status: open. Hosts: Zen 5 for the AVX-512 measured half; a separately named
+AMX-capable host is required for the AMX half.**
 
 x86 reaches hardware two ways, and nothing arbitrates between them:
 
 * **C++ MLIR** — `src/compiler/codegen/tessera_x86_backend/`, AMX BF16 +
-  AVX-512 GEMM, works end to end (Decision #1).
+  AVX-512 GEMM. Decision #1 records the existing end-to-end architecture;
+  this plan may revalidate AVX-512 on Zen 5 but cannot refresh the AMX claim
+  without an AMX-capable host.
 * **Python synthesizer** — `emit/x86_llvm.py` + `emit/x86_aocl_dlp.py` behind
   the `KernelEmitter`/`compile_fn`/`KernelRunner` seams.
 
@@ -152,6 +161,10 @@ This is the same two-compiler split documented for Apple in
 be consistent across the fleet rather than decided per backend. Blocked on the
 spine decision in
 [`../../compiler/COMPILER_THEORY_OF_OPERATION.md`](../../compiler/COMPILER_THEORY_OF_OPERATION.md).
+Closure requires separate terminal outcomes: an exact-device Zen 5 AVX-512
+selection, and either exact-device AMX evidence from a named capable host or an
+explicit planned/access-gated AMX state. Neither architecture may promote the
+other.
 
 ## Cross-backend sync
 

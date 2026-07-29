@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-28
+last_updated: 2026-07-29
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -9,6 +9,40 @@ scope: x86 AMX/AVX-512 backend implementation and exact-device proof
 
 # x86 backend TODO
 
+## X86-CALIB-1: split verdict on the hardware-free score calibration
+
+Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **split: bank-conflict metric
+not applicable; locality metric follow-up required.** Owning host Zen 5 (Ryzen AI
+Max+ 395 CPU complex, AVX-512, no AMX).
+
+Two static device-free scores are being calibrated against measured latency
+([`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md)
+§3.7–3.8; motivation in
+[`TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md) §2). They do
+not get the same verdict here, and reporting one blended state would hide that.
+
+**Bank-conflict analyzer — not applicable, architecture-specific reason.** It
+counts N-way conflicts across a fixed number of software-managed scratchpad banks
+under a wave's phase-grouped access. The x86 lane has no software-managed
+scratchpad and no wave phases: AVX-512 loads go through a hardware-managed
+L1/L2/L3 hierarchy where the analogous hazards are 4 KiB aliasing, cache-set
+associativity conflicts, and store-forwarding stalls. Those are real, but they
+are a different model with different inputs — not this analyzer with different
+constants.
+
+**Locality histogram — follow-up required.** The step-distance histogram over a
+materialized access order is genuinely target-independent: it scores an access
+*order*, not a memory technology. This is also the metric with the strongest
+prior for CPUs, since blocked-algorithm cache analysis is a CPU literature
+(Lam/Rothberg/Wolf 1991, cited in the same assessment). x86 executes natively and
+has committed benchmarks (`benchmarks/benchmark_x86_e2e*.py`), so it can supply a
+non-GPU architecture to the calibration — valuable precisely because a score that
+holds across CPU *and* GPU is far less likely to be fitting an accelerator
+artifact.
+
+**Missing exact-device evidence.** Rank correlation between the locality score
+and recorded Zen 5 AVX-512 latencies over the e2e benchmark rows. No evidence is
+owed for the conflict metric.
 Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **not applicable, with an
 architecture-specific reason.** Schedule IR gained `raster_order` /
 `raster_group` on `schedule.tile` / `schedule.knob` (arch-neutral definition in

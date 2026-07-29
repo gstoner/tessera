@@ -3,11 +3,46 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-28
+last_updated: 2026-07-29
 ---
 
 # Apple compiler, exact-device, and performance plan
 
+## APPLE-CALIB-1: contribute op breadth to the hardware-free score calibration
+
+Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **follow-up required, owning
+host M1 Max (apple7).** Apple is the *breadth* axis, not the sole site.
+
+**What is being calibrated.** Two static, device-free quality metrics found in
+production AMD code and recorded in
+[`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md)
+§3.7–3.8: a step-distance locality histogram over a materialized access order,
+and an N-way bank-conflict analyzer computed from a descriptor alone. Both are
+computable on any target with no silicon. The question is whether either
+*predicts measured latency* — which decides how much weight the arbiter's
+hardware-free tier can carry, per
+[`TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md) §2.
+
+**Apple's role.** The widest F4-verified op-family envelope in the fleet, so it
+answers *does the score generalize across op kinds* — norm chains, attention with
+online softmax, pointwise-reduce, gated matmul, coopmat `simdgroup_matrix`, not
+just GEMM. NVIDIA and ROCm supply shape depth within GEMM/attention
+(`NVIDIA-CALIB-1`, `ROCM-CALIB-1`). Both axes are required: a score fitted on one
+architecture reproduces the overfit that assessment §5.2 records for NeuSight,
+which led on the A100 inside its training distribution and lost that lead on
+every newer part.
+
+**Apple-specific caveat.** The bank-conflict half was derived for LDS with a
+known bank count and a 4-phase wave64 access pattern. Metal threadgroup memory is
+not LDS and its banking is not documented to the same level (Decision #27 — do
+not assert a Metal hardware detail without a real source), so the conflict metric
+may be **not applicable** on Apple even where the locality metric is not. Report
+that split rather than one blended verdict.
+
+**Missing exact-device evidence.** Rank correlation between each score and
+recorded M1 Max latency, per op family, over the families the Apple lane already
+measures. A score that does not rank measured Apple kernels correctly is not
+trustworthy for unmeasured kernels anywhere.
 ## APPLE-RASTER-1: reconcile the MLX-inherited swizzle with the shared contract
 
 Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning

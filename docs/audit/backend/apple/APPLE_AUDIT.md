@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-13
+last_updated: 2026-07-28
 audit_role: sub_audit
 ---
 
@@ -291,6 +291,55 @@ not current support counts.
    hardware-free bridge remains `python/tessera/compiler/microscaling.py`.
 7. **Cross-backend real-hardware proof** for NVIDIA / ROCm remains tracked in
    the per-platform audits, not here.
+8. **Be the validation site for the hardware-free cost model.** Added 2026-07-28
+   from the AMD kernel-compiler survey
+   ([`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md)),
+   which found two *static, device-free* quality metrics in production AMD code:
+   a step-distance locality histogram over a materialized access order (§3.7) and
+   a bank-conflict analyzer that computes N-way conflict from a descriptor alone
+   (§3.8). Both are computable on any target and neither needs silicon.
+
+   The action is not "add a metric" but **calibrate one**: compute the
+   locality/conflict score for kernel families that are already measured, and
+   check the score against recorded latency. A metric that does not rank measured
+   kernels correctly should not be trusted to rank unmeasured ones. This is the
+   concrete follow-on to the mock-cost-model finding in
+   [`TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md) §2, and it
+   gates how much weight the arbiter's hardware-free tier can carry.
+
+   **This is a cross-backend calibration, not an Apple-only one** (corrected
+   2026-07-29 — an earlier draft of this item said Apple was "the only backend
+   that executes broadly enough" and referred to "ROCm or NVIDIA kernels we
+   cannot measure"; both claims were false, written from the pre-bring-up framing
+   CLAUDE.md itself retired). NVIDIA has a committed, consumed, device-keyed
+   `nvidia:sm_120` autotune corpus over 64/256/512/1024/2048 square buckets plus
+   fused GEMM and causal attention
+   ([`../nvidia/NVIDIA_AUDIT.md`](../nvidia/NVIDIA_AUDIT.md); generator at
+   `benchmarks/nvidia/record_autotune_corpus.py`). ROCm has measured gfx1151
+   evidence including the size-adaptive grouped-GEMM tile selector, the hot-path
+   ratchet, and a measured resident-GPU crossover for sparse attention
+   ([`../rocm/ROCM_AUDIT.md`](../rocm/ROCM_AUDIT.md);
+   `rocm_gfx1151_compiler_retune_2026_07_15.json`).
+
+   Excluding those corpora would not just be unfair to the sibling backends — it
+   would make the calibration *weaker*. A locality metric fitted against one
+   architecture is the exact failure mode the same assessment records for learned
+   predictors: TileSight §5.2 shows NeuSight leading on the A100 in its training
+   distribution and losing that lead on every newer part. A score validated on
+   Apple alone would carry the same defect by construction.
+
+   Apple's actual distinctive contribution is **op breadth**, not exclusivity:
+   the widest F4-verified family envelope in the fleet, so it can test whether a
+   score generalizes *across op kinds*. NVIDIA and ROCm contribute **shape depth**
+   within GEMM/attention. The calibration needs both axes, so it is owned across
+   the queues under sync key `COSTMODEL-CALIB-2026-07-29` — see the per-backend
+   items named there.
+
+   A second, smaller item from the same survey: the MSL synthesizer currently
+   *authors* access patterns, whereas CK *derives* vector width, access count and
+   traversal order from a distribution encoding (§3.9). That is a design question
+   for the synthesizer, not a task — record it when the codegen path is next
+   revisited, and do not treat it as blocking.
 
 ## Hardware capability reference (grounded 2026-06-17)
 

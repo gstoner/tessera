@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-28
+last_updated: 2026-07-29
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -7,6 +7,40 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+## ROCM-CALIB-1: supply gfx1151 evidence to the hardware-free score calibration
+
+Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **follow-up required, owning
+host Strix Halo (Radeon 8060S, gfx1151).**
+
+**Correction that created this item.** `APPLE_AUDIT.md` originally scoped this
+calibration to Apple alone, stating that ROCm and NVIDIA kernels "cannot be
+measured". False here: this backend holds the measured size-adaptive grouped-GEMM
+tile selector, the hot-path perf ratchet, a measured resident-GPU crossover for
+large-block sparse attention, and the committed
+`rocm_gfx1151_compiler_retune_2026_07_15.json` retune corpus.
+
+**ROCm's special standing on this item.** Both metrics *originate here*. The
+step-distance locality histogram and the N-way bank-conflict analyzer are
+extracted from production AMD code
+([`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md)
+§3.7–3.8), so ROCm is the one backend where the metric can be checked against the
+hardware model it was actually written for. If it fails to rank gfx1151 kernels,
+that is a much stronger negative result than failing on a target it was never
+designed for — and it should end the line of work rather than prompt retuning.
+
+**Constant re-derivation is mandatory, not optional.** The published phase table
+is GFX950/wave64 with 64 banks (survey §5.1, now including all four phases —
+`phase 1 = phase 0 + 32`, `phase 3 = phase 2 + 32`, the four disjoint and
+covering lanes 0–63). gfx1151 is **wave32** with a different bank count, so every
+constant must be re-derived before a conflict count means anything on this part.
+ISA truth stays [`docs/reference/isa/rdna/`](../../../reference/isa/rdna/)
+(gfx1151 = RDNA 3.5).
+
+**Missing exact-device evidence.** Rank correlation between each score and the
+recorded gfx1151 latencies, over the retune corpus and hot-path ratchet rows. The
+grouped-GEMM selector is the most informative subject: its tile choice is already
+known to be size-adaptive under measurement, so a locality score that cannot
+reproduce that ordering has failed on its home ground.
 ## ROCM-RASTER-1: consume the shared block-rasterization contract
 
 Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning

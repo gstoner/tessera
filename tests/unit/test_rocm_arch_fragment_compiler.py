@@ -28,7 +28,8 @@ def _lower(
     *,
     generic: bool = False,
 ) -> str:
-    tessera_opt = tools.require_tessera_opt()
+    tessera_opt = tools.require_tessera_opt(
+        "lower-tile-to-rocm", "lower-tessera-target-to-rocdl")
     command = [
         str(tessera_opt), "-" if source is not None else str(FIXTURE),
         "--allow-unregistered-dialect",
@@ -221,7 +222,7 @@ def test_gfx940_descriptor_path_lowers_to_real_mfma(compiler_toolchain):
 
 
 def test_family_mismatch_is_a_named_error(compiler_toolchain):
-    tessera_opt = compiler_toolchain.require_tessera_opt()
+    tessera_opt = compiler_toolchain.require_tessera_opt("lower-tile-to-rocm")
     source = FIXTURE.read_text().replace('family = "auto"', 'family = "mfma"')
     result = subprocess.run(
         [

@@ -228,7 +228,10 @@ def test_migrated_compiler_fixture_has_no_private_tool_probe():
     )
     assert "pytest.mark.compiler_tool" in text
     assert 'REPO / "build/tools/tessera-opt/tessera-opt"' not in text
-    assert "compiler_toolchain.require_tessera_opt()" in text
+    # The shared resolver owns selection; the fixture names the passes it
+    # drives so a build without the ROCm backend skips instead of failing.
+    assert "compiler_toolchain.require_tessera_opt(" in text
+    assert "lower-tile-to-rocm" in text
 
 
 @pytest.mark.parametrize(

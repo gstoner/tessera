@@ -99,9 +99,12 @@ struct LowerControlForToAppleGPUPass
   }
 };
 
-// Standalone registration so the pass is invokable as
-// `--tessera-control-for-to-apple_gpu` (the lit fixture runs it in isolation).
-static PassRegistration<LowerControlForToAppleGPUPass> gReg;
+// No static PassRegistration here: `registerTesseraAppleBackendPipelines()`
+// registers this pass, as it now does all 28 — one list, kept in step with
+// Passes.h and enforced by `test_apple_pass_registration.py`. Registering the
+// same argument twice leaves MLIR to keep one and discard the other, so which
+// registration a `--help` line describes would be unspecified.
+// `--tessera-control-for-to-apple_gpu` still runs the pass in isolation.
 
 } // namespace
 

@@ -226,17 +226,26 @@ def run_pointwise_graph_aot(region: Any, arrays: Any) -> tuple[Any, str]:
     library path — the alternative, re-deriving broadcast flags and element
     counts here, is how the two lanes would end up dispatching different
     buffers while claiming to differ only in compile strategy.
+
+    The operand *plan* is derived here too, and must be: this lane compiles
+    before that dispatch runs, and the broadcast mask is part of the emitted
+    body. Both come from `pointwise_operand_plan`, so there is still one owner.
     """
     from tessera.compiler.emit import apple_msl
 
-    import numpy as np
-
-    dtype = np.asarray(arrays[0]).dtype
-    elem = "f16" if dtype == np.float16 else "f32"
-    if not metal_toolchain_available():
+    # The mask decides how the kernel indexes each operand, so it has to be
+    # known at compile time. Emitting under the default all-full mask would
+    # build a kernel reading a per-feature operand at `[gid]` while the
+    # dispatcher uploads only `cols` elements of it — past the end of the
+    # buffer, with whatever that memory holds.
+    plan = apple_msl.pointwise_operand_plan(arrays)
+    if not plan.dispatchable or not metal_toolchain_available():
+        # No emitted form for these shapes, or no toolchain. Either way the
+        # JIT lane will reach its own reference; take the tag from there.
         return apple_msl.run_pointwise_graph(region, arrays)[0], "reference"
     try:
-        source = get_emitter(AIR_TARGET).emit(region, dtype=elem)
+        source = get_emitter(AIR_TARGET).emit(
+            region, dtype=plan.elem, broadcast=plan.broadcast)
         metallib = compile_msl_to_metallib(source.source, entry=source.entry)
     except (MetalToolchainError, EmitError):
         # The emitter cannot express this region, or the toolchain declined.
@@ -271,12 +280,18 @@ def run_fused_region_aot(region: Any, A: Any, B: Any, bias: Any = None, *,
 
     symbol = _metallib_coopmat_symbol()
     if symbol is not None and metal_toolchain_available():
-        source = get_emitter(AIR_TARGET).emit(
-            region, dtype="f16" if dtype == np.float16 else "f32",
-            dims=(m, n, k), variant=apple_msl.COOPMAT)
         try:
+            # Pinned COOPMAT: a region carrying a reduction, residual, or
+            # prologue has no matrix form and `emit` refuses it rather than
+            # returning the scalar body under a coopmat label. That refusal is
+            # this lane declining the region — the documented reference
+            # fallback below — not a crash in the registered runner, which
+            # would stop the F4 oracle gating such regions at all.
+            source = get_emitter(AIR_TARGET).emit(
+                region, dtype="f16" if dtype == np.float16 else "f32",
+                dims=(m, n, k), variant=apple_msl.COOPMAT)
             metallib = compile_msl_to_metallib(source.source, entry=source.entry)
-        except MetalToolchainError:
+        except (MetalToolchainError, EmitError):
             metallib = None
         if metallib is not None:
             bias_arr = (np.ascontiguousarray(bias, dtype)
@@ -328,19 +343,28 @@ class AppleAIRRunner(KernelRunner):
         return run_fused_region_aot(region, *args, **kwargs)
 
     @staticmethod
-    def _decline(reference: Any) -> tuple[Any, str]:
-        """No AOT dispatch exists for this family — report it as such."""
-        return reference, "reference"
+    def _decline(region: Any, *args: Any) -> tuple[Any, str]:
+        """No AOT dispatch for this family — compute the region's own reference.
+
+        It must be the reference and nothing else. Routing through the JIT lane
+        and relabelling its answer `"reference"` would be wrong twice over: F4
+        trusts a reference tag *without* a numerical comparison, so a wrong JIT
+        result would pass the AOT gate unexamined, and an AOT measurement would
+        silently include JIT compile and dispatch work.
+        """
+        return region.reference(*args), "reference"
 
     def run_fused_attention(self, region: Any, *args: Any, **kwargs: Any):
-        from tessera.compiler.emit import apple_msl
-        out, _ = apple_msl.run_fused_attention(region, *args, **kwargs)
-        return self._decline(out)
+        if kwargs:
+            raise TypeError(
+                f"run_fused_attention takes no {sorted(kwargs)} option(s)")
+        return self._decline(region, *args)
 
     def run_gated_matmul_region(self, region: Any, *args: Any, **kwargs: Any):
-        from tessera.compiler.emit import apple_msl
-        out, _ = apple_msl.run_gated_matmul_region(region, *args, **kwargs)
-        return self._decline(out)
+        if kwargs:
+            raise TypeError(
+                f"run_gated_matmul_region takes no {sorted(kwargs)} option(s)")
+        return self._decline(region, *args)
 
     def run_pointwise_graph(self, region: Any, *args: Any, **kwargs: Any):
         return run_pointwise_graph_aot(region, *args, **kwargs)

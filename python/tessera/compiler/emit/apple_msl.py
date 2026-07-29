@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -1264,6 +1264,63 @@ def _synth_pointwise_symbol(dtype: str) -> Any:
     return sym
 
 
+class PointwiseOperandPlan(NamedTuple):
+    """How a pointwise DAG's operands map onto the emitted kernel.
+
+    ``broadcast`` is the part that must reach *synthesis*, not just dispatch: a
+    per-feature operand is uploaded as ``cols`` elements and the kernel has to
+    index it ``[gid % C]``. A kernel built without the mask indexes ``[gid]``
+    and reads past the end of that buffer, so the AOT lane — which compiles
+    before dispatch — must derive this plan first and emit against it.
+    """
+
+    elem: str                      #: "f16" / "f32" — the MSL element type
+    npdt: type                     #: the matching numpy dtype
+    arrays: list[np.ndarray]       #: contiguous, cast to `npdt`
+    out_shape: tuple[int, ...]
+    total: int                     #: total output elements
+    cols: int                      #: last-dim width (the `% C` modulus)
+    broadcast: tuple[bool, ...]    #: per input: index `[gid % C]` rather than `[gid]`
+    counts: tuple[int, ...]        #: per input: elements actually uploaded
+    dispatchable: bool             #: False ⇒ no Metal form; use the reference
+
+
+def pointwise_operand_plan(arrays: list[np.ndarray]) -> PointwiseOperandPlan:
+    """Classify operands once, for both the JIT and AOT lanes.
+
+    One owner on purpose: the mask decides both what the kernel is compiled to
+    index and how many elements the dispatcher uploads. Deriving it twice is
+    how the two lanes end up disagreeing about a buffer's length.
+    """
+    in_dtype = np.asarray(arrays[0]).dtype
+    elem = "f16" if in_dtype == np.float16 else "f32"
+    npdt = np.float16 if elem == "f16" else np.float32
+    arrs = [np.ascontiguousarray(a, npdt) for a in arrays]
+    empty = PointwiseOperandPlan(elem, npdt, arrs, (), 0, 1, (), (), False)
+    try:
+        out_shape = np.broadcast_shapes(*[a.shape for a in arrs])
+    except ValueError:                          # incompatible shapes
+        return empty
+    n = int(np.prod(out_shape)) if out_shape else 1
+    cols = int(out_shape[-1]) if out_shape else 1
+
+    # Classify each input: full (index [gid]) or per-feature broadcast ([gid%C]).
+    # Anything else (per-row / internal broadcast) has no emitted form.
+    bc: list[bool] = []
+    counts: list[int] = []
+    for a in arrs:
+        if a.shape == out_shape or a.size == n:
+            bc.append(False)
+            counts.append(int(a.size))
+        elif a.size == cols and _is_trailing_feature(a.shape, out_shape):
+            bc.append(True)
+            counts.append(cols)
+        else:
+            return empty
+    return PointwiseOperandPlan(elem, npdt, arrs, out_shape, n, cols,
+                                tuple(bc), tuple(counts), True)
+
+
 def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray],
                         *, library: str | None = None
                         ) -> tuple[np.ndarray, str]:
@@ -1279,30 +1336,12 @@ def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray],
     ``emit.apple_air``: two copies would drift, and then the AOT and JIT lanes
     would be feeding different buffers while claiming to differ only in compile
     strategy."""
-    in_dtype = np.asarray(arrays[0]).dtype
-    elem = "f16" if in_dtype == np.float16 else "f32"
-    npdt = np.float16 if elem == "f16" else np.float32
-    arrs = [np.ascontiguousarray(a, npdt) for a in arrays]
-    try:
-        out_shape = np.broadcast_shapes(*[a.shape for a in arrs])
-    except ValueError:                          # incompatible shapes
+    plan = pointwise_operand_plan(arrays)
+    elem, npdt = plan.elem, plan.npdt
+    if not plan.dispatchable:
         return region.reference(*arrays).astype(npdt), "reference"
-    n = int(np.prod(out_shape)) if out_shape else 1
-    cols = int(out_shape[-1]) if out_shape else 1
-
-    # Classify each input: full (index [gid]) or per-feature broadcast ([gid%C]).
-    # Anything else (per-row / internal broadcast) bails to the numpy reference.
-    bc: list[bool] = []
-    counts: list[int] = []
-    for a in arrs:
-        if a.shape == out_shape or a.size == n:
-            bc.append(False)
-            counts.append(int(a.size))
-        elif a.size == cols and _is_trailing_feature(a.shape, out_shape):
-            bc.append(True)
-            counts.append(cols)
-        else:
-            return region.reference(*arrays).astype(npdt), "reference"
+    arrs, out_shape = plan.arrays, plan.out_shape
+    n, cols, bc, counts = plan.total, plan.cols, plan.broadcast, plan.counts
 
     # Resolve the symbol for the lane actually being used. Gating on the JIT
     # symbol and then swapping in the AOT one would make the AOT lane's
@@ -1319,7 +1358,7 @@ def run_pointwise_graph(region: PointwiseGraphRegion, arrays: list[np.ndarray],
     if sym is not None and len(arrs) <= _PW_MAX_INPUTS:
         in_ptrs = (ctypes.c_void_p * len(arrs))(*[a.ctypes.data for a in arrs])
         count_arr = (ctypes.c_int32 * len(arrs))(*counts)
-        out = np.zeros(out_shape, npdt)
+        out: np.ndarray = np.zeros(out_shape, npdt)
         if first is None:
             first = synthesize_pointwise_graph_msl(
                 region, elem, tuple(bc)).encode("utf-8")
@@ -2067,6 +2106,7 @@ class AppleMSLEmitter(KernelEmitter):
         dtype: str = "f32",
         dims: tuple[int, ...] | None = None,
         variant: str = AUTO,
+        broadcast: tuple[bool, ...] | None = None,
         **kwargs: Any,
     ) -> KernelSource:
         if kwargs:
@@ -2107,7 +2147,19 @@ class AppleMSLEmitter(KernelEmitter):
             raise EmitError(
                 f"{type(region).__name__} has a single emitted form; variant "
                 f"{variant!r} is only meaningful for a FusedRegion")
-        source = synth(region, dtype=dtype)
+        if broadcast is not None and not isinstance(region, PointwiseGraphRegion):
+            raise EmitError(
+                f"{type(region).__name__} has no broadcast mask; `broadcast` is "
+                "only meaningful for a PointwiseGraphRegion")
+        if isinstance(region, PointwiseGraphRegion):
+            # The mask belongs to the emitted *body* — a per-feature operand is
+            # uploaded as `cols` elements and must be indexed `[gid % C]`.
+            # Emitting without it and then dispatching a broadcast buffer reads
+            # past its end, which is why the AOT lane passes the plan it will
+            # dispatch under rather than letting this default.
+            source = synth(region, dtype=dtype, broadcast=broadcast)
+        else:
+            source = synth(region, dtype=dtype)
         # B2c: record the shape-specialization key. Symbolic dim identity comes
         # from the region (dim_names) when present; STATIC/BUCKET key on `dims`.
         key = bucket_key(dims, spec, dim_names=getattr(region, "dim_names", None))

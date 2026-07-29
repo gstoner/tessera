@@ -96,7 +96,10 @@ struct LowerControlWhileToAppleGPUPass
   }
 };
 
-static PassRegistration<LowerControlWhileToAppleGPUPass> gReg;
+// No static PassRegistration here: `registerTesseraAppleBackendPipelines()`
+// registers this pass, as it now does all 28 — one list, enforced by
+// `test_apple_pass_registration.py`. Registering the same argument twice
+// leaves MLIR to keep one and discard the other.
 
 } // namespace
 

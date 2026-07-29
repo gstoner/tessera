@@ -334,6 +334,105 @@ def test_aot_pointwise_matches_the_jit_lane_bitwise() -> None:
     np.testing.assert_allclose(aot_out, region.reference(a, b), atol=1e-6)
 
 
+def test_aot_pointwise_compiles_with_the_broadcast_mask_it_dispatches() -> None:
+    """A per-feature operand must be indexed `[gid % C]` by the *prebuilt* kernel.
+
+    The mask follows from the operand shapes, and this lane compiles before the
+    dispatch that classifies them. Emitting under the default all-full mask
+    built a kernel reading a length-`cols` buffer at `[gid]` — past its end,
+    silently, while still reporting `metal_metallib`. The same-shape case above
+    cannot catch that: every mask entry is False there.
+    """
+    _require_toolchain()
+    import numpy as np
+
+    from tessera.compiler.emit import apple_msl
+
+    region = F.PointwiseGraphRegion(
+        ops=(("add", ("x", "bias"), "o"),), inputs=("x", "bias"), output="o")
+    rng = np.random.default_rng(0)
+    x = rng.standard_normal((8, 32)).astype(np.float32)
+    bias = rng.standard_normal((32,)).astype(np.float32)
+
+    plan = apple_msl.pointwise_operand_plan([x, bias])
+    assert plan.broadcast == (False, True), "the fixture must exercise a mask"
+
+    emitter = get_emitter(AIR_TARGET)
+    masked = emitter.emit(region, dtype="f32", broadcast=plan.broadcast).source
+    assert "gid % (uint)C" in masked
+    # Distinct source ⇒ distinct content-addressed metallib, so a masked and an
+    # unmasked kernel can never be served for one another out of the cache.
+    assert masked != emitter.emit(region, dtype="f32").source
+
+    aot_out, aot_tag = apple_air.run_pointwise_graph_aot(region, [x, bias])
+    if aot_tag == "reference":
+        pytest.skip("the device declined the AOT lane")
+    assert aot_tag == "metal_metallib"
+    np.testing.assert_allclose(aot_out, region.reference(x, bias), atol=1e-6)
+
+
+def test_aot_declines_a_region_the_coopmat_kernel_cannot_express() -> None:
+    """A non-coopmat region is declined, not raised through the runner.
+
+    `emit(variant=COOPMAT)` refuses a region carrying a reduction, residual, or
+    prologue. Letting that refusal escape the registered runner would stop the
+    F4 oracle gating those regions at all — the runner has to answer.
+    """
+    import numpy as np
+
+    from tessera.compiler.emit import apple_msl
+
+    region = F.FusedRegion(epilogue=("relu",), reduction="softmax")
+    assert not apple_msl.coopmat_eligible(region), "fixture must be ineligible"
+    rng = np.random.default_rng(0)
+    a = rng.standard_normal((16, 16)).astype(np.float32)
+    b = rng.standard_normal((16, 16)).astype(np.float32)
+
+    out, tag = apple_air.run_fused_region_aot(region, a, b)
+    assert tag == "reference"
+    np.testing.assert_allclose(
+        out, region.reference(a, b, None, None), rtol=1e-5, atol=1e-5)
+
+
+def test_undispatched_families_return_the_reference_not_a_relabelled_jit_run(
+    monkeypatch,
+) -> None:
+    """`reference` must mean numpy, because F4 trusts that tag without comparing.
+
+    Routing an unimplemented AOT family through the JIT lane and relabelling its
+    answer would let a wrong device result past the gate unexamined, and would
+    fold JIT compile and dispatch time into an AOT measurement.
+    """
+    import numpy as np
+
+    from tessera.compiler.emit import apple_msl
+
+    def _forbidden(*_args, **_kwargs):
+        raise AssertionError("the AOT runner must not invoke the JIT lane")
+
+    monkeypatch.setattr(apple_msl, "run_fused_attention", _forbidden)
+    monkeypatch.setattr(apple_msl, "run_gated_matmul_region", _forbidden)
+
+    runner = apple_air.AppleAIRRunner()
+    rng = np.random.default_rng(0)
+    q = rng.standard_normal((8, 16)).astype(np.float32)
+    k = rng.standard_normal((8, 16)).astype(np.float32)
+    v = rng.standard_normal((8, 16)).astype(np.float32)
+    attn = F.AttentionRegion()
+    out, tag = runner.run_fused_attention(attn, q, k, v)
+    assert tag == "reference"
+    np.testing.assert_allclose(out, attn.reference(q, k, v), rtol=1e-6, atol=1e-6)
+
+    a = rng.standard_normal((8, 16)).astype(np.float32)
+    wg = rng.standard_normal((16, 16)).astype(np.float32)
+    wu = rng.standard_normal((16, 16)).astype(np.float32)
+    gated = F.GatedMatmulRegion(gate_act="silu")
+    out, tag = runner.run_gated_matmul_region(gated, a, wg, wu)
+    assert tag == "reference"
+    np.testing.assert_allclose(
+        out, gated.reference(a, wg, wu), rtol=1e-6, atol=1e-6)
+
+
 @pytest.mark.hardware_apple_gpu
 def test_gpu_executes_hand_written_simdgroup_air_ir(tmp_path) -> None:
     """S1 probe: an emitter can reach the matrix units, not just scalar code.

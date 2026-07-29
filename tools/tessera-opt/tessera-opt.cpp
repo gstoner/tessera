@@ -36,8 +36,11 @@
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
 #include "Tessera/IR/Dialects.h"
-#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
+#endif
+#if defined(TESSERA_HAVE_CORE_TESSERA_IR) ||                                  \
+    defined(TESSERA_HAVE_NVIDIA_BACKEND) || defined(TESSERA_HAVE_ROCM_BACKEND)
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #endif
 
 // Sprint V7 (2026-05-22): FA-4 attention dialect registration.
@@ -363,8 +366,11 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
+                  mlir::gpu::GPUDialect, mlir::memref::MemRefDialect,
                   mlir::LLVM::LLVMDialect, mlir::NVVM::NVVMDialect,
-                  mlir::ROCDL::ROCDLDialect>();
+                  mlir::ROCDL::ROCDLDialect, mlir::scf::SCFDialect,
+                  mlir::vector::VectorDialect,
+                  tessera::tile::TesseraTileDialect>();
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND
   tessera::registerTesseraNVIDIABackendDialects(registry);
 #endif

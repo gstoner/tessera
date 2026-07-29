@@ -5,7 +5,7 @@ namespace tessera { namespace x86 {
 
 // Hardware feature query
 bool tessera_x86_amx_supported();
-bool tessera_x86_amx_int8_supported();
+extern "C" bool tessera_x86_amx_int8_supported();
 // Request Linux permission for AMX tile data (no-op on non-Linux)
 bool tessera_x86_amx_enable_linux();
 

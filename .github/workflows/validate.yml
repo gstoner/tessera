@@ -1,9 +1,9 @@
 name: Validate
 
-# Six lanes, separately reported so branch protection can require the
-# fast ones (lint / unit / audit / build) without blocking on optional
-# work (lit / sanitizer).  See .github/BRANCH_PROTECTION.md for the
-# recommended required-check list.
+# Seven lanes, separately reported so branch protection can require the
+# portable gates (lint / unit / audit / build / ROCm compiler) without
+# blocking on optional work (lit / sanitizer). See
+# .github/BRANCH_PROTECTION.md for the recommended required-check list.
 #
 # Mirrors scripts/validate.sh exactly — the local validation spine is
 # the source of truth.  When you add a step there, add a lane (or
@@ -358,7 +358,105 @@ jobs:
           lit tests/tessera-ir -v
 
   # ────────────────────────────────────────────────────────────────────
-  # Lane 6 — sanitizer  (asan / tsan / ubsan smoke)   ~15min
+  # Lane 6 — ROCm compiler (host-free LLVM/MLIR 23)
+  # Required check.
+  #
+  # This is a compiler ownership proof, not an exact-device proof. It builds
+  # the ROCm target artifact pipeline without HIP, requires Apple/NVIDIA
+  # pipelines to remain absent, runs the backend lit suite, and executes the
+  # ROCM-TEST-1 host-free pytest inventory.
+  # ────────────────────────────────────────────────────────────────────
+  rocm-compiler:
+    name: rocm compiler (host-free LLVM/MLIR 23)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install LLVM/MLIR 23 and build tools
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources 2>/dev/null || true
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build wget gnupg ca-certificates
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/apt.llvm.org.gpg >/dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-23 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm23.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang-23 llvm-23-dev llvm-23-tools mlir-23-tools libmlir-23-dev
+          test -f /usr/lib/llvm-23/lib/cmake/llvm/LLVMConfig.cmake
+          test -f /usr/lib/llvm-23/lib/cmake/mlir/MLIRConfig.cmake
+          echo "/usr/lib/llvm-23/bin" >> "$GITHUB_PATH"
+
+      - name: Install compiler-test dependencies
+        env:
+          PYTHON: python
+        run: |
+          python -m pip install -e . --no-deps
+          bash scripts/install_test_deps.sh
+
+      - name: Configure ROCm-only host-free compiler
+        run: |
+          cmake -S . -B build-rocm-ci -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-23 \
+            -DCMAKE_CXX_COMPILER=clang++-23 \
+            -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm \
+            -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
+            -DTESSERA_BUILD_TESTS=ON \
+            -DTESSERA_BUILD_EXAMPLES=OFF \
+            -DTESSERA_BUILD_PYTHON=OFF \
+            -DTESSERA_BUILD_X86_BACKEND=OFF \
+            -DTESSERA_BUILD_NVIDIA_BACKEND=OFF \
+            -DTESSERA_BUILD_ROCM_BACKEND=ON \
+            -DTESSERA_BUILD_APPLE_BACKEND=OFF \
+            -DTESSERA_ENABLE_CUDA=OFF \
+            -DTESSERA_ENABLE_HIP=OFF \
+            -DTESSERA_ROCM_BUILD_RUNTIME=OFF
+
+      - name: Build ROCm compiler drivers
+        run: >-
+          cmake --build build-rocm-ci
+          --target tessera-opt tessera-rocm-opt
+          -j2
+
+      - name: Run ROCm backend lit suite
+        run: cmake --build build-rocm-ci --target check-tessera-rocm
+
+      - name: Run ROCM-TEST-1 ownership gate
+        env:
+          PYTHONPATH: python
+        run: |
+          python scripts/run_rocm_host_free_compiler_tests.py \
+            --build-dir build-rocm-ci \
+            --tool build-rocm-ci/tools/tessera-opt/tessera-opt \
+            --report rocm-host-free-compiler-report.json
+
+      - name: Upload ROCm compiler ownership report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rocm-host-free-compiler-report
+          path: |
+            rocm-host-free-compiler-report.json
+            build-rocm-ci/CMakeCache.txt
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ────────────────────────────────────────────────────────────────────
+  # Lane 7 — sanitizer  (asan / tsan / ubsan smoke)   ~15min
   # Opt-in via PR label `sanitizer-smoke`.  Not required.
   # ────────────────────────────────────────────────────────────────────
   sanitizer:
@@ -399,7 +497,7 @@ jobs:
   validate-required:
     name: validate-required
     runs-on: ubuntu-latest
-    needs: [lint, unit, audit, build]
+    needs: [lint, unit, audit, build, rocm-compiler]
     if: always()
     steps:
       - name: Verify required lanes succeeded
@@ -411,6 +509,7 @@ jobs:
             "${{ needs.unit.result }}"
             "${{ needs.audit.result }}"
             "${{ needs.build.result }}"
+            "${{ needs.rocm-compiler.result }}"
           )
           fail=0
           for r in "${required[@]}"; do
@@ -419,7 +518,7 @@ jobs:
             fi
           done
           if [ "$fail" -ne 0 ]; then
-            echo "::error ::Required validation lane failed: lint=${{ needs.lint.result }} unit=${{ needs.unit.result }} audit=${{ needs.audit.result }} build=${{ needs.build.result }}"
+            echo "::error ::Required validation lane failed: lint=${{ needs.lint.result }} unit=${{ needs.unit.result }} audit=${{ needs.audit.result }} build=${{ needs.build.result }} rocm-compiler=${{ needs.rocm-compiler.result }}"
             exit 1
           fi
           echo "All required lanes passed."

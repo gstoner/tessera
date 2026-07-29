@@ -108,6 +108,42 @@ def _tool_version(command: list[str]) -> dict[str, object]:
     }
 
 
+def _rocm_only_capability_error(
+    capabilities: CompilerBuildCapabilities,
+) -> str | None:
+    """Return a diagnostic when the build is not ROCm-only."""
+
+    if not capabilities.rocm:
+        return "ROCM-TEST-1 requires TESSERA_BUILD_ROCM_BACKEND=ON"
+    foreign = [
+        name for name, enabled in (
+            ("Apple", capabilities.apple),
+            ("NVIDIA", capabilities.nvidia),
+        )
+        if enabled
+    ]
+    if foreign:
+        return (
+            "ROCM-TEST-1 requires a ROCm-only compiler build; disable "
+            + " and ".join(foreign)
+            + " backend support"
+        )
+    return None
+
+
+def _pipeline_probe_error(probes: dict[str, dict[str, object]]) -> str | None:
+    """Return a diagnostic unless ROCm alone owns the probed pipelines."""
+
+    if not probes["rocm"]["available"]:
+        return "ROCm pipeline is unavailable"
+    unexpected = [
+        name for name in ("nvidia", "apple") if probes[name]["available"]
+    ]
+    if unexpected:
+        return "foreign pipeline unexpectedly available: " + ", ".join(unexpected)
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", type=Path, required=True)
@@ -117,8 +153,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     capabilities = CompilerBuildCapabilities.from_cmake_cache(args.build_dir)
-    if not capabilities.rocm:
-        parser.error("ROCM-TEST-1 requires TESSERA_BUILD_ROCM_BACKEND=ON")
+    if capability_error := _rocm_only_capability_error(capabilities):
+        parser.error(capability_error)
     if not args.tool.is_file():
         parser.error(f"tessera-opt not found: {args.tool}")
 
@@ -127,8 +163,12 @@ def main(argv: list[str] | None = None) -> int:
         "nvidia": _probe(args.tool, "lower-tile-to-nvidia"),
         "apple": _probe(args.tool, "tessera-lower-to-apple_gpu"),
     }
-    if not probes["rocm"]["available"]:
-        print(json.dumps({"capabilities": capabilities.as_dict(), "probes": probes}, indent=2))
+    if probe_error := _pipeline_probe_error(probes):
+        print(json.dumps({
+            "capabilities": capabilities.as_dict(),
+            "probes": probes,
+            "probe_contract_error": probe_error,
+        }, indent=2))
         return 1
 
     try:

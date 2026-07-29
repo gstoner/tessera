@@ -91,13 +91,12 @@ void amx_release() {
     _tile_release();
 }
 
-}} // namespace
-
-
-bool tessera_x86_amx_int8_supported() {
+extern "C" bool tessera_x86_amx_int8_supported() {
     unsigned int a,b,c,d;
     cpuid(7, 0, a,b,c,d);
     bool amx_tile = (d & (1u << 24)) != 0;
     bool amx_int8 = (d & (1u << 25)) != 0;
     return amx_tile && amx_int8;
 }
+
+}} // namespace tessera::x86

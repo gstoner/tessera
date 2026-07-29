@@ -16,7 +16,8 @@ def test_apple_gpu_pipeline_is_registered_in_declared_compiler_build(
 ) -> None:
     """Apple lowering is a compiler capability, independent of Metal hardware."""
 
-    tessera_opt = compiler_toolchain.require_tessera_opt()
+    tessera_opt = compiler_toolchain.require_tessera_opt(
+        "tessera-lower-to-apple_gpu")
     source = """module {
       func.func @f(%x: tensor<4x4xf32>) -> tensor<4x4xf32> {
         %0 = tessera.softmax %x : (tensor<4x4xf32>) -> tensor<4x4xf32>

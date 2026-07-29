@@ -17,6 +17,11 @@ from typing import Any, Iterable, Optional
 from ..diagnostics import TesseraDiagnostic
 from .graph_ir import GraphIRDiagnostic, GraphIRModule, GraphIRVerificationError, IROp
 from .op_catalog import canonical_graph_op_name
+from .tile_rasterization import (
+    RASTER_GROUP_CHOICES,
+    RASTER_ORDER_CHOICES,
+    RasterOrder,
+)
 
 
 SCHEDULE_MEMORY_SPACES = {"register", "shared", "lds", "global", "managed", "host", "tmem"}
@@ -359,6 +364,13 @@ def _lower_graph_ops(
                 ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "tile_k", "choices": [32, 64, 128, 256], "frozen": False}),
                 ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "num_warps", "choices": [1, 2, 4, 8], "frozen": False}),
                 ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "num_stages", "choices": [1, 2, 3, 4], "frozen": False}),
+                # Block rasterization: a permutation of block ids onto the tile
+                # grid. Semantics-preserving by construction (tile_rasterization
+                # .is_bijection proves it hardware-free), and one of the largest
+                # levers on cache locality there is — see
+                # docs/audit/compiler/TILESIGHT_ASSESSMENT.md §3.2.
+                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "raster_order", "choices": list(RASTER_ORDER_CHOICES), "frozen": False}),
+                ScheduleOp("schedule.knob", {**_base_attrs(op, idx), "name": "raster_group", "choices": list(RASTER_GROUP_CHOICES), "frozen": False}),
             ])
             scheduled.append(ScheduleOp(
                 "schedule.tile",
@@ -373,6 +385,8 @@ def _lower_graph_ops(
                     "num_stages": _schedule_int(
                         schedule_config, "num_stages", 2
                     ),
+                    "raster_order": _schedule_raster_order(schedule_config),
+                    "raster_group": _schedule_raster_group(schedule_config),
                     "cost_model": (
                         "measured"
                         if (schedule_config or {}).get("evidence") == "measured"
@@ -437,6 +451,40 @@ def _schedule_int(
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"schedule {name} must be an integer")
     return value
+
+
+def _schedule_raster_order(config: dict[str, object] | None) -> str:
+    """The requested block rasterization order, defaulting to the identity.
+
+    An unknown order is rejected rather than silently falling back to row-major:
+    a schedule that asked for a swizzle and quietly got none would look like the
+    swizzle did nothing (Decision #21).
+    """
+    if config is None or "raster_order" not in config:
+        return RasterOrder.ROW_MAJOR.value
+    value = config["raster_order"]
+    if not isinstance(value, str) or value not in RASTER_ORDER_CHOICES:
+        raise ValueError(
+            f"schedule raster_order must be one of {list(RASTER_ORDER_CHOICES)}, "
+            f"got {value!r}")
+    return value
+
+
+def _schedule_raster_group(config: dict[str, object] | None) -> int:
+    """The requested rasterization panel height, defaulting to 1 (ungrouped).
+
+    Validated to the same bound ``TuningConfig`` enforces. Without this the two
+    boundaries disagree: ``raster_group: 0`` would be rejected by the tuning
+    config but sail into ``schedule.tile`` attrs, where it divides by zero in
+    :func:`tile_rasterization._grouped`.
+
+    Not restricted to ``RASTER_GROUP_CHOICES`` — those are sweep hints, not a
+    legality bound, and a measured optimum may sit off the grid.
+    """
+    group = _schedule_int(config, "raster_group", 1)
+    if group < 1:
+        raise ValueError(f"schedule raster_group must be >= 1, got {group}")
+    return group
 
 
 def _lower_schedule_directive(op: IROp, ordinal: int) -> list[ScheduleOp]:

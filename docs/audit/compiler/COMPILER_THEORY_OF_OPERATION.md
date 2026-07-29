@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-02
+last_updated: 2026-07-28
 audit_role: plan
 plan_state: open
 ---
@@ -16,6 +16,12 @@ plan_state: open
 > synthesis), [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md) (the scoring engine that
 > gates promotion), [`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) (current state), and
 > [`STAGE_A_EMIT_PLAN.md`](STAGE_A_EMIT_PLAN.md) (cross-vendor emit grounding).
+>
+> **External assessment:**
+> [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) — analytical tile-centric
+> cost modeling (arXiv:2607.22432), and the audit finding it surfaced: the
+> analytical cost model this document's §4 step 3 falls back to was a mock. See
+> §4 and W7 below.
 
 ---
 
@@ -156,6 +162,11 @@ For each `(op, shape, dtype, target)`:
 3. **Score the surviving (in-budget) candidates** — on a system with real silicon
    for `target`, measure latency (measure-at-first-miss, then cache). Without
    silicon, score by the Tier 2 cost model (roofline / `MmaDescriptor` footprint).
+   **Caveat (2026-07-28):** that hardware-free fallback is weak. Target profiles
+   now carry calibrated performance parameters (`TargetPerf`), but the roofline
+   *estimator* that consumes them is still shallow — see
+   [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) §2. Treat measured
+   arbitration as the only load-bearing scorer until that is replaced.
 4. **Select the fastest in-budget candidate + cache** it keyed by
    `device+shape-bucket` (§8 W2 — one tuned kernel serves a bucket of shapes).
 5. **Record** — the winning tier + measured latency + the accuracy margin into
@@ -334,7 +345,7 @@ when the kernel spine is proven across the fleet.
 | **W4** | **Layout & data-movement optimization** (layout propagation, transpose elimination, packing) as a *wired* pass | A large share of real DL latency is data movement, not FLOPs | `LayoutAssignmentPass` carries row/column-major contracts through transpose, pointwise/fused epilogues, GEMM, and last-axis reduction while preserving packed storage. x86 consumes row/column-major/BHSD/NHWC Graph casts. ROCm's signed-INT4 terminal pack feeds IU4 WMMA, group-scaled dequant-GEMM, nibblewise ReLU, indexed sparse gather, and packed cache append without host unpack/repack. Exact gfx1151 operation-total medians are 1.93 ms dequant-GEMM, 3.88 ms elementwise, 2.31 ms sparse gather, and 2.26 ms cache append. Terminal packing remains opt-in outside operations with one of these physical ABIs. Apple/NVIDIA retain architecture-owned consumers and policy. **Remaining:** sibling-device physical evidence and default-enable decisions per consumer envelope. |
 | **W5** | **Training / backward-graph optimization** (backward fusion, optimizer-step fusion, remat as global opt) | The compiler must optimize the *whole* training step, not just forward inference | Native Graph-IR adjoints cover tensor algebra, reductions, activations, softmax, affine normalization, regression/BCE/class/distribution losses, and explicit Momentum/Nesterov/Adam/AdamW state. ROCm now owns compiler-generated one-launch standalone Adam/AdamW and arbitrary-axis KL/JS VJPs; Lion has explicit moment state plus native forward execution. Single-use MSE/MAE/Huber/SmoothL1/BCE prediction gradients fuse directly into SGD or AdamW; one dynamic Linalg loop and exact AVX-512/gfx1151 ABIs preserve dTarget while eliminating dPrediction. Dynamic RMSNorm/LayerNorm additionally fuse canonical softcap on gfx1151. Runtime mean extent lowers through `tensor.dim`; max/min retain equal-share finite-tie semantics. **Remaining:** the runtime-ambiguous aligned dynamic-broadcast case, compiled Lion VJP, Adafactor factored-state execution/adjoint, additional loss/optimizer adjoints, broader training-step epilogues, and Apple/NVIDIA training/backward materializers. |
 | **W6** | **Distributed optimization** (sharding propagation, collective placement, comm/compute overlap scheduling) | Frontier training is multi-GPU; overlap scheduling is a top differentiator | Schedule IR has mesh/ZeRO/1F1B + MegaMoE overlap exists, but as runtime machinery, not a middle-end optimization pass; multi-rank is still mock-collective |
-| **W7** | **Absolute performance truth** (roofline attainment as the success metric) | "Beats per-op dispatch / beats MPS" is *relative*; world-class means *% of peak* | Flywheel + roofline tooling exist; the plans' success bar is relative — should add an absolute attainment target per hot path |
+| **W7** | **Absolute performance truth** (roofline attainment as the success metric) | "Beats per-op dispatch / beats MPS" is *relative*; world-class means *% of peak* | Flywheel + roofline tooling exist; the plans' success bar is relative — should add an absolute attainment target per hot path. **Unblocked 2026-07-28:** the missing input was that target profiles carried *capability* data but no *performance* data — no peak TFLOPS, no DRAM bandwidth, no L2. `compiler/target_perf.py` now supplies calibrated `TargetPerf` per profile, so "% of peak" is computable. See [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) §2/§4 |
 | **W8** | **Long-tail op codegen** (generic elementwise/reduction/scatter/gather synthesis) | **Premise stale (reassessed 2026-07-08).** The named families are native — `generated/e2e_op_coverage.md` = 280 complete / 6 runnable_reference / 0 artifact_only; gather/scatter*/argmax/cumsum/sort/where/softmax are `fused`/`device_verified_jit`/`device_verified_abi` after the warp-shuffle lanes. The old "~125 numpy-only" was registry-conservative prose (Decision #26). | **No *generic-synthesis* gap, but per-target native coverage ≠ complete** — the E2E rollup is cross-target; read `s_series_status.md` **Backend Proof By Target**. Open there: the **EBM domain family** (x86 `reference`, ROCm `planned`), ROCm `gemm` (`artifact_only`), gated NVIDIA/Apple. Plus the **6 collective/MoE** refs (need NCCL/RCCL → W6) + `not_applicable` structural/view/host ops. |
 
 **Two fleet superpowers these dimensions unlock (cheap, high-value):**

@@ -201,6 +201,50 @@ def test_pipeline_inner_passes_are_capability_checked(tmp_path, monkeypatch):
         )
 
 
+def test_toolchain_fixture_reaches_the_capable_driver_too(tmp_path, monkeypatch):
+    """The fixture must *select* a capable driver, not just check the preferred one.
+
+    `CompilerToolchain` stores only the preferred path, so capability-checking
+    that one field would skip on a host whose PATH build can run the passes —
+    turning the naming of passes into a coverage loss instead of a better skip.
+    """
+    lean = _fake_tessera_opt(
+        tmp_path / "in-repo" / "tessera-opt", "pass-pipeline", "canonicalize"
+    )
+    full = _fake_tessera_opt(
+        tmp_path / "on-path" / "tessera-opt",
+        "pass-pipeline", "canonicalize", "lower-tile-to-rocm",
+    )
+    monkeypatch.delenv("TESSERA_OPT", raising=False)
+    monkeypatch.delenv("TESSERA_OPT_BIN", raising=False)
+    monkeypatch.setattr(compiler_tool, "_DEFAULT_CANDIDATES", (lean,))
+    monkeypatch.setattr(compiler_tool.shutil, "which", lambda _: str(full))
+    tools = CompilerToolchain.discover()
+
+    def resolved(*passes: str) -> Path:
+        """Resolve, turning an unexpected skip into a failure.
+
+        The regression this guards against *is* a skip, so letting one escape
+        would leave the ratchet green on the very state it exists to catch.
+        """
+        try:
+            return tools.require_tessera_opt(*passes)
+        except pytest.skip.Exception as skipped:
+            pytest.fail(f"a capable driver was discoverable, but got: {skipped}")
+
+    assert tools.tessera_opt == lean, "preference still picks the in-repo build"
+    assert resolved() == lean, "no passes named: no capability gate"
+    assert resolved("canonicalize") == lean
+    assert resolved("lower-tile-to-rocm") == full
+    assert resolved(
+        "--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1151})") == full
+
+    # Nothing capable anywhere is still a skip, not a silent wrong binary.
+    monkeypatch.setattr(compiler_tool.shutil, "which", lambda _: None)
+    with pytest.raises(pytest.skip.Exception, match="lower-tile-to-rocm"):
+        CompilerToolchain.discover().require_tessera_opt("lower-tile-to-rocm")
+
+
 def test_compiler_toolchain_missing_state_is_a_canonical_skip():
     tools = CompilerToolchain(tessera_opt=None, mlir_opt=None)
     with pytest.raises(pytest.skip.Exception, match="requires tessera-opt"):
@@ -230,8 +274,10 @@ def test_migrated_compiler_fixture_has_no_private_tool_probe():
     assert 'REPO / "build/tools/tessera-opt/tessera-opt"' not in text
     # Open paren, not `()` — the fixture should be *told which passes* it needs,
     # so a build without them skips instead of failing inside MLIR. Requiring
-    # the empty-argument form would forbid exactly that.
+    # the empty-argument form would forbid exactly that. Naming the pipeline
+    # is what makes the requirement and the executed passes one string.
     assert "compiler_toolchain.require_tessera_opt(" in text
+    assert "lower-tile-to-rocm" in text
 
 
 @pytest.mark.parametrize(

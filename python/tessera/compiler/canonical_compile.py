@@ -262,8 +262,15 @@ class CompileResult:
         # a legacy Apple value call: doing so would make runtime.launch choose
         # the old executor and silently bypass the descriptor it was given.
         if self.native_image is not None and self.launch_descriptor is not None:
-            meta["compiler_path"] = "apple_native_descriptor"
-            meta["apple_target_ir_kind"] = "native_descriptor"
+            meta["compiler_path"] = {
+                "apple_gpu": "apple_native_descriptor",
+                "apple_cpu": "apple_cpu_native_descriptor",
+                "nvidia_sm120": "nvidia_sm120_native_descriptor",
+                "rocm_gfx1151": "rocm_gfx1151_native_descriptor",
+                "x86": "x86_native_descriptor",
+            }.get(self.target, f"{self.target}_native_descriptor")
+            if self.target in ("apple_cpu", "apple_gpu"):
+                meta["apple_target_ir_kind"] = "native_descriptor"
         elif self.target in ("apple_cpu", "apple_gpu"):
             try:
                 from tessera.compiler import driver as _drv

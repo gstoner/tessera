@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from ..telemetry import make_event
+from .reuse_distance_cost import estimate_gemm_reuse_distance
 from .rounding import RTNE
 from .tile_rasterization import RASTER_ORDER_CHOICES
 
@@ -100,15 +101,11 @@ class TuningConfig:
     #: to ``"row_major"``, which is the mapping every emitter already uses, so an
     #: unset config is byte-identical to pre-knob behaviour.
     #:
-    #: **Carried, not swept.** Neither ``LegalGEMMCandidateGenerator`` nor the
-    #: Optuna objective enumerates this axis, because the only scorer available
-    #: hardware-free is ``_mock_latency``, which does not model rasterization at
-    #: all — adding the axis would multiply the search space by ~20 for zero
-    #: signal and let TPE "discover" an arbitrary winner. It becomes a real
-    #: search dimension when a scorer can distinguish its values: an on-device
-    #: measurement, or the tile-reuse-distance model
-    #: (``docs/audit/compiler/TILESIGHT_ASSESSMENT.md`` §3.1 T1). Until then the
-    #: field exists so a measured or hand-set value round-trips end to end.
+    #: **Carried, not analytically promoted.** The reuse-distance model can score
+    #: this axis, but ROCM-CALIB-1 proved that an unvalidated locality metric must
+    #: not change a production raster choice. The field remains available to
+    #: exact-device sweeps and measured records; automatic enumeration waits for
+    #: an architecture-owned correlation/retain verdict.
     raster_order: str = "row_major"
     #: Panel height for the grouped orders. 1 makes them degenerate to
     #: row/column-major, keeping the identity reachable from anywhere in the
@@ -180,7 +177,7 @@ class TuningResult:
     trial_id: int = 0
     status: str = "ok"
     reason: str = ""
-    method: str = "roofline"
+    method: str = "reuse_distance"
 
     def __repr__(self) -> str:
         suffix = f", status={self.status!r}" if self.status != "ok" else ""
@@ -279,8 +276,14 @@ class BayesianAutotuner:
     workload:
         The GEMM workload to optimise.
     peak_tflops:
-        Hardware peak (TFLOPs/s); used by the synthetic latency model.
+        Hardware peak (TFLOPs/s); used by the analytical compute bound.
         Default 312 = NVIDIA A100 BF16.
+    dram_bw_gbps:
+        Sustained or specification DRAM bandwidth in GB/s.  The provenance is
+        owned by ``TargetPerf`` at production call sites.
+    cache_bytes:
+        Capacity of the cache represented by the tile-reuse simulation.  Zero
+        is an explicit conservative no-cache boundary, not a guessed fallback.
     seed:
         Random seed for reproducibility.
     smem_budget_bytes:
@@ -297,11 +300,23 @@ class BayesianAutotuner:
         workload: GEMMWorkload,
         *,
         peak_tflops: float = 312.0,
+        dram_bw_gbps: float = 2039.0,
+        cache_bytes: int = 40 * 1024 * 1024,
         seed: int = 42,
         smem_budget_bytes: int = 98_304,
     ) -> None:
+        if peak_tflops <= 0:
+            raise ValueError("peak_tflops must be positive")
+        if dram_bw_gbps <= 0:
+            raise ValueError("dram_bw_gbps must be positive")
+        if cache_bytes < 0:
+            raise ValueError("cache_bytes must be non-negative")
+        if smem_budget_bytes <= 0:
+            raise ValueError("smem_budget_bytes must be positive")
         self.workload = workload
         self.peak_tflops = peak_tflops
+        self.dram_bw_gbps = dram_bw_gbps
+        self.cache_bytes = cache_bytes
         self.seed = seed
         self.smem_budget_bytes = smem_budget_bytes
         self._results: List[TuningResult] = []
@@ -350,6 +365,9 @@ class BayesianAutotuner:
             if "layout" in columns:
                 filters.append("layout=?")
                 params.append(self.workload.layout)
+            if "movement_json" in columns:
+                filters.append("movement_json=?")
+                params.append(json.dumps(dict(self.workload.movement), sort_keys=True))
             cur = conn.execute(
                 f"SELECT {', '.join(select_cols)} FROM tuning_results WHERE {' AND '.join(filters)}",
                 tuple(params),
@@ -387,8 +405,7 @@ class BayesianAutotuner:
                         method=str(row[11]),
                     )
                     self._results.append(res)
-                    if self._best is None or res.tflops > self._best.tflops:
-                        self._best = res
+                    self._consider_best(res)
                     count += 1
                 except (ValueError, TypeError) as exc:
                     self._warm_start_skipped.append(
@@ -431,39 +448,62 @@ class BayesianAutotuner:
             conn.commit()
 
     # ------------------------------------------------------------------
-    # Synthetic latency model (used in place of real kernel measurement)
+    # Hardware-free reuse-distance model
     # ------------------------------------------------------------------
 
-    def _mock_latency(self, cfg: TuningConfig) -> float:
-        """
-        Analytical roofline model with tile- and stage-efficiency factors.
+    def _analytical_latency(self, cfg: TuningConfig) -> float:
+        return estimate_gemm_reuse_distance(
+            self.workload,
+            cfg,
+            peak_tflops=self.peak_tflops,
+            dram_bw_gbps=self.dram_bw_gbps,
+            cache_bytes=self.cache_bytes,
+        ).latency_ms
 
-        Optimal point: tile_m=128, tile_n=128, tile_k=32, num_warps=4, num_stages=2.
-        Deviations incur multiplicative penalties to simulate realistic behaviour.
-        """
-        roofline_ms = self.workload.flops() / (self.peak_tflops * 1e12) * 1e3
-
-        # Tile efficiency: normalise to 128×128
-        tile_area = cfg.tile_m * cfg.tile_n
-        tile_eff = min(math.sqrt(tile_area) / 128.0, 1.0)
-
-        # Stage penalty: 2 stages is optimal for most A100 configs
-        stage_pen = 1.0 + abs(cfg.num_stages - 2) * 0.08
-
-        # Warp penalty: 4 warps is optimal
-        warp_pen = 1.0 + abs(math.log2(cfg.num_warps) - 2) * 0.05
-
-        # Small-K penalty: tile_k < 32 is wasteful
-        k_pen = 1.0 + max(0, math.log2(32) - math.log2(cfg.tile_k)) * 0.04
-
-        return roofline_ms / max(tile_eff, 1e-6) * stage_pen * warp_pen * k_pen
-
-    def _evaluate(self, cfg: TuningConfig, trial_id: int, *, method: str = "roofline") -> TuningResult:
-        latency_ms = self._mock_latency(cfg)
+    def _evaluate(
+        self,
+        cfg: TuningConfig,
+        trial_id: int,
+        *,
+        method: str = "reuse_distance",
+    ) -> TuningResult:
+        latency_ms = self._analytical_latency(cfg)
         tflops = self.workload.tflops_at(latency_ms)
         status = "unmeasured" if method == "on_device" else "ok"
-        reason = "runtime device timers are not wired; using deterministic roofline estimate" if method == "on_device" else ""
-        return TuningResult(cfg, latency_ms, tflops, time.time(), trial_id, status, reason, method)
+        reason = (
+            "runtime device timers are not wired; reuse-distance estimate is "
+            "reported but cannot drive lowering"
+            if method == "on_device"
+            else ""
+        )
+        actual_method = "on_device" if method == "on_device" else "reuse_distance"
+        return TuningResult(
+            cfg,
+            latency_ms,
+            tflops,
+            time.time(),
+            trial_id,
+            status,
+            reason,
+            actual_method,
+        )
+
+    @staticmethod
+    def _result_rank(result: TuningResult) -> tuple[int, int, float]:
+        """Measured exact-workload rows always outrank analytical estimates."""
+
+        return (
+            int(result.status == "ok" and result.method == "measured"),
+            int(result.status == "ok"),
+            result.tflops,
+        )
+
+    def _consider_best(self, result: TuningResult) -> None:
+        if (
+            self._best is None
+            or self._result_rank(result) > self._result_rank(self._best)
+        ):
+            self._best = result
 
     def _is_feasible(self, cfg: TuningConfig) -> bool:
         return self._candidate_generator().rejection_reason(cfg) == ""
@@ -502,7 +542,9 @@ class BayesianAutotuner:
     # Public entry point
     # ------------------------------------------------------------------
 
-    def tune(self, max_trials: int = 50, *, method: str = "roofline") -> TuningResult:
+    def tune(
+        self, max_trials: int = 50, *, method: str = "reuse_distance"
+    ) -> TuningResult:
         """
         Search for the best TuningConfig.
 
@@ -519,7 +561,7 @@ class BayesianAutotuner:
         TuningResult
             The best configuration found.
         """
-        if method in {"on_device", "grid", "roofline"}:
+        if method in {"on_device", "grid", "roofline", "reuse_distance"}:
             return self._tune_grid(max_trials, method=method)
         try:
             import optuna  # noqa: F401
@@ -527,7 +569,9 @@ class BayesianAutotuner:
         except ImportError:
             return self._tune_grid(max_trials, method=method)
 
-    def _tune_optuna(self, max_trials: int, *, method: str = "roofline") -> TuningResult:
+    def _tune_optuna(
+        self, max_trials: int, *, method: str = "reuse_distance"
+    ) -> TuningResult:
         import optuna
 
         optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -551,8 +595,7 @@ class BayesianAutotuner:
                 raise optuna.TrialPruned()
             res = self._evaluate(cfg, trial.number, method=method)
             self._results.append(res)
-            if self._best is None or res.tflops > self._best.tflops:
-                self._best = res
+            self._consider_best(res)
             return res.tflops  # maximise
 
         sampler = optuna.samplers.TPESampler(seed=self.seed)
@@ -577,7 +620,9 @@ class BayesianAutotuner:
             raise ValueError("no legal GEMM tuning candidates were available")
         return self._best
 
-    def _tune_grid(self, max_trials: int, *, method: str = "roofline") -> TuningResult:
+    def _tune_grid(
+        self, max_trials: int, *, method: str = "reuse_distance"
+    ) -> TuningResult:
         """Deterministic grid search fallback."""
         trial_id = len(self._results)
         candidates = self.legal_candidates()
@@ -587,8 +632,7 @@ class BayesianAutotuner:
         for cfg in candidates[:max_trials]:
             res = self._evaluate(cfg, trial_id, method=method)
             self._results.append(res)
-            if self._best is None or res.tflops > self._best.tflops:
-                self._best = res
+            self._consider_best(res)
             trial_id += 1
 
         # By contract, the loop above sets ``self._best`` at least once

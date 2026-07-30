@@ -1,10 +1,10 @@
 """Workstream C1 — x86 (Zen 5) codegen plugin contract + F4 gating.
 
-Mirrors the Apple emitter/runner contract tests for the new x86 backend
-(`emit/x86_llvm.py`). Three layers, matching the handoff's definition of done:
+Gates the portable-C fused-region candidate (`emit/x86_c.py`) under the
+canonical x86 arbiter. Three layers match the handoff's definition of done:
 
 1. **Registration + emit (host-free)** — the three seams register for target
-   "x86"; `emit` produces C source and rejects unsupported regions/policies/dtypes
+   "x86_c"; `emit` produces C source and rejects unsupported regions/policies/dtypes
    (Decision #21).
 2. **F4 gating (host-free-safe)** — the universal oracle gates the x86 runner:
    a wrong kernel is rejected, a correct one trusted. On a host without a C
@@ -12,7 +12,7 @@ Mirrors the Apple emitter/runner contract tests for the new x86 backend
    which the oracle trusts — so the layer stays green everywhere and becomes a
    real silicon check on the Zen 5 box.
 3. **Real execution (needs a C compiler)** — compile + `ctypes` launch on this
-   box; assert the kernel ran ("x86_native") and matches numpy across the
+   box; assert the kernel ran ("x86_c_native") and matches numpy across the
    epilogue / reduction / prologue chains.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 import tessera.compiler.fusion as F
-import tessera.compiler.emit.x86_llvm as x86  # noqa: F401 — self-registers
+import tessera.compiler.emit.x86_c as x86  # noqa: F401 — self-registers
 from tessera.compiler.emit.kernel_emitter import (
     EmitError, SpecPolicy, get_emitter, get_runner,
 )
@@ -29,14 +29,12 @@ from tessera.compiler.emit.kernel_emitter import (
 import platform
 import shutil
 
-#: Every gate below guards an `execution == "x86_native"` assertion, so it needs
-#: an x86 *host*, not merely a compiler. `_x86_compile_fn` builds with
-#: `-march=native`; on arm64 that targets ARM, the runner correctly declines,
-#: and the lane reports "reference". Gating on the compiler alone made those
-#: read as backend failures on an Apple Silicon box. See
-#: docs/audit/backend/x86/todo.md (X86-1) — the fix is proving the lane on x86,
-#: not relaxing the assertion.
-_IS_X86_HOST = platform.machine().lower() in {"x86_64", "amd64", "i386", "i686"}
+#: Every gate below guards an `execution == "x86_c_native"` assertion, so the
+#: host must implement the explicit x86-64-v4 artifact profile.
+_IS_X86_HOST = (
+    platform.machine().lower() in {"x86_64", "amd64", "i386", "i686"}
+    and x86.host_supports_x86_64_v4()
+)
 _HAVE_CC = (
     _IS_X86_HOST
     and x86._cc() is not None
@@ -48,22 +46,33 @@ _HAVE_CC = (
 
 def test_x86_seams_registered():
     from tessera.compiler.emit.kernel_cache import get_compiler
-    assert get_emitter("x86").target == "x86"
-    assert get_runner("x86").target == "x86"
-    assert callable(get_compiler("x86"))
+    assert get_emitter("x86_c").target == "x86_c"
+    assert get_runner("x86_c").target == "x86_c"
+    assert callable(get_compiler("x86_c"))
+
+
+def test_legacy_x86_llvm_module_is_compatibility_only():
+    import tessera.compiler.emit.x86_llvm as legacy
+
+    assert legacy.X86CEmitter is x86.X86CEmitter
+    assert legacy.X86CRunner is x86.X86CRunner
+    assert legacy.X86GenericCCandidate is x86.X86GenericCCandidate
+    assert get_emitter("x86_c").target == "x86_c"
+    assert get_runner("x86_c").target == "x86_c"
 
 
 def test_x86_does_not_hijack_active_runner():
     # Registered default=False, so Apple stays the active default runner.
     from tessera.compiler.emit.kernel_emitter import active_runner
     ar = active_runner()
-    assert ar is None or ar.target != "x86"
+    assert ar is None or ar.target != "x86_c"
 
 
 def test_emit_produces_c_source():
-    src = get_emitter("x86").emit(F.FusedRegion(epilogue=("bias", "gelu")), dtype="f32")
+    src = get_emitter("x86_c").emit(F.FusedRegion(epilogue=("bias", "gelu")), dtype="f32")
     assert src.lang == "c"
     assert src.entry == "tessera_x86_fused"
+    assert "tessera-x86-c-architecture: x86-64-v4" in src.source
     assert "int tessera_x86_fused(" in src.source
     assert "bias[n]" in src.source and "tanhf" in src.source  # bias + gelu emitted
 
@@ -72,7 +81,7 @@ def test_emit_column_major_uses_physical_stride_contract():
     region = F.FusedRegion(
         epilogue=("relu",), a_layout="col_major", b_layout="col_major"
     )
-    src = get_emitter("x86").emit(region, dtype="f32")
+    src = get_emitter("x86_c").emit(region, dtype="f32")
     assert "A[(long)k*M + m]" in src.source
     assert "B[(long)n*K + k]" in src.source
     assert tuple(layout.order.value for layout in src.layouts) == (
@@ -83,14 +92,14 @@ def test_emit_column_major_uses_physical_stride_contract():
 
 def test_emit_rejects_non_fused_region():
     with pytest.raises(EmitError, match="cannot emit"):
-        get_emitter("x86").emit(F.AttentionRegion())
+        get_emitter("x86_c").emit(F.AttentionRegion())
 
 
 def test_emit_accepts_dynamic_spec():
     # DYNAMIC is supported (Workstream G / W2): the runtime-arg kernel is
     # dims-invariant, so DYNAMIC emits the same source as BUCKET — one compiled
     # kernel serves every shape (see test_dynamic_shape_emit.py for the full proof).
-    e = get_emitter("x86")
+    e = get_emitter("x86_c")
     region = F.FusedRegion(epilogue=("relu",))
     dyn = e.emit(region, spec=SpecPolicy.DYNAMIC)
     assert dyn.spec is SpecPolicy.DYNAMIC
@@ -99,7 +108,7 @@ def test_emit_accepts_dynamic_spec():
 
 def test_emit_rejects_non_f32_dtype():
     with pytest.raises(EmitError, match="f32"):
-        get_emitter("x86").emit(F.FusedRegion(epilogue=("relu",)), dtype="f16")
+        get_emitter("x86_c").emit(F.FusedRegion(epilogue=("relu",)), dtype="f16")
 
 
 # ── 2. F4 gating (host-free-safe) ─────────────────────────────────────────────
@@ -110,7 +119,7 @@ def test_oracle_trusts_correct_or_fallback_x86():
     for r in (F.FusedRegion(epilogue=("relu",)),
               F.FusedRegion(epilogue=("bias", "gelu")),
               F.FusedRegion(epilogue=(), reduction="softmax")):
-        assert F.verify_synthesized_region(r, runner=get_runner("x86"), force=True) is True
+        assert F.verify_synthesized_region(r, runner=get_runner("x86_c"), force=True) is True
 
 
 def test_oracle_rejects_wrong_x86_kernel():
@@ -120,7 +129,7 @@ def test_oracle_rejects_wrong_x86_kernel():
 
     class _WrongX86(x86.X86CRunner):
         def run_fused_region(self, region, A, B, bias=None, *a, **k):
-            return np.full((A.shape[0], B.shape[1]), 999.0, np.float32), "x86_native"
+            return np.full((A.shape[0], B.shape[1]), 999.0, np.float32), "x86_c_native"
 
     assert F.verify_synthesized_region(
         F.FusedRegion(epilogue=("relu",)), runner=_WrongX86(), force=True) is False
@@ -144,13 +153,13 @@ _CHAINS = [
 @pytest.mark.skipif(not _HAVE_CC, reason="needs an x86 host with a C compiler (see backend/x86/todo.md X86-1)")
 @pytest.mark.parametrize("region", _CHAINS, ids=lambda r: f"{r.epilogue}/{r.reduction}/{r.prologue}")
 def test_x86_kernel_runs_and_matches_numpy(region):
-    runner = get_runner("x86")
+    runner = get_runner("x86_c")
     rng = np.random.default_rng(0)
     A = rng.standard_normal((8, 12)).astype(np.float32)
     B = rng.standard_normal((12, 16)).astype(np.float32)
     bias = rng.standard_normal((16,)).astype(np.float32) if region.has_bias else None
     out, execution = runner.run_fused_region(region, A, B, bias)
-    assert execution == "x86_native"  # a real compiled kernel ran on this box
+    assert execution == "x86_c_native"  # the portable-C candidate ran
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-3)
 
 
@@ -170,7 +179,7 @@ def test_x86_missing_required_buffer_declines_not_segfault(
         """
         import numpy as np
         import tessera.compiler.fusion as F
-        import tessera.compiler.emit.x86_llvm as x86
+        import tessera.compiler.emit.x86_c as x86
         r = x86.X86CRunner()
         A = np.zeros((8, 12), np.float32)
         B = np.zeros((12, 16), np.float32)
@@ -203,8 +212,8 @@ def test_x86_residual_path_matches_numpy():
     A = rng.standard_normal((8, 12)).astype(np.float32)
     B = rng.standard_normal((12, 16)).astype(np.float32)
     R = rng.standard_normal((8, 16)).astype(np.float32)
-    out, execution = get_runner("x86").run_fused_region(region, A, B, None, residual=R)
-    assert execution == "x86_native"
+    out, execution = get_runner("x86_c").run_fused_region(region, A, B, None, residual=R)
+    assert execution == "x86_c_native"
     assert np.allclose(out, region.reference(A, B, None, R), atol=1e-3)
 
 
@@ -219,7 +228,7 @@ def test_x86_dynamic_route_materializes_strided_layout_and_records_guards():
     B = rng.standard_normal((14, 11)).astype(np.float32)[::2, :]
     assert not A.flags.c_contiguous and not B.flags.c_contiguous
     out, execution = runner.run_fused_region(region, A, B)
-    assert execution == "x86_native"
+    assert execution == "x86_c_native"
     np.testing.assert_allclose(out, region.reference(A, B), rtol=1e-4, atol=1e-4)
     assert runner.last_launch_contract == {
         "spec": "dynamic",
@@ -248,7 +257,7 @@ def test_x86_column_major_physical_abi_matches_numpy(a_layout, b_layout):
     a = rng.standard_normal((17, 13)).astype(np.float32)
     b = rng.standard_normal((13, 11)).astype(np.float32)
     out, execution = runner.run_fused_region(region, a, b)
-    assert execution == "x86_native"
+    assert execution == "x86_c_native"
     np.testing.assert_allclose(
         out, region.reference(a, b), rtol=2e-4, atol=2e-4
     )
@@ -324,5 +333,5 @@ def test_x86_arbiter_falls_to_generic_when_aocl_absent():
     B = rng.standard_normal((12, 16)).astype(np.float32)
     bias = rng.standard_normal((16,)).astype(np.float32)
     out, tag = run_arbitrated(region, OP_FUSED_REGION, "x86", A, B, bias)
-    assert tag == "x86_native"
+    assert tag == "x86_c_native"
     assert np.allclose(out, region.reference(A, B, bias), atol=1e-3)

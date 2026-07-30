@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Mapping, Sequence
 
 from .autotune_v2 import GEMMWorkload, LegalGEMMCandidateGenerator, TuningConfig
 from .capabilities import CAPABILITY_REGISTRY_VERSION, normalize_target
+from .reuse_distance_cost import estimate_gemm_reuse_distance
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .target_perf import TargetPerf
@@ -36,7 +37,7 @@ class SelectedSchedule:
     target: str
     config: TuningConfig
     cache_key: str
-    method: str = "roofline"
+    method: str = "reuse_distance"
     capability_version: str = CAPABILITY_REGISTRY_VERSION
 
     def to_dict(self) -> dict[str, object]:
@@ -53,19 +54,23 @@ class SelectedSchedule:
 class SchedulePlanner:
     """Deterministic legality -> cost -> selected schedule pipeline.
 
-    .. warning::
-       The **legality** half is real; the **cost** half is not yet. See
-       :func:`_estimate_latency_ms` — it has no memory term, so it cannot tell a
-       compute-bound shape from a memory-bound one and must not be treated as a
-       ranking oracle. Prefer :meth:`for_target` over the bare constructor so at
-       least the peak is the right hardware's, and treat measured arbitration
-       (``emit/autotune.py``) as the only load-bearing scorer.
-       See ``docs/audit/compiler/TILESIGHT_ASSESSMENT.md`` §2.
+    Legal candidates are ranked by a tile-granular reuse-distance/cache model.
+    The model is a pruning signal, not promotion evidence: exact-device measured
+    arbitration remains authoritative for near-neighbour selection.
     """
 
-    def __init__(self, *, peak_tflops: float = 312.0, smem_budget_bytes: int = 98_304,
+    def __init__(self, *, peak_tflops: float = 312.0,
+                 dram_bw_gbps: float = 2039.0,
+                 cache_bytes: int = 40 * 1024 * 1024,
+                 smem_budget_bytes: int = 98_304,
                  perf: "TargetPerf | None" = None) -> None:
+        if peak_tflops <= 0 or dram_bw_gbps <= 0 or cache_bytes < 0:
+            raise ValueError(
+                "peak_tflops/dram_bw_gbps must be > 0 and cache_bytes >= 0"
+            )
         self.peak_tflops = peak_tflops
+        self.dram_bw_gbps = dram_bw_gbps
+        self.cache_bytes = cache_bytes
         self.smem_budget_bytes = smem_budget_bytes
         #: The device profile these numbers came from, when constructed via
         #: :meth:`for_target`. ``None`` means the caller supplied bare numbers
@@ -79,10 +84,9 @@ class SchedulePlanner:
         """Build a planner from a target's **calibrated** performance profile
         rather than the A100-shaped default.
 
-        The bare ``SchedulePlanner()`` default is ``peak_tflops=312.0`` — A100
-        dense bf16 — applied to every target including CPUs and Apple GPUs. This
-        constructor sources the peak and the shared-memory budget from
-        :mod:`target_perf` instead.
+        The bare ``SchedulePlanner()`` defaults are the cited A100 dense-bf16
+        profile. This constructor sources peak, bandwidth, last-level cache, and
+        shared-memory capacity from :mod:`target_perf` instead.
 
         Raises :class:`TargetPerfError` when the target has no registered device,
         has one but no peak for ``dtype``, or has one with no shared-memory
@@ -111,6 +115,14 @@ class SchedulePlanner:
                 f"{profile.device} ({target_name}) has no {dtype!r} peak "
                 f"(matrix or vector). Run a calibration sweep and merge it via "
                 f"target_perf.apply_corpus(), or add a cited value.")
+        dram_bw = profile.value("dram_bw_gbps")
+        if dram_bw is None:
+            raise TargetPerfError(
+                f"{profile.device} ({target_name}) has no 'dram_bw_gbps'. "
+                "Populate a cited value or measured overlay before analytical "
+                "schedule ranking."
+            )
+        cache = profile.value("llc_bytes")
         if smem_budget_bytes is None:
             smem = profile.value("smem_bytes_per_cu")
             if smem is None:
@@ -123,6 +135,11 @@ class SchedulePlanner:
             smem_budget_bytes = int(smem)
         return cls(
             peak_tflops=peak,
+            dram_bw_gbps=dram_bw,
+            # Zero is the explicit conservative boundary when the target has no
+            # characterized inter-tile cache capacity. Never borrow another
+            # device's cache.
+            cache_bytes=0 if cache is None else int(cache),
             smem_budget_bytes=smem_budget_bytes,
             perf=profile,
         )
@@ -135,7 +152,7 @@ class SchedulePlanner:
         k: int,
         dtype: str = "bf16",
         target: object = "cpu",
-        method: str = "roofline",
+        method: str = "reuse_distance",
     ) -> SelectedSchedule:
         target_name = normalize_target(target)
         workload = GEMMWorkload(m, n, k, dtype=dtype, arch=target_name)
@@ -169,7 +186,17 @@ class SchedulePlanner:
         candidates: list[ScheduleCandidate] = []
         for cfg, reason in legal_by_config.items():
             legal = not reason
-            latency = _estimate_latency_ms(workload, cfg, self.peak_tflops) if legal else 0.0
+            latency = (
+                _estimate_latency_ms(
+                    workload,
+                    cfg,
+                    self.peak_tflops,
+                    dram_bw_gbps=self.dram_bw_gbps,
+                    cache_bytes=self.cache_bytes,
+                )
+                if legal
+                else 0.0
+            )
             candidates.append(ScheduleCandidate(
                 op_name="tessera.matmul",
                 target=target_name,
@@ -204,23 +231,23 @@ def schedule_cache_key(
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:24]
 
 
-def _estimate_latency_ms(workload: GEMMWorkload, cfg: TuningConfig, peak_tflops: float) -> float:
-    """Compute-only latency estimate. **Known-weak — do not extend, replace.**
+def _estimate_latency_ms(
+    workload: GEMMWorkload,
+    cfg: TuningConfig,
+    peak_tflops: float,
+    *,
+    dram_bw_gbps: float = 2039.0,
+    cache_bytes: int = 40 * 1024 * 1024,
+) -> float:
+    """Tile-reuse-distance latency estimate used only for candidate pruning."""
 
-    There is no memory term here: latency is FLOPs over a fudge-factored peak, so
-    every memory-bound shape is scored as if bandwidth were infinite, and the
-    ``occupancy`` factor below has the sign of the real effect backwards (more
-    resident blocks *deepens* the pipeline rather than merely raising
-    utilisation). The replacement is tile-reuse-distance cache modelling plus a
-    prologue/steady/epilogue envelope — ``TILESIGHT_ASSESSMENT.md`` §3.1 T1/T4.
-    ``TargetPerf.roofline_ms`` is the interim honest bound where a byte count is
-    available.
-    """
-    occupancy = min(1.0, (cfg.tile_m * cfg.tile_n) / (128 * 128))
-    stage_bonus = min(1.15, 1.0 + 0.04 * max(0, cfg.num_stages - 1))
-    warp_bonus = min(1.1, 0.85 + 0.05 * cfg.num_warps)
-    effective_peak = max(1e-6, peak_tflops * occupancy * stage_bonus * warp_bonus)
-    return workload.flops() / (effective_peak * 1e12) * 1_000.0
+    return estimate_gemm_reuse_distance(
+        workload,
+        cfg,
+        peak_tflops=peak_tflops,
+        dram_bw_gbps=dram_bw_gbps,
+        cache_bytes=cache_bytes,
+    ).latency_ms
 
 
 __all__ = [

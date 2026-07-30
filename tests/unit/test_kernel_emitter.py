@@ -401,9 +401,9 @@ def test_verify_default_runner_unchanged_without_injection():
 
 class _X86Wrong(KernelRunner):
     """A non-Metal backend whose kernel diverges — returns its OWN real tag."""
-    target = "x86"
+    target = "x86_c"
     def run_fused_region(self, region, A, B, bias=None, *a, **k):
-        return np.full((A.shape[0], B.shape[1]), 999.0, np.float32), "x86_native"
+        return np.full((A.shape[0], B.shape[1]), 999.0, np.float32), "x86_c_native"
     def run_fused_attention(self, region, *a, **k): ...
     def run_gated_matmul_region(self, region, *a, **k): ...
     def run_pointwise_graph(self, region, *a, **k): ...
@@ -411,7 +411,7 @@ class _X86Wrong(KernelRunner):
 
 def test_oracle_gates_non_metal_backends():
     # The F4 gate is backend-agnostic: a runner returning its own real-execution
-    # tag ("x86_native", not "metal_runtime") is still compared to the reference,
+    # tag ("x86_c_native", not "metal_runtime") is still compared to the reference,
     # so a non-Apple backend is genuinely gated — not trusted by default. A
     # reference/fallback tag (no real kernel) is still trusted.
     F.clear_verification_cache()
@@ -419,7 +419,7 @@ def test_oracle_gates_non_metal_backends():
 
     class _X86Ref(_X86Wrong):
         def run_fused_region(self, region, A, B, bias=None, *a, **k):
-            return region.reference(A, B, bias), "x86_native"
+            return region.reference(A, B, bias), "x86_c_native"
 
     class _X86Fallback(_X86Wrong):
         def run_fused_region(self, region, A, B, bias=None, *a, **k):

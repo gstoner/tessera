@@ -3,11 +3,10 @@ target profiles.
 
 ``gpu_target.py`` / ``rocm_target.py`` / ``apple_target.py`` describe what a
 target *can do* (ISA gates, dtype support, LDS/SMEM capacity, feature matrices).
-Nothing in the tree described how *fast* it does it: no peak FLOP/s, no DRAM
-bandwidth, no LLC size. That gap is why the hardware-free cost model
-(``schedule_planner._estimate_latency_ms``) has no memory term at all — it had no
-bandwidth number to divide by — and why "% of peak" (Theory §8 **W7**) was not
-computable. This module supplies those numbers.
+Nothing in the tree originally described how *fast* it does it: no peak FLOP/s,
+DRAM bandwidth, or LLC size. That gap made the old hardware-free cost model
+compute-only and made "% of peak" (Theory §8 **W7**) uncomputable. This module
+now supplies the explicit inputs consumed by the tile-reuse-distance model.
 
 Two rules make this honest rather than a pile of marketing figures:
 

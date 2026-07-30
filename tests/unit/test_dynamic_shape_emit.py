@@ -24,12 +24,12 @@ import pytest
 
 import tessera.compiler.fusion as F
 import tessera.compiler.emit.rocm_hip as rocm  # noqa: F401 — self-registers
-import tessera.compiler.emit.x86_llvm  # noqa: F401
+import tessera.compiler.emit.x86_c  # noqa: F401
 import tessera.compiler.emit.nvidia_cuda  # noqa: F401
 from tessera.compiler.emit import kernel_cache as KC
 from tessera.compiler.emit.kernel_emitter import EmitError, SpecPolicy, get_emitter
 
-_GENERIC_TARGETS = ("rocm", "x86", "nvidia")
+_GENERIC_TARGETS = ("rocm", "x86_c", "nvidia")
 
 
 def _rocm_hip_live() -> bool:

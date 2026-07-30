@@ -385,7 +385,8 @@ def test_unknown_raster_order_in_cache_is_reported_not_silently_dropped(
             "INSERT INTO tuning_results (M,N,K,dtype,arch,layout,movement_json,"
             "tile_m,tile_n,tile_k,num_warps,num_stages,latency_ms,tflops,"
             "sampled_at,trial_id,status,reason,method,raster_order,raster_group)"
-            " VALUES (256,256,256,'bf16','generic','row_major','{}',"
+            " VALUES (256,256,256,'bf16','generic','row_major',"
+            "'{\"overlap\": \"compute\", \"prefetch\": \"auto\"}',"
             "128,128,32,4,2,1.0,33.5,0.0,0,'ok','','measured','z_order',4)")
 
     tuner = BayesianAutotuner(GEMMWorkload(M=256, N=256, K=256))
@@ -413,7 +414,8 @@ def test_corrupted_cache_row_is_also_reported(tmp_path) -> None:
             "INSERT INTO tuning_results (M,N,K,dtype,arch,layout,movement_json,"
             "tile_m,tile_n,tile_k,num_warps,num_stages,latency_ms,tflops,"
             "sampled_at,trial_id,status,reason,method,raster_order,raster_group)"
-            " VALUES (256,256,256,'bf16','generic','row_major','{}',"
+            " VALUES (256,256,256,'bf16','generic','row_major',"
+            "'{\"overlap\": \"compute\", \"prefetch\": \"auto\"}',"
             "128,128,32,3,2,1.0,33.5,0.0,0,'ok','','measured','row_major',1)")
 
     tuner = BayesianAutotuner(GEMMWorkload(M=256, N=256, K=256))
@@ -423,17 +425,20 @@ def test_corrupted_cache_row_is_also_reported(tmp_path) -> None:
 
 
 def test_raster_axes_are_carried_but_not_swept() -> None:
-    """Documents a deliberate limit rather than letting it be discovered as a
-    surprise: nothing enumerates the raster axes, because `_mock_latency` cannot
-    score them. Enumerating would multiply the space by ~20 for zero signal."""
+    """The analytical model may prune but cannot promote a raster choice.
+
+    ROCM-CALIB-1 rejected the prior locality metric on its home architecture.
+    Enumeration therefore remains owned by exact-device sweeps until each
+    backend records a correlation/retain verdict for the new model.
+    """
     from tessera.compiler.autotune_v2 import BayesianAutotuner, GEMMWorkload
 
     tuner = BayesianAutotuner(GEMMWorkload(M=256, N=256, K=256))
     orders = {c.raster_order for c in tuner.legal_candidates()}
     groups = {c.raster_group for c in tuner.legal_candidates()}
     assert orders == {"row_major"}, (
-        "the candidate generator now sweeps raster_order — give it a scorer "
-        "that can distinguish the values, and update the TuningConfig docstring")
+        "the candidate generator now promotes raster_order without an "
+        "architecture-owned exact-device retain verdict")
     assert groups == {1}
 
 

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-28
+last_updated: 2026-07-30
 audit_role: theme
 ---
 
@@ -10,17 +10,18 @@ multiple root audit documents and compiler archive files.
 
 ## Cost-model foundations: target perf + rasterization knob (2026-07-28)
 
-An assessment of TileSight (arXiv:2607.22432) surfaced that **Tessera's
-hardware-free analytical cost model was a mock** —
-`schedule_planner._estimate_latency_ms` has no memory term (latency is FLOPs over
-a fudge-factored peak), `autotune_v2._mock_latency` is a hand-drawn bowl with
+An assessment of TileSight (arXiv:2607.22432) surfaced that Tessera's
+hardware-free analytical cost model **was a mock at discovery time** —
+`schedule_planner._estimate_latency_ms` had no memory term (latency was FLOPs over
+a fudge-factored peak), `autotune_v2._mock_latency` was a hand-drawn bowl with
 `tile_m=128, tile_n=128` placed at its minimum by hand, and the target profiles
 carried capability data but **zero** performance data. Theory §4 step 3's
 "without silicon, score by the Tier 2 cost model" therefore ranked nothing. Full
 finding, verdict, and reference survey:
 [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md).
 
-Two prerequisites landed; the cost model itself did **not** and is still open.
+The two prerequisites and the first T1 model slice have now landed. The quoted
+function names above describe the retired implementation, not current behavior.
 
 **1. `compiler/target_perf.py` — calibrated performance parameters.**
 Per-device (not per-arch: `nvidia_sm120` covers a 5070 Ti and an RTX PRO 6000,
@@ -50,15 +51,16 @@ behaviour, byte-for-byte), `COLUMN_MAJOR`, `GROUPED_M`, `GROUPED_N`, wired as
 `raster_group` fields. Morton/Z-order is deliberately absent (clean bijection
 only on power-of-two square grids; no closed-form emission).
 
-**The axes are carried, not swept** (corrected 2026-07-28 — an earlier draft of
+**The axes are carried, not swept** (corrected 2026-07-30 — an earlier draft of
 this entry claimed "autotuner axes", which overstated it). Neither
 `LegalGEMMCandidateGenerator` nor the Optuna objective enumerates them, because
-the only hardware-free scorer is `_mock_latency`, which does not model
-rasterization at all: adding the axes would multiply the search space by ~20 for
-zero signal and let TPE "discover" an arbitrary winner. They become real search
-dimensions when a scorer can tell the values apart — an on-device measurement, or
-the T1 reuse-distance model. A test (`test_raster_axes_are_carried_but_not_swept`)
-pins this so the limit is a decision rather than a surprise.
+the new T1 reuse-distance scorer is a pruning model, not promotion evidence.
+It can distinguish raster orders symbolically, but `ROCM-CALIB-1` rejected the
+older step-distance locality score on its home architecture; allowing another
+uncalibrated locality score to promote a raster would repeat that failure.
+The axes become search dimensions only after exact-device correlation and a
+backend-owned retain verdict. A test
+(`test_raster_axes_are_carried_but_not_swept`) pins this evidence boundary.
 
 Because a rasterization order is a *permutation of block ids*, it is
 semantics-preserving by construction and has a **total, hardware-free oracle**:
@@ -74,9 +76,14 @@ identically under CUDA and HIP).
 GEMM (`emit/nvidia_cuda.py`, the 2-D `dim3 grid((M+15)/16,(N+7)/8)` launches) and
 the ROCm GEMM path still compute `blockIdx` directly. That wiring needs a
 measurement on the NR2 Pro / Strix Halo boxes to be worth anything, and neither
-was available here. Default is the identity, so nothing changed until it is. The
-tile-reuse-distance cache model (TILESIGHT §3.1 T1/T4) that would *replace*
-`_estimate_latency_ms` is likewise open.
+was available here. Default is the identity, so nothing changed until it is.
+T1 is now implemented in `compiler/reuse_distance_cost.py`: it materializes the
+symbolic GEMM tile order, counts A/B tile reuse through a capacity-bounded LRU,
+uses real dtype storage widths, and combines cache-derived DRAM bytes with
+`TargetPerf` compute/bandwidth inputs. It replaces both `_estimate_latency_ms`
+and `_mock_latency`. It deliberately has no fitted warp, stage, or preferred-tile
+coefficients. T3 action-DAG ordering and T4 occupancy/prologue/steady-state
+overlap remain open.
 
 **Cross-backend synchronization key `RASTER-CONTRACT-2026-07-28`.** The
 rasterization knob is a shared Schedule IR contract, so all four architecture
@@ -198,10 +205,10 @@ Two facts make the transition cheaper than it looks:
 | IR level | Real today | Dispatcher / stub | Primary gap to close |
 |---|---|---|---|
 | **Python `@jit`** | Decoration-time constraint + effect analysis; honest fallback gating (won't let eager Python masquerade as compiled). | Effect/constraint analysis is single-function, AST-only. A general IR-optimization step (folders/effects) between emission and execution is still thin. | Component-aware multi-op metadata **landed** (carried to the `@jit` artifact); fusion dispatch is **authoritative** (Phase 0 seam closed). Remaining: effect interfaces + broader folding. |
-| **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast`/`reshape` folders + `matmul`/`transpose`/`reshape` canonicalizers (8 ops — `reshape` carries an identity fold + a `reshape(reshape(x))` chain-collapse, both guarding the optional `dim_names` symbolic-dim annotations), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). **Per-op effect interfaces landed (2026-06-22):** all 23 non-pure ops carry an explicit `MemoryEffectsOpInterface` — deterministic value ops (`adam`/`adamw`/`momentum`/`adafactor`/`lion`, `arch.ste_one_hot`/`weighted_sum`/`switch`/`mixed`) are `[Pure]`; random (`dropout`/`arch.gumbel_softmax`/`arch.hard_concrete`), stateful (`kv_cache.*`/`ring.create`/`arch.parameter`), collective (`all_reduce`/`reduce_scatter`/`all_gather`) and MoE-transport ops carry `MemWrite`/`MemRead`, so generic CSE/DCE is sound and precise across them (`graph_ir_op_effects.mlir`). `LayoutAssignmentPass` is **wired into the named x86/GPU/CUDA-13 pipelines behind the opt-in `assign-layouts` option**. CORE-COMPILER-2 makes the generic x86 binding layout executable and recognizes ROCm's independent structured `#tile.layout` consumer, but Graph `cast{layout}` materializers are not yet complete across targets, so assignment stays opt-in. **Phase 1 closed (2026-06-22)** — effect interfaces, opt-in LayoutAssignment wiring, and reshape folder coverage all landed. ~5 passes are attribute-stamp-only. | Add folders opportunistically as new algebraic identities surface; ~5 attribute-stamp-only passes could gain real bodies. |
-| **Schedule IR** | DistributionLowering (real structural wiring + escaping-value fix); collective *insertion*. **Real pipeline partitioning + 1F1B proof landed (2026-06-23); explicit execution order landed (2026-07-27)** — `PipelineStagePartition` emits `tessera.pp_stage`, insertion performs the send/recv SSA rewire, and `PipelineScheduleLegality` proves the contract before materializing unique-clock `tessera.pipeline_steps` across warmup, steady, and cooldown regions. The conservative serialized dependency order prevents same-rank forward/backward conflicts and is a stable base for target overlap. Chained as `tessera-pipeline`; lit includes `pipeline_schedule_materialization.mlir`. | OptimizerShard is still pure attrs; target runtimes do not consume `tessera.pipeline_steps`; no collective overlap (`ChunkPlanner`/`CollectiveScheduler` never invoked). | Wire the emitted steps and collective planners into execution, then materialize optimizer-shard transport. |
+| **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast`/`reshape` folders + `matmul`/`transpose`/`reshape` canonicalizers (8 ops — `reshape` carries an identity fold + a `reshape(reshape(x))` chain-collapse, both guarding the optional `dim_names` symbolic-dim annotations), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). **Per-op effect interfaces landed (2026-06-22):** all 23 non-pure ops carry an explicit `MemoryEffectsOpInterface` — deterministic value ops (`adam`/`adamw`/`momentum`/`adafactor`/`lion`, `arch.ste_one_hot`/`weighted_sum`/`switch`/`mixed`) are `[Pure]`; random (`dropout`/`arch.gumbel_softmax`/`arch.hard_concrete`), stateful (`kv_cache.*`/`ring.create`/`arch.parameter`), collective (`all_reduce`/`reduce_scatter`/`all_gather`) and MoE-transport ops carry `MemWrite`/`MemRead`, so generic CSE/DCE is sound and precise across them (`graph_ir_op_effects.mlir`). `LayoutAssignmentPass` is wired into the named x86/GPU/CUDA-13 pipelines. x86 and NVIDIA default it on because their Graph-cast materializers consume the markers immediately; Apple and ROCm retain architecture-owned opt-in boundaries until their complete physical consumer envelopes are proven. **Phase 1 closed (2026-06-22)** — effect interfaces, target-scoped LayoutAssignment wiring, and reshape folder coverage all landed. ~5 passes are attribute-stamp-only. | Add folders opportunistically as new algebraic identities surface; ~5 attribute-stamp-only passes could gain real bodies. |
+| **Schedule IR** | DistributionLowering performs structural wiring and collective insertion. `PipelineStagePartition` emits `tessera.pp_stage`; insertion rewires send/recv SSA; `PipelineScheduleLegality` proves the contract and materializes unique-clock `tessera.pipeline_steps` across warmup, steady, and cooldown. The shared runtime executes those steps in compiler order, overlaps selected backward collectives on an independent transport executor, joins them before completion, and binds typed collective descriptors to explicit OptimizerShard replicated/rank-local ownership transitions. | The portable runtime path is proven with deterministic adapters, but no backend has supplied a real multi-rank CUDA, ROCm, or Metal packet. Collective placement and overlap remain runtime machinery rather than a complete middle-end optimization pass. | Land architecture-owned multi-rank NCCL/RCCL/Metal execution and exact-device evidence; then promote placement/overlap policy into the middle end. |
 | **Tile IR (FA-4)** | `#tile.layout` is attached to real views/copies/fragments; SSA buffer, pipeline, TMA, mbarrier, TMEM, and TCGen05 vocabulary is registered. Canonical GEMM has explicit M/N/K loops; its ROCm consumer now requires planned buffer/token/pipeline-state SSA ownership and has exact gfx1151 register/LDS comparison proof. FlashAttention has explicit rank-4 batch/query-head distribution into a KV `scf.for` carrying `(acc,m,l,producer,consumer,boundary)` with typed slice coordinates and ragged extents. ROCm consumes that shared forward recurrence and its deterministic tensor-valued backward workspace/reduction loops directly. NVIDIA, shared legality fixtures, and ROCm LDS consumers are free of name-based buffer identity. | The direct NVIDIA execution consumer of the shared attention loop remains open. Deprecated `#tile.buffer_ref` is parser-visible only for migration diagnostics and archived IR. SM100 TCGen05/TMEM has structural proof only. | Finish the direct NVIDIA distributed-attention consumer; exact SM100 TCGen05/TMEM. |
-| **Autotuner** | `BayesianAutotuner` tunes `{tile_m/n/k, num_warps, num_stages}`. | Scores via `_mock_latency` (roofline); `on_device` returns "unmeasured". **Output reaches no lowering pass** (read path exists at `TileIRLoweringPass.cpp` ~`:111`; write path absent). `flywheel` measurement lane not in compile path. | Write-path (stamp tile attrs); measured-latency scoring on Apple/CPU. |
+| **Autotuner** | `BayesianAutotuner` tunes `{tile_m/n/k, num_warps, num_stages}`. Target/evidence/latency-valid measured schedule records change the actual Schedule IR and Tile IR M/N/K, warp-count, and pipeline-depth attributes. Hardware-free pruning uses a symbolic tile-reuse/capacity model with explicit compute, DRAM-bandwidth, cache, dtype-width, and raster-order inputs; measured rows always outrank analytical rows and cache reuse is exact to shape/dtype/target/layout/movement. | T1 is GEMM-only and intentionally cannot distinguish warp/stage choices; T3 action-DAG ordering, T4 overlap structure, production target-cache semantics (especially Apple SLC and x86 hierarchy), and per-target correlation/selector packets remain incomplete. | Correlate T1 against each architecture's committed corpus and retain or reject it per backend. Keep exact-device latency authoritative; do not coefficient-tune a failed model. |
 | **Target IR / runtime** | x86 AMX/AVX-512, Apple GPU, NVIDIA `sm_120`, and ROCm `gfx1151` all have checked-in native execution rows. The generated runtime matrix currently records 24 NVIDIA and 69 ROCm rows; the E2E fleet additionally seals release packets for NVIDIA softmax/reduction and ROCm softmax/reduction/paged-KV/MoE. `fusion.py` remains real runtime MSL codegen for matmul-epilogue regions, and `tessera_jit` is a real MLIR→LLVM CPU JIT. | Native breadth is architecture-specific, not backend-wide: NVIDIA `sm_80`/`sm_90`/`sm_100` and the ROCm target-map tail remain artifact-only or exact-device gated. Apple still has a name→lane→ctypes dispatcher seam, and reference execution remains explicit for unsupported rows. | Close the dispatcher seam and promote the remaining target-map tails only with exact-device execute-and-compare evidence. |
 
 ### The phased plan
@@ -499,8 +506,9 @@ Phase 4 is HF; only GPU launch + silicon-perf is gated.
   `best_variant_for`), so the executed Apple GPU lane runs the measured-best
   kernel. Latency is real (synthesizer dispatch timing); the roofline mock stays
   the honest NVIDIA/ROCm fallback. Guard: `tests/unit/test_autotune_loop.py` (5).
-  *Deferred:* the `apply_to_op()` tile-attribute write-path for the Schedule/Tile
-  IR autotuner (NVIDIA/tile-IR configs have no executable Apple kernel — HG).
+  *Superseded 2026-07-27:* the Schedule/Tile write path now validates measured
+  records and stamps physical M/N/K, warp-count, and pipeline-depth attributes.
+  Target-owned measurements and selector promotion remain hardware-gated.
 - **Phase 4 — Grow `tessera_jit` toward default CPU (HF), then GPU spine.**
   **Brought forward (2026-06-15) — the keystone landed: the tessera_jit MLIR→LLVM
   lane is now the executed CPU path** for the covered f32 op set, so the C++ IR
@@ -1345,8 +1353,10 @@ WarpSpec stamping `#tile.pipeline_depths`, and the kernels that consume the
 per-ring depths. That statement closed the original C1–C6 review inventory,
 not all later structural work. PR #457 subsequently replaced the C1–C3
 compatibility scaffolding with real SSA consumers; the canonical GEMM K-loop,
-sibling-backend SSA migration, removal of fallback metadata, and autotuner
-write-path remain legitimate hardware-free compiler closure work.
+  sibling-backend SSA migration and removal of fallback metadata remained
+  legitimate hardware-free compiler closure work. The autotuner write path
+  subsequently landed under `CORE-COMPILER-RUNTIME-CLOSEOUT-2026-07-27`;
+  analytical scoring and target-owned selector evidence remain open.
 
 **Registry sync + typed-contract hardening LANDED (2026-06-23).** Two follow-ups
 after the C1–C6 feature: (1) the Python meta-registries now reflect the new
@@ -1701,11 +1711,13 @@ compiler/runtime seams:
   recurrence rather than finite differences, with explicit FP32 state and
   reverse-token scheduling metadata.
 
-The remaining gates are intentionally narrower: physical Adafactor adjoint
-execution; full-model measured rematerialization selection; real
+The remaining gates are intentionally narrower: full-model measured
+rematerialization selection; real
 multi-rank collective/OptimizerShard transport on each GPU runtime; per-target
 measured selector packets; and physical sequence-mixer backward packaging and
-chunk-parallel scheduling.
+chunk-parallel scheduling on CUDA and Apple. The following
+`CORE-PRODUCTION-EVIDENCE-2026-07-27` record closes the gfx1151 physical
+Adafactor adjoint that was still open at the start of this synchronization.
 
 `CORE-PRODUCTION-EVIDENCE-2026-07-27` advances each seam without overstating
 exact-device scope. Typed collective descriptors are now attached to emitted

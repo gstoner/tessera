@@ -3,24 +3,41 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-29
+last_updated: 2026-07-30
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+## APPLE-SPINE-1: reconcile retained compiler lanes after canonical selection
+
+Cross-backend sync `EXECUTION-SPINE-2026-07-29` — **parity validated for the
+shared selector contract; lane reconciliation remains follow-up required.**
+Apple CPU and GPU already auto-promote eligible native packages through
+`canonical_compile()` and retain their established
+`apple_cpu_native_descriptor` / `apple_native_descriptor` runtime identities.
+The NVIDIA selector cleanup changes no Apple IR, ABI, package, schedule, or
+exact-device claim. Apple follow-up remains the architectural task: reconcile
+the value/artifact Target-IR lane with compiler-owned native packaging without
+silently bypassing either status-bearing ABI.
+
+The x86 sibling has since reconciled its split by reserving canonical `x86` for
+typed MLIR/native packaging and moving portable C to an `x86_c` arbiter
+candidate. That naming/authority pattern is applicable to Apple, but x86
+AVX-512 evidence and its shared-object loader do not transfer to Metal.
 
 ## APPLE-CALIB-1: contribute op breadth to the hardware-free score calibration
 
 Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **superseded by the terminal
 ROCm home-architecture rejection.** No Apple arbiter-score adoption work remains.
 
-**What is being calibrated.** Two static, device-free quality metrics found in
+**Historical calibration result and current subject.** The original
+step-distance and bank-conflict metrics found in
 production AMD code and recorded in
 [`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md)
-§3.7–3.8: a step-distance locality histogram over a materialized access order,
-and an N-way bank-conflict analyzer computed from a descriptor alone. Both are
-computable on any target with no silicon. The question is whether either
-*predicts measured latency* — which decides how much weight the arbiter's
-hardware-free tier can carry, per
+§3.7–3.8 were not retained after step-distance failed on its ROCm home
+architecture. Apple must not revive or retune it. The current shared subject is
+the T1 GEMM cache/reuse model, whose rank correlation decides how much weight the
+arbiter's hardware-free pruning tier can carry, per
 [`TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md) §2.
 
 **Apple's role.** The widest F4-verified op-family envelope in the fleet, so it
@@ -32,17 +49,17 @@ architecture reproduces the overfit that assessment §5.2 records for NeuSight,
 which led on the A100 inside its training distribution and lost that lead on
 every newer part.
 
-**Apple-specific caveat.** The bank-conflict half was derived for LDS with a
-known bank count and a 4-phase wave64 access pattern. Metal threadgroup memory is
-not LDS and its banking is not documented to the same level (Decision #27 — do
-not assert a Metal hardware detail without a real source), so the conflict metric
-may be **not applicable** on Apple even where the locality metric is not. Report
-that split rather than one blended verdict.
+**Apple-specific caveat.** The production bridge passes `cache_bytes=0`
+explicitly because Apple SLC is not interchangeable with a discrete-GPU L2.
+Before T1 can rank Apple candidates, this item must define an Apple-owned
+cache-capacity/traffic interpretation backed by a real source or measurement.
+The retired LDS bank-conflict metric remains not applicable: Metal banking is
+not documented to the required level.
 
-**Missing exact-device evidence.** Rank correlation between each score and
-recorded M1 Max latency, per op family, over the families the Apple lane already
-measures. A score that does not rank measured Apple kernels correctly is not
-trustworthy for unmeasured kernels anywhere.
+**Missing exact-device evidence.** Rank correlation between T1 and recorded M1
+Max GEMM latency after the cache semantics are defined. Apple still contributes
+op breadth to later non-GEMM models, but T1 v1 is GEMM-only and must not claim
+coverage of norm, attention, or pointwise/reduce families.
 
 **Fleet outcome (2026-07-29).** ROCM-CALIB-1 re-derived the metric on the AMD
 architecture it came from and reproduced 0/6 committed gfx1151 winners (median
@@ -50,6 +67,7 @@ rho -0.1381, 0% positive). Per the shared rule, the locality-as-latency-ranker
 line ends without retuning; Apple no longer owes a promotion-calibration run.
 Metal banking remains not applicable. Existing Apple measurements may still be
 used for unrelated cache-model research, but cannot revive this rejected score.
+
 ## APPLE-RASTER-1: reconcile the MLX-inherited swizzle with the shared contract
 
 Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning
@@ -1480,7 +1498,7 @@ implementation/proof work; `blocked` names an external prerequisite.
 
 | Order | ID | Status | Current state and next action |
 |---:|---|---|---|
-| 1 | APPLE-CALIB-1 | **active — exact-device analysis** | Correlate the locality score with the committed Apple7 latency corpus by op family; report the bank-conflict metric separately as not applicable unless Metal banking can be sourced and modeled. |
+| 1 | APPLE-CALIB-1 | **active — cache semantics + exact-device analysis** | Define an evidence-backed Apple SLC/traffic interpretation, then correlate T1 with the committed Apple7 GEMM corpus. Keep the retired bank-conflict metric not applicable and do not claim non-GEMM coverage from T1 v1. |
 | 2 | APPLE-RASTER-1 | **active — exact-device A/B** | Reconcile `swizzle_log` with the shared raster contract only after a matched-group Apple7 A/B establishes neutral-or-better latency and counter behavior. |
 | 3 | APPLE-AOT-2 | **landing** | Runner registration and pointwise/reduction AOT coverage are landed. Harden the artifact/deferred contract, complete the remaining runtime families, then land cache maturity before the shared arbiter ships. APPLE-AOT-1/3/4 are completed evidence under the same sync key. |
 | 4 | APPLE-TEST-1 | **closed** | The centralized hardware boundary collects 976 of 15,374 unit nodes, the structural scan finds zero inline Apple capability gates, and portable marker/provenance ratchets reject classification drift. |
@@ -2441,9 +2459,12 @@ capability, execution row, selector, or threadgroup-memory contract changes.
 
 Cross-backend sync `CORE-SCHEDULE-1F1B-MATERIALIZE-2026-07-27` emits a shared
 unique-clock warmup/steady/cooldown dependency order after pipeline legality.
-Metal/runtime consumption and collective overlap remain Apple-owned follow-up;
-the structural carrier changes no Apple capability, selector, or exact-device
-claim.
+At this synchronization point Metal/runtime consumption and collective overlap
+remained Apple-owned follow-up; the immediately following
+`CORE-COMPILER-RUNTIME-CLOSEOUT-2026-07-27` record supersedes the portable
+runtime-consumption gap. A real multi-rank Metal transport packet remains
+Apple-owned. The structural carrier changes no Apple capability, selector, or
+exact-device claim.
 
 Cross-backend sync `CORE-COMPILER-RUNTIME-CLOSEOUT-2026-07-27` adds a shared
 runtime consumer for emitted 1F1B steps, including an independent collective

@@ -199,6 +199,61 @@ def supports_native_package(module: GraphIRModule) -> bool:
     ))
 
 
+def native_package_kind(module: GraphIRModule) -> str | None:
+    """Classify one explicit x86 native-package request.
+
+    Vendor-family dispatch belongs beside the Tile-to-x86 package producers,
+    not in the shared canonical driver.
+    """
+
+    from .x86_breadth import requests_graph_breadth
+
+    if requests_softmax(module):
+        return "softmax"
+    if requests_reduction(module):
+        return "reduction"
+    if requests_matmul(module):
+        return "matmul"
+    if requests_attention(module):
+        return "attention"
+    if requests_cohort2(module):
+        return "cohort2"
+    if requests_graph_breadth(module):
+        return "breadth"
+    if requests_elementwise(module):
+        return "elementwise"
+    return None
+
+
+def package_native(
+    module: GraphIRModule,
+    *,
+    pipeline_name: str,
+) -> X86NativePackage:
+    """Compile the canonical typed x86 package selected for ``module``."""
+
+    kind = native_package_kind(module)
+    if kind == "softmax":
+        return package_softmax(module, pipeline_name=pipeline_name)
+    if kind == "reduction":
+        return package_reduction(module, pipeline_name=pipeline_name)
+    if kind == "matmul":
+        return package_matmul(module, pipeline_name=pipeline_name)
+    if kind == "attention":
+        return package_attention(module, pipeline_name=pipeline_name)
+    if kind == "cohort2":
+        return package_cohort2(module, pipeline_name=pipeline_name)
+    if kind == "breadth":
+        from .x86_breadth import package_graph_breadth
+
+        return package_graph_breadth(module, pipeline_name=pipeline_name)
+    if kind == "elementwise":
+        return package_elementwise(module, pipeline_name=pipeline_name)
+    raise ValueError(
+        "x86 native packaging requires one supported static Graph contract"
+    )
+
+
 def _version_fingerprint(tool: Path) -> str:
     result = subprocess.run([str(tool), "--version"], capture_output=True, text=True, check=False)
     text = "\n".join(value.strip() for value in (result.stdout, result.stderr) if value.strip())
@@ -1214,11 +1269,12 @@ __all__ = [
     "X86_BINARY_MATH_KINDS", "X86_BITWISE_KINDS", "X86_COMPARE_KINDS",
     "X86_LOGICAL_KINDS", "X86_TRANSCENDENTAL_KINDS", "X86_WHERE_KINDS",
     "emit_attention_tile_ir", "emit_cohort2_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir", "emit_reduce_tile_ir",
-    "emit_softmax_tile_ir", "package_attention", "package_matmul",
+    "emit_softmax_tile_ir", "native_package_kind", "package_attention", "package_matmul",
+    "package_native",
     "package_cohort2", "package_elementwise", "package_reduction", "package_softmax", "requests_attention",
     "requests_cohort2",
     "requests_matmul", "requests_reduction", "requests_softmax",
     "supports_attention", "supports_cohort2", "supports_elementwise", "supports_promoted_elementwise",
     "supports_matmul", "supports_promoted_matmul", "supports_reduction",
-    "supports_softmax", "tools_available",
+    "supports_native_package", "supports_softmax", "tools_available",
 ]

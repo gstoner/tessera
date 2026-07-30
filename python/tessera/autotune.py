@@ -62,26 +62,44 @@ def autotune(
     layout: str = "row_major",
     numeric_policy: Mapping[str, object] | None = None,
     movement: Mapping[str, object] | None = None,
-    method: str = "roofline",
+    method: str = "reuse_distance",
     backend: str | None = None,
     max_trials: int = 20,
     cache_path: str | os.PathLike | None = None,
     peak_tflops: float = 312.0,
+    bandwidth_gbps: float = 2039.0,
+    cache_bytes: int = 40 * 1024 * 1024,
 ) -> TuningResult:
     """Tune an operation for a shape and return the best configuration.
 
     Phase 1 supports GEMM-like shapes ``(M, N, K)`` and reuses the existing
     Bayesian/grid autotuner. ``method="on_device"`` is accepted as the future
-    measurement mode; until runtime kernels are wired, it uses the same
-    synthetic/roofline evaluator and records the method in the cache wrapper.
+    measurement mode; until runtime kernels are wired, it returns a structured
+    unmeasured result whose analytical value cannot drive lowering.
+
+    ``method="roofline"`` remains a compatibility spelling, but uses the
+    tile-reuse-distance model rather than the retired compute-only estimator.
     """
 
-    if method not in ("roofline", "on_device", "grid", "bayesian"):
-        raise ValueError("method must be roofline, on_device, grid, or bayesian")
+    if method not in (
+        "reuse_distance",
+        "roofline",
+        "on_device",
+        "grid",
+        "bayesian",
+    ):
+        raise ValueError(
+            "method must be reuse_distance, roofline, on_device, grid, or bayesian"
+        )
     workload = _workload_from(op, shapes, dtype, arch=arch, layout=layout, movement=movement)
     path = _cache_path(cache_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tuner = BayesianAutotuner(workload, peak_tflops=peak_tflops)
+    tuner = BayesianAutotuner(
+        workload,
+        peak_tflops=peak_tflops,
+        dram_bw_gbps=bandwidth_gbps,
+        cache_bytes=cache_bytes,
+    )
     tuner.warm_start_from_cache(str(path))
     result = tuner.tune(max_trials=max_trials, method=method)
     if method == "on_device" and backend in {"cpu", "apple_cpu"}:

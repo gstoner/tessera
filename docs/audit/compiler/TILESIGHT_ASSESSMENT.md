@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-28
+last_updated: 2026-07-30
 audit_role: reference
 ---
 
@@ -128,7 +128,7 @@ paper's approach removes.
 
 | # | Idea | Why | Lands in |
 |---|---|---|---|
-| **T1** | **Tile reuse distance** (§3.5) — reuse distance over the *symbolic tile order* with tile-sized blocks as the reuse universe, Gaussian + Zelen–Severo approximation of the SDCM binomial, sampling along reduction axes | 64× fewer tracked entries than cache-line granularity, 256× fewer checks via K-sampling, ~1pp accuracy. Makes schedule-sensitive cache modeling cheap enough to sit *inside* the search loop. We have **zero** of this — no reuse/L2/hit-rate modeling anywhere in `python/`, `src/`, or `tools/` | replaces `_estimate_latency_ms` |
+| **T1** | **Tile reuse distance** (§3.5) — reuse distance over the *symbolic tile order* with tile-sized blocks as the reuse universe, Gaussian + Zelen–Severo approximation of the SDCM binomial, sampling along reduction axes | Landed 2026-07-30 as a deliberately smaller first adaptation: symbolic GEMM tile order + capacity-bounded exact LRU over A/B tiles, bounded deterministic sampling, real dtype widths, and a compute/DRAM roofline. It replaces both mock estimators for pruning; the paper's SDCM approximation and multi-level hierarchy are not claimed. | `reuse_distance_cost.py` |
 | **T2** | **Prune, don't select** (§5.6) | 12% MAPE is far too coarse to pick between two close candidates but plenty to discard the bottom 95%. Slots in front of the arbiter's existing `measure` seam with **no API change** and no threat to Decision #28 lead-safety — the measured loop still decides, the model only decides what gets measured. Cuts device runs per shape bucket during fleet bring-up | pre-filter before `arbitrate()` |
 | **T3** | **Resource vector + tile-action DAG ordering search** (§3.4) | Per-action time on independent pipelines, then `min over legal topological orders of max over resources`. Tractable because real DAGs are constrained — their MLA-decode example: 11 actions, 11! permutations → **132** legal orders | new cost-model module |
 | **T4** | **`d = stages × resident_tiles_per_SM − 1`**, and separate prologue/steady/epilogue | Occupancy changes *overlap structure*, not just utilization: two blocks per SM deepens the pipeline. Our current `occupancy = tile_area/(128·128)` term gets this exactly backwards. 4 of their 7 diagnosis wins (Table 5) are "Not Overlapped → more blocks per SM / smaller tile", 1.17×–2.0× | same module |
@@ -193,9 +193,8 @@ stands on its own regardless of whether the cost model is ever built.**
 
 ## 4. What this opened
 
-Two items, both worth doing independently of whether the full model is ever
-built. Landed 2026-07-28 — see [`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) for the
-detail.
+Three foundation items have landed — see
+[`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) for the current detail.
 
 1. **`compiler/target_perf.py`** — calibrated, per-device performance parameters
    with per-field provenance (`MEASURED` > `DERIVED` > `SPEC` > `UNKNOWN`) and a
@@ -207,6 +206,11 @@ detail.
    (`schedule.knob` + `schedule.tile` + `TuningConfig` axes), with the bijection
    oracle and a test that compiles the emitted C and checks it against the
    reference for every block id.
+3. **`compiler/reuse_distance_cost.py`** — the T1 first slice. It replaces the
+   FLOPs-only planner estimator and hand-shaped autotuner mock with symbolic
+   tile reuse, explicit cache capacity, cache-derived DRAM traffic, target
+   compute/bandwidth inputs, and deterministic sampling. It is a pruning model:
+   exact measured latency remains the only promotion authority.
 
 **Still open, and the honest limits of what landed:**
 
@@ -220,9 +224,13 @@ detail.
   rather than guessed — which means `SchedulePlanner.for_target(..., "bf16")`
   currently raises on all three boxes. That is the gap made visible, not a
   regression.
-- **The cost model itself is not built.** T1–T4 remain a follow-on, correctly
-  framed as **replacing `_estimate_latency_ms` and `_mock_latency`** — not as new
-  machinery bolted alongside them.
+- **Only T1 v1 is built.** T3 resource/action-DAG ordering and T4
+  resident-tile/prologue/steady/epilogue overlap remain follow-ons. The T1
+  implementation intentionally assigns no warp/stage bonus and does not select
+  an unvalidated raster order. `ROCM-CALIB-1` rejected the separate
+  step-distance approach; the new cache model must earn its own retain verdict
+  against gfx1151 and sibling-backend corpora rather than receive tuned
+  coefficients.
 
 ---
 

@@ -152,6 +152,51 @@ def native_packaging_available() -> bool:
     return tools_available() and _rocm_clang(_rocm_path()) is not None
 
 
+def native_package_kind(module: GraphIRModule) -> str | None:
+    """Return the canonical single-descriptor gfx1151 family for ``module``."""
+
+    if supports_softmax(module):
+        return "softmax"
+    if supports_reduction(module):
+        return "reduction"
+    if supports_paged_kv_read(module):
+        return "paged_kv"
+    if supports_attention(module):
+        return "attention"
+    if supports_moe_dispatch(module):
+        return "moe_dispatch"
+    return None
+
+
+def supports_native_package(module: GraphIRModule) -> bool:
+    """Whether the canonical single-launch gfx1151 package accepts ``module``."""
+
+    return native_package_kind(module) is not None
+
+
+def package_native(
+    module: GraphIRModule,
+    *,
+    pipeline_name: str,
+) -> ROCMNativePackage:
+    """Compile the one canonical gfx1151 descriptor selected for ``module``."""
+
+    kind = native_package_kind(module)
+    if kind == "softmax":
+        return package_softmax(module, pipeline_name=pipeline_name)
+    if kind == "reduction":
+        return package_reduction(module, pipeline_name=pipeline_name)
+    if kind == "paged_kv":
+        return package_paged_kv_read(module, pipeline_name=pipeline_name)
+    if kind == "attention":
+        return package_attention(module, pipeline_name=pipeline_name)
+    if kind == "moe_dispatch":
+        return package_moe_dispatch(module, pipeline_name=pipeline_name)
+    raise ValueError(
+        "gfx1151 native packaging requires one supported static Graph contract"
+    )
+
+
 def _rocm_path() -> Path:
     configured = Path(os.environ.get("ROCM_PATH", "/opt/rocm")).expanduser()
     for candidate in (configured, configured / "core"):
@@ -2189,6 +2234,7 @@ __all__ = [
     "emit_paged_kv_read_tile_ir",
     "emit_softmax_tile_ir",
     "package_moe_dispatch",
+    "package_native",
     "package_attention",
     "package_attention_backward",
     "package_reduction",
@@ -2200,12 +2246,14 @@ __all__ = [
     "requests_reduction",
     "requests_paged_kv_read",
     "requests_softmax",
+    "native_package_kind",
     "supports_moe_dispatch",
     "supports_attention",
     "supports_attention_backward",
     "supports_reduction",
     "supports_paged_kv_read",
     "supports_softmax",
+    "supports_native_package",
     "native_packaging_available",
     "tools_available",
 ]

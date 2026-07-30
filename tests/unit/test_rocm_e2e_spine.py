@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from tessera.compiler.canonical_compile import canonical_compile
 from tessera.compiler.driver import compile_graph_module
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.native_artifact import (
@@ -36,6 +37,7 @@ from tessera.compiler.rocm_native import (
     emit_reduce_tile_ir,
     emit_paged_kv_read_tile_ir,
     emit_softmax_tile_ir,
+    native_package_kind,
     package_attention_backward,
     package_moe_dispatch,
     package_attention,
@@ -54,6 +56,7 @@ from tessera.compiler.rocm_native import (
     supports_reduction,
     supports_paged_kv_read,
     supports_softmax,
+    supports_native_package,
 )
 
 
@@ -853,6 +856,44 @@ def test_driver_joins_exact_gfx1151_native_package(monkeypatch) -> None:
     assert bundle.tile is not None and "tile.softmax_kernel" in bundle.tile.text
     assert bundle.target_ir is not None and "tessera_rocm.softmax" in bundle.target_ir.text
     assert any(event.pass_name == "rocm-gfx1151-native-package" for event in bundle.trace_events)
+
+
+def test_canonical_gfx1151_selector_defaults_to_native_descriptor(monkeypatch) -> None:
+    monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_native.native_packaging_available", lambda: True
+    )
+    module = _softmax_module()
+    assert supports_native_package(module)
+    assert native_package_kind(module) == "softmax"
+
+    result = canonical_compile(
+        module,
+        target="rocm_gfx1151",
+        enable_tool_validation=False,
+    )
+
+    assert result.bundle.execution_mode == "native_descriptor"
+    assert result.bundle.execution_kind == "native_gpu"
+    assert result.native_image is not None
+    assert result.launch_descriptor is not None
+    assert result.to_runtime_artifact().metadata["compiler_path"] == (
+        "rocm_gfx1151_native_descriptor"
+    )
+
+
+def test_canonical_gfx1151_selector_preserves_explicit_opt_out(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "tessera.compiler.rocm_native.native_packaging_available", lambda: True
+    )
+    result = canonical_compile(
+        _softmax_module(),
+        target="rocm_gfx1151",
+        options={"package_native": False},
+        enable_tool_validation=False,
+    )
+    assert result.native_image is None
+    assert result.launch_descriptor is None
 
 
 def test_rocm_reduction_emitter_and_contract_are_typed_and_arbitrary_axis() -> None:

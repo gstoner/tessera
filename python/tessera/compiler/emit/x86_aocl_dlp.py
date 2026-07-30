@@ -161,6 +161,6 @@ class X86AoclDlpCandidate(Candidate):
         return region.reference(A, B, bias), "reference"
 
 
-# Opt-in registration (import side effect; imported by emit.x86_llvm). Registered
+# Opt-in registration (import side effect; imported by emit.x86_c). Registered
 # even when absent so it is arbiter-visible; available() gates actual selection.
 register_candidate(X86AoclDlpCandidate())

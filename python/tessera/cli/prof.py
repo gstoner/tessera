@@ -249,7 +249,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", help="Write emitted report/json/trace text to a file")
     parser.add_argument("--compile-target", default="generic", help="Target architecture/profile for profiling metadata")
     parser.add_argument("--autotune", action="store_true", help="Run foundation GEMM autotuning after source inspection")
-    parser.add_argument("--autotune-method", choices=("roofline", "grid", "bayesian", "on_device"), default="roofline")
+    parser.add_argument(
+        "--autotune-method",
+        choices=("reuse_distance", "roofline", "grid", "bayesian", "on_device"),
+        default="reuse_distance",
+    )
     parser.add_argument("--shapes", default="128,128,128", help="GEMM shape for --autotune as M,N,K")
     parser.add_argument("--max-trials", type=int, default=8, help="Maximum autotune trials")
     parser.add_argument("--cache", help="SQLite tuning cache path")

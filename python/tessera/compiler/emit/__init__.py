@@ -6,7 +6,7 @@ candidate arbiter (D1), and the measured autotune loop (D2) — so callers use
 ``from tessera.compiler import emit`` instead of reaching into submodules.
 
 Deliberately NOT eagerly imported: the per-arch backend plugins
-(``apple_msl``, ``nvidia_cuda``, ``rocm_hip``, ``x86_llvm``, ``x86_aocl_dlp``).
+(``apple_msl``, ``nvidia_cuda``, ``rocm_hip``, ``x86_c``, ``x86_aocl_dlp``).
 Each self-registers its emitter / compiler / runner / candidates as an import
 side effect, and ``get_emitter`` / ``get_compiler`` bootstrap the Apple
 reference on demand — so importing this package stays cheap and does not force a

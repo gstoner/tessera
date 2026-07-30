@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-29
+last_updated: 2026-07-30
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -9,13 +9,52 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+## X86-SPINE-1: reconcile C synthesis with the MLIR/LLVM lane
+
+Cross-backend sync `EXECUTION-SPINE-2026-07-29` — **AVX-512 lane landing; AMX
+remains planned/access-gated.** Canonical target `x86` now has one meaning:
+Graph/Tile IR lowered by `TileToX86Pass`, packaged with the C++ backend shared
+image and typed launch descriptor. Vendor-family selection moved out of the
+shared driver into `x86_native.native_package_kind()` / `package_native()`.
+
+The former `emit/x86_llvm.py` implementation never emitted LLVM IR. It is now
+`emit/x86_c.py`, registered under source target `x86_c`, and remains a measured
+fused-region candidate under the canonical x86 arbiter. A compatibility import
+preserves old module imports without reclaiming target `x86`. Its artifact
+profile is explicit `x86-64-v4` rather than build-host-dependent
+`-march=native`; the source carries that profile into the content-addressed
+cache identity and the runner declines on hosts lacking the required AVX-512
+feature set. Its execution tag is `x86_c_native`, distinct from the canonical
+descriptor lane.
+
+The native loader also keeps each memfd alive with its image. Previously Linux
+could reuse an fd number and glibc could return the base-x86 handle for a later
+AVX-512 `/proc/self/fd/N` load, making valid descriptor symbols appear absent.
+A base-then-AVX-512 regression test guards distinct handles and symbols.
+
+**Zen 5 proof.** The Ryzen AI Max+ 395 WSL host reports the complete
+`x86-64-v4` AVX-512 feature set. The broader 2026-07-30 cleanup run passed 261
+focused Python candidate/canonical/native/audit tests with one expected
+capability skip. A fresh spine verification on the same host passes **63/63**
+canonical-x86/native-descriptor plus explicit-`x86_c` source-candidate tests.
+The current x86 dtype/ISA/capability and manifest gate is **26/26** (superseding
+the earlier recorded count of 24), and all **18/18** rebuilt C++ backend
+executables pass.
+
+The seven x86-owned Tile-to-x86 MLIR fixtures pass **7/7**. The expanded
+cross-target set now discovers 12 fixtures: **11 pass and 1 is expected
+unsupported**. The unsupported `layout_target_materializers.mlir` fixture
+requires the Apple backend; it is not an x86 failure. The native GEMM executable
+reports `AMX not available; skipping` and runs the AVX-512 path. No AMX
+readiness, numerical, or performance claim is inferred.
+
 ## X86-CALIB-1: split verdict on the hardware-free score calibration
 
-Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **closed by terminal ROCm
-rejection: bank-conflict not applicable; locality latency-ranker rejected.**
-Owning host Zen 5 (Ryzen AI Max+ 395 CPU complex, AVX-512, no AMX).
+Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **retired step-distance;
+bank-conflict not applicable; T1 cache-model follow-up required.** Owning host
+Zen 5 (Ryzen AI Max+ 395 CPU complex, AVX-512, no AMX).
 
-Two static device-free scores are being calibrated against measured latency
+The original two static device-free scores were assessed against measured latency
 ([`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md)
 §3.7–3.8; motivation in
 [`TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md) §2). They do
@@ -30,19 +69,20 @@ associativity conflicts, and store-forwarding stalls. Those are real, but they
 are a different model with different inputs — not this analyzer with different
 constants.
 
-**Locality histogram — follow-up required.** The step-distance histogram over a
-materialized access order is genuinely target-independent: it scores an access
-*order*, not a memory technology. This is also the metric with the strongest
-prior for CPUs, since blocked-algorithm cache analysis is a CPU literature
-(Lam/Rothberg/Wolf 1991, cited in the same assessment). x86 executes natively and
-has committed benchmarks (`benchmarks/x86/benchmark_x86_e2e*.py`), so it can supply a
-non-GPU architecture to the calibration — valuable precisely because a score that
-holds across CPU *and* GPU is far less likely to be fitting an accelerator
-artifact.
+**Step-distance locality — rejected fleet-wide.** It failed on the ROCm
+architecture from which it was derived, so x86 will not retune or revive it.
 
-**Missing exact-device evidence.** Rank correlation between the locality score
-and recorded Zen 5 AVX-512 latencies over the e2e benchmark rows. No evidence is
-owed for the conflict metric.
+**T1 reuse/cache model — follow-up required.** The new shared model is
+structurally applicable to blocked AVX-512/AMX GEMM, but the current target
+profile does not yet provide trustworthy Zen 5 compute peaks and the generic
+single-cache abstraction must be mapped to the L1/L2/L3 hierarchy. x86 executes
+natively and has committed benchmarks
+(`benchmarks/x86/benchmark_x86_e2e*.py`), so it can supply the non-GPU
+retain/reject check once those inputs are evidence-backed.
+
+**Missing exact-device evidence.** Evidence-backed Zen 5 compute/bandwidth/cache
+inputs and rank correlation between T1 and recorded AVX-512 latencies over the
+e2e benchmark rows. No evidence is owed for the bank-conflict metric.
 
 **Fleet outcome (2026-07-29).** ROCM-CALIB-1 reproduced 0/6 measured winners on
 the AMD home architecture (median rho -0.1381, 0% positive), triggering the
@@ -50,6 +90,7 @@ agreed no-retuning stop rule. x86 no longer owes a calibration run for adoption
 of this score. CPU cache-blocking or reuse-distance research remains valid as a
 different model; it must not be presented as a resurrection of the rejected
 step-distance latency ranker.
+
 Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **not applicable, with an
 architecture-specific reason.** Schedule IR gained `raster_order` /
 `raster_group` on `schedule.tile` / `schedule.knob` (arch-neutral definition in
@@ -67,9 +108,10 @@ is not expressible as this permutation.
 **This is a not-applicable for the *contract*, not for the underlying idea.**
 Tile-granular reuse-distance analysis, the T1 item the same assessment proposes,
 *does* port to AMX/AVX-512 cache blocking — that literature is a CPU literature
-(Lam/Rothberg/Wolf 1991 on blocked algorithms). Revisit x86 when T1 is built, not
-when an emitter consumes `raster_order`. No exact-device evidence is owed here;
-nothing in the x86 lane changed and no x86 test was affected.
+(Lam/Rothberg/Wolf 1991 on blocked algorithms). T1 v1 is now built; revisit x86
+through `X86-CALIB-1` when the hierarchy inputs and Zen 5 corpus correlation are
+ready, not by consuming `raster_order`. No exact-device evidence is owed for the
+raster contract itself.
 
 Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **not applicable**. Apple
 added `apple_gpu_air`, a precompiled-artifact lane behind the shared
@@ -98,19 +140,19 @@ evidence: no AMX-capable owning host is currently named. X86-3 may reconcile
 the compiler-lane architecture, but its AMX half remains open until a separate
 AMX host, target identity, numerical packet, and performance gate are recorded.
 
-## X86-1: the plugin lane cannot report `x86_native` off x86 — 15 red tests
+## X86-1: close the portable-C plugin provenance and host gate
 
-**Status: open. Host: needs a Zen 5 (AVX-512) runner.**
+**Status: closed for the Zen 5 AVX-512 host.**
 
-`tests/unit/test_x86_plugin.py` asserts `execution == "x86_native"` in 15
-places. On this Apple Silicon host every one returns `"reference"`, and the
-cause is not a defect:
+Historically `tests/unit/test_x86_plugin.py` asserted
+`execution == "x86_native"` in 15 places. On the original Apple Silicon audit
+host every one returned `"reference"`. The historical cause was not a defect:
 
-* `python/tessera/compiler/emit/x86_llvm.py::_x86_compile_fn` compiles the
-  emitted C with `clang -O3 -march=native -fPIC -shared`.
-* `platform.machine()` is `arm64`, so `-march=native` targets ARM. The produced
-  `.so` is not an x86 kernel, the runner declines, and it reports `reference` —
-  which is the honest answer.
+* the former `emit/x86_llvm.py::_x86_compile_fn` compiled emitted C with
+  `clang -O3 -march=native -fPIC -shared`;
+* `platform.machine()` was `arm64`, so `-march=native` targeted ARM. The
+  produced `.so` was not an x86 kernel, the runner declined, and it reported
+  `reference` — the honest answer.
 
 These failures were invisible until 2026-07-28 because `clang` was not on
 `PATH`; the lane skipped for the wrong reason. Putting LLVM 23 on `PATH`
@@ -118,17 +160,17 @@ un-gated them. They fail identically on `main`.
 
 Required work, on an x86 host:
 
-1. Prove the lane end to end: `X86CEmitter` → `_x86_compile_fn` → `X86CRunner`
-   returning `x86_native` with numerics matched against the F4 numpy oracle.
-2. Decide the `-march` contract. `native` bakes in the build host, which makes
+1. **Complete.** `X86CEmitter` → `_x86_compile_fn` → `X86CRunner` returns
+   `x86_c_native` with numerics matched against the F4 numpy oracle.
+2. **Complete.** `native` baked in the build host, which made
    a cached artifact non-portable across the fleet and interacts badly with the
    content-addressed `kernel_cache` key (the key hashes source + dtype + target,
-   *not* the host ISA — two hosts would collide on one entry). An explicit
-   `-march=x86-64-v4` or a target-profile-driven flag is the likely answer, and
-   it must be reflected in the cache key.
-3. Confirm whether `x86_aocl_dlp.py` (AOCL-DLP, Zen-tuned) and `x86_llvm.py`
-   should both register for target `"x86"` — today they do, and the second
-   `register_compiler("x86", ...)` silently replaces the first.
+   *not* the host ISA — two hosts would collide on one entry). The selected
+   profile is explicit `-march=x86-64-v4`, recorded in emitted source/cache
+   identity and guarded before execution.
+3. **Corrected.** AOCL-DLP registers only an unavailable hand-tuned candidate;
+   it never registered a compiler. The C compiler now registers for `x86_c`,
+   leaving canonical target `x86` unambiguous.
 
 **Interim (landed 2026-07-28):** the assertions are host-gated so an arm64 host
 skips instead of failing. The gate is `platform.machine()`, not a capability
@@ -137,22 +179,19 @@ claim. Removing the gate is not the fix; proving the lane on x86 is.
 
 ## X86-2: `_LANG = "c"` — the file name says LLVM, the emitter says C
 
-**Status: open. Host-free.**
+**Status: closed.**
 
-`emit/x86_llvm.py` sets `_LANG = "c"` and emits C for `clang`, not LLVM IR.
-That is a legitimate design (every backend in `compiler/emit/` emits vendor
-source text — CUDA C, HIP C++, MSL, C), but the module name states otherwise and
-misleads anyone reasoning about the MLIR/LLVM spine.
-
-Either rename to `x86_c.py`, or make it genuinely emit LLVM IR. The second is
-only worth it if the x86 lane is meant to join the C++ MLIR pipeline, which
-already reaches AMX/AVX-512 independently — so this is a naming decision first
-and an architecture decision second. Record the choice here.
+`emit/x86_c.py` sets `_LANG = "c"` and emits C for `clang`, matching its name.
+`emit/x86_llvm.py` is a compatibility-only re-export.
+That is the selected design: source-synthesis modules emit vendor source text
+(CUDA C, HIP C++, MSL, C), while canonical `x86` reaches LLVM through the typed
+C++ compiler spine. The compatibility shim preserves imports without restoring
+the misleading compiler authority.
 
 ## X86-3: reconcile the two x86 lanes
 
-**Status: open. Hosts: Zen 5 for the AVX-512 measured half; a separately named
-AMX-capable host is required for the AMX half.**
+**Status: AVX-512 half closed on Zen 5; AMX half planned/access-gated. A
+separately named AMX-capable host is still required.**
 
 x86 reaches hardware two ways, and nothing arbitrates between them:
 
@@ -160,18 +199,17 @@ x86 reaches hardware two ways, and nothing arbitrates between them:
   AVX-512 GEMM. Decision #1 records the existing end-to-end architecture;
   this plan may revalidate AVX-512 on Zen 5 but cannot refresh the AMX claim
   without an AMX-capable host.
-* **Python synthesizer** — `emit/x86_llvm.py` + `emit/x86_aocl_dlp.py` behind
-  the `KernelEmitter`/`compile_fn`/`KernelRunner` seams.
+* **Python C candidate** — `emit/x86_c.py` + optional `emit/x86_aocl_dlp.py`
+  behind the arbiter; it no longer owns canonical target `x86`.
 
 This is the same two-compiler split documented for Apple in
 [`apple/todo.md`](../apple/todo.md); x86 has it too, and the resolution should
 be consistent across the fleet rather than decided per backend. Blocked on the
 spine decision in
 [`../../compiler/COMPILER_THEORY_OF_OPERATION.md`](../../compiler/COMPILER_THEORY_OF_OPERATION.md).
-Closure requires separate terminal outcomes: an exact-device Zen 5 AVX-512
-selection, and either exact-device AMX evidence from a named capable host or an
-explicit planned/access-gated AMX state. Neither architecture may promote the
-other.
+The two required terminal outcomes are now explicit: AVX-512 is selected and
+proven on Zen 5; AMX is planned/access-gated until a named capable host supplies
+its own packet. Neither architecture promotes the other.
 
 ## Cross-backend sync
 

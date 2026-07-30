@@ -8,6 +8,13 @@ last_updated: 2026-07-30
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `CORE-ATTENTION-TRAINING-X86-2026-07-30` — **follow-up
+required, no NVIDIA contract change.** X86 adopted the shared rank-4 forward
+and tensor backward loops and closed its optimizer adjoints. No Zen 5 ABI,
+schedule, LSE policy, or timing transfers to SM120. NVIDIA retains direct
+shared-loop forward/backward consumption, architecture-owned LSE selection,
+and its remaining backward materializers.
+
 ## NVIDIA-SPINE-1: make the completed SM120 package the canonical default
 
 Cross-backend sync `EXECUTION-SPINE-2026-07-29` — **landing.** The SM120

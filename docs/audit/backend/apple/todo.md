@@ -8,6 +8,13 @@ last_updated: 2026-07-30
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `CORE-ATTENTION-TRAINING-X86-2026-07-30` — **follow-up
+required, no Apple contract change.** X86 adopted the shared rank-4 forward and
+tensor backward attention loops and closed its Lion/Adafactor physical
+adjoints. Zen 5 ABI, schedule, LSE policy, and timing do not transfer. Apple
+retains its rank-4 forward, shared backward-loop/modifier, LSE-policy, and
+optimizer/backward-materializer items.
+
 ## APPLE-SPINE-1: reconcile retained compiler lanes after canonical selection
 
 Cross-backend sync `EXECUTION-SPINE-2026-07-29` — **parity validated for the

@@ -391,7 +391,19 @@ jobs:
             | gpg --dearmor \
             | sudo tee /usr/share/keyrings/apt.llvm.org.gpg >/dev/null
           . /etc/os-release
-          echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME} main" \
+          versioned_suite="llvm-toolchain-${VERSION_CODENAME}-23"
+          snapshot_suite="llvm-toolchain-${VERSION_CODENAME}"
+          if wget -q --spider \
+              "https://apt.llvm.org/${VERSION_CODENAME}/dists/${versioned_suite}/Release"; then
+            llvm_suite="${versioned_suite}"
+          elif wget -q --spider \
+              "https://apt.llvm.org/${VERSION_CODENAME}/dists/${snapshot_suite}/Release"; then
+            llvm_suite="${snapshot_suite}"
+          else
+            echo "apt.llvm.org has neither ${versioned_suite} nor ${snapshot_suite}" >&2
+            exit 1
+          fi
+          echo "deb [signed-by=/usr/share/keyrings/apt.llvm.org.gpg] https://apt.llvm.org/${VERSION_CODENAME}/ ${llvm_suite} main" \
             | sudo tee /etc/apt/sources.list.d/llvm23.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \

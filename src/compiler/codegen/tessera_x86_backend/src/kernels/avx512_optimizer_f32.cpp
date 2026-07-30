@@ -17,6 +17,7 @@
 // √ via the exact hardware `_mm512_sqrt_ps`. A scalar reference is alongside.
 
 #include <immintrin.h>
+#include <cstddef>
 #include <cmath>
 #include <cstdint>
 
@@ -179,5 +180,187 @@ extern "C" void tessera_x86_avx512_momentum_bwd_f32(
                    + dvelocity_out[i];
         dvelocity[i] = momentum *
             ((nesterov ? momentum : 1.0f) * from_param + dvelocity_out[i]);
+    }
+}
+
+extern "C" void tessera_x86_avx512_lion_bwd_f32(
+    const float* dparam_out, const float* dmoment_out, int64_t n, float lr,
+    float beta2, float weight_decay, float* dparam, float* dgrad,
+    float* dmoment) {
+    const __m512 parameter_factor =
+        _mm512_set1_ps(1.0f - lr * weight_decay);
+    const __m512 gradient_factor = _mm512_set1_ps(1.0f - beta2);
+    const __m512 moment_factor = _mm512_set1_ps(beta2);
+    int64_t i = 0;
+    for (; i + 16 <= n; i += 16) {
+        const __m512 dp = _mm512_loadu_ps(dparam_out + i);
+        const __m512 dm = _mm512_loadu_ps(dmoment_out + i);
+        _mm512_storeu_ps(dparam + i, _mm512_mul_ps(parameter_factor, dp));
+        _mm512_storeu_ps(dgrad + i, _mm512_mul_ps(gradient_factor, dm));
+        _mm512_storeu_ps(dmoment + i, _mm512_mul_ps(moment_factor, dm));
+    }
+    for (; i < n; ++i) {
+        dparam[i] = (1.0f - lr * weight_decay) * dparam_out[i];
+        dgrad[i] = (1.0f - beta2) * dmoment_out[i];
+        dmoment[i] = beta2 * dmoment_out[i];
+    }
+}
+
+extern "C" void tessera_x86_avx512_adafactor_factored_f32(
+    const float* parameter, const float* gradient, const float* old_row,
+    const float* old_col, int64_t rows, int64_t cols, float lr, float beta2,
+    float eps, float* output, float* new_row, float* new_col) {
+    const float one_minus_beta2 = 1.0f - beta2;
+    for (int64_t r = 0; r < rows; ++r) {
+        float sum = 0.0f;
+        for (int64_t c = 0; c < cols; ++c) {
+            const float g = gradient[r * cols + c];
+            sum += g * g;
+        }
+        new_row[r] = beta2 * old_row[r]
+                   + one_minus_beta2 * (sum / static_cast<float>(cols));
+    }
+    for (int64_t c = 0; c < cols; ++c) {
+        float sum = 0.0f;
+        for (int64_t r = 0; r < rows; ++r) {
+            const float g = gradient[r * cols + c];
+            sum += g * g;
+        }
+        new_col[c] = beta2 * old_col[c]
+                   + one_minus_beta2 * (sum / static_cast<float>(rows));
+    }
+    float row_mean = 0.0f;
+    for (int64_t r = 0; r < rows; ++r) row_mean += new_row[r];
+    row_mean /= static_cast<float>(rows);
+    const float safe_mean = std::fmax(row_mean, eps);
+    for (int64_t r = 0; r < rows; ++r) {
+        const float safe_row = std::fmax(new_row[r], eps);
+        for (int64_t c = 0; c < cols; ++c) {
+            const int64_t i = r * cols + c;
+            const float scale =
+                safe_row * std::fmax(new_col[c], eps) / safe_mean;
+            const float denom = std::sqrt(scale) + eps;
+            output[i] = parameter[i] - lr * gradient[i] / denom;
+        }
+    }
+}
+
+extern "C" void tessera_x86_avx512_adafactor_full_f32(
+    const float* parameter, const float* gradient, const float* old_moment,
+    int64_t n, float lr, float beta2, float eps, float* output,
+    float* new_moment) {
+    const float one_minus_beta2 = 1.0f - beta2;
+    for (int64_t i = 0; i < n; ++i) {
+        const float g = gradient[i];
+        const float moment =
+            beta2 * old_moment[i] + one_minus_beta2 * g * g;
+        new_moment[i] = moment;
+        output[i] =
+            parameter[i] - lr * g / (std::sqrt(std::fmax(moment, eps)) + eps);
+    }
+}
+
+extern "C" void tessera_x86_avx512_adafactor_factored_bwd_f32(
+    const float* gradient, const float* old_row, const float* old_col,
+    const float* cotangent, int64_t rows, int64_t cols, float lr, float beta2,
+    float eps, float* dparam, float* dgrad, float* d_old_row,
+    float* d_old_col) {
+    float* row = new float[static_cast<size_t>(rows)];
+    float* col = new float[static_cast<size_t>(cols)];
+    float* drow = new float[static_cast<size_t>(rows)]();
+    float* dcol = new float[static_cast<size_t>(cols)]();
+    const float one_minus_beta2 = 1.0f - beta2;
+    for (int64_t r = 0; r < rows; ++r) {
+        float sum = 0.0f;
+        for (int64_t c = 0; c < cols; ++c) {
+            const float g = gradient[r * cols + c];
+            sum += g * g;
+        }
+        row[r] = beta2 * old_row[r]
+               + one_minus_beta2 * sum / static_cast<float>(cols);
+    }
+    for (int64_t c = 0; c < cols; ++c) {
+        float sum = 0.0f;
+        for (int64_t r = 0; r < rows; ++r) {
+            const float g = gradient[r * cols + c];
+            sum += g * g;
+        }
+        col[c] = beta2 * old_col[c]
+               + one_minus_beta2 * sum / static_cast<float>(rows);
+    }
+    float mean = 0.0f;
+    for (int64_t r = 0; r < rows; ++r) mean += row[r];
+    mean /= static_cast<float>(rows);
+    const float safe_mean = std::fmax(mean, eps);
+    float dmean = 0.0f;
+    for (int64_t r = 0; r < rows; ++r) {
+        const float safe_row = std::fmax(row[r], eps);
+        for (int64_t c = 0; c < cols; ++c) {
+            const int64_t i = r * cols + c;
+            const float safe_col = std::fmax(col[c], eps);
+            const float scale = safe_row * safe_col / safe_mean;
+            const float root = std::sqrt(scale);
+            const float denom = root + eps;
+            const float ds = lr * cotangent[i] * gradient[i]
+                           / (2.0f * std::fmax(root, 1.0e-30f)
+                              * denom * denom);
+            drow[r] += ds * safe_col / safe_mean;
+            dcol[c] += ds * safe_row / safe_mean;
+            dmean -= ds * safe_row * safe_col / (safe_mean * safe_mean);
+        }
+    }
+    for (int64_t r = 0; r < rows; ++r) {
+        if (row[r] > eps && mean > eps)
+            drow[r] += dmean / static_cast<float>(rows);
+        else if (row[r] <= eps)
+            drow[r] = 0.0f;
+        d_old_row[r] = beta2 * drow[r];
+    }
+    for (int64_t c = 0; c < cols; ++c) {
+        if (col[c] <= eps) dcol[c] = 0.0f;
+        d_old_col[c] = beta2 * dcol[c];
+    }
+    for (int64_t r = 0; r < rows; ++r) {
+        const float safe_row = std::fmax(row[r], eps);
+        for (int64_t c = 0; c < cols; ++c) {
+            const int64_t i = r * cols + c;
+            const float scale =
+                safe_row * std::fmax(col[c], eps) / safe_mean;
+            const float denom = std::sqrt(scale) + eps;
+            const float state =
+                drow[r] / static_cast<float>(cols)
+                + dcol[c] / static_cast<float>(rows);
+            dparam[i] = cotangent[i];
+            dgrad[i] = -lr * cotangent[i] / denom
+                     + 2.0f * one_minus_beta2 * gradient[i] * state;
+        }
+    }
+    delete[] row;
+    delete[] col;
+    delete[] drow;
+    delete[] dcol;
+}
+
+extern "C" void tessera_x86_avx512_adafactor_full_bwd_f32(
+    const float* gradient, const float* old_moment, const float* cotangent,
+    int64_t n, float lr, float beta2, float eps, float* dparam, float* dgrad,
+    float* d_old_moment) {
+    const float one_minus_beta2 = 1.0f - beta2;
+    for (int64_t i = 0; i < n; ++i) {
+        const float g = gradient[i];
+        const float moment =
+            beta2 * old_moment[i] + one_minus_beta2 * g * g;
+        const float root = std::sqrt(std::fmax(moment, eps));
+        const float denom = root + eps;
+        const float dm =
+            moment > eps
+                ? lr * cotangent[i] * g
+                      / (2.0f * std::fmax(root, 1.0e-30f)
+                         * denom * denom)
+                : 0.0f;
+        dparam[i] = cotangent[i];
+        dgrad[i] = -lr * cotangent[i] / denom
+                 + 2.0f * one_minus_beta2 * g * dm;
+        d_old_moment[i] = beta2 * dm;
     }
 }

@@ -9,6 +9,43 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+## X86 attention and training closeout
+
+Cross-backend sync `CORE-ATTENTION-TRAINING-X86-2026-07-30` — **closed for
+Zen 5 AVX-512; no AMX claim.**
+
+The pre-existing inventory is now explicit:
+
+- AVX-512 rank-4 attention forward, Lion forward, SGD and
+  Momentum/Nesterov VJPs, loss-to-SGD/AdamW fusion, and physical DeltaNet
+  backward were already complete.
+- `X86-ATTN-CANON-1` is complete. Canonical x86 packaging begins from
+  `tessera.flash_attn`, runs the shared rank-4 batch/query-head/KV recurrence,
+  fails closed unless the streaming `scf.for` structure is present, and only
+  then selects the established typed AVX-512 attention ABI. The package source
+  no longer presents a freshly synthesized `tile.attention_kernel` as its
+  semantic authority. Existing f32 MHA/GQA, bias, causal/window, and softcap
+  numerical behavior remains covered on the Ryzen AI MAX+ 395.
+- `X86-ATTN-BWD-1` is complete. The x86 package structurally consumes the
+  canonical tensor-valued dQ, split-dK/dV, and ascending fixed-order reduction
+  loops. Its AVX-512 ABI executes MHA/GQA/MQA gradients with optional bias,
+  causal/window, and softcap modifiers.
+- `X86-LSE-1` is complete for this Zen 5 target. A 21-sample resident packet
+  compares the established forward plus recomputed-LSE backward with the
+  forward-with-LSE plus saved-LSE backward at sequence lengths 32/64/128.
+  Saved LSE wins by 1.45x/1.23x/1.06x, so x86 selects `save_lse`. Evidence:
+  [`../../../../benchmarks/baselines/x86_avx512_attention_lse_2026_07_30.json`](../../../../benchmarks/baselines/x86_avx512_attention_lse_2026_07_30.json).
+- `X86-LION-BWD-1` is complete. One AVX-512 call implements the canonical
+  stop-gradient-through-sign VJP for parameter, gradient, and carried moment.
+- `X86-ADAFACTOR-1` is complete. AVX-512 factored row/column and lower-rank
+  full-moment forward execution and analytic physical adjoints match the shared
+  optimizer/VJP oracles.
+
+The x86 work does not transfer physical schedules or evidence to sibling
+backends. ROCm parity was already complete; Apple and NVIDIA retain their
+architecture-owned canonical attention/backward and training materializer
+items. Validation for this closeout is recorded by the owning PR.
+
 ## X86-SPINE-1: reconcile C synthesis with the MLIR/LLVM lane
 
 Cross-backend sync `EXECUTION-SPINE-2026-07-29` — **AVX-512 lane landing; AMX

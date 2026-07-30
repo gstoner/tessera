@@ -610,26 +610,26 @@ def emit_attention_backward_graph_ir(
 ) -> str:
     """Emit the shared tensor-valued forward-recompute and backward program.
 
-    This is the canonical source for optimized gfx1151 backward packaging.
-    Target lowering consumes the resulting ``scf.for`` phase bodies and owns
-    only the AMD schedule and five-entry launch ABI.  The launch-level Tile
+    This is the canonical target-neutral source for optimized backward
+    packaging. Target lowering consumes the resulting ``scf.for`` phase bodies
+    and owns only its physical schedule and launch ABI. The launch-level Tile
     emitter above remains a compatibility/reference seam.
     """
-    if storage not in {"f16", "bf16"}:
-        raise ValueError(f"unsupported gfx1151 attention backward storage {storage!r}")
+    if storage not in {"f16", "bf16", "f32"}:
+        raise ValueError(f"unsupported attention backward storage {storage!r}")
     if not math.isfinite(scale) or scale <= 0.0:
-        raise ValueError("gfx1151 attention backward scale must be finite and positive")
+        raise ValueError("attention backward scale must be finite and positive")
     if not math.isfinite(softcap) or softcap < 0.0:
-        raise ValueError("gfx1151 attention backward softcap must be finite and nonnegative")
+        raise ValueError("attention backward softcap must be finite and nonnegative")
     if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
-        raise ValueError("gfx1151 attention backward dropout must satisfy 0 <= p < 1")
+        raise ValueError("attention backward dropout must satisfy 0 <= p < 1")
     if dropout_seed < 0:
-        raise ValueError("gfx1151 attention backward dropout seed must be nonnegative")
+        raise ValueError("attention backward dropout seed must be nonnegative")
     if query_block <= 0 or key_block <= 0 or split_count < 2:
-        raise ValueError("gfx1151 attention backward needs positive blocks and at least two splits")
+        raise ValueError("attention backward needs positive blocks and at least two splits")
     b, hq, hkv, sq, sk, head_dim, value_dim = dims
     if head_dim != value_dim:
-        raise ValueError("gfx1151 optimized attention backward requires D == Dv")
+        raise ValueError("optimized attention backward requires D == Dv")
 
     scale_literal = _mlir_float(scale)
     softcap_literal = _mlir_float(softcap)

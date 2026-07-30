@@ -102,6 +102,32 @@ def _rocm_lion(param, grad, moment):
     )
 
 
+@ts.jit(
+    target="x86",
+    autodiff="reverse",
+    wrt=("param", "grad", "moment"),
+)
+def _x86_lion(param, grad, moment):
+    return ts.ops.lion(
+        param,
+        grad,
+        moment,
+        lr=0.004,
+        beta1=0.8,
+        beta2=0.93,
+        weight_decay=0.025,
+    )
+
+
+@ts.jit(
+    target="x86",
+    autodiff="reverse",
+    wrt=("q", "key", "value"),
+)
+def _x86_flash_attention(q, key, value):
+    return ts.ops.flash_attn(q, key, value, scale=0.25, causal=True)
+
+
 @ts.jit(target="rocm", autodiff="reverse", wrt=("log_p", "q"))
 def _rocm_kl(log_p, q):
     return ts.ops.kl_divergence(
@@ -417,6 +443,55 @@ def test_rocm_lion_backward_runs_shared_stop_sign_policy_on_gfx1151():
         "rocm_lion_bwd_compiled"
     )
     assert _rocm_lion.last_backward_execution["residual_policy"] == "none"
+
+
+def test_x86_lion_backward_runs_shared_stop_sign_policy_on_avx512():
+    from tessera import runtime as rt
+
+    if not rt._x86_elementwise_available():
+        pytest.skip("AVX-512 runtime unavailable")
+    rng = np.random.default_rng(125)
+    shape = (5, 19)
+    values = [rng.normal(size=shape).astype(np.float32) for _ in range(3)]
+    cotangents = [
+        rng.normal(size=shape).astype(np.float32) for _ in range(2)
+    ]
+    actual = _x86_lion.native_backward(
+        *values, out_cotangents=tuple(cotangents)
+    )
+    expected = (
+        cotangents[0] * (1.0 - 0.004 * 0.025),
+        cotangents[1] * (1.0 - 0.93),
+        cotangents[1] * 0.93,
+    )
+    for got, want in zip(actual, expected, strict=True):
+        np.testing.assert_allclose(got, want, atol=2e-6, rtol=2e-6)
+    assert _x86_lion.last_backward_execution["compiler_path"] == (
+        "x86_lion_bwd_compiled"
+    )
+
+
+def test_x86_attention_backward_reaches_canonical_avx512_package():
+    from tessera import runtime as rt
+
+    if not rt._x86_elementwise_available():
+        pytest.skip("AVX-512 runtime unavailable")
+    rng = np.random.default_rng(126)
+    q = rng.normal(size=(1, 2, 8, 16)).astype(np.float32)
+    key = rng.normal(size=(1, 2, 8, 16)).astype(np.float32)
+    value = rng.normal(size=(1, 2, 8, 16)).astype(np.float32)
+    dout = rng.normal(size=(1, 2, 8, 16)).astype(np.float32)
+    gradients = _x86_flash_attention.native_backward(
+        q, key, value, out_cotangents=dout
+    )
+    assert len(gradients) == 3
+    assert all(gradient.shape == q.shape for gradient in gradients)
+    assert _x86_flash_attention.last_backward_execution["compiler_path"] == (
+        "x86_flash_attn_bwd_compiled"
+    )
+    assert _x86_flash_attention.last_backward_execution["residual_policy"] == (
+        "saved"
+    )
 
 
 def test_rocm_kl_backward_handles_nonfinal_axis_and_tensor_cotangent():

@@ -112,7 +112,9 @@ def _extract_hsaco(gpu_binary_mlir: str) -> bytes:
     return bytes(out)
 
 
-def _compile_to_hsaco(op: str, mlir_opt: str, n: int) -> bytes:
+def _compile_to_hsaco(
+    op: str, tessera_opt: Path, mlir_opt: str, n: int
+) -> bytes:
     """tessera kernel → tessera-opt emit-rocdl → mlir-opt finish+attach+binary →
     extract hsaco bytes. The kernel name is fixed (`ew`)."""
     src = f'''
@@ -121,7 +123,7 @@ func.func @ew(%a: tensor<{n}xf32>, %b: tensor<{n}xf32>) -> tensor<{n}xf32> {{
   return %0 : tensor<{n}xf32>
 }}
 '''
-    emit = _run([str(TESSERA_OPT), "-", "--tessera-emit-rocdl"], input=src)
+    emit = _run([str(tessera_opt), "-", "--tessera-emit-rocdl"], input=src)
     assert emit.returncode == 0, f"tessera-emit-rocdl failed: {emit.stderr}"
     pipeline = (
         "builtin.module("
@@ -200,7 +202,7 @@ def test_tessera_kernel_compiles_through_mlir_and_executes(op):
         pytest.skip("libamdhip64.so not loadable — no ROCm host")
 
     n = 64
-    hsaco = _compile_to_hsaco(op, mlir_opt, n)
+    hsaco = _compile_to_hsaco(op, TESSERA_OPT, mlir_opt, n)
 
     rng = np.random.default_rng(0)
     a = rng.standard_normal(n).astype(np.float32)
@@ -221,6 +223,6 @@ def test_emit_rocdl_serializes_to_a_real_hsaco_elf():
     mlir_opt = _find_mlir_opt()
     if mlir_opt is None:
         pytest.skip("mlir-opt not found (set TESSERA_MLIR_OPT or install LLVM 23)")
-    hsaco = _compile_to_hsaco("tessera.add", mlir_opt, 64)
+    hsaco = _compile_to_hsaco("tessera.add", TESSERA_OPT, mlir_opt, 64)
     assert hsaco[:4] == b"\x7fELF"
     assert len(hsaco) > 256, "hsaco implausibly small"

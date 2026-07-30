@@ -395,6 +395,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_flash_attn_compiled": "x86 CPU attention lane — FA-style online-softmax "
                                "flash_attn forward via the AVX-512 kernel "
                                "(MHA scale+causal; the ROCm-WMMA partner). f32",
+    "x86_flash_attn_bwd_compiled": "x86 CPU deterministic tensor-valued "
+                                   "flash-attention VJP via the AVX-512 image; "
+                                   "MHA/GQA/MQA, bias, window, softcap, and "
+                                   "saved/recomputed LSE. f32",
     "x86_mla_compiled": "x86 CPU MLA latent-KV lane — DeepSeek "
                         "latent_kv_compress/expand_k/expand_v/mla_decode_fused "
                         "composed on the AVX-512 GEMM + flash_attn lanes. f32",
@@ -664,6 +668,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_momentum_bwd_compiled": "x86 CPU AVX-512 paired Momentum/Nesterov "
                             "backward; one launch writes parameter, gradient, "
                             "and velocity gradients. f32",
+    "x86_lion_bwd_compiled": "x86 CPU AVX-512 Lion stop-sign VJP; one native "
+                            "call writes parameter, gradient, and moment "
+                            "cotangents. f32",
+    "x86_adafactor_compiled": "x86 CPU AVX-512 factored/full Adafactor update "
+                            "with explicit row/column or full-moment state. f32",
+    "x86_adafactor_bwd_compiled": "x86 CPU AVX-512 analytic factored/full "
+                            "Adafactor adjoint with explicit state cotangents. f32",
     "x86_normcompose_compiled": "x86 CPU group/instance/weight norm — composed "
                             "on the AVX-512 layer_norm + reduce kernels (host "
                             "reshape/divide). f32",
@@ -1731,6 +1742,42 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
         residual_policy="none",
         residual_tradeoff="The affine VJP requires no forward residuals."),
+    ("x86", "x86_lion_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_lion_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_lion_bwd_compiled", runtime_status="success",
+        reason="One AVX-512 call applies the shared stop-sign Lion VJP to "
+               "parameter, gradient, and moment cotangents.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="lion", device_proof="device_verified_abi",
+        evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_x86_optimizer_compiled.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="none",
+        residual_tradeoff="The stop-sign policy needs no forward residuals."),
+    ("x86", "x86_adafactor_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_adafactor_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_adafactor_compiled", runtime_status="success",
+        reason="AVX-512 image executes explicit factored row/column state or "
+               "lower-rank full-moment Adafactor updates.",
+        execution_mode="cpu_avx512", op_family="adafactor",
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_x86_optimizer_compiled.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512"),
+    ("x86", "x86_adafactor_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_adafactor_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_adafactor_bwd_compiled", runtime_status="success",
+        reason="AVX-512 image executes analytic factored/full Adafactor "
+               "parameter, gradient, and optimizer-state adjoints.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="adafactor", device_proof="device_verified_abi",
+        evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_x86_optimizer_compiled.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="save_inputs_and_state",
+        residual_tradeoff="The adjoint recomputes updated moments from inputs."),
     ("x86", "x86_normcompose_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_normcompose_compiled",
         execution_kind="native_cpu", executable=True,
@@ -1894,6 +1941,23 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "reshape/scale/mask/KV-group expansion in Python. The CPU analog "
                "of the ROCm WMMA flash-attention family. f32.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_flash_attn_bwd_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_flash_attn_bwd_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_flash_attn_bwd_compiled", runtime_status="success",
+        reason="The x86 AVX-512 image consumes the shared tensor-valued "
+               "attention VJP contract and emits dQ plus fixed-order shared "
+               "dK/dV reductions for MHA/GQA/MQA. Bias, causal/window, "
+               "softcap, and saved/recomputed LSE use the forward contract.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="flash_attn",
+        backward_aliases=("multi_head_attention", "gqa_attention", "mqa_attention"),
+        residual_policy="save_lse",
+        residual_tradeoff="Exact Zen 5 AVX-512 timing selected saved row LSE "
+                          "over recomputation at sequence lengths 32/64/128.",
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_x86_attention_backward_compiled.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512"),
     ("x86", "x86_rope_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_rope_compiled",
         execution_kind="native_cpu", executable=True,

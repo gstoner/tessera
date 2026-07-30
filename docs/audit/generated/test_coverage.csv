@@ -2,7 +2,7 @@ op,python_refs,lit_refs,negative_refs,total_refs,is_thinly_tested,dtype_variants
 abs,6,0,1,6,0,bf16 f32,directly_tested,6 direct test references
 absolute,6,0,0,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 acos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-adafactor,12,0,0,12,0,fp32 fp64,directly_tested,12 direct test references
+adafactor,15,0,0,15,0,fp32 fp64,directly_tested,15 direct test references
 adam,17,5,0,22,0,fp32 fp64,directly_tested,22 direct test references
 adamw,15,5,0,20,0,fp32 fp64,directly_tested,20 direct test references
 adaptive_pool,6,0,0,6,0,,directly_tested,6 direct test references
@@ -182,7 +182,7 @@ factorized_matmul,6,0,1,6,0,,directly_tested,6 direct test references
 factorized_pos_emb,12,0,1,12,0,fp16,directly_tested,12 direct test references
 fake_quantize,6,0,1,6,0,,directly_tested,6 direct test references
 fft,17,2,0,19,0,f32 fp32,directly_tested,19 direct test references
-flash_attn,120,72,9,192,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,192 direct test references
+flash_attn,124,72,9,196,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,196 direct test references
 flatten,5,5,0,10,0,,directly_tested,10 direct test references
 flip,7,0,0,7,0,,directly_tested,7 direct test references
 floor,6,0,1,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
@@ -245,7 +245,7 @@ linear_attn,44,8,2,52,0,,directly_tested,52 direct test references
 linear_attn_state,7,0,1,7,0,fp16,directly_tested,7 direct test references
 linear_general,15,0,0,15,0,,directly_tested,15 direct test references
 linear_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-lion,12,0,0,12,0,fp32 fp64,directly_tested,12 direct test references
+lion,14,0,0,14,0,fp32 fp64,directly_tested,14 direct test references
 load_balance_loss,6,0,0,6,0,,directly_tested,6 direct test references
 load_sharded,3,0,1,3,0,,directly_tested,3 direct test references
 load_state,14,0,2,14,0,,directly_tested,14 direct test references

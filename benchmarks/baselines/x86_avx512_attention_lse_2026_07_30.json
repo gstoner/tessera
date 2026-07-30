@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "work_item": "X86-LSE-1",
+  "host": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "architecture": "zen5_avx512",
+  "environment": "WSL2 Ubuntu",
+  "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "timer": "time.perf_counter_ns",
+  "warmup": 5,
+  "reps": 21,
+  "comparison": "established forward + recomputed-LSE backward versus forward-with-LSE + saved-LSE backward",
+  "rows": [
+    {
+      "sequence": 32,
+      "recompute_ms": 0.10793,
+      "saved_ms": 0.07467,
+      "saved_speedup": 1.4454265434578812,
+      "winner": "saved"
+    },
+    {
+      "sequence": 64,
+      "recompute_ms": 0.194401,
+      "saved_ms": 0.157481,
+      "saved_speedup": 1.234440980181736,
+      "winner": "saved"
+    },
+    {
+      "sequence": 128,
+      "recompute_ms": 0.566427,
+      "saved_ms": 0.535547,
+      "saved_speedup": 1.0576606721725639,
+      "winner": "saved"
+    }
+  ],
+  "verdict": "saved"
+}

@@ -21,6 +21,7 @@ from tessera.compiler.x86_native import (
     emit_reduce_tile_ir,
     emit_softmax_tile_ir,
     package_attention,
+    package_attention_backward_semantics,
     package_matmul,
     package_reduction,
     package_softmax,
@@ -108,6 +109,16 @@ def _fake_lower(tile_ir: str, symbol: str):
     return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-x86", "compiler", "toolchain"
 
 
+def _fake_attention_semantics(graph_ir: str, *, tile_q: int, tile_kv: int) -> str:
+    assert '"tessera.flash_attn"' in graph_ir
+    assert tile_q > 0 and tile_kv > 0
+    return (
+        'module { "tessera.streaming_attention"() ({ '
+        '"tessera_attn.streaming_update"() : () -> () '
+        '}) : () -> () }'
+    )
+
+
 def test_x86_emitters_use_shared_typed_envelopes() -> None:
     softmax = emit_softmax_tile_ir(entry="softmax")
     reduction = emit_reduce_tile_ir(entry="reduce", kind="mean", axis=1, keepdims=True)
@@ -159,6 +170,10 @@ def test_canonical_x86_selector_defaults_to_descriptor(
     monkeypatch, module, abi,
 ) -> None:
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
+    monkeypatch.setattr(
+        "tessera.compiler.x86_native._lower_attention_semantics",
+        _fake_attention_semantics,
+    )
     monkeypatch.setattr("tessera.compiler.x86_native.tools_available", lambda: True)
     result = canonical_compile(
         module, target="x86", enable_tool_validation=False,
@@ -310,10 +325,48 @@ def test_x86_builtin_launcher_registers_each_pilot_abi_in_isolation(abi) -> None
 )
 def test_x86_next_slices_package_typed_descriptors(monkeypatch, module, packager, abi) -> None:
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
+    monkeypatch.setattr(
+        "tessera.compiler.x86_native._lower_attention_semantics",
+        _fake_attention_semantics,
+    )
     package = packager(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
     assert package.image.entry_points[0].abi_id == abi
-    assert package.descriptor.provenance["work_item"] == "X86-E2E-1"
+    expected_item = (
+        "X86-ATTN-CANON-1"
+        if abi in {X86_ATTENTION_F32_ABI, X86_ATTENTION_EXT_F32_ABI}
+        else "X86-E2E-1"
+    )
+    assert package.descriptor.provenance["work_item"] == expected_item
+    if expected_item == "X86-ATTN-CANON-1":
+        assert package.descriptor.provenance["semantic_route"] == (
+            "canonical_rank4_kv_scf_for"
+        )
+        assert '"tessera.flash_attn"' in package.tile_ir
+        assert "tile.attention_kernel" not in package.tile_ir
+        assert "tessera.streaming_attention" in package.backend_ir
+        assert "tessera_attn.streaming_update" in package.backend_ir
+
+
+@pytest.mark.skipif(not tools_available(), reason="x86 compiler/shared library unavailable")
+def test_x86_attention_backward_consumes_shared_tensor_loops() -> None:
+    graph_ir, semantic_ir = package_attention_backward_semantics(
+        dims=(1, 4, 2, 8, 8, 16, 16),
+        scale=0.25,
+        causal=True,
+        bias=True,
+        window=5,
+        softcap=3.0,
+        lse_checkpoint="recompute",
+    )
+    assert '"tessera_attn.backward"' in graph_ir
+    assert 'tessera.lse_checkpoint = "recompute"' in graph_ir
+    assert 'tessera.attention_backward_phase = "dq.key_block"' in semantic_ir
+    assert 'tessera.attention_backward_phase = "dkdv.key_block"' in semantic_ir
+    assert (
+        'tessera.attention_backward_phase = "reduce.fixed_order_split"'
+        in semantic_ir
+    )
 
 
 @pytest.mark.skipif(not tools_available(), reason="x86 compiler/shared library unavailable")

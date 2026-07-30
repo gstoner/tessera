@@ -1254,6 +1254,7 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86Native
         )
     names, bias_name, output_name, dims, scale, causal, window, softcap = contract
     b, hq, hkv, sq, sk, d, dv = dims
+    attention_dims = (b, hq, hkv, sq, sk, d, dv)
     extended = bias_name is not None or window >= 0 or softcap > 0.0
     symbol = "tessera_x86_flash_attn_ext_f32" if extended else "tessera_x86_flash_attn_f32"
     abi = X86_ATTENTION_EXT_F32_ABI if extended else X86_ATTENTION_F32_ABI
@@ -1261,7 +1262,7 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86Native
         f"{scale:.17g}:{causal}:{bool(bias_name)}:{window}:{softcap:.17g}".encode()
     ).hexdigest()[:10]
     graph_ir = emit_attention_graph_ir(
-        entry=f"tessera_graph_x86_attention_{semantic}", dims=dims,
+        entry=f"tessera_graph_x86_attention_{semantic}", dims=attention_dims,
         scale=scale, causal=causal, bias=bias_name is not None,
         window=window, softcap=softcap,
     )

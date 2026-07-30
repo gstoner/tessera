@@ -7320,12 +7320,12 @@ def _execute_x86_compiled_flash_attn_backward(
     if q.ndim != 4 or k.ndim != 4 or v.ndim != 4 or dout.ndim != 4:
         raise ValueError("x86 attention backward requires rank-4 [B,H,S,D] tensors")
     b, hq, sq, d = (int(value) for value in q.shape)
-    bk, hkv, sk, dk = (int(value) for value in k.shape)
+    bk, hkv, sk, key_d = (int(value) for value in k.shape)
     bv, hv, sv, dv = (int(value) for value in v.shape)
     if (
         b != bk
         or b != bv
-        or dk != d
+        or key_d != d
         or hv != hkv
         or sv != sk
         or hkv <= 0

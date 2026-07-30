@@ -34,7 +34,7 @@ The pre-existing inventory is now explicit:
   compares the established forward plus recomputed-LSE backward with the
   forward-with-LSE plus saved-LSE backward at sequence lengths 32/64/128.
   Saved LSE wins by 1.45x/1.23x/1.06x, so x86 selects `save_lse`. Evidence:
-  [`../../../benchmarks/baselines/x86_avx512_attention_lse_2026_07_30.json`](../../../benchmarks/baselines/x86_avx512_attention_lse_2026_07_30.json).
+  [`../../../../benchmarks/baselines/x86_avx512_attention_lse_2026_07_30.json`](../../../../benchmarks/baselines/x86_avx512_attention_lse_2026_07_30.json).
 - `X86-LION-BWD-1` is complete. One AVX-512 call implements the canonical
   stop-gradient-through-sign VJP for parameter, gradient, and carried moment.
 - `X86-ADAFACTOR-1` is complete. AVX-512 factored row/column and lower-rank

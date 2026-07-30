@@ -109,6 +109,16 @@ def _fake_lower(tile_ir: str, symbol: str):
     return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-x86", "compiler", "toolchain"
 
 
+def _fake_attention_semantics(graph_ir: str, *, tile_q: int, tile_kv: int) -> str:
+    assert '"tessera.flash_attn"' in graph_ir
+    assert tile_q > 0 and tile_kv > 0
+    return (
+        'module { "tessera.streaming_attention"() ({ '
+        '"tessera_attn.streaming_update"() : () -> () '
+        '}) : () -> () }'
+    )
+
+
 def test_x86_emitters_use_shared_typed_envelopes() -> None:
     softmax = emit_softmax_tile_ir(entry="softmax")
     reduction = emit_reduce_tile_ir(entry="reduce", kind="mean", axis=1, keepdims=True)
@@ -160,6 +170,10 @@ def test_canonical_x86_selector_defaults_to_descriptor(
     monkeypatch, module, abi,
 ) -> None:
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
+    monkeypatch.setattr(
+        "tessera.compiler.x86_native._lower_attention_semantics",
+        _fake_attention_semantics,
+    )
     monkeypatch.setattr("tessera.compiler.x86_native.tools_available", lambda: True)
     result = canonical_compile(
         module, target="x86", enable_tool_validation=False,
@@ -311,6 +325,10 @@ def test_x86_builtin_launcher_registers_each_pilot_abi_in_isolation(abi) -> None
 )
 def test_x86_next_slices_package_typed_descriptors(monkeypatch, module, packager, abi) -> None:
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
+    monkeypatch.setattr(
+        "tessera.compiler.x86_native._lower_attention_semantics",
+        _fake_attention_semantics,
+    )
     package = packager(module, pipeline_name="tessera-lower-to-x86")
     assert package.descriptor.abi_id == abi
     assert package.image.entry_points[0].abi_id == abi
@@ -330,6 +348,7 @@ def test_x86_next_slices_package_typed_descriptors(monkeypatch, module, packager
         assert "tessera_attn.streaming_update" in package.backend_ir
 
 
+@pytest.mark.skipif(not tools_available(), reason="x86 compiler/shared library unavailable")
 def test_x86_attention_backward_consumes_shared_tensor_loops() -> None:
     graph_ir, semantic_ir = package_attention_backward_semantics(
         dims=(1, 4, 2, 8, 8, 16, 16),

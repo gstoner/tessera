@@ -1064,9 +1064,12 @@ class JitFn:
         if ordered is None:
             raise TesseraJitError("native_backward requires every forward argument")
         inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
-        cots = out_cotangents if isinstance(out_cotangents, (tuple, list)) \
+        cpu_cots = (
+            tuple(out_cotangents)
+            if isinstance(out_cotangents, (tuple, list))
             else (out_cotangents,)
-        cotangents = [np.ascontiguousarray(np.asarray(value)) for value in cots]
+        )
+        cotangents = [np.ascontiguousarray(np.asarray(value)) for value in cpu_cots]
         module = self._specialized_autodiff_module(args, kwargs)
         opt = _jb._find_tessera_opt()
         if opt is None:

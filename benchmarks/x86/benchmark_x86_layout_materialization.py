@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-import tessera.compiler.emit.x86_llvm  # noqa: F401
+import tessera.compiler.emit.x86_c  # noqa: F401
 from tessera.compiler.emit.kernel_emitter import get_runner
 from tessera.compiler.fusion_core import FusedRegion
 
@@ -38,7 +38,7 @@ def record(size: int = 128, warmup: int = 5, reps: int = 30) -> dict:
     # Fortran-order physical storage. A row-major binding must repack it.
     a = np.asfortranarray(rng.standard_normal((size, size)).astype(np.float32))
     b = np.asfortranarray(rng.standard_normal((size, size)).astype(np.float32))
-    runner = get_runner("x86")
+    runner = get_runner("x86_c")
     regions = {
         "repack_row_major": FusedRegion(
             epilogue=("relu",), a_layout="row_major", b_layout="row_major"
@@ -50,8 +50,8 @@ def record(size: int = 128, warmup: int = 5, reps: int = 30) -> dict:
 
     def invoke(region):
         value, tag = runner.run_fused_region(region, a, b)
-        if tag != "x86_native":
-            raise RuntimeError(f"expected x86_native, got {tag}")
+        if tag != "x86_c_native":
+            raise RuntimeError(f"expected x86_c_native, got {tag}")
         return value
 
     expected = regions["repack_row_major"].reference(a, b)

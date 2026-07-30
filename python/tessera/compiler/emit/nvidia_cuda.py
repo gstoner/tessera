@@ -3316,7 +3316,7 @@ def _raster_launch(order: str, group: int, *, m: str, n: str) -> tuple[str, str,
         raise ValueError("raster_group must be positive")
     if order == RasterOrder.ROW_MAJOR.value:
         return (
-            f"  int mt=blockIdx.x*16, nt=blockIdx.y*8, ",
+            "  int mt=blockIdx.x*16, nt=blockIdx.y*8, ",
             f"dim3 grid(({m}+15)/16,({n}+7)/8), block(32)",
             f"dim3(({m}+15)/16,({n}+7)/8),32",
         )

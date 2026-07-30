@@ -7284,6 +7284,132 @@ def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> An
     return _x86_flash_attn_kernel(q, k, v, scale, causal, np)
 
 
+def _execute_x86_compiled_flash_attn_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Execute the canonical rank-4 attention VJP on the AVX-512 image.
+
+    The native ABI consumes dO/Q/K/V directly and accumulates shared-KV
+    gradients in fixed query-head/query-row/key-row order. ``lse_checkpoint``
+    selects the x86-owned saved/recompute policy without changing the gradient
+    contract.
+    """
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.flash_attn":
+        raise ValueError(
+            "x86_flash_attn_bwd_compiled requires one tessera.flash_attn op"
+        )
+    op = ops[0]
+    operand_names = [str(name) for name in op.get("operands", [])]
+    if len(operand_names) not in {3, 4} or not arg_names:
+        raise ValueError("attention backward requires dO plus Q, K, V, and optional bias")
+    values = _bind_launch_args(args, arg_names)
+    dout = np.ascontiguousarray(
+        _as_numpy(values[str(arg_names[0])]), dtype=np.float32
+    )
+    arrays = [
+        np.ascontiguousarray(_as_numpy(values[name]), dtype=np.float32)
+        for name in operand_names
+    ]
+    q, k, v = arrays[:3]
+    bias = arrays[3] if len(arrays) == 4 else None
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4 or dout.ndim != 4:
+        raise ValueError("x86 attention backward requires rank-4 [B,H,S,D] tensors")
+    b, hq, sq, d = (int(value) for value in q.shape)
+    bk, hkv, sk, dk = (int(value) for value in k.shape)
+    bv, hv, sv, dv = (int(value) for value in v.shape)
+    if (
+        b != bk
+        or b != bv
+        or dk != d
+        or hv != hkv
+        or sv != sk
+        or hkv <= 0
+        or hq % hkv
+        or dout.shape != (b, hq, sq, dv)
+    ):
+        raise ValueError(
+            "x86 attention backward requires compatible MHA/GQA Q/K/V/dO shapes"
+        )
+    if bias is not None and bias.shape != (b, hq, sq, sk):
+        raise ValueError("x86 attention backward bias must have shape [B,Hq,Sq,Sk]")
+    kwargs = op.get("kwargs") or {}
+    if float(kwargs.get("dropout_p", 0.0) or 0.0) != 0.0:
+        raise ValueError("x86 attention backward does not yet support dropout")
+    scale = float(kwargs.get("scale") or (1.0 / float(np.sqrt(d))))
+    causal = bool(kwargs.get("causal", False))
+    window = int(kwargs.get("window", 0) or 0)
+    softcap = float(
+        kwargs.get("softcap", kwargs.get("logit_softcap", 0.0)) or 0.0
+    )
+    checkpoint = str(kwargs.get("lse_checkpoint", "saved"))
+    if checkpoint not in {"saved", "recompute"}:
+        raise ValueError("x86 lse_checkpoint must be 'saved' or 'recompute'")
+    if window < 0 or softcap < 0.0:
+        raise ValueError("x86 attention backward window and softcap must be nonnegative")
+
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    cf = ctypes.POINTER(ctypes.c_float)
+    null = cf()
+    bias_ptr = bias.ctypes.data_as(cf) if bias is not None else null
+    saved_ptr = null
+    if checkpoint == "saved":
+        forward = np.empty((b, hq, sq, dv), dtype=np.float32)
+        saved_lse = np.empty((b, hq, sq), dtype=np.float32)
+        lib.tessera_x86_flash_attn_ext_lse_f32(
+            q.ctypes.data_as(cf),
+            k.ctypes.data_as(cf),
+            v.ctypes.data_as(cf),
+            bias_ptr,
+            ctypes.c_int64(b),
+            ctypes.c_int64(hq),
+            ctypes.c_int64(hkv),
+            ctypes.c_int64(sq),
+            ctypes.c_int64(sk),
+            ctypes.c_int64(d),
+            ctypes.c_int64(dv),
+            ctypes.c_float(scale),
+            ctypes.c_int(int(causal)),
+            ctypes.c_int64(window),
+            ctypes.c_float(softcap),
+            forward.ctypes.data_as(cf),
+            saved_lse.ctypes.data_as(cf),
+        )
+        saved_ptr = saved_lse.ctypes.data_as(cf)
+    dq = np.empty_like(q)
+    dk = np.empty_like(k)
+    dv_out = np.empty_like(v)
+    lib.tessera_x86_flash_attn_bwd_f32(
+        dout.ctypes.data_as(cf),
+        q.ctypes.data_as(cf),
+        k.ctypes.data_as(cf),
+        v.ctypes.data_as(cf),
+        bias_ptr,
+        saved_ptr,
+        ctypes.c_int64(b),
+        ctypes.c_int64(hq),
+        ctypes.c_int64(hkv),
+        ctypes.c_int64(sq),
+        ctypes.c_int64(sk),
+        ctypes.c_int64(d),
+        ctypes.c_int64(dv),
+        ctypes.c_float(scale),
+        ctypes.c_int(int(causal)),
+        ctypes.c_int64(window),
+        ctypes.c_float(softcap),
+        dq.ctypes.data_as(cf),
+        dk.ctypes.data_as(cf),
+        dv_out.ctypes.data_as(cf),
+    )
+    return dq, dk, dv_out
+
+
 def _x86_flash_attn(q: Any, k: Any, v: Any, *, scale: Any = None, causal: bool = True, attn_bias: Any = None) -> Any:
     """Run the native AVX-512 flash_attn forward on Q/K/V via the x86 flash
     executor (constructs a minimal sub-artifact) — the CPU analog of
@@ -12709,6 +12835,222 @@ def _execute_x86_compiled_momentum_backward(artifact: RuntimeArtifact, args: Any
         *(output.ctypes.data_as(cf) for output in outputs),
     )
     return tuple(outputs)
+
+
+def _execute_x86_compiled_lion_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Run Lion's stop-sign VJP through one AVX-512 library call."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.lion":
+        raise ValueError("x86_lion_bwd_compiled requires one tessera.lion op")
+    values = _bind_launch_args(args, names)
+    cotangent_names = list(
+        metadata.get("out_cotangents") or ["dparam_out", "dmoment_out"]
+    )
+    if len(cotangent_names) != 2:
+        raise ValueError("x86 Lion backward requires two output cotangents")
+    dp = np.ascontiguousarray(_as_numpy(values[cotangent_names[0]]), np.float32)
+    dm = np.ascontiguousarray(_as_numpy(values[cotangent_names[1]]), np.float32)
+    if dp.shape != dm.shape:
+        raise ValueError("x86 Lion output cotangents must have matching shapes")
+    kwargs = ops[0].get("kwargs") or {}
+    outputs = [np.empty_like(dp) for _ in range(3)]
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("AVX-512 runtime unavailable")
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_lion_bwd_f32(
+        dp.ctypes.data_as(cf),
+        dm.ctypes.data_as(cf),
+        ctypes.c_int64(dp.size),
+        ctypes.c_float(float(kwargs.get("lr", 1e-4))),
+        ctypes.c_float(float(kwargs.get("beta2", 0.99))),
+        ctypes.c_float(float(kwargs.get("weight_decay", 0.0))),
+        *(output.ctypes.data_as(cf) for output in outputs),
+    )
+    return tuple(outputs)
+
+
+def _x86_adafactor_factored(
+    parameter: Any,
+    gradient: Any,
+    row_moment: Any,
+    col_moment: Any,
+    *,
+    lr: float,
+    beta2: float,
+    eps: float,
+) -> tuple[Any, Any, Any]:
+    import numpy as np
+
+    p = np.ascontiguousarray(parameter, np.float32)
+    g = np.ascontiguousarray(gradient, np.float32)
+    if p.shape != g.shape or p.ndim < 2:
+        raise ValueError("x86 Adafactor factored execution requires rank-2+ tensors")
+    rows, cols = int(np.prod(p.shape[:-1])), int(p.shape[-1])
+    old_row = np.ascontiguousarray(row_moment, np.float32).reshape(-1)
+    old_col = np.ascontiguousarray(col_moment, np.float32).reshape(-1)
+    if old_row.size != rows or old_col.size != cols:
+        raise ValueError("x86 Adafactor factored state shape mismatch")
+    output = np.empty_like(p)
+    new_row = np.empty(rows, np.float32)
+    new_col = np.empty(cols, np.float32)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("AVX-512 runtime unavailable")
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_adafactor_factored_f32(
+        p.ctypes.data_as(cf),
+        g.ctypes.data_as(cf),
+        old_row.ctypes.data_as(cf),
+        old_col.ctypes.data_as(cf),
+        ctypes.c_int64(rows),
+        ctypes.c_int64(cols),
+        ctypes.c_float(lr),
+        ctypes.c_float(beta2),
+        ctypes.c_float(eps),
+        output.ctypes.data_as(cf),
+        new_row.ctypes.data_as(cf),
+        new_col.ctypes.data_as(cf),
+    )
+    return output, new_row.reshape(p.shape[:-1]), new_col
+
+
+def _x86_adafactor_full(
+    parameter: Any,
+    gradient: Any,
+    moment: Any,
+    *,
+    lr: float,
+    beta2: float,
+    eps: float,
+) -> tuple[Any, Any]:
+    import numpy as np
+
+    p = np.ascontiguousarray(parameter, np.float32)
+    g = np.ascontiguousarray(gradient, np.float32)
+    old = np.ascontiguousarray(moment, np.float32)
+    if p.shape != g.shape or p.shape != old.shape or p.ndim >= 2:
+        raise ValueError("x86 Adafactor full execution requires matching rank-0/1 tensors")
+    output, new_moment = np.empty_like(p), np.empty_like(p)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("AVX-512 runtime unavailable")
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_adafactor_full_f32(
+        p.ctypes.data_as(cf),
+        g.ctypes.data_as(cf),
+        old.ctypes.data_as(cf),
+        ctypes.c_int64(p.size),
+        ctypes.c_float(lr),
+        ctypes.c_float(beta2),
+        ctypes.c_float(eps),
+        output.ctypes.data_as(cf),
+        new_moment.ctypes.data_as(cf),
+    )
+    return output, new_moment
+
+
+def _execute_x86_compiled_adafactor(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Execute factored or full-moment Adafactor through the AVX-512 image."""
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.adafactor":
+        raise ValueError("x86_adafactor_compiled requires one tessera.adafactor op")
+    operand_names = [str(name) for name in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, names)
+    kwargs = ops[0].get("kwargs") or {}
+    parameters = {
+        "lr": float(kwargs.get("lr", 1e-3)),
+        "beta2": float(kwargs.get("beta2", 0.999)),
+        "eps": float(kwargs.get("eps", 1e-30)),
+    }
+    if len(operand_names) == 3:
+        return _x86_adafactor_full(
+            *(values[name] for name in operand_names), **parameters
+        )
+    if len(operand_names) == 4:
+        return _x86_adafactor_factored(
+            *(values[name] for name in operand_names), **parameters
+        )
+    raise ValueError("x86 Adafactor ABI requires parameter/gradient plus one or two states")
+
+
+def _execute_x86_compiled_adafactor_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Execute the physical factored/full Adafactor adjoint on AVX-512."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.adafactor":
+        raise ValueError("x86_adafactor_bwd_compiled requires one tessera.adafactor op")
+    operand_names = [str(name) for name in ops[0].get("operands", [])]
+    values = _bind_launch_args(args, names)
+    cotangent_name = str(metadata.get("out_cotangent", "dy"))
+    kwargs = ops[0].get("kwargs") or {}
+    lr = float(kwargs.get("lr", 1e-3))
+    beta2 = float(kwargs.get("beta2", 0.999))
+    eps = float(kwargs.get("eps", 1e-30))
+    g = np.ascontiguousarray(_as_numpy(values[operand_names[1]]), np.float32)
+    dy = np.ascontiguousarray(_as_numpy(values[cotangent_name]), np.float32)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("AVX-512 runtime unavailable")
+    cf = ctypes.POINTER(ctypes.c_float)
+    if len(operand_names) == 3:
+        old = np.ascontiguousarray(_as_numpy(values[operand_names[2]]), np.float32)
+        outputs = [np.empty_like(g) for _ in range(3)]
+        lib.tessera_x86_avx512_adafactor_full_bwd_f32(
+            g.ctypes.data_as(cf),
+            old.ctypes.data_as(cf),
+            dy.ctypes.data_as(cf),
+            ctypes.c_int64(g.size),
+            ctypes.c_float(lr),
+            ctypes.c_float(beta2),
+            ctypes.c_float(eps),
+            *(output.ctypes.data_as(cf) for output in outputs),
+        )
+        return tuple(outputs)
+    if len(operand_names) == 4:
+        if g.ndim < 2:
+            raise ValueError("x86 factored Adafactor backward requires rank-2+ tensors")
+        rows, cols = int(np.prod(g.shape[:-1])), int(g.shape[-1])
+        old_row = np.ascontiguousarray(
+            _as_numpy(values[operand_names[2]]), np.float32
+        ).reshape(-1)
+        old_col = np.ascontiguousarray(
+            _as_numpy(values[operand_names[3]]), np.float32
+        ).reshape(-1)
+        dp, dg = np.empty_like(g), np.empty_like(g)
+        drow, dcol = np.empty(rows, np.float32), np.empty(cols, np.float32)
+        lib.tessera_x86_avx512_adafactor_factored_bwd_f32(
+            g.ctypes.data_as(cf),
+            old_row.ctypes.data_as(cf),
+            old_col.ctypes.data_as(cf),
+            dy.ctypes.data_as(cf),
+            ctypes.c_int64(rows),
+            ctypes.c_int64(cols),
+            ctypes.c_float(lr),
+            ctypes.c_float(beta2),
+            ctypes.c_float(eps),
+            dp.ctypes.data_as(cf),
+            dg.ctypes.data_as(cf),
+            drow.ctypes.data_as(cf),
+            dcol.ctypes.data_as(cf),
+        )
+        return dp, dg, drow.reshape(g.shape[:-1]), dcol
+    raise ValueError("x86 Adafactor backward ABI requires one or two state tensors")
 
 
 def _apple_optimizer_kernel(
@@ -26689,6 +27031,7 @@ def _executor_table():
         "x86_rope_compiled": _execute_x86_compiled_rope,
         "x86_alibi_compiled": _execute_x86_compiled_alibi,
         "x86_attention_compiled": _execute_x86_compiled_attention,
+        "x86_flash_attn_bwd_compiled": _execute_x86_compiled_flash_attn_backward,
         "x86_loss_compiled": _execute_x86_compiled_loss,
         "x86_stat_reduce_compiled": _execute_x86_compiled_stat_reduce,
         "x86_stable_reduce_compiled": _execute_x86_compiled_stable_reduce,
@@ -26699,6 +27042,9 @@ def _executor_table():
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
         "x86_sgd_bwd_compiled": _execute_x86_compiled_sgd_backward,
         "x86_momentum_bwd_compiled": _execute_x86_compiled_momentum_backward,
+        "x86_lion_bwd_compiled": _execute_x86_compiled_lion_backward,
+        "x86_adafactor_compiled": _execute_x86_compiled_adafactor,
+        "x86_adafactor_bwd_compiled": _execute_x86_compiled_adafactor_backward,
         "x86_complex_compiled": _execute_x86_compiled_complex,
         "x86_conformal_compiled": _execute_x86_compiled_conformal,
         "x86_rng_compiled": _execute_x86_compiled_rng,

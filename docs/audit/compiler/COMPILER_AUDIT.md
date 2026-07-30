@@ -1567,8 +1567,10 @@ foundation rather than lowering attention as one whole-tensor sequence:
    launch carrier verifies split-workspace ownership, block-loop
    metadata, and ascending reduction order. Tensor-valued shared backward
    `scf.for` bodies now carry dQ, split dK/dV partials, and fixed-order
-   reduction. ROCm directly consumes them on gfx1151; Apple and NVIDIA remain
-   architecture-owned follow-ups.
+   reduction. ROCm directly consumes them on gfx1151, and x86 now structurally
+   consumes the same forward and backward loop contracts before selecting its
+   Zen 5 AVX-512 package. Apple and NVIDIA remain architecture-owned
+   follow-ups.
 5. Exact-device evidence is not transferable. NVIDIA SM120, Apple, and ROCm
    must each lower the shared contract into architecture-owned schedules and
    retain numerical, resource, cache, device-event, and end-to-end proof before
@@ -1608,6 +1610,17 @@ at maximum absolute errors dQ `0.000024833`, dK `0.000035211`, and dV
 `0.000329971`; the resident five-launch median is `0.367367 ms` versus the
 `0.368203 ms` baseline and `0.405023 ms` cap. Apple/NVIDIA physical
 consumption remains open and inherits no AMD artifact or timing evidence.
+
+`CORE-ATTENTION-TRAINING-X86-2026-07-30` closes the x86 sibling consumption
+without transferring AMD schedules. X86 canonical forward packaging now starts
+from the shared rank-4 Graph recurrence; its backward package requires the
+canonical dQ, split-dK/dV, and fixed-order reduction phase topology. Exact Zen
+5 AVX-512 numerics preserve f32 MHA/GQA, bias, causal/window, and softcap
+behavior. `X86-LSE-1` selects saved row LSE from a 21-sample 32/64/128 sequence
+packet (1.45x/1.23x/1.06x over end-to-end recomputation). The x86 Lion VJP and
+factored/full Adafactor execution plus physical adjoints are also complete.
+ROCm retains its complete attention/Lion/Adafactor implementations, while its
+128+ saved-LSE threshold remains provisional pending bare-metal gfx1151 events.
 
 > **Open items: #4 (fixture-backed numerical proof before conformance cells go
 > complete) and #5 (point specs at dashboards/this audit, not old root audits).**
@@ -1734,6 +1747,10 @@ deterministic prefix, parallel chunk fill, and reverse. The AVX-512 ABI uses
 caller-owned resident workspaces and the same affine composition law. Both
 physical paths implement the exact modified-Delta normalization VJP and match
 the analytic oracle below `4e-7`.
+
+Consequently, both ROCm gfx1151 and x86 AVX-512 have physical sequence-mixer
+backward packages; CUDA and Apple remain the architecture-owned packaging
+follow-ups.
 
 Affine chunk composition is deliberately limited to `erase=false`, where a
 chunk is exactly `state_out = scale * state_in + update`. Erase-dependent

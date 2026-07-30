@@ -2089,7 +2089,11 @@ remain the next training/fusion work.
 wall-clock plus HIP-event distributions at 17/64/128/256. HIP 7.14 returns
 positive events under this WSL host, but the packet is fail-closed as
 `blocked_wsl_device_event_not_transferable`; the 128+ saved-LSE policy still
-awaits bare-metal gfx1151 confirmation.
+awaits bare-metal gfx1151 confirmation. The threshold is therefore
+**provisional, not production selector evidence**: a bare-metal owner must
+repeat valid device-event measurements and retain or replace 128+ before this
+item can close. The 2026-07-30 x86 attention/training closeout changes no ROCm
+kernel, ABI, schedule, or completion state.
 
 Cross-backend sync `CORE-SCHEDULE-1F1B-MATERIALIZE-2026-07-27` makes the shared
 pipeline legality pass emit an explicit, unique-clock warmup/steady/cooldown

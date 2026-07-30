@@ -359,6 +359,133 @@ def emit_attention_tile_ir(
 '''
 
 
+def emit_attention_graph_ir(
+    *,
+    entry: str,
+    dims: tuple[int, int, int, int, int, int, int],
+    scale: float,
+    causal: bool,
+    bias: bool,
+    window: int,
+    softcap: float,
+    tile_kv: int = 16,
+) -> str:
+    """Emit the shared rank-4 Graph attention consumed by x86 packaging."""
+    b, hq, hkv, sq, sk, d, dv = dims
+    bias_arg = f",\n      %bias: tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    bias_operand = ", %bias" if bias else ""
+    bias_type = f", tensor<{b}x{hq}x{sq}x{sk}xf32>" if bias else ""
+    return f'''module attributes {{
+  tessera.ir.version = "1.0",
+  tessera.target = {{sm = 90 : i32, warps = 1 : i32,
+                    smem = 65536 : i64, pipeline_stages = 2 : i32}}
+}} {{
+  func.func @{entry}(
+      %q: tensor<{b}x{hq}x{sq}x{d}xf32>,
+      %key: tensor<{b}x{hkv}x{sk}x{d}xf32>,
+      %v: tensor<{b}x{hkv}x{sk}x{dv}xf32>{bias_arg}
+  ) -> tensor<{b}x{hq}x{sq}x{dv}xf32> {{
+    %o = "tessera.flash_attn"(%q, %key, %v{bias_operand})
+        <{{operandSegmentSizes = array<i32: 1, 1, 1, {int(bias)}>}}> {{
+      causal = {str(causal).lower()}, dropout_p = 0.0 : f64,
+      dropout_seed = 0 : i64, head_dim = {d} : i64,
+      scale = {float(scale)!r} : f32, softcap = {float(softcap)!r} : f32,
+      tessera.tile_q = {sq} : i32, tessera.tile_kv = {tile_kv} : i32,
+      window_left = {window} : i64, window_right = {window} : i64
+    }} : (tensor<{b}x{hq}x{sq}x{d}xf32>,
+          tensor<{b}x{hkv}x{sk}x{d}xf32>,
+          tensor<{b}x{hkv}x{sk}x{dv}xf32>{bias_type})
+          -> tensor<{b}x{hq}x{sq}x{dv}xf32>
+    return %o : tensor<{b}x{hq}x{sq}x{dv}xf32>
+  }}
+}}
+'''
+
+
+def _lower_attention_semantics(graph_ir: str, *, tile_q: int, tile_kv: int) -> str:
+    tool = _tessera_opt()
+    if tool is None:
+        raise RuntimeError("x86 canonical attention packaging requires tessera-opt")
+    result = subprocess.run(
+        [
+            str(tool),
+            "-",
+            (
+                "--tessera-tile-ir-lowering="
+                f"tile-q={tile_q} tile-kv={tile_kv} sm=90"
+            ),
+        ],
+        input=graph_ir,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(
+            "x86 shared attention lowering failed: "
+            + (result.stderr.strip() or str(result.returncode))
+        )
+    semantic_ir = result.stdout
+    required = (
+        "tessera.streaming_attention",
+        "tessera_attn.streaming_update",
+        "scf.for",
+    )
+    if any(marker not in semantic_ir for marker in required):
+        raise RuntimeError(
+            "x86 attention packaging requires structural consumption of the "
+            "shared rank-4 KV recurrence"
+        )
+    return semantic_ir
+
+
+def package_attention_backward_semantics(
+    *,
+    dims: tuple[int, int, int, int, int, int, int],
+    scale: float,
+    causal: bool,
+    bias: bool,
+    window: int,
+    softcap: float,
+    lse_checkpoint: str,
+) -> tuple[str, str]:
+    """Materialize and verify the shared tensor-valued VJP consumed by x86."""
+    from .rocm_native import emit_attention_backward_graph_ir
+
+    if lse_checkpoint not in {"saved", "recompute"}:
+        raise ValueError("x86 lse_checkpoint must be 'saved' or 'recompute'")
+    graph_ir = emit_attention_backward_graph_ir(
+        forward_entry="tessera_x86_attention_forward_contract",
+        backward_entry="tessera_x86_attention_backward_contract",
+        storage="f32",
+        dims=dims,
+        scale=scale,
+        causal=causal,
+        bias=bias,
+        window_left=window,
+        window_right=window,
+        softcap=softcap,
+        save_lse=lse_checkpoint == "saved",
+    )
+    semantic_ir = _lower_attention_semantics(
+        graph_ir, tile_q=dims[3], tile_kv=16
+    )
+    required = (
+        'tessera.attention_backward_phase = "dq.key_block"',
+        'tessera.attention_backward_phase = "dkdv.key_block"',
+        'tessera.attention_backward_phase = "reduce.fixed_order_split"',
+        "tessera_attn.backward_dq_block",
+        "tessera_attn.backward_dkdv_block",
+        "tessera_attn.backward_reduce_split",
+    )
+    if any(marker not in semantic_ir for marker in required):
+        raise RuntimeError(
+            "x86 backward packaging requires canonical dQ, split-dK/dV, and "
+            "ordered-reduction loop consumption"
+        )
+    return graph_ir, semantic_ir
+
+
 def emit_elementwise_tile_ir(*, entry: str, family: str, kind: str) -> str:
     if family not in {
         "unary", "binary", "predicate", "compare", "logical", "bitwise",
@@ -1126,23 +1253,31 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86Native
             "f32 bias, symmetric window semantics, and dropout=0"
         )
     names, bias_name, output_name, dims, scale, causal, window, softcap = contract
+    b, hq, hkv, sq, sk, d, dv = dims
     extended = bias_name is not None or window >= 0 or softcap > 0.0
     symbol = "tessera_x86_flash_attn_ext_f32" if extended else "tessera_x86_flash_attn_f32"
     abi = X86_ATTENTION_EXT_F32_ABI if extended else X86_ATTENTION_F32_ABI
     semantic = hashlib.sha256(
         f"{scale:.17g}:{causal}:{bool(bias_name)}:{window}:{softcap:.17g}".encode()
     ).hexdigest()[:10]
-    tile_ir = emit_attention_tile_ir(
+    graph_ir = emit_attention_graph_ir(
+        entry=f"tessera_graph_x86_attention_{semantic}", dims=dims,
+        scale=scale, causal=causal, bias=bias_name is not None,
+        window=window, softcap=softcap,
+    )
+    semantic_ir = _lower_attention_semantics(
+        graph_ir, tile_q=sq, tile_kv=16
+    )
+    physical_carrier = emit_attention_tile_ir(
         entry=f"tessera_tile_x86_attention_{semantic}", scale=scale, causal=causal,
         bias=bias_name is not None, window=window, softcap=softcap,
     )
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol)
+    target_ir, payload, compiler, toolchain = _lower(physical_carrier, symbol)
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
         pipeline_name=pipeline_name, symbol=symbol, abi=abi,
     )
     q_name, k_name, v_name = names
-    b, hq, hkv, sq, sk, d, dv = dims
     bindings = [
         BufferBinding(0, q_name, "input", "fp32", 4, "row_major", 4),
         BufferBinding(1, k_name, "input", "fp32", 4, "row_major", 4),
@@ -1171,13 +1306,16 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86Native
         geometry=LaunchGeometry(policy="x86_avx512_attention_rows"),
         ordering=OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",)),
         provenance={
-            "work_item": "X86-E2E-1", "route": "avx512_c_abi",
+            "work_item": "X86-ATTN-CANON-1", "route": "avx512_c_abi",
             "shape": list(dims), "storage": "f32", "accum": "f32",
             "scale": scale, "causal": causal, "bias": bias_name is not None,
             "window": window, "softcap": softcap, "extended": extended,
+            "sync_key": "CORE-STREAMING-ATTN-RANK4-X86-2026-07-30",
+            "semantic_route": "canonical_rank4_kv_scf_for",
+            "semantic_ir_digest": hashlib.sha256(semantic_ir.encode()).hexdigest(),
         },
     )
-    return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
+    return X86NativePackage(graph_ir, target_ir, semantic_ir, image, descriptor)
 
 
 def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
@@ -1271,7 +1409,9 @@ __all__ = [
     "emit_attention_tile_ir", "emit_cohort2_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir", "emit_reduce_tile_ir",
     "emit_softmax_tile_ir", "native_package_kind", "package_attention", "package_matmul",
     "package_native",
-    "package_cohort2", "package_elementwise", "package_reduction", "package_softmax", "requests_attention",
+    "emit_attention_graph_ir", "package_attention_backward_semantics",
+    "package_cohort2", "package_elementwise",
+    "package_reduction", "package_softmax", "requests_attention",
     "requests_cohort2",
     "requests_matmul", "requests_reduction", "requests_softmax",
     "supports_attention", "supports_cohort2", "supports_elementwise", "supports_promoted_elementwise",

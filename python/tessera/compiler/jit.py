@@ -874,6 +874,180 @@ class JitFn:
             ):
                 return self._native_class_loss_backward(
                     "x86", args, kwargs, out_cotangents=out_cotangents)
+            if len(graph_ops) == 1:
+                op = graph_ops[0]
+                name = op.op_name.removeprefix("tessera.")
+                ordered = self._ordered_inputs(args, kwargs)
+                if ordered is None:
+                    raise TesseraJitError(
+                        "x86 compiled backward requires every forward argument"
+                    )
+                import numpy as np
+                from tessera.runtime import RuntimeArtifact, launch
+
+                inputs = [
+                    np.ascontiguousarray(np.asarray(value), dtype=np.float32)
+                    for value in ordered
+                ]
+                cots = (
+                    tuple(out_cotangents)
+                    if isinstance(out_cotangents, (tuple, list))
+                    else (out_cotangents,)
+                )
+                cotangents = [
+                    np.ascontiguousarray(np.asarray(value), dtype=np.float32)
+                    for value in cots
+                ]
+                if name in {
+                    "flash_attn",
+                    "multi_head_attention",
+                    "gqa_attention",
+                    "mqa_attention",
+                }:
+                    if len(inputs) not in {3, 4} or len(cotangents) != 1:
+                        raise TesseraJitError(
+                            "x86 attention backward requires Q/K/V, optional "
+                            "bias, and one output cotangent"
+                        )
+                    q, key, value = inputs[:3]
+                    if q.ndim != 4 or key.ndim != 4 or value.ndim != 4:
+                        raise TesseraJitError(
+                            "x86 canonical attention backward requires rank-4 tensors"
+                        )
+                    b, hq, sq, d = q.shape
+                    _, hkv, sk, dk = key.shape
+                    dv = value.shape[-1]
+                    if dk != d or dv != d:
+                        raise TesseraJitError(
+                            "x86 canonical attention backward currently requires D == Dv"
+                        )
+                    op_kwargs = dict(op.kwargs)
+                    scale = float(op_kwargs.get("scale") or (1.0 / np.sqrt(d)))
+                    raw_window = op_kwargs.get("window", 0)
+                    if isinstance(raw_window, (tuple, list)):
+                        if len(raw_window) != 2 or raw_window[0] != raw_window[1]:
+                            raise TesseraJitError(
+                                "x86 canonical attention needs a symmetric window"
+                            )
+                        raw_window = raw_window[0]
+                    window = int(raw_window or 0)
+                    softcap = float(
+                        op_kwargs.get(
+                            "softcap", op_kwargs.get("logit_softcap", 0.0)
+                        )
+                        or 0.0
+                    )
+                    checkpoint = str(op_kwargs.get("lse_checkpoint", "saved"))
+                    from .x86_native import package_attention_backward_semantics
+
+                    package_attention_backward_semantics(
+                        dims=(b, hq, hkv, sq, sk, d, dv),
+                        scale=scale,
+                        causal=bool(op_kwargs.get("causal", False)),
+                        bias=len(inputs) == 4,
+                        window=window,
+                        softcap=softcap,
+                        lse_checkpoint=checkpoint,
+                    )
+                    names = ["do", "q", "k", "v"] + (
+                        ["bias"] if len(inputs) == 4 else []
+                    )
+                    artifact = RuntimeArtifact(
+                        metadata={
+                            "target": "x86",
+                            "compiler_path": "x86_flash_attn_bwd_compiled",
+                            "executable": True,
+                            "execution_kind": "native_cpu",
+                            "arg_names": names,
+                            "output_name": "grads",
+                            "ops": [{
+                                "op_name": "tessera.flash_attn",
+                                "operands": names[1:],
+                                "kwargs": {
+                                    **op_kwargs,
+                                    "scale": scale,
+                                    "window": window,
+                                    "softcap": softcap,
+                                    "lse_checkpoint": checkpoint,
+                                },
+                            }],
+                        }
+                    )
+                    result = launch(
+                        artifact, tuple([cotangents[0], *inputs])
+                    )
+                    path = "x86_flash_attn_bwd_compiled"
+                elif name == "lion":
+                    if len(inputs) != 3 or len(cotangents) != 2:
+                        raise TesseraJitError(
+                            "x86 Lion VJP requires p/g/m and two output cotangents"
+                        )
+                    names = ["p", "g", "m", "dp", "dm"]
+                    artifact = RuntimeArtifact(metadata={
+                        "target": "x86",
+                        "compiler_path": "x86_lion_bwd_compiled",
+                        "executable": True,
+                        "execution_kind": "native_cpu",
+                        "arg_names": names,
+                        "out_cotangents": ["dp", "dm"],
+                        "ops": [{
+                            "op_name": "tessera.lion",
+                            "operands": names[:3],
+                            "kwargs": dict(op.kwargs),
+                        }],
+                    })
+                    result = launch(artifact, tuple([*inputs, *cotangents]))
+                    path = "x86_lion_bwd_compiled"
+                elif name == "adafactor":
+                    if len(inputs) not in {3, 4} or len(cotangents) != 1:
+                        raise TesseraJitError(
+                            "x86 Adafactor VJP requires p/g/state and one "
+                            "parameter-output cotangent"
+                        )
+                    names = (
+                        ["p", "g", "row", "col"]
+                        if len(inputs) == 4
+                        else ["p", "g", "moment"]
+                    )
+                    artifact = RuntimeArtifact(metadata={
+                        "target": "x86",
+                        "compiler_path": "x86_adafactor_bwd_compiled",
+                        "executable": True,
+                        "execution_kind": "native_cpu",
+                        "arg_names": [*names, "dy"],
+                        "out_cotangent": "dy",
+                        "ops": [{
+                            "op_name": "tessera.adafactor",
+                            "operands": names,
+                            "kwargs": dict(op.kwargs),
+                        }],
+                    })
+                    result = launch(artifact, tuple([*inputs, cotangents[0]]))
+                    path = "x86_adafactor_bwd_compiled"
+                else:
+                    return self._native_norm_backward(
+                        "x86", args, kwargs, out_cotangents=out_cotangents)
+                if not result.get("ok"):
+                    raise TesseraJitError(
+                        f"{path} launch failed: {result.get('reason')}"
+                    )
+                self.last_backward_execution = {
+                    "compiler_path": path,
+                    "execution_kind": "native_cpu",
+                    "execution_mode": "cpu_avx512",
+                    "evidence_target": "x86_avx512",
+                    "residual_policy": (
+                        checkpoint
+                        if name in {
+                            "flash_attn",
+                            "multi_head_attention",
+                            "gqa_attention",
+                            "mqa_attention",
+                        }
+                        else "save_inputs_and_optimizer_state"
+                    ),
+                }
+                return tuple(result["output"])
             return self._native_norm_backward(
                 "x86", args, kwargs, out_cotangents=out_cotangents)
         if target_kind != "cpu":

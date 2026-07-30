@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 from tessera import optim
+from tessera.autodiff.vjp import get_vjp
 
 
 def _rt_or_skip():
@@ -136,3 +137,117 @@ def test_lion():
     pn, mn = (np.asarray(x) for x in res["output"])
     np.testing.assert_allclose(pn, np.asarray(rp), atol=1e-6)
     np.testing.assert_allclose(mn, np.asarray(rst["m"]), atol=1e-6)
+
+
+def test_lion_backward_stop_sign_vjp():
+    rt = _rt_or_skip()
+    rng = np.random.default_rng(8)
+    dp = rng.standard_normal(SHAPE).astype(np.float32)
+    dm = rng.standard_normal(SHAPE).astype(np.float32)
+    artifact = rt.RuntimeArtifact(metadata={
+        "target": "x86", "compiler_path": "x86_lion_bwd_compiled",
+        "executable": True, "execution_kind": "native_cpu",
+        "arg_names": ["p", "g", "m", "dp", "dm"],
+        "out_cotangents": ["dp", "dm"],
+        "ops": [{
+            "op_name": "tessera.lion", "operands": ["p", "g", "m"],
+            "kwargs": {"lr": 1e-4, "beta2": 0.99, "weight_decay": 0.01},
+        }],
+    })
+    zeros = np.zeros(SHAPE, np.float32)
+    result = rt.launch(artifact, (zeros, zeros, zeros, dp, dm))
+    assert result["ok"] is True, result.get("reason")
+    got = tuple(np.asarray(value) for value in result["output"])
+    np.testing.assert_allclose(got[0], (1.0 - 1e-4 * 0.01) * dp, atol=1e-6)
+    np.testing.assert_allclose(got[1], (1.0 - 0.99) * dm, atol=1e-6)
+    np.testing.assert_allclose(got[2], 0.99 * dm, atol=1e-6)
+
+
+def _adafactor_artifact(rt, *, backward: bool, factored: bool):
+    operands = ["p", "g", "row", "col"] if factored else ["p", "g", "moment"]
+    names = operands + (["dy"] if backward else [])
+    return rt.RuntimeArtifact(metadata={
+        "target": "x86",
+        "compiler_path": (
+            "x86_adafactor_bwd_compiled" if backward
+            else "x86_adafactor_compiled"
+        ),
+        "executable": True, "execution_kind": "native_cpu",
+        "arg_names": names, "out_cotangent": "dy",
+        "ops": [{
+            "op_name": "tessera.adafactor", "operands": operands,
+            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+        }],
+    })
+
+
+def test_adafactor_factored_forward_and_backward():
+    rt = _rt_or_skip()
+    rng = np.random.default_rng(9)
+    p = rng.standard_normal(SHAPE).astype(np.float32)
+    g = (0.2 * rng.standard_normal(SHAPE)).astype(np.float32)
+    row = rng.uniform(0.1, 0.3, SHAPE[:-1]).astype(np.float32)
+    col = rng.uniform(0.1, 0.3, SHAPE[-1]).astype(np.float32)
+    dy = rng.standard_normal(SHAPE).astype(np.float32)
+    forward = rt.launch(
+        _adafactor_artifact(rt, backward=False, factored=True),
+        (p, g, row, col),
+    )
+    assert forward["ok"] is True, forward.get("reason")
+    expected_forward, expected_state = optim.adafactor(
+        p, g, {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+        lr=1e-2, beta2=0.9, eps=1e-6,
+    )
+    actual_p, actual_row, actual_col = (
+        np.asarray(value) for value in forward["output"]
+    )
+    np.testing.assert_allclose(actual_p, expected_forward, rtol=2e-5, atol=2e-5)
+    np.testing.assert_allclose(actual_row, expected_state["v"]["row"], atol=1e-6)
+    np.testing.assert_allclose(actual_col, expected_state["v"]["col"], atol=1e-6)
+
+    backward = rt.launch(
+        _adafactor_artifact(rt, backward=True, factored=True),
+        (p, g, row, col, dy),
+    )
+    assert backward["ok"] is True, backward.get("reason")
+    expected = get_vjp("adafactor")(
+        dy, p, g, {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+        lr=1e-2, beta2=0.9, eps=1e-6,
+    )
+    dp, dg, drow, dcol = (np.asarray(value) for value in backward["output"])
+    np.testing.assert_allclose(dp, expected[0], rtol=2e-5, atol=2e-5)
+    np.testing.assert_allclose(dg, expected[1], rtol=3e-4, atol=3e-5)
+    np.testing.assert_allclose(drow, expected[2]["v"]["row"], rtol=3e-4, atol=3e-5)
+    np.testing.assert_allclose(dcol, expected[2]["v"]["col"], rtol=3e-4, atol=3e-5)
+
+
+def test_adafactor_full_forward_and_backward():
+    rt = _rt_or_skip()
+    rng = np.random.default_rng(10)
+    p = rng.standard_normal(19).astype(np.float32)
+    g = (0.2 * rng.standard_normal(19)).astype(np.float32)
+    moment = rng.uniform(0.1, 0.3, 19).astype(np.float32)
+    dy = rng.standard_normal(19).astype(np.float32)
+    forward = rt.launch(
+        _adafactor_artifact(rt, backward=False, factored=False),
+        (p, g, moment),
+    )
+    assert forward["ok"] is True, forward.get("reason")
+    expected_forward, expected_state = optim.adafactor(
+        p, g, {"v": {"v": moment, "factored": False}, "step": 1},
+        lr=1e-2, beta2=0.9, eps=1e-6,
+    )
+    actual_p, actual_moment = (np.asarray(value) for value in forward["output"])
+    np.testing.assert_allclose(actual_p, expected_forward, rtol=2e-5, atol=2e-5)
+    np.testing.assert_allclose(actual_moment, expected_state["v"]["v"], atol=1e-6)
+    backward = rt.launch(
+        _adafactor_artifact(rt, backward=True, factored=False),
+        (p, g, moment, dy),
+    )
+    assert backward["ok"] is True, backward.get("reason")
+    expected = get_vjp("adafactor")(
+        dy, p, g, {"v": {"v": moment, "factored": False}, "step": 1},
+        lr=1e-2, beta2=0.9, eps=1e-6,
+    )
+    for actual, reference in zip(backward["output"], (expected[0], expected[1], expected[2]["v"]["v"])):
+        np.testing.assert_allclose(actual, reference, rtol=3e-4, atol=3e-5)

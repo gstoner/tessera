@@ -170,3 +170,178 @@ extern "C" void tessera_x86_flash_attn_ext_f32(
         }
     }
 }
+
+namespace {
+
+inline void attention_bounds(int64_t i, int64_t sq, int64_t sk, int causal,
+                             int64_t window, int64_t* begin, int64_t* end) {
+    const int64_t off = (sk > sq) ? (sk - sq) : 0;
+    int64_t jmin = 0;
+    int64_t jmax = causal ? i + off : sk - 1;
+    if (window > 0) {
+        if (causal) {
+            jmin = i + off - window + 1;
+            jmax = i + off;
+        } else {
+            jmin = i + off - window / 2;
+            jmax = i + off + window / 2;
+        }
+    }
+    *begin = jmin > 0 ? jmin : 0;
+    *end = jmax < sk - 1 ? jmax : sk - 1;
+}
+
+inline float attention_score(const float* q, const float* k, float bias,
+                             int64_t d, float scale, float softcap,
+                             float* softcap_derivative) {
+    const float raw = scale * dot_f32(q, k, d);
+    if (softcap > 0.0f) {
+        const float t = std::tanh(raw / softcap);
+        *softcap_derivative = 1.0f - t * t;
+        return softcap * t + bias;
+    }
+    *softcap_derivative = 1.0f;
+    return raw + bias;
+}
+
+}  // namespace
+
+// Deterministic rank-4 f32 attention VJP. Query heads map to KV heads by
+// floor(hq * Hkv / Hq), so MHA/GQA/MQA all use one ABI. dK/dV accumulation is
+// deliberately ascending in (B,Hq,Sq,Sk) order; CPU execution therefore needs
+// no atomics while preserving the shared fixed-reduction contract. If
+// `saved_lse` is null each row recomputes logsumexp; otherwise it consumes the
+// forward-owned [B,Hq,Sq] checkpoint.
+extern "C" void tessera_x86_flash_attn_bwd_f32(
+        const float* dO, const float* Q, const float* K, const float* V,
+        const float* bias, const float* saved_lse, int64_t B, int64_t Hq,
+        int64_t Hkv, int64_t sq, int64_t sk, int64_t d, int64_t dv,
+        float scale, int causal, int64_t window, float softcap, float* dQ,
+        float* dK, float* dV) {
+    const int64_t q_count = B * Hq * sq * d;
+    const int64_t k_count = B * Hkv * sk * d;
+    const int64_t v_count = B * Hkv * sk * dv;
+    for (int64_t i = 0; i < q_count; ++i) dQ[i] = 0.0f;
+    for (int64_t i = 0; i < k_count; ++i) dK[i] = 0.0f;
+    for (int64_t i = 0; i < v_count; ++i) dV[i] = 0.0f;
+
+    for (int64_t batch = 0; batch < B; ++batch) {
+        for (int64_t qh = 0; qh < Hq; ++qh) {
+            const int64_t kh = qh * Hkv / Hq;
+            const float* Qh = Q + ((batch * Hq + qh) * sq) * d;
+            const float* Kh = K + ((batch * Hkv + kh) * sk) * d;
+            const float* Vh = V + ((batch * Hkv + kh) * sk) * dv;
+            const float* dOh = dO + ((batch * Hq + qh) * sq) * dv;
+            float* dQh = dQ + ((batch * Hq + qh) * sq) * d;
+            float* dKh = dK + ((batch * Hkv + kh) * sk) * d;
+            float* dVh = dV + ((batch * Hkv + kh) * sk) * dv;
+            const float* Bh =
+                bias ? bias + ((batch * Hq + qh) * sq) * sk : nullptr;
+            for (int64_t qi = 0; qi < sq; ++qi) {
+                int64_t j0 = 0, j1 = -1;
+                attention_bounds(qi, sq, sk, causal, window, &j0, &j1);
+                const float* q = Qh + qi * d;
+                const float* dout = dOh + qi * dv;
+                float row_lse;
+                if (saved_lse) {
+                    row_lse = saved_lse[(batch * Hq + qh) * sq + qi];
+                } else {
+                    float row_max = -INFINITY;
+                    float row_sum = 0.0f;
+                    for (int64_t kj = j0; kj <= j1; ++kj) {
+                        float derivative;
+                        const float score = attention_score(
+                            q, Kh + kj * d, Bh ? Bh[qi * sk + kj] : 0.0f,
+                            d, scale, softcap, &derivative);
+                        if (score > row_max) {
+                            row_sum = (row_max == -INFINITY)
+                                          ? 1.0f
+                                          : row_sum * std::exp(row_max - score)
+                                                + 1.0f;
+                            row_max = score;
+                        } else {
+                            row_sum += std::exp(score - row_max);
+                        }
+                    }
+                    row_lse = row_max + std::log(row_sum);
+                }
+                float weighted_dpv = 0.0f;
+                for (int64_t kj = j0; kj <= j1; ++kj) {
+                    float derivative;
+                    const float score = attention_score(
+                        q, Kh + kj * d, Bh ? Bh[qi * sk + kj] : 0.0f,
+                        d, scale, softcap, &derivative);
+                    const float probability = std::exp(score - row_lse);
+                    weighted_dpv += probability
+                        * dot_f32(dout, Vh + kj * dv, dv);
+                }
+                for (int64_t kj = j0; kj <= j1; ++kj) {
+                    float cap_derivative;
+                    const float score = attention_score(
+                        q, Kh + kj * d, Bh ? Bh[qi * sk + kj] : 0.0f,
+                        d, scale, softcap, &cap_derivative);
+                    const float probability = std::exp(score - row_lse);
+                    const float dpv = dot_f32(dout, Vh + kj * dv, dv);
+                    const float ds =
+                        probability * (dpv - weighted_dpv) * cap_derivative;
+                    const float* key = Kh + kj * d;
+                    for (int64_t x = 0; x < d; ++x) {
+                        dQh[qi * d + x] += scale * ds * key[x];
+                        dKh[kj * d + x] += scale * ds * q[x];
+                    }
+                    for (int64_t x = 0; x < dv; ++x)
+                        dVh[kj * dv + x] += probability * dout[x];
+                }
+            }
+        }
+    }
+}
+
+// Forward wrapper that emits the real per-row LSE checkpoint alongside O.
+// The output computation uses the established AVX-512 forward kernel; the
+// checkpoint pass repeats only the score reduction so saved/recompute policy
+// can be measured without changing numerical semantics.
+extern "C" void tessera_x86_flash_attn_ext_lse_f32(
+        const float* Q, const float* K, const float* V, const float* bias,
+        int64_t B, int64_t Hq, int64_t Hkv, int64_t sq, int64_t sk, int64_t d,
+        int64_t dv, float scale, int causal, int64_t window, float softcap,
+        float* O, float* row_lse) {
+    for (int64_t batch = 0; batch < B; ++batch) {
+        for (int64_t qh = 0; qh < Hq; ++qh) {
+            const int64_t kh = qh * Hkv / Hq;
+            tessera_x86_flash_attn_ext_f32(
+                Q + ((batch * Hq + qh) * sq) * d,
+                K + ((batch * Hkv + kh) * sk) * d,
+                V + ((batch * Hkv + kh) * sk) * dv,
+                bias ? bias + ((batch * Hq + qh) * sq) * sk : nullptr,
+                0, 1, sq, sk, d, dv, scale, causal, window, softcap,
+                O + ((batch * Hq + qh) * sq) * dv);
+            for (int64_t qi = 0; qi < sq; ++qi) {
+                int64_t j0 = 0, j1 = -1;
+                attention_bounds(qi, sq, sk, causal, window, &j0, &j1);
+                const float* q = Q + ((batch * Hq + qh) * sq + qi) * d;
+                float row_max = -INFINITY;
+                float row_sum = 0.0f;
+                for (int64_t kj = j0; kj <= j1; ++kj) {
+                    float derivative;
+                    const float score = attention_score(
+                        q, K + ((batch * Hkv + kh) * sk + kj) * d,
+                        bias ? bias[((batch * Hq + qh) * sq + qi) * sk + kj]
+                             : 0.0f,
+                        d, scale, softcap, &derivative);
+                    if (score > row_max) {
+                        row_sum = (row_max == -INFINITY)
+                                      ? 1.0f
+                                      : row_sum * std::exp(row_max - score)
+                                            + 1.0f;
+                        row_max = score;
+                    } else {
+                        row_sum += std::exp(score - row_max);
+                    }
+                }
+                row_lse[(batch * Hq + qh) * sq + qi] =
+                    row_max + std::log(row_sum);
+            }
+        }
+    }
+}

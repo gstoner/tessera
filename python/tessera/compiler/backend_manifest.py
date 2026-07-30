@@ -2629,6 +2629,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
        for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
     **{(op, "rocm"): "tests/unit/test_rocm_optimizer_compiled.py"
        for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    ("adafactor", "x86"): "tests/unit/test_x86_optimizer_compiled.py",
     ("adafactor", "rocm"): "tests/unit/test_rocm_optimizer_compiled.py",
     ("lamb", "x86"): "tests/unit/test_x86_lamb_compiled.py",
     ("lamb", "rocm"): "tests/unit/test_rocm_lamb_compiled.py",
@@ -3175,9 +3176,10 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     "flash_attn": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": "AVX-512 FA-style online-softmax forward "
-                 "(tessera_x86_flash_attn_f32, runtime-loaded; "
-                 "x86_flash_attn_compiled lane; MHA scale+causal; f32)",
+        "notes": "Canonical shared rank-4 recurrence consumed by the AVX-512 "
+                 "online-softmax forward plus tensor-valued dQ/split-dK/dV/"
+                 "fixed-reduction backward (x86_flash_attn_compiled / "
+                 "x86_flash_attn_bwd_compiled; saved-LSE Zen 5 policy; f32)",
     },
     # P13 — conv2d / conv3d via im2col + the AVX-512 f32 GEMM (host im2col,
     # device GEMM; x86_conv_compiled lane). f32.
@@ -3771,14 +3773,29 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "x86_moe_compiled lane; f32, matches numpy",
     },
     # Optimizer steps (P3) — fused per-parameter update, AVX-512
-    # (x86_optimizer_compiled). adafactor (factored moments) is a follow-up.
+    # (x86_optimizer_compiled).
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": f"Optimizer {op} — AVX-512 fused per-parameter update kernel "
-                 "(state m/v in-place; host computes the 1-β^t bias correction); "
-                 "x86_optimizer_compiled lane; f32, matches the optim.py reference",
+        "notes": (
+            f"Optimizer {op} — AVX-512 fused per-parameter update kernel "
+            "(state m/v in-place; host computes the 1-β^t bias correction); "
+            "x86_optimizer_compiled lane; f32, matches the optim.py reference"
+            + (
+                "; Lion also has the x86_lion_bwd_compiled physical VJP"
+                if op == "lion"
+                else ""
+            )
+        ),
     } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    "adafactor": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "Optimizer adafactor — AVX-512 factored row/column and "
+                 "lower-rank full-moment update plus analytic physical "
+                 "adjoints; x86_adafactor_compiled / "
+                 "x86_adafactor_bwd_compiled lanes",
+    },
     # P3 tail — LAMB: AVX-512 adam update + host per-tensor trust ratio.
     "lamb": {
         "status": _FUSED_KERNEL_STATUS,

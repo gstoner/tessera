@@ -8,14 +8,14 @@ tile-config candidates and searches them. This bridge connects them:
     ``autotune_v2``'s ``GEMMWorkload`` and confirm the two modules agree on FLOP
     accounting (a measured record validates the analytical model);
   * ``autotuner_for`` — build a ``BayesianAutotuner`` for a record's workload,
-    **device-grounded** with the flywheel's calibrated peak, exposing the legal
-    constrained candidate set;
+    **device-grounded** with the flywheel's calibrated compute and bandwidth
+    peaks, exposing the legal constrained candidate set;
   * ``best_record`` — the measured selection criterion over a corpus.
 
 Honest scope: ``autotune_v2``'s candidate space is NVIDIA-style tile/warp/stage
 configs, which Apple's MPS matmul does not expose — so on Apple this bridge
-connects measured FLOP-accounting + a device-calibrated roofline peak + best-by-
-measurement. Full *measured tile-config* autotuning arrives with the NVIDIA
+connects measured FLOP-accounting + a device-calibrated roofline boundary +
+best-by-measurement. Full *measured tile-config* autotuning arrives with the NVIDIA
 executable lane (the configs become measurable there).
 """
 
@@ -50,11 +50,17 @@ def measured_tflops(record: AutotuneRecord) -> float | None:
 
 def autotuner_for(record: AutotuneRecord, *, seed: int = 42) -> BayesianAutotuner:
     """A ``BayesianAutotuner`` for the record's workload, grounded with the
-    device-calibrated peak so its roofline view matches the real GPU. Use
-    ``.legal_candidates()`` for the BaCO-style constrained search space."""
+    device-calibrated compute and bandwidth peaks. Apple cache capacity remains
+    explicitly zero here because its SLC is not interchangeable with a
+    discrete-GPU L2 model. Use ``.legal_candidates()`` for the BaCO-style
+    constrained search space."""
     peak = peak_for_device(record.device_id)
     return BayesianAutotuner(
-        gemm_workload_for(record), peak_tflops=peak.peak_tflops, seed=seed
+        gemm_workload_for(record),
+        peak_tflops=peak.peak_tflops,
+        dram_bw_gbps=peak.peak_bw_gb_s,
+        cache_bytes=0,
+        seed=seed,
     )
 
 

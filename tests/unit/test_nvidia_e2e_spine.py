@@ -6,6 +6,7 @@ import pytest
 
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.capabilities import supports_op
+from tessera.compiler.canonical_compile import canonical_compile
 from tessera.compiler.nvidia_native import (
     _link_cuda_device_library_if_needed,
     emit_f16_matmul_tile_ir,
@@ -22,6 +23,7 @@ from tessera.compiler.nvidia_native import (
     emit_packed_decode_tile_ir,
     emit_paged_attention_tile_ir,
     emit_paged_kv_read_tile_ir,
+    native_package_kind,
     package_nvfp4_matmul,
     package_packed_decode,
     requests_mx_matmul,
@@ -42,6 +44,7 @@ from tessera.compiler.nvidia_native import (
     supports_fp8_matmul,
     supports_int8_matmul,
     supports_mx_matmul,
+    supports_native_package,
     supports_nvfp4_matmul,
     supports_paged_kv_read,
     supports_reduction,
@@ -157,6 +160,57 @@ def _matmul_module(
             )
         ]
     )
+
+
+def test_canonical_sm120_selector_defaults_to_native_descriptor(monkeypatch) -> None:
+    def fake_compile(tile_ir: str, entry: str):
+        return (
+            f"module attributes {{tessera.entry = \"{entry}\"}} {{}}",
+            f".version 9.0\n.target sm_120a\n.visible .entry {entry}() {{ ret; }}\n",
+            {"registers_per_thread": 16, "spill_store_bytes": 0, "spill_load_bytes": 0},
+            "test-compiler",
+            "test-toolchain",
+            (),
+            "cold",
+        )
+
+    monkeypatch.setattr(
+        "tessera.compiler.nvidia_native.tools_available", lambda: True
+    )
+    monkeypatch.setattr(
+        "tessera.compiler.nvidia_native._compile_tile_ir", fake_compile
+    )
+
+    module = _matmul_module()
+    assert supports_native_package(module)
+    assert native_package_kind(module) == "matmul"
+    result = canonical_compile(
+        module,
+        target="nvidia_sm120",
+        enable_tool_validation=False,
+    )
+
+    assert result.bundle.execution_mode == "native_descriptor"
+    assert result.bundle.execution_kind == "native_gpu"
+    assert result.native_image is not None
+    assert result.launch_descriptor is not None
+    assert result.to_runtime_artifact().metadata["compiler_path"] == (
+        "nvidia_sm120_native_descriptor"
+    )
+
+
+def test_canonical_sm120_selector_preserves_explicit_opt_out(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "tessera.compiler.nvidia_native.tools_available", lambda: True
+    )
+    result = canonical_compile(
+        _matmul_module(),
+        target="nvidia_sm120",
+        options={"package_native": False},
+        enable_tool_validation=False,
+    )
+    assert result.native_image is None
+    assert result.launch_descriptor is None
 
 
 def test_sm120_f16_native_packager_owns_typed_tile_kernel() -> None:

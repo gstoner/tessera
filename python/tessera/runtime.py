@@ -3616,6 +3616,7 @@ def _submit_rocm_gfx1151_native(
 
 
 _x86_native_image_libraries: dict[str, ctypes.CDLL] = {}
+_x86_native_image_fds: dict[str, int] = {}
 
 
 def _load_x86_native_image(image: NativeImageArtifact) -> ctypes.CDLL:
@@ -3631,8 +3632,15 @@ def _load_x86_native_image(image: NativeImageArtifact) -> ctypes.CDLL:
         while written < len(view):
             written += os.write(fd, view[written:])
         library = ctypes.CDLL(f"/proc/self/fd/{fd}")
-    finally:
+    except Exception:
         os.close(fd)
+        raise
+    # Keep the memfd alive with the loaded image.  Closing it allows Linux to
+    # reuse the same fd number; glibc may then return the already-loaded handle
+    # for that repeated ``/proc/self/fd/N`` spelling even though the new fd
+    # contains a different architecture image.  The prior behavior could make
+    # an AVX-512 descriptor resolve against the base-x86 library.
+    _x86_native_image_fds[image.image_digest] = fd
     _x86_native_image_libraries[image.image_digest] = library
     return library
 

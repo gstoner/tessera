@@ -18,7 +18,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 from .graph_ir import GraphIRModule
 from .native_artifact import (
@@ -205,6 +205,87 @@ def tools_available() -> bool:
             "llvm-link",
             "ptxas",
         )
+    )
+
+
+def native_package_kind(module: GraphIRModule) -> str | None:
+    """Return the canonical SM120 descriptor family for ``module``.
+
+    Keep Graph-contract recognition next to the backend packagers so the
+    canonical driver does not maintain a second vendor-specific dispatch
+    table.  The ordering is intentional: scaled/packed matmuls must be
+    classified before the ordinary rank-2 matmul contract.
+    """
+
+    if supports_attention_backward(module):
+        return "attention_backward"
+    if supports_paged_kv_read(module):
+        return "paged_kv"
+    if supports_attention(module):
+        return "attention"
+    if supports_f32_softmax(module) or supports_f16_softmax(module) or supports_bf16_softmax(module):
+        return "softmax"
+    if supports_norm(module):
+        return "norm"
+    if supports_reduction(module):
+        return "reduction"
+    if supports_nvfp4_matmul(module):
+        return "nvfp4_matmul"
+    if supports_int4_matmul(module):
+        return "int4_matmul"
+    if supports_mx_matmul(module):
+        return "mx_matmul"
+    if supports_matmul(module):
+        return "matmul"
+    return None
+
+
+def supports_native_package(module: GraphIRModule) -> bool:
+    """Whether the canonical SM120 native descriptor contract accepts a module."""
+
+    return native_package_kind(module) is not None
+
+
+def package_native(
+    module: GraphIRModule,
+    *,
+    pipeline_name: str,
+    options: Mapping[str, Any] | None = None,
+) -> NVIDIANativePackage:
+    """Compile the one canonical SM120 package selected for ``module``."""
+
+    kind = native_package_kind(module)
+    if kind is None:
+        raise ValueError(
+            "SM120 native packaging requires one supported static Graph contract"
+        )
+    resolved = options or {}
+    if kind == "attention_backward":
+        return package_attention_backward(module, pipeline_name=pipeline_name)
+    if kind == "paged_kv":
+        return package_paged_kv_read(module, pipeline_name=pipeline_name)
+    if kind == "attention":
+        return package_attention(module, pipeline_name=pipeline_name)
+    if kind == "softmax":
+        return package_softmax(module, pipeline_name=pipeline_name)
+    if kind == "norm":
+        return package_norm(module, pipeline_name=pipeline_name)
+    if kind == "reduction":
+        return package_reduction(
+            module,
+            pipeline_name=pipeline_name,
+            schedule=str(resolved.get("nvidia_reduction_schedule", "serial")),
+        )
+    if kind == "nvfp4_matmul":
+        return package_nvfp4_matmul(module, pipeline_name=pipeline_name)
+    if kind == "int4_matmul":
+        return package_int4_matmul(module, pipeline_name=pipeline_name)
+    if kind == "mx_matmul":
+        return package_mx_matmul(module, pipeline_name=pipeline_name)
+    return package_matmul(
+        module,
+        pipeline_name=pipeline_name,
+        schedule=str(resolved.get("nvidia_schedule", "auto")),
     )
 
 
@@ -3174,7 +3255,9 @@ __all__ = [
     "package_paged_attention",
     "package_replay_ssm_kernels",
     "package_moe_kernels",
+    "package_native",
     "package_softmax",
+    "native_package_kind",
     "requests_softmax",
     "requests_attention",
     "requests_attention_backward",
@@ -3201,5 +3284,6 @@ __all__ = [
     "supports_tf32_matmul",
     "supports_f32_softmax",
     "supports_nvfp4_matmul",
+    "supports_native_package",
     "tools_available",
 ]

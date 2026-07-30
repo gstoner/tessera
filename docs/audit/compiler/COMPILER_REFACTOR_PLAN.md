@@ -72,7 +72,7 @@ table is the single skim surface. `✅` done · `🟡` partial · `⬜` not star
 | **2** | B4a `kernel_cache` synth→compile→cache loop | ✅ | — | — |
 | **2** | B4 real AOT `compile_fn`s (per-arch, landed via C1/C2/C3) | ✅ registered host-free | ✅ Zen5 `clang` + gfx1151 `hipcc` | ✅ sm_120 `nvcc`+`ptxas` |
 | **3** | C0 backend-plugin handoff + non-Apple F4 gate | ✅ (PR #285) | — | — |
-| **3** | C1 x86 plugin (`emit/x86_llvm.py`: emitter + `cc` compile + ctypes runner) | ✅ emit host-free | ✅ execute on Zen 5 | — |
+| **3** | C1 x86 C candidate (`emit/x86_c.py`: emitter + `cc` compile + ctypes runner) | ✅ emit host-free | ✅ execute on Zen 5 | — |
 | **3** | Oracle accuracy budget (`KernelRunner.accuracy_atol`, D2 seed) | ✅ | — | — |
 | **3** | C1b x86 AOCL-DLP Tier-3 candidate (opt-in) | 🟡 candidate wired host-free | 🟡 generic Tier-1 proven on Zen; AOCL lane library-gated | — |
 | **4** | C2 NVIDIA generic synth → CUDA (`emit/nvidia_cuda.py`: emitter + `nvcc` + runner) | ✅ emit host-free | — | ✅ sm_120 FusedRegion (RTX 5070 Ti) |
@@ -239,7 +239,7 @@ backends).
   (compile-on-launch — Metal compiles inside `run_*`, cached in the runtime), so
   the loop dedups and keys without duplicating work. **Launch** stays the B3
   `KernelRunner`. **The real ahead-of-time `compile_fn`s landed in Workstream C**
-  (2026-07): `emit/x86_llvm.py` (`clang`/`cc`), `emit/nvidia_cuda.py` (`nvcc`, +
+  (2026-07): `emit/x86_c.py` (`clang`/`cc`), `emit/nvidia_cuda.py` (`nvcc`, +
   `ptxas` for the mma.sync PTX bridge), and `emit/rocm_hip.py` (`hipcc`) each
   `register_compiler` their toolchain into the B4a loop.
 
@@ -266,7 +266,7 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
   2. **`compile_fn`** (`register_compiler`) — `source → artifact` (x86: `clang
      -O3 -mavx512f -mavx512bf16 -shared` → `.so`). The original `compile_fn` field.
   3. **`KernelRunner`** (`register_runner`, `default=False`) — `run_*(region,
-     *inputs) → (out, execution_tag)`; a real tag (`"x86_native"`) gets F4-gated,
+     *inputs) → (out, execution_tag)`; a real tag (`"x86_c_native"`) gets F4-gated,
      a `REFERENCE_EXECUTIONS` tag declines.
 
   The original seven fields map onto shipped reality as: **`emit_kernel`** =
@@ -306,7 +306,7 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
 - **C2 · NVIDIA emit lanes** `[MAC]` authoring → `[NV]` proof. Two lanes, mirroring
   the ROCm split:
   **Generic CUDA lane — LANDED + hardware-proven 2026-07-07.** `emit/nvidia_cuda.py`
-  is a **full three-seam plugin** (parallel to `rocm_hip`/`x86_llvm`):
+  is a **full three-seam plugin** (parallel to `rocm_hip`/`x86_c`):
   `NvidiaCudaEmitter` turns a `FusedRegion` into CUDA source (a `__global__`
   one-thread-per-row kernel + a host-pointer C-ABI wrapper doing H2D/launch/D2H),
   reusing the *same* scalar body as x86/ROCm (`_fused_scalar_body.row_compute_body`)

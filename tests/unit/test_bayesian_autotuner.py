@@ -122,14 +122,44 @@ class TestBayesianAutotuner:
         best_tflops = max(r.tflops for r in tuner.results)
         assert abs(tuner.best.tflops - best_tflops) < 1e-9
 
-    def test_larger_tiles_generally_faster_for_large_gemm(self):
-        """128×128 tiles should outperform 32×32 tiles for large GEMMs."""
-        tuner = BayesianAutotuner(GEMMWorkload(M=4096, N=4096, K=4096))
+    def test_larger_tiles_reduce_redundant_dram_traffic_for_large_gemm(self):
+        tuner = BayesianAutotuner(
+            GEMMWorkload(M=4096, N=4096, K=4096),
+            peak_tflops=1000.0,
+            dram_bw_gbps=32.0,
+            cache_bytes=64 * 1024,
+        )
         small = TuningConfig(tile_m=32, tile_n=32, tile_k=32)
         large = TuningConfig(tile_m=128, tile_n=128, tile_k=32)
-        lat_small = tuner._mock_latency(small)
-        lat_large = tuner._mock_latency(large)
+        lat_small = tuner._analytical_latency(small)
+        lat_large = tuner._analytical_latency(large)
         assert lat_large < lat_small
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"peak_tflops": 0.0}, "peak_tflops"),
+            ({"dram_bw_gbps": 0.0}, "dram_bw_gbps"),
+            ({"cache_bytes": -1}, "cache_bytes"),
+            ({"smem_budget_bytes": 0}, "smem_budget_bytes"),
+        ],
+    )
+    def test_invalid_cost_model_inputs_fail_closed(self, kwargs, message):
+        with pytest.raises(ValueError, match=message):
+            BayesianAutotuner(GEMMWorkload(64, 64, 64), **kwargs)
+
+    def test_measured_cache_row_remains_authoritative(self):
+        tuner = self._tuner(M=256, N=256, K=256)
+        measured = TuningResult(
+            TuningConfig(64, 64, 32),
+            latency_ms=99.0,
+            tflops=0.01,
+            method="measured",
+        )
+        tuner._results.append(measured)
+        tuner._consider_best(measured)
+
+        assert tuner.tune(max_trials=5) is measured
 
     def test_smem_budget_enforced(self):
         """Configs exceeding smem budget should not be in results."""
@@ -237,5 +267,27 @@ class TestBayesianAutotunerCache:
             t2 = BayesianAutotuner(GEMMWorkload(M=1024, N=1024, K=1024))
             loaded = t2.warm_start_from_cache(db_path)
             assert loaded == 0
+        finally:
+            os.unlink(db_path)
+
+    def test_warm_start_different_movement_contract_returns_zero(self):
+        """Measured evidence is exact to the workload's movement contract."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            original = GEMMWorkload(
+                M=512, N=512, K=512,
+                movement={"overlap": "compute"},
+            )
+            t1 = BayesianAutotuner(original)
+            t1.tune(max_trials=3)
+            t1.save_to_cache(db_path)
+
+            changed = GEMMWorkload(
+                M=512, N=512, K=512,
+                movement={"overlap": "none"},
+            )
+            t2 = BayesianAutotuner(changed)
+            assert t2.warm_start_from_cache(db_path) == 0
         finally:
             os.unlink(db_path)

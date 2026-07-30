@@ -247,6 +247,31 @@ def test_x86_base_descriptor_executes_without_avx512(family) -> None:
     np.testing.assert_allclose(output, expected, rtol=2e-6, atol=2e-6)
 
 
+@pytest.mark.skipif(
+    not (
+        tools_available_for_architecture(X86_BASE_ARCHITECTURE)
+        and tools_available()
+    ),
+    reason="base and AVX-512 x86 images unavailable",
+)
+def test_x86_loader_keeps_base_and_avx512_images_distinct() -> None:
+    base = package_softmax(
+        _softmax_module((2, 2)),
+        pipeline_name="tessera-lower-to-x86",
+        architecture=X86_BASE_ARCHITECTURE,
+    )
+    avx512 = package_softmax(
+        _softmax_module((2, 2)),
+        pipeline_name="tessera-lower-to-x86",
+    )
+    base_library = rt._load_x86_native_image(base.image)
+    avx512_library = rt._load_x86_native_image(avx512.image)
+
+    assert base_library._handle != avx512_library._handle
+    assert getattr(base_library, base.descriptor.entry_symbol, None) is not None
+    assert getattr(avx512_library, avx512.descriptor.entry_symbol, None) is not None
+
+
 def test_driver_joins_x86_native_package(monkeypatch) -> None:
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
     bundle = compile_graph_module(

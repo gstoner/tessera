@@ -242,7 +242,7 @@ class RunnerError(RuntimeError):
 #: the numpy reference. The F4 oracle trusts these by construction (there is
 #: nothing device-emitted to distrust); ANY OTHER tag means a real kernel ran and
 #: the oracle compares it to the numpy reference. A new backend therefore returns
-#: its own real-execution tag (e.g. ``"x86_native"`` / ``"rocm_hip"`` / ``"cuda"``)
+#: its own real-execution tag (e.g. ``"x86_c_native"`` / ``"rocm_hip"`` / ``"cuda"``)
 #: to get gated, and one of these when it declines — it does NOT need to pretend
 #: to be Metal. This is what makes the F4 gate backend-agnostic (B3).
 REFERENCE_EXECUTIONS = frozenset({"reference", "fallback"})
@@ -252,7 +252,7 @@ class KernelRunner(ABC):
     """Executes a synthesized fused region on probe inputs.
 
     Each method returns ``(output, execution)`` where ``execution`` is a backend
-    tag: a real-execution tag (``"metal_runtime"``, ``"x86_native"``, …) when a
+    tag: a real-execution tag (``"metal_runtime"``, ``"x86_c_native"``, …) when a
     real device kernel ran, or a tag in :data:`REFERENCE_EXECUTIONS`
     (``"reference"`` / ``"fallback"``) when it fell back to numpy. The F4 oracle
     compares to the numpy reference iff a real kernel ran, and trusts the

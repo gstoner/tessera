@@ -59,15 +59,15 @@ Key source files (Python, on the Mac and mirrored to your box):
 ## 2. The three seams you implement
 
 Everything lives in one new module, `python/tessera/compiler/emit/<target>.py`
-(e.g. `x86_llvm.py`, `rocm_hip.py`, `nvidia_ptx.py`). It registers itself on
+(e.g. `x86_c.py`, `rocm_hip.py`, `nvidia_ptx.py`). It registers itself on
 import, exactly like `apple_msl.py`.
 
 ### Seam 1 — `KernelEmitter` (region → source)
 
 ```python
 class MyEmitter(KernelEmitter):
-    target = "x86"          # your backend id
-    lang   = "c-llvm"       # source dialect tag ("msl" | "ptx" | "amdgcn" | "c-llvm")
+    target = "x86_c"        # source-candidate id; canonical "x86" is MLIR/native
+    lang   = "c"            # source dialect tag ("msl" | "ptx" | "amdgcn" | "c")
 
     def can_emit(self, region) -> bool:
         return isinstance(region, (FusedRegion, NormChainRegion, ...))
@@ -94,7 +94,7 @@ def my_compile_fn(source: KernelSource):
     return artifact          # opaque handle; return None ONLY for compile-on-launch
 ```
 
-Register with `register_compiler("x86", my_compile_fn)`. The `build()` loop keys
+Register with `register_compiler("x86_c", my_compile_fn)`. The `build()` loop keys
 the artifact by `cache_key(source, dtype, target)` and reuses it on a hit — you
 get the shape-bucket cache for free. Raise (or let the toolchain raise) on a
 compile failure; `build` wraps it in `CompileError` (never a silent no-op).
@@ -103,15 +103,15 @@ compile failure; `build` wraps it in `CompileError` (never a silent no-op).
 
 ```python
 class MyRunner(KernelRunner):
-    target = "x86"
+    target = "x86_c"
     def run_fused_region(self, region, A, B, bias=None, *a, **k):
         out = my_launch(region, A, B, bias)        # dlopen the .so, call entry, run
-        return out, "x86_native"                   # ← your REAL-execution tag
+        return out, "x86_c_native"                 # ← your REAL-execution tag
     # ... run_fused_attention / run_gated_matmul_region / run_pointwise_graph
 ```
 
 **The execution-tag contract (this is what makes the F4 oracle gate _you_):**
-return your own real tag (`"x86_native"`, `"rocm_hip"`, `"cuda"`) when a real
+return your own real tag (`"x86_c_native"`, `"rocm_hip"`, `"cuda"`) when a real
 device kernel ran, or a tag in `REFERENCE_EXECUTIONS` (`"reference"`/`"fallback"`)
 when you fell back to numpy. The oracle compares your output to the numpy
 reference **iff** a real kernel ran — you do **not** pretend to be Metal.
@@ -138,12 +138,12 @@ from tessera.compiler.fusion_core import (
     PointwiseGraphRegion, PointwiseReduceRegion,
 )
 
-_TARGET = "x86"          # TODO: your backend id
+_TARGET = "x86_c"        # source-candidate id; canonical x86 is MLIR/native
 
 
 class _Emitter(KernelEmitter):
     target = _TARGET
-    lang = "c-llvm"      # TODO
+    lang = "c"           # TODO
     def can_emit(self, region):
         return isinstance(region, FusedRegion)          # TODO: widen as you add kinds
     def emit(self, region, *, spec=SpecPolicy.BUCKET, dtype="f32", dims=None):
@@ -162,7 +162,7 @@ def _compile_fn(source):
 class _Runner(KernelRunner):
     target = _TARGET
     def run_fused_region(self, region, *a, **k):
-        raise NotImplementedError("TODO: launch → (out, 'x86_native')")
+        raise NotImplementedError("TODO: launch → (out, 'x86_c_native')")
     def run_fused_attention(self, region, *a, **k): raise NotImplementedError
     def run_gated_matmul_region(self, region, *a, **k): raise NotImplementedError
     def run_pointwise_graph(self, region, *a, **k): raise NotImplementedError
@@ -203,8 +203,9 @@ register_runner(_Runner(), default=False)
 - **Box:** Strix Halo (Ryzen AI Max+ 395, Zen 5). **AVX-512 only — no AMX** on
   this fleet; never emit AMX. The NR2 Pro's 265F CPU has **no AVX-512** — do not
   build the x86 backend there.
-- **compile_fn:** `clang -O3 -mavx512f -mavx512bf16 -shared` → `.so`; launch via
-  `ctypes`/`dlopen`. Cheapest 2nd impl — start here to validate the framework.
+- **compile_fn:** `clang -O3 -march=x86-64-v4 -shared` → `.so`; launch via
+  `ctypes`/`dlopen`. The explicit ISA profile is part of source/cache identity;
+  the runner declines on hosts that cannot execute it.
 - **Reuse:** the existing `TileToX86Pass` AMX/AVX512 GEMM
   (`src/compiler/codegen/tessera_x86_backend/`) as the codegen reference; the
   `spec_policy` replaces its hard `"requires static shapes"` gate.

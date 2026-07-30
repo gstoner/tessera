@@ -582,6 +582,14 @@ that the analytical cost model our arbiter falls back on was a mock. A
 step-distance histogram over a materialized access order is cheap, needs no
 device, and is a real signal. **[I]**
 
+> **2026-07-30 calibration correction.** `ROCM-CALIB-1` rejected this
+> step-distance hypothesis against the gfx1151 retune/hot-path evidence on its
+> AMD home architecture. “Real signal” above was an implementation hypothesis,
+> not a validated ranking claim. The line is ended rather than coefficient
+> tuned. The replacement T1 experiment is structurally different: symbolic
+> tile identities, capacity-bounded LRU reuse, and cache-derived DRAM traffic;
+> it must earn a separate per-backend retain/reject verdict.
+
 > **Calibration is owned across all four queues** under sync key
 > `COSTMODEL-CALIB-2026-07-29`, not by whichever backend happens to be nearest.
 > A score is only worth what it predicts, and one fitted against a single
@@ -1088,11 +1096,11 @@ the dominant tiling lever.
    schedule bad" output that needs no hardware.
 8. **Intrawave/interwave as a named schedule axis** — §3.5. A discrete,
    documented policy choice our Schedule IR should carry explicitly.
-9. **The compile-time locality metric** — §3.7. A step-distance histogram over a
-   materialized access order is a hardware-free static cost signal, and it lands
-   squarely on the mock-analytical-cost-model finding in
-   [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md). Cheapest real answer to
-   that gap.
+9. **The compile-time locality metric — rejected after calibration** — §3.7.
+   The step-distance histogram was a cheap hardware-free hypothesis, but
+   `ROCM-CALIB-1` rejected it on gfx1151. Do not implement, retune, or transfer
+   it. The structurally different T1 tile-reuse/cache model is the active
+   experiment and owns a separate retain/reject gate.
 
 10. **Selection as a composable tree of single-concern nodes** — §4.2. The
     structural answer to combining hand-tuned, generated and predicted kernels:

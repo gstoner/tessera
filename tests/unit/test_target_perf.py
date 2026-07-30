@@ -473,6 +473,8 @@ def test_planner_for_target_uses_the_right_hardware_peak() -> None:
     apple = SchedulePlanner.for_target("apple_gpu", dtype="fp32")
     assert apple.perf is not None and apple.perf.device == "m1_max"
     assert apple.peak_tflops == pytest.approx(10.62)
+    assert apple.dram_bw_gbps == pytest.approx(400.0)
+    assert apple.cache_bytes == 48 * 1024 * 1024
     assert apple.smem_budget_bytes == 32768
 
 
@@ -495,7 +497,8 @@ def test_planner_refuses_to_inherit_another_devices_smem_budget() -> None:
     A100-shaped budget and every legality verdict would be wrong."""
     cpu = TargetPerf(device="_smemless", target="x86",
                      source="a synthetic row with a peak but no SMEM capacity",
-                     peak_tflops={"fp32:vector": 2.0})
+                     peak_tflops={"fp32:vector": 2.0},
+                     dram_bw_gbps=100.0)
     register_perf(cpu)
     try:
         with pytest.raises(TargetPerfError, match="smem_bytes_per_cu"):

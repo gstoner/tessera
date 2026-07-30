@@ -1,6 +1,6 @@
 """Workstream C2 — NVIDIA (sm_120) codegen plugin: generic synth → CUDA.
 
-The NVIDIA counterpart to ``emit/rocm_hip.py`` / ``emit/x86_llvm.py`` — the three
+The NVIDIA counterpart to ``emit/rocm_hip.py`` / ``emit/x86_c.py`` — the three
 registered seams the target-agnostic synthesizer (``fusion_core``) calls into, so
 NVIDIA gains the generic **compiled** middle-ground lane it lacks today (the
 shipped ``libtessera_nvidia_gemm.so`` is a *pure* mma.sync GEMM with no fused
@@ -4632,7 +4632,7 @@ class NvidiaTileMatmulCandidate(Candidate):
             return None
 
 
-# ── registration (import side effect, exactly like rocm_hip / x86_llvm) ────────
+# ── registration (import side effect, exactly like rocm_hip / x86_c) ───────────
 register_emitter(NvidiaCudaEmitter())
 register_compiler(_TARGET, _nvidia_cuda_compile_fn)
 register_runner(NvidiaCudaRunner(), default=False)

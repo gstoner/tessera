@@ -1,0 +1,16 @@
+{
+  "schema": "tessera.nvidia.aot_jit.v1",
+  "target": "nvidia_sm120",
+  "architecture": "sm_120a",
+  "device": "NVIDIA GeForce RTX 5070 Ti",
+  "driver": "610.62",
+  "cuda": "13.3",
+  "samples": 7,
+  "jit_compile_load_launch_ms": 18.266,
+  "aot_load_launch_ms": 0.867,
+  "aot_offline_build_ms": 173.004,
+  "aot_saved_ms": 17.399,
+  "cold_cache_control": "unique entry symbol and source for every sample",
+  "correctness": "both lanes load, launch, and write the same device result",
+  "decision": "precompiled peer warranted; offline build amortizes after 10 cold launches"
+}

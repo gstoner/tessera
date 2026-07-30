@@ -101,12 +101,16 @@ a total hardware-free oracle. Rationale and the 35%→72% L2 figure that motivat
 it: [`compiler/TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md)
 §3.2.
 
-**What is open here.** No NVIDIA emitter consumes it. The `mma.sync` GEMM in
-`python/tessera/compiler/emit/nvidia_cuda.py` launches a 2-D
-`dim3 grid((M+15)/16,(N+7)/8)` and computes `int mt=blockIdx.x*16,
-nt=blockIdx.y*8` directly; the gated-matmul kernel uses the same shape. Both are
-the sites where `emit_c()` drops in, flattening to a 1-D grid so the permutation
-has a single block id to remap.
+**Implementation landed (2026-07-30); selection remains open.** The SM120
+`mma.sync` fused-GEMM and gated-matmul emitters now consume `raster_order` and
+`raster_group`. `row_major` retains their established 2-D launch and direct
+`blockIdx.x` / `blockIdx.y` coordinate arithmetic. Non-default orders flatten
+the same block count to one dimension and inject the shared `emit_c()` mapping,
+including ragged final panels. The compiled-artifact cache key includes both
+knobs, so a swizzled binary can never alias a row-major one. Focused host-free
+tests cover source selection and the shared permutation oracle; exact RTX 5070
+Ti execute-and-compare covered grouped-M fused GEMM and grouped-N gated matmul
+on ragged dimensions. No selector change is implied.
 
 **Why it did not land in the contract PR.** Changing a hardware-verified
 `mma.sync` kernel without sm_120 silicon to measure the result would be an
@@ -120,13 +124,14 @@ with host clang, running it against the Python reference for every block id**
 under `-Wall -Wshadow -Werror`. That covers the arithmetic and the emission's
 scoping, on any host.
 
-**Missing exact-device evidence.** Whether a swizzle moves sm_120 latency, and at
-which `raster_group`, for the GEMM shape buckets in the perf ratchet. Needs
-`ncu` L2 hit-rate deltas plus device-event timing on the NR2 Pro. Until then the
-axis is **carried, not swept**. T1 can score the order symbolically, but it has
-not earned an sm_120 raster retain verdict and cannot promote a choice.
+**Remaining exact-device evidence.** Whether a swizzle moves sm_120 latency, and
+at which `raster_group`, for the GEMM shape buckets in the perf ratchet. This
+needs a committed repeated-median CUDA-event matrix plus `ncu` L2 hit-rate
+deltas on the NR2 Pro. Until then the axis is **carried, not selected**. T1 can
+score the order symbolically, but it has not earned an sm_120 raster retain
+verdict and cannot promote a choice.
 
-## NVIDIA-AOT-1: decide whether NVRTC needs a precompiled peer
+## NVIDIA-AOT-1: decide whether NVRTC needs a precompiled peer — complete
 
 Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **follow-up required**.
 Apple added `apple_gpu_air`, a precompiled-artifact lane behind the shared
@@ -145,6 +150,22 @@ benchmarks/apple_gpu/benchmark_aot_vs_jit.py *with its cache control* (a never-
 before-compiled kernel per sample) — the driver's own cache is what made the
 first Apple number 13x too good. No shared IR, ABI, dtype/op registration, or
 numerical contract changed.
+
+**Decision (2026-07-30): a precompiled peer is warranted.** The exact SM120
+probe [`benchmark_aot_vs_jit.cu`](../../../../benchmarks/nvidia/benchmark_aot_vs_jit.cu)
+uses a unique CUDA source and entry symbol for every sample, so neither NVRTC
+nor the driver can serve a prior module. Both lanes load, launch, and verify the
+same device result. On the RTX 5070 Ti (CUDA 13.3, driver 610.62), seven-sample
+medians were **18.266 ms** for NVRTC compile + module load + launch and
+**0.867 ms** for a precompiled cubin load + launch: **17.399 ms** saved per cold
+request. Offline cubin construction was **173.004 ms**, amortizing after about
+**10 cold launches**. The retained packet is
+[`nvidia_sm120_aot_vs_jit_2026_07_30.json`](../../../../benchmarks/baselines/nvidia_sm120_aot_vs_jit_2026_07_30.json).
+
+This closes the decision, not productization: a follow-on must add a versioned
+SM120 cubin/fatbin artifact to the native package/runtime seam, preserve the
+current NVRTC fallback for unsupported or stale artifacts, and execute-compare
+the production matmul ABI before any selector promotion.
 
 Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43
 self-resolving test files onto the shared `tests/_support/compiler_tool.py`

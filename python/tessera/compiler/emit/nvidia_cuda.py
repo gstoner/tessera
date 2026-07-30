@@ -77,6 +77,7 @@ from tessera.compiler.fusion_core import (
     MatmulRegion,
     PointwiseGraphRegion,
 )
+from tessera.compiler.tile_rasterization import RasterOrder, emit_c
 
 _TARGET = "nvidia"
 _LANG = "cuda"
@@ -3300,8 +3301,34 @@ class NvidiaPointwiseCandidate(Candidate):
 _MMA_FUSED_ENTRY = "tessera_nvidia_mma_fused"
 #: Activations the mma.sync fused epilogue applies after the (optional) bias add.
 _MMA_FUSED_ACTS = ("relu", "gelu", "silu", "sigmoid", "tanh")
-_mma_fused_fn_cache: dict[tuple[str, bool, str | None], Any] = {}
-_mma_fused_device_fn_cache: dict[tuple[str, bool, str | None], Any] = {}
+_mma_fused_fn_cache: dict[tuple[str, bool, str | None, str, int], Any] = {}
+_mma_fused_device_fn_cache: dict[tuple[str, bool, str | None, str, int], Any] = {}
+
+
+def _raster_launch(order: str, group: int, *, m: str, n: str) -> tuple[str, str, str]:
+    """CUDA launch and tile-coordinate text for a raster configuration.
+
+    Keep the row-major source byte-for-byte equivalent to the established 2-D
+    launch.  Other orders flatten the grid and use the shared, total C oracle.
+    """
+    order = RasterOrder(order).value
+    if group < 1:
+        raise ValueError("raster_group must be positive")
+    if order == RasterOrder.ROW_MAJOR.value:
+        return (
+            "  int mt=blockIdx.x*16, nt=blockIdx.y*8, ",
+            f"dim3 grid(({m}+15)/16,({n}+7)/8), block(32)",
+            f"dim3(({m}+15)/16,({n}+7)/8),32",
+        )
+    coords = emit_c(order, group=group, bid="blockIdx.x",
+                    grid_m=f"(({m}+15)/16)", grid_n=f"(({n}+7)/8)",
+                    out_m="_tsr_mt", out_n="_tsr_nt", indent="  ")
+    return (
+        f"  const int _tsr_grid_m=({m}+15)/16, _tsr_grid_n=({n}+7)/8;\n"
+        f"{coords}  int mt=_tsr_mt*16, nt=_tsr_nt*8, ",
+        f"dim3 grid(({m}+15)/16*(({n}+7)/8)), block(32)",
+        f"dim3(({m}+15)/16*(({n}+7)/8)),32",
+    )
 
 
 def _native_mma_storage_spec(storage: str) -> dict[str, Any]:
@@ -3417,7 +3444,9 @@ def _mma_fused_epilogue(region: Any) -> tuple[bool, str | None] | None:
 
 
 def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
-                               storage: str = "f16") -> str:
+                               storage: str = "f16", *,
+                               raster_order: str = "row_major",
+                               raster_group: int = 1) -> str:
     """One-kernel native MMA GEMM plus bias/activation store epilogue."""
     from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
     spec = _native_mma_storage_spec(storage)
@@ -3436,6 +3465,8 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
                   "int kr=rr+j; unsigned v=(kr<K&&cc<N)?B[kr*N+cc]:0u; "
                   "w|=v<<(8*j);} return w;")
     bias_param = "const float* bias, " if has_bias else ""
+    coordinates, launch, launch_args = _raster_launch(
+        raster_order, raster_group, m="M", n="N")
 
     def epi(var: str, col: str) -> str:
         s = ""
@@ -3453,7 +3484,7 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         f"extern \"C\" __global__ void {_MMA_FUSED_ENTRY}_kernel(\n"
         f"    const {ctype}* A, const {ctype}* B, const float* bias,\n"
         "    float* D, int M, int N, int K) {\n"
-        "  int mt=blockIdx.x*16, nt=blockIdx.y*8, lane=threadIdx.x, gid=lane>>2, tig=lane&3;\n"
+        f"{coordinates}lane=threadIdx.x, gid=lane>>2, tig=lane&3;\n"
         "  float d0=0,d1=0,d2=0,d3=0;\n"
         f"  for (int k0=0;k0<K;k0+={step}){{\n"
         f"    auto la=[&](int r,int c)->unsigned{{{load_a}}};\n"
@@ -3481,7 +3512,7 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         "  cudaMemcpy(dB,hB,szB,cudaMemcpyHostToDevice);\n"
         "  if (hbias){ if (cudaMalloc(&dbias,szBias)!=cudaSuccess){cudaFree(dA);cudaFree(dB);cudaFree(dD);return 3;}\n"
         "    cudaMemcpy(dbias,hbias,szBias,cudaMemcpyHostToDevice); }\n"
-        "  dim3 grid((M+15)/16,(N+7)/8), block(32);\n"
+        f"  {launch};\n"
         f"  {_MMA_FUSED_ENTRY}_kernel<<<grid,block>>>(dA,dB,dbias,dD,M,N,K);\n"
         "  int ok = (cudaDeviceSynchronize()==cudaSuccess) ? 1 : 3;\n"
         "  if (ok==1) cudaMemcpy(hD,dD,szO,cudaMemcpyDeviceToHost);\n"
@@ -3500,7 +3531,7 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
         "      cudaMemcpy(dB,hB,szB,cudaMemcpyHostToDevice)!=cudaSuccess) goto fail;\n"
         "  if (hbias) { if (cudaMalloc(&dbias,szBias)!=cudaSuccess ||\n"
         "      cudaMemcpy(dbias,hbias,szBias,cudaMemcpyHostToDevice)!=cudaSuccess) goto fail; }\n"
-        "  { dim3 grid((M+15)/16,(N+7)/8), block(32);\n"
+        f"  {{ {launch};\n"
         f"    for(int i=0;i<warmup;i++) {_MMA_FUSED_ENTRY}_kernel<<<grid,block>>>(dA,dB,dbias,dD,M,N,K);\n"
         "    if (cudaDeviceSynchronize()!=cudaSuccess || cudaEventCreate(&beg)!=cudaSuccess ||\n"
         "        cudaEventCreate(&end)!=cudaSuccess || cudaEventRecord(beg)!=cudaSuccess) goto fail;\n"
@@ -3517,15 +3548,18 @@ def _synthesize_mma_fused_cuda(has_bias: bool, act: str | None,
     )
 
 
-def _mma_fused_fn(has_bias: bool, act: str | None, storage: str = "f16"):
+def _mma_fused_fn(has_bias: bool, act: str | None, storage: str = "f16", *,
+                  raster_order: str = "row_major", raster_group: int = 1):
     """Compile (once per epilogue signature) the mma.sync fused kernel and return
     its bound entry symbol: ``int(A bf16, B bf16, bias f32|NULL, D f32, M,N,K)``."""
-    sig = (storage, has_bias, act)
+    sig = (storage, has_bias, act, RasterOrder(raster_order).value, raster_group)
     fn = _mma_fused_fn_cache.get(sig)
     if fn is not None:
         return fn
     from tessera.compiler.emit.kernel_emitter import KernelSource
-    src = KernelSource(source=_synthesize_mma_fused_cuda(has_bias, act, storage),
+    src = KernelSource(source=_synthesize_mma_fused_cuda(
+                           has_bias, act, storage, raster_order=sig[3],
+                           raster_group=raster_group),
                        entry=_MMA_FUSED_ENTRY, lang=_LANG)
     artifact = _nvidia_cuda_compile_fn(src)
     lib = _load_lib(artifact)
@@ -3537,13 +3571,16 @@ def _mma_fused_fn(has_bias: bool, act: str | None, storage: str = "f16"):
 
 
 def _mma_fused_device_fn(has_bias: bool, act: str | None,
-                         storage: str = "f16"):
-    sig = (storage, has_bias, act)
+                         storage: str = "f16", *, raster_order: str = "row_major",
+                         raster_group: int = 1):
+    sig = (storage, has_bias, act, RasterOrder(raster_order).value, raster_group)
     fn = _mma_fused_device_fn_cache.get(sig)
     if fn is not None:
         return fn
     from tessera.compiler.emit.kernel_emitter import KernelSource
-    src = KernelSource(source=_synthesize_mma_fused_cuda(has_bias, act, storage),
+    src = KernelSource(source=_synthesize_mma_fused_cuda(
+                           has_bias, act, storage, raster_order=sig[3],
+                           raster_group=raster_group),
                        entry=_MMA_FUSED_ENTRY, lang=_LANG)
     artifact = _nvidia_cuda_compile_fn(src)
     fn = getattr(_load_lib(artifact), f"{_MMA_FUSED_ENTRY}_device_ms")
@@ -3617,7 +3654,9 @@ class NvidiaMmaFusedCandidate(Candidate):
             bias_arr = (np.ascontiguousarray(bias, np.float32)
                         if has_bias else None)
             out = np.zeros((M, N), np.float32)
-            fn = _mma_fused_fn(has_bias, act, self.storage)
+            fn = _mma_fused_fn(has_bias, act, self.storage,
+                                raster_order=k.get("raster_order", "row_major"),
+                                raster_group=int(k.get("raster_group", 1)))
             rc = fn(_ptr(Ab), _ptr(Bb), _ptr(bias_arr), _ptr(out), M, N, K)
             if rc == 1:
                 return out, _REAL_TAG
@@ -4013,11 +4052,13 @@ class NvidiaMmaAttnCandidate(Candidate):
 # ── tensor-core GATED lane — paired mma.sync projections + gate epilogue ─────
 
 _MMA_GATED_ENTRY = "tessera_nvidia_mma_gated"
-_mma_gated_fn_cache: dict[tuple[str, str], Any] = {}
-_mma_gated_device_fn_cache: dict[tuple[str, str], Any] = {}
+_mma_gated_fn_cache: dict[tuple[str, str, str, int], Any] = {}
+_mma_gated_device_fn_cache: dict[tuple[str, str, str, int], Any] = {}
 
 
-def _synthesize_mma_gated_cuda(storage: str, act: str) -> str:
+def _synthesize_mma_gated_cuda(storage: str, act: str, *,
+                               raster_order: str = "row_major",
+                               raster_group: int = 1) -> str:
     """Two tensor-core projections sharing A, followed by gate(AWg) * AWu."""
     from tessera.compiler.emit._fused_scalar_body import pointwise_snippet
     spec = _native_mma_storage_spec(storage)
@@ -4035,6 +4076,8 @@ def _synthesize_mma_gated_cuda(storage: str, act: str) -> str:
                   "int kr=rr+j; unsigned v=(kr<K&&cc<H)?W[kr*H+cc]:0u; "
                   "w|=v<<(8*j);} return w;")
     e = _MMA_GATED_ENTRY
+    coordinates, launch, launch_args = _raster_launch(
+        raster_order, raster_group, m="M", n="H")
     gate = "".join(f"    {pointwise_snippet(act, f'g{i}')}\n" for i in range(4))
     mma = (f'asm volatile("mma.sync.aligned.m16n8k{step}.row.col.f32.{mma_type}.{mma_type}.f32 "\n'
            '      "{%0,%1,%2,%3},{%4,%5,%6,%7},{%8,%9},{%0,%1,%2,%3};\\n"')
@@ -4043,7 +4086,7 @@ def _synthesize_mma_gated_cuda(storage: str, act: str) -> str:
         f"extern \"C\" __global__ void {e}_kernel(const {ctype}* A,\n"
         f"    const {ctype}* Wg, const {ctype}* Wu, float* O,\n"
         "    int M, int H, int K) {\n"
-        "  int mt=blockIdx.x*16, nt=blockIdx.y*8, lane=threadIdx.x, gid=lane>>2, tig=lane&3;\n"
+        f"{coordinates}lane=threadIdx.x, gid=lane>>2, tig=lane&3;\n"
         "  float g0=0,g1=0,g2=0,g3=0,u0=0,u1=0,u2=0,u3=0;\n"
         f"  for(int k0=0;k0<K;k0+={step}){{\n"
         f"    auto la=[&](int r,int c)->unsigned{{{load_a}}};\n"
@@ -4068,7 +4111,7 @@ def _synthesize_mma_gated_cuda(storage: str, act: str) -> str:
         "  if(cudaMalloc(&dA,szA)!=cudaSuccess) return 3;\n"
         "  if(cudaMalloc(&dWg,szW)!=cudaSuccess||cudaMalloc(&dWu,szW)!=cudaSuccess||cudaMalloc(&dO,szO)!=cudaSuccess){cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return 3;}\n"
         "  cudaMemcpy(dA,hA,szA,cudaMemcpyHostToDevice);cudaMemcpy(dWg,hWg,szW,cudaMemcpyHostToDevice);cudaMemcpy(dWu,hWu,szW,cudaMemcpyHostToDevice);\n"
-        f"  {e}_kernel<<<dim3((M+15)/16,(H+7)/8),32>>>(dA,dWg,dWu,dO,M,H,K);\n"
+        f"  {launch}; {e}_kernel<<<{launch_args}>>>(dA,dWg,dWu,dO,M,H,K);\n"
         "  int ok=(cudaDeviceSynchronize()==cudaSuccess)?1:3;if(ok==1)cudaMemcpy(hO,dO,szO,cudaMemcpyDeviceToHost);\n"
         "  cudaFree(dA);cudaFree(dWg);cudaFree(dWu);cudaFree(dO);return ok;\n}\n"
         f'extern "C" float {e}_device_ms(const {ctype}*hA,const {ctype}*hWg,'
@@ -4078,9 +4121,9 @@ def _synthesize_mma_gated_cuda(storage: str, act: str) -> str:
         "if(reps<1||warmup<0||cudaMalloc(&a,za)||cudaMalloc(&g,zw)||cudaMalloc(&u,zw)||"
         "cudaMalloc(&o,zo)||cudaMemcpy(a,hA,za,cudaMemcpyHostToDevice)||"
         "cudaMemcpy(g,hWg,zw,cudaMemcpyHostToDevice)||cudaMemcpy(u,hWu,zw,cudaMemcpyHostToDevice))goto fail;"
-        f"for(int i=0;i<warmup;i++){e}_kernel<<<dim3((M+15)/16,(H+7)/8),32>>>(a,g,u,o,M,H,K);"
+        f"for(int i=0;i<warmup;i++){e}_kernel<<<{launch_args}>>>(a,g,u,o,M,H,K);"
         "if(cudaDeviceSynchronize()!=cudaSuccess||cudaEventCreate(&x)||cudaEventCreate(&y)||cudaEventRecord(x))goto fail;"
-        f"for(int i=0;i<reps;i++){e}_kernel<<<dim3((M+15)/16,(H+7)/8),32>>>(a,g,u,o,M,H,K);"
+        f"for(int i=0;i<reps;i++){e}_kernel<<<{launch_args}>>>(a,g,u,o,M,H,K);"
         "if(cudaEventRecord(y)||cudaEventSynchronize(y))goto fail;if(cudaEventElapsedTime(&ms,x,y))goto fail;"
         "cudaEventDestroy(x);cudaEventDestroy(y);cudaFree(a);cudaFree(g);cudaFree(u);cudaFree(o);return ms/reps;"
         "fail:if(x)cudaEventDestroy(x);if(y)cudaEventDestroy(y);if(a)cudaFree(a);if(g)cudaFree(g);"
@@ -4088,11 +4131,13 @@ def _synthesize_mma_gated_cuda(storage: str, act: str) -> str:
     )
 
 
-def _mma_gated_fn(storage: str, act: str):
-    key = (storage, act)
+def _mma_gated_fn(storage: str, act: str, *, raster_order: str = "row_major",
+                  raster_group: int = 1):
+    key = (storage, act, RasterOrder(raster_order).value, raster_group)
     if key in _mma_gated_fn_cache:
         return _mma_gated_fn_cache[key]
-    src = KernelSource(source=_synthesize_mma_gated_cuda(storage, act),
+    src = KernelSource(source=_synthesize_mma_gated_cuda(
+                           storage, act, raster_order=key[2], raster_group=raster_group),
                        entry=_MMA_GATED_ENTRY, lang=_LANG)
     fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)), _MMA_GATED_ENTRY)
     fn.restype = ctypes.c_int
@@ -4101,11 +4146,13 @@ def _mma_gated_fn(storage: str, act: str):
     return fn
 
 
-def _mma_gated_device_fn(storage: str, act: str):
-    key = (storage, act)
+def _mma_gated_device_fn(storage: str, act: str, *, raster_order: str = "row_major",
+                         raster_group: int = 1):
+    key = (storage, act, RasterOrder(raster_order).value, raster_group)
     if key in _mma_gated_device_fn_cache:
         return _mma_gated_device_fn_cache[key]
-    src = KernelSource(source=_synthesize_mma_gated_cuda(storage, act),
+    src = KernelSource(source=_synthesize_mma_gated_cuda(
+                           storage, act, raster_order=key[2], raster_group=raster_group),
                        entry=_MMA_GATED_ENTRY, lang=_LANG)
     fn = getattr(_load_lib(_nvidia_cuda_compile_fn(src)),
                  f"{_MMA_GATED_ENTRY}_device_ms")
@@ -4162,7 +4209,10 @@ class NvidiaMmaGatedCandidate(Candidate):
             M, K = Ah.shape
             _, H = Wgh.shape
             out = np.zeros((M, H), np.float32)
-            rc = _mma_gated_fn(self.storage, region.gate_act)(
+            rc = _mma_gated_fn(
+                self.storage, region.gate_act,
+                raster_order=k.get("raster_order", "row_major"),
+                raster_group=int(k.get("raster_group", 1)))(
                 _ptr(Ah), _ptr(Wgh), _ptr(Wuh), _ptr(out), M, H, K)
             if rc == 1:
                 return out, _REAL_TAG

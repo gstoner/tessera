@@ -50,6 +50,10 @@ from tessera.compiler.nvidia_native import (
     supports_reduction,
     supports_tf32_matmul,
 )
+from tessera.compiler.emit.nvidia_cuda import (
+    _synthesize_mma_fused_cuda,
+    _synthesize_mma_gated_cuda,
+)
 from tessera.compiler.primitive_coverage import NumericPolicy
 
 
@@ -211,6 +215,21 @@ def test_canonical_sm120_selector_preserves_explicit_opt_out(monkeypatch) -> Non
     )
     assert result.native_image is None
     assert result.launch_descriptor is None
+
+
+def test_nvidia_mma_emitters_consume_shared_raster_contract() -> None:
+    """Row-major retains the old 2-D launch; other orders use the C oracle."""
+    fused = _synthesize_mma_fused_cuda(
+        False, None, raster_order="grouped_m", raster_group=4)
+    gated = _synthesize_mma_gated_cuda(
+        "f16", "silu", raster_order="grouped_n", raster_group=8)
+    for source in (fused, gated):
+        assert "const int _tsr_grid_m=" in source
+        assert "_tsr_raster_pp" in source
+        assert "dim3 grid((M+15)/16*((" in source
+    row_major = _synthesize_mma_fused_cuda(False, None)
+    assert "int mt=blockIdx.x*16, nt=blockIdx.y*8" in row_major
+    assert "dim3 grid((M+15)/16,(N+7)/8), block(32)" in row_major
 
 
 def test_sm120_f16_native_packager_owns_typed_tile_kernel() -> None:

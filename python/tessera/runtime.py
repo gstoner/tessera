@@ -5634,6 +5634,8 @@ def _build_compiled_gemm_hsaco(
             f', schedule_ownership = "{sa["schedule_ownership"]}"'
             f", schedule_vgpr_estimate = {sa['schedule_vgpr_estimate']} : i64"
             f', schedule_source = "{sa["schedule_source"]}"'
+            f', schedule_raster_order = "{sa["schedule_raster_order"]}"'
+            f", schedule_raster_group = {sa['schedule_raster_group']} : i64"
         )
     storage_pack = ""
     if dtype in ("int4", "i4"):
@@ -6109,7 +6111,15 @@ def _rocm_wmma_gemm_2d(a: Any, b: Any) -> Any:
     return d
 
 
-def _rocm_wmma_fused_2d(a: Any, b: Any, bias: Any = None, activation: str = "none") -> Any:
+def _rocm_wmma_fused_2d(
+    a: Any,
+    b: Any,
+    bias: Any = None,
+    activation: str = "none",
+    *,
+    raster_order: str = "row_major",
+    raster_group: int = 1,
+) -> Any:
     """Run ONE 2-D WMMA GEMM with a **fused epilogue** — a per-column bias add
     and/or a pointwise activation (``relu``/``gelu``/``silu``) applied on the f32
     accumulator *before the store*, all inside the one COMPILER-GENERATED kernel
@@ -6144,7 +6154,9 @@ def _rocm_wmma_fused_2d(a: Any, b: Any, bias: Any = None, activation: str = "non
             raise ValueError(f"rocm WMMA bias must have shape ({n},) (one per output column); got {bias_arr.shape}")
     from .compiler.rocm_schedule import select_rocm_gemm_schedule
 
-    schedule = select_rocm_gemm_schedule(m, n, k, dtype=dtype_tag, arch=_rocm_chip())
+    schedule = select_rocm_gemm_schedule(
+        m, n, k, dtype=dtype_tag, arch=_rocm_chip(),
+        raster_order=raster_order, raster_group=raster_group)
     mt, nt = schedule.macro_tile
     hsaco = _build_compiled_gemm_hsaco(mt, nt, dtype_tag, bias=has_bias, activation=activation, schedule=schedule)
 

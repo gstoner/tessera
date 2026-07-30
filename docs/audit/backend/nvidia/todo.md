@@ -10,8 +10,8 @@ last_updated: 2026-07-29
 
 ## NVIDIA-CALIB-1: supply the sm_120 corpus to the hardware-free score calibration
 
-Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **follow-up required, owning
-host NR2 Pro (RTX 5070 Ti, sm_120).**
+Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **superseded by the terminal
+ROCm home-architecture rejection.** No NVIDIA arbiter-score adoption work remains.
 
 **Correction that created this item.** `APPLE_AUDIT.md` originally scoped this
 calibration to Apple alone, on the stated grounds that ROCm and NVIDIA kernels
@@ -46,6 +46,13 @@ port AMD constants.
 recorded sm_120 latencies already in the corpus — this needs no new hardware run,
 only an analysis pass over committed data, which makes it the cheapest of the
 three contributions to land.
+
+**Fleet outcome (2026-07-29).** ROCM-CALIB-1 tested the metric where it
+originated and reproduced 0/6 committed gfx1151 winners (median rho -0.1381, 0%
+positive). The agreed home-architecture failure rule ends this latency-ranking
+line without coefficient or target retuning. NVIDIA therefore owes no sm_120
+promotion analysis for this score; CUDA-specific bank diagnostics remain a
+separate future model and must not inherit AMD constants.
 ## NVIDIA-RASTER-1: consume the shared block-rasterization contract
 
 Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning

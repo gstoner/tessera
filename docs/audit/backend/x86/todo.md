@@ -11,9 +11,9 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 ## X86-CALIB-1: split verdict on the hardware-free score calibration
 
-Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **split: bank-conflict metric
-not applicable; locality metric follow-up required.** Owning host Zen 5 (Ryzen AI
-Max+ 395 CPU complex, AVX-512, no AMX).
+Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **closed by terminal ROCm
+rejection: bank-conflict not applicable; locality latency-ranker rejected.**
+Owning host Zen 5 (Ryzen AI Max+ 395 CPU complex, AVX-512, no AMX).
 
 Two static device-free scores are being calibrated against measured latency
 ([`../../compiler/AMD_KERNEL_COMPILER_SURVEY.md`](../../compiler/AMD_KERNEL_COMPILER_SURVEY.md)
@@ -43,6 +43,13 @@ artifact.
 **Missing exact-device evidence.** Rank correlation between the locality score
 and recorded Zen 5 AVX-512 latencies over the e2e benchmark rows. No evidence is
 owed for the conflict metric.
+
+**Fleet outcome (2026-07-29).** ROCM-CALIB-1 reproduced 0/6 measured winners on
+the AMD home architecture (median rho -0.1381, 0% positive), triggering the
+agreed no-retuning stop rule. x86 no longer owes a calibration run for adoption
+of this score. CPU cache-blocking or reuse-distance research remains valid as a
+different model; it must not be presented as a resurrection of the rejected
+step-distance latency ranker.
 Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **not applicable, with an
 architecture-specific reason.** Schedule IR gained `raster_order` /
 `raster_group` on `schedule.tile` / `schedule.knob` (arch-neutral definition in

@@ -1,0 +1,585 @@
+{
+  "schema": "tessera.rocm.raster.gfx1151.v1",
+  "sync_key": "RASTER-CONTRACT-2026-07-28",
+  "architecture": "gfx1151",
+  "method": {
+    "timing": "resident buffers, HIP events",
+    "ordering": "round-robin rotated interleaving",
+    "trials": 9,
+    "iterations_per_trial": 30,
+    "warmup_launches": 3,
+    "promotion_gate": "correct, >=3% paired-median speedup, >=75% paired win rate, and exact-device MALL/L2 counter support",
+    "device_event_timing_available": false,
+    "device_event_timing_error": "invalid GEMM timing sample: 0.0 ms"
+  },
+  "pmc": {
+    "supported": false,
+    "command": [
+      "/opt/rocm/core/bin/rocprofv3-avail",
+      "list",
+      "--pmc"
+    ],
+    "returncode": 0,
+    "output": "GPU                           :\t0\nName                          :\tAMD Radeon(TM) 8060S Graphics\n                               No pmc counters supported\n\n\n\nW0729 17:15:57.495602  178983 metadata.cpp:273] rocprofiler_iterate_agent_supported_counters failed for agent 0 (AMD Radeon(TM) 8060S Graphics) :: Agent HW architecture is not supported, no counter metrics found.",
+    "requested_domains": [
+      "MALL",
+      "L2/TCP/TCC"
+    ]
+  },
+  "rows": [
+    {
+      "family": "square",
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "macro_tile": [
+        4,
+        4
+      ],
+      "raster_order": "row_major",
+      "raster_group": 1,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.298324584960938e-06,
+      "normalized_error": 3.62496754956934e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "square",
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "macro_tile": [
+        4,
+        4
+      ],
+      "raster_order": "column_major",
+      "raster_group": 1,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.298324584960938e-06,
+      "normalized_error": 3.62496754956934e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "square",
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "macro_tile": [
+        4,
+        4
+      ],
+      "raster_order": "grouped_m",
+      "raster_group": 4,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.298324584960938e-06,
+      "normalized_error": 3.62496754956934e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "square",
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "macro_tile": [
+        4,
+        4
+      ],
+      "raster_order": "grouped_m",
+      "raster_group": 8,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.298324584960938e-06,
+      "normalized_error": 3.62496754956934e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "square",
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "macro_tile": [
+        4,
+        4
+      ],
+      "raster_order": "grouped_n",
+      "raster_group": 4,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.298324584960938e-06,
+      "normalized_error": 3.62496754956934e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "square",
+      "shape": [
+        1024,
+        1024,
+        1024
+      ],
+      "macro_tile": [
+        4,
+        4
+      ],
+      "raster_order": "grouped_n",
+      "raster_group": 8,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.298324584960938e-06,
+      "normalized_error": 3.62496754956934e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "wide",
+      "shape": [
+        256,
+        4096,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "row_major",
+      "raster_group": 1,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.821487426757812e-06,
+      "normalized_error": 3.0915772817866575e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "wide",
+      "shape": [
+        256,
+        4096,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "column_major",
+      "raster_group": 1,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.821487426757812e-06,
+      "normalized_error": 3.0915772817866575e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "wide",
+      "shape": [
+        256,
+        4096,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_m",
+      "raster_group": 4,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.821487426757812e-06,
+      "normalized_error": 3.0915772817866575e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "wide",
+      "shape": [
+        256,
+        4096,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_m",
+      "raster_group": 8,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.821487426757812e-06,
+      "normalized_error": 3.0915772817866575e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "wide",
+      "shape": [
+        256,
+        4096,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_n",
+      "raster_group": 4,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.821487426757812e-06,
+      "normalized_error": 3.0915772817866575e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "wide",
+      "shape": [
+        256,
+        4096,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_n",
+      "raster_group": 8,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.821487426757812e-06,
+      "normalized_error": 3.0915772817866575e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "tall",
+      "shape": [
+        4096,
+        256,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "row_major",
+      "raster_group": 1,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.702278137207031e-06,
+      "normalized_error": 3.510140893208724e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "tall",
+      "shape": [
+        4096,
+        256,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "column_major",
+      "raster_group": 1,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.702278137207031e-06,
+      "normalized_error": 3.510140893208724e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "tall",
+      "shape": [
+        4096,
+        256,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_m",
+      "raster_group": 4,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.702278137207031e-06,
+      "normalized_error": 3.510140893208724e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "tall",
+      "shape": [
+        4096,
+        256,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_m",
+      "raster_group": 8,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.702278137207031e-06,
+      "normalized_error": 3.510140893208724e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "tall",
+      "shape": [
+        4096,
+        256,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_n",
+      "raster_group": 4,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.702278137207031e-06,
+      "normalized_error": 3.510140893208724e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "tall",
+      "shape": [
+        4096,
+        256,
+        1024
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_n",
+      "raster_group": 8,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 8.702278137207031e-06,
+      "normalized_error": 3.510140893208724e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "ragged",
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "row_major",
+      "raster_group": 1,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.059906005859375e-06,
+      "normalized_error": 3.6999921715955106e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "ragged",
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "column_major",
+      "raster_group": 1,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.059906005859375e-06,
+      "normalized_error": 3.6999921715955106e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "ragged",
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_m",
+      "raster_group": 4,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.059906005859375e-06,
+      "normalized_error": 3.6999921715955106e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "ragged",
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_m",
+      "raster_group": 8,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.059906005859375e-06,
+      "normalized_error": 3.6999921715955106e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "ragged",
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_n",
+      "raster_group": 4,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.059906005859375e-06,
+      "normalized_error": 3.6999921715955106e-06,
+      "mismatch_count": null
+    },
+    {
+      "family": "ragged",
+      "shape": [
+        1025,
+        1537,
+        1009
+      ],
+      "macro_tile": [
+        2,
+        4
+      ],
+      "raster_order": "grouped_n",
+      "raster_group": 8,
+      "trials_ms": [],
+      "median_ms": null,
+      "speedup_vs_row_major": null,
+      "paired_median_speedup_vs_row_major": null,
+      "paired_win_rate_vs_row_major": null,
+      "correct": true,
+      "max_abs_error": 9.059906005859375e-06,
+      "normalized_error": 3.6999921715955106e-06,
+      "mismatch_count": null
+    }
+  ],
+  "all_correct": true,
+  "promotion": "blocked_retain_row_major"
+}

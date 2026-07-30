@@ -160,6 +160,7 @@ def _extract_hsaco(text: str) -> bytes:
 
 
 def _need_tools():
+    global TESSERA_OPT
     TESSERA_OPT = require_tessera_opt(*_ROCM_PASSES)
     mo = _find_mlir_opt()
     if mo is None:

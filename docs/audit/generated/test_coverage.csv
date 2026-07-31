@@ -245,7 +245,7 @@ linear_attn,44,8,2,52,0,,directly_tested,52 direct test references
 linear_attn_state,7,0,1,7,0,fp16,directly_tested,7 direct test references
 linear_general,15,0,0,15,0,,directly_tested,15 direct test references
 linear_warmup_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
-lion,14,0,0,14,0,fp32 fp64,directly_tested,14 direct test references
+lion,15,0,0,15,0,fp32 fp64,directly_tested,15 direct test references
 load_balance_loss,6,0,0,6,0,,directly_tested,6 direct test references
 load_sharded,3,0,1,3,0,,directly_tested,3 direct test references
 load_state,14,0,2,14,0,,directly_tested,14 direct test references

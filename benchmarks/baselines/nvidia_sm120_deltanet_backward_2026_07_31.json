@@ -1,0 +1,166 @@
+{
+  "abi_id": "tessera.nvidia.training.deltanet_backward.q_k_v_gate_beta_decay_do_dq_dk_dv_dgate_dbeta_ddecay_dims_flags.f32.v1",
+  "bounded_dims": {
+    "Dqk": 8,
+    "Dv": 8
+  },
+  "device": "nvidia:sm_120",
+  "method": {
+    "f32_input_scale": 0.05,
+    "ncu_metrics": [
+      "lts__t_sector_hit_rate.pct",
+      "dram__bytes.sum"
+    ],
+    "repetitions": 100,
+    "runs": 2,
+    "selector_changed": false,
+    "timing_domains": [
+      "cuda_event",
+      "end_to_end"
+    ],
+    "warmup": 20
+  },
+  "package": "tessera_cuda_training_deltanet_backward_f32_v2",
+  "rows": [
+    {
+      "device_event_median_ms": 0.6431809663772583,
+      "device_event_ms": [
+        0.6432642936706543,
+        0.6430976390838623
+      ],
+      "end_to_end_median_ms": 1.5301477300818078,
+      "end_to_end_ms": [
+        1.567644490278326,
+        1.4926509698852897
+      ],
+      "max_abs_gradient_error": 7.450580596923828e-09,
+      "ncu": {
+        "dram_bytes": 11484800.0,
+        "l2_sector_hit_rate_pct": 68.95500000000001
+      },
+      "ncu_reports": [
+        "nvidia-sm120-deltanet-plain.ncu-rep",
+        "nvidia-sm120-deltanet-plain-repeat.ncu-rep"
+      ],
+      "ncu_samples": [
+        {
+          "dram_bytes": 20742400.0,
+          "l2_sector_hit_rate_pct": 65.98
+        },
+        {
+          "dram_bytes": 2227200.0,
+          "l2_sector_hit_rate_pct": 71.93
+        }
+      ],
+      "resources": {
+        "active_blocks_per_sm": 2,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 1328,
+        "registers_per_thread": 255,
+        "static_shared_memory_bytes": 0
+      },
+      "shape": [
+        1,
+        2,
+        16,
+        8,
+        8
+      ],
+      "variant": "plain"
+    },
+    {
+      "device_event_median_ms": 0.7671689689159393,
+      "device_event_ms": [
+        0.7682009935379028,
+        0.7661369442939758
+      ],
+      "end_to_end_median_ms": 1.5467394448933192,
+      "end_to_end_ms": [
+        1.5696927497629076,
+        1.5237861400237307
+      ],
+      "max_abs_gradient_error": 1.862645149230957e-09,
+      "ncu": {
+        "dram_bytes": 11300992.0,
+        "l2_sector_hit_rate_pct": 77.99
+      },
+      "ncu_reports": [
+        "nvidia-sm120-deltanet-affine.ncu-rep",
+        "nvidia-sm120-deltanet-affine-repeat.ncu-rep"
+      ],
+      "ncu_samples": [
+        {
+          "dram_bytes": 674816.0,
+          "l2_sector_hit_rate_pct": 94.66
+        },
+        {
+          "dram_bytes": 21927168.0,
+          "l2_sector_hit_rate_pct": 61.32
+        }
+      ],
+      "resources": {
+        "active_blocks_per_sm": 2,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 1328,
+        "registers_per_thread": 255,
+        "static_shared_memory_bytes": 0
+      },
+      "shape": [
+        1,
+        2,
+        16,
+        8,
+        8
+      ],
+      "variant": "affine"
+    },
+    {
+      "device_event_median_ms": 0.9277796447277069,
+      "device_event_ms": [
+        0.9279749989509583,
+        0.9275842905044556
+      ],
+      "end_to_end_median_ms": 1.6975224250927567,
+      "end_to_end_ms": [
+        1.7076484399149194,
+        1.687396410270594
+      ],
+      "max_abs_gradient_error": 0.00013489625416696072,
+      "ncu": {
+        "dram_bytes": 747392.0,
+        "l2_sector_hit_rate_pct": 94.735
+      },
+      "ncu_reports": [
+        "nvidia-sm120-deltanet-serial-fill.ncu-rep",
+        "nvidia-sm120-deltanet-serial-fill-repeat.ncu-rep"
+      ],
+      "ncu_samples": [
+        {
+          "dram_bytes": 779776.0,
+          "l2_sector_hit_rate_pct": 94.77
+        },
+        {
+          "dram_bytes": 715008.0,
+          "l2_sector_hit_rate_pct": 94.7
+        }
+      ],
+      "resources": {
+        "active_blocks_per_sm": 2,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 1328,
+        "registers_per_thread": 255,
+        "static_shared_memory_bytes": 0
+      },
+      "shape": [
+        1,
+        2,
+        16,
+        8,
+        8
+      ],
+      "variant": "serial_fill"
+    }
+  ],
+  "schema": "tessera.nvidia.deltanet_backward.packet.v1",
+  "work_item": "NVIDIA-DeltaNet-backward"
+}

@@ -48,10 +48,16 @@ class MeasureRecord:
     latency_ms: float
     candidates: dict[str, float] = field(default_factory=dict)
     evidence: dict[str, Any] = field(default_factory=dict)
+    #: Replayable schedule identity for every measured candidate. This is
+    #: evidence, never a selector input: a missing descriptor must not be
+    #: reconstructed from a winner name after the fact.
+    candidate_descriptors: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def as_json(self) -> dict[str, Any]:
         return {"winner": self.winner, "latency_ms": self.latency_ms,
                 "candidates": dict(self.candidates),
+                **({"candidate_descriptors": dict(self.candidate_descriptors)}
+                   if self.candidate_descriptors else {}),
                 **({"evidence": dict(self.evidence)} if self.evidence else {})}
 
     @classmethod
@@ -60,6 +66,11 @@ class MeasureRecord:
                    latency_ms=float(d["latency_ms"]),
                    candidates={str(k): float(v)
                                for k, v in dict(d.get("candidates", {})).items()},
+                   candidate_descriptors={
+                       str(k): dict(v)
+                       for k, v in dict(d.get("candidate_descriptors", {})).items()
+                       if isinstance(v, dict)
+                   },
                    evidence=dict(d.get("evidence", {})))
 
 

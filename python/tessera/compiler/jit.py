@@ -1976,10 +1976,32 @@ class JitFn:
             ordered = self._ordered_inputs(args, kwargs)
             source = graph_ops[0]
             flags = dict(source.kwargs)
-            if (ordered is None or len(ordered) != 3 or len(graph_ops) != 1
-                    or source.op_name == "tessera.modified_delta_attention"
-                    or any(bool(flags.get(key, False)) for key in ("erase", "has_gate", "has_beta", "has_decay"))):
-                raise TesseraJitError("SM120 DeltaNet backward supports plain causal f32 only")
+            # Graph IR preserves optional DeltaNet tensors as operands, while
+            # older front-ends did not serialize their presence booleans.  Map
+            # canonical operand labels into the v2 physical ABI flags here;
+            # retain the positional fallback for already-lowered anonymous IR.
+            optional_labels = {
+                str(name).lstrip("%").lower() for name in source.operands[3:]
+            }
+            for key, label in (
+                ("has_gate", "gate"), ("has_beta", "beta"),
+                ("has_decay", "decay"),
+            ):
+                if key not in flags:
+                    flags[key] = label in optional_labels
+            if not optional_labels.intersection({"gate", "beta", "decay"}) and len(source.operands) > 3:
+                for index, key in enumerate(("has_gate", "has_beta", "has_decay")):
+                    flags[key] = index < len(source.operands) - 3
+            affine_inputs = 3 + sum(
+                int(bool(flags.get(key, False)))
+                for key in ("has_gate", "has_beta", "has_decay")
+            )
+            if (ordered is None or len(ordered) != affine_inputs or len(graph_ops) != 1
+                    or not bool(flags.get("causal", True))):
+                raise TesseraJitError(
+                    "SM120 DeltaNet backward requires causal Q/K/V with optional "
+                    "gate/beta/decay inputs"
+                )
             cotangents = out_cotangents if isinstance(out_cotangents, (tuple, list)) else (out_cotangents,)
             if len(cotangents) != 1:
                 raise TesseraJitError("SM120 DeltaNet backward requires one output cotangent")

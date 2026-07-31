@@ -3592,9 +3592,11 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="nvidia_deltanet_bwd_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="nvidia_deltanet_bwd_compiled", runtime_status="success",
-        reason="SM120 compiler-owned deterministic reverse scan for the plain "
-               "causal f32 DeltaNet VJP; gate/beta/decay/erase/modified are "
-               "explicitly unsupported pending CUDA-owned analytic schedules.",
+        reason="SM120 compiler-owned deterministic reverse scan with the fixed "
+               "v2 physical ABI: plain, gate/beta/decay, and erase/modified "
+               "serial-fill f32 VJPs are exact-device verified for Dqk,Dv<=8. "
+               "The recorded timing/NCU packet retains the single "
+               "correctness-first schedule; no selector promotion exists.",
         execution_mode="cuda_driver", direction="backward", op_family="deltanet",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_training_autodiff_native.py",

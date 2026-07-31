@@ -2675,15 +2675,20 @@ def _submit_nvidia_sm120_native(
             raise RuntimeError("SM120 Lion-backward shapes disagree with descriptor scalar N")
         output = tuple(raw[5:8])
     elif descriptor.abi_id in SM120_DELTANET_BWD_ABIS.values():
-        dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "H", "S", "Dqk", "Dv"))
-        b, h, s, dqk, dv = dimensions
-        q, key, value, dy, dq, dk, dvalue = raw
-        if (tuple(q.shape) != (b, h, s, dqk) or tuple(key.shape) != tuple(q.shape)
-                or tuple(value.shape) != (b, h, s, dv) or tuple(dy.shape) != tuple(value.shape)
-                or tuple(dq.shape) != tuple(q.shape) or tuple(dk.shape) != tuple(q.shape)
-                or tuple(dvalue.shape) != tuple(value.shape)):
+        dimensions = tuple(int(cast(int, scalars[name])) for name in (
+            "B", "H", "S", "Dqk", "Dv", "HasGate", "HasBeta", "HasDecay", "Erase", "Modified"))
+        b, h, s, dqk, dv, has_gate, has_beta, has_decay, erase, modified = dimensions
+        q, key, value, gate, beta, decay, dy, dq, dk, dvalue, dgate, dbeta, ddecay = raw
+        if (any(flag not in {0, 1} for flag in (has_gate, has_beta, has_decay, erase, modified))
+                or tuple(q.shape) != (b, h, s, dqk) or tuple(key.shape) != tuple(q.shape)
+                or tuple(value.shape) != (b, h, s, dv) or tuple(gate.shape) != tuple(value.shape)
+                or tuple(beta.shape) != (b, h, s) or tuple(decay.shape) != (b, h, s)
+                or tuple(dy.shape) != tuple(value.shape) or tuple(dq.shape) != tuple(q.shape)
+                or tuple(dk.shape) != tuple(q.shape) or tuple(dvalue.shape) != tuple(value.shape)
+                or tuple(dgate.shape) != tuple(value.shape) or tuple(dbeta.shape) != (b, h, s)
+                or tuple(ddecay.shape) != (b, h, s)):
             raise RuntimeError("SM120 DeltaNet-backward shapes disagree with descriptor scalars")
-        output = (dq, dk, dvalue)
+        output = (dq, dk, dvalue, dgate, dbeta, ddecay)
     elif descriptor.abi_id in {
         *SM120_FUSED_LOSS_SGD_ABIS.values(),
         *SM120_FUSED_LOSS_ADAMW_ABIS.values(),
@@ -8707,7 +8712,7 @@ def _execute_nvidia_lion_backward(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 def _execute_nvidia_deltanet_backward(artifact: RuntimeArtifact, args: Any) -> Any:
-    """Run the deliberately narrow, compiler-owned SM120 causal DeltaNet VJP."""
+    """Run the bounded affine SM120 causal DeltaNet VJP package."""
     import numpy as np
     metadata = artifact.metadata or {}
     ops = list(metadata.get("ops") or [])
@@ -8718,28 +8723,68 @@ def _execute_nvidia_deltanet_backward(artifact: RuntimeArtifact, args: Any) -> A
     }:
         raise ValueError("nvidia_deltanet_bwd_compiled requires one DeltaNet op")
     kw = op.get("kwargs") or {}
-    if (not bool(kw.get("causal", True)) or bool(kw.get("erase", False))
-            or bool(kw.get("has_gate", False)) or bool(kw.get("has_beta", False))
-            or bool(kw.get("has_decay", False))
-            or str(op.get("op_name", "")) == "tessera.modified_delta_attention"):
-        raise ValueError("NVIDIA DeltaNet backward v1 supports plain causal f32 only")
+    has_gate = bool(kw.get("has_gate", False))
+    has_beta = bool(kw.get("has_beta", False))
+    has_decay = bool(kw.get("has_decay", False))
+    if not bool(kw.get("causal", True)):
+        raise ValueError("NVIDIA DeltaNet backward is causal-only")
+    erase = bool(kw.get("erase", False))
+    modified = str(op.get("op_name", "")) == "tessera.modified_delta_attention"
     values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
     names = [str(name) for name in op.get("operands", [])]
     cotangents = list(metadata.get("out_cotangents") or ["dy"])
-    if len(names) != 3 or len(cotangents) != 1:
-        raise ValueError("NVIDIA DeltaNet backward requires Q/K/V and one dO")
-    q, key, value = (np.ascontiguousarray(_as_numpy(values[name]), np.float32) for name in names)
+    expected_inputs = 3 + int(has_gate) + int(has_beta) + int(has_decay)
+    if len(names) != expected_inputs or len(cotangents) != 1:
+        raise ValueError("NVIDIA DeltaNet backward operands disagree with affine flags")
+    q, key, value = (
+        np.ascontiguousarray(_as_numpy(values[name]), np.float32)
+        for name in names[:3]
+    )
     dy = np.ascontiguousarray(_as_numpy(values[cotangents[0]]), np.float32)
     if q.ndim != 4 or key.shape != q.shape or value.ndim != 4 or value.shape[:3] != q.shape[:3] or dy.shape != value.shape:
         raise ValueError("NVIDIA DeltaNet backward requires Q/K [B,H,S,Dqk] and V/dO [B,H,S,Dv]")
     from .compiler.nvidia_training import package_deltanet_backward
     b, h, s, dqk = (int(x) for x in q.shape); dv = int(value.shape[-1])
+    if dqk > 8 or dv > 8:
+        raise ValueError("NVIDIA DeltaNet backward requires validated Dqk and Dv <= 8")
     package = package_deltanet_backward()
+    scalar_shape = (b, h, s)
+    cursor = 3
+    gate = np.zeros_like(value)
+    beta = np.ones(scalar_shape, np.float32)
+    decay = np.ones(scalar_shape, np.float32)
+    if has_gate:
+        gate = np.ascontiguousarray(_as_numpy(values[names[cursor]]), np.float32)
+        cursor += 1
+        if gate.shape != value.shape:
+            raise ValueError("NVIDIA DeltaNet backward gate must have V's physical shape")
+    if has_beta:
+        beta = np.ascontiguousarray(_as_numpy(values[names[cursor]]), np.float32)
+        cursor += 1
+        if beta.shape != scalar_shape:
+            raise ValueError("NVIDIA DeltaNet backward beta must have [B,H,S] shape")
+    if has_decay:
+        decay = np.ascontiguousarray(_as_numpy(values[names[cursor]]), np.float32)
+        if decay.shape != scalar_shape:
+            raise ValueError("NVIDIA DeltaNet backward decay must have [B,H,S] shape")
     result = _submit_nvidia_sm120_native(package.image, package.descriptor,
-        {"q": q, "k": key, "v": value, "dy": dy,
-         "dq": np.empty_like(q), "dk": np.empty_like(key), "dv": np.empty_like(value)},
-        {"B": b, "H": h, "S": s, "Dqk": dqk, "Dv": dv}, None)
-    return tuple(result)
+        {"q": q, "k": key, "v": value,
+         "gate": gate, "beta": beta, "decay": decay, "dy": dy,
+         "dq": np.empty_like(q), "dk": np.empty_like(key), "dv": np.empty_like(value),
+         "dgate": np.empty_like(value), "dbeta": np.empty(scalar_shape, np.float32),
+         "ddecay": np.empty(scalar_shape, np.float32)},
+        {"B": b, "H": h, "S": s, "Dqk": dqk, "Dv": dv,
+         "HasGate": int(has_gate), "HasBeta": int(has_beta),
+         "HasDecay": int(has_decay), "Erase": int(erase),
+         "Modified": int(modified)}, None)
+    outputs = list(result[:3])
+    if has_gate:
+        outputs.append(result[3])
+    if has_beta:
+        outputs.append(result[4])
+    if has_decay:
+        outputs.append(result[5])
+    return tuple(outputs)
 
 
 def _execute_nvidia_training_loss_backward(artifact: RuntimeArtifact, args: Any) -> Any:

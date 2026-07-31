@@ -27,6 +27,16 @@ def _median(values: list[float]) -> float:
     return float(statistics.median(values))
 
 
+def _shape(text: str) -> tuple[int, int, int, int, int, int, int]:
+    values = tuple(int(value) for value in text.split("x"))
+    if len(values) != 7 or min(values) < 1:
+        raise argparse.ArgumentTypeError("shapes must be positive BxHqxHkvxSqxSkxDxDv")
+    b, hq, hkv, _, _, _, _ = values
+    if hq % hkv:
+        raise argparse.ArgumentTypeError("Hq must be divisible by Hkv")
+    return values
+
+
 def _compile(module):
     return compile_graph_module(
         module, source_origin="NVIDIA-LSE-1", target="nvidia_sm120",
@@ -66,6 +76,11 @@ def main() -> int:
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--reps", type=int, default=100)
     parser.add_argument("--warmup", type=int, default=20)
+    parser.add_argument("--shapes", type=_shape, nargs="+", default=(
+        (1, 2, 1, 3, 4, 4, 3),
+        (1, 2, 1, 8, 8, 8, 8),
+        (1, 4, 2, 15, 17, 16, 12),
+    ))
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if not nvidia_cuda_host_ready():
@@ -73,48 +88,50 @@ def main() -> int:
         return 0
     if args.samples <= 0 or args.reps <= 0 or args.warmup < 0:
         raise ValueError("samples/reps must be positive and warmup nonnegative")
-    modules = {
-        "forward": {kind: _forward_module(saved=kind == "saved") for kind in ("recompute", "saved")},
-        "backward": {kind: _backward_module(saved=kind == "saved") for kind in ("recompute", "saved")},
-    }
-    bundles = {stage: {kind: _compile(module) for kind, module in variants.items()}
-               for stage, variants in modules.items()}
     rng = np.random.default_rng(120_101)
-    q = np.ascontiguousarray((rng.normal(size=(1, 2, 3, 4)) * .2).astype(np.float32))
-    k = np.ascontiguousarray((rng.normal(size=(1, 1, 4, 4)) * .2).astype(np.float32))
-    v = np.ascontiguousarray((rng.normal(size=(1, 1, 4, 3)) * .2).astype(np.float32))
-    do = np.ascontiguousarray((rng.normal(size=(1, 2, 3, 3)) * .2).astype(np.float32))
-    scalars = {"B": 1, "Hq": 2, "Hkv": 1, "Sq": 3, "Sk": 4, "D": 4, "Dv": 3}
-    row_lse = np.empty((1, 2, 3), dtype=np.float32)
-    forward_args = {
-        "saved": {"q": q, "k": k, "v": v, "o": np.empty((1, 2, 3, 3), np.float32), "row_lse": row_lse, **scalars},
-        "recompute": {"q": q, "k": k, "v": v, "o": np.empty((1, 2, 3, 3), np.float32), **scalars},
-    }
-    # Populate the shared checkpoint exactly once before timing the consumer.
-    saved_artifact = compile_result_from_bundle(bundles["forward"]["saved"], module=modules["forward"]["saved"]).to_runtime_artifact()
-    if not launch(saved_artifact, forward_args["saved"])["ok"]:
-        raise RuntimeError("saved-LSE producer setup failed")
-    backward_args = {
-        "saved": {"do": do, "q": q, "k": k, "v": v, "row_lse": row_lse,
-                  "dq": np.empty_like(q), "dk": np.empty_like(k), "dv": np.empty_like(v), **scalars},
-        "recompute": {"do": do, "q": q, "k": k, "v": v,
+    packets: list[dict[str, object]] = []
+    for shape in args.shapes:
+        b, hq, hkv, sq, sk, d, dv = shape
+        modules = {
+            "forward": {kind: _forward_module(saved=kind == "saved", shape=shape) for kind in ("recompute", "saved")},
+            "backward": {kind: _backward_module(saved=kind == "saved", shape=shape) for kind in ("recompute", "saved")},
+        }
+        bundles = {stage: {kind: _compile(module) for kind, module in variants.items()}
+                   for stage, variants in modules.items()}
+        q = np.ascontiguousarray((rng.normal(size=(b, hq, sq, d)) * .2).astype(np.float32))
+        k = np.ascontiguousarray((rng.normal(size=(b, hkv, sk, d)) * .2).astype(np.float32))
+        v = np.ascontiguousarray((rng.normal(size=(b, hkv, sk, dv)) * .2).astype(np.float32))
+        do = np.ascontiguousarray((rng.normal(size=(b, hq, sq, dv)) * .2).astype(np.float32))
+        scalars = {"B": b, "Hq": hq, "Hkv": hkv, "Sq": sq, "Sk": sk, "D": d, "Dv": dv}
+        row_lse = np.empty((b, hq, sq), dtype=np.float32)
+        forward_args = {
+            "saved": {"q": q, "k": k, "v": v, "o": np.empty((b, hq, sq, dv), np.float32), "row_lse": row_lse, **scalars},
+            "recompute": {"q": q, "k": k, "v": v, "o": np.empty((b, hq, sq, dv), np.float32), **scalars},
+        }
+        saved_artifact = compile_result_from_bundle(bundles["forward"]["saved"], module=modules["forward"]["saved"]).to_runtime_artifact()
+        if not launch(saved_artifact, forward_args["saved"])["ok"]:
+            raise RuntimeError("saved-LSE producer setup failed")
+        backward_args = {
+            "saved": {"do": do, "q": q, "k": k, "v": v, "row_lse": row_lse,
                       "dq": np.empty_like(q), "dk": np.empty_like(k), "dv": np.empty_like(v), **scalars},
-    }
-    rows = {
-        stage: {kind: _sample(bundles[stage][kind], modules[stage][kind], stage_args,
-                              samples=args.samples, reps=args.reps, warmup=args.warmup)
-                for kind, stage_args in variants.items()}
-        for stage, variants in (("forward", forward_args), ("backward", backward_args))
-    }
+            "recompute": {"do": do, "q": q, "k": k, "v": v,
+                          "dq": np.empty_like(q), "dk": np.empty_like(k), "dv": np.empty_like(v), **scalars},
+        }
+        rows = {
+            stage: {kind: _sample(bundles[stage][kind], modules[stage][kind], stage_args,
+                                  samples=args.samples, reps=args.reps, warmup=args.warmup)
+                    for kind, stage_args in variants.items()}
+            for stage, variants in (("forward", forward_args), ("backward", backward_args))
+        }
+        packets.append({"shape": list(shape), "rows": rows})
     packet = {
-        "schema": "tessera.nvidia.lse_checkpoint.benchmark.v1",
+        "schema": "tessera.nvidia.lse_checkpoint.benchmark.v2",
         "work_item": "NVIDIA-LSE-1",
         "device": "nvidia:sm_120",
-        "shape": [1, 2, 1, 3, 4, 4, 3],
         "method": {"timing_domains": ["cuda_event", "end_to_end"], "samples": args.samples,
                    "repetitions": args.reps, "warmup": args.warmup,
                    "selector_default": "recompute", "ncu_required": True},
-        "rows": rows,
+        "packets": packets,
         "selector_changed": False,
     }
     encoded = json.dumps(packet, indent=2, sort_keys=True) + "\n"

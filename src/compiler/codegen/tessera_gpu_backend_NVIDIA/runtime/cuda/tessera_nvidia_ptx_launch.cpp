@@ -1443,8 +1443,8 @@ int benchmarkMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
 }
 
 struct TrainingLayout {
-    size_t sizes[10] = {};
-    bool outputs[10] = {};
+    size_t sizes[16] = {};
+    bool outputs[16] = {};
     unsigned grid = 0;
 };
 
@@ -1467,6 +1467,7 @@ bool trainingLayout(const char* name, size_t nbuf, const int64_t* dims,
     if (std::strncmp(name, kTrainingPrefix, std::strlen(kTrainingPrefix)) != 0)
         return false;
     long long work = 0;
+    bool oneBlockPerWork = false;
     if (std::strncmp(name, "tessera_cuda_training_norm_", 27) == 0) {
         if (nbuf != 6 || ndim != 2 || dims[0] <= 0 || dims[1] <= 0 ||
             dims[0] > LLONG_MAX / dims[1])
@@ -1570,20 +1571,29 @@ bool trainingLayout(const char* name, size_t nbuf, const int64_t* dims,
         work = dims[0];
     } else if (std::strncmp(
                    name, "tessera_cuda_training_deltanet_backward_", 40) == 0) {
-        // First CUDA DeltaNet VJP: Q/K [B,H,S,Dqk], V/dO [B,H,S,Dv].
-        if (nbuf != 7 || ndim != 5 || dims[0] <= 0 || dims[1] <= 0 ||
+        // Versioned four-stage ABI: Q/K, V/gate/dO, beta/decay, and all VJPs.
+        if (nbuf != 13 || ndim != 10 || dims[0] <= 0 || dims[1] <= 0 ||
             dims[2] <= 0 || dims[3] <= 0 || dims[4] <= 0 ||
+            dims[5] < 0 || dims[5] > 1 || dims[6] < 0 || dims[6] > 1 ||
+            dims[7] < 0 || dims[7] > 1 || dims[8] < 0 || dims[8] > 1 ||
+            dims[9] < 0 || dims[9] > 1 ||
             dims[0] > LLONG_MAX / dims[1] ||
             dims[0] * dims[1] > LLONG_MAX / dims[2]) return false;
         const long long bh = dims[0] * dims[1];
         const long long bhs = bh * dims[2];
-        size_t qBytes = 0, vBytes = 0;
+        size_t qBytes = 0, vBytes = 0, scalarBytes = 0;
         if (!checkedBytes(bhs * dims[3], sizeof(float), qBytes) ||
-            !checkedBytes(bhs * dims[4], sizeof(float), vBytes)) return false;
-        layout.sizes[0] = layout.sizes[1] = layout.sizes[4] = layout.sizes[5] = qBytes;
-        layout.sizes[2] = layout.sizes[3] = layout.sizes[6] = vBytes;
-        layout.outputs[4] = layout.outputs[5] = layout.outputs[6] = true;
+            !checkedBytes(bhs * dims[4], sizeof(float), vBytes) ||
+            !checkedBytes(bhs, sizeof(float), scalarBytes)) return false;
+        layout.sizes[0] = layout.sizes[1] = layout.sizes[7] = layout.sizes[8] = qBytes;
+        layout.sizes[2] = layout.sizes[3] = layout.sizes[6] = layout.sizes[9] = layout.sizes[10] = vBytes;
+        layout.sizes[4] = layout.sizes[5] = layout.sizes[11] = layout.sizes[12] = scalarBytes;
+        for (size_t i = 7; i < nbuf; ++i) layout.outputs[i] = true;
         work = bh;
+        // The recurrence kernel uses only thread zero and maps blockIdx.x to
+        // one (batch, head) trajectory.  Do not apply the elementwise /128
+        // grid rule here or all but the first 128 trajectories are skipped.
+        oneBlockPerWork = true;
     } else if (std::strncmp(name, "tessera_cuda_training_fused_", 28) == 0) {
         if (ndim != 1 || (nbuf != 6 && nbuf != 10)) return false;
         size_t storage = 0, state = 0;
@@ -1605,8 +1615,9 @@ bool trainingLayout(const char* name, size_t nbuf, const int64_t* dims,
     } else {
         return false;
     }
-    const unsigned long long blocks =
-        (static_cast<unsigned long long>(work) + 127ULL) / 128ULL;
+    const unsigned long long blocks = oneBlockPerWork
+        ? static_cast<unsigned long long>(work)
+        : (static_cast<unsigned long long>(work) + 127ULL) / 128ULL;
     if (blocks == 0 || blocks > UINT_MAX) return false;
     layout.grid = static_cast<unsigned>(blocks);
     return true;
@@ -1615,12 +1626,12 @@ bool trainingLayout(const char* name, size_t nbuf, const int64_t* dims,
 int runTraining(CUfunction fn, const char* name, void** buffers, size_t nbuf,
                 const int64_t* dims, size_t ndim, int warmup,
                 int repetitions, float* latencyMs) {
-    if (!buffers || !dims || nbuf > 10 || ndim > 5 || warmup < 0 ||
+    if (!buffers || !dims || nbuf > 16 || ndim > 10 || warmup < 0 ||
         repetitions <= 0)
         return 5;
     TrainingLayout layout;
     if (!trainingLayout(name, nbuf, dims, ndim, layout)) return 5;
-    CUdeviceptr device[10] = {};
+    CUdeviceptr device[16] = {};
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
     for (size_t i = 0; i < nbuf; ++i) {
@@ -1635,8 +1646,8 @@ int runTraining(CUfunction fn, const char* name, void** buffers, size_t nbuf,
             cuMemcpyHtoD(device[i], buffers[i], layout.sizes[i]) != CUDA_SUCCESS)
             rc = 3;
     }
-    long long args64[5] = {};
-    void* args[15] = {};
+    long long args64[10] = {};
+    void* args[26] = {};
     size_t arg = 0;
     for (size_t i = 0; i < nbuf; ++i) args[arg++] = &device[i];
     for (size_t i = 0; i < ndim; ++i) {

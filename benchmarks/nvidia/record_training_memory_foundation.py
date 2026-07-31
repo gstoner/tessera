@@ -25,6 +25,7 @@ from tessera.compiler.nvidia_training import (
     package_class_backward,
     package_broadcast_gradient,
     package_fused_loss_optimizer,
+    package_lion_backward,
     package_loss_backward,
     package_norm_backward,
     package_optimizer,
@@ -165,6 +166,24 @@ def _training_cases(n: int) -> list[tuple[str, NVIDIATrainingPackage, dict[str, 
                 moment2_output=np.empty_like(m2),
             )
         cases.append((kind, package, arrays, {"N": n}))
+    lion_moment = rng.normal(scale=0.05, size=n).astype(np.float32)
+    cases.append(
+        (
+            "lion_backward",
+            package_lion_backward(lr=0.003, beta2=0.99, weight_decay=0.02),
+            {
+                "param": param,
+                "grad": grad,
+                "moment": lion_moment,
+                "dparam_out": rng.normal(size=n).astype(np.float32),
+                "dmoment_out": rng.normal(size=n).astype(np.float32),
+                "dparam": np.empty(n, np.float32),
+                "dgrad": np.empty(n, np.float32),
+                "dmoment": np.empty(n, np.float32),
+            },
+            {"N": n},
+        )
+    )
     for optimizer in ("sgd", "adamw"):
         package = package_fused_loss_optimizer(
             loss_kind="mse", optimizer=optimizer, parameter=1.0,
@@ -256,6 +275,11 @@ def _warm_package(package: NVIDIATrainingPackage) -> NVIDIATrainingPackage:
             weight_decay=number("weight_decay"),
             step=integer("step"),
             storage=storage,
+        )
+    if family == "optimizer_backward" and provenance.get("kind") == "lion":
+        return package_lion_backward(
+            lr=number("lr"), beta2=number("beta2"),
+            weight_decay=number("weight_decay"), storage=storage,
         )
     return package_fused_loss_optimizer(
         loss_kind=str(provenance["loss_kind"]),

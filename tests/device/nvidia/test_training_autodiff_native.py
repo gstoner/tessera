@@ -8,8 +8,10 @@ from tessera.compiler.nvidia_training import (
     NVIDIATrainingPackage,
     package_broadcast_gradient,
     package_class_backward,
+    package_deltanet_backward,
     package_fused_loss_optimizer,
     package_loss_backward,
+    package_lion_backward,
     package_norm_backward,
     package_optimizer,
 )
@@ -835,3 +837,57 @@ def test_public_jit_native_backward_binds_sm120_training_packages() -> None:
     assert _nvidia_huber.last_backward_execution["compiler_path"] == (
         "nvidia_regression_loss_bwd_compiled"
     )
+
+
+@pytest.mark.hardware_nvidia
+def test_lion_stop_sign_backward_executes_on_sm120() -> None:
+    _require_cuda()
+    rng = np.random.default_rng(725)
+    shape = (5, 19)
+    param, grad = (rng.normal(size=shape).astype(np.float32) for _ in range(2))
+    moment = rng.normal(size=shape).astype(np.float32)
+    dparam_out = rng.normal(size=shape).astype(np.float32)
+    dmoment_out = rng.normal(size=shape).astype(np.float32)
+    package = package_lion_backward(lr=0.004, beta2=0.93, weight_decay=0.025)
+    got = _invoke(
+        package,
+        {
+            "param": param.reshape(-1), "grad": grad.reshape(-1),
+            "moment": moment.reshape(-1),
+            "dparam_out": dparam_out.reshape(-1),
+            "dmoment_out": dmoment_out.reshape(-1),
+            "dparam": np.empty(param.size, np.float32),
+            "dgrad": np.empty(param.size, np.float32),
+            "dmoment": np.empty(param.size, np.float32),
+        },
+        N=param.size,
+    )
+    expected = (
+        dparam_out * (1.0 - 0.004 * 0.025),
+        dmoment_out * (1.0 - 0.93),
+        dmoment_out * 0.93,
+    )
+    for actual, reference in zip(got, expected, strict=True):
+        np.testing.assert_allclose(
+            actual.reshape(shape), reference, rtol=2e-6, atol=2e-6
+        )
+
+
+@pytest.mark.hardware_nvidia
+def test_plain_causal_deltanet_backward_executes_on_sm120() -> None:
+    """The first CUDA DeltaNet VJP matches the shared analytic oracle."""
+    _require_cuda()
+    from tessera.autodiff.vjp import get_vjp
+    rng = np.random.default_rng(730)
+    q = rng.normal(size=(1, 1, 5, 3)).astype(np.float32)
+    k = rng.normal(size=q.shape).astype(np.float32)
+    v = rng.normal(size=(1, 1, 5, 2)).astype(np.float32)
+    dy = rng.normal(size=v.shape).astype(np.float32)
+    package = package_deltanet_backward()
+    got = _invoke(package, {
+        "q": q, "k": k, "v": v, "dy": dy,
+        "dq": np.empty_like(q), "dk": np.empty_like(k), "dv": np.empty_like(v),
+    }, B=1, H=1, S=5, Dqk=3, Dv=2)
+    expected = get_vjp("gated_deltanet")(dy, q, k, v)
+    for actual, reference in zip(got, expected, strict=True):
+        np.testing.assert_allclose(actual, reference, rtol=3e-3, atol=3e-3)

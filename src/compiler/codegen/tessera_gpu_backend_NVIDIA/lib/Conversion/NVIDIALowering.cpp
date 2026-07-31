@@ -1981,18 +1981,23 @@ static LogicalResult materializeSm120AttentionKernel(
   auto softcapAttr = op->getAttrOfType<FloatAttr>("softcap");
   auto dropoutAttr = op->getAttrOfType<FloatAttr>("dropout_p");
   auto dropoutSeedAttr = op->getAttrOfType<IntegerAttr>("dropout_seed");
+  auto lseCheckpoint = op->getAttrOfType<StringAttr>("lse_checkpoint");
   bool hasBias = biasAttr && biasAttr.getValue();
+  bool hasSavedLse = lseCheckpoint && lseCheckpoint.getValue() == "saved";
   unsigned outputIndex = 3 + unsigned(hasBias);
-  unsigned dimStart = outputIndex + 1;
+  unsigned lseIndex = outputIndex + 1;
+  unsigned dimStart = lseIndex + unsigned(hasSavedLse);
   bool f16Storage = storage && storage.getValue() == "f16";
   bool bf16Storage = storage && storage.getValue() == "bf16";
-  if (in.size() != 11 + unsigned(hasBias) || !storage ||
+  if (in.size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse) || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") || !accum ||
       accum.getValue() != "f32" || !scaleAttr || !causalAttr || !biasAttr ||
       !windowLeftAttr || !windowRightAttr || !softcapAttr || !dropoutAttr ||
-      !dropoutSeedAttr) {
+      !dropoutSeedAttr ||
+      (lseCheckpoint && lseCheckpoint.getValue() != "recompute" &&
+       lseCheckpoint.getValue() != "saved")) {
     op->emitError("sm_120 attention_kernel requires f16/bf16/f32 storage, f32 "
-                  "accum, complete mask/dropout attrs, and the canonical ABI");
+                  "accum, complete mask/dropout/LSE attrs, and the canonical ABI");
     return failure();
   }
   Location loc = op->getLoc();
@@ -2178,6 +2183,33 @@ static LogicalResult materializeSm120AttentionKernel(
     Value outPtr = LLVM::GEPOp::create(builder, loc, in[outputIndex].getType(), f32,
                                        in[outputIndex], ValueRange{linearOut});
     LLVM::StoreOp::create(builder, loc, result, outPtr, 4);
+    if (hasSavedLse) {
+      Value ln2 = arith::ConstantFloatOp::create(
+          builder, loc, f32, APFloat(0.6931471805599453f));
+      Value rowLse = arith::AddFOp::create(
+          builder, loc, maxLoop.getResult(0),
+          arith::MulFOp::create(
+              builder, loc,
+              NVVM::Log2Op::create(builder, loc, f32,
+                                   accumLoop.getResult(0), false),
+              ln2));
+      Value firstValue = arith::CmpIOp::create(
+          builder, loc, arith::CmpIPredicate::eq, dv,
+          i64Constant(builder, loc, 0));
+      auto writeLse = scf::IfOp::create(builder, loc, firstValue, false);
+      {
+        OpBuilder::InsertionGuard lseGuard(builder);
+        builder.setInsertionPointToStart(writeLse.thenBlock());
+        Value rowIndex = addI64(builder, loc,
+            mulI64(builder, loc,
+                addI64(builder, loc, mulI64(builder, loc, b, Hq), hq), Sq), q);
+        Value rowPtr = LLVM::GEPOp::create(
+            builder, loc, in[lseIndex].getType(), f32, in[lseIndex],
+            ValueRange{rowIndex});
+        LLVM::StoreOp::create(builder, loc, rowLse, rowPtr, 4);
+      }
+      builder.setInsertionPointAfter(writeLse);
+    }
   }
   builder.setInsertionPointAfter(guarded);
   op->erase();
@@ -2202,10 +2234,12 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   auto deterministic = op->getAttrOfType<BoolAttr>("deterministic");
   auto workspace = op->getAttrOfType<IntegerAttr>("workspace_bytes");
   auto workspaceOwner = op->getAttrOfType<StringAttr>("workspace_owner");
+  auto lseCheckpoint = op->getAttrOfType<StringAttr>("lse_checkpoint");
   const bool hasBias = biasAttr && biasAttr.getValue();
+  const bool hasSavedLse = lseCheckpoint && lseCheckpoint.getValue() == "saved";
   const bool f16Storage = storage && storage.getValue() == "f16";
   const bool bf16Storage = storage && storage.getValue() == "bf16";
-  if (in.size() != 14 + unsigned(hasBias) || !storage ||
+  if (in.size() != 14 + unsigned(hasBias) + unsigned(hasSavedLse) || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
       !accum || accum.getValue() != "f32" ||
       !scaleAttr || !causalAttr || !windowLeftAttr || !windowRightAttr ||
@@ -2213,7 +2247,9 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
       route.getValue() != "deterministic_direct" ||
       !deterministic || !deterministic.getValue() || !workspace ||
       workspace.getInt() != 0 || !workspaceOwner ||
-      workspaceOwner.getValue() != "output_element") {
+      workspaceOwner.getValue() != "output_element" ||
+      (lseCheckpoint && lseCheckpoint.getValue() != "recompute" &&
+       lseCheckpoint.getValue() != "saved")) {
     op->emitError("sm_120 attention_backward_kernel requires the canonical "
                   "deterministic-direct f16/bf16/f32 ABI with dropout replay "
                   "attrs");
@@ -2229,7 +2265,8 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
                          : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
   unsigned storageAlignment = (f16Storage || bf16Storage) ? 2 : 4;
   const unsigned biasIndex = 4;
-  const unsigned dqIndex = 4 + unsigned(hasBias);
+  const unsigned lseIndex = 4 + unsigned(hasBias);
+  const unsigned dqIndex = lseIndex + unsigned(hasSavedLse);
   const unsigned dkIndex = dqIndex + 1;
   const unsigned dvIndex = dqIndex + 2;
   const unsigned dimIndex = dqIndex + 3;
@@ -2246,12 +2283,13 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
 
   auto load = [&](unsigned pointer, Value index) -> Value {
     bool biasPointer = hasBias && pointer == biasIndex;
-    Type type = biasPointer ? Type(f32) : storageType;
-    unsigned alignment = biasPointer ? 4 : storageAlignment;
+    bool lsePointer = hasSavedLse && pointer == lseIndex;
+    Type type = (biasPointer || lsePointer) ? Type(f32) : storageType;
+    unsigned alignment = (biasPointer || lsePointer) ? 4 : storageAlignment;
     Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(), type,
                                     in[pointer], ValueRange{index});
     Value loaded = LLVM::LoadOp::create(builder, loc, type, ptr, alignment);
-    return !biasPointer && (f16Storage || bf16Storage)
+    return !biasPointer && !lsePointer && (f16Storage || bf16Storage)
         ? Value(LLVM::FPExtOp::create(builder, loc, f32, loaded))
         : loaded;
   };
@@ -2401,6 +2439,33 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   };
   // Return the row maximum, softmax denominator, and dO dot O delta.
   auto rowStats = [&](Value b, Value hq, Value hkv, Value q) -> SmallVector<Value, 3> {
+    if (hasSavedLse) {
+      Value rowIndex = addI64(builder, loc,
+          mulI64(builder, loc,
+              addI64(builder, loc, mulI64(builder, loc, b, Hq), hq), Sq), q);
+      Value savedLse = load(lseIndex, rowIndex);
+      Value zf = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
+      auto deltaLoop = scf::ForOp::create(builder, loc, zero, Sk, one, ValueRange{zf});
+      {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointToStart(deltaLoop.getBody());
+        Value key = deltaLoop.getInductionVar();
+        Value weight = NVVM::Ex2Op::create(
+            builder, loc,
+            arith::MulFOp::create(builder, loc,
+                arith::SubFOp::create(builder, loc,
+                    maskedScore(b, hq, hkv, q, key), savedLse), log2e), false);
+        Value term = arith::MulFOp::create(
+            builder, loc, weight,
+            arith::MulFOp::create(builder, loc,
+                dropoutScale(b, hq, q, key), doDotV(b, hq, hkv, q, key)));
+        scf::YieldOp::create(builder, loc, ValueRange{
+            arith::AddFOp::create(builder, loc, deltaLoop.getRegionIterArgs()[0], term)});
+      }
+      builder.setInsertionPointAfter(deltaLoop);
+      Value onef = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f));
+      return {savedLse, onef, deltaLoop.getResult(0)};
+    }
     Value negInf = arith::ConstantFloatOp::create(
         builder, loc, f32, APFloat::getInf(APFloat::IEEEsingle(), true));
     auto maxLoop = scf::ForOp::create(builder, loc, zero, Sk, one, ValueRange{negInf});
@@ -2438,6 +2503,12 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   };
   auto probability = [&](Value b, Value hq, Value hkv, Value q, Value key,
                          Value maxValue, Value denom) -> Value {
+    if (hasSavedLse)
+      return NVVM::Ex2Op::create(
+          builder, loc,
+          arith::MulFOp::create(builder, loc,
+              arith::SubFOp::create(builder, loc,
+                  maskedScore(b, hq, hkv, q, key), maxValue), log2e), false);
     Value shifted = arith::SubFOp::create(
         builder, loc, maskedScore(b, hq, hkv, q, key), maxValue);
     Value weight = NVVM::Ex2Op::create(

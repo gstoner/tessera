@@ -17,8 +17,12 @@ Skip-clean: lib not built / no usable GPU / no NVRTC (the symbol returns rc=2).
 from __future__ import annotations
 
 import ctypes
+import hashlib
+import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -72,6 +76,62 @@ def _bind(lib, name):
     return fn
 
 
+_F16_COLD_PROCESS = r"""
+import ctypes
+import json
+import os
+import numpy as np
+
+for directory in os.environ["TESSERA_NVIDIA_CUDA_LIB_DIRS"].split(os.pathsep):
+    for dep in ("libcuda.so.1", "libcuda.so", "libnvrtc.so"):
+        path = os.path.join(directory, dep)
+        if os.path.isfile(path):
+            try:
+                ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+            except OSError:
+                pass
+            break
+lib = ctypes.CDLL(os.environ["TESSERA_NVIDIA_GEMM_LIBRARY"], mode=ctypes.RTLD_GLOBAL)
+fn = lib.tessera_nvidia_mma_gemm_f16
+fn.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+               ctypes.c_int, ctypes.c_int, ctypes.c_int]
+fn.restype = ctypes.c_int
+status = lib.tessera_nvidia_mma_gemm_f16_aot_status
+status.restype = ctypes.c_char_p
+version = lib.tessera_nvidia_mma_gemm_f16_aot_version
+version.restype = ctypes.c_int
+source_sha256 = lib.tessera_nvidia_mma_gemm_f16_aot_source_sha256
+source_sha256.restype = ctypes.c_char_p
+rng = np.random.default_rng(20260730)
+a = rng.standard_normal((17, 31)).astype(np.float16)
+b = rng.standard_normal((31, 9)).astype(np.float16)
+out = np.zeros((17, 9), dtype=np.float32)
+rc = fn(a.ctypes.data_as(ctypes.c_void_p), b.ctypes.data_as(ctypes.c_void_p),
+        out.ctypes.data_as(ctypes.c_void_p), 17, 9, 31)
+print(json.dumps({"rc": rc, "status": status().decode(),
+                  "version": version(), "source_sha256": source_sha256().decode(),
+                  "output": out.tolist()}))
+"""
+
+
+def _run_f16_cold_process(mode: str, *, artifact_dir: Path | None = None) -> dict:
+    """Run one never-before-loaded production GEMM process for AOT/JIT proof."""
+    library = next(path for path in _GEMM_LIBS if path.is_file())
+    env = os.environ.copy()
+    env.update({
+        "TESSERA_NVIDIA_AOT_MODE": mode,
+        "TESSERA_NVIDIA_GEMM_LIBRARY": str(library),
+        "TESSERA_NVIDIA_CUDA_LIB_DIRS": os.pathsep.join(_CUDA_LIB_DIRS),
+    })
+    if artifact_dir is not None:
+        env["TESSERA_NVIDIA_AOT_ARTIFACT_DIR"] = str(artifact_dir)
+    result = subprocess.run(
+        [sys.executable, "-c", _F16_COLD_PROCESS], env=env,
+        check=False, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    return json.loads(result.stdout)
+
+
 def _round_tf32(x: np.ndarray) -> np.ndarray:
     """Round f32 to tf32 (10-bit mantissa) with round-to-nearest-even."""
     u = x.astype(np.float32).view(np.uint32).astype(np.uint64)
@@ -123,6 +183,32 @@ def test_shipped_nvidia_mma_gemm_matches_numpy(dt):
         skipped_all = False
         assert_matches(D, ref, dt, reduction_length=K)
     assert not skipped_all
+
+
+def test_sm120_f16_aot_and_nvrtc_fallback_are_cold_process_equivalent(tmp_path):
+    """The versioned cubin and identical-source fallback preserve production ABI."""
+    aot = _run_f16_cold_process("require")
+    jit = _run_f16_cold_process("disable")
+    missing = _run_f16_cold_process("auto", artifact_dir=tmp_path)
+    source = (REPO_ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda"
+              / "aot/tessera_nvidia_mma_f16_sm120_v1.cu")
+
+    if aot["rc"] == 2:
+        pytest.skip("SM120 AOT artifact is incompatible with this CUDA host")
+    assert aot["rc"] == jit["rc"] == missing["rc"] == 0
+    assert aot["status"] == "aot"
+    assert jit["status"] == "nvrtc_disabled"
+    assert missing["status"] == "nvrtc_missing"
+    assert aot["version"] == jit["version"] == missing["version"] == 1
+    assert aot["source_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    np.testing.assert_allclose(aot["output"], jit["output"], rtol=0, atol=1e-5)
+    np.testing.assert_allclose(aot["output"], missing["output"], rtol=0, atol=1e-5)
+
+
+def test_sm120_f16_aot_require_rejects_missing_artifact(tmp_path):
+    result = _run_f16_cold_process("require", artifact_dir=tmp_path)
+    assert result["rc"] == 2
+    assert result["status"] == "required_unavailable"
 
 
 @pytest.mark.parametrize("dt", _DTYPES)

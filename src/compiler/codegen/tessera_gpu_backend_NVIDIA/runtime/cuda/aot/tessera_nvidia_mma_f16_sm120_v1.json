@@ -1,0 +1,17 @@
+{
+  "schema": "tessera.nvidia.aot.cubin.v1",
+  "artifact_id": "tessera_nvidia_mma_f16_sm120",
+  "artifact_version": 1,
+  "format": "cubin",
+  "target": "nvidia_sm120",
+  "architecture": "sm_120a",
+  "compute_capability": [12, 0],
+  "minimum_cuda_driver": 13000,
+  "entry": "gemm",
+  "physical_abi": {
+    "inputs": ["A:u16[M,K]", "B:u16[K,N]"],
+    "output": "D:f32[M,N]",
+    "arguments": ["A", "B", "D", "M", "N", "K"]
+  },
+  "fallback": "NVRTC compiles the identical canonical .cu source"
+}

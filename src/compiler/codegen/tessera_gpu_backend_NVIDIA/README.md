@@ -29,6 +29,13 @@ Blackwell, CC 12.0, CUDA 13.3). The full rung ladder clears —
 (`tsrRegisterGpuLauncher`) → execute-and-compare vs numpy. The shipped
 `libtessera_nvidia_gemm.so` is a general tiled/K-looped `mma.sync` GEMM.
 
+For SM120 f16, the shipped runtime first loads the versioned adjacent cubin
+`tessera_nvidia_mma_f16_sm120_v1.cubin`; exact CC 12.0 and driver compatibility
+are required. The cubin and NVRTC fallback are generated from one canonical CUDA
+source. Set `TESSERA_NVIDIA_AOT_MODE=disable` to force NVRTC during diagnosis or
+`require` to reject a missing/incompatible production artifact; `auto` is the
+default and retains safe NVRTC fallback.
+
 On-silicon multi-dtype sweep (RTX 5070 Ti, NVRTC `compute_120`, execute-and-compare
 across 7 shapes incl. ragged): **bf16, f16, tf32, fp8 e4m3, fp8 e5m2** all match a
 host reference (fp8 bit-exact). NVFP4 block-scaled `mma.sync.m16n8k64` also

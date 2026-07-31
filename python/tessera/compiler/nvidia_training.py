@@ -93,6 +93,19 @@ SM120_ADAM_ABIS = {
     )
     for storage in _STORAGE_DTYPES
 }
+SM120_LION_BWD_ABIS = {
+    storage: _training_abi(
+        "optimizer.lion_backward",
+        "param_grad_moment_dparam_out_dmoment_out_dparam_dgrad_dmoment_n",
+        storage,
+    )
+    for storage in _STORAGE_DTYPES
+}
+SM120_DELTANET_BWD_ABIS = {
+    "f32": _training_abi(
+        "deltanet_backward", "q_k_v_do_dq_dk_dv_b_h_s_dqk_dv", "f32"
+    )
+}
 SM120_FUSED_LOSS_SGD_ABIS = {
     storage: _training_abi(
         "fused_loss_sgd",
@@ -116,6 +129,7 @@ SM120_CLASS_BWD_F32_ABI = SM120_CLASS_BWD_ABIS["f32"]
 SM120_SGD_F32_ABI = SM120_SGD_ABIS["f32"]
 SM120_MOMENTUM_F32_ABI = SM120_MOMENTUM_ABIS["f32"]
 SM120_ADAM_F32_ABI = SM120_ADAM_ABIS["f32"]
+SM120_LION_BWD_F32_ABI = SM120_LION_BWD_ABIS["f32"]
 SM120_FUSED_LOSS_SGD_F32_ABI = SM120_FUSED_LOSS_SGD_ABIS["f32"]
 SM120_FUSED_LOSS_ADAMW_F32_ABI = SM120_FUSED_LOSS_ADAMW_ABIS["f32"]
 
@@ -129,6 +143,8 @@ _ABI_STORAGE = {
         SM120_SGD_ABIS,
         SM120_MOMENTUM_ABIS,
         SM120_ADAM_ABIS,
+        SM120_LION_BWD_ABIS,
+        SM120_DELTANET_BWD_ABIS,
         SM120_FUSED_LOSS_SGD_ABIS,
         SM120_FUSED_LOSS_ADAMW_ABIS,
     )
@@ -698,6 +714,92 @@ extern "C" __global__ void {entry}({signature}, int64_t n) {{
     )
 
 
+def _lion_backward_source(
+    entry: str, *, lr: float, beta2: float, weight_decay: float, storage: str
+) -> str:
+    """SM120 materialization of Lion's shared stop-sign VJP policy.
+
+    ``param``, ``grad``, and ``moment`` are retained in the ABI so the native
+    package has the same operand ownership as the Graph operation.  The
+    stop-sign convention makes their values unnecessary for this VJP.
+    """
+    return (
+        _header()
+        + _storage_prelude(storage)
+        + f"""
+extern "C" __global__ void {entry}(
+    const storage_t* param, const storage_t* grad, const float* moment,
+    const float* dparam_out, const float* dmoment_out,
+    float* dparam, float* dgrad, float* dmoment, int64_t n) {{
+  int64_t i = (int64_t)blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  // Keep the retained forward operands physically present in the ABI.  A
+  // volatile load prevents NVCC from deleting those formally-unused pointers.
+  volatile float retained_param = load_storage(param[i]);
+  volatile float retained_grad = load_storage(grad[i]);
+  volatile float retained_moment = moment[i];
+  (void)retained_param; (void)retained_grad; (void)retained_moment;
+  dparam[i] = dparam_out[i] * {_f32(1.0 - lr * weight_decay)};
+  dgrad[i] = dmoment_out[i] * {_f32(1.0 - beta2)};
+  dmoment[i] = dmoment_out[i] * {_f32(beta2)};
+}}
+"""
+    )
+
+
+def _deltanet_backward_source(entry: str) -> str:
+    """Plain causal DeltaNet VJP: one deterministic block per (B,H).
+
+    This deliberately narrow first ABI has no gate/beta/decay/erase/modified
+    flags.  Its reverse scan is CUDA-owned; later nonlinear variants need their
+    own checked analytic schedule rather than silently sharing this package.
+    """
+    return _header() + f"""
+extern \"C\" __global__ void {entry}(
+    const float* q, const float* k, const float* v, const float* dy,
+    float* dq, float* dk, float* dv,
+    int64_t B, int64_t H, int64_t S, int64_t Dqk, int64_t Dv) {{
+  if (threadIdx.x != 0) return;
+  const int64_t bh = blockIdx.x, BH = B * H;
+  if (bh >= BH) return;
+  // dS_t = sum over u >= t of outer(q_u, dy_u). Recompute the forward state
+  // for dQ_t; this is correctness-first and intentionally selector-neutral.
+  for (int64_t t = S; t-- > 0;) {{
+    for (int64_t d = 0; d < Dqk; ++d) {{
+      float dk_value = 0.0f;
+      for (int64_t e = 0; e < Dv; ++e) {{
+        float ds = 0.0f;
+        for (int64_t u = t; u < S; ++u)
+          ds += q[(bh*S+u)*Dqk+d] * dy[(bh*S+u)*Dv+e];
+        dk_value += ds * v[(bh*S+t)*Dv+e];
+      }}
+      dk[(bh*S+t)*Dqk+d] = dk_value;
+    }}
+    for (int64_t e = 0; e < Dv; ++e) {{
+      float dv_value = 0.0f;
+      for (int64_t d = 0; d < Dqk; ++d) {{
+        float ds = 0.0f;
+        for (int64_t u = t; u < S; ++u)
+          ds += q[(bh*S+u)*Dqk+d] * dy[(bh*S+u)*Dv+e];
+        dv_value += k[(bh*S+t)*Dqk+d] * ds;
+      }}
+      dv[(bh*S+t)*Dv+e] = dv_value;
+    }}
+    for (int64_t d = 0; d < Dqk; ++d) {{
+      float dq_value = 0.0f;
+      for (int64_t e = 0; e < Dv; ++e) {{
+        float state = 0.0f;
+        for (int64_t u = 0; u <= t; ++u)
+          state += k[(bh*S+u)*Dqk+d] * v[(bh*S+u)*Dv+e];
+        dq_value += dy[(bh*S+t)*Dv+e] * state;
+      }}
+      dq[(bh*S+t)*Dqk+d] = dq_value;
+    }}
+  }}
+}}
+"""
+
+
 def _fused_source(
     entry: str,
     *,
@@ -814,9 +916,15 @@ def _package(
         "velocity_output",
         "moment1_output",
         "moment2_output",
+        "dparam",
+        "dgrad",
+        "dmoment",
+        "dq", "dk", "dv",
     }
 
     def buffer_rank(name: str) -> int:
+        if abi_id in SM120_DELTANET_BWD_ABIS.values():
+            return 4
         if abi_id in SM120_NORM_BWD_ABIS.values() and name in {"x", "dy", "dx"}:
             return 2
         if abi_id in SM120_CLASS_BWD_ABIS.values() and name in {"logits", "dlogits"}:
@@ -832,6 +940,12 @@ def _package(
         "moment2",
         "moment1_output",
         "moment2_output",
+        "moment",
+        "dparam_out",
+        "dmoment_out",
+        "dparam",
+        "dgrad",
+        "dmoment",
     }
 
     def buffer_dtype(name: str) -> tuple[str, int]:
@@ -1064,6 +1178,49 @@ def package_optimizer(
     )
 
 
+def package_lion_backward(
+    *,
+    lr: float = 1.0e-4,
+    beta2: float = 0.99,
+    weight_decay: float = 0.0,
+    storage: str = "f32",
+) -> NVIDIATrainingPackage:
+    """Build the CUDA-owned, stop-sign Lion VJP package for SM120."""
+    _validate_storage(storage)
+    values = {"lr": lr, "beta2": beta2, "weight_decay": weight_decay}
+    digest = hashlib.sha256(repr(sorted(values.items())).encode()).hexdigest()[:8]
+    entry = f"tessera_cuda_training_lion_backward_{storage}_{digest}"
+    return _package(
+        contract=f"tile.training.optimizer.lion_backward.{storage}",
+        source=_lion_backward_source(entry, storage=storage, **values),
+        entry=entry,
+        abi_id=SM120_LION_BWD_ABIS[storage],
+        buffer_names=(
+            "param", "grad", "moment", "dparam_out", "dmoment_out",
+            "dparam", "dgrad", "dmoment",
+        ),
+        scalar_names=("N",),
+        provenance={
+            "family": "optimizer_backward", "kind": "lion",
+            "policy": "stop_sign", **values,
+        },
+        storage=storage,
+    )
+
+
+def package_deltanet_backward() -> NVIDIATrainingPackage:
+    """Build the first explicit SM120 causal f32 DeltaNet backward package."""
+    entry = "tessera_cuda_training_deltanet_backward_f32_v1"
+    return _package(
+        contract="tile.training.deltanet_backward.causal.f32",
+        source=_deltanet_backward_source(entry), entry=entry,
+        abi_id=SM120_DELTANET_BWD_ABIS["f32"],
+        buffer_names=("q", "k", "v", "dy", "dq", "dk", "dv"),
+        scalar_names=("B", "H", "S", "Dqk", "Dv"),
+        provenance={"family": "deltanet_backward", "causal": True,
+                    "variants": "plain_only", "schedule": "serial_reverse"},
+        storage="f32",
+    )
 def package_fused_loss_optimizer(
     *,
     loss_kind: str,
@@ -1135,6 +1292,9 @@ __all__ = [
     "NVIDIATrainingPackage",
     "SM120_ADAM_ABIS",
     "SM120_ADAM_F32_ABI",
+    "SM120_LION_BWD_ABIS",
+    "SM120_DELTANET_BWD_ABIS",
+    "SM120_LION_BWD_F32_ABI",
     "SM120_CLASS_BWD_ABIS",
     "SM120_CLASS_BWD_F32_ABI",
     "SM120_FUSED_LOSS_ADAMW_ABIS",
@@ -1155,6 +1315,8 @@ __all__ = [
     "package_class_backward",
     "package_fused_loss_optimizer",
     "package_loss_backward",
+    "package_lion_backward",
+    "package_deltanet_backward",
     "package_norm_backward",
     "package_optimizer",
     "training_storage_for_abi",

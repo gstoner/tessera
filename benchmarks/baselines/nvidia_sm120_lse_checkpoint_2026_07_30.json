@@ -1,0 +1,25 @@
+{
+  "schema": "tessera.nvidia.lse_checkpoint.benchmark.v1",
+  "work_item": "NVIDIA-LSE-1",
+  "device": "nvidia:sm_120",
+  "shape": [1, 2, 1, 3, 4, 4, 3],
+  "method": {
+    "timing_domains": ["cuda_event", "end_to_end"],
+    "samples": 3,
+    "repetitions": 40,
+    "warmup": 10,
+    "selector_default": "recompute",
+    "selector_changed": false,
+    "ncu_metrics": ["lts__t_sector_hit_rate.pct", "dram__bytes.sum"]
+  },
+  "forward": {
+    "recompute": {"device_event_median_ms": 0.0076688, "end_to_end_median_ms": 0.5765508, "registers_per_thread": 40, "active_blocks_per_sm": 12, "ncu_l2_sector_hit_rate_pct": 117.97, "ncu_dram_bytes": 25088},
+    "saved": {"device_event_median_ms": 0.0100960, "end_to_end_median_ms": 0.8129149, "registers_per_thread": 40, "active_blocks_per_sm": 12, "ncu_l2_sector_hit_rate_pct": 103.08, "ncu_dram_bytes": 17920}
+  },
+  "backward": {
+    "recompute": {"device_event_median_ms": 0.0277656, "end_to_end_median_ms": 0.6867974, "registers_per_thread": 64, "active_blocks_per_sm": 8, "ncu_l2_sector_hit_rate_pct": 77.19, "ncu_dram_bytes": 122112},
+    "saved": {"device_event_median_ms": 0.0171584, "end_to_end_median_ms": 0.7485772, "registers_per_thread": 56, "active_blocks_per_sm": 9, "ncu_l2_sector_hit_rate_pct": 94.41, "ncu_dram_bytes": 46592}
+  },
+  "decision": "retain_recompute_default",
+  "rationale": "Saved LSE improves isolated backward event time and resources, but the paired forward-save plus backward-load end-to-end median is slower at this exact SM120 correctness envelope. One small shape cannot justify a selector promotion."
+}

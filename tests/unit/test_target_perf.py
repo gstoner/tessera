@@ -98,6 +98,8 @@ def test_provenance_is_per_field_not_per_row() -> None:
     assert ti.provenance_of("compute_units") is Provenance.SPEC
     # ...and the SMEM capacity was read off the silicon.
     assert ti.provenance_of("smem_bytes_per_cu") is Provenance.MEASURED
+    assert ti.value("llc_bytes") == 50_331_648
+    assert ti.provenance_of("llc_bytes") is Provenance.MEASURED
 
 
 def test_apple_bandwidth_is_spec_not_derived() -> None:

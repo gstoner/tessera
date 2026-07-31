@@ -699,9 +699,13 @@ int invokeMoe(CUfunction fn, const char* name, void** buffers, size_t nbuf,
 
 int invokeAttention(CUfunction fn, const char* name, void** buffers,
                     size_t nbuf, const int64_t* dims, size_t ndim) {
-    if ((nbuf != 4 && nbuf != 5) || ndim != 7 || !name) return 5;
-    const bool hasBias = nbuf == 5;
+    if (ndim != 7 || !name) return 5;
+    const bool hasSavedLse = std::strstr(name, "_lse_") != nullptr;
+    if ((!hasSavedLse && nbuf != 4 && nbuf != 5) ||
+        (hasSavedLse && nbuf != 5 && nbuf != 6)) return 5;
+    const bool hasBias = hasSavedLse ? nbuf == 6 : nbuf == 5;
     const size_t outputIndex = hasBias ? 4 : 3;
+    const size_t lseIndex = outputIndex + 1;
     for (size_t i = 0; i < ndim; ++i)
         if (dims[i] <= 0 || dims[i] >= (1LL << 31)) return 5;
     const size_t B = (size_t)dims[0], Hq = (size_t)dims[1];
@@ -716,11 +720,12 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
         }
         return true;
     };
-    size_t qElements, kElements, vElements, oElements, biasElements = 0;
+    size_t qElements, kElements, vElements, oElements, rowElements = 0, biasElements = 0;
     if (!product({B, Hq, Sq, D}, qElements) ||
         !product({B, Hkv, Sk, D}, kElements) ||
         !product({B, Hkv, Sk, Dv}, vElements) ||
         !product({B, Hq, Sq, Dv}, oElements) ||
+        (hasSavedLse && !product({B, Hq, Sq}, rowElements)) ||
         (hasBias && !product({B, Hq, Sq, Sk}, biasElements))) return 5;
     const bool narrow =
         std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
@@ -728,12 +733,14 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
     const size_t elementBytes = narrow ? 2 : 4;
     if (qElements > SIZE_MAX / elementBytes || kElements > SIZE_MAX / elementBytes ||
         vElements > SIZE_MAX / elementBytes || oElements > SIZE_MAX / sizeof(float) ||
+        (hasSavedLse && rowElements > SIZE_MAX / sizeof(float)) ||
         (hasBias && biasElements > SIZE_MAX / sizeof(float))) return 5;
-    size_t sizes[5] = {qElements * elementBytes, kElements * elementBytes,
-                       vElements * elementBytes, 0, 0};
+    size_t sizes[6] = {qElements * elementBytes, kElements * elementBytes,
+                       vElements * elementBytes, 0, 0, 0};
     if (hasBias) sizes[3] = biasElements * sizeof(float);
     sizes[outputIndex] = oElements * sizeof(float);
-    CUdeviceptr device[5] = {};
+    if (hasSavedLse) sizes[lseIndex] = rowElements * sizeof(float);
+    CUdeviceptr device[6] = {};
     int rc = 0;
     for (size_t i = 0; i < nbuf; ++i)
         if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) { rc = 3; break; }
@@ -743,7 +750,7 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
     if (!rc) {
         long long args64[7];
         for (int i = 0; i < 7; ++i) args64[i] = dims[i];
-        void* args[12] = {};
+        void* args[13] = {};
         size_t arg = 0;
         for (size_t i = 0; i < nbuf; ++i) args[arg++] = &device[i];
         for (int i = 0; i < 7; ++i) args[arg++] = &args64[i];
@@ -752,7 +759,9 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
             cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0) != CUDA_SUCCESS ||
             cuCtxSynchronize() != CUDA_SUCCESS ||
             cuMemcpyDtoH(buffers[outputIndex], device[outputIndex],
-                         sizes[outputIndex]) != CUDA_SUCCESS)
+                         sizes[outputIndex]) != CUDA_SUCCESS ||
+            (hasSavedLse && cuMemcpyDtoH(buffers[lseIndex], device[lseIndex],
+                                         sizes[lseIndex]) != CUDA_SUCCESS))
             rc = 3;
     }
     for (CUdeviceptr ptr : device) if (ptr) cuMemFree(ptr);
@@ -830,9 +839,13 @@ int invokePagedAttention(CUfunction fn, void** buffers, size_t nbuf,
 int invokeAttentionBackward(CUfunction fn, const char* kernelName,
                             void** buffers, size_t nbuf,
                             const int64_t* dims, size_t ndim) {
-    if ((nbuf != 7 && nbuf != 8) || ndim != 7) return 5;
-    const bool hasBias = nbuf == 8;
-    const size_t outputBase = hasBias ? 5 : 4;
+    if (ndim != 7 || !kernelName) return 5;
+    const bool hasSavedLse = std::strstr(kernelName, "_lse_") != nullptr;
+    if ((!hasSavedLse && nbuf != 7 && nbuf != 8) ||
+        (hasSavedLse && nbuf != 8 && nbuf != 9)) return 5;
+    const bool hasBias = hasSavedLse ? nbuf == 9 : nbuf == 8;
+    const size_t lseIndex = 4 + size_t(hasBias);
+    const size_t outputBase = lseIndex + size_t(hasSavedLse);
     const long long B=dims[0], Hq=dims[1], Hkv=dims[2], Sq=dims[3];
     const long long Sk=dims[4], D=dims[5], Dv=dims[6];
     if (B<=0 || Hq<=0 || Hkv<=0 || Sq<=0 || Sk<=0 || D<=0 || Dv<=0 ||
@@ -849,19 +862,21 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
         }
         return true;
     };
-    size_t doBytes=0, qBytes=0, kBytes=0, vBytes=0, biasBytes=0;
+    size_t doBytes=0, qBytes=0, kBytes=0, vBytes=0, lseBytes=0, biasBytes=0;
     if (!bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)Dv},elementBytes,doBytes) ||
         !bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)D},elementBytes,qBytes) ||
         !bytes({(size_t)B,(size_t)Hkv,(size_t)Sk,(size_t)D},elementBytes,kBytes) ||
         !bytes({(size_t)B,(size_t)Hkv,(size_t)Sk,(size_t)Dv},elementBytes,vBytes) ||
+        (hasSavedLse && !bytes({(size_t)B,(size_t)Hq,(size_t)Sq},4,lseBytes)) ||
         (hasBias && !bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)Sk},4,biasBytes)))
         return 5;
-    size_t sizes[8] = {doBytes,qBytes,kBytes,vBytes,0,0,0,0};
+    size_t sizes[9] = {doBytes,qBytes,kBytes,vBytes,0,0,0,0,0};
     if (hasBias) sizes[4] = biasBytes;
+    if (hasSavedLse) sizes[lseIndex] = lseBytes;
     sizes[outputBase] = qBytes;
     sizes[outputBase+1] = kBytes;
     sizes[outputBase+2] = vBytes;
-    CUdeviceptr device[8] = {};
+    CUdeviceptr device[9] = {};
     int rc = 0;
     for (size_t i=0;i<nbuf;++i)
         if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) { rc=3; break; }
@@ -870,7 +885,7 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
             if (cuMemcpyHtoD(device[i],buffers[i],sizes[i]) != CUDA_SUCCESS) { rc=3; break; }
     if (!rc) {
         long long args64[7]; for(int i=0;i<7;++i) args64[i]=dims[i];
-        void* args[15] = {};
+        void* args[16] = {};
         size_t arg=0;
         for(size_t i=0;i<nbuf;++i) args[arg++]=&device[i];
         for(int i=0;i<7;++i) args[arg++]=&args64[i];
@@ -1117,11 +1132,14 @@ int benchmarkUnary(CUfunction fn, const char* name, void** buffers,
 int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
                        size_t nbuf, const int64_t* dims, size_t ndim,
                        int warmup, int repetitions, float* latencyMs) {
-    if ((nbuf != 4 && nbuf != 5) || ndim != 7 || !name || !latencyMs ||
-        warmup < 0 || repetitions <= 0)
+    if (ndim != 7 || !name || !latencyMs || warmup < 0 || repetitions <= 0)
         return 5;
-    const bool hasBias = nbuf == 5;
+    const bool hasSavedLse = std::strstr(name, "_lse_") != nullptr;
+    if ((!hasSavedLse && nbuf != 4 && nbuf != 5) ||
+        (hasSavedLse && nbuf != 5 && nbuf != 6)) return 5;
+    const bool hasBias = hasSavedLse ? nbuf == 6 : nbuf == 5;
     const size_t outputIndex = hasBias ? 4 : 3;
+    const size_t lseIndex = outputIndex + 1;
     for (size_t i = 0; i < ndim; ++i)
         if (dims[i] <= 0 || dims[i] >= (1LL << 31)) return 5;
     const size_t B = (size_t)dims[0], Hq = (size_t)dims[1], Hkv = (size_t)dims[2];
@@ -1136,17 +1154,18 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
         }
         return true;
     };
-    size_t counts[5] = {};
+    size_t counts[6] = {};
     if (!product({B, Hq, Sq, D}, counts[0]) ||
         !product({B, Hkv, Sk, D}, counts[1]) ||
         !product({B, Hkv, Sk, Dv}, counts[2]) ||
         !product({B, Hq, Sq, Dv}, counts[outputIndex]) ||
+        (hasSavedLse && !product({B, Hq, Sq}, counts[lseIndex])) ||
         (hasBias && !product({B, Hq, Sq, Sk}, counts[3]))) return 5;
     const bool narrow =
         std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
         std::strncmp(name, "tessera_tile_attention_bf16_", 28) == 0;
     const size_t elementBytes = narrow ? 2 : 4;
-    size_t sizes[5] = {};
+    size_t sizes[6] = {};
     for (int i = 0; i < 3; ++i) {
         if (counts[i] > SIZE_MAX / elementBytes) return 5;
         sizes[i] = counts[i] * elementBytes;
@@ -1155,7 +1174,11 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
     if (hasBias) sizes[3] = counts[3] * sizeof(float);
     if (counts[outputIndex] > SIZE_MAX / sizeof(float)) return 5;
     sizes[outputIndex] = counts[outputIndex] * sizeof(float);
-    CUdeviceptr device[5] = {};
+    if (hasSavedLse) {
+        if (counts[lseIndex] > SIZE_MAX / sizeof(float)) return 5;
+        sizes[lseIndex] = counts[lseIndex] * sizeof(float);
+    }
+    CUdeviceptr device[6] = {};
     CUevent start = nullptr, stop = nullptr;
     int rc = 0;
     for (size_t i = 0; i < nbuf; ++i)
@@ -1166,7 +1189,7 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
     if (!rc) {
         long long args64[7];
         for (int i = 0; i < 7; ++i) args64[i] = dims[i];
-        void* args[12] = {};
+        void* args[13] = {};
         size_t arg = 0;
         for (size_t i = 0; i < nbuf; ++i) args[arg++] = &device[i];
         for (int i = 0; i < 7; ++i) args[arg++] = &args64[i];
@@ -1191,6 +1214,67 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
     if (start) cuEventDestroy(start);
     if (stop) cuEventDestroy(stop);
     for (CUdeviceptr ptr : device) if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
+int benchmarkAttentionBackward(CUfunction fn, const char* name, void** buffers,
+                               size_t nbuf, const int64_t* dims, size_t ndim,
+                               int warmup, int repetitions, float* latencyMs) {
+    if (ndim != 7 || !name || !latencyMs || warmup < 0 || repetitions <= 0)
+        return 5;
+    const bool hasSavedLse = std::strstr(name, "_lse_") != nullptr;
+    if ((!hasSavedLse && nbuf != 7 && nbuf != 8) ||
+        (hasSavedLse && nbuf != 8 && nbuf != 9)) return 5;
+    const bool hasBias = hasSavedLse ? nbuf == 9 : nbuf == 8;
+    const size_t lseIndex = 4 + size_t(hasBias);
+    const size_t outputBase = lseIndex + size_t(hasSavedLse);
+    const long long B=dims[0], Hq=dims[1], Hkv=dims[2], Sq=dims[3];
+    const long long Sk=dims[4], D=dims[5], Dv=dims[6];
+    if (B<=0 || Hq<=0 || Hkv<=0 || Sq<=0 || Sk<=0 || D<=0 || Dv<=0 || Hq%Hkv)
+        return 5;
+    const bool narrow = std::strstr(name, "attention_backward_f16_") != nullptr ||
+                        std::strstr(name, "attention_backward_bf16_") != nullptr;
+    const size_t elementBytes = narrow ? 2 : 4;
+    auto bytes = [](std::initializer_list<size_t> values, size_t width, size_t& out) {
+        out = width;
+        for (size_t value : values) { if (value && out > SIZE_MAX / value) return false; out *= value; }
+        return true;
+    };
+    size_t doBytes=0, qBytes=0, kBytes=0, vBytes=0, lseBytes=0, biasBytes=0;
+    if (!bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)Dv},elementBytes,doBytes) ||
+        !bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)D},elementBytes,qBytes) ||
+        !bytes({(size_t)B,(size_t)Hkv,(size_t)Sk,(size_t)D},elementBytes,kBytes) ||
+        !bytes({(size_t)B,(size_t)Hkv,(size_t)Sk,(size_t)Dv},elementBytes,vBytes) ||
+        (hasSavedLse && !bytes({(size_t)B,(size_t)Hq,(size_t)Sq},4,lseBytes)) ||
+        (hasBias && !bytes({(size_t)B,(size_t)Hq,(size_t)Sq,(size_t)Sk},4,biasBytes))) return 5;
+    size_t sizes[9] = {doBytes,qBytes,kBytes,vBytes,0,0,0,0,0};
+    if (hasBias) sizes[4] = biasBytes;
+    if (hasSavedLse) sizes[lseIndex] = lseBytes;
+    sizes[outputBase] = qBytes; sizes[outputBase+1] = kBytes; sizes[outputBase+2] = vBytes;
+    CUdeviceptr device[9] = {}; CUevent start=nullptr, stop=nullptr; int rc=0;
+    for (size_t i=0; i<nbuf; ++i)
+        if (cuMemAlloc(&device[i], sizes[i]) != CUDA_SUCCESS) { rc=3; break; }
+    if (!rc) for (size_t i=0; i<outputBase; ++i)
+        if (cuMemcpyHtoD(device[i], buffers[i], sizes[i]) != CUDA_SUCCESS) { rc=3; break; }
+    if (!rc) {
+        long long args64[7]; for (int i=0;i<7;++i) args64[i]=dims[i];
+        void* args[16] = {}; size_t arg=0;
+        for (size_t i=0;i<nbuf;++i) args[arg++]=&device[i];
+        for (int i=0;i<7;++i) args[arg++]=&args64[i];
+        size_t elements=qBytes/elementBytes+kBytes/elementBytes+vBytes/elementBytes;
+        unsigned grid=(unsigned)((elements+127)/128);
+        auto launch = [&]() { return cuLaunchKernel(fn, grid,1,1,128,1,1,0,0,args,0); };
+        for (int i=0;i<warmup;++i) if (launch()!=CUDA_SUCCESS) { rc=3; break; }
+        if (!rc && (cuCtxSynchronize()!=CUDA_SUCCESS || cuEventCreate(&start, CU_EVENT_DEFAULT)!=CUDA_SUCCESS ||
+                    cuEventCreate(&stop, CU_EVENT_DEFAULT)!=CUDA_SUCCESS || cuEventRecord(start,0)!=CUDA_SUCCESS)) rc=3;
+        for (int i=0;!rc && i<repetitions;++i) if (launch()!=CUDA_SUCCESS) rc=3;
+        if (!rc && (cuEventRecord(stop,0)!=CUDA_SUCCESS || cuEventSynchronize(stop)!=CUDA_SUCCESS)) rc=3;
+        float totalMs=0.0f;
+        if (!rc && cuEventElapsedTime(&totalMs,start,stop)!=CUDA_SUCCESS) rc=3;
+        if (!rc) *latencyMs=totalMs/(float)repetitions;
+    }
+    if (start) cuEventDestroy(start); if (stop) cuEventDestroy(stop);
+    for (CUdeviceptr ptr:device) if (ptr) cuMemFree(ptr);
     return rc;
 }
 
@@ -1471,6 +1555,35 @@ bool trainingLayout(const char* name, size_t nbuf, const int64_t* dims,
             layout.sizes[5] = layout.sizes[6] = state;
         layout.outputs[4] = layout.outputs[5] = layout.outputs[6] = true;
         work = dims[0];
+    } else if (std::strncmp(
+                   name, "tessera_cuda_training_lion_backward_", 36) == 0) {
+        // Lion's stop-sign VJP retains p/g/m for operation ownership, carries
+        // two output cotangents, and returns f32 dp/dg/dm.
+        if (nbuf != 8 || ndim != 1) return false;
+        size_t storage = 0, state = 0;
+        if (!checkedBytes(dims[0], trainingStorageBytes(name), storage) ||
+            !checkedBytes(dims[0], sizeof(float), state))
+            return false;
+        layout.sizes[0] = layout.sizes[1] = storage;
+        for (size_t i = 2; i < nbuf; ++i) layout.sizes[i] = state;
+        layout.outputs[5] = layout.outputs[6] = layout.outputs[7] = true;
+        work = dims[0];
+    } else if (std::strncmp(
+                   name, "tessera_cuda_training_deltanet_backward_", 40) == 0) {
+        // First CUDA DeltaNet VJP: Q/K [B,H,S,Dqk], V/dO [B,H,S,Dv].
+        if (nbuf != 7 || ndim != 5 || dims[0] <= 0 || dims[1] <= 0 ||
+            dims[2] <= 0 || dims[3] <= 0 || dims[4] <= 0 ||
+            dims[0] > LLONG_MAX / dims[1] ||
+            dims[0] * dims[1] > LLONG_MAX / dims[2]) return false;
+        const long long bh = dims[0] * dims[1];
+        const long long bhs = bh * dims[2];
+        size_t qBytes = 0, vBytes = 0;
+        if (!checkedBytes(bhs * dims[3], sizeof(float), qBytes) ||
+            !checkedBytes(bhs * dims[4], sizeof(float), vBytes)) return false;
+        layout.sizes[0] = layout.sizes[1] = layout.sizes[4] = layout.sizes[5] = qBytes;
+        layout.sizes[2] = layout.sizes[3] = layout.sizes[6] = vBytes;
+        layout.outputs[4] = layout.outputs[5] = layout.outputs[6] = true;
+        work = bh;
     } else if (std::strncmp(name, "tessera_cuda_training_fused_", 28) == 0) {
         if (ndim != 1 || (nbuf != 6 && nbuf != 10)) return false;
         size_t storage = 0, state = 0;
@@ -1502,7 +1615,7 @@ bool trainingLayout(const char* name, size_t nbuf, const int64_t* dims,
 int runTraining(CUfunction fn, const char* name, void** buffers, size_t nbuf,
                 const int64_t* dims, size_t ndim, int warmup,
                 int repetitions, float* latencyMs) {
-    if (!buffers || !dims || nbuf > 10 || ndim > 2 || warmup < 0 ||
+    if (!buffers || !dims || nbuf > 10 || ndim > 5 || warmup < 0 ||
         repetitions <= 0)
         return 5;
     TrainingLayout layout;
@@ -1522,8 +1635,8 @@ int runTraining(CUfunction fn, const char* name, void** buffers, size_t nbuf,
             cuMemcpyHtoD(device[i], buffers[i], layout.sizes[i]) != CUDA_SUCCESS)
             rc = 3;
     }
-    long long args64[2] = {};
-    void* args[12] = {};
+    long long args64[5] = {};
+    void* args[15] = {};
     size_t arg = 0;
     for (size_t i = 0; i < nbuf; ++i) args[arg++] = &device[i];
     for (size_t i = 0; i < ndim; ++i) {
@@ -1878,6 +1991,11 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
                      std::strlen(kTileNormPrefix)) == 0)
         return benchmarkUnary(fn, kernel_name, buffers, num_buffers, dims,
                               num_dims, warmup, repetitions, latency_ms);
+    if (std::strncmp(kernel_name, kTileAttentionBackwardPrefix,
+                     std::strlen(kTileAttentionBackwardPrefix)) == 0)
+        return benchmarkAttentionBackward(fn, kernel_name, buffers, num_buffers,
+                                          dims, num_dims, warmup, repetitions,
+                                          latency_ms);
     if (std::strncmp(kernel_name, kTileAttentionPrefix,
                      std::strlen(kTileAttentionPrefix)) == 0)
         return benchmarkAttention(fn, kernel_name, buffers, num_buffers, dims,

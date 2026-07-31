@@ -1093,12 +1093,17 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "nvidia_deltanet_compiled": "NVIDIA GPU (consumer Blackwell sm_120) native "
                             "single-launch f32 DeltaNet recurrence with gate, beta, "
                             "decay, erase, and modified variants",
+    "nvidia_deltanet_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
+                            "compiler-owned plain causal f32 DeltaNet VJP; nonlinear "
+                            "and erase schedules remain separately gated",
     "nvidia_moe_transport_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
                             "single-launch MoE dispatch/combine and contiguous grouped GEMM",
     "nvidia_dequant_gemm_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
                             "fused int4/int8 per-group dequantization inside grouped GEMM",
     "nvidia_optimizer_compiled": "NVIDIA GPU (consumer Blackwell sm_120) fused "
                             "f32 SGD, momentum, Nesterov, Adam, AdamW, and Lion updates",
+    "nvidia_lion_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) compiler-owned "
+                            "PTX Lion stop-sign VJP with f32 state",
     "nvidia_norm_bwd_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
                             "compiler-owned CUDA/PTX dynamic affine RMSNorm and "
                             "LayerNorm backward",
@@ -3444,7 +3449,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "f32/fp16/bf16 storage, "
                "f32 accumulation, MHA/GQA/MQA "
                "KV-head mapping, online softmax, causal/window masks, dense additive bias "
-               "and logit soft-cap; one CUDA launch over all B*Hq*Sq query rows.",
+               "and logit soft-cap; one CUDA launch over all B*Hq*Sq query rows. "
+               "The P0 f32 checkpoint form has a distinct O,row_lse physical ABI; "
+               "the default remains no-save/recompute.",
         execution_mode="cuda_runtime", direction="forward", op_family="attention",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_flash_attention.py",
@@ -3458,13 +3465,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "f32 dQ/dK/dV accumulation "
                "recomputes online-softmax statistics, atomically accumulates shared GQA/MQA "
                "dK/dV, and differentiates causal/window masks, dense additive bias, and "
-               "logit soft-cap.",
+               "logit soft-cap. The P0 f32 saved-LSE form consumes an explicit "
+               "row_lse pointer and is measured separately from recompute.",
         execution_mode="cuda_runtime", direction="backward", op_family="flash_attn",
         backward_aliases=("multi_head_attention", "gqa_attention", "mqa_attention"),
         residual_policy="recompute_all",
-        residual_tradeoff="save no forward tensors; recompute softmax statistics",
+        residual_tradeoff="P0 saved-LSE reduces isolated backward work but loses paired end-to-end at the exact small SM120 envelope; retain recompute until broader evidence wins.",
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
-        numerical_fixture="tests/device/nvidia/test_flash_attention_backward.py",
+        numerical_fixture="tests/device/nvidia/test_lse_checkpoint_native.py",
         proof_build="cuda13.3+sm120"),
     ("nvidia_sm120", "nvidia_linear_attn_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_linear_attn_compiled",
@@ -3580,6 +3588,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_deltanet.py",
         proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_deltanet_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_deltanet_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_deltanet_bwd_compiled", runtime_status="success",
+        reason="SM120 compiler-owned deterministic reverse scan for the plain "
+               "causal f32 DeltaNet VJP; gate/beta/decay/erase/modified are "
+               "explicitly unsupported pending CUDA-owned analytic schedules.",
+        execution_mode="cuda_driver", direction="backward", op_family="deltanet",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_training_autodiff_native.py",
+        proof_build="cuda13.3+llvm23+sm120", residual_policy="recompute"),
     ("nvidia_sm120", "nvidia_moe_transport_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_moe_transport_compiled",
         execution_kind="native_gpu", executable=True,
@@ -3611,6 +3630,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         device_proof="device_verified_jit", evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_optimizer.py",
         proof_build="cuda13.3+sm120"),
+    ("nvidia_sm120", "nvidia_lion_bwd_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_lion_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_lion_bwd_compiled", runtime_status="success",
+        reason="SM120 compiler-owned PTX materializes Lion's shared stop-sign "
+               "VJP; parameter, gradient, and f32 moment ownership remain explicit.",
+        execution_mode="cuda_driver", direction="backward", op_family="lion",
+        device_proof="device_verified_jit", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_training_autodiff_native.py",
+        proof_build="cuda13.3+llvm23+sm120", residual_policy="none"),
     ("nvidia_sm120", "nvidia_norm_bwd_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_norm_bwd_compiled",
         execution_kind="native_gpu", executable=True,

@@ -408,11 +408,17 @@ _register_all([
             "fp32:vector": 43.9,
         },
         dram_bw_gbps=896.0,          # 256/8 x 28 = 896
+        llc_bytes=50_331_648,        # cudaDevAttrL2CacheSize, RTX 5070 Ti
         smem_bytes_per_cu=102400,    # 100 KiB/SM, CC 12.0
         spec_provenance=Provenance.DERIVED,
         field_provenance={
             "compute_units": Provenance.SPEC,
             "clock_ghz": Provenance.SPEC,
+            # Live CUDA 13.3 query on the owning RTX 5070 Ti, 2026-07-30:
+            # cudaDevAttrL2CacheSize = 50,331,648 bytes.  The same query saw
+            # 70 SMs, a 2.497 GHz core clock, 14.001 GHz memory clock, and a
+            # 256-bit bus; the latter corroborates the 896 GB/s derived peak.
+            "llc_bytes": Provenance.MEASURED,
             # Confirmed on-silicon 2026-06-25 (RTX 5070 Ti, CUDA 13.3):
             # sharedMemPerMultiprocessor == 102400. Reporting this as merely
             # DERIVED would understate the one value here that touched hardware.

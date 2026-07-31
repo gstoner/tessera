@@ -120,6 +120,23 @@ def _x86_lion(param, grad, moment):
 
 
 @ts.jit(
+    target="nvidia_sm120",
+    autodiff="reverse",
+    wrt=("param", "grad", "moment"),
+)
+def _nvidia_lion(param, grad, moment):
+    return ts.ops.lion(
+        param,
+        grad,
+        moment,
+        lr=0.004,
+        beta1=0.8,
+        beta2=0.93,
+        weight_decay=0.025,
+    )
+
+
+@ts.jit(
     target="x86",
     autodiff="reverse",
     wrt=("q", "key", "value"),
@@ -469,6 +486,31 @@ def test_x86_lion_backward_runs_shared_stop_sign_policy_on_avx512():
     assert _x86_lion.last_backward_execution["compiler_path"] == (
         "x86_lion_bwd_compiled"
     )
+
+
+def test_nvidia_lion_backward_runs_sm120_stop_sign_package():
+    from tessera import runtime as rt
+
+    if not rt._nvidia_tile_runtime_available():
+        pytest.skip("CUDA SM120 runtime unavailable")
+    rng = np.random.default_rng(725)
+    shape = (5, 19)
+    values = [rng.normal(size=shape).astype(np.float32) for _ in range(3)]
+    cotangents = [rng.normal(size=shape).astype(np.float32) for _ in range(2)]
+    actual = _nvidia_lion.native_backward(
+        *values, out_cotangents=tuple(cotangents)
+    )
+    expected = (
+        cotangents[0] * (1.0 - 0.004 * 0.025),
+        cotangents[1] * (1.0 - 0.93),
+        cotangents[1] * 0.93,
+    )
+    for got, want in zip(actual, expected, strict=True):
+        np.testing.assert_allclose(got, want, atol=2e-6, rtol=2e-6)
+    assert _nvidia_lion.last_backward_execution["compiler_path"] == (
+        "nvidia_lion_bwd_compiled"
+    )
+    assert _nvidia_lion.last_backward_execution["residual_policy"] == "none"
 
 
 def test_x86_attention_backward_reaches_canonical_avx512_package():

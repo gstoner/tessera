@@ -1970,6 +1970,96 @@ class JitFn:
             return self._native_norm_backward(
                 "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
             )
+        if ops <= {"gated_deltanet", "kimi_delta_attention", "modified_delta_attention"}:
+            import numpy as np
+            from tessera.runtime import RuntimeArtifact, launch
+            ordered = self._ordered_inputs(args, kwargs)
+            source = graph_ops[0]
+            flags = dict(source.kwargs)
+            if (ordered is None or len(ordered) != 3 or len(graph_ops) != 1
+                    or source.op_name == "tessera.modified_delta_attention"
+                    or any(bool(flags.get(key, False)) for key in ("erase", "has_gate", "has_beta", "has_decay"))):
+                raise TesseraJitError("SM120 DeltaNet backward supports plain causal f32 only")
+            cotangents = out_cotangents if isinstance(out_cotangents, (tuple, list)) else (out_cotangents,)
+            if len(cotangents) != 1:
+                raise TesseraJitError("SM120 DeltaNet backward requires one output cotangent")
+            path = "nvidia_deltanet_bwd_compiled"
+            artifact = RuntimeArtifact(metadata={
+                "target": "nvidia_sm120", "compiler_path": path,
+                "executable": True, "execution_kind": "native_gpu",
+                "execution_mode": "cuda_driver", "autodiff_phase": "backward",
+                "out_cotangents": ["dy"],
+                "arg_names": list(self.arg_names) + ["dy"],
+                "output_names": [f"d_{name}" for name in self.arg_names],
+                "ops": [{"op_name": source.op_name, "result": source.result,
+                         "operands": list(self.arg_names), "kwargs": flags}],
+            })
+            launched = launch(artifact, tuple([
+                *(np.ascontiguousarray(np.asarray(value), dtype=np.float32) for value in ordered),
+                np.ascontiguousarray(np.asarray(cotangents[0]), dtype=np.float32),
+            ]))
+            if not launched.get("ok"):
+                raise TesseraJitError("verified SM120 DeltaNet backward launch failed: " + str(launched.get("reason")))
+            request = self.differentiation_request
+            if request is None:
+                raise TesseraJitError("native backward requires differentiation request")
+            gradients = dict(zip(self.arg_names, launched["output"]))
+            self.last_backward_execution = {"compiler_path": path, "execution_kind": "native_gpu", "execution_mode": "cuda_driver", "evidence_target": "nvidia_sm120", "implementation": "dedicated", "residual_policy": "recompute", "op_family": "deltanet"}
+            return tuple(gradients[name] for name in request.wrt)
+        if ops == {"lion"}:
+            import numpy as np
+            from tessera.runtime import RuntimeArtifact, launch
+
+            ordered = self._ordered_inputs(args, kwargs)
+            if ordered is None or len(ordered) != 3:
+                raise TesseraJitError(
+                    "NVIDIA Lion backward requires param, grad, and moment"
+                )
+            cotangents = (
+                out_cotangents
+                if isinstance(out_cotangents, (tuple, list))
+                else (out_cotangents,)
+            )
+            if len(cotangents) != 2:
+                raise TesseraJitError(
+                    "Lion backward requires parameter and moment output cotangents"
+                )
+            source = graph_ops[0]
+            cotangent_names = ["dparam_out", "dmoment_out"]
+            path = "nvidia_lion_bwd_compiled"
+            artifact = RuntimeArtifact(metadata={
+                "target": "nvidia_sm120", "compiler_path": path,
+                "executable": True, "execution_kind": "native_gpu",
+                "execution_mode": "cuda_driver", "autodiff_phase": "backward",
+                "out_cotangents": cotangent_names,
+                "arg_names": list(self.arg_names) + cotangent_names,
+                "output_names": [f"d_{name}" for name in self.arg_names],
+                "ops": [{"op_name": source.op_name, "result": source.result,
+                         "operands": list(self.arg_names),
+                         "kwargs": dict(source.kwargs)}],
+            })
+            result = launch(artifact, tuple([
+                *(np.ascontiguousarray(np.asarray(value), dtype=np.float32)
+                  for value in ordered),
+                *(np.ascontiguousarray(np.asarray(value), dtype=np.float32)
+                  for value in cotangents),
+            ]))
+            if not result.get("ok") or result.get("execution_mode") != "cuda_driver":
+                raise TesseraJitError(
+                    "verified SM120 Lion backward launch failed: "
+                    + str(result.get("reason"))
+                )
+            request = self.differentiation_request
+            if request is None:
+                raise TesseraJitError("native backward requires differentiation request")
+            gradients = dict(zip(self.arg_names, result["output"]))
+            self.last_backward_execution = {
+                "compiler_path": path, "execution_kind": "native_gpu",
+                "execution_mode": "cuda_driver", "evidence_target": "nvidia_sm120",
+                "implementation": "dedicated", "residual_policy": "none",
+                "op_family": "lion",
+            }
+            return tuple(gradients[name] for name in request.wrt)
         if ops <= {
             "loss.mse", "mse_loss", "loss.mae", "mae_loss",
             "loss.huber", "huber_loss", "loss.smooth_l1", "smooth_l1_loss",

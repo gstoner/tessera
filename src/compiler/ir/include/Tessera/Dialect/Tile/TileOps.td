@@ -657,9 +657,10 @@ def Tile_X86ABIKernelOp : Tile_Op<"x86_abi_kernel"> {
   let hasVerifier = 1;
 }
 
-// Launch-level scaled dot-product attention envelope. Inputs are Q, K, V, O
-// followed by B, Hq, Hkv, Sq, Sk, D, and Dv. Storage, accumulation, scale, and
-// masking are explicit; target lowering must not infer them from host buffers.
+// Launch-level scaled dot-product attention envelope. Inputs are Q, K, V,
+// optional bias, O, and (when lse_checkpoint="saved") row_lse, followed by B,
+// Hq, Hkv, Sq, Sk, D, and Dv. row_lse is a physical f32[B,Hq,Sq] output, not
+// metadata: its presence changes both the pointer ABI and kernel arguments.
 def Tile_AttentionKernelOp : Tile_Op<"attention_kernel"> {
   let summary = "Launch-level typed scaled dot-product attention";
   let arguments = (ins Variadic<AnyType>:$inputs);
@@ -669,8 +670,8 @@ def Tile_AttentionKernelOp : Tile_Op<"attention_kernel"> {
 }
 
 // Launch-level scaled dot-product attention VJP envelope. Inputs are dO, Q,
-// K, V, optional dense f32 bias, dQ, dK, dV, followed by B, Hq, Hkv, Sq, Sk,
-// D, and Dv. The deterministic-direct compatibility route assigns one output
+// K, V, optional dense f32 bias, optional saved f32 row_lse, dQ, dK, dV,
+// followed by B, Hq, Hkv, Sq, Sk, D, and Dv. The deterministic-direct compatibility route assigns one output
 // gradient element to one thread. The canonical split/reduced route instead
 // makes launch-owned workspace, query/KV block loops, split count, and fixed
 // reduction order explicit as attributes; physical backends schedule those

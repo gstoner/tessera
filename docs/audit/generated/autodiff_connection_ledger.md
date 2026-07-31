@@ -45,7 +45,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 - `layer_norm` — device_verified_jit: nvidia_sm120; device_verified_abi: rocm_gfx1151,x86_avx512
 - `lightning_attention` — device_verified_jit: nvidia_sm120
 - `linear_attn` — device_verified_jit: nvidia_sm120
-- `lion` — device_verified_jit: rocm_gfx1151; device_verified_abi: x86_avx512
+- `lion` — device_verified_jit: nvidia_sm120,rocm_gfx1151; device_verified_abi: x86_avx512
 - `mae_loss` — device_verified_jit: nvidia_sm120,rocm_gfx1151; device_verified_abi: x86_avx512
 - `matmul` — device_verified_jit: cpu_x86_64,rocm_gfx1151
 - `modified_delta_attention` — device_verified_jit: rocm_gfx1151; device_verified_abi: x86_avx512
@@ -212,7 +212,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `linear_attn` | attention | yes | none | — | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | — | nvidia_sm120=recompute_all | nvidia_sm120=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+sm120] | native backward executes on nvidia_sm120 (Phase 4) |
 | `linear_attn_state` | attention | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `linear_general` | model_layer | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `lion` | functional_optimizer_step | yes | none | — | rocm_gfx1151 | rocm_gfx1151,x86_avx512 | rocm_gfx1151,x86_avx512 | rocm_gfx1151 | x86_avx512 | rocm_gfx1151=none; x86_avx512=none | rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151]; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native backward executes on rocm_gfx1151, x86_avx512 (Phase 4) |
+| `lion` | functional_optimizer_step | yes | none | — | nvidia_sm120,rocm_gfx1151 | nvidia_sm120,rocm_gfx1151,x86_avx512 | nvidia_sm120,rocm_gfx1151,x86_avx512 | nvidia_sm120,rocm_gfx1151 | x86_avx512 | nvidia_sm120=none; rocm_gfx1151=none; x86_avx512=none | nvidia_sm120=dedicated; rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+llvm23+sm120]; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151]; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native backward executes on nvidia_sm120, rocm_gfx1151, x86_avx512 (Phase 4) |
 | `load_balance_loss` | loss | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `log` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `log1p` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |

@@ -7,21 +7,29 @@
 //
 //     D[M,N] f32 = A[M,K] @ B[K,N]   (row-major; ragged M/N/K zero-padded)
 //
-// The kernel is NVRTC-compiled for the live device arch at first call (compute_XX
-// from cuDeviceGetAttribute) — the driver JIT path, so the .o needs only the host
-// compiler + the CUDA driver (libcuda) + NVRTC at link time, no nvcc device pass.
+// The f16 kernel first tries a versioned, adjacent SM120 cubin.  Its source is
+// also compiled through NVRTC if the artifact is absent, stale, incompatible, or
+// explicitly disabled.  The remaining dtypes currently use NVRTC directly.
 // This is the shipped symbol the backend_manifest `hardware_verified` contract
 // requires; the execute_compare_fixture (tests/unit/test_nvidia_mma_runtime_symbol.py)
 // dlopens it and numerically validates each dtype against a numpy reference.
 //
 // Proven on-silicon 2026-06-25 (RTX 5070 Ti). Each dtype uses its documented MMA
 // shape: 16-bit (bf16/f16) m16n8k16, tf32 m16n8k8, fp8 (e4m3/e5m2) m16n8k32.
-// Return codes: 0 ok, 1 bad shape, 2 no usable GPU / NVRTC, 3 device op failed.
+// Return codes: 0 ok, 1 bad shape, 2 no usable GPU/NVRTC or required AOT
+// artifact unavailable, 3 device op failed.
 
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <mutex>
 #include <string>
 #include <vector>
+
+#if defined(__linux__) || defined(__APPLE__)
+#include <dlfcn.h>
+#endif
 
 #include <cuda.h>
 #include <nvrtc.h>
@@ -160,6 +168,15 @@ extern "C" __global__ void gemm(const unsigned char* A,
 }
 )NVRTC";
 
+// Generated at configure time from aot/tessera_nvidia_mma_f16_sm120_v1.cu.
+// It is intentionally included inside this anonymous namespace.
+#include "tessera_nvidia_mma_f16_sm120_v1_source.h"
+
+constexpr char kSm120F16AotArtifactName[] =
+    "tessera_nvidia_mma_f16_sm120_v1.cubin";
+constexpr int kSm120F16AotVersion = 1;
+constexpr int kSm120F16AotMinDriver = 13000;
+
 std::once_flag g_ctx_once;
 bool g_ctx_ok = false;
 CUdevice g_dev = 0;
@@ -206,13 +223,131 @@ bool compileKernel(const char* src_tmpl, const char* type, CUfunction* out,
   return cuModuleGetFunction(out, mod, "gemm") == CUDA_SUCCESS;
 }
 
-// Per-dtype kernel cache (compiled once).
-struct Kernel { std::once_flag once; bool ok = false; CUfunction fn = nullptr; };
+enum class AotMode { kAuto, kDisable, kRequire };
+enum class AotState {
+  kUninitialized,
+  kAot,
+  kNvrtcDisabled,
+  kNvrtcIncompatible,
+  kNvrtcMissing,
+  kNvrtcLoadFailed,
+  kRequiredUnavailable,
+};
+
+AotMode aotMode() {
+  const char* value = std::getenv("TESSERA_NVIDIA_AOT_MODE");
+  if (value && std::strcmp(value, "disable") == 0) return AotMode::kDisable;
+  if (value && std::strcmp(value, "require") == 0) return AotMode::kRequire;
+  return AotMode::kAuto;
+}
+
+const char* aotStateName(AotState state) {
+  switch (state) {
+    case AotState::kUninitialized: return "uninitialized";
+    case AotState::kAot: return "aot";
+    case AotState::kNvrtcDisabled: return "nvrtc_disabled";
+    case AotState::kNvrtcIncompatible: return "nvrtc_incompatible";
+    case AotState::kNvrtcMissing: return "nvrtc_missing";
+    case AotState::kNvrtcLoadFailed: return "nvrtc_load_failed";
+    case AotState::kRequiredUnavailable: return "required_unavailable";
+  }
+  return "unknown";
+}
+
+bool sm120F16AotCompatible() {
+  int maj = 0, min = 0, driver = 0;
+  if (cuDeviceGetAttribute(&maj, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+                           g_dev) != CUDA_SUCCESS ||
+      cuDeviceGetAttribute(&min, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+                           g_dev) != CUDA_SUCCESS ||
+      cuDriverGetVersion(&driver) != CUDA_SUCCESS)
+    return false;
+  // A cubin is not forward-compatible across SMs.  Do not let a future
+  // consumer part accidentally select an SM120 binary merely because it is
+  // numerically close in the capability table.
+  return maj == 12 && min == 0 && driver >= kSm120F16AotMinDriver;
+}
+
+std::string sm120F16AotArtifactPath() {
+  if (const char* dir = std::getenv("TESSERA_NVIDIA_AOT_ARTIFACT_DIR"))
+    return std::string(dir) + "/" + kSm120F16AotArtifactName;
+#if defined(__linux__) || defined(__APPLE__)
+  Dl_info info{};
+  if (dladdr(reinterpret_cast<const void*>(&sm120F16AotArtifactPath), &info) &&
+      info.dli_fname) {
+    std::string image(info.dli_fname);
+    const size_t slash = image.find_last_of('/');
+    if (slash != std::string::npos)
+      return image.substr(0, slash + 1) + kSm120F16AotArtifactName;
+  }
+#endif
+  return kSm120F16AotArtifactName;
+}
+
+bool loadBinary(const std::string& path, std::vector<char>* bytes) {
+  std::ifstream input(path, std::ios::binary | std::ios::ate);
+  if (!input) return false;
+  const std::streamsize size = input.tellg();
+  if (size < 4) return false;
+  input.seekg(0, std::ios::beg);
+  bytes->resize(static_cast<size_t>(size));
+  if (!input.read(bytes->data(), size)) return false;
+  // All CUDA cubins are ELF images.  Reject accidental sidecars or corrupt
+  // payloads before passing arbitrary data to the CUDA driver.
+  return (*bytes)[0] == '\x7f' && (*bytes)[1] == 'E' &&
+         (*bytes)[2] == 'L' && (*bytes)[3] == 'F';
+}
+
+// Per-dtype kernel cache.  A loaded module remains owned by the cache for the
+// process lifetime, matching the function cache lifetime.
+struct Kernel {
+  std::once_flag once;
+  bool ok = false;
+  CUfunction fn = nullptr;
+  CUmodule module = nullptr;
+  AotState aot_state = AotState::kUninitialized;
+};
 Kernel g_k16bf, g_k16f, g_ktf32, g_ke4, g_ke5, g_knvfp4;
 
 CUfunction getKernel(Kernel* k, const char* tmpl, const char* type) {
   std::call_once(k->once, [&] { k->ok = compileKernel(tmpl, type, &k->fn); });
   return k->ok ? k->fn : nullptr;
+}
+
+CUfunction getF16Kernel() {
+  std::call_once(g_k16f.once, [] {
+    const AotMode mode = aotMode();
+    if (mode != AotMode::kDisable && sm120F16AotCompatible()) {
+      std::vector<char> image;
+      if (loadBinary(sm120F16AotArtifactPath(), &image)) {
+        CUmodule module = nullptr;
+        CUfunction function = nullptr;
+        if (cuModuleLoadData(&module, image.data()) == CUDA_SUCCESS &&
+            cuModuleGetFunction(&function, module, "gemm") == CUDA_SUCCESS) {
+          g_k16f.module = module;
+          g_k16f.fn = function;
+          g_k16f.ok = true;
+          g_k16f.aot_state = AotState::kAot;
+          return;
+        }
+        if (module) cuModuleUnload(module);
+        g_k16f.aot_state = AotState::kNvrtcLoadFailed;
+      } else {
+        g_k16f.aot_state = AotState::kNvrtcMissing;
+      }
+    } else if (mode == AotMode::kDisable) {
+      g_k16f.aot_state = AotState::kNvrtcDisabled;
+    } else {
+      g_k16f.aot_state = AotState::kNvrtcIncompatible;
+    }
+    if (mode == AotMode::kRequire) {
+      g_k16f.aot_state = AotState::kRequiredUnavailable;
+      return;
+    }
+    // Fallback source is generated from the exact .cu that built the cubin.
+    g_k16f.ok = compileKernel(kSrcF16Aot, nullptr, &g_k16f.fn);
+  });
+  return g_k16f.ok ? g_k16f.fn : nullptr;
 }
 
 CUfunction getNvfp4Kernel() {
@@ -307,6 +442,19 @@ int dispatchDevice(Kernel* k, const char* tmpl, const char* type,
       getKernel(k, tmpl, type), A, B, D, M, N, K, stream);
 }
 
+int dispatchF16(const void* A, const void* B, void* D, int M, int N, int K) {
+  std::call_once(g_ctx_once, initCtxOnce);
+  if (!g_ctx_ok) return 2;
+  return runGemm(getF16Kernel(), A, B, D, M, N, K, 2);
+}
+
+int dispatchF16Device(const void* A, const void* B, void* D,
+                      int M, int N, int K, void* stream) {
+  std::call_once(g_ctx_once, initCtxOnce);
+  if (!g_ctx_ok) return 2;
+  return runGemmDevice(getF16Kernel(), A, B, D, M, N, K, stream);
+}
+
 }  // namespace
 
 extern "C" {
@@ -315,7 +463,7 @@ int tessera_nvidia_mma_gemm_bf16(const void* A, const void* B, void* D, int M, i
   return dispatch(&g_k16bf, kSrc16, "bf16", A, B, D, M, N, K, 2);
 }
 int tessera_nvidia_mma_gemm_f16(const void* A, const void* B, void* D, int M, int N, int K) {
-  return dispatch(&g_k16f, kSrc16, "f16", A, B, D, M, N, K, 2);
+  return dispatchF16(A, B, D, M, N, K);
 }
 int tessera_nvidia_mma_gemm_tf32(const void* A, const void* B, void* D, int M, int N, int K) {
   return dispatch(&g_ktf32, kSrcTf32, nullptr, A, B, D, M, N, K, 4);
@@ -342,8 +490,10 @@ int name(const void* A, const void* B, void* D, int M, int N, int K,           \
 
 TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_bf16_device,
                     &g_k16bf, kSrc16, "bf16")
-TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_f16_device,
-                    &g_k16f, kSrc16, "f16")
+int tessera_nvidia_mma_gemm_f16_device(const void* A, const void* B, void* D,
+                                       int M, int N, int K, void* stream) {
+  return dispatchF16Device(A, B, D, M, N, K, stream);
+}
 TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_tf32_device,
                     &g_ktf32, kSrcTf32, nullptr)
 TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_e4m3_device,
@@ -352,6 +502,18 @@ TESSERA_DEVICE_GEMM(tessera_nvidia_mma_gemm_e5m2_device,
                     &g_ke5, kSrcF8, "e5m2")
 
 #undef TESSERA_DEVICE_GEMM
+
+const char* tessera_nvidia_mma_gemm_f16_aot_status() {
+  return aotStateName(g_k16f.aot_state);
+}
+
+int tessera_nvidia_mma_gemm_f16_aot_version() {
+  return kSm120F16AotVersion;
+}
+
+const char* tessera_nvidia_mma_gemm_f16_aot_source_sha256() {
+  return kSm120F16AotSourceSha256;
+}
 
 int tessera_nvidia_device_alloc(void** out, size_t bytes) {
   if (out == nullptr || bytes == 0) return 1;

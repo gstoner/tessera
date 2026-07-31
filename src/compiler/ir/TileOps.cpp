@@ -1168,15 +1168,21 @@ LogicalResult X86ABIKernelOp::verify() {
 LogicalResult AttentionKernelOp::verify() {
   auto bias = getOperation()->getAttrOfType<BoolAttr>("bias");
   bool hasBias = bias && bias.getValue();
+  auto lseCheckpoint =
+      getOperation()->getAttrOfType<StringAttr>("lse_checkpoint");
+  bool hasSavedLse = lseCheckpoint && lseCheckpoint.getValue() == "saved";
   if (!bias)
     return emitOpError("requires an explicit bias boolean");
-  if (getInputs().size() != 11 + unsigned(hasBias))
+  if (lseCheckpoint && (lseCheckpoint.getValue() != "recompute" &&
+                        lseCheckpoint.getValue() != "saved"))
+    return emitOpError("requires lse_checkpoint=\"recompute\" or \"saved\"");
+  if (getInputs().size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse))
     return emitOpError(
-        "expects Q, K, V, optional bias, O, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
-  unsigned pointerCount = 4 + unsigned(hasBias);
+        "expects Q, K, V, optional bias, O, optional row_lse, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
+  unsigned pointerCount = 4 + unsigned(hasBias) + unsigned(hasSavedLse);
   for (Value pointer : getInputs().take_front(pointerCount))
     if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
-      return emitOpError("Q, K, V, optional bias, and O operands must be !llvm.ptr");
+      return emitOpError("Q, K, V, optional bias, O, and optional row_lse operands must be !llvm.ptr");
   for (Value dim : getInputs().drop_front(pointerCount))
     if (!dim.getType().isInteger(64))
       return emitOpError("attention dimensions must be i64");
@@ -1217,16 +1223,22 @@ LogicalResult AttentionKernelOp::verify() {
 LogicalResult AttentionBackwardKernelOp::verify() {
   auto bias = getOperation()->getAttrOfType<BoolAttr>("bias");
   bool hasBias = bias && bias.getValue();
+  auto lseCheckpoint =
+      getOperation()->getAttrOfType<StringAttr>("lse_checkpoint");
+  bool hasSavedLse = lseCheckpoint && lseCheckpoint.getValue() == "saved";
   if (!bias)
     return emitOpError("requires an explicit bias boolean");
-  if (getInputs().size() != 14 + unsigned(hasBias))
+  if (lseCheckpoint && (lseCheckpoint.getValue() != "recompute" &&
+                        lseCheckpoint.getValue() != "saved"))
+    return emitOpError("requires lse_checkpoint=\"recompute\" or \"saved\"");
+  if (getInputs().size() != 14 + unsigned(hasBias) + unsigned(hasSavedLse))
     return emitOpError(
-        "expects dO, Q, K, V, optional bias, dQ, dK, dV, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
-  unsigned pointerCount = 7 + unsigned(hasBias);
+        "expects dO, Q, K, V, optional bias, optional row_lse, dQ, dK, dV, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
+  unsigned pointerCount = 7 + unsigned(hasBias) + unsigned(hasSavedLse);
   for (Value pointer : getInputs().take_front(pointerCount))
     if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
       return emitOpError(
-          "dO, Q, K, V, optional bias, dQ, dK, and dV operands must be !llvm.ptr");
+          "dO, Q, K, V, optional bias, optional row_lse, dQ, dK, and dV operands must be !llvm.ptr");
   for (Value dim : getInputs().drop_front(pointerCount))
     if (!dim.getType().isInteger(64))
       return emitOpError("attention backward dimensions must be i64");

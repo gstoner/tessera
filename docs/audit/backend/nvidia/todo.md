@@ -79,11 +79,34 @@ line without coefficient or target retuning. NVIDIA therefore owes no sm_120
 promotion analysis for this score; CUDA-specific bank diagnostics remain a
 separate future model and must not inherit AMD constants.
 
-**Missing exact-device evidence.** Supply the RTX 5070 Ti cache capacity and
-bandwidth inputs, then compute per-family/per-shape rank correlation between T1
-and recorded sm_120 latencies already in the corpus. This needs no new hardware
-run. Retain T1 only as a pruning score if it generalizes; measured latency
-remains selection authority.
+**Live-input update (2026-07-30).** The owning RTX 5070 Ti now reports through
+CUDA 13.3 `cudaDeviceGetAttribute`: 70 SMs, 2.497 GHz core, 14.001 GHz memory,
+a 256-bit bus, and `cudaDevAttrL2CacheSize = 50,331,648` bytes (48 MiB). The
+registry consumes the measured L2 capacity; the observed memory clock and bus
+corroborate the existing 896 GB/s peak-bandwidth derivation.
+
+**Counter rerun (2026-07-30).** Nsight Compute 2026.2.1 is now installed on
+the owning WSL host. A resource-only capture of the existing 512³ f16
+production-route launcher retained `/tmp/nvidia-calib-sm120-2026-07-30.ncu-rep`
+(`sha256:e0d0a1e2650dbfc1da921f72ebf0f36c27a1ec1165b278c51905336d02d6c79d`).
+For the two Tile implementations, `tessera_tile_matmul_direct_f16` reported
+97.65% L2-sector hit rate and 1,273,856 DRAM bytes, while
+`tessera_tile_matmul_shared_f16` reported 91.24% and 1,101,312 bytes. This
+confirms that CUDA counter collection works and that the two schedules have
+distinct cache/traffic behavior. The profiler's replay duration is explicitly
+not timing evidence, and these are different schedule shapes rather than a
+controlled candidate-rank packet; neither value changes selection or supplies
+a T1 correlation verdict.
+
+**Correlation verdict: not identifiable from the committed corpus.** The
+corpus retains latency keyed by named implementation but does not serialize the
+candidate Tile M/N/K/raster descriptor needed to replay T1 for each competitor.
+It therefore cannot supply an honest within-shape rank correlation, even with
+the now-measured cache input. Retain T1 solely as a legal pruning estimator;
+measured latency remains selection authority. A future CUDA corpus revision
+must persist candidate schedule descriptors and profiler counter availability
+before this item can produce a correlation verdict. Do not fabricate a rank or
+revive the rejected AMD step-distance metric.
 
 ## NVIDIA-RASTER-1: consume the shared block-rasterization contract
 
@@ -166,6 +189,21 @@ This closes the decision, not productization: a follow-on must add a versioned
 SM120 cubin/fatbin artifact to the native package/runtime seam, preserve the
 current NVRTC fallback for unsupported or stale artifacts, and execute-compare
 the production matmul ABI before any selector promotion.
+
+**Productization landed (2026-07-30).** `libtessera_nvidia_gemm.so` now ships
+the first package-owned precompiled peer: the versioned
+`tessera_nvidia_mma_f16_sm120_v1.cubin` beside the runtime image. Its canonical
+`.cu` input is also generated into the library as the NVRTC fallback source, so
+the AOT and JIT lanes have one kernel body, entry symbol, and physical
+`A:u16[M,K], B:u16[K,N], D:f32[M,N], M,N,K` ABI. The loader admits the cubin
+only on exact CC 12.0 and CUDA-driver >= 13000; absent, corrupt, incompatible,
+or explicitly disabled artifacts use NVRTC. `TESSERA_NVIDIA_AOT_MODE=require`
+is a strict deployment check and never falls back silently. Fresh-process RTX
+5070 Ti execution proves forced-AOT, forced-NVRTC, and missing-artifact
+fallback are numerically equivalent on ragged `17x31x9` f16 GEMM; the version
+and canonical-source SHA are queried from the shipped C ABI. This is NVIDIA
+runtime packaging only: no shared IR/ABI, selector, Apple, or ROCm contract
+changed, so sibling backend plan changes are not applicable.
 
 Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43
 self-resolving test files onto the shared `tests/_support/compiler_tool.py`
@@ -689,7 +727,7 @@ host. No CUDA execution status was inferred or promoted from the ROCm run.
 | 8 | NVIDIA-TEST-5 | Measured performance | Run `hardware_nvidia and performance` serially. Warm up compilation and caches; use repeated medians; measure kernel-only and end-to-end separately; record registers, shared memory, occupancy, spills, and selected route. | Stable baselines cover square/rectangular/ragged GEMM, fused epilogues, attention, paged KV, ReplaySSM, reductions, and transport. Each ratchet identifies the selected implementation. |
 | 9 | NVIDIA-TEST-6 | Refactor and deduplicate | Move mature families toward `tests/compiler/`, `tests/device/nvidia/`, `tests/integration/`, and `tests/performance/nvidia/`. Consolidate repeated CUDA availability, compilation, launch, oracle, and cleanup code. | No central filename allowlist; no duplicated private CUDA probe/loader; process trees and device allocations clean up on failure. |
 | 10 | NVIDIA-TEST-7 | Local release ownership | Own the NVIDIA-box release gate locally in WSL with a host concurrency lock and retained artifacts; GitHub runners are intentionally not used. Keep two-run device correctness required for NVIDIA promotion and performance serial. | A clean branch run reports NVIDIA host-free/shared registries, compiler artifact, device correctness, and performance independently and retains the fail-closed evidence bundle. |
-| 11 | NVIDIA-LSE-1 | Consume and measure the real shared LSE checkpoint on CUDA | The shared source/destination/identity/effects contract is landed and ROCm supplies non-transferable gfx1151 evidence. Add compiler-owned CUDA save/load packaging, price the current zero-workspace policy, and measure SM120/Hopper/datacenter thresholds with paired resident timing. | Exact-device numerical, resource, workspace, and timing evidence; architecture-owned selector or retained recompute decision. |
+| 11 | NVIDIA-LSE-1 | Consume and measure the real shared LSE checkpoint on CUDA | **Landing, SM120 P0 complete.** Compiler-owned f32 paired physical ABIs now carry `Q/K/V -> O,row_lse` and `dO/Q/K/V,row_lse -> dQ/dK/dV` through Tile operands, descriptors, bridge allocation/copies/argument order, runtime validation, and the native-package route. Exact RTX 5070 Ti proof covers oracle equality, saved-vs-recompute forward/backward equality, and malformed rank rejection. | At `[1,2,1,3,4,4,3]`, saved lowers backward event time (0.01716 vs 0.02777 ms) but the paired save/load e2e median loses (1.56149 vs 1.26335 ms); NCU/resource packet is retained in `benchmarks/baselines/nvidia_sm120_lse_checkpoint_2026_07_30.json`. Retain recompute default; repeat representative sequence/shape sweeps before promotion. |
 | 12 | NVIDIA-E2E-1 | Canonical SM120 compiler spine | Under sync `E2E-SPINE-2026-07-18`, compose Graph/Schedule/Tile lowering with `LowerTileToNVIDIA(sm=120)`, NVVM/PTX/native-image packaging, and the existing register/invoke launch bridge. Prove f16 and NVFP4 first, including non-origin scale tiles and general-shape dispatch. | One canonical driver request returns a typed image artifact plus launch descriptor, registers and launches on `sm_120`, compares numerically, and retains compiler/ABI/device/resource evidence without a selector change. |
 | 13 | NVIDIA-E2E-2 | Per-SM and operation breadth | Replace shared-alias/hardcoded target behavior with architecture-specific pipelines, then move supported CUDA families through the same typed image/launch seam. | Every enabled SM/family has the four-layer proof on its exact device or an explicit unsupported/planned terminal state; `sm_90` and `sm_100` are never inferred from `sm_120`. |
 
@@ -1922,6 +1960,15 @@ and WSL timings do not transfer to CUDA. NVIDIA remains follow-up required for
 an architecture-owned compiled Lion backward materializer; no SM120
 capability, execution row, PTX schedule, or selector changes.
 
+**NVIDIA follow-on update (2026-07-30):** the CUDA-owned Lion materializer now
+has landed as `nvidia_lion_bwd_compiled`: an SM120 PTX package with an explicit
+eight-buffer ABI (`p/g/m`, two output cotangents, and `dp/dg/dm`), CUDA bridge
+layout, runtime executor, execution-matrix row, f32 oracle, and RTX 5070 Ti
+device validation. It implements the shared stop-sign VJP without importing an
+AMD code object or schedule. This is a correctness-first 128-thread package;
+no optimizer selector changed and a timing packet remains a separate SM120
+measurement task.
+
 Cross-backend sync `CORE-SCHEDULE-1F1B-MATERIALIZE-2026-07-27` emits a shared
 unique-clock warmup/steady/cooldown dependency order after pipeline legality.
 At this synchronization point CUDA runtime consumption and collective overlap
@@ -1963,3 +2010,14 @@ paths and proves an affine parallel chunk-composition algorithm for
 five-entry gfx1151 HSACO, AMD workgroup schedule, and WSL resident timings do
 not transfer to SM120. CUDA sequence-mixer backward packaging, nonlinear/erase
 chunk scheduling, and a refreshed exact-CUDA-host selector packet remain open.
+
+**CUDA DeltaNet reverse architecture (2026-07-30):** NVIDIA owns a separate
+four-stage package: (1) fp32 state checkpoints per `(batch, head)` trajectory;
+(2) an erase-free affine chunk-summary/prefix path; (3) a serial nonlinear or
+`erase=true` checkpoint-fill path; and (4) reverse-token gradients with unique
+`(batch, head)` ownership for Q/K/V/gate/beta/decay. The modified-normalization
+derivative is part of stage 4, not a reuse of an AMD or AVX implementation.
+The current CUDA forward recurrence is intentionally unchanged. Do not add a
+`nvidia_deltanet_bwd_compiled` execution row or selector candidate until this
+CUDA package has exact f32 numerical tests plus SM120 device-event and
+end-to-end timing cohorts; ROCm/x86 packets are non-evidence for that decision.

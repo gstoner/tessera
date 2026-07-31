@@ -2412,6 +2412,8 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_BIAS_F16_ABI,
         SM120_ATTN_BWD_BF16_ABI,
         SM120_ATTN_BWD_BIAS_BF16_ABI,
+        SM120_ATTN_LSE_F32_ABI,
+        SM120_ATTN_BWD_LSE_F32_ABI,
         SM120_BF16_ABI,
         SM120_EPILOGUE_ABIS,
         SM120_F16_ABI,
@@ -2447,9 +2449,11 @@ def _submit_nvidia_sm120_native(
         SM120_ADAM_ABIS,
         SM120_BROADCAST_REDUCE_ABIS,
         SM120_CLASS_BWD_ABIS,
+        SM120_DELTANET_BWD_ABIS,
         SM120_FUSED_LOSS_ADAMW_ABIS,
         SM120_FUSED_LOSS_SGD_ABIS,
         SM120_LOSS_BWD_ABIS,
+        SM120_LION_BWD_ABIS,
         SM120_MOMENTUM_ABIS,
         SM120_NORM_BWD_ABIS,
         SM120_SGD_ABIS,
@@ -2474,6 +2478,8 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_BIAS_F16_ABI,
         SM120_ATTN_BWD_BF16_ABI,
         SM120_ATTN_BWD_BIAS_BF16_ABI,
+        SM120_ATTN_LSE_F32_ABI,
+        SM120_ATTN_BWD_LSE_F32_ABI,
         SM120_BF16_ABI,
         SM120_F16_ABI,
         SM120_NVFP4_ABI,
@@ -2546,6 +2552,7 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BIAS_F16_ABI,
         SM120_ATTN_BIAS_BF16_ABI,
         SM120_ATTN_BIAS_F32_ABI,
+        SM120_ATTN_LSE_F32_ABI,
     }
     attention_backward_abis = {
         SM120_ATTN_BWD_F32_ABI,
@@ -2554,6 +2561,7 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_BIAS_F16_ABI,
         SM120_ATTN_BWD_BF16_ABI,
         SM120_ATTN_BWD_BIAS_BF16_ABI,
+        SM120_ATTN_BWD_LSE_F32_ABI,
     }
     unary_abis = softmax_abis | reduction_abis | norm_abis
     moe_abis = set(SM120_MOE_ABIS)
@@ -2660,6 +2668,22 @@ def _submit_nvidia_sm120_native(
             output = tuple(raw[3:5])
         else:
             output = tuple(raw[4:7])
+    elif descriptor.abi_id in SM120_LION_BWD_ABIS.values():
+        dimensions = (int(cast(int, scalars["N"])),)
+        n = dimensions[0]
+        if any(tuple(value.shape) != (n,) for value in raw):
+            raise RuntimeError("SM120 Lion-backward shapes disagree with descriptor scalar N")
+        output = tuple(raw[5:8])
+    elif descriptor.abi_id in SM120_DELTANET_BWD_ABIS.values():
+        dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "H", "S", "Dqk", "Dv"))
+        b, h, s, dqk, dv = dimensions
+        q, key, value, dy, dq, dk, dvalue = raw
+        if (tuple(q.shape) != (b, h, s, dqk) or tuple(key.shape) != tuple(q.shape)
+                or tuple(value.shape) != (b, h, s, dv) or tuple(dy.shape) != tuple(value.shape)
+                or tuple(dq.shape) != tuple(q.shape) or tuple(dk.shape) != tuple(q.shape)
+                or tuple(dvalue.shape) != tuple(value.shape)):
+            raise RuntimeError("SM120 DeltaNet-backward shapes disagree with descriptor scalars")
+        output = (dq, dk, dvalue)
     elif descriptor.abi_id in {
         *SM120_FUSED_LOSS_SGD_ABIS.values(),
         *SM120_FUSED_LOSS_ADAMW_ABIS.values(),
@@ -2676,27 +2700,42 @@ def _submit_nvidia_sm120_native(
     elif descriptor.abi_id in attention_backward_abis:
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
-        has_bias = descriptor.abi_id in {
-            SM120_ATTN_BWD_BIAS_F32_ABI,
-            SM120_ATTN_BWD_BIAS_F16_ABI,
-            SM120_ATTN_BWD_BIAS_BF16_ABI,
-        }
-        do, q, key, value = raw[:4]
-        bias = raw[4] if has_bias else None
-        output_base = 5 if has_bias else 4
-        dq, dk, dvalue = raw[output_base : output_base + 3]
-        if (
-            tuple(do.shape) != (b, hq, sq, dv)
-            or tuple(q.shape) != (b, hq, sq, d)
-            or tuple(key.shape) != (b, hkv, sk, d)
-            or tuple(value.shape) != (b, hkv, sk, dv)
-            or tuple(dq.shape) != tuple(q.shape)
-            or tuple(dk.shape) != tuple(key.shape)
-            or tuple(dvalue.shape) != tuple(value.shape)
-            or (bias is not None and tuple(bias.shape) != (b, hq, sq, sk))
-        ):
-            raise RuntimeError("SM120 attention backward shapes disagree with descriptor scalars")
-        output = (dq, dk, dvalue)
+        if descriptor.abi_id == SM120_ATTN_BWD_LSE_F32_ABI:
+            do, q, key, value, row_lse, dq, dk, dvalue = raw
+            if (
+                tuple(do.shape) != (b, hq, sq, dv)
+                or tuple(q.shape) != (b, hq, sq, d)
+                or tuple(key.shape) != (b, hkv, sk, d)
+                or tuple(value.shape) != (b, hkv, sk, dv)
+                or tuple(row_lse.shape) != (b, hq, sq)
+                or tuple(dq.shape) != tuple(q.shape)
+                or tuple(dk.shape) != tuple(key.shape)
+                or tuple(dvalue.shape) != tuple(value.shape)
+            ):
+                raise RuntimeError("SM120 saved-LSE attention backward shapes disagree with descriptor scalars")
+            output = (dq, dk, dvalue)
+        else:
+            has_bias = descriptor.abi_id in {
+                SM120_ATTN_BWD_BIAS_F32_ABI,
+                SM120_ATTN_BWD_BIAS_F16_ABI,
+                SM120_ATTN_BWD_BIAS_BF16_ABI,
+            }
+            do, q, key, value = raw[:4]
+            bias = raw[4] if has_bias else None
+            output_base = 5 if has_bias else 4
+            dq, dk, dvalue = raw[output_base : output_base + 3]
+            if (
+                tuple(do.shape) != (b, hq, sq, dv)
+                or tuple(q.shape) != (b, hq, sq, d)
+                or tuple(key.shape) != (b, hkv, sk, d)
+                or tuple(value.shape) != (b, hkv, sk, dv)
+                or tuple(dq.shape) != tuple(q.shape)
+                or tuple(dk.shape) != tuple(key.shape)
+                or tuple(dvalue.shape) != tuple(value.shape)
+                or (bias is not None and tuple(bias.shape) != (b, hq, sq, sk))
+            ):
+                raise RuntimeError("SM120 attention backward shapes disagree with descriptor scalars")
+            output = (dq, dk, dvalue)
     elif descriptor.abi_id == SM120_PAGED_ATTN_F32_ABI:
         dimensions = tuple(
             int(cast(int, scalars[name]))
@@ -2741,22 +2780,34 @@ def _submit_nvidia_sm120_native(
     elif descriptor.abi_id in attention_abis:
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
-        has_bias = descriptor.abi_id in {
+        if descriptor.abi_id == SM120_ATTN_LSE_F32_ABI:
+            q, key, value, output, row_lse = raw
+            if (
+                tuple(q.shape) != (b, hq, sq, d)
+                or tuple(key.shape) != (b, hkv, sk, d)
+                or tuple(value.shape) != (b, hkv, sk, dv)
+                or tuple(output.shape) != (b, hq, sq, dv)
+                or tuple(row_lse.shape) != (b, hq, sq)
+            ):
+                raise RuntimeError("SM120 saved-LSE attention shapes disagree with descriptor scalars")
+            output = (output, row_lse)
+        else:
+            has_bias = descriptor.abi_id in {
             SM120_ATTN_BIAS_F16_ABI,
             SM120_ATTN_BIAS_BF16_ABI,
             SM120_ATTN_BIAS_F32_ABI,
-        }
-        q, key, value = raw[:3]
-        bias = raw[3] if has_bias else None
-        output = raw[4] if has_bias else raw[3]
-        if (
-            tuple(q.shape) != (b, hq, sq, d)
-            or tuple(key.shape) != (b, hkv, sk, d)
-            or tuple(value.shape) != (b, hkv, sk, dv)
-            or tuple(output.shape) != (b, hq, sq, dv)
-            or (bias is not None and tuple(bias.shape) != (b, hq, sq, sk))
-        ):
-            raise RuntimeError("SM120 attention shapes disagree with descriptor scalars")
+            }
+            q, key, value = raw[:3]
+            bias = raw[3] if has_bias else None
+            output = raw[4] if has_bias else raw[3]
+            if (
+                tuple(q.shape) != (b, hq, sq, d)
+                or tuple(key.shape) != (b, hkv, sk, d)
+                or tuple(value.shape) != (b, hkv, sk, dv)
+                or tuple(output.shape) != (b, hq, sq, dv)
+                or (bias is not None and tuple(bias.shape) != (b, hq, sq, sk))
+            ):
+                raise RuntimeError("SM120 attention shapes disagree with descriptor scalars")
     elif descriptor.abi_id in SM120_MOE_ABIS and descriptor.provenance.get("route") == "dispatch":
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("Tokens", "Slots", "Hidden"))
         tokens, slots, hidden = dimensions
@@ -4454,6 +4505,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_ATTN_BWD_BIAS_F16_ABI,
         SM120_ATTN_BWD_BF16_ABI,
         SM120_ATTN_BWD_BIAS_BF16_ABI,
+        SM120_ATTN_LSE_F32_ABI,
+        SM120_ATTN_BWD_LSE_F32_ABI,
         SM120_BF16_ABI,
         SM120_EPILOGUE_ABIS,
         SM120_F16_ABI,
@@ -4501,13 +4554,15 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_ATTN_F32_ABI,
                 SM120_ATTN_BIAS_F16_ABI,
                 SM120_ATTN_BIAS_BF16_ABI,
-                SM120_ATTN_BIAS_F32_ABI,
+        SM120_ATTN_BIAS_F32_ABI,
+        SM120_ATTN_LSE_F32_ABI,
                 SM120_ATTN_BWD_F32_ABI,
                 SM120_ATTN_BWD_BIAS_F32_ABI,
                 SM120_ATTN_BWD_F16_ABI,
                 SM120_ATTN_BWD_BIAS_F16_ABI,
                 SM120_ATTN_BWD_BF16_ABI,
-                SM120_ATTN_BWD_BIAS_BF16_ABI,
+        SM120_ATTN_BWD_BIAS_BF16_ABI,
+        SM120_ATTN_BWD_LSE_F32_ABI,
                 SM120_BF16_ABI,
                 SM120_F16_ABI,
                 SM120_NVFP4_ABI,
@@ -8597,6 +8652,94 @@ _NVIDIA_TRAINING_LOSSES = {
     "loss.js_divergence": ("js", None),
     "js_divergence": ("js", None),
 }
+
+
+def _execute_nvidia_lion_backward(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch the SM120-owned Lion stop-sign VJP PTX package."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.lion":
+        raise ValueError("nvidia_lion_bwd_compiled requires one tessera.lion op")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    cotangent_names = list(
+        metadata.get("out_cotangents") or ["dparam_out", "dmoment_out"]
+    )
+    if len(cotangent_names) != 2:
+        raise ValueError("NVIDIA Lion backward requires two output cotangents")
+    operand_names = [str(name) for name in ops[0].get("operands", [])]
+    if len(operand_names) != 3:
+        raise ValueError("NVIDIA Lion backward requires param, grad, and moment")
+    param = np.ascontiguousarray(_as_numpy(values[operand_names[0]]))
+    grad = np.ascontiguousarray(_as_numpy(values[operand_names[1]]))
+    moment = np.ascontiguousarray(_as_numpy(values[operand_names[2]]), np.float32)
+    storage, store = _nvidia_training_storage(param, np)
+    if storage != "f32" or grad.dtype != param.dtype or moment.shape != param.shape:
+        raise ValueError("NVIDIA Lion backward currently requires matching f32 operands")
+    dp = np.ascontiguousarray(_as_numpy(values[cotangent_names[0]]), np.float32)
+    dm = np.ascontiguousarray(_as_numpy(values[cotangent_names[1]]), np.float32)
+    if any(value.shape != param.shape for value in (grad, moment, dp, dm)):
+        raise ValueError("NVIDIA Lion backward operands and cotangents must match")
+    from .compiler.nvidia_training import package_lion_backward
+
+    kwargs = ops[0].get("kwargs") or {}
+    package = package_lion_backward(
+        lr=float(kwargs.get("lr", 1.0e-4)),
+        beta2=float(kwargs.get("beta2", 0.99)),
+        weight_decay=float(kwargs.get("weight_decay", 0.0)),
+        storage=storage,
+    )
+    n = int(param.size)
+    result = _submit_nvidia_sm120_native(
+        package.image,
+        package.descriptor,
+        {
+            "param": param.reshape(-1), "grad": grad.reshape(-1),
+            "moment": moment.reshape(-1), "dparam_out": dp.reshape(-1),
+            "dmoment_out": dm.reshape(-1), "dparam": np.empty(n, np.float32),
+            "dgrad": np.empty(n, np.float32), "dmoment": np.empty(n, np.float32),
+        },
+        {"N": n},
+        None,
+    )
+    return tuple(value.reshape(param.shape) for value in result)
+
+
+def _execute_nvidia_deltanet_backward(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Run the deliberately narrow, compiler-owned SM120 causal DeltaNet VJP."""
+    import numpy as np
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    op = ops[0] if len(ops) == 1 else {}
+    if str(op.get("op_name", "")) not in {
+        "tessera.gated_deltanet", "tessera.kimi_delta_attention",
+        "tessera.modified_delta_attention",
+    }:
+        raise ValueError("nvidia_deltanet_bwd_compiled requires one DeltaNet op")
+    kw = op.get("kwargs") or {}
+    if (not bool(kw.get("causal", True)) or bool(kw.get("erase", False))
+            or bool(kw.get("has_gate", False)) or bool(kw.get("has_beta", False))
+            or bool(kw.get("has_decay", False))
+            or str(op.get("op_name", "")) == "tessera.modified_delta_attention"):
+        raise ValueError("NVIDIA DeltaNet backward v1 supports plain causal f32 only")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    names = [str(name) for name in op.get("operands", [])]
+    cotangents = list(metadata.get("out_cotangents") or ["dy"])
+    if len(names) != 3 or len(cotangents) != 1:
+        raise ValueError("NVIDIA DeltaNet backward requires Q/K/V and one dO")
+    q, key, value = (np.ascontiguousarray(_as_numpy(values[name]), np.float32) for name in names)
+    dy = np.ascontiguousarray(_as_numpy(values[cotangents[0]]), np.float32)
+    if q.ndim != 4 or key.shape != q.shape or value.ndim != 4 or value.shape[:3] != q.shape[:3] or dy.shape != value.shape:
+        raise ValueError("NVIDIA DeltaNet backward requires Q/K [B,H,S,Dqk] and V/dO [B,H,S,Dv]")
+    from .compiler.nvidia_training import package_deltanet_backward
+    b, h, s, dqk = (int(x) for x in q.shape); dv = int(value.shape[-1])
+    package = package_deltanet_backward()
+    result = _submit_nvidia_sm120_native(package.image, package.descriptor,
+        {"q": q, "k": key, "v": value, "dy": dy,
+         "dq": np.empty_like(q), "dk": np.empty_like(key), "dv": np.empty_like(value)},
+        {"B": b, "H": h, "S": s, "Dqk": dqk, "Dv": dv}, None)
+    return tuple(result)
 
 
 def _execute_nvidia_training_loss_backward(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -26982,9 +27125,11 @@ def _executor_table():
         "nvidia_posenc_compiled": _execute_nvidia_posenc_compiled,
         "nvidia_ssm_compiled": _execute_nvidia_ssm_compiled,
         "nvidia_deltanet_compiled": _execute_nvidia_deltanet_compiled,
+        "nvidia_deltanet_bwd_compiled": _execute_nvidia_deltanet_backward,
         "nvidia_moe_transport_compiled": _execute_nvidia_moe_transport,
         "nvidia_dequant_gemm_compiled": _execute_nvidia_dequant_gemm,
         "nvidia_optimizer_compiled": _execute_nvidia_optimizer,
+        "nvidia_lion_bwd_compiled": _execute_nvidia_lion_backward,
         "nvidia_norm_bwd_compiled": _execute_nvidia_training_norm_backward,
         "nvidia_regression_loss_bwd_compiled": _execute_nvidia_training_loss_backward,
         "nvidia_binary_loss_bwd_compiled": _execute_nvidia_training_loss_backward,

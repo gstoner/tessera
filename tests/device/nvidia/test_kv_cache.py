@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import tessera
-from _nvidia_testutil import require_nvidia_mma_runtime
+from tests._support.nvidia import require_nvidia_mma_runtime
 
 
 def _artifact(start: int, end: int):

@@ -2209,6 +2209,18 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 # table above: ``device_verified_jit`` proves a generated binary was launched,
 # while ``device_verified_abi`` additionally proves a packaged runtime symbol.
 _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
+    "gated_deltanet": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("recurrent", "autodiff", "compiler_owned_ptx", "cuda"),
+        "shape_envelope": "plain causal Q/K[B,H,S,Dqk], V/dO[B,H,S,Dv] DeltaNet VJP; all extents positive",
+        "notes": "SM120 compiler-owned deterministic reverse scan returns dQ/dK/dV. Gate, beta, decay, erase, and modified-delta schedules are intentionally excluded pending CUDA-specific analytic proof.",
+    },
+    "lion": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("optimizer", "autodiff", "compiler_owned_ptx", "cuda"),
+        "shape_envelope": "matching non-empty f32 parameter, gradient, and moment tensors; two f32 output cotangents",
+        "notes": "Compiler-owned SM120 PTX Lion stop-sign VJP with an explicit p/g/m and output-cotangent ABI; it returns dp/dg/dm without importing another backend's schedule.",
+    },
     "conv2d": {
         "dtypes": ("fp32",),
         "feature_flags": ("conv2d", "direct", "cuda"),
@@ -2252,7 +2264,7 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("flash_attention", "flash_attention_backward", "gqa", "mqa", "causal", "sliding_window", "attn_bias", "logit_softcap", "dropout", "compiler_owned_ptx", "cuda"),
         "shape_envelope": "Q[B,Hq,Sq,D], K[B,Hkv,Sk,D], V[B,Hkv,Sk,Dv]; Hq % Hkv == 0; Dv <= 256; optional dense [B,Hq,Sq,Sk] bias",
-        "notes": "Compiler-owned SM120 PTX image/descriptor forward and deterministic VJP with f32/fp16/bf16 storage and f32 softmax/accumulation; explicit MHA/GQA/MQA mapping, causal/sliding-window masks, dense bias, logit soft-cap, and reproducible dropout replay.",
+        "notes": "Compiler-owned SM120 PTX image/descriptor forward and deterministic VJP with f32/fp16/bf16 storage and f32 softmax/accumulation; explicit MHA/GQA/MQA mapping, causal/sliding-window masks, dense bias, logit soft-cap, and reproducible dropout replay. The P0 f32 saved-LSE pair is a distinct Q/K/V->O,row_lse and dO/Q/K/V,row_lse->dQ/dK/dV ABI; recompute remains the default pending broader SM120 evidence.",
     },
     "softmax": {
         "dtypes": ("fp32", "fp16", "bf16"),
@@ -2744,6 +2756,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # numpy/ml_dtypes reference. Skip-clean when no NVIDIA GPU / NVRTC. The
     # numerical-proof half of the nvidia_sm120 matmul `device_verified_abi` row.
     ("matmul", "nvidia_sm120"): "tests/device/nvidia/test_mma_runtime_symbol.py",
+    ("gated_deltanet", "nvidia_sm120"):
+        "tests/device/nvidia/test_training_autodiff_native.py",
     ("fused_epilogue", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
     ("relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
     ("matmul_relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
@@ -2763,7 +2777,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
                   "binary_cross_entropy_loss", "kl_divergence",
                   "js_divergence", "cross_entropy_loss",
                   "label_smoothed_cross_entropy", "training.loss_sgd",
-                  "training.loss_adamw")},
+                  "training.loss_adamw", "lion")},
     **{(op, "nvidia_sm120"): "tests/device/nvidia/test_reduce.py"
        for op in ("sum", "mean", "max", "min", "amax", "amin")},
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is

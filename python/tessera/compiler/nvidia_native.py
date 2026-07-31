@@ -18,7 +18,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, cast
 
 from .graph_ir import GraphIRModule
 from .native_artifact import (
@@ -114,6 +114,10 @@ SM120_ATTN_BWD_F16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_di
 SM120_ATTN_BWD_BIAS_F16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_bias_dq_dk_dv_dims.f16_f32acc.v2"
 SM120_ATTN_BWD_BF16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.bf16_f32acc.v3"
 SM120_ATTN_BWD_BIAS_BF16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_bias_dq_dk_dv_dims.bf16_f32acc.v3"
+# Saved-LSE is a distinct paired physical ABI: row_lse is f32[B,Hq,Sq], not
+# optional metadata on the zero-workspace recompute path.
+SM120_ATTN_LSE_F32_ABI = "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1"
+SM120_ATTN_BWD_LSE_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_row_lse_dq_dk_dv_dims.f32.v1"
 SM120_PAGED_KV_F32_ABI = "tessera.nvidia.paged_kv.pages_table_o_dims.f32_i32.v1"
 SM120_PAGED_ATTN_F32_ABI = "tessera.nvidia.paged_attention.q_kp_vp_table_indices_o_dims.f32_i32_i64.v1"
 SM120_REPLAY_DECODE_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_c_a_y_dims.f32.v1"
@@ -217,6 +221,10 @@ def native_package_kind(module: GraphIRModule) -> str | None:
     classified before the ordinary rank-2 matmul contract.
     """
 
+    if supports_attention_backward_lse(module):
+        return "attention_backward_lse"
+    if supports_attention_lse(module):
+        return "attention_lse"
     if supports_attention_backward(module):
         return "attention_backward"
     if supports_paged_kv_read(module):
@@ -260,6 +268,10 @@ def package_native(
             "SM120 native packaging requires one supported static Graph contract"
         )
     resolved = options or {}
+    if kind == "attention_backward_lse":
+        return package_attention_backward_lse(module, pipeline_name=pipeline_name)
+    if kind == "attention_lse":
+        return package_attention_lse(module, pipeline_name=pipeline_name)
     if kind == "attention_backward":
         return package_attention_backward(module, pipeline_name=pipeline_name)
     if kind == "paged_kv":
@@ -899,6 +911,7 @@ def emit_attention_tile_ir(
     softcap: float = 0.0,
     dropout_p: float = 0.0,
     dropout_seed: int = 0,
+    lse_checkpoint: str = "recompute",
 ) -> str:
     """Emit the correctness-first typed SDPA launch envelope."""
     if storage not in {"f16", "bf16", "f32"}:
@@ -911,20 +924,24 @@ def emit_attention_tile_ir(
         raise ValueError("SM120 attention softcap must be finite and nonnegative")
     if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
         raise ValueError("SM120 attention dropout_p must be in [0, 1)")
+    if lse_checkpoint not in {"recompute", "saved"}:
+        raise ValueError("SM120 attention lse_checkpoint must be 'recompute' or 'saved'")
     optional_arg = "%bias: !llvm.ptr, " if bias else ""
     optional_operand = "%bias, " if bias else ""
+    lse_arg = "%row_lse: !llvm.ptr, " if lse_checkpoint == "saved" else ""
+    lse_operand = "%row_lse, " if lse_checkpoint == "saved" else ""
     return f'''module {{
   llvm.func @{entry}(%q: !llvm.ptr, %key: !llvm.ptr, %v: !llvm.ptr,
-                     {optional_arg}%o: !llvm.ptr, %b: i64, %hq: i64, %hkv: i64,
+                     {optional_arg}%o: !llvm.ptr, {lse_arg}%b: i64, %hq: i64, %hkv: i64,
                      %sq: i64, %sk: i64, %d: i64, %dv: i64)
       attributes {{nvvm.kernel}} {{
-    tile.attention_kernel %q, %key, %v, {optional_operand}%o, %b, %hq, %hkv, %sq, %sk, %d, %dv {{
+    tile.attention_kernel %q, %key, %v, {optional_operand}%o, {lse_operand}%b, %hq, %hkv, %sq, %sk, %d, %dv {{
       storage = "{storage}", accum = "f32", scale = {scale:.17g} : f32,
       causal = {str(causal).lower()}, bias = {str(bias).lower()},
       window_left = {window_left} : i64, window_right = {window_right} : i64,
       softcap = {float(softcap)!r} : f32, dropout_p = {float(dropout_p)!r} : f32,
-      dropout_seed = {dropout_seed} : i64
-    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (1 + int(bias))}i64, i64, i64, i64, i64, i64, i64
+      dropout_seed = {dropout_seed} : i64, lse_checkpoint = "{lse_checkpoint}"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (1 + int(bias) + int(lse_checkpoint == "saved"))}i64, i64, i64, i64, i64, i64, i64
     llvm.return
   }}
 }}
@@ -1033,6 +1050,7 @@ def emit_attention_backward_tile_ir(
     *, entry: str, scale: float, causal: bool, storage: str = "f32", bias: bool = False,
     window_left: int = -1, window_right: int = -1, softcap: float = 0.0,
     dropout_p: float = 0.0, dropout_seed: int = 0,
+    lse_checkpoint: str = "recompute",
 ) -> str:
     """Emit the deterministic f16/bf16/f32 reference VJP through Tile IR."""
     if storage not in {"f16", "bf16", "f32"}:
@@ -1045,15 +1063,19 @@ def emit_attention_backward_tile_ir(
         raise ValueError("SM120 attention backward softcap must be finite and nonnegative")
     if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
         raise ValueError("SM120 attention backward dropout_p must be in [0, 1)")
+    if lse_checkpoint not in {"recompute", "saved"}:
+        raise ValueError("SM120 attention backward lse_checkpoint must be 'recompute' or 'saved'")
     optional_arg = "%bias: !llvm.ptr, " if bias else ""
     optional_operand = "%bias, " if bias else ""
+    lse_arg = "%row_lse: !llvm.ptr, " if lse_checkpoint == "saved" else ""
+    lse_operand = "%row_lse, " if lse_checkpoint == "saved" else ""
     return f'''module {{
   llvm.func @{entry}(%do: !llvm.ptr, %q: !llvm.ptr, %key: !llvm.ptr,
-                     %v: !llvm.ptr, {optional_arg}%dq: !llvm.ptr,
+                     %v: !llvm.ptr, {optional_arg}{lse_arg}%dq: !llvm.ptr,
                      %dk: !llvm.ptr, %dv: !llvm.ptr, %b: i64, %hq: i64,
                      %hkv: i64, %sq: i64, %sk: i64, %d: i64, %dv_dim: i64)
       attributes {{nvvm.kernel}} {{
-    tile.attention_backward_kernel %do, %q, %key, %v, {optional_operand}%dq, %dk, %dv,
+    tile.attention_backward_kernel %do, %q, %key, %v, {optional_operand}{lse_operand}%dq, %dk, %dv,
         %b, %hq, %hkv, %sq, %sk, %d, %dv_dim {{
       storage = "{storage}", accum = "f32", scale = {scale:.17g} : f32,
       causal = {str(causal).lower()}, bias = {str(bias).lower()},
@@ -1062,8 +1084,8 @@ def emit_attention_backward_tile_ir(
       dropout_p = {float(dropout_p)!r} : f32, dropout_seed = {dropout_seed} : i64,
       route = "deterministic_direct",
       deterministic = true, workspace_bytes = 0 : i64,
-      workspace_owner = "output_element"
-    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (3 + int(bias))}i64, i64, i64, i64, i64, i64, i64
+      workspace_owner = "output_element", lse_checkpoint = "{lse_checkpoint}"
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (3 + int(bias) + int(lse_checkpoint == "saved"))}i64, i64, i64, i64, i64, i64, i64
     llvm.return
   }}
 }}
@@ -1362,6 +1384,116 @@ def _attention_backward_contract(
 
 def supports_attention_backward(module: GraphIRModule) -> bool:
     return _attention_backward_contract(module) is not None
+
+
+def _attention_lse_contract(
+    module: GraphIRModule,
+) -> tuple[tuple[str, str, str, str, str], tuple[int, int, int, int, int, int, int], float, bool] | None:
+    """The explicit f32 forward-save ABI, deliberately separate from attention."""
+    if not requests_attention(module):
+        return None
+    fn, op = module.functions[0], module.functions[0].body[0]
+    if op.kwargs.get("lse_checkpoint") != "saved" or len(op.operands) != 3:
+        return None
+    if len(fn.result_types) != 2 or len(fn.return_values) != 2 or len(op.result_names) != 2:
+        return None
+    q_name, k_name, v_name = (item.removeprefix("%") for item in op.operands)
+    output_name, lse_name = op.result_names
+    args = {arg.name: arg for arg in fn.args}
+    if any(name not in args for name in (q_name, k_name, v_name)):
+        return None
+    shapes = tuple(_shape(module, name) for name in (q_name, k_name, v_name))
+    if any(shape is None or len(shape) != 4 for shape in shapes):
+        return None
+    q_shape, k_shape, v_shape = cast(tuple[tuple[int, ...], ...], shapes)
+    b, hq, sq, d = q_shape
+    bk, hkv, sk, dk = k_shape
+    bv, hv, sv, dv = v_shape
+    if (args[q_name].ir_type.dtype != "fp32" or args[k_name].ir_type.dtype != "fp32"
+            or args[v_name].ir_type.dtype != "fp32" or b != bk or b != bv
+            or hkv != hv or sk != sv or d != dk or hq % hkv):
+        return None
+    output_type, lse_type = fn.result_types
+    try:
+        output_shape = tuple(int(item) for item in output_type.shape)
+        lse_result_shape = tuple(int(item) for item in lse_type.shape)
+    except (TypeError, ValueError):
+        return None
+    if (output_type.dtype != "fp32" or output_shape != (b, hq, sq, dv)
+            or lse_type.dtype != "fp32" or lse_result_shape != (b, hq, sq)):
+        return None
+    if any(value.removeprefix("%") != expected for value, expected in zip(
+            fn.return_values, (output_name, lse_name), strict=True)):
+        return None
+    scale = float(op.kwargs.get("scale", 1.0 / math.sqrt(float(d))))
+    if not math.isfinite(scale) or scale <= 0.0:
+        return None
+    # The P0 checkpoint package has one semantic envelope; features that alter
+    # the score function land only with their own paired ABI and proof.
+    if any((bool(op.kwargs.get("bias", False)), op.kwargs.get("window_left", -1) != -1,
+            op.kwargs.get("window_right", -1) != -1,
+            float(op.kwargs.get("softcap", 0.0) or 0.0) != 0.0,
+            float(op.kwargs.get("dropout_p", 0.0) or 0.0) != 0.0)):
+        return None
+    return (q_name, k_name, v_name, output_name, lse_name), (b, hq, hkv, sq, sk, d, dv), scale, bool(op.kwargs.get("causal", False))
+
+
+def supports_attention_lse(module: GraphIRModule) -> bool:
+    return _attention_lse_contract(module) is not None
+
+
+def _attention_backward_lse_contract(
+    module: GraphIRModule,
+) -> tuple[tuple[str, str, str, str, str, str, str, str], tuple[int, int, int, int, int, int, int], float, bool] | None:
+    """The paired f32 backward-load ABI. row_lse is an input pointer."""
+    if not requests_attention_backward(module):
+        return None
+    fn, op = module.functions[0], module.functions[0].body[0]
+    if op.kwargs.get("lse_checkpoint") != "saved" or len(op.operands) != 5:
+        return None
+    if len(fn.result_types) != 3 or len(fn.return_values) != 3 or len(op.result_names) != 3:
+        return None
+    do_name, q_name, k_name, v_name, lse_name = (item.removeprefix("%") for item in op.operands)
+    dq_name, dk_name, dv_name = op.result_names
+    args = {arg.name: arg for arg in fn.args}
+    if any(name not in args for name in (do_name, q_name, k_name, v_name, lse_name)):
+        return None
+    if any(args[name].ir_type.dtype != "fp32" for name in (do_name, q_name, k_name, v_name, lse_name)):
+        return None
+    shapes = tuple(_shape(module, name) for name in (do_name, q_name, k_name, v_name, lse_name))
+    if any(shape is None for shape in shapes):
+        return None
+    do_shape, q_shape, k_shape, v_shape, lse_shape = cast(tuple[tuple[int, ...], ...], shapes)
+    if len(do_shape) != 4 or len(q_shape) != 4 or len(k_shape) != 4 or len(v_shape) != 4 or len(lse_shape) != 3:
+        return None
+    b, hq, sq, d = q_shape
+    bk, hkv, sk, dk = k_shape
+    bv, hv, sv, dv = v_shape
+    if (b != bk or b != bv or hkv != hv or sk != sv or d != dk or hq % hkv
+            or do_shape != (b, hq, sq, dv) or lse_shape != (b, hq, sq)):
+        return None
+    if tuple(result.dtype for result in fn.result_types) != ("fp32", "fp32", "fp32"):
+        return None
+    try:
+        result_shapes = tuple(tuple(int(item) for item in result.shape) for result in fn.result_types)
+    except (TypeError, ValueError):
+        return None
+    if result_shapes != (q_shape, k_shape, v_shape):
+        return None
+    scale = float(op.kwargs.get("scale", 1.0 / math.sqrt(float(d))))
+    if not math.isfinite(scale) or scale <= 0.0:
+        return None
+    if str(op.kwargs.get("route", "deterministic_direct")) != "deterministic_direct":
+        return None
+    if any((op.kwargs.get("window_left", -1) != -1, op.kwargs.get("window_right", -1) != -1,
+            float(op.kwargs.get("softcap", 0.0) or 0.0) != 0.0,
+            float(op.kwargs.get("dropout_p", 0.0) or 0.0) != 0.0)):
+        return None
+    return (do_name, q_name, k_name, v_name, lse_name, dq_name, dk_name, dv_name), (b, hq, hkv, sq, sk, d, dv), scale, bool(op.kwargs.get("causal", False))
+
+
+def supports_attention_backward_lse(module: GraphIRModule) -> bool:
+    return _attention_backward_lse_contract(module) is not None
 
 
 def _reduction_contract(module: GraphIRModule) -> tuple[str, str, int, bool] | None:
@@ -2778,6 +2910,129 @@ def package_attention_backward(
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
 
 
+def package_attention_lse(
+    module: GraphIRModule, *, pipeline_name: str
+) -> NVIDIANativePackage:
+    """Package the explicit f32 Q/K/V -> O,row_lse checkpoint producer."""
+    contract = _attention_lse_contract(module)
+    if contract is None:
+        raise ValueError("SM120 saved-LSE forward requires the canonical f32 paired ABI")
+    names, dims, scale, causal = contract
+    q_name, k_name, v_name, output_name, lse_name = names
+    b, hq, hkv, sq, sk, d, dv = dims
+    key = hashlib.sha256(f"{scale:.17g}:{causal}:saved_lse".encode()).hexdigest()[:10]
+    entry = f"tessera_tile_attention_lse_f32_{'causal' if causal else 'full'}_{key}"
+    tile_ir = emit_attention_tile_ir(
+        entry=entry, storage="f32", scale=scale, causal=causal,
+        lse_checkpoint="saved",
+    )
+    lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = _compile_tile_ir(tile_ir, entry)
+    image = NativeImageArtifact(
+        target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(), binary_format="ptx",
+        payload=ptx.encode("ascii"), entry_points=(NativeEntryPoint(entry, SM120_ATTN_LSE_F32_ABI),),
+        compile_state=compile_state, device_libraries=device_libraries,
+        resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
+    )
+    buffers = (
+        BufferBinding(0, q_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(1, k_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(2, v_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(3, output_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(4, lse_name, "output", "fp32", 3, "row_major", 4),
+    )
+    guards = tuple(
+        ShapeGuard(name, axis, "eq", extent)
+        for name, shape in ((q_name, (b, hq, sq, d)), (k_name, (b, hkv, sk, d)),
+                            (v_name, (b, hkv, sk, dv)), (output_name, (b, hq, sq, dv)),
+                            (lse_name, (b, hq, sq)))
+        for axis, extent in enumerate(shape)
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=entry, abi_id=SM120_ATTN_LSE_F32_ABI,
+        buffers=buffers,
+        scalars=tuple(ScalarArgument(5 + index, name, "int64") for index, name in enumerate(
+            ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))),
+        shape_guards=guards,
+        geometry=LaunchGeometry(policy="sm120_attention_lse_thread_per_output_128"),
+        workspace=WorkspaceRequirement(bytes=0, alignment=4),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
+        provenance={
+            "work_item": "NVIDIA-LSE-1", "checkpoint_role": "forward_save",
+            "lse_checkpoint": "saved", "shape": list(dims), "storage": "f32",
+            "accum": "f32", "output": "f32", "row_lse": "f32[B,Hq,Sq]",
+            "scale": scale, "causal": causal, "workspace_bytes": 0,
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def package_attention_backward_lse(
+    module: GraphIRModule, *, pipeline_name: str
+) -> NVIDIANativePackage:
+    """Package the explicit f32 dO/Q/K/V,row_lse -> dQ/dK/dV consumer."""
+    contract = _attention_backward_lse_contract(module)
+    if contract is None:
+        raise ValueError("SM120 saved-LSE backward requires the canonical f32 paired ABI")
+    names, dims, scale, causal = contract
+    do_name, q_name, k_name, v_name, lse_name, dq_name, dk_name, dv_name = names
+    b, hq, hkv, sq, sk, d, dv = dims
+    key = hashlib.sha256(f"{scale:.17g}:{causal}:saved_lse:deterministic_direct".encode()).hexdigest()[:10]
+    entry = f"tessera_tile_attention_backward_lse_f32_deterministic_{key}"
+    tile_ir = emit_attention_backward_tile_ir(
+        entry=entry, storage="f32", scale=scale, causal=causal,
+        lse_checkpoint="saved",
+    )
+    lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = _compile_tile_ir(tile_ir, entry)
+    image = NativeImageArtifact(
+        target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(), binary_format="ptx",
+        payload=ptx.encode("ascii"), entry_points=(NativeEntryPoint(entry, SM120_ATTN_BWD_LSE_F32_ABI),),
+        compile_state=compile_state, device_libraries=device_libraries,
+        resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
+    )
+    buffers = (
+        BufferBinding(0, do_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(1, q_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(2, k_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(3, v_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(4, lse_name, "input", "fp32", 3, "row_major", 4),
+        BufferBinding(5, dq_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(6, dk_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(7, dv_name, "output", "fp32", 4, "row_major", 4),
+    )
+    guards = tuple(
+        ShapeGuard(name, axis, "eq", extent)
+        for name, shape in ((do_name, (b, hq, sq, dv)), (q_name, (b, hq, sq, d)),
+                            (k_name, (b, hkv, sk, d)), (v_name, (b, hkv, sk, dv)),
+                            (lse_name, (b, hq, sq)), (dq_name, (b, hq, sq, d)),
+                            (dk_name, (b, hkv, sk, d)), (dv_name, (b, hkv, sk, dv)))
+        for axis, extent in enumerate(shape)
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=entry, abi_id=SM120_ATTN_BWD_LSE_F32_ABI,
+        buffers=buffers,
+        scalars=tuple(ScalarArgument(8 + index, name, "int64") for index, name in enumerate(
+            ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))),
+        shape_guards=guards,
+        geometry=LaunchGeometry(policy="sm120_attention_backward_lse_deterministic_direct_128"),
+        workspace=WorkspaceRequirement(bytes=0, alignment=4),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
+        provenance={
+            "work_item": "NVIDIA-LSE-1", "checkpoint_role": "backward_load",
+            "route": "deterministic_direct", "deterministic": True,
+            "lse_checkpoint": "saved", "shape": list(dims), "storage": "f32",
+            "gradient_storage": "f32", "row_lse": "f32[B,Hq,Sq]",
+            "scale": scale, "causal": causal, "workspace_bytes": 0,
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
 def package_paged_kv_read(
     module: GraphIRModule, *, pipeline_name: str
 ) -> NVIDIANativePackage:
@@ -3186,6 +3441,8 @@ __all__ = [
     "SM120_ATTN_BWD_BIAS_F16_ABI",
     "SM120_ATTN_BWD_BF16_ABI",
     "SM120_ATTN_BWD_BIAS_BF16_ABI",
+    "SM120_ATTN_LSE_F32_ABI",
+    "SM120_ATTN_BWD_LSE_F32_ABI",
     "SM120_BF16_ABI",
     "SM120_EPILOGUE_ABIS",
     "SM120_F16_ABI",
@@ -3240,6 +3497,8 @@ __all__ = [
     "package_bf16_softmax",
     "package_attention",
     "package_attention_backward",
+    "package_attention_lse",
+    "package_attention_backward_lse",
     "package_f16_matmul",
     "package_f16_softmax",
     "package_matmul",
@@ -3270,6 +3529,8 @@ __all__ = [
     "supports_bf16_softmax",
     "supports_attention",
     "supports_attention_backward",
+    "supports_attention_lse",
+    "supports_attention_backward_lse",
     "supports_f16_matmul",
     "supports_f16_softmax",
     "supports_fp64_matmul",

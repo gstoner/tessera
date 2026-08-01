@@ -106,6 +106,21 @@ def test_ir_arena_matches_the_materializer_resource_record(
     ]
 
 
+def test_materializer_refuses_a_descriptor_layout_that_drifts_from_its_tile() -> None:
+    """The emitted MSL cannot silently replace compiler-owned staging bytes."""
+    with pytest.raises(AppleFragmentError, match="E_PIPE_LAYOUT_MISMATCH"):
+        materialize_apple_simdgroup_tile_msl(
+            TARGET, "fp16", 32, 32, 16,
+            staging_contract={
+                "stage_depth": 2,
+                "staged_a_bytes": 1,
+                "staged_b_bytes": 2048,
+                "edge_scratch_bytes": 256,
+                "total_threadgroup_bytes": 4352,
+            },
+        )
+
+
 def test_both_owners_reject_the_same_over_capacity_tile(
     compiler_toolchain: CompilerToolchain,
 ) -> None:

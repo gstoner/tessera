@@ -23,15 +23,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 EMITTER = (ROOT / "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple"
            / "Lowering/TileToApple.cpp")
+STREAMING_EMITTER = (ROOT / "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple"
+                     / "Lowering/StreamingAttentionToAppleGPU.cpp")
 RUNTIME = ROOT / "python/tessera/runtime.py"
 
-#: Scope: op_kinds the emitter writes as *string literals*. The linalg lane
+#: Scope: op_kinds the emitters write as *string literals*. The linalg lane
 #: computes its op_kind from a spec table (`sp->graphName` minus the `tessera.`
-#: prefix), so kinds like `cholesky` — and `flash_attn` from the streaming
-#: rewrite — do not appear here. Those are emitted executable and are *not* in
-#: the launcher allowlist, which is exactly the gap this file exists to watch;
-#: covering them needs the spec table parsed too, and is left as a follow-up
-#: rather than asserted loosely.
+#: prefix), so kinds like `cholesky` and rank-2 `flash_attn` do not appear here.
+#: Those remain follow-up parser work.  The rank-4 GQA consumer writes a literal
+#: executable ``flash_attn_gqa`` in the streaming emitter and must stay bound to
+#: the value-lane launcher.
 
 
 def _emitted_executable_gpu_op_kinds() -> set[str]:
@@ -44,6 +45,10 @@ def _emitted_executable_gpu_op_kinds() -> set[str]:
         args = [a.strip() for a in re.split(r",(?![^(]*\))", call)]
         if len(args) > 3 and args[3].startswith('"'):
             kinds.add(args[3].strip('"'))
+    streaming = STREAMING_EMITTER.read_text(encoding="utf-8")
+    if (re.search(r'state\.addAttribute\("op_kind",\s*builder\.getStringAttr\("flash_attn_gqa"\)\)', streaming)
+            and 'state.addAttribute("status", builder.getStringAttr("executable"))' in streaming):
+        kinds.add("flash_attn_gqa")
     return kinds
 
 

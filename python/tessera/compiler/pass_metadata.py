@@ -182,7 +182,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "!tile.pipeline_state) and re-forms it as one "
             "`tessera_apple.gpu.kernel_call` simdgroup_matrix dispatch, "
             "carrying the loop's own tile decision and ragged-zero-pad "
-            "guarantee. Recognition is not promotion: value-mode "
+            "guarantee plus the compiler-owned Metal staging-byte contract. "
+            "Recognition is not promotion: value-mode "
             "Accelerate/MPS remains the incumbent route."
         ),
         input_dialects=("tessera", "scf", "tensor", "func"),
@@ -192,6 +193,13 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "tessera_apple.canonical_k_loop",
             "tessera_apple.accumulate",
             "tessera_apple.ragged_zero_pad",
+            "tessera_apple.staging_layout_owner",
+            "tessera_apple.stage_depth",
+            "tessera_apple.staged_a_bytes",
+            "tessera_apple.staged_b_bytes",
+            "tessera_apple.edge_scratch_bytes",
+            "tessera_apple.threadgroup_arena_bytes",
+            "tessera_apple.threadgroup_capacity_bytes",
         ),
         diagnostic_codes=(
             "APPLE_CANONICAL_GEMM_UNRECOGNIZED",
@@ -222,13 +230,13 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-apple-streaming-attention",
         cpp_class="StreamingAttentionToAppleGPUPass",
         summary=(
-            "APPLE-ATTN-STREAM-1: recognizes the shared KV-block "
+            "APPLE-ATTN-STREAM-1/2: recognizes the shared KV-block "
             "streaming-attention recurrence and re-forms it as one Apple "
-            "flash-attention dispatch, carrying causal/window/logical-length "
-            "semantics read off tessera_attn.boundary_mask. Currently refuses "
-            "every program because the shared lowering always retains the "
-            "backward LSE checkpoint the Apple fused ABI cannot return; it is "
-            "therefore not wired into the production pipeline."
+            "flash-attention dispatch, carrying boundary semantics read off "
+            "tessera_attn.boundary_mask. For rank-4 distribution it replaces "
+            "the enclosing batch/query-head loops with the static f32 GQA ABI, "
+            "while retaining rank-2 and unsupported modifier/LSE cases as "
+            "fail-closed boundaries."
         ),
         # The tessera_attn.* ops are matched generically by name, so the
         # FA-4 Attn dialect need not be loaded for this pass to run.
@@ -237,6 +245,14 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         required_attrs=("tessera.streaming_attention",),
         preserved_attrs=(
             "tessera_apple.streaming_recurrence",
+            "tessera_apple.rank4_distribution",
+            "tessera_apple.batch",
+            "tessera_apple.q_heads",
+            "tessera_apple.kv_heads",
+            "tessera_apple.gqa_group_size",
+            "tessera_apple.sq",
+            "tessera_apple.sk",
+            "tessera_apple.scale",
             "tessera_apple.causal",
             "tessera_apple.logical_sk",
             "tessera_apple.kv_block",
@@ -248,6 +264,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "APPLE_STREAMING_ATTN_SHAPE_UNSUPPORTED",
             "APPLE_STREAMING_ATTN_HEAD_DIM_UNSUPPORTED",
             "APPLE_STREAMING_ATTN_DTYPE_UNSUPPORTED",
+            "APPLE_STREAMING_ATTN_RANK4_MODIFIER_UNSUPPORTED",
         ),
         pass_kind="lowering",
         sprint="APPLE-ATTN-STREAM-1",

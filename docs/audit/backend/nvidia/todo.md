@@ -29,11 +29,15 @@ Host-free focused validation covers canonical selection, typed package
 production, runtime projection, and the native artifact contract. Existing
 RTX 5070 Ti evidence remains the exact-device proof for the unchanged lowering,
 PTX, ABI, and schedules; this slice changes selection authority, not emitted
-code. The next spine slice is ROCm parity for canonical default selection,
-which landed under the same synchronization key; Apple and x86 retained-lane
-reconciliation was next. X86 has since separated canonical MLIR/native target
+code. The ROCm, Apple, and x86 selector reconciliations subsequently landed
+under the same synchronization key. Apple keeps its explicit Value Target-IR
+compatibility/probe route outside descriptor promotion. X86 has since separated canonical MLIR/native target
 `x86` from its `x86_c` source candidate. NVIDIA already has that separation;
 no PTX, ABI, schedule, or exact-device evidence changes.
+
+APPLE-RASTER-1 subsequently consumed the shared map in emitted MSL and retained
+row-major after mixed Apple7 timing. This is Apple-specific evidence, not an
+NVIDIA selector or measurement result.
 
 ## NVIDIA-CALIB-1: supply the sm_120 corpus to the hardware-free score calibration
 

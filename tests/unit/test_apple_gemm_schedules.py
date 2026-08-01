@@ -53,17 +53,26 @@ def test_seed_tile_feeds_steel_emitter():
     assert "simdgroup_matrix<float, 8, 8> acc[8 * 8]" in msl
 
 
-def test_schedule_axes_alignment_and_swizzle():
+def test_seed_tile_can_materialize_a_shared_grouped_m_raster():
+    tile = select_seed_tile(DeviceClass.MEDIUM, "bf16")
+    msl = emit_steel_gemm_msl(
+        "bf16", tile.bm, tile.bn, tile.bk, raster_order="grouped_m", raster_group=4,
+    )
+    assert validate_steel_gemm_structure(msl, dtype="bf16").ok
+    assert "raster=grouped_m, group=4" in msl
+
+
+def test_schedule_axes_alignment_and_shared_raster_default():
     tile = AppleGemmTile(64, 64, 16, 2, 2)
-    # M=128,N=128,K=64 all divisible -> aligned; tm=2 (<=3) -> swizzle_log 0.
+    # M=128,N=128,K=64 all divisible; the selected default is the identity.
     ax = schedule_axes_for(128, 128, 64, tile)
     assert ax.align_m and ax.align_n and ax.align_k
-    assert ax.swizzle_log == 0
+    assert ax.raster_order == "row_major" and ax.raster_group == 1
     assert not ax.do_axpby
-    # ragged M, big M -> unaligned + swizzle_log 1.
-    ax2 = schedule_axes_for(1000, 130, 70, tile)   # tm=ceil(1000/64)=16 >3
+    # A non-default is explicit, including for ragged shapes.
+    ax2 = schedule_axes_for(1000, 130, 70, tile, raster_order="grouped_m", raster_group=2)
     assert not ax2.align_m and not ax2.align_n and not ax2.align_k
-    assert ax2.swizzle_log == 1
+    assert ax2.raster_order == "grouped_m" and ax2.raster_group == 2
 
 
 def test_schedule_axes_axpby_epilogue():

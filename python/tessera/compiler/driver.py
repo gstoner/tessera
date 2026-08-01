@@ -327,6 +327,17 @@ def compile_graph_module(
     enable_tool_validation: bool = True,
 ) -> CompileArtifactBundle:
     target_kind = normalize_target_kind(target)
+    resolved_options = dict(options or {})
+    if target_kind in ("apple_cpu", "apple_gpu"):
+        apple_target_ir_mode = _resolve_apple_target_ir_mode(resolved_options)
+        if apple_target_ir_mode == "value" and resolved_options.get("package_native") is True:
+            raise ValueError(
+                "apple_target_ir_mode='value' conflicts with package_native=True; "
+                "use the canonical descriptor route or the explicit value route"
+            )
+    else:
+        apple_target_ir_mode = "artifact"
+    options = resolved_options
     # Decision #19 — auto-emit fusion descriptors. Before the Graph IR is
     # rendered, stamp `tessera.fusion.intent` on each recognized fusion chain's
     # terminal op so the Apple Target IR fusion passes *consume* the compiler's
@@ -415,7 +426,7 @@ def compile_graph_module(
     # artifact (so to_runtime_artifact routes to apple_value_target_ir). Default
     # (artifact) behavior is untouched — no opt-in, no change.
     value_mode_error: str | None = None
-    if str((options or {}).get("apple_target_ir_mode", "")) == "value" and target_kind in ("apple_cpu", "apple_gpu"):
+    if apple_target_ir_mode == "value":
         # Feed the *canonical* (parseable custom-assembly) Graph IR straight to
         # the value pipeline — no text rewrite. `graph_text` above is the paren
         # form kept for hashing / display; the canonical render is parser-ready.
@@ -574,7 +585,8 @@ def compile_graph_module(
     elif target_kind == "apple_cpu" and bool((options or {}).get("package_native", False)):
         from . import apple_cpu_native
 
-        if not apple_cpu_native.supports_native_package(module):
+        package_kind = apple_cpu_native.native_package_kind(module)
+        if package_kind is None:
             raise ValueError("Apple CPU native packaging requires one static supported descriptor contract")
         resolution = target_pipeline_lookup(target_kind)
         producer = (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
@@ -598,14 +610,16 @@ def compile_graph_module(
                           "compile_state": apple_cpu_package.image.compile_state,
                           "entry_symbol": apple_cpu_package.descriptor.entry_symbol,
                           "dtype": apple_cpu_package.descriptor.buffers[0].dtype,
-                          "op_family": apple_cpu_package.descriptor.provenance["op_kind"],
+                          "op_family": package_kind,
+                          "descriptor_op_family": apple_cpu_package.descriptor.provenance["op_kind"],
                           "work_item": apple_cpu_package.descriptor.provenance["work_item"]},
             )
         )
     elif target_kind == "apple_gpu" and bool((options or {}).get("package_native", False)):
         from . import apple_native
 
-        if not apple_native.supports_native_package(module):
+        package_kind = apple_native.native_package_kind(module)
+        if package_kind is None:
             raise ValueError("Apple GPU native packaging requires one static supported descriptor contract")
         resolution = target_pipeline_lookup(target_kind)
         producer = (
@@ -637,7 +651,8 @@ def compile_graph_module(
                     "compile_state": apple_package.image.compile_state,
                     "entry_symbol": apple_package.descriptor.entry_symbol,
                     "dtype": apple_package.descriptor.buffers[0].dtype,
-                    "op_family": apple_package.descriptor.provenance["op_kind"],
+                    "op_family": package_kind,
+                    "descriptor_op_family": apple_package.descriptor.provenance["op_kind"],
                     "work_item": apple_package.descriptor.provenance["work_item"],
                 },
             )
@@ -666,6 +681,25 @@ def compile_graph_module(
     return bundle
 
 
+def _resolve_apple_target_ir_mode(options: Mapping[str, Any]) -> str:
+    """Validate and normalize Apple's deliberately explicit Target-IR route.
+
+    ``artifact`` is the descriptor-capable default; ``value`` is retained only
+    for the separately named compatibility/probe executor.  Keeping this
+    choice closed prevents an arbitrary string or a conflicting native-package
+    request from silently selecting a third route.
+    """
+    raw = options.get("apple_target_ir_mode", "artifact")
+    if raw is None or raw == "":
+        return "artifact"
+    if isinstance(raw, str) and raw in {"artifact", "value"}:
+        return raw
+    raise ValueError(
+        "apple_target_ir_mode must be 'artifact' or 'value', "
+        f"got {raw!r}"
+    )
+
+
 def canonical_compile_options(
     module: GraphIRModule,
     *,
@@ -683,13 +717,23 @@ def canonical_compile_options(
     """
 
     resolved = dict(options or {})
-    if normalize_target_kind(target) == "nvidia_sm120" and "package_native" not in resolved:
+    target_kind = normalize_target_kind(target)
+    if target_kind in ("apple_cpu", "apple_gpu"):
+        apple_target_ir_mode = _resolve_apple_target_ir_mode(resolved)
+        if apple_target_ir_mode == "value" and resolved.get("package_native") is True:
+            raise ValueError(
+                "apple_target_ir_mode='value' conflicts with package_native=True; "
+                "use the canonical descriptor route or the explicit value route"
+            )
+    else:
+        apple_target_ir_mode = "artifact"
+    if target_kind == "nvidia_sm120" and "package_native" not in resolved:
         from .nvidia_native import supports_native_package, tools_available
 
         resolved["package_native"] = (
             supports_native_package(module) and tools_available()
         )
-    if normalize_target_kind(target) == "rocm_gfx1151" and "package_native" not in resolved:
+    if target_kind == "rocm_gfx1151" and "package_native" not in resolved:
         from .rocm_native import (
             native_packaging_available,
             supports_native_package,
@@ -698,26 +742,26 @@ def canonical_compile_options(
         resolved["package_native"] = (
             supports_native_package(module) and native_packaging_available()
         )
-    if normalize_target_kind(target) == "x86" and "package_native" not in resolved:
+    if target_kind == "x86" and "package_native" not in resolved:
         from .x86_native import supports_native_package, tools_available
 
         resolved["package_native"] = (
             supports_native_package(module) and tools_available()
         )
-    if normalize_target_kind(target) == "apple_gpu" and "package_native" not in resolved:
-        from .apple_native import supports_native_package, tools_available
+    if target_kind == "apple_gpu" and "package_native" not in resolved:
+        from .apple_native import native_package_kind, tools_available
 
         resolved["package_native"] = (
-            str(resolved.get("apple_target_ir_mode", "")) != "value"
-            and supports_native_package(module)
+            apple_target_ir_mode != "value"
+            and native_package_kind(module) is not None
             and tools_available()
         )
-    if normalize_target_kind(target) == "apple_cpu" and "package_native" not in resolved:
-        from .apple_cpu_native import supports_native_package, tools_available
+    if target_kind == "apple_cpu" and "package_native" not in resolved:
+        from .apple_cpu_native import native_package_kind, tools_available
 
         resolved["package_native"] = (
-            str(resolved.get("apple_target_ir_mode", "")) != "value"
-            and supports_native_package(module)
+            apple_target_ir_mode != "value"
+            and native_package_kind(module) is not None
             and tools_available()
         )
     return resolved
@@ -876,6 +920,7 @@ _APPLE_VALUE_GPU_SYMBOL_PROBES: Mapping[str, str] = {
     "tessera_apple_gpu_tile_simdgroup_gemm_f16": "_apple_gpu_tile_simdgroup_gemm_available",
     "tessera_apple_gpu_tile_simdgroup_gemm_bf16": "_apple_gpu_tile_simdgroup_gemm_available",
     "tessera_apple_gpu_native_sparse_attn_f32": "_apple_gpu_native_sparse_attn_f32",
+    "tessera_apple_gpu_flash_attn_gqa_f32": "_apple_gpu_flash_attn_gqa_f32",
     "tessera_apple_gpu_ppo_policy_loss_f32": "_apple_gpu_ppo_policy_loss_available",
     "tessera_apple_gpu_ppo_policy_loss_ex_f32": "_apple_gpu_ppo_policy_loss_ex_available",
     "tessera_apple_gpu_ebm_energy_quadratic_value_f32": "_apple_gpu_ebm_energy_quadratic_value_available",

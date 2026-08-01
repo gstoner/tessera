@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-30
+last_updated: 2026-07-31
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -53,6 +53,13 @@ remains planned/access-gated.** Canonical target `x86` now has one meaning:
 Graph/Tile IR lowered by `TileToX86Pass`, packaged with the C++ backend shared
 image and typed launch descriptor. Vendor-family selection moved out of the
 shared driver into `x86_native.native_package_kind()` / `package_native()`.
+Apple CPU/GPU now use the same backend-owned admission shape while retaining an
+explicit Value Target-IR compatibility/probe opt-out; this does not transfer any
+AVX-512 ABI, schedule, or exact-device evidence.
+
+APPLE-RASTER-1 subsequently consumed the shared mapping in emitted MSL and
+retained row-major after mixed Apple7 timing. X86 remains not applicable because
+CPU work partitioning is not GPU workgroup rasterization.
 
 The former `emit/x86_llvm.py` implementation never emitted LLVM IR. It is now
 `emit/x86_c.py`, registered under source target `x86_c`, and remains a measured

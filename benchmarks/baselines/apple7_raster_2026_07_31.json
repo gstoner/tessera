@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "target": "Apple M1 Max / apple7",
+  "timing_domain": "Metal GPU timestamp",
+  "repetitions_per_round": 15,
+  "independent_warm_runs": 2,
+  "paired_variable": "raster_order/raster_group only; fp16 storage, fp32 accumulation, 32x32x16 tile, inputs, 32-lane threadgroup, and 2-D grid held fixed",
+  "selection": {
+    "selected_default": "row_major",
+    "reason": "grouped_m group 2 is native and correct but is not neutral-or-better across square, wide, tall, and ragged buckets; Metal counter sampling is unavailable on this host"
+  },
+  "rows": [
+    {"shape": "256x256x256", "baseline_row_major_ns": [28083, 18750], "candidate_grouped_m_2_ns": [14208, 12125], "native_gpu": true, "numerically_validated": true, "counter_sampling_supported": false},
+    {"shape": "512x128x512", "baseline_row_major_ns": [12000, 11791], "candidate_grouped_m_2_ns": [12124, 13541], "native_gpu": true, "numerically_validated": true, "counter_sampling_supported": false},
+    {"shape": "128x512x128", "baseline_row_major_ns": [15541, 12249], "candidate_grouped_m_2_ns": [12625, 13124], "native_gpu": true, "numerically_validated": true, "counter_sampling_supported": false},
+    {"shape": "257x193x129", "baseline_row_major_ns": [12750, 11458], "candidate_grouped_m_2_ns": [12666, 14333], "native_gpu": true, "numerically_validated": true, "counter_sampling_supported": false}
+  ]
+}

@@ -48,10 +48,12 @@ from .apple_fragment import (
     select_apple_simdgroup_fragment,
 )
 from .apple_target import AppleGPUTargetProfile
+from .tile_rasterization import RasterOrder, emit_c
 
 # Apple GPU SIMD-scoped matrix multiply uses 8×8 fragments (the simdgroup_matrix
 # fragment size). GEMM tile dims must be whole multiples of the fragment.
 SIMDGROUP_FRAG = 8
+E_PIPE_LAYOUT_MISMATCH = "E_PIPE_LAYOUT_MISMATCH"
 
 # Input element dtype → MSL scalar type. bfloat needs MSL 3.1 (memory:
 # apple7-m1max-gpu-feature-set); half/float are long-standing.
@@ -119,6 +121,8 @@ class AppleTileMslArtifact:
     fragment: AppleSimdgroupFragment
     shape: MslGemmShape
     resources: AppleTileResourceRecord
+    raster_order: str
+    raster_group: int
     entry: str
     msl: str
 
@@ -258,6 +262,11 @@ def emit_steel_gemm_msl(
     entry: str | None = None,
     partial_edge: bool = False,
     double_buffer: bool = False,
+    raster_order: RasterOrder | str = RasterOrder.ROW_MAJOR,
+    raster_group: int = 1,
+    staged_a_elements: int | None = None,
+    staged_b_elements: int | None = None,
+    edge_scratch_elements: int | None = None,
 ) -> str:
     """Emit the **steel-structured** MSL ``simdgroup_matrix`` GEMM — the production
     shape MLX uses (``kernels/steel/gemm``), a step up from the single-fragment
@@ -298,12 +307,41 @@ def emit_steel_gemm_msl(
             f"multiple of {SIMDGROUP_FRAG}")
     T, ACC, f = _scalar(dtype), _scalar(accum), SIMDGROUP_FRAG
     mf, nf = bm // f, bn // f
+    a_elements = staged_a_elements if staged_a_elements is not None else bm * bk
+    b_elements = staged_b_elements if staged_b_elements is not None else bk * bn
+    scratch_elements = (edge_scratch_elements if edge_scratch_elements is not None
+                        else f * f)
+    if a_elements != bm * bk or b_elements != bk * bn:
+        raise ValueError("Apple staging contract does not match the requested GEMM tile")
+    if partial_edge and scratch_elements != f * f:
+        raise ValueError("Apple edge-scratch contract does not match the simdgroup fragment")
     name = entry or f"tessera_steel_gemm_{dtype}"
+    order = RasterOrder(raster_order)
+    # Validate through the shared emitter even for row-major.  The default keeps
+    # its exact established coordinate expressions below; non-default orders use
+    # this same emission as CUDA/HIP rather than maintaining an Apple-only map.
+    raster_msl = emit_c(
+        order, group=raster_group, bid="tgid.y * grid_n + tgid.x",
+        grid_m="grid_m", grid_n="grid_n", out_m="_tsr_tile_m",
+        out_n="_tsr_tile_n", indent="  ",
+    )
+    if order is RasterOrder.ROW_MAJOR:
+        tile_origins = """  const uint m0 = tgid.y * BM;
+  const uint n0 = tgid.x * BN;"""
+        raster_description = "row-major identity"
+    else:
+        tile_origins = f"""  // Shared block-raster permutation.  Physical threadgroup ids retain
+  // the normal 2-D launch; only their logical output-tile assignment changes.
+  const uint grid_m = (M + BM - 1u) / BM;
+  const uint grid_n = (N + BN - 1u) / BN;
+{raster_msl}  const uint m0 = (uint)_tsr_tile_m * BM;
+  const uint n0 = (uint)_tsr_tile_n * BN;"""
+        raster_description = f"{order.value}, group={raster_group}"
 
     # ── staging (single- vs double-buffered) ──
     if double_buffer:
-        buffers = (f"  threadgroup {T} As[2][{bm} * {bk}];   // double-buffered staged A (ping-pong)\n"
-                   f"  threadgroup {T} Bs[2][{bk} * {bn}];   // double-buffered staged B (ping-pong)")
+        buffers = (f"  threadgroup {T} As[2][{a_elements}];   // descriptor-owned staged A (ping-pong)\n"
+                   f"  threadgroup {T} Bs[2][{b_elements}];   // descriptor-owned staged B (ping-pong)")
         # Barrier-correctness invariant (one barrier per K-step suffices): with the
         # prefetch at the top of the iteration and the single barrier at the bottom,
         # every slot's READ (compute of As[buf]) is separated from its producing
@@ -332,8 +370,8 @@ def emit_steel_gemm_msl(
     buf = nbuf;
   }}"""
     else:
-        buffers = (f"  threadgroup {T} As[{bm} * {bk}];   // staged A tile (zero-padded at edges)\n"
-                   f"  threadgroup {T} Bs[{bk} * {bn}];   // staged B tile")
+        buffers = (f"  threadgroup {T} As[{a_elements}];   // descriptor-owned staged A tile\n"
+                   f"  threadgroup {T} Bs[{b_elements}];   // descriptor-owned staged B tile")
         kloop = f"""  for (uint k0 = 0; k0 < K; k0 += BK) {{
     // Cooperative, bounds-guarded staging load (ragged edges -> zero pad).
 {_steel_stage_block(T, "As", "Bs", "k0")}
@@ -348,7 +386,7 @@ def emit_steel_gemm_msl(
     if partial_edge:
         store = f"""  // B1: edge-aware store. The full/edge test is threadgroup-uniform (keyed on
   // tgid + compile-time loop counters), so the scratch barriers are hit uniformly.
-  threadgroup {ACC} Cs[{f} * {f}];
+  threadgroup {ACC} Cs[{scratch_elements}];
   for (uint im = 0; im < {mf}u; ++im) {{
     for (uint in = 0; in < {nf}u; ++in) {{
       uint cr = m0 + im * F, cc = n0 + in * F;
@@ -382,7 +420,7 @@ def emit_steel_gemm_msl(
                    + (" +double-buffer" if double_buffer else ""))
     return f"""//
 // Tessera rung-2.5 emission — Apple simdgroup_matrix {dtype} GEMM, STEEL-structured
-// (BM={bm} BN={bn} BK={bk}; {mf}x{nf} output fragments per threadgroup{refinements}). Multi-
+// (BM={bm} BN={bn} BK={bk}; {mf}x{nf} output fragments per threadgroup; raster={raster_description}{refinements}). Multi-
 // fragment tiling + threadgroup staging + edge-masked load — the production MLX-steel
 // shape. metal-compile = rung 3 (absent here; the B3 Metal-CI lane verifies). API
 // grounded from MLX steel/gemm/mma.h + MSL spec ch.6; not compile-verified here.
@@ -405,8 +443,7 @@ kernel void {name}(
   const uint BM = {bm}u, BN = {bn}u, BK = {bk}u, F = {f}u;
   const uint2 tgid = tgid3.xy;
   const uint tid = tid3.x, tcount = tcount3.x;
-  const uint m0 = tgid.y * BM;
-  const uint n0 = tgid.x * BN;
+{tile_origins}
 
 {buffers}
 
@@ -431,7 +468,10 @@ def materialize_apple_simdgroup_tile_msl(
     *,
     partial_edge: bool = True,
     double_buffer: bool = True,
+    raster_order: RasterOrder | str = RasterOrder.ROW_MAJOR,
+    raster_group: int = 1,
     entry: str | None = None,
+    staging_contract: dict[str, int] | None = None,
 ) -> AppleTileMslArtifact:
     """Materialize an Apple-owned Tile MMA artifact for ``target``.
 
@@ -443,6 +483,10 @@ def materialize_apple_simdgroup_tile_msl(
     execution result.
     """
     fragment = select_apple_simdgroup_fragment(target, storage_dtype)
+    order = RasterOrder(raster_order)
+    # This validates the group and keeps the MSL source's non-default mapping
+    # exactly tied to the shared rasterization contract.
+    emit_c(order, group=raster_group)
     shape = MslGemmShape(bm, bn, bk)
     if not shape.is_valid():
         raise ValueError(
@@ -450,10 +494,37 @@ def materialize_apple_simdgroup_tile_msl(
             f"the selected {fragment.m}x{fragment.n}x{fragment.k} fragment")
     storage_bytes = 2  # The selected simdgroup path currently admits fp16/bf16 only.
     buffer_count = 2 if double_buffer else 1
-    staged_a_bytes = buffer_count * bm * bk * storage_bytes
-    staged_b_bytes = buffer_count * bk * bn * storage_bytes
-    edge_scratch_bytes = fragment.m * fragment.n * 4 if partial_edge else 0
-    total_threadgroup_bytes = staged_a_bytes + staged_b_bytes + edge_scratch_bytes
+    expected_a_bytes = buffer_count * bm * bk * storage_bytes
+    expected_b_bytes = buffer_count * bk * bn * storage_bytes
+    expected_scratch_bytes = fragment.m * fragment.n * 4 if partial_edge else 0
+    expected_total_bytes = expected_a_bytes + expected_b_bytes + expected_scratch_bytes
+    if staging_contract is None:
+        # Compatibility entrypoint for source-only materialization. Compiler
+        # descriptors always pass the explicit contract below.
+        staging_contract = {
+            "stage_depth": buffer_count,
+            "staged_a_bytes": expected_a_bytes,
+            "staged_b_bytes": expected_b_bytes,
+            "edge_scratch_bytes": expected_scratch_bytes,
+            "total_threadgroup_bytes": expected_total_bytes,
+        }
+    required = {
+        "stage_depth": buffer_count,
+        "staged_a_bytes": expected_a_bytes,
+        "staged_b_bytes": expected_b_bytes,
+        "edge_scratch_bytes": expected_scratch_bytes,
+        "total_threadgroup_bytes": expected_total_bytes,
+    }
+    for key, expected in required.items():
+        actual = staging_contract.get(key)
+        if actual is None or int(actual) != expected:
+            raise AppleFragmentError(
+                f"{E_PIPE_LAYOUT_MISMATCH}: descriptor {key}={actual!r} "
+                f"does not match the {expected}-byte Apple staging contract")
+    staged_a_bytes = int(staging_contract["staged_a_bytes"])
+    staged_b_bytes = int(staging_contract["staged_b_bytes"])
+    edge_scratch_bytes = int(staging_contract["edge_scratch_bytes"])
+    total_threadgroup_bytes = int(staging_contract["total_threadgroup_bytes"])
     capacity = target.threadgroup_memory_capacity_bytes
     if total_threadgroup_bytes > capacity:
         raise AppleFragmentError(
@@ -475,6 +546,8 @@ def materialize_apple_simdgroup_tile_msl(
         fragment=fragment,
         shape=shape,
         resources=resources,
+        raster_order=order.value,
+        raster_group=raster_group,
         entry=entry or f"tessera_steel_gemm_{fragment.storage_dtype}",
         msl=emit_steel_gemm_msl(
             fragment.storage_dtype,
@@ -485,6 +558,11 @@ def materialize_apple_simdgroup_tile_msl(
             entry=entry,
             partial_edge=partial_edge,
             double_buffer=double_buffer,
+            raster_order=order,
+            raster_group=raster_group,
+            staged_a_elements=staged_a_bytes // (buffer_count * storage_bytes),
+            staged_b_elements=staged_b_bytes // (buffer_count * storage_bytes),
+            edge_scratch_elements=edge_scratch_bytes // 4 if partial_edge else None,
         ),
     )
 

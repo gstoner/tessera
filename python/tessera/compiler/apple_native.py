@@ -402,39 +402,53 @@ def _svd_contract(module: GraphIRModule):
         return None
     return name, tuple(value.removeprefix("%") for value in fn.return_values), shape
 
-def supports_native_package(module: GraphIRModule) -> bool:
+def native_package_kind(module: GraphIRModule) -> str | None:
+    """Return the canonical Apple GPU descriptor family for ``module``.
+
+    Keep this ordered classification beside the package producers.  The
+    canonical driver can then ask one backend-owned question instead of
+    maintaining a second Apple value/descriptor family table.
+    """
     if _contract(module) is not None:
-        return True
+        return "batched_gemm"
     if _softmax_contract(module) is not None:
-        return True
+        return "softmax"
     if _dynamic_softmax_contract(module) is not None:
-        return True
+        return "dynamic_softmax"
     if _transpose_contract(module) is not None:
-        return True
+        return "transpose"
     if _gelu_contract(module) is not None:
-        return True
+        return "gelu"
     if _dynamic_gelu_contract(module) is not None:
-        return True
+        return "dynamic_gelu"
     if _dynamic_popcount_contract(module) is not None:
-        return True
+        return "dynamic_popcount"
     if _dynamic_count_nonzero_contract(module) is not None:
-        return True
+        return "dynamic_count_nonzero"
     if _dynamic_topk_contract(module) is not None:
-        return True
+        return "dynamic_topk"
     if _svd_contract(module) is not None:
-        return True
+        return "svd"
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
-        return False
+        return None
     fn, op = module.functions[0], module.functions[0].body[0]
     if op.op_name in {
         "tessera.batched_gemm", "tessera.matmul", "tessera.gemm", "tessera.softmax",
         "tessera.transpose", "tessera.gelu", "tessera.popcount",
         "tessera.count_nonzero", "tessera.top_k", "tessera.svd",
     }:
-        return False
+        return None
     # Multi-result families are descriptor-supported only through a dedicated
     # ordered-binding contract above; the generic value path has one output.
-    return len(fn.result_types) == 1 and value_descriptor_state(op.op_name) == "descriptor_ready"
+    if len(fn.result_types) != 1 or value_descriptor_state(op.op_name) != "descriptor_ready":
+        return None
+    return "value_" + op.op_name.removeprefix("tessera.").replace(".", "_")
+
+
+def supports_native_package(module: GraphIRModule) -> bool:
+    """Whether the canonical Apple GPU descriptor contract accepts ``module``."""
+
+    return native_package_kind(module) is not None
 
 
 _VALUE_SYMBOLS = {
@@ -451,26 +465,29 @@ _VALUE_SYMBOLS = {
 
 
 def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    if _contract(module) is not None:
+    kind = native_package_kind(module)
+    if kind == "batched_gemm":
         return package_batched_gemm(module, pipeline_name=pipeline_name)
-    if _softmax_contract(module) is not None:
+    if kind == "softmax":
         return package_softmax(module, pipeline_name=pipeline_name)
-    if _dynamic_softmax_contract(module) is not None:
+    if kind == "dynamic_softmax":
         return package_dynamic_softmax(module, pipeline_name=pipeline_name)
-    if _transpose_contract(module) is not None:
+    if kind == "transpose":
         return package_transpose(module, pipeline_name=pipeline_name)
-    if _gelu_contract(module) is not None:
+    if kind == "gelu":
         return package_gelu(module, pipeline_name=pipeline_name)
-    if _dynamic_gelu_contract(module) is not None:
+    if kind == "dynamic_gelu":
         return package_dynamic_gelu(module, pipeline_name=pipeline_name)
-    if _dynamic_popcount_contract(module) is not None:
+    if kind == "dynamic_popcount":
         return package_dynamic_popcount(module, pipeline_name=pipeline_name)
-    if _dynamic_count_nonzero_contract(module) is not None:
+    if kind == "dynamic_count_nonzero":
         return package_dynamic_count_nonzero(module, pipeline_name=pipeline_name)
-    if _dynamic_topk_contract(module) is not None:
+    if kind == "dynamic_topk":
         return package_dynamic_topk(module, pipeline_name=pipeline_name)
-    if _svd_contract(module) is not None:
+    if kind == "svd":
         return package_svd(module, pipeline_name=pipeline_name)
+    if kind is None:
+        raise ValueError("Apple GPU native packaging requires one supported static descriptor contract")
     fn, op = module.functions[0], module.functions[0].body[0]
     entry = _VALUE_SYMBOLS.get(op.op_name)
     if entry is None or len(fn.result_types) != 1:

@@ -326,7 +326,7 @@ def emit_steel_gemm_msl(
         out_n="_tsr_tile_n", indent="  ",
     )
     if order is RasterOrder.ROW_MAJOR:
-        tile_origins = f"""  const uint m0 = tgid.y * BM;
+        tile_origins = """  const uint m0 = tgid.y * BM;
   const uint n0 = tgid.x * BN;"""
         raster_description = "row-major identity"
     else:

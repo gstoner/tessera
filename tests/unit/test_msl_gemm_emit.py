@@ -130,8 +130,8 @@ def test_steel_has_production_shape_features():
     # 4x4 output fragments per threadgroup.
     assert "simdgroup_matrix<float, 8, 8> acc[4 * 4]" in msl
     # threadgroup staging + barrier.
-    assert "threadgroup bfloat As[32 * 16]" in msl
-    assert "threadgroup bfloat Bs[16 * 32]" in msl
+    assert "threadgroup bfloat As[512]" in msl
+    assert "threadgroup bfloat Bs[512]" in msl
     assert "threadgroup_barrier(mem_flags::mem_threadgroup)" in msl
     # ragged-edge masking on the staged load (zero-pad out-of-bounds).
     assert "(m0 + r < M && k0 + c < K) ? A[(m0 + r) * K + (k0 + c)] : bfloat(0)" in msl
@@ -220,7 +220,7 @@ def test_steel_partial_edge_store():
     msl = emit_steel_gemm_msl("f16", 32, 32, 16, partial_edge=True)
     v = validate_steel_gemm_structure(msl, dtype="f16", partial_edge=True)
     assert v.ok, v.reasons
-    assert "threadgroup float Cs[8 * 8]" in msl          # 8x8 scratch
+    assert "threadgroup float Cs[64]" in msl              # 8x8 scratch
     assert "uint rows = min(F, M - cr), cols = min(F, N - cc)" in msl  # valid-element bounds
     assert "C[(cr + rr) * N + (cc + cl)] = Cs[rr * F + cl]" in msl     # cooperative copy
     # full-fragment fast path is still present.
@@ -231,7 +231,7 @@ def test_steel_double_buffer_staging():
     msl = emit_steel_gemm_msl("f16", 32, 32, 16, double_buffer=True)
     v = validate_steel_gemm_structure(msl, dtype="f16", double_buffer=True)
     assert v.ok, v.reasons
-    assert "threadgroup half As[2][32 * 16]" in msl      # ping-pong slots
+    assert "threadgroup half As[2][512]" in msl           # ping-pong slots
     assert "uint buf = 0u" in msl                        # prologue index
     assert "uint nbuf = buf ^ 1u" in msl                 # alternate slot
     # double-buffer drops to ONE barrier per K-step (prologue + 1/iter) vs two.
@@ -255,7 +255,7 @@ def test_steel_refinements_compose():
 
 def test_steel_validator_catches_missing_partial_scratch():
     msl = emit_steel_gemm_msl("f16", 32, 32, 16, partial_edge=True).replace(
-        "threadgroup float Cs[8 * 8];", "/* no scratch */")
+        "threadgroup float Cs[64];", "/* no scratch */")
     v = validate_steel_gemm_structure(msl, dtype="f16", partial_edge=True)
     assert not v.ok
     assert any("partial-edge" in r for r in v.reasons)

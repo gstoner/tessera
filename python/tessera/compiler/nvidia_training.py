@@ -102,9 +102,14 @@ SM120_LION_BWD_ABIS = {
     for storage in _STORAGE_DTYPES
 }
 SM120_DELTANET_BWD_ABIS = {
-    "f32": _training_abi(
+    "f32_v1": _training_abi(
         "deltanet_backward", "q_k_v_do_dq_dk_dv_b_h_s_dqk_dv", "f32"
-    )
+    ),
+    "f32": _training_abi(
+        "deltanet_backward",
+        "q_k_v_gate_beta_decay_do_dq_dk_dv_dgate_dbeta_ddecay_dims_flags",
+        "f32",
+    ),
 }
 SM120_FUSED_LOSS_SGD_ABIS = {
     storage: _training_abi(
@@ -748,53 +753,151 @@ extern "C" __global__ void {entry}(
 
 
 def _deltanet_backward_source(entry: str) -> str:
-    """Plain causal DeltaNet VJP: one deterministic block per (B,H).
+    """Bounded, correctness-first CUDA VJP for affine DeltaNet variants.
 
-    This deliberately narrow first ABI has no gate/beta/decay/erase/modified
-    flags.  Its reverse scan is CUDA-owned; later nonlinear variants need their
-    own checked analytic schedule rather than silently sharing this package.
+    The physical v2 ABI is fixed for all DeltaNet variants.  This entry owns
+    the affine reverse stage (optional gate, beta, and decay) and the bounded
+    serial-fill derivative for erase and modified updates. One CUDA thread
+    owns each B/H recurrence so the state is private and no cross-block
+    reduction changes the ABI.
     """
     return _header() + f"""
 extern \"C\" __global__ void {entry}(
-    const float* q, const float* k, const float* v, const float* dy,
-    float* dq, float* dk, float* dv,
-    int64_t B, int64_t H, int64_t S, int64_t Dqk, int64_t Dv) {{
+    const float* q, const float* k, const float* v, const float* gate,
+    const float* beta, const float* decay, const float* dy,
+    float* dq, float* dk, float* dv, float* dgate, float* dbeta,
+    float* ddecay, int64_t B, int64_t H, int64_t S, int64_t Dqk,
+    int64_t Dv, int64_t HasGate, int64_t HasBeta, int64_t HasDecay,
+    int64_t Erase, int64_t Modified) {{
   if (threadIdx.x != 0) return;
   const int64_t bh = blockIdx.x, BH = B * H;
-  if (bh >= BH) return;
-  // dS_t = sum over u >= t of outer(q_u, dy_u). Recompute the forward state
-  // for dQ_t; this is correctness-first and intentionally selector-neutral.
+  // This bounded envelope lets one thread carry the analytic reverse state.
+  if (bh >= BH || Dqk > 8 || Dv > 8) return;
+  float dstate[16][16] = {{0.0f}};
   for (int64_t t = S; t-- > 0;) {{
-    for (int64_t d = 0; d < Dqk; ++d) {{
-      float dk_value = 0.0f;
+    float old[16][16] = {{0.0f}};
+    // Replay the causal recurrence only through t-1 to obtain S_t.
+    for (int64_t u = 0; u < t; ++u) {{
+      const float a = HasDecay ? decay[bh*S+u] : 1.0f;
+      const float b = HasBeta ? beta[bh*S+u] : 1.0f;
+      float target[16], update[16][16], delta[16][16];
       for (int64_t e = 0; e < Dv; ++e) {{
-        float ds = 0.0f;
-        for (int64_t u = t; u < S; ++u)
-          ds += q[(bh*S+u)*Dqk+d] * dy[(bh*S+u)*Dv+e];
-        dk_value += ds * v[(bh*S+t)*Dv+e];
+        target[e] = v[(bh*S+u)*Dv+e];
+        if (Erase) {{
+          float vhat = 0.0f;
+          for (int64_t d = 0; d < Dqk; ++d)
+            vhat += k[(bh*S+u)*Dqk+d] * old[d][e];
+          target[e] -= a * vhat;
+        }}
       }}
+      float norm2 = 0.0f;
+      for (int64_t d = 0; d < Dqk; ++d)
+        for (int64_t e = 0; e < Dv; ++e) {{
+          update[d][e] = k[(bh*S+u)*Dqk+d] * target[e];
+          norm2 += update[d][e] * update[d][e];
+        }}
+      const float denom = Modified ? 1.0f + sqrtf(norm2) : 1.0f;
+      for (int64_t d = 0; d < Dqk; ++d)
+        for (int64_t e = 0; e < Dv; ++e)
+          old[d][e] = a * old[d][e] + b * update[d][e] / denom;
+    }}
+    const float a = HasDecay ? decay[bh*S+t] : 1.0f;
+    const float b = HasBeta ? beta[bh*S+t] : 1.0f;
+    float target[16], vhat[16], update[16][16], delta[16][16];
+    for (int64_t e = 0; e < Dv; ++e) {{
+      target[e] = v[(bh*S+t)*Dv+e];
+      vhat[e] = 0.0f;
+      if (Erase) {{
+        for (int64_t d = 0; d < Dqk; ++d)
+          vhat[e] += k[(bh*S+t)*Dqk+d] * old[d][e];
+        target[e] -= a * vhat[e];
+      }}
+    }}
+    float norm2 = 0.0f;
+    for (int64_t d = 0; d < Dqk; ++d)
+      for (int64_t e = 0; e < Dv; ++e) {{
+        update[d][e] = k[(bh*S+t)*Dqk+d] * target[e];
+        norm2 += update[d][e] * update[d][e];
+      }}
+    const float norm = Modified ? sqrtf(norm2) : 0.0f;
+    const float denom = Modified ? 1.0f + norm : 1.0f;
+    float state[16][16];
+    for (int64_t d = 0; d < Dqk; ++d)
+      for (int64_t e = 0; e < Dv; ++e)
+        {{ delta[d][e] = update[d][e] / denom;
+           state[d][e] = a * old[d][e] + b * delta[d][e]; }}
+
+    float dnew[16][16];
+    for (int64_t d = 0; d < Dqk; ++d) {{
+      for (int64_t e = 0; e < Dv; ++e) {{
+        const int64_t v_offset = (bh*S+t)*Dv+e;
+        const float g = gate[v_offset];
+        const float sigmoid = HasGate ? 1.0f / (1.0f + expf(-g)) : 1.0f;
+        const float dyt = dy[v_offset] * sigmoid;
+        dnew[d][e] = dstate[d][e] + q[(bh*S+t)*Dqk+d] * dyt;
+      }}
+    }}
+
+    float beta_grad = 0.0f, decay_grad = 0.0f;
+    for (int64_t d = 0; d < Dqk; ++d)
+      for (int64_t e = 0; e < Dv; ++e) {{
+        beta_grad += dnew[d][e] * delta[d][e];
+        decay_grad += dnew[d][e] * old[d][e];
+    }}
+    dbeta[bh*S+t] = HasBeta ? beta_grad : 0.0f;
+
+    float dupdate[16][16], dtarget[16];
+    float projection = 0.0f;
+    if (Modified)
+      for (int64_t d = 0; d < Dqk; ++d)
+        for (int64_t e = 0; e < Dv; ++e)
+          projection += b * dnew[d][e] * update[d][e];
+    for (int64_t d = 0; d < Dqk; ++d)
+      for (int64_t e = 0; e < Dv; ++e) {{
+        dupdate[d][e] = b * dnew[d][e] / denom;
+        if (Modified && norm > 0.0f)
+          dupdate[d][e] -= update[d][e] * projection / (norm * denom * denom);
+      }}
+    for (int64_t e = 0; e < Dv; ++e) {{
+      dtarget[e] = 0.0f;
+      for (int64_t d = 0; d < Dqk; ++d)
+        dtarget[e] += dupdate[d][e] * k[(bh*S+t)*Dqk+d];
+      dv[(bh*S+t)*Dv+e] = dtarget[e];
+      if (Erase) decay_grad -= dtarget[e] * vhat[e];
+    }}
+    ddecay[bh*S+t] = HasDecay ? decay_grad : 0.0f;
+    for (int64_t d = 0; d < Dqk; ++d) {{
+      float dk_value = 0.0f, dq_value = 0.0f;
+      for (int64_t e = 0; e < Dv; ++e) {{
+        const int64_t v_offset = (bh*S+t)*Dv+e;
+        const float g = gate[v_offset];
+        const float sigmoid = HasGate ? 1.0f / (1.0f + expf(-g)) : 1.0f;
+        const float dyt = dy[v_offset] * sigmoid;
+        dq_value += state[d][e] * dyt;
+        dk_value += dupdate[d][e] * target[e];
+      }}
+      dq[(bh*S+t)*Dqk+d] = dq_value;
       dk[(bh*S+t)*Dqk+d] = dk_value;
     }}
     for (int64_t e = 0; e < Dv; ++e) {{
-      float dv_value = 0.0f;
-      for (int64_t d = 0; d < Dqk; ++d) {{
-        float ds = 0.0f;
-        for (int64_t u = t; u < S; ++u)
-          ds += q[(bh*S+u)*Dqk+d] * dy[(bh*S+u)*Dv+e];
-        dv_value += k[(bh*S+t)*Dqk+d] * ds;
+      const int64_t v_offset = (bh*S+t)*Dv+e;
+      const float g = gate[v_offset];
+      if (HasGate) {{
+        const float sigmoid = 1.0f / (1.0f + expf(-g));
+        float raw = 0.0f;
+        for (int64_t d = 0; d < Dqk; ++d)
+          raw += q[(bh*S+t)*Dqk+d] * state[d][e];
+        dgate[v_offset] = dy[v_offset] * raw * sigmoid * (1.0f - sigmoid);
+      }} else {{
+        dgate[v_offset] = 0.0f;
       }}
-      dv[(bh*S+t)*Dv+e] = dv_value;
     }}
-    for (int64_t d = 0; d < Dqk; ++d) {{
-      float dq_value = 0.0f;
+    for (int64_t d = 0; d < Dqk; ++d)
       for (int64_t e = 0; e < Dv; ++e) {{
-        float state = 0.0f;
-        for (int64_t u = 0; u <= t; ++u)
-          state += k[(bh*S+u)*Dqk+d] * v[(bh*S+u)*Dv+e];
-        dq_value += dy[(bh*S+t)*Dv+e] * state;
+        const float dvhat = Erase ? -a * dtarget[e] : 0.0f;
+        dk[(bh*S+t)*Dqk+d] += old[d][e] * dvhat;
+        dstate[d][e] = a * dnew[d][e] + k[(bh*S+t)*Dqk+d] * dvhat;
       }}
-      dq[(bh*S+t)*Dqk+d] = dq_value;
-    }}
   }}
 }}
 """
@@ -919,12 +1022,12 @@ def _package(
         "dparam",
         "dgrad",
         "dmoment",
-        "dq", "dk", "dv",
+        "dq", "dk", "dv", "dgate", "ddecay",
     }
 
     def buffer_rank(name: str) -> int:
         if abi_id in SM120_DELTANET_BWD_ABIS.values():
-            return 4
+            return 3 if name in {"beta", "decay", "dbeta", "ddecay"} else 4
         if abi_id in SM120_NORM_BWD_ABIS.values() and name in {"x", "dy", "dx"}:
             return 2
         if abi_id in SM120_CLASS_BWD_ABIS.values() and name in {"logits", "dlogits"}:
@@ -977,6 +1080,9 @@ def _package(
         ),
         shape_guards=tuple(
             ShapeGuard(name, 0, "min", 1) for name in buffer_names
+        ) + (
+            (ShapeGuard("q", 3, "max", 8), ShapeGuard("v", 3, "max", 8))
+            if abi_id in SM120_DELTANET_BWD_ABIS.values() else ()
         ),
         geometry=LaunchGeometry(policy="sm120_training_threads_128"),
         ordering=OrderingSemantics(
@@ -1209,16 +1315,20 @@ def package_lion_backward(
 
 
 def package_deltanet_backward() -> NVIDIATrainingPackage:
-    """Build the first explicit SM120 causal f32 DeltaNet backward package."""
-    entry = "tessera_cuda_training_deltanet_backward_f32_v1"
+    """Build the versioned SM120 four-stage DeltaNet package envelope."""
+    entry = "tessera_cuda_training_deltanet_backward_f32_v2"
     return _package(
-        contract="tile.training.deltanet_backward.causal.f32",
+        contract="tile.training.deltanet_backward.causal.flags.f32",
         source=_deltanet_backward_source(entry), entry=entry,
         abi_id=SM120_DELTANET_BWD_ABIS["f32"],
-        buffer_names=("q", "k", "v", "dy", "dq", "dk", "dv"),
-        scalar_names=("B", "H", "S", "Dqk", "Dv"),
+        buffer_names=("q", "k", "v", "gate", "beta", "decay", "dy",
+                      "dq", "dk", "dv", "dgate", "dbeta", "ddecay"),
+        scalar_names=("B", "H", "S", "Dqk", "Dv", "HasGate", "HasBeta",
+                      "HasDecay", "Erase", "Modified"),
         provenance={"family": "deltanet_backward", "causal": True,
-                    "variants": "plain_only", "schedule": "serial_reverse"},
+                    "variants": "plain,gate,beta,decay,erase,modified; Dqk,Dv<=8",
+                    "stages": ["checkpoint", "affine_summary", "serial_fill", "reverse"],
+                    "schedule": "bounded_serial_fill_reverse"},
         storage="f32",
     )
 def package_fused_loss_optimizer(

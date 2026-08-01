@@ -209,6 +209,23 @@ def test_corpus_cold_to_warm_roundtrip_is_reproducible():
     assert warm.hits == 1 and warm.misses == 0
 
 
+def test_corpus_preserves_candidate_schedule_descriptors():
+    cache = AT.MeasureCache()
+    key = ("nvidia:sm_120", "nvidia", OP_MATMUL, (64, 64, 64),
+           "float16", "device")
+    descriptor = {
+        "schema": "tessera.nvidia.candidate-schedule.v1",
+        "candidate": "candidate", "problem_dims": [64, 64, 64],
+        "mma_fragment_mnk": [16, 8, 16], "replayable": True,
+    }
+    cache.put(key, AT.MeasureRecord(
+        winner="candidate", latency_ms=.1, candidates={"candidate": .1},
+        candidate_descriptors={"candidate": descriptor}))
+    restored = AT.MeasureCache()
+    assert restored.load_dict(cache.to_dict()) == 1
+    assert restored.get(key).candidate_descriptors == {"candidate": descriptor}
+
+
 # ── D3: arbiter dispatch log (won / degraded / no_candidate) ─────────────────
 
 def test_dispatch_log_records_won_degraded_no_candidate():

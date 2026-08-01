@@ -17,6 +17,47 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 
 
+def _candidate_descriptors(*, target: str, op: str, dims: tuple[int, ...],
+                           dtype: str, names: dict[str, float]) -> dict[str, dict[str, object]]:
+    """Persist each measured candidate's replay identity with its latency."""
+    from tessera.compiler.emit.candidate import candidates_for
+
+    registered = {candidate.name: candidate for candidate in candidates_for(target, op)}
+    descriptors: dict[str, dict[str, object]] = {}
+    for name in sorted(names):
+        candidate = registered.get(name)
+        descriptor: dict[str, object] = {
+            "schema": "tessera.nvidia.candidate-schedule.v1",
+            "candidate": name, "op": op, "dtype": dtype,
+            "problem_dims": list(dims),
+        }
+        if candidate is None:
+            descriptor.update(replayable=False,
+                              reason="candidate absent from current registry")
+        else:
+            descriptor.update({
+                "candidate_class": type(candidate).__qualname__,
+                "tier": candidate.tier.value,
+                "mma_target": candidate.mma_target,
+                "mma_arch": candidate.mma_arch,
+            })
+            schedule = getattr(candidate, "schedule", None)
+            if schedule is not None:
+                descriptor["schedule"] = str(schedule)
+            preferred = candidate.mma_prefer_shape
+            if preferred is not None:
+                descriptor["preferred_tile_mnk"] = list(preferred)
+            if name in {"nvidia_mma_gemm_emitted", "nvidia_mma_gemm_shipped"}:
+                descriptor["mma_fragment_mnk"] = [16, 8, 16]
+            descriptor["replayable"] = bool(
+                schedule is not None or preferred is not None
+                or "mma_fragment_mnk" in descriptor)
+            if not descriptor["replayable"]:
+                descriptor["reason"] = "candidate has no serializable schedule descriptor"
+        descriptors[name] = descriptor
+    return descriptors
+
+
 def _shape(text: str, rank: int) -> tuple[int, ...]:
     try:
         dims = tuple(int(part) for part in text.lower().split("x"))
@@ -233,10 +274,18 @@ def main() -> int:
     }
     for key, record in list(cache._store.items()):
         workload_shape = observed_shapes.get(key)
+        _, target, op, _, dtype, _ = key
+        dimensions = tuple(workload_shape or ())
         cache._store[key] = dataclasses.replace(
             record, evidence={**record.evidence, **evidence,
                               **({"workload_shape": workload_shape}
-                                 if workload_shape else {})})
+                                 if workload_shape else {})},
+            candidate_descriptors=(
+                _candidate_descriptors(target=str(target), op=str(op),
+                                       dims=dimensions, dtype=str(dtype),
+                                       names=record.candidates)
+                if workload_shape else record.candidate_descriptors
+            ))
     print(f"wrote {at.save_corpus(cache=cache)}")
     return 0
 

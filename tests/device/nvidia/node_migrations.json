@@ -10,6 +10,7 @@
     "tests/device/nvidia/test_flash_attention.py::test_live_nvidia_flash_attn_multiwarp_ragged_mask_bias_softcap[8]",
     "tests/device/nvidia/test_moe_transport.py::test_grouped_swiglu_collapsed_route_matches_legacy_decomposition",
     "tests/device/nvidia/test_moe_transport.py::test_moe_device_timing_retains_resident_batches",
+    "tests/unit/test_nvidia_deltanet_contract.py::test_deltanet_backward_rejects_unvalidated_head_dimensions_without_cuda",
     "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_grouped_expert_metadata_rejects_bad_partition",
     "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_grouped_expert_metadata_retains_empty_and_ragged_groups",
     "tests/unit/test_nvidia_moe_transport_contract.py::test_canonical_moe_metadata_binds_rank_device_topology",

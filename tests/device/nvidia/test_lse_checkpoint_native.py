@@ -12,18 +12,27 @@ from tessera.runtime import launch
 from tests._support.nvidia import nvidia_cuda_host_ready
 
 
-def _types() -> tuple[IRType, IRType, IRType, IRType, IRType]:
-    q = IRType("tensor<1x2x3x4xf32>", ("1", "2", "3", "4"), "fp32")
-    k = IRType("tensor<1x1x4x4xf32>", ("1", "1", "4", "4"), "fp32")
-    v = IRType("tensor<1x1x4x3xf32>", ("1", "1", "4", "3"), "fp32")
-    do = IRType("tensor<1x2x3x3xf32>", ("1", "2", "3", "3"), "fp32")
-    lse = IRType("tensor<1x2x3xf32>", ("1", "2", "3"), "fp32")
+def _types(shape: tuple[int, int, int, int, int, int, int] = (1, 2, 1, 3, 4, 4, 3)) -> tuple[IRType, IRType, IRType, IRType, IRType]:
+    b, hq, hkv, sq, sk, d, dv = shape
+
+    def tensor(*dims: int) -> IRType:
+        encoded = "x".join(str(dim) for dim in dims)
+        return IRType(f"tensor<{encoded}xf32>", tuple(str(dim) for dim in dims), "fp32")
+
+    q = tensor(b, hq, sq, d)
+    k = tensor(b, hkv, sk, d)
+    v = tensor(b, hkv, sk, dv)
+    do = tensor(b, hq, sq, dv)
+    lse = tensor(b, hq, sq)
     return q, k, v, do, lse
 
 
-def _forward_module(*, saved: bool) -> GraphIRModule:
-    q, k, v, _, lse = _types()
-    out = IRType("tensor<1x2x3x3xf32>", ("1", "2", "3", "3"), "fp32")
+def _forward_module(*, saved: bool,
+                    shape: tuple[int, int, int, int, int, int, int] = (1, 2, 1, 3, 4, 4, 3)) -> GraphIRModule:
+    q, k, v, _, lse = _types(shape)
+    b, hq, _, sq, _, _, dv = shape
+    out = IRType(f"tensor<{b}x{hq}x{sq}x{dv}xf32>",
+                 tuple(str(dim) for dim in (b, hq, sq, dv)), "fp32")
     names = "o,row_lse" if saved else "o"
     result_types = [out, lse] if saved else [out]
     returns = ["%o", "%row_lse"] if saved else ["%o"]
@@ -38,8 +47,9 @@ def _forward_module(*, saved: bool) -> GraphIRModule:
     )])
 
 
-def _backward_module(*, saved: bool) -> GraphIRModule:
-    q, k, v, do, lse = _types()
+def _backward_module(*, saved: bool,
+                     shape: tuple[int, int, int, int, int, int, int] = (1, 2, 1, 3, 4, 4, 3)) -> GraphIRModule:
+    q, k, v, do, lse = _types(shape)
     args = [IRArg("do", do), IRArg("q", q), IRArg("k", k), IRArg("v", v)]
     operands = ["%do", "%q", "%k", "%v"]
     operand_types = [str(do), str(q), str(k), str(v)]

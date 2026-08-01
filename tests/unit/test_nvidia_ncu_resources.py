@@ -46,3 +46,18 @@ def test_ncu_csv_accepts_cuda_13_spill_request_counters():
     assert row["shared_spill_requests"] == 0
     assert row["spill_evidence_complete"] is True
     assert row["spills_detected"] is False
+
+
+def test_raster_counter_parser_requires_both_selector_metrics():
+    path = Path(__file__).parents[2] / "benchmarks/nvidia/record_raster_packet.py"
+    spec = importlib.util.spec_from_file_location("nvidia_raster_packet", path)
+    assert spec and spec.loader
+    raster = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(raster)
+    header = ('"ID","Kernel Name","Metric Name","Metric Value"\n')
+    rows = [
+        '"0","tessera_nvidia_mma_fused_kernel","lts__t_sector_hit_rate.pct","97.5"',
+        '"0","tessera_nvidia_mma_fused_kernel","dram__bytes.sum","31458288"',
+    ]
+    counters = raster.parse_ncu_counters("==PROF== status\n" + header + "\n".join(rows) + "\n")
+    assert counters == {"l2_sector_hit_rate_pct": 97.5, "dram_bytes": 31458288.0}

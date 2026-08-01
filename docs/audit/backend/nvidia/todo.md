@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-30
+last_updated: 2026-07-31
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -2021,3 +2021,27 @@ The current CUDA forward recurrence is intentionally unchanged. Do not add a
 `nvidia_deltanet_bwd_compiled` execution row or selector candidate until this
 CUDA package has exact f32 numerical tests plus SM120 device-event and
 end-to-end timing cohorts; ROCm/x86 packets are non-evidence for that decision.
+
+**Implementation update (2026-07-31):** the versioned v2 CUDA package now
+keeps its fixed 13-buffer/10-scalar ABI while executing the validated bounded f32
+`Dqk,Dv <= 8` reverse recurrence. It has CUDA-owned analytic gate, beta, and
+decay derivatives, followed by serial replay for `erase` and modified-update
+normalization; direct-package and public JIT exact-device tests compare all six
+gradients against the shared oracle. This is correctness evidence only: no
+execution-matrix promotion or selector choice has been made until the required
+SM120 timing and counter packet exists. Apple, ROCm, and x86 are **not
+applicable to this physical package**; their differently scheduled packages
+and evidence remain sibling follow-ups rather than CUDA proof.
+
+**Timing/NCU packet (2026-07-31):**
+[`nvidia_sm120_deltanet_backward_2026_07_31.json`](../../../../benchmarks/baselines/nvidia_sm120_deltanet_backward_2026_07_31.json)
+records two repeated CUDA-event and end-to-end cohorts at `[B,H,S,Dqk,Dv] =
+[1,2,16,8,8]`: plain `0.64318 / 1.53015 ms`, affine `0.76717 / 1.54674 ms`,
+and erase+modified serial-fill `0.92778 / 1.69752 ms`. All variants match the
+oracle (maximum errors `7.45e-09`, `1.86e-09`, and `1.35e-04`). The packet
+also records live resources (255 registers/thread, 1328 B local/thread, two
+active blocks/SM) and two NCU L2/DRAM cohorts. Only serial-fill counters were
+stable (94.77/94.70% L2 and 779,776/715,008 DRAM B); plain and affine counter
+cohorts diverged materially, so they are evidence of collection instability,
+not a schedule result. The packet changes no selector: there is one
+correctness-first implementation and no controlled alternative to promote.

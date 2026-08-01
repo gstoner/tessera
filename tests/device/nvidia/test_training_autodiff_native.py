@@ -35,6 +35,24 @@ def _nvidia_huber(prediction, target):
     )
 
 
+@ts.jit(
+    target="nvidia_sm120", autodiff="reverse",
+    wrt=("q", "k", "v", "gate", "beta", "decay"),
+)
+def _nvidia_affine_deltanet(q, k, v, gate, beta, decay):
+    return ts.ops.gated_deltanet(q, k, v, gate, beta, decay, causal=True)
+
+
+@ts.jit(
+    target="nvidia_sm120", autodiff="reverse",
+    wrt=("q", "k", "v", "gate", "beta", "decay"),
+)
+def _nvidia_modified_erase_deltanet(q, k, v, gate, beta, decay):
+    return ts.ops.modified_delta_attention(
+        q, k, v, gate, beta, decay, causal=True, erase=True
+    )
+
+
 def _require_cuda() -> None:
     if not nvidia_cuda_host_ready():
         pytest.skip("host WSL CUDA device/toolchain unavailable")
@@ -885,9 +903,126 @@ def test_plain_causal_deltanet_backward_executes_on_sm120() -> None:
     dy = rng.normal(size=v.shape).astype(np.float32)
     package = package_deltanet_backward()
     got = _invoke(package, {
-        "q": q, "k": k, "v": v, "dy": dy,
+        "q": q, "k": k, "v": v,
+        "gate": np.zeros_like(v), "beta": np.ones((1, 1, 5), np.float32),
+        "decay": np.ones((1, 1, 5), np.float32), "dy": dy,
         "dq": np.empty_like(q), "dk": np.empty_like(k), "dv": np.empty_like(v),
-    }, B=1, H=1, S=5, Dqk=3, Dv=2)
+        "dgate": np.empty_like(v), "dbeta": np.empty((1, 1, 5), np.float32),
+        "ddecay": np.empty((1, 1, 5), np.float32),
+    }, B=1, H=1, S=5, Dqk=3, Dv=2,
+       HasGate=0, HasBeta=0, HasDecay=0, Erase=0, Modified=0)
     expected = get_vjp("gated_deltanet")(dy, q, k, v)
-    for actual, reference in zip(got, expected, strict=True):
+    for actual, reference in zip(got[:3], expected, strict=True):
         np.testing.assert_allclose(actual, reference, rtol=3e-3, atol=3e-3)
+    for unused in got[3:]:
+        np.testing.assert_array_equal(unused, 0.0)
+
+
+@pytest.mark.hardware_nvidia
+def test_affine_gated_beta_decay_deltanet_backward_executes_on_sm120() -> None:
+    """The v2 package differentiates the full affine recurrence and gate."""
+    _require_cuda()
+    from tessera.autodiff.vjp import get_vjp
+    rng = np.random.default_rng(731)
+    q = (0.1 * rng.normal(size=(1, 2, 4, 3))).astype(np.float32)
+    k = (0.1 * rng.normal(size=q.shape)).astype(np.float32)
+    v = (0.1 * rng.normal(size=(1, 2, 4, 2))).astype(np.float32)
+    gate = rng.normal(size=v.shape).astype(np.float32)
+    beta = rng.uniform(0.2, 0.9, size=(1, 2, 4)).astype(np.float32)
+    decay = rng.uniform(0.7, 0.99, size=(1, 2, 4)).astype(np.float32)
+    dy = rng.normal(size=v.shape).astype(np.float32)
+    package = package_deltanet_backward()
+    got = _invoke(package, {
+        "q": q, "k": k, "v": v, "gate": gate, "beta": beta,
+        "decay": decay, "dy": dy,
+        "dq": np.empty_like(q), "dk": np.empty_like(k), "dv": np.empty_like(v),
+        "dgate": np.empty_like(v), "dbeta": np.empty_like(beta),
+        "ddecay": np.empty_like(decay),
+    }, B=1, H=2, S=4, Dqk=3, Dv=2,
+       HasGate=1, HasBeta=1, HasDecay=1, Erase=0, Modified=0)
+    expected = get_vjp("gated_deltanet")(dy, q, k, v, gate, beta, decay)
+    for actual, reference in zip(got, expected, strict=True):
+        np.testing.assert_allclose(actual, reference, rtol=4e-3, atol=4e-3)
+
+
+@pytest.mark.hardware_nvidia
+def test_erase_modified_deltanet_serial_fill_backward_executes_on_sm120() -> None:
+    """Erase plus modified normalization uses the CUDA-owned serial-fill VJP."""
+    _require_cuda()
+    from tessera.autodiff.vjp import get_vjp
+    rng = np.random.default_rng(734)
+    q = (0.1 * rng.normal(size=(1, 1, 4, 3))).astype(np.float32)
+    k = (0.1 * rng.normal(size=q.shape)).astype(np.float32)
+    v = (0.1 * rng.normal(size=(1, 1, 4, 2))).astype(np.float32)
+    gate = rng.normal(size=v.shape).astype(np.float32)
+    beta = rng.uniform(0.2, 0.9, size=(1, 1, 4)).astype(np.float32)
+    decay = rng.uniform(0.7, 0.99, size=(1, 1, 4)).astype(np.float32)
+    dy = rng.normal(size=v.shape).astype(np.float32)
+    package = package_deltanet_backward()
+    got = _invoke(package, {
+        "q": q, "k": k, "v": v, "gate": gate, "beta": beta,
+        "decay": decay, "dy": dy,
+        "dq": np.empty_like(q), "dk": np.empty_like(k), "dv": np.empty_like(v),
+        "dgate": np.empty_like(v), "dbeta": np.empty_like(beta),
+        "ddecay": np.empty_like(decay),
+    }, B=1, H=1, S=4, Dqk=3, Dv=2,
+       HasGate=1, HasBeta=1, HasDecay=1, Erase=1, Modified=1)
+    expected = get_vjp("modified_delta_attention")(
+        dy, q, k, v, gate, beta, decay, erase=True
+    )
+    for name, actual, reference in zip(
+        ("dq", "dk", "dv", "dgate", "dbeta", "ddecay"), got, expected, strict=True
+    ):
+        np.testing.assert_allclose(
+            actual, reference, rtol=5e-3, atol=5e-3, err_msg=name
+        )
+
+
+@pytest.mark.hardware_nvidia
+def test_jit_affine_deltanet_backward_routes_v2_package_on_sm120() -> None:
+    """JIT binds all optional inputs and maps only their requested gradients."""
+    _require_cuda()
+    from tessera.autodiff.vjp import get_vjp
+    rng = np.random.default_rng(732)
+    q = rng.normal(size=(1, 1, 4, 3)).astype(np.float32)
+    k = rng.normal(size=q.shape).astype(np.float32)
+    v = rng.normal(size=(1, 1, 4, 2)).astype(np.float32)
+    gate = rng.normal(size=v.shape).astype(np.float32)
+    beta = rng.uniform(0.2, 0.9, size=(1, 1, 4)).astype(np.float32)
+    decay = rng.uniform(0.7, 0.99, size=(1, 1, 4)).astype(np.float32)
+    dy = rng.normal(size=v.shape).astype(np.float32)
+    got = _nvidia_affine_deltanet.native_backward(
+        q, k, v, gate, beta, decay, out_cotangents=dy
+    )
+    expected = get_vjp("gated_deltanet")(dy, q, k, v, gate, beta, decay)
+    for actual, reference in zip(got, expected, strict=True):
+        np.testing.assert_allclose(actual, reference, rtol=4e-3, atol=4e-3)
+    assert _nvidia_affine_deltanet.last_backward_execution["compiler_path"] == (
+        "nvidia_deltanet_bwd_compiled"
+    )
+
+
+@pytest.mark.hardware_nvidia
+def test_jit_erase_modified_deltanet_routes_serial_fill_on_sm120() -> None:
+    """The public JIT route carries erase/modified flags through the v2 ABI."""
+    _require_cuda()
+    from tessera.autodiff.vjp import get_vjp
+    rng = np.random.default_rng(734)
+    q = (0.1 * rng.normal(size=(1, 1, 4, 3))).astype(np.float32)
+    k = (0.1 * rng.normal(size=q.shape)).astype(np.float32)
+    v = (0.1 * rng.normal(size=(1, 1, 4, 2))).astype(np.float32)
+    gate = rng.normal(size=v.shape).astype(np.float32)
+    beta = rng.uniform(0.2, 0.9, size=(1, 1, 4)).astype(np.float32)
+    decay = rng.uniform(0.7, 0.99, size=(1, 1, 4)).astype(np.float32)
+    dy = rng.normal(size=v.shape).astype(np.float32)
+    got = _nvidia_modified_erase_deltanet.native_backward(
+        q, k, v, gate, beta, decay, out_cotangents=dy
+    )
+    expected = get_vjp("modified_delta_attention")(
+        dy, q, k, v, gate, beta, decay, erase=True
+    )
+    for actual, reference in zip(got, expected, strict=True):
+        np.testing.assert_allclose(actual, reference, rtol=5e-3, atol=5e-3)
+    assert _nvidia_modified_erase_deltanet.last_backward_execution["compiler_path"] == (
+        "nvidia_deltanet_bwd_compiled"
+    )

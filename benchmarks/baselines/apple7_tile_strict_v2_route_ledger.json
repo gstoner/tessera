@@ -1,0 +1,2754 @@
+{
+  "context": {
+    "compiler_fingerprint": "sha256:a76b1fc2f95e37dba0561cf8f6d8f98c9991bd24b5af4fb1e0a2c9bf3f5a9fc2",
+    "device": "apple7",
+    "os_version": "26.5.2",
+    "physical_device": "Apple M1 Max",
+    "runtime_fingerprint": "sha256:9b12af9a94947525dc0aec14a9718f8dacea40174cc20b4012e47c2f6f8662dc",
+    "sdk_version": "26.5"
+  },
+  "decisions": [
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              281416,
+              258500,
+              246917
+            ],
+            [
+              251875,
+              231500,
+              242458
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.06616403665789539,
+          "times_ns": [
+            258500,
+            242458
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.06533041603743911,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.35880077369439073,
+            -0.42413118973182984
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.24178440458253972,
+              -0.35880077369439073,
+              -0.6603069047493693
+            ],
+            [
+              -0.37882679900744415,
+              -0.46796544276457885,
+              -0.42413118973182984
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              349458,
+              351250,
+              409958
+            ],
+            [
+              347292,
+              339834,
+              345292
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.017254961018500284,
+          "speedups_vs_incumbent": [
+            -0.35880077369439073,
+            -0.42413118973182984
+          ],
+          "times_ns": [
+            351250,
+            345292
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mps",
+      "shape": "127x63x129",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              18541,
+              13041,
+              18416
+            ],
+            [
+              10750,
+              11125,
+              11125
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.655370786516854,
+          "times_ns": [
+            18416,
+            11125
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.3367394068438895,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.19814431408634306,
+            -0.5348837209302325
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.0696834043471226,
+              -0.19814431408634306,
+              -0.42311033883579496
+            ],
+            [
+              -0.5348837209302325,
+              -0.629123595505618,
+              -0.4943820224719101
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              17249,
+              15625,
+              26208
+            ],
+            [
+              16500,
+              18124,
+              16625
+            ]
+          ],
+          "paired_win_fractions": [
+            0.3333333333333333,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.03753383458646616,
+          "speedups_vs_incumbent": [
+            0.06336880973066898,
+            -0.4943820224719101
+          ],
+          "times_ns": [
+            17249,
+            16625
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "mps",
+      "shape": "127x63x129",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              285083,
+              263667,
+              253250
+            ],
+            [
+              272083,
+              280416,
+              294125
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.06352330780871326,
+          "times_ns": [
+            263667,
+            280416
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.10777424154123938,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.3599843742296154,
+            -0.46775861577085476
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.6458680454464139,
+              -0.3599843742296154,
+              -0.304213228035538
+            ],
+            [
+              -0.5598806246623274,
+              -0.46775861577085476,
+              -0.2489009774755631
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              469209,
+              358583,
+              330292
+            ],
+            [
+              424417,
+              411583,
+              367333
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.147803995169877,
+          "speedups_vs_incumbent": [
+            -0.3599843742296154,
+            -0.46775861577085476
+          ],
+          "times_ns": [
+            358583,
+            411583
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mps",
+      "shape": "127x63x129",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              13916,
+              13374,
+              15875
+            ],
+            [
+              9875,
+              11583,
+              13583
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.20141586808253475,
+          "times_ns": [
+            13916,
+            11583
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.10811007819066298,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.43712273641851107,
+            -0.3290126582278481
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.43712273641851107,
+              -0.7041274113952445,
+              -0.17316535433070865
+            ],
+            [
+              -0.3290126582278481,
+              -0.06828973495640163,
+              -0.39262313185599645
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              19999,
+              22791,
+              18624
+            ],
+            [
+              13124,
+              12374,
+              18916
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.523849436147516,
+          "speedups_vs_incumbent": [
+            -0.43712273641851107,
+            -0.13303979970646637
+          ],
+          "times_ns": [
+            19999,
+            13124
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "mps",
+      "shape": "127x63x129",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              309208,
+              311583,
+              293958
+            ],
+            [
+              327667,
+              369792,
+              318958
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.05969767923210266,
+          "times_ns": [
+            309208,
+            327667
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.021569015590678586,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.8508318025406846,
+            -0.829262786950006
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.8508318025406846,
+              -0.8252215300578016,
+              -1.42367617142585
+            ],
+            [
+              -0.9097132149407783,
+              -0.5765619591554171,
+              -0.829262786950006
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              572292,
+              568708,
+              712459
+            ],
+            [
+              625750,
+              583000,
+              583458
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.01951101885051687,
+          "speedups_vs_incumbent": [
+            -0.8508318025406846,
+            -0.7806431529571181
+          ],
+          "times_ns": [
+            572292,
+            583458
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mps",
+      "shape": "256x256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              11874,
+              11499,
+              11583
+            ],
+            [
+              14000,
+              18500,
+              12750
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.208667875334542,
+          "times_ns": [
+            11583,
+            14000
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.11788952630066674,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.5263601145359609,
+            -0.40847058823529414
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.5263601145359609,
+              -0.41316636229237325,
+              -0.8344988344988346
+            ],
+            [
+              -0.5386428571428571,
+              -0.27702702702702703,
+              -0.40847058823529414
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              18124,
+              16250,
+              21249
+            ],
+            [
+              21541,
+              23625,
+              17958
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.18853453983668064,
+          "speedups_vs_incumbent": [
+            -0.5647068980402313,
+            -0.5386428571428571
+          ],
+          "times_ns": [
+            18124,
+            21541
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "mps",
+      "shape": "256x256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              269125,
+              279833,
+              250000
+            ],
+            [
+              351333,
+              276541,
+              317417
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.179440780306549,
+          "times_ns": [
+            269125,
+            317417
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.1842469834840328,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.709055043543828,
+            -0.5248080600597952
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.658151416627961,
+              -0.709055043543828,
+              -0.7725
+            ],
+            [
+              -0.3691910523634273,
+              -0.6100686697451734,
+              -0.5248080600597952
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              446250,
+              478250,
+              443125
+            ],
+            [
+              481042,
+              445250,
+              484000
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.07796526610644258,
+          "speedups_vs_incumbent": [
+            -0.658151416627961,
+            -0.515489088486124
+          ],
+          "times_ns": [
+            446250,
+            481042
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mps",
+      "shape": "256x256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              15125,
+              12083,
+              11875
+            ],
+            [
+              20666,
+              15041,
+              12916
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.24480675328974594,
+          "times_ns": [
+            12083,
+            15041
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.10075454949453948,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.07376842105263158,
+            0.17452297054717106
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.20938842975206612,
+              0.006951915914921791,
+              0.07376842105263158
+            ],
+            [
+              0.3649472563631085,
+              0.17452297054717106,
+              -0.1580984825023227
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              11958,
+              11999,
+              10999
+            ],
+            [
+              13124,
+              12416,
+              14958
+            ]
+          ],
+          "paired_win_fractions": [
+            1.0,
+            0.6666666666666666
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.09750794447231978,
+          "speedups_vs_incumbent": [
+            0.010345112968633618,
+            0.1274516322053055
+          ],
+          "times_ns": [
+            11958,
+            13124
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "mps",
+      "shape": "256x256x256",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              203292,
+              226375,
+              224333
+            ],
+            [
+              202375,
+              249459,
+              231500
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.03194804152755056,
+          "times_ns": [
+            224333,
+            231500
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.20111594968592464,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.4502131419105467,
+            -0.24909719222462204
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.5632292466009484,
+              -0.4502131419105467,
+              -0.41827996772654935
+            ],
+            [
+              -0.709904879555281,
+              -0.12059296317230486,
+              -0.24909719222462204
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              317792,
+              328292,
+              318167
+            ],
+            [
+              346042,
+              279542,
+              289166
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.10029187387175532,
+          "speedups_vs_incumbent": [
+            -0.41827996772654935,
+            -0.24909719222462204
+          ],
+          "times_ns": [
+            318167,
+            289166
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mps",
+      "shape": "32x16x32",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              7291,
+              12541,
+              9374
+            ],
+            [
+              9125,
+              17875,
+              15999
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.7067420524855985,
+          "times_ns": [
+            9374,
+            15999
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 1.1892428389853094,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -1.4002560273095797,
+            -0.21101318832427027
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -2.0401865313400083,
+              -0.8870903436727534,
+              -1.4002560273095797
+            ],
+            [
+              -1.6575342465753424,
+              0.27507692307692305,
+              -0.21101318832427027
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              22166,
+              23666,
+              22500
+            ],
+            [
+              24250,
+              12958,
+              19375
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.3333333333333333
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.16129032258064516,
+          "speedups_vs_incumbent": [
+            -1.4002560273095797,
+            -0.21101318832427027
+          ],
+          "times_ns": [
+            22500,
+            19375
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "mps",
+      "shape": "32x16x32",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              237334,
+              208000,
+              200417
+            ],
+            [
+              261750,
+              237042,
+              254791
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.22495673076923076,
+          "times_ns": [
+            208000,
+            254791
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.07969122580533444,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.45467699845821463,
+            -0.3749857726528802
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.2166398408993233,
+              -1.3223173076923076,
+              -0.45467699845821463
+            ],
+            [
+              -0.6240038204393505,
+              -0.3002252765332726,
+              -0.3749857726528802
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              288750,
+              483042,
+              291542
+            ],
+            [
+              425083,
+              308208,
+              350334
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.20165876614690165,
+          "speedups_vs_incumbent": [
+            -0.4016442307692308,
+            -0.3749857726528802
+          ],
+          "times_ns": [
+            291542,
+            350334
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mps",
+      "shape": "32x16x32",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              18083,
+              17208,
+              16333
+            ],
+            [
+              24750,
+              10999,
+              12999
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.3237941380106162,
+          "times_ns": [
+            17208,
+            12999
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.043670752960129205,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.07752208275220827,
+            0.12119283571233748
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.09218603107891389,
+              0.07752208275220827,
+              -0.028041388599767344
+            ],
+            [
+              0.36028282828282826,
+              0.12119283571233748,
+              -0.27886760520040005
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              16416,
+              15874,
+              16791
+            ],
+            [
+              15833,
+              9666,
+              16624
+            ]
+          ],
+          "paired_win_fractions": [
+            0.6666666666666666,
+            0.6666666666666666
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.036821827827954276,
+          "speedups_vs_incumbent": [
+            0.04602510460251046,
+            -0.21801677052080928
+          ],
+          "times_ns": [
+            16416,
+            15833
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "mps",
+      "shape": "32x16x32",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              211542,
+              212458,
+              188750
+            ],
+            [
+              234542,
+              226000,
+              234125
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.10675421429314273,
+          "times_ns": [
+            211542,
+            234125
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.017004620518045188,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.29623431753505214,
+            -0.3132389380530973
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.29623431753505214,
+              -0.25201216240386337,
+              -0.512805298013245
+            ],
+            [
+              -0.45904784644114915,
+              -0.3132389380530973,
+              -0.14646449546182594
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              274208,
+              266000,
+              285542
+            ],
+            [
+              342208,
+              296792,
+              268416
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.08236083557007819,
+          "speedups_vs_incumbent": [
+            -0.29623431753505214,
+            -0.2676647090229578
+          ],
+          "times_ns": [
+            274208,
+            296792
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mps",
+      "shape": "8x8x8",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "bf16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              9958,
+              10750,
+              8999
+            ],
+            [
+              16541,
+              9124,
+              12625
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.26782486443060854,
+          "times_ns": [
+            9958,
+            12625
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.30440700049117186,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.3472584856396867,
+            -0.042851485148514855
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.3472584856396867,
+              -0.29069767441860467,
+              -0.4167129681075675
+            ],
+            [
+              0.010096124780847591,
+              -0.8175142481367821,
+              -0.042851485148514855
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              13416,
+              13875,
+              12749
+            ],
+            [
+              16374,
+              16583,
+              13166
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.3333333333333333
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.2204830053667263,
+          "speedups_vs_incumbent": [
+            -0.3472584856396867,
+            -0.29695049504950494
+          ],
+          "times_ns": [
+            13416,
+            16374
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "mps",
+      "shape": "8x8x8",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": true,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              283708,
+              256000,
+              260250
+            ],
+            [
+              264500,
+              280458,
+              269125
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.034101825168107586,
+          "times_ns": [
+            260250,
+            269125
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.10222824489452338,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            -0.10086455331412104,
+            -0.20309279820864443
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              -0.0652114145529911,
+              -0.12483984375,
+              -0.10086455331412104
+            ],
+            [
+              -0.2531493383742911,
+              -0.20309279820864443,
+              -0.17990153274500698
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              302209,
+              287959,
+              286500
+            ],
+            [
+              331458,
+              337417,
+              317541
+            ]
+          ],
+          "paired_win_fractions": [
+            0.0,
+            0.0
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.15105969947110526,
+          "speedups_vs_incumbent": [
+            -0.10647070124879923,
+            -0.23161356247097073
+          ],
+          "times_ns": [
+            287959,
+            331458
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "end_to_end"
+      },
+      "selected_route": "mps",
+      "shape": "8x8x8",
+      "status": "retain_incumbent",
+      "timing_domain": "end_to_end"
+    },
+    {
+      "device": "apple7",
+      "dtype": "f16",
+      "incumbent_route": "mps",
+      "op": "matmul",
+      "reason": "no candidate met the per-run stable-win threshold",
+      "route_evidence": {
+        "mps": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_trial_times_ns": [
+            [
+              28500,
+              23708,
+              18500
+            ],
+            [
+              25749,
+              19541,
+              13750
+            ]
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            },
+            {
+              "api": "MPSMatrixMultiplication",
+              "threadgroup_resources": null
+            }
+          ],
+          "run_drift_fraction": 0.21324394862084847,
+          "times_ns": [
+            23708,
+            19541
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        },
+        "simdgroup_matrix": {
+          "absolute_time_stable": false,
+          "counter_sampling_supported": [
+            false,
+            false
+          ],
+          "counter_timestamp_deltas": [
+            null,
+            null
+          ],
+          "cross_run_speedup_spread": 0.051919747522131666,
+          "eligible": true,
+          "paired_measurement": true,
+          "paired_median_speedups": [
+            0.07456140350877193,
+            0.02264165598664026
+          ],
+          "paired_speedups_vs_incumbent": [
+            [
+              0.07456140350877193,
+              -0.03690737303863675,
+              0.13064864864864864
+            ],
+            [
+              0.02264165598664026,
+              -0.04692697405455197,
+              0.17578181818181818
+            ]
+          ],
+          "paired_trial_times_ns": [
+            [
+              26375,
+              24583,
+              16083
+            ],
+            [
+              25166,
+              20458,
+              11333
+            ]
+          ],
+          "paired_win_fractions": [
+            0.6666666666666666,
+            0.6666666666666666
+          ],
+          "placement_and_numerical_proof": true,
+          "present_in_all_runs": true,
+          "repeated_measurement": true,
+          "resource_evidence_retained": true,
+          "resource_records": [
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            },
+            {
+              "double_buffered": true,
+              "edge_scratch_bytes": 256,
+              "partial_edge_store": true,
+              "simdgroup_lanes": 32,
+              "staged_a_bytes": 2048,
+              "staged_b_bytes": 2048,
+              "target_threadgroup_capacity_bytes": 32768,
+              "threadgroup": [
+                32,
+                1,
+                1
+              ],
+              "total_threadgroup_bytes": 4352
+            }
+          ],
+          "run_drift_fraction": 0.20163261315866654,
+          "speedups_vs_incumbent": [
+            -0.03690737303863675,
+            -0.04692697405455197
+          ],
+          "times_ns": [
+            24583,
+            20458
+          ],
+          "timing_coverage": [
+            1.0,
+            1.0
+          ],
+          "timing_sources": [
+            "owned_command_buffer",
+            "owned_command_buffer"
+          ]
+        }
+      },
+      "selected_evidence": {
+        "correctness": true,
+        "device": "apple7",
+        "provenance": "native_gpu",
+        "timing_domain": "device"
+      },
+      "selected_route": "mps",
+      "shape": "8x8x8",
+      "status": "retain_incumbent",
+      "timing_domain": "device"
+    }
+  ],
+  "expires_at": "2026-08-31T03:21:48.401738Z",
+  "ineligible_decisions": [],
+  "measured_at": "2026-08-01T03:21:48.401738Z",
+  "promotion_rules": {
+    "absolute_time_drift_is_diagnostic_only": true,
+    "maximum_cross_run_drift_fraction": 0.15,
+    "maximum_cross_run_speedup_spread": 0.05,
+    "minimum_paired_win_fraction_each_run": 0.75,
+    "minimum_speedup_fraction_each_run": 0.05,
+    "requires_interleaved_paired_trials": true,
+    "requires_native_dispatch": true,
+    "requires_numerical_validation": true,
+    "requires_repeated_measurement": true,
+    "requires_resource_evidence": true
+  },
+  "schema": "tessera.apple.route-ledger.v2",
+  "selection_scope": "runtime_route",
+  "source_report_count": 2,
+  "source_report_digests": [
+    "sha256:b2c7e08192c7ebee973ad5617c3e41472f14cb0588d9b241f5b322ff3bec5ac5",
+    "sha256:f0ae0dd10ae008935e487d8453fd96eb489cc9876e0158dc348e2710b9f7c20e"
+  ]
+}

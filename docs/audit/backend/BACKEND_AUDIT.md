@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-12
+last_updated: 2026-07-31
 audit_role: theme
 ---
 
@@ -104,16 +104,18 @@ Apple, NVIDIA, and ROCm details live in sibling platform folders.
 
 ## Still Open
 
-- **Canonical compiler-spine gap (cross-cutting):** native execution, typed
-  compiler lowering, and canonical Graph→native-image→launch are distinct proof
-  levels. Existing CUDA, ROCm, x86, and Apple runtime routes remain valid native
-  candidates, but no fleet-wide driver contract yet owns the typed target,
-  native image, and launch descriptor end to end. The rebuilt architecture,
-  schemas, dependency graph, and backend work IDs are tracked in
-  **E2E-SPINE-0/-1/-2**; ownership, portable schemas, typed carriers, cache
-  identity, and descriptor-first generic orchestration are complete. Backend
-  image producers and exact-target launcher hooks remain architecture-owned. See
-  [E2E_COMPILATION_AUDIT.md](E2E_COMPILATION_AUDIT.md).
+- **Canonical compiler spine (cross-cutting):** native execution, typed
+  compiler lowering, and canonical Graph→native-image→launch remain distinct
+  proof levels, but the fleet-wide driver contract now owns canonical admission
+  and typed artifact carriage end to end. NVIDIA, ROCm, x86, and Apple each
+  expose backend-owned `native_package_kind()` / `package_native()` producers;
+  the driver promotes only a complete, host-available descriptor contract.
+  Apple additionally retains `apple_target_ir_mode="value"` as an explicit
+  compatibility/probe opt-out, not a fallback; it is a closed `artifact`/`value`
+  choice and conflicts with `package_native=True` rather than silently overriding
+  descriptor selection. Backend image producers,
+  exact-target launchers, physical schedules, and exact-device proof remain
+  architecture-owned. See [E2E_COMPILATION_AUDIT.md](E2E_COMPILATION_AUDIT.md).
 - **NVIDIA runtime execution:** ✅ first executable row landed (2026-06-25,
   RTX 5070 Ti / sm_120) — `(nvidia_sm120, nvidia_mma)` matmul is
   `device_verified_abi` with an execute-compare fixture and the shipped

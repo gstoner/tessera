@@ -1426,6 +1426,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/backend/apple/todo.md APPLE-PIPE-1", sprint="APPLE-PIPE-1",
     ),
     DiagnosticCode(
+        code="E_PIPE_LAYOUT_MISMATCH", pass_origin="AppleMslMaterializer",
+        severity="error",
+        summary="The compiler-provided Apple staging-byte contract disagrees with the requested simdgroup GEMM tile.",
+        fix_hint="Regenerate the descriptor from the canonical Tile loop; do not substitute a runtime-default staging layout.",
+        spec="docs/audit/backend/apple/todo.md APPLE-PIPE-1", sprint="APPLE-PIPE-1", language="python",
+    ),
+    DiagnosticCode(
         code="APPLE_THREADGROUP_MALFORMED_ALLOC", pass_origin="AppleThreadgroupPipeline",
         severity="error",
         summary="A tile.alloc reached the Apple placer without the 'space' and 'bytes' attributes placement requires.",
@@ -1553,6 +1560,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         summary="The Apple fused flash-attention route accepts f32/f16/bf16 storage.",
         fix_hint="Convert storage at the boundary, or keep the recurrence on the decomposed path.",
         spec="docs/audit/backend/apple/todo.md APPLE-ATTN-STREAM-1", sprint="APPLE-ATTN-STREAM-1",
+    ),
+    DiagnosticCode(
+        code="APPLE_STREAMING_ATTN_RANK4_MODIFIER_UNSUPPORTED", pass_origin="StreamingAttentionToAppleGPU",
+        severity="error",
+        summary="The rank-4 Apple GQA ABI carries causal and scale but not sliding windows, score bias, or softcap.",
+        fix_hint="Keep modifier-bearing rank-4 attention on the shared decomposed path until the Apple GQA ABI carries every requested modifier.",
+        spec="docs/audit/backend/apple/todo.md APPLE-ATTN-STREAM-2", sprint="APPLE-ATTN-STREAM-2",
     ),
     # C6 — WarpSpecLegalityPass (the 7 appendix invariants).
     DiagnosticCode(

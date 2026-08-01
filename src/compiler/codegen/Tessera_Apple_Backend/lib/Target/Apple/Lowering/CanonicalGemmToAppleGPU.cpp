@@ -39,6 +39,16 @@ using namespace mlir;
 namespace tessera::apple {
 namespace {
 
+constexpr int64_t kAppleSimdgroupFragment = 8;
+constexpr int64_t kAppleStagingElementBytes = 2;
+constexpr int64_t kAppleEdgeScratchBytes = 8 * 8 * 4;
+constexpr int64_t kAppleThreadgroupCapacityBytes = 32 * 1024;
+
+int64_t roundToAppleFragment(int64_t extent) {
+  return ((extent + kAppleSimdgroupFragment - 1) / kAppleSimdgroupFragment) *
+         kAppleSimdgroupFragment;
+}
+
 bool isForOp(Operation *op) {
   return op && op->getName().getStringRef() == "scf.for";
 }
@@ -209,6 +219,73 @@ struct CanonicalGemmToAppleGPUPass
               ("tessera_apple." + tileAttr.drop_front(strlen("tessera."))).str(),
               value);
       }
+      // APPLE-PIPE-1: the compiler owns the physical staging layout consumed
+      // by the emitted MSL. The Python materializer validates and uses these
+      // byte counts; it may not substitute its former default tile layout.
+      auto tileM = matmul->getAttrOfType<IntegerAttr>("tessera.tile_m");
+      auto tileN = matmul->getAttrOfType<IntegerAttr>("tessera.tile_n");
+      auto tileK = matmul->getAttrOfType<IntegerAttr>("tessera.tile_k");
+      if (!tileM || !tileN || !tileK || tileM.getInt() <= 0 ||
+          tileN.getInt() <= 0 || tileK.getInt() <= 0) {
+        root->emitOpError(
+            "APPLE_CANONICAL_GEMM_SHAPE_UNSUPPORTED: canonical Apple GEMM "
+            "requires positive tessera.tile_m/n/k for its staging contract");
+        signalPassFailure();
+        return;
+      }
+      const int64_t stageM = roundToAppleFragment(tileM.getInt());
+      const int64_t stageN = roundToAppleFragment(tileN.getInt());
+      const int64_t stageK = roundToAppleFragment(tileK.getInt());
+      // The shared loop owns the pipeline depth. Do not bake the current
+      // ping-pong default into the descriptor: depth-one loops are a valid
+      // single-buffered contract and depth-two loops are ping-pong.
+      int64_t stageDepth = 0;
+      root->walk([&](Operation *op) {
+        if (op->getName().getStringRef() != "tile.pipeline_init" ||
+            stageDepth != 0)
+          return;
+        if (auto depth = op->getAttrOfType<IntegerAttr>("depth"))
+          stageDepth = depth.getInt();
+      });
+      if (stageDepth != 1 && stageDepth != 2) {
+        root->emitOpError(
+            "APPLE_CANONICAL_GEMM_UNRECOGNIZED: canonical Apple GEMM requires "
+            "one shared tile.pipeline_init with depth one or two");
+        signalPassFailure();
+        return;
+      }
+      const int64_t stagedA = stageDepth * stageM * stageK *
+                              kAppleStagingElementBytes;
+      const int64_t stagedB = stageDepth * stageK * stageN *
+                              kAppleStagingElementBytes;
+      const int64_t arena = stagedA + stagedB + kAppleEdgeScratchBytes;
+      if (arena > kAppleThreadgroupCapacityBytes) {
+        root->emitOpError(
+            "APPLE_THREADGROUP_MEMORY_EXCEEDED: canonical Apple GEMM staging "
+            "layout exceeds the 32768-byte threadgroup capacity");
+        signalPassFailure();
+        return;
+      }
+      state.addAttribute("tessera_apple.staging_layout_owner",
+                         builder.getStringAttr("canonical_tile_ir"));
+      state.addAttribute("tessera_apple.stage_depth",
+                         builder.getI64IntegerAttr(stageDepth));
+      state.addAttribute("tessera_apple.staging_tile_m",
+                         builder.getI64IntegerAttr(stageM));
+      state.addAttribute("tessera_apple.staging_tile_n",
+                         builder.getI64IntegerAttr(stageN));
+      state.addAttribute("tessera_apple.staging_tile_k",
+                         builder.getI64IntegerAttr(stageK));
+      state.addAttribute("tessera_apple.staged_a_bytes",
+                         builder.getI64IntegerAttr(stagedA));
+      state.addAttribute("tessera_apple.staged_b_bytes",
+                         builder.getI64IntegerAttr(stagedB));
+      state.addAttribute("tessera_apple.edge_scratch_bytes",
+                         builder.getI64IntegerAttr(kAppleEdgeScratchBytes));
+      state.addAttribute("tessera_apple.threadgroup_arena_bytes",
+                         builder.getI64IntegerAttr(arena));
+      state.addAttribute("tessera_apple.threadgroup_capacity_bytes",
+                         builder.getI64IntegerAttr(kAppleThreadgroupCapacityBytes));
       if (matmul->hasAttr("tessera.ragged_zero_pad"))
         state.addAttribute("tessera_apple.ragged_zero_pad",
                            builder.getBoolAttr(true));

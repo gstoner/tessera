@@ -99,50 +99,62 @@ def _entry_for(op_name: str, dtype: str) -> tuple[str, str] | None:
     return _LOW_PRECISION_MATMUL_SYMBOLS.get((op_name, dtype))
 
 
-def supports_native_package(module: GraphIRModule) -> bool:
+def native_package_kind(module: GraphIRModule) -> str | None:
+    """Classify one canonical Apple CPU descriptor request.
+
+    Recognition belongs with the Apple package producer.  In particular, the
+    shared driver must not grow a second list of CPU value-ABI families merely
+    to decide whether canonical compilation may promote a package.
+    """
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
-        return False
+        return None
     fn, op = module.functions[0], module.functions[0].body[0]
     names = tuple(value.removeprefix("%") for value in op.operands)
     args = {arg.name: arg for arg in fn.args}
     if not names or any(name not in args for name in names):
-        return False
+        return None
     input_dtypes = {args[name].ir_type.dtype for name in names}
     if len(input_dtypes) != 1:
-        return False
+        return None
     dtype = input_dtypes.pop()
     if dtype is None or _entry_for(op.op_name, dtype) is None:
-        return False
+        return None
     expected_result_dtypes = _TUPLE_RESULT_DTYPES.get(op.op_name, (dtype,))
     if (len(fn.result_types) != len(expected_result_dtypes)
             or tuple(result.dtype for result in fn.result_types) != expected_result_dtypes
             or len(fn.return_values) != len(expected_result_dtypes)):
-        return False
+        return None
     try:
         input_shapes = [tuple(int(v) for v in args[name].ir_type.shape) for name in names]
         output_shapes = [tuple(int(v) for v in result.shape) for result in fn.result_types]
     except (TypeError, ValueError):
-        return False
+        return None
     if any(dimension <= 0 for shape in input_shapes + output_shapes for dimension in shape):
-        return False
+        return None
     if dtype in {"fp16", "bf16"}:
         if (len(names) != 2 or any(len(shape) != 2 for shape in input_shapes)
                 or len(output_shapes) != 1 or output_shapes[0] != (input_shapes[0][0], input_shapes[1][1])
                 or input_shapes[0][1] != input_shapes[1][0]):
-            return False
+            return None
     if op.op_name == "tessera.softmax":
         try:
             axis = int(op.kwargs.get("axis", -1))
         except (TypeError, ValueError):
-            return False
+            return None
         if (len(names) != 1 or len(input_shapes[0]) != 2 or output_shapes != [input_shapes[0]]
                 or axis % 2 != 1):
-            return False
-    return True
+            return None
+    return op.op_name.removeprefix("tessera.")
+
+
+def supports_native_package(module: GraphIRModule) -> bool:
+    """Whether the canonical Apple CPU descriptor contract accepts ``module``."""
+
+    return native_package_kind(module) is not None
 
 
 def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleCPUNativePackage:
-    if not supports_native_package(module):
+    if native_package_kind(module) is None:
         raise ValueError("Apple CPU native packaging requires one static supported descriptor contract")
     fn, op = module.functions[0], module.functions[0].body[0]
     names = tuple(value.removeprefix("%") for value in op.operands)

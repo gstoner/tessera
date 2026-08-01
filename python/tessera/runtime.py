@@ -30621,6 +30621,9 @@ _APPLE_VALUE_GPU_DISPATCH: dict[str, tuple] = {
     "tessera_apple_gpu_tile_simdgroup_gemm_f16": (_apple_gpu_tile_simdgroup_gemm_available, "tile_simdgroup_f16"),
     "tessera_apple_gpu_tile_simdgroup_gemm_bf16": (_apple_gpu_tile_simdgroup_gemm_available, "tile_simdgroup_bf16"),
     "tessera_apple_gpu_native_sparse_attn_f32": (_apple_gpu_native_sparse_attn_f32, "native_sparse_attn_f32"),
+    # Resolver is declared later with the native GQA ABI helpers; the value
+    # executor validates this tag before binding that ABI.
+    "tessera_apple_gpu_flash_attn_gqa_f32": (None, "flash_attn_gqa_f32"),
     "tessera_apple_gpu_ppo_policy_loss_f32": (_apple_gpu_ppo_policy_loss_f32, "ppo_policy_loss_f32"),
     "tessera_apple_gpu_ppo_policy_loss_ex_f32": (_apple_gpu_ppo_policy_loss_ex_f32, "ppo_policy_loss_ex_f32"),
     "tessera_apple_gpu_ebm_energy_quadratic_value_f32": (
@@ -30737,7 +30740,33 @@ def _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np):
     from tessera.compiler.apple_target import AppleGPUArch, AppleGPUTargetProfile
     from tessera.compiler.msl_gemm_emit import dispatch_apple_simdgroup_tile_f16, materialize_apple_simdgroup_tile_msl
 
-    art = materialize_apple_simdgroup_tile_msl(AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, 32, 32, 16)
+    layout_owner = call.get("staging_layout_owner")
+    if layout_owner is None:
+        # Legacy direct Tile calls predate the compiler-owned layout contract.
+        bm, bn, bk, contract = 32, 32, 16, None
+    elif layout_owner == "canonical_tile_ir":
+        try:
+            bm = int(call["staging_tile_m"])
+            bn = int(call["staging_tile_n"])
+            bk = int(call["staging_tile_k"])
+            contract = {
+                "stage_depth": int(call["stage_depth"]),
+                "staged_a_bytes": int(call["staged_a_bytes"]),
+                "staged_b_bytes": int(call["staged_b_bytes"]),
+                "edge_scratch_bytes": int(call["edge_scratch_bytes"]),
+                "total_threadgroup_bytes": int(call["threadgroup_arena_bytes"]),
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                "tile_simdgroup_gemm canonical descriptor lacks a complete Apple staging contract"
+            ) from exc
+    else:
+        raise ValueError(f"tile_simdgroup_gemm has unknown staging layout owner {layout_owner!r}")
+    art = materialize_apple_simdgroup_tile_msl(
+        AppleGPUTargetProfile(AppleGPUArch.APPLE7), dtype, bm, bn, bk,
+        double_buffer=(contract is None or contract["stage_depth"] == 2),
+        staging_contract=contract,
+    )
     out, native = dispatch_apple_simdgroup_tile_f16(art, a, b)
     if not native:
         raise ValueError("TILE-1 simdgroup ABI returned non-native dispatch")
@@ -30806,6 +30835,62 @@ def _dispatch_gpu_native_sparse_attn(inputs, call, np):
         ctypes.c_int32(1 if causal else 0),
     )
     return out
+
+
+def _dispatch_gpu_flash_attn_gqa(inputs, call, np):
+    """Execute the strict f32 rank-4 Apple GQA value descriptor.
+
+    Q is ``[B,Hq,Sq,D]`` and K/V are ``[B,Hkv,Sk,D]``. This binds the exact
+    native C ABI named in the descriptor instead of routing through a broader
+    attention selector, keeping descriptor symbol and executed ABI identical.
+    """
+    symbol = str(call.get("symbol", ""))
+    entry = _APPLE_VALUE_GPU_DISPATCH.get(symbol)
+    if entry is None or entry[1] != "flash_attn_gqa_f32":
+        raise ValueError(
+            f"apple_value_target_ir(gpu): symbol {symbol!r} is not the f32 GQA value symbol"
+        )
+    if len(inputs) != 3:
+        raise ValueError(
+            f"apple_value_target_ir(gpu): flash_attn_gqa value-call needs exactly 3 input(s), got {len(inputs)}"
+        )
+    q, k, v = (np.ascontiguousarray(np.asarray(value, dtype=np.float32)) for value in inputs)
+    if q.ndim != 4 or k.ndim != 4 or v.ndim != 4:
+        raise ValueError("flash_attn_gqa(gpu) requires rank-4 Q/K/V tensors")
+    B, Hq, Sq, D = (int(dim) for dim in q.shape)
+    Bk, Hkv, Sk, Dk = (int(dim) for dim in k.shape)
+    if k.shape != v.shape or Bk != B or Dk != D or Hq <= 0 or Hkv <= 0 or Hq % Hkv:
+        raise ValueError(
+            f"flash_attn_gqa(gpu) requires Q[B,Hq,Sq,D] and matching K/V[B,Hkv,Sk,D] with Hq % Hkv == 0; got {q.shape}, {k.shape}, {v.shape}"
+        )
+    for key, actual in (("batch", B), ("q_heads", Hq), ("kv_heads", Hkv),
+                        ("sq", Sq), ("sk", Sk), ("head_dim", D)):
+        if key in call and int(call[key]) != actual:
+            raise ValueError(
+                f"flash_attn_gqa(gpu) descriptor {key}={call[key]} disagrees with operand shape {actual}"
+            )
+    if D > _apple_fused_score_cap():
+        raise ValueError(f"flash_attn_gqa(gpu) head_dim {D} exceeds the Apple fused cap")
+    scale = float(call.get("scale", 1.0 / math.sqrt(D)))
+    if not math.isfinite(scale) or scale <= 0.0:
+        raise ValueError("flash_attn_gqa(gpu) requires a finite positive scale")
+    sym = _apple_gpu_flash_attn_gqa_f32()
+    if sym is None:
+        raise ValueError(
+            "apple_gpu runtime lacks an active Metal f32 GQA executor; the non-Darwin stub is not executable for value IR"
+        )
+    q_flat = q.reshape(B * Hq, Sq, D)
+    k_flat = k.reshape(B * Hkv, Sk, D)
+    v_flat = v.reshape(B * Hkv, Sk, D)
+    out = np.empty_like(q_flat)
+    fp = lambda array: array.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    sym(
+        fp(q_flat), fp(k_flat), fp(v_flat), fp(out),
+        ctypes.c_int32(B * Hq), ctypes.c_int32(Hq), ctypes.c_int32(Hkv),
+        ctypes.c_int32(Sq), ctypes.c_int32(Sk), ctypes.c_int32(D),
+        ctypes.c_float(scale), ctypes.c_int32(1 if bool(call.get("causal", False)) else 0),
+    )
+    return out.reshape(q.shape)
 
 
 def _dispatch_gpu_ppo_policy_loss(inputs, call, np):
@@ -31150,6 +31235,7 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
         "batched_gemm",
         "tile_simdgroup_gemm",
         "native_sparse_attn_fused",
+        "flash_attn_gqa",
         "ppo_policy_loss",
         "ebm_energy_quadratic",
         "ebm_langevin_step",
@@ -31159,7 +31245,7 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
     }:
         raise ValueError(
             f"apple_value_target_ir(gpu): only batched_gemm, tile_simdgroup_gemm, "
-            f"native_sparse_attn_fused, ppo_policy_loss, EBM value kernels, "
+            f"native_sparse_attn_fused, flash_attn_gqa, ppo_policy_loss, EBM value kernels, "
             f"and cl30 clifford_geometric_product execute on the GPU value "
             f"lane today "
             f"(got op_kind={call.get('op_kind')!r})"
@@ -31185,6 +31271,8 @@ def _execute_apple_value_target_ir_gpu_artifact(artifact: "RuntimeArtifact", arg
         return _dispatch_gpu_batched_matmul(inputs, call, np)
     if op_kind == "tile_simdgroup_gemm":
         return _dispatch_gpu_tile_simdgroup_gemm(inputs, call, np)
+    if op_kind == "flash_attn_gqa":
+        return _dispatch_gpu_flash_attn_gqa(inputs, call, np)
     if op_kind == "ppo_policy_loss":
         return _dispatch_gpu_ppo_policy_loss(inputs, call, np)
     if op_kind == "ebm_energy_quadratic":

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-30
+last_updated: 2026-07-31
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -39,7 +39,13 @@ kernel correctness failure.
 The x86 sibling subsequently reserved canonical `x86` for typed MLIR/native
 packaging and renamed its portable-source candidate `x86_c`. ROCm already keeps
 canonical HSACO packaging separate from the `rocm_hip` source candidate, so
-this is parity validated with no HIP/ROCDL or gfx1151 evidence change.
+this is parity validated with no HIP/ROCDL or gfx1151 evidence change. Apple
+likewise owns its package-family admission locally and retains only an explicit
+Value Target-IR compatibility/probe opt-out; no ROCm behavior changes.
+
+APPLE-RASTER-1 subsequently consumed the shared map in emitted MSL and retained
+row-major after mixed Apple7 timing. This neither changes the gfx1151 raster
+implementation nor supplies its missing profiler evidence.
 
 ## ROCM-CALIB-1: supply gfx1151 evidence to the hardware-free score calibration
 

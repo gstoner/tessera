@@ -90,6 +90,43 @@ def test_gqa_symbol_exported():
 
 
 @pytest.mark.hardware_apple_gpu
+def test_rank4_gqa_value_descriptor_matches_repeat_kv() -> None:
+    """The compiler's rank-4 descriptor reaches its named native GQA ABI."""
+    from tests._support.apple import require_apple_metal
+
+    require_apple_metal()
+    rng = np.random.RandomState(23)
+    B, Hq, Hkv, Sq, Sk, D = 2, 4, 2, 17, 19, 64
+    Q = rng.randn(B, Hq, Sq, D).astype(np.float32)
+    K = rng.randn(B, Hkv, Sk, D).astype(np.float32)
+    V = rng.randn(B, Hkv, Sk, D).astype(np.float32)
+    scale = 0.125
+    artifact = R.RuntimeArtifact(metadata={
+        "target": "apple_gpu",
+        "compiler_path": "apple_value_target_ir",
+        "apple_target_ir_kind": "value_target_ir",
+        "executable": True,
+        "apple_value_calls": [{
+            "op": "tessera_apple.gpu.kernel_call",
+            "op_kind": "flash_attn_gqa",
+            "symbol": "tessera_apple_gpu_flash_attn_gqa_f32",
+            "status": "executable",
+            "batch": B,
+            "q_heads": Hq,
+            "kv_heads": Hkv,
+            "sq": Sq,
+            "sk": Sk,
+            "head_dim": D,
+            "scale": scale,
+            "causal": False,
+        }],
+    })
+    out = R._execute_apple_value_target_ir_gpu_artifact(artifact, [Q, K, V])
+    ref = _ref_gqa(Q, K, V, Hq, Hkv, scale, False)
+    np.testing.assert_allclose(out, ref, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.hardware_apple_gpu
 def test_gqa_f16_bf16_symbols_exported():
     rt = R._load_apple_gpu_runtime()
     assert hasattr(rt, "tessera_apple_gpu_flash_attn_gqa_f16")

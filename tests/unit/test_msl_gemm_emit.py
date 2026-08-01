@@ -145,6 +145,27 @@ def test_steel_fragment_count_scales_with_tile():
     assert "simdgroup_matrix<float, 8, 8> acc[8 * 4]" in msl
 
 
+@pytest.mark.parametrize(("order", "group"), [
+    ("column_major", 1), ("grouped_m", 4), ("grouped_n", 4),
+])
+def test_steel_nondefault_raster_uses_the_shared_block_mapping(order, group):
+    """The Metal source changes tile assignment, not storage or launch shape."""
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16, raster_order=order, raster_group=group)
+    assert validate_steel_gemm_structure(msl, dtype="f16").ok
+    assert "const uint grid_m = (M + BM - 1u) / BM;" in msl
+    assert "const uint grid_n = (N + BN - 1u) / BN;" in msl
+    assert "tgid.y * grid_n + tgid.x" in msl
+    assert "const uint m0 = (uint)_tsr_tile_m * BM;" in msl
+    assert "const uint n0 = (uint)_tsr_tile_n * BN;" in msl
+
+
+def test_steel_row_major_keeps_the_established_direct_coordinates():
+    msl = emit_steel_gemm_msl("f16", 32, 32, 16)
+    assert "const uint m0 = tgid.y * BM;" in msl
+    assert "const uint n0 = tgid.x * BN;" in msl
+    assert "const uint grid_m" not in msl
+
+
 def test_steel_rejects_non_fragment_multiple_tile():
     with pytest.raises(ValueError):
         emit_steel_gemm_msl("f16", 20, 32, 16)   # BM not a multiple of 8

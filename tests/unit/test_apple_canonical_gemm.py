@@ -65,7 +65,25 @@ def _descriptor(stdout: str) -> dict[str, str]:
     call = [line for line in stdout.splitlines()
             if "tessera_apple.gpu.kernel_call" in line]
     assert call, f"no Apple dispatch in:\n{stdout}"
-    return dict(re.findall(r'([\w.]+) = "?([\w.]+)"?', call[0]))
+    # Descriptor values include MLIR scientific literals (for example
+    # ``1.250000e-01 : f32``), not only identifiers and integer attrs.
+    return {
+        key: quoted or bare
+        for key, quoted, bare in re.findall(
+            r'([\w.]+) = (?:"([^"]+)"|([^,\s]+))', call[0]
+        )
+    }
+
+
+def _staging_contract(descriptor: dict[str, str]) -> dict[str, int]:
+    """Read the compiler-owned MSL staging plan off a canonical descriptor."""
+    return {
+        "stage_depth": int(descriptor["tessera_apple.stage_depth"]),
+        "staged_a_bytes": int(descriptor["tessera_apple.staged_a_bytes"]),
+        "staged_b_bytes": int(descriptor["tessera_apple.staged_b_bytes"]),
+        "edge_scratch_bytes": int(descriptor["tessera_apple.edge_scratch_bytes"]),
+        "total_threadgroup_bytes": int(descriptor["tessera_apple.threadgroup_arena_bytes"]),
+    }
 
 
 def test_canonical_loop_becomes_one_apple_simdgroup_dispatch(
@@ -91,6 +109,13 @@ def test_canonical_loop_becomes_one_apple_simdgroup_dispatch(
     assert descriptor["tessera_apple.tile_k"] == "16"
     # The ragged-tail guard is part of the contract Apple must honor.
     assert descriptor["tessera_apple.ragged_zero_pad"] == "true"
+    assert descriptor["tessera_apple.staging_layout_owner"] == "canonical_tile_ir"
+    assert descriptor["tessera_apple.stage_depth"] == "2"
+    assert int(descriptor["tessera_apple.threadgroup_arena_bytes"]) == (
+        int(descriptor["tessera_apple.staged_a_bytes"])
+        + int(descriptor["tessera_apple.staged_b_bytes"])
+        + int(descriptor["tessera_apple.edge_scratch_bytes"])
+    )
 
 
 def test_bf16_canonical_loop_selects_the_bf16_symbol(
@@ -179,7 +204,8 @@ def test_canonical_loop_dispatch_executes_and_matches_the_oracle(
         int(descriptor["tessera_apple.tile_k"]),
     )
     artifact = materialize_apple_simdgroup_tile_msl(
-        TARGET, "fp16", block.m, block.n, block.k)
+        TARGET, "fp16", block.m, block.n, block.k,
+        staging_contract=_staging_contract(descriptor))
     assert artifact.resources.total_threadgroup_bytes <= (
         TARGET.threadgroup_memory_capacity_bytes)
 
@@ -222,12 +248,12 @@ def _attn_module(sq: int, sk: int, d: int, storage: str, causal: str) -> str:
 
 
 def _lower_attn(
-    toolchain: CompilerToolchain, module: str
+    toolchain: CompilerToolchain, module: str, *, tile_q: int = 64, tile_kv: int = 64,
 ) -> subprocess.CompletedProcess[str]:
     tessera_opt = toolchain.require_tessera_opt("tessera-tile-ir-lowering", "tessera-apple-streaming-attention")
     return subprocess.run(
         [str(tessera_opt), "-", "--allow-unregistered-dialect",
-         "--tessera-tile-ir-lowering=tile-q=64 tile-kv=64 sm=90",
+         f"--tessera-tile-ir-lowering=tile-q={tile_q} tile-kv={tile_kv} sm=90",
          "--tessera-apple-streaming-attention"],
         input=module, capture_output=True, text=True, check=False, timeout=60)
 
@@ -250,6 +276,72 @@ def test_streaming_attention_carries_the_shared_boundary_semantics(
     # The recurrence and its depth-3 staging are gone.
     assert "scf.for" not in proc.stdout
     assert "tile.pipeline_init" not in proc.stdout
+
+
+def _attn_rank4_gqa_module(*, window_left: int = -1) -> str:
+    return f"""module attributes {{tessera.ir.version = "1.0",
+    tessera.target = {{sm = 90 : i32, warps = 4 : i32, smem = 233472 : i64,
+                      pipeline_stages = 2 : i32}}}} {{
+  func.func @rank4_gqa(%Q: tensor<2x4x17x64xf32>,
+                       %K: tensor<2x2x19x64xf32>,
+                       %V: tensor<2x2x19x64xf32>) -> tensor<2x4x17x64xf32> {{
+    %o = "tessera.flash_attn"(%Q, %K, %V)
+        <{{operandSegmentSizes = array<i32: 1, 1, 1, 0>}}> {{
+      causal = true, head_dim = 64 : i64, scale = 0.125 : f32,
+      tessera.tile_q = 17 : i32, tessera.tile_kv = 16 : i32,
+      window_left = {window_left} : i64, window_right = -1 : i64
+    }} : (tensor<2x4x17x64xf32>, tensor<2x2x19x64xf32>,
+          tensor<2x2x19x64xf32>) -> tensor<2x4x17x64xf32>
+    return %o : tensor<2x4x17x64xf32>
+  }}
+}}"""
+
+
+def test_rank4_streaming_attention_claims_the_enclosing_distribution(
+    compiler_toolchain: CompilerToolchain,
+) -> None:
+    """Rank-4 GQA replaces batch/head distribution, never the inner slice loop."""
+    proc = _lower_attn(
+        compiler_toolchain, _attn_rank4_gqa_module(), tile_q=17, tile_kv=16,
+    )
+    assert proc.returncode == 0, proc.stderr
+    descriptor = _descriptor(proc.stdout)
+    assert descriptor["op_kind"] == "flash_attn_gqa"
+    assert descriptor["symbol"] == "tessera_apple_gpu_flash_attn_gqa_f32"
+    assert descriptor["abi"] == "msl_gqa"
+    assert descriptor["tessera_apple.rank4_distribution"] == "true"
+    assert descriptor["tessera_apple.batch"] == "2"
+    assert descriptor["tessera_apple.q_heads"] == "4"
+    assert descriptor["tessera_apple.kv_heads"] == "2"
+    assert descriptor["tessera_apple.gqa_group_size"] == "2"
+    assert descriptor["tessera_apple.sq"] == "17"
+    assert descriptor["tessera_apple.sk"] == "19"
+    assert descriptor["tessera_apple.scale"] == "1.250000e-01"
+    # The descriptor is not merely inspectable: its symbol is allowlisted and
+    # probed for the Apple value-artifact executor.
+    from tessera.compiler.driver import (
+        apple_value_call_is_executable,
+        extract_apple_value_calls,
+    )
+
+    call = extract_apple_value_calls(proc.stdout)[0]
+    assert call["q_heads"] == 4
+    assert call["kv_heads"] == 2
+    assert call["scale"] == 0.125
+    assert apple_value_call_is_executable(call)
+    assert "scf.for" not in proc.stdout
+    assert "tensor.insert_slice" not in proc.stdout
+    assert "tile.pipeline_init" not in proc.stdout
+
+
+def test_rank4_streaming_attention_rejects_unrepresented_window(
+    compiler_toolchain: CompilerToolchain,
+) -> None:
+    proc = _lower_attn(
+        compiler_toolchain, _attn_rank4_gqa_module(window_left=8), tile_q=17, tile_kv=16,
+    )
+    assert proc.returncode != 0
+    assert "APPLE_STREAMING_ATTN_RANK4_MODIFIER_UNSUPPORTED" in proc.stderr
 
 
 @pytest.mark.hardware_apple_gpu

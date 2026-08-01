@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-30
+last_updated: 2026-07-31
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -17,15 +17,20 @@ optimizer/backward-materializer items.
 
 ## APPLE-SPINE-1: reconcile retained compiler lanes after canonical selection
 
-Cross-backend sync `EXECUTION-SPINE-2026-07-29` — **parity validated for the
-shared selector contract; lane reconciliation remains follow-up required.**
+Cross-backend sync `EXECUTION-SPINE-2026-07-29` — **closed — host-free selector contract.**
 Apple CPU and GPU already auto-promote eligible native packages through
 `canonical_compile()` and retain their established
 `apple_cpu_native_descriptor` / `apple_native_descriptor` runtime identities.
 The NVIDIA selector cleanup changes no Apple IR, ABI, package, schedule, or
-exact-device claim. Apple follow-up remains the architectural task: reconcile
-the value/artifact Target-IR lane with compiler-owned native packaging without
-silently bypassing either status-bearing ABI.
+exact-device claim. Apple CPU and GPU now each own one
+`native_package_kind()` / `package_native()` admission point, which the shared
+driver uses for canonical selection and trace provenance. `apple_target_ir_mode`
+is a closed `artifact`/`value` choice: `value` remains an explicit
+compatibility/probe route and deliberately opts out of descriptor promotion;
+unknown modes and `value` plus `package_native=True` are rejected rather than
+silently choosing a route. Host-free decision-table tests cover both Apple
+targets. This slice changes selection authority only, not emitted IR, ABI,
+package contents, schedule, or exact-device evidence.
 
 The x86 sibling has since reconciled its split by reserving canonical `x86` for
 typed MLIR/native packaging and moving portable C to an `x86_c` arbiter
@@ -77,10 +82,9 @@ used for unrelated cache-model research, but cannot revive this rejected score.
 
 ## APPLE-RASTER-1: reconcile the MLX-inherited swizzle with the shared contract
 
-Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **follow-up required, owning
-host M1 Max (apple7).** Apple's follow-up is *reconciliation*, not
-implementation: it is the one backend that already had a threadblock swizzle
-before the shared contract existed.
+Cross-backend sync `RASTER-CONTRACT-2026-07-28` — **closed — carried, with
+row-major retained.** The owning M1 Max (apple7) now has an emitted-MSL and
+exact-device decision, not merely a schedule-note claim.
 
 **Shared contract changed.** Schedule IR gained `raster_order` (`row_major` |
 `column_major` | `grouped_m` | `grouped_n`) and `raster_group` on
@@ -89,22 +93,19 @@ cache, over the arch-neutral `compiler/tile_rasterization.py`. Rationale:
 [`compiler/TILESIGHT_ASSESSMENT.md`](../../compiler/TILESIGHT_ASSESSMENT.md)
 §3.2.
 
-**The pre-existing divergence.** `compiler/apple_gemm_schedules.py` carries
-`swizzle_log`, inherited from MLX as a Metal function constant with a hardcoded
-heuristic — `swizzle_log = 0 if tm <= 3 else 1`, where `tm = ceil(M/bm)`. That is
-a two-valued, shape-derived rule, not a tuned axis, and it is expressed as a
-power-of-two tile block rather than the contract's panel height. So Apple is not
-missing the lever; it has a **second, incompatible spelling of it**, which is
-exactly the kind of drift the shared contract exists to stop.
+**Resolved divergence.** `compiler/apple_gemm_schedules.py` did carry an
+MLX-derived `swizzle_log` helper, but the real Tessera MSL emitter never
+consumed it; it was neither a Metal function constant nor an executable raster
+route. The helper is retired. Apple now passes the shared `raster_order` /
+`raster_group` directly to the MSL emitter. `row_major` retains the exact direct
+`tgid.y` / `tgid.x` coordinate expressions; a non-default source specialization
+uses the same shared `tile_rasterization.emit_c()` mapping as CUDA and HIP while
+retaining the 2-D grid, tile storage, and 32-lane threadgroup ABI.
 
-**Decision required (not yet made).** Either (a) express `swizzle_log` as
-`raster_order="grouped_m"` with `raster_group = 1 << swizzle_log` and retire the
-hardcode, or (b) record why the MLX form stays — e.g. if the Metal
-function-constant specialization is load-bearing for pipeline-state caching in a
-way the generic emission is not. Option (a) is preferred *only* if it measures
-neutral-or-better; MLX's heuristic is tuned against real Apple silicon and must
-not be displaced by a generic default on tidiness grounds (Theory §1 rule 2
-applies to inherited hand-tuning as much as to our own).
+**Decision (2026-07-31).** The emitted `grouped_m, raster_group=2` route is
+native and numerically correct, but it is not neutral-or-better across the four
+matched shape buckets. Therefore `row_major` remains the selected default; the
+other shared orders are carried and executable, not autotune-promoted.
 
 **Note the shape of the win differs here.** M1 Max is unified-memory with a
 48 MB SLC, not a discrete L2 — the cache tier a swizzle protects behaves
@@ -117,9 +118,14 @@ reference for every block id. The emitted form is C, so it validates the ROCm an
 NVIDIA lanes; Apple's MSL synthesizer would need its own emission if option (a)
 is chosen — the C snippet is *not* MSL.
 
-**Missing exact-device evidence.** An M1 Max A/B of the MLX heuristic against
-`grouped_m` at matched group sizes across the GEMM shape buckets, with Metal
-counter evidence, before either spelling is declared canonical.
+**Exact-device evidence.**
+[`apple7_raster_2026_07_31.json`](../../../../benchmarks/baselines/apple7_raster_2026_07_31.json)
+records two independent warm 15-sample Metal-timestamp rounds for fp16-storage /
+fp32-accumulation 32x32x16 Tile GEMM. All 16 paired rows are native and correct.
+Grouped-M 2 wins the 256-cube strongly, loses the wide bucket, improves one tall
+round but not enough for a global retain rule, and is mixed on ragged. Counter
+sampling is explicitly `false` on this host, so no SLC interpretation is claimed.
+`benchmarks/apple_gpu/benchmark_raster_order.py` reproduces the matched matrix.
 
 ## APPLE-AOT-4: S1 probe — what an MLIR → AIR emitter would actually cost
 
@@ -1506,7 +1512,7 @@ implementation/proof work; `blocked` names an external prerequisite.
 | Order | ID | Status | Current state and next action |
 |---:|---|---|---|
 | 1 | APPLE-CALIB-1 | **active — cache semantics + exact-device analysis** | Define an evidence-backed Apple SLC/traffic interpretation, then correlate T1 with the committed Apple7 GEMM corpus. Keep the retired bank-conflict metric not applicable and do not claim non-GEMM coverage from T1 v1. |
-| 2 | APPLE-RASTER-1 | **active — exact-device A/B** | Reconcile `swizzle_log` with the shared raster contract only after a matched-group Apple7 A/B establishes neutral-or-better latency and counter behavior. |
+| 2 | APPLE-RASTER-1 | **closed — row-major retained** | Retired the unconsumed MLX `swizzle_log` helper; the MSL Tile emitter consumes shared raster order/group under the unchanged 2-D launch ABI. Two 15-sample Apple7 warm pairs prove native correctness but mixed latency and unavailable counters, so grouped-M 2 is carried rather than selected. |
 | 3 | APPLE-AOT-2 | **landing** | Runner registration and pointwise/reduction AOT coverage are landed. Harden the artifact/deferred contract, complete the remaining runtime families, then land cache maturity before the shared arbiter ships. APPLE-AOT-1/3/4 are completed evidence under the same sync key. |
 | 4 | APPLE-TEST-1 | **closed** | The centralized hardware boundary collects 976 of 15,374 unit nodes, the structural scan finds zero inline Apple capability gates, and portable marker/provenance ratchets reject classification drift. |
 | 5 | APPLE-CI-2 | **closed** | The host-free compiler ownership gate is executable and green for the declared Apple capability set, and now validates the exact LLVM/MLIR runner-utils path for every CMake cache type. |
@@ -1780,12 +1786,12 @@ capability-rejection or consumer proof, not undeclared divergence.
 
 | Order | ID | Status | Current state and next action |
 |---:|---|---|---|
-| 22 | APPLE-PIPE-1 | **landing** | The `tessera-apple-threadgroup-pipeline` pass is a real consumer of the shared SSA vocabulary and runs first in `tessera-lower-to-apple_gpu`: `!tile.buffer` allocations are placed 16-byte-aligned into one capacity-bounded per-function threadgroup arena, and `!tile.pipeline_state` rings are claimed as `ping_pong` / `single` Metal staging. Nine registered diagnostics own the capability boundary. Evidence below. **Narrower follow-up:** the emitted steel MSL still computes its own staged bytes — the two owners are proven *equal*, not yet *sourced from one place* — and this rung is host-free by design, so it carries no exact-device execution proof. |
-| 23 | APPLE-TILE-2 | **landing** | `tessera-apple-canonical-gemm` recognizes the shared three-deep M/N/K nest and re-forms it as one `simdgroup_matrix` dispatch carrying the loop's tile decision, `accumulate = "fp32"`, and the `ragged_zero_pad` guarantee. Exact-device execute-and-compare passes on Apple7 Metal for aligned and ragged rows, driven by the compiler-produced descriptor. The **incumbent rule is recorded in the pass itself**: recognition is not promotion. **Narrower follow-up:** no strict-v2 paired route-ledger row yet, so no timing-domain comparison exists and value-mode Accelerate/MPS remains the production route by default rather than by measurement. |
+| 22 | APPLE-PIPE-1 | **closed (2026-07-31)** | The `tessera-apple-threadgroup-pipeline` pass consumes the shared SSA vocabulary: `!tile.buffer` allocations are placed 16-byte-aligned into a capacity-bounded per-function arena and `!tile.pipeline_state` rings are claimed as `ping_pong` / `single` Metal staging. Canonical GEMM now carries that physical decision forward as one `canonical_tile_ir` staging contract on its Apple descriptor: fragment-rounded tile dimensions, stage depth, staged-A/B bytes, edge scratch, arena total, and capacity. The runtime materializer consumes those bytes for the emitted MSL declarations and rejects any disagreement by name; it no longer substitutes its old `32x32x16` default for compiler-produced descriptors. Host compiler tests prove descriptor arithmetic and mismatch rejection; the existing Apple7 exact-device canonical-GEMM oracle now materializes from that descriptor contract. Sibling outcome: no shared Tile IR or sibling schedule changed. |
+| 23 | APPLE-TILE-2 | **closed (2026-07-31, incumbent retained by strict-v2 evidence)** | `tessera-apple-canonical-gemm` recognizes the shared three-deep M/N/K nest and re-forms it as one `simdgroup_matrix` dispatch carrying the loop's tile decision, `accumulate = "fp32"`, and the `ragged_zero_pad` guarantee. Exact-device execute-and-compare passes on Apple7 Metal for aligned and ragged rows, driven by the compiler-produced descriptor. The Tile-owned producer now writes the shared strict-v2 source-report schema: two fresh Apple7 processes each interleave MPS with the exact f16/bf16 source-backed Tile ABI across `8x8x8`, `32x16x32`, ragged `127x63x129`, and `256x256x256`, retaining native placement, oracle correctness, owned-command-buffer timing, and resource/counter records. [`apple7_tile_strict_v2_route_ledger.json`](../../../../benchmarks/baselines/apple7_tile_strict_v2_route_ledger.json) seals those reports and admits all 16 exact shape/dtype/domain rows against the live context. Every row retains MPS under the paired stable-win rule, so the MPS/Accelerate incumbent selector is intentionally unchanged; the ledger makes that retention measured rather than defaulted. Sibling outcome: no shared Tile IR, ABI, or NVIDIA/ROCm/x86 schedule changed. |
 | 24 | APPLE-ATTN-STREAM-1 | **landing** | `tessera-apple-streaming-attention` recognizes the shared KV-block recurrence and re-forms it as one Apple flash-attention dispatch, carrying `causal` / `logical_sk` / `window_left/right` / `kv_block` **read off `tessera_attn.boundary_mask`** instead of re-derived — the ownership fix this row exists for. It runs first in `tessera-lower-to-apple_gpu`, ahead of APPLE-PIPE-1, because the shared depth-3 KV ring must be re-formed before the threadgroup pass judges a schedule the program is about to stop having. Unblocked without changing the shared `LseSaveOp` declaration (see below). **Narrower follow-up:** the descriptor targets the same ABI family as the incumbent, so numerical parity is proven structurally plus an on-device oracle check — not yet a full APPLE-ATTN-FWD-1 corpus re-run, and no selector changed. |
 | 25 | APPLE-DTYPE-1-REJECT | **closed** | The macOS-27 SDK gate is enforced, not incidental. `tests/tessera-ir/phase8/apple_lowprecision_capability_gate.mlir` runs the same module through `--tessera-storage-legalize` twice: the `apple_gpu` target stamps no `tessera.storage_packed`/`_container` on either a block-scaled NVFP4 decode or a packed int4 contraction, while the `nvidia_sm120` contrast run stamps both — so the negative cannot pass merely because the pass did nothing. A block-scaled or otherwise unrouted cooperative-matrix descriptor is separately rejected with `APPLE_MMA_STORAGE_UNSUPPORTED`, and `tests/unit/test_apple_threadgroup_pipeline.py` binds that gate to `select_apple_simdgroup_fragment`: fp16/bf16 accepted by both owners, nvfp4/fp4/fp6/fp8/int4 refused by both. APPLE-DTYPE-1 itself stays **blocked — SDK**; this row proves the block, it does not lift it. |
 | 26 | APPLE-COUNTER-1 | **landing** | `compiler/apple_counter_evidence.py` maps Metal telemetry onto the shared autotune-evidence fields with an explicit four-state reason on every field: `measured`, `not_measured` (device can, this run did not), `unsupported_by_device` (this GPU family cannot), `no_public_api` (Metal exposes no query — register count, scratch bytes, spill count, achieved occupancy). Supplying a value the capability bits do not support raises rather than silently downgrading, so a corpus cannot claim evidence the device cannot produce. Bit positions are drift-gated against the runtime's own documented matrix. **Narrower follow-up:** the benchmark writers do not yet emit these fields into a committed corpus, so this is the vocabulary and its guards, not a recorded two-run corpus. |
-| 27 | APPLE-ATTN-STREAM-2 | **active** | Rank-4 batch/head streaming attention. `CORE-STREAMING-ATTN-RANK4-ROCM-2026-07-26` added shared rank-4 distribution and a direct ROCm consumer; APPLE-ATTN-STREAM-1 re-forms rank-2 only and its `APPLE_STREAMING_ATTN_SHAPE_UNSUPPORTED` diagnostic refuses anything else. Extend the consumer to the rank-4 form, or record rank-4 as an explicit Apple non-goal with the reason. Gate: the same parity bar as rank-2 — boundary semantics read off the shared ops, plus an exact-device oracle row. |
+| 27 | APPLE-ATTN-STREAM-2 | **closed (2026-07-31, narrow f32 GQA contract)** | `tessera-apple-streaming-attention` now recognizes the marked rank-2 KV loop only when it is enclosed by the shared `query_head` then `batch` distributions, and replaces the **batch-loop result** with one `flash_attn_gqa` descriptor — never the rank-2 inner slice. The descriptor carries static `B/Hq/Hkv/Sq/Sk/D`, GQA group size, `scale`, causal/logical-KV semantics, and the shared KV block, and binds `tessera_apple_gpu_flash_attn_gqa_f32` through the Apple value-artifact executor. Structural tests prove the enclosing loops/staging disappear; an Apple7 exact-device repeat-KV oracle proves that descriptor ABI. Scope is deliberately static f32, no live LSE, no dropout, and causal/scale only; f16/bf16 output policy and window/bias/softcap coverage remain owned by APPLE-ATTN-MODIFIERS-1. Sibling outcome: shared IR was unchanged, so ROCm/NVIDIA/x86 schedules were not altered or reclassified. |
 | 28 | APPLE-ATTN-BWD-2 | **active** | Consume the shared tensor-valued attention **backward** phase loops. `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` made gfx1151 the first direct physical consumer; Apple must validate the same dQ / split-dK/dV / fixed-reduction contract and map it to a Metal-owned package. APPLE-ATTN-BWD-1 already owns proven serial / atomic / split-reduce Metal routes, so this is contract adoption, not new kernels — the question is whether the shared phase loops describe the schedules Apple already runs. The AMD WMMA schedule, five-entry HSACO, HIP workspace, and host-wall timing do not transfer. |
 | 29 | APPLE-ATTN-BWD-3 | **active** | `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified shared backward contracts; confirm Apple's backward satisfies them or record the divergence. The shared LSE checkpoint contract is now real and conditional; Apple retains recompute until an exact Metal package and benchmark justify a saved checkpoint. |
 | 30 | APPLE-ATTN-MODIFIERS-1 | **active** | `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26` lands shared tensor-valued attention loop modifiers. Apple owns validating that its causal / sliding-window / softcap / bias / GQA-MQA envelope still expresses every admitted modifier after the shared change, and rejecting the rest by name rather than silently narrowing. |

@@ -35,6 +35,7 @@
 #include "Tessera/Target/Apple/Passes.h"
 #include "Tessera/Target/Apple/TesseraAppleDialect.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
@@ -108,6 +109,28 @@ void eraseDeadStaging(Block *block) {
   }
 }
 
+bool hasAttentionDistribution(Operation *op, StringRef distribution) {
+  if (!op || op->getName().getStringRef() != "scf.for")
+    return false;
+  auto attr = op->getAttrOfType<StringAttr>("tessera.attention_distribution");
+  return attr && attr.getValue() == distribution;
+}
+
+bool isStaticRank4(Value value) {
+  auto type = llvm::dyn_cast<RankedTensorType>(value.getType());
+  return type && type.getRank() == 4 && type.hasStaticShape();
+}
+
+bool hasLiveLse(Operation *root) {
+  bool live = false;
+  root->walk([&](Operation *op) {
+    if (op->getName().getStringRef() == "tessera_attn.lse_accumulate" &&
+        op->getNumResults() > 1 && !op->getResult(1).use_empty())
+      live = true;
+  });
+  return live;
+}
+
 struct StreamingAttentionToAppleGPUPass
     : public PassWrapper<StreamingAttentionToAppleGPUPass,
                          OperationPass<ModuleOp>> {
@@ -178,6 +201,136 @@ struct StreamingAttentionToAppleGPUPass
             "attention Apple can re-form");
         signalPassFailure();
         return;
+      }
+
+      // APPLE-ATTN-STREAM-2: a rank-4 shared attention lowering is not a
+      // rank-4 KV loop. The marked loop still carries one [Sq, D] slice; the
+      // enclosing query-head and batch loops own distribution and assemble the
+      // [B, Hq, Sq, D] result. Claiming the inner loop would replace one slice
+      // with a rank-4 call and is therefore structurally invalid.
+      Operation *headLoop = loop->getParentOp();
+      Operation *batchLoop = headLoop ? headLoop->getParentOp() : nullptr;
+      if (hasAttentionDistribution(headLoop, "query_head") &&
+          hasAttentionDistribution(batchLoop, "batch")) {
+        if (!isStaticRank4(q) || !isStaticRank4(k) || !isStaticRank4(v) ||
+            batchLoop->getNumResults() != 1 ||
+            !isStaticRank4(batchLoop->getResult(0))) {
+          batchLoop->emitOpError(
+              "APPLE_STREAMING_ATTN_SHAPE_UNSUPPORTED: rank-4 Apple GQA "
+              "requires static [B,H,S,D] Q/K/V and one rank-4 batch result");
+          signalPassFailure();
+          return;
+        }
+        auto qType = llvm::cast<RankedTensorType>(q.getType());
+        auto kType = llvm::cast<RankedTensorType>(k.getType());
+        auto vType = llvm::cast<RankedTensorType>(v.getType());
+        auto outType = llvm::cast<RankedTensorType>(batchLoop->getResult(0).getType());
+        const int64_t batch = qType.getDimSize(0);
+        const int64_t qHeads = qType.getDimSize(1);
+        const int64_t sq = qType.getDimSize(2);
+        const int64_t headDim = qType.getDimSize(3);
+        const int64_t kvHeads = kType.getDimSize(1);
+        const int64_t sk = kType.getDimSize(2);
+        if (qType.getElementType() != Float32Type::get(&getContext()) ||
+            kType.getElementType() != qType.getElementType() ||
+            vType.getElementType() != qType.getElementType() ||
+            outType.getElementType() != qType.getElementType()) {
+          batchLoop->emitOpError(
+              "APPLE_STREAMING_ATTN_DTYPE_UNSUPPORTED: rank-4 Apple GQA "
+              "currently requires f32 Q/K/V and f32 output");
+          signalPassFailure();
+          return;
+        }
+        if (kType.getDimSize(0) != batch || vType.getDimSize(0) != batch ||
+            vType.getDimSize(1) != kvHeads || vType.getDimSize(2) != sk ||
+            kType.getDimSize(3) != headDim || vType.getDimSize(3) != headDim ||
+            outType.getShape() != qType.getShape() || qHeads <= 0 ||
+            kvHeads <= 0 || qHeads % kvHeads != 0) {
+          batchLoop->emitOpError(
+              "APPLE_STREAMING_ATTN_SHAPE_UNSUPPORTED: rank-4 Apple GQA "
+              "requires matching batch/head dimensions and an integral Q/KV "
+              "head ratio");
+          signalPassFailure();
+          return;
+        }
+        if (headDim > kAppleHeadDimCap) {
+          batchLoop->emitOpError("APPLE_STREAMING_ATTN_HEAD_DIM_UNSUPPORTED: "
+                                 "rank-4 head_dim ")
+              << headDim << " exceeds the Apple fused-chain score cap of "
+              << kAppleHeadDimCap;
+          signalPassFailure();
+          return;
+        }
+        if (hasLiveLse(batchLoop)) {
+          batchLoop->emitOpError(
+              "APPLE_STREAMING_ATTN_LSE_UNSUPPORTED: rank-4 Apple GQA "
+              "returns attention output only, but this distribution retains "
+              "a live per-row log-sum-exp");
+          signalPassFailure();
+          return;
+        }
+
+        // The established GQA ABI carries causal semantics and scale, but not
+        // sliding windows, score bias, or softcap. Refuse those modifiers at
+        // this boundary rather than dropping shared semantics.
+        const auto hasNonDefaultWindow = [&](StringRef name) {
+          auto attr = mask ? mask->getAttrOfType<IntegerAttr>(name) : nullptr;
+          return attr && attr.getInt() != -1;
+        };
+        if (hasNonDefaultWindow("window_left") ||
+            hasNonDefaultWindow("window_right") ||
+            (score && (score->hasAttr("bias") || score->hasAttr("softcap")))) {
+          batchLoop->emitOpError(
+              "APPLE_STREAMING_ATTN_RANK4_MODIFIER_UNSUPPORTED: rank-4 "
+              "Apple GQA currently supports causal and scale only; window, "
+              "bias, and softcap remain on the shared decomposed path");
+          signalPassFailure();
+          return;
+        }
+
+        OpBuilder builder(batchLoop);
+        OperationState state(batchLoop->getLoc(),
+                             "tessera_apple.gpu.kernel_call");
+        state.addOperands({q, k, v});
+        state.addTypes({batchLoop->getResult(0).getType()});
+        state.addAttribute("op_kind", builder.getStringAttr("flash_attn_gqa"));
+        state.addAttribute("symbol", builder.getStringAttr(
+                                       "tessera_apple_gpu_flash_attn_gqa_f32"));
+        state.addAttribute("abi", builder.getStringAttr("msl_gqa"));
+        state.addAttribute("status", builder.getStringAttr("executable"));
+        state.addAttribute("framework", builder.getStringAttr("Metal"));
+        state.addAttribute("dtype", builder.getStringAttr("f32"));
+        state.addAttribute("tessera_apple.streaming_recurrence",
+                           builder.getBoolAttr(true));
+        state.addAttribute("tessera_apple.rank4_distribution",
+                           builder.getBoolAttr(true));
+        state.addAttribute("tessera_apple.batch", builder.getI64IntegerAttr(batch));
+        state.addAttribute("tessera_apple.q_heads", builder.getI64IntegerAttr(qHeads));
+        state.addAttribute("tessera_apple.kv_heads", builder.getI64IntegerAttr(kvHeads));
+        state.addAttribute("tessera_apple.sq", builder.getI64IntegerAttr(sq));
+        state.addAttribute("tessera_apple.sk", builder.getI64IntegerAttr(sk));
+        state.addAttribute("tessera_apple.head_dim",
+                           builder.getI64IntegerAttr(headDim));
+        state.addAttribute("tessera_apple.gqa_group_size",
+                           builder.getI64IntegerAttr(qHeads / kvHeads));
+        if (auto scale = score->getAttr("scale"))
+          state.addAttribute("tessera_apple.scale", scale);
+        if (mask) {
+          for (StringRef attr : {"causal", "logical_sk"})
+            if (Attribute value = mask->getAttr(attr))
+              state.addAttribute(("tessera_apple." + attr).str(), value);
+        } else {
+          state.addAttribute("tessera_apple.causal", builder.getBoolAttr(false));
+        }
+        if (auto block = loop->getAttrOfType<IntegerAttr>("tessera.kv_block"))
+          state.addAttribute("tessera_apple.kv_block", block);
+
+        Operation *call = builder.create(state);
+        batchLoop->getResult(0).replaceAllUsesWith(call->getResult(0));
+        Block *block = batchLoop->getBlock();
+        batchLoop->erase();
+        eraseDeadStaging(block);
+        continue;
       }
 
       auto qType = llvm::dyn_cast<RankedTensorType>(q.getType());

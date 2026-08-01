@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .msl_gemm_emit import SIMDGROUP_FRAG
+from .tile_rasterization import RasterOrder, emit_c
 
 
 class DeviceClass(Enum):
@@ -114,24 +115,31 @@ class GemmScheduleAxes:
     align_n: bool   # N % bn == 0  (fc 201)
     align_k: bool   # K % bk == 0  (fc 202)
     do_axpby: bool  # alpha != 1 or beta != 1 (fc 110) — fused α·AB + β·C epilogue
-    swizzle_log: int  # threadblock swizzle: tile = 1 << swizzle_log
+    raster_order: str  # shared block-id permutation; row_major remains selected
+    raster_group: int  # panel height for grouped_m/grouped_n
 
 
 def schedule_axes_for(
     m: int, n: int, k: int, tile: AppleGemmTile,
     *, alpha: float = 1.0, beta: float = 0.0,
+    raster_order: RasterOrder | str = RasterOrder.ROW_MAJOR,
+    raster_group: int = 1,
 ) -> GemmScheduleAxes:
     """Derive MLX's per-problem schedule axes for ``(M,N,K)`` under ``tile`` —
-    alignment booleans, the αAB+βC epilogue flag, and the threadblock swizzle
-    (``swizzle_log = tm<=3 ? 0 : 1`` where ``tm = ceil(M/bm)``)."""
-    tm = (m + tile.bm - 1) // tile.bm
-    swizzle_log = 0 if tm <= 3 else 1
+    alignment booleans, the αAB+βC epilogue flag, and the shared block-raster
+    choice.  The former MLX-only ``swizzle_log`` heuristic was never consumed by
+    Tessera's emitted MSL; it is retired rather than being silently promoted as
+    a default.  Callers may request a measured non-default shared raster.
+    """
+    order = RasterOrder(raster_order)
+    emit_c(order, group=raster_group)  # validate the shared emission contract
     return GemmScheduleAxes(
         align_m=(m % tile.bm == 0),
         align_n=(n % tile.bn == 0),
         align_k=(k % tile.bk == 0),
         do_axpby=(alpha != 1.0 or beta != 0.0),
-        swizzle_log=swizzle_log,
+        raster_order=order.value,
+        raster_group=raster_group,
     )
 
 

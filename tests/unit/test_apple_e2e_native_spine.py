@@ -103,7 +103,13 @@ def test_apple_gpu_canonical_pipeline_is_the_runtime_pipeline() -> None:
     assert resolution.declared_pipeline == "tessera-lower-to-apple_gpu-runtime"
 
 
-def test_canonical_compile_promotes_only_descriptor_contracts(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize(("target", "runtime_var"), [
+    ("apple_gpu", "TESSERA_APPLE_GPU_RUNTIME_LIB"),
+    ("apple_cpu", "TESSERA_APPLE_CPU_RUNTIME_LIB"),
+])
+def test_canonical_compile_promotes_only_descriptor_contracts(
+    monkeypatch, tmp_path, target, runtime_var,
+) -> None:
     """The normal canonical path owns the descriptor; explicit value mode does not.
 
     This preserves the value-IR probe surface while ensuring APPLE-E2E-1's
@@ -113,11 +119,67 @@ def test_canonical_compile_promotes_only_descriptor_contracts(monkeypatch, tmp_p
 
     dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     dylib.write_bytes(b"apple-e2e-test-runtime")
-    monkeypatch.setenv("TESSERA_APPLE_GPU_RUNTIME_LIB", str(dylib))
-    assert canonical_compile_options(_module(), target="apple_gpu")["package_native"] is True
+    monkeypatch.setenv(runtime_var, str(dylib))
+    assert canonical_compile_options(_module(), target=target)["package_native"] is True
     assert canonical_compile_options(
-        _module(), target="apple_gpu", options={"apple_target_ir_mode": "value"},
+        _module(), target=target, options={"apple_target_ir_mode": "value"},
     )["package_native"] is False
+
+
+@pytest.mark.parametrize("target", ["apple_gpu", "apple_cpu"])
+def test_apple_target_ir_mode_is_closed_and_has_no_conflicting_package_route(target) -> None:
+    """Value Target-IR is a named compatibility route, never a fallback."""
+    from tessera.compiler.driver import canonical_compile_options, compile_graph_module
+
+    with pytest.raises(ValueError, match="must be 'artifact' or 'value'"):
+        canonical_compile_options(_module(), target=target, options={"apple_target_ir_mode": "legacy"})
+    with pytest.raises(ValueError, match="must be 'artifact' or 'value'"):
+        compile_graph_module(
+            _module(), source_origin="apple-spine-unknown-route-test", target=target,
+            options={"apple_target_ir_mode": "legacy"}, enable_tool_validation=False,
+        )
+    with pytest.raises(ValueError, match="conflicts with package_native=True"):
+        canonical_compile_options(
+            _module(), target=target,
+            options={"apple_target_ir_mode": "value", "package_native": True},
+        )
+    with pytest.raises(ValueError, match="conflicts with package_native=True"):
+        compile_graph_module(
+            _module(), source_origin="apple-spine-conflicting-route-test", target=target,
+            options={"apple_target_ir_mode": "value", "package_native": True},
+            enable_tool_validation=False,
+        )
+
+
+@pytest.mark.parametrize(("target", "runtime_var"), [
+    ("apple_gpu", "TESSERA_APPLE_GPU_RUNTIME_LIB"),
+    ("apple_cpu", "TESSERA_APPLE_CPU_RUNTIME_LIB"),
+])
+def test_apple_package_trace_uses_backend_selected_kind(monkeypatch, tmp_path, target, runtime_var) -> None:
+    """Apple has the same package-kind provenance contract as every backend."""
+    from tessera.compiler.driver import compile_graph_module
+
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-spine-test-runtime")
+    monkeypatch.setenv(runtime_var, str(dylib))
+    bundle = compile_graph_module(
+        _module(), source_origin="apple-spine-package-kind-test", target=target,
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    event = next(
+        event for event in bundle.trace_events
+        if event.pass_name == f"{target.replace('_', '-')}-native-package"
+    )
+    assert event.metadata["op_family"] == "batched_gemm"
+    assert event.metadata["descriptor_op_family"] == "batched_gemm"
+
+
+def test_apple_native_package_kind_is_backend_owned() -> None:
+    from tessera.compiler.apple_cpu_native import native_package_kind as cpu_kind
+    from tessera.compiler.apple_native import native_package_kind as gpu_kind
+
+    assert gpu_kind(_module()) == "batched_gemm"
+    assert cpu_kind(_module()) == "batched_gemm"
 
 
 def test_value_family_descriptor_states_are_explicit() -> None:

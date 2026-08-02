@@ -170,7 +170,23 @@ Per-phase deliverables and the open-work priority queue live in
 
 4. **`ConstraintSolver` runs at decoration time.** `@jit` inspects annotations and calls `ConstraintSolver.check(signature)` before IR emission. Violations → `TesseraConstraintError`.
 
-5. **Effects are inferred, not declared.** `EffectLattice` walks the IR. Programmers only declare `@jit(deterministic=True)` and `@jit(seed=N)` at the top level.
+5. **Effects are inferred, not declared.** Programmers only declare
+   `@jit(deterministic=True)` and `@jit(seed=N)` at the top level.
+   **Corrected 2026-08-02 — inference is currently AST-based and there are two
+   mechanisms.** `EffectLattice` (`python/tessera/compiler/effects.py`) does
+   *not* walk the IR: `_EffectVisitor(ast.NodeVisitor)` walks the function's
+   **Python source AST** and matches dotted call names against `_OP_EFFECTS`.
+   Its own docstring scopes this ("Phase 1: AST-based single-function analysis.
+   Phase 2: full inter-procedural dataflow over the Graph IR call graph").
+   Separately, `src/transforms/lib/EffectAnnotationPass.cpp` computes effects on
+   the MLIR side — that is the one `GPUCollectiveInsertionPass` orders against.
+   **Consequence to design around: the AST walker fails open.** An op reached
+   through an alias, a local, a helper function, `getattr`, or a dict dispatch is
+   invisible to name matching, and an invisible op contributes `Effect.pure` — so
+   a function that calls RNG through a wrapper is inferred pure and
+   `@jit(deterministic=True)` passes. Do not rely on `EffectLattice` as a safety
+   property until effects are derived from traced IR (integrated plan W2.2).
+   Full analysis: [`docs/audit/compiler/COMPILER_ARCHITECTURE_SWEEP.md`](docs/audit/compiler/COMPILER_ARCHITECTURE_SWEEP.md) §F1.
 
 6. **Mock collectives use threads, not processes.** Multi-rank tests run in-process via `MockRankGroup`. No NCCL/MPI dependency in the test suite.
 

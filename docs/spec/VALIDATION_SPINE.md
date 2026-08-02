@@ -2,7 +2,7 @@
 status: Normative
 classification: Spec
 authority: Distinguishes unit / lit / build / artifact-only / hardware-runtime checks across the Tessera validation spine
-last_updated: 2026-07-13
+last_updated: 2026-08-02
 ---
 
 # Tessera validation spine — M5 deliverable
@@ -28,7 +28,7 @@ maps unambiguously to **command**.
 | **MLIR lit tests** | C++ pass + dialect contracts on canonical input MLIR | `lit tests/tessera-ir -v` (the console script; the `python -m lit` form does not work — lit's package has no `__main__`) | CPU only (after building `tessera-opt`) | opt-in: `TESSERA_VALIDATE_LIT=1 scripts/validate.sh` runs lit when both `lit` and `tessera-opt` are on PATH (or in `build/tools/tessera-opt/`); otherwise the layer is skipped with a clear diagnostic. |
 | **C++ build checks** | the C++ tree compiles against matched MLIR 23 / LLVM 23 | `cmake -B build && cmake --build build` | toolchain only | partial — gated on environment |
 | **Artifact-only target lowering** | an exact target/op has no executable runtime row; textual Target IR is still inspectable | `tessera-opt ... | FileCheck` | none | yes |
-| **Hardware-runtime smoke tests** | a supported symbol actually dispatches on its named device | backend-specific execute-and-compare fixtures (Apple, `nvidia_sm120`, or `rocm_gfx1151`) | the named accelerator | no (skipped without hardware) |
+| **Hardware-runtime smoke tests** | a supported symbol actually dispatches on its named device | backend-specific execute-and-compare fixtures (Apple, `nvidia_sm120`, `rocm_gfx1151`, or the local Intel AMX gate) | the named accelerator | no (excluded without hardware) |
 | **Generated audit drift** | `op_catalog` / `primitive_coverage` / `backend_manifest` / `capabilities` haven't drifted from the generated support table | `python -m tessera.compiler.audit support_table --check` | CPU only | yes |
 | **Canonical-program reports** | each shipped canonical program runs CPU-only and produces a deterministic `CompileReport` | `pytest tests/unit/test_compile_report.py tests/unit/test_canonical_program_registry.py` | CPU only | yes |
 | **Benchmark schema validation** | every emitted benchmark row matches the M5 canonical schema | `pytest tests/unit/test_benchmark_row.py` | CPU only | yes |
@@ -81,12 +81,11 @@ the spine layers as follows:
 
 ## Hardware gating in CI
 
-Hardware-runtime checks are tagged with
-markers (`@pytest.mark.hardware_apple_gpu`, etc.) and are excluded
-from the default sweep.  CI configurations that have the matching
-hardware opt in by passing `-m hardware_apple_gpu` (or whichever
-marker).  Tests without hardware emit a `skip` with the canonical
-reason — never silently mark themselves green.
+Hardware-runtime checks are tagged with markers
+(`@pytest.mark.hardware_apple_gpu`, etc.) and are excluded from the default
+sweep. A matching exact-device command selects the marker. Intel AMX uses
+`scripts/run_x86_amx_release_gate.sh`; the gate rejects a non-AMX host instead
+of turning the native proof into a skip or reference success.
 
 The required CPU PR lane excludes ``performance`` and every hardware marker.
 External compiler-tool tests use the shared ``compiler_toolchain`` fixture so

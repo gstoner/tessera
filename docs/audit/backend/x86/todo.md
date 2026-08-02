@@ -182,7 +182,9 @@ author and structurally gate; it cannot produce device evidence.
 on the Zen 5 host. AMX is **planned, access-gated**, and cannot inherit AVX-512
 evidence: no AMX-capable owning host is currently named. X86-3 may reconcile
 the compiler-lane architecture, but its AMX half remains open until a separate
-AMX host, target identity, numerical packet, and performance gate are recorded.
+AMX host, target identity, numerical packet, and performance evidence are
+recorded. The access-gated correctness command now exists at
+`scripts/run_x86_amx_release_gate.sh`; its existence is not device evidence.
 
 ## X86-1: close the portable-C plugin provenance and host gate
 
@@ -234,8 +236,8 @@ the misleading compiler authority.
 
 ## X86-3: reconcile the two x86 lanes
 
-**Status: AVX-512 half closed on Zen 5; AMX half planned/access-gated. A
-separately named AMX-capable host is still required.**
+**Status: AVX-512 half closed on Zen 5; AMX correctness lane landed but remains
+planned/access-gated. A separately named AMX-capable host is still required.**
 
 x86 reaches hardware two ways, and nothing arbitrates between them:
 
@@ -254,6 +256,20 @@ spine decision in
 The two required terminal outcomes are now explicit: AVX-512 is selected and
 proven on Zen 5; AMX is planned/access-gated until a named capable host supplies
 its own packet. Neither architecture promotes the other.
+
+The AMX regression is now owned by
+`tests/device/x86/test_amx_int8_gemm.py` and selected by
+`scripts/run_x86_amx_release_gate.sh`. The gate fails closed on missing
+AMX-TILE/AMX-INT8, runs native execution in a crash-isolated child, repeats the
+K>64 numerical comparison twice without xdist, and retains identity, JUnit,
+collection, and status artifacts. This closes the validation-ownership gap; it
+does **not** close X86-3. A named Intel AMX host must still produce the packet,
+and a separate measured-performance gate and baseline remain open.
+
+Cross-backend sync `X86-AMX-DEVICE-2026-08-02` — **not applicable to Apple,
+NVIDIA, and ROCm.** This change moves one x86-native regression and adds an
+x86-owned local proof command; shared IR, runtime ABI, marker policy, and peer
+backend device commands are unchanged.
 
 ## Cross-backend sync
 

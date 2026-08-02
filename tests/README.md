@@ -8,9 +8,10 @@ contributors should start here.
 | Goal | Command |
 |---|---|
 | Hermetic CPU PR lane (14,217 selected on 2026-07-15; 6m18s on a 24-worker WSL host) | `python scripts/run_unit_tests.py -q` |
-| Full Python collection, including device/performance states (~15,326 tests) | `pytest tests/unit/ tests/device/nvidia/ tests/performance/nvidia/ tests/integration/ --collect-only -q` |
+| Full Python collection, including device/performance states (~15,326 tests) | `pytest tests/unit/ tests/device/ tests/performance/ tests/integration/ --collect-only -q` |
 | NVIDIA exact-device correctness (RTX 5070 Ti box) | `pytest tests/unit/ tests/device/nvidia/ tests/integration/ -m "hardware_nvidia and not performance" -q` |
 | NVIDIA measured performance, serial (RTX 5070 Ti box) | `pytest tests/unit/ tests/device/nvidia/ tests/performance/nvidia/ tests/integration/ -m "hardware_nvidia and performance" -q -n 0` |
+| Intel AMX exact-device correctness (named AMX host required) | `scripts/run_x86_amx_release_gate.sh` |
 | MLIR lit fixtures (needs `tessera-opt` on `$PATH`) | `lit tests/tessera-ir/ -v` |
 | Just the autodiff slice (~213 tests, ~2 s) | `pytest tests/unit/test_autodiff_*.py tests/unit/test_conv1d_autodiff.py tests/unit/test_deferred_vjps.py tests/unit/test_sprint_*.py tests/unit/test_standalone_compiler_roadmap.py -q` |
 
@@ -26,6 +27,7 @@ SuperBench / GEMM tail.
 |---|---|---|
 | `tests/unit/` | Transitional flattened suite; proof layer and environment are selected by markers while families migrate to dedicated directories | `python scripts/run_unit_tests.py` |
 | `tests/device/nvidia/` | NVIDIA exact-device suites; selected only by the NVIDIA proof commands, with node-ID maps retained for each relocation | `pytest tests/unit tests/device/nvidia tests/integration -m hardware_nvidia -q` |
+| `tests/device/x86/` | Intel AMX exact-device correctness; native calls are child-process isolated and selected only by the local AMX proof gate | `scripts/run_x86_amx_release_gate.sh` |
 | `tests/tessera-ir/` | FileCheck-based MLIR pass and pipeline lit fixtures | `lit tests/tessera-ir/` |
 | `tests/performance/` | Deterministic roofline/proxy performance contracts (compile latency, generated-artifact size, GEMM/attention/collective timings, benchmark JSON schema) | `cmake --build . --target check-tessera-performance` or `TESSERA_RUN_PERFORMANCE_TESTS=1 ./scripts/test.sh` |
 | `tests/kernel_tests/` | C++ kernel-level tests | Built via CMake when CUDA/HIP backends are enabled |
@@ -57,8 +59,10 @@ Declared in `pyproject.toml` `[tool.pytest.ini_options]`:
 
 The `hardware_*` markers are how target boxes select exact-device tests. The
 CPU PR expression excludes every hardware marker and `performance`; a missing
-device must not turn a native proof into a reference success. CUDA's current
-lane and NVIDIA-box work plan are recorded in
+device must not turn a native proof into a reference success. AMX correctness
+is owned by `scripts/run_x86_amx_release_gate.sh`, which fails closed unless
+the host exposes AMX-TILE and AMX-INT8 and the native numerical test passes
+twice. CUDA's current lane and NVIDIA-box work plan are recorded in
 [`docs/audit/backend/nvidia/todo.md`](../docs/audit/backend/nvidia/todo.md).
 
 See [`MEMORY_AND_PERFORMANCE.md`](MEMORY_AND_PERFORMANCE.md) for what

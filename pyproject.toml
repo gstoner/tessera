@@ -139,6 +139,7 @@ markers = [
     "metal4: requires a Metal 4-capable Apple GPU runtime",
     "hardware_nvidia: requires an NVIDIA GPU with the CUDA toolkit",
     "hardware_rocm: requires an AMD GPU with the ROCm toolkit",
+    "hardware_amx: requires Intel AMX hardware with OS tile-state permission",
 ]
 
 # ----------------------------------------------------------------------------

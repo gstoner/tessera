@@ -122,7 +122,7 @@ jobs:
         # expected pytest-timeout, now installed).
         run: >-
           python -m pytest tests/unit -q
-          -m "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm"
+          -m "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm and not hardware_amx"
           -n auto --timeout=180
 
   # ────────────────────────────────────────────────────────────────────

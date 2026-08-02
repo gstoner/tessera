@@ -32,7 +32,7 @@ GPU benchmark part of the hermetic CPU lane.
   skip state.
 - Child-process tests carry `integration` and use `python_subprocess_env`.
 - Native tests carry exactly one target marker: `hardware_apple_gpu`,
-  `hardware_nvidia`, or `hardware_rocm`.
+  `hardware_nvidia`, `hardware_rocm`, or `hardware_amx`.
 - Any assertion based on elapsed time carries `performance` and runs serially
   in a benchmark/device lane, never under PR-lane xdist load.
 

@@ -53,6 +53,7 @@ Declared in `pyproject.toml` `[tool.pytest.ini_options]`:
 | `hardware_apple_gpu` | Tests that require a Darwin host with Metal hardware. Skipped silently when collecting on non-Darwin or in CI without hardware. |
 | `hardware_nvidia` | Tests that require an NVIDIA GPU with CUDA toolkit. |
 | `hardware_rocm` | Tests that require an AMD GPU with the ROCm toolkit. |
+| `hardware_amx` | Tests that require Intel AMX hardware and OS tile-state permission. |
 
 The `hardware_*` markers are how target boxes select exact-device tests. The
 CPU PR expression excludes every hardware marker and `performance`; a missing

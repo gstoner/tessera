@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-27
+last_updated: 2026-08-02
 audit_role: root
 ---
 
@@ -181,6 +181,75 @@ linked platform audits and [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md
 - Generated dashboards, not historical roadmap prose, own live counts.
 
 ## Open Action Register
+
+### PA — Compiler architecture remediation *(proposal — not adopted; no code landed)*
+
+A cross-cutting program, distinct in kind from P0/P1/P2. Those close **proof**
+gaps (does this op execute and match its oracle on this target?). This one closes
+**architecture** gaps (does the compiler enforce the contracts it already
+declares, and derive the facts it currently guesses?). They are orthogonal and
+should not be traded against each other — except that PA's first wave is
+correctness work, described below.
+
+Owner document: [`compiler/INTEGRATED_COMPILER_PLAN.md`](compiler/INTEGRATED_COMPILER_PLAN.md).
+It supersedes the individual queues in its seven source reviews and owns
+sequencing. Evidence and rationale stay in those reviews:
+[`compiler/COMPILER_ARCHITECTURE_SWEEP.md`](compiler/COMPILER_ARCHITECTURE_SWEEP.md) ·
+[`compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md`](compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md) ·
+[`compiler/IR_STACK_INTEGRATION_REVIEW.md`](compiler/IR_STACK_INTEGRATION_REVIEW.md) ·
+[`compiler/TARGET_IR_REVIEW.md`](compiler/TARGET_IR_REVIEW.md) ·
+[`compiler/AUTODIFF_ARCHITECTURE_REVIEW.md`](compiler/AUTODIFF_ARCHITECTURE_REVIEW.md) ·
+[`domain/GA_EBM_ARCHITECTURE_REVIEW.md`](domain/GA_EBM_ARCHITECTURE_REVIEW.md) ·
+[`compiler/RIEMANNIAN_OT_PLAN.md`](compiler/RIEMANNIAN_OT_PLAN.md).
+
+**Thesis.** Roughly forty findings reduce to two root causes and one
+consequence: metadata is **declared but not consumed** (the `manifold` attribute
+reaches no backend; the Tile dialect declares nine types and uses
+`Variadic<AnyType>` 70 times; closed `batching_rule` / `shape_rule` axes whose
+consumers ignore them), and facts are **told rather than derived** (effects walk
+the Python AST and fail open; no activity, liveness, fusion-legality, or sharding
+propagation analysis exists). Together they force **duplication** — two
+frontends, two lowerings per level boundary, two AD engines — because a second
+implementation is the only way to carry what the first one drops. Remediation is
+therefore ordered *declarations → analyses → de-duplication*; starting at
+de-duplication deletes working systems.
+
+**Wave 0 is correctness, not cleanup, and is unblocked today.** It closes
+paths that produce plausible wrong answers rather than errors:
+
+| Item | Defect |
+|---|---|
+| PA-0.1 | `EBMCanonicalize` warns and **defaults a missing `manifold` to `"euclidean"`**; no backend reads the attribute at all. A first-order-correct Euclidean fallback converges and reports a wrong result. |
+| PA-0.2 | `EBMCheckpointInnerLoop` marks every step in every loop rematerializable with no liveness or differentiability analysis, contradicting Decision #10's own live-set discipline. |
+| PA-0.3 | EBM samplers default to `O(2^n)` finite-difference gradients while tape-based reverse mode is available. |
+| PA-0.4 | `jacrev`/`jacfwd` re-run the full forward pass per Jacobian element, contrary to their own docstrings. |
+| PA-0.5 | **Decision #5 in `CLAUDE.md` was factually wrong** — corrected 2026-08-02; `EffectLattice` walks the Python AST, not the IR, and fails open on indirection. |
+| PA-0.6 | Duplicate `Queue.td` / `Attn.td` each declaring the same dialect name; `GraphToSchedulePass` defined inside a driver source file and therefore unlinkable. |
+| PA-0.7 | **Decision #19's named validation is a substring test.** `test_target_ir_contract.py` asserts `"tessera_rocm.mfma" in mm.target_ir` against Python-generated text — it never parses MLIR, loads the dialect, or runs a verifier. |
+| PA-0.8 | **x86 has no Target IR dialect at all**, though Decision #19 says backends MUST expose one. Decide: build `tessera_x86`, or add an explicit carve-out. Silence is the one option to close. |
+
+**Budget levels.** Minimum ≈ 5 weeks (Wave 0 + governance). Recommended ≈ 23
+weeks (through the analysis layer and single-frontend convergence) — the point
+at which the compiler stops accumulating parallel systems. Full ≈ 72 weeks, of
+which ~6 is hardware-routed to the Strix Halo gfx1151 box (the ROCm codegen
+consolidation changes generated kernels and needs per-pass execute-and-compare on
+real silicon). Highest-leverage single item: typing the Tile **and** Target IR
+dialects (5 weeks, no new concepts — for the ROCm/NVIDIA matrix ops the correct
+`vector<…>` types are already written in their own ODS descriptions, in prose).
+
+**Governance.** The plan proposes six standing decisions (#21a semantic keys
+never default · #10a eligibility passes ship a negative fixture · #29 a
+declaration must have a consumer · #30 derive, don't ask · #31 one
+implementation per boundary · #32 information loss across a level boundary must
+be declared). #29 and #31 are drift-gateable and are what prevent the same
+patterns regrowing; adopt before Wave 1.
+
+
+**Not covered:** the bodies of the 67 `GenerateROCM*Kernel` passes (review these
+on the ROCm box *before* scheduling their consolidation, not after), the `emit/`
+per-backend internals, the spectral/TPP solver families, the collectives and
+neighbors dialects, and RubinCPX. Absence from the program is not a clean bill of
+health.
 
 ### P0 — Close the remaining exact-target proof gaps
 

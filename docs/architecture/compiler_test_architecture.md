@@ -2,7 +2,7 @@
 status: Normative
 classification: Architecture
 authority: Defines Tessera compiler test proof layers, environment states, and migration rules
-last_updated: 2026-07-15
+last_updated: 2026-08-02
 ---
 
 # Compiler test architecture
@@ -33,6 +33,10 @@ GPU benchmark part of the hermetic CPU lane.
 - Child-process tests carry `integration` and use `python_subprocess_env`.
 - Native tests carry exactly one target marker: `hardware_apple_gpu`,
   `hardware_nvidia`, `hardware_rocm`, or `hardware_amx`.
+- Every excluded hardware marker has an owning exact-device command. Intel AMX
+  is selected by `scripts/run_x86_amx_release_gate.sh`; it records machine
+  identity and repeats serial correctness, while remaining access-gated until
+  a named AMX host supplies the retained bundle.
 - Any assertion based on elapsed time carries `performance` and runs serially
   in a benchmark/device lane, never under PR-lane xdist load.
 

@@ -1,14 +1,14 @@
-"""Regression tests for the three 🔴 Critical findings from the full-source
-code review (2026-06-20).
+"""Host-free regressions from the full-source code review (2026-06-20).
 
 Each test encodes the *correct* contract and therefore FAILS against the
 current (buggy) code — that is the point of a regression test: it reproduces
 the defect and will turn green once the fix lands.
 
-Findings under test:
-  R1. src/compiler/codegen/tessera_x86_backend/src/kernels/amx_gemm_int8.cpp:72
-      int8 AMX edge-tile path drops all K>64 (no K-tiling in the packed path),
-      with no reference fallback — silent miscompile for unaligned shapes.
+The native R1 AMX regression is owned by
+``tests/device/x86/test_amx_int8_gemm.py`` so it remains executable without
+placing an exact-device proof in the hermetic unit lane.
+
+Findings under test here:
   R2. python/tessera/autodiff/vjp.py:2357
       cross_entropy_loss soft-target gradient is returned WITHOUT the
       reduction-scale factor (off by 1/N for reduction="mean"; ignores dout).
@@ -18,11 +18,6 @@ Findings under test:
 """
 
 from __future__ import annotations
-
-import os
-import platform
-import subprocess
-import tempfile
 
 import numpy as np
 import pytest
@@ -72,9 +67,7 @@ def test_cross_entropy_soft_target_grad_is_reduction_scaled_mean():
         targets,
     )
 
-    _, target_grad = get_vjp("cross_entropy_loss")(
-        1.0, logits, targets, reduction="mean"
-    )
+    _, target_grad = get_vjp("cross_entropy_loss")(1.0, logits, targets, reduction="mean")
     assert target_grad is not None
     np.testing.assert_allclose(target_grad, numeric, rtol=1e-5, atol=1e-7)
 
@@ -98,9 +91,7 @@ def test_cross_entropy_soft_target_grad_respects_dout_reduction_none():
     )
     expected = -log_softmax * dout[:, None]
 
-    _, target_grad = get_vjp("cross_entropy_loss")(
-        dout, logits, targets, reduction="none"
-    )
+    _, target_grad = get_vjp("cross_entropy_loss")(dout, logits, targets, reduction="none")
     assert target_grad is not None
     np.testing.assert_allclose(target_grad, expected, rtol=1e-6, atol=1e-8)
 
@@ -158,80 +149,3 @@ def test_dropout_vjp_seeded_matches_forward_mask():
 
     # kept units scale by 1/(1-p); dropped units are zero in both.
     np.testing.assert_allclose(grad, y, rtol=0, atol=0)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# R1 — int8 AMX edge-tile GEMM must not truncate K>64
-# ─────────────────────────────────────────────────────────────────────────────
-_X86 = platform.machine().lower() in ("x86_64", "amd64")
-_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-_X86_BE = os.path.join(_REPO, "src", "compiler", "codegen", "tessera_x86_backend")
-
-
-def _build_amx_int8_lib(tmpdir):
-    """Compile the int8 AMX GEMM kernel + runtime into a shared lib.
-
-    Returns the .so path, or None if the toolchain can't build AMX intrinsics
-    (e.g. on non-x86 hosts) — the caller skips in that case.
-    """
-    src = [
-        os.path.join(_X86_BE, "src", "kernels", "amx_gemm_int8.cpp"),
-        os.path.join(_X86_BE, "src", "runtime", "amx_runtime.cpp"),
-    ]
-    inc = os.path.join(_X86_BE, "include")
-    if not all(os.path.exists(s) for s in src):
-        return None
-    so = os.path.join(tmpdir, "libamx_int8.so")
-    cc = os.environ.get("CXX", "c++")
-    cmd = [
-        cc, "-std=c++17", "-O2", "-fPIC", "-shared",
-        "-mamx-int8", "-mamx-tile", "-mamx-bf16",
-        f"-I{inc}", *src, "-o", so,
-    ]
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=180)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-    return so
-
-
-@pytest.mark.skipif(not _X86, reason="int8 AMX requires x86_64 hardware")
-@pytest.mark.hardware_amx
-def test_amx_int8_gemm_does_not_truncate_large_k():
-    """Unaligned-shape int8 GEMM with K>64 must equal the full int32 GEMM.
-
-    Reproduces amx_gemm_int8.cpp:72 — the edge path packs only min(K,64) and
-    calls the tile op with K=min(K,64), dropping all contraction beyond 64.
-    M=17,N=17 force the edge path; K=128 (>64) exposes the truncation.
-    """
-    import ctypes
-
-    with tempfile.TemporaryDirectory() as tmp:
-        so = _build_amx_int8_lib(tmp)
-        if so is None:
-            pytest.skip("could not build AMX int8 kernel on this toolchain")
-        lib = ctypes.CDLL(so)
-        if not bool(lib.tessera_x86_amx_int8_supported()):
-            pytest.skip("CPU does not support AMX-INT8")
-
-        M, N, K = 17, 17, 128
-        rng = np.random.default_rng(7)
-        A = rng.integers(-8, 8, size=(M, K), dtype=np.int8)
-        B = rng.integers(-8, 8, size=(K, N), dtype=np.int8)
-        C = np.zeros((M, N), dtype=np.int32)
-
-        gemm = lib.tessera_x86_amx_gemm_s8s8_s32
-        gemm.restype = None
-        gemm.argtypes = [
-            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-        ]
-        gemm(
-            A.ctypes.data_as(ctypes.c_void_p),
-            B.ctypes.data_as(ctypes.c_void_p),
-            C.ctypes.data_as(ctypes.c_void_p),
-            M, N, K, 0,
-        )
-
-        reference = A.astype(np.int32) @ B.astype(np.int32)
-        np.testing.assert_array_equal(C, reference)

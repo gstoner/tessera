@@ -60,7 +60,7 @@ are present defects today.
 
 Three separate facts compound here.
 
-**It defaults.** [`Canonicalize.cpp:56`](../../../src/solvers/ebm/lib/Passes/Canonicalize.cpp:56):
+**It defaults.** [`Canonicalize.cpp:56`](../../../src/solvers/ebm/lib/Passes/Canonicalize.cpp#L56):
 
 ```cpp
 op->emitWarning("tessera_ebm.langevin_step missing `manifold`; "
@@ -112,7 +112,7 @@ langevin_step(x, energy_fn=<python callable>, ...)
 
 Consequently, on **every** native path, the gradient is evaluated on the host and
 handed to the device as data.
-[`geo_sampling.py:279`](../../../python/tessera/ebm/geo_sampling.py:279), inside
+[`geo_sampling.py:279`](../../../python/tessera/ebm/geo_sampling.py#L279), inside
 the branch commented "the whole step … is one MSL kernel":
 
 ```python
@@ -144,7 +144,7 @@ landed — the EBM API predates it.
 rewrites it to a single `clifford.rotor_sandwich` marker, so that (per its
 header) "GA9 backends can pick up ... a fused kernel."
 
-Independently, [`ga/ops.py:759`](../../../python/tessera/ga/ops.py:759) hardcodes:
+Independently, [`ga/ops.py:759`](../../../python/tessera/ga/ops.py#L759) hardcodes:
 
 ```python
 gpu_out = _try_apple_gpu_rotor_sandwich_cl30_f32(rotor, x)
@@ -240,7 +240,7 @@ The compiler therefore *knows*, statically, that a rotor has support only on
 grades {0, 2}.
 
 `geometric_product` then does this
-([`ops.py:93`](../../../python/tessera/ga/ops.py:93)):
+([`ops.py:93`](../../../python/tessera/ga/ops.py#L93)):
 
 ```python
 for i in range(dim):
@@ -354,24 +354,30 @@ rather than nice at dim 32.
 
 ### 2.6 Numerical-gradient fallbacks cost `O(d)` and `O(2^n)` energy evaluations per step
 
-[`geo_sampling.py:45`](../../../python/tessera/ebm/geo_sampling.py:45)
+[`geo_sampling.py:45`](../../../python/tessera/ebm/geo_sampling.py#L45)
 (`_numerical_grad_mv`) central-differences every one of `2^n` multivector
 coefficients: **16 host energy calls per Cl(3,0) step, 32 for Cl(1,3)**.
-[`energy.py:60`](../../../python/tessera/ebm/energy.py:60) (`_numerical_grad`)
+[`energy.py:60`](../../../python/tessera/ebm/energy.py#L60) (`_numerical_grad`)
 does the same over `d` dimensions: `2d` calls per step.
 
 This is the **default** path — it runs whenever the caller does not supply an
 analytic `grad_fn`, which is the common case for anything but the hardcoded
 quadratic energy.
 
-Tessera has tape-based reverse-mode autodiff (`autodiff/vjp.py`, `autodiff/tape.py`)
-covering a broad primitive set. The EBM samplers do not use it. Routing
-`grad_fn=None` through `autodiff.tape` instead of finite differences replaces
-`2d` energy evaluations with one forward + one backward, and simultaneously
-removes the `eps`-selection accuracy problem (`_DEFAULT_GRAD_EPS` is a fixed
-constant, which is wrong at both ends of the scale range).
+Tessera has tape-based reverse-mode autodiff (`autodiff/vjp.py`,
+`autodiff/tape.py`) covering a broad Tessera primitive set, but it does not trace
+arbitrary NumPy callbacks. The EBM samplers therefore cannot replace finite
+differences unconditionally: an ordinary NumPy `energy_fn` records no cotangent
+path, and the public gradient transform currently materializes a zero cotangent
+for that case. The safe route is an explicit traceable-energy contract: use one
+forward + one backward only when the tape records a supported path, and retain
+the numerical gradient for untraceable callbacks. Tests must cover both a
+Tessera-op energy and the existing NumPy energies before the tape becomes a
+default. This removes the `eps`-selection accuracy problem where reverse mode is
+actually supported without turning valid gradients into zeros elsewhere.
 
-This is the highest value-per-line fix in the entire review.
+This remains high leverage, but it is a guarded migration rather than a
+drop-in replacement.
 
 ### 2.7 AIS and Monte-Carlo partition estimators are Python-only and structurally host-bound
 
@@ -422,7 +428,7 @@ the shape Decision #28's arbiter is built to choose kernels for.
 
 | # | Item | § | Effort | Why this rank |
 |---|---|---|---|---|
-| 1 | Route `grad_fn=None` through `autodiff.tape` instead of finite differences | 2.6 | ~2 days | Removes a `2d`-energy-evaluation default path and an accuracy hazard. Pure win, no new concepts. |
+| 1 | Add a traceable-energy contract for `grad_fn=None`; use `autodiff.tape` for supported Tessera-op energies and retain numerical differentiation for untraceable NumPy callbacks | 2.6 | ~1 week | Removes repeated energy evaluations where reverse mode is valid while preserving the existing correct fallback and NumPy regression coverage. |
 | 2 | Make `manifold` a required, verified enum; delete the Euclidean default | 1.1 | ~3 days | Closes a live silent-wrong-answer path. Pattern already exists in the sibling dialect. |
 | 3 | Demand-gate `CheckpointInnerLoop` + negative fixtures | 1.5 | ~4 days | Live defect; the fixture is the durable artifact. |
 | 4 | Fix `.td` summaries; distinguish "stub" from "annotation-only"; remove the false "GA8 will refuse" promise | 1.4 | ~1 day | Trivial; these strings are what `--help` prints. |

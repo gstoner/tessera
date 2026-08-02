@@ -142,10 +142,10 @@ independent; run them in parallel.
 |---|---|---|---|
 | W0.1 | `manifold` → required verified enum; delete the Euclidean default (copy `AnnotateAlgebra`'s `emitError`+interrupt) | GA/EBM §1.1 | 3d |
 | W0.2 | Demand-gate `CheckpointInnerLoop`; `CHECK-NOT` fixtures; `steps_annotated` counter | GA/EBM §1.5 | 4d |
-| W0.3 | EBM `grad_fn=None` → `autodiff.tape` instead of `O(2^n)` finite differences | GA/EBM §2.6 | 2d |
+| W0.3 | Define traceable EBM energies; use `autodiff.tape` only when a supported cotangent path is recorded, with numerical differentiation retained for untraceable NumPy callbacks and regression coverage for both paths | GA/EBM §2.6 | 1w |
 | W0.4 | Fix `jacrev`/`jacfwd` forward-pass-per-element; correct their docstrings | Autodiff §B1–B2 | 3d |
 | W0.5 | **Correct Decision #5 in `CLAUDE.md`** — the effect lattice walks the AST, not the IR | Sweep §F1 | 1h |
-| W0.6 | Delete duplicate `dialects/tessera_{queue,attn}/*.td`; move `GraphToSchedulePass` into `src/transforms/lib/` with lit fixtures | IR Stack §T5, §T3 | 1w |
+| W0.6 | Delete duplicate `dialects/tessera_{queue,attn}/*.td`; split the already-linkable `GraphToSchedulePass` into a dedicated library-owned source/header with focused lit fixtures | IR Stack §T5, §T3 | 3d |
 | W0.7 | `.td` summary drift: distinguish "stub" from "annotation-only"; remove `AnnotateAlgebra`'s false "GA8 lowering will refuse" | GA/EBM §1.4 | 1d |
 | W0.8 | Adopt Decisions #21a, #10a, #29, #30, #31, #32 | §2 | 1d |
 | W0.9 | Replace `test_target_ir_contract.py`'s substring assertions (`assert "tessera_rocm.mfma" in mm.target_ir`) with a real MLIR parse + dialect load + verifier run. Decision #19's named validation is currently `str.__contains__` | Target §X4 | 1w |

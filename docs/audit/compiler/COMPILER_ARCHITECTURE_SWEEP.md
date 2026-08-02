@@ -47,7 +47,7 @@ Ranked by leverage. Each names its shape from §1.
 
 **This is the highest-leverage finding in the sweep.**
 
-[`effects.py:173`](../../../python/tessera/compiler/effects.py:173):
+[`effects.py:173`](../../../python/tessera/compiler/effects.py#L173):
 
 ```python
 class _EffectVisitor(ast.NodeVisitor):
@@ -90,7 +90,7 @@ above a wrong substrate is building on sand.
 
 ### F2 — The shape system is name equality, not a symbolic algebra — and Decision #28 requires more  *(L1)*
 
-[`shape.py:353`](../../../python/tessera/shape.py:353):
+[`shape.py:353`](../../../python/tessera/shape.py#L353):
 
 ```python
 def dims_compatible(lhs, rhs):
@@ -160,7 +160,7 @@ written once against a region *grammar* rather than once per region *shape*.
 
 ### F4 — `DistributedPlan` is a validator named "planner"; there is no sharding propagation and no search  *(L3 + L4)*
 
-[`distributed_planner.py:124`](../../../python/tessera/compiler/distributed_planner.py:124).
+[`distributed_planner.py:124`](../../../python/tessera/compiler/distributed_planner.py#L124).
 The user supplies a `LayerSpec` list with `dp_axis`, `tp_axis`, `weight_sharding`,
 and `pp_stage` **already chosen**, per layer. `validate()` then checks that named
 axes exist in `mesh_axes`. The pipeline-stage contiguity check is:
@@ -302,7 +302,7 @@ commitments.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| 1 | Route EBM `grad_fn=None` through `autodiff.tape` instead of `O(2^n)` finite differences | GA/EBM §2.6 | 2d |
+| 1 | Add a traceable-energy contract for EBM `grad_fn=None`; use `autodiff.tape` only for supported Tessera-op energies and preserve numerical differentiation for untraceable NumPy callbacks | GA/EBM §2.6 | 1w |
 | 2 | `manifold` → required verified enum; delete the Euclidean default (copy `AnnotateAlgebra`) | GA/EBM §1.1 · OT §H1 | 3d |
 | 3 | Demand-gate `CheckpointInnerLoop` + `CHECK-NOT` fixtures + annotated-count assertion | GA/EBM §1.5 · OT §H2 | 4d |
 | 4 | **Correct Decision #5 in `CLAUDE.md`** — the effect lattice walks the AST, not the IR | F1 | 1h |

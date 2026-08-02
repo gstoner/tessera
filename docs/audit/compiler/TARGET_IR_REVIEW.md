@@ -141,7 +141,7 @@ So the full picture below Graph IR is now known:
 
 | Boundary | Canonical | Parallel MLIR |
 |---|---|---|
-| Graph → Schedule | Python `lower_graph_to_schedule_ir` | `GraphToSchedulePass` (inside a driver source file) |
+| Graph → Schedule | Python `lower_graph_to_schedule_ir` | `GraphToSchedulePass` (co-located with driver pipeline code, but compiled into the linkable `TesseraPM` library) |
 | Schedule → Tile | Python `lower_schedule_to_tile_ir` | `TileIRLoweringPass` |
 | Tile → Target | Python `lower_tile_to_target_ir` | 67 `GenerateROCM*` passes; NVIDIA/Apple elsewhere |
 

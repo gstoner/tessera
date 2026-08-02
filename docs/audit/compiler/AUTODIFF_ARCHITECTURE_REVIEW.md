@@ -52,7 +52,7 @@ output. The ledger says this explicitly and is right to.
 
 ### A1. The Python tape is global monkey-patching, not a program transform
 
-[`tape.py:497`](../../../python/tessera/autodiff/tape.py:497):
+[`tape.py:497`](../../../python/tessera/autodiff/tape.py#L497):
 
 ```python
 wrapped = _make_wrapper(name, original)
@@ -93,7 +93,7 @@ sitting next to it. The rules exist; the substrate cannot compose them.
 
 ### A3. The compiler's reverse pass rejects all control flow — by design
 
-[`AutodiffPass.cpp:118`](../../../src/transforms/lib/AutodiffPass.cpp:118):
+[`AutodiffPass.cpp:118`](../../../src/transforms/lib/AutodiffPass.cpp#L118):
 
 ```cpp
 if (op->getNumRegions() != 0) {
@@ -217,7 +217,7 @@ is an *autodiff* policy question, not an EBM one.
 
 ### B1. `jacrev` re-runs the forward pass once per output element
 
-[`transforms.py:132`](../../../python/tessera/autodiff/transforms.py:132). The
+[`transforms.py:132`](../../../python/tessera/autodiff/transforms.py#L132). The
 docstring says it "uses `retain_graph=True` … so the inner tape can be
 backward'd repeatedly." The code does not do that:
 
@@ -263,7 +263,7 @@ per-primitive batching rules, and `vmap(grad(f))` compiles to one batched kernel
 
 ### B4. `hvp` is central finite differences of `grad`
 
-[`grad.py:120`](../../../python/tessera/autodiff/grad.py:120), and its docstring
+[`grad.py:120`](../../../python/tessera/autodiff/grad.py#L120), and its docstring
 says so plainly:
 
 ```
@@ -315,7 +315,7 @@ straight-line blocks that were never the bottleneck get a good greedy schedule.
 
 ### B7. Adjoints of collectives are real, and are a genuine lead worth naming
 
-[`AdjointInterface.cpp:42-70`](../../../src/compiler/ir/AdjointInterface.cpp:42):
+[`AdjointInterface.cpp:42-70`](../../../src/compiler/ir/AdjointInterface.cpp#L42):
 `AllReduce` is self-dual; `AllGather† = ReduceScatter`; `ReduceScatter† =
 AllGather` — correct, and `AdjointCollectiveInsertionPass` places them
 effect-aware, after `EffectAnnotationPass`, keyed on `tessera.effect = "memory"`.

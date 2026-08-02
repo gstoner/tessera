@@ -105,7 +105,7 @@ entire compiler.
 
 ### G2 — Type inference is a five-case if-chain over 315 ops, defaulting to "the first operand's type"
 
-[`graph_ir.py:1702`](../../../python/tessera/compiler/graph_ir.py:1702)
+[`graph_ir.py:1702`](../../../python/tessera/compiler/graph_ir.py#L1702)
 `_infer_result_type` handles `tessera.matmul`, `tessera.batched_gemm`, two EBM
 ops, and `tessera.transpose`. Everything else returns `operand_types[0]`.
 
@@ -144,7 +144,7 @@ at all**, so the one registry that should be authoritative is not among the four
 
 ### G4 — SSA is hand-constructed on an AST with no CFG, which is a design that cannot converge
 
-[`graph_ir.py:1050`](../../../python/tessera/compiler/graph_ir.py:1050),
+[`graph_ir.py:1050`](../../../python/tessera/compiler/graph_ir.py#L1050),
 `_reserve_ssa_for_assign` plus `_name_alias`, minting `c` → `c__1` → `c__2` on
 reassignment, with an explicit comment about the ordering hazard in `c = c + 1`.
 
@@ -198,16 +198,18 @@ the tree. The lazy-binding machinery already exists in the same file
 (`__getattr__` at line 5353, PEP 562, used for `train`) — the pattern to follow is
 present and unused for the bulk.
 
-### G7 — Graph→Schedule is implemented twice, and the C++ one lives inside a tool
+### G7 — Graph→Schedule is implemented twice, and the C++ pass lacks independent ownership
 
 - Python: `lower_graph_to_schedule_ir` (schedule_ir.py:277) with per-op-family
   constructors — `_flash_attention_pipeline`, `_sequence_mixer_pipeline`,
   `_msa_kv_outer_sparse`, `_media_op`, `_jepa_op`.
 - C++: `GraphToSchedulePass`, defined in
-  `src/compiler/programming_model/tools/tessera-opt/PassPipelinesPM11.cpp:200` —
-  **a driver source file, not a library.** A pass defined in a tool's pipeline
-  source cannot be linked by the main `tessera-opt`, by another tool, or by a
-  test binary. It is structurally unreusable.
+  `src/compiler/programming_model/tools/tessera-opt/PassPipelinesPM11.cpp:200`.
+  Despite the path, CMake compiles that source into the `TesseraPM` library and
+  the test dependency set links `TesseraPM`, so the pass is linkable. The real
+  ownership defect is co-location with pipeline-driver code: it has no dedicated
+  pass source/header or focused lit fixtures, which obscures its reusable API and
+  lets the Python and C++ implementations drift without differential coverage.
 
 Defect shape L2 (two disconnected compilers), at the Graph→Schedule seam.
 
@@ -299,12 +301,13 @@ pipeline* rather than only at kernel-emit time, and it is where the generic
 fusion-region discovery from [sweep F3](COMPILER_ARCHITECTURE_SWEEP.md) should
 live.
 
-### U4 — Move `GraphToSchedulePass` into a library; delete the Python duplicate
+### U4 — Give `GraphToSchedulePass` dedicated ownership; delete the Python duplicate
 
-A pass in `tools/…/PassPipelinesPM11.cpp` is unreachable from anything but that
-one binary. Move it to `src/transforms/lib/`, register it in `Passes.cpp`, give it
-lit fixtures, and retire `lower_graph_to_schedule_ir` once U3's decisions live in
-the pass.
+`GraphToSchedulePass` is already compiled into the linkable `TesseraPM` library,
+but its implementation and factory are buried in pipeline-driver source. Move
+the implementation to a dedicated library-owned pass source/header, retain its
+registration, add focused lit fixtures, and retire `lower_graph_to_schedule_ir`
+once U3's decisions live in the pass.
 
 ### U5 — Decompose `JitFn`
 
@@ -347,7 +350,7 @@ be explicitly scoped to declarations, not semantics.
 | **E2** | U1 — differential harness (trace vs AST over the op catalog), then promote the tracer to default per target | 4w | byte-identical or explained IR for every catalog op |
 | **E3** | U7 — derive effects from traced IR; retire `_EffectVisitor`; correct Decision #5 | 2w | aliased/indirect RNG call is detected |
 | **E4** | U5 + U6 — decompose `JitFn` and `__init__.py` | 3w | no target string in `jit.py` |
-| **E5** | U4 — `GraphToSchedulePass` to a library; lit fixtures; retire the Python duplicate | 2w | one Graph→Schedule implementation |
+| **E5** | U4 — dedicated `GraphToSchedulePass` source/header; lit fixtures; retire the Python duplicate | 2w | one Graph→Schedule implementation |
 | **E6** | U3 — cost-model-driven scheduling at Schedule IR | 5w | tile sizes chosen by measurement, not config |
 | **E7** | Dynamic control flow **as one program** — frontend regions + symbolic dims + region adjoints | 10w | a data-dependent loop compiles, differentiates, and executes |
 

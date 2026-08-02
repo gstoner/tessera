@@ -42,7 +42,7 @@ same boundaries, not the production one. Concretely, at each boundary:
 
 | Boundary | Python (canonical per `@jit`) | C++/MLIR | Status |
 |---|---|---|---|
-| Graph → Schedule | `schedule_ir.lower_graph_to_schedule_ir` | `GraphToSchedulePass` — defined **inside `PassPipelinesPM11.cpp`**, a driver source file | two impls; C++ one unlinkable |
+| Graph → Schedule | `schedule_ir.lower_graph_to_schedule_ir` | `GraphToSchedulePass` — defined inside `PassPipelinesPM11.cpp` but compiled into `TesseraPM` | two linkable impls; no differential coverage |
 | Schedule → Tile | `tile_ir.lower_schedule_to_tile_ir` | `TileIRLoweringPass` (real, pattern-matches `flash_attn`/`matmul`) | two impls |
 | Schedule/Tile → Target | `target_ir` (2004 lines) | `LowerScheduleToTarget` — scaffold that fails loudly | Python only |
 
@@ -128,9 +128,11 @@ Per §0. The specific costs:
 - **Divergence is undetectable.** There is no differential test asserting that
   `lower_schedule_to_tile_ir` and `TileIRLoweringPass` produce equivalent IR from
   the same input. They can drift silently and almost certainly have.
-- **`GraphToSchedulePass` is structurally unreusable** — a pass defined in
-  `tools/…/PassPipelinesPM11.cpp` cannot be linked by `tessera-opt`, by another
-  tool, or by a test binary.
+- **`GraphToSchedulePass` has muddled ownership.** CMake already compiles
+  `PassPipelinesPM11.cpp` into the linkable `TesseraPM` library, and tests link
+  that target. The defect is that pass implementation, factory, registration,
+  and driver-pipeline assembly share one source file with no focused fixtures or
+  differential gate against the Python implementation.
 - **The Python spine is untyped too.** `tile_ir.py` is 482 lines and mentions
   `dtype`/`shape`/`layout` seven times. So the canonical lowering carries even
   less type information than the ODS it mirrors.
@@ -297,8 +299,9 @@ sequence is:
    emitted IR. This is the only way to know what the C++ passes actually do
    differently, and it is the same harness the
    [frontend review](FRONTEND_GRAPH_SCHEDULE_REVIEW.md) E2 needs for trace-vs-AST.
-2. Move `GraphToSchedulePass` out of `PassPipelinesPM11.cpp` into
-   `src/transforms/lib/` so it is linkable and lit-testable at all.
+2. Move `GraphToSchedulePass` out of `PassPipelinesPM11.cpp` into a dedicated
+   library-owned source/header so its API and fixtures are independently owned;
+   it is already linkable through `TesseraPM`.
 3. Converge on MLIR as the surviving path for Graph→Schedule→Tile (it is where
    the types from U1 live), keeping the Python spine as the reference/oracle —
    the same demotion the [autodiff review](AUTODIFF_ARCHITECTURE_REVIEW.md) M1
@@ -347,7 +350,7 @@ One hour. Removes a trap.
 
 | Phase | Contents | Effort | Gate |
 |---|---|---|---|
-| **I0** | U7 duplicate ODS deletion; move `GraphToSchedulePass` to a library | 1w | one ODS per dialect; pass linkable + lit-tested |
+| **I0** | U7 duplicate ODS deletion; split `GraphToSchedulePass` into a dedicated library-owned source/header with focused fixtures | 3d | one ODS per dialect; pass ownership explicit + lit-tested |
 | **I1** | **U1 — type the Tile dialect**; parameterize `!tile.fragment`/`!tile.buffer` | 3w | `AnyType` count in `TileOps.td` → 0; a mismatched `tile.mma` fails to parse |
 | **I2** | U2 — legality passes → ODS constraints + one dataflow pass | 2w | six passes → one; no rule lost |
 | **I3** | U4 — split the Tile dialect by level | 3w | every `tile.*` op is a tile primitive |
@@ -355,7 +358,7 @@ One hour. Removes a trap.
 | **I5** | U3 — differential harness, then one lowering per boundary | 5w | one implementation per boundary |
 | **I6** | U6 — scheduling decisions at Schedule IR | (= frontend E6) | tile sizes chosen by measurement |
 
-**I0 + I1 is four weeks and is the highest-leverage block in this review.**
+**I0 + I1 is about four weeks and is the highest-leverage block in this review.**
 Typing the Tile dialect is prerequisite to I2, makes I3 and I4 tractable, and
 gives every backend a real contract to lower against.
 
@@ -378,7 +381,7 @@ as amended by the [frontend review §5](FRONTEND_GRAPH_SCHEDULE_REVIEW.md):
    for trace-vs-AST *and* Python-spine-vs-MLIR-pass. Budget once.
 5. **I6 is frontend E6.** Same work, seen from the other side. Not additive.
 
-Net new to the queue after de-duplication: **I0 (1w) + I1 (3w) + I2 (2w) +
+Net new to the queue after de-duplication: **I0 (3d) + I1 (3w) + I2 (2w) +
 I3 (3w) + I4 (2w) ≈ 11 weeks**, of which the first four weeks carry most of the
 value.
 

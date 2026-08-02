@@ -24,7 +24,7 @@ BRANCH_PROTECTION_DOC = REPO_ROOT / ".github" / "BRANCH_PROTECTION.md"
 
 
 # Required lanes (must all be inputs to the validate-required aggregator).
-REQUIRED_LANES = ("lint", "unit", "audit", "build")
+REQUIRED_LANES = ("lint", "unit", "audit", "build", "rocm-compiler")
 OPTIONAL_LANES = ("lit", "sanitizer")
 AGGREGATOR_JOB = "validate-required"
 
@@ -170,6 +170,64 @@ class TestWorkflowStructure:
                 f"lit lane must invoke {test_file} so the cmake build "
                 f"is verified end-to-end (build + execution + "
                 f"FileCheck); current `run:` steps:\n{run_text}"
+            )
+
+    def test_rocm_markdown_bypass_preserves_required_job_success(self) -> None:
+        """Markdown-only PRs bypass heavy steps inside the required job.
+
+        A job-level condition would report ``skipped`` and make the aggregator
+        fail. Keep the classifier and successful no-op as ordinary steps.
+        """
+
+        wf = _load_workflow()
+        rocm = wf["jobs"]["rocm-compiler"]
+        assert not rocm.get("if"), (
+            "the required ROCm job must always run; gate its heavy steps instead"
+        )
+        steps = rocm.get("steps", [])
+        by_id = {step.get("id"): step for step in steps if step.get("id")}
+        classifier = by_id.get("rocm_impact")
+        assert classifier is not None, "ROCm lane is missing its PR change classifier"
+        script = classifier.get("run", "")
+        for contract in (
+            "github.event.pull_request.base.sha",
+            "github.event.pull_request.head.sha",
+            "--diff-filter=ACMRTD",
+            "*.md",
+            '"${#changed_files[@]}" -eq 0',
+            'echo "required=$required" >> "$GITHUB_OUTPUT"',
+        ):
+            assert contract in script or contract in str(classifier.get("env", {})), (
+                f"ROCm classifier is missing fail-closed contract {contract!r}"
+            )
+
+        checkout = next(
+            step for step in steps if str(step.get("uses", "")).startswith("actions/checkout@")
+        )
+        assert checkout.get("with", {}).get("fetch-depth") == 0
+
+        bypass = next(
+            (step for step in steps if "Markdown-only PR" in step.get("name", "")),
+            None,
+        )
+        assert bypass is not None
+        assert "steps.rocm_impact.outputs.required == 'false'" in bypass.get("if", "")
+
+        heavy_names = {
+            "Set up Python 3.11",
+            "Install LLVM/MLIR 23 and build tools",
+            "Prepare host-free ROCm linker layout",
+            "Install compiler-test dependencies",
+            "Configure ROCm-only host-free compiler",
+            "Build ROCm compiler drivers",
+            "Run ROCm backend lit suite",
+            "Run ROCM-TEST-1 ownership gate",
+        }
+        heavy_steps = [step for step in steps if step.get("name") in heavy_names]
+        assert {step.get("name") for step in heavy_steps} == heavy_names
+        for step in heavy_steps:
+            assert "steps.rocm_impact.outputs.required == 'true'" in step.get("if", ""), (
+                f"heavy ROCm step {step.get('name')!r} is not classifier-gated"
             )
 
 

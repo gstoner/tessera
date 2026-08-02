@@ -196,6 +196,7 @@ def _build_amx_int8_lib(tmpdir):
 
 
 @pytest.mark.skipif(not _X86, reason="int8 AMX requires x86_64 hardware")
+@pytest.mark.hardware_amx
 def test_amx_int8_gemm_does_not_truncate_large_k():
     """Unaligned-shape int8 GEMM with K>64 must equal the full int32 GEMM.
 

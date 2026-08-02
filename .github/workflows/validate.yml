@@ -122,7 +122,7 @@ jobs:
         # expected pytest-timeout, now installed).
         run: >-
           python -m pytest tests/unit -q
-          -m "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm"
+          -m "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm and not hardware_amx"
           -n auto --timeout=180
 
   # ────────────────────────────────────────────────────────────────────
@@ -364,7 +364,8 @@ jobs:
   # This is a compiler ownership proof, not an exact-device proof. It builds
   # the ROCm target artifact pipeline without HIP, requires Apple/NVIDIA
   # pipelines to remain absent, runs the backend lit suite, and executes the
-  # ROCM-TEST-1 host-free pytest inventory.
+  # ROCM-TEST-1 host-free pytest inventory. Markdown-only PRs retain this job as
+  # a successful required check but bypass the LLVM install and compiler build.
   # ────────────────────────────────────────────────────────────────────
   rocm-compiler:
     name: rocm compiler (host-free LLVM/MLIR 23)
@@ -372,14 +373,60 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The PR classifier compares the actual head and base commits rather
+          # than the synthetic merge commit checked out by pull_request runs.
+          fetch-depth: 0
+
+      - name: Classify ROCm compiler impact
+        id: rocm_impact
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          required=true
+          reason="non-PR validation"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            mapfile -t changed_files < <(
+              git diff --name-only --diff-filter=ACMRTD "$BASE_SHA" "$HEAD_SHA"
+            )
+            required=false
+            reason="all changed files are Markdown"
+            if [ "${#changed_files[@]}" -eq 0 ]; then
+              required=true
+              reason="change classifier found no files; fail closed"
+            else
+              for path in "${changed_files[@]}"; do
+                case "$path" in
+                  *.md) ;;
+                  *)
+                    required=true
+                    reason="non-Markdown change: $path"
+                    break
+                    ;;
+                esac
+              done
+            fi
+          fi
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+          echo "ROCm compiler lane required: $required ($reason)"
+
+      - name: Skip full ROCm compiler lane for Markdown-only PR
+        if: steps.rocm_impact.outputs.required == 'false'
+        run: |
+          echo "ROCm compiler ownership is unaffected by this Markdown-only PR."
+          echo "The required job remains successful so validate-required can fan in normally."
 
       - name: Set up Python 3.11
+        if: steps.rocm_impact.outputs.required == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Install LLVM/MLIR 23 and build tools
+        if: steps.rocm_impact.outputs.required == 'true'
         run: |
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
                      /etc/apt/sources.list.d/azure-cli.list \
@@ -415,6 +462,7 @@ jobs:
           echo "/usr/lib/llvm-23/bin" >> "$GITHUB_PATH"
 
       - name: Prepare host-free ROCm linker layout
+        if: steps.rocm_impact.outputs.required == 'true'
         run: |
           # MLIR's ROCDL serializer resolves the linker as
           # ${ROCM_PATH}/llvm/bin/ld.lld. The apt LLVM layout keeps it at
@@ -427,6 +475,7 @@ jobs:
           echo "ROCM_PATH=${rocm_toolkit}" >> "$GITHUB_ENV"
 
       - name: Install compiler-test dependencies
+        if: steps.rocm_impact.outputs.required == 'true'
         env:
           PYTHON: python
         run: |
@@ -434,6 +483,7 @@ jobs:
           bash scripts/install_test_deps.sh
 
       - name: Configure ROCm-only host-free compiler
+        if: steps.rocm_impact.outputs.required == 'true'
         run: |
           cmake -S . -B build-rocm-ci -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -453,15 +503,18 @@ jobs:
             -DTESSERA_ROCM_BUILD_RUNTIME=OFF
 
       - name: Build ROCm compiler drivers
+        if: steps.rocm_impact.outputs.required == 'true'
         run: >-
           cmake --build build-rocm-ci
           --target tessera-opt tessera-rocm-opt
           -j2
 
       - name: Run ROCm backend lit suite
+        if: steps.rocm_impact.outputs.required == 'true'
         run: cmake --build build-rocm-ci --target check-tessera-rocm
 
       - name: Run ROCM-TEST-1 ownership gate
+        if: steps.rocm_impact.outputs.required == 'true'
         env:
           PYTHONPATH: python
         run: |
@@ -471,7 +524,7 @@ jobs:
             --report rocm-host-free-compiler-report.json
 
       - name: Upload ROCm compiler ownership report
-        if: always()
+        if: always() && steps.rocm_impact.outputs.required == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: rocm-host-free-compiler-report

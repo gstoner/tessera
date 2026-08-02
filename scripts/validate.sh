@@ -71,7 +71,7 @@ fi
 
 echo "==> Python unit tests"
 "$PYTHON" -m pytest tests/unit -q -m \
-  "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm"
+  "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm and not hardware_amx"
 
 # Generated audit dashboards: one script owns the drift list so local
 # validation, CI, and pre-commit do not diverge.

@@ -107,11 +107,16 @@ entire compiler.
 
 [`graph_ir.py:1702`](../../../python/tessera/compiler/graph_ir.py#L1702)
 `_infer_result_type` handles `tessera.matmul`, `tessera.batched_gemm`, two EBM
-ops, and `tessera.transpose`. Everything else returns `operand_types[0]`.
+ops, and `tessera.transpose`; its fallback returns `operand_types[0]`.
+`_struct_result_type` subsequently repairs a bounded set of structural
+reshape/view/squeeze/permute-style operations once keyword attributes are
+bound.  The fail-open default remains for the rest of the catalog, but the
+structural helper is an existing partial consumer and should be folded into the
+canonical rule registry rather than described as absent.
 
-That default is *silently wrong* for every reduction (rank changes), every
-reshape/view, every concat, every gather/scatter, every dtype-changing cast,
-every multi-output op — which is most of the catalog.
+That default is *silently wrong* for unhandled reductions, concat,
+gather/scatter, dtype-changing casts, multi-output ops, and other families not
+covered by `_struct_result_type`—still a large portion of the catalog.
 
 The code knows. `_struct_result_type`'s own docstring:
 

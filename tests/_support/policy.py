@@ -40,22 +40,23 @@ MARKERS: dict[str, str] = {
     "metal4": "requires a Metal 4-capable Apple GPU runtime",
     "hardware_nvidia": "requires an NVIDIA GPU with the CUDA toolkit",
     "hardware_rocm": "requires an AMD GPU with the ROCm toolkit",
+    "hardware_amx": "requires Intel AMX hardware with OS tile-state permission",
 }
 
 
 PR_MARKER_EXPRESSION = (
     "not slow and not performance and not hardware_apple_gpu "
-    "and not hardware_nvidia and not hardware_rocm"
+    "and not hardware_nvidia and not hardware_rocm and not hardware_amx"
 )
 
 
 APPLE_HOST_FREE_COMPILER_EXPRESSION = (
     "compiler_tool and not hardware_apple_gpu and not performance "
-    "and not hardware_nvidia and not hardware_rocm"
+    "and not hardware_nvidia and not hardware_rocm and not hardware_amx"
 )
 
 
 ROCM_HOST_FREE_COMPILER_EXPRESSION = (
     "compiler_tool and not performance and not hardware_apple_gpu "
-    "and not hardware_nvidia and not hardware_rocm"
+    "and not hardware_nvidia and not hardware_rocm and not hardware_amx"
 )

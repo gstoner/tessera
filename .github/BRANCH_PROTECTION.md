@@ -17,10 +17,15 @@ status checks to pass before merging":
 Selecting just `validate-required` is sufficient. Each underlying
 lane (`lint (ruff + mypy ratchet)`, `unit (pytest -m "not slow")`,
 `audit (drift + claim_lint + examples)`, `build (runtime +
-collectives)`, and `rocm compiler (host-free LLVM/MLIR 23)`) is still reported
+collectives)`, and `rocm compiler (host-free LLVM/MLIR 23)` from job
+`rocm-compiler`) is still reported
 individually in the PR Checks tab so contributors can see which lane failed
 without expanding the aggregator log. The required ROCm compiler lane is a
 host-free artifact and ownership proof; it does not claim AMD GPU execution.
+For a pull request containing only Markdown changes, that lane performs a
+lightweight successful no-op instead of installing LLVM/MLIR and rebuilding the
+compiler. Any non-Markdown change fails closed to the full ROCm lane. Pushes to
+`main` and manual workflow dispatches always run the full lane.
 
 ## Opt-in lanes (NOT required for merge)
 
@@ -76,8 +81,10 @@ contributor doesn't have to wait 15+ minutes on every PR.
 
 `validate-required` uses `if: always()` and pulls `needs.<lane>.result`
 explicitly so a *skipped* required lane (which would normally pass
-GitHub's default status check logic) is treated as a failure. There's
-no escape hatch — the five named lanes must all `success`.
+GitHub's default status check logic) is treated as a failure. The five named
+lanes must all report `success`; consequently the Markdown-only ROCm bypass is
+implemented as a successful step inside the always-present job, not as a
+job-level `if:` that would produce `skipped`.
 
 ## Adding a new required lane
 

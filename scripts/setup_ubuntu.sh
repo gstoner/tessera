@@ -235,7 +235,7 @@ Next steps
 
   # Python unit tests (no C++ build needed):
   python -m pytest tests/unit/ -m \
-    "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm"
+    "not slow and not performance and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm and not hardware_amx"
 
   # MLIR lit tests (after building tessera-opt):
   python -m lit tests/tessera-ir/ -v

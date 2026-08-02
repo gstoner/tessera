@@ -48,19 +48,20 @@ into costly:
    optimizations, and a parallel Python path that calls hand-written kernels,
    with no connection between them.
 
-Two of the findings (§1.1, §1.5) are the failure modes flagged in the
-[Riemannian OT plan](../compiler/RIEMANNIAN_OT_PLAN.md) as future risks. They
-are present defects today.
+Two findings (§1.1, §1.5) correspond to failure modes flagged in the
+[Riemannian OT plan](../compiler/RIEMANNIAN_OT_PLAN.md). Source verification
+narrows them: §1.1 is open-value and unconsumed-metadata debt, while §1.5 emits
+inert checkpoint policy because no runtime/codegen consumer exists today.
 
 ---
 
 ## 1. Architectural findings
 
-### 1.1 The `manifold` attribute silently defaults to Euclidean — and no backend reads it
+### 1.1 `manifold` values are open strings and no backend consumes the attribute
 
 Three separate facts compound here.
 
-**It defaults.** [`Canonicalize.cpp:56`](../../../src/solvers/ebm/lib/Passes/Canonicalize.cpp#L56):
+**A stale fallback exists.** [`Canonicalize.cpp:56`](../../../src/solvers/ebm/lib/Passes/Canonicalize.cpp#L56):
 
 ```cpp
 op->emitWarning("tessera_ebm.langevin_step missing `manifold`; "
@@ -68,15 +69,16 @@ op->emitWarning("tessera_ebm.langevin_step missing `manifold`; "
 op->setAttr("tessera.ebm.manifold", StringAttr::get(ctx, "euclidean"));
 ```
 
-A warning is not a failure. A `langevin_step` that loses its `manifold`
-attribute anywhere upstream becomes a Euclidean sampler that converges, looks
-numerically healthy, and produces wrong samples — because `exp_x(v) ≈ x + v` is
-correct to first order on any manifold.
+The registered ODS operation already declares `StrAttr:$manifold` as required,
+so a normally verified input missing the attribute is rejected before this
+canonicalizer can repair it.  The fallback is misleading dead/defensive code in
+the verified pipeline and should be removed, but it is not by itself a current
+reachable silent-wrong-answer path.
 
-**It is unvalidated.** The ODS declares `StrAttr:$manifold`
+**Its value is unvalidated.** The ODS declares `StrAttr:$manifold`
 ([`EBMOps.td:120`](../../../src/solvers/ebm/lib/Dialect/EBM/EBMOps.td)), and
 `EBMOps.cpp` is 11 lines with no custom verifier. `"Sphere"`, `"sphere2"`, and
-`"spere"` all parse, canonicalize, and propagate.
+`"spere"` satisfy the required string type, canonicalize, and propagate.
 
 **It is never consumed.** `grep -rn manifold src/compiler/codegen/` returns six
 hits, **all of them comments**. No backend kernel generator branches on it. The
@@ -218,12 +220,17 @@ This contradicts Decision #10, which specifies that recompute insertion is
 "budget-guided" using "a greedy live-set scan" with "only pure ops qualifying."
 The general `InsertRecomputePass` does that scan. This domain pass bypasses it.
 
-The practical consequence, and the reason it matters now: on an
-envelope-theorem loop — RNOT's `c`-transform, where the inner trajectory is
-provably never differentiated through — this pass would annotate 2500 dead steps
-as rematerializable and instruct the backend to keep four live states of a
-trajectory nothing reads. The budget default is documented as "enough to fit a
-typical T=16 chain"; the workloads in flight are T=2500.
+The current consequence is inert policy pollution: the pass would annotate an
+envelope-theorem loop even though repository-wide inspection finds no runtime or
+codegen consumer for `tessera.ebm.{checkpoint_loop,recompute_step}`. It therefore
+does not currently instruct a backend to keep four states. That absence of a
+consumer is itself Decision #29 debt and makes the pass inappropriate for the
+default pipeline. If a consumer is later introduced, the hardcoded budget and
+missing demand analysis would become a correctness/performance hazard.
+
+There is already a negative fixture for loops without EBM ops. What is missing
+is a demand-aware contract; it should be supplied by the shared rematerialization
+analysis rather than retrofitted as another EBM-only policy.
 
 Design and tripwires: [RIEMANNIAN_OT_PLAN.md §H2](../compiler/RIEMANNIAN_OT_PLAN.md).
 
@@ -291,7 +298,7 @@ The Cayley table **is** the kernel. It is exactly, precisely, the kind of
 compile-time-known, signature-parametric sparse contraction that Decision #28's
 tier-1 synthesizer exists to specialize — and `python/tessera/compiler/emit/`
 now exists, with `apple_msl.py`, `nvidia_cuda.py`, `rocm_hip.py`, and
-`x86_llvm.py` over arch-agnostic regions in `fusion_core.py`. It did not exist
+`x86_c.py` over arch-agnostic regions in `fusion_core.py`. It did not exist
 when GA was written.
 
 One table-driven emitter would replace the hand-written set *and* make Cl(1,3),
@@ -429,8 +436,8 @@ the shape Decision #28's arbiter is built to choose kernels for.
 | # | Item | § | Effort | Why this rank |
 |---|---|---|---|---|
 | 1 | Add a traceable-energy contract for `grad_fn=None`; use `autodiff.tape` for supported Tessera-op energies and retain numerical differentiation for untraceable NumPy callbacks | 2.6 | ~1 week | Removes repeated energy evaluations where reverse mode is valid while preserving the existing correct fallback and NumPy regression coverage. |
-| 2 | Make `manifold` a required, verified enum; delete the Euclidean default | 1.1 | ~3 days | Closes a live silent-wrong-answer path. Pattern already exists in the sibling dialect. |
-| 3 | Demand-gate `CheckpointInnerLoop` + negative fixtures | 1.5 | ~4 days | Live defect; the fixture is the durable artifact. |
+| 2 | Replace the already-required `manifold` string with a verified enum; delete the unreachable Euclidean repair; name the eventual backend consumer | 1.1 | ~3 days | Closes invalid-value acceptance and decorative-metadata debt. |
+| 3 | Remove `CheckpointInnerLoop` from the default EBM pipeline; classify or delete the standalone inert marker pass, then register EBM op knowledge with shared rematerialization work | 1.5 | ~1 day now; shared analysis tracked separately | Enforces declaration/consumer ownership without inventing a domain-only demand analysis. |
 | 4 | Fix `.td` summaries; distinguish "stub" from "annotation-only"; remove the false "GA8 will refuse" promise | 1.4 | ~1 day | Trivial; these strings are what `--help` prints. |
 | 5 | Thread `MultivectorSpec.grades` into `geometric_product` and add `input_grades` to `GradeFusion` | 2.1 | ~1 week | 2–4× on the dominant GA ops using information already computed. |
 | 6 | Batched operands in `ExpandProductTable` | 1.3 | ~1 week | Without it the MLIR GA lane cannot run a real workload. |

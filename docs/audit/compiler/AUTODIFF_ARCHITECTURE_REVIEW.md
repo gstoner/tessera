@@ -61,9 +61,12 @@ ops.registry._entries[name].reference = wrapped
 ```
 
 `install_op_wrappers()` rebinds every name in the `tessera.ops` module and
-mutates the op registry in place. It is process-wide, irreversible, not
-thread-safe, and not re-entrant. "Being differentiated" is a global process
-state rather than a property of a value or a program.
+mutates the op registry in place. Installation is process-wide and there is no
+uninstall path.  However, active-tape state is held in a `ContextVar`, so normal
+recording is async/thread-local and nested tape contexts restore their token.
+The architectural limitation is global namespace instrumentation plus
+identity-keyed values—not that every tape operation is inherently non-reentrant
+or thread-unsafe.
 
 This is not a style objection — it is the reason the Python layer *cannot* be
 promoted into the compiler and must be demoted to oracle. The unification plan
@@ -206,6 +209,9 @@ carries an explicit dominance argument for clone placement.
 `EBMCheckpointInnerLoop` — reviewed in
 [`GA_EBM_ARCHITECTURE_REVIEW.md §1.5`](../domain/GA_EBM_ARCHITECTURE_REVIEW.md) —
 is purely syntactic with a hardcoded budget and no liveness analysis at all.
+Its attributes currently have no runtime/codegen consumer, so the immediate
+problem is inert policy in the default pipeline rather than an active backend
+checkpoint schedule.
 
 Same repository, same concept, opposite rigor. The domain pass should be deleted
 and its op knowledge registered into the general one. Naming this here because it
@@ -305,8 +311,10 @@ of the largest long-lived pure activation intervals until the estimated peak fit
 the budget. That is a sound greedy heuristic for a straight-line block.
 
 It is not the algorithm the literature settles on for loops. Revolve/treeverse
-binomial checkpointing gives **provably optimal** schedules with `O(log T)` memory
-and `O(log T)` recompute for a `T`-step loop. And per A3, the pass cannot act
+binomial checkpointing gives optimal schedules under specific checkpoint-count
+and recomputation models; its memory/recompute tradeoff depends on the available
+checkpoint budget and cannot be summarized as simultaneous `O(log T)` memory
+and `O(log T)` total recompute for every `T`-step loop. And per A3, the pass cannot act
 inside a loop at all (`REMAT_NON_CLONABLE` on nested regions).
 
 So the workloads with the worst activation-memory profile — long scans, diffusion
@@ -508,7 +516,8 @@ Maps to: P5, and it is the correct next big rock after P4.
   HYBRID candidates, measured — exactly the Decision #28 mechanism, applied to a
   choice it was built for.
 - Add Revolve/treeverse binomial checkpointing for counted loops, replacing "no
-  checkpointing at all" (B6) with a provably optimal `O(log T)` schedule.
+  checkpointing at all" (B6) with a schedule selected for the explicit memory
+  budget and recomputation objective.
 - Delete `EBMCheckpointInnerLoop`; register its op knowledge into
   `ActivationRematerializationPass` (A8).
 
@@ -519,8 +528,8 @@ Maps to: P4/P6.
 Two steps:
 
 1. Exact forward-over-reverse HVP, once D2 exists.
-2. **Taylor / jet mode over Weil algebras — implemented on the existing
-   multivector engine.**
+2. **Taylor / jet mode over Weil algebras — potentially sharing a future
+   generic finite-algebra lowering substrate with GA.**
 
 Step 2 deserves emphasis, because it is a synergy nobody else has. Taylor-mode AD
 computes all mixed partials to order `k` in a single forward pass at cost linear
@@ -528,19 +537,20 @@ in the algebra dimension, by carrying values in a **truncated polynomial (Weil)
 algebra** instead of ℝ. A Weil algebra is a finite-dimensional commutative
 algebra with a compile-time-known multiplication table and a nilpotent grading.
 
-Tessera already has *exactly that object*:
+Tessera does not yet have that general object.  It has a useful implementation
+pattern:
 [`ga/signature.py`](../../../python/tessera/ga/signature.py) builds a
 compile-time-cached, graded, bitmask-indexed product table from a signature and
 caches it per algebra, and
 [`ExpandProductTable.cpp`](../../../src/solvers/clifford/lib/Passes/ExpandProductTable.cpp)
-lowers a product table to unrolled IR. The GA track and the higher-order-AD track
-are the same machine with different structure constants.
+lowers a **Clifford** product table to unrolled IR.  `ga/signature.py` hard-codes
+blade XOR, metric signs, and Clifford anti-commutation; it cannot represent an
+arbitrary commutative nilpotent Weil algebra by changing `(p,q,r)`.
 
-If the GA review's item 7 (table-driven kernel synthesis via `emit/`) lands
-first, Taylor mode arrives largely for free — and the grade-sparsity work
-(GA review §2.1) is *literally* the truncation-order sparsity Taylor mode needs.
-No other AD system has a production graded-algebra kernel generator to host this
-on.
+If the GA review's table-driven synthesis is generalized to accept an explicit
+finite multiplication table, both Clifford and Taylor/Weil lowering could use
+that substrate.  That generalization is new design work; Taylor mode does not
+arrive "largely for free" from the current Clifford signature engine.
 
 Maps to: new capability; no existing P-phase covers it.
 

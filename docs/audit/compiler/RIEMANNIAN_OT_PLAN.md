@@ -380,11 +380,13 @@ guardrails against a hypothetical.
 
 ### H1 — Semantic keys never default
 
-**The defect.** `src/solvers/ebm/lib/Passes/Canonicalize.cpp:56` emits a
-*warning* and defaults a missing `manifold` attribute to `"euclidean"`. The
-attribute is an unvalidated `StrAttr` with no verifier, and **no backend reads
-it** — every hit for `manifold` under `src/compiler/codegen/` is a comment.
-Manifold correctness is carried entirely by Python function-name dispatch.
+**The defect.** `src/solvers/ebm/lib/Passes/Canonicalize.cpp:56` contains a
+warning-plus-Euclidean repair for a missing `manifold`, but the registered ODS
+op already requires the `StrAttr`; normal verification rejects absence before
+the repair.  The reachable defects are that the string's value is not closed by
+an enum/verifier and **no backend reads it**—every hit for `manifold` under
+`src/compiler/codegen/` is a comment. Manifold correctness is carried entirely
+by Python function-name dispatch.
 
 **The generalizing principle.** The bug is not "EBM got one default wrong." It is
 that Tessera has no rule separating two kinds of attribute:
@@ -452,23 +454,29 @@ finds a step op, marks every step `recompute_step` and sets a hardcoded
 This bypasses Decision #10's own discipline — "budget-guided … greedy live-set
 scan … only pure ops qualify" — which the general `InsertRecomputePass`
 implements and this domain pass does not. On the `c`-transform loop it would
-annotate 2500 provably-dead steps and instruct the backend to keep four live
-states of a trajectory nothing reads. The budget comment reads "enough to fit a
-typical T=16 chain"; the workload is T=2500.
+annotate 2500 dead steps. Repository-wide inspection finds no runtime or codegen
+consumer for those EBM attributes, so it does not currently instruct a backend
+to keep four states; it emits inert, misleading policy. The budget comment reads
+"enough to fit a typical T=16 chain" while the workload is T=2500, which would
+become hazardous if a consumer were added without first replacing the policy.
 
 **The design, five parts.**
 
-1. **Supply the missing concept: differentiation demand.** The pass
+1. **First remove the inert pass from the default pipeline.** Retain it as a
+   standalone pass only if it is explicitly classified experimental; otherwise
+   delete it under Decision #29 because its attributes have no consumer.
+2. **Supply the missing concept: differentiation demand in the shared remat
+   system.** The pass
    over-annotates because nothing in the IR states "this trajectory is needed for
    a backward pass." Add an explicit gradient-boundary marker — and note this is
    **the same object as R2's `stop_gradient` region**, not a second mechanism.
    A value is remat-eligible only if it is live-in to a differentiation boundary.
-2. **Gate on it.** `recompute_step` attaches only when some value defined in the
+3. **Gate shared loop rematerialization on it.** A remat decision exists only when some value defined in the
    loop body reaches such a boundary. A loop whose results are all consumed
    through `stop_gradient`, or which yields only its final state, gets **no**
    annotation and no `checkpoint_loop` attribute.
-3. **Make the no-op observable and tested.** Three lit fixtures, of which two are
-   new:
+4. **Make the no-op observable and tested.** Preserve the existing non-EBM-loop
+   negative fixture. When demand-aware loop rematerialization lands, add:
    - `checkpoint_inner_loop_basic.mlir` *(exists)* — demand present → annotated.
    - **new** `checkpoint_skips_envelope_loop.mlir` — loop result crosses
      `stop_gradient` → `CHECK-NOT: tessera.ebm.recompute_step` and
@@ -476,11 +484,11 @@ typical T=16 chain"; the workload is T=2500.
    - **new** `checkpoint_skips_forward_only_loop.mlir` — no-grad module → same.
 
    The `CHECK-NOT` fixture *is* the proof asked for, and it costs almost nothing.
-4. **Count it, don't just assert absence.** Have the pass emit
+5. **Count shared remat decisions, don't just assert absence.** Have the pass emit
    `tessera.remat.steps_annotated = N` and assert `N == 0` on the envelope
    fixture. Absence of an attribute is weak evidence — it also holds if the pass
    silently failed to run. A zero is a measurement.
-5. **Then delete the pass.** The end state is that `EBMCheckpointInnerLoop`
+6. **Do not recreate the domain pass.** The end state is that `EBMCheckpointInnerLoop`
    stops existing as a separate syntactic pass and becomes a *registration* of
    EBM/OT step ops into `InsertRecomputePass`'s existing live-set scan. Domain
    passes should contribute op knowledge, not reimplement analysis — one remat

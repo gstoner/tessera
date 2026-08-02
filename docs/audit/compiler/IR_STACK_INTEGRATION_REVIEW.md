@@ -53,7 +53,7 @@ extended: it is not one duplicated boundary, it is **all three**.
 
 ## 1. Architectural findings
 
-### T1 — The Tile dialect defines nine types and uses none of them on its operations
+### T1 — The Tile dialect has begun adopting nine types, but its core compute and copy envelopes remain open
 
 [`TileOps.td`](../../../src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td)
 declares a complete and well-chosen type vocabulary:
@@ -67,7 +67,12 @@ declares a complete and well-chosen type vocabulary:
 That is exactly the right vocabulary for a tile-level IR — fragments, buffers,
 TMEM, TMA descriptors, mbarriers, pipeline state, async tokens.
 
-Then the operations:
+The statement that the operations use none of these types is stale.  The current
+ODS uses typed results/operands for `tile.alloc`/`dealloc`, pipeline state, TMA
+descriptors, mbarriers, TMEM handles, tile values, and fragment pack/zero/unpack.
+That is meaningful progress and must be preserved.
+
+The most important portable compute and copy envelopes are still open:
 
 ```tablegen
 def Tile_MMAOp : Tile_Op<"mma"> {
@@ -82,8 +87,10 @@ def Tile_AsyncCopyOp : Tile_Op<"async_copy"> {
 }
 ```
 
-`AnyType` appears **70 times** in the file; `RankedTensorType`, `MemRefOf`, and
-`TensorOf` appear **zero** times.
+`AnyType` still appears 71 times (66 as `Variadic<AnyType>`), concentrated in
+value-lane, whole-kernel, domain, and compatibility operations.  Some of those
+uses are temporary consequences of the level-mixing in T4, not all the same
+typing defect.
 
 `tile.mma` is the single most type-sensitive operation in the compiler —
 fragment layout, accumulator precision, MMA shape, and register-file assignment
@@ -91,9 +98,13 @@ all ride on its operand types — and it is `Variadic<AnyType> → Variadic<AnyT
 `tile.async_copy` is the operation whose entire purpose is moving between memory
 spaces, and it names no memory space, no shape, and no dtype.
 
-This is the sharpest instance in five reviews of the recurring pattern
-"metadata is defined and never consumed": the types are **already written**. The
-fix is changing operand declarations in ODS, not designing anything.
+This remains a high-value instance of the recurring pattern "metadata is
+defined and only partially consumed."  The fix is not only changing operand
+declarations: `!tile.fragment` and `!tile.buffer` are currently opaque, so
+carrying element type, shape, layout, memory space, and numeric policy requires
+a variant-aware type design and migration plan.  Whole-kernel/domain ops should
+not be forced into a false primitive signature merely to drive `AnyType` to
+zero; T4 must move them to their owning level.
 
 Two consequences follow, and they are §T2 and §T6.
 
@@ -247,7 +258,7 @@ for, already present here.
 
 ## 3. Algorithmic and architectural updates
 
-### U1 — Type the Tile dialect  *(the cheapest high-value change in five reviews)*
+### U1 — Finish typing the true Tile primitives
 
 Replace `Variadic<AnyType>` with the types the dialect already defines:
 
@@ -265,6 +276,7 @@ def Tile_MMAOp : Tile_Op<"mma"> {
 }
 ```
 
+Preserve the typed alloc/pipeline/TMA/mbarrier/TMEM vocabulary already landed.
 Then parameterize `!tile.fragment` and `!tile.buffer` on the attributes that
 actually decide codegen — element type, tile shape, layout, memory space, and
 (for the accumulator) `numeric_policy`. That single step:
@@ -277,7 +289,11 @@ actually decide codegen — element type, tile shape, layout, memory space, and
 - and gives every backend a typed contract to lower against instead of a
   positional variadic.
 
-No new concepts. The types are written; the ops need to reference them.
+This is a bounded type-system extension, not a mechanical substitution.  Before
+tightening an op, inventory every producer/consumer on ROCm, NVIDIA, Apple, and
+x86; define variant-aware fragment roles and dtypes; and retain an explicit,
+reviewed compatibility exception only where the op is scheduled to move out of
+Tile IR under U4.
 
 ### U2 — Collapse the legality archipelago
 
@@ -351,7 +367,7 @@ One hour. Removes a trap.
 | Phase | Contents | Effort | Gate |
 |---|---|---|---|
 | **I0** | U7 duplicate ODS deletion; split `GraphToSchedulePass` into a dedicated library-owned source/header with focused fixtures | 3d | one ODS per dialect; pass ownership explicit + lit-tested |
-| **I1** | **U1 — type the Tile dialect**; parameterize `!tile.fragment`/`!tile.buffer` | 3w | `AnyType` count in `TileOps.td` → 0; a mismatched `tile.mma` fails to parse |
+| **I1** | **U1 — finish typing true Tile primitives**; parameterize `!tile.fragment`/`!tile.buffer`; inventory compatibility exceptions | 3w design/migration estimate | no unexplained `AnyType` on true primitives; a mismatched `tile.mma` fails verification |
 | **I2** | U2 — legality passes → ODS constraints + one dataflow pass | 2w | six passes → one; no rule lost |
 | **I3** | U4 — split the Tile dialect by level | 3w | every `tile.*` op is a tile primitive |
 | **I4** | U5 — metadata lowering obligation + boundary verifier | 2w | no attribute drops without a recorded reason |
@@ -369,9 +385,11 @@ gives every backend a real contract to lower against.
 Revisions to [`COMPILER_ARCHITECTURE_SWEEP.md §4`](COMPILER_ARCHITECTURE_SWEEP.md),
 as amended by the [frontend review §5](FRONTEND_GRAPH_SCHEDULE_REVIEW.md):
 
-1. **I0 joins Tier 0.** One week, removes a duplicate-dialect trap and makes an
-   existing pass linkable.
-2. **I1 joins Tier 1, near the top.** Three weeks, no new concepts, and it is the
+1. **I0 joins Tier 0.** Three days, removes a duplicate-dialect trap and gives
+   the already-linkable `GraphToSchedulePass` explicit source/header ownership
+   plus focused lit coverage.
+2. **I1 joins Tier 1, near the top.** It is a bounded type-system design and
+   migration, and it is the
    precondition for the Tile-level half of nearly everything else. I would rank
    it immediately after the dataflow framework (sweep item 8) and alongside the
    shape-rule registry (frontend E1) — all three are "make the type/contract

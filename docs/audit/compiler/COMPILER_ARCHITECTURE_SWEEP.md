@@ -63,9 +63,10 @@ against a dictionary. The class docstring is candid: *"Phase 1: AST-based
 single-function analysis. Phase 2: full inter-procedural dataflow over the Graph
 IR call graph."*
 
-**Decision #5 in `CLAUDE.md` states: "Effects are inferred, not declared.
-`EffectLattice` walks the IR."** It does not walk the IR. That is a load-bearing
-architectural decision documented incorrectly.
+**At review time Decision #5 in `CLAUDE.md` stated: "Effects are inferred, not
+declared. `EffectLattice` walks the IR."** It did not walk the IR. The decision
+was corrected on 2026-08-02 to distinguish the current AST inference from the
+MLIR effect pass; unifying the two mechanisms remains open.
 
 It also **fails open**, in exactly the manifold-default shape (L4). Any op reached
 through an alias, a local variable, a helper function, a `getattr`, a dict
@@ -303,9 +304,9 @@ commitments.
 | # | Item | Source | Effort |
 |---|---|---|---|
 | 1 | Add a traceable-energy contract for EBM `grad_fn=None`; use `autodiff.tape` only for supported Tessera-op energies and preserve numerical differentiation for untraceable NumPy callbacks | GA/EBM §2.6 | 1w |
-| 2 | `manifold` → required verified enum; delete the Euclidean default (copy `AnnotateAlgebra`) | GA/EBM §1.1 · OT §H1 | 3d |
-| 3 | Demand-gate `CheckpointInnerLoop` + `CHECK-NOT` fixtures + annotated-count assertion | GA/EBM §1.5 · OT §H2 | 4d |
-| 4 | **Correct Decision #5 in `CLAUDE.md`** — the effect lattice walks the AST, not the IR | F1 | 1h |
+| 2 | Replace the already-required `manifold` string with a verified enum; delete the stale Euclidean repair and name the eventual consumer | GA/EBM §1.1 · OT §H1 | 3d |
+| 3 | Remove unconsumed `CheckpointInnerLoop` policy from the default pipeline; defer demand-aware loop remat to the shared analysis | GA/EBM §1.5 · OT §H2 | 1d |
+| 4 | **Completed 2026-08-02:** correct Decision #5 to distinguish AST and MLIR effect inference | F1 | done |
 | 5 | Fix `jacrev`/`jacfwd` forward-pass-per-element; route `vmap` through the batching-rule registry | Autodiff §B1–B3 | 1w |
 | 6 | `.td` summary drift; distinguish "stub" from "annotation-only"; remove the false "GA8 will refuse" promise | GA/EBM §1.4 | 1d |
 | 7 | Adopt Decisions #21a (semantic keys never default) and #10a (eligibility passes ship a negative fixture) | OT §4a | — |
@@ -342,11 +343,12 @@ commitments.
 | # | Item | Source | Effort |
 |---|---|---|---|
 | 20 | Sparse AD — sparsity detection + coloring (a client of #8/#10) | Autodiff D7 | 5w |
-| 21 | Taylor/jet mode hosted on the GA multivector engine | Autodiff D6 | 4w |
+| 21 | Research/design a generic finite-multiplication-table substrate for Taylor/Weil mode, potentially shared with the Clifford-specific GA lowering | Autodiff D6 | re-estimate after design spike |
 | 22 | Table-driven GA kernel synthesis via `emit/`; then PGA `Cl(3,0,1)` | GA/EBM §2.3–2.4 | 5w |
 
-**If only one tier happens: Tier 0 plus item 8.** Tier 0 closes three live
-defects and one wrong architectural decision in ~3 weeks; item 8 is what makes
+**If only one tier happens: Tier 0 plus item 8.** Tier 0 closes verified
+fail-open/invalid-value paths, removes inert policy and duplicate definitions,
+and corrects one wrong architectural decision; item 8 is what makes
 everything after it cheaper instead of being the eighth hand-rolled analysis.
 
 ---

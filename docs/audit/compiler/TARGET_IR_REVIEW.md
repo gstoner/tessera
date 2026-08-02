@@ -79,17 +79,21 @@ Identical for `ROCM_WMMAOp`. These are the operations that *are* the backend —
 the whole reason a ROCm Target IR exists is to name MFMA and WMMA before they
 become text.
 
-What makes this instance sharper than the Tile IR one: **the correct types are
-written down, in prose, in the same file.** `ROCM_WMMAGemmOp`'s description:
+The nearby `ROCM_WMMAGemmOp` description documents one concrete f16 WMMA
+materialization:
 
 > …loads the A/B tiles into RDNA WMMA fragment vectors (`vector<16xf16>`), calls
 > `tessera_rocm.wmma` (Stage J → real `rocdl.wmma`), and stores the
 > `vector<8xf32>` accumulator with the wave32 lane/element layout.
 
-`vector<16xf16>` and `vector<8xf32>` are exactly the operand types
-`ROCM_WMMAOp` should declare. They are in an English paragraph instead of the
-ODS, so nothing checks them and the generating pass is the only place the
-contract lives.
+Those vectors are evidence for that f16 gfx11 variant, not a universal signature
+for `ROCM_WMMAOp`: the directive also admits bf16 and integer storage variants,
+and MFMA has architecture/shape-dependent fragment forms.  NVIDIA's shared op
+base likewise has no equivalent fixed-vector prose for all `mma_sync`/`wgmma`
+variants.  The defect is still real—matrix contracts are open—but the fix must
+be variant-aware types or verifier constraints keyed by architecture, shape,
+operand dtype, accumulator dtype, and role.  Hard-coding the two f16 vector
+types would reject valid families and encode one AMD schedule as fleet policy.
 
 **This resizes Wave 1 of the [integrated plan](INTEGRATED_COMPILER_PLAN.md)** —
 typing the Tile dialect was scoped at 3 weeks; the Target dialects add roughly
@@ -130,26 +134,37 @@ that four substrings appear in generated text.
 That is a useful smoke test and it is not a contract. The named validation for
 Tessera's Target IR architectural decision is `str.__contains__`.
 
-### X5 — Target IR is Python-canonical too, completing the pattern at all three boundaries
+### X5 — The compatibility Target-IR path is Python-canonical; native packaging is mixed
 
 `target_ir.py` (2004 lines) defines `lower_tile_to_target_ir` plus
 `_lower_rocm_op`, `_lower_cpu_op`, and `_lower_apple_gpu_fusion` — hand-written
 per-backend lowering functions, mirroring `_lower_schedule_ops` in `tile_ir.py`
 and `_lower_graph_ops` in `schedule_ir.py`.
 
-So the full picture below Graph IR is now known:
+That is not, however, the whole production picture.  For the native package
+families admitted by `rocm_native.native_package_kind`, canonical compilation
+replaces the compatibility artifact with MLIR produced by `tessera-opt` and
+lowers it through the C++ ROCm pipeline to ROCDL/HSACO.  The Python Target-IR
+path remains canonical for compatibility/value artifacts and unsupported
+families, but it is not the canonical Tile→Target implementation for the five
+auto-promoted gfx1151 package families.
+
+The full picture below Graph IR is therefore mixed:
 
 | Boundary | Canonical | Parallel MLIR |
 |---|---|---|
 | Graph → Schedule | Python `lower_graph_to_schedule_ir` | `GraphToSchedulePass` (co-located with driver pipeline code, but compiled into the linkable `TesseraPM` library) |
 | Schedule → Tile | Python `lower_schedule_to_tile_ir` | `TileIRLoweringPass` |
-| Tile → Target | Python `lower_tile_to_target_ir` | 67 `GenerateROCM*` passes; NVIDIA/Apple elsewhere |
+| Tile → Target | Python `lower_tile_to_target_ir` for compatibility/value artifacts; C++ MLIR for admitted native packages | 67 registered `GenerateROCM*` family passes; only a bounded subset participates in the default ROCm backend pipeline |
 
-**All three boundaries, Python-canonical, each with a parallel MLIR
-implementation and no differential test between them.** The integrated plan's
-W3.2 already scopes convergence; this confirms it is three boundaries, not two.
+There is still no differential test that makes the ownership boundary explicit.
+The cleanup target is not "replace three Python-canonical boundaries"; it is to
+name one production owner for each `(target, package family)` and prove that any
+retained compatibility/oracle path agrees at that boundary.  The integrated
+plan's W3.2 still spans three boundaries, but must preserve the already-canonical
+ROCm MLIR/LLVM package lane.
 
-### X6 — The two lead performance targets have opposite codegen architectures
+### X6 — ROCm has three differently scoped generation surfaces with unclear ownership
 
 Decision #28 names ROCm and CUDA as *the* lead performance targets whose ceiling
 shared infrastructure must never cap. Their codegen could hardly be less shared:
@@ -161,16 +176,22 @@ shared infrastructure must never cap. Their codegen could hardly be less shared:
 - **NVIDIA: zero such passes.** Its codegen is Python — `emit/nvidia_cuda.py`,
   4722 lines.
 
-Neither choice is wrong in isolation. The cost is that they share no spine: a
-fusion improvement, a numeric-policy change, or a new op family must be
-implemented twice, in two languages, by someone fluent in both. And 67 passes is
-the [sweep's](COMPILER_ARCHITECTURE_SWEEP.md) F3 pattern — hand-enumerated
-catalog instead of generic mechanism — at its largest scale in the tree.
+The three ROCm surfaces are not interchangeable implementations of one job:
 
-The `emit/` subsystem (Decision #28 tier 1/2) is the intended shared spine and
-already has `rocm_hip.py` (806 lines) alongside `nvidia_cuda.py`. So there are
-now *three* ROCm codegen paths: 67 C++ passes, `emit/rocm_hip.py`, and
-`target_ir.py::_lower_rocm_op`.
+- the C++ passes own the canonical MLIR→ROCDL/HSACO native package lane;
+- `target_ir.py::_lower_rocm_op` owns compatibility/value Target-IR text and
+  host-free inspection for families not promoted to a native package; and
+- `emit/rocm_hip.py` is an arbiter candidate for generic fused regions plus a
+  runner for selected shipped kernels.  Its own contract explicitly keeps
+  crown-jewel WMMA/MFMA codegen first-class.
+
+The defect is therefore **unclear and weakly tested ownership**, not evidence
+that all 67 passes should move to HIP source synthesis.  Moving the canonical
+ROCm generators onto `emit/rocm_hip.py` would demote the backend from the
+compiler-owned MLIR/LLVM spine to vendor-source synthesis and contradict the
+execution-spine direction.  The right first move is an inventory and
+differential gate keyed by package family; only genuinely duplicate producers
+should later be retired.
 
 ### X7 — "Hardware-free" is doing less work than Decision #19 implies
 
@@ -208,12 +229,12 @@ by design and portability lives at Tile IR.
 
 | # | Item | Effort | Where it lands |
 |---|---|---|---|
-| X-U1 | Type the Target IR matrix ops — `ROCM_{MFMA,WMMA}`, `NVIDIA_{MmaSync,Wgmma}` — with the `vector<…>` types their own descriptions already specify | 2w | **grows W1.1** |
+| X-U1 | Type or verify Target-IR matrix ops with variant-aware `(arch, instruction, shape, operand dtype, accumulator dtype, role)` contracts; use the documented gfx11 f16 vectors as one fixture, not the universal signature | 2w design/migration estimate | **grows W1.1** |
 | X-U2 | `EnumAttr` for every semantic `StrAttr:$kind`/`$mode` across the three target dialects (per #21a) | 1w | **grows W1.1** |
 | X-U3 | Replace `test_target_ir_contract.py`'s substring assertions with a real parse + dialect-load + verifier run; keep the substring test as a smoke check | 1w | **new, Tier 0-adjacent** |
 | X-U4 | Resolve x86's Decision #19 status: either build `tessera_x86` (AMX tile / AVX-512 vector / pack ops) or add an explicit carve-out to the decision | 3w *or* 1h | **new** — decide before building |
 | X-U5 | Tile → Target joins the boundary convergence (three boundaries, not two) | — | **already in W3.2** |
-| X-U6 | Consolidate the three ROCm codegen paths (67 C++ passes / `emit/rocm_hip.py` / `target_ir.py::_lower_rocm_op`) onto the `emit/` spine | 6w | **new, W5-adjacent** — see §4 |
+| X-U6 | Define ROCm producer ownership per package family and add a differential gate between each production owner and any retained compatibility/oracle surface; preserve C++ MLIR→ROCDL/HSACO as the canonical native spine | 2w initial inventory/gate | **new, W3-adjacent** — see §4 |
 
 X-U1 + X-U2 + X-U3 ≈ 4 weeks and are Mac-doable (ODS, lit, unit tests, no
 hardware). X-U4's *decision* costs an hour; only the "build it" branch costs 3
@@ -231,18 +252,21 @@ and the user's note that ROCm work belongs on the ROCm system:
 | X-U1, X-U2 (ODS typing + enums) | **Mac** | ODS + `tessera-opt` + lit; no device. Tightening types is a compile-time contract change. |
 | X-U3 (real contract test) | **Mac** | Parse + verify only. |
 | X-U4 (x86 dialect, if built) | **Mac** for ODS/lit; **Zen5 box** for AMX/AVX-512 execution proof | The Core Ultra 7 in the NR2 Pro has no AVX-512/AMX. |
-| **X-U6 (ROCm codegen consolidation)** | **Strix Halo gfx1151 — required** | It changes *generated kernels*. Every one of the 67 passes that moves onto the `emit/` spine needs an execute-and-compare against its current output on real silicon. Doing this blind on the Mac would be refactoring 67 code generators with no oracle. |
+| **X-U6 (ROCm ownership + differential gate)** | **Host-free for inventory/IR equivalence; Strix Halo gfx1151 for any kernel-producing migration** | Merely classifying owners does not change codegen. Any later retirement or producer change must execute-and-compare on the owning device. |
 | ROCm hardware-gated arch breadth (gfx950/gfx1201/gfx1250) | deferred — no silicon | MASTER_AUDIT P2. |
 
-**Concrete recommendation for X-U6:** do it on the ROCm box, and do it
-*incrementally with a differential harness per pass* — the same harness shape
-W3.1 needs for trace-vs-AST and W3.2 needs for Python-spine-vs-MLIR. One harness
-design, now three uses. Consolidating 67 generators without per-pass numerical
-comparison on gfx1151 is the highest-risk item surfaced in any of these reviews.
+**Concrete recommendation for X-U6:** first classify every registered generator
+as default-pipeline, native-package-only, compatibility-only, candidate, or
+unconsumed.  Then add a differential harness per package family — the same
+harness shape W3.1 needs for trace-vs-AST and W3.2 needs for
+Python-spine-vs-MLIR.  Do not schedule a blanket 67-pass migration.  When a
+specific producer is changed or retired, run its numerical comparison on
+gfx1151.
 
-A second reason to run it there: X-U1's ROCm typing will produce compile
-failures in exactly those 67 passes (that is the point of typing), so the two
-items want the same person on the same box in the same window.
+X-U1's ROCm typing may produce compile failures in registered generators; those
+are host-free contract failures and should be fixed before device work.  A
+gfx1151 run becomes mandatory only when the selected producer or emitted kernel
+changes, not merely because an ODS signature tightened.
 
 ---
 
@@ -253,11 +277,12 @@ items want the same person on the same box in the same window.
 | **Tier 0 / W0** | + X-U3 (real contract test, 1w); + X-U4's *decision* (1h) |
 | **W1** | W1.1 grows from 3w to **5w** — Tile IR **and** the three Target IR dialects; + X-U2 enums (1w). Wave 1 total 8w → **10w** |
 | **W3.2** | unchanged in cost; confirmed as **three** boundaries |
-| **W5** | + X-U6 ROCm codegen consolidation (6w, ROCm box) |
+| **W3** | + X-U6 ROCm producer-ownership inventory and differential gate (2w initial slice; device proof only for later producer changes) |
 | **new** | X-U4 build branch (3w) only if Decision #19 is affirmed for x86 |
 
-Plan total ≈ 63w → **≈ 72w**, of which ~6w is hardware-routed to the ROCm box.
-The Recommended budget (W0 + W1 + W2 + W3.1) moves from ~20w to **~23w**.
+The previous numeric plan total is not retained: W1.1 includes variant-aware
+type-system design, while the blanket six-week ROCm migration is not justified.
+Re-estimate after the W1.1 design spike and X-U6 ownership inventory.
 
 ---
 
@@ -267,8 +292,9 @@ Examined: the three Target IR ODS files, `target_ir.py`, the
 `GenerateROCM*Kernel` pass inventory, `test_target_ir_contract.py`, and the x86
 backend tree.
 
-Not examined: the bodies of the 67 ROCm generators, `emit/nvidia_cuda.py` and
-`emit/rocm_hip.py` internals, the Apple `apple_gpu_runtime.mm` MSL set, the
-collectives and neighbors dialects, and the RubinCPX backend. The ROCm generator
-bodies in particular would need review *before* X-U6 is scheduled, on the ROCm
-box.
+Not examined: the bodies of the 67 ROCm generators, `emit/nvidia_cuda.py`
+internals, the Apple `apple_gpu_runtime.mm` MSL set, the collectives and
+neighbors dialects, and the RubinCPX backend. `emit/rocm_hip.py` was inspected
+far enough to establish its candidate/runner role. The ROCm generator bodies
+need host-side ownership classification before X-U6; gfx1151 is required for a
+later migration that changes a selected producer or emitted kernel.

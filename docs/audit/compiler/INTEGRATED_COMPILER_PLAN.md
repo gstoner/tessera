@@ -7,13 +7,14 @@ supersedes_queues_in:
   - FRONTEND_GRAPH_SCHEDULE_REVIEW.md §5
   - IR_STACK_INTEGRATION_REVIEW.md §5
   - AUTODIFF_ARCHITECTURE_REVIEW.md §5
+  - TARGET_IR_REVIEW.md §5
   - ../domain/GA_EBM_ARCHITECTURE_REVIEW.md §4
   - RIEMANNIAN_OT_PLAN.md §4
 ---
 
 # Integrated Compiler Plan
 
-One plan across six reviews. Each review's own ranked queue stays as *evidence
+One plan across seven reviews. Each review's own ranked queue stays as *evidence
 and rationale*; **this document owns sequencing and de-duplication.** Where a
 review's queue and this document disagree on ordering or cost, this document
 wins — the reviews were written independently and double-counted overlapping
@@ -36,7 +37,7 @@ estimates for a single track with no hardware gates, not commitments.
 
 ## 1. The thesis
 
-Across six independent reviews, roughly forty findings reduce to **two root
+Across seven independent reviews, roughly forty findings reduce to **two root
 causes and one consequence.**
 
 ### Root cause A — Declared but not consumed
@@ -50,7 +51,7 @@ then no pass reads it.
 | `MultivectorSpec.grades`, `IsRotor`, `Even`/`Odd` | `geometric_product` — iterates all `dim²` pairs | GA/EBM §2.1 |
 | `batching_rule` axis, closed across 480 primitives | `vmap` — a Python `for` loop | Autodiff §B3 |
 | `shape_rule` axis, reported closed | `_infer_result_type` — a five-case if-chain | Frontend §G2 |
-| `!tile.fragment`, `!tile.buffer`, `!tile.tmem`, … (9 types) | every Tile op — `Variadic<AnyType>`, 70× | IR Stack §T1 |
+| `!tile.fragment`, `!tile.buffer`, `!tile.tmem`, … (9 types) | partially consumed; core `tile.mma`/`tile.async_copy` and compatibility envelopes remain open | IR Stack §T1 |
 | `numeric_policy` (Decision #15a) | no carrier below Graph IR at all | IR Stack §T6 |
 | `TilingInterface` on Matmul/Conv/FlashAttn | `fusion_core.py` — 7 hand-enumerated regions | Sweep §F3 |
 
@@ -63,7 +64,7 @@ wrong at the edges and fail open.
 |---|---|---|
 | Effect/purity on the IR | `ast.NodeVisitor` name-matching; aliased RNG ⇒ inferred pure ⇒ `deterministic=True` passes | Sweep §F1 |
 | Differentiation activity | `AutodiffPass` builds adjoints for everything | Autodiff §A5 |
-| Gradient demand / trajectory liveness | `CheckpointInnerLoop` marks every step in every loop | GA/EBM §1.5 |
+| Gradient demand / trajectory liveness | `CheckpointInnerLoop` marks every EBM step in a containing loop, but no downstream pass consumes those marks | GA/EBM §1.5 |
 | Symbolic shape constraints | `dims_compatible` is `str(lhs) == str(rhs)` | Sweep §F2 |
 | Fusion legality | region shapes enumerated by hand | Sweep §F3 |
 | Sharding propagation | every layer annotated by hand; `validate()` contains `pass` | Sweep §F4 |
@@ -111,7 +112,7 @@ gets accepted in review, and they are what make Waves 1–3 stick.
 
 ## 3. De-duplication ledger
 
-The six reviews costed overlapping work independently. Corrections applied here:
+The seven reviews costed overlapping work independently. Corrections applied here:
 
 | Double-counted work | Costed as | Merged into | Saved |
 |---|---|---|---|
@@ -123,8 +124,9 @@ The six reviews costed overlapping work independently. Corrections applied here:
 | Legality collapse (IR Stack I2) as independent work | standalone | **W2.4** — client of the dataflow layer | ~1w |
 | Remat unification: delete `EBMCheckpointInnerLoop` (GA/EBM) + AD D5 | 2 items | **W5.1** | ~1w |
 
-**~17 weeks of double-counting removed.** The naive sum of the six queues is
-~80 weeks; the integrated plan is ~63.
+**~17 weeks of double-counting identified.** Queue estimates are directional:
+the source documents used different scopes, and the Target-IR corrections below
+replace a blanket ROCm migration with an ownership-and-evidence gate.
 
 ---
 
@@ -135,45 +137,49 @@ items are merged; it is done when the criterion holds.
 
 ### W0 — Stop the bleeding *(4 weeks · no dependencies · start immediately)*
 
-Live defects, fail-open paths, and false documentation. Every item is
+Live defects, fail-open paths, inert machinery, and false documentation. Every item is
 independent; run them in parallel.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| W0.1 | `manifold` → required verified enum; delete the Euclidean default (copy `AnnotateAlgebra`'s `emitError`+interrupt) | GA/EBM §1.1 | 3d |
-| W0.2 | Demand-gate `CheckpointInnerLoop`; `CHECK-NOT` fixtures; `steps_annotated` counter | GA/EBM §1.5 | 4d |
+| W0.1 | `manifold` is already a required `StrAttr` in ODS; replace it with a verified enum and delete `Canonicalize`'s generic-op Euclidean fallback (copy `AnnotateAlgebra`'s `emitError`+interrupt) | GA/EBM §1.1 | 3d |
+| W0.2 | Remove `CheckpointInnerLoop` from the default EBM pipeline because its attributes have no consumer. Keep the standalone pass only if it is explicitly classified experimental; retain the existing non-EBM `CHECK-NOT` fixture and defer demand-aware loop rematerialization to W5.1 | GA/EBM §1.5 | 1d |
 | W0.3 | Define traceable EBM energies; use `autodiff.tape` only when a supported cotangent path is recorded, with numerical differentiation retained for untraceable NumPy callbacks and regression coverage for both paths | GA/EBM §2.6 | 1w |
 | W0.4 | Fix `jacrev`/`jacfwd` forward-pass-per-element; correct their docstrings | Autodiff §B1–B2 | 3d |
-| W0.5 | **Correct Decision #5 in `CLAUDE.md`** — the effect lattice walks the AST, not the IR | Sweep §F1 | 1h |
+| W0.5 | **Completed 2026-08-02:** Decision #5 in `CLAUDE.md` now states that the effect lattice walks the AST, not the IR | Sweep §F1 | done |
 | W0.6 | Delete duplicate `dialects/tessera_{queue,attn}/*.td`; split the already-linkable `GraphToSchedulePass` into a dedicated library-owned source/header with focused lit fixtures | IR Stack §T5, §T3 | 3d |
 | W0.7 | `.td` summary drift: distinguish "stub" from "annotation-only"; remove `AnnotateAlgebra`'s false "GA8 lowering will refuse" | GA/EBM §1.4 | 1d |
 | W0.8 | Adopt Decisions #21a, #10a, #29, #30, #31, #32 | §2 | 1d |
-| W0.9 | Replace `test_target_ir_contract.py`'s substring assertions (`assert "tessera_rocm.mfma" in mm.target_ir`) with a real MLIR parse + dialect load + verifier run. Decision #19's named validation is currently `str.__contains__` | Target §X4 | 1w |
+| W0.9 | Keep `test_target_ir_contract.py`'s substring assertions as smoke coverage, and add a real MLIR parse + dialect load + verifier run. ROCm already has native lit/E2E coverage; the gap is the generic Decision #19 contract named by `CLAUDE.md`, not absence of ROCm compiler verification | Target §X4 | 1w |
 | W0.10 | **Decide x86's Decision #19 status** — build `tessera_x86` (AMX tile / AVX-512 vector / pack ops) or add an explicit carve-out. x86 has no `.td` anywhere; the decision reads as universal and the oldest, most-executable backend silently doesn't follow it | Target §X1 | 1h to decide |
 
-**Exit:** no known silent-wrong-answer path remains open; `CLAUDE.md` Decision #5
-is accurate; every dialect has exactly one ODS.
+**Exit:** the open-string manifold key is verified, the EBM default pipeline
+emits no unconsumed checkpoint policy, `CLAUDE.md` Decision #5 is accurate, and
+every dialect has exactly one ODS.
 
 ### W1 — Make declarations binding *(8 weeks · depends on W0.8)*
 
-Root cause A. Nothing here designs a new concept — every item enforces a contract
-that already exists.
+Root cause A. Most items enforce existing declarations; fragment/buffer
+parameterization and target matrix contracts require bounded, variant-aware type
+design before migration.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| W1.1 | **Type the Tile dialect and the three Target IR dialects.** `Variadic<AnyType>` → the nine declared Tile types; parameterize `!tile.fragment`/`!tile.buffer` on element type, tile shape, layout, memory space, accumulator `numeric_policy`. Then `ROCM_{MFMA,WMMA}` and `NVIDIA_{MmaSync,Wgmma}` get the `vector<16xf16>`/`vector<8xf32>` types **their own ODS descriptions already specify in prose** | IR Stack §U1 + Target §X2 | 5w |
+| W1.1 | **Finish typing true Tile primitives and verify target matrix variants.** Preserve the typed alloc/pipeline/TMA/mbarrier/TMEM ops; parameterize `!tile.fragment`/`!tile.buffer` on element type, tile shape, layout, memory space, role, and accumulator `numeric_policy`. Define target contracts by `(arch, instruction, shape, operand dtype, accumulator dtype, role)`; treat the documented gfx11 f16 vectors as one fixture, not a universal ROCm/NVIDIA signature. Inventory every backend producer/consumer before tightening each op | IR Stack §U1 + Target §X2 | 5w design/migration estimate |
 | W1.1b | `EnumAttr` for every semantic `StrAttr` in the target dialects (62 × `$name`, 4 × `$kind`, 1 × `$mode`; zero enums today) — Decision #21a enforcement | Target §X3 | 1w |
 | W1.2 | **One shape-rule registry**, owned by `op_catalog.OpSpec`; `primitive_coverage.shape_rule` auto-flips from it (same mechanism as `_VJPS`/`_JVPS`); unknown op ⇒ diagnostic, never `operand_types[0]` | Frontend §U2 | 2w |
 | W1.3 | Metadata lowering obligation (#32) + boundary verifier | IR Stack §U5 | 2w |
 | W1.4 | Thread `MultivectorSpec.grades` into `geometric_product`; add `input_grades` to `GradeFusion` | GA/EBM §2.1 | 1w |
 
-**Exit:** `AnyType` count in `TileOps.td` is 0; a mismatched `tile.mma` fails to
-parse; no op reaches the `operand_types[0]` fallback; no Decision #15a attribute
-drops across a boundary without a recorded reason.
+**Exit:** no true Tile primitive has an unexplained `AnyType`; a mismatched
+`tile.mma` fails verification; every compatibility exception names its owning
+level-migration item; no op reaches the `operand_types[0]` fallback; no Decision
+#15a attribute drops across a boundary without a recorded reason.
 
-> **W1.1 is the single highest-leverage item in the plan.** Three weeks, no new
-> concepts, and it is the precondition for W2.4, W3.2, W3.3, and every backend
-> having a real contract to lower against.
+> **W1.1 is a high-leverage contract project, not a mechanical ODS edit.** It is
+> the precondition for W2.4, W3.2, W3.3, and every backend having a real contract
+> to lower against, but it must land incrementally with producer/consumer and
+> per-architecture variant coverage.
 
 ### W2 — Build the analysis layer *(8 weeks · depends on W0)*
 
@@ -207,6 +213,7 @@ path was carrying.
 | W3.4 | Decompose `JitFn` (11 `_native_*_backward` → `emit/candidate.py` candidates behind `@f__bwd`); split `__init__.py`'s 315 nested defs into `tessera/ops/` | Frontend §U5–U6 | 3w |
 | W3.5 | Finish `NewtonAutodiff`'s IFT body (`dF/dx = -(dR/dx)⁻¹dR/du`) — emits real `residual` + `linear_solve` ops | Autodiff §B8 + OT R2 | 2w |
 | W3.6 | Batched operands in `ExpandProductTable`; connect `RotorSandwichFold`'s marker to a consumer | GA/EBM §1.3 | 2w |
+| W3.7 | **Define ROCm producer ownership per package family** across registered C++ generators, compatibility Target-IR text, and `emit/rocm_hip.py` candidates. Add differential gates and retire only producers proven duplicate; preserve C++ MLIR→ROCDL/HSACO as the canonical native spine | Target §X6 | 2w initial inventory/gate |
 
 **Exit:** one frontend, one lowering per boundary, no target string in `jit.py`,
 every `tile.*` op is a tile primitive.
@@ -241,7 +248,6 @@ an existing hardcoded choice through the arbiter Decision #28 already built.
 | W5.3 | Generic fusion region discovery over a legality oracle (a W2.1 client); keep the measured cost models | Sweep §F3 | *(folded into W5.2)* |
 | W5.4 | Sharding **propagation** (GSPMD/Shardy-style) — annotate a few tensors, infer the rest | Sweep §F4 | 4w |
 | W5.5 | Rule-table-driven canonicalization (PDL/PDLL). **Defer equality saturation** until the rule table is large enough that ordering demonstrably costs something | Sweep §F5 | 3w |
-| W5.6 | **Consolidate the three ROCm codegen paths** — 67 `GenerateROCM*Kernel.cpp` passes, `emit/rocm_hip.py`, and `target_ir.py::_lower_rocm_op` — onto the `emit/` spine. **Must run on the Strix Halo gfx1151 box** (§6a) | Target §X6 | 6w |
 
 **Exit:** no tile size, residual policy, or fusion boundary is chosen by a
 constant; sharding a model requires O(few) annotations, not O(layers).
@@ -252,15 +258,16 @@ constant; sharding a model requires O(few) annotations, not O(layers).
 |---|---|---|---|
 | W6.1 | Forward mode in the compiler (`TangentInterface`) — cheapest large capability; unlocks exact HVP, `jacfwd`, and W6.3 | Autodiff D2 | 3w |
 | W6.2 | Sparse AD — sparsity detection + coloring (client of W2.1/W4.2). PyTorch, TF, and JAX all lack this | Autodiff D7 | 5w |
-| W6.3 | Taylor/jet mode over Weil algebras, **hosted on the GA multivector engine** — a Weil algebra is a graded algebra with a compile-time product table, which is exactly `ga/signature.py` | Autodiff D6 | 4w |
+| W6.3 | Taylor/jet mode over Weil algebras on a **new generic finite-multiplication-table substrate** potentially shared with GA. The current `ga/signature.py` is Clifford-specific (blade XOR, metric signs, anti-commutation) and cannot represent arbitrary commutative nilpotent Weil algebras | Autodiff D6 | research estimate required |
 | W6.4 | Table-driven GA kernel synthesis via `emit/`; then PGA `Cl(3,0,1)` | GA/EBM §2.3–2.4 | 5w |
 
 **Exit:** a defensible "exceeds SOTA" claim with a benchmark behind it — sparse
 Jacobian scaling `O(colors)` not `O(rows)`; order-`k` derivatives sharing the
 tuned GA kernels.
 
-> W6.3 is much cheaper if W6.4 lands first — the graded-algebra kernel generator
-> is the shared substrate. Order them 6.4 → 6.3 unless GA work is deprioritized.
+> W6.4 can supply useful table-lowering machinery, but W6.3 still requires a
+> generic algebra representation and AD semantics. Treat reuse as a design
+> hypothesis to prove, not as a sequencing-based cost reduction.
 
 ### Riemannian OT — re-scoped as validation, not a track
 
@@ -270,7 +277,7 @@ of it is **already funded by W1–W5**:
 | OT need | Provided by |
 |---|---|
 | manifold as a hard dispatch key (H1) | W0.1 |
-| remat no-op proof (H2) | W0.2 |
+| remove inert EBM checkpoint policy from the default pipeline (H2) | W0.2; demand-aware loop rematerialization remains W5.1 |
 | geometric primitive layer (R1) | new — 1.5w, first consumers are `ebm/geo_sampling.py` and `hyperbolic.py` |
 | `stop_gradient` + implicit diff (R2) | W3.5 + W2.3 |
 | `c_transform` fused loop (R3) | W4 (control flow) + W5.1 (residual policy) |
@@ -303,26 +310,30 @@ W0 ─────────────────────────�
                        W3.1 one frontend ──► W4.1
 ```
 
-Critical path: **W0 → W1.1 → W2.1 → W3.1 → W4 → W5** ≈ 40 weeks.
-Full plan ≈ 63 weeks single-track; substantially parallelizable across W1/W2 and
-within W0.
+Critical dependency chain: **W0 → W1.1 → W2.1 → W3.1 → W4 → W5**. The earlier
+40-week/63-week totals are not retained as commitments: W1.1 is new type-system
+design and W6.3 needs research scoping, while the rejected blanket ROCm
+migration removed six weeks of unjustified work.
 
 ---
 
 ## 6. Three budget levels
 
-**Minimum (5 weeks) — W0 only.** Closes three live silent-wrong-answer paths, one
-false architecture decision, a duplicate-dialect trap, an `O(2^n)` default path,
-and a substring-based "contract" test. Adopts the six governance rules so nothing
-regrows. **Do this regardless of what else is decided.**
+**Minimum — W0 only.** Closes verified fail-open and invalid-value paths,
+preserves the correct numerical fallback for untraceable EBM callbacks, removes
+inert checkpoint policy from the default pipeline, corrects architecture
+documentation, removes a duplicate-dialect trap, and upgrades the generic
+Target-IR contract test. Adopts the six governance rules so nothing regrows.
 
-**Recommended (23 weeks) — W0 + W1 + W2 + W3.1.** Root causes A and B are fixed,
+**Recommended scope — W0 + W1 + W2 + W3.1; re-estimate after the W1.1 design
+spike.** Root causes A and B are fixed,
 the frontend duplication is gone, and every subsequent piece of work becomes
 cheaper rather than adding to the pile. This is the point at which the compiler
 stops accumulating parallel systems. If one number is chosen, choose this.
 
-**Full (72 weeks) — W0…W6**, of which ~6 weeks is hardware-routed to the ROCm box
-(§6a). Adds the control-flow capability, measured decisions, and two defensible
+**Full — W0…W6, re-estimate after W1.1 and W6.3 design spikes.** ROCm ownership/inventory work is host-free;
+subsequent kernel-producing migrations are hardware-routed individually (§6a).
+Adds the control-flow capability, measured decisions, and two defensible
 exceeds-SOTA claims.
 
 ## 6a. Fleet routing — what must run on which box
@@ -334,17 +345,15 @@ hardware-bound, and one of them is the highest-risk item in the plan.
 |---|---|---|
 | W0, W1 (typing, enums, shape rules), W2 (analyses), W3.1–W3.4 | **Mac M1 Max** | ODS, `tessera-opt`, lit, unit tests. No device needed; tightening a type is a compile-time change. |
 | W0.10 build branch — `tessera_x86` dialect | **Mac** for ODS/lit; **Zen5 box** for AMX/AVX-512 execution proof | The NR2 Pro's Core Ultra 7 has no AVX-512/AMX. |
-| **W5.6 — ROCm codegen consolidation** | **Strix Halo gfx1151 — required** | It changes *generated kernels*. Each of the 67 passes moving onto the `emit/` spine needs an execute-and-compare against its current output on real silicon. Refactoring 67 code generators on a machine that cannot run them is refactoring without an oracle. |
+| **W3.7 — ROCm producer ownership + differential gate** | **Host-free for inventory/IR equivalence; Strix Halo gfx1151 for each later producer change** | The initial slice does not change kernels. Any retirement or migration that changes generated code requires execute-and-compare on the owning device. |
 | W4 (control flow) end-to-end gate | **any executing lane**; gfx1151 preferred | It has the broadest compiler-generated + hardware-verified op coverage. |
 | ROCm arch breadth (gfx950 / gfx1201 / gfx1250) | deferred — no silicon | MASTER_AUDIT P2, unchanged. |
 
-**Two sequencing consequences.** First, W5.6 must be incremental with a
-per-pass differential harness — the *same harness design* W3.1 needs for
-trace-vs-AST and W3.2 needs for Python-spine-vs-MLIR. One design, three uses;
-build it in W3.1 and reuse it. Second, **W1.1's ROCm typing will produce compile
-failures in exactly those 67 passes** — that is what typing is for — so W1.1's
-ROCm half and W5.6 want the same person, on the ROCm box, in the same window.
-Schedule them adjacent rather than at opposite ends of the plan.
+**Two sequencing consequences.** First, W3.7 reuses the differential-harness
+design from W3.1/W3.2 and records one owner per package family before anything
+is deleted. Second, W1.1's ROCm typing may expose invalid assumptions in
+registered generators; fix those compile-time contracts host-free, and require
+gfx1151 evidence only when a generated kernel or selected producer changes.
 
 **What to cut first if squeezed:** W6.4 (GA synthesis / PGA) and W5.5
 (canonicalization rule tables) are the most deferrable — genuine value, no
@@ -360,7 +369,7 @@ accumulate.
 |---|---|---|
 | **W3.1 is a broad behavior change** — the AST frontend is the default on every non-Apple target | W3 | The differential harness ships *before* the switch, not after; promote per-target with the harness green |
 | **W4 will exceed its estimate.** Region adjoints are the hardest item here and structured reverse mode is genuinely difficult | W4 | Land W4.1+W4.2 with a forward-only gate first, so partial progress is observable before W4.3 |
-| **W1.1 touches every Tile-consuming backend** | W1 | It is additive at the ODS level — types tighten, existing valid IR stays valid; the failures it produces are the point |
+| **W1.1 touches every Tile-consuming backend** | W1 | Parameterized types and verifier contracts can invalidate producers and consumers; land per primitive/variant with parser, verifier, lowering, and backend fixtures |
 | **Waves 1–3 produce no user-visible feature.** Fifteen weeks of "the compiler now enforces what it already said" is hard to fund | all | RNOT (§4) is the visible acceptance workload; state the intermediate gates as capability claims, not cleanup |
 | **The governance rules are ignored under delivery pressure** | all | #29 and #31 are drift-gateable; make them tests, not conventions |
 | **Someone starts at W3** (deleting duplications first, because they are the most visible waste) | — | It fails: the surviving path cannot yet carry what the deleted one carried. Ordering A→B→C is the plan's core claim |
@@ -374,10 +383,13 @@ Not examined across the seven reviews, and therefore not planned:
 - ~~Target IR dialects~~ — **reviewed 2026-08-02**
   ([TARGET_IR_REVIEW.md](TARGET_IR_REVIEW.md)). The `AnyType` finding **does**
   repeat, in `ROCM_{MFMA,WMMA}` and the NVIDIA mma ops; W1.1 grew 3w → 5w
-  accordingly, and three new items landed (W0.9, W0.10, W1.1b, W5.6).
+  accordingly, and four new items landed (W0.9, W0.10, W1.1b, W3.7).
 - The bodies of the 67 `GenerateROCM*Kernel` passes — these need review on the
-  ROCm box **before** W5.6 is scheduled, not after.
-- `emit/nvidia_cuda.py` (4722 lines) and `emit/rocm_hip.py` internals.
+  host for ownership classification, with gfx1151 required before any
+  kernel-producing migration is accepted.
+- `emit/nvidia_cuda.py` (4722 lines) internals. `emit/rocm_hip.py` was inspected
+  far enough to establish that it is an arbiter candidate/runner surface, not a
+  drop-in replacement for the canonical MLIR→ROCDL package spine.
 - Spectral and TPP solver families; the collectives and neighbors dialects;
   the RubinCPX backend.
 - Quantization numerics; the KV-cache and memory model.

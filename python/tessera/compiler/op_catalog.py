@@ -19,6 +19,11 @@ class OpSpec:
     max_arity: int
     effect: str = "pure"
     lowering: str = "elementwise"
+    # W1.2 — the op's shape rule, by NAME. Empty means "take the declared
+    # default for my `lowering` kind" (see LOWERING_SHAPE_RULE); it does not
+    # mean "no rule". An op whose lowering kind has no declared default is
+    # `unclassified`, which is a real, counted status -- not a silent fallback.
+    shape_rule: str = ""
 
     def valid_arity(self, arity: int) -> bool:
         return self.min_arity <= arity <= self.max_arity
@@ -567,3 +572,175 @@ __all__ = [
     "graph_name_for",
     "normalize_op_name",
 ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# W1.2 — the one shape-rule registry
+#
+# `_infer_result_type` was a five-case if-chain ending in
+# `return operand_types[0]`: correct for the 60 elementwise ops and silently
+# wrong for anything else whose result shape differs from its first operand.
+# Worse, `primitive_coverage` reported the `shape_rule` axis as CLOSED across
+# 480 primitives while that if-chain was the whole implementation -- Decision
+# #29's "declared but not consumed" in its purest form.
+#
+# The fix is not to hand-write 313 rules. It is to make the rule NAMED for
+# every op, so that:
+#   * the common case is declared once per lowering kind rather than implied,
+#   * an op with no rule is a *counted* `unclassified`, not a silent default,
+#   * `primitive_coverage.shape_rule` can auto-flip from real declarations the
+#     same way it already does from `_VJPS` / `_JVPS`.
+#
+# Behavior is deliberately unchanged in this slice: `unclassified` still
+# resolves to same-as-first-operand. What changes is that it is now visible and
+# counted, so it can be driven down instead of read as closed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Shape rule per lowering kind. Only kinds whose shape behavior is genuinely
+#: uniform are declared here; the rest resolve to `unclassified` on purpose.
+LOWERING_SHAPE_RULE: dict = {
+    # Result has the shape and dtype of the first operand.
+    "elementwise": "same_as_first",
+    "normalization": "same_as_first",
+    "random_mask": "same_as_first",
+    "position_encoding": "same_as_first",
+    "rotary_embedding": "same_as_first",
+    "quantize": "same_as_first",
+    "numeric_helper": "same_as_first",
+    # A comparison yields a predicate, not a value in the operand dtype.
+    "comparison": "same_shape_bool",
+    "functional_optimizer_step": "same_as_first",
+    "optimizer": "same_as_first",
+    # Contractions and reductions get per-op rules; naming the kind here would
+    # be a guess. Left unclassified until each is declared.
+}
+
+#: Per-op rules that override the lowering-kind default.
+OP_SHAPE_RULE: dict = {
+    "tessera.matmul": "matmul_2d",
+    "tessera.batched_gemm": "batched_gemm_3d",
+    "tessera.transpose": "transpose",
+    "tessera.ebm_energy_quadratic": "reduce_trailing",
+    "tessera.ebm.energy_quadratic": "reduce_trailing",
+    "tessera.ebm.langevin_step": "same_as_first",
+    # The `logical` kind is NOT uniform: the connectives yield a predicate
+    # while the bitwise ops preserve the operand's integer dtype. Declaring one
+    # default for the kind would be wrong for half of it.
+    "tessera.logical_and": "same_shape_bool",
+    "tessera.logical_or": "same_shape_bool",
+    "tessera.logical_not": "same_shape_bool",
+    "tessera.logical_xor": "same_shape_bool",
+    "tessera.bitwise_and": "same_as_first",
+    "tessera.bitwise_or": "same_as_first",
+    "tessera.bitwise_xor": "same_as_first",
+    "tessera.bitwise_not": "same_as_first",
+    # Predicates that happen to sit under the `numeric_helper` kind. Caught by
+    # differentially probing predicted vs actual dtype -- the shape agreed, so
+    # a shape-only check would have missed them exactly as it missed `eq`.
+    "tessera.isnan": "same_shape_bool",
+    "tessera.isinf": "same_shape_bool",
+    "tessera.isfinite": "same_shape_bool",
+
+    # ── Verified against actual op behavior (f32 AND bf16) ────────────────
+    # Full reductions to a scalar; storage dtype preserved.
+    **{f"tessera.{n}": "reduce_all" for n in
+       ("amax", "amin", "max", "mean", "min", "prod", "std", "var",
+        "logsumexp", "reduce", "vlb_loss")},
+    # Full reductions yielding an index.
+    **{f"tessera.{n}": "reduce_all_index" for n in
+       ("argmax", "argmin", "count_nonzero")},
+    # Shape-preserving: scans, softmax family, sort, and layout no-ops.
+    **{f"tessera.{n}": "same_as_first" for n in
+       ("cummax", "cummin", "cumprod", "cumsum", "softmax", "softmax_safe",
+        "log_softmax", "sort", "flip", "squeeze", "stack", "unpack",
+        "fused_epilogue", "all_reduce", "all_to_all")},
+    "tessera.argsort": "same_shape_index",
+    # Flattening layout transforms.
+    "tessera.flatten": "flatten",
+    "tessera.cat": "flatten",
+    # Grade-reducing Clifford norms: drop the trailing axis.
+    "tessera.clifford_norm": "reduce_trailing",
+    "tessera.clifford_norm_squared": "reduce_trailing",
+    # Spectral — WITHDRAWN, and the reason is worth keeping.
+    #
+    # `fft`/`ifft`/`rfft` genuinely return complex64; the probe confirms it.
+    # But declaring that rule propagates complex64 into Graph IR, and the dtype
+    # capability contracts mark complex64 `unsupported` / `planned_gated` on
+    # x86 and ROCm. Decision #15a is explicit that planned/gated dtypes are not
+    # first-class, so the verifier rejecting a complex-typed `dct` operand is
+    # the POLICY WORKING, not a bug.
+    #
+    # These ops previously "passed" only because the fallback mistyped their
+    # result as f32 — a wrong dtype that happened to satisfy the capability
+    # check. Declaring the true rule surfaced the real conflict: the spectral
+    # lane needs a first-class complex dtype, which is a dtype-policy decision
+    # (Decision #15a), not a shape-rule one. Left unclassified until that is
+    # taken; promoting complex64 in the capability tables here would silently
+    # make a planned_gated dtype first-class.
+
+    # ── Attribute-driven (needed the widened rule signature) ─────────────
+    # Result shape lives in an attribute, not in any operand's type.
+    **{f"tessera.{n}": "from_shape_attr" for n in
+       ("reshape", "view", "broadcast", "expand", "tile_view")},
+    "tessera.cast": "cast",
+
+    # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
+    # operand's shape only because the probe ran at world_size=1. Their real
+    # shapes scale with the mesh, so declaring from that measurement would bake
+    # in a degenerate case. They stay `unclassified` until probed multi-rank.
+}
+
+#: The declared vocabulary. `graph_ir` implements each name; a rule named here
+#: with no implementation (or vice versa) is a drift-gated error.
+SHAPE_RULE_NAMES = frozenset({
+    "same_as_first",
+    "matmul_2d",
+    "batched_gemm_3d",
+    "transpose",
+    "same_shape_bool",
+    "reduce_all",
+    "reduce_all_index",
+    "same_shape_index",
+    "flatten",
+    "complex_same",
+    "rfft",
+    "from_shape_attr",
+    "cast",
+    "reduce_trailing",
+    "unclassified",
+})
+
+
+def shape_rule_for(graph_name: str) -> str:
+    """The declared shape rule for `graph_name`.
+
+    Returns `"unclassified"` -- an explicit, counted status -- when neither the
+    op nor its lowering kind declares one. Never returns an empty string, so a
+    caller cannot mistake "no rule" for "no answer".
+    """
+    explicit = OP_SHAPE_RULE.get(graph_name)
+    if explicit:
+        return explicit
+    for spec in _SPECS:
+        if spec.graph_name == graph_name:
+            if spec.shape_rule:
+                return spec.shape_rule
+            return LOWERING_SHAPE_RULE.get(spec.lowering, "unclassified")
+    return "unclassified"
+
+
+def unclassified_shape_ops() -> list:
+    """Graph op names whose shape rule is still `unclassified`.
+
+    This list is a RATCHET: it may shrink, never grow. Driving it to zero is
+    what actually closes W1's "no op reaches the `operand_types[0]` fallback".
+    """
+    seen = set()
+    out = []
+    for spec in _SPECS:
+        if spec.graph_name in seen:
+            continue
+        seen.add(spec.graph_name)
+        if shape_rule_for(spec.graph_name) == "unclassified":
+            out.append(spec.graph_name)
+    return sorted(out)

@@ -441,7 +441,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def gelu(x):
         if hasattr(x, "_data"):
             x = x._data
-        return x * 0.5 * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
+        # `np.sqrt(...)` yields a float64 SCALAR, which is "strong" under NumPy 2
+        # promotion and silently drags an f32 input up to f64 -- doubling
+        # precision and memory for an elementwise activation, contrary to
+        # Decision #15a (storage dtype lives on the tensor). `float(...)` makes
+        # it a weak Python scalar so the result follows x's dtype, which is what
+        # relu / silu / tanh / sigmoid already do.
+        _k = float(np.sqrt(2.0 / np.pi))
+        return x * 0.5 * (1.0 + np.tanh(_k * (x + 0.044715 * x**3)))
 
     def tanh(x):
         if hasattr(x, "_data"):
@@ -1025,6 +1032,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         else:
             generator = rng if rng is not None else np.random.default_rng(None if seed is None else int(seed))
         mask = generator.binomial(1, 1 - p, x.shape) / (1 - p)
+        # binomial() returns int64 and the scale makes it float64, so `x * mask`
+        # promoted an f32 input to f64. Match x's dtype instead (same values,
+        # same scaling) -- see the gelu note above.
+        if np.issubdtype(np.asarray(x).dtype, np.floating):
+            mask = mask.astype(np.asarray(x).dtype, copy=False)
         return x * mask
 
     def conv2d(x, weight, bias=None, stride=1, padding=0, layout: str = "nhwc", epilogue=None):
@@ -4990,6 +5002,92 @@ def _make_ops_namespace() -> types.SimpleNamespace:
 
 ops = _make_ops_namespace()
 
+
+def _enforce_storage_dtype_preservation(namespace) -> None:
+    """Make the shape registry's storage-dtype claim BINDING (W1.2 / #29).
+
+    `ml_dtypes.bfloat16` does not follow NumPy's weak-scalar promotion: a plain
+    Python float promotes it to float32. So `x * 0.5`, `1.0 + x`, and
+    `0.044715 * x` all silently leave bf16 -- measured across gelu, silu,
+    sigmoid, dropout, layer_norm, rmsnorm, weight_norm, and the clifford
+    family. An f32-only check cannot see any of it, which is why these ops
+    looked correct until they were probed at bf16.
+
+    Patching each expression would be endless and would regress the moment
+    someone writes another literal. Instead, ops whose DECLARED shape rule says
+    the result keeps the operand's storage dtype have that enforced here.
+
+    This is not a workaround -- it is exactly Decision #15a: compute may widen
+    internally (that is `numeric_policy`), but STORAGE dtype belongs to the
+    tensor. Accumulating in f32 and storing back to bf16 is the intended
+    model; silently *returning* f32 is not.
+    """
+    import functools
+
+    import numpy as _np
+
+    try:
+        from .compiler.op_catalog import _SPECS, shape_rule_for
+    except Exception:  # pragma: no cover - catalog unavailable during bootstrap
+        return
+
+    # Rules whose contract includes "result carries the operand's storage dtype".
+    preserving = {"same_as_first", "reduce_all", "reduce_trailing"}
+    targets = {
+        spec.public_name
+        for spec in _SPECS
+        if shape_rule_for(spec.graph_name) in preserving
+    }
+
+    def _is_float_storage(dtype) -> bool:
+        """Float test that actually works for bf16 and the fp8 types.
+
+        THE standard idioms silently exclude them:
+          * `dtype.kind == "f"`            -> bf16 reports 'V' (void)
+          * `np.issubdtype(dt, np.floating)` -> False for bf16
+        Both are used widely in NumPy-shaped code, and both quietly skip the
+        exact dtypes an accelerator pipeline runs in. `ml_dtypes.finfo`
+        recognizes the extension floats, so ask it.
+        """
+        if dtype is None:
+            return False
+        if dtype.kind == "f":
+            return True
+        try:
+            import ml_dtypes as _ml
+
+            _ml.finfo(dtype)
+            return True
+        except Exception:
+            return False
+
+    def _storage_dtype(value):
+        data = getattr(value, "_data", value)
+        dtype = getattr(data, "dtype", None)
+        # Only floating storage is coerced; integer/bool results (predicates,
+        # indices) are governed by their own declared rules.
+        if not _is_float_storage(dtype):
+            return None
+        return dtype
+
+    def _wrap(fn):
+        @functools.wraps(fn)
+        def wrapped(*args, **kwargs):
+            want = _storage_dtype(args[0]) if args else None
+            out = fn(*args, **kwargs)
+            if want is None or not isinstance(out, _np.ndarray):
+                return out
+            if _is_float_storage(out.dtype) and out.dtype != want:
+                return out.astype(want, copy=False)
+            return out
+        return wrapped
+
+    for name in sorted(targets):
+        fn = getattr(namespace, name, None)
+        if callable(fn):
+            setattr(namespace, name, _wrap(fn))
+
+
 # Phase 2.1c (2026-06-01) — wrap the 8 encode-eligible ops with the
 # apple_gpu trace-capture interceptor. Backward-compatible: when no
 # @auto_batch trace is active, the wrappers call straight through to
@@ -4998,6 +5096,11 @@ ops = _make_ops_namespace()
 # apple_gpu_ops.* automatically.
 from . import apple_gpu_ops_interception as _agpu_intercept
 _agpu_intercept.install_apple_gpu_interception(ops)
+
+# Enforce LAST so it wraps outermost. The Apple interceptor rebinds rmsnorm /
+# layer_norm / softmax / gelu / bmm, so enforcing before it left those three
+# unprotected -- the wrapper was there, just no longer on the outside.
+_enforce_storage_dtype_preservation(ops)
 
 # Common op aliases kept at the top level for older advanced examples. The
 # canonical compiler-visible spelling remains ``tessera.ops.<name>``.

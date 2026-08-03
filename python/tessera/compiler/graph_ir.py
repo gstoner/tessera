@@ -1638,7 +1638,10 @@ class _OpExtractor(ast.NodeVisitor):
                 operands.append(operand if operand else "%?")
                 operand_types.append(str(self._value_types.get(operand or "%?", TENSOR_OPAQUE)))
 
-        result_type = _infer_result_type(mlir_name, [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands])
+        result_type = _infer_result_type(
+            mlir_name,
+            [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands],
+            attrs=kwargs)
 
         for kw in call.keywords:
             if kw.arg is None:
@@ -1699,34 +1702,223 @@ def _span_from_ast(node: ast.AST) -> SourceSpan:
     )
 
 
-def _infer_result_type(op_name: str, operand_types: List[IRType]) -> IRType:
+# ─────────────────────────────────────────────────────────────────────────────
+# W1.2 — shape rules, dispatched by NAME from the one registry
+#
+# These were a five-case if-chain ending in `return operand_types[0]`. Each is
+# now a named rule the catalog can point at, so `primitive_coverage.shape_rule`
+# has something real to auto-flip from instead of reporting an axis closed that
+# nothing implemented (Decision #29).
+#
+# Behavior is unchanged by design: `unclassified` still resolves to
+# same-as-first. The difference is that it is now a *declared, counted* status
+# rather than an implicit default, so it can be driven to zero. See
+# `op_catalog.unclassified_shape_ops()` — a shrink-only ratchet.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _shape_same_as_first(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    return operand_types[0]
+
+
+def _shape_matmul_2d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    if len(operand_types) < 2:
+        return operand_types[0]
+    lhs, rhs = operand_types[0], operand_types[1]
+    dtype = lhs.dtype or rhs.dtype
+    if lhs.rank == 2 and rhs.rank == 2:
+        return tensor_ir_type((lhs.shape[0], rhs.shape[1]), dtype, layout=lhs.layout)
+    return tensor_ir_type(("*",), dtype, layout=lhs.layout)
+
+
+def _shape_batched_gemm_3d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    # Rank-3 C[b] = A[b] @ B[b]: result is B×M×N from A's (B,M) + B's N.
+    if len(operand_types) < 2:
+        return operand_types[0]
+    lhs, rhs = operand_types[0], operand_types[1]
+    dtype = lhs.dtype or rhs.dtype
+    if lhs.rank == 3 and rhs.rank == 3:
+        return tensor_ir_type((lhs.shape[0], lhs.shape[1], rhs.shape[2]),
+                              dtype, layout=lhs.layout)
+    return tensor_ir_type(("*",), dtype, layout=lhs.layout)
+
+
+def _shape_same_shape_bool(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """First operand's shape, but a BOOLEAN result dtype.
+
+    Comparisons and logical connectives yield a predicate, not a value in the
+    operand's dtype. Under the old `return operand_types[0]` fallback,
+    `tessera.eq` on two f32 tensors reported `dtype=fp32` -- a silently wrong
+    result type that no test caught, because the axis was reported closed.
+    Classifying the shape taxonomy is what surfaced it.
+    """
+    first = operand_types[0]
+    return tensor_ir_type(first.shape, "bool", layout=first.layout)
+
+
+def _shape_reduce_all(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Full reduction to a scalar, preserving the operand's STORAGE dtype.
+
+    Accumulating internally in higher precision is a `numeric_policy` concern
+    (Decision #15a); it must not change the result's storage dtype, or a bf16
+    pipeline silently materializes f32/f64 and loses the accelerator's reason
+    for using bf16 at all.
+    """
+    first = operand_types[0]
+    return tensor_ir_type((), first.dtype, layout=first.layout)
+
+
+def _shape_reduce_all_index(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Full reduction yielding an INDEX (argmax/argmin/count_nonzero)."""
+    first = operand_types[0]
+    return tensor_ir_type((), "int64", layout=first.layout)
+
+
+def _shape_same_shape_index(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Operand shape, index dtype (argsort)."""
+    first = operand_types[0]
+    return tensor_ir_type(first.shape, "int64", layout=first.layout)
+
+
+def _shape_flatten(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    first = operand_types[0]
+    if first.rank is None:
+        return tensor_ir_type(("*",), first.dtype, layout=first.layout)
+    total = 1
+    for d in first.shape:
+        try:
+            total *= int(d)
+        except (TypeError, ValueError):
+            return tensor_ir_type(("*",), first.dtype, layout=first.layout)
+    return tensor_ir_type((str(total),), first.dtype, layout=first.layout)
+
+
+def _shape_complex_same(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Same shape, complex result (fft / ifft)."""
+    first = operand_types[0]
+    return tensor_ir_type(first.shape, "complex64", layout=first.layout)
+
+
+def _shape_rfft(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Real FFT: trailing axis becomes n//2 + 1, result complex."""
+    first = operand_types[0]
+    if first.rank is None or not first.shape:
+        return tensor_ir_type(("*",), "complex64", layout=first.layout)
+    try:
+        n = int(first.shape[-1])
+    except (TypeError, ValueError):
+        return tensor_ir_type(("*",), "complex64", layout=first.layout)
+    return tensor_ir_type(first.shape[:-1] + (str(n // 2 + 1),), "complex64",
+                          layout=first.layout)
+
+
+def _shape_from_shape_attr(operand_types: List[IRType],
+                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Result shape comes from an ATTRIBUTE, not from the operands.
+
+    `reshape`, `view`, `broadcast`, `expand`, `tile_view` are all of this form.
+    The previous signature -- `(op_name, operand_types)` -- could not express
+    them at all: the target shape simply is not in any operand's type. They
+    were not "hard to classify", they were *inexpressible*, which is why
+    widening the signature was the right fix rather than inventing a rule that
+    guesses.
+    """
+    first = operand_types[0]
+    attrs = attrs or {}
+    for key in ("shape", "sizes", "new_shape", "target_shape"):
+        value = attrs.get(key)
+        if value is None:
+            continue
+        try:
+            dims = tuple(str(int(d)) for d in value)
+        except (TypeError, ValueError):
+            continue
+        return tensor_ir_type(dims, first.dtype, layout=first.layout)
+    # Attribute absent at trace time (dynamic shape) -- unranked, not a guess.
+    return tensor_ir_type(("*",), first.dtype, layout=first.layout)
+
+
+def _shape_cast(operand_types: List[IRType],
+                attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Same shape; the result DTYPE comes from an attribute.
+
+    This is the storage-dtype half of Decision #15a made explicit: a cast is
+    the one elementwise op whose result dtype is not the operand's, and in a
+    reduced-precision pipeline getting it wrong is what silently re-inflates
+    a bf16 tensor.
+    """
+    first = operand_types[0]
+    attrs = attrs or {}
+    target = attrs.get("dtype") or attrs.get("to") or attrs.get("target_dtype")
+    if target is None:
+        return first
+    try:
+        from ..dtype import canonicalize_dtype
+        target = canonicalize_dtype(str(target).strip("\"'"))
+    except Exception:
+        target = str(target)
+    return tensor_ir_type(first.shape, target, layout=first.layout)
+
+
+def _shape_transpose(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    first = operand_types[0]
+    if first.rank is None:
+        return first
+    return tensor_ir_type(tuple(reversed(first.shape)), first.dtype, layout=first.layout)
+
+
+def _shape_reduce_trailing(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Drop the trailing axis (e.g. a per-row energy over [N, D] -> [N])."""
+    x = operand_types[0]
+    if x.rank == 2:
+        return tensor_ir_type((x.shape[0],), x.dtype, layout=x.layout)
+    return tensor_ir_type(("*",), x.dtype, layout=x.layout)
+
+
+_SHAPE_RULES = {
+    "same_as_first": _shape_same_as_first,
+    "matmul_2d": _shape_matmul_2d,
+    "batched_gemm_3d": _shape_batched_gemm_3d,
+    "same_shape_bool": _shape_same_shape_bool,
+    "reduce_all": _shape_reduce_all,
+    "reduce_all_index": _shape_reduce_all_index,
+    "same_shape_index": _shape_same_shape_index,
+    "flatten": _shape_flatten,
+    "complex_same": _shape_complex_same,
+    "rfft": _shape_rfft,
+    "from_shape_attr": _shape_from_shape_attr,
+    "cast": _shape_cast,
+    "transpose": _shape_transpose,
+    "reduce_trailing": _shape_reduce_trailing,
+    # Not yet classified. Same result as the historical fallback, but reached
+    # through a NAME, so it is countable and cannot masquerade as a rule.
+    "unclassified": _shape_same_as_first,
+}
+
+
+def _infer_result_type(op_name: str, operand_types: List[IRType],
+                       attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Infer an op's result type from its operands AND its attributes.
+
+    `attrs` was added in W1.2. Without it a whole class of ops -- `reshape`,
+    `expand`, `cast`, `arange`, and the strided stencils -- could not be
+    expressed at all, because their result shape or dtype lives in an
+    attribute rather than in any operand's type. Classifying them was blocked
+    on the signature, not on the analysis.
+    """
     if not operand_types:
         return TENSOR_OPAQUE
-    if op_name == "tessera.matmul" and len(operand_types) >= 2:
-        lhs, rhs = operand_types[0], operand_types[1]
-        dtype = lhs.dtype or rhs.dtype
-        if lhs.rank == 2 and rhs.rank == 2:
-            return tensor_ir_type((lhs.shape[0], rhs.shape[1]), dtype, layout=lhs.layout)
-        return tensor_ir_type(("*",), dtype, layout=lhs.layout)
-    if op_name == "tessera.batched_gemm" and len(operand_types) >= 2:
-        # Rank-3 C[b] = A[b] @ B[b]: result is B×M×N from A's (B,M) + B's N.
-        lhs, rhs = operand_types[0], operand_types[1]
-        dtype = lhs.dtype or rhs.dtype
-        if lhs.rank == 3 and rhs.rank == 3:
-            return tensor_ir_type((lhs.shape[0], lhs.shape[1], rhs.shape[2]),
-                                  dtype, layout=lhs.layout)
-        return tensor_ir_type(("*",), dtype, layout=lhs.layout)
-    if op_name in ("tessera.ebm_energy_quadratic", "tessera.ebm.energy_quadratic") and operand_types:
-        x = operand_types[0]
-        if x.rank == 2:
-            return tensor_ir_type((x.shape[0],), x.dtype, layout=x.layout)
-        return tensor_ir_type(("*",), x.dtype, layout=x.layout)
-    if op_name == "tessera.ebm.langevin_step" and operand_types:
-        return operand_types[0]
-    if op_name in {"tessera.transpose"} and operand_types[0].rank is not None:
-        first = operand_types[0]
-        return tensor_ir_type(tuple(reversed(first.shape)), first.dtype, layout=first.layout)
-    return operand_types[0]
+    from .op_catalog import shape_rule_for
+    rule = shape_rule_for(op_name)
+    fn = _SHAPE_RULES.get(rule)
+    if fn is None:
+        # A catalog rule name with no implementation here. Drift-gated by
+        # test_shape_rule_registry.py; fail loudly rather than silently
+        # reverting to the old fallback.
+        raise KeyError(
+            f"shape rule {rule!r} is declared for {op_name!r} in op_catalog "
+            f"but has no implementation in graph_ir._SHAPE_RULES"
+        )
+    return fn(operand_types, attrs)
 
 
 def _struct_result_type(op_name: str, in_type: Optional[IRType],

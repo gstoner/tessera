@@ -605,7 +605,6 @@ LOWERING_SHAPE_RULE: dict = {
     "random_mask": "same_as_first",
     "position_encoding": "same_as_first",
     "rotary_embedding": "same_as_first",
-    "quantize": "same_as_first",
     "numeric_helper": "same_as_first",
     # NOT declared: `functional_optimizer_step` / `optimizer`. An optimizer
     # legitimately keeps f32 master state while the parameters are bf16 --
@@ -769,6 +768,24 @@ SHAPE_RULE_NAMES = frozenset({
 #: force wrong behavior. Answering "why is this unclassified?" is what makes the
 #: remaining count meaningful.
 DELIBERATELY_UNDECLARED: dict = {
+    # The quantize family returns a TUPLE (codes, scale), not a single tensor,
+    # so `same_as_first` was a false declaration -- it claims one result type
+    # for a multi-result contract. The wrapper happened not to corrupt anything
+    # (it passes non-arrays through), but a rule that misstates the contract is
+    # exactly what this registry exists to remove. Declaring these needs a
+    # tuple-aware rule vocabulary, which does not exist yet.
+    #
+    # Note the codes come back as f32, NOT as fp8/fp4 storage: this is
+    # fake-quant. fp8_e4m3 / fp8_e5m2 / fp4_e2m1 / nvfp4 ARE canonical dtypes
+    # in `tessera.dtype` and the per-backend contracts model them honestly
+    # (gfx1151 `unsupported` -- RDNA 3.5 has no FP8 WMMA; x86 `emulated`), so
+    # the type system can express the storage the reference never materializes.
+    # Producing real sub-byte storage is a backend-path question, not a shape
+    # rule one.
+    **{f"tessera.{n}": "returns a (codes, scale) TUPLE rather than a single tensor; needs a tuple-aware rule vocabulary. Codes are fake-quant f32, not native fp8/fp4 storage"
+       for n in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
+                 "dequantize_fp6", "quantize_fp4", "dequantize_fp4",
+                 "quantize_nvfp4", "dequantize_nvfp4")},
     "tessera.popcount": "returns an INTEGER bit count, never the operand's storage dtype, so it is not storage-preserving despite sitting in the `elementwise` kind. The exact integer width is NumPy-version dependent (uint8 under 2.x, int64 under 1.26), so pinning one would be wrong; declaring a shape rule needs an int-width-agnostic vocabulary first",
     "tessera.adam": "optimizer keeps f32 compute/state while params are reduced precision; MEASURED: at fp16 a 1e-4 gradient squares to exactly zero, so an fp16 second moment would collapse -- the f32 default is load-bearing. Declaring it storage-preserving would force the state back to the param dtype and destroy the update. See tests/unit/test_optimizer_reduced_precision.py",
     "tessera.adamw": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",

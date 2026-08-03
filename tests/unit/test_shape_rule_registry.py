@@ -262,10 +262,17 @@ def test_declared_rules_hold_at_reduced_precision():
             fn = getattr(ops, spec.public_name, None)
             if fn is None:
                 continue
+            # All five production storage widths. fp8/fp4 are canonical dtypes
+            # in `tessera.dtype`, not hypotheticals -- the per-backend contracts
+            # already model them (gfx1151 `unsupported`, x86 `emulated`), and an
+            # op that silently leaves fp8 forfeits the entire reason an
+            # accelerator pipeline chose it.
             probes = (
                 ("f32", np.float32, np.dtype(np.float32)),
                 ("bf16", bf16, np.dtype(bf16)),
                 ("fp16", np.float16, np.dtype(np.float16)),
+                ("fp8_e4m3", ml_dtypes.float8_e4m3fn, np.dtype(ml_dtypes.float8_e4m3fn)),
+                ("fp4_e2m1", ml_dtypes.float4_e2m1fn, np.dtype(ml_dtypes.float4_e2m1fn)),
             )
             try:
                 observed = [

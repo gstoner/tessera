@@ -2289,6 +2289,320 @@ def _shape_reduce_scatter(operand_types: List[IRType],
     return _scaled_collective_shape(operand_types, attrs, mesh, multiply=False)
 
 
+def _dim(value) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _unknown_like(t: IRType, dtype: Optional[str] = None) -> IRType:
+    return tensor_ir_type(("*",), dtype or t.dtype, layout=t.layout)
+
+
+def _shape_matmul_trailing(operand_types: List[IRType],
+                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Contract operand 0's LAST axis with operand 1's last, keeping leading dims.
+
+    `linear_general((B,S,D), (D,N)) -> (B,S,N)` and the latent-KV
+    compress/expand pair. Distinct from `matmul_2d`, which is rank-2 only and
+    would report `(*)` for the rank-3 activations that dominate real models.
+
+    Also covers the grouped/MoE forms whose weight is `(E, D, N)`: the expert
+    axis is not a batch axis of the activation, so the result still takes only
+    operand 1's LAST dim. Reading operand 1's first dim instead would be right
+    for `(D, N)` and wrong for `(E, D, N)` -- which is why this keys on the
+    last axis rather than "the other one".
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    lhs, rhs = operand_types[0], operand_types[1]
+    dtype = lhs.dtype or rhs.dtype
+    if lhs.rank is None or rhs.rank is None or not lhs.shape or not rhs.shape:
+        return _unknown_like(lhs, dtype)
+    return tensor_ir_type(lhs.shape[:-1] + (rhs.shape[-1],), dtype,
+                          layout=lhs.layout)
+
+
+def _shape_same_as_second(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Result mirrors operand 1 (the right-hand side / the thing being scored).
+
+    `tri_solve(A, b) -> b`-shaped, `cholesky_solve(L, b) -> b`-shaped,
+    `target_verify(tokens, logits) -> logits`-shaped. Operand 0 is the
+    operator or the key, not the value, so `same_as_first` is wrong on both
+    shape and dtype -- the same asymmetry `select_from_second` exists for.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    return operand_types[1]
+
+
+def _shape_conv_spatial(operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """NHWC / NDHWC convolution, valid padding: `out = in - k + 1` per axis.
+
+    One rule for conv2d and conv3d: the spatial rank is read from the operands
+    rather than fixed, so `(N, *spatial, Cin)` against `(*kernel, Cin, Cout)`
+    works for both. A separate rule per rank would duplicate the arithmetic and
+    let the two drift.
+
+    Falls back to unknown when stride/padding are non-default rather than
+    guessing -- the caller can pass them, and a rule that ignores stride would
+    be confidently wrong by exactly the stride factor.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    x, w = operand_types[0], operand_types[1]
+    attrs = attrs or {}
+    dtype = x.dtype or w.dtype
+    if x.rank is None or w.rank is None or x.rank != w.rank or x.rank < 3:
+        return _unknown_like(x, dtype)
+    if _dim(attrs.get("stride", 1)) != 1 or _dim(attrs.get("padding", 0)) != 0:
+        return _unknown_like(x, dtype)
+    spatial = x.rank - 2
+    dims: list = [x.shape[0]]
+    for axis in range(spatial):
+        n, k = _dim(x.shape[1 + axis]), _dim(w.shape[axis])
+        dims.append(str(n - k + 1) if n is not None and k is not None else "?")
+    dims.append(w.shape[-1])
+    return tensor_ir_type(tuple(dims), dtype, layout=x.layout)
+
+
+def _shape_index_along_axis(operand_types: List[IRType],
+                            attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`gather` / `index_select`: the indexed axis becomes len(indices)."""
+    if len(operand_types) < 2:
+        return operand_types[0]
+    x, idx = operand_types[0], operand_types[1]
+    axis = _dim((attrs or {}).get("axis", 0)) or 0
+    if x.rank is None or idx.rank is None or not idx.shape:
+        return _unknown_like(x)
+    if axis < 0:
+        axis += len(x.shape)
+    if not 0 <= axis < len(x.shape):
+        return _unknown_like(x)
+    dims = list(x.shape)
+    dims[axis] = idx.shape[0]
+    return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
+
+
+def _shape_drop_axis(operand_types: List[IRType],
+                     attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`select(x, i, axis)` removes the axis entirely (unlike a size-1 slice)."""
+    x = operand_types[0]
+    axis = _dim((attrs or {}).get("axis", 0)) or 0
+    if x.rank is None or not x.shape:
+        return _unknown_like(x)
+    if axis < 0:
+        axis += len(x.shape)
+    if not 0 <= axis < len(x.shape):
+        return _unknown_like(x)
+    return tensor_ir_type(x.shape[:axis] + x.shape[axis + 1:], x.dtype,
+                          layout=x.layout)
+
+
+def _shape_insert_axis(operand_types: List[IRType],
+                       attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`unsqueeze`: a length-1 axis at `axes`."""
+    x = operand_types[0]
+    raw = (attrs or {}).get("axes", (attrs or {}).get("axis", 0))
+    axis = _dim(raw if not isinstance(raw, (tuple, list)) else
+                (raw[0] if raw else 0))
+    if x.rank is None or axis is None:
+        return _unknown_like(x)
+    if axis < 0:
+        axis += len(x.shape) + 1
+    if not 0 <= axis <= len(x.shape):
+        return _unknown_like(x)
+    return tensor_ir_type(x.shape[:axis] + ("1",) + x.shape[axis:], x.dtype,
+                          layout=x.layout)
+
+
+def _shape_from_slice_sizes(operand_types: List[IRType],
+                            attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`slice` / `dynamic_slice`: the result IS `slice_sizes`."""
+    x = operand_types[0]
+    sizes = (attrs or {}).get("slice_sizes")
+    if not isinstance(sizes, (tuple, list)) or not sizes:
+        return _unknown_like(x)
+    return tensor_ir_type(tuple(str(s) for s in sizes), x.dtype, layout=x.layout)
+
+
+def _shape_pad(operand_types: List[IRType],
+               attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Each axis grows by its (before, after) pad."""
+    x = operand_types[0]
+    widths = (attrs or {}).get("pad_width")
+    if x.rank is None or not isinstance(widths, (tuple, list)):
+        return _unknown_like(x)
+    dims = []
+    for axis, extent in enumerate(x.shape):
+        n = _dim(extent)
+        pad = widths[axis] if axis < len(widths) else 0
+        lo, hi = pad if isinstance(pad, (tuple, list)) else (pad, pad)
+        lo, hi = _dim(lo), _dim(hi)
+        dims.append(str(n + lo + hi) if None not in (n, lo, hi) else "?")
+    return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
+
+
+def _shape_scores_per_block(operand_types: List[IRType],
+                            attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Query x key-BLOCK scores: `(B, H, S_q, num_blocks)`.
+
+    The MSA / memory index branches score each KV block, so the trailing axis
+    is a block count -- `S_k // block_size` -- not the head dim. With no
+    `block_size` the block count is unknown and says so.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    q, k = operand_types[0], operand_types[1]
+    if q.rank is None or k.rank is None or len(q.shape) < 2 or len(k.shape) < 2:
+        return _unknown_like(q)
+    s_k = _dim(k.shape[-2])
+    block = _dim((attrs or {}).get("block_size", 1)) or 1
+    blocks = str(s_k // block) if s_k is not None and block else "?"
+    return tensor_ir_type(q.shape[:-1] + (blocks,), q.dtype, layout=q.layout)
+
+
+def _shape_scores_per_block_mask(operand_types: List[IRType],
+                                 attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`memory_index_select`: the same block grid as the scores, but a MASK.
+
+    Shares its shape with `scores_per_block` and differs only in dtype, which
+    is exactly the case a shape-only check cannot see -- the probe reported
+    identical shapes and the two rules were indistinguishable until dtype was
+    compared. It selects blocks; it does not score them.
+    """
+    scores = _shape_scores_per_block(operand_types, attrs)
+    return tensor_ir_type(scores.shape, "bool", layout=scores.layout)
+
+
+def _shape_reduce_trailing_index(operand_types: List[IRType],
+                                 attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Drop the trailing axis, result is an INDEX (argmax-like selection)."""
+    from .op_catalog import INDEX_DTYPE
+
+    x = operand_types[0]
+    if x.rank is None or not x.shape:
+        return _unknown_like(x, INDEX_DTYPE)
+    return tensor_ir_type(x.shape[:-1], INDEX_DTYPE, layout=x.layout)
+
+
+def _shape_reduce_trailing_bool(operand_types: List[IRType],
+                                attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Drop the trailing axis, result is a boolean mask (`mor_partition`)."""
+    x = operand_types[0]
+    if x.rank is None or not x.shape:
+        return _unknown_like(x, "bool")
+    return tensor_ir_type(x.shape[:-1], "bool", layout=x.layout)
+
+
+def _shape_top_k(operand_types: List[IRType],
+                 attrs: Optional[Dict[str, Any]] = None):
+    """`(values, indices)` — both operand-shaped with the axis cut to k.
+
+    The indices half is why this cannot be `same_shape_index`: the two results
+    have the same SHAPE but different dtypes, and a single-tensor rule can
+    state only one of them.
+    """
+    from .op_catalog import INDEX_DTYPE
+
+    x = operand_types[0]
+    k = _dim((attrs or {}).get("k"))
+    axis = _dim((attrs or {}).get("axis", -1))
+    if x.rank is None or not x.shape or k is None or axis is None:
+        return (_unknown_like(x), _unknown_like(x, INDEX_DTYPE))
+    if axis < 0:
+        axis += len(x.shape)
+    if not 0 <= axis < len(x.shape):
+        return (_unknown_like(x), _unknown_like(x, INDEX_DTYPE))
+    dims = list(x.shape)
+    dims[axis] = str(k)
+    return (tensor_ir_type(tuple(dims), x.dtype, layout=x.layout),
+            tensor_ir_type(tuple(dims), INDEX_DTYPE, layout=x.layout))
+
+
+def _shape_split_equal(operand_types: List[IRType],
+                       attrs: Optional[Dict[str, Any]] = None):
+    """`chunk` / `split` into N equal pieces along `axis`.
+
+    Returns an N-tuple, so the count must be statically known. When it is not,
+    a single unknown piece is returned rather than a guess at N -- an arity the
+    op does not have is a worse claim than an unknown shape.
+    """
+    x = operand_types[0]
+    attrs = attrs or {}
+    n = _dim(attrs.get("chunks", attrs.get("indices_or_sections")))
+    axis = _dim(attrs.get("axis", 0)) or 0
+    if x.rank is None or not x.shape or n is None or n <= 0:
+        return _unknown_like(x)
+    if axis < 0:
+        axis += len(x.shape)
+    if not 0 <= axis < len(x.shape):
+        return _unknown_like(x)
+    extent = _dim(x.shape[axis])
+    piece = str(extent // n) if extent is not None else "?"
+    dims = list(x.shape)
+    dims[axis] = piece
+    part = tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
+    return tuple(part for _ in range(n))
+
+
+def _shape_split_halves(operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None):
+    """`rope_split`: the trailing axis is cut into a rope part and the rest.
+
+    Both halves are returned; the split point is the `rope_dim` attribute, so
+    they are NOT necessarily equal and must not be assumed so.
+    """
+    x = operand_types[0]
+    rope = _dim((attrs or {}).get("rope_dim"))
+    if x.rank is None or not x.shape:
+        return (_unknown_like(x), _unknown_like(x))
+    total = _dim(x.shape[-1])
+    if rope is None or total is None:
+        return (_unknown_like(x), _unknown_like(x))
+    head = tensor_ir_type(x.shape[:-1] + (str(rope),), x.dtype, layout=x.layout)
+    tail = tensor_ir_type(x.shape[:-1] + (str(total - rope),), x.dtype,
+                          layout=x.layout)
+    return (head, tail)
+
+
+def _shape_qkv_projection(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None):
+    """`(Q, K, V)` — one fused projection split three ways.
+
+    `(B, S, D) x (D, 3*D) -> three (B, S, D)`. The fused weight's trailing axis
+    is 3x the per-head width, so the result width is `rhs[-1] // 3` rather than
+    the input's D; they coincide only in the square case.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    x, w = operand_types[0], operand_types[1]
+    if x.rank is None or w.rank is None or not x.shape or not w.shape:
+        return tuple(_unknown_like(x) for _ in range(3))
+    fused = _dim(w.shape[-1])
+    width = str(fused // 3) if fused is not None else "?"
+    part = tensor_ir_type(x.shape[:-1] + (width,), x.dtype, layout=x.layout)
+    return (part, part, part)
+
+
+def _shape_state_matrix(operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`linear_attn_state`: the recurrent state is `(B, H, D, D)`.
+
+    Linear attention's state is an outer product of key and value features, so
+    the sequence axis is contracted away and replaced by a second feature axis
+    -- the one shape in this family that is NOT the query's.
+    """
+    x = operand_types[0]
+    if x.rank is None or len(x.shape) < 2:
+        return _unknown_like(x)
+    return tensor_ir_type(x.shape[:-2] + (x.shape[-1], x.shape[-1]), x.dtype,
+                          layout=x.layout)
+
+
 def _shape_layout_permute(operand_types: List[IRType],
                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """`pack` / `rearrange`: permute by an explicit axis order, else identity.
@@ -2387,6 +2701,23 @@ _SHAPE_RULES = {
     "cast": _shape_cast,
     "transpose": _shape_transpose,
     "reduce_trailing": _shape_reduce_trailing,
+    "matmul_trailing": _shape_matmul_trailing,
+    "same_as_second": _shape_same_as_second,
+    "conv_spatial": _shape_conv_spatial,
+    "index_along_axis": _shape_index_along_axis,
+    "drop_axis": _shape_drop_axis,
+    "insert_axis": _shape_insert_axis,
+    "from_slice_sizes": _shape_from_slice_sizes,
+    "pad": _shape_pad,
+    "scores_per_block": _shape_scores_per_block,
+    "scores_per_block_mask": _shape_scores_per_block_mask,
+    "reduce_trailing_index": _shape_reduce_trailing_index,
+    "reduce_trailing_bool": _shape_reduce_trailing_bool,
+    "top_k": _shape_top_k,
+    "split_equal": _shape_split_equal,
+    "split_halves": _shape_split_halves,
+    "qkv_projection": _shape_qkv_projection,
+    "state_matrix": _shape_state_matrix,
     "layout_permute": _shape_layout_permute,
     "state_handle": _shape_state_handle,
     "kv_cache_read": _shape_kv_cache_read,

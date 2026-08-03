@@ -5114,6 +5114,27 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
         "reduce_all",
         "reduce_trailing",
         "select_from_second",
+        # W1.4 wave 2. Every rule here derives its result dtype from an
+        # operand, so each op belongs under the storage contract -- and
+        # classifying an op is what puts it there. Several were measured
+        # widening f32 -> f64 (`msa_index_scores`, `memory_index_score`,
+        # `memory_index_select_ste`, `retention`) purely because nothing was
+        # enforcing the contract on an unclassified op.
+        "matmul_trailing",
+        "same_as_second",
+        "conv_spatial",
+        "index_along_axis",
+        "drop_axis",
+        "insert_axis",
+        "from_slice_sizes",
+        "pad",
+        "scores_per_block",
+        "layout_permute",
+        "split_equal",
+        "split_halves",
+        "qkv_projection",
+        "top_k",
+        "state_matrix",
     }
     targets = {
         spec.public_name: dtype_source_index(spec.graph_name)

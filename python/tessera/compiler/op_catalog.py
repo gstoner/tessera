@@ -801,6 +801,40 @@ OP_SHAPE_RULE: dict = {
         "cholesky",
     )},
 
+    # W1.4 wave 2 -- new rules, each verified on all-distinct dims.
+    **{f"tessera.{n}": "matmul_trailing" for n in (
+        "linear_general", "latent_kv_compress", "latent_kv_expand_k",
+        "latent_kv_expand_v", "grouped_gemm", "moe")},
+    # Operand 1 is the value; operand 0 is the operator or the key.
+    **{f"tessera.{n}": "same_as_second" for n in (
+        "cholesky_solve", "tri_solve", "target_verify")},
+    "tessera.conv2d_nhwc": "conv_spatial",
+    "tessera.conv3d_ndhwc": "conv_spatial",
+    "tessera.gather": "index_along_axis",
+    "tessera.index_select": "index_along_axis",
+    "tessera.select": "drop_axis",
+    "tessera.unsqueeze": "insert_axis",
+    "tessera.slice": "from_slice_sizes",
+    "tessera.dynamic_slice": "from_slice_sizes",
+    "tessera.pad": "pad",
+    # Query x key-BLOCK scores -- the trailing axis is a block count.
+    **{f"tessera.{n}": "scores_per_block" for n in (
+        "msa_index_scores", "memory_index_score", "memory_index_select_ste")},
+    # Same block grid, but a MASK -- it selects blocks rather than scoring
+    # them. Shape-identical to the rule above, so only a dtype comparison
+    # separates them.
+    "tessera.memory_index_select": "scores_per_block_mask",
+    "tessera.masked_categorical": "reduce_trailing_index",
+    "tessera.mor_router": "reduce_trailing_index",
+    "tessera.mor_partition": "reduce_trailing_bool",
+    "tessera.top_k": "top_k",
+    "tessera.chunk": "split_equal",
+    "tessera.split": "split_equal",
+    "tessera.rope_split": "split_halves",
+    "tessera.qkv_projection": "qkv_projection",
+    "tessera.linear_attn_state": "state_matrix",
+    "tessera.permute": "layout_permute",
+
     # `pack` / `rearrange` mean two things depending on their `layout`
     # attribute: a tuple permutes, a named layout is identity.
     "tessera.pack": "layout_permute",
@@ -872,6 +906,23 @@ SHAPE_RULE_NAMES = frozenset({
     "reduce_trailing",
     "state_handle",
     "layout_permute",
+    "matmul_trailing",
+    "same_as_second",
+    "conv_spatial",
+    "index_along_axis",
+    "drop_axis",
+    "insert_axis",
+    "from_slice_sizes",
+    "pad",
+    "scores_per_block",
+    "scores_per_block_mask",
+    "reduce_trailing_index",
+    "reduce_trailing_bool",
+    "top_k",
+    "split_equal",
+    "split_halves",
+    "qkv_projection",
+    "state_matrix",
     "kv_cache_read",
     "all_gather",
     "reduce_scatter",
@@ -960,6 +1011,9 @@ def undeclared_reason(graph_name: str):
 #: looking principled.
 SHAPE_RULE_DTYPE_SOURCE: dict = {
     "select_from_second": 1,
+    # `tri_solve(A, b)` / `target_verify(tokens, logits)`: operand 0 is the
+    # operator or the key, operand 1 is the value that carries storage dtype.
+    "same_as_second": 1,
 }
 
 

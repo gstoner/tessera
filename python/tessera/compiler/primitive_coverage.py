@@ -2083,9 +2083,102 @@ _NUMERIC_POLICY_BY_NAME_FACTORIES: dict[str, "Callable[[], NumericPolicy]"] = {
 }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# W2 — numeric policy by LOWERING KIND
+#
+# The per-name table above covers 59 of 313 catalog ops. The remaining 254 had
+# no declared accumulator, which is what forced the capability registry to fall
+# back on a blanket `("fp32", "f32")` for every op it enumerated -- and that is
+# why `gelu(bf16)` was REJECTED on cpu / x86 / apple_cpu / sm90 / gfx942 while
+# the storage-dtype wrapper was busy computing it correctly at f32 and storing
+# back. Two parts of the compiler answering the same question differently.
+#
+# Writing 254 more per-op entries would be the wrong shape. An accumulator is a
+# property of what the op DOES, and the catalog already groups ops by exactly
+# that: `lowering`. So this mirrors the shape-rule architecture one level down
+# -- `LOWERING_SHAPE_RULE` + `OP_SHAPE_RULE` becomes
+# `LOWERING_NUMERIC_POLICY` + `_NUMERIC_POLICY_BY_NAME_FACTORIES`, per-op
+# always winning.
+#
+# The f64 kinds are deliberate, not oversight. Matrix decompositions and
+# triangular solves are conditioning-sensitive: a Cholesky or QR of an
+# ill-conditioned matrix at f32 loses digits the algorithm needs, so their
+# declared accumulator is f64 and an f64 storage dtype is admitted wherever the
+# target has it.
+
+
+def _passthrough_policy() -> "NumericPolicy":
+    """Structural ops — no arithmetic, so storage rides through untouched.
+
+    `transpose` / `reshape` / `gather` do not accumulate anything, so declaring
+    an accumulator narrower than the data would wrongly exclude dtypes the op
+    handles perfectly well. `accum="fp64"` here means "imposes no ceiling",
+    which is the honest reading for a data-movement op.
+    """
+    return NumericPolicy(storage="bf16", accum="fp64")
+
+
+def _f32_accum_policy() -> "NumericPolicy":
+    """The default for arithmetic: reduced-precision storage, f32 accumulate."""
+    return NumericPolicy(storage="bf16", accum="fp32")
+
+
+def _f64_accum_policy() -> "NumericPolicy":
+    """Conditioning-sensitive numerics — decompositions and solves."""
+    return NumericPolicy(storage="fp32", accum="fp64")
+
+
+def _integer_policy() -> "NumericPolicy":
+    """Index / mask / logical ops: the result is not a float at all."""
+    return NumericPolicy(storage="int32", accum="int32")
+
+
+#: Lowering kind → default numeric policy. Every kind in the catalog appears;
+#: a missing kind is drift, gated by `test_numeric_policy_coverage.py`.
+LOWERING_NUMERIC_POLICY: dict = {
+    # Arithmetic — f32 accumulate over reduced-precision storage (Decision #15a)
+    **{k: _f32_accum_policy for k in (
+        "elementwise", "reduction", "attention", "loss", "rl_loss",
+        "normalization", "loop_nest", "contraction", "matmul", "conv",
+        "stencil", "moe", "moe_transport", "projection", "model_layer",
+        "state_space", "segment_reduce", "numeric_helper", "ebm",
+        "acceptance_verification", "random_source", "sparse",
+        "fused_epilogue", "position_encoding", "random_mask",
+        "rotary_embedding",
+        "functional_optimizer_step", "optimizer", "state_update",
+        "quantize", "spectral", "stable_reduction", "sort", "scan",
+        "clifford", "geometric",
+    )},
+    # Conditioning-sensitive: f64 accumulate, and f64 storage admitted.
+    **{k: _f64_accum_policy for k in (
+        "linalg_decomposition", "linalg_solver",
+    )},
+    # Non-float results.
+    **{k: _integer_policy for k in ("logical", "comparison", "indexing")},
+    # Pure data movement — no accumulator ceiling.
+    **{k: _passthrough_policy for k in ("layout_transform", "collective")},
+}
+
+
 def _policy_for_name(name: str) -> "NumericPolicy | None":
+    """The op's numeric policy: per-op declaration, else its lowering kind.
+
+    Returns None only for a name the catalog does not know -- an op the
+    compiler has never heard of has no policy to state, which is different from
+    an op whose policy is the family default.
+    """
     factory = _NUMERIC_POLICY_BY_NAME_FACTORIES.get(name)
-    return factory() if factory is not None else None
+    if factory is not None:
+        return factory()
+    from .op_catalog import GRAPH_OP_TO_SPEC, _SPECS
+
+    spec = next((s for s in _SPECS if s.public_name == name), None)
+    if spec is None:
+        spec = GRAPH_OP_TO_SPEC.get(name)
+    if spec is None:
+        return None
+    kind_factory = LOWERING_NUMERIC_POLICY.get(spec.lowering)
+    return kind_factory() if kind_factory is not None else None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

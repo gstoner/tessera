@@ -5093,6 +5093,61 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         grpo_policy_loss=grpo_policy_loss_ref,
         cispo_policy_loss=cispo_policy_loss_ref,
     )
+
+    # ── W2.2 — the complex family reaches `tessera.ops` ───────────────────
+    #
+    # These 16 ops are in the op catalog, several already have Apple GPU MSL
+    # kernels and per-target capability entries, and none of them had a
+    # `tessera.ops` entry point -- so no `@jit` body could emit any of them.
+    # Measured 2026-08-03: 19 of the 24 catalog ops with no ops entry were this
+    # family, making it the single largest reachability gap in the compiler.
+    #
+    # Bound lazily by name from `tessera.complex` rather than imported at
+    # module scope: `tessera/__init__` builds this namespace during package
+    # init, and `tessera.complex` imports back from `tessera`, so an eager
+    # import is a cycle. A missing name is skipped rather than raising -- the
+    # catalog is the contract, and `test_ops_reachability.py` is what fails if
+    # one goes absent.
+    def _bind_complex_family(namespace) -> None:
+        import importlib
+
+        try:
+            mod = importlib.import_module("tessera.complex")
+        except Exception:  # pragma: no cover - complex surface unavailable
+            return
+        for name in (
+            "complex_abs", "complex_arg", "complex_conjugate", "complex_div",
+            "complex_exp", "complex_log", "complex_mul", "complex_pow",
+            "complex_sqrt", "cross_ratio", "is_concyclic", "mobius",
+            "mobius_from_three_points", "stereographic", "laplacian_2d",
+            "conformal_energy_on_sphere",
+        ):
+            fn = getattr(mod, name, None)
+            if fn is not None and not hasattr(namespace, name):
+                setattr(namespace, name, fn)
+
+    _bind_complex_family(_ns)
+
+    # Three more catalog ops that existed but had no ops entry point.
+    # `nesterov` lives on `tessera.optim` beside `sgd`/`momentum`, which ARE
+    # bound here -- it was simply missed. The two fused loss+optimizer steps
+    # were registered only in the runtime reference table below, so the catalog
+    # named a Graph IR op the frontend could not reach.
+    #
+    # `training.loss_*` are DOTTED names, matching how the catalog spells them;
+    # bound with setattr and read with getattr, as the catalog itself does.
+    try:
+        from .optim import nesterov as _nesterov_ref
+
+        if not hasattr(_ns, "nesterov"):
+            _ns.nesterov = _nesterov_ref
+    except Exception:  # pragma: no cover - optim surface unavailable
+        pass
+    for _dotted, _fn in (("training.loss_sgd", training_loss_sgd_ref),
+                         ("training.loss_adamw", training_loss_adamw_ref)):
+        if getattr(_ns, _dotted, None) is None:
+            setattr(_ns, _dotted, _fn)
+
     return _ns
 
 

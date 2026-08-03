@@ -4785,6 +4785,13 @@ def _capability_status(target_name: str, op_name: str) -> tuple[str, tuple[str, 
     # flow into the manifest would have turned an expressible type into a
     # claimed kernel on six targets.
     dtypes = tuple(d for d in op_cap.dtypes if not _is_planned_gated_dtype(d))
+    # DERIVED dtypes answer legality, not kernel existence. `gelu` accumulates
+    # at f32 and sm90 declares fp8 storage, so `gelu(fp8)` is expressible --
+    # but no fp8 gelu kernel exists, and a manifest row asserting one is the
+    # same over-claim as the phantom NVIDIA FFT rows. A backend states its
+    # PROVEN dtypes explicitly; anything derived stays at the reference set.
+    if op_cap.dtypes_derived:
+        dtypes = tuple(d for d in ("fp32", "f32") if d in dtypes) or ("fp32",)
     return (op_cap.runtime_status, dtypes)
 
 

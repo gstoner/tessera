@@ -118,6 +118,40 @@ class ComplexScalar:
     def ndim(self) -> int:
         return self.re.ndim
 
+    def __array__(self, dtype=None, copy=None):
+        """Interleave into a real numpy complex array.
+
+        W2.2. Without this, `np.asarray(ComplexScalar)` produced a rank-0
+        ``object`` scalar -- the value carried both halves and exposed neither,
+        so every consumer that reaches for `np.asarray` (the shape-rule gates,
+        the storage-dtype wrapper, benchmark harnesses) saw an opaque box. The
+        complex family was unreachable from `tessera.ops` at the time, which is
+        the only reason nothing had tripped over it.
+
+        The component width is preserved rather than promoted: an f32 pair
+        becomes complex64, an f64 pair complex128. Widening here would
+        reintroduce the `np.fft.*`-style "host library picks the precision"
+        defect on the value type itself, which is where it would be hardest to
+        see.
+        """
+        component = np.result_type(self.re.dtype, self.im.dtype)
+        target = np.dtype(
+            "complex128" if component.itemsize >= 8 else "complex64")
+        # Assign the components; do NOT build the value as `re + 1j*im`.
+        # That expression is wrong in exactly the cases this type exists to
+        # represent faithfully: `1j * inf` is `nan+infj` (because `0 * inf` is
+        # nan), so the north pole of the stereographic projection came back
+        # `nan+infj` instead of `inf+infj`. Arithmetic construction silently
+        # corrupts every infinite or NaN component.
+        #
+        # `np.empty` + component assignment also returns an ndarray for a 0-d
+        # pair, where the arithmetic form yields a numpy SCALAR and numpy
+        # rejects it with "object __array__ method not producing an array".
+        out = np.empty(np.shape(self.re), dtype=target)
+        out.real = np.asarray(self.re)
+        out.imag = np.asarray(self.im)
+        return out.astype(dtype, copy=False) if dtype is not None else out
+
     # ── construction helpers ───────────────────────────────────
 
     @classmethod
@@ -199,7 +233,21 @@ def _as_pair(z: Any) -> tuple[np.ndarray, np.ndarray]:
     arr = np.asarray(z)
     if np.issubdtype(arr.dtype, np.complexfloating):
         return arr.real, arr.imag
-    return arr.astype(np.float64, copy=False), np.zeros_like(arr, dtype=np.float64)
+    # A real input keeps its own width; it is NOT promoted to f64.
+    #
+    # W2.2. This line said `arr.astype(np.float64)` unconditionally, and since
+    # this is the family's declared "single ingest gate" it set the precision
+    # for all 16 complex ops at once: `complex_exp(f32)` came back complex128.
+    # Same defect as `np.fft.*` always computing in double and `cos(int32) ->
+    # float64` -- a fixed host precision overriding the caller's storage -- but
+    # at the most leveraged point in the surface.
+    #
+    # f64 stays f64 (the oracle path), f32 stays f32, and anything narrower or
+    # integral promotes to the declared compute float rather than to double.
+    component: "np.dtype[Any]" = np.dtype(
+        np.float64 if arr.dtype == np.float64 else np.float32)
+    real = arr.astype(component, copy=False)
+    return real, np.zeros_like(real)
 
 
 def _try_apple_gpu_complex_op(
@@ -486,9 +534,16 @@ def stereographic(
     denom = 1.0 - z
     safe = np.where(np.abs(denom) > eps, denom, 1.0)
     near_north = np.abs(denom) <= eps
-    re = np.where(near_north, np.inf, x / safe)
-    im = np.where(near_north, np.inf, y / safe)
-    return ComplexScalar(re, im)
+    # `np.inf` is a PYTHON float, so `np.where(cond, np.inf, f32)` promotes the
+    # result to f64 -- which is why a single f32 point came back complex128
+    # while the batched path stayed complex64. Same op, two precisions, decided
+    # by a literal. Type the infinity to the operand instead.
+    component = np.result_type(x, y)
+    infinity = np.array(np.inf, dtype=component)
+    re = np.where(near_north, infinity, x / safe)
+    im = np.where(near_north, infinity, y / safe)
+    return ComplexScalar(re.astype(component, copy=False),
+                         im.astype(component, copy=False))
 
 
 def stereographic_inverse(zeta: Any) -> np.ndarray:

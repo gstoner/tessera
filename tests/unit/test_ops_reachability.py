@@ -138,3 +138,90 @@ def test_magnitude_and_angle_are_real_not_complex():
     assert magnitude.dtype == np.dtype("float32"), magnitude.dtype
     assert angle.dtype == np.dtype("float32"), angle.dtype
     np.testing.assert_allclose(magnitude, [5.0, 1.0], atol=1e-6)
+
+
+# ── PR #494 review: three defects in the newly-declared complex rules ──────
+#
+# All three were introduced by the declaration itself, which is the risk of
+# classifying a family that was never reachable enough to probe.
+
+@pytest.mark.parametrize("shape", [(3,), (4, 3), (2, 5, 3)])
+def test_stereographic_drops_the_coordinate_axis(shape):
+    """`(..., 3)` real coordinates -> `(...)` complex: one value per POINT.
+
+    Declared `complex_same`, which preserves shape, so a `tensor<4x3xfp32>`
+    operand was typed `tensor<4x3xcomplex64>`. That is a wrong result SHAPE
+    carried into verification and lowering, not a mislabel.
+    """
+    from tessera import ops
+    from tessera.compiler.graph_ir import _infer_result_type, tensor_ir_type
+
+    points = np.random.default_rng(0).standard_normal(shape).astype(np.float32)
+    points = points / np.linalg.norm(points, axis=-1, keepdims=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        actual = np.asarray(ops.stereographic(points))
+    assert actual.shape == shape[:-1], actual.shape
+
+    predicted = _infer_result_type(
+        "tessera.stereographic",
+        [tensor_ir_type(tuple(str(d) for d in shape), "fp32")])
+    if shape[:-1]:  # rank-0 results are reported as the opaque shape
+        assert tuple(predicted.shape) == tuple(str(d) for d in actual.shape)
+    assert predicted.dtype == actual.dtype.name
+
+
+@pytest.mark.parametrize("op", ["complex_exp", "complex_log", "complex_conjugate"])
+@pytest.mark.parametrize("width", ["complex64", "complex128"])
+def test_complex_width_is_preserved_not_defaulted(op, width):
+    """An already-complex operand keeps its width.
+
+    `_COMPLEX_FOR_REAL` recognised only fp64/f64, so a complex128 operand fell
+    through to the complex64 default: `complex_exp(complex128)` was typed
+    complex64, silently narrowing a double-precision computation and giving it
+    the wrong ABI at the boundary. The rule has to answer both directions —
+    promote a real, preserve a complex.
+    """
+    from tessera import ops
+    from tessera.compiler.graph_ir import _infer_result_type, tensor_ir_type
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        actual = np.asarray(getattr(ops, op)(np.array([1 + 2j, 3 + 4j], dtype=width)))
+    predicted = _infer_result_type(f"tessera.{op}", [tensor_ir_type(("2",), width)])
+    assert actual.dtype.name == width, f"{op} narrowed {width} -> {actual.dtype}"
+    assert predicted.dtype == width, f"rule narrowed {width} -> {predicted.dtype}"
+
+
+def test_stereographic_precision_does_not_depend_on_batching():
+    """A single f32 point returned complex128 while a batch returned complex64.
+
+    `np.where(near_north, np.inf, x / safe)` — `np.inf` is a PYTHON float, so
+    it promoted the f32 result to f64. Same op, two precisions, decided by a
+    literal. The same host-precision-leak class as `_as_pair` and `np.fft.*`,
+    arriving through a sentinel value rather than a cast.
+    """
+    from tessera import ops
+
+    single = np.array([0.0, 0.0, -1.0], dtype=np.float32)
+    batch = np.tile(single, (4, 1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        one = np.asarray(ops.stereographic(single))
+        many = np.asarray(ops.stereographic(batch))
+    assert one.dtype == many.dtype == np.dtype("complex64"), (one.dtype, many.dtype)
+
+
+def test_north_pole_still_maps_to_infinity():
+    """The typed infinity must not have changed the SEMANTICS.
+
+    Fixing a dtype by changing a sentinel's value would be a worse bug than the
+    one it replaced.
+    """
+    from tessera import ops
+
+    north = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        out = np.asarray(ops.stereographic(north))
+    assert np.isinf(out.real) and np.isinf(out.imag), out

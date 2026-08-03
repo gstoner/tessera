@@ -902,7 +902,11 @@ OP_SHAPE_RULE: dict = {
     **{f"tessera.{n}": "complex_same" for n in (
         "complex_mul", "complex_div", "complex_exp", "complex_log",
         "complex_pow", "complex_sqrt", "complex_conjugate",
-        "mobius", "stereographic", "cross_ratio")},
+        "mobius", "cross_ratio")},
+    # `stereographic` is NOT `complex_same`: it consumes `(..., 3)` real
+    # coordinates and yields one complex value per point, so the trailing
+    # coordinate axis is dropped.
+    "tessera.stereographic": "complex_from_coords",
     # A magnitude and an angle are REAL.
     "tessera.complex_abs": "complex_to_real",
     "tessera.complex_arg": "complex_to_real",
@@ -988,6 +992,7 @@ SHAPE_RULE_NAMES = frozenset({
     "einsum",
     "istft",
     "complex_to_real",
+    "complex_from_coords",
     "concat_trailing",
     "tile_trailing",
     "flatten_repeat",

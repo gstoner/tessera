@@ -83,11 +83,11 @@ clip_grad_norm,10,0,0,10,0,,directly_tested,10 direct test references
 clip_grad_value,2,0,0,2,0,,directly_tested,2 direct test references
 collective_permute,2,0,0,2,0,,directly_tested,2 direct test references
 compilation_cache,2,0,0,2,0,,directly_tested,2 direct test references
-complex_abs,7,0,1,7,0,,directly_tested,7 direct test references
-complex_arg,4,0,0,4,0,,directly_tested,4 direct test references
+complex_abs,7,0,1,7,0,fp32,directly_tested,7 direct test references
+complex_arg,4,0,0,4,0,fp32,directly_tested,4 direct test references
 complex_conjugate,7,0,1,7,0,,directly_tested,7 direct test references
 complex_div,4,0,0,4,0,,directly_tested,4 direct test references
-complex_exp,7,0,1,7,0,,directly_tested,7 direct test references
+complex_exp,7,0,1,7,0,fp32,directly_tested,7 direct test references
 complex_log,3,0,0,3,0,,directly_tested,3 direct test references
 complex_mul,14,0,1,14,0,,directly_tested,14 direct test references
 complex_pow,3,0,0,3,0,,directly_tested,3 direct test references
@@ -434,7 +434,7 @@ state_filter,0,0,0,0,1,,structural_only,category default for 'state_tree'
 state_migration,1,0,1,1,1,,structural_only,category default for 'serialization'
 state_partition,0,0,0,0,1,,structural_only,category default for 'state_tree'
 std,4,0,0,4,0,,directly_tested,4 direct test references
-stereographic,6,0,0,6,0,,directly_tested,6 direct test references
+stereographic,11,0,0,11,0,fp32,directly_tested,11 direct test references
 stft,7,0,0,7,0,,directly_tested,7 direct test references
 sub,15,7,2,22,0,bf16 f16 f32 fp16 fp32,directly_tested,22 direct test references
 sum,14,0,2,14,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,14 direct test references

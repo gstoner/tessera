@@ -473,7 +473,11 @@ _SPECS = [
     OpSpec("complex_abs",        "tessera.complex_abs",        1, 1),
     OpSpec("complex_arg",        "tessera.complex_arg",        1, 1),
     # — Möbius / projective family (3) —
-    OpSpec("mobius",                   "tessera.mobius",                   2, 2),
+    # 5 operands: `mobius(z, a, b, c, d)` -- the Mobius transform
+    # (az + b) / (cz + d) takes its four coefficients as values, not
+    # attributes. Catalog said 2; caught only once the op became reachable
+    # from `tessera.ops` (W2.2), which is what let the arity gate see it.
+    OpSpec("mobius",                   "tessera.mobius",                   5, 5),
     OpSpec("mobius_from_three_points", "tessera.mobius_from_three_points", 2, 2),
     OpSpec("stereographic",            "tessera.stereographic",            1, 1),
     # — Cross-ratio / cocircularity / Cauchy-Riemann certificate (3) —
@@ -486,7 +490,8 @@ _SPECS = [
     OpSpec("laplacian_2d", "tessera.laplacian_2d", 1, 1, lowering="stencil"),
     # — Conformal Jacobian + energy on sphere (2) —
     OpSpec("conformal_jacobian",         "tessera.conformal_jacobian",         1, 1, lowering="stencil"),
-    OpSpec("conformal_energy_on_sphere", "tessera.conformal_energy_on_sphere", 1, 1, lowering="stable_reduction"),
+    # 2 operands: `(p, p_target)` -- an energy BETWEEN two point sets.
+    OpSpec("conformal_energy_on_sphere", "tessera.conformal_energy_on_sphere", 2, 2, lowering="stable_reduction"),
 ]
 
 OP_SPECS: dict[str, OpSpec] = {spec.public_name: spec for spec in _SPECS}
@@ -889,6 +894,29 @@ OP_SHAPE_RULE: dict = {
     # `(N, 3)` points on the sphere -> a per-point energy `(N,)`.
     "tessera.conformal_energy_on_sphere": "reduce_trailing",
 
+    # W2.2 -- the complex family, now reachable from `tessera.ops`.
+    # These were unreachable, so they had been sitting on the `elementwise`
+    # default (`same_as_first`) unchecked. That default is actively wrong for
+    # them and the storage-dtype wrapper enforces it: `complex_abs` returned a
+    # float32 magnitude and got cast back to complex64.
+    **{f"tessera.{n}": "complex_same" for n in (
+        "complex_mul", "complex_div", "complex_exp", "complex_log",
+        "complex_pow", "complex_sqrt", "complex_conjugate",
+        "mobius", "cross_ratio")},
+    # `stereographic` is NOT `complex_same`: it consumes `(..., 3)` real
+    # coordinates and yields one complex value per point, so the trailing
+    # coordinate axis is dropped.
+    "tessera.stereographic": "complex_from_coords",
+    # A magnitude and an angle are REAL.
+    "tessera.complex_abs": "complex_to_real",
+    "tessera.complex_arg": "complex_to_real",
+    # Concyclicity is a predicate.
+    "tessera.is_concyclic": "same_shape_bool",
+    # `laplacian_2d` and `conformal_energy_on_sphere` are the real-valued
+    # members of this family and are already declared with the wave-3 tail
+    # above -- they were classifiable from `tessera.complex` before the ops
+    # namespace reached them.
+
     # `pack` / `rearrange` mean two things depending on their `layout`
     # attribute: a tuple permutes, a named layout is identity.
     "tessera.pack": "layout_permute",
@@ -963,6 +991,8 @@ SHAPE_RULE_NAMES = frozenset({
     "arange",
     "einsum",
     "istft",
+    "complex_to_real",
+    "complex_from_coords",
     "concat_trailing",
     "tile_trailing",
     "flatten_repeat",

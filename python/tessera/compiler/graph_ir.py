@@ -170,6 +170,12 @@ _KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.msa_sparse_attention": ("block_size", "top_k"),
     "tessera.rope_split": ("rope_dim",),
     "tessera.softcap": ("cap",),
+    # W2.2 -- newly reachable ops (`nesterov` and the two fused
+    # loss+optimizer steps). `kind` selects the LOSS, so it is a semantic key
+    # in the Decision #21a sense: it must be stated, never defaulted.
+    "tessera.nesterov": ("lr",),
+    "tessera.training.loss_sgd": ("kind", "lr"),
+    "tessera.training.loss_adamw": ("kind",),
 }
 
 
@@ -2062,7 +2068,14 @@ _REAL_FOR_COMPLEX = {"complex128": "fp64", "complex64": "fp32"}
 
 
 def _complex_of(dtype: Optional[str]) -> str:
-    """complex64 unless the operand is genuinely double precision.
+    """The complex type for this operand, PRESERVING an existing complex width.
+
+    An already-complex operand keeps its own width. Without that branch,
+    `_COMPLEX_FOR_REAL` recognised only fp64/f64, so a complex128 operand fell
+    through to the complex64 default and `complex_exp(complex128)` was typed
+    complex64 -- silently narrowing a double-precision computation, and
+    assigning it the wrong ABI at the boundary. The rule has to answer for both
+    directions: promote a real, preserve a complex.
 
     Hard-coding `complex64` (as this did) is wrong for an f64 signal, and
     hard-coding `complex128` -- which is what the numpy-backed reference
@@ -2070,7 +2083,10 @@ def _complex_of(dtype: Optional[str]) -> str:
     again: the host library's precision choice overriding the compiler's. The
     family's own `_spectral_policy` declares `storage="fp32"`.
     """
-    return _COMPLEX_FOR_REAL.get(dtype or "", "complex64")
+    name = dtype or ""
+    if name in _REAL_FOR_COMPLEX:      # already complex -- keep its width
+        return name
+    return _COMPLEX_FOR_REAL.get(name, "complex64")
 
 
 def _shape_complex_same(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
@@ -2119,6 +2135,36 @@ def _shape_rfft(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = N
     dims = list(first.shape)
     dims[axis] = str(n // 2 + 1)
     return tensor_ir_type(tuple(dims), complex_dtype, layout=first.layout)
+
+
+def _shape_complex_from_coords(operand_types: List[IRType],
+                               attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`stereographic`: `(..., 3)` real coordinates -> `(...)` complex.
+
+    One complex value per POINT, so the trailing coordinate axis is consumed.
+    `complex_same` preserves shape and therefore reported
+    `tensor<4x3xcomplex64>` for a `tensor<4x3xfp32>` operand -- a wrong result
+    shape carried into verification and lowering, not merely a mislabel.
+    """
+    first = operand_types[0]
+    complex_dtype = _complex_of(first.dtype)
+    if first.rank is None or not first.shape:
+        return tensor_ir_type(("*",), complex_dtype, layout=first.layout)
+    return tensor_ir_type(first.shape[:-1], complex_dtype, layout=first.layout)
+
+
+def _shape_complex_to_real(operand_types: List[IRType],
+                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`complex_abs` / `complex_arg`: a magnitude or an angle is REAL.
+
+    They sit in the `elementwise` kind, whose default rule is `same_as_first`,
+    and that default is not merely imprecise here -- the storage-dtype wrapper
+    ENFORCES it, casting `complex_abs`'s float32 magnitude back to complex64.
+    A wrong declaration is worse than none once something acts on it.
+    """
+    first = operand_types[0]
+    real = _REAL_FOR_COMPLEX.get(first.dtype or "", first.dtype or "fp32")
+    return tensor_ir_type(first.shape, real, layout=first.layout)
 
 
 def _shape_irfft(operand_types: List[IRType],
@@ -3064,6 +3110,8 @@ _SHAPE_RULES = {
     "arange": _shape_arange,
     "einsum": _shape_einsum,
     "istft": _shape_istft,
+    "complex_to_real": _shape_complex_to_real,
+    "complex_from_coords": _shape_complex_from_coords,
     "layout_permute": _shape_layout_permute,
     "state_handle": _shape_state_handle,
     "kv_cache_read": _shape_kv_cache_read,

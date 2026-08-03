@@ -22,6 +22,17 @@ class OpCapability:
     ranks: tuple[int, ...] = ()
     layouts: tuple[str, ...] = ("row_major",)
     reason: str = ""
+    dtypes_derived: bool = False
+    """True when `dtypes` came from `policy accumulator ∩ target dtypes` rather
+    than from an explicit backend declaration.
+
+    LEGALITY and KERNEL EXISTENCE are different claims and this field keeps
+    them apart. A derived set answers "can the type system express this here" --
+    sm90 declares fp8 storage and `gelu` accumulates at f32, so `gelu(fp8)` is
+    expressible. It does NOT mean an fp8 gelu kernel exists, and the backend
+    manifest is a kernel claim. Without this distinction the sm90 dashboard
+    would assert fp8 kernels for every activation, which is the same over-claim
+    that put nine phantom FFT rows on the NVIDIA dashboard."""
 
     @property
     def executable(self) -> bool:
@@ -137,11 +148,104 @@ def target_aliases() -> dict[str, str]:
     return dict(_ALIASES)
 
 
-def _ops(status: RuntimeStatus, names: tuple[str, ...], *, reason: str = "", dtypes: tuple[str, ...] = ("fp32", "f32")) -> dict[str, OpCapability]:
+# ─────────────────────────────────────────────────────────────────────────────
+# W2 — an op's dtype set is derived from its NUMERIC POLICY ∩ the target
+#
+# `_ops()` defaulted every op it enumerated to `("fp32", "f32")`. The
+# consequence was not "conservative", it was wrong and inconsistent:
+#
+#     gelu(bf16)   cpu=n  x86=n  apple_cpu=n  sm90=n  gfx942=n  |  gfx1151=Y
+#
+# gfx1151 said yes only because it declares ONE op, so everything else fell
+# through to the target's dtype tuple; gfx942 declares four and got the blanket
+# default. The same op, opposite answers, decided by how many rows a target
+# happened to enumerate rather than by anything architectural -- and CDNA3 is
+# not worse at bf16 than RDNA 3.5.
+#
+# It also contradicted the reduced-precision work directly: the storage-dtype
+# wrapper computes `gelu(bf16)` at f32 and stores back, while this gate said the
+# backend could not do it. Two parts of the compiler answering one question
+# differently is the thing the registry work exists to remove.
+#
+# The derivation: an op admits a target storage dtype when the op's declared
+# ACCUMULATOR can hold it. `accum="fp32"` admits bf16/fp16/fp32 and excludes
+# fp64; the decomposition kinds declare `accum="fp64"` and admit it, which is
+# what "use f64 where the algorithm expects it" means concretely. Integer and
+# sub-byte support stays an EXPLICIT per-op declaration -- an f32 accumulator
+# says nothing about int8 matmul, and deriving it would be a guess.
+
+_FLOAT_WIDTH = {
+    "fp8_e4m3": 1, "fp8_e5m2": 1, "fp6_e2m3": 1, "fp6_e3m2": 1,
+    "fp4_e2m1": 1, "nvfp4": 1,
+    "bf16": 2, "fp16": 2,
+    "fp32": 4, "f32": 4,
+    "fp64": 8,
+}
+
+
+def _dtypes_from_policy(op_name: str, target_dtypes: tuple[str, ...]) -> tuple[str, ...]:
+    """Target float dtypes the op's accumulator can hold, widest-first order kept."""
+    try:
+        from .primitive_coverage import _policy_for_name
+    except Exception:  # pragma: no cover - bootstrap
+        return ("fp32", "f32")
+    public = op_name.removeprefix("tessera.")
+    policy = _policy_for_name(public) or _policy_for_name(op_name)
+    if policy is None:
+        return ("fp32", "f32")
+    ceiling = _FLOAT_WIDTH.get(str(policy.accum), 4)
+    admitted = tuple(
+        d for d in target_dtypes
+        if d in _FLOAT_WIDTH and _FLOAT_WIDTH[d] <= ceiling
+    )
+    # A target that declares no float this op can hold still gets f32: the
+    # reference lane is f32 and an empty dtype tuple would read as "this op is
+    # unsupported here", which is a different and stronger claim.
+    return admitted or ("fp32", "f32")
+
+
+#: Sentinel marking "this op did not state its dtypes" -- resolved per target
+#: by `_with_derived_dtypes` once the target's own tuple is known. Identity, not
+#: equality: a backend that explicitly declares `("fp32", "f32")` because that
+#: is genuinely all it proved must NOT be silently widened.
+_DEFAULT_DTYPES: tuple[str, ...] = ("fp32", "f32")
+
+
+def _ops(status: RuntimeStatus, names: tuple[str, ...], *, reason: str = "",
+         dtypes: tuple[str, ...] | None = None) -> dict[str, OpCapability]:
+    """Build per-op capabilities.
+
+    `dtypes` is an explicit override and still wins -- a backend that has
+    PROVEN a specific set (sm120's 13-dtype matmul) states it directly. When
+    omitted the op is left on the sentinel and resolved from its numeric policy
+    against the target's dtypes below.
+    """
+    resolved = _DEFAULT_DTYPES if dtypes is None else dtypes
     return {
-        canonical_op(name): OpCapability(canonical_op(name), status, dtypes=dtypes, reason=reason)
+        canonical_op(name): OpCapability(canonical_op(name), status, dtypes=resolved, reason=reason)
         for name in names
     }
+
+
+def _with_derived_dtypes(target: TargetCapability) -> TargetCapability:
+    """Resolve sentinel op dtypes from `policy accumulator ∩ target dtypes`.
+
+    Done as a post-pass rather than threaded through 33 `_ops()` call sites --
+    several of which are written before the target's own `supported_dtypes`
+    literal, so they could not read it anyway.
+    """
+    import dataclasses
+
+    ops = dict(target.supported_ops)
+    changed = False
+    for name, cap in list(ops.items()):
+        if cap.dtypes is not _DEFAULT_DTYPES:
+            continue  # explicitly declared -- leave it alone
+        ops[name] = dataclasses.replace(
+            cap, dtypes=_dtypes_from_policy(name, target.supported_dtypes),
+            dtypes_derived=True)
+        changed = True
+    return dataclasses.replace(target, supported_ops=ops) if changed else target
 
 
 _CPU_OPS = tuple(sorted(GRAPH_OP_TO_SPEC))
@@ -878,7 +982,7 @@ def _with_complex_storage(target: TargetCapability) -> TargetCapability:
 
 
 TARGET_CAPABILITIES = {
-    name: _with_complex_storage(target)
+    name: _with_complex_storage(_with_derived_dtypes(target))
     for name, target in TARGET_CAPABILITIES.items()
 }
 

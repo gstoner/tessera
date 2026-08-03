@@ -741,6 +741,14 @@ OP_SHAPE_RULE: dict = {
     # dequantize is single-result: (codes, scale) -> tensor shaped like codes.
     **{f"tessera.dequantize_{n}": "same_as_first"
        for n in ("fp8", "fp6", "fp4", "nvfp4")},
+    # Optimizers: (param, moment1, moment2). The param keeps its own storage
+    # dtype while the moments follow the `state_dtype` attribute -- f32 master
+    # state with bf16 params is standard mixed precision. Previously exempted
+    # as "deliberately undeclared"; that was a vocabulary gap, not a genuine
+    # exception, and the exemption also silently covered an optimizer wrongly
+    # rounding its state DOWN to the param dtype.
+    **{f"tessera.{n}": "optimizer_step" for n in
+       ("adam", "adamw", "momentum", "nesterov", "adafactor", "lion", "sgd")},
 
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
@@ -765,6 +773,7 @@ SHAPE_RULE_NAMES = frozenset({
     "select_from_second",
     "quantize_per_tensor",
     "quantize_per_block",
+    "optimizer_step",
     "from_shape_attr",
     "cast",
     "reduce_trailing",
@@ -793,13 +802,6 @@ DELIBERATELY_UNDECLARED: dict = {
     # Producing real sub-byte storage is a backend-path question, not a shape
     # rule one.
     "tessera.popcount": "returns an INTEGER bit count, never the operand's storage dtype, so it is not storage-preserving despite sitting in the `elementwise` kind. The exact integer width is NumPy-version dependent (uint8 under 2.x, int64 under 1.26), so pinning one would be wrong; declaring a shape rule needs an int-width-agnostic vocabulary first",
-    "tessera.adam": "optimizer keeps f32 compute/state while params are reduced precision; MEASURED: at fp16 a 1e-4 gradient squares to exactly zero, so an fp16 second moment would collapse -- the f32 default is load-bearing. Declaring it storage-preserving would force the state back to the param dtype and destroy the update. See tests/unit/test_optimizer_reduced_precision.py",
-    "tessera.adamw": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.momentum": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.nesterov": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.adafactor": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.lion": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.sgd": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
     "tessera.all_gather": "result shape scales with mesh size, not derivable from operand types",
     "tessera.reduce_scatter": "result shape shrinks with mesh size, not derivable from operand types",
     "tessera.fft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",

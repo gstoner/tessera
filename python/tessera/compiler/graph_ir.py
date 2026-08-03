@@ -1906,6 +1906,40 @@ def _shape_quantize_per_block(operand_types: List[IRType],
     return (codes, scale)
 
 
+def _shape_optimizer_step(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None):
+    """(updated_param, moment1, moment2) — param dtype and STATE dtype differ.
+
+    This was parked as "deliberately undeclared" on the grounds that an
+    optimizer keeping f32 master state with bf16 parameters is correct mixed
+    precision rather than a bug. True — but it was never really an exception:
+    it was a VOCABULARY GAP. The contract is exactly expressible once rules can
+    (a) return a tuple and (b) read an attribute:
+
+        result[0] = param  -> operand 0's shape and storage dtype
+        result[1..2] = moments -> operand 0's shape, `state_dtype` attribute
+
+    Declaring it is strictly better than exempting it, because the exemption
+    silently also covered the case where an optimizer wrongly rounds its state
+    down to the parameter dtype. Now that is a verifiable difference.
+    """
+    param = operand_types[0]
+    attrs = attrs or {}
+    state = attrs.get("state_dtype") or "fp32"
+    try:
+        from ..dtype import canonicalize_dtype
+
+        state = canonicalize_dtype(str(state).strip("\"'"))
+    except Exception:
+        state = str(state)
+    moment = tensor_ir_type(param.shape, state, layout=param.layout)
+    return (
+        tensor_ir_type(param.shape, param.dtype, layout=param.layout),
+        moment,
+        moment,
+    )
+
+
 def _shape_select_from_second(operand_types: List[IRType],
                               attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """Select along a candidate axis of operand 1, keyed by operand 0.
@@ -1957,6 +1991,7 @@ _SHAPE_RULES = {
     "select_from_second": _shape_select_from_second,
     "quantize_per_tensor": _shape_quantize_per_tensor,
     "quantize_per_block": _shape_quantize_per_block,
+    "optimizer_step": _shape_optimizer_step,
     "from_shape_attr": _shape_from_shape_attr,
     "cast": _shape_cast,
     "transpose": _shape_transpose,

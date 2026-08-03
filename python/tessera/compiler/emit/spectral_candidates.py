@@ -143,6 +143,30 @@ def _cptr(a: np.ndarray) -> ctypes.c_void_p:
     return a.ctypes.data_as(ctypes.c_void_p)
 
 
+def _is_pow2(n: int) -> bool:
+    """Whether the shipped Stockham kernels can transform a length-`n` signal.
+
+    They are radix-4 with a radix-2 stage, so they handle powers of two and
+    nothing else -- and they do NOT validate `n`. Measured against `numpy.fft`
+    on both the CPU and ROCm lanes: every power of two from 1 to 1024 agrees to
+    ~1e-7, while 3, 12, 24, 48, 100, 255 and 257 come back with relative error
+    ~1.0. Not a precision shortfall; a different answer.
+    
+    That made it a SILENT wrong result rather than a decline: the kernels
+    returned their own lane name, so the arbiter recorded a successful
+    `cpu_stockham` / `rocm_stockham` run and the F4 reference check never ran at
+    a size that would expose it. Decision #21 requires an unsupported case to
+    say so; returning a plausible-looking wrong array is worse than the no-op it
+    prohibits.
+    
+    Extending the kernels to arbitrary `n` (mixed-radix, or Bluestein for
+    primes) is real work and separate. Declining is what makes the current
+    kernels honest in the meantime -- the arbiter falls back to a correct
+    reference instead of shipping a wrong transform.
+    """
+    return n > 0 and (n & (n - 1)) == 0
+
+
 # --- candidates --------------------------------------------------------------
 class CpuStockhamFFTCandidate(Candidate):
     """Tier-1: the shipped CPU mixed-radix Stockham kernel, compiled + dlopened.
@@ -156,10 +180,13 @@ class CpuStockhamFFTCandidate(Candidate):
     def available(self) -> bool:
         return _cpu_lib() is not None
 
+    def applies_to(self, region: Any) -> bool:
+        return _is_pow2(getattr(region, "n", 0))
+
     def run(self, region: SpectralFFTRegion, x: np.ndarray, *a: Any,
             **k: Any) -> tuple[Any, str]:
         lib = _cpu_lib()
-        if lib is None:
+        if lib is None or not _is_pow2(region.n):
             return region.reference(x), "reference"
         try:
             xin = np.ascontiguousarray(x, np.complex64)
@@ -180,6 +207,9 @@ class RocmStockhamFFTCandidate(Candidate):
     target = "rocm"
     op = OP_SPECTRAL_FFT
 
+    def applies_to(self, region: Any) -> bool:
+        return _is_pow2(getattr(region, "n", 0))
+
     def available(self) -> bool:
         # Needs hipcc AND a usable device; the host-pointer wrapper returns 0 on
         # success.  Probe cheaply: compile ok + a tiny transform round-trips.
@@ -197,7 +227,7 @@ class RocmStockhamFFTCandidate(Candidate):
     def run(self, region: SpectralFFTRegion, x: np.ndarray, *a: Any,
             **k: Any) -> tuple[Any, str]:
         lib = _amd_lib()
-        if lib is None:
+        if lib is None or not _is_pow2(region.n):
             return region.reference(x), "reference"
         try:
             xin = np.ascontiguousarray(x, np.complex64)
@@ -213,3 +243,421 @@ class RocmStockhamFFTCandidate(Candidate):
 
 register_candidate(CpuStockhamFFTCandidate())
 register_candidate(RocmStockhamFFTCandidate())
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TSOL spectral family — the four remaining ops, COMPOSED over the FFT region
+#
+# `rfft` / `irfft` / `stft` / `istft` are not new kernels. Each decomposes to
+# the complex FFT the shipped Stockham lanes already implement, so a candidate
+# here delegates its inner transform to whatever `spectral_fft` candidate is
+# registered for the same target. Two consequences worth being explicit about:
+#
+#   * One FFT lane per foundation lights up FIVE TSOL ops on that foundation.
+#     When the NVIDIA `.cu` (written, not yet registered) and an Apple lane land
+#     as `spectral_fft` candidates, these compose on top with no further work.
+#   * A composed candidate is never "more available" than its inner FFT. If no
+#     FFT lane can build or run for a target, the composition declines to the
+#     reference exactly as the FFT candidate does (Decision #21 -- never a
+#     mislabeled kernel).
+#
+# `spectral_filter` is deliberately NOT composed over the FFT: it is a pointwise
+# product of two spectra (`Xf * Hf`), with no transform inside. Filing it with
+# the transforms because its operands happen to be spectra would be the same
+# one-reason-for-N-ops error this registry has already been bitten by twice.
+# ═════════════════════════════════════════════════════════════════════════════
+
+OP_SPECTRAL_RFFT = "spectral_rfft"
+OP_SPECTRAL_IRFFT = "spectral_irfft"
+OP_SPECTRAL_STFT = "spectral_stft"
+OP_SPECTRAL_ISTFT = "spectral_istft"
+OP_SPECTRAL_FILTER = "spectral_filter"
+
+
+def _inner_fft(target: str, n: int, sign: int, x: np.ndarray) -> tuple[np.ndarray, str]:
+    """Run the best available `spectral_fft` lane for `target`.
+
+    Returns `(values, lane)`, where `lane` is `"reference"` when no registered
+    FFT candidate could run -- so a composed op reports honestly which lane
+    actually produced its inner transform rather than claiming its own name.
+    """
+    from tessera.compiler.emit.candidate import candidates_for
+
+    region = SpectralFFTRegion(n=n, sign=sign)
+    for cand in candidates_for(target, OP_SPECTRAL_FFT):
+        try:
+            if not cand.applies_to(region) or not cand.available():
+                continue
+            out, lane = cand.run(region, x)
+            if lane != "reference":
+                return np.asarray(out, np.complex64), lane
+        except Exception:
+            continue
+    return region.reference(x), "reference"
+
+
+class SpectralRFFTRegion:
+    """Real-input FFT of length `n` -> the `n//2 + 1` non-redundant bins.
+
+    A real signal's transform is conjugate-symmetric, so only half the spectrum
+    carries information. The composition runs the full complex transform and
+    keeps that half -- correct, and it reuses the shipped kernel rather than
+    introducing a second FFT implementation to keep in step (Decision #31).
+    """
+
+    def __init__(self, n: int):
+        self.n = int(n)
+
+    @property
+    def bins(self) -> int:
+        return self.n // 2 + 1
+
+    def reference(self, x: np.ndarray) -> np.ndarray:
+        return np.fft.rfft(np.asarray(x, np.float32)).astype(np.complex64)
+
+    def probe_input(self, seed: int) -> np.ndarray:
+        return np.random.default_rng(seed).standard_normal(self.n).astype(np.float32)
+
+
+class SpectralIRFFTRegion:
+    """Half-spectrum -> real signal of length `n`; the inverse of `rfft`.
+
+    `n` is explicit rather than inferred: `bins = n//2 + 1` maps two lengths
+    (2*bins-2 and 2*bins-1) onto the same bin count, so an odd-length original
+    is NOT recoverable from the spectrum alone. That ambiguity is exactly why
+    `np.fft.irfft` takes an `n`, and why the W1 shape rule for `irfft` reads it.
+    """
+
+    def __init__(self, n: int):
+        self.n = int(n)
+
+    @property
+    def bins(self) -> int:
+        return self.n // 2 + 1
+
+    def reference(self, xf: np.ndarray) -> np.ndarray:
+        return np.fft.irfft(np.asarray(xf, np.complex64), n=self.n).astype(np.float32)
+
+    def probe_input(self, seed: int) -> np.ndarray:
+        rng = np.random.default_rng(seed)
+        return np.fft.rfft(rng.standard_normal(self.n).astype(np.float32)).astype(np.complex64)
+
+
+class SpectralSTFTRegion:
+    """Framed short-time transform: `(frames, win//2 + 1)`.
+
+    Composes over `rfft` per frame, matching `tessera.ops.stft`'s framing --
+    `frames = (n - win) // hop + 1`, window applied before the transform.
+    """
+
+    def __init__(self, n: int, win: int, hop: int):
+        self.n, self.win, self.hop = int(n), int(win), int(hop)
+
+    @property
+    def frames(self) -> int:
+        return max(1, (self.n - self.win) // self.hop + 1)
+
+    def window(self) -> np.ndarray:
+        return np.hanning(self.win).astype(np.float32)
+
+    def reference(self, x: np.ndarray) -> np.ndarray:
+        x = np.asarray(x, np.float32)
+        w = self.window()
+        out = [np.fft.rfft(x[s:s + self.win] * w)
+               for s in range(0, max(1, self.n - self.win + 1), self.hop)]
+        return np.stack(out, axis=-2).astype(np.complex64)
+
+    def probe_input(self, seed: int) -> np.ndarray:
+        return np.random.default_rng(seed).standard_normal(self.n).astype(np.float32)
+
+
+class SpectralISTFTRegion:
+    """Overlap-add inverse of `stft` -> `(frames - 1) * hop + win` samples.
+
+    The f64 accumulator is deliberate and matches the reference: overlap-add
+    sums many windowed frames, and the accumulation width is a separate
+    decision from the RESULT width (Decision #15a).
+    """
+
+    def __init__(self, frames: int, win: int, hop: int):
+        self.frames, self.win, self.hop = int(frames), int(win), int(hop)
+
+    @property
+    def samples(self) -> int:
+        return (self.frames - 1) * self.hop + self.win
+
+    def window(self) -> np.ndarray:
+        return np.hanning(self.win).astype(np.float32)
+
+    def reference(self, xf: np.ndarray) -> np.ndarray:
+        xf = np.asarray(xf, np.complex64)
+        w = self.window()
+        out = np.zeros(self.samples, np.float64)
+        weight = np.zeros_like(out)
+        for i in range(self.frames):
+            frame = np.fft.irfft(xf[i], n=self.win) * w
+            s = i * self.hop
+            out[s:s + self.win] += frame
+            weight[s:s + self.win] += w * w
+        return (out / np.maximum(weight, 1e-12)).astype(np.float32)
+
+    def probe_input(self, seed: int) -> np.ndarray:
+        rng = np.random.default_rng(seed)
+        sig = rng.standard_normal(self.samples).astype(np.float32)
+        w = self.window()
+        return np.stack(
+            [np.fft.rfft(sig[i * self.hop:i * self.hop + self.win] * w)
+             for i in range(self.frames)], axis=-2).astype(np.complex64)
+
+
+class SpectralFilterRegion:
+    """Pointwise product of two spectra — `Xf * Hf`. No transform inside.
+
+    Kept apart from the transform family on purpose: it operates ON spectra
+    rather than producing them, so composing it over the FFT region would be a
+    wrong decomposition dressed as consistency.
+    """
+
+    def __init__(self, bins: int):
+        self.bins = int(bins)
+
+    def reference(self, xf: np.ndarray, hf: np.ndarray) -> np.ndarray:
+        return (np.asarray(xf, np.complex64) * np.asarray(hf, np.complex64)).astype(np.complex64)
+
+    def probe_input(self, seed: int) -> tuple[np.ndarray, np.ndarray]:
+        rng = np.random.default_rng(seed)
+        def spec() -> np.ndarray:
+            return (rng.standard_normal(self.bins)
+                    + 1j * rng.standard_normal(self.bins)).astype(np.complex64)
+        return spec(), spec()
+
+
+# --- verifiers ---------------------------------------------------------------
+def _fp32_budget(n: int, atol: float) -> float:
+    """fp32 round-off grows ~ N*eps, so scale the budget with the transform size.
+
+    A fixed tolerance either passes a miscompile at small N or fails a correct
+    kernel at large N; the FFT verifier above already made this call and these
+    reuse it so the family answers accuracy the same way throughout.
+    """
+    return max(atol, 1e-4 * max(1, n))
+
+
+def _verify_unary(candidate: Candidate, region: Any, *, atol: float = 1e-3,
+                  seed: int = 0) -> bool:
+    x = region.probe_input(seed)
+    return verify_by_reference(candidate, region, (x,), region.reference(x),
+                               atol=_fp32_budget(getattr(region, "n", 1), atol))
+
+
+def _verify_binary(candidate: Candidate, region: Any, *, atol: float = 1e-3,
+                   seed: int = 0) -> bool:
+    xf, hf = region.probe_input(seed)
+    return verify_by_reference(candidate, region, (xf, hf),
+                               region.reference(xf, hf), atol=atol)
+
+
+register_op_kind(OP_SPECTRAL_RFFT, _verify_unary)
+register_op_kind(OP_SPECTRAL_IRFFT, _verify_unary)
+register_op_kind(OP_SPECTRAL_STFT, _verify_unary)
+register_op_kind(OP_SPECTRAL_ISTFT, _verify_unary)
+register_op_kind(OP_SPECTRAL_FILTER, _verify_binary)
+
+
+# --- composed candidates -----------------------------------------------------
+class _ComposedSpectralCandidate(Candidate):
+    """Base for an op that delegates its inner transform to a `spectral_fft` lane.
+
+    `available()` asks the FFT candidates rather than answering for itself: a
+    composition cannot be more available than the transform it is built on, and
+    claiming otherwise is how a lane ends up reporting its own name for work the
+    reference actually did.
+    """
+
+    tier = Tier.SYNTHESIZED
+
+    #: Attribute on the region giving the length of the INNER complex
+    #: transform. For the framed ops that is the window, not the signal.
+    inner_len_attr = "n"
+
+    def applies_to(self, region: Any) -> bool:
+        """Decline whatever the inner FFT would decline.
+
+        The composed ops inherit the kernels' power-of-two restriction, and it
+        applies to the length actually transformed: `stft`/`istft` transform a
+        WINDOW, so a 1000-sample signal with a 64-sample window is fine while a
+        1024-sample signal with a 60-sample window is not. Reading the signal
+        length there would be the wrong test in both directions.
+        """
+        return _is_pow2(int(getattr(region, self.inner_len_attr, 0) or 0))
+
+    def available(self) -> bool:
+        from tessera.compiler.emit.candidate import candidates_for
+
+        for cand in candidates_for(self.target, OP_SPECTRAL_FFT):
+            try:
+                if cand.available():
+                    return True
+            except Exception:
+                continue
+        return False
+
+
+class RFFTCandidate(_ComposedSpectralCandidate):
+    """Real FFT via the complex lane, keeping the non-redundant half."""
+
+    op = OP_SPECTRAL_RFFT
+
+    def run(self, region: SpectralRFFTRegion, x: np.ndarray, *a: Any,
+            **k: Any) -> tuple[Any, str]:
+        if not self.applies_to(region):
+            return region.reference(x), "reference"
+        try:
+            full, lane = _inner_fft(self.target, region.n, -1,
+                                    np.asarray(x, np.float32).astype(np.complex64))
+            if lane == "reference":
+                return region.reference(x), "reference"
+            return np.asarray(full[:region.bins], np.complex64), f"{lane}+rfft"
+        except Exception:
+            return region.reference(x), "reference"
+
+
+class IRFFTCandidate(_ComposedSpectralCandidate):
+    """Inverse real FFT: rebuild the Hermitian spectrum, inverse-transform, take
+    the real part.
+
+    The mirrored bins are `conj(X[k])` at `n-k`, and the DC bin -- plus Nyquist
+    when `n` is even -- are their own mirror and must NOT be written twice.
+    Doubling them is the classic way this reconstruction goes subtly wrong: the
+    result stays real and plausible, with the endpoints off.
+    """
+
+    op = OP_SPECTRAL_IRFFT
+
+    def run(self, region: SpectralIRFFTRegion, xf: np.ndarray, *a: Any,
+            **k: Any) -> tuple[Any, str]:
+        if not self.applies_to(region):
+            return region.reference(xf), "reference"
+        try:
+            half = np.asarray(xf, np.complex64)
+            n = region.n
+            full = np.zeros(n, np.complex64)
+            full[:region.bins] = half[:region.bins]
+            for k_idx in range(1, (n + 1) // 2):
+                full[n - k_idx] = np.conj(half[k_idx])
+            out, lane = _inner_fft(self.target, n, +1, full)
+            if lane == "reference":
+                return region.reference(xf), "reference"
+            return np.asarray(np.real(out), np.float32), f"{lane}+irfft"
+        except Exception:
+            return region.reference(xf), "reference"
+
+
+class STFTCandidate(_ComposedSpectralCandidate):
+    """Framed transform: window each frame, then the composed real FFT."""
+
+    op = OP_SPECTRAL_STFT
+    inner_len_attr = "win"
+
+    def run(self, region: SpectralSTFTRegion, x: np.ndarray, *a: Any,
+            **k: Any) -> tuple[Any, str]:
+        if not self.applies_to(region):
+            return region.reference(x), "reference"
+        try:
+            sig = np.asarray(x, np.float32)
+            w = region.window()
+            inner = SpectralRFFTRegion(region.win)
+            rfft = RFFTCandidate()
+            rfft.target = self.target
+            frames, lane_seen = [], None
+            for start in range(0, max(1, region.n - region.win + 1), region.hop):
+                out, lane = rfft.run(inner, sig[start:start + region.win] * w)
+                if lane == "reference":
+                    return region.reference(x), "reference"
+                lane_seen = lane
+                frames.append(np.asarray(out, np.complex64))
+            return np.stack(frames, axis=-2), f"{lane_seen}+stft"
+        except Exception:
+            return region.reference(x), "reference"
+
+
+class ISTFTCandidate(_ComposedSpectralCandidate):
+    """Overlap-add inverse: composed inverse real FFT per frame, then accumulate.
+
+    Accumulates in f64 and stores f32, matching the reference. The accumulator
+    width is a separate decision from the result width, and conflating them is
+    what made `istft` hard-code `float64` as its RESULT type before W1.4.
+    """
+
+    op = OP_SPECTRAL_ISTFT
+    inner_len_attr = "win"
+
+    def run(self, region: SpectralISTFTRegion, xf: np.ndarray, *a: Any,
+            **k: Any) -> tuple[Any, str]:
+        if not self.applies_to(region):
+            return region.reference(xf), "reference"
+        try:
+            spec = np.asarray(xf, np.complex64)
+            w = region.window()
+            inner = SpectralIRFFTRegion(region.win)
+            irfft = IRFFTCandidate()
+            irfft.target = self.target
+            out = np.zeros(region.samples, np.float64)
+            weight = np.zeros_like(out)
+            lane_seen = None
+            for i in range(region.frames):
+                frame, lane = irfft.run(inner, spec[i])
+                if lane == "reference":
+                    return region.reference(xf), "reference"
+                lane_seen = lane
+                start = i * region.hop
+                out[start:start + region.win] += np.asarray(frame, np.float64) * w
+                weight[start:start + region.win] += w * w
+            return ((out / np.maximum(weight, 1e-12)).astype(np.float32),
+                    f"{lane_seen}+istft")
+        except Exception:
+            return region.reference(xf), "reference"
+
+
+class SpectralFilterCandidate(Candidate):
+    """Pointwise spectral product. Needs no FFT lane, so it is always available
+    -- unlike its four siblings, which cannot outrun their inner transform."""
+
+    op = OP_SPECTRAL_FILTER
+    tier = Tier.SYNTHESIZED
+
+    def available(self) -> bool:
+        return True
+
+    def run(self, region: SpectralFilterRegion, xf: np.ndarray,
+            hf: np.ndarray, *a: Any, **k: Any) -> tuple[Any, str]:
+        try:
+            return (np.asarray(xf, np.complex64) * np.asarray(hf, np.complex64)
+                    ).astype(np.complex64), "spectral_filter"
+        except Exception:
+            return region.reference(xf, hf), "reference"
+
+
+def _register_composed_lanes() -> None:
+    """Register the composed ops for every target that has an FFT lane.
+
+    Driven off the FFT registry rather than a hard-coded target list, so a new
+    `spectral_fft` candidate (the written-but-unregistered NVIDIA `.cu`, or an
+    Apple lane) brings all four composed ops with it automatically.
+    """
+    from tessera.compiler.emit.candidate import _CANDIDATES
+
+    targets = {t for (t, op) in _CANDIDATES if op == OP_SPECTRAL_FFT}
+    for target in sorted(targets):
+        for cls in (RFFTCandidate, IRFFTCandidate, STFTCandidate, ISTFTCandidate):
+            cand = cls()
+            cand.target = target
+            cand.name = f"{target}_{cls.op.removeprefix('spectral_')}"
+            register_candidate(cand)
+        filt = SpectralFilterCandidate()
+        filt.target = target
+        filt.name = f"{target}_spectral_filter"
+        register_candidate(filt)
+
+
+_register_composed_lanes()

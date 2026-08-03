@@ -39,6 +39,7 @@ import numpy as np
 from tessera.compiler.emit.candidate import (
     Candidate,
     Tier,
+    on_candidate_registered,
     register_candidate,
     register_op_kind,
     verify_by_reference,
@@ -343,11 +344,33 @@ class SpectralIRFFTRegion:
         return np.fft.rfft(rng.standard_normal(self.n).astype(np.float32)).astype(np.complex64)
 
 
+def _probe_window(length: int, seed: int) -> np.ndarray:
+    """A deliberately NON-Hann probe window.
+
+    `stft(x, win, hop)` takes the window as DATA. An earlier version of these
+    regions manufactured `np.hanning(win)` internally and the candidates ignored
+    the operand, so a caller's rectangular or custom window was silently
+    computed as Hann -- and because the reference manufactured the same window,
+    verification compared wrong against wrong and passed.
+
+    So the probe window must be one no implementation would invent: asymmetric,
+    not a standard taper, and not separable from the signal. If a lane
+    manufactures its own, this fails immediately. Probing at a configuration
+    where a right and a wrong implementation agree is the specific gate failure
+    this whole thread keeps rediscovering.
+    """
+    rng = np.random.default_rng(seed + 9973)
+    return (0.25 + rng.random(length)).astype(np.float32)
+
+
 class SpectralSTFTRegion:
     """Framed short-time transform: `(frames, win//2 + 1)`.
 
     Composes over `rfft` per frame, matching `tessera.ops.stft`'s framing --
     `frames = (n - win) // hop + 1`, window applied before the transform.
+
+    `win` here is the window LENGTH, which is a shape parameter the plan needs.
+    The window VALUES are an operand and travel with the call.
     """
 
     def __init__(self, n: int, win: int, hop: int):
@@ -357,18 +380,16 @@ class SpectralSTFTRegion:
     def frames(self) -> int:
         return max(1, (self.n - self.win) // self.hop + 1)
 
-    def window(self) -> np.ndarray:
-        return np.hanning(self.win).astype(np.float32)
-
-    def reference(self, x: np.ndarray) -> np.ndarray:
+    def reference(self, x: np.ndarray, win: np.ndarray) -> np.ndarray:
         x = np.asarray(x, np.float32)
-        w = self.window()
+        w = np.asarray(win, np.float32)
         out = [np.fft.rfft(x[s:s + self.win] * w)
                for s in range(0, max(1, self.n - self.win + 1), self.hop)]
         return np.stack(out, axis=-2).astype(np.complex64)
 
-    def probe_input(self, seed: int) -> np.ndarray:
-        return np.random.default_rng(seed).standard_normal(self.n).astype(np.float32)
+    def probe_input(self, seed: int):
+        sig = np.random.default_rng(seed).standard_normal(self.n).astype(np.float32)
+        return sig, _probe_window(self.win, seed)
 
 
 class SpectralISTFTRegion:
@@ -386,12 +407,9 @@ class SpectralISTFTRegion:
     def samples(self) -> int:
         return (self.frames - 1) * self.hop + self.win
 
-    def window(self) -> np.ndarray:
-        return np.hanning(self.win).astype(np.float32)
-
-    def reference(self, xf: np.ndarray) -> np.ndarray:
+    def reference(self, xf: np.ndarray, win: np.ndarray) -> np.ndarray:
         xf = np.asarray(xf, np.complex64)
-        w = self.window()
+        w = np.asarray(win, np.float32)
         out = np.zeros(self.samples, np.float64)
         weight = np.zeros_like(out)
         for i in range(self.frames):
@@ -401,13 +419,14 @@ class SpectralISTFTRegion:
             weight[s:s + self.win] += w * w
         return (out / np.maximum(weight, 1e-12)).astype(np.float32)
 
-    def probe_input(self, seed: int) -> np.ndarray:
+    def probe_input(self, seed: int):
         rng = np.random.default_rng(seed)
         sig = rng.standard_normal(self.samples).astype(np.float32)
-        w = self.window()
-        return np.stack(
+        w = _probe_window(self.win, seed)
+        spec = np.stack(
             [np.fft.rfft(sig[i * self.hop:i * self.hop + self.win] * w)
              for i in range(self.frames)], axis=-2).astype(np.complex64)
+        return spec, w
 
 
 class SpectralFilterRegion:
@@ -443,25 +462,26 @@ def _fp32_budget(n: int, atol: float) -> float:
     return max(atol, 1e-4 * max(1, n))
 
 
-def _verify_unary(candidate: Candidate, region: Any, *, atol: float = 1e-3,
-                  seed: int = 0) -> bool:
-    x = region.probe_input(seed)
-    return verify_by_reference(candidate, region, (x,), region.reference(x),
+def _verify_region(candidate: Candidate, region: Any, *, atol: float = 1e-3,
+                   seed: int = 0) -> bool:
+    """Verify against the region's own reference, whatever its operand arity.
+
+    The arity comes from `probe_input`: a tuple means several operands. One
+    verifier rather than a per-arity family, because the arity is a property of
+    the region and splitting it invites the two from drifting -- which is how
+    `stft`'s window operand went unverified in the first place.
+    """
+    probe = region.probe_input(seed)
+    args = probe if isinstance(probe, tuple) else (probe,)
+    return verify_by_reference(candidate, region, args, region.reference(*args),
                                atol=_fp32_budget(getattr(region, "n", 1), atol))
 
 
-def _verify_binary(candidate: Candidate, region: Any, *, atol: float = 1e-3,
-                   seed: int = 0) -> bool:
-    xf, hf = region.probe_input(seed)
-    return verify_by_reference(candidate, region, (xf, hf),
-                               region.reference(xf, hf), atol=atol)
-
-
-register_op_kind(OP_SPECTRAL_RFFT, _verify_unary)
-register_op_kind(OP_SPECTRAL_IRFFT, _verify_unary)
-register_op_kind(OP_SPECTRAL_STFT, _verify_unary)
-register_op_kind(OP_SPECTRAL_ISTFT, _verify_unary)
-register_op_kind(OP_SPECTRAL_FILTER, _verify_binary)
+register_op_kind(OP_SPECTRAL_RFFT, _verify_region)
+register_op_kind(OP_SPECTRAL_IRFFT, _verify_region)
+register_op_kind(OP_SPECTRAL_STFT, _verify_region)
+register_op_kind(OP_SPECTRAL_ISTFT, _verify_region)
+register_op_kind(OP_SPECTRAL_FILTER, _verify_region)
 
 
 # --- composed candidates -----------------------------------------------------
@@ -559,13 +579,13 @@ class STFTCandidate(_ComposedSpectralCandidate):
     op = OP_SPECTRAL_STFT
     inner_len_attr = "win"
 
-    def run(self, region: SpectralSTFTRegion, x: np.ndarray, *a: Any,
-            **k: Any) -> tuple[Any, str]:
+    def run(self, region: SpectralSTFTRegion, x: np.ndarray,
+            win: np.ndarray, *a: Any, **k: Any) -> tuple[Any, str]:
         if not self.applies_to(region):
-            return region.reference(x), "reference"
+            return region.reference(x, win), "reference"
         try:
             sig = np.asarray(x, np.float32)
-            w = region.window()
+            w = np.asarray(win, np.float32)
             inner = SpectralRFFTRegion(region.win)
             rfft = RFFTCandidate()
             rfft.target = self.target
@@ -573,12 +593,12 @@ class STFTCandidate(_ComposedSpectralCandidate):
             for start in range(0, max(1, region.n - region.win + 1), region.hop):
                 out, lane = rfft.run(inner, sig[start:start + region.win] * w)
                 if lane == "reference":
-                    return region.reference(x), "reference"
+                    return region.reference(x, win), "reference"
                 lane_seen = lane
                 frames.append(np.asarray(out, np.complex64))
             return np.stack(frames, axis=-2), f"{lane_seen}+stft"
         except Exception:
-            return region.reference(x), "reference"
+            return region.reference(x, win), "reference"
 
 
 class ISTFTCandidate(_ComposedSpectralCandidate):
@@ -592,13 +612,13 @@ class ISTFTCandidate(_ComposedSpectralCandidate):
     op = OP_SPECTRAL_ISTFT
     inner_len_attr = "win"
 
-    def run(self, region: SpectralISTFTRegion, xf: np.ndarray, *a: Any,
-            **k: Any) -> tuple[Any, str]:
+    def run(self, region: SpectralISTFTRegion, xf: np.ndarray,
+            win: np.ndarray, *a: Any, **k: Any) -> tuple[Any, str]:
         if not self.applies_to(region):
-            return region.reference(xf), "reference"
+            return region.reference(xf, win), "reference"
         try:
             spec = np.asarray(xf, np.complex64)
-            w = region.window()
+            w = np.asarray(win, np.float32)
             inner = SpectralIRFFTRegion(region.win)
             irfft = IRFFTCandidate()
             irfft.target = self.target
@@ -608,7 +628,7 @@ class ISTFTCandidate(_ComposedSpectralCandidate):
             for i in range(region.frames):
                 frame, lane = irfft.run(inner, spec[i])
                 if lane == "reference":
-                    return region.reference(xf), "reference"
+                    return region.reference(xf, win), "reference"
                 lane_seen = lane
                 start = i * region.hop
                 out[start:start + region.win] += np.asarray(frame, np.float64) * w
@@ -616,7 +636,7 @@ class ISTFTCandidate(_ComposedSpectralCandidate):
             return ((out / np.maximum(weight, 1e-12)).astype(np.float32),
                     f"{lane_seen}+istft")
         except Exception:
-            return region.reference(xf), "reference"
+            return region.reference(xf, win), "reference"
 
 
 class SpectralFilterCandidate(Candidate):
@@ -638,26 +658,43 @@ class SpectralFilterCandidate(Candidate):
             return region.reference(xf, hf), "reference"
 
 
-def _register_composed_lanes() -> None:
-    """Register the composed ops for every target that has an FFT lane.
+def _compose_for_target(target: str) -> None:
+    """Attach the five composed ops to one target's FFT lane."""
+    for cls in (RFFTCandidate, IRFFTCandidate, STFTCandidate, ISTFTCandidate):
+        cand = cls()
+        cand.target = target
+        cand.name = f"{target}_{cls.op.removeprefix('spectral_')}"
+        register_candidate(cand)
+    filt = SpectralFilterCandidate()
+    filt.target = target
+    filt.name = f"{target}_spectral_filter"
+    register_candidate(filt)
 
-    Driven off the FFT registry rather than a hard-coded target list, so a new
-    `spectral_fft` candidate (the written-but-unregistered NVIDIA `.cu`, or an
-    Apple lane) brings all four composed ops with it automatically.
+
+def register_composed_lanes() -> None:
+    """Attach the composed ops to every target that currently has an FFT lane.
+
+    IDEMPOTENT and re-runnable, which is the whole point. An earlier version ran
+    once at import and snapshotted the registry, so a `spectral_fft` candidate
+    registered LATER -- exactly the NVIDIA/Apple extension path this design
+    advertises -- silently received none of the composed ops. The claim that
+    "one FFT lane per foundation lights up five TSOL ops" was true only for
+    lanes that happened to be imported first.
+
+    `register_candidate` replaces by name within a bucket, so calling this again
+    after a new FFT lane registers is safe and picks up the new target.
     """
     from tessera.compiler.emit.candidate import _CANDIDATES
 
-    targets = {t for (t, op) in _CANDIDATES if op == OP_SPECTRAL_FFT}
-    for target in sorted(targets):
-        for cls in (RFFTCandidate, IRFFTCandidate, STFTCandidate, ISTFTCandidate):
-            cand = cls()
-            cand.target = target
-            cand.name = f"{target}_{cls.op.removeprefix('spectral_')}"
-            register_candidate(cand)
-        filt = SpectralFilterCandidate()
-        filt.target = target
-        filt.name = f"{target}_spectral_filter"
-        register_candidate(filt)
+    for target in sorted({t for (t, op) in _CANDIDATES if op == OP_SPECTRAL_FFT}):
+        _compose_for_target(target)
 
 
-_register_composed_lanes()
+def _on_registered(target: str, op: str) -> None:
+    """Compose as soon as a target gains an FFT lane, whenever that happens."""
+    if op == OP_SPECTRAL_FFT:
+        _compose_for_target(target)
+
+
+register_composed_lanes()
+on_candidate_registered(_on_registered)

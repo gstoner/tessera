@@ -717,6 +717,21 @@ OP_SHAPE_RULE: dict = {
         "js_divergence", "contrastive_divergence", "persistent_cd",
         "ddpm_noise_pred", "score_matching", "vlb")},
 
+    # ── Probed at f32 / bf16 / fp16; several ignored the input dtype ─────
+    # These returned float64 for EVERY input dtype -- f32, bf16 and fp16 alike.
+    # They are unclassified only in the sense that nobody had looked; declaring
+    # the rule also FIXES them, because the storage-dtype enforcement then
+    # computes at f32 and stores back at the operand's dtype.
+    **{f"tessera.loss.{n}": "reduce_all" for n in ("z_loss", "load_balance_loss")},
+    "tessera.rl.ppo_policy_loss": "reduce_all",
+    "tessera.rl.normalize_group_advantages": "same_as_first",
+    # sigmoid_safe was inconsistent: f32 for a bf16 input but f16 for an f16
+    # input. Declaring it makes the behavior uniform instead of accidental.
+    "tessera.sigmoid_safe": "same_as_first",
+    "tessera.dct": "same_as_first",
+    # Shape-reducing, dtype-preserving.
+    "tessera.ebm_self_verify": "reduce_trailing",
+
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
     # shapes scale with the mesh, so declaring from that measurement would bake

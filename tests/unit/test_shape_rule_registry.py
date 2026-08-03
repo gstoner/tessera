@@ -38,7 +38,7 @@ from tessera.compiler.op_catalog import (
 
 #: Ratchet. May shrink, never grow. Driving it to zero is what closes W1's
 #: "no op reaches the `operand_types[0]` fallback".
-MAX_UNCLASSIFIED = 113
+MAX_UNCLASSIFIED = 106
 
 
 def test_declared_rule_names_match_implementations():
@@ -231,10 +231,16 @@ def test_declared_rules_hold_at_reduced_precision():
     does NOT follow NumPy's weak-scalar promotion, so `x * 0.5` silently yields
     float32.
 
-    fp16 is deliberately not probed here: measured against this same op set it
-    caught nothing bf16 did not (bf16 is a strict superset for *propagation*).
-    fp16's distinct value is RANGE -- its max is 6.55e4 versus bf16's 3.39e38 --
-    which belongs in a numerics/overflow gate, not a dtype-propagation one.
+    All THREE production dtypes are probed. fp16 was originally excluded on the
+    grounds that bf16 caught a strict superset for *propagation* -- true at the
+    time, and too narrow a conclusion. Several ops ignored the input dtype
+    entirely and returned f64 for f32, bf16 and fp16 alike, and f32 is a
+    production dtype rather than an oracle: a wrapper that only handled reduced
+    precision left f32 callers still getting f64. Probing all three is what made
+    that visible.
+
+    fp64 remains the oracle and is not asserted here; its range/precision
+    hazards live in test_fp16_range_sensitivity.py.
     """
     import ml_dtypes
 
@@ -256,16 +262,24 @@ def test_declared_rules_hold_at_reduced_precision():
             fn = getattr(ops, spec.public_name, None)
             if fn is None:
                 continue
+            probes = (
+                ("f32", np.float32, np.dtype(np.float32)),
+                ("bf16", bf16, np.dtype(bf16)),
+                ("fp16", np.float16, np.dtype(np.float16)),
+            )
             try:
-                got_f32 = np.asarray(fn(sample.astype(np.float32))).dtype
-                got_bf16 = np.asarray(fn(sample.astype(bf16))).dtype
+                observed = [
+                    (label, np.asarray(fn(sample.astype(dt))).dtype, expected)
+                    for label, dt, expected in probes
+                ]
             except Exception:
                 continue
             checked += 1
-            if got_f32 != np.float32:
-                failures.append(f"{spec.public_name}: f32 in -> {got_f32}")
-            if got_bf16 != np.dtype(bf16):
-                failures.append(f"{spec.public_name}: bf16 in -> {got_bf16}")
+            for label, got, expected in observed:
+                if got != expected:
+                    failures.append(
+                        f"{spec.public_name}: {label} in -> {got}"
+                    )
 
     assert checked > 40, f"only {checked} ops probed; the sweep likely broke"
     assert not failures, (

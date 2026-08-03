@@ -5089,14 +5089,26 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
         @functools.wraps(fn)
         def wrapped(*args, **kwargs):
             want = _storage_dtype(args[0]) if args else None
-            if want is None or not _is_reduced(want):
+            if want is None:
                 return fn(*args, **kwargs)
-            # Compute the whole op at f32 -- every reduced-precision operand,
-            # not just the first, or a mixed call would still overflow.
-            out = fn(
-                *[_promote(a) for a in args],
-                **{k: _promote(v) for k, v in kwargs.items()},
-            )
+
+            # Two SEPARATE decisions. Conflating them left f32 broken: an early
+            # return for non-reduced inputs skipped the store-back, so ops that
+            # widen to f64 kept doing it for f32 callers -- and f32 is very much
+            # a production dtype, not just an oracle.
+            #
+            #   1. PROMOTE inputs only when they are narrower than the compute
+            #      width, so the op's internals never run at fp16/bf16.
+            #   2. STORE BACK whenever the result widened, regardless of the
+            #      input's width.
+            if _is_reduced(want):
+                out = fn(
+                    *[_promote(a) for a in args],
+                    **{k: _promote(v) for k, v in kwargs.items()},
+                )
+            else:
+                out = fn(*args, **kwargs)
+
             if not isinstance(out, (_np.ndarray, _np.generic)):
                 return out
             if _is_float_storage(out.dtype) and out.dtype != want:

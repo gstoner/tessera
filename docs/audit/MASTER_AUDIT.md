@@ -182,7 +182,15 @@ linked platform audits and [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md
 
 ## Open Action Register
 
-### PA — Compiler architecture remediation *(proposal — not adopted; no code landed)*
+### PA — Compiler architecture remediation *(partially landed)*
+
+> **Status correction (2026-08-03).** This heading read "proposal — not adopted;
+> no code landed" until now, which is no longer true: **Wave 0 is complete and
+> W1.2 is complete**, with the six governance decisions (#21a, #10a, #29, #30,
+> #31, #32) adopted into `CLAUDE.md`. W1.1 is partially done, and W1.1b / W1.3 /
+> W1.4 are untouched. Per-item state is in
+> [`compiler/INTEGRATED_COMPILER_PLAN.md`](compiler/INTEGRATED_COMPILER_PLAN.md);
+> do not read this section's prose as a snapshot.
 
 A cross-cutting program, distinct in kind from P0/P1/P2. Those close **proof**
 gaps (does this op execute and match its oracle on this target?). This one closes
@@ -250,6 +258,54 @@ on the ROCm box *before* scheduling their consolidation, not after), the `emit/`
 per-backend internals, the spectral/TPP solver families, the collectives and
 neighbors dialects, and RubinCPX. Absence from the program is not a clean bill of
 health.
+
+### PB — Declaration correctness *(unplanned; landed 2026-08-02/03)*
+
+A second cross-cutting program, orthogonal to PA and to P0/P1/P2. It was not
+planned: it grew out of W1.2 when closing the shape-rule registry kept
+surfacing the same defect one level down, and it was directed session-by-session
+rather than scheduled. It is recorded here because it landed, and because
+`git log` otherwise disagrees with this document — see the label note below.
+
+**Thesis.** Where PA's finding is *declared but not consumed*, PB's is
+**declared and consumed, but wrong** — and specifically wrong in a way the
+guarding gate could not see. Every item below is an instance of one shape: a
+contract stated in one place, enforced by machinery in another, and a check that
+skipped exactly the configuration where the two disagreed.
+
+| Item | Landed | Defect closed |
+|---|---|---|
+| PB-1 | #492, #493 | The shape-rule registry (plan item **W1.2**): 303 declared / 6 deliberately undeclared / **0 unexamined**, ratchet closed to 0. On the way: reduced-precision ops computed at f32 instead of masking dtype; `cos(int8)→f16` vs `cos(int32)→f64` width-dependence removed; keyword tensor operands emitted as string attributes holding SSA names; the `!tessera.kv_cache` handle unreachable from Python though declared in ODS. |
+| PB-2 | #494 | An op's dtype set derives from its **numeric policy ∩ target**, not a blanket `("fp32","f32")`. `gelu(bf16)` was rejected on five targets and accepted on one, decided by how many rows each target happened to enumerate. Policy coverage 59 → 313 via lowering-kind defaults. f64 admitted exactly where the algorithm declares `accum="fp64"`. |
+| PB-3 | #494 | Reachability 24 → 5. **19 of the 24 unreachable catalog ops were the complex family** — several with Apple GPU MSL kernels — with no `tessera.ops` entry point, so no `@jit` body could emit them. |
+| PB-4 | #495 | TSOL spectral family composed over the shipped FFT: `rfft`/`irfft`/`stft`/`istft` arbitrate on CPU and gfx1151. Found the shipped Stockham kernels returning **silently wrong answers at non-power-of-two lengths** under their own lane name. |
+| PB-5 | #496 | Mixed-radix + Bluestein, with planning shared across the three backends (`TargetHooks/Common/FFTPlan.h`). All lengths verified: 63 sizes on CPU, 48 on live gfx1151. |
+
+**The recurring lesson, stated once.** Five separate gates in this program were
+green while the thing they guarded was broken, each because the gate only ever
+measured a configuration where the wrong answer and the right answer coincide:
+`ebm_self_verify` probed with two same-shaped tensors; the collectives probed at
+`world_size=1`; `nonzero`'s tuple result was silently stacked by `np.asarray`;
+the FFT verifier only ran at power-of-two sizes; and the diagnostic-registry
+scanner did not know the `GRAPH_IR_*` prefix, so it reported compliance for a
+family with 17 unregistered codes. **A behavioural gate should probe at least
+one configuration where a wrong implementation and a right one differ** — that
+is the standing rule this program earned, and it is cheaper to apply than any of
+the individual fixes.
+
+**Label note — `git log` does not match the plan.** Commits in #492–#496 carry
+sub-wave labels `W1.3`, `W1.4`, `W2.1`–`W2.4`. Those were **local numbering for
+this thread and are not plan items**; the plan's own W1.3, W1.4 and W2.x are
+different, untouched work (the plan's W2.4, for instance, is "collapse six
+`*LegalityPass` → ODS constraints", unrelated to the FFT commit that shares the
+label). The mapping above is authoritative. Merged commit messages are left
+as-is rather than rewritten — the history is public and the ledger is the place
+to reconcile it.
+
+**Not covered.** PB closed contract *correctness* for the op registry, the dtype
+capability table, and the spectral family. It did not touch the analysis layer
+(PA's W2), the Tile IR typing (W1.1), or `backend_kernel` proof for the other 46
+TSOL ops. Absence from this ledger is not a clean bill of health.
 
 ### P0 — Close the remaining exact-target proof gaps
 

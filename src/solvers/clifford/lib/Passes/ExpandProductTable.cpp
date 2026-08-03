@@ -41,6 +41,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include <cstdint>
+#include <set>
 #include <vector>
 
 using namespace mlir;
@@ -50,6 +51,26 @@ namespace {
 
 constexpr StringRef kGeoProductOpName = "tessera_clifford.geo_product";
 constexpr StringRef kOutputGradesAttr = "tessera.clifford.output_grades";
+constexpr StringRef kLhsGradesAttr = "tessera.clifford.input_grades_lhs";
+constexpr StringRef kRhsGradesAttr = "tessera.clifford.input_grades_rhs";
+
+// Per-blade "can be non-zero" mask from a declared grade set.  Blade index is
+// the basis-blade bitmask, so its grade is popcount(index).  Returns all-true
+// when the attribute is absent -- an undeclared operand is unrestricted, not
+// empty, and getting that backwards would silently emit a zero product.
+static std::vector<bool> bladeMaskFor(Operation *op, StringRef attrName,
+                                      int64_t dim) {
+  std::vector<bool> mask(dim, true);
+  auto gradesAttr = op->getAttrOfType<ArrayAttr>(attrName);
+  if (!gradesAttr) return mask;
+  std::set<int64_t> wanted;
+  for (Attribute g : gradesAttr)
+    if (auto gi = dyn_cast<IntegerAttr>(g)) wanted.insert(gi.getInt());
+  if (wanted.empty()) return mask;
+  for (int64_t i = 0; i < dim; ++i)
+    mask[i] = wanted.count(tessera::clifford::gradeOfMask(i)) > 0;
+  return mask;
+}
 constexpr StringRef kExpandedMarker = "tessera.clifford.expanded";
 
 struct ExpandProductTablePattern : public RewritePattern {
@@ -109,6 +130,14 @@ struct ExpandProductTablePattern : public RewritePattern {
       }
     }
 
+    // W1.4 -- operand grade restrictions (set by GradeFusion's input pattern).
+    // `output_grades` prunes by which results are wanted; these prune by which
+    // inputs can be non-zero.  The two compose: an input restriction narrows
+    // which products exist at all, an output restriction narrows which of them
+    // are kept.
+    const std::vector<bool> lhsMask = bladeMaskFor(op, kLhsGradesAttr, dim);
+    const std::vector<bool> rhsMask = bladeMaskFor(op, kRhsGradesAttr, dim);
+
     Location loc = op->getLoc();
 
     // Pre-extract all lhs and rhs coefficients as scalars.
@@ -127,7 +156,9 @@ struct ExpandProductTablePattern : public RewritePattern {
 
     std::vector<Value> outCoeffs(dim, zero);
     for (int64_t i = 0; i < dim; ++i) {
+      if (!lhsMask[i]) continue;
       for (int64_t j = 0; j < dim; ++j) {
+        if (!rhsMask[j]) continue;
         auto entry = table[i][j];
         if (entry.sign == 0) continue;
         int outGrade = tessera::clifford::gradeOfMask(entry.result_mask);

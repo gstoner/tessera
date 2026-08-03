@@ -198,6 +198,8 @@ Per-phase deliverables and the open-work priority queue live in
 
 10. **Recompute insertion is budget-guided.** `InsertRecomputePass` uses `--memory-budget-mb` and a greedy live-set scan. Only pure ops qualify for recomputation.
 
+10a. **An eligibility-marking pass ships a negative fixture.** (Adopted 2026-08-02, W0.8.) Any pass that annotates work as rematerializable, fusable, or pipelineable must gate on a demand/liveness analysis and ship **at least one lit fixture whose correct output is _no annotation_** (`CHECK-NOT`). Marking everything is not a conservative default — it is an unmeasured cost that a downstream pass will believe. Derived from `EBMCheckpointInnerLoop` marking every step of every loop rematerializable with no analysis, contradicting #10's own live-set discipline.
+
 11. **Bayesian autotuner warm-starts from SQLite cache.** Key = `hash(device_class + kernel_id + config)`. v2 schema adds Optuna trial IDs.
 
 12. **Benchmark JSON schema is stable.** Fields: `backend`, `op`, `shape`, `dtype`, `latency_ms`, `tflops`, `memory_bw_gb_s`, `device`, `tessera_version`. `tools/roofline_tools/` reads this directly — do not change the schema.
@@ -221,9 +223,15 @@ Per-phase deliverables and the open-work priority queue live in
 
 19. **Backends expose hardware-free Target IR before hardware-specific lowering.** Each backend defines an ODS dialect of abstract target ops (`tessera_rocm.mfma`, `tessera_apple.cpu.accelerate_gemm`, `tessera_apple.gpu.metal_kernel`) between Tile IR and final hardware emission. The hardware-free layer is what makes backends lit-testable; validated by `test_target_ir_contract.py`.
 
+    **`tessera_x86` now exists — x86 complies (built 2026-08-02, W0.10).** It was previously the one backend with no Target IR dialect at all: `TileToX86Pass` lowered Tile IR to 21 `func::CallOp`s into a hand-written C shim, and the Python emitter named a `tessera_x86.func` op no dialect defined. **No carve-out was granted.** The dialect lives at `src/compiler/codegen/tessera_x86_backend/include/TesseraX86/IR/`, is registered in `tessera-opt`, and splits into value-carrying ops (`amx_tile_load`/`amx_tile_zero`/`amx_dpbf16ps`/`amx_dpbusd`/`amx_tile_store` over a real `!tessera_x86.tile` type, so the verifier rejects a tile dot-product whose operands never came from a tile load) and directives (`avx512_gemm_microkernel`, `pack_b_panel`, `elementwise`, `kernel`, `kv_cache_read`, `unsupported`). `abi_call` **models the C-shim boundary instead of hiding it**, so Decision #28's arbiter can tell compiler-generated work from delegated work. Fixtures: `tests/tessera-ir/phase2/x86_target_ir{,_invalid}.mlir` — including a negative case, since a dialect that only ever accepts proves nothing. **Remaining follow-on is `x86vector.*` (AVX-512) lowering only; the AMX half is optional** — per project direction (2026-08-02) AMX is expected to be superseded by the ACE matrix instructions jointly agreed by Intel and AMD, so the AMX ops stay as the IR-level contract without an `amx.*` lowering. That also removes the hardware blocker: AVX-512 runs on the primary box, while no fleet machine has AMX.
+
+    **Decision #19 is now checked by MLIR, not by substring (W0.9).** `test_target_ir_contract.py` keeps its `in`-assertions as smoke coverage and adds a real parse + dialect-load + verifier run over every emitter and every committed golden. That gate immediately found that **no** Python-emitted Target IR was valid MLIR — undialect-prefixed module attributes, an invented `<dialect>.func` container, ops emitted with signatures their ODS rejects, and five op names (`tessera_rocm.elementwise`, `tessera_rocm.kv_cache_read`, `tessera_rocm.msa_block_sparse`, `tessera_apple.cpu.kv_cache_read`, `tessera_apple.cpu.moe_solver`) that no dialect declared. All fixed. The portable `cpu` reference lane is closed too: it emitted `tessera.cpu.<source-op>`, one name per Graph IR op, which could never be enumerated in ODS — and that name was redundant, since the CPU verifier already requires a `source` attribute. It now emits the single declared `tessera.cpu.reference` node. **No exclusions remain**: every target whose dialect the build compiles (`cpu`, `x86`, `rocm`, `apple_cpu`, `apple_gpu`) passes a real parse + verify; NVIDIA skips only because its dialect is off by default.
+
 20. **`@jit(target=...)` accepts both `GPUTargetProfile` and string aliases.** Valid strings: `"rocm"`, `"apple_cpu"`, `"apple_gpu"`. Strings dispatch through `matmul_pipeline.py` to `tessera-lower-to-{target}`. Do not invent new string aliases without adding the corresponding pipeline.
 
 21. **Unsupported lowering must emit a stable diagnostic.** When a backend cannot lower an op (e.g., KV-cache on a target without it), emit a diagnostic naming the op and the target — never silently no-op or fall through. See the KV-cache → target lowering for the canonical pattern.
+
+21a. **Semantic keys never default.** (Adopted 2026-08-02, W0.8.) An attribute that selects *semantics* fails **closed** on absence — emit a diagnostic and stop; it may never be silently defaulted. An attribute that selects *performance* may fall back, but must say so with a diagnostic. Semantic keys: `manifold`, `algebra`, `math_mode`, `rounding_mode`, `distribution`, `dtype`. Performance keys: tile sizes, stage depth, `auto_batch`, checkpoint budget. Derived from `EBMCanonicalize` defaulting a missing `manifold` to `"euclidean"` — a first-order-correct Euclidean fallback converges and reports a **wrong** result rather than an error. Corollaries: no `operand_types[0]` shape fallback, and no unvalidated `StrAttr` where an `EnumAttr` states the legal set.
 
 22. **Doc surface is broader than IR/runtime surface — check `docs/guides/` and `docs/programming_guide/` before claiming a feature is missing.** APIs like `tessera.debug.check_grad`/`check_determinism`, replay manifests, and `tessera-mlir` compile-artifact mode are documented and largely implemented but easy to overlook in the source tour.
 
@@ -289,6 +297,14 @@ Per-phase deliverables and the open-work priority queue live in
 
 28. **The forward compiler direction is the three-tier / measured-arbiter model — leads set the ceiling, the generic framework raises the floor.** (North star, 2026-07-02.) Kernels come from three tiers: **(1)** a generic synthesizer (arch-agnostic region-IR + F4 oracle + synth→compile→cache→launch loop), **(2)** a per-arch codegen plugin (`KernelEmitter`/`TargetPlugin`: MSL / PTX / AMDGCN / C-LLVM), **(3)** hand-tuned kernels. A **measured, accuracy-budgeted arbiter** picks the fastest *in-budget* candidate per `(op, shape-bucket, dtype, target)`. **ROCm and CUDA are the lead performance targets: shared infra must never cap their ceiling** — hand-emitted `wgmma`/`mma.sync`/MFMA/WMMA stay first-class arbiter candidates, displaced only when a compiled kernel is both faster and in accuracy budget. The synthesizer/plugin interface is **symbolic-dim-aware from day one** (`static | bucket | dynamic` policy; first impls bucket-specialize) so dynamic shapes never force an API break. Full model: [`docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md`](docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md); execution: [`docs/audit/compiler/COMPILER_REFACTOR_PLAN.md`](docs/audit/compiler/COMPILER_REFACTOR_PLAN.md). These are *direction*; MASTER_AUDIT + generated dashboards stay status truth.
 
+29. **A declaration must have a consumer.** (Adopted 2026-08-02, W0.8.) If the compiler declares metadata — an ODS type or attribute, a `primitive_coverage` axis, a coverage claim — a **named pass or code path must consume it**, or the declaration is deleted. A declaration with no consumer is worse than a missing one: it reads as a closed contract in review and in the dashboards while carrying nothing. Drift-gated by `tests/unit/test_governance_declarations.py`. Derived from seven independent instances (`manifold` reaching no backend; `MultivectorSpec.grades` ignored by `geometric_product`; a closed `batching_rule` axis whose `vmap` is a Python for-loop; a closed `shape_rule` axis whose inference is a five-case if-chain; nine declared `!tile.*` types alongside 70 `Variadic<AnyType>`; `numeric_policy` with no carrier below Graph IR; `TilingInterface` unused by `fusion_core.py`).
+
+30. **Derive, don't ask.** (Adopted 2026-08-02, W0.8.) A pass that needs a program fact — purity, activity, liveness, fusion legality, shape equality, sharding — **queries the analysis layer**; it does not accept the fact syntactically and it does not hand-roll an eighth bespoke walker. New ad-hoc analyses are rejected in review. Told-not-derived facts are wrong at the edges and **fail open**, which is how `EffectLattice` name-matching lets an aliased RNG call pass `@jit(deterministic=True)`. Until the W2.1 dataflow framework exists, a pass that cannot derive a fact must fail closed (treat unprovable as unsafe), not assume the permissive answer.
+
+31. **One implementation per boundary.** (Adopted 2026-08-02, W0.8.) Each IR level boundary has exactly **one production lowering**. A second implementation is either (a) a **declared oracle** with a differential test against the production path, or (b) deleted. Same rule for frontends and AD engines. Drift-gated by `tests/unit/test_governance_declarations.py`. **Ordering caveat:** do not collapse a duplication before the surviving path can carry what the deleted one carried — that is the documented way this fails; see the W0→W1→W2→W3 ordering in `INTEGRATED_COMPILER_PLAN.md`.
+
+32. **Information loss across a level boundary must be declared.** (Adopted 2026-08-02, W0.8.) A lowering either carries each Decision #15a attribute (`layout`, `numeric_policy`, `distribution`, …) forward, or **records a named reason it dropped it**. A boundary verifier fails on silent loss. Derived from `numeric_policy` vanishing above the MMA — the accumulator contract is stated at Graph IR and no longer exists by the time codegen picks an instruction.
+
 ---
 
 ## Key Design Contracts
@@ -315,7 +331,7 @@ X    = tessera.array.from_domain(D, dtype="bf16", distribution=dist)
 Gate all of these behind `target_profile.isa >= ISA.SM_90`:
 
 - `tessera.schedule.warp` role assignments (FA-4 warp specialization)
-- `tessera.tile.mma.tcgen05` (Blackwell TMEM MMA)
+- `tile.tcgen05.mma` (Blackwell TMEM MMA) — the mnemonic is `tcgen05.mma`, not `mma.tcgen05`; the latter spelling came from a parallel `tile` ODS deleted in W0.6 that nothing compiled
 - `tile.async_copy` / `tile.wait_async` stage indexing
 - `tessera.schedule.policy "persistent"` (persistent CTA scheduling)
 - `tessera.queue.{create, push, pop}` (tile queue dialect)
@@ -349,58 +365,90 @@ Heavy SuperBench / benchmark-contract tests are marked `slow` and excluded by de
 
 ---
 
-## Local Toolchain (Homebrew, off-venv)
+## Local Toolchain
 
-Everything needed for build / lint / typecheck / lit / unit-test is on Homebrew
-on this Mac under `/opt/homebrew/bin/`: `python3` (3.14.6), `ninja`, `cmake`,
-`pytest`, `mypy`, `ruff`, `black`, `isort`, `flake8`, `lit`. Run the Python flow
-directly with `python3 -m …` — no venv. `numpy`, `scipy`, `transformers`,
-`ml_dtypes` are under `/opt/homebrew/lib/python3.14/site-packages/`. **`torch` is
-not installed here** — anything importing it must `pytest.importorskip`.
+**Core compiler work is driven on the Strix Halo / Ubuntu box (decided
+2026-08-02)** — it is faster, has more memory, and is the only machine in the
+fleet with an executing GPU lane, so compile-time contract work and its hardware
+gate live together. The Mac is retained for Apple-backend work, which cannot be
+retargeted. Fleet routing per work item:
+[`INTEGRATED_COMPILER_PLAN.md`](docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md) §6a.
+
+### Primary — Ubuntu 24.04 on Strix Halo (x86 + AMD ROCm)
+
+`AMD RYZEN AI MAX+ 395 w/ Radeon 8060S`, 32 threads, 62 GB RAM, Ubuntu 24.04.4
+under WSL2. `bash scripts/setup_ubuntu.sh` provisions matched LLVM/MLIR 23 from
+**apt.llvm.org**, the base build deps, and a project-local `.venv` — then
+`source .venv/bin/activate` and `export PYTHONPATH=python`. CMake LLVM lives at
+`/usr/lib/llvm-23/lib/cmake/{llvm,mlir}`; put `/usr/lib/llvm-23/bin` on `PATH`
+for `FileCheck` before running lit. TheRock ROCm **7.14** lives under
+`/opt/rocm/core` (→ `/opt/rocm-7.2.4/core-7.14`) —
+`-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON
+-DCMAKE_PREFIX_PATH=/opt/rocm/core`. The venv caps `numpy<2.2` (numpy ≥2.2 stubs
+break the `python_version=3.10` mypy ratchet).
+
+Two WSL specifics that bite: the GPU node is **`/dev/dxg`, not `/dev/kfd`** — do
+not test for `/dev/kfd` to decide whether ROCm can execute here; and `rocminfo`
+reports `gfx1151` natively. gfx1151 kernel execution is **live on this box**, not
+Phase-H gated. **`torch` is not installed** — anything importing it must
+`pytest.importorskip`.
+
+CPU note: Zen 5 has **AVX-512 but no AMX** (AMX is Intel-only). Native x86
+execution proof on this box means AVX-512; the AMX device lane
+(`tests/device/x86/`, `scripts/run_x86_amx_release_gate.sh`) has no hardware in
+the current fleet and stays capability-gated.
+
+### Apple only — Mac M1 Max (Homebrew, off-venv)
+
+Use for the Apple backend and Apple lit fixtures. Everything needed for build /
+lint / typecheck / lit / unit-test is on Homebrew under `/opt/homebrew/bin/`:
+`python3` (3.14.6), `ninja`, `cmake`, `pytest`, `mypy`, `ruff`, `black`, `isort`,
+`flake8`, `lit`. Run the Python flow directly with `python3 -m …` — no venv.
+`numpy`, `scipy`, `transformers`, `ml_dtypes` are under
+`/opt/homebrew/lib/python3.14/site-packages/`. `torch` is not installed there
+either.
 
 **LLVM/MLIR 23 is a manual install at `/opt/homebrew/llvm-23.1.0-rc1/`**
 (`llvm-config --version` → `23.1.0git`). There is **no `llvm@23` Homebrew
-formula** on this machine — `brew install llvm@23` does not produce
+formula** on that machine — `brew install llvm@23` does not produce
 `/opt/homebrew/opt/llvm@23/`, and Homebrew's own `llvm` keg is 22.1.8, which the
 build rejects. Point CMake at
 `/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/{llvm,mlir}`, and put
 `/opt/homebrew/llvm-23.1.0-rc1/bin` on `PATH` for `FileCheck` before running lit.
 
-### Ubuntu 24.04 (x86 + AMD ROCm 7.14)
-
-The same tree builds on Ubuntu 24.04. `bash scripts/setup_ubuntu.sh` provisions
-matched LLVM/MLIR 23 from **apt.llvm.org**, the base
-build deps, and a project-local `.venv` — then `source .venv/bin/activate` and
-`export PYTHONPATH=python`. CMake LLVM lives at `/usr/lib/llvm-23/lib/cmake/
-{llvm,mlir}`; TheRock ROCm **7.14** lives under `/opt/rocm/core`
-(`-DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON
--DCMAKE_PREFIX_PATH=/opt/rocm/core`). ROCm kernel
-execution stays hardware-gated (Phase H) until a GPU + `/dev/kfd` are present;
-the build and lit fixtures need no GPU. The venv caps `numpy<2.2` (numpy ≥2.2
-stubs break the `python_version=3.10` mypy ratchet). See `docs/GETTING_STARTED.md`
-for the full cross-platform matrix.
+See `docs/GETTING_STARTED.md` for the full cross-platform matrix.
 
 ---
 
 ## C++ Build
 
 ```bash
-# Canonical local configure — CPU + Apple backend against LLVM/MLIR 23 (Ninja)
+# Canonical configure — PRIMARY box (Ubuntu/Strix Halo), x86 + ROCm + solver dialects
+cmake -S . -B build -G Ninja \
+  -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm \
+  -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
+  -DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON \
+  -DCMAKE_PREFIX_PATH=/opt/rocm/core
+ninja -C build tessera-opt        # 32 threads; ~1-2 min cold
+
+# EBM / Clifford (GA) dialects are OFF by default — enable them or their passes
+# and lit fixtures silently do not build. Required for the W0 compiler work.
+cmake -S . -B build -G Ninja -DTESSERA_BUILD_EBM_BACKEND=ON -DTESSERA_BUILD_CLIFFORD_BACKEND=ON
+
+# Re-verify a C++ pass change end-to-end: rebuild → lit fixture + FileCheck → drift test
+export PATH=/usr/lib/llvm-23/bin:$PATH
+ninja -C build tessera-opt
+./build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/ga_ebm_graph_ops.mlir \
+  --allow-unregistered-dialect | FileCheck tests/tessera-ir/phase8/ga_ebm_graph_ops.mlir
+
+# Mac (Apple backend only) — LLVM/MLIR 23 lives under Homebrew there
 cmake -S . -B build -G Ninja \
   -DLLVM_DIR=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/llvm \
   -DMLIR_DIR=/opt/homebrew/llvm-23.1.0-rc1/lib/cmake/mlir \
   -DTESSERA_CPU_ONLY=ON -DTESSERA_BUILD_APPLE_BACKEND=ON
-ninja -C build tessera-opt        # ~150 targets, ~1-2 min cold
-
-# Re-verify a C++ pass change end-to-end: rebuild → lit fixture + FileCheck → drift test
-ninja -C build tessera-opt
-./build/tools/tessera-opt/tessera-opt tests/tessera-ir/phase8/apple_gpu_lowering.mlir \
-  -tessera-lower-to-apple_gpu --allow-unregistered-dialect | \
-  /opt/homebrew/llvm-23.1.0-rc1/bin/FileCheck tests/tessera-ir/phase8/apple_gpu_lowering.mlir
 
 # Other backend toggles (additive)
 cmake .. -DTESSERA_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda   # CUDA
-cmake .. -DTESSERA_ENABLE_HIP=ON  -DHIP_ROOT_DIR=/opt/rocm                  # ROCm
 cmake .. -DTESSERA_BUILD_RUBINCPX_BACKEND=ON                                # RubinCPX
 
 # Benchmarks (stable JSON schema, Decision #12)

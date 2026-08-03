@@ -12,7 +12,6 @@ set(PM_TD_INC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ir)
 # TableGen — one pair of .h.inc / .cpp.inc per dialect .td file
 # ------------------------------------------------------------------
 foreach(_td_rel
-    tile/TileMemoryOps
     cache/CacheOps
     schedule/ScheduleMeshPipelineOps
     moe/MoeOps
@@ -31,7 +30,7 @@ add_public_tablegen_target(TesseraPMTableGen)
 # PassPipelines compiler driver
 # ------------------------------------------------------------------
 add_library(TesseraPM
-    tools/tessera-opt/PassPipelinesPM11.cpp
+    lib/PMPasses.cpp
 )
 
 target_include_directories(TesseraPM

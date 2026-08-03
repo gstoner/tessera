@@ -623,3 +623,75 @@ class TestEndToEnd:
         run_once()
         second = x_p.grad.numpy()
         np.testing.assert_allclose(second, 2 * first)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# W0.4 — jacrev records the forward pass once and reuses the tape
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_jacrev_runs_forward_exactly_once():
+    """jacrev must record ONE forward pass and re-run backward per output dim.
+
+    Before W0.4, jacrev called `grad(loss_fn)` inside a loop over output
+    elements, so `fn` ran `out_size` times -- while its own docstring claimed
+    it used the `retain_graph=True` re-runnable tape. That machinery existed
+    in Tape.backward (its docstring even names jacrev as the motivating
+    caller) and was simply never wired up.
+
+    This locks the property, because a regression here is invisible: the
+    Jacobian stays numerically correct while the cost goes quadratic.
+    """
+    import numpy as np
+
+    from tessera import ops
+    from tessera.autodiff import jacrev
+
+    calls = {"n": 0}
+
+    def f(x):
+        calls["n"] += 1
+        return ops.mul(x, x)
+
+    x = np.array([1.0, 2.0, 3.0, 4.0])
+    jac = jacrev(f)(x)
+
+    assert calls["n"] == 1, (
+        f"jacrev ran the forward pass {calls['n']} times; it must record the "
+        "tape once and re-run backward per output element."
+    )
+    # d(x*x)/dx = 2x on the diagonal, zero off-diagonal.
+    np.testing.assert_allclose(np.diag(jac), 2 * x)
+    off_diagonal = jac - np.diag(np.diag(jac))
+    np.testing.assert_allclose(off_diagonal, np.zeros_like(jac), atol=1e-12)
+
+
+def test_jacrev_handles_outputs_the_tape_never_produced():
+    """PR #490 review (P1): `jacrev(lambda x: x)` must not raise.
+
+    Reusing a single tape (W0.4) removed an accidental shield: the previous
+    implementation wrapped `fn` in `sum(out * cotangent)` through `ops.*`, which
+    made the backward target tape-produced no matter what `fn` returned. With
+    one tape, an `fn` that returns an argument unchanged or returns a constant
+    has no tape entry owning the output, and `backward` raised.
+
+    Both cases have well-defined Jacobians and are resolved structurally.
+    """
+    import numpy as np
+
+    from tessera import ops
+    from tessera.autodiff import jacrev
+
+    x = np.array([1.0, 2.0, 3.0])
+
+    # d(x)/d(x) = I
+    np.testing.assert_allclose(jacrev(lambda v: v)(x), np.eye(3))
+
+    # A constant output does not depend on the input.
+    const = jacrev(lambda v: np.array([5.0, 6.0]))(np.array([1.0, 2.0]))
+    np.testing.assert_allclose(const, np.zeros((2, 2)))
+
+    # The ordinary tape-produced path is unaffected.
+    np.testing.assert_allclose(
+        np.diag(jacrev(lambda v: ops.mul(v, v))(x)), 2 * x
+    )

@@ -23,6 +23,9 @@ src/compiler/ir/TesseraOps.td,BinaryCrossEntropyLossBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,BinaryCrossEntropyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,BroadcastInDimOp,1,1,real
 src/compiler/ir/TesseraOps.td,BroadcastOp,1,1,real
+src/compiler/ir/TesseraOps.td,CPUMsaBlockSparseOp,1,1,real
+src/compiler/ir/TesseraOps.td,CPUProfilerProbeOp,1,1,real
+src/compiler/ir/TesseraOps.td,CPUReferenceOp,1,1,real
 src/compiler/ir/TesseraOps.td,CacheCommitOp,1,1,real
 src/compiler/ir/TesseraOps.td,CachePageLookupOp,1,1,real
 src/compiler/ir/TesseraOps.td,CacheRollbackOp,1,1,real

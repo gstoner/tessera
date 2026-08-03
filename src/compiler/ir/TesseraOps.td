@@ -2904,3 +2904,50 @@ def Tessera_TargetVerifyOp : Op<
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
+
+//===----------------------------------------------------------------------===//
+// Portable CPU reference lane (Decision #19 / W0.9 follow-up)
+//
+// The `cpu` target is the portable host *reference* path -- it lowers to numpy,
+// not to hardware -- and it was the last Target-IR lane whose emitted text was
+// not valid MLIR. The cause was its op naming: it minted one op per source op
+// (`tessera.cpu.matmul`, `tessera.cpu.softmax`, `tessera.cpu.layer_norm`, ...),
+// so the vocabulary grew with the Graph IR op set and could never be enumerated
+// in ODS the way a backend dialect is.
+//
+// That per-op name was pure redundancy: every one of those ops already carried
+// the originating op in a REQUIRED `source` attribute (the CPU verifier
+// enforces `source`, `result`, `ordinal`, `abi`). Collapsing to one generic
+// node loses nothing and makes the lane declarable -- and therefore checkable
+// by a real MLIR parse rather than a substring match.
+//===----------------------------------------------------------------------===//
+
+def Tessera_CPUReferenceOp : Op<Tessera_Dialect, "cpu.reference"> {
+  let summary = "One lowered op on the portable CPU reference lane";
+  let description = [{
+    The single generic node for the numpy reference path. `source` names the
+    originating Graph IR op (e.g. `"tessera.matmul"`), `result` the SSA name it
+    produced, `ordinal` its position, and `abi` the reference calling
+    convention. Replaces the former one-op-name-per-source-op scheme.
+  }];
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def Tessera_CPUProfilerProbeOp : Op<Tessera_Dialect, "cpu.profiler_probe"> {
+  let summary = "A profiler probe placed on the CPU reference lane";
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def Tessera_CPUMsaBlockSparseOp : Op<Tessera_Dialect, "cpu.msa_block_sparse"> {
+  let summary = "MSA KV-outer selected-block sparse attention on the CPU lane";
+  let description = [{
+    Kept as its own op rather than folded into `cpu.reference` because it
+    carries a distinct selected-block contract (`block_ids_layout`,
+    `gqa_group_size`, tile extents) that a generic reference node would not
+    describe.
+  }];
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}

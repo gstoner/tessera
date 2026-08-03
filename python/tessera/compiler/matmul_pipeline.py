@@ -605,8 +605,8 @@ def _render_target_ir(
             schedule_config=schedule_config,
         )
     lines = [
-        'module attributes {tessera.ir.level = "target", target = "cpu"} {',
-        '  "tessera.cpu.func"() ({',
+        'module attributes {tessera.ir.level = "target", tessera.target = "cpu"} {',
+        f'  func.func @{fn.name}() {{',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -614,7 +614,8 @@ def _render_target_ir(
             f'    "{_target_op_name(op_name)}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, abi = "numpy"}} : () -> ()'
         )
     lines.extend([
-        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        '    return',
+        '  }',
         "}",
     ])
     return "\n".join(lines)
@@ -639,15 +640,21 @@ def _render_object_target_ir(
 
 def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
-        'module attributes {tessera.ir.level = "target", target = "rocm", arch = "gfx90a"} {',
-        '  "tessera_rocm.func"() ({',
+        'module attributes {tessera.ir.level = "target", tessera.target = "rocm", tessera.arch = "gfx90a"} {',
+        f'  func.func @{fn.name}() {{',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
         if op_name in MATMUL_OPS:
-            lines.append(
-                f'    "tessera_rocm.mfma"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "gfx90a", shape = "m16n16k16", accum = "f32"}} : () -> ()'
-            )
+            # `mfma` declares (a, b, acc) -> res in TesseraROCMOps.td, so it
+            # must be emitted with that signature or the dialect's verifier
+            # rejects it. Fragment values are structural placeholders.
+            lines.extend([
+                f'    %mfma_a_{idx} = ub.poison : vector<16xf16>',
+                f'    %mfma_b_{idx} = ub.poison : vector<16xf16>',
+                f'    %mfma_acc_{idx} = ub.poison : vector<8xf32>',
+                f'    %mfma_res_{idx} = "tessera_rocm.mfma"(%mfma_a_{idx}, %mfma_b_{idx}, %mfma_acc_{idx}) {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "gfx90a", shape = "m16n16k16", accum = "f32"}} : (vector<16xf16>, vector<16xf16>, vector<8xf32>) -> vector<8xf32>',
+            ])
         elif op_name == "tessera.flash_attn":
             lines.append(
                 f'    "tessera.target.diagnostic"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, target = "rocm", severity = "unsupported", reason = "flash_attn target kernel contract is not implemented for ROCm in this phase"}} : () -> ()'
@@ -660,12 +667,17 @@ def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
             lines.append(
                 f'    "tessera_rocm.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "gfx90a"}} : () -> ()'
             )
-        lines.append(
-            f'    "tessera_rocm.async_copy"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, src_space = "global", dst_space = "lds", bytes = 16 : i64}} : () -> ()'
-        )
-        lines.append(f'    "tessera_rocm.wait"() {{ordinal = {idx} : i64}} : () -> ()')
+        # async_copy yields a token that wait consumes -- a real dependency.
+        lines.extend([
+            f'    %copy_dst_{idx} = ub.poison : memref<16xf16>',
+            f'    %copy_src_{idx} = ub.poison : memref<16xf16>',
+            f'    %copy_bytes_{idx} = arith.constant 16 : i64',
+            f'    %copy_tok_{idx} = "tessera_rocm.async_copy"(%copy_dst_{idx}, %copy_src_{idx}, %copy_bytes_{idx}) {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, src_space = "global", dst_space = "lds", bytes = 16 : i64}} : (memref<16xf16>, memref<16xf16>, i64) -> !tessera_rocm.token',
+            f'    "tessera_rocm.wait"(%copy_tok_{idx}) {{ordinal = {idx} : i64}} : (!tessera_rocm.token) -> ()',
+        ])
     lines.extend([
-        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        '    return',
+        '  }',
         "}",
     ])
     return "\n".join(lines)
@@ -673,8 +685,8 @@ def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
 
 def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
-        'module attributes {tessera.ir.level = "target", target = "apple_cpu", arch = "arm64-apple-silicon", execution_mode = "cpu_accelerate"} {',
-        '  "tessera_apple.cpu.func"() ({',
+        'module attributes {tessera.ir.level = "target", tessera.target = "apple_cpu", tessera.arch = "arm64-apple-silicon", tessera.execution_mode = "cpu_accelerate"} {',
+        f'  func.func @{fn.name}() {{',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -694,7 +706,8 @@ def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
             f'    "{target_op}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, {attrs}}} : () -> ()'
         )
     lines.extend([
-        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        '    return',
+        '  }',
         "}",
     ])
     return "\n".join(lines)
@@ -702,8 +715,8 @@ def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
 
 def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
-        'module attributes {tessera.ir.level = "target", target = "apple_gpu", arch = "apple-metal", execution_mode = "metal_artifact"} {',
-        '  "tessera_apple.gpu.func"() ({',
+        'module attributes {tessera.ir.level = "target", tessera.target = "apple_gpu", tessera.arch = "apple-metal", tessera.execution_mode = "metal_artifact"} {',
+        f'  func.func @{fn.name}() {{',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -736,10 +749,11 @@ def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
             f'    "tessera_apple.gpu.metal_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, kernel = "{kernel}", framework = "{framework}", dtype = "f32", {extra}}} : () -> ()'
         )
         lines.append(
-            f'    "tessera_apple.gpu.dispatch"() {{ordinal = {idx} : i64, queue = "MTLCommandQueue", artifact = "metallib", execution_mode = "metal_artifact"}} : () -> ()'
+            f'    "tessera_apple.gpu.dispatch"() {{ordinal = {idx} : i64, queue = "MTLCommandQueue", artifact = "metallib", tessera.execution_mode = "metal_artifact"}} : () -> ()'
         )
     lines.extend([
-        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        '    return',
+        '  }',
         "}",
     ])
     return "\n".join(lines)
@@ -759,8 +773,8 @@ def _render_nvidia_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target
         "nvidia_sm120": "sm_120",
     }.get(target_kind, "sm_90a")
     lines = [
-        f'module attributes {{tessera.ir.level = "target", target = "{target_kind}", arch = "{arch}"}} {{',
-        '  "tessera_nvidia.func"() ({',
+        f'module attributes {{tessera.ir.level = "target", tessera.target = "{target_kind}", tessera.arch = "{arch}"}} {{',
+        f'  func.func @{fn.name}() {{',
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -801,7 +815,8 @@ def _render_nvidia_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target
                 f'    "tessera_nvidia.cuda_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", kernel = "elementwise_contract", status = "artifact_only"}} : () -> ()'
             )
     lines.extend([
-        f'  }}) {{sym_name = "{fn.name}"}} : () -> ()',
+        '    return',
+        '  }',
         "}",
     ])
     return "\n".join(lines)
@@ -1092,13 +1107,13 @@ def _tile_op_name(op_name: str) -> str:
 
 
 def _target_op_name(op_name: str) -> str:
-    op_name = _canonical_op_name(op_name)
-    bare = op_name.split(".")[-1]
-    if op_name in MATMUL_OPS:
-        bare = "matmul"
-    if op_name in CONV2D_OPS:
-        bare = "conv2d_nhwc"
-    return f"tessera.cpu.{bare}"
+    """The CPU reference lane's single generic node.
+
+    Formerly one op name per source op, which could not be declared in ODS
+    (the vocabulary grew with the Graph IR op set). The originating op is
+    already carried in the `source` attribute, so the name added nothing.
+    """
+    return "tessera.cpu.reference"
 
 
 def _lowering_kind(op_name: str) -> str:

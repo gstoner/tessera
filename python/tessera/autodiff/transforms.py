@@ -25,8 +25,9 @@ from typing import Any, Callable, Sequence, Union
 
 import numpy as np
 
-from .grad import grad
+from .grad import _wrap_as_parameter
 from .jvp import jvp
+from .tape import tape
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -124,6 +125,27 @@ def vmap(
     return wrapped
 
 
+def _returns_this_parameter(out, param) -> bool:
+    """True when `fn` handed back the very buffer it was given for `param`.
+
+    Identity has to be decided by BUFFER identity, not by value: two arrays
+    that merely compare equal have unrelated Jacobians.
+    """
+    if out is param:
+        return True
+    buf = getattr(getattr(param, "_data", None), "_data", None)
+    if buf is None:
+        return False
+    if out is buf:
+        return True
+    out_arr = np.asarray(out)
+    return (
+        isinstance(out_arr, np.ndarray)
+        and out_arr.shape == np.asarray(buf).shape
+        and np.shares_memory(out_arr, buf)
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # jacrev — Jacobian via reverse-mode autodiff
 # ─────────────────────────────────────────────────────────────────────────────
@@ -143,9 +165,16 @@ def jacrev(
     For scalar inputs / outputs reduces to ``grad``. For tuple
     ``argnums``, returns a tuple of Jacobians, one per arg.
 
-    Implementation: re-runs ``fn`` once per output dim and seeds a
-    one-hot cotangent. Uses ``retain_graph=True`` (Item 4) so the
-    inner tape can be backward'd repeatedly.
+    Implementation: records the forward pass **once** on a single tape,
+    then re-runs ``backward`` with ``retain_graph=True`` and a one-hot
+    cotangent per output element. Cost is one forward plus
+    ``out_size`` backward sweeps.
+
+    (Before W0.4 this docstring described tape reuse while the code
+    actually re-ran the full forward pass inside ``grad`` once per
+    output element -- ``out_size`` forwards, not one. The
+    ``retain_graph=True`` machinery in :meth:`Tape.backward` had been
+    built for exactly this caller and was never wired to it.)
     """
     argnums_tuple: tuple[int, ...]
     if isinstance(argnums, int):
@@ -157,40 +186,71 @@ def jacrev(
 
     @functools.wraps(fn)
     def wrapped(*args, **kwargs):
-        # Sample run to get output shape.
-        sample = np.asarray(fn(*args, **kwargs))
-        out_shape = sample.shape
-
-        # Pre-allocate Jacobian buffers, one per diff'd arg.
-        jacobians = []
+        # Promote each diff'd arg to a Parameter on a fresh copy, so the
+        # tape can carry cotangents without mutating the caller's arrays.
+        new_args = list(args)
+        params = []
         for i in argnums_tuple:
-            ai = np.asarray(args[i])
-            jac = np.zeros(out_shape + ai.shape, dtype=np.float64)
-            jacobians.append((i, jac, ai.shape))
+            p = _wrap_as_parameter(args[i])
+            new_args[i] = p
+            params.append(p)
 
-        # For each output index, build the one-hot cotangent and run
-        # reverse-mode grad.
-        out_size = sample.size
-        for k in range(out_size):
-            cotan = np.zeros(out_shape, dtype=np.float64)
-            cotan.flat[k] = 1.0
+        # ── ONE forward pass, recorded on ONE tape ────────────────────
+        with tape() as t:
+            out = fn(*new_args, **kwargs)
+            out_arr = np.asarray(out)
+            out_shape = out_arr.shape
 
-            # Wrap fn so it returns sum(out * cotan) — which has gradient
-            # exactly the row of the Jacobian we want.
-            def loss_fn(*inner_args):
-                from .. import ops as _ops
-                y = fn(*inner_args, **kwargs)
-                return _ops.reduce(_ops.mul(y, cotan), op="sum")
+            # Pre-allocate Jacobian buffers, one per diff'd arg.
+            jacobians = []
+            for i, p in zip(argnums_tuple, params):
+                ai_shape = np.asarray(args[i]).shape
+                jacobians.append(
+                    (p, np.zeros(out_shape + ai_shape, dtype=np.float64), ai_shape)
+                )
 
-            grad_fn = grad(loss_fn, argnums=argnums_tuple)
-            grads = grad_fn(*args)
-            if not isinstance(grads, tuple):
-                grads = (grads,)
+            # An output the tape never produced has no gradient path to walk:
+            # `fn` either returned one of its arguments unchanged, or returned a
+            # constant. Both are legitimate — `jacrev(lambda x: x)` is the
+            # identity Jacobian — and `backward` would raise on them, so resolve
+            # them structurally instead.
+            #
+            # The pre-W0.4 implementation never hit this because it wrapped `fn`
+            # in `sum(out * cotangent)` through `ops.*`, which made the target
+            # tape-produced no matter what `fn` did. Reusing one tape removed
+            # that accidental shield.
+            if not any(entry.output_id == id(out) for entry in t.entries):
+                for p, jac_buf, ai_shape in jacobians:
+                    if _returns_this_parameter(out, p):
+                        # d(x)/d(x) = I, laid out as out_shape + in_shape.
+                        size = int(np.prod(out_shape)) if out_shape else 1
+                        jac_buf[...] = np.eye(size, dtype=np.float64).reshape(
+                            jac_buf.shape
+                        )
+                    # Otherwise the output is constant in this argument and the
+                    # pre-zeroed buffer is already correct.
+                result = tuple(jac for _, jac, _ in jacobians)
+                return result[0] if singleton else result
 
-            # Place the gradient into the (k,) row of the Jacobian.
-            out_idx = np.unravel_index(k, out_shape)
-            for (arg_i, jac_buf, ai_shape), g in zip(jacobians, grads):
-                jac_buf[out_idx] = np.asarray(g).reshape(ai_shape)
+            # ── One backward sweep per output element, reusing the tape ──
+            for k in range(out_arr.size):
+                cotan = np.zeros(out_shape, dtype=np.float64)
+                cotan.flat[k] = 1.0
+
+                t.backward(
+                    out,
+                    cotangent=cotan,
+                    retain_graph=True,
+                    accumulate_param_grad=False,
+                )
+
+                out_idx = np.unravel_index(k, out_shape)
+                for p, jac_buf, ai_shape in jacobians:
+                    g = t.cotangent.get(id(p._data._data))
+                    if g is None:
+                        # This arg is not on the gradient path → zero row.
+                        continue
+                    jac_buf[out_idx] = np.asarray(g).reshape(ai_shape)
 
         result = tuple(jac for _, jac, _ in jacobians)
         return result[0] if singleton else result

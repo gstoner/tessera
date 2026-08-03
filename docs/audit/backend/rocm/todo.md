@@ -1,11 +1,23 @@
 ---
-last_updated: 2026-07-31
+last_updated: 2026-08-02
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **parity validated, contract changed.**
+W0.9 made Decision #19 checkable by a real MLIR parse + dialect load + verifier
+instead of substring matching, and ROCm's emitted Target IR did not survive it.
+Fixed here: `tessera_rocm.mfma` / `async_copy` / `wait` now emit their real ODS
+signatures (the async-copy token is threaded into the wait rather than dropped),
+and `elementwise`, `kv_cache_read`, `msa_block_sparse`, and `profiler_probe`
+are declared in `TesseraROCMOps.td` — they were emitted without being declared,
+so the artifact named the dialect without being it. Validated on the gfx1151
+box: plain and probe-annotated modules both parse and verify.
+**No generated kernel changed** — this is Target-IR artifact text only, so no
+new exact-device evidence is required and none is claimed.
 
 ## ROCM-SPINE-1: promote the gfx1151 package through canonical compilation
 

@@ -20,7 +20,9 @@ COMPILER_REF = ROOT / "docs" / "spec" / "COMPILER_REFERENCE.md"
 LOWERING_SPEC = ROOT / "docs" / "spec" / "LOWERING_PIPELINE_SPEC.md"
 TMEM_PTX = ROOT / "src/compiler/tile_opt_fa4/lib/Conversion/TesseraTileToPTX/LowerTileToPTX.cpp"
 TILING_INTERFACE = ROOT / "src/compiler/ir/TesseraTiling.cpp"
-PM_VERIFY = ROOT / "src/compiler/programming_model/tools/tessera-opt/PassPipelinesPM11.cpp"
+# Moved out of the tools/ driver into a library-owned source in W0.6, so the
+# PM passes can be constructed and lit-tested independently of the driver.
+PM_VERIFY = ROOT / "src/compiler/programming_model/lib/PMPasses.cpp"
 
 
 def test_python_api_spec_lists_current_runtime_op_catalog():

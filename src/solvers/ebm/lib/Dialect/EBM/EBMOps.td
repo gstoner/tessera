@@ -48,9 +48,33 @@ def EBM_Dialect : Dialect {
 //   method        : "exact" | "monte_carlo" | "annealed"
 //   init_strategy : "noise" | "base_model" | "copy"
 //
-// MLIR ODS doesn't support `def X : StrAttr` aliases (StrAttr is itself
-// a def, not a class), so we use `StrAttr` directly in op operands.
+// These are constrained with `StringBasedAttr`, which pins the legal set in
+// the op verifier. (An earlier comment here claimed ODS could not express a
+// constrained string alias and used bare `StrAttr` — that was incorrect;
+// `StringBasedAttr` is a class and is already used by the ROCm target dialect
+// in this same tree.)
+//
+// `manifold` is a SEMANTIC key under Decision #21a: it selects which
+// integrator runs, so it must fail closed. It is neither optional nor
+// defaultable — a missing or unrecognized value is an error, never a silent
+// fall back to "euclidean". A Euclidean integrator applied to spherical or
+// bivector state converges and reports a confidently wrong answer.
+//
+// Decision #21a's remaining obligation for this dialect is the EnumAttr
+// upgrade (typed C++ accessors), which is owned by W1.1b.
 //===----------------------------------------------------------------------===//
+
+class EBM_EnumStrAttr<list<string> cases, string summaryText>
+    : StringBasedAttr<
+        CPred<"::llvm::is_contained(::llvm::ArrayRef<::llvm::StringRef>({"
+              # !interleave(!foreach(c, cases, "\"" # c # "\""), ", ") #
+              "}), ::llvm::cast<::mlir::StringAttr>($_self).getValue())">,
+        summaryText>;
+
+// Semantic key — selects the Langevin integrator. Fails closed (#21a).
+def EBM_ManifoldAttr
+    : EBM_EnumStrAttr<["euclidean", "sphere", "bivector"],
+                      "EBM manifold kind: 'euclidean', 'sphere', or 'bivector'">;
 
 //===----------------------------------------------------------------------===//
 // Core EBM ops
@@ -119,7 +143,7 @@ def EBM_LangevinStepOp : EBMOp<"langevin_step", []> {
     FlatSymbolRefAttr:$energy_fn,
     F64Attr:$eta,
     F64Attr:$temperature,
-    StrAttr:$manifold,
+    EBM_ManifoldAttr:$manifold,
     OptionalAttr<I64Attr>:$grade
   );
   let results = (outs AnyType:$new_state, AnyType:$next_key);

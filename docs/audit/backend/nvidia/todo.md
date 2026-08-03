@@ -3,10 +3,27 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-07-31
+last_updated: 2026-08-02
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **follow-up required, NOT validated on NVIDIA.**
+W0.9 added a real parse + dialect-load + verifier gate over every Target-IR
+emitter, and it found that no Python-emitted Target IR was valid MLIR
+(undialect-prefixed module attributes, an invented `<dialect>.func` container,
+ops emitted with signatures their ODS rejects, and several undeclared op names).
+Those defects were fixed and verified for `cpu`, `x86`, `rocm`, and `apple`.
+**NVIDIA was skipped, deliberately and visibly**: `tessera_nvidia` is not
+compiled into the default build, and failing it would have measured the build
+config rather than the emitter. The shared fixes (module-attribute prefixing,
+`func.func` container) apply to the NVIDIA lane too, but its dialect-specific
+surface is unchecked — `TesseraNVIDIADialect.td` still carries 3 `AnyType` and
+3 `Variadic<AnyType>` slots, and it may have the same undeclared-op class
+(`tessera_nvidia.profiler_probe` in particular was not declared).
+**Owning follow-up:** run `tests/unit/test_target_ir_contract.py` on a build
+with `-DTESSERA_BUILD_NVIDIA_BACKEND=ON`; the gate skips rather than passes
+today, so a green run there is not yet evidence.
 
 Cross-backend sync `CORE-ATTENTION-TRAINING-X86-2026-07-30` — **follow-up
 required, no NVIDIA contract change.** X86 adopted the shared rank-4 forward

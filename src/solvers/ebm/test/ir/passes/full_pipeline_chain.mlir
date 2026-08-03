@@ -1,8 +1,7 @@
 // RUN: ts-ebm-opt --tessera-ebm-pipeline %s | FileCheck %s
 //
 // End-to-end EBM pipeline alias:
-//   canonicalize → fuse-energy-grad → checkpoint-inner-loop →
-//   pipeline-candidates.
+//   canonicalize → fuse-energy-grad → pipeline-candidates.
 //
 // An EBT-style chain (decode_init + inner-loop langevin + self_verify)
 // emerges from this pipeline with every relevant op annotated.
@@ -45,13 +44,24 @@ module {
       %x : tensor<2x16xf32>, %y : tensor<2x4x16xf32>) -> tensor<2x4xf32>
 }
 
+// These markers are emitted by four independent passes and appear in source
+// order, not pass order -- `pipeline_K` lands on `decode_init` (the first op)
+// while `checkpoint_budget` lands on the loop below it. Sequential CHECKs
+// therefore cannot match them; CHECK-DAG expresses the actual contract, which
+// is "all of these are present", not "in this order".
+//
 // Canonicalize: every ebm op gets a canonical marker.
-// CHECK: tessera.ebm.canonical
+// CHECK-DAG: tessera.ebm.canonical
 // Fuse-energy-grad: the energy + langevin_step share energy_fn.
-// CHECK: tessera.ebm.energy_grad_fused
-// Checkpoint-inner-loop: the scf.for got annotations.
-// CHECK: tessera.ebm.checkpoint_loop
-// CHECK: tessera.ebm.checkpoint_budget
+// CHECK-DAG: tessera.ebm.energy_grad_fused
+// W0.2 — checkpoint-inner-loop is NOT in the default pipeline (it marks every
+// step rematerializable with no demand analysis, and nothing consumes the
+// attributes). Decision #10a requires an eligibility pass to ship a fixture
+// whose correct output is NO annotation; this is that fixture for the default
+// pipeline.
+// CHECK-NOT: tessera.ebm.checkpoint_loop
+// CHECK-NOT: tessera.ebm.checkpoint_budget
+// CHECK-NOT: tessera.ebm.recompute_step
 // Pipeline-candidates: decode_init + self_verify linked with K=4.
-// CHECK: tessera.ebm.pipeline_K = 4
-// CHECK: tessera.ebm.pipeline_axis = "k"
+// CHECK-DAG: tessera.ebm.pipeline_K = 4
+// CHECK-DAG: tessera.ebm.pipeline_axis = "k"

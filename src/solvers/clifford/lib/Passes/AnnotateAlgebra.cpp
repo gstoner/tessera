@@ -10,9 +10,12 @@
 //   tessera.clifford.canonical    : unit attr — present iff the op is
 //                                   ready for GA8 lowering
 //
-// GA8 lowering passes gate on `canonical` and refuse to proceed on
-// out-of-allow-list signatures, emitting a precise diagnostic naming the
-// op and the unsupported signature.
+// NOTE (W0.7): no pass currently reads `canonical`. The GA8 lowering passes
+// are annotation-only and do not gate on it. This comment previously asserted
+// that they "gate on `canonical` and refuse to proceed on out-of-allow-list
+// signatures, emitting a precise diagnostic" -- that was never true.
+// Decision #29: wire the gate with the real GA8 lowering, or delete the
+// attribute. It must not read as an enforced contract in the meantime.
 //
 // This is the GA7-load-bearing pass: it walks the IR, doesn't yet emit
 // any new ops (annotation-only). Mirrors LegalizeSpectralPass.

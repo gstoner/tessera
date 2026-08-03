@@ -116,7 +116,7 @@ generated support and E2E dashboards.
 | `NVFlashAttnKernelEmitter` — scale resolution, full mbarrier seq, launch bounds | ✅ | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | `tessera-lower-to-gpu` named pipeline | ✅ | registered in GPU backend |
 | FA-4 Attn dialect v2.0 — `ScaledDotProduct`, `OnlineSoftmax`, `LseAccumulate`, `DropoutMask`, `CausalMask` | ✅ | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` |
-| `tessera.queue` dialect — `create`, `push`, `pop` | ✅ | `src/compiler/tile_opt_fa4/dialects/tessera_queue/Queue.td` |
+| `tessera.queue` dialect — `create`, `push`, `pop` | ✅ | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td` |
 
 ### Work That Is Scaffolded Or Artifact-Only
 

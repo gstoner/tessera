@@ -210,3 +210,16 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_predicate_f32.cpp
   src/kernels/kv_cache_f32.cpp
 )
+
+# ------------------------------------------------------------------
+# tessera_x86 Target IR dialect (Decision #19, built by W0.10)
+#
+# The rest of this directory is a standalone kernel project with no MLIR
+# dependency, so the dialect is guarded: it builds only when configured from
+# the main tree, where MLIR's CMake helpers are available.
+# ------------------------------------------------------------------
+if(COMMAND add_mlir_library AND COMMAND mlir_tablegen)
+  add_subdirectory(lib/IR)
+else()
+  message(STATUS "tessera_x86 Target IR dialect skipped (MLIR helpers unavailable)")
+endif()

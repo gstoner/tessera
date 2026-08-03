@@ -32,30 +32,41 @@ def CliffordAnnotateAlgebra : Pass<"tessera-clifford-annotate-algebra", "mlir::M
       tessera.clifford.allow_listed : bool — true iff in v1 allow-list
       tessera.clifford.canonical    : bool — true iff signature is well-formed
 
-    Downstream lowering passes (GA8) gate on `canonical=true` and refuse to
-    proceed on out-of-allow-list signatures, emitting a precise diagnostic
-    naming the op and the unsupported signature.
+    NOTE (W0.7): the GA8 passes below do NOT yet gate on `canonical` -- they
+    are annotation-only and reference the attribute nowhere. An earlier
+    version of this text asserted that they "gate on `canonical=true` and
+    refuse to proceed on out-of-allow-list signatures"; that was never true.
+    `tessera.clifford.canonical` is therefore a declaration without a
+    consumer (Decision #29). Either the gate lands with the real GA8
+    lowering, or the attribute is deleted -- it must not read as an enforced
+    contract in the meantime.
   }];
 }
 
 def CliffordExpandProductTable : Pass<"tessera-clifford-expand-product-table", "mlir::ModuleOp"> {
   let summary =
-    "[GA8 stub] Lower clifford.geo_product to a compile-time-known sparse "
-    "contraction using the algebra's Cayley table.";
+    "[annotation-only] Emit a remark per clifford.geo_product describing the "
+    "planned Cayley-table lowering. Rewrites no IR.";
   let description = [{
-    Implementation pending GA8. The GA7 stub emits a remark on each
-    geo_product op describing the lowering plan; no IR rewriting yet.
+    W0.7 -- "stub" was ambiguous between "does nothing" and "does something
+    partial". This pass is ANNOTATION-ONLY: it emits a remark on each
+    geo_product op describing the intended lowering and performs no IR
+    rewriting. It does not read `tessera.clifford.canonical`.
+
+    The real lowering (compile-time-known sparse contraction from the
+    algebra's Cayley table) is GA8, and batched operands are W3.6.
   }];
 }
 
 def CliffordGradeFusion : Pass<"tessera-clifford-grade-fusion", "mlir::ModuleOp"> {
   let summary =
-    "[GA8 stub] Fuse chains `grade(k, geo_product(a, b))` into a single "
-    "restricted contraction that only emits the grade-k slice.";
+    "[annotation-only] Recognize `grade(k, geo_product(a, b))` chains. "
+    "Rewrites no IR; the restricted-contraction lowering is GA8.";
 }
 
 def CliffordRotorSandwichFold : Pass<"tessera-clifford-rotor-sandwich-fold", "mlir::ModuleOp"> {
   let summary =
-    "[GA8 stub] Recognize R · x · R† chains and emit a direct rotor-"
-    "conjugation kernel instead of two geometric products.";
+    "[annotation-only] Mark R · x · R† chains. Rewrites no IR -- the marker "
+    "it writes has no consumer yet (W3.6); the direct rotor-conjugation "
+    "kernel is GA8.";
 }

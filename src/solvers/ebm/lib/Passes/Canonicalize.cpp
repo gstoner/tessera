@@ -49,15 +49,31 @@ struct EBMCanonicalizePass
       if (!isEBMOp(name)) return WalkResult::advance();
 
       // Tag manifold on langevin_step.
+      //
+      // `manifold` is a semantic key (Decision #21a): it selects which
+      // integrator runs, so it fails CLOSED. This previously warned and
+      // defaulted to "euclidean", which is the worst available behavior --
+      // a Euclidean step on spherical or bivector state does not diverge or
+      // error, it converges and reports a confidently wrong result. The
+      // fail-closed shape mirrors AnnotateAlgebra's handling of `algebra`.
       if (name == "tessera_ebm.langevin_step") {
-        if (auto manifold = op->getAttrOfType<StringAttr>("manifold")) {
-          op->setAttr("tessera.ebm.manifold", manifold);
-        } else {
-          op->emitWarning("tessera_ebm.langevin_step missing `manifold`; "
-                          "defaulting to 'euclidean'");
-          op->setAttr("tessera.ebm.manifold",
-                      StringAttr::get(ctx, "euclidean"));
+        auto manifold = op->getAttrOfType<StringAttr>("manifold");
+        if (!manifold) {
+          op->emitError("tessera_ebm.langevin_step missing required "
+                        "`manifold` attribute; expected 'euclidean', "
+                        "'sphere', or 'bivector'");
+          failed_ = true;
+          return WalkResult::interrupt();
         }
+        if (!isKnownManifold(manifold.getValue())) {
+          op->emitError("tessera_ebm.langevin_step has unrecognized "
+                        "`manifold` value '")
+              << manifold.getValue()
+              << "'; expected 'euclidean', 'sphere', or 'bivector'";
+          failed_ = true;
+          return WalkResult::interrupt();
+        }
+        op->setAttr("tessera.ebm.manifold", manifold);
       }
 
       // Normalize self_verify(beta = 0.0) to hard argmin.
@@ -73,7 +89,18 @@ struct EBMCanonicalizePass
       op->setAttr("tessera.ebm.canonical", builder.getUnitAttr());
       return WalkResult::advance();
     });
+
+    if (failed_) signalPassFailure();
   }
+
+private:
+  // Decision #21a: the legal set is declared, and anything outside it is an
+  // error. Keep in sync with EBM_ManifoldAttr in EBMOps.td.
+  static bool isKnownManifold(StringRef value) {
+    return value == "euclidean" || value == "sphere" || value == "bivector";
+  }
+
+  bool failed_ = false;
 };
 
 }  // namespace

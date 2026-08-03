@@ -1294,7 +1294,7 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
     if target_kind == "apple_cpu":
         text = "\n".join(
             [
-                'module attributes {tessera.ir.level = "backend", target = "apple_cpu", execution_mode = "cpu_accelerate"} {',
+                'module attributes {tessera.ir.level = "backend", tessera.target = "apple_cpu", tessera.execution_mode = "cpu_accelerate"} {',
                 '  "tessera_apple.cpu.runtime_pipeline"() {',
                 '    pipeline = "tessera-lower-to-apple_cpu-runtime",',
                 '    symbol = "tessera_apple_cpu_gemm_f32",',
@@ -1409,7 +1409,7 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
         text = "\n".join(
             line
             for line in [
-                'module attributes {tessera.ir.level = "backend", target = "apple_gpu", execution_mode = "metal_runtime"} {',
+                'module attributes {tessera.ir.level = "backend", tessera.target = "apple_gpu", tessera.execution_mode = "metal_runtime"} {',
                 '  "tessera_apple.gpu.runtime_pipeline"() {',
                 '    pipeline = "tessera-lower-to-apple_gpu-runtime",',
                 f'    symbol = "{symbol}",',

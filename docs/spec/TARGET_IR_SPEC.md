@@ -555,7 +555,7 @@ $scores q_off = $q_offset kv_off = $kv_offset attr-dict
 
 ## 4. `tessera.queue` Dialect — Tile Queue Synchronisation
 
-**TableGen:** `src/compiler/tile_opt_fa4/dialects/tessera_queue/Queue.td` (v1.3)
+**TableGen:** `src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td` (v1.3)
 **Dialect name:** `tessera.queue`
 **C++ namespace:** `::tessera::queue`
 **Phase:** 3

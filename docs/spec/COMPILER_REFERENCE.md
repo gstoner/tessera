@@ -228,8 +228,8 @@ These decisions are closed unless a new normative spec supersedes them.
 | Mock collective testing | `python/tessera/testing/mock_collective.py` |
 | Graph IR ODS | `src/compiler/ir/TesseraOps.td` |
 | Transform passes | `src/transforms/lib/` |
-| FA-4 Attn dialect | `src/compiler/tile_opt_fa4/dialects/tessera_attn/Attn.td` |
-| Queue dialect | `src/compiler/tile_opt_fa4/dialects/tessera_queue/Queue.td` |
+| FA-4 Attn dialect | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` |
+| Queue dialect | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td` |
 | x86 backend | `src/compiler/codegen/tessera_x86_backend/` |
 | NVIDIA backend | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | ROCm backend | `src/compiler/codegen/Tessera_ROCM_Backend/` |

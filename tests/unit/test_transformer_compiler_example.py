@@ -82,6 +82,6 @@ def test_transformer_attention_block_compiles_and_executes_cpu_dataflow():
     assert artifacts["schedule"].count("schedule.tile") == 6
     assert "layout_transform" in artifacts["tile"]
     assert "stable_reduction" in artifacts["tile"]
-    assert artifacts["target"].count("tessera.cpu.matmul") == 6
+    assert artifacts["target"].count('source = "tessera.matmul"') == 6
     explanation = transformer_attention_block.explain_lowering()
     assert "JIT_COMPILED_CPU" in explanation

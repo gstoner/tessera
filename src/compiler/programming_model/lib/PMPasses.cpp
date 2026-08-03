@@ -1,14 +1,24 @@
-//===- PassPipelinesPM11.cpp — Programming Model v1.1 pass pipelines ------===//
+//===- PMPasses.cpp — Programming Model v1.1 passes and pipelines ---------===//
 //
-// Wires the Schedule / Cache / TileMemory dialects into the global dialect
-// registry and provides two ready-made pass pipelines:
+// Library-owned pass bodies. Previously these lived in
+// `tools/tessera-opt/PassPipelinesPM11.cpp`, a driver source, so the passes
+// could not be constructed or lit-tested independently of that driver (W0.6).
 //
-//   buildPMV11VerifyPipeline(pm)  — validate all PM v1.1 ops (no transforms)
-//   buildPMV11LegalizePipeline(pm) — full Graph → Schedule → Tile → Target
+// See PMPasses.h for the maturity contract: the verifier is real; the two
+// lowering passes are annotation-only skeletons and are labeled as such in
+// their pass descriptions so `tessera-opt --help` does not misrepresent them.
+//
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Pass/PassManager.h"
+#include "tessera/ProgrammingModel/PMPasses.h"
+
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Pass/PassRegistry.h"
 #include "mlir/Transforms/Passes.h"
 
 using namespace mlir;
@@ -16,32 +26,21 @@ using namespace mlir;
 namespace tessera {
 
 // ---------------------------------------------------------------------------
-// Forward declarations (implemented inline below as anonymous pass structs)
-// ---------------------------------------------------------------------------
-std::unique_ptr<mlir::Pass> createPMV11VerifierPass();
-std::unique_ptr<mlir::Pass> createGraphToSchedulePass();
-std::unique_ptr<mlir::Pass> createScheduleToTilePass();
-
-// ---------------------------------------------------------------------------
 // Dialect registration
 // ---------------------------------------------------------------------------
 
 void registerPMPipelinesV11(DialectRegistry &registry) {
-  // The dialects are loaded on-demand when their ops appear in the module.
-  // Explicit registration ensures tessera-opt can parse them from .mlir files.
-  // In a full build these would be:
-  //   registry.insert<tessera::schedule::ScheduleDialect,
-  //                   tessera::cache::CacheDialect,
-  //                   tessera::tile::TileDialect>();
-  //
-  // Until ODS tables are generated we mark them for registration via the
-  // string-based dynamic dialect loader:
-  (void)registry;  // suppress unused warning; dialects auto-register on parse
+  // The PM v1.1 dialects (schedule / cache / moe) auto-register when their ops
+  // are parsed. The production `tile` dialect is owned by TesseraIR and is
+  // registered as `tessera::tile::TesseraTileDialect` by its own component --
+  // a second `tile` ODS that used to live under this directory was deleted in
+  // W0.6 (it was never registered and never included by any source file).
+  (void)registry;
 }
 
 // ---------------------------------------------------------------------------
-// PMV11 verifier pass — walks the module and calls verifyProgrammingModelOp
-// for every op whose dialect name starts with schedule/cache/tile.
+// PMV11 verifier pass — walks the module and verifies every op whose dialect
+// name starts with schedule/cache/tile. This is a real verifier.
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -193,7 +192,7 @@ private:
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
-// Graph → Schedule pass (skeleton)
+// Graph -> Schedule — ANNOTATION-ONLY SKELETON. Lowers nothing. See PMPasses.h.
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -204,7 +203,9 @@ struct GraphToSchedulePass
 
   StringRef getArgument() const override { return "tessera-graph-to-schedule"; }
   StringRef getDescription() const override {
-    return "Lower Tessera Graph IR ops to Schedule IR";
+    return "[annotation-only skeleton] Stamp schedule.artifact_hash on "
+           "tessera.matmul/flash_attn/elementwise. Does NOT lower Graph IR to "
+           "Schedule IR -- no op is matched, replaced, or rewritten.";
   }
 
   void runOnOperation() override {
@@ -212,7 +213,7 @@ struct GraphToSchedulePass
     OpBuilder builder(mod.getContext());
 
     // Annotate each tessera.* Graph IR op with a schedule.artifact stub.
-    // A real pass would pattern-match and replace ops.
+    // A real lowering would pattern-match and replace ops; this does not.
     mod.walk([&](Operation *op) -> WalkResult {
       StringRef name = op->getName().getStringRef();
       if (!name.starts_with("tessera.matmul") &&
@@ -230,7 +231,7 @@ struct GraphToSchedulePass
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
-// Schedule → Tile pass (skeleton)
+// Schedule -> Tile — ANNOTATION-ONLY SKELETON. Lowers nothing. See PMPasses.h.
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -241,7 +242,9 @@ struct ScheduleToTilePass
 
   StringRef getArgument() const override { return "tessera-schedule-to-tile"; }
   StringRef getDescription() const override {
-    return "Lower Schedule IR to Tile IR with memory-space assignments";
+    return "[annotation-only skeleton] Stamp tile.staged on "
+           "schedule.async_copy. Does NOT lower Schedule IR to Tile IR and "
+           "assigns no memory spaces.";
   }
 
   void runOnOperation() override {
@@ -277,7 +280,7 @@ std::unique_ptr<mlir::Pass> createScheduleToTilePass() {
 }
 
 // ---------------------------------------------------------------------------
-// Pipeline builders (called from tessera-opt driver)
+// Pipeline builders (called from the tessera-opt driver)
 // ---------------------------------------------------------------------------
 
 void buildPMV11VerifyPipeline(OpPassManager &pm) {
@@ -288,8 +291,8 @@ void buildPMV11VerifyPipeline(OpPassManager &pm) {
 
 void buildPMV11LegalizePipeline(OpPassManager &pm) {
   pm.addPass(createPMV11VerifierPass());    // validate before transforms
-  pm.addPass(createGraphToSchedulePass());  // Graph IR → Schedule IR
-  pm.addPass(createScheduleToTilePass());   // Schedule IR → Tile IR
+  pm.addPass(createGraphToSchedulePass());  // annotation-only skeleton
+  pm.addPass(createScheduleToTilePass());   // annotation-only skeleton
   pm.addPass(mlir::createCanonicalizerPass());
 }
 
@@ -307,7 +310,8 @@ void registerPMV11Passes() {
 
   PassPipelineRegistration<>(
       "tessera-pm-legalize-pipeline",
-      "Full Graph IR → Schedule → Tile → Target lowering",
+      "[partial] PM v1.1 verifier + two annotation-only skeletons. Does NOT "
+      "perform Graph IR -> Schedule -> Tile lowering.",
       [](OpPassManager &pm) { buildPMV11LegalizePipeline(pm); });
 }
 

@@ -3,10 +3,23 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-07-31
+last_updated: 2026-08-02
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **follow-up required, contract changed.**
+The same W0.9 gate found Apple's emitted Target IR invalid: the function
+container was an invented `tessera_apple.cpu.func` / `gpu.func` that no dialect
+defines (now the standard `func.func`), and `cpu.kv_cache_read`,
+`cpu.moe_solver`, `cpu.profiler_probe`, and `gpu.profiler_probe` were emitted
+without declaration (now in `TesseraAppleOps.td`). Module attributes are
+dialect-prefixed at render time.
+**Validated at IR level only.** These changes were made and checked on the
+Ubuntu/Strix Halo box; the Metal/Accelerate runtime lanes cannot be exercised
+there, so Apple execution parity is unverified. Apple retains the follow-up to
+re-run its device suites and confirm no runtime lane depended on the old
+op names.
 
 Cross-backend sync `CORE-ATTENTION-TRAINING-X86-2026-07-30` — **follow-up
 required, no Apple contract change.** X86 adopted the shared rank-4 forward and

@@ -223,7 +223,7 @@ ops targeting SM_90+.
 ```
 Dialect name: tessera.attn
 C++ namespace: ::tessera::attn
-Source: src/compiler/tile_opt_fa4/dialects/tessera_attn/Attn.td
+Source: src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td
 ```
 
 ### 4.2 `tessera_attn.scaled_dot_product`
@@ -314,7 +314,7 @@ data movement between producer and consumer warps.
 ```
 Dialect name: tessera.queue
 C++ namespace: ::tessera::queue
-Source: src/compiler/tile_opt_fa4/dialects/tessera_queue/Queue.td
+Source: src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td
 ```
 
 ### 5.2 Types

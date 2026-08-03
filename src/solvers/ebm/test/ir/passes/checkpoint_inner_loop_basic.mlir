@@ -29,8 +29,9 @@ module {
       %x : tensor<8x4xf32>, %y : tensor<8x4xf32>) -> tensor<8xf32>
 }
 
+// The loop's checkpoint attributes print on the region's CLOSING brace, not
+// on the `scf.for` line -- CHECK-SAME against `scf.for` never matched them.
 // CHECK: scf.for
-// CHECK-SAME: tessera.ebm.checkpoint_loop
-// CHECK-SAME: tessera.ebm.checkpoint_budget = 4
 // CHECK: tessera_ebm.langevin_step
 // CHECK-SAME: tessera.ebm.recompute_step
+// CHECK: } {tessera.ebm.checkpoint_budget = 4 : i64, tessera.ebm.checkpoint_loop}

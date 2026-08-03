@@ -431,17 +431,41 @@ def Tile_ControlScanOp  : Tile_ControlOp<"control_scan">;
 // the staged tile as its result; a typed completion token is threaded in Phase B.
 def Tile_AsyncCopyOp : Tile_Op<"async_copy"> {
   let summary = "Asynchronous global→shared/LDS tile copy";
+  let description = [{
+    Dual-form during migration, mirroring `tile.mma` (W1.1):
+
+      * **Typed form** -- the op returns a `!tile.async_token` that a
+        `tile.wait_async` consumes, so the copy/wait dependency lives in SSA
+        def-use instead of program order. This is the model the token type was
+        declared for, and it matches `tessera_rocm.async_copy`, which already
+        yields a `!tessera_rocm.token` threaded into its `wait`.
+      * **Legacy form** -- no token result; ordering is carried by
+        `tile.barrier_id` / `tile.depends_on` (still load-bearing on ROCm).
+        Accepted unchanged so the ten existing producers keep working.
+
+    Until W1.1's producer migration completes, absence of a token is NOT an
+    error. What the verifier does enforce is that a copy which *claims* the
+    typed form is well formed.
+  }];
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$outputs);
   let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
 }
 
 // Wait on outstanding async copies (waitcnt(vmcnt) / mbarrier / cp.async.wait).
 def Tile_WaitAsyncOp : Tile_Op<"wait_async"> {
   let summary = "Wait on outstanding asynchronous tile copies";
+  let description = [{
+    The consumer half of the typed `tile.async_copy` form. A
+    `!tile.async_token` operand must be produced by a `tile.async_copy` -- a
+    wait on a token from anywhere else is a dependency the backend cannot
+    honor. Waits with no token operand keep the legacy program-order meaning.
+  }];
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$outputs);
   let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $outputs)";
+  let hasVerifier = 1;
 }
 
 // Tile-level tensor-core MMA (WGMMA / MFMA / WMMA / tcgen05).

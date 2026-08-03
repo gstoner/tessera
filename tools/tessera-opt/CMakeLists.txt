@@ -125,6 +125,20 @@ if(TARGET TesseraQueueDialect AND NOT TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
   target_link_libraries(tessera-opt PRIVATE TesseraQueueDialect)
 endif()
 
+# W0.10 (2026-08-02): link the hardware-free x86 Target IR dialect so
+# `tessera_x86.*` ops and the `!tessera_x86.tile` type are recognized at parse
+# time. Until this landed, x86 was the ONE backend with no Target IR dialect,
+# though Decision #19 says backends MUST expose one. Mirrors the Attn/Queue
+# pattern above.
+if(TARGET TesseraX86IR AND NOT TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
+  tessera_opt_feature(x86-target-ir TESSERA_HAVE_X86_TARGET_IR)
+  target_include_directories(tessera-opt PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/compiler/codegen/tessera_x86_backend/include
+    ${CMAKE_BINARY_DIR}/src/compiler/codegen/tessera_x86_backend/lib/IR
+  )
+  target_link_libraries(tessera-opt PRIVATE TesseraX86IR)
+endif()
+
 if(TARGET tessera_solvers_passes AND TARGET tessera_linalg_solver_passes)
   tessera_opt_feature(solvers TESSERA_HAVE_SOLVERS)
   target_include_directories(tessera-opt PRIVATE

@@ -27,4 +27,4 @@ module {
 
 // CHECK: tessera_ebm.energy
 // CHECK: tessera_ebm.langevin_step
-// CHECK-SAME: manifold = "euclidean"
+// CHECK-SAME: manifold "euclidean"

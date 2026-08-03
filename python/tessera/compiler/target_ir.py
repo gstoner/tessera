@@ -691,11 +691,28 @@ class TargetOp:
     attrs: dict[str, Any] = field(default_factory=dict)
     operands: list[str] = field(default_factory=list)
     result: Optional[str] = None
+    # Real MLIR signature. Ops whose ODS declares operands/results MUST set
+    # these, or the emitted text is rejected by the dialect's own verifier
+    # (e.g. "'tessera_rocm.mfma' op requires one result"). Ops declared
+    # `assemblyFormat = "attr-dict"` — the directive-style majority — leave
+    # them empty and correctly render as `() -> ()`.
+    operand_types: list[str] = field(default_factory=list)
+    result_type: Optional[str] = None
+    # Raw MLIR lines emitted immediately before this op, used to materialize
+    # the SSA values its signature requires.
+    prelude: list[str] = field(default_factory=list)
 
     def to_mlir(self, indent: str = "  ") -> str:
+        lines = [f"{indent}{line}" for line in self.prelude]
         result_text = f"%{self.result} = " if self.result else ""
         operands = ", ".join(self.operands)
-        return f"{indent}{result_text}\"{self.op_name}\"({operands}) {_format_attr_dict(self.attrs)} : () -> ()"
+        sig_in = ", ".join(self.operand_types)
+        sig_out = self.result_type if self.result_type else "()"
+        lines.append(
+            f"{indent}{result_text}\"{self.op_name}\"({operands}) "
+            f"{_format_attr_dict(self.attrs)} : ({sig_in}) -> {sig_out}"
+        )
+        return "\n".join(lines)
 
 
 @dataclass
@@ -705,17 +722,25 @@ class TargetFunction:
     target: str = "cpu"
 
     def to_mlir(self, indent: str = "  ") -> str:
-        func_op = {
-            APPLE_CPU_TARGET: "tessera_apple.cpu.func",
-            APPLE_GPU_TARGET: "tessera_apple.gpu.func",
-            CPU_TARGET: "tessera.cpu.func",
-            X86_TARGET: "tessera_x86.func",
-            ROCM_TARGET: "tessera_rocm.func",
-        }.get(self.target, "tessera_nvidia.func" if self.target in NVIDIA_TARGETS else "tessera.target.func")
-        lines = [f"{indent}\"{func_op}\"() ({{"]
+        # The function container is `func.func`, not a per-target `<dialect>.func`.
+        #
+        # This used to pick from a hardcoded map of `tessera_apple.cpu.func`,
+        # `tessera_rocm.func`, `tessera_nvidia.func`, `tessera_x86.func`, ... --
+        # **none of which are defined by any dialect in the tree** (and
+        # `tessera_x86` is not even a dialect; see Decision #19 / W0.10). MLIR
+        # rejects them as unregistered operations. Every backend's ODS defines
+        # its *body* ops (`tessera_apple.cpu.accelerate_gemm`,
+        # `tessera_rocm.mfma`, ...) and relies on the standard `func` dialect
+        # for the container, which is what this now emits.
+        #
+        # Found by W0.9's real parse/verify harness; a substring assertion sees
+        # the dialect's name in the text and cannot tell an invented op from a
+        # declared one.
+        lines = [f"{indent}func.func @{self.name}() {{"]
         for op in self.body:
             lines.append(op.to_mlir(indent + "  "))
-        lines.append(f"{indent}}}) {{sym_name = {json.dumps(self.name)}}} : () -> ()")
+        lines.append(f"{indent}  return")
+        lines.append(f"{indent}}}")
         return "\n".join(lines)
 
 
@@ -732,7 +757,9 @@ class TargetIRModule:
             result = self.verify()
             if not result.ok:
                 raise TargetIRVerificationError(result.format())
-        lines = [f"module attributes {_format_attr_dict(self.attrs)} {{"]
+        lines = [
+            f"module attributes {_format_attr_dict(_mlir_module_attrs(self.attrs))} {{"
+        ]
         for fn in self.functions:
             lines.append(fn.to_mlir())
         lines.append("}")
@@ -1242,6 +1269,39 @@ def _flatten_tile_ops(ops: Iterable[TileOp]) -> Iterable[TileOp]:
             yield from _flatten_tile_ops(op.body)
 
 
+def _rocm_async_copy_pair(base: dict[str, Any]) -> list[TargetOp]:
+    """Emit `async_copy` + `wait` with their real ODS signatures.
+
+    Both ops declare operands in TesseraROCMOps.td (`async_copy` yields a
+    `!tessera_rocm.token` that `wait` consumes), so they cannot be emitted as
+    bare `() -> ()`. SSA names are suffixed with the op ordinal because a
+    function body holds one pair per lowered op and MLIR requires unique names.
+    """
+    n = base["ordinal"]
+    buf = "memref<16xf16>"
+    return [
+        TargetOp(
+            "tessera_rocm.async_copy",
+            {**base, "src_space": "global", "dst_space": "lds", "bytes": 16},
+            operands=[f"%copy_dst_{n}", f"%copy_src_{n}", f"%copy_bytes_{n}"],
+            result=f"copy_tok_{n}",
+            operand_types=[buf, buf, "i64"],
+            result_type="!tessera_rocm.token",
+            prelude=[
+                f"%copy_dst_{n} = ub.poison : {buf}",
+                f"%copy_src_{n} = ub.poison : {buf}",
+                f"%copy_bytes_{n} = arith.constant 16 : i64",
+            ],
+        ),
+        TargetOp(
+            "tessera_rocm.wait",
+            {"ordinal": n},
+            operands=[f"%copy_tok_{n}"],
+            operand_types=["!tessera_rocm.token"],
+        ),
+    ]
+
+
 def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
     if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
         return []
@@ -1267,13 +1327,34 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
             )
             if key in op.attrs
         }
+        # `mfma`, `async_copy`, and `wait` declare real operands/results in
+        # TesseraROCMOps.td, so they must be emitted with a matching signature.
+        # The fragment/buffer values are structural placeholders (`ub.poison` —
+        # "a value of this type, contents undefined"), which is exactly what a
+        # hardware-free Target IR artifact carries: it fixes the matrix-core
+        # tile SHAPE and dtype contract without asserting data. The async-copy
+        # token is a genuine dependency and is threaded into the wait.
+        n = base["ordinal"]
+        frag_a = "vector<16xf16>"
+        frag_acc = "vector<8xf32>"
         return [
-            TargetOp("tessera_rocm.mfma", {**base, "arch": "gfx90a", "shape": "m16n16k16", "accum": "f32"}),
+            TargetOp(
+                "tessera_rocm.mfma",
+                {**base, "arch": "gfx90a", "shape": "m16n16k16", "accum": "f32"},
+                operands=[f"%mfma_a_{n}", f"%mfma_b_{n}", f"%mfma_acc_{n}"],
+                result=f"mfma_res_{n}",
+                operand_types=[frag_a, frag_a, frag_acc],
+                result_type=frag_acc,
+                prelude=[
+                    f"%mfma_a_{n} = ub.poison : {frag_a}",
+                    f"%mfma_b_{n} = ub.poison : {frag_a}",
+                    f"%mfma_acc_{n} = ub.poison : {frag_acc}",
+                ],
+            ),
             TargetOp("tessera_rocm.wmma_gemm", {**base, "name": "gemm",
                      "m": 16, "n": 16, "k": 16, "dtype": dtype,
                      **schedule_attrs}),
-            TargetOp("tessera_rocm.async_copy", {**base, "src_space": "global", "dst_space": "lds", "bytes": 16}),
-            TargetOp("tessera_rocm.wait", {"ordinal": base["ordinal"]}),
+            *_rocm_async_copy_pair(base),
         ]
     if source == "tessera.grouped_gemm":
         return [TargetOp("tessera_rocm.grouped_gemm", {
@@ -1330,15 +1411,13 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
         })]
     if op.op_name == "tile.async_copy":
         return [
-            TargetOp("tessera_rocm.async_copy", {**base, "src_space": "global", "dst_space": "lds", "bytes": 16}),
-            TargetOp("tessera_rocm.wait", {"ordinal": base["ordinal"]}),
+            *_rocm_async_copy_pair(base),
         ]
     if op.op_name.startswith("tessera.queue.") or op.op_name == "tile.wait_async":
         return []
     return [
         TargetOp("tessera_rocm.elementwise", {**base, "arch": "gfx90a"}),
-        TargetOp("tessera_rocm.async_copy", {**base, "src_space": "global", "dst_space": "lds", "bytes": 16}),
-        TargetOp("tessera_rocm.wait", {"ordinal": base["ordinal"]}),
+        *_rocm_async_copy_pair(base),
     ]
 
 
@@ -1938,13 +2017,19 @@ def _source_from_tile_op(op: TileOp) -> str:
     return op.op_name
 
 
+# The portable CPU reference lane emits ONE generic node.
+#
+# It used to mint an op name per source op (`tessera.cpu.matmul`,
+# `tessera.cpu.softmax`, ...), which grew with the Graph IR op set and so could
+# never be declared in ODS -- leaving this the last Target-IR lane whose text
+# was not valid MLIR. The name was redundant: `source` is already a REQUIRED
+# attribute on every CPU op (see `_verify_cpu_op`), so the collapse loses no
+# information and makes the lane parseable and verifiable.
+CPU_REFERENCE_OP = "tessera.cpu.reference"
+
+
 def _cpu_target_op_name(source: str) -> str:
-    bare = source.removeprefix("tessera.").replace(".", "_")
-    if source in {"tessera.matmul", "tessera.gemm"}:
-        bare = "matmul"
-    elif source in {"tessera.conv2d", "tessera.conv2d_nhwc"}:
-        bare = "conv2d_nhwc"
-    return f"tessera.cpu.{bare}"
+    return CPU_REFERENCE_OP
 
 
 def _x86_runtime_lane(source: str) -> str | None:
@@ -1967,6 +2052,24 @@ def _nvidia_arch(target_kind: str) -> str:
         "nvidia_sm100": "sm_100a",
         "nvidia_sm120": "sm_120",
     }[target_kind]
+
+
+# Module attributes carried on `builtin.module` MUST be dialect-prefixed --
+# MLIR rejects the module outright otherwise ("can only contain attributes with
+# dialect-prefixed names"). The Python-facing `attrs` dict keeps the short keys
+# (`target`, `arch`, ...) because callers and tests index it directly; the
+# prefix is applied only when rendering MLIR text. Found by W0.9's real
+# parse/verify harness, which the previous substring-only contract test could
+# not have caught.
+_MLIR_MODULE_ATTR_PREFIX = "tessera."
+
+
+def _mlir_module_attrs(attrs: dict[str, Any]) -> dict[str, Any]:
+    """Return `attrs` with every bare key dialect-prefixed for MLIR emission."""
+    out: dict[str, Any] = {}
+    for key, value in attrs.items():
+        out[key if "." in key else _MLIR_MODULE_ATTR_PREFIX + key] = value
+    return out
 
 
 def _format_attr_dict(attrs: dict[str, Any]) -> str:

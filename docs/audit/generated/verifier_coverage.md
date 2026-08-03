@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 213 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 216 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 213 | |
+| **Total** | 216 | |
 
 ## Per-dialect details
 
@@ -42,6 +42,9 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `BinaryCrossEntropyLossOp` | `real` |
 | `BroadcastInDimOp` | `real` |
 | `BroadcastOp` | `real` |
+| `CPUMsaBlockSparseOp` | `real` |
+| `CPUProfilerProbeOp` | `real` |
+| `CPUReferenceOp` | `real` |
 | `CacheCommitOp` | `real` |
 | `CachePageLookupOp` | `real` |
 | `CacheRollbackOp` | `real` |

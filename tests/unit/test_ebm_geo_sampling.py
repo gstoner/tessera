@@ -347,3 +347,154 @@ def test_ebm_version_advanced_to_ebm7() -> None:
     assert ebm.__version__.startswith("0.0.0-ebm")
     sprint_str = ebm.__version__.split("-ebm", 1)[1]
     assert int(sprint_str) >= 7
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# W0.3 — traceable energies use reverse mode; NumPy callbacks fall back
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestTraceableEnergyGradient:
+    """Both gradient paths, and the rule that picks between them.
+
+    Central differences cost 2·D energy evaluations, and for a multivector in
+    Cl(p,q,r) that is D = 2^n -- exponential in the algebra's dimension, and
+    only first-order accurate. Reverse mode costs one forward plus one backward
+    regardless of D. Before W0.3 the samplers always took the numerical path,
+    because `Multivector.coefficients` hands out a fresh whole-array view on
+    every access, so nothing the energy touched could be matched back to the
+    state buffer.
+    """
+
+    @staticmethod
+    def _traceable_energy(counter):
+        """E(c) = sum(c^2), routed through tessera.ops so the tape records it."""
+        from tessera import ops
+        from tessera.ga.multivector import Multivector
+
+        def energy(x):
+            counter["n"] += 1
+            c = x.coefficients if isinstance(x, Multivector) else x
+            return ops.reduce(ops.mul(c, c), op="sum")
+
+        return energy
+
+    @staticmethod
+    def _raw_numpy_energy(counter):
+        """The same energy in raw NumPy — records nothing, must fall back."""
+        from tessera.ga.multivector import Multivector
+
+        def energy(x):
+            counter["n"] += 1
+            c = x.coefficients if isinstance(x, Multivector) else x
+            return float(np.sum(np.asarray(c) ** 2))
+
+        return energy
+
+    def test_traceable_multivector_energy_uses_reverse_mode(self):
+        from tessera.ebm.geo_sampling import _tape_grad_mv
+        from tessera.ga.multivector import Multivector
+        from tessera.ga.signature import Cl
+
+        algebra = Cl(3, 0)
+        state = Multivector(np.arange(1.0, algebra.dim + 1.0), algebra)
+
+        counter = {"n": 0}
+        grad = _tape_grad_mv(self._traceable_energy(counter), state)
+
+        assert grad is not None, "a tessera.ops-based energy must be traceable"
+        # E = sum(c^2) → dE/dc = 2c, exactly (not to finite-difference tolerance).
+        np.testing.assert_allclose(grad, 2.0 * np.asarray(state.coefficients))
+        assert counter["n"] == 1, (
+            f"reverse mode must evaluate the energy once; got {counter['n']}"
+        )
+
+    def test_reverse_mode_is_cheaper_than_central_differences(self):
+        from tessera.ebm.geo_sampling import _numerical_grad_mv, _tape_grad_mv
+        from tessera.ga.multivector import Multivector
+        from tessera.ga.signature import Cl
+
+        algebra = Cl(3, 0)
+        state = Multivector(np.arange(1.0, algebra.dim + 1.0), algebra)
+
+        tape_calls = {"n": 0}
+        _tape_grad_mv(self._traceable_energy(tape_calls), state)
+
+        num_calls = {"n": 0}
+        _numerical_grad_mv(self._traceable_energy(num_calls), state)
+
+        # 2 evaluations per coefficient, and Cl(3,0) has 2^3 = 8 coefficients.
+        assert num_calls["n"] == 2 * algebra.dim
+        assert tape_calls["n"] == 1
+        assert tape_calls["n"] < num_calls["n"]
+
+    def test_raw_numpy_energy_is_untraceable_and_falls_back(self):
+        from tessera.ebm.geo_sampling import _numerical_grad_mv, _tape_grad_mv
+        from tessera.ga.multivector import Multivector
+        from tessera.ga.signature import Cl
+
+        algebra = Cl(3, 0)
+        state = Multivector(np.arange(1.0, algebra.dim + 1.0), algebra)
+
+        counter = {"n": 0}
+        energy = self._raw_numpy_energy(counter)
+
+        assert _tape_grad_mv(energy, state) is None, (
+            "a raw-NumPy energy records no cotangent path and must report "
+            "untraceable so the caller falls back, rather than returning a "
+            "silently wrong gradient"
+        )
+
+        # The fallback still produces the right answer, to fd tolerance.
+        counter["n"] = 0
+        grad = _numerical_grad_mv(energy, state)
+        np.testing.assert_allclose(
+            grad, 2.0 * np.asarray(state.coefficients), rtol=1e-4, atol=1e-4
+        )
+
+    def test_both_paths_agree_on_a_langevin_step(self):
+        """The sampler must produce the same step whichever path supplied the
+        gradient -- the choice is an optimization, not a semantic change."""
+        from tessera.ebm.geo_sampling import bivector_langevin_step
+        from tessera.ga.multivector import Multivector
+        from tessera.ga.signature import Cl
+        from tessera.rng import RNGKey
+
+        algebra = Cl(3, 0)
+        coeffs = np.zeros(algebra.dim)
+        # Populate the grade-2 (bivector) slots.
+        for i, blade in enumerate(algebra.blades()):
+            if blade.grade == 2:
+                coeffs[i] = 0.5 * (i + 1)
+        state = Multivector(coeffs, algebra)
+
+        traced, _ = bivector_langevin_step(
+            state, self._traceable_energy({"n": 0}),
+            eta=0.01, temperature=0.0, rng_key=RNGKey(0),
+        )
+        fallback, _ = bivector_langevin_step(
+            state, self._raw_numpy_energy({"n": 0}),
+            eta=0.01, temperature=0.0, rng_key=RNGKey(0),
+        )
+
+        np.testing.assert_allclose(
+            np.asarray(traced.coefficients),
+            np.asarray(fallback.coefficients),
+            rtol=1e-5, atol=1e-6,
+        )
+
+    def test_sphere_step_traces_a_tessera_ops_energy(self):
+        from tessera.ebm.geo_sampling import _tape_grad
+
+        x = np.array([0.6, 0.8, 0.0])
+        counter = {"n": 0}
+        grad = _tape_grad(self._traceable_energy(counter), x, lambda a: a)
+
+        assert grad is not None
+        np.testing.assert_allclose(grad, 2.0 * x)
+        assert counter["n"] == 1
+
+        raw_counter = {"n": 0}
+        assert _tape_grad(
+            self._raw_numpy_energy(raw_counter), x, lambda a: a
+        ) is None

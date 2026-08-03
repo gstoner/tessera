@@ -39,6 +39,110 @@ _DEFAULT_GRAD_EPS = 1e-3
 
 
 # ---------------------------------------------------------------------------
+# Traceable-energy gradient (W0.3)
+#
+# Central differences cost 2·D energy evaluations, where D is the coefficient
+# count -- and for a multivector in Cl(p,q,r) that is D = 2^n. Reverse mode
+# costs one forward plus one backward regardless of D. So the numerical path
+# is exponentially worse *and* only first-order accurate.
+#
+# It is still the correct fallback: an energy written in raw NumPy records
+# nothing on the tape and has no cotangent path. The rule (per the integrated
+# plan) is to use the tape ONLY when a supported cotangent path is actually
+# recorded, and to fall back silently and correctly otherwise. Both paths are
+# regression-covered.
+#
+# A "traceable EBM energy" is a callable whose scalar result is produced
+# through `tessera.ops.*` applied to the state it was handed. Everything else
+# -- raw NumPy, an op with no registered VJP, a non-scalar result -- is
+# untraceable and takes the numerical path.
+# ---------------------------------------------------------------------------
+
+def _cotangent_for_buffer(t: Any, x: np.ndarray) -> Optional[np.ndarray]:
+    """Find the cotangent the tape accumulated for buffer ``x``.
+
+    A direct ``t.cotangent[id(x)]`` lookup is not enough. The tape keys values
+    on the ``id()`` of the exact array object an op received, and
+    ``Multivector.coefficients`` hands out a *fresh whole-array view* on every
+    access -- so an energy reading ``state.coefficients`` registers under an id
+    we never saw.
+
+    Resolving this inside the tape (mapping a whole view to its base) is the
+    obvious fix and is wrong: ``Tape.record`` keys an op's OUTPUT on
+    ``id(output)``, so rewriting only the input side severs producer->consumer
+    links and silently drops gradients elsewhere. Instead, recover identity
+    here, after the fact, by matching recorded buffers against ``x``.
+    """
+    direct = t.cotangent.get(id(x))
+    if direct is not None:
+        return direct
+
+    for entry in t.entries:
+        for desc in entry.inputs:
+            arr = desc.array
+            if not isinstance(arr, np.ndarray):
+                continue
+            # Same buffer, or a whole-array view onto it.
+            if arr is x or (
+                arr.base is x
+                and arr.shape == x.shape
+                and arr.strides == x.strides
+            ):
+                found = t.cotangent.get(desc.array_id)
+                if found is not None:
+                    return found
+    return None
+
+
+def _tape_grad(
+    energy_fn: Callable[[Any], Any],
+    probe: np.ndarray,
+    make_arg: Callable[[np.ndarray], Any],
+) -> Optional[np.ndarray]:
+    """Reverse-mode ``dE/d(probe)``, or ``None`` if the energy is untraceable.
+
+    Returns ``None`` -- never raises -- for every "this energy cannot be
+    differentiated by the tape" condition, so callers can fall back to central
+    differences. An exception raised by the energy *itself* is a caller bug and
+    is deliberately allowed to propagate.
+    """
+    from ..autodiff.tape import TesseraAutodiffError, tape
+
+    # Own the buffer, so its identity is recoverable from the tape afterwards.
+    x = np.array(probe, dtype=np.float64)
+
+    try:
+        with tape() as t:
+            energy = energy_fn(make_arg(x))
+            if not t.entries:
+                return None  # nothing routed through tessera.ops.*
+            if np.asarray(energy).size != 1:
+                return None  # energy must be scalar to seed a cotangent
+            t.backward(energy, accumulate_param_grad=False)
+            grad = _cotangent_for_buffer(t, x)
+    except TesseraAutodiffError:
+        # Target not on the tape, or an op on the path has no registered VJP.
+        return None
+
+    if grad is None:
+        return None  # state was not on the gradient path
+    return np.asarray(grad, dtype=np.float64).reshape(x.shape)
+
+
+def _tape_grad_mv(
+    energy_fn: Callable[[Multivector], Any],
+    state: Multivector,
+) -> Optional[np.ndarray]:
+    """Reverse-mode gradient wrt a multivector's coefficients, or ``None``."""
+    algebra = state.algebra
+    return _tape_grad(
+        energy_fn,
+        state.coefficients,
+        lambda coeffs: Multivector(coeffs, algebra),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Multivector gradient helper
 # ---------------------------------------------------------------------------
 
@@ -104,7 +208,11 @@ def bivector_langevin_step(
         )
 
     if grad_fn is None:
-        raw_grad_coeffs = _numerical_grad_mv(energy_fn, state)
+        # W0.3 — reverse mode when the energy is traceable (one backward),
+        # central differences only when it is not (2·2^n evaluations).
+        raw_grad_coeffs = _tape_grad_mv(energy_fn, state)
+        if raw_grad_coeffs is None:
+            raw_grad_coeffs = _numerical_grad_mv(energy_fn, state)
         grad_mv = Multivector(raw_grad_coeffs, algebra)
     else:
         grad_mv = grad_fn(state)
@@ -306,16 +414,20 @@ def sphere_langevin_step(
                 return (yv / ynorm).astype(np.float32), next_key
 
     if grad_fn is None:
-        # Numerical gradient via central differences.
-        eps = _DEFAULT_GRAD_EPS
-        grad = np.zeros_like(x_arr)
-        for i in range(x_arr.shape[0]):
-            base = x_arr.copy()
-            base[i] = x_arr[i] + eps
-            E_plus = float(energy_fn(base))
-            base[i] = x_arr[i] - eps
-            E_minus = float(energy_fn(base))
-            grad[i] = (E_plus - E_minus) / (2.0 * eps)
+        # W0.3 — reverse mode first; central differences only if the energy
+        # records no cotangent path (raw-NumPy callback).
+        grad = _tape_grad(energy_fn, x_arr, lambda a: a)
+        if grad is None:
+            # Numerical gradient via central differences.
+            eps = _DEFAULT_GRAD_EPS
+            grad = np.zeros_like(x_arr)
+            for i in range(x_arr.shape[0]):
+                base = x_arr.copy()
+                base[i] = x_arr[i] + eps
+                E_plus = float(energy_fn(base))
+                base[i] = x_arr[i] - eps
+                E_minus = float(energy_fn(base))
+                grad[i] = (E_plus - E_minus) / (2.0 * eps)
     else:
         grad = np.asarray(grad_fn(x_arr), dtype=np.float64)
 

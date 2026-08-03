@@ -611,6 +611,66 @@ LogicalResult FragmentZeroOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// tile.async_copy / tile.wait_async — typed-token form (W1.1)
+//
+// `!tile.async_token` was declared and never used anywhere in the dialect: a
+// Decision #29 violation ("a declaration must have a consumer"). It was not an
+// oversight -- the type was introduced for the NV warp-spec dependency model
+// that replaced program-order reasoning -- it simply had no producer or
+// consumer wired to it. These verifiers are that consumer.
+//
+// Same dual-form migration shape as MMAOp::verify(): the typed form is
+// enforced when present, the legacy form is accepted unchanged so the existing
+// producers keep working. The permissive branch is deleted only once W1.1's
+// producer migration completes.
+//===----------------------------------------------------------------------===//
+
+LogicalResult AsyncCopyOp::verify() {
+  llvm::SmallVector<Value> tokens;
+  for (Value out : getOutputs())
+    if (isa<AsyncTokenType>(out.getType()))
+      tokens.push_back(out);
+
+  if (tokens.empty())
+    return success();  // legacy form: ordering via barrier_id / depends_on
+
+  if (tokens.size() != 1)
+    return emitOpError("typed form yields exactly one !tile.async_token; got ")
+           << tokens.size();
+  if (!isa<AsyncTokenType>(getOutputs().back().getType()))
+    return emitOpError(
+        "the !tile.async_token must be the last result of tile.async_copy");
+  if (getInputs().empty())
+    return emitOpError("typed form expects at least a source operand");
+  // NOTE: the established convention is ONE operand (the source) with the
+  // copied tile returned alongside the token -- e.g.
+  //   %tile, %tok = tile.async_copy %src : (tensor<..>) -> (tensor<..>, !tile.async_token)
+  // An earlier version of this verifier required a destination operand too,
+  // modelled on `tessera_rocm.async_copy(dst, src, bytes)`. That was wrong for
+  // Tile level and the existing fixtures caught it. Do not re-tighten this
+  // without re-reading tile_async_token_roundtrip.mlir and
+  // warpspec_token_sync_legality.mlir.
+  return success();
+}
+
+LogicalResult WaitAsyncOp::verify() {
+  for (Value in : getInputs()) {
+    if (!isa<AsyncTokenType>(in.getType()))
+      continue;
+    Operation *producer = in.getDefiningOp();
+    if (!producer)
+      return emitOpError(
+          "!tile.async_token operand must be produced by a tile.async_copy, "
+          "not a block argument");
+    if (!isa<AsyncCopyOp>(producer))
+      return emitOpError("!tile.async_token operand must be produced by a "
+                         "tile.async_copy; got '")
+             << producer->getName().getStringRef() << "'";
+  }
+  return success();
+}
+
 LogicalResult MMAOp::verify() {
   // Preserve the legacy permissive form during migration. Only the typed
   // fragment form is eligible for physical cooperative-matrix lowering.

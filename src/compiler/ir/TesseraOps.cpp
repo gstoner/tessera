@@ -4586,6 +4586,47 @@ LogicalResult SpectralConvOp::verify() {
                                              "spectral_conv");
 }
 
+//===----------------------------------------------------------------------===//
+// Portable CPU reference lane verifiers (W0.9 follow-up)
+//
+// These ops carry their contract in discardable attributes rather than in
+// operands, so the ODS argument list cannot enforce it -- a verifier is the
+// only place the requirement can live. The Python Target-IR verifier
+// (`_verify_cpu_op`) already demanded exactly these attributes; without these
+// implementations the MLIR side would accept what the Python side rejects,
+// which is the "declared but not consumed" pattern Decision #29 exists to stop.
+//===----------------------------------------------------------------------===//
+
+static LogicalResult requireStrAttrs(Operation *op,
+                                     ArrayRef<StringRef> names) {
+  for (StringRef name : names) {
+    Attribute attr = op->getAttr(name);
+    if (!attr)
+      return op->emitOpError("requires a '") << name << "' attribute";
+    if (!llvm::isa<StringAttr>(attr))
+      return op->emitOpError("attribute '") << name << "' must be a string";
+  }
+  return success();
+}
+
+LogicalResult CPUReferenceOp::verify() {
+  // `source` is what makes the collapse to one generic node lossless: it names
+  // the originating Graph IR op that the per-op name used to encode.
+  if (failed(requireStrAttrs(*this, {"source", "result", "abi"})))
+    return failure();
+  if (!(*this)->getAttrOfType<IntegerAttr>("ordinal"))
+    return emitOpError("requires an integer 'ordinal' attribute");
+  return success();
+}
+
+LogicalResult CPUProfilerProbeOp::verify() {
+  return requireStrAttrs(*this, {"kernel", "phase", "metric", "aggregation"});
+}
+
+LogicalResult CPUMsaBlockSparseOp::verify() {
+  return requireStrAttrs(*this, {"source", "abi", "arch", "kernel", "status"});
+}
+
 } // namespace tessera
 
 #define GET_OP_CLASSES

@@ -23,5 +23,6 @@ module {
       %x : tensor<2x3xf32>, %y : tensor<2x3xf32>) -> tensor<2xf32>
 }
 
+// Loop attributes print on the region's closing brace, not the `scf.for` line.
 // CHECK: scf.for
-// CHECK-SAME: tessera.ebm.checkpoint_budget = 2
+// CHECK: tessera.ebm.checkpoint_budget = 2

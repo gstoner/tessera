@@ -43,7 +43,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 72 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-07-13 | 20 | ✓ |
 | `TILE_IR.md` | Normative | 2026-05-22 | 72 | ✓ |
-| `VALIDATION_SPINE.md` | Normative | 2026-07-13 | 20 | ✓ |
+| `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 0 | ✓ |
 | `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 59 | ✓ |
 
 ### `docs/guides/`
@@ -104,7 +104,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `README.md` | Informative | 2026-05-20 | 74 | ✓ |
 | `Tessera_Kernel_Compilation_Stages_Overview.md` | Informative | 2026-05-06 | 88 | ✓ |
 | `compiler_gaps_1_3_5_plan.md` | - | 2026-07-14 | 19 | ✓ |
-| `compiler_test_architecture.md` | Normative | 2026-07-15 | 18 | ✓ |
+| `compiler_test_architecture.md` | Normative | 2026-08-02 | 0 | ✓ |
 | `distributed/megamoe.md` | - | 2026-06-09 | 54 | ✓ |
 | `frontend_substrate_plan.md` | Active | 2026-05-20 | 74 | ✓ |
 | `inference/serving.md` | - | 2026-07-13 | 20 | ✓ |

@@ -36,7 +36,7 @@ def test_jit_gemm_lowering_artifacts_cover_all_compiler_layers():
     assert "schedule.tile" in artifacts["schedule"]
     assert "tile_m = 128" in artifacts["schedule"]
     assert "tile.mma" in artifacts["tile"]
-    assert "tessera.cpu.matmul" in artifacts["target"]
+    assert 'source = "tessera.matmul"' in artifacts["target"]
     assert gemm.schedule_ir == artifacts["schedule"]
     assert gemm.tile_ir == artifacts["tile"]
     assert gemm.target_ir == artifacts["target"]
@@ -142,7 +142,7 @@ def test_unary_ops_compile_through_cpu_path():
     assert relu.is_executable
     assert sigmoid.is_executable
     assert sin.is_executable
-    assert "tessera.cpu.relu" in relu.target_ir
+    assert 'source = "tessera.relu"' in relu.target_ir
 
 
 def test_softmax_compiles_as_stable_cpu_reduction():
@@ -191,8 +191,8 @@ def test_composite_supported_ops_compile_through_cpu_dataflow():
 
     assert composite.is_executable
     assert "JIT_COMPILED_CPU" in composite.explain_lowering()
-    assert "tessera.cpu.relu" in composite.target_ir
-    assert "tessera.cpu.softmax" in composite.target_ir
+    assert 'source = "tessera.relu"' in composite.target_ir
+    assert 'source = "tessera.softmax"' in composite.target_ir
     np.testing.assert_allclose(out, ts.ops.softmax(ts.ops.relu(x)))
 
 
@@ -209,8 +209,8 @@ def test_nested_ops_and_keyword_literals_compile_through_cpu_dataflow():
     np.testing.assert_allclose(nested(A, B), e / np.sum(e, axis=0, keepdims=True))
     assert nested.is_executable
     assert "axis = 0" in nested.ir_text()
-    assert "tessera.cpu.matmul" in nested.target_ir
-    assert "tessera.cpu.softmax" in nested.target_ir
+    assert 'source = "tessera.matmul"' in nested.target_ir
+    assert 'source = "tessera.softmax"' in nested.target_ir
 
 
 def test_developer_frontend_docs_link_first_end_to_end_path():

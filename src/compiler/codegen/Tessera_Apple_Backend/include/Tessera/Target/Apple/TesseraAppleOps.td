@@ -369,3 +369,19 @@ def AppleGPU_ControlWhileOp : TesseraApple_Op<"gpu.control_while", [Pure]> {
 }
 
 #endif // TESSERA_TARGET_APPLE_OPS
+
+//===----------------------------------------------------------------------===//
+// Structural Target-IR nodes (W0.9) -- emitted by the Python lowering before
+// being declared here, so the artifact named the dialect without being it.
+// Directive-style: structural markers, not value-carrying computation.
+//===----------------------------------------------------------------------===//
+
+def Apple_CPUKVCacheReadOp : TesseraApple_Op<"cpu.kv_cache_read"> {
+  let summary = "Hardware-free marker for a KV-cache read lowered to Apple CPU";
+  let assemblyFormat = "attr-dict";
+}
+
+def Apple_CPUMoeSolverOp : TesseraApple_Op<"cpu.moe_solver"> {
+  let summary = "Hardware-free marker for the MoE solver lowered to Apple CPU";
+  let assemblyFormat = "attr-dict";
+}

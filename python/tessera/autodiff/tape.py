@@ -292,6 +292,15 @@ def _describe(arg: Any):
             return InputDesc(param=param, array_id=id(inner), array=inner)
 
     if isinstance(arg, np.ndarray):
+        # NOTE (W0.3): do NOT resolve a whole-array view to its base here.
+        # It looks like a clean fix for accessors that hand out a fresh
+        # `arr.view()` per access (`Multivector.coefficients` does), but it is
+        # asymmetric: `Tape.record` keys an op's OUTPUT on `id(output)`, so
+        # redirecting only the INPUT side severs producer→consumer links and
+        # silently drops gradients (measured: 12 Clifford/MoE autodiff
+        # failures). Callers that need to recover a cotangent for a buffer
+        # they own should match by buffer identity after `backward` —
+        # see `tessera.ebm.geo_sampling._cotangent_for_buffer`.
         param = parameter_for_buffer_id(id(arg))
         return InputDesc(param=param, array_id=id(arg), array=arg)
 

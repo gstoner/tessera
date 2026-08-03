@@ -32,7 +32,7 @@ violation and gets a follow-up entry in `docs/audit/roadmap/ROADMAP_AUDIT.md`.
 | Graph IR | `tessera.kv_cache.prune` | `src/compiler/ir/TesseraOps.td` |
 | Graph IR | `tessera.kv_cache.read` (handle + position) | `src/compiler/ir/TesseraOps.td:374` |
 | Graph IR type | `tessera.kv_cache` (`Tessera_KVCacheType`) | `TesseraOps.td:103` |
-| Tile IR | `tile.kv_cache` (`Tile_KVCacheOp`) | `programming_model/ir/tile/TileMemoryOps.td:91` |
+| Tile IR | `tile.kv_cache` (`Tile_KVCacheOp`) | `src/compiler/ir/TesseraOps.td` (Graph IR `kv_cache`) |
 | Effects | `tessera.kv_cache.*` → `Effect.state` | `src/transforms/lib/EffectAnnotationPass.cpp:106` |
 | Python runtime | `tessera.ops.kv_cache_append` / `kv_cache_prune` (numpy `ReferenceKVCache`) | `python/tessera/__init__.py:830` |
 

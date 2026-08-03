@@ -83,4 +83,4 @@ def test_transformer_proxy_exercises_all_documented_python_ir_layers():
     assert "tessera.matmul" in artifacts["graph"]
     assert "schedule.tile" in artifacts["schedule"]
     assert "stable_reduction" in artifacts["tile"]
-    assert "tessera.cpu.matmul" in artifacts["target"]
+    assert 'source = "tessera.matmul"' in artifacts["target"]

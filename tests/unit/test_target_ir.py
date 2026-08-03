@@ -86,8 +86,8 @@ def test_lower_tile_to_cpu_target_ir_maps_mma_and_elementwise_to_x86_numpy_contr
     text = target.to_mlir()
     assert 'target = "cpu"' in text
     assert 'arch = "x86_64"' in text
-    assert "tessera.cpu.matmul" in text
-    assert "tessera.cpu.relu" in text
+    assert 'source = "tessera.matmul"' in text
+    assert 'source = "tessera.relu"' in text
     assert 'abi = "numpy"' in text
 
 

@@ -1309,3 +1309,45 @@ def ROCM_DsReadTrOp : TesseraROCM_Op<"ds_read_tr", [MemoryEffects<[MemRead]>]> {
 def ROCM_EmitOp : TesseraROCM_Op<"emit", [Terminator]> {
   let assemblyFormat = "attr-dict";
 }
+
+//===----------------------------------------------------------------------===//
+// Structural Target-IR nodes (W0.9)
+//
+// These were EMITTED by the Python Target-IR lowering before being DECLARED
+// here, so the artifacts named the dialect without being it -- MLIR rejected
+// them as unregistered operations. A substring contract test could not see the
+// difference; the real parse/verify harness could. Decision #19 makes the ODS
+// the contract, so the emitter's vocabulary must appear in it.
+//
+// They are directive-style (attr-dict only): structural markers that fix an
+// op's target placement, not value-carrying computation.
+//===----------------------------------------------------------------------===//
+
+def ROCM_ElementwiseOp : TesseraROCM_Op<"elementwise"> {
+  let summary = "Hardware-free marker for a pointwise/elementwise op on ROCm";
+  let description = [{
+    The generic pointwise node the Tile->Target lowering emits for any op with
+    no dedicated ROCm directive (softmax, activations, and friends carry their
+    own ops). Attributes record `arch` and the originating Graph IR op.
+  }];
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_KVCacheReadOp : TesseraROCM_Op<"kv_cache_read"> {
+  let summary = "Hardware-free marker for a KV-cache read lowered to ROCm";
+  let description = [{
+    The abstract KV-cache read node. Distinct from `paged_kv_read`, which is
+    the launch-contract directive a generator pass expands into a real kernel.
+  }];
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_MsaBlockSparseOp : TesseraROCM_Op<"msa_block_sparse"> {
+  let summary = "Hardware-free marker for the MSA block-sparse attention contract";
+  let description = [{
+    The IR-visible ROCm mirror of the MSA KV-outer sparse contract; the real
+    executing lane is realized by `block_sparse_attention*` at launch time.
+    Attributes record `arch`, `kernel`, and the proof `status`.
+  }];
+  let assemblyFormat = "attr-dict";
+}

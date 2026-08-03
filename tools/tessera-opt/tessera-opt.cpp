@@ -56,6 +56,13 @@
 #include "tessera/Dialect/Queue/QueueDialect.h"
 #endif
 
+// W0.10 (2026-08-02): hardware-free x86 Target IR dialect. x86 was the one
+// backend with no Target IR dialect at all, though Decision #19 says backends
+// MUST expose one; no carve-out was granted, so it is built and registered.
+#ifdef TESSERA_HAVE_X86_TARGET_IR
+#include "TesseraX86/IR/TesseraX86Dialect.h"
+#endif
+
 #ifdef TESSERA_HAVE_SOLVERS
 #include "SolversPasses.h"
 #include "tessera/Dialect/Solver/SolverDialect.h"
@@ -519,6 +526,12 @@ int main(int argc, char **argv) {
   // `!tessera.queue.tile_queue` / `!tessera.queue.token` types
   // directly (rather than only through the FA-4 lowering passes).
   tessera::queue::registerQueueDialect(registry);
+#endif
+
+#ifdef TESSERA_HAVE_X86_TARGET_IR
+  // W0.10 — `tessera_x86.*` ops and the `!tessera_x86.tile` type, so the x86
+  // Target IR is parseable and verifiable by lit like every other backend.
+  mlir::tessera_x86::registerTesseraX86Dialect(registry);
 #endif
 
 #ifdef TESSERA_HAVE_SOLVERS

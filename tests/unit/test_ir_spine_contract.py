@@ -38,7 +38,7 @@ def test_cpu_artifacts_use_graph_schedule_tile_target_spine_names():
     assert "tile.async_copy" in artifacts["tile"]
     assert "tessera_attn.online_softmax" in artifacts["tile"]
     assert "tile.wait_async" in artifacts["tile"]
-    assert "tessera.cpu.flash_attn" in artifacts["target"]
+    assert 'source = "tessera.flash_attn"' in artifacts["target"]
 
 
 def test_textual_kv_cache_path_emits_schedule_and_tile_contracts():
@@ -72,13 +72,23 @@ def test_ods_contracts_cover_graph_schedule_and_tile_spine():
     schedule = (
         root / "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td"
     ).read_text(encoding="utf-8")
-    tile = (root / "src/compiler/programming_model/ir/tile/TileMemoryOps.td").read_text(
-        encoding="utf-8"
-    )
+    # The production Tile dialect — the one CMake tablegens into TesseraIR and
+    # that every backend registers as `tessera::tile::TesseraTileDialect`.
+    # A parallel `programming_model/ir/tile/TileMemoryOps.td` used to be
+    # asserted here; it declared the same `tile` dialect name with *different*
+    # mnemonics (`mma.tcgen05` vs the real `tcgen05.mma`), was never included by
+    # any source file, and was never registered. It was deleted in W0.6 —
+    # asserting against it proved nothing about the compiled spine.
+    tile = (
+        root / "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td"
+    ).read_text(encoding="utf-8")
 
     for op in ["layer_norm", "dropout", "all_reduce", "fft", "spectral_conv", "adam"]:
         assert f'"{op}"' in graph
     for op in ["tile", "warp", "optimizer_shard"]:
         assert f'"{op}"' in schedule
-    for op in ["mma", "kv_cache", "tmem.alloc", "mma.tcgen05"]:
+    for op in ["mma", "tcgen05.mma", "tmem.allocate", "async_copy", "wait_async"]:
         assert f'"{op}"' in tile
+    # `kv_cache` is a Graph IR op; at Tile level the paged-read kernel carries it.
+    assert '"kv_cache"' in graph
+    assert '"paged_kv_read_kernel"' in tile

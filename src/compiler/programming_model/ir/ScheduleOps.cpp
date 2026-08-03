@@ -3,7 +3,7 @@
 // Provides C++ verifier implementations for every op in:
 //   ScheduleMeshPipelineOps.td  → schedule.*
 //   CacheOps.td                 → cache.*
-//   TileMemoryOps.td            → tile.*
+//   (tile.* ODS lives in src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td)
 //
 // Each op's hasVerifier = 1 TableGen flag calls <Op>::verify().
 // This file provides those definitions so the project links without

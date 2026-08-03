@@ -623,3 +623,44 @@ class TestEndToEnd:
         run_once()
         second = x_p.grad.numpy()
         np.testing.assert_allclose(second, 2 * first)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# W0.4 — jacrev records the forward pass once and reuses the tape
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_jacrev_runs_forward_exactly_once():
+    """jacrev must record ONE forward pass and re-run backward per output dim.
+
+    Before W0.4, jacrev called `grad(loss_fn)` inside a loop over output
+    elements, so `fn` ran `out_size` times -- while its own docstring claimed
+    it used the `retain_graph=True` re-runnable tape. That machinery existed
+    in Tape.backward (its docstring even names jacrev as the motivating
+    caller) and was simply never wired up.
+
+    This locks the property, because a regression here is invisible: the
+    Jacobian stays numerically correct while the cost goes quadratic.
+    """
+    import numpy as np
+
+    from tessera import ops
+    from tessera.autodiff import jacrev
+
+    calls = {"n": 0}
+
+    def f(x):
+        calls["n"] += 1
+        return ops.mul(x, x)
+
+    x = np.array([1.0, 2.0, 3.0, 4.0])
+    jac = jacrev(f)(x)
+
+    assert calls["n"] == 1, (
+        f"jacrev ran the forward pass {calls['n']} times; it must record the "
+        "tape once and re-run backward per output element."
+    )
+    # d(x*x)/dx = 2x on the diagonal, zero off-diagonal.
+    np.testing.assert_allclose(np.diag(jac), 2 * x)
+    off_diagonal = jac - np.diag(np.diag(jac))
+    np.testing.assert_allclose(off_diagonal, np.zeros_like(jac), atol=1e-12)

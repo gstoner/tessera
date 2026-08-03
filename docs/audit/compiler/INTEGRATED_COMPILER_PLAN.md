@@ -79,7 +79,7 @@ that does. Every duplication in the tree traces to this:
 | Duplication | Why it exists |
 |---|---|
 | Two frontends (AST `_OpExtractor` / tracer), opposite failure policies | the AST path can't produce SSA through control flow |
-| Two Graph→Schedule, two Schedule→Tile lowerings; Python canonical | the MLIR types don't carry what codegen needs |
+| Two Graph→Schedule, two Schedule→Tile lowerings; Python canonical — **but see the correction below** | the MLIR types don't carry what codegen needs |
 | Python AD tape + `AutodiffPass` | the tape can't be a transform (global monkey-patching) |
 | GA Python fast paths + `RotorSandwichFold` marker | `ExpandProductTable` rejects batched operands |
 | Two `Queue.td`, two `Attn.td` defining the same dialect | accretion, uncaught |
@@ -88,6 +88,25 @@ that does. Every duplication in the tree traces to this:
 **This is why the plan is ordered A → B → C.** Collapsing a duplication before
 the surviving path can carry the information just deletes a working system. Every
 attempt to start at C fails.
+
+> **Correction (2026-08-02, from W0.6 execution) — the Graph→Schedule and
+> Schedule→Tile row above overstates the C++ side, and this makes W3.2 *larger*,
+> not smaller.** There are not two competing lowerings at those boundaries. On
+> the C++ side there is one **annotation-only skeleton**: `GraphToSchedulePass`
+> stamps `schedule.artifact_hash = "__pending__"` on three op-name prefixes and
+> `ScheduleToTilePass` stamps `tile.staged` on `schedule.async_copy`. Neither
+> matches, replaces, or rewrites any op — the original source comment says so
+> outright ("a real pass would pattern-match and replace ops"). Worse, the
+> library holding them (`TesseraPM`) is linked **only into the test binary**;
+> `tessera-opt --help` in the production driver does not list
+> `-tessera-graph-to-schedule` at all.
+>
+> So W3.2 is not "converge two implementations onto MLIR" — the MLIR
+> implementation does not exist yet, and the Python spine is not a duplicate of
+> it but the only implementation. Re-scope W3.2 accordingly before funding it.
+> The passes now carry `[annotation-only skeleton]` in their registered
+> descriptions and a maturity contract in `PMPasses.h`, so nothing can cite them
+> as evidence of a working boundary again.
 
 ---
 
@@ -117,14 +136,38 @@ The seven reviews costed overlapping work independently. Corrections applied her
 | Double-counted work | Costed as | Merged into | Saved |
 |---|---|---|---|
 | Symbolic shapes (Sweep #10, 3w) + control-flow adjoints (AD D4, 6w) + frontend regions (E7) | 3 separate items | **W4** — one program, one gate | ~4w and 2 items that would each have "landed" with zero capability |
-| Differential harness: trace-vs-AST (E2) + Python-spine-vs-MLIR (I5) | 2 harnesses | **W3.1** — one harness, two uses | ~2w |
+| Differential harness: trace-vs-AST (E2) + Python-spine-vs-MLIR (I5) | 2 harnesses | **W3.1** — one harness, ~~two uses~~ **one use today** (see below) | ~2w *(saving no longer holds as stated)* |
 | Schedule-decision work (Frontend U3/E6) + (IR Stack U6/I6) | 2 items | **W5.2** | ~5w |
 | Effects re-homing (Sweep #9) vs derive-from-traced-IR (Frontend E3) | 2 approaches | **W2.2** — E3 strictly supersedes | ~2w |
 | Implicit diff: OT R2 `custom_root` + AD "finish NewtonAutodiff" | 2 items | **W3.5** — same pass | ~2w |
 | Legality collapse (IR Stack I2) as independent work | standalone | **W2.4** — client of the dataflow layer | ~1w |
-| Remat unification: delete `EBMCheckpointInnerLoop` (GA/EBM) + AD D5 | 2 items | **W5.1** | ~1w |
+| Remat unification: ~~delete `EBMCheckpointInnerLoop`~~ **(done in W0.2)** + AD D5 | 2 items | **W5.1** — now AD D5 only | ~1w *(already banked)* |
 
-**~17 weeks of double-counting identified.** Queue estimates are directional:
+**Two rows corrected after W0 execution (2026-08-02).** The ledger is accounting,
+not a work queue — every row's work already lives in a wave item — but two rows
+no longer describe reality:
+
+- **Remat unification.** Deleting `EBMCheckpointInnerLoop` is **done**: W0.2
+  removed it from the default EBM pipeline (its three attributes had zero
+  consumers tree-wide), kept it as an explicitly experimental standalone pass,
+  and shipped the Decision #10a `CHECK-NOT` fixture proving the default pipeline
+  emits no checkpoint annotations. W5.1 therefore owns **only** AD D5 — the
+  demand-aware residual policy as an arbiter axis. Do not re-scope W5.1 as if
+  the deletion were still ahead of it.
+
+- **Differential harness — this merge's saving does not hold.** It assumed two
+  implementations to compare at the Graph→Schedule / Schedule→Tile boundaries.
+  W0.6 established there are not: the C++ side is an **annotation-only skeleton
+  in a test-only library** (`GraphToSchedulePass` stamps
+  `schedule.artifact_hash = "__pending__"` and returns; `TesseraPM` is linked
+  only into the test binary, so production `tessera-opt` never exposed
+  `-tessera-graph-to-schedule`). The trace-vs-AST use is real and unaffected;
+  the Python-spine-vs-MLIR use has no MLIR side to differ against until W3.2
+  builds one. **Net effect: W3.1 keeps one use, and W3.2 grows** — see the
+  correction under §1.
+
+**~17 weeks of double-counting identified**, minus the corrections above.
+Queue estimates are directional:
 the source documents used different scopes, and the Target-IR corrections below
 replace a blanket ROCm migration with an ownership-and-evidence gate.
 
@@ -142,16 +185,20 @@ independent; run them in parallel.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| W0.1 | `manifold` is already a required `StrAttr` in ODS; replace it with a verified enum and delete `Canonicalize`'s generic-op Euclidean fallback (copy `AnnotateAlgebra`'s `emitError`+interrupt) | GA/EBM §1.1 | 3d |
+| W0.1 | **Landed 2026-08-02.** `manifold` is now `EBM_ManifoldAttr` (a `StringBasedAttr` pinning `euclidean`/`sphere`/`bivector`), and `Canonicalize`'s Euclidean fallback is replaced with `emitError`+interrupt+`signalPassFailure`. Verified: unknown value and missing value are both rejected before any pass runs; negative fixture `canonicalize_rejects_bad_manifold.mlir`. The typed-`EnumAttr` upgrade stays with W1.1b. Two side findings, both fixed: the `.td` comment claiming ODS "doesn't support" a constrained string alias was false (`StringBasedAttr` is already used by the ROCm dialect in this tree), and `ts-ebm-opt` never registered `arith`, so **6 of its 12 lit fixtures could not parse** — invisible because `TESSERA_BUILD_EBM_BACKEND` is OFF by default. EBM lit is now 12/12. | GA/EBM §1.1 | 3d |
 | W0.2 | Remove `CheckpointInnerLoop` from the default EBM pipeline because its attributes have no consumer. Keep the standalone pass only if it is explicitly classified experimental; retain the existing non-EBM `CHECK-NOT` fixture and defer demand-aware loop rematerialization to W5.1 | GA/EBM §1.5 | 1d |
-| W0.3 | Define traceable EBM energies; use `autodiff.tape` only when a supported cotangent path is recorded, with numerical differentiation retained for untraceable NumPy callbacks and regression coverage for both paths | GA/EBM §2.6 | 1w |
+| W0.3 | **Landed 2026-08-02.** A traceable EBM energy is now defined as one whose scalar result flows through `tessera.ops.*` on the state it was handed; `_tape_grad`/`_tape_grad_mv` return a reverse-mode gradient when a cotangent path is actually recorded and `None` otherwise, so raw-NumPy callbacks keep the central-difference path. Both `bivector_langevin_step` and `sphere_langevin_step` try the tape first. Measured on Cl(3,0) (D = 2³ = 8): **1 energy evaluation instead of 16**, and exact instead of first-order. **Root cause was tape identity, not the samplers** — `Multivector.coefficients` returns a fresh read-only *whole-array view* on every access, so the tape's `id()`-keyed identity could never match the state buffer and manifold energies were untraceable in principle. **Recorded negative result:** fixing this inside `Tape._describe` (resolving a whole view to its base) is the obvious move and is **wrong** — `Tape.record` keys an op's *output* on `id(output)`, so rewriting only the *input* side severs producer→consumer links and silently drops gradients. Measured: 12 Clifford/MoE autodiff failures, all numerically silent. Identity is therefore recovered *after* `backward` in `_cotangent_for_buffer`, local to the EBM helper, leaving global tape semantics untouched; a comment in `_describe` records why the tempting fix is rejected. Six regression tests cover both paths plus their agreement on a full Langevin step. | GA/EBM §2.6 | 1w |
 | W0.4 | Fix `jacrev`/`jacfwd` forward-pass-per-element; correct their docstrings | Autodiff §B1–B2 | 3d |
 | W0.5 | **Completed 2026-08-02:** Decision #5 in `CLAUDE.md` now states that the effect lattice walks the AST, not the IR | Sweep §F1 | done |
-| W0.6 | Delete duplicate `dialects/tessera_{queue,attn}/*.td`; split the already-linkable `GraphToSchedulePass` into a dedicated library-owned source/header with focused lit fixtures | IR Stack §T5, §T3 | 3d |
+| W0.6 | **Landed 2026-08-02.** Deleted the dead `dialects/tessera_{queue,attn}/*.td` (no CMake referenced them, yet **six docs cited them as the authoritative source** — all repointed). The new Decision #31 drift gate then found a **third duplicate the reviews missed**: `src/compiler/programming_model/ir/tile/TileMemoryOps.td` declared the same `tile` dialect name as the production `Tessera/Dialect/Tile/TileOps.td`, with *contradictory* mnemonics (`mma.tcgen05` vs the live `tcgen05.mma`); it was tablegen'd but never `#include`d by any source and never registered. Deleted, and `CLAUDE.md`'s GPU-only tier corrected to the real mnemonic. PM passes moved to `lib/PMPasses.cpp` + `include/tessera/ProgrammingModel/PMPasses.h`. | IR Stack §T5, §T3 | 3d |
 | W0.7 | `.td` summary drift: distinguish "stub" from "annotation-only"; remove `AnnotateAlgebra`'s false "GA8 lowering will refuse" | GA/EBM §1.4 | 1d |
-| W0.8 | Adopt Decisions #21a, #10a, #29, #30, #31, #32 | §2 | 1d |
-| W0.9 | Keep `test_target_ir_contract.py`'s substring assertions as smoke coverage, and add a real MLIR parse + dialect load + verifier run. ROCm already has native lit/E2E coverage; the gap is the generic Decision #19 contract named by `CLAUDE.md`, not absence of ROCm compiler verification | Target §X4 | 1w |
-| W0.10 | **Decide x86's Decision #19 status** — build `tessera_x86` (AMX tile / AVX-512 vector / pack ops) or add an explicit carve-out. x86 has no `.td` anywhere; the decision reads as universal and the oldest, most-executable backend silently doesn't follow it | Target §X1 | 1h to decide |
+| W0.8 | **Landed 2026-08-02.** All six decisions are in `CLAUDE.md`'s do-not-revisit list with their originating defect. #29 and #31 are drift-gated by `tests/unit/test_governance_declarations.py`: every `primitive_coverage` axis must name an existing consumer file, and no two ODS files may declare the same dialect name. The two genuinely-unconsumed axes (`batching_rule`, `shape_rule`) are explicit ratchet waivers naming their owning wave item, so they read as open rather than closed. The #31 half found a duplicate dialect on its first run (see W0.6). | §2 | 1d |
+| W0.9 | **Landed 2026-08-02, and it found more than expected.** Substring assertions retained as smoke; a real parse + dialect-load + verifier harness now runs each emitter's text through `tessera-opt`. **Result: every Python-emitted "Target IR" fails a real MLIR parse.** Two stacked defects, both invisible to `in`-assertions: (1) module attributes are not dialect-prefixed (`arch`, `target`, `target_features`), which `builtin.module` rejects outright; (2) underneath that, the ops violate their own ODS — `tessera_rocm.mfma` is emitted as `() -> ()` carrying its result as a **string attribute** (`result = "v0"`) while the dialect requires one SSA result. So the Python lane emits text that *resembles* the dialect without being it, and Decision #19's contract was validated by a test that could never have caught this. NVIDIA targets **skip** rather than fail — `tessera_nvidia` is not compiled into the default build, and failing them would measure the build config rather than the emitter.
+
+**The ratchet is now EMPTY — all of it was fixed, not just recorded.** Four distinct defects, each invisible to `in`-assertions: (1) module attributes are dialect-prefixed at MLIR-render time (`_mlir_module_attrs`), keeping the short Python-facing keys callers index; (2) the function container is `func.func`, replacing a hardcoded map of `tessera_apple.cpu.func` / `tessera_rocm.func` / `tessera_nvidia.func` / `tessera_x86.func` — **none of which any dialect defined**; (3) `mfma` / `async_copy` / `wait` emit their real ODS signatures with the async-copy token threaded into the wait; (4) five emitted-but-undeclared ops (`tessera_rocm.{elementwise,kv_cache_read,msa_block_sparse}`, `tessera_apple.cpu.{kv_cache_read,moe_solver}`) were added to their dialects. A second, duplicate emitter family in `matmul_pipeline.py` had the same defects and was fixed with it. The gate now also parses **every committed golden**, which is what caught defect (4): the single-matmul test passed while the multi-op `matmul_softmax` goldens did not.
+
+**The `cpu` reference lane is now closed too (2026-08-02) — no exclusions remain.** It emitted `tessera.cpu.<source-op>`, one op name per Graph IR op, so its vocabulary grew with the op set and could never be enumerated in ODS. That name was pure redundancy: the CPU verifier already *requires* a `source` attribute naming the originating op. It now emits the single declared `tessera.cpu.reference` node (plus `cpu.profiler_probe` and `cpu.msa_block_sparse`, kept separate because they carry distinct contracts), and parses and verifies like every other lane. Every target the build compiles a dialect for — `cpu`, `x86`, `rocm`, `apple_cpu`, `apple_gpu` — now passes a real parse + dialect-load + verifier run; only NVIDIA skips, and only because its dialect is off in the default build. | Target §X4 | 1w |
+| W0.10 | **Decided 2026-08-02: build `tessera_x86`.** No carve-out — Decision #19 stays universal. Evidence that settled it: `TileToX86Pass` lowers Tile IR to **21 `func::CallOp`s** into a hand-written C shim plus arith/memref glue, using neither a `tessera_x86` dialect nor MLIR's upstream `amx`/`x86vector` dialects — structurally the same `func.call`-to-a-C-symbol shape `CLAUDE.md` already flags for Apple GPU. The build is cheaper than the other backends' equivalents because the abstract ops largely exist upstream: the hardware-free layer (`tessera_x86.amx_tile_load`, `.amx_dpbf16ps`, `.avx512_gemm_microkernel`, pack/unpack) can lower into `amx.*`/`x86vector.*` rather than terminating in `func.call`. **Built 2026-08-02.** `tessera_x86` is defined, tablegen'd, linked into `tessera-opt`, and registered (`--show-dialects` lists it). It separates **value-carrying** ops — `amx_tile_load` / `amx_tile_zero` / `amx_dpbf16ps` / `amx_dpbusd` / `amx_tile_store` over a real `!tessera_x86.tile` type — from **directives** (`avx512_gemm_microkernel`, `pack_b_panel`, `elementwise`, plus the emitter's `kernel` / `kv_cache_read` / `unsupported`). `abi_call` models the C-shim boundary rather than hiding it, so Decision #28's arbiter can distinguish compiler-generated from delegated work. Positive **and negative** lit fixtures ship (`x86_target_ir{,_invalid}.mlir`); the negative one proves the typed layer rejects an AMX dot-product whose operands never came from a tile — exactly the property a substring test cannot check. The Python x86 emitter's output now parses, loads the dialect, and verifies. **Remaining, and re-scoped 2026-08-02:** lowering into upstream `x86vector.*` (AVX-512) instead of terminating in `func.call` is the live follow-on — it changes generated code and needs AVX-512 execute-and-compare on this box. **The AMX half is deprioritized to optional:** per the project owner, AMX is expected to be superseded by the ACE matrix instructions jointly agreed by Intel and AMD for future CPUs, so an AMX → `amx.*` lowering is not worth building now. (Recorded as owner direction; ACE specifics are not independently verified in this plan.) The AMX ops stay in the ODS as the IR-level contract — they cost nothing, they pin the tile/accumulator shape, and they give the eventual ACE ops a structure to follow. This also removes the fleet's only hardware blocker here: AVX-512 execution is available on this box, whereas no machine in the fleet has AMX. | Target §X1 | 1h to decide (done); dialect + fixtures done |
 
 **Exit:** the open-string manifold key is verified, the EBM default pipeline
 emits no unconsumed checkpoint policy, `CLAUDE.md` Decision #5 is accurate, and
@@ -165,7 +212,7 @@ design before migration.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| W1.1 | **Finish typing true Tile primitives and verify target matrix variants.** Preserve the typed alloc/pipeline/TMA/mbarrier/TMEM ops; parameterize `!tile.fragment`/`!tile.buffer` on element type, tile shape, layout, memory space, role, and accumulator `numeric_policy`. Define target contracts by `(arch, instruction, shape, operand dtype, accumulator dtype, role)`; treat the documented gfx11 f16 vectors as one fixture, not a universal ROCm/NVIDIA signature. Inventory every backend producer/consumer before tightening each op | IR Stack §U1 + Target §X2 | 5w design/migration estimate |
+| W1.1 | **Inventory landed 2026-08-02: [`W1_1_TYPING_INVENTORY.md`](W1_1_TYPING_INVENTORY.md)** — the precondition this item states ("inventory every backend producer/consumer before tightening each op"). Headline correction: **W1.1 is a migration already in progress, not a design job.** `MMAOp::verify()` already enforces a full typed-fragment contract and explicitly keeps a legacy permissive branch "during migration"; but **no C++ pass emits the typed form** (0 of 10 producers set `#tile.mma_desc` — the only producers are Python text emitters), and **no lit fixture pairs `!tile.fragment` with `tile.mma`**. Also found: `Tile_AsyncTokenType` is declared and never used (a live Decision #29 violation), and `tile.async_copy` has no verifier at all, so it has no typed form to migrate onto — those two close each other. Recommended order and reproducible counts are in the inventory. **Finish typing true Tile primitives and verify target matrix variants.** Preserve the typed alloc/pipeline/TMA/mbarrier/TMEM ops; parameterize `!tile.fragment`/`!tile.buffer` on element type, tile shape, layout, memory space, role, and accumulator `numeric_policy`. Define target contracts by `(arch, instruction, shape, operand dtype, accumulator dtype, role)`; treat the documented gfx11 f16 vectors as one fixture, not a universal ROCm/NVIDIA signature. Inventory every backend producer/consumer before tightening each op | IR Stack §U1 + Target §X2 | 5w design/migration estimate |
 | W1.1b | `EnumAttr` for every semantic `StrAttr` in the target dialects (62 × `$name`, 4 × `$kind`, 1 × `$mode`; zero enums today) — Decision #21a enforcement | Target §X3 | 1w |
 | W1.2 | **One shape-rule registry**, owned by `op_catalog.OpSpec`; `primitive_coverage.shape_rule` auto-flips from it (same mechanism as `_VJPS`/`_JVPS`); unknown op ⇒ diagnostic, never `operand_types[0]` | Frontend §U2 | 2w |
 | W1.3 | Metadata lowering obligation (#32) + boundary verifier | IR Stack §U5 | 2w |
@@ -338,22 +385,38 @@ exceeds-SOTA claims.
 
 ## 6a. Fleet routing — what must run on which box
 
+**Core compiler work is driven on the Strix Halo box (decided 2026-08-02).**
+`AMD RYZEN AI MAX+ 395 w/ Radeon 8060S`, Ubuntu 24.04 under WSL2, 32 threads,
+62 GB RAM, LLVM/MLIR 23 at `/usr/lib/llvm-23`, `gfx1151` visible to `rocminfo`.
+It is both faster and larger-memory than the Mac M1 Max for `tessera-opt`
+rebuilds, and it is the only box in the fleet with an executing GPU lane — so
+compile-time contract work and its hardware gate live on the same machine. The
+Mac is retained for Apple-backend work, which cannot move.
+
 Most of this plan is compile-time contract work and runs anywhere. Two items are
 hardware-bound, and one of them is the highest-risk item in the plan.
 
 | Work | Box | Why |
 |---|---|---|
-| W0, W1 (typing, enums, shape rules), W2 (analyses), W3.1–W3.4 | **Mac M1 Max** | ODS, `tessera-opt`, lit, unit tests. No device needed; tightening a type is a compile-time change. |
-| W0.10 build branch — `tessera_x86` dialect | **Mac** for ODS/lit; **Zen5 box** for AMX/AVX-512 execution proof | The NR2 Pro's Core Ultra 7 has no AVX-512/AMX. |
-| **W3.7 — ROCm producer ownership + differential gate** | **Host-free for inventory/IR equivalence; Strix Halo gfx1151 for each later producer change** | The initial slice does not change kernels. Any retirement or migration that changes generated code requires execute-and-compare on the owning device. |
-| W4 (control flow) end-to-end gate | **any executing lane**; gfx1151 preferred | It has the broadest compiler-generated + hardware-verified op coverage. |
+| W0, W1 (typing, enums, shape rules), W2 (analyses), W3.1–W3.4 | **Strix Halo (primary)** | ODS, `tessera-opt`, lit, unit tests. No device needed; tightening a type is a compile-time change. Runs on the Mac too, but the primary is where the gates are expected to be green. |
+| Any item touching the Apple backend or Apple lit fixtures | **Mac M1 Max** | Metal/Accelerate toolchain is Mac-only; this is the one thing that cannot be retargeted. |
+| W0.10 build branch — `tessera_x86` dialect | **Strix Halo** for ODS/lit; **AVX-512 execution proof also here**; AMX execution proof has **no box in the fleet** | Zen 5 has AVX-512 (`avx512f` confirmed on this host) but **AMX is Intel-only** — the earlier routing to a "Zen5 box for AMX" was wrong. The NR2 Pro's Core Ultra 7 has neither. Anything AMX-gated is currently unexercised (see the note below). |
+| **W3.7 — ROCm producer ownership + differential gate** | **Strix Halo** — inventory/IR equivalence is host-free, and gfx1151 for each later producer change is on the same box | The initial slice does not change kernels. Any retirement or migration that changes generated code requires execute-and-compare on the owning device. |
+| W4 (control flow) end-to-end gate | **Strix Halo / gfx1151** | It has the broadest compiler-generated + hardware-verified op coverage. |
 | ROCm arch breadth (gfx950 / gfx1201 / gfx1250) | deferred — no silicon | MASTER_AUDIT P2, unchanged. |
+
+**AMX has no hardware behind it.** `tests/device/x86/test_amx_int8_gemm.py` and
+`scripts/run_x86_amx_release_gate.sh` (merged in #489) gate on AMX capability,
+which no current fleet box reports. The gating is honest, but the lane is
+unexercised; do not let W0.10 lean on an AMX execution proof it cannot obtain.
+Native x86 proof on this box means AVX-512.
 
 **Two sequencing consequences.** First, W3.7 reuses the differential-harness
 design from W3.1/W3.2 and records one owner per package family before anything
 is deleted. Second, W1.1's ROCm typing may expose invalid assumptions in
 registered generators; fix those compile-time contracts host-free, and require
-gfx1151 evidence only when a generated kernel or selected producer changes.
+gfx1151 evidence only when a generated kernel or selected producer changes —
+both halves now on the same machine.
 
 **What to cut first if squeezed:** W6.4 (GA synthesis / PGA) and W5.5
 (canonicalization rule tables) are the most deferrable — genuine value, no

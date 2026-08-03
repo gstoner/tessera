@@ -750,6 +750,7 @@ SHAPE_RULE_NAMES = frozenset({
 #: force wrong behavior. Answering "why is this unclassified?" is what makes the
 #: remaining count meaningful.
 DELIBERATELY_UNDECLARED: dict = {
+    "tessera.popcount": "returns an INTEGER bit count, never the operand's storage dtype, so it is not storage-preserving despite sitting in the `elementwise` kind. The exact integer width is NumPy-version dependent (uint8 under 2.x, int64 under 1.26), so pinning one would be wrong; declaring a shape rule needs an int-width-agnostic vocabulary first",
     "tessera.adam": "optimizer keeps f32 compute/state while params are reduced precision; MEASURED: at fp16 a 1e-4 gradient squares to exactly zero, so an fp16 second moment would collapse -- the f32 default is load-bearing. Declaring it storage-preserving would force the state back to the param dtype and destroy the update. See tests/unit/test_optimizer_reduced_precision.py",
     "tessera.adamw": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
     "tessera.momentum": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
@@ -783,6 +784,14 @@ def shape_rule_for(graph_name: str) -> str:
     op nor its lowering kind declares one. Never returns an empty string, so a
     caller cannot mistake "no rule" for "no answer".
     """
+    # A deliberate non-declaration outranks any lowering-kind default. Without
+    # this, an op could be listed as "examined, deliberately undeclared" while
+    # `shape_rule_for` still handed back its kind's default -- and the gates
+    # would enforce a rule the catalog had explicitly withdrawn. `popcount` hit
+    # exactly that: excluded from the ratchet, yet still reported
+    # `same_as_first` from the `elementwise` kind.
+    if graph_name in DELIBERATELY_UNDECLARED:
+        return "unclassified"
     explicit = OP_SHAPE_RULE.get(graph_name)
     if explicit:
         return explicit

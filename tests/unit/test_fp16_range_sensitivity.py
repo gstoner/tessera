@@ -37,12 +37,21 @@ def test_declared_hazards_name_real_ops_and_explain_themselves():
 def test_fp16_range_limit_is_what_we_think():
     """Pin the premise. If fp16's range changed, this whole axis changes."""
     assert float(np.finfo(np.float16).max) == pytest.approx(65504.0)
-    # Square IN fp16 — converting to a Python float first does the arithmetic
-    # in double and never overflows, which is the mistake this line originally
-    # made and is the same class of error the whole axis is about.
+    # Square IN fp16, using an ARRAY.
+    #
+    # Two traps here, both hit for real:
+    #   * converting to a Python float first does the arithmetic in double and
+    #     never overflows;
+    #   * `np.float16(1e4) ** 2` on a SCALAR is NumPy-version dependent — under
+    #     NEP 50 (NumPy 2.x) it stays float16 and overflows, while NumPy 1.26
+    #     promotes it to float64 and yields a finite 1e8. CI pins numpy<2.0, so
+    #     a scalar-based assertion passes locally and fails there.
+    # Array-array arithmetic does not promote on either version, so it is the
+    # version-stable way to state this premise.
+    values = np.full((2,), 1e4, dtype=np.float16)
     with np.errstate(over="ignore"):
-        squared_in_fp16 = np.float16(1e4) ** 2  # overflow is the point
-    assert not np.isfinite(squared_in_fp16), (
+        squared_in_fp16 = values * values  # overflow is the point
+    assert not np.all(np.isfinite(squared_in_fp16)), (
         "(1e4)**2 no longer overflows fp16 — re-derive the hazard set"
     )
 

@@ -25,7 +25,7 @@ from typing import Any, Callable, Sequence, Union
 
 import numpy as np
 
-from .grad import _normalize_argnums, _wrap_as_parameter, grad
+from .grad import _wrap_as_parameter
 from .jvp import jvp
 from .tape import tape
 
@@ -125,6 +125,27 @@ def vmap(
     return wrapped
 
 
+def _returns_this_parameter(out, param) -> bool:
+    """True when `fn` handed back the very buffer it was given for `param`.
+
+    Identity has to be decided by BUFFER identity, not by value: two arrays
+    that merely compare equal have unrelated Jacobians.
+    """
+    if out is param:
+        return True
+    buf = getattr(getattr(param, "_data", None), "_data", None)
+    if buf is None:
+        return False
+    if out is buf:
+        return True
+    out_arr = np.asarray(out)
+    return (
+        isinstance(out_arr, np.ndarray)
+        and out_arr.shape == np.asarray(buf).shape
+        and np.shares_memory(out_arr, buf)
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # jacrev — Jacobian via reverse-mode autodiff
 # ─────────────────────────────────────────────────────────────────────────────
@@ -187,6 +208,29 @@ def jacrev(
                 jacobians.append(
                     (p, np.zeros(out_shape + ai_shape, dtype=np.float64), ai_shape)
                 )
+
+            # An output the tape never produced has no gradient path to walk:
+            # `fn` either returned one of its arguments unchanged, or returned a
+            # constant. Both are legitimate — `jacrev(lambda x: x)` is the
+            # identity Jacobian — and `backward` would raise on them, so resolve
+            # them structurally instead.
+            #
+            # The pre-W0.4 implementation never hit this because it wrapped `fn`
+            # in `sum(out * cotangent)` through `ops.*`, which made the target
+            # tape-produced no matter what `fn` did. Reusing one tape removed
+            # that accidental shield.
+            if not any(entry.output_id == id(out) for entry in t.entries):
+                for p, jac_buf, ai_shape in jacobians:
+                    if _returns_this_parameter(out, p):
+                        # d(x)/d(x) = I, laid out as out_shape + in_shape.
+                        size = int(np.prod(out_shape)) if out_shape else 1
+                        jac_buf[...] = np.eye(size, dtype=np.float64).reshape(
+                            jac_buf.shape
+                        )
+                    # Otherwise the output is constant in this argument and the
+                    # pre-zeroed buffer is already correct.
+                result = tuple(jac for _, jac, _ in jacobians)
+                return result[0] if singleton else result
 
             # ── One backward sweep per output element, reusing the tape ──
             for k in range(out_arr.size):

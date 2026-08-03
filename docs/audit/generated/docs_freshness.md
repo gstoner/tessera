@@ -6,9 +6,9 @@ Reference date for staleness: **2026-08-02**.
 
 ## Headline
 
-- **134** docs catalogued across the canonical doc tree.
-- **133** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **79** updated within the last 30 days.
+- **135** docs catalogued across the canonical doc tree.
+- **134** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **80** updated within the last 30 days.
 - **8** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -142,19 +142,19 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/apple/APPLE_GPU_CODEGEN_PLAN.md` | - | 2026-07-13 | 20 | ✓ |
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 20 | ✓ |
 | `backend/apple/README.md` | - | 2026-07-13 | 20 | ✓ |
-| `backend/apple/todo.md` | - | 2026-07-31 | 2 | ✓ |
+| `backend/apple/todo.md` | - | 2026-08-02 | 0 | ✓ |
 | `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-06-24 | 39 | ✓ |
 | `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-07-18 | 15 | ✓ |
 | `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-19 | 14 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 20 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 39 | ✓ |
-| `backend/nvidia/todo.md` | - | 2026-07-31 | 2 | ✓ |
+| `backend/nvidia/todo.md` | - | 2026-08-02 | 0 | ✓ |
 | `backend/rocm/GFX1250_MI450_COMPILER_REFERENCE.md` | - | 2026-07-28 | 5 | ✓ |
 | `backend/rocm/ROCM_AUDIT.md` | - | 2026-07-16 | 17 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 5 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 40 | ✓ |
-| `backend/rocm/todo.md` | - | 2026-07-31 | 2 | ✓ |
-| `backend/x86/todo.md` | - | 2026-07-31 | 2 | ✓ |
+| `backend/rocm/todo.md` | - | 2026-08-02 | 0 | ✓ |
+| `backend/x86/todo.md` | - | 2026-08-02 | 0 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 5 | ✓ |
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-02 | 0 | ✓ |
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-07-14 | 19 | ✓ |
@@ -174,6 +174,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/STAGE_A_EMIT_PLAN.md` | - | 2026-07-11 | 22 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 0 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 3 | ✓ |
+| `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 0 | ✓ |
 | `compiler/WORKSTREAM_C_HANDOFF.md` | - | 2026-07-06 | 27 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-06-21 | 42 | ✓ |
 | `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 52 | ✓ |

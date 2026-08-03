@@ -442,3 +442,59 @@ def test_committed_golden_target_ir_parses_and_verifies(golden):
         f"committed golden {golden.name} is not valid MLIR:\n  {diagnostic}\n"
         f"Regenerate with TESSERA_UPDATE_GOLDEN=1 after fixing the emitter."
     )
+
+
+@pytest.mark.parametrize("target_kind", sorted(_TARGET_DIALECT))
+def test_probe_annotated_target_ir_still_parses(target_kind):
+    """Probe annotation must preserve typed ops (PR #490 review, P1-3).
+
+    `annotate_target_ir_with_probes()` rebuilds every op through
+    `_copy_target_op`. That copy originally dropped the `operand_types` /
+    `result_type` / `prelude` fields, which silently downgraded a typed op back
+    to `() -> ()` *while keeping its operand references* — so the annotated
+    module no longer parsed ("expected 3 operand types but had 0") and its SSA
+    operands had no defining prelude.
+
+    Nothing caught it because the plain lowering was the only thing checked.
+    This gate covers the annotated path too, for every target.
+    """
+    from tessera.compiler.frontend import lower_text_to_graph_ir as _lower_graph
+    from tessera.compiler.schedule_ir import lower_graph_to_schedule_ir
+    from tessera.compiler.target_ir import (
+        annotate_target_ir_with_probes,
+        lower_tile_to_target_ir,
+    )
+    from tessera.compiler.tile_ir import lower_schedule_to_tile_ir
+
+    opt = _tessera_opt()
+    if opt is None:
+        pytest.skip("tessera-opt not built; run `ninja -C build tessera-opt`")
+    dialect = _TARGET_DIALECT[target_kind]
+    if dialect not in _registered_dialects(opt):
+        pytest.skip(f"{dialect} is not compiled into this tessera-opt build")
+
+    # Multi-op, so more than one lowering path is exercised.
+    source = """
+    module demo {
+      func main(A: tensor<2x3xfp32>, B: tensor<3x2xfp32>) -> tensor<2x2xfp32> {
+        C = op.matmul(A, B);
+        P = op.softmax(C);
+        return P;
+      }
+    }
+    """
+    tile = lower_schedule_to_tile_ir(
+        lower_graph_to_schedule_ir(_lower_graph(source))
+    )
+    module = lower_tile_to_target_ir(tile, target_kind=target_kind)
+
+    ok, diagnostic = _parse_and_verify(opt, module.to_mlir(verify=False))
+    assert ok, f"{target_kind} plain Target IR regressed: {diagnostic}"
+
+    annotated = annotate_target_ir_with_probes(module)
+    ok, diagnostic = _parse_and_verify(opt, annotated.to_mlir(verify=False))
+    assert ok, (
+        f"{target_kind} Target IR stopped parsing after probe annotation:\n"
+        f"  {diagnostic}\n"
+        f"Check that _copy_target_op copies every TargetOp field."
+    )

@@ -498,3 +498,38 @@ class TestTraceableEnergyGradient:
         assert _tape_grad(
             self._raw_numpy_energy(raw_counter), x, lambda a: a
         ) is None
+
+
+def test_tape_grad_sums_cotangents_from_every_alias():
+    """PR #490 review (P1): aliased views must accumulate, not first-match-win.
+
+    `Multivector.coefficients` returns a fresh whole-array view on every access,
+    so an energy that reads the state twice registers two distinct tape ids,
+    each holding its own half of dE/dx. Returning the first match gave a
+    gradient of 1 where the true value is 2 — a silently wrong Langevin step,
+    not an error, which is precisely the failure class this work exists to
+    remove.
+    """
+    import numpy as np
+
+    from tessera import ops
+    from tessera.ebm.geo_sampling import _numerical_grad_mv, _tape_grad_mv
+    from tessera.ga.multivector import Multivector
+    from tessera.ga.signature import Cl
+
+    algebra = Cl(3, 0)
+    state = Multivector(np.arange(1.0, algebra.dim + 1.0), algebra)
+
+    def aliased_energy(x):
+        a = x.coefficients          # view #1
+        b = x.coefficients          # view #2 — a different object
+        return ops.reduce(ops.add(a, b), op="sum")   # E = sum(2c) -> dE/dc = 2
+
+    grad = _tape_grad_mv(aliased_energy, state)
+    assert grad is not None
+    np.testing.assert_allclose(grad, np.full(algebra.dim, 2.0))
+
+    # And it agrees with the numerical fallback, which never had this bug.
+    np.testing.assert_allclose(
+        grad, _numerical_grad_mv(aliased_energy, state), rtol=1e-4, atol=1e-4
+    )

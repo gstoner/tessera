@@ -6,7 +6,7 @@ adafactor,15,0,0,15,0,fp32 fp64,directly_tested,15 direct test references
 adam,17,5,0,22,0,fp32 fp64,directly_tested,22 direct test references
 adamw,15,5,0,20,0,fp32 fp64,directly_tested,20 direct test references
 adaptive_pool,6,0,0,6,0,,directly_tested,6 direct test references
-add,118,32,10,150,0,bf16 f16 f32 f64 fp16 fp32 int8,directly_tested,150 direct test references
+add,119,32,10,151,0,bf16 f16 f32 f64 fp16 fp32 int8,directly_tested,151 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,7,0,0,7,0,bf16 f16 f32 fp32 int32,directly_tested,7 direct test references
 all_gather,2,5,0,7,0,fp32,directly_tested,7 direct test references
@@ -302,7 +302,7 @@ msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,47,11,1,58,0,,directly_tested,58 direct test references
 mse_loss,29,0,5,29,0,f32 fp32 int64,directly_tested,29 direct test references
-mul,92,15,7,107,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,107 direct test references
+mul,93,15,7,108,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,108 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,13,0,0,13,0,,directly_tested,13 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -348,7 +348,7 @@ quantize_nvfp4,18,0,3,18,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,8,0,0,8,0,fp16,directly_tested,8 direct test references
 reciprocal,4,0,0,4,0,bf16 f32 fp16 fp32,directly_tested,4 direct test references
-reduce,98,15,7,113,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,113 direct test references
+reduce,99,15,7,114,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,114 direct test references
 reduce_scatter,1,10,0,11,0,,directly_tested,11 direct test references
 relu,114,36,9,150,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,150 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'

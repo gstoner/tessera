@@ -73,10 +73,27 @@ def _cotangent_for_buffer(t: Any, x: np.ndarray) -> Optional[np.ndarray]:
     links and silently drops gradients elsewhere. Instead, recover identity
     here, after the fact, by matching recorded buffers against ``x``.
     """
-    direct = t.cotangent.get(id(x))
-    if direct is not None:
-        return direct
+    # Every alias must be SUMMED, not first-match-wins. `Multivector.coefficients`
+    # returns a fresh view per access, so an energy that reads the state twice --
+    # `ops.add(x.coefficients, x.coefficients)` -- registers two distinct
+    # array_ids, each carrying its own half of dE/dx. Returning the first match
+    # yielded a gradient of 1 where the true value is 2: a silently wrong
+    # Langevin step, not an error.
+    total: Optional[np.ndarray] = None
+    seen_ids: set[int] = set()
 
+    def _accumulate(array_id: int) -> None:
+        nonlocal total
+        if array_id in seen_ids:
+            return
+        seen_ids.add(array_id)
+        found = t.cotangent.get(array_id)
+        if found is None:
+            return
+        contribution = np.asarray(found, dtype=np.float64)
+        total = contribution.copy() if total is None else total + contribution
+
+    _accumulate(id(x))
     for entry in t.entries:
         for desc in entry.inputs:
             arr = desc.array
@@ -88,10 +105,8 @@ def _cotangent_for_buffer(t: Any, x: np.ndarray) -> Optional[np.ndarray]:
                 and arr.shape == x.shape
                 and arr.strides == x.strides
             ):
-                found = t.cotangent.get(desc.array_id)
-                if found is not None:
-                    return found
-    return None
+                _accumulate(desc.array_id)
+    return total
 
 
 def _tape_grad(

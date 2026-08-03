@@ -664,3 +664,34 @@ def test_jacrev_runs_forward_exactly_once():
     np.testing.assert_allclose(np.diag(jac), 2 * x)
     off_diagonal = jac - np.diag(np.diag(jac))
     np.testing.assert_allclose(off_diagonal, np.zeros_like(jac), atol=1e-12)
+
+
+def test_jacrev_handles_outputs_the_tape_never_produced():
+    """PR #490 review (P1): `jacrev(lambda x: x)` must not raise.
+
+    Reusing a single tape (W0.4) removed an accidental shield: the previous
+    implementation wrapped `fn` in `sum(out * cotangent)` through `ops.*`, which
+    made the backward target tape-produced no matter what `fn` returned. With
+    one tape, an `fn` that returns an argument unchanged or returns a constant
+    has no tape entry owning the output, and `backward` raised.
+
+    Both cases have well-defined Jacobians and are resolved structurally.
+    """
+    import numpy as np
+
+    from tessera import ops
+    from tessera.autodiff import jacrev
+
+    x = np.array([1.0, 2.0, 3.0])
+
+    # d(x)/d(x) = I
+    np.testing.assert_allclose(jacrev(lambda v: v)(x), np.eye(3))
+
+    # A constant output does not depend on the input.
+    const = jacrev(lambda v: np.array([5.0, 6.0]))(np.array([1.0, 2.0]))
+    np.testing.assert_allclose(const, np.zeros((2, 2)))
+
+    # The ordinary tape-produced path is unaffected.
+    np.testing.assert_allclose(
+        np.diag(jacrev(lambda v: ops.mul(v, v))(x)), 2 * x
+    )

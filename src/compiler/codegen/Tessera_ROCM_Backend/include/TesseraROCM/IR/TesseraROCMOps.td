@@ -1351,3 +1351,12 @@ def ROCM_MsaBlockSparseOp : TesseraROCM_Op<"msa_block_sparse"> {
   }];
   let assemblyFormat = "attr-dict";
 }
+
+// Profiler probe (W0.9 follow-up). `annotate_target_ir_with_probes()` emits
+// this op into every target lane; it was emitted without being declared, so a
+// probe-annotated module did not parse. Same defect class as the five op names
+// W0.9 declared -- found via the `_copy_target_op` fix in review of PR #490.
+def ROCM_ProfilerProbeOp : TesseraROCM_Op<"profiler_probe"> {
+  let summary = "Intra-kernel profiler probe on the ROCm target lane";
+  let assemblyFormat = "attr-dict";
+}

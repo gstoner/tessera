@@ -1997,11 +1997,21 @@ def _probe_op_name_for_target(target: str) -> str:
 
 
 def _copy_target_op(op: TargetOp) -> TargetOp:
+    # Every field must be copied. `operand_types`, `result_type`, and `prelude`
+    # were added for ops whose ODS declares real operands/results
+    # (`tessera_rocm.mfma`, `async_copy`, ...); omitting them here silently
+    # downgraded a typed op back to `() -> ()` while KEEPING its operand
+    # references, so probe annotation produced a module that no longer parsed
+    # ("expected 3 operand types but had 0") and whose SSA operands had no
+    # defining prelude. Add new TargetOp fields here at the same time.
     return TargetOp(
         op.op_name,
         attrs=dict(op.attrs),
         operands=list(op.operands),
         result=op.result,
+        operand_types=list(op.operand_types),
+        result_type=op.result_type,
+        prelude=list(op.prelude),
     )
 
 

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-31
+last_updated: 2026-08-02
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,23 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **parity validated, new dialect landed.**
+W0.10 closed x86's Decision #19 gap: it was the one backend with no Target IR
+dialect at all (`TileToX86Pass` lowered to 21 `func::CallOp`s into a
+hand-written C shim, and the Python emitter named a `tessera_x86.func` op no
+dialect defined). No carve-out was granted. `tessera_x86` now exists with a real
+`!tessera_x86.tile` type, is registered in `tessera-opt`, and separates
+value-carrying AMX ops from directives; `abi_call` models the C-shim boundary
+instead of hiding it. Positive and negative lit fixtures ship — the negative one
+proves the verifier rejects a dot-product whose operands never came from a tile
+load. The Python x86 emitter now parses, loads the dialect, and verifies.
+**Scope limits:** AMX *lowering* is optional per project direction (expected
+supersession by ACE), so the AMX ops are the IR-level contract only. The live
+follow-up is `x86vector.*` (AVX-512) lowering instead of terminating in
+`func.call` — that changes generated code and needs AVX-512
+execute-and-compare, which IS obtainable on the Strix Halo box. No AMX
+execution evidence is claimed: no machine in the fleet reports AMX.
 
 ## X86 attention and training closeout
 

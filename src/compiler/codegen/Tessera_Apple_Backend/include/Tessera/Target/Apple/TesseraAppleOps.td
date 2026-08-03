@@ -385,3 +385,17 @@ def Apple_CPUMoeSolverOp : TesseraApple_Op<"cpu.moe_solver"> {
   let summary = "Hardware-free marker for the MoE solver lowered to Apple CPU";
   let assemblyFormat = "attr-dict";
 }
+
+// Profiler probe (W0.9 follow-up). `annotate_target_ir_with_probes()` emits
+// this op into every target lane; it was emitted without being declared, so a
+// probe-annotated module did not parse. Same defect class as the five op names
+// W0.9 declared -- found via the `_copy_target_op` fix in review of PR #490.
+def Apple_CPUProfilerProbeOp : TesseraApple_Op<"cpu.profiler_probe"> {
+  let summary = "Intra-kernel profiler probe on the Apple CPU lane";
+  let assemblyFormat = "attr-dict";
+}
+
+def Apple_GPUProfilerProbeOp : TesseraApple_Op<"gpu.profiler_probe"> {
+  let summary = "Intra-kernel profiler probe on the Apple GPU lane";
+  let assemblyFormat = "attr-dict";
+}

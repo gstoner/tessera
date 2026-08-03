@@ -303,10 +303,15 @@ static bool layoutHasLdsAxis(tessera::tile::TileLayoutAttr layout) {
   return false;
 }
 
+// COMPOSE the shared Tile rule with this backend's own control type rather
+// than keeping a private copy. The Tile half now lives in
+// `tessera::tile::isTileControlType` -- it used to exist only here, which is
+// why the ODS verifier counted raw operands and the typed `tile.mma` form was
+// unreachable for any producer that also carried a warp-spec token.
+// Tile IR cannot see `tessera_rocm::TokenType`, so the backend adds it here.
 static bool isTileControlType(Type type) {
-  return isa<tessera::tile::AsyncTokenType, tessera::tile::BufferType,
-             tessera::tile::PipelineStateType,
-             mlir::tessera_rocm::TokenType>(type);
+  return tessera::tile::isTileControlType(type) ||
+         isa<mlir::tessera_rocm::TokenType>(type);
 }
 
 static SmallVector<Value> dataOperands(Operation *op) {

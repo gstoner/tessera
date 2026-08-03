@@ -72,13 +72,13 @@ examples/advanced/**/runs/
 python/tessera.egg-info/
 research/sandbox_compilers/build/
 
-# lit test runtime artifacts (recreated on every `lit` invocation)
-tests/tessera-ir/**/Output/
-tests/tessera-ir/.lit_test_times.txt
-src/solvers/tpp/test/TPP/Output/
-src/solvers/tpp/test/TPP/.lit_test_times.txt
-src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/Output/
-src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/.lit_test_times.txt
+# lit test runtime artifacts (recreated on every `lit` invocation).
+# Globbed rather than listed per suite: the previous per-suite list had already
+# fallen behind (the EBM and Clifford suites were missing, so their timing
+# caches surfaced as untracked after every run), and a new suite should not have
+# to remember to add itself here.
+**/Output/
+**/.lit_test_times.txt
 
 # Local exact-device proof bundles (retained on the hardware host, never
 # represented as source or GitHub-hosted evidence).

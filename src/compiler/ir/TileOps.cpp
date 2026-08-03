@@ -684,15 +684,30 @@ LogicalResult MMAOp::verify() {
     return emitOpError("typed fragment form requires a #tile.mma_desc mma attribute");
   bool isNVFP4 = desc.getAType() == "nvfp4" || desc.getAType() == "fp4_e2m1";
   unsigned expectedInputs = isNVFP4 ? 5 : 3;
-  if (getInputs().size() != expectedInputs || getOutputs().size() != 1 ||
+  // Count DATA operands, not raw ones.
+  //
+  // `tile.mma` legitimately carries control operands alongside its data:
+  // `WarpSpecLegalityPass` REQUIRES a consumer mma that reads an async-staged
+  // tile to also read that producer's `!tile.async_token`
+  // (`WARPSPEC_MMA_NOT_TOKEN_SYNCED`), and `TileIRLoweringPass` duly emits
+  // A, B, and two tokens. Counting raw operands made that token edge look like
+  // a fourth data operand, so the typed fragment form and warp-spec token sync
+  // were mutually exclusive -- a producer could satisfy one or the other, never
+  // both. That, not neglect, is why no C++ producer emitted the typed form.
+  //
+  // The ROCm lowering already applied this rule via a file-local `dataOperands`
+  // helper; the verifier simply never learned it. The helper is now shared
+  // (`tessera::tile::dataOperands`), so both sides count the same way.
+  SmallVector<Value> data = dataOperands(getOperation());
+  if (data.size() != expectedInputs || getOutputs().size() != 1 ||
       !isa<FragmentType>(getOutputs().front().getType()))
     return emitOpError(isNVFP4
         ? "typed NVFP4 fragment form expects A, B, accumulator, scale_a, scale_b -> !tile.fragment"
         : "typed fragment form expects A, B, accumulator -> !tile.fragment");
-  if (failed(requireFragmentProducer(getOperation(), getInputs()[0], "a", desc)) ||
-      failed(requireFragmentProducer(getOperation(), getInputs()[1], "b", desc)))
+  if (failed(requireFragmentProducer(getOperation(), data[0], "a", desc)) ||
+      failed(requireFragmentProducer(getOperation(), data[1], "b", desc)))
     return failure();
-  Value accumulator = getInputs()[2];
+  Value accumulator = data[2];
   if (!isa<FragmentType>(accumulator.getType()))
     return emitOpError("accumulator must be a !tile.fragment");
   Operation *accProducer = accumulator.getDefiningOp();
@@ -702,9 +717,9 @@ LogicalResult MMAOp::verify() {
   if (role && role.getValue() != "acc")
     return emitOpError("accumulator fragment must have role acc");
   if (isNVFP4 &&
-      (failed(requireFragmentProducer(getOperation(), getInputs()[3],
+      (failed(requireFragmentProducer(getOperation(), data[3],
                                       "scale_a", desc)) ||
-       failed(requireFragmentProducer(getOperation(), getInputs()[4],
+       failed(requireFragmentProducer(getOperation(), data[4],
                                       "scale_b", desc))))
     return failure();
   return success();

@@ -437,7 +437,7 @@ _SPECS = [
     OpSpec("normalize_group_advantages", "tessera.rl.normalize_group_advantages", 1, 1, lowering="rl_loss"),
     # State-space / Mamba2 selective scan.  Inputs: x, A, B, C, [D, initial_state].
     # Lowered as a stateful sequence-axis scan (`state_space` lowering kind).
-    OpSpec("selective_ssm", "tessera.selective_ssm", 4, 6, effect="state", lowering="state_space"),
+    OpSpec("selective_ssm", "tessera.selective_ssm", 5, 6, effect="state", lowering="state_space"),
 
     # M7 Visual Complex Analysis (E3, 2026-05-20).  These ops give the
     # M7 long-tail a real Graph IR identity so the frontend can emit

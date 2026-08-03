@@ -42,6 +42,35 @@ from .op_catalog import GRAPH_OP_MAP, graph_name_for
 # form ``top_k(x, k=5)``.  Order = the positional scalar params after the
 # operands.  Tensor positional args are unaffected (they still emit as operands).
 _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
+    # W1.2 (2026-08-03) — trailing POSITIONAL parameters that are attributes,
+    # not operands. Without these the frontend counts them as tensor operands,
+    # which is why 41 ops failed an arity probe and why structural view ops
+    # could not be emitted at all.
+    #
+    # Each was checked against the reference body rather than assumed: a
+    # parameter consumed via `len()` / `zip()` / `int()` is static, while
+    # `selective_ssm`'s `delta` is documented `(B, S, D)` and is a real
+    # operand — that one is catalog arity drift, fixed in op_catalog instead.
+    "tessera.arange": ("start",),
+    "tessera.cast": ("dtype",),
+    "tessera.chunk": ("chunks",),
+    "tessera.dynamic_slice": ("start_indices", "slice_sizes"),
+    "tessera.dynamic_update_slice": ("start_indices",),
+    "tessera.factorized_matmul": ("rank",),
+    "tessera.istft": ("hop",),
+    "tessera.stft": ("hop",),
+    "tessera.pack": ("layout",),
+    "tessera.pad": ("pad_width",),
+    "tessera.rearrange": ("layout",),
+    "tessera.repeat": ("repeats",),
+    "tessera.roll": ("shift",),
+    "tessera.select": ("index",),
+    "tessera.split": ("indices_or_sections",),
+    "tessera.tile": ("reps",),
+    "tessera.tile_view": ("BM", "BN"),
+    "tessera.rng_normal": ("shape",),
+    "tessera.rng_uniform": ("shape",),
+
     "tessera.top_k": ("k", "axis"),
     # slice(x, start_indices, slice_sizes): the two trailing positional args are
     # index/size *lists* (StableHLO dynamic-slice form), not tensors — bind them

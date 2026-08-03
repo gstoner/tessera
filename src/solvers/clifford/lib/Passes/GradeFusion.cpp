@@ -37,6 +37,8 @@ namespace {
 constexpr StringRef kGradeOpName = "tessera_clifford.grade";
 constexpr StringRef kGeoProductOpName = "tessera_clifford.geo_product";
 constexpr StringRef kOutputGradesAttr = "tessera.clifford.output_grades";
+constexpr StringRef kLhsGradesAttr = "tessera.clifford.input_grades_lhs";
+constexpr StringRef kRhsGradesAttr = "tessera.clifford.input_grades_rhs";
 
 struct GradeFusionPattern : public RewritePattern {
   GradeFusionPattern(MLIRContext *ctx)
@@ -86,6 +88,60 @@ struct GradeFusionPattern : public RewritePattern {
   }
 };
 
+// W1.4 — the mirror of the pattern above.
+//
+// `output_grades` prunes the Cayley table by WHICH RESULTS ARE WANTED.
+// `input_grades` prunes it by WHICH INPUTS CAN BE NON-ZERO, which is the other
+// half of the same compile-time sparsity and was declared nowhere: the plan
+// cites `MultivectorSpec.grades` reaching `geometric_product` as a live
+// Decision #29 violation, and this is its MLIR-side counterpart.
+//
+// Worked example in Cl(3,0), `geo_product(grade(1,a), grade(1,b))`:
+//   - Unrestricted:   64 (i, j) table entries.
+//   - output_grades:  prunes by the 8 result masks.
+//   - input_grades:   only 3 lhs blades x 3 rhs blades can contribute, so 9
+//                     entries survive -- and the result is grades {0, 2},
+//                     which no output restriction had to be written to learn.
+//
+// The two compose: an input restriction narrows which products exist, an
+// output restriction narrows which are kept.
+struct InputGradeFusionPattern : public RewritePattern {
+  InputGradeFusionPattern(MLIRContext *ctx)
+      : RewritePattern(kGeoProductOpName, /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 2) return failure();
+
+    bool changed = false;
+    const StringRef attrNames[2] = {kLhsGradesAttr, kRhsGradesAttr};
+    for (unsigned side = 0; side < 2; ++side) {
+      // Already annotated: leave it. Re-deriving would be harmless but the
+      // pattern would never converge, since the greedy driver re-runs while
+      // anything changes.
+      if (op->hasAttr(attrNames[side])) continue;
+
+      Operation *def = op->getOperand(side).getDefiningOp();
+      if (!def || def->getName().getStringRef() != kGradeOpName) continue;
+      auto gradesAttr = def->getAttrOfType<ArrayAttr>("grades");
+      if (!gradesAttr) continue;
+
+      std::set<int64_t> gradeSet;
+      for (Attribute g : gradesAttr)
+        if (auto gi = dyn_cast<IntegerAttr>(g)) gradeSet.insert(gi.getInt());
+      if (gradeSet.empty()) continue;
+
+      SmallVector<Attribute, 4> grades;
+      for (int64_t g : gradeSet)
+        grades.push_back(rewriter.getI64IntegerAttr(g));
+      op->setAttr(attrNames[side],
+                  ArrayAttr::get(rewriter.getContext(), grades));
+      changed = true;
+    }
+    return changed ? success() : failure();
+  }
+};
+
 struct CliffordGradeFusionPass
     : public PassWrapper<CliffordGradeFusionPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CliffordGradeFusionPass)
@@ -100,6 +156,7 @@ struct CliffordGradeFusionPass
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
     patterns.add<GradeFusionPattern>(ctx);
+    patterns.add<InputGradeFusionPattern>(ctx);
     if (failed(applyPatternsGreedily(getOperation(), std::move(patterns)))) {
       signalPassFailure();
     }

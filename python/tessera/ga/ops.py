@@ -65,6 +65,20 @@ def _promoted_dtype(a: Multivector, b: Multivector) -> np.dtype:
 # Geometric product (the load-bearing one)
 # ---------------------------------------------------------------------------
 
+def _blade_mask_for_grades(algebra, grades):
+    """Per-blade "can be non-zero" mask from a DECLARED grade set.
+
+    Returns ``None`` when the value is unrestricted -- the caller then falls
+    back to scanning coefficients, which is the only option without a
+    declaration. Blade index ``i`` is the basis-blade bitmask, so its grade is
+    ``popcount(i)``.
+    """
+    if grades is None:
+        return None
+    wanted = frozenset(int(g) for g in grades)
+    return [int(i).bit_count() in wanted for i in range(algebra.dim)]
+
+
 def geometric_product(a: Multivector, b: Multivector) -> Multivector:
     """The fundamental Clifford product ``a * b``.
 
@@ -90,21 +104,53 @@ def geometric_product(a: Multivector, b: Multivector) -> Multivector:
     # Broadcast the leading axes.
     leading_shape = np.broadcast_shapes(a_co.shape[:-1], b_co.shape[:-1])
     out = np.zeros((*leading_shape, dim), dtype=dtype)
+
+    # W1.4 — the operands' DECLARED grades restrict which blades can
+    # contribute, and the product's own grade set follows from them.
+    #
+    # `MultivectorSpec.grades` / `Multivector.grades` were declared, validated
+    # on construction, and read by nothing: the live Decision #29 violation the
+    # integrated plan cites. This loop instead asked `np.any(ai)` — scanning the
+    # DATA at runtime for a fact the TYPE already states, which is Decision #30
+    # inverted. A vector in Cl(3,0) is grade {1}: three of its eight blades can
+    # be non-zero, and no amount of scanning makes that more certain than the
+    # annotation does.
+    #
+    # The runtime check is kept for unrestricted values, where there is no
+    # declaration to read and scanning is the only way to skip zeros.
+    a_mask = _blade_mask_for_grades(algebra, a.grades)
+    b_mask = _blade_mask_for_grades(algebra, b.grades)
+
+    result_grades: set[int] | None = set() if (
+        a.grades is not None and b.grades is not None) else None
+
     for i in range(dim):
+        if a_mask is not None and not a_mask[i]:
+            continue
         ai = a_co[..., i]
-        if not np.any(ai):
+        if a_mask is None and not np.any(ai):
             continue
         row = table[i]
         for j in range(dim):
+            if b_mask is not None and not b_mask[j]:
+                continue
             result_mask, sign = row[j]
             if sign == 0:
                 continue
+            if result_grades is not None:
+                result_grades.add(int(result_mask).bit_count())
             bj = b_co[..., j]
             if sign == 1:
                 out[..., result_mask] = out[..., result_mask] + ai * bj
             else:
                 out[..., result_mask] = out[..., result_mask] - ai * bj
-    return Multivector(out, algebra)
+
+    # Propagate the derived restriction so a chain of products keeps narrowing
+    # instead of falling back to "unrestricted" after the first step.
+    grades = (frozenset(result_grades)
+              if result_grades is not None and result_grades else None)
+    return Multivector(out, algebra, grades=grades) if grades is not None \
+        else Multivector(out, algebra)
 
 
 # ---------------------------------------------------------------------------

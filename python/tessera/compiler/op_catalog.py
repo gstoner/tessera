@@ -761,6 +761,13 @@ OP_SHAPE_RULE: dict = {
     **{f"tessera.{n}": "optimizer_step" for n in
        ("adam", "adamw", "momentum", "nesterov", "adafactor", "lion", "sgd")},
 
+    # Cache mutators thread the handle through -- the ODS says
+    # `-> Tessera_KVCacheType:$updated` for each. `read` is the one member of
+    # the family that returns TENSORS, not a handle.
+    **{f"tessera.{n}": "state_handle" for n in
+       ("kv_cache.append", "kv_cache.prune", "cache.commit", "cache.rollback")},
+    "tessera.kv_cache.read": "kv_cache_read",
+
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
     # shapes scale with the mesh, so declaring from that measurement would bake
@@ -788,6 +795,8 @@ SHAPE_RULE_NAMES = frozenset({
     "from_shape_attr",
     "cast",
     "reduce_trailing",
+    "state_handle",
+    "kv_cache_read",
     "unclassified",
 })
 
@@ -819,11 +828,20 @@ DELIBERATELY_UNDECLARED: dict = {
     "tessera.ifft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
     "tessera.rfft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
     "tessera.irfft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
-    "tessera.kv_cache.append": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
-    "tessera.kv_cache.prune": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
-    "tessera.kv_cache.read": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
-    "tessera.cache.commit": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
-    "tessera.cache.rollback": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
+    # The five cache ops were here, under one shared sentence: "opaque cache
+    # handle rather than a tensor type; its result is not describable by a
+    # tensor shape rule". Both halves of that turned out to be wrong.
+    #
+    # The handle was never undescribable -- `Tessera_KVCacheType` has been in
+    # `TesseraOps.td` the whole time, and the ODS states the signatures
+    # exactly (`(!tessera.kv_cache, tensor, tensor) -> !tessera.kv_cache`).
+    # What was missing was a way for the PYTHON emitter to name a non-tensor
+    # type; it emitted `tensor<*x?>` at both ends and the handle silently
+    # became an untyped tensor. They are now `state_handle`.
+    #
+    # And `kv_cache.read` does not return a handle at all -- it returns
+    # `(K, V)` tensors. The shared sentence was true of four ops, so nothing
+    # pointed at the fifth. It is now `kv_cache_read`.
 }
 
 

@@ -265,6 +265,40 @@ def tensor_ir_type(
     return IRType(f"tensor<{shape_text}x{dtype_text}>", normalized_shape, normalized_dtype, layout)
 
 
+def handle_ir_type(mnemonic: str) -> IRType:
+    """A stateful HANDLE type — `!tessera.kv_cache` and friends.
+
+    W1.3. Everything the Python emitter could name was a tensor, so the five
+    cache ops were filed as "opaque cache handle rather than a tensor type; its
+    result is not describable by a tensor shape rule". True as far as it went,
+    and beside the point: the rule does not have to be a *tensor* rule.
+
+    The type was never missing either. `Tessera_KVCacheType` has been in
+    `TesseraOps.td` all along, and the ODS states these signatures exactly:
+
+        tessera.kv_cache.append : (!tessera.kv_cache, tensor, tensor)
+                                      -> !tessera.kv_cache
+
+    The Python side emitted `tensor<*x?>` for both ends of that, so the handle
+    -- a distinct type with its own verifier contract -- silently became an
+    untyped tensor at the level that states the contract first. That is
+    Decision #32 information loss, and it is invisible precisely because
+    `tensor<*x?>` is what an unknown tensor looks like too.
+
+    Deliberately carries no shape or dtype: a handle has neither, and giving it
+    `("*",)` would let shape-reasoning code treat it as a rank-unknown tensor
+    rather than reject it.
+    """
+    return IRType(f"!tessera.{mnemonic}")
+
+
+#: The stateful handle types the Graph IR ODS declares. Names match the ODS
+#: `mnemonic` field so the two cannot drift apart silently.
+HANDLE_KV_CACHE = handle_ir_type("kv_cache")
+HANDLE_CACHE_PAGE = handle_ir_type("cache_page")
+HANDLE_RING = handle_ir_type("ring")
+
+
 @dataclass(frozen=True)
 class NumericPolicy:
     """Canonical numerics contract carried through Graph/Schedule/Tile IR."""
@@ -2117,6 +2151,42 @@ def _shape_select_from_second(operand_types: List[IRType],
     return tensor_ir_type(dims, candidates.dtype, layout=candidates.layout)
 
 
+def _shape_state_handle(operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """A cache mutator threads its handle through: `cache -> updated`.
+
+    `kv_cache.append` / `kv_cache.prune` / `cache.commit` / `cache.rollback`
+    all return the handle they were given, and the ODS says so directly --
+    `let results = (outs Tessera_KVCacheType:$updated)`. So the result type is
+    not derived from operand 0's *inferred* type (which the Python frontend
+    reports as `tensor<*x?>`, having no handle vocabulary until now); it is the
+    declared handle type. Returning operand 0 verbatim would propagate the
+    frontend's wrong guess instead of correcting it.
+
+    These four were previously exempted as "not describable by a tensor shape
+    rule". They are not describable by a tensor rule, and they never needed to
+    be.
+    """
+    return HANDLE_KV_CACHE
+
+
+def _shape_kv_cache_read(operand_types: List[IRType],
+                         attrs: Optional[Dict[str, Any]] = None):
+    """`kv_cache.read(cache, start, end) -> (K, V)` — TENSORS, not a handle.
+
+    This op was filed with the four mutators above under one shared reason,
+    "opaque cache handle rather than a tensor type". That reason is simply
+    wrong here: `read` is the one member of the family that does NOT return a
+    handle. The reference stacks and returns `(K, V)` arrays.
+
+    Grouping five ops under one sentence is how a wrong classification hides --
+    the sentence was true of four of them, so nothing in review pointed at the
+    fifth. The shapes stay opaque because they depend on the cache's runtime
+    extent, but the ARITY and the tensor-ness are known and now stated.
+    """
+    return (TENSOR_OPAQUE, TENSOR_OPAQUE)
+
+
 def _shape_transpose(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
     first = operand_types[0]
     if first.rank is None:
@@ -2151,6 +2221,8 @@ _SHAPE_RULES = {
     "cast": _shape_cast,
     "transpose": _shape_transpose,
     "reduce_trailing": _shape_reduce_trailing,
+    "state_handle": _shape_state_handle,
+    "kv_cache_read": _shape_kv_cache_read,
     # Not yet classified. Same result as the historical fallback, but reached
     # through a NAME, so it is countable and cannot masquerade as a rule.
     "unclassified": _shape_same_as_first,
@@ -2474,6 +2546,38 @@ class GraphIRBuilder:
         self.diagnostics = []
 
 
+#: Python handle classes -> the ODS type mnemonic they lower to. Without this
+#: an annotated `cache: KVCacheHandle` argument lowered to `tensor<*x?>`, so
+#: `tessera.kv_cache.append` emitted `(tensor<*x?>, ...) -> !tessera.kv_cache`
+#: -- the RESULT typed from the ODS and the OPERAND still an untyped tensor,
+#: which is a worse contract than being consistently wrong. The handle
+#: subclasses (latent/SSM/delta/memory) share `!tessera.kv_cache` because that
+#: is the single stateful-handle type the Graph IR ODS declares; if the dialect
+#: ever splits them, this map is the one place that changes.
+_HANDLE_ANNOTATIONS: Dict[str, str] = {
+    "KVCacheHandle": "kv_cache",
+    "LatentKVCacheHandle": "kv_cache",
+    "SSMStateHandle": "kv_cache",
+    "DeltaNetStateHandle": "kv_cache",
+    "MemoryStateHandle": "kv_cache",
+}
+
+
+def _handle_type_for_annotation(ann: Any) -> Optional[IRType]:
+    """The handle IR type for a cache-handle annotation, else None.
+
+    Matches on the class NAME rather than by importing the handle classes:
+    `graph_ir` is imported during `tessera` package init, and importing
+    `tessera.cache` from here reintroduces the import cycle those modules are
+    lazy-imported to avoid.
+    """
+    name = getattr(ann, "__name__", None) if isinstance(ann, type) else None
+    if name is None and isinstance(ann, str):
+        name = ann.strip().strip("\"'")
+    mnemonic = _HANDLE_ANNOTATIONS.get(name or "")
+    return handle_ir_type(mnemonic) if mnemonic else None
+
+
 def _annotation_to_ir_type(ann: Any) -> IRType:
     if ann is inspect.Parameter.empty:
         return TENSOR_OPAQUE
@@ -2494,6 +2598,12 @@ def _annotation_to_ir_type(ann: Any) -> IRType:
             parsed = _parse_mlir_tensor_type(text)
             if parsed is not None:
                 return parsed
+        # A handle type written directly, e.g. `"!tessera.kv_cache"`.
+        if text.startswith("!tessera."):
+            return IRType(text)
+    handle = _handle_type_for_annotation(ann)
+    if handle is not None:
+        return handle
     dims = getattr(ann, "__dims__", None)
     dtype = getattr(ann, "dtype", None)
     shape = getattr(ann, "shape", None)

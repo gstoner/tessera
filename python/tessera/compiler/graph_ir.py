@@ -1859,6 +1859,28 @@ def _shape_cast(operand_types: List[IRType],
     return tensor_ir_type(first.shape, target, layout=first.layout)
 
 
+def _shape_select_from_second(operand_types: List[IRType],
+                              attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Select along a candidate axis of operand 1, keyed by operand 0.
+
+    `ebm_self_verify(energies: (B, K), candidates: (B, K, D)) -> (B, D)`:
+    operand 0 only *scores* the candidates, operand 1 carries the data. So both
+    the shape and the STORAGE DTYPE come from operand 1.
+
+    This is why `dataOperands`-style "operand 0 is the tensor" assumptions have
+    to be per-op rather than global -- `reduce_trailing` on operand 0 predicted
+    `(B,)` with the energies' dtype, which is wrong on both counts.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    candidates = operand_types[1]
+    if candidates.rank is None or len(candidates.shape) < 2:
+        return tensor_ir_type(("*",), candidates.dtype, layout=candidates.layout)
+    # Drop the candidate axis (axis 1), keep batch and feature dims.
+    dims = (candidates.shape[0],) + tuple(candidates.shape[2:])
+    return tensor_ir_type(dims, candidates.dtype, layout=candidates.layout)
+
+
 def _shape_transpose(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
     first = operand_types[0]
     if first.rank is None:
@@ -1885,6 +1907,7 @@ _SHAPE_RULES = {
     "flatten": _shape_flatten,
     "complex_same": _shape_complex_same,
     "rfft": _shape_rfft,
+    "select_from_second": _shape_select_from_second,
     "from_shape_attr": _shape_from_shape_attr,
     "cast": _shape_cast,
     "transpose": _shape_transpose,

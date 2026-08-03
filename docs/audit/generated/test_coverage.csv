@@ -356,7 +356,7 @@ repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,12,17,1,29,0,,directly_tested,29 direct test references
 retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,6,0,1,6,0,fp32,directly_tested,6 direct test references
-rmsnorm,101,18,6,119,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,119 direct test references
+rmsnorm,102,18,6,120,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,120 direct test references
 rmsnorm_safe,8,5,1,13,0,bf16 f16 f32,directly_tested,13 direct test references
 rng_bernoulli,4,0,0,4,0,,directly_tested,4 direct test references
 rng_beta,3,0,0,3,0,,directly_tested,3 direct test references

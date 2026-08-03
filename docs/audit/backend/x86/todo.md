@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **follow-up required, reference-level only.**
+The reference lane now computes reduced-precision ops at f32 and stores back.
+x86's AVX-512 kernels are the executable lane on this fleet and were not
+re-verified against the corrected reference; the fp16/bf16 accumulate contract
+is now stated explicitly, so a mismatch would be a real divergence rather than
+an ambiguity. x86 owns an AVX-512 execute-and-compare — obtainable on the
+Strix Halo box, unlike the AMX lane.
+
 Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **not applicable, with a reason.**
 x86 has no `tile.mma` consumer: `TileToX86Pass` lowers through the C-ABI shim
 and the `tessera_x86` Target IR models the boundary with `abi_call`. The shared

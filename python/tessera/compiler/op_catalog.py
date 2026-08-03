@@ -730,7 +730,10 @@ OP_SHAPE_RULE: dict = {
     "tessera.sigmoid_safe": "same_as_first",
     "tessera.dct": "same_as_first",
     # Shape-reducing, dtype-preserving.
-    "tessera.ebm_self_verify": "reduce_trailing",
+    # Derives from operand 1 (candidates), NOT operand 0 (energies): energies
+    # only score, candidates carry the data. `reduce_trailing` on operand 0
+    # predicted (B,) with the energies' dtype -- wrong shape AND wrong dtype.
+    "tessera.ebm_self_verify": "select_from_second",
 
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
@@ -752,6 +755,7 @@ SHAPE_RULE_NAMES = frozenset({
     "flatten",
     "complex_same",
     "rfft",
+    "select_from_second",
     "from_shape_attr",
     "cast",
     "reduce_trailing",
@@ -790,6 +794,23 @@ DELIBERATELY_UNDECLARED: dict = {
 def undeclared_reason(graph_name: str):
     """Why this op has no rule, when that was a decision rather than a gap."""
     return DELIBERATELY_UNDECLARED.get(graph_name)
+
+
+#: Which OPERAND carries the result's storage dtype, per rule. Defaults to 0.
+#: `ebm_self_verify` is the counterexample that forced this to be explicit:
+#: operand 0 is a score vector and operand 1 is the data, so casting the result
+#: to operand 0's dtype silently changed a bf16 candidate tensor to f32.
+#: An "operand 0 is the tensor" assumption is a per-op question, not a global
+#: one, and baking it in is how the wrapper produced a wrong dtype while
+#: looking principled.
+SHAPE_RULE_DTYPE_SOURCE: dict = {
+    "select_from_second": 1,
+}
+
+
+def dtype_source_index(graph_name: str) -> int:
+    """Index of the operand whose storage dtype the result should carry."""
+    return SHAPE_RULE_DTYPE_SOURCE.get(shape_rule_for(graph_name), 0)
 
 
 def shape_rule_for(graph_name: str) -> str:

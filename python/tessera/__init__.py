@@ -5033,9 +5033,20 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
     except Exception:  # pragma: no cover - catalog unavailable during bootstrap
         return
 
-    preserving = {"same_as_first", "reduce_all", "reduce_trailing"}
+    from .compiler.op_catalog import dtype_source_index
+
+    # Rules whose contract includes "the result carries an operand's storage
+    # dtype". Which operand is per-rule, not always the first -- see
+    # `dtype_source_index`; assuming operand 0 silently converted a bf16
+    # candidate tensor to f32 for ebm_self_verify.
+    preserving = {
+        "same_as_first",
+        "reduce_all",
+        "reduce_trailing",
+        "select_from_second",
+    }
     targets = {
-        spec.public_name
+        spec.public_name: dtype_source_index(spec.graph_name)
         for spec in _SPECS
         if shape_rule_for(spec.graph_name) in preserving
     }
@@ -5085,10 +5096,13 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
             return _np.asarray(data).astype(_COMPUTE, copy=False)
         return value
 
-    def _wrap(fn):
+    def _wrap(fn, dtype_source: int = 0):
         @functools.wraps(fn)
         def wrapped(*args, **kwargs):
-            want = _storage_dtype(args[0]) if args else None
+            source = args[dtype_source] if len(args) > dtype_source else (
+                args[0] if args else None
+            )
+            want = _storage_dtype(source) if source is not None else None
             if want is None:
                 return fn(*args, **kwargs)
 
@@ -5117,12 +5131,33 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
 
         return wrapped
 
-    for name in sorted(targets):
+    for name, dtype_source in sorted(targets.items()):
         fn = getattr(namespace, name, None)
         if callable(fn):
-            setattr(namespace, name, _wrap(fn))
+            setattr(namespace, name, _wrap(fn, dtype_source))
 
 
+# Phase 2.1c (2026-06-01) — apple_gpu trace-capture interceptor. Backward
+# compatible: with no @auto_batch trace active the wrappers call straight
+# through to the numpy reference. Inside @auto_batch, calls carrying the
+# encode-required kwargs (gamma, rows, cols, …) route to apple_gpu_ops.*.
+#
+# THIS INSTALL IS LOAD-BEARING AND WAS ACCIDENTALLY DELETED (PR #492 review).
+# A refactor of `_enforce_storage_dtype_preservation` replaced a region that
+# spanned this call, so the eight canonical intercepted ops silently reverted
+# to the numpy reference: `ops.rmsnorm(..., rows=..., cols=...)` then rejects
+# the trace-only kwargs and never returns the TraceRef the Apple encode path
+# requires. Nothing else in the repo installs it. Guarded by
+# tests/unit/test_apple_interception_installed.py.
+from . import apple_gpu_ops_interception as _agpu_intercept
+
+_agpu_intercept.install_apple_gpu_interception(ops)
+
+# Enforce dtype LAST so it wraps outermost: the interceptor rebinds rmsnorm /
+# layer_norm / softmax / gelu / bmm, and enforcing first would leave those
+# unprotected. The outer wrapper is a no-op for trace calls -- a TraceRef has
+# no `.dtype`, so `_storage_dtype` returns None and the call passes straight
+# through to the interceptor untouched.
 _enforce_storage_dtype_preservation(ops)
 
 # Common op aliases kept at the top level for older advanced examples. The

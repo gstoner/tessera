@@ -8,6 +8,18 @@ last_updated: 2026-08-03
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **follow-up required, reference-level only.**
+The shared reduced-precision policy changed: ops whose declared rule preserves
+storage dtype now upcast reduced-precision inputs to f32, compute, and store
+back. This repaired six ops whose INTERNAL arithmetic left fp16 range while
+their answers fit easily — including `flash_attn` and `mla_decode`, both hot
+SM120 paths, which previously returned float64 for f32 AND bf16 inputs.
+**This is the Python reference lane, not generated CUDA.** The same hazard
+class applies to NVIDIA kernels — a QK^T contraction overflowing fp16 before the
+softmax rescales — and nothing here proves the generated kernels handle it.
+NVIDIA owns verifying the accumulate-in-f32 contract on device; the reference
+now states what the kernels must match.
+
 Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **parity validated, and the prior NOT-VALIDATED status is now CLOSED.**
 `MMAOp::verify()` now counts DATA operands, so the typed `tile.mma` fragment
 form and the warp-spec `!tile.async_token` edge can coexist. NVIDIA needed the

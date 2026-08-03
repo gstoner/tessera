@@ -115,3 +115,97 @@ def test_scalar_times_anything_keeps_the_other_operands_grades():
     product = geometric_product(scalar, u)
     assert product.grades == frozenset({1}), product.grades
     np.testing.assert_allclose(product.coefficients, 2.0 * u.coefficients)
+
+
+# ── PR #497 review: metadata must not depend on which lane ran ─────────────
+
+def test_the_grade_contract_is_derived_before_any_backend_dispatch():
+    """The Apple GPU fast path returns early; grades must already be decided.
+
+    Deriving them after that return meant `vector * vector` reported `None` on
+    Apple and `{0, 2}` everywhere else — backend-dependent metadata on an
+    operation whose grade algebra is a property of the ALGEBRA, not of the
+    hardware. The fix is structural rather than a second derivation on the fast
+    path: the contract is computed from the declarations before dispatch, so
+    there is no lane that can disagree.
+
+    Checked by construction here, since the Apple kernel is not available on
+    this box: the helper is pure and takes no coefficients, so it cannot vary
+    with the backend.
+    """
+    import inspect
+
+    from tessera.ga.ops import _product_grade_contract
+
+    algebra = _cl30()
+    table = algebra.product_table()
+    lhs, rhs, grades = _product_grade_contract(
+        algebra, table, frozenset({1}), frozenset({1}))
+    assert grades == frozenset({0, 2}), grades
+    assert lhs is not None and rhs is not None
+
+    # No coefficient ever reaches it — the signature is the guarantee.
+    params = set(inspect.signature(_product_grade_contract).parameters)
+    assert params == {"algebra", "table", "a_grades", "b_grades"}, params
+
+
+def test_geometric_product_tags_the_fast_path_result_too():
+    """Whatever `geometric_product` returns carries the derived grades.
+
+    A stub standing in for a successful GPU dispatch: the returned value must
+    be re-tagged, not passed through untouched.
+    """
+    from tessera.ga import ops as ga_ops
+
+    algebra = _cl30()
+    u = Multivector.from_vector([1.0, 2.0, 3.0], algebra)
+    v = Multivector.from_vector([4.0, 5.0, 6.0], algebra)
+    expected = np.asarray(geometric_product(u, v).coefficients)
+
+    original = ga_ops._try_apple_gpu_binary_8x8_cl30_f32
+    try:
+        # Return an UNTAGGED multivector, exactly as the real fast path does.
+        ga_ops._try_apple_gpu_binary_8x8_cl30_f32 = (
+            lambda a, b, sym, op_name=None: Multivector(expected.copy(), algebra))
+        out = geometric_product(u, v)
+    finally:
+        ga_ops._try_apple_gpu_binary_8x8_cl30_f32 = original
+
+    assert out.grades == frozenset({0, 2}), (
+        f"the fast-path result lost its grades: {out.grades}"
+    )
+    np.testing.assert_allclose(out.coefficients, expected)
+
+
+def test_an_empty_declared_set_is_not_the_same_as_unrestricted():
+    """`grades=[]` is publicly constructible and means the ZERO multivector.
+
+    Converting an empty result to `None` loses a valid restriction: subsequent
+    products then fall back to scanning and propagate `None` onward, so a
+    provably-zero value is reported as "could be anything".
+    """
+    from tessera.ga.ops import grade_projection
+
+    algebra = _cl30()
+    u = Multivector.from_vector([1.0, 2.0, 3.0], algebra)
+    v = Multivector.from_vector([4.0, 5.0, 6.0], algebra)
+
+    empty = grade_projection(u, [])
+    assert empty.grades == frozenset(), empty.grades
+
+    product = geometric_product(empty, v)
+    assert product.grades == frozenset(), (
+        f"empty restriction became {product.grades!r}"
+    )
+    assert not np.any(product.coefficients), "the product must be zero"
+
+    # And it keeps propagating rather than widening back out.
+    assert geometric_product(product, v).grades == frozenset()
+
+
+def test_unrestricted_still_means_none_not_empty():
+    """The converse — the two must not collapse in the other direction."""
+    algebra = _cl30()
+    u = Multivector.from_vector([1.0, 2.0, 3.0], algebra)
+    unrestricted = Multivector(np.ones(algebra.dim), algebra)
+    assert geometric_product(unrestricted, u).grades is None

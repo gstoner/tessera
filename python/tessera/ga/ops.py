@@ -72,11 +72,56 @@ def _blade_mask_for_grades(algebra, grades):
     back to scanning coefficients, which is the only option without a
     declaration. Blade index ``i`` is the basis-blade bitmask, so its grade is
     ``popcount(i)``.
+
+    An EMPTY declared set yields an all-False mask, not ``None``: "declared to
+    have no grades" is the zero multivector, which is a different claim from
+    "unrestricted" and must not collapse into it.
     """
     if grades is None:
         return None
     wanted = frozenset(int(g) for g in grades)
     return [int(i).bit_count() in wanted for i in range(algebra.dim)]
+
+
+def _product_grade_contract(algebra, table, a_grades, b_grades):
+    """`(lhs_mask, rhs_mask, result_grades)` derived from DECLARATIONS alone.
+
+    Computed before any backend dispatch, and from the type only -- never from
+    coefficient values -- so the answer cannot depend on which lane ran the
+    product. The Apple GPU fast path returns early, and deriving grades after
+    it meant `vector * vector` reported `None` on Apple and `{0, 2}` everywhere
+    else: backend-dependent metadata on an operation whose grade algebra is a
+    property of the algebra, not of the hardware.
+
+    `result_grades` is ``None`` only when an operand is UNRESTRICTED. When both
+    are declared it is a frozenset, possibly EMPTY -- `grades=[]` is publicly
+    constructible (and `grade_projection(a, [])` produces it), and the zero
+    product it yields carries a valid empty restriction that must survive.
+    """
+    lhs = _blade_mask_for_grades(algebra, a_grades)
+    rhs = _blade_mask_for_grades(algebra, b_grades)
+    if lhs is None or rhs is None:
+        return lhs, rhs, None
+    grades = set()
+    for i in range(algebra.dim):
+        if not lhs[i]:
+            continue
+        row = table[i]
+        for j in range(algebra.dim):
+            if not rhs[j]:
+                continue
+            result_mask, sign = row[j]
+            if sign == 0:
+                continue
+            grades.add(int(result_mask).bit_count())
+    return lhs, rhs, frozenset(grades)
+
+
+def _with_grades(mv, grades):
+    """Re-tag a result with a derived grade restriction, if there is one."""
+    if grades is None:
+        return mv
+    return Multivector(mv.coefficients, mv.algebra, grades=grades)
 
 
 def geometric_product(a: Multivector, b: Multivector) -> Multivector:
@@ -90,13 +135,16 @@ def geometric_product(a: Multivector, b: Multivector) -> Multivector:
     ``tessera_apple_gpu_clifford_geo_product_cl30_f32``.
     """
     algebra = _same_algebra(a, b)
+    table = algebra.product_table()
+    # Derived from the DECLARATIONS, before any dispatch, so every lane agrees.
+    a_mask, b_mask, result_grades = _product_grade_contract(
+        algebra, table, a.grades, b.grades)
     if algebra.signature == (3, 0, 0):
         gpu_out = _try_apple_gpu_binary_8x8_cl30_f32(
             a, b, "tessera_apple_gpu_clifford_geo_product_cl30_f32",
             op_name="clifford_geometric_product")
         if gpu_out is not None:
-            return gpu_out
-    table = algebra.product_table()
+            return _with_grades(gpu_out, result_grades)
     dim = algebra.dim
     dtype = _promoted_dtype(a, b)
     a_co = a.coefficients.astype(dtype, copy=False)
@@ -118,12 +166,6 @@ def geometric_product(a: Multivector, b: Multivector) -> Multivector:
     #
     # The runtime check is kept for unrestricted values, where there is no
     # declaration to read and scanning is the only way to skip zeros.
-    a_mask = _blade_mask_for_grades(algebra, a.grades)
-    b_mask = _blade_mask_for_grades(algebra, b.grades)
-
-    result_grades: set[int] | None = set() if (
-        a.grades is not None and b.grades is not None) else None
-
     for i in range(dim):
         if a_mask is not None and not a_mask[i]:
             continue
@@ -137,8 +179,6 @@ def geometric_product(a: Multivector, b: Multivector) -> Multivector:
             result_mask, sign = row[j]
             if sign == 0:
                 continue
-            if result_grades is not None:
-                result_grades.add(int(result_mask).bit_count())
             bj = b_co[..., j]
             if sign == 1:
                 out[..., result_mask] = out[..., result_mask] + ai * bj
@@ -146,11 +186,10 @@ def geometric_product(a: Multivector, b: Multivector) -> Multivector:
                 out[..., result_mask] = out[..., result_mask] - ai * bj
 
     # Propagate the derived restriction so a chain of products keeps narrowing
-    # instead of falling back to "unrestricted" after the first step.
-    grades = (frozenset(result_grades)
-              if result_grades is not None and result_grades else None)
-    return Multivector(out, algebra, grades=grades) if grades is not None \
-        else Multivector(out, algebra)
+    # instead of falling back to "unrestricted" after the first step. An empty
+    # frozenset is preserved rather than converted to None -- see
+    # `_product_grade_contract`.
+    return _with_grades(Multivector(out, algebra), result_grades)
 
 
 # ---------------------------------------------------------------------------

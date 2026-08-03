@@ -188,6 +188,27 @@ class Candidate(ABC):
 _CANDIDATES: dict[tuple[str, str], list[Candidate]] = {}
 
 
+#: Callbacks fired after each successful registration, as ``(target, op)``.
+#:
+#: Registration order between backend modules is not controlled -- each plugs
+#: itself in on import -- so anything that DERIVES candidates from other
+#: candidates cannot snapshot the registry once and be correct. The spectral
+#: family composes `rfft`/`irfft`/`stft`/`istft` over whatever `spectral_fft`
+#: lane a target has; built at import time it silently missed every FFT lane
+#: registered later, which is precisely the NVIDIA/Apple extension path.
+_REGISTRATION_HOOKS: list = []
+
+
+def on_candidate_registered(hook) -> None:
+    """Subscribe `hook(target, op)` to future registrations.
+
+    Fires after the candidate is in the registry, so a hook may itself register
+    (the composed-lane case). Re-entrant registration is safe because
+    `register_candidate` replaces by name.
+    """
+    _REGISTRATION_HOOKS.append(hook)
+
+
 def register_candidate(candidate: Candidate) -> None:
     """Register ``candidate`` under ``(target, op)``. Re-registering the same
     ``name`` in a bucket replaces it (idempotent under module re-import — the hook
@@ -197,11 +218,22 @@ def register_candidate(candidate: Candidate) -> None:
     if candidate.op not in _OP_VERIFY and candidate.op not in _OP_KIND_VERIFY:
         raise ValueError(f"unknown Candidate.op {candidate.op!r}")
     bucket = _CANDIDATES.setdefault((candidate.target, candidate.op), [])
+    replaced = False
     for i, existing in enumerate(bucket):
         if existing.name == candidate.name:
             bucket[i] = candidate
-            return
-    bucket.append(candidate)
+            replaced = True
+            break
+    if not replaced:
+        bucket.append(candidate)
+    for hook in tuple(_REGISTRATION_HOOKS):
+        try:
+            hook(candidate.target, candidate.op)
+        except Exception:
+            # A derived-candidate hook must never break the primary
+            # registration: the base lane is more important than the
+            # compositions built on it.
+            continue
 
 
 def candidates_for(target: str, op: str) -> list[Candidate]:

@@ -121,7 +121,12 @@ _SPECS = [
     # Gap 4 (2026-05-20): 2D spatial-grid local-window attention.
     OpSpec("attn_local_window_2d", "tessera.attn_local_window_2d", 3, 3, effect="state", lowering="attention"),
     OpSpec("attn_compressed_blocks", "tessera.attn_compressed_blocks", 3, 3, effect="state", lowering="attention"),
-    OpSpec("attn_top_k_blocks", "tessera.attn_top_k_blocks", 3, 3, effect="state", lowering="attention"),
+    # 4 operands, not 3: `scores` is a keyword-only TENSOR (B, H, S_q,
+    # num_blocks), unwrapped and asarray'd by the reference exactly like Q/K/V.
+    # The positional-only arity gate could not see it, and the frontend was
+    # emitting it as a string attribute rather than an operand (W1.3).
+    # Contrast `varlen_sdpa`, whose keyword-only cu_seqlens WERE already counted.
+    OpSpec("attn_top_k_blocks", "tessera.attn_top_k_blocks", 4, 4, effect="state", lowering="attention"),
     OpSpec("deepseek_sparse_attention", "tessera.deepseek_sparse_attention", 3, 4, effect="state", lowering="attention"),
     # MiniMax Sparse Attention (MSA, arXiv:2606.13392) — Index Branch (per-GQA-
     # group exp-free block scoring) + exact block-sparse Main Branch. The index
@@ -158,7 +163,13 @@ _SPECS = [
     OpSpec("mor_router", "tessera.mor_router", 2, 2, lowering="layout_transform"),
     OpSpec("mor_partition", "tessera.mor_partition", 2, 2, lowering="layout_transform"),
     OpSpec("mor_scatter", "tessera.mor_scatter", 3, 3, lowering="layout_transform"),
-    OpSpec("moe", "tessera.moe", 2, 2, effect="collective", lowering="moe"),
+    # 2 required (x, experts) + 2 OPTIONAL keyword tensor operands (`scores`,
+    # `route`). max_arity was 2, so a routed MoE -- the normal case for a real
+    # model -- exceeded the declared arity once `route` correctly emitted as an
+    # operand, and the op was dropped from the body entirely. That failure was
+    # SILENT at the Graph IR level and only surfaced two stages later as
+    # "schedule-ir stage was claimed but schedule_ir is empty".
+    OpSpec("moe", "tessera.moe", 2, 4, effect="collective", lowering="moe"),
     OpSpec("moe_dispatch", "tessera.moe_dispatch", 2, 2, effect="collective", lowering="moe_transport"),
     OpSpec("moe_combine", "tessera.moe_combine", 2, 2, effect="collective", lowering="moe_transport"),
     OpSpec("all_reduce", "tessera.all_reduce", 1, 1, effect="collective", lowering="collective"),

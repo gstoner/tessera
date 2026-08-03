@@ -629,10 +629,9 @@ def test_sm120_nvfp4_native_packager_owns_scales_and_k64_contract() -> None:
                     IROp(
                         result="c",
                         op_name="tessera.matmul",
-                        operands=["%a", "%b"],
-                        operand_types=[str(a), str(b)],
+                        operands=["%a", "%b", "%scale_a", "%scale_b"],
+                        operand_types=[str(a), str(b), str(sa), str(sb)],
                         result_type=str(c),
-                        kwargs={"scale_a": "%scale_a", "scale_b": "%scale_b"},
                     )
                 ],
                 return_values=["%c"],
@@ -681,10 +680,9 @@ def _mx_matmul_module(dtype: str, *, scale_k: int = 2) -> GraphIRModule:
                     IROp(
                         result="c",
                         op_name="tessera.matmul",
-                        operands=["%a", "%b"],
-                        operand_types=[str(a), str(b)],
+                        operands=["%a", "%b", "%scale_a", "%scale_b"],
+                        operand_types=[str(a), str(b), str(sa), str(sb)],
                         result_type=str(c),
-                        kwargs={"scale_a": "%scale_a", "scale_b": "%scale_b"},
                     )
                 ],
                 return_values=["%c"],
@@ -725,17 +723,24 @@ def test_sm120_mx_packager_contract_is_distinct_from_nvfp4(
         emit_mx_matmul_tile_ir(entry="bad", storage="nvfp4")
 
 
+# The malformed contracts are expressed as OPERANDS now, because that is where
+# the scale views live (W1.3). They were `kwargs={"scale_a": "%scale_a"}` — an
+# SSA name inside a string attribute, which put the scale tensors outside the
+# operand list every dataflow consumer reads. The four cases are unchanged in
+# substance: no scales, wrong scale shape, an epilogue operand, wrong scale
+# dtype. Each must still SELECT the NVFP4 lane and be rejected by its packager,
+# rather than falling through to an unrelated error.
 @pytest.mark.parametrize(
-    ("kwargs", "scale_shape", "scale_dtype"),
+    ("extra_operands", "scale_shape", "scale_dtype"),
     [
-        ({}, (16, 4), "uint8"),
-        ({"scale_a": "%scale_a", "scale_b": "%scale_b"}, (16, 3), "uint8"),
-        ({"scale_a": "%scale_a", "scale_b": "%scale_b", "bias": "%bias"}, (16, 4), "uint8"),
-        ({"scale_a": "%scale_a", "scale_b": "%scale_b"}, (16, 4), "fp32"),
+        ((), (16, 4), "uint8"),
+        (("%scale_a", "%scale_b"), (16, 3), "uint8"),
+        (("%scale_a", "%scale_b", "%bias"), (16, 4), "uint8"),
+        (("%scale_a", "%scale_b"), (16, 4), "fp32"),
     ],
 )
 def test_sm120_nvfp4_packager_rejects_invalid_scale_and_epilogue_contracts(
-    kwargs: dict[str, object],
+    extra_operands: tuple[str, ...],
     scale_shape: tuple[int, int],
     scale_dtype: str,
 ) -> None:
@@ -753,16 +758,17 @@ def test_sm120_nvfp4_packager_rejects_invalid_scale_and_epilogue_contracts(
                     IRArg("b", b),
                     IRArg("scale_a", sa),
                     IRArg("scale_b", sb),
+                    IRArg("bias", c),
                 ],
                 result_types=[c],
                 body=[
                     IROp(
                         result="c",
                         op_name="tessera.matmul",
-                        operands=["%a", "%b"],
-                        operand_types=[str(a), str(b)],
+                        operands=["%a", "%b", *extra_operands],
+                        operand_types=[str(a), str(b)]
+                        + [str(sa), str(sb), str(c)][: len(extra_operands)],
                         result_type=str(c),
-                        kwargs=kwargs,
                     )
                 ],
                 return_values=["%c"],

@@ -102,6 +102,71 @@ _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
 }
 
 
+# Keyword-only TENSOR operands — the other half of the same contract.
+#
+# W1.3 (2026-08-03). `_POSITIONAL_ATTR_PARAMS` above fixes one direction: a
+# positional arg that is really an attribute. The keyword side had the mirror
+# defect and it was worse, because it was silent. Every `call.keywords` entry
+# became an attribute regardless of what it bound, so a tensor passed by keyword
+# emitted as a *string attribute holding an SSA name*:
+#
+#     tessera.attn_top_k_blocks(%Q, %K, %V) {scores = "%s", top_k = 2}
+#
+# `%s` is nowhere in the operand list. The dataflow edge is gone: use-def walks,
+# liveness, and DCE all see `%s` as unused, and the graph verifier cannot catch
+# it because it only checks `op.operands` — an edge hidden in an attribute is
+# invisible to the one check that would have found it. The IR *looks* fine in a
+# dump, which is why this survived. (Decision #30: the emitter must derive the
+# operand/attribute split, not take the call syntax's word for it.)
+#
+# Declaration is load-bearing for ORDER, not just for documentation. Deriving
+# alone -- "a kwarg binding an SSA value is an operand" -- would make the operand
+# list depend on the order the caller happened to write the keywords, so
+# `f(Q, scores=s, top_k=2)` and `f(Q, top_k=2, scores=s)` would emit different
+# IR for the same program. The declared tuple pins the position.
+_KEYWORD_OPERANDS: Dict[str, tuple[str, ...]] = {
+    # NSA branch 3: per-block scores (B, H, S_q, num_blocks), unwrapped and
+    # `np.asarray`d by the reference exactly like Q/K/V. A real operand.
+    "tessera.attn_top_k_blocks": ("scores",),
+    # Packed-sequence cumulative lengths — index tensors, not scalars. The
+    # catalog already counted them (min_arity=5); only the frontend dropped them.
+    "tessera.varlen_sdpa": ("cu_seqlens_q", "cu_seqlens_k"),
+    # MoE routing: `scores` (B*S, num_experts) and `route` (per-token expert
+    # index, asarray'd to int64) are OPTIONAL tensor operands. Optional is why
+    # they were missed by a survey of *required* keyword-only parameters — the
+    # operand/attribute question is about what a parameter BINDS, and has
+    # nothing to do with whether it has a default.
+    "tessera.moe": ("scores", "route"),
+}
+
+
+# Keyword-only ATTRIBUTES. These already emitted correctly (a scalar keyword
+# becomes an attribute, which is right) -- what was missing was a DECLARATION
+# SITE, so nothing could tell "this op requires a keyword-only attribute" from
+# "the catalog's arity is wrong". `test_op_arity_contract` had to scope itself to
+# positional parameters for exactly that reason; with this map it no longer does.
+#
+# Values are the required keyword-only attribute names, so a rename in the
+# reference signature is caught rather than silently emitting a stale key.
+_KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
+    "tessera.attn_sliding_window": ("window_size",),
+    "tessera.attn_top_k_blocks": ("top_k", "block_size"),
+    "tessera.deepseek_sparse_attention": ("window_size", "block_size", "top_k"),
+    "tessera.ebm_inner_step": ("eta",),
+    "tessera.ebm_refinement": ("eta", "T"),
+    "tessera.lookahead_sparse_attention": ("window_size", "block_size"),
+    "tessera.masked_fill": ("value",),
+    "tessera.memory_index_select": ("block_size",),
+    "tessera.mor_partition": ("step",),
+    "tessera.mor_router": ("max_depth",),
+    "tessera.msa_index_scores": ("block_size",),
+    "tessera.msa_select_blocks": ("top_k", "block_size"),
+    "tessera.msa_sparse_attention": ("block_size", "top_k"),
+    "tessera.rope_split": ("rope_dim",),
+    "tessera.softcap": ("cap",),
+}
+
+
 def _scalar_const_env(fn: Any) -> Dict[str, Any]:
     """Scalar constants visible to ``fn`` — closure free vars + module globals —
     so a positional scalar param passed by *name* (``top_k(x, k)`` with ``k`` a
@@ -823,6 +888,35 @@ class GraphIRVerifier:
                         span=op.source_span,
                         code="GRAPH_IR_UNDEFINED_OPERAND",
                     ))
+            # An attribute may not hide a dataflow EDGE. This is the check whose
+            # absence let keyword tensor operands emit as `{scores = "%s"}` for
+            # as long as they did: the loop above verifies `op.operands`, so an
+            # edge parked in an attribute was invisible to the one place that
+            # would have caught it. Verifying operands is not the same as
+            # verifying that every edge IS an operand.
+            #
+            # The test is "names a value that is NOT an operand", not "starts
+            # with %". `tessera.graph.debug_value` carries `{name = "%A"}`
+            # alongside `%A` in its operand list -- there the attribute is a
+            # LABEL for an edge that already exists, which is exactly the case
+            # this check must not flag. Flagging the sigil alone would have made
+            # the diagnostic mean "an attribute mentions a value", which is not
+            # a defect and would have pushed the next person to weaken it.
+            operand_set = set(op.operands)
+            for attr_name, attr_value in (op.kwargs or {}).items():
+                if not isinstance(attr_value, str) or not attr_value.startswith("%"):
+                    continue
+                if attr_value in operand_set:
+                    continue
+                diagnostics.append(GraphIRDiagnostic(
+                    "error",
+                    f"op {op.op_name!r} attribute {attr_name!r} holds SSA "
+                    f"value {attr_value}, which is not an operand -- a value "
+                    f"edge must be an operand, not an attribute "
+                    f"(declare it in _KEYWORD_OPERANDS)",
+                    span=op.source_span,
+                    code="GRAPH_IR_SSA_VALUE_IN_ATTRIBUTE",
+                ))
             self._verify_op_types(op, value_types, diagnostics, target=target)
         if control_stack:
             diagnostics.append(GraphIRDiagnostic(
@@ -1667,19 +1761,51 @@ class _OpExtractor(ast.NodeVisitor):
                 operands.append(operand if operand else "%?")
                 operand_types.append(str(self._value_types.get(operand or "%?", TENSOR_OPAQUE)))
 
-        result_type = _infer_result_type(
-            mlir_name,
-            [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands],
-            attrs=kwargs)
-
+        # Keywords are bound BEFORE the result type is inferred. They used to be
+        # bound after, which quietly disabled every attribute-reading shape rule
+        # for the normal calling convention: `cast(x, dtype="bf16")` inferred
+        # from an empty attribute set and returned `tensor<*x?>` instead of bf16,
+        # and `adam(..., state_dtype="fp32")` never saw `state_dtype` at all.
+        # The rules were correct; they were being consulted too early.
+        kw_operands: Dict[str, str] = {}
         for kw in call.keywords:
             if kw.arg is None:
                 continue
             try:
                 kwargs[kw.arg] = ast.literal_eval(kw.value)
+                continue
             except (ValueError, TypeError):
-                value_name = self._emit_expr(kw.value)
+                pass
+            value_name = self._emit_expr(kw.value)
+            # A keyword that binds a DEFINED SSA value is a tensor operand, not
+            # an attribute. Recording it as `{scores = "%s"}` produced an
+            # attribute holding an SSA name -- syntactically fine, semantically
+            # nothing, and it erased the edge from the operand list where every
+            # dataflow consumer looks. Derive the split from what the value IS
+            # (Decision #30) rather than from the call syntax.
+            if value_name and self._is_defined_value(value_name):
+                kw_operands[kw.arg] = value_name
+            else:
                 kwargs[kw.arg] = value_name or "?"
+
+        # Declared order first, so the operand list does not depend on the order
+        # the caller happened to write the keywords. Anything undeclared is
+        # appended by sorted name -- deterministic, and flagged by
+        # `test_keyword_operand_vocabulary` as vocabulary that needs declaring.
+        if kw_operands:
+            declared = _KEYWORD_OPERANDS.get(mlir_name, ())
+            ordered = [n for n in declared if n in kw_operands]
+            ordered += sorted(n for n in kw_operands if n not in declared)
+            for name in ordered:
+                value = kw_operands[name]
+                operands.append(value)
+                operand_types.append(
+                    str(self._value_types.get(value, TENSOR_OPAQUE)))
+
+        result_type = _infer_result_type(
+            mlir_name,
+            [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands],
+            attrs=kwargs)
 
         # Structural view ops: derive the result type from the shape/axes/perm
         # attr (now fully bound) instead of the input-type fallback, so a static

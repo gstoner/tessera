@@ -768,11 +768,46 @@ OP_SHAPE_RULE: dict = {
        ("kv_cache.append", "kv_cache.prune", "cache.commit", "cache.rollback")},
     "tessera.kv_cache.read": "kv_cache_read",
 
+    # A bit count is the operand's shape with the declared index width. It sits
+    # in the `elementwise` kind, whose default rule is `same_as_first` -- which
+    # would claim the operand's storage dtype and is wrong for a count.
+    "tessera.popcount": "same_shape_index",
+
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
     # shapes scale with the mesh, so declaring from that measurement would bake
     # in a degenerate case. They stay `unclassified` until probed multi-rank.
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Declared result dtypes for non-storage-preserving results (W1.3)
+#
+# Two constants, because both were previously *derived* -- and a derived dtype
+# is one the caller's storage choice can change out from under the compiler.
+#
+#   INDEX_DTYPE   an index or a count. Was hard-coded as "int64" in two shape
+#                 rules and computed a third way by `popcount`, which returns
+#                 `np.bitwise_count`'s width on numpy >= 2.0 (uint8 for int8
+#                 input) and int64 from the masking fallback on 1.26. Same
+#                 program, different result dtype, decided by which NumPy the
+#                 reference happened to import.
+#
+#   COMPUTE_FLOAT the float an INTEGER input promotes to. NumPy picks this from
+#                 the integer's width -- int8 -> f16, int16 -> f32,
+#                 int32/int64 -> f64 -- so `cos` returned four different
+#                 precisions for identical mathematics depending only on how
+#                 the input was stored. Measured across the catalog: 29 ops.
+#                 f32 is the compute width of the stack (Decision #15a); f64 is
+#                 the oracle path and runs at 1/64 rate on the target GPUs,
+#                 and f16-from-int8 silently caps a transcendental at 6.55e4.
+#
+# "Pinning one would be wrong" was the recorded reason `popcount` stayed
+# undeclared. It is the opposite: a compiler must declare its result dtype
+# precisely because it cannot be a function of the host library's promotion
+# table.
+INDEX_DTYPE = "int64"
+COMPUTE_FLOAT_DTYPE = "fp32"
+
 
 #: The declared vocabulary. `graph_ir` implements each name; a rule named here
 #: with no implementation (or vice versa) is a drift-gated error.
@@ -821,7 +856,14 @@ DELIBERATELY_UNDECLARED: dict = {
     # the type system can express the storage the reference never materializes.
     # Producing real sub-byte storage is a backend-path question, not a shape
     # rule one.
-    "tessera.popcount": "returns an INTEGER bit count, never the operand's storage dtype, so it is not storage-preserving despite sitting in the `elementwise` kind. The exact integer width is NumPy-version dependent (uint8 under 2.x, int64 under 1.26), so pinning one would be wrong; declaring a shape rule needs an int-width-agnostic vocabulary first",
+    # `popcount` was here, on the grounds that its integer width is
+    # NumPy-version dependent (uint8 under 2.x via `np.bitwise_count`, int64
+    # under 1.26 via the masking fallback) "so pinning one would be wrong".
+    # That has it backwards. A result dtype decided by which NumPy the host
+    # imported is not a contract at all, and pinning one is precisely what a
+    # compiler owes its users. It is `same_shape_index` over `INDEX_DTYPE` --
+    # operand shape, declared index width -- and the reference now returns that
+    # on every NumPy rather than inheriting the host's answer.
     "tessera.all_gather": "result shape scales with mesh size, not derivable from operand types",
     "tessera.reduce_scatter": "result shape shrinks with mesh size, not derivable from operand types",
     "tessera.fft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",

@@ -3894,14 +3894,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def popcount(x):
         """Per-element population count (number of set bits) of an integer
         tensor — e.g. candidates-remaining for a bitmask-encoded lattice cell.
-        Elementwise, shape-preserving, non-negative integers."""
+        Elementwise, shape-preserving, non-negative integers.
+
+        Always returns the declared index width (`INDEX_DTYPE`). The two
+        implementations below disagree about the result dtype --
+        `np.bitwise_count` (numpy >= 2.0) returns the INPUT's width, so
+        `popcount(int8)` gave uint8, while the masking fallback always produced
+        int64. The *values* matched, so nothing failed; only the dtype moved,
+        and it moved with whichever NumPy the host imported. That is not a
+        contract, and it is why this op sat in `DELIBERATELY_UNDECLARED` under
+        "pinning one would be wrong". Pinning one is the entire job.
+        """
+        from .compiler.op_catalog import INDEX_DTYPE
+
         a = np.asarray(_unwrap(x))
+        index_dtype = np.dtype(INDEX_DTYPE)
         if hasattr(np, "bitwise_count"):          # numpy >= 2.0 fast path
-            return np.asarray(np.bitwise_count(a))
+            return np.asarray(np.bitwise_count(a)).astype(index_dtype, copy=False)
         v = a.astype(np.uint64, copy=True)        # numpy < 2.0 masking fallback
-        out = np.zeros(v.shape, dtype=np.int64)
+        out = np.zeros(v.shape, dtype=index_dtype)
         while np.any(v):
-            out += (v & np.uint64(1)).astype(np.int64)
+            out += (v & np.uint64(1)).astype(index_dtype)
             v >>= np.uint64(1)
         return out
 
@@ -5084,6 +5097,11 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
             return None
         return dtype
 
+    def _is_integer_storage(value) -> bool:
+        data = getattr(value, "_data", value)
+        dtype = getattr(data, "dtype", None)
+        return dtype is not None and dtype.kind in ("i", "u")
+
     _COMPUTE = _np.float32
 
     def _promote(value):
@@ -5104,7 +5122,29 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
             )
             want = _storage_dtype(source) if source is not None else None
             if want is None:
-                return fn(*args, **kwargs)
+                out = fn(*args, **kwargs)
+                # INTEGER input to a float-producing op. NumPy picks the result
+                # float width from the INTEGER's width -- int8 -> f16,
+                # int16 -> f32, int32/int64 -> f64 -- so `cos` returns four
+                # different precisions for the same mathematics depending only
+                # on how the input was stored. That is NumPy's promotion table
+                # leaking into Tessera's type system; a compiler targeting
+                # accelerators cannot let storage width of an index-like input
+                # choose the compute precision of a transcendental.
+                #
+                # The declared answer is the compute dtype (Decision #15a), not
+                # a derived one. f64 is the oracle path and is 1/64 rate on the
+                # GPUs this targets; f16-from-int8 is worse still, silently
+                # capping a transcendental at 6.55e4.
+                if (
+                    source is not None
+                    and _is_integer_storage(source)
+                    and isinstance(out, (_np.ndarray, _np.generic))
+                    and _is_float_storage(out.dtype)
+                    and out.dtype != _COMPUTE
+                ):
+                    return _np.asarray(out).astype(_COMPUTE, copy=False)
+                return out
 
             # Two SEPARATE decisions. Conflating them left f32 broken: an early
             # return for non-reduced inputs skipped the store-back, so ops that

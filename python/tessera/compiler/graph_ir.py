@@ -1958,14 +1958,24 @@ def _shape_reduce_all(operand_types: List[IRType], attrs: Optional[Dict[str, Any
 
 def _shape_reduce_all_index(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """Full reduction yielding an INDEX (argmax/argmin/count_nonzero)."""
+    from .op_catalog import INDEX_DTYPE
+
     first = operand_types[0]
-    return tensor_ir_type((), "int64", layout=first.layout)
+    return tensor_ir_type((), INDEX_DTYPE, layout=first.layout)
 
 
 def _shape_same_shape_index(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
-    """Operand shape, index dtype (argsort)."""
+    """Operand shape, declared index dtype (argsort, popcount).
+
+    The width comes from `INDEX_DTYPE` rather than a literal, because it was
+    previously spelled out here, again in `_shape_reduce_all_index`, and
+    derived a third way by `popcount` from whichever NumPy was installed. Three
+    spellings of one convention is how they drift apart.
+    """
+    from .op_catalog import INDEX_DTYPE
+
     first = operand_types[0]
-    return tensor_ir_type(first.shape, "int64", layout=first.layout)
+    return tensor_ir_type(first.shape, INDEX_DTYPE, layout=first.layout)
 
 
 def _shape_flatten(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:

@@ -835,6 +835,60 @@ OP_SHAPE_RULE: dict = {
     "tessera.linear_attn_state": "state_matrix",
     "tessera.permute": "layout_permute",
 
+    # W1.4 wave 3.
+    # The remaining attention entry points are dispatch wrappers over the same
+    # contract: the result is the query's shape. `gqa`/`mqa` differ only in how
+    # many KV heads they broadcast over, which does not change the result.
+    **{f"tessera.{n}": "same_as_first" for n in (
+        "attn_local_window_2d", "gqa_attention", "mqa_attention",
+        "multi_head_attention", "varlen_sdpa")},
+    # Sparse and factorized products are still A @ B at the type level -- the
+    # sparsity lives in the STORAGE of operand 0, not in the result shape.
+    **{f"tessera.{n}": "matmul_2d" for n in (
+        "spmm_csr", "spmm_coo", "bsmm", "sddmm", "factorized_matmul",
+        "quantized_matmul")},
+    "tessera.dequant_matmul": "matmul_trailing",
+    "tessera.dequant_grouped_gemm": "matmul_trailing",
+    # `moe_combine` sums the partials over the token axis.
+    "tessera.moe_combine": "drop_axis",
+    "tessera.rope_merge": "concat_trailing",
+    "tessera.tile": "tile_trailing",
+    "tessera.repeat": "flatten_repeat",
+    "tessera.msa_select_blocks": "select_k_index",
+    "tessera.segment_reduce": "segment_reduce",
+    "tessera.lu": "lu",
+    "tessera.qr": "qr",
+    "tessera.svd": "svd",
+    "tessera.nonzero": "nonzero",
+    "tessera.spec_accept": "spec_accept",
+    "tessera.spec_accept_sample": "spec_accept",
+    "tessera.spec_accept_tree_sample": "spec_accept_tree",
+    "tessera.stft": "stft",
+    "tessera.spectral_conv": "conv_full",
+    # Shape lives entirely in an attribute for these sources.
+    **{f"tessera.{n}": "from_shape_attr" for n in ("rng_normal", "rng_uniform")},
+
+    "tessera.arange": "arange",
+    "tessera.einsum": "einsum",
+    "tessera.istft": "istft",
+    # Score-matching and RL policy losses reduce to a SCALAR. `reduce_all`
+    # already states that, and being in the wrapper's preserving set it also
+    # stops them widening f32 -> f64, which all four were measured doing.
+    **{f"tessera.loss.{n}": "reduce_all" for n in (
+        "denoising_score_matching", "implicit_score_matching")},
+    **{f"tessera.rl.{n}": "reduce_all" for n in (
+        "grpo_policy_loss", "cispo_policy_loss")},
+
+    # W1.4 wave 3 tail. The Clifford field derivatives take a RAW coefficient
+    # array `(spatial..., 2**n)` -- not a `MultivectorField` -- and return the
+    # same layout. Three earlier probes failed only because they used the wrong
+    # spatial rank for Cl(3,0); the ops were never the problem.
+    **{f"tessera.{n}": "same_as_first" for n in (
+        "clifford_ext_deriv", "clifford_codiff", "clifford_vec_deriv",
+        "laplacian_2d")},
+    # `(N, 3)` points on the sphere -> a per-point energy `(N,)`.
+    "tessera.conformal_energy_on_sphere": "reduce_trailing",
+
     # `pack` / `rearrange` mean two things depending on their `layout`
     # attribute: a tuple permutes, a named layout is identity.
     "tessera.pack": "layout_permute",
@@ -906,6 +960,22 @@ SHAPE_RULE_NAMES = frozenset({
     "reduce_trailing",
     "state_handle",
     "layout_permute",
+    "arange",
+    "einsum",
+    "istft",
+    "concat_trailing",
+    "tile_trailing",
+    "flatten_repeat",
+    "select_k_index",
+    "segment_reduce",
+    "lu",
+    "qr",
+    "svd",
+    "nonzero",
+    "spec_accept",
+    "spec_accept_tree",
+    "stft",
+    "conv_full",
     "matmul_trailing",
     "same_as_second",
     "conv_spatial",
@@ -936,6 +1006,41 @@ SHAPE_RULE_NAMES = frozenset({
 #: force wrong behavior. Answering "why is this unclassified?" is what makes the
 #: remaining count meaningful.
 DELIBERATELY_UNDECLARED: dict = {
+    # W1.4 -- a genuinely new category, and the first exemption reason in this
+    # registry that survives examination rather than dissolving under it.
+    #
+    # These four take a PYTHON CALLABLE as operand 0 and a complex scalar as
+    # operand 1: they are higher-order numerical-differentiation operators
+    # (`dz` / `dbar` are the Wirtinger derivatives, evaluated by finite
+    # differences of `f` around `z0`). A shape rule is a function of
+    # `operand_types`, and operand 0 here HAS no tensor type -- there is
+    # nothing for the rule to read. This is not a vocabulary gap that a richer
+    # signature would close, the way mesh context closed the collectives; the
+    # operand is a function.
+    #
+    # They also live on `tessera.complex`, not `tessera.ops`, so the frontend
+    # cannot emit them as Graph IR ops at all. Worth stating plainly: the
+    # catalog names them, and no `@jit` body can reach them.
+    **{f"tessera.{_n}": "takes a Python callable as operand 0 (higher-order "
+                        "numerical differentiation of f around z0), so there "
+                        "is no operand tensor type for a shape rule to read; "
+                        "also reachable only via tessera.complex, not "
+                        "tessera.ops"
+       for _n in ("dz", "dbar", "conformal_jacobian", "check_cauchy_riemann")},
+
+    # `training.loss_sgd` / `training.loss_adamw` are FUSED loss+optimizer
+    # steps registered only in the runtime reference table, with no
+    # `tessera.ops` entry point. Their results are (updated_param,
+    # target_gradient) and (updated_param, m, v, target_gradient) -- describable
+    # in principle, but the op cannot be called through the ops namespace, so
+    # any rule declared here would be unverifiable against real behaviour. That
+    # is the condition this registry exists to avoid.
+    **{f"tessera.training.{_n}": "fused loss+optimizer step registered only in "
+                                 "the runtime reference table; no tessera.ops "
+                                 "entry point, so a declared rule could not be "
+                                 "verified against the op"
+       for _n in ("loss_sgd", "loss_adamw")},
+
     # The quantize family returns a TUPLE (codes, scale), not a single tensor,
     # so `same_as_first` was a false declaration -- it claims one result type
     # for a multi-result contract. The wrapper happened not to corrupt anything

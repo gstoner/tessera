@@ -2603,6 +2603,250 @@ def _shape_state_matrix(operand_types: List[IRType],
                           layout=x.layout)
 
 
+def _shape_concat_trailing(operand_types: List[IRType],
+                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`rope_merge`: the two halves rejoin along the trailing axis.
+
+    The inverse of `split_halves`, and like it the parts are not equal -- the
+    rope part is `rope_dim` wide and the pass-through is the remainder.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    a, b = operand_types[0], operand_types[1]
+    if a.rank is None or b.rank is None or not a.shape or not b.shape:
+        return _unknown_like(a)
+    lo, hi = _dim(a.shape[-1]), _dim(b.shape[-1])
+    total = str(lo + hi) if lo is not None and hi is not None else "?"
+    return tensor_ir_type(a.shape[:-1] + (total,), a.dtype, layout=a.layout)
+
+
+def _shape_tile_trailing(operand_types: List[IRType],
+                         attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`tile`: a scalar `reps` repeats the LAST axis (numpy's broadcast rule)."""
+    x = operand_types[0]
+    reps = (attrs or {}).get("reps")
+    if x.rank is None or not x.shape or isinstance(reps, (tuple, list)):
+        return _unknown_like(x)
+    n, r = _dim(x.shape[-1]), _dim(reps)
+    if n is None or r is None:
+        return _unknown_like(x)
+    return tensor_ir_type(x.shape[:-1] + (str(n * r),), x.dtype, layout=x.layout)
+
+
+def _shape_flatten_repeat(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`repeat` with no axis FLATTENS -- `(4,6)` repeated twice is `(48,)`.
+
+    Easy to mistake for shape-preserving elementwise repetition; it is not, and
+    the rank change is the part a downstream consumer would get wrong.
+    """
+    x = operand_types[0]
+    attrs = attrs or {}
+    if attrs.get("axis") is not None:
+        return _unknown_like(x)
+    reps = _dim(attrs.get("repeats"))
+    if x.rank is None or not x.shape or reps is None:
+        return _unknown_like(x)
+    total = 1
+    for extent in x.shape:
+        n = _dim(extent)
+        if n is None:
+            return _unknown_like(x)
+        total *= n
+    return tensor_ir_type((str(total * reps),), x.dtype, layout=x.layout)
+
+
+def _shape_select_k_index(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`msa_select_blocks`: trailing axis becomes `top_k`, result is an index."""
+    from .op_catalog import INDEX_DTYPE
+
+    x = operand_types[0]
+    k = _dim((attrs or {}).get("top_k"))
+    if x.rank is None or not x.shape or k is None:
+        return _unknown_like(x, INDEX_DTYPE)
+    return tensor_ir_type(x.shape[:-1] + (str(k),), INDEX_DTYPE, layout=x.layout)
+
+
+def _shape_segment_reduce(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Leading axis becomes the SEGMENT COUNT, which is data-dependent.
+
+    The number of segments is `max(seg_ids) + 1` -- a property of the values in
+    operand 1, not of any type. So the rule states `?` there and keeps the
+    trailing axes, rather than reusing the input extent (which would be the
+    claim "one segment per row", true only when nothing is grouped).
+    """
+    x = operand_types[0]
+    if x.rank is None or not x.shape:
+        return _unknown_like(x)
+    return tensor_ir_type(("?",) + x.shape[1:], x.dtype, layout=x.layout)
+
+
+def _shape_lu(operand_types: List[IRType],
+              attrs: Optional[Dict[str, Any]] = None):
+    """`(LU, pivots)` — the packed factors plus a rank-1 pivot vector."""
+    a = operand_types[0]
+    if a.rank is None or len(a.shape) < 2:
+        return (_unknown_like(a), _unknown_like(a, "int32"))
+    return (tensor_ir_type(a.shape, a.dtype, layout=a.layout),
+            tensor_ir_type((a.shape[-2],), "int32", layout=a.layout))
+
+
+def _shape_qr(operand_types: List[IRType],
+              attrs: Optional[Dict[str, Any]] = None):
+    """Reduced QR: `Q (m, n)` and `R (n, n)` for m >= n."""
+    a = operand_types[0]
+    if a.rank is None or len(a.shape) < 2:
+        return (_unknown_like(a), _unknown_like(a))
+    m, n = a.shape[-2], a.shape[-1]
+    return (tensor_ir_type(a.shape[:-2] + (m, n), a.dtype, layout=a.layout),
+            tensor_ir_type(a.shape[:-2] + (n, n), a.dtype, layout=a.layout))
+
+
+def _shape_svd(operand_types: List[IRType],
+               attrs: Optional[Dict[str, Any]] = None):
+    """Reduced SVD: `U (m, n)`, singular values `S (n,)`, `Vt (n, n)`."""
+    a = operand_types[0]
+    if a.rank is None or len(a.shape) < 2:
+        return (_unknown_like(a), _unknown_like(a), _unknown_like(a))
+    m, n = a.shape[-2], a.shape[-1]
+    return (tensor_ir_type(a.shape[:-2] + (m, n), a.dtype, layout=a.layout),
+            tensor_ir_type(a.shape[:-2] + (n,), a.dtype, layout=a.layout),
+            tensor_ir_type(a.shape[:-2] + (n, n), a.dtype, layout=a.layout))
+
+
+def _shape_nonzero(operand_types: List[IRType],
+                   attrs: Optional[Dict[str, Any]] = None):
+    """One rank-1 index vector per input axis; the LENGTH is data-dependent.
+
+    The arity is the input's rank -- static and worth stating -- while the
+    common length depends on how many elements are non-zero and is `?`. Both
+    halves matter: an unknown length is not a reason to leave the arity unsaid.
+    """
+    from .op_catalog import INDEX_DTYPE
+
+    x = operand_types[0]
+    if x.rank is None or not x.shape:
+        return _unknown_like(x, INDEX_DTYPE)
+    part = tensor_ir_type(("?",), INDEX_DTYPE, layout=x.layout)
+    return tuple(part for _ in x.shape)
+
+
+def _shape_spec_accept(operand_types: List[IRType],
+                       attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`[path_idx, prefix_length, bonus_token]` — a fixed 3-vector of i32."""
+    return tensor_ir_type(("3",), "int32", layout=operand_types[0].layout)
+
+
+def _shape_spec_accept_tree(operand_types: List[IRType],
+                            attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`[path_idx, prefix_length]` — the tree form carries no bonus token."""
+    return tensor_ir_type(("2",), "int32", layout=operand_types[0].layout)
+
+
+def _shape_stft(operand_types: List[IRType],
+                attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`(frames, bins)` — `frames = (n - win) // hop + 1`, `bins = win//2 + 1`.
+
+    `bins` is the `rfft` half-spectrum, so the result is complex with the
+    input's component width -- the same real-pair model as the rest of the
+    transform family.
+    """
+    x, win = operand_types[0], (operand_types[1] if len(operand_types) > 1 else None)
+    dtype = _complex_of(x.dtype)
+    hop = _dim((attrs or {}).get("hop"))
+    n = _dim(x.shape[-1]) if x.shape else None
+    w = _dim(win.shape[-1]) if win is not None and win.shape else None
+    if None in (hop, n, w) or not hop:
+        return _unknown_like(x, dtype)
+    return tensor_ir_type((str((n - w) // hop + 1), str(w // 2 + 1)), dtype,
+                          layout=x.layout)
+
+
+def _shape_conv_full(operand_types: List[IRType],
+                     attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`spectral_conv`: FULL convolution, trailing axis `n + m - 1`.
+
+    Not the `n - m + 1` of `conv_spatial`. Spectral convolution keeps the whole
+    support, which is why it is a separate rule rather than a padding mode --
+    the two differ by `2*(m-1)` and both are plausible-looking numbers.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    x, w = operand_types[0], operand_types[1]
+    if x.rank is None or w.rank is None or not x.shape or not w.shape:
+        return _unknown_like(x)
+    n, m = _dim(x.shape[-1]), _dim(w.shape[-1])
+    total = str(n + m - 1) if n is not None and m is not None else "?"
+    return tensor_ir_type(x.shape[:-1] + (total,), x.dtype, layout=x.layout)
+
+
+def _shape_arange(operand_types: List[IRType],
+                  attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`arange`: length is `ceil((stop - start) / step)`, from attributes only.
+
+    No operand carries it -- `arange` is a SOURCE. The `unclassified` fallback
+    returned operand 0's type, which for a source op means echoing whatever
+    happened to be passed as `start`.
+    """
+    attrs = attrs or {}
+    start, stop = _dim(attrs.get("start", 0)), _dim(attrs.get("stop"))
+    step = _dim(attrs.get("step", 1)) or 1
+    dtype = attrs.get("dtype") or "fp32"
+    if stop is None or start is None or not step:
+        return tensor_ir_type(("?",), dtype)
+    length = max(0, -(-(stop - start) // step))  # ceil division
+    return tensor_ir_type((str(length),), dtype)
+
+
+def _shape_einsum(operand_types: List[IRType],
+                  attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`einsum`: the result subscripts name the axes, so read them.
+
+    Each output label is looked up in the input labels to find its extent.
+    This is the one op whose shape is written down by the caller in full, and
+    the `unclassified` fallback (operand 0's shape) ignored it entirely --
+    right only for a spec that happens to preserve the first operand.
+    """
+    spec = (attrs or {}).get("spec") or (attrs or {}).get("equation")
+    if not isinstance(spec, str) or "->" not in spec:
+        return _unknown_like(operand_types[0])
+    lhs, rhs = spec.split("->", 1)
+    sizes: Dict[str, str] = {}
+    for term, operand in zip(lhs.split(","), operand_types):
+        labels = term.strip()
+        if operand.rank is None or len(labels) != len(operand.shape):
+            return _unknown_like(operand_types[0])
+        for label, extent in zip(labels, operand.shape):
+            sizes.setdefault(label, extent)
+    out = rhs.strip()
+    if not out:
+        return tensor_ir_type((), operand_types[0].dtype)
+    return tensor_ir_type(tuple(sizes.get(label, "?") for label in out),
+                          operand_types[0].dtype)
+
+
+def _shape_istft(operand_types: List[IRType],
+                 attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Inverse STFT: `(frames - 1) * hop + win` samples, and REAL.
+
+    The overlap-add inverse of `_shape_stft`. Like `irfft` it is the member of
+    its pair that leaves the complex domain, so its dtype comes from
+    `_REAL_FOR_COMPLEX` rather than the operand.
+    """
+    xf = operand_types[0]
+    win = operand_types[1] if len(operand_types) > 1 else None
+    dtype = _REAL_FOR_COMPLEX.get(xf.dtype or "", "fp32")
+    hop = _dim((attrs or {}).get("hop"))
+    frames = _dim(xf.shape[-2]) if xf.rank and len(xf.shape) >= 2 else None
+    length = _dim(win.shape[-1]) if win is not None and win.shape else None
+    if None in (hop, frames, length):
+        return _unknown_like(xf, dtype)
+    return tensor_ir_type(xf.shape[:-2] + (str((frames - 1) * hop + length),),
+                          dtype, layout=xf.layout)
+
+
 def _shape_layout_permute(operand_types: List[IRType],
                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """`pack` / `rearrange`: permute by an explicit axis order, else identity.
@@ -2718,6 +2962,22 @@ _SHAPE_RULES = {
     "split_halves": _shape_split_halves,
     "qkv_projection": _shape_qkv_projection,
     "state_matrix": _shape_state_matrix,
+    "concat_trailing": _shape_concat_trailing,
+    "tile_trailing": _shape_tile_trailing,
+    "flatten_repeat": _shape_flatten_repeat,
+    "select_k_index": _shape_select_k_index,
+    "segment_reduce": _shape_segment_reduce,
+    "lu": _shape_lu,
+    "qr": _shape_qr,
+    "svd": _shape_svd,
+    "nonzero": _shape_nonzero,
+    "spec_accept": _shape_spec_accept,
+    "spec_accept_tree": _shape_spec_accept_tree,
+    "stft": _shape_stft,
+    "conv_full": _shape_conv_full,
+    "arange": _shape_arange,
+    "einsum": _shape_einsum,
+    "istft": _shape_istft,
     "layout_permute": _shape_layout_permute,
     "state_handle": _shape_state_handle,
     "kv_cache_read": _shape_kv_cache_read,

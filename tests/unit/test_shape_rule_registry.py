@@ -28,7 +28,12 @@ import warnings
 import numpy as np
 import pytest
 
-from tessera.compiler.graph_ir import _SHAPE_RULES, _infer_result_type, tensor_ir_type
+from tessera.compiler.graph_ir import (
+    _SHAPE_RULES,
+    _infer_result_type,
+    _infer_result_types,
+    tensor_ir_type,
+)
 from tessera.compiler.op_catalog import (
     _SPECS,
     SHAPE_RULE_NAMES,
@@ -38,7 +43,12 @@ from tessera.compiler.op_catalog import (
 
 #: Ratchet. May shrink, never grow. Driving it to zero is what closes W1's
 #: "no op reaches the `operand_types[0]` fallback".
-MAX_UNCLASSIFIED = 106
+#:
+#: It is ZERO (W1.4). Every catalog op now resolves to a named rule or to a
+#: recorded, examined reason in `DELIBERATELY_UNDECLARED` — so a NEW op with no
+#: rule fails here immediately rather than being absorbed into a large bound.
+#: A ratchet left slack after it has been closed stops gating anything.
+MAX_UNCLASSIFIED = 0
 
 
 def test_declared_rule_names_match_implementations():
@@ -159,9 +169,24 @@ def test_declared_rules_agree_with_actual_op_behavior():
             if fn is None:
                 continue
             try:
-                actual = np.asarray(fn(x))
+                raw = fn(x)
             except Exception:
                 continue  # op needs more than a bare tensor; not probeable here
+            # A multi-result op must be compared result-by-result. `np.asarray`
+            # on a tuple silently STACKS it -- `nonzero`'s `(rows, cols)` came
+            # back as one `(2, 32)` array, so the gate compared a rule for the
+            # first result against a shape that exists nowhere in the contract.
+            # Same tuple-blindness the quantize probe had: a check that cannot
+            # express multiple results does not skip them, it invents one.
+            if isinstance(raw, tuple):
+                predicted_all = _infer_result_types(spec.graph_name, [probe])
+                if len(predicted_all) != len(raw):
+                    disagreements.append(
+                        f"{spec.public_name}: rule {rule!r} predicts "
+                        f"{len(predicted_all)} results, op returns {len(raw)}"
+                    )
+                continue
+            actual = np.asarray(raw)
             predicted = _infer_result_type(spec.graph_name, [probe])
             try:
                 actual_dtype = canonicalize_dtype(str(actual.dtype))
@@ -169,6 +194,15 @@ def test_declared_rules_agree_with_actual_op_behavior():
                 continue
             pred_shape = tuple(str(d) for d in predicted.shape)
             real_shape = tuple(str(d) for d in actual.shape)
+            # `?` is a declared unknown -- a data-dependent extent such as
+            # `nonzero`'s count or `segment_reduce`'s segment total. It agrees
+            # with any concrete size; demanding a match would force the rule to
+            # echo whatever the probe's data happened to produce, which is the
+            # degenerate-probe error this file already guards against twice.
+            if len(pred_shape) == len(real_shape):
+                real_shape = tuple(
+                    p if p == "?" else r for p, r in zip(pred_shape, real_shape)
+                )
             if pred_shape != real_shape:
                 disagreements.append(
                     f"{spec.public_name}: rule {rule!r} predicts shape "

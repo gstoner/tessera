@@ -2530,10 +2530,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             x = x._data
         if hasattr(w, "_data"):
             w = w._data
-        n = x.shape[-1] + w.shape[-1] - 1
+        x = np.asarray(x)
+        n = x.shape[-1] + np.asarray(w).shape[-1] - 1
         nfft = 1 << int(np.ceil(np.log2(n)))
         y = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)
-        return y[..., :n]
+        # FULL convolution keeps the whole support (n + m - 1), and the result
+        # stays at the input's width rather than numpy's f64.
+        want = x.dtype if x.dtype.kind == "f" else np.dtype("float32")
+        return y[..., :n].astype(want, copy=False)
 
     def stft(x, win, hop: int):
         if hasattr(x, "_data"):
@@ -2542,10 +2546,16 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             win = win._data
         x = np.asarray(x)
         win = np.asarray(win)
+        # `np.fft.rfft` computes and returns in double, so an f32 signal came
+        # back complex128. Compute wide, store at the input's component width
+        # -- the same contract `fft`/`rfft` above follow. These three spectral
+        # helpers call `np.fft.*` directly rather than going through `ops.rfft`,
+        # which is why fixing that op did not reach them.
+        want = _complex_for(x.dtype)
         frames = []
         for start in range(0, max(1, x.shape[-1] - win.shape[-1] + 1), int(hop)):
             frames.append(np.fft.rfft(x[..., start:start + win.shape[-1]] * win, axis=-1))
-        return np.stack(frames, axis=-2)
+        return np.stack(frames, axis=-2).astype(want, copy=False)
 
     def istft(xf, win, hop: int):
         if hasattr(xf, "_data"):
@@ -2563,7 +2573,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             start = idx * int(hop)
             out[..., start:start + frame_len] += frame
             weight[..., start:start + frame_len] += win * win
-        return out / np.maximum(weight, 1e-12)
+        # The f64 accumulator is deliberate -- overlap-add sums many frames --
+        # but the RESULT is stored at the width implied by the spectrum, not at
+        # the accumulator's.
+        want = _real_for(xf.dtype) if xf.dtype.kind == "c" else xf.dtype
+        return (out / np.maximum(weight, 1e-12)).astype(want, copy=False)
 
     def spectral_filter(Xf, Hf):
         if hasattr(Xf, "_data"):

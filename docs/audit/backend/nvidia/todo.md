@@ -3,10 +3,27 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-02
+last_updated: 2026-08-03
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **parity validated, and the prior NOT-VALIDATED status is now CLOSED.**
+`MMAOp::verify()` now counts DATA operands, so the typed `tile.mma` fragment
+form and the warp-spec `!tile.async_token` edge can coexist. NVIDIA needed the
+same correction and had not received it: `NVIDIALowering.cpp` compared raw
+`op->getNumOperands()` against 3/5 and then indexed raw operands, so the exact
+typed-plus-token form this change unblocks would have hit `emitError` +
+`signalPassFailure` during SM120 lowering — and operand 3 would have been the
+token rather than an NVFP4 scale. Both the count and the indexing now use
+`tessera::tile::dataOperands`.
+**Verified by building it**, not by inference: ROCm and NVIDIA cannot both
+register in one `tessera-opt`, so a second tree (`build-nvidia`,
+`-DTESSERA_BUILD_NVIDIA_BACKEND=ON`) was configured and built. With
+`tessera_nvidia` actually registered, the W0.9 parse/verify gate **passes for
+sm90 / sm100 / sm120, plain and probe-annotated** — it had been SKIPPING every
+run since PR #490. The contract test now discovers either build, so NVIDIA is
+no longer silently unmeasured.
 
 Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **follow-up required, NOT validated on NVIDIA.**
 W0.9 added a real parse + dialect-load + verifier gate over every Target-IR

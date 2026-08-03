@@ -4392,8 +4392,16 @@ struct LowerTileToNVIDIAPass
           bool isNVFP4 = physical &&
               physical->packing == Sm120InputPacking::PackedX8E2M1;
           unsigned expectedOperands = isNVFP4 ? 5 : 3;
+          // Count DATA operands, matching MMAOp::verify() and the ROCm
+          // lowering. A typed `tile.mma` legitimately carries a
+          // `!tile.async_token` alongside A/B/acc -- WarpSpecLegalityPass
+          // REQUIRES that edge -- so a raw `getNumOperands()` sees 4 where the
+          // contract says 3 and rejects exactly the form the shared verifier
+          // now accepts. Indexing must use the same filtered list, or operand
+          // 3 would be the token rather than an NVFP4 scale.
+          SmallVector<Value> mmaData = tessera::tile::dataOperands(op);
           if (smVersion < kConsumerBlackwellSM ||
-              op->getNumOperands() != expectedOperands ||
+              mmaData.size() != expectedOperands ||
               op->getNumResults() != 1 ||
               (!op->getResult(0).use_empty() && !hasOutputStore)) {
             op->emitError("initial typed fragment lowering requires sm_120, "
@@ -4402,15 +4410,15 @@ struct LowerTileToNVIDIAPass
             signalPassFailure();
             return;
           }
-          auto aPack = op->getOperand(0).getDefiningOp<tessera::tile::FragmentPackOp>();
-          auto bPack = op->getOperand(1).getDefiningOp<tessera::tile::FragmentPackOp>();
-          auto cZero = op->getOperand(2).getDefiningOp<tessera::tile::FragmentZeroOp>();
+          auto aPack = mmaData[0].getDefiningOp<tessera::tile::FragmentPackOp>();
+          auto bPack = mmaData[1].getDefiningOp<tessera::tile::FragmentPackOp>();
+          auto cZero = mmaData[2].getDefiningOp<tessera::tile::FragmentZeroOp>();
           tessera::tile::FragmentPackOp scaleAPack;
           tessera::tile::FragmentPackOp scaleBPack;
           if (isNVFP4) {
-            scaleAPack = op->getOperand(3).getDefiningOp<
+            scaleAPack = mmaData[3].getDefiningOp<
                 tessera::tile::FragmentPackOp>();
-            scaleBPack = op->getOperand(4).getDefiningOp<
+            scaleBPack = mmaData[4].getDefiningOp<
                 tessera::tile::FragmentPackOp>();
           }
           if (!aPack || !bPack || !cZero || !physical) {

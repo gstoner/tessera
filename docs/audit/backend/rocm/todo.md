@@ -1,11 +1,20 @@
 ---
-last_updated: 2026-08-02
+last_updated: 2026-08-03
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **parity validated, no ROCm behavior change.**
+The `dataOperands` / `isTileControlType` rule ROCm already applied privately in
+`TileToROCM.cpp` is now a shared Tile helper. ROCm **composes** rather than
+forks: it ORs the shared Tile rule with its own `tessera_rocm::TokenType`,
+because Tile IR must not depend on a backend dialect. Behavior is identical;
+what changed is that the ODS verifier finally learned the rule ROCm had, which
+is what made the typed form reachable at all. Verified on the gfx1151 box: full
+lit and the typed-mma fixtures green.
 
 Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **parity validated, contract changed.**
 W0.9 made Decision #19 checkable by a real MLIR parse + dialect load + verifier

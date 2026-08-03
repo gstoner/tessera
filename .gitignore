@@ -103,3 +103,7 @@ graphify-out/
 # Stray ROCm installer artifact (do not commit)
 amdgpu-install_*.deb
 *.deb
+
+# Second build tree for the NVIDIA dialect (ROCm and NVIDIA cannot both
+# register in one tessera-opt).
+build-nvidia/

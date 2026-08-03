@@ -118,6 +118,29 @@ class ComplexScalar:
     def ndim(self) -> int:
         return self.re.ndim
 
+    def __array__(self, dtype=None, copy=None):
+        """Interleave into a real numpy complex array.
+
+        W2.2. Without this, `np.asarray(ComplexScalar)` produced a rank-0
+        ``object`` scalar -- the value carried both halves and exposed neither,
+        so every consumer that reaches for `np.asarray` (the shape-rule gates,
+        the storage-dtype wrapper, benchmark harnesses) saw an opaque box. The
+        complex family was unreachable from `tessera.ops` at the time, which is
+        the only reason nothing had tripped over it.
+
+        The component width is preserved rather than promoted: an f32 pair
+        becomes complex64, an f64 pair complex128. Widening here would
+        reintroduce the `np.fft.*`-style "host library picks the precision"
+        defect on the value type itself, which is where it would be hardest to
+        see.
+        """
+        component = np.result_type(self.re.dtype, self.im.dtype)
+        target = np.dtype(
+            "complex128" if component.itemsize >= 8 else "complex64")
+        out = np.asarray(self.re, dtype=target)
+        out = out + 1j * np.asarray(self.im, dtype=target)
+        return out.astype(dtype, copy=False) if dtype is not None else out
+
     # ── construction helpers ───────────────────────────────────
 
     @classmethod
@@ -199,7 +222,21 @@ def _as_pair(z: Any) -> tuple[np.ndarray, np.ndarray]:
     arr = np.asarray(z)
     if np.issubdtype(arr.dtype, np.complexfloating):
         return arr.real, arr.imag
-    return arr.astype(np.float64, copy=False), np.zeros_like(arr, dtype=np.float64)
+    # A real input keeps its own width; it is NOT promoted to f64.
+    #
+    # W2.2. This line said `arr.astype(np.float64)` unconditionally, and since
+    # this is the family's declared "single ingest gate" it set the precision
+    # for all 16 complex ops at once: `complex_exp(f32)` came back complex128.
+    # Same defect as `np.fft.*` always computing in double and `cos(int32) ->
+    # float64` -- a fixed host precision overriding the caller's storage -- but
+    # at the most leveraged point in the surface.
+    #
+    # f64 stays f64 (the oracle path), f32 stays f32, and anything narrower or
+    # integral promotes to the declared compute float rather than to double.
+    component: "np.dtype[Any]" = np.dtype(
+        np.float64 if arr.dtype == np.float64 else np.float32)
+    real = arr.astype(component, copy=False)
+    return real, np.zeros_like(real)
 
 
 def _try_apple_gpu_complex_op(

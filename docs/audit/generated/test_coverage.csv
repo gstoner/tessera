@@ -83,11 +83,11 @@ clip_grad_norm,10,0,0,10,0,,directly_tested,10 direct test references
 clip_grad_value,2,0,0,2,0,,directly_tested,2 direct test references
 collective_permute,2,0,0,2,0,,directly_tested,2 direct test references
 compilation_cache,2,0,0,2,0,,directly_tested,2 direct test references
-complex_abs,6,0,1,6,0,,directly_tested,6 direct test references
-complex_arg,3,0,0,3,0,,directly_tested,3 direct test references
+complex_abs,7,0,1,7,0,,directly_tested,7 direct test references
+complex_arg,4,0,0,4,0,,directly_tested,4 direct test references
 complex_conjugate,7,0,1,7,0,,directly_tested,7 direct test references
 complex_div,4,0,0,4,0,,directly_tested,4 direct test references
-complex_exp,6,0,1,6,0,,directly_tested,6 direct test references
+complex_exp,7,0,1,7,0,,directly_tested,7 direct test references
 complex_log,3,0,0,3,0,,directly_tested,3 direct test references
 complex_mul,14,0,1,14,0,,directly_tested,14 direct test references
 complex_pow,3,0,0,3,0,,directly_tested,3 direct test references

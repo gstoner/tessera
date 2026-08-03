@@ -170,6 +170,12 @@ _KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.msa_sparse_attention": ("block_size", "top_k"),
     "tessera.rope_split": ("rope_dim",),
     "tessera.softcap": ("cap",),
+    # W2.2 -- newly reachable ops (`nesterov` and the two fused
+    # loss+optimizer steps). `kind` selects the LOSS, so it is a semantic key
+    # in the Decision #21a sense: it must be stated, never defaulted.
+    "tessera.nesterov": ("lr",),
+    "tessera.training.loss_sgd": ("kind", "lr"),
+    "tessera.training.loss_adamw": ("kind",),
 }
 
 
@@ -2121,6 +2127,20 @@ def _shape_rfft(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = N
     return tensor_ir_type(tuple(dims), complex_dtype, layout=first.layout)
 
 
+def _shape_complex_to_real(operand_types: List[IRType],
+                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`complex_abs` / `complex_arg`: a magnitude or an angle is REAL.
+
+    They sit in the `elementwise` kind, whose default rule is `same_as_first`,
+    and that default is not merely imprecise here -- the storage-dtype wrapper
+    ENFORCES it, casting `complex_abs`'s float32 magnitude back to complex64.
+    A wrong declaration is worse than none once something acts on it.
+    """
+    first = operand_types[0]
+    real = _REAL_FOR_COMPLEX.get(first.dtype or "", first.dtype or "fp32")
+    return tensor_ir_type(first.shape, real, layout=first.layout)
+
+
 def _shape_irfft(operand_types: List[IRType],
                  attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """Inverse real FFT: complex -> REAL, trailing axis 2 * (n - 1).
@@ -3064,6 +3084,7 @@ _SHAPE_RULES = {
     "arange": _shape_arange,
     "einsum": _shape_einsum,
     "istft": _shape_istft,
+    "complex_to_real": _shape_complex_to_real,
     "layout_permute": _shape_layout_permute,
     "state_handle": _shape_state_handle,
     "kv_cache_read": _shape_kv_cache_read,

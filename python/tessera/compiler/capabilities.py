@@ -787,6 +787,102 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
     ),
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Complex storage — derived from each target's REAL dtypes, in one place
+#
+# W1.3. No target's `supported_dtypes` listed a complex spelling, so the moment
+# the spectral shape rules started reporting `fft(f32) -> complex64` honestly,
+# the legality gate rejected the whole FFT chain on every backend. The gate was
+# right and the rules are right; the capability table was the thing that had
+# never had to answer the question, because the old rule returned the operand's
+# dtype and a `f32 -> f32` FFT passes any dtype check vacuously.
+#
+# The answer is NOT to make complex a first-class storage dtype on four
+# backends. It is already `planned_gated` in `tessera.dtype`, and no target ISA
+# here has a native complex type: CUDA's `cuComplex` is a `float2` struct,
+# Metal has `float2`, x86 SIMD interleaves, and Tessera's own ROCm ODS declares
+# its FFT over "a batch of interleaved-complex rows". The existing capability
+# entries agree -- `complex_mul` and `complex_exp` declare dtype `("fp32",)`,
+# not `("complex64",)`.
+#
+# So complex is a LOGICAL dtype carried in an interleaved pair of reals, which
+# is precisely Decision #15a's storage-versus-policy split. A target supports
+# `complex64` exactly when it supports `fp32`, and `complex128` when it
+# supports `fp64` -- derived here rather than written out 18 times, so a
+# backend cannot gain or lose complex support by an edit that forgets one.
+_COMPLEX_FROM_REAL = (("fp32", "complex64"), ("fp64", "complex128"))
+
+#: Ops that CARRY complex values. Scoped deliberately: `_ops()` defaults every
+#: op to `("fp32", "f32")`, and widening that default would declare complex
+#: `matmul` and complex `flash_attn` on every backend, which is false. Only the
+#: transform family produces or consumes a spectrum.
+#:
+#: `irfft` is here as a CONSUMER -- it takes complex and returns real, the
+#: mirror of `rfft`. Omitting it would break the round trip at exactly the
+#: point the shape rules now describe correctly.
+_COMPLEX_CARRYING_OPS = frozenset({
+    "tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft",
+    "tessera.dct", "tessera.stft", "tessera.istft", "tessera.spectral_conv",
+    "tessera.spectral_filter",
+})
+
+
+def _complex_for(dtypes: tuple[str, ...]) -> tuple[str, ...]:
+    """The complex spellings implied by a set of real dtypes."""
+    present = set(dtypes)
+    return tuple(
+        complex_name for real, complex_name in _COMPLEX_FROM_REAL
+        if real in present and complex_name not in present
+    )
+
+
+def _with_complex_storage(target: TargetCapability) -> TargetCapability:
+    """Widen the transform family's dtypes, NOT the target's storage tuple.
+
+    The target-level `supported_dtypes` is owned by the per-backend storage
+    contracts -- `x86_ready_storage_dtypes()`,
+    `sm120_supported_storage_dtypes()`, the ROCm gfx tables -- each of which is
+    gated by its own test asserting the registry matches the contract exactly.
+    A first cut appended complex there too and broke five of those gates. They
+    were right to fail: those tuples answer "what STORAGE has this backend
+    proven", and complex is not a storage format any of these ISAs has. It is a
+    logical dtype carried in an interleaved real pair, so it belongs to the ops
+    that carry it, not to the backend's storage contract.
+
+    Widens ops that ALREADY have an entry; it never creates one. Synthesising
+    entries for absent ops looked like the tidier fix and was a false claim: an
+    absent op produces no backend-manifest row, so creating one made the NVIDIA
+    dashboard assert `fp8_e4m3` and `int8` FFT kernels on sm_90 -- nine new
+    `artifact_only` rows for a backend where zero source files so much as
+    mention FFT. A target that has no entry for `fft` is stating it has no
+    `fft`, and rejecting a complex FFT there is the correct answer, not a gap
+    to paper over.
+    """
+    import dataclasses
+
+    ops = dict(target.supported_ops)
+    changed = False
+    for name in _COMPLEX_CARRYING_OPS:
+        canonical = canonical_op(name)
+        cap = ops.get(canonical)
+        if cap is None:
+            continue
+        added = _complex_for(cap.dtypes)
+        if not added:
+            continue
+        ops[canonical] = dataclasses.replace(cap, dtypes=cap.dtypes + added)
+        changed = True
+    if not changed:
+        return target
+    return dataclasses.replace(target, supported_ops=ops)
+
+
+TARGET_CAPABILITIES = {
+    name: _with_complex_storage(target)
+    for name, target in TARGET_CAPABILITIES.items()
+}
+
+
 _ALIASES = {
     alias: target.name
     for target in TARGET_CAPABILITIES.values()

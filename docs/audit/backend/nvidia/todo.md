@@ -8,6 +8,49 @@ last_updated: 2026-08-03
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `SHAPE-RULE-REGISTRY-2026-08-03` — **follow-up required - scale operands changed, and NVIDIA has no FFT lane.**
+PR #493 closed the Graph IR shape-rule registry: **303 declared / 6 deliberately
+undeclared / 0 unexamined**, with the `MAX_UNCLASSIFIED` ratchet dropped 106 -> 0.
+Shared contracts changed; all four backends are affected equally at the
+reference level:
+
+* **Result contracts.** Multi-result ops now emit every SSA result
+  (`kv_cache.read -> (K, V)`, `top_k`, `qr`/`svd`/`lu`/`nonzero`), and tuple
+  destructuring (`v, i = ...`) lowers. The emitter previously called the
+  single-result `_infer_result_type`, so a declared multi-result contract
+  stopped at Graph IR.
+* **Stateful handles.** `!tessera.kv_cache` is now reachable from Python; the
+  emitter had been printing `tensor<*x?>` for a type the ODS has always
+  declared.
+* **dtype policy.** An integer input to a float-producing op promotes to the
+  declared `COMPUTE_FLOAT_DTYPE` (fp32) instead of NumPy's width-derived float
+  (`cos(int8) -> f16`, `cos(int32) -> f64`); index/count results use a declared
+  `INDEX_DTYPE`; complex is a LOGICAL dtype carried in an interleaved real pair,
+  not a storage format.
+* **Diagnostics.** The whole `GRAPH_IR_*` family (17 codes) is registered - the
+  drift gate's scanner did not know the prefix, so it reported green while the
+  family accumulated unregistered.
+
+**This is the Python reference lane, not generated device code.** The NVFP4/MX matmul lane carried `scale_a`/`scale_b` as ATTRIBUTES holding SSA
+names; they are now real operands 2 and 3. This corrects Graph IR toward what
+NVIDIA already declared everywhere else: the ABI is
+`tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1` and the kernel is
+`tile.matmul_kernel %a, %b, %scale_a, %scale_b, %d`, so Tile IR modelled the
+scales as operands and only Graph IR demoted them. `nvidia_native.py`'s
+packagers and its `requests_`/`supports_` predicates were updated; `bias` was
+never affected (x86, ROCm and the unscaled NVIDIA lanes all append it as an
+operand). Parity validated at the Python packaging level; **device evidence is
+missing** - no exact-device run confirms the packaged buffer order end-to-end on
+sm_120.
+
+Recorded plainly: **complex FFT is REJECTED on nvidia_sm120**, because no NVIDIA
+target declares an `fft` capability entry and zero NVIDIA source files mention
+FFT at all. An earlier cut synthesised capability entries for absent ops and made
+the sm_90 dashboard assert `fp8_e4m3` and `int8` FFT kernels - nine
+`artifact_only` rows for a backend with no FFT. That was backed out. A target
+with no `fft` entry is stating it has no `fft`.
+
+
 Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **follow-up required; NVIDIA is the target where this matters most.**
 The quantize family is now correctly declared as MULTI-RESULT `(codes, scale)`,
 and `quantize_nvfp4` has its own rule because its scale is per-BLOCK (one per 16

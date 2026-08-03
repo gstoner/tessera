@@ -2461,25 +2461,71 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def _axis_from_axes(axis: int = -1, axes=None) -> int:
         return int(axis if axes is None else tuple(axes)[-1])
 
+    # `np.fft.*` always computes AND returns in double, so a f32 signal came
+    # back as complex128 and an inverse transform as float64. That contradicts
+    # the numeric policy this family already declares -- `_spectral_policy` is
+    # `storage="fp32", accum="fp32"` ("FFT numerics need the full mantissa",
+    # meaning fp32) -- and it is the same defect as `cos(int32) -> float64`:
+    # the host library's precision choice overriding the compiler's.
+    #
+    # Computing in double and STORING BACK is the right shape (NumPy has no
+    # single-precision FFT), and is the same "compute at a safe precision,
+    # store at the declared dtype" pattern as the reduced-precision work --
+    # here it narrows the result rather than widening the compute.
+    def _complex_for(real_dtype) -> "np.dtype":
+        """The complex type whose components match this real storage width.
+
+        INTEGER inputs promote to the declared compute float FIRST, then pick
+        their complex width from that. Choosing on raw byte width instead made
+        `fft(int64)` return complex128 while Graph IR's `_complex_of` inferred
+        complex64 -- reintroducing exactly the runtime-versus-compiler dtype
+        mismatch this work exists to remove, by a path that only integer inputs
+        take. An integer has no float storage width to inherit; it gets the
+        declared one (`COMPUTE_FLOAT_DTYPE`, fp32), same as every other
+        integer-input op.
+        """
+        dt = np.dtype(real_dtype)
+        if dt.kind in ("i", "u", "b"):
+            return np.dtype("complex64")
+        return np.dtype("complex128" if dt.itemsize >= 8 else "complex64")
+
+    def _real_for(complex_dtype) -> "np.dtype":
+        """The inverse: complex64 -> float32, complex128 -> float64."""
+        return np.dtype("float64" if np.dtype(complex_dtype).itemsize >= 16
+                        else "float32")
+
     def fft(x, axis: int = -1, axes=None):
         if hasattr(x, "_data"):
             x = x._data
-        return np.fft.fft(x, axis=_axis_from_axes(axis, axes))
+        x = np.asarray(x)
+        want = _complex_for(x.dtype) if x.dtype.kind != "c" else x.dtype
+        return np.fft.fft(x, axis=_axis_from_axes(axis, axes)).astype(want, copy=False)
 
     def ifft(xf, axis: int = -1, axes=None):
         if hasattr(xf, "_data"):
             xf = xf._data
-        return np.fft.ifft(xf, axis=_axis_from_axes(axis, axes))
+        xf = np.asarray(xf)
+        want = xf.dtype if xf.dtype.kind == "c" else _complex_for(xf.dtype)
+        return np.fft.ifft(xf, axis=_axis_from_axes(axis, axes)).astype(want, copy=False)
 
     def rfft(x, axis: int = -1, axes=None):
         if hasattr(x, "_data"):
             x = x._data
-        return np.fft.rfft(x, axis=_axis_from_axes(axis, axes))
+        x = np.asarray(x)
+        want = _complex_for(x.dtype)
+        return np.fft.rfft(x, axis=_axis_from_axes(axis, axes)).astype(want, copy=False)
 
     def irfft(xf, axis: int = -1, axes=None, n=None):
+        # The one member of the family that returns REAL values, not complex.
+        # It was exempted alongside the other three under "returns complex64,
+        # which is planned_gated" -- a sentence true of its siblings and simply
+        # wrong here.
         if hasattr(xf, "_data"):
             xf = xf._data
-        return np.fft.irfft(xf, n=n, axis=_axis_from_axes(axis, axes))
+        xf = np.asarray(xf)
+        want = _real_for(xf.dtype) if xf.dtype.kind == "c" else xf.dtype
+        out = np.fft.irfft(xf, n=n, axis=_axis_from_axes(axis, axes))
+        return out.astype(want, copy=False)
 
     def dct(x, type: int = 2, axis: int = -1):
         if hasattr(x, "_data"):
@@ -2496,10 +2542,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             x = x._data
         if hasattr(w, "_data"):
             w = w._data
-        n = x.shape[-1] + w.shape[-1] - 1
+        x = np.asarray(x)
+        n = x.shape[-1] + np.asarray(w).shape[-1] - 1
         nfft = 1 << int(np.ceil(np.log2(n)))
         y = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)
-        return y[..., :n]
+        # FULL convolution keeps the whole support (n + m - 1), and the result
+        # stays at the input's width rather than numpy's f64.
+        want = x.dtype if x.dtype.kind == "f" else np.dtype("float32")
+        return y[..., :n].astype(want, copy=False)
 
     def stft(x, win, hop: int):
         if hasattr(x, "_data"):
@@ -2508,10 +2558,16 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             win = win._data
         x = np.asarray(x)
         win = np.asarray(win)
+        # `np.fft.rfft` computes and returns in double, so an f32 signal came
+        # back complex128. Compute wide, store at the input's component width
+        # -- the same contract `fft`/`rfft` above follow. These three spectral
+        # helpers call `np.fft.*` directly rather than going through `ops.rfft`,
+        # which is why fixing that op did not reach them.
+        want = _complex_for(x.dtype)
         frames = []
         for start in range(0, max(1, x.shape[-1] - win.shape[-1] + 1), int(hop)):
             frames.append(np.fft.rfft(x[..., start:start + win.shape[-1]] * win, axis=-1))
-        return np.stack(frames, axis=-2)
+        return np.stack(frames, axis=-2).astype(want, copy=False)
 
     def istft(xf, win, hop: int):
         if hasattr(xf, "_data"):
@@ -2529,7 +2585,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             start = idx * int(hop)
             out[..., start:start + frame_len] += frame
             weight[..., start:start + frame_len] += win * win
-        return out / np.maximum(weight, 1e-12)
+        # The f64 accumulator is deliberate -- overlap-add sums many frames --
+        # but the RESULT is stored at the width implied by the spectrum, not at
+        # the accumulator's.
+        want = _real_for(xf.dtype) if xf.dtype.kind == "c" else xf.dtype
+        return (out / np.maximum(weight, 1e-12)).astype(want, copy=False)
 
     def spectral_filter(Xf, Hf):
         if hasattr(Xf, "_data"):
@@ -2602,12 +2662,35 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                 out.append(values.sum(axis=0))
         return np.stack(out, axis=0)
 
+    #: Layout names that genuinely denote the identity permutation. Anything
+    #: else is rejected rather than ignored -- see `rearrange`.
+    _IDENTITY_LAYOUTS = frozenset({"row_major", "identity", "c", "contiguous"})
+
     def rearrange(x, layout):
+        """Permute axes by an explicit permutation, or assert an identity layout.
+
+        The string branch used to `return np.asarray(x)` for ANY string, so an
+        einops-style spell like ``"a b -> b a"`` was accepted and silently
+        ignored -- the caller asked for a transpose and got the original array
+        back, with no error and a correct-looking shape for square inputs.
+
+        `layout` selects SEMANTICS, so Decision #21a applies: it fails closed.
+        A permutation is honoured, a known identity name is a no-op, and
+        anything else is a named error rather than a quiet wrong answer.
+        """
         if hasattr(x, "_data"):
             x = x._data
         if isinstance(layout, (tuple, list)):
             return np.transpose(x, tuple(layout))
-        return np.asarray(x)
+        if layout is None or (isinstance(layout, str)
+                              and layout.strip().lower() in _IDENTITY_LAYOUTS):
+            return np.asarray(x)
+        raise ValueError(
+            f"rearrange layout {layout!r} is not a permutation or a known "
+            f"identity layout {sorted(_IDENTITY_LAYOUTS)}. Pass an explicit "
+            f"axis permutation such as (0, 2, 1); an einops-style spec is not "
+            f"interpreted and must not be silently ignored."
+        )
 
     def pack(x, layout):
         return rearrange(x, layout if isinstance(layout, (tuple, list)) else None)
@@ -3894,14 +3977,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def popcount(x):
         """Per-element population count (number of set bits) of an integer
         tensor — e.g. candidates-remaining for a bitmask-encoded lattice cell.
-        Elementwise, shape-preserving, non-negative integers."""
+        Elementwise, shape-preserving, non-negative integers.
+
+        Always returns the declared index width (`INDEX_DTYPE`). The two
+        implementations below disagree about the result dtype --
+        `np.bitwise_count` (numpy >= 2.0) returns the INPUT's width, so
+        `popcount(int8)` gave uint8, while the masking fallback always produced
+        int64. The *values* matched, so nothing failed; only the dtype moved,
+        and it moved with whichever NumPy the host imported. That is not a
+        contract, and it is why this op sat in `DELIBERATELY_UNDECLARED` under
+        "pinning one would be wrong". Pinning one is the entire job.
+        """
+        from .compiler.op_catalog import INDEX_DTYPE
+
         a = np.asarray(_unwrap(x))
+        index_dtype = np.dtype(INDEX_DTYPE)
         if hasattr(np, "bitwise_count"):          # numpy >= 2.0 fast path
-            return np.asarray(np.bitwise_count(a))
+            return np.asarray(np.bitwise_count(a)).astype(index_dtype, copy=False)
         v = a.astype(np.uint64, copy=True)        # numpy < 2.0 masking fallback
-        out = np.zeros(v.shape, dtype=np.int64)
+        out = np.zeros(v.shape, dtype=index_dtype)
         while np.any(v):
-            out += (v & np.uint64(1)).astype(np.int64)
+            out += (v & np.uint64(1)).astype(index_dtype)
             v >>= np.uint64(1)
         return out
 
@@ -5044,6 +5140,27 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
         "reduce_all",
         "reduce_trailing",
         "select_from_second",
+        # W1.4 wave 2. Every rule here derives its result dtype from an
+        # operand, so each op belongs under the storage contract -- and
+        # classifying an op is what puts it there. Several were measured
+        # widening f32 -> f64 (`msa_index_scores`, `memory_index_score`,
+        # `memory_index_select_ste`, `retention`) purely because nothing was
+        # enforcing the contract on an unclassified op.
+        "matmul_trailing",
+        "same_as_second",
+        "conv_spatial",
+        "index_along_axis",
+        "drop_axis",
+        "insert_axis",
+        "from_slice_sizes",
+        "pad",
+        "scores_per_block",
+        "layout_permute",
+        "split_equal",
+        "split_halves",
+        "qkv_projection",
+        "top_k",
+        "state_matrix",
     }
     targets = {
         spec.public_name: dtype_source_index(spec.graph_name)
@@ -5084,6 +5201,11 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
             return None
         return dtype
 
+    def _is_integer_storage(value) -> bool:
+        data = getattr(value, "_data", value)
+        dtype = getattr(data, "dtype", None)
+        return dtype is not None and dtype.kind in ("i", "u")
+
     _COMPUTE = _np.float32
 
     def _promote(value):
@@ -5104,7 +5226,29 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
             )
             want = _storage_dtype(source) if source is not None else None
             if want is None:
-                return fn(*args, **kwargs)
+                out = fn(*args, **kwargs)
+                # INTEGER input to a float-producing op. NumPy picks the result
+                # float width from the INTEGER's width -- int8 -> f16,
+                # int16 -> f32, int32/int64 -> f64 -- so `cos` returns four
+                # different precisions for the same mathematics depending only
+                # on how the input was stored. That is NumPy's promotion table
+                # leaking into Tessera's type system; a compiler targeting
+                # accelerators cannot let storage width of an index-like input
+                # choose the compute precision of a transcendental.
+                #
+                # The declared answer is the compute dtype (Decision #15a), not
+                # a derived one. f64 is the oracle path and is 1/64 rate on the
+                # GPUs this targets; f16-from-int8 is worse still, silently
+                # capping a transcendental at 6.55e4.
+                if (
+                    source is not None
+                    and _is_integer_storage(source)
+                    and isinstance(out, (_np.ndarray, _np.generic))
+                    and _is_float_storage(out.dtype)
+                    and out.dtype != _COMPUTE
+                ):
+                    return _np.asarray(out).astype(_COMPUTE, copy=False)
+                return out
 
             # Two SEPARATE decisions. Conflating them left f32 broken: an early
             # return for non-reduced inputs skipped the store-back, so ops that
@@ -5123,6 +5267,25 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
             else:
                 out = fn(*args, **kwargs)
 
+            # Multi-result ops store back the PRIMARY tensor only. `out[0]` is
+            # the value carrying the operand's storage dtype; the rest is
+            # auxiliary state with its own declared width -- `gated_deltanet`'s
+            # recurrent state and an optimizer's moments are f32 master state
+            # on purpose, and dragging them down to bf16/fp16 storage would
+            # undo the very mixed-precision contract this wrapper enforces.
+            #
+            # Getting here mattered: promoting the inputs while being unable to
+            # store back through a tuple silently widened the primary result to
+            # f32, so declaring a multi-result op storage-preserving made its
+            # dtype WORSE than leaving it unclassified.
+            if isinstance(out, tuple) and out:
+                first = out[0]
+                if (isinstance(first, (_np.ndarray, _np.generic))
+                        and _is_float_storage(first.dtype)
+                        and first.dtype != want):
+                    return (_np.asarray(first).astype(want, copy=False),
+                            *out[1:])
+                return out
             if not isinstance(out, (_np.ndarray, _np.generic)):
                 return out
             if _is_float_storage(out.dtype) and out.dtype != want:

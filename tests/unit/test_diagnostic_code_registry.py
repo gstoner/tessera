@@ -99,7 +99,18 @@ _PYTHON_CODE_PATTERNS = (
     re.compile(r'"(E_[A-Z][A-Z0-9_]{1,})"'),
     re.compile(r'"(JIT_[A-Z][A-Z0-9_]{2,})"'),
     re.compile(r'"(TS_ERR_[A-Z][A-Z0-9_]{2,})"'),
+    # W1.3 — the FOURTH Python family: `GraphIRModule.verify()` emits
+    # `GRAPH_IR_*` codes. The scanner did not know the prefix, so this gate was
+    # blind to the whole family and 13 codes accumulated unregistered while it
+    # reported green. A drift gate that cannot see a family does not report a
+    # gap in it; it reports nothing, which reads identically to compliance.
+    re.compile(r'"(GRAPH_IR_[A-Z][A-Z0-9_]{2,})"'),
 )
+
+#: Identifiers that share a diagnostic prefix but are not diagnostics.
+#: `GRAPH_IR_SCHEMA_VERSION` is the IR schema version constant; it is quoted in
+#: `__all__`, which is enough for a prefix regex to mistake it for a code.
+_NOT_DIAGNOSTICS = frozenset({"GRAPH_IR_SCHEMA_VERSION"})
 
 
 def _scan_codes_in_python() -> dict[str, set[Path]]:
@@ -120,6 +131,8 @@ def _scan_codes_in_python() -> dict[str, set[Path]]:
             continue
         for pattern in _PYTHON_CODE_PATTERNS:
             for match in pattern.finditer(text):
+                if match.group(1) in _NOT_DIAGNOSTICS:
+                    continue
                 codes.setdefault(match.group(1), set()).add(path)
     return codes
 

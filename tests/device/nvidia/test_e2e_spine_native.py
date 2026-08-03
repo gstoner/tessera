@@ -92,10 +92,9 @@ def _nvfp4_module(m: int, n: int, k: int) -> GraphIRModule:
                     IROp(
                         result="c",
                         op_name="tessera.matmul",
-                        operands=["%a", "%b"],
-                        operand_types=[str(a), str(b)],
+                        operands=["%a", "%b", "%scale_a", "%scale_b"],
+                        operand_types=[str(a), str(b), str(sa), str(sb)],
                         result_type=str(c),
-                        kwargs={"scale_a": "%scale_a", "scale_b": "%scale_b"},
                     )
                 ],
                 return_values=["%c"],
@@ -156,10 +155,9 @@ def _mx_module(m: int, n: int, k: int, storage: str) -> GraphIRModule:
                     IROp(
                         result="c",
                         op_name="tessera.matmul",
-                        operands=["%a", "%b"],
-                        operand_types=[str(a), str(b)],
+                        operands=["%a", "%b", "%scale_a", "%scale_b"],
+                        operand_types=[str(a), str(b), str(sa), str(sb)],
                         result_type=str(c),
-                        kwargs={"scale_a": "%scale_a", "scale_b": "%scale_b"},
                     )
                 ],
                 return_values=["%c"],

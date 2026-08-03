@@ -8,6 +8,42 @@ last_updated: 2026-08-03
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `SHAPE-RULE-REGISTRY-2026-08-03` — **follow-up required - CPU lane supported, GPU lane rejected.**
+PR #493 closed the Graph IR shape-rule registry: **303 declared / 6 deliberately
+undeclared / 0 unexamined**, with the `MAX_UNCLASSIFIED` ratchet dropped 106 -> 0.
+Shared contracts changed; all four backends are affected equally at the
+reference level:
+
+* **Result contracts.** Multi-result ops now emit every SSA result
+  (`kv_cache.read -> (K, V)`, `top_k`, `qr`/`svd`/`lu`/`nonzero`), and tuple
+  destructuring (`v, i = ...`) lowers. The emitter previously called the
+  single-result `_infer_result_type`, so a declared multi-result contract
+  stopped at Graph IR.
+* **Stateful handles.** `!tessera.kv_cache` is now reachable from Python; the
+  emitter had been printing `tensor<*x?>` for a type the ODS has always
+  declared.
+* **dtype policy.** An integer input to a float-producing op promotes to the
+  declared `COMPUTE_FLOAT_DTYPE` (fp32) instead of NumPy's width-derived float
+  (`cos(int8) -> f16`, `cos(int32) -> f64`); index/count results use a declared
+  `INDEX_DTYPE`; complex is a LOGICAL dtype carried in an interleaved real pair,
+  not a storage format.
+* **Diagnostics.** The whole `GRAPH_IR_*` family (17 codes) is registered - the
+  drift gate's scanner did not know the prefix, so it reported green while the
+  family accumulated unregistered.
+
+**This is the Python reference lane, not generated device code.** Complex FFT is SUPPORTED on `apple_cpu` (it declares an `fft` capability entry;
+vDSP/Accelerate carries the interleaved-complex form) and REJECTED on
+`apple_gpu`, which declares no `fft` entry. Metal has no native complex type -
+`float2` is the carrier - which matches the interleaved real-pair model this work
+adopted, so the GPU gap is a capability-registration plus MSL-kernel task rather
+than a type-system one.
+
+Nothing here touches `apple_gpu_runtime.mm` or the hand-written MSL kernels. The
+`install_apple_gpu_interception(ops)` ordering constraint still holds and is
+still guarded by `test_apple_interception_installed.py`: the storage-dtype
+enforcement wrapper must be installed AFTER it.
+
+
 Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **follow-up required, capability unverified here.**
 Same multi-result quantize declaration. Whether Metal exposes native FP8/FP4
 arithmetic on the M-series was NOT verified in this change, and per Decision #27

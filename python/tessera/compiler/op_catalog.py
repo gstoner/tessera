@@ -121,7 +121,12 @@ _SPECS = [
     # Gap 4 (2026-05-20): 2D spatial-grid local-window attention.
     OpSpec("attn_local_window_2d", "tessera.attn_local_window_2d", 3, 3, effect="state", lowering="attention"),
     OpSpec("attn_compressed_blocks", "tessera.attn_compressed_blocks", 3, 3, effect="state", lowering="attention"),
-    OpSpec("attn_top_k_blocks", "tessera.attn_top_k_blocks", 3, 3, effect="state", lowering="attention"),
+    # 4 operands, not 3: `scores` is a keyword-only TENSOR (B, H, S_q,
+    # num_blocks), unwrapped and asarray'd by the reference exactly like Q/K/V.
+    # The positional-only arity gate could not see it, and the frontend was
+    # emitting it as a string attribute rather than an operand (W1.3).
+    # Contrast `varlen_sdpa`, whose keyword-only cu_seqlens WERE already counted.
+    OpSpec("attn_top_k_blocks", "tessera.attn_top_k_blocks", 4, 4, effect="state", lowering="attention"),
     OpSpec("deepseek_sparse_attention", "tessera.deepseek_sparse_attention", 3, 4, effect="state", lowering="attention"),
     # MiniMax Sparse Attention (MSA, arXiv:2606.13392) — Index Branch (per-GQA-
     # group exp-free block scoring) + exact block-sparse Main Branch. The index
@@ -158,7 +163,13 @@ _SPECS = [
     OpSpec("mor_router", "tessera.mor_router", 2, 2, lowering="layout_transform"),
     OpSpec("mor_partition", "tessera.mor_partition", 2, 2, lowering="layout_transform"),
     OpSpec("mor_scatter", "tessera.mor_scatter", 3, 3, lowering="layout_transform"),
-    OpSpec("moe", "tessera.moe", 2, 2, effect="collective", lowering="moe"),
+    # 2 required (x, experts) + 2 OPTIONAL keyword tensor operands (`scores`,
+    # `route`). max_arity was 2, so a routed MoE -- the normal case for a real
+    # model -- exceeded the declared arity once `route` correctly emitted as an
+    # operand, and the op was dropped from the body entirely. That failure was
+    # SILENT at the Graph IR level and only surfaced two stages later as
+    # "schedule-ir stage was claimed but schedule_ir is empty".
+    OpSpec("moe", "tessera.moe", 2, 4, effect="collective", lowering="moe"),
     OpSpec("moe_dispatch", "tessera.moe_dispatch", 2, 2, effect="collective", lowering="moe_transport"),
     OpSpec("moe_combine", "tessera.moe_combine", 2, 2, effect="collective", lowering="moe_transport"),
     OpSpec("all_reduce", "tessera.all_reduce", 1, 1, effect="collective", lowering="collective"),
@@ -750,11 +761,180 @@ OP_SHAPE_RULE: dict = {
     **{f"tessera.{n}": "optimizer_step" for n in
        ("adam", "adamw", "momentum", "nesterov", "adafactor", "lion", "sgd")},
 
+    # Cache mutators thread the handle through -- the ODS says
+    # `-> Tessera_KVCacheType:$updated` for each. `read` is the one member of
+    # the family that returns TENSORS, not a handle.
+    **{f"tessera.{n}": "state_handle" for n in
+       ("kv_cache.append", "kv_cache.prune", "cache.commit", "cache.rollback")},
+    "tessera.kv_cache.read": "kv_cache_read",
+
+    # A bit count is the operand's shape with the declared index width. It sits
+    # in the `elementwise` kind, whose default rule is `same_as_first` -- which
+    # would claim the operand's storage dtype and is wrong for a count.
+    "tessera.popcount": "same_shape_index",
+
+    # Mesh-scaling collectives. `all_reduce` and `all_to_all` are NOT here:
+    # both preserve shape, so their `same_as_first` default is already right.
+    "tessera.all_gather": "all_gather",
+    "tessera.reduce_scatter": "reduce_scatter",
+
+    # W1.4 wave 1 -- ops whose result is exactly operand 0, CONFIRMED with all
+    # dims distinct (2,3,5,7 / 4x6). A square or equal-dim probe cannot tell
+    # `same_as_first` from `transpose`, `matmul_2d` or `select_from_second`:
+    # measured on a 4x4, `cholesky` matched six different rules. Every
+    # assignment below survived a shape where only one of them can.
+    #
+    # The whole linear/sparse attention family lands here -- these are
+    # attention VARIANTS, so the result is the query's shape whatever the
+    # interior does.
+    **{f"tessera.{n}": "same_as_first" for n in (
+        "hybrid_attention", "kimi_delta_attention", "lightning_attention",
+        "linear_attn", "modified_delta_attention", "power_attn", "retention",
+        "attn_compressed_blocks", "attn_sliding_window", "gated_deltanet",
+        "deepseek_sparse_attention", "lookahead_sparse_attention",
+        "msa_sparse_attention", "attn_top_k_blocks", "mla_decode_fused",
+        # Structural / in-place-shaped ops.
+        "masked_fill", "mor_scatter", "roll", "dynamic_update_slice",
+        "scatter_add", "scatter_reduce", "selective_ssm", "moe_swiglu_block",
+        # cholesky of an (N, N) matrix is (N, N) -- verified on 6x6, since a
+        # 4x4 probe would have matched five other rules equally well.
+        "cholesky",
+    )},
+
+    # W1.4 wave 2 -- new rules, each verified on all-distinct dims.
+    **{f"tessera.{n}": "matmul_trailing" for n in (
+        "linear_general", "latent_kv_compress", "latent_kv_expand_k",
+        "latent_kv_expand_v", "grouped_gemm", "moe")},
+    # Operand 1 is the value; operand 0 is the operator or the key.
+    **{f"tessera.{n}": "same_as_second" for n in (
+        "cholesky_solve", "tri_solve", "target_verify")},
+    "tessera.conv2d_nhwc": "conv_spatial",
+    "tessera.conv3d_ndhwc": "conv_spatial",
+    "tessera.gather": "index_along_axis",
+    "tessera.index_select": "index_along_axis",
+    "tessera.select": "drop_axis",
+    "tessera.unsqueeze": "insert_axis",
+    "tessera.slice": "from_slice_sizes",
+    "tessera.dynamic_slice": "from_slice_sizes",
+    "tessera.pad": "pad",
+    # Query x key-BLOCK scores -- the trailing axis is a block count.
+    **{f"tessera.{n}": "scores_per_block" for n in (
+        "msa_index_scores", "memory_index_score", "memory_index_select_ste")},
+    # Same block grid, but a MASK -- it selects blocks rather than scoring
+    # them. Shape-identical to the rule above, so only a dtype comparison
+    # separates them.
+    "tessera.memory_index_select": "scores_per_block_mask",
+    "tessera.masked_categorical": "reduce_trailing_index",
+    "tessera.mor_router": "reduce_trailing_index",
+    "tessera.mor_partition": "reduce_trailing_bool",
+    "tessera.top_k": "top_k",
+    "tessera.chunk": "split_equal",
+    "tessera.split": "split_equal",
+    "tessera.rope_split": "split_halves",
+    "tessera.qkv_projection": "qkv_projection",
+    "tessera.linear_attn_state": "state_matrix",
+    "tessera.permute": "layout_permute",
+
+    # W1.4 wave 3.
+    # The remaining attention entry points are dispatch wrappers over the same
+    # contract: the result is the query's shape. `gqa`/`mqa` differ only in how
+    # many KV heads they broadcast over, which does not change the result.
+    **{f"tessera.{n}": "same_as_first" for n in (
+        "attn_local_window_2d", "gqa_attention", "mqa_attention",
+        "multi_head_attention", "varlen_sdpa")},
+    # Sparse and factorized products are still A @ B at the type level -- the
+    # sparsity lives in the STORAGE of operand 0, not in the result shape.
+    **{f"tessera.{n}": "matmul_2d" for n in (
+        "spmm_csr", "spmm_coo", "bsmm", "sddmm", "factorized_matmul",
+        "quantized_matmul")},
+    "tessera.dequant_matmul": "matmul_trailing",
+    "tessera.dequant_grouped_gemm": "matmul_trailing",
+    # `moe_combine` sums the partials over the token axis.
+    "tessera.moe_combine": "drop_axis",
+    "tessera.rope_merge": "concat_trailing",
+    "tessera.tile": "tile_trailing",
+    "tessera.repeat": "flatten_repeat",
+    "tessera.msa_select_blocks": "select_k_index",
+    "tessera.segment_reduce": "segment_reduce",
+    "tessera.lu": "lu",
+    "tessera.qr": "qr",
+    "tessera.svd": "svd",
+    "tessera.nonzero": "nonzero",
+    "tessera.spec_accept": "spec_accept",
+    "tessera.spec_accept_sample": "spec_accept",
+    "tessera.spec_accept_tree_sample": "spec_accept_tree",
+    "tessera.stft": "stft",
+    "tessera.spectral_conv": "conv_full",
+    # Shape lives entirely in an attribute for these sources.
+    **{f"tessera.{n}": "from_shape_attr" for n in ("rng_normal", "rng_uniform")},
+
+    "tessera.arange": "arange",
+    "tessera.einsum": "einsum",
+    "tessera.istft": "istft",
+    # Score-matching and RL policy losses reduce to a SCALAR. `reduce_all`
+    # already states that, and being in the wrapper's preserving set it also
+    # stops them widening f32 -> f64, which all four were measured doing.
+    **{f"tessera.loss.{n}": "reduce_all" for n in (
+        "denoising_score_matching", "implicit_score_matching")},
+    **{f"tessera.rl.{n}": "reduce_all" for n in (
+        "grpo_policy_loss", "cispo_policy_loss")},
+
+    # W1.4 wave 3 tail. The Clifford field derivatives take a RAW coefficient
+    # array `(spatial..., 2**n)` -- not a `MultivectorField` -- and return the
+    # same layout. Three earlier probes failed only because they used the wrong
+    # spatial rank for Cl(3,0); the ops were never the problem.
+    **{f"tessera.{n}": "same_as_first" for n in (
+        "clifford_ext_deriv", "clifford_codiff", "clifford_vec_deriv",
+        "laplacian_2d")},
+    # `(N, 3)` points on the sphere -> a per-point energy `(N,)`.
+    "tessera.conformal_energy_on_sphere": "reduce_trailing",
+
+    # `pack` / `rearrange` mean two things depending on their `layout`
+    # attribute: a tuple permutes, a named layout is identity.
+    "tessera.pack": "layout_permute",
+    "tessera.rearrange": "layout_permute",
+
+    # Spectral family. `irfft` returns REAL values -- it is not `complex_same`.
+    "tessera.fft": "complex_same",
+    "tessera.ifft": "complex_same",
+    "tessera.rfft": "rfft",
+    "tessera.irfft": "irfft",
+
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
     # shapes scale with the mesh, so declaring from that measurement would bake
     # in a degenerate case. They stay `unclassified` until probed multi-rank.
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Declared result dtypes for non-storage-preserving results (W1.3)
+#
+# Two constants, because both were previously *derived* -- and a derived dtype
+# is one the caller's storage choice can change out from under the compiler.
+#
+#   INDEX_DTYPE   an index or a count. Was hard-coded as "int64" in two shape
+#                 rules and computed a third way by `popcount`, which returns
+#                 `np.bitwise_count`'s width on numpy >= 2.0 (uint8 for int8
+#                 input) and int64 from the masking fallback on 1.26. Same
+#                 program, different result dtype, decided by which NumPy the
+#                 reference happened to import.
+#
+#   COMPUTE_FLOAT the float an INTEGER input promotes to. NumPy picks this from
+#                 the integer's width -- int8 -> f16, int16 -> f32,
+#                 int32/int64 -> f64 -- so `cos` returned four different
+#                 precisions for identical mathematics depending only on how
+#                 the input was stored. Measured across the catalog: 29 ops.
+#                 f32 is the compute width of the stack (Decision #15a); f64 is
+#                 the oracle path and runs at 1/64 rate on the target GPUs,
+#                 and f16-from-int8 silently caps a transcendental at 6.55e4.
+#
+# "Pinning one would be wrong" was the recorded reason `popcount` stayed
+# undeclared. It is the opposite: a compiler must declare its result dtype
+# precisely because it cannot be a function of the host library's promotion
+# table.
+INDEX_DTYPE = "int64"
+COMPUTE_FLOAT_DTYPE = "fp32"
+
 
 #: The declared vocabulary. `graph_ir` implements each name; a rule named here
 #: with no implementation (or vice versa) is a drift-gated error.
@@ -770,6 +950,7 @@ SHAPE_RULE_NAMES = frozenset({
     "flatten",
     "complex_same",
     "rfft",
+    "irfft",
     "select_from_second",
     "quantize_per_tensor",
     "quantize_per_block",
@@ -777,6 +958,44 @@ SHAPE_RULE_NAMES = frozenset({
     "from_shape_attr",
     "cast",
     "reduce_trailing",
+    "state_handle",
+    "layout_permute",
+    "arange",
+    "einsum",
+    "istft",
+    "concat_trailing",
+    "tile_trailing",
+    "flatten_repeat",
+    "select_k_index",
+    "segment_reduce",
+    "lu",
+    "qr",
+    "svd",
+    "nonzero",
+    "spec_accept",
+    "spec_accept_tree",
+    "stft",
+    "conv_full",
+    "matmul_trailing",
+    "same_as_second",
+    "conv_spatial",
+    "index_along_axis",
+    "drop_axis",
+    "insert_axis",
+    "from_slice_sizes",
+    "pad",
+    "scores_per_block",
+    "scores_per_block_mask",
+    "reduce_trailing_index",
+    "reduce_trailing_bool",
+    "top_k",
+    "split_equal",
+    "split_halves",
+    "qkv_projection",
+    "state_matrix",
+    "kv_cache_read",
+    "all_gather",
+    "reduce_scatter",
     "unclassified",
 })
 
@@ -787,6 +1006,41 @@ SHAPE_RULE_NAMES = frozenset({
 #: force wrong behavior. Answering "why is this unclassified?" is what makes the
 #: remaining count meaningful.
 DELIBERATELY_UNDECLARED: dict = {
+    # W1.4 -- a genuinely new category, and the first exemption reason in this
+    # registry that survives examination rather than dissolving under it.
+    #
+    # These four take a PYTHON CALLABLE as operand 0 and a complex scalar as
+    # operand 1: they are higher-order numerical-differentiation operators
+    # (`dz` / `dbar` are the Wirtinger derivatives, evaluated by finite
+    # differences of `f` around `z0`). A shape rule is a function of
+    # `operand_types`, and operand 0 here HAS no tensor type -- there is
+    # nothing for the rule to read. This is not a vocabulary gap that a richer
+    # signature would close, the way mesh context closed the collectives; the
+    # operand is a function.
+    #
+    # They also live on `tessera.complex`, not `tessera.ops`, so the frontend
+    # cannot emit them as Graph IR ops at all. Worth stating plainly: the
+    # catalog names them, and no `@jit` body can reach them.
+    **{f"tessera.{_n}": "takes a Python callable as operand 0 (higher-order "
+                        "numerical differentiation of f around z0), so there "
+                        "is no operand tensor type for a shape rule to read; "
+                        "also reachable only via tessera.complex, not "
+                        "tessera.ops"
+       for _n in ("dz", "dbar", "conformal_jacobian", "check_cauchy_riemann")},
+
+    # `training.loss_sgd` / `training.loss_adamw` are FUSED loss+optimizer
+    # steps registered only in the runtime reference table, with no
+    # `tessera.ops` entry point. Their results are (updated_param,
+    # target_gradient) and (updated_param, m, v, target_gradient) -- describable
+    # in principle, but the op cannot be called through the ops namespace, so
+    # any rule declared here would be unverifiable against real behaviour. That
+    # is the condition this registry exists to avoid.
+    **{f"tessera.training.{_n}": "fused loss+optimizer step registered only in "
+                                 "the runtime reference table; no tessera.ops "
+                                 "entry point, so a declared rule could not be "
+                                 "verified against the op"
+       for _n in ("loss_sgd", "loss_adamw")},
+
     # The quantize family returns a TUPLE (codes, scale), not a single tensor,
     # so `same_as_first` was a false declaration -- it claims one result type
     # for a multi-result contract. The wrapper happened not to corrupt anything
@@ -801,18 +1055,50 @@ DELIBERATELY_UNDECLARED: dict = {
     # the type system can express the storage the reference never materializes.
     # Producing real sub-byte storage is a backend-path question, not a shape
     # rule one.
-    "tessera.popcount": "returns an INTEGER bit count, never the operand's storage dtype, so it is not storage-preserving despite sitting in the `elementwise` kind. The exact integer width is NumPy-version dependent (uint8 under 2.x, int64 under 1.26), so pinning one would be wrong; declaring a shape rule needs an int-width-agnostic vocabulary first",
-    "tessera.all_gather": "result shape scales with mesh size, not derivable from operand types",
-    "tessera.reduce_scatter": "result shape shrinks with mesh size, not derivable from operand types",
-    "tessera.fft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
-    "tessera.ifft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
-    "tessera.rfft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
-    "tessera.irfft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
-    "tessera.kv_cache.append": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
-    "tessera.kv_cache.prune": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
-    "tessera.kv_cache.read": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
-    "tessera.cache.commit": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
-    "tessera.cache.rollback": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
+    # `popcount` was here, on the grounds that its integer width is
+    # NumPy-version dependent (uint8 under 2.x via `np.bitwise_count`, int64
+    # under 1.26 via the masking fallback) "so pinning one would be wrong".
+    # That has it backwards. A result dtype decided by which NumPy the host
+    # imported is not a contract at all, and pinning one is precisely what a
+    # compiler owes its users. It is `same_shape_index` over `INDEX_DTYPE` --
+    # operand shape, declared index width -- and the reference now returns that
+    # on every NumPy rather than inheriting the host's answer.
+    # `all_gather` and `reduce_scatter` were here: "result shape scales with
+    # mesh size, not derivable from operand types". The premise was right and
+    # the conclusion did not follow -- it is not derivable from OPERAND TYPES,
+    # which is an argument for giving the rule signature mesh context, not for
+    # leaving the ops undeclared. They now take a `{axis: size}` mesh and FAIL
+    # CLOSED to `?` on the scaled axis when it is unknown. Leaving them
+    # unclassified meant falling back to the operand shape, which is not a
+    # neutral answer but the positive claim `world_size == 1` -- and the
+    # single-rank reference stubs made a probe agree with it.
+    # The four spectral ops were here: "returns complex64, which is
+    # planned_gated per Decision #15a; declaring it conflicts with the dtype
+    # capability contract". It does not conflict -- the contract has an
+    # explicit path for planned/gated dtypes (`allow_planned_gated=True` plus
+    # `metadata.dtype_status`), and NAMING a dtype in a shape rule is not the
+    # same as claiming a backend implements it. Promoting complex to CANONICAL
+    # would be a capability change; declaring these rules is not, and complex
+    # stays planned_gated.
+    #
+    # `complex_same` and `_shape_rfft` were already written and registered
+    # while all four ops stayed exempt -- two rules with no consumer, which
+    # Decision #29 exists to prevent, sitting next to the ops they were
+    # written for.
+    # The five cache ops were here, under one shared sentence: "opaque cache
+    # handle rather than a tensor type; its result is not describable by a
+    # tensor shape rule". Both halves of that turned out to be wrong.
+    #
+    # The handle was never undescribable -- `Tessera_KVCacheType` has been in
+    # `TesseraOps.td` the whole time, and the ODS states the signatures
+    # exactly (`(!tessera.kv_cache, tensor, tensor) -> !tessera.kv_cache`).
+    # What was missing was a way for the PYTHON emitter to name a non-tensor
+    # type; it emitted `tensor<*x?>` at both ends and the handle silently
+    # became an untyped tensor. They are now `state_handle`.
+    #
+    # And `kv_cache.read` does not return a handle at all -- it returns
+    # `(K, V)` tensors. The shared sentence was true of four ops, so nothing
+    # pointed at the fifth. It is now `kv_cache_read`.
 }
 
 
@@ -830,6 +1116,9 @@ def undeclared_reason(graph_name: str):
 #: looking principled.
 SHAPE_RULE_DTYPE_SOURCE: dict = {
     "select_from_second": 1,
+    # `tri_solve(A, b)` / `target_verify(tokens, logits)`: operand 0 is the
+    # operator or the key, operand 1 is the value that carries storage dtype.
+    "same_as_second": 1,
 }
 
 

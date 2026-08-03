@@ -1692,17 +1692,35 @@ def supports_fp64_matmul(module: GraphIRModule) -> bool:
     return supports_matmul(module, storage="fp64")
 
 
+# The block-scaled lanes carry their scale views as OPERANDS 2 and 3, matching
+# the layout every other part of the stack already assumed:
+#
+#   ABI:    tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1
+#   Tile IR: tile.matmul_kernel %a, %b, %scale_a, %scale_b, %d, %m, %n, %k
+#
+# Only Graph IR disagreed. It kept them as `kwargs={"scale_a": "%scale_a"}` --
+# an SSA name inside a string attribute, so the scale tensors were absent from
+# the operand list that every dataflow consumer reads. Nothing downstream was
+# wrong; the level that states the contract first was (Decision #32: a lowering
+# may not silently drop what a lower level then has to reconstruct).
+#
+# `bias` was never affected: the x86, ROCm, and unscaled NVIDIA lanes all append
+# it as a real operand. The scaled lane was the single outlier.
+_MATRIX_OPERANDS = 2
+_SCALED_OPERANDS = 4
+
+
+def _matrix_names(op) -> tuple[str, ...]:
+    """A and B — always the first two operands, scaled lane or not."""
+    return tuple(v.removeprefix("%") for v in op.operands[:_MATRIX_OPERANDS])
+
+
 def _scale_names(module: GraphIRModule) -> tuple[str, str] | None:
     op = module.functions[0].body[0]
-    values = (op.kwargs.get("scale_a"), op.kwargs.get("scale_b"))
-    if any(not isinstance(value, str) for value in values):
+    if len(op.operands) != _SCALED_OPERANDS:
         return None
-    scale_a, scale_b = values
-    assert isinstance(scale_a, str) and isinstance(scale_b, str)
-    return (
-        scale_a[1:] if scale_a.startswith("%") else scale_a,
-        scale_b[1:] if scale_b.startswith("%") else scale_b,
-    )
+    scale_a, scale_b = op.operands[_MATRIX_OPERANDS:_SCALED_OPERANDS]
+    return (scale_a.removeprefix("%"), scale_b.removeprefix("%"))
 
 
 def requests_nvfp4_matmul(module: GraphIRModule) -> bool:
@@ -1716,10 +1734,16 @@ def requests_nvfp4_matmul(module: GraphIRModule) -> bool:
         return False
     fn = module.functions[0]
     op = fn.body[0]
-    if op.op_name not in {"tessera.matmul", "tessera.gemm"} or len(op.operands) != 2:
+    if op.op_name not in {"tessera.matmul", "tessera.gemm"}:
+        return False
+    # Only A and B are inspected, per the docstring above: an operand-count test
+    # here would reject a malformed scale/epilogue contract as "not NVFP4" and
+    # send it to a lane whose error message is about something else entirely.
+    # `supports_nvfp4_matmul` is where the shape of the contract is judged.
+    if len(op.operands) < _MATRIX_OPERANDS:
         return False
     args = {arg.name: arg for arg in fn.args}
-    names = tuple(value.removeprefix("%") for value in op.operands)
+    names = _matrix_names(op)
     return all(name in args and args[name].ir_type.dtype == "nvfp4" for name in names)
 
 
@@ -1742,7 +1766,12 @@ def supports_int4_matmul(module: GraphIRModule) -> bool:
     op = fn.body[0]
     if fn.result_types[0].dtype != "int32":
         return False
-    if any(op.kwargs.get(key) not in {None, False} for key in ("scale_a", "scale_b", "bias", "residual")):
+    # int4 is unscaled: A and B and nothing else. Previously this asked whether
+    # the `scale_a`/`scale_b`/`bias`/`residual` ATTRIBUTES were absent, which
+    # only worked while extra tensors lived in attributes. They are operands, so
+    # ask the operand list -- and this now also rejects a bias/residual operand
+    # the attribute check would have missed entirely.
+    if len(op.operands) != _MATRIX_OPERANDS:
         return False
     if op.kwargs.get("activation", "none") != "none":
         return False
@@ -1756,10 +1785,13 @@ def requests_mx_matmul(module: GraphIRModule) -> bool:
         return False
     fn = module.functions[0]
     op = fn.body[0]
-    if op.op_name not in {"tessera.matmul", "tessera.gemm"} or len(op.operands) != 2:
+    if op.op_name not in {"tessera.matmul", "tessera.gemm"}:
+        return False
+    # Matrix dtype only -- same reasoning as `requests_nvfp4_matmul`.
+    if len(op.operands) < _MATRIX_OPERANDS:
         return False
     args = {arg.name: arg for arg in fn.args}
-    names = tuple(value.removeprefix("%") for value in op.operands)
+    names = _matrix_names(op)
     storages = {args[name].ir_type.dtype for name in names if name in args}
     return len(storages) == 1 and storages <= {
         "fp6_e2m3",
@@ -1773,7 +1805,7 @@ def supports_mx_matmul(module: GraphIRModule) -> bool:
         return False
     fn = module.functions[0]
     op = fn.body[0]
-    matrix_names = tuple(value.removeprefix("%") for value in op.operands)
+    matrix_names = _matrix_names(op)
     scale_names = _scale_names(module)
     if scale_names is None:
         return False
@@ -1805,9 +1837,12 @@ def supports_nvfp4_matmul(module: GraphIRModule) -> bool:
         return False
     fn = module.functions[0]
     op = fn.body[0]
-    if op.op_name not in {"tessera.matmul", "tessera.gemm"} or len(op.operands) != 2:
+    if op.op_name not in {"tessera.matmul", "tessera.gemm"}:
         return False
-    matrix_names = tuple(value[1:] if value.startswith("%") else value for value in op.operands)
+    matrix_names = _matrix_names(op)
+    # `_scale_names` returns None unless there are exactly 4 operands, so a
+    # 2-operand NVFP4 matmul (no scales) is rejected here rather than by an
+    # operand-count test that could not tell "unscaled" from "malformed".
     scale_names = _scale_names(module)
     if scale_names is None:
         return False
@@ -2218,7 +2253,7 @@ def package_nvfp4_matmul(
     )
     fn = module.functions[0]
     op = fn.body[0]
-    a_name, b_name = tuple(value[1:] if value.startswith("%") else value for value in op.operands)
+    a_name, b_name = _matrix_names(op)
     scale_names = _scale_names(module)
     assert scale_names is not None
     scale_a_name, scale_b_name = scale_names
@@ -2381,7 +2416,7 @@ def package_mx_matmul(
         )
     fn = module.functions[0]
     op = fn.body[0]
-    a_name, b_name = tuple(value.removeprefix("%") for value in op.operands)
+    a_name, b_name = _matrix_names(op)
     args = {arg.name: arg for arg in fn.args}
     storage = args[a_name].ir_type.dtype
     if storage not in {"fp6_e2m3", "fp6_e3m2", "fp4_e2m1"}:

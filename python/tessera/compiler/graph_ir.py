@@ -28,7 +28,7 @@ import json
 import re
 import textwrap
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, cast
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, SourceLocation, TesseraDiagnostic, TesseraErrorCode
 from .legality import TensorContract, check_op_legality
@@ -97,8 +97,79 @@ _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.flatten": ("start", "end"),
     # reshape/view — their own ODS ops (same SameOperandsAndResultElementType
     # contract); the target shape binds as the `shape` attr, not an operand.
+    # `kv_cache.read(cache, start, end)` -- the bounds are scalars. Unlike
+    # `cache.commit`/`rollback`/`page_lookup`, which the ODS declares with
+    # `Index` OPERANDS, `kv_cache.read` has no Graph IR ODS op at all, so
+    # there is no operand contract to contradict and binding them as
+    # attributes is what lets the op emit and verify.
+    "tessera.kv_cache.read": ("start", "end"),
     "tessera.reshape": ("shape",),
     "tessera.view": ("shape",),
+}
+
+
+# Keyword-only TENSOR operands — the other half of the same contract.
+#
+# W1.3 (2026-08-03). `_POSITIONAL_ATTR_PARAMS` above fixes one direction: a
+# positional arg that is really an attribute. The keyword side had the mirror
+# defect and it was worse, because it was silent. Every `call.keywords` entry
+# became an attribute regardless of what it bound, so a tensor passed by keyword
+# emitted as a *string attribute holding an SSA name*:
+#
+#     tessera.attn_top_k_blocks(%Q, %K, %V) {scores = "%s", top_k = 2}
+#
+# `%s` is nowhere in the operand list. The dataflow edge is gone: use-def walks,
+# liveness, and DCE all see `%s` as unused, and the graph verifier cannot catch
+# it because it only checks `op.operands` — an edge hidden in an attribute is
+# invisible to the one check that would have found it. The IR *looks* fine in a
+# dump, which is why this survived. (Decision #30: the emitter must derive the
+# operand/attribute split, not take the call syntax's word for it.)
+#
+# Declaration is load-bearing for ORDER, not just for documentation. Deriving
+# alone -- "a kwarg binding an SSA value is an operand" -- would make the operand
+# list depend on the order the caller happened to write the keywords, so
+# `f(Q, scores=s, top_k=2)` and `f(Q, top_k=2, scores=s)` would emit different
+# IR for the same program. The declared tuple pins the position.
+_KEYWORD_OPERANDS: Dict[str, tuple[str, ...]] = {
+    # NSA branch 3: per-block scores (B, H, S_q, num_blocks), unwrapped and
+    # `np.asarray`d by the reference exactly like Q/K/V. A real operand.
+    "tessera.attn_top_k_blocks": ("scores",),
+    # Packed-sequence cumulative lengths — index tensors, not scalars. The
+    # catalog already counted them (min_arity=5); only the frontend dropped them.
+    "tessera.varlen_sdpa": ("cu_seqlens_q", "cu_seqlens_k"),
+    # MoE routing: `scores` (B*S, num_experts) and `route` (per-token expert
+    # index, asarray'd to int64) are OPTIONAL tensor operands. Optional is why
+    # they were missed by a survey of *required* keyword-only parameters — the
+    # operand/attribute question is about what a parameter BINDS, and has
+    # nothing to do with whether it has a default.
+    "tessera.moe": ("scores", "route"),
+}
+
+
+# Keyword-only ATTRIBUTES. These already emitted correctly (a scalar keyword
+# becomes an attribute, which is right) -- what was missing was a DECLARATION
+# SITE, so nothing could tell "this op requires a keyword-only attribute" from
+# "the catalog's arity is wrong". `test_op_arity_contract` had to scope itself to
+# positional parameters for exactly that reason; with this map it no longer does.
+#
+# Values are the required keyword-only attribute names, so a rename in the
+# reference signature is caught rather than silently emitting a stale key.
+_KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
+    "tessera.attn_sliding_window": ("window_size",),
+    "tessera.attn_top_k_blocks": ("top_k", "block_size"),
+    "tessera.deepseek_sparse_attention": ("window_size", "block_size", "top_k"),
+    "tessera.ebm_inner_step": ("eta",),
+    "tessera.ebm_refinement": ("eta", "T"),
+    "tessera.lookahead_sparse_attention": ("window_size", "block_size"),
+    "tessera.masked_fill": ("value",),
+    "tessera.memory_index_select": ("block_size",),
+    "tessera.mor_partition": ("step",),
+    "tessera.mor_router": ("max_depth",),
+    "tessera.msa_index_scores": ("block_size",),
+    "tessera.msa_select_blocks": ("top_k", "block_size"),
+    "tessera.msa_sparse_attention": ("block_size", "top_k"),
+    "tessera.rope_split": ("rope_dim",),
+    "tessera.softcap": ("cap",),
 }
 
 
@@ -198,6 +269,40 @@ def tensor_ir_type(
         shape_text = "x".join(normalized_shape)
     dtype_text = _mlir_dtype(normalized_dtype) if normalized_dtype else "?"
     return IRType(f"tensor<{shape_text}x{dtype_text}>", normalized_shape, normalized_dtype, layout)
+
+
+def handle_ir_type(mnemonic: str) -> IRType:
+    """A stateful HANDLE type — `!tessera.kv_cache` and friends.
+
+    W1.3. Everything the Python emitter could name was a tensor, so the five
+    cache ops were filed as "opaque cache handle rather than a tensor type; its
+    result is not describable by a tensor shape rule". True as far as it went,
+    and beside the point: the rule does not have to be a *tensor* rule.
+
+    The type was never missing either. `Tessera_KVCacheType` has been in
+    `TesseraOps.td` all along, and the ODS states these signatures exactly:
+
+        tessera.kv_cache.append : (!tessera.kv_cache, tensor, tensor)
+                                      -> !tessera.kv_cache
+
+    The Python side emitted `tensor<*x?>` for both ends of that, so the handle
+    -- a distinct type with its own verifier contract -- silently became an
+    untyped tensor at the level that states the contract first. That is
+    Decision #32 information loss, and it is invisible precisely because
+    `tensor<*x?>` is what an unknown tensor looks like too.
+
+    Deliberately carries no shape or dtype: a handle has neither, and giving it
+    `("*",)` would let shape-reasoning code treat it as a rank-unknown tensor
+    rather than reject it.
+    """
+    return IRType(f"!tessera.{mnemonic}")
+
+
+#: The stateful handle types the Graph IR ODS declares. Names match the ODS
+#: `mnemonic` field so the two cannot drift apart silently.
+HANDLE_KV_CACHE = handle_ir_type("kv_cache")
+HANDLE_CACHE_PAGE = handle_ir_type("cache_page")
+HANDLE_RING = handle_ir_type("ring")
 
 
 @dataclass(frozen=True)
@@ -500,6 +605,16 @@ class IROp:
     kwargs: Dict[str, Any] = field(default_factory=dict)
     source_span: Optional["SourceSpan"] = None
     inferred_type: Optional[IRType] = None
+    inferred_types: Tuple[IRType, ...] = ()
+    """The FULL result contract for a multi-result op.
+
+    `inferred_type` is the primary result and stays the single-result answer
+    every existing consumer reads. Without this field a declared multi-result
+    rule stopped at the emitter: `_try_map_call` called the single-result
+    `_infer_result_type`, which drops every element after the first, so
+    `kv_cache.read`'s `(K, V)` reached Graph IR as one SSA value and no caller
+    could destructure V. Declaring the contract in the registry is not the same
+    as emitting it."""
     numeric_policy: Optional[Any] = None  # NumericPolicy when populated
     # Phase A (2026-05-20) — optional metadata fields.  Producers
     # fill what they know; consumers must tolerate ``None`` /
@@ -823,6 +938,35 @@ class GraphIRVerifier:
                         span=op.source_span,
                         code="GRAPH_IR_UNDEFINED_OPERAND",
                     ))
+            # An attribute may not hide a dataflow EDGE. This is the check whose
+            # absence let keyword tensor operands emit as `{scores = "%s"}` for
+            # as long as they did: the loop above verifies `op.operands`, so an
+            # edge parked in an attribute was invisible to the one place that
+            # would have caught it. Verifying operands is not the same as
+            # verifying that every edge IS an operand.
+            #
+            # The test is "names a value that is NOT an operand", not "starts
+            # with %". `tessera.graph.debug_value` carries `{name = "%A"}`
+            # alongside `%A` in its operand list -- there the attribute is a
+            # LABEL for an edge that already exists, which is exactly the case
+            # this check must not flag. Flagging the sigil alone would have made
+            # the diagnostic mean "an attribute mentions a value", which is not
+            # a defect and would have pushed the next person to weaken it.
+            operand_set = set(op.operands)
+            for attr_name, attr_value in (op.kwargs or {}).items():
+                if not isinstance(attr_value, str) or not attr_value.startswith("%"):
+                    continue
+                if attr_value in operand_set:
+                    continue
+                diagnostics.append(GraphIRDiagnostic(
+                    "error",
+                    f"op {op.op_name!r} attribute {attr_name!r} holds SSA "
+                    f"value {attr_value}, which is not an operand -- a value "
+                    f"edge must be an operand, not an attribute "
+                    f"(declare it in _KEYWORD_OPERANDS)",
+                    span=op.source_span,
+                    code="GRAPH_IR_SSA_VALUE_IN_ATTRIBUTE",
+                ))
             self._verify_op_types(op, value_types, diagnostics, target=target)
         if control_stack:
             diagnostics.append(GraphIRDiagnostic(
@@ -1133,6 +1277,30 @@ class _OpExtractor(ast.NodeVisitor):
                 # collide with itself on a future reassignment); the
                 # alias map suffices for reads.
                 return
+        elif isinstance(tgt, ast.Tuple) and all(
+                isinstance(e, ast.Name) for e in tgt.elts):
+            # Destructuring a multi-result op: `v, i = ops.top_k(x, 2)`.
+            # Only a bare `ast.Name` target was handled, so a tuple target fell
+            # through and the RHS was never emitted at all -- the op vanished
+            # from the body rather than failing. Declaring a multi-result
+            # contract and emitting both SSA results is only half of it if no
+            # Python spelling can bind them.
+            first = self._emit_expr(node.value)
+            if first is None:
+                return
+            emitted = self.ops[-1] if self.ops else None
+            names = emitted.result_names if emitted is not None else []
+            if len(names) != len(tgt.elts):
+                # Arity mismatch: bind what we can rather than silently
+                # dropping the statement, and leave the rest unbound so a
+                # later use reports an undefined value instead of a wrong one.
+                names = names[:len(tgt.elts)]
+            # `all(isinstance(...))` above does not narrow the element type for
+            # the checker, so bind through an explicitly-typed list.
+            targets = [e for e in tgt.elts if isinstance(e, ast.Name)]
+            for target, ssa in zip(targets, names):
+                self._name_alias[target.id] = ssa
+            return
         elif isinstance(tgt, ast.Subscript):
             value = self._emit_expr(node.value)
             if value is not None:
@@ -1529,6 +1697,17 @@ class _OpExtractor(ast.NodeVisitor):
             op = self._try_map_call(node)
             if op is None:
                 return None
+            # One SSA name per declared result. A multi-result op given a
+            # single name would print `%v0 = ... -> (tK, tV)`, which is not
+            # valid MLIR and leaves V unnameable.
+            if len(op.inferred_types) > 1:
+                names = [result_name or self._fresh()]
+                names += [self._fresh() for _ in op.inferred_types[1:]]
+                op.result = ",".join(names)
+                for name, typ in zip(names, op.inferred_types):
+                    self._value_types[f"%{name}"] = typ
+                self.ops.append(op)
+                return f"%{names[0]}"
             op.result = result_name or self._fresh()
             _ir_type = op.inferred_type if hasattr(op, "inferred_type") else _parse_mlir_tensor_type(op.result_type or "tensor<*x?>")
             if _ir_type is not None:
@@ -1667,19 +1846,52 @@ class _OpExtractor(ast.NodeVisitor):
                 operands.append(operand if operand else "%?")
                 operand_types.append(str(self._value_types.get(operand or "%?", TENSOR_OPAQUE)))
 
-        result_type = _infer_result_type(
-            mlir_name,
-            [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands],
-            attrs=kwargs)
-
+        # Keywords are bound BEFORE the result type is inferred. They used to be
+        # bound after, which quietly disabled every attribute-reading shape rule
+        # for the normal calling convention: `cast(x, dtype="bf16")` inferred
+        # from an empty attribute set and returned `tensor<*x?>` instead of bf16,
+        # and `adam(..., state_dtype="fp32")` never saw `state_dtype` at all.
+        # The rules were correct; they were being consulted too early.
+        kw_operands: Dict[str, str] = {}
         for kw in call.keywords:
             if kw.arg is None:
                 continue
             try:
                 kwargs[kw.arg] = ast.literal_eval(kw.value)
+                continue
             except (ValueError, TypeError):
-                value_name = self._emit_expr(kw.value)
+                pass
+            value_name = self._emit_expr(kw.value)
+            # A keyword that binds a DEFINED SSA value is a tensor operand, not
+            # an attribute. Recording it as `{scores = "%s"}` produced an
+            # attribute holding an SSA name -- syntactically fine, semantically
+            # nothing, and it erased the edge from the operand list where every
+            # dataflow consumer looks. Derive the split from what the value IS
+            # (Decision #30) rather than from the call syntax.
+            if value_name and self._is_defined_value(value_name):
+                kw_operands[kw.arg] = value_name
+            else:
                 kwargs[kw.arg] = value_name or "?"
+
+        # Declared order first, so the operand list does not depend on the order
+        # the caller happened to write the keywords. Anything undeclared is
+        # appended by sorted name -- deterministic, and flagged by
+        # `test_keyword_operand_vocabulary` as vocabulary that needs declaring.
+        if kw_operands:
+            declared = _KEYWORD_OPERANDS.get(mlir_name, ())
+            ordered = [n for n in declared if n in kw_operands]
+            ordered += sorted(n for n in kw_operands if n not in declared)
+            for name in ordered:
+                value = kw_operands[name]
+                operands.append(value)
+                operand_types.append(
+                    str(self._value_types.get(value, TENSOR_OPAQUE)))
+
+        result_types = _infer_result_types(
+            mlir_name,
+            [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands],
+            attrs=kwargs)
+        result_type = result_types[0]
 
         # Structural view ops: derive the result type from the shape/axes/perm
         # attr (now fully bound) instead of the input-type fallback, so a static
@@ -1691,16 +1903,23 @@ class _OpExtractor(ast.NodeVisitor):
             kwargs)
         if _struct is not None:
             result_type = _struct
+            result_types = (_struct,)
 
+        # MLIR spells a multi-result signature `-> (t0, t1)`; a single result
+        # has no parentheses. Emitting the tuple form for one result would be
+        # a different (and wrong) type.
+        printed = (str(result_type) if len(result_types) == 1
+                   else "(" + ", ".join(str(t) for t in result_types) + ")")
         return IROp(
             result=None,  # filled in by caller
             op_name=mlir_name,
             operands=operands,
             operand_types=operand_types,
-            result_type=str(result_type),
+            result_type=printed,
             kwargs=kwargs,
             source_span=_span_from_ast(call),
             inferred_type=result_type,
+            inferred_types=tuple(result_types),
         )
 
 
@@ -1798,14 +2017,24 @@ def _shape_reduce_all(operand_types: List[IRType], attrs: Optional[Dict[str, Any
 
 def _shape_reduce_all_index(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """Full reduction yielding an INDEX (argmax/argmin/count_nonzero)."""
+    from .op_catalog import INDEX_DTYPE
+
     first = operand_types[0]
-    return tensor_ir_type((), "int64", layout=first.layout)
+    return tensor_ir_type((), INDEX_DTYPE, layout=first.layout)
 
 
 def _shape_same_shape_index(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
-    """Operand shape, index dtype (argsort)."""
+    """Operand shape, declared index dtype (argsort, popcount).
+
+    The width comes from `INDEX_DTYPE` rather than a literal, because it was
+    previously spelled out here, again in `_shape_reduce_all_index`, and
+    derived a third way by `popcount` from whichever NumPy was installed. Three
+    spellings of one convention is how they drift apart.
+    """
+    from .op_catalog import INDEX_DTYPE
+
     first = operand_types[0]
-    return tensor_ir_type(first.shape, "int64", layout=first.layout)
+    return tensor_ir_type(first.shape, INDEX_DTYPE, layout=first.layout)
 
 
 def _shape_flatten(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
@@ -1821,23 +2050,106 @@ def _shape_flatten(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] 
     return tensor_ir_type((str(total),), first.dtype, layout=first.layout)
 
 
+#: Real storage width -> the complex type whose COMPONENTS have that width.
+#: These spellings are `planned_gated` in `tessera.dtype`, which the exemption
+#: read as "declaring it conflicts with the dtype capability contract". It does
+#: not: the contract has an explicit path for planned/gated dtypes
+#: (`allow_planned_gated=True` plus `metadata.dtype_status`), and naming one in
+#: a shape rule is not the same as claiming a backend implements it. Promoting
+#: complex to CANONICAL would be a capability change; this is not that.
+_COMPLEX_FOR_REAL = {"fp64": "complex128", "f64": "complex128"}
+_REAL_FOR_COMPLEX = {"complex128": "fp64", "complex64": "fp32"}
+
+
+def _complex_of(dtype: Optional[str]) -> str:
+    """complex64 unless the operand is genuinely double precision.
+
+    Hard-coding `complex64` (as this did) is wrong for an f64 signal, and
+    hard-coding `complex128` -- which is what the numpy-backed reference
+    actually returned for every input -- is the `cos(int32) -> float64` defect
+    again: the host library's precision choice overriding the compiler's. The
+    family's own `_spectral_policy` declares `storage="fp32"`.
+    """
+    return _COMPLEX_FOR_REAL.get(dtype or "", "complex64")
+
+
 def _shape_complex_same(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
-    """Same shape, complex result (fft / ifft)."""
+    """Same shape, complex result with matching component width (fft / ifft)."""
     first = operand_types[0]
-    return tensor_ir_type(first.shape, "complex64", layout=first.layout)
+    return tensor_ir_type(first.shape, _complex_of(first.dtype), layout=first.layout)
+
+
+def _transform_axis(t: IRType, attrs: Optional[Dict[str, Any]]) -> Optional[int]:
+    """The axis a spectral op transforms, normalised to a positive index.
+
+    Mirrors the reference's `_axis_from_axes`: an explicit `axes` tuple wins and
+    its LAST entry is the transformed axis, otherwise `axis` (default -1).
+
+    Reading this matters only for the rules that RESIZE an axis. `fft`/`ifft`
+    preserve shape, so they were correct while ignoring it; `rfft` and `irfft`
+    are not -- `rfft` on `8x16` with `axis=0` is `5x16`, and a rule that always
+    resizes the trailing dimension would claim `8x9`.
+    """
+    attrs = attrs or {}
+    axes = attrs.get("axes")
+    raw = tuple(axes)[-1] if isinstance(axes, (tuple, list)) and axes else attrs.get("axis", -1)
+    axis = _dim(raw)
+    if axis is None or t.rank is None or not t.shape:
+        return None
+    if axis < 0:
+        axis += len(t.shape)
+    return axis if 0 <= axis < len(t.shape) else None
 
 
 def _shape_rfft(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
-    """Real FFT: trailing axis becomes n//2 + 1, result complex."""
+    """Real FFT: the TRANSFORMED axis becomes n//2 + 1, result complex.
+
+    Only the non-redundant half of a real spectrum is kept, since a real
+    signal's transform is conjugate-symmetric. Which axis is halved comes from
+    `axis`/`axes`, not from an assumption that it is the last one.
+    """
     first = operand_types[0]
-    if first.rank is None or not first.shape:
-        return tensor_ir_type(("*",), "complex64", layout=first.layout)
-    try:
-        n = int(first.shape[-1])
-    except (TypeError, ValueError):
-        return tensor_ir_type(("*",), "complex64", layout=first.layout)
-    return tensor_ir_type(first.shape[:-1] + (str(n // 2 + 1),), "complex64",
-                          layout=first.layout)
+    complex_dtype = _complex_of(first.dtype)
+    axis = _transform_axis(first, attrs)
+    if first.rank is None or not first.shape or axis is None:
+        return tensor_ir_type(("*",), complex_dtype, layout=first.layout)
+    n = _dim(first.shape[axis])
+    if n is None:
+        return tensor_ir_type(("*",), complex_dtype, layout=first.layout)
+    dims = list(first.shape)
+    dims[axis] = str(n // 2 + 1)
+    return tensor_ir_type(tuple(dims), complex_dtype, layout=first.layout)
+
+
+def _shape_irfft(operand_types: List[IRType],
+                 attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Inverse real FFT: complex -> REAL, trailing axis 2 * (n - 1).
+
+    `irfft` was exempted with its three siblings under one sentence -- "returns
+    complex64, which is planned_gated per Decision #15a" -- which is true of
+    them and simply wrong here: it is the member of the family that returns
+    real values. The same one-reason-for-N-ops error that hid `kv_cache.read`
+    among the cache mutators.
+
+    The inverse of `rfft`'s `n // 2 + 1`. It is the inverse of the EVEN-length
+    case; an odd-length original is not recoverable from the spectrum alone,
+    which is why `irfft` takes an explicit `n` -- honoured here when given.
+    """
+    first = operand_types[0]
+    real_dtype = _REAL_FOR_COMPLEX.get(first.dtype or "", "fp32")
+    axis = _transform_axis(first, attrs)
+    if first.rank is None or not first.shape or axis is None:
+        return tensor_ir_type(("*",), real_dtype, layout=first.layout)
+    dims = list(first.shape)
+    explicit = _dim((attrs or {}).get("n"))
+    if explicit is not None:
+        dims[axis] = str(explicit)
+        return tensor_ir_type(tuple(dims), real_dtype, layout=first.layout)
+    n = _dim(first.shape[axis])
+    if n is None:
+        return tensor_ir_type(("*",), real_dtype, layout=first.layout)
+    dims[axis] = str(2 * (n - 1))
+    return tensor_ir_type(tuple(dims), real_dtype, layout=first.layout)
 
 
 def _shape_from_shape_attr(operand_types: List[IRType],
@@ -1991,6 +2303,699 @@ def _shape_select_from_second(operand_types: List[IRType],
     return tensor_ir_type(dims, candidates.dtype, layout=candidates.layout)
 
 
+def _collective_axis(operand_types: List[IRType],
+                     attrs: Optional[Dict[str, Any]]) -> tuple[int, Optional[str]]:
+    """(tensor axis that scales, mesh axis name) for a collective.
+
+    `all_gather(x, axis="dp")` overloads one parameter: an `int` names a TENSOR
+    axis, a `str` names a MESH axis. When it is a mesh axis the tensor axis is
+    0, matching the `Block(mesh_axes=("dp",)) -> partition=(0,)` convention
+    (CLAUDE.md, "Domain & distribution").
+    """
+    axis = (attrs or {}).get("axis", "dp")
+    if isinstance(axis, int) and not isinstance(axis, bool):
+        return axis, None
+    return 0, str(axis).strip("\"'")
+
+
+def _scaled_collective_shape(operand_types: List[IRType],
+                             attrs: Optional[Dict[str, Any]],
+                             mesh: Optional[Mapping[str, int]],
+                             *, multiply: bool) -> IRType:
+    """Shared body for all_gather (multiply) and reduce_scatter (divide).
+
+    FAILS CLOSED. When the mesh size is unknown the scaled dimension becomes
+    `?` -- explicitly unknown -- rather than the operand's own extent. That
+    distinction is the whole point of this rule: returning the operand shape
+    is not a neutral fallback, it is the positive claim `world_size == 1`.
+    Both ops previously did exactly that, and it went undetected because the
+    reference collectives are single-rank no-op stubs, so a probe at
+    world_size=1 confirmed the wrong rule. Decision #30: a rule that cannot
+    derive a fact must fail closed, not assume the convenient answer.
+    """
+    first = operand_types[0]
+    tensor_axis, mesh_axis = _collective_axis(operand_types, attrs)
+    if first.rank is None or not first.shape:
+        return first
+    dims = list(first.shape)
+    if tensor_axis < 0:
+        tensor_axis += len(dims)
+    if not 0 <= tensor_axis < len(dims):
+        return first
+    size = (mesh or {}).get(mesh_axis) if mesh_axis else None
+    scaled = "?"
+    if size:
+        try:
+            extent = int(dims[tensor_axis])
+            scaled = str(extent * int(size)) if multiply else (
+                str(extent // int(size)) if extent % int(size) == 0 else "?"
+            )
+        except (TypeError, ValueError):
+            scaled = "?"
+    dims[tensor_axis] = scaled
+    return tensor_ir_type(tuple(dims), first.dtype, layout=first.layout)
+
+
+def _shape_all_gather(operand_types: List[IRType],
+                      attrs: Optional[Dict[str, Any]] = None,
+                      mesh: Optional[Mapping[str, int]] = None) -> IRType:
+    """Gathered axis grows by the mesh extent: `d -> d * world_size`."""
+    return _scaled_collective_shape(operand_types, attrs, mesh, multiply=True)
+
+
+def _shape_reduce_scatter(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None,
+                          mesh: Optional[Mapping[str, int]] = None) -> IRType:
+    """Scattered axis shrinks by the mesh extent: `d -> d / world_size`."""
+    return _scaled_collective_shape(operand_types, attrs, mesh, multiply=False)
+
+
+def _dim(value) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _unknown_like(t: IRType, dtype: Optional[str] = None) -> IRType:
+    return tensor_ir_type(("*",), dtype or t.dtype, layout=t.layout)
+
+
+def _shape_matmul_trailing(operand_types: List[IRType],
+                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Contract operand 0's LAST axis with operand 1's last, keeping leading dims.
+
+    `linear_general((B,S,D), (D,N)) -> (B,S,N)` and the latent-KV
+    compress/expand pair. Distinct from `matmul_2d`, which is rank-2 only and
+    would report `(*)` for the rank-3 activations that dominate real models.
+
+    Also covers the grouped/MoE forms whose weight is `(E, D, N)`: the expert
+    axis is not a batch axis of the activation, so the result still takes only
+    operand 1's LAST dim. Reading operand 1's first dim instead would be right
+    for `(D, N)` and wrong for `(E, D, N)` -- which is why this keys on the
+    last axis rather than "the other one".
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    lhs, rhs = operand_types[0], operand_types[1]
+    dtype = lhs.dtype or rhs.dtype
+    if lhs.rank is None or rhs.rank is None or not lhs.shape or not rhs.shape:
+        return _unknown_like(lhs, dtype)
+    return tensor_ir_type(lhs.shape[:-1] + (rhs.shape[-1],), dtype,
+                          layout=lhs.layout)
+
+
+def _shape_same_as_second(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Result mirrors operand 1 (the right-hand side / the thing being scored).
+
+    `tri_solve(A, b) -> b`-shaped, `cholesky_solve(L, b) -> b`-shaped,
+    `target_verify(tokens, logits) -> logits`-shaped. Operand 0 is the
+    operator or the key, not the value, so `same_as_first` is wrong on both
+    shape and dtype -- the same asymmetry `select_from_second` exists for.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    return operand_types[1]
+
+
+def _shape_conv_spatial(operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """NHWC / NDHWC convolution, valid padding: `out = in - k + 1` per axis.
+
+    One rule for conv2d and conv3d: the spatial rank is read from the operands
+    rather than fixed, so `(N, *spatial, Cin)` against `(*kernel, Cin, Cout)`
+    works for both. A separate rule per rank would duplicate the arithmetic and
+    let the two drift.
+
+    Falls back to unknown when stride/padding are non-default rather than
+    guessing -- the caller can pass them, and a rule that ignores stride would
+    be confidently wrong by exactly the stride factor.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    x, w = operand_types[0], operand_types[1]
+    attrs = attrs or {}
+    dtype = x.dtype or w.dtype
+    if x.rank is None or w.rank is None or x.rank != w.rank or x.rank < 3:
+        return _unknown_like(x, dtype)
+    if _dim(attrs.get("stride", 1)) != 1 or _dim(attrs.get("padding", 0)) != 0:
+        return _unknown_like(x, dtype)
+    spatial = x.rank - 2
+    dims: list = [x.shape[0]]
+    for axis in range(spatial):
+        n, k = _dim(x.shape[1 + axis]), _dim(w.shape[axis])
+        dims.append(str(n - k + 1) if n is not None and k is not None else "?")
+    dims.append(w.shape[-1])
+    return tensor_ir_type(tuple(dims), dtype, layout=x.layout)
+
+
+def _shape_index_along_axis(operand_types: List[IRType],
+                            attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`gather` / `index_select`: the indexed axis becomes len(indices)."""
+    if len(operand_types) < 2:
+        return operand_types[0]
+    x, idx = operand_types[0], operand_types[1]
+    axis = _dim((attrs or {}).get("axis", 0)) or 0
+    if x.rank is None or idx.rank is None or not idx.shape:
+        return _unknown_like(x)
+    if axis < 0:
+        axis += len(x.shape)
+    if not 0 <= axis < len(x.shape):
+        return _unknown_like(x)
+    dims = list(x.shape)
+    dims[axis] = idx.shape[0]
+    return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
+
+
+def _shape_drop_axis(operand_types: List[IRType],
+                     attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`select(x, i, axis)` removes the axis entirely (unlike a size-1 slice)."""
+    x = operand_types[0]
+    axis = _dim((attrs or {}).get("axis", 0)) or 0
+    if x.rank is None or not x.shape:
+        return _unknown_like(x)
+    if axis < 0:
+        axis += len(x.shape)
+    if not 0 <= axis < len(x.shape):
+        return _unknown_like(x)
+    return tensor_ir_type(x.shape[:axis] + x.shape[axis + 1:], x.dtype,
+                          layout=x.layout)
+
+
+def _shape_insert_axis(operand_types: List[IRType],
+                       attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`unsqueeze`: a length-1 axis at `axes`."""
+    x = operand_types[0]
+    raw = (attrs or {}).get("axes", (attrs or {}).get("axis", 0))
+    axis = _dim(raw if not isinstance(raw, (tuple, list)) else
+                (raw[0] if raw else 0))
+    if x.rank is None or axis is None:
+        return _unknown_like(x)
+    if axis < 0:
+        axis += len(x.shape) + 1
+    if not 0 <= axis <= len(x.shape):
+        return _unknown_like(x)
+    return tensor_ir_type(x.shape[:axis] + ("1",) + x.shape[axis:], x.dtype,
+                          layout=x.layout)
+
+
+def _shape_from_slice_sizes(operand_types: List[IRType],
+                            attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`slice` / `dynamic_slice`: the result IS `slice_sizes`."""
+    x = operand_types[0]
+    sizes = (attrs or {}).get("slice_sizes")
+    if not isinstance(sizes, (tuple, list)) or not sizes:
+        return _unknown_like(x)
+    return tensor_ir_type(tuple(str(s) for s in sizes), x.dtype, layout=x.layout)
+
+
+def _shape_pad(operand_types: List[IRType],
+               attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Each axis grows by its (before, after) pad."""
+    x = operand_types[0]
+    widths = (attrs or {}).get("pad_width")
+    if x.rank is None or not isinstance(widths, (tuple, list)):
+        return _unknown_like(x)
+    dims = []
+    for axis, extent in enumerate(x.shape):
+        n = _dim(extent)
+        pad = widths[axis] if axis < len(widths) else 0
+        lo, hi = pad if isinstance(pad, (tuple, list)) else (pad, pad)
+        lo, hi = _dim(lo), _dim(hi)
+        # Explicit `is None` rather than `None not in (...)`: the latter reads
+        # fine and does not narrow, so mypy still sees `int | None` in the sum.
+        if n is None or lo is None or hi is None:
+            dims.append("?")
+        else:
+            dims.append(str(n + lo + hi))
+    return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
+
+
+def _shape_scores_per_block(operand_types: List[IRType],
+                            attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Query x key-BLOCK scores: `(B, H, S_q, num_blocks)`.
+
+    The MSA / memory index branches score each KV block, so the trailing axis
+    is a block count -- `S_k // block_size` -- not the head dim. With no
+    `block_size` the block count is unknown and says so.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    q, k = operand_types[0], operand_types[1]
+    if q.rank is None or k.rank is None or len(q.shape) < 2 or len(k.shape) < 2:
+        return _unknown_like(q)
+    s_k = _dim(k.shape[-2])
+    block = _dim((attrs or {}).get("block_size", 1)) or 1
+    blocks = str(s_k // block) if s_k is not None and block else "?"
+    return tensor_ir_type(q.shape[:-1] + (blocks,), q.dtype, layout=q.layout)
+
+
+def _shape_scores_per_block_mask(operand_types: List[IRType],
+                                 attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`memory_index_select`: the same block grid as the scores, but a MASK.
+
+    Shares its shape with `scores_per_block` and differs only in dtype, which
+    is exactly the case a shape-only check cannot see -- the probe reported
+    identical shapes and the two rules were indistinguishable until dtype was
+    compared. It selects blocks; it does not score them.
+    """
+    scores = _shape_scores_per_block(operand_types, attrs)
+    return tensor_ir_type(scores.shape, "bool", layout=scores.layout)
+
+
+def _shape_reduce_trailing_index(operand_types: List[IRType],
+                                 attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Drop the trailing axis, result is an INDEX (argmax-like selection)."""
+    from .op_catalog import INDEX_DTYPE
+
+    x = operand_types[0]
+    if x.rank is None or not x.shape:
+        return _unknown_like(x, INDEX_DTYPE)
+    return tensor_ir_type(x.shape[:-1], INDEX_DTYPE, layout=x.layout)
+
+
+def _shape_reduce_trailing_bool(operand_types: List[IRType],
+                                attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Drop the trailing axis, result is a boolean mask (`mor_partition`)."""
+    x = operand_types[0]
+    if x.rank is None or not x.shape:
+        return _unknown_like(x, "bool")
+    return tensor_ir_type(x.shape[:-1], "bool", layout=x.layout)
+
+
+def _shape_top_k(operand_types: List[IRType],
+                 attrs: Optional[Dict[str, Any]] = None):
+    """`(values, indices)` — both operand-shaped with the axis cut to k.
+
+    The indices half is why this cannot be `same_shape_index`: the two results
+    have the same SHAPE but different dtypes, and a single-tensor rule can
+    state only one of them.
+    """
+    from .op_catalog import INDEX_DTYPE
+
+    x = operand_types[0]
+    k = _dim((attrs or {}).get("k"))
+    axis = _dim((attrs or {}).get("axis", -1))
+    if x.rank is None or not x.shape or k is None or axis is None:
+        return (_unknown_like(x), _unknown_like(x, INDEX_DTYPE))
+    if axis < 0:
+        axis += len(x.shape)
+    if not 0 <= axis < len(x.shape):
+        return (_unknown_like(x), _unknown_like(x, INDEX_DTYPE))
+    dims = list(x.shape)
+    dims[axis] = str(k)
+    return (tensor_ir_type(tuple(dims), x.dtype, layout=x.layout),
+            tensor_ir_type(tuple(dims), INDEX_DTYPE, layout=x.layout))
+
+
+def _shape_split_equal(operand_types: List[IRType],
+                       attrs: Optional[Dict[str, Any]] = None):
+    """`chunk` / `split` into N equal pieces along `axis`.
+
+    Returns an N-tuple, so the count must be statically known. When it is not,
+    a single unknown piece is returned rather than a guess at N -- an arity the
+    op does not have is a worse claim than an unknown shape.
+    """
+    x = operand_types[0]
+    attrs = attrs or {}
+    n = _dim(attrs.get("chunks", attrs.get("indices_or_sections")))
+    axis = _dim(attrs.get("axis", 0)) or 0
+    if x.rank is None or not x.shape or n is None or n <= 0:
+        return _unknown_like(x)
+    if axis < 0:
+        axis += len(x.shape)
+    if not 0 <= axis < len(x.shape):
+        return _unknown_like(x)
+    extent = _dim(x.shape[axis])
+    piece = str(extent // n) if extent is not None else "?"
+    dims = list(x.shape)
+    dims[axis] = piece
+    part = tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
+    return tuple(part for _ in range(n))
+
+
+def _shape_split_halves(operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None):
+    """`rope_split`: the trailing axis is cut into a rope part and the rest.
+
+    Both halves are returned; the split point is the `rope_dim` attribute, so
+    they are NOT necessarily equal and must not be assumed so.
+    """
+    x = operand_types[0]
+    rope = _dim((attrs or {}).get("rope_dim"))
+    if x.rank is None or not x.shape:
+        return (_unknown_like(x), _unknown_like(x))
+    total = _dim(x.shape[-1])
+    if rope is None or total is None:
+        return (_unknown_like(x), _unknown_like(x))
+    head = tensor_ir_type(x.shape[:-1] + (str(rope),), x.dtype, layout=x.layout)
+    tail = tensor_ir_type(x.shape[:-1] + (str(total - rope),), x.dtype,
+                          layout=x.layout)
+    return (head, tail)
+
+
+def _shape_qkv_projection(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None):
+    """`(Q, K, V)` — one fused projection split three ways.
+
+    `(B, S, D) x (D, 3*D) -> three (B, S, D)`. The fused weight's trailing axis
+    is 3x the per-head width, so the result width is `rhs[-1] // 3` rather than
+    the input's D; they coincide only in the square case.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    x, w = operand_types[0], operand_types[1]
+    if x.rank is None or w.rank is None or not x.shape or not w.shape:
+        return tuple(_unknown_like(x) for _ in range(3))
+    fused = _dim(w.shape[-1])
+    width = str(fused // 3) if fused is not None else "?"
+    part = tensor_ir_type(x.shape[:-1] + (width,), x.dtype, layout=x.layout)
+    return (part, part, part)
+
+
+def _shape_state_matrix(operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`linear_attn_state`: the recurrent state is `(B, H, D, D)`.
+
+    Linear attention's state is an outer product of key and value features, so
+    the sequence axis is contracted away and replaced by a second feature axis
+    -- the one shape in this family that is NOT the query's.
+    """
+    x = operand_types[0]
+    if x.rank is None or len(x.shape) < 2:
+        return _unknown_like(x)
+    return tensor_ir_type(x.shape[:-2] + (x.shape[-1], x.shape[-1]), x.dtype,
+                          layout=x.layout)
+
+
+def _shape_concat_trailing(operand_types: List[IRType],
+                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`rope_merge`: the two halves rejoin along the trailing axis.
+
+    The inverse of `split_halves`, and like it the parts are not equal -- the
+    rope part is `rope_dim` wide and the pass-through is the remainder.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    a, b = operand_types[0], operand_types[1]
+    if a.rank is None or b.rank is None or not a.shape or not b.shape:
+        return _unknown_like(a)
+    lo, hi = _dim(a.shape[-1]), _dim(b.shape[-1])
+    total = str(lo + hi) if lo is not None and hi is not None else "?"
+    return tensor_ir_type(a.shape[:-1] + (total,), a.dtype, layout=a.layout)
+
+
+def _shape_tile_trailing(operand_types: List[IRType],
+                         attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`tile`: a scalar `reps` repeats the LAST axis (numpy's broadcast rule)."""
+    x = operand_types[0]
+    reps = (attrs or {}).get("reps")
+    if x.rank is None or not x.shape or isinstance(reps, (tuple, list)):
+        return _unknown_like(x)
+    n, r = _dim(x.shape[-1]), _dim(reps)
+    if n is None or r is None:
+        return _unknown_like(x)
+    return tensor_ir_type(x.shape[:-1] + (str(n * r),), x.dtype, layout=x.layout)
+
+
+def _shape_flatten_repeat(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`repeat` with no axis FLATTENS -- `(4,6)` repeated twice is `(48,)`.
+
+    Easy to mistake for shape-preserving elementwise repetition; it is not, and
+    the rank change is the part a downstream consumer would get wrong.
+    """
+    x = operand_types[0]
+    attrs = attrs or {}
+    if attrs.get("axis") is not None:
+        return _unknown_like(x)
+    reps = _dim(attrs.get("repeats"))
+    if x.rank is None or not x.shape or reps is None:
+        return _unknown_like(x)
+    total = 1
+    for extent in x.shape:
+        n = _dim(extent)
+        if n is None:
+            return _unknown_like(x)
+        total *= n
+    return tensor_ir_type((str(total * reps),), x.dtype, layout=x.layout)
+
+
+def _shape_select_k_index(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`msa_select_blocks`: trailing axis becomes `top_k`, result is an index."""
+    from .op_catalog import INDEX_DTYPE
+
+    x = operand_types[0]
+    k = _dim((attrs or {}).get("top_k"))
+    if x.rank is None or not x.shape or k is None:
+        return _unknown_like(x, INDEX_DTYPE)
+    return tensor_ir_type(x.shape[:-1] + (str(k),), INDEX_DTYPE, layout=x.layout)
+
+
+def _shape_segment_reduce(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Leading axis becomes the SEGMENT COUNT, which is data-dependent.
+
+    The number of segments is `max(seg_ids) + 1` -- a property of the values in
+    operand 1, not of any type. So the rule states `?` there and keeps the
+    trailing axes, rather than reusing the input extent (which would be the
+    claim "one segment per row", true only when nothing is grouped).
+    """
+    x = operand_types[0]
+    if x.rank is None or not x.shape:
+        return _unknown_like(x)
+    return tensor_ir_type(("?",) + x.shape[1:], x.dtype, layout=x.layout)
+
+
+def _shape_lu(operand_types: List[IRType],
+              attrs: Optional[Dict[str, Any]] = None):
+    """`(LU, pivots)` — the packed factors plus a rank-1 pivot vector."""
+    a = operand_types[0]
+    if a.rank is None or len(a.shape) < 2:
+        return (_unknown_like(a), _unknown_like(a, "int32"))
+    return (tensor_ir_type(a.shape, a.dtype, layout=a.layout),
+            tensor_ir_type((a.shape[-2],), "int32", layout=a.layout))
+
+
+def _shape_qr(operand_types: List[IRType],
+              attrs: Optional[Dict[str, Any]] = None):
+    """Reduced QR: `Q (m, n)` and `R (n, n)` for m >= n."""
+    a = operand_types[0]
+    if a.rank is None or len(a.shape) < 2:
+        return (_unknown_like(a), _unknown_like(a))
+    m, n = a.shape[-2], a.shape[-1]
+    return (tensor_ir_type(a.shape[:-2] + (m, n), a.dtype, layout=a.layout),
+            tensor_ir_type(a.shape[:-2] + (n, n), a.dtype, layout=a.layout))
+
+
+def _shape_svd(operand_types: List[IRType],
+               attrs: Optional[Dict[str, Any]] = None):
+    """Reduced SVD: `U (m, n)`, singular values `S (n,)`, `Vt (n, n)`."""
+    a = operand_types[0]
+    if a.rank is None or len(a.shape) < 2:
+        return (_unknown_like(a), _unknown_like(a), _unknown_like(a))
+    m, n = a.shape[-2], a.shape[-1]
+    return (tensor_ir_type(a.shape[:-2] + (m, n), a.dtype, layout=a.layout),
+            tensor_ir_type(a.shape[:-2] + (n,), a.dtype, layout=a.layout),
+            tensor_ir_type(a.shape[:-2] + (n, n), a.dtype, layout=a.layout))
+
+
+def _shape_nonzero(operand_types: List[IRType],
+                   attrs: Optional[Dict[str, Any]] = None):
+    """One rank-1 index vector per input axis; the LENGTH is data-dependent.
+
+    The arity is the input's rank -- static and worth stating -- while the
+    common length depends on how many elements are non-zero and is `?`. Both
+    halves matter: an unknown length is not a reason to leave the arity unsaid.
+    """
+    from .op_catalog import INDEX_DTYPE
+
+    x = operand_types[0]
+    if x.rank is None or not x.shape:
+        return _unknown_like(x, INDEX_DTYPE)
+    part = tensor_ir_type(("?",), INDEX_DTYPE, layout=x.layout)
+    return tuple(part for _ in x.shape)
+
+
+def _shape_spec_accept(operand_types: List[IRType],
+                       attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`[path_idx, prefix_length, bonus_token]` — a fixed 3-vector of i32."""
+    return tensor_ir_type(("3",), "int32", layout=operand_types[0].layout)
+
+
+def _shape_spec_accept_tree(operand_types: List[IRType],
+                            attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`[path_idx, prefix_length]` — the tree form carries no bonus token."""
+    return tensor_ir_type(("2",), "int32", layout=operand_types[0].layout)
+
+
+def _shape_stft(operand_types: List[IRType],
+                attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`(frames, bins)` — `frames = (n - win) // hop + 1`, `bins = win//2 + 1`.
+
+    `bins` is the `rfft` half-spectrum, so the result is complex with the
+    input's component width -- the same real-pair model as the rest of the
+    transform family.
+    """
+    x, win = operand_types[0], (operand_types[1] if len(operand_types) > 1 else None)
+    dtype = _complex_of(x.dtype)
+    hop = _dim((attrs or {}).get("hop"))
+    n = _dim(x.shape[-1]) if x.shape else None
+    w = _dim(win.shape[-1]) if win is not None and win.shape else None
+    if hop is None or n is None or w is None or not hop:
+        return _unknown_like(x, dtype)
+    return tensor_ir_type((str((n - w) // hop + 1), str(w // 2 + 1)), dtype,
+                          layout=x.layout)
+
+
+def _shape_conv_full(operand_types: List[IRType],
+                     attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`spectral_conv`: FULL convolution, trailing axis `n + m - 1`.
+
+    Not the `n - m + 1` of `conv_spatial`. Spectral convolution keeps the whole
+    support, which is why it is a separate rule rather than a padding mode --
+    the two differ by `2*(m-1)` and both are plausible-looking numbers.
+    """
+    if len(operand_types) < 2:
+        return operand_types[0]
+    x, w = operand_types[0], operand_types[1]
+    if x.rank is None or w.rank is None or not x.shape or not w.shape:
+        return _unknown_like(x)
+    n, m = _dim(x.shape[-1]), _dim(w.shape[-1])
+    total = str(n + m - 1) if n is not None and m is not None else "?"
+    return tensor_ir_type(x.shape[:-1] + (total,), x.dtype, layout=x.layout)
+
+
+def _shape_arange(operand_types: List[IRType],
+                  attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`arange`: length is `ceil((stop - start) / step)`, from attributes only.
+
+    No operand carries it -- `arange` is a SOURCE. The `unclassified` fallback
+    returned operand 0's type, which for a source op means echoing whatever
+    happened to be passed as `start`.
+    """
+    attrs = attrs or {}
+    start, stop = _dim(attrs.get("start", 0)), _dim(attrs.get("stop"))
+    step = _dim(attrs.get("step", 1)) or 1
+    dtype = attrs.get("dtype") or "fp32"
+    if stop is None or start is None or not step:
+        return tensor_ir_type(("?",), dtype)
+    length = max(0, -(-(stop - start) // step))  # ceil division
+    return tensor_ir_type((str(length),), dtype)
+
+
+def _shape_einsum(operand_types: List[IRType],
+                  attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`einsum`: the result subscripts name the axes, so read them.
+
+    Each output label is looked up in the input labels to find its extent.
+    This is the one op whose shape is written down by the caller in full, and
+    the `unclassified` fallback (operand 0's shape) ignored it entirely --
+    right only for a spec that happens to preserve the first operand.
+    """
+    spec = (attrs or {}).get("spec") or (attrs or {}).get("equation")
+    if not isinstance(spec, str) or "->" not in spec:
+        return _unknown_like(operand_types[0])
+    lhs, rhs = spec.split("->", 1)
+    sizes: Dict[str, str] = {}
+    for term, operand in zip(lhs.split(","), operand_types):
+        labels = term.strip()
+        if operand.rank is None or len(labels) != len(operand.shape):
+            return _unknown_like(operand_types[0])
+        for label, extent in zip(labels, operand.shape):
+            sizes.setdefault(label, extent)
+    out = rhs.strip()
+    if not out:
+        return tensor_ir_type((), operand_types[0].dtype)
+    return tensor_ir_type(tuple(sizes.get(label, "?") for label in out),
+                          operand_types[0].dtype)
+
+
+def _shape_istft(operand_types: List[IRType],
+                 attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Inverse STFT: `(frames - 1) * hop + win` samples, and REAL.
+
+    The overlap-add inverse of `_shape_stft`. Like `irfft` it is the member of
+    its pair that leaves the complex domain, so its dtype comes from
+    `_REAL_FOR_COMPLEX` rather than the operand.
+    """
+    xf = operand_types[0]
+    win = operand_types[1] if len(operand_types) > 1 else None
+    dtype = _REAL_FOR_COMPLEX.get(xf.dtype or "", "fp32")
+    hop = _dim((attrs or {}).get("hop"))
+    frames = _dim(xf.shape[-2]) if xf.rank and len(xf.shape) >= 2 else None
+    length = _dim(win.shape[-1]) if win is not None and win.shape else None
+    if hop is None or frames is None or length is None:
+        return _unknown_like(xf, dtype)
+    return tensor_ir_type(xf.shape[:-2] + (str((frames - 1) * hop + length),),
+                          dtype, layout=xf.layout)
+
+
+def _shape_layout_permute(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`pack` / `rearrange`: permute by an explicit axis order, else identity.
+
+    Two shapes behind one op, and the rule has to read the attribute to tell
+    them apart. A tuple `layout` is an axis permutation; a named layout
+    (`"row_major"`, `"identity"`) is shape-preserving.
+
+    The reference used to return the input unchanged for ANY string, so an
+    einops-style `"a b -> b a"` was accepted and ignored. That is now a named
+    error (Decision #21a -- `layout` selects semantics, so it fails closed),
+    which is also what makes this rule expressible: an op that silently means
+    two different things cannot have one honest shape rule.
+    """
+    first = operand_types[0]
+    layout = (attrs or {}).get("layout")
+    if not isinstance(layout, (tuple, list)):
+        return first
+    if first.rank is None or len(layout) != len(first.shape):
+        return tensor_ir_type(("*",), first.dtype, layout=first.layout)
+    try:
+        dims = tuple(first.shape[int(axis)] for axis in layout)
+    except (TypeError, ValueError, IndexError):
+        return tensor_ir_type(("*",), first.dtype, layout=first.layout)
+    return tensor_ir_type(dims, first.dtype, layout=first.layout)
+
+
+def _shape_state_handle(operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """A cache mutator threads its handle through: `cache -> updated`.
+
+    `kv_cache.append` / `kv_cache.prune` / `cache.commit` / `cache.rollback`
+    all return the handle they were given, and the ODS says so directly --
+    `let results = (outs Tessera_KVCacheType:$updated)`. So the result type is
+    not derived from operand 0's *inferred* type (which the Python frontend
+    reports as `tensor<*x?>`, having no handle vocabulary until now); it is the
+    declared handle type. Returning operand 0 verbatim would propagate the
+    frontend's wrong guess instead of correcting it.
+
+    These four were previously exempted as "not describable by a tensor shape
+    rule". They are not describable by a tensor rule, and they never needed to
+    be.
+    """
+    return HANDLE_KV_CACHE
+
+
+def _shape_kv_cache_read(operand_types: List[IRType],
+                         attrs: Optional[Dict[str, Any]] = None):
+    """`kv_cache.read(cache, start, end) -> (K, V)` — TENSORS, not a handle.
+
+    This op was filed with the four mutators above under one shared reason,
+    "opaque cache handle rather than a tensor type". That reason is simply
+    wrong here: `read` is the one member of the family that does NOT return a
+    handle. The reference stacks and returns `(K, V)` arrays.
+
+    Grouping five ops under one sentence is how a wrong classification hides --
+    the sentence was true of four of them, so nothing in review pointed at the
+    fifth. The shapes stay opaque because they depend on the cache's runtime
+    extent, but the ARITY and the tensor-ness are known and now stated.
+    """
+    return (TENSOR_OPAQUE, TENSOR_OPAQUE)
+
+
 def _shape_transpose(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
     first = operand_types[0]
     if first.rank is None:
@@ -2017,6 +3022,7 @@ _SHAPE_RULES = {
     "flatten": _shape_flatten,
     "complex_same": _shape_complex_same,
     "rfft": _shape_rfft,
+    "irfft": _shape_irfft,
     "select_from_second": _shape_select_from_second,
     "quantize_per_tensor": _shape_quantize_per_tensor,
     "quantize_per_block": _shape_quantize_per_block,
@@ -2025,14 +3031,60 @@ _SHAPE_RULES = {
     "cast": _shape_cast,
     "transpose": _shape_transpose,
     "reduce_trailing": _shape_reduce_trailing,
+    "matmul_trailing": _shape_matmul_trailing,
+    "same_as_second": _shape_same_as_second,
+    "conv_spatial": _shape_conv_spatial,
+    "index_along_axis": _shape_index_along_axis,
+    "drop_axis": _shape_drop_axis,
+    "insert_axis": _shape_insert_axis,
+    "from_slice_sizes": _shape_from_slice_sizes,
+    "pad": _shape_pad,
+    "scores_per_block": _shape_scores_per_block,
+    "scores_per_block_mask": _shape_scores_per_block_mask,
+    "reduce_trailing_index": _shape_reduce_trailing_index,
+    "reduce_trailing_bool": _shape_reduce_trailing_bool,
+    "top_k": _shape_top_k,
+    "split_equal": _shape_split_equal,
+    "split_halves": _shape_split_halves,
+    "qkv_projection": _shape_qkv_projection,
+    "state_matrix": _shape_state_matrix,
+    "concat_trailing": _shape_concat_trailing,
+    "tile_trailing": _shape_tile_trailing,
+    "flatten_repeat": _shape_flatten_repeat,
+    "select_k_index": _shape_select_k_index,
+    "segment_reduce": _shape_segment_reduce,
+    "lu": _shape_lu,
+    "qr": _shape_qr,
+    "svd": _shape_svd,
+    "nonzero": _shape_nonzero,
+    "spec_accept": _shape_spec_accept,
+    "spec_accept_tree": _shape_spec_accept_tree,
+    "stft": _shape_stft,
+    "conv_full": _shape_conv_full,
+    "arange": _shape_arange,
+    "einsum": _shape_einsum,
+    "istft": _shape_istft,
+    "layout_permute": _shape_layout_permute,
+    "state_handle": _shape_state_handle,
+    "kv_cache_read": _shape_kv_cache_read,
+    "all_gather": _shape_all_gather,
+    "reduce_scatter": _shape_reduce_scatter,
     # Not yet classified. Same result as the historical fallback, but reached
     # through a NAME, so it is countable and cannot masquerade as a rule.
     "unclassified": _shape_same_as_first,
 }
 
 
+#: Rules that take a third `mesh` argument -- a `{axis_name: size}` mapping.
+#: DECLARED rather than discovered by signature introspection, so adding a
+#: mesh parameter to a rule is a visible edit here and not an implicit
+#: behaviour change in the dispatcher.
+_MESH_AWARE_RULES = frozenset({"all_gather", "reduce_scatter"})
+
+
 def _infer_result_types(op_name: str, operand_types: List[IRType],
-                        attrs: Optional[Dict[str, Any]] = None):
+                        attrs: Optional[Dict[str, Any]] = None,
+                        mesh: Optional[Mapping[str, int]] = None):
     """All result types for `op_name`, as a tuple.
 
     Most ops have exactly one result and this returns a 1-tuple. Multi-result
@@ -2042,20 +3094,29 @@ def _infer_result_types(op_name: str, operand_types: List[IRType],
     function -- the single-result one cannot express them and pretending
     otherwise is how `same_as_first` came to be declared for a tuple op.
     """
-    result = _infer_result_type(op_name, operand_types, attrs, _raw=True)
+    result = _infer_result_type(op_name, operand_types, attrs, mesh=mesh, _raw=True)
     return result if isinstance(result, tuple) else (result,)
 
 
 def _infer_result_type(op_name: str, operand_types: List[IRType],
                        attrs: Optional[Dict[str, Any]] = None,
-                       *, _raw: bool = False) -> IRType:
-    """Infer an op's result type from its operands AND its attributes.
+                       *, mesh: Optional[Mapping[str, int]] = None,
+                       _raw: bool = False) -> IRType:
+    """Infer an op's result type from its operands, attributes AND mesh.
 
     `attrs` was added in W1.2. Without it a whole class of ops -- `reshape`,
     `expand`, `cast`, `arange`, and the strided stencils -- could not be
     expressed at all, because their result shape or dtype lives in an
     attribute rather than in any operand's type. Classifying them was blocked
     on the signature, not on the analysis.
+
+    `mesh` is the same story one level out (W1.3). A collective's result shape
+    is a function of the MESH -- `all_gather` multiplies its axis by the mesh
+    extent, `reduce_scatter` divides -- and no operand type or attribute
+    carries that. With no way to say so, both ops returned the operand shape,
+    which is not a neutral fallback but the positive claim `world_size == 1`.
+    The reference collectives are single-rank no-op stubs, so a probe agreed
+    and the wrong rule looked confirmed.
     """
     if not operand_types:
         return TENSOR_OPAQUE
@@ -2070,7 +3131,17 @@ def _infer_result_type(op_name: str, operand_types: List[IRType],
             f"shape rule {rule!r} is declared for {op_name!r} in op_catalog "
             f"but has no implementation in graph_ir._SHAPE_RULES"
         )
-    result = fn(operand_types, attrs)
+    if rule in _MESH_AWARE_RULES:
+        # `_SHAPE_RULES` is heterogeneous: most rules take (operands, attrs)
+        # and the mesh-aware ones take a third argument. The dict's inferred
+        # value type is the 2-arg shape, so the extra argument is invisible to
+        # the checker -- `_MESH_AWARE_RULES` is the declaration that makes it
+        # safe, and this cast records that rather than widening every rule's
+        # signature to carry a parameter almost none of them read.
+        mesh_fn = cast(Callable[..., Any], fn)
+        result = mesh_fn(operand_types, attrs, mesh)
+    else:
+        result = fn(operand_types, attrs)
     if isinstance(result, tuple) and not _raw:
         # Single-result callers get the primary tensor; the full contract is
         # available via `_infer_result_types`.
@@ -2348,6 +3419,38 @@ class GraphIRBuilder:
         self.diagnostics = []
 
 
+#: Python handle classes -> the ODS type mnemonic they lower to. Without this
+#: an annotated `cache: KVCacheHandle` argument lowered to `tensor<*x?>`, so
+#: `tessera.kv_cache.append` emitted `(tensor<*x?>, ...) -> !tessera.kv_cache`
+#: -- the RESULT typed from the ODS and the OPERAND still an untyped tensor,
+#: which is a worse contract than being consistently wrong. The handle
+#: subclasses (latent/SSM/delta/memory) share `!tessera.kv_cache` because that
+#: is the single stateful-handle type the Graph IR ODS declares; if the dialect
+#: ever splits them, this map is the one place that changes.
+_HANDLE_ANNOTATIONS: Dict[str, str] = {
+    "KVCacheHandle": "kv_cache",
+    "LatentKVCacheHandle": "kv_cache",
+    "SSMStateHandle": "kv_cache",
+    "DeltaNetStateHandle": "kv_cache",
+    "MemoryStateHandle": "kv_cache",
+}
+
+
+def _handle_type_for_annotation(ann: Any) -> Optional[IRType]:
+    """The handle IR type for a cache-handle annotation, else None.
+
+    Matches on the class NAME rather than by importing the handle classes:
+    `graph_ir` is imported during `tessera` package init, and importing
+    `tessera.cache` from here reintroduces the import cycle those modules are
+    lazy-imported to avoid.
+    """
+    name = getattr(ann, "__name__", None) if isinstance(ann, type) else None
+    if name is None and isinstance(ann, str):
+        name = ann.strip().strip("\"'")
+    mnemonic = _HANDLE_ANNOTATIONS.get(name or "")
+    return handle_ir_type(mnemonic) if mnemonic else None
+
+
 def _annotation_to_ir_type(ann: Any) -> IRType:
     if ann is inspect.Parameter.empty:
         return TENSOR_OPAQUE
@@ -2368,6 +3471,12 @@ def _annotation_to_ir_type(ann: Any) -> IRType:
             parsed = _parse_mlir_tensor_type(text)
             if parsed is not None:
                 return parsed
+        # A handle type written directly, e.g. `"!tessera.kv_cache"`.
+        if text.startswith("!tessera."):
+            return IRType(text)
+    handle = _handle_type_for_annotation(ann)
+    if handle is not None:
+        return handle
     dims = getattr(ann, "__dims__", None)
     dtype = getattr(ann, "dtype", None)
     shape = getattr(ann, "shape", None)

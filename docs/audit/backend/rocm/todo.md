@@ -7,6 +7,41 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `SHAPE-RULE-REGISTRY-2026-08-03` — **follow-up required - closest to a complex FFT lane, and still rejected.**
+PR #493 closed the Graph IR shape-rule registry: **303 declared / 6 deliberately
+undeclared / 0 unexamined**, with the `MAX_UNCLASSIFIED` ratchet dropped 106 -> 0.
+Shared contracts changed; all four backends are affected equally at the
+reference level:
+
+* **Result contracts.** Multi-result ops now emit every SSA result
+  (`kv_cache.read -> (K, V)`, `top_k`, `qr`/`svd`/`lu`/`nonzero`), and tuple
+  destructuring (`v, i = ...`) lowers. The emitter previously called the
+  single-result `_infer_result_type`, so a declared multi-result contract
+  stopped at Graph IR.
+* **Stateful handles.** `!tessera.kv_cache` is now reachable from Python; the
+  emitter had been printing `tensor<*x?>` for a type the ODS has always
+  declared.
+* **dtype policy.** An integer input to a float-producing op promotes to the
+  declared `COMPUTE_FLOAT_DTYPE` (fp32) instead of NumPy's width-derived float
+  (`cos(int8) -> f16`, `cos(int32) -> f64`); index/count results use a declared
+  `INDEX_DTYPE`; complex is a LOGICAL dtype carried in an interleaved real pair,
+  not a storage format.
+* **Diagnostics.** The whole `GRAPH_IR_*` family (17 codes) is registered - the
+  drift gate's scanner did not know the prefix, so it reported green while the
+  family accumulated unregistered.
+
+**This is the Python reference lane, not generated device code.** Complex FFT is currently REJECTED on `rocm_gfx1151` because no ROCm target
+declares an `fft` capability entry. ROCm is nonetheless the backend nearest to
+having the lane: `TesseraROCMOps.td` already declares an FFT op over "a batch of
+interleaved-complex rows" (`OUT[b,k]=sum_j IN[b,j]*exp(sign*2*pi*i*kj/n)`), which
+is exactly the real-pair model the shared dtype work adopted. Closing this is a
+capability-registration plus lowering task, not a type-system one.
+
+No ROCm-specific regression: the `tile.mma` data-operand rule this registry work
+builds on was already ROCm's own - a file-local `static` in `TileToROCM.cpp`
+before being promoted to `tessera::tile::dataOperands`.
+
+
 Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **not applicable on gfx1151, by hardware.**
 Same multi-result quantize declaration as NVIDIA. The sub-byte STORAGE path
 does not apply to the current ROCm target: the dtype contract already records

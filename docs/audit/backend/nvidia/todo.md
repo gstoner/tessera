@@ -8,6 +8,20 @@ last_updated: 2026-08-03
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **follow-up required; NVIDIA is the target where this matters most.**
+The quantize family is now correctly declared as MULTI-RESULT `(codes, scale)`,
+and `quantize_nvfp4` has its own rule because its scale is per-BLOCK (one per 16
+elements along the last axis) rather than per-tensor — the micro-scaled form
+Blackwell implements. A shared per-tensor rule would have misstated the format
+for exactly the architecture that motivates it.
+**The open gap is a backend-path one, not a shape-rule one.** The reference
+returns codes as **f32** — fake-quant. `fp8_e4m3`, `fp8_e5m2`, `fp4_e2m1` and
+`nvfp4` are canonical dtypes and the Graph IR type system can carry them, so
+nothing in the compiler prevents real sub-byte storage; no lowering produces it.
+NVIDIA owns this first: consumer/datacenter Blackwell has native FP8 and NVFP4,
+so it is the one target where "the backend upcasts anyway" is NOT the answer.
+The Target IR must carry fp8/fp4 as real storage into the mma path.
+
 Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **follow-up required, reference-level only.**
 The shared reduced-precision policy changed: ops whose declared rule preserves
 storage dtype now upcast reduced-precision inputs to f32, compute, and store

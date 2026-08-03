@@ -8,6 +8,13 @@ last_updated: 2026-08-03
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **follow-up required, capability unverified here.**
+Same multi-result quantize declaration. Whether Metal exposes native FP8/FP4
+arithmetic on the M-series was NOT verified in this change, and per Decision #27
+that question must be answered from on-machine SDK headers rather than
+inference — which cannot be done on the Ubuntu box. Apple owns checking the
+Metal/MPS capability before any sub-byte storage lowering is scoped.
+
 Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **follow-up required; a real Apple regression was introduced and reverted here.**
 The reduced-precision enforcement now computes at f32 and stores back at the
 operand's dtype, rather than casting the result (which made dtypes right while

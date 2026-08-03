@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **follow-up required, emulated path.**
+The x86 dtype contract records `fp8_e4m3` as `emulated`: packed-byte storage
+with software conversion and fp32 compute, since Zen 5 has no native FP8
+arithmetic. So x86 CAN carry real sub-byte STORAGE even though it cannot
+compute in it — which makes it a useful place to prove the storage path
+independently of native arithmetic. x86 owns deciding whether to materialize
+packed fp8 storage or keep the f32 fake-quant reference.
+
 Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **follow-up required, reference-level only.**
 The reference lane now computes reduced-precision ops at f32 and stores back.
 x86's AVX-512 kernels are the executable lane on this fleet and were not

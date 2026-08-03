@@ -313,3 +313,88 @@ def test_bfloat16_is_not_detected_by_the_usual_numpy_float_idioms():
     assert bf16.kind == "V", f"bf16.kind is {bf16.kind!r}, expected 'V' (void)"
     # ml_dtypes.finfo is the detection that actually works.
     assert ml_dtypes.finfo(bf16).max > 3e38
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-result contracts
+# ─────────────────────────────────────────────────────────────────────────────
+
+MULTI_RESULT_OPS = {
+    "tessera.quantize_fp8": "quantize_fp8",
+    "tessera.quantize_fp6": "quantize_fp6",
+    "tessera.quantize_fp4": "quantize_fp4",
+    "tessera.quantize_nvfp4": "quantize_nvfp4",
+}
+
+
+def test_multi_result_rules_match_actual_arity_and_shapes():
+    """The quantize family returns (codes, scale) — verify BOTH results.
+
+    These were declared `same_as_first`: a single-tensor claim for a two-result
+    op. It survived because the differential probe did `np.asarray(fn(...))`,
+    which raises on a tuple, so the op was silently SKIPPED. A gate that skips
+    the thing it cannot express is indistinguishable from a passing gate — the
+    same failure mode as the substring assertions this registry replaced.
+
+    `_infer_result_types` returns the full contract; `_infer_result_type`
+    returns only the primary tensor and cannot express these at all.
+    """
+    from tessera import ops
+    from tessera.compiler.graph_ir import _infer_result_types, tensor_ir_type
+
+    sample = np.random.default_rng(0).standard_normal((4, 16)).astype(np.float32)
+    probe = tensor_ir_type(("4", "16"), "f32")
+
+    for graph_name, public_name in sorted(MULTI_RESULT_OPS.items()):
+        fn = getattr(ops, public_name, None)
+        if fn is None:
+            continue
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                actual = fn(sample)
+            except Exception:
+                continue
+        assert isinstance(actual, tuple), (
+            f"{public_name} no longer returns a tuple — update MULTI_RESULT_OPS"
+        )
+        predicted = _infer_result_types(graph_name, [probe])
+        assert len(predicted) == len(actual), (
+            f"{public_name}: rule predicts {len(predicted)} results, op returns "
+            f"{len(actual)}"
+        )
+        for index, (want, got) in enumerate(zip(predicted, actual)):
+            got_arr = np.asarray(got)
+            want_shape = tuple(str(d) for d in want.shape)
+            real_shape = tuple(str(d) for d in got_arr.shape)
+            assert want_shape == real_shape, (
+                f"{public_name} result[{index}]: rule predicts shape "
+                f"{want_shape}, op returns {real_shape}"
+            )
+
+
+def test_nvfp4_scale_is_per_block_not_per_tensor():
+    """NVFP4 is micro-scaled; folding it into the per-tensor rule misstates it.
+
+    `quantize_fp8/fp6/fp4` carry ONE scale for the whole tensor (rank-0), while
+    `quantize_nvfp4` carries one per block of 16 along the last axis — the
+    format Blackwell actually implements. A shared rule would have been wrong
+    for exactly the target that motivates the format.
+    """
+    from tessera import ops
+    from tessera.compiler.graph_ir import _infer_result_types, tensor_ir_type
+
+    sample = np.random.default_rng(0).standard_normal((4, 32)).astype(np.float32)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _, per_tensor_scale = ops.quantize_fp8(sample)
+        _, per_block_scale = ops.quantize_nvfp4(sample)
+
+    assert np.asarray(per_tensor_scale).shape == ()
+    assert np.asarray(per_block_scale).shape == (4, 2), (
+        "expected one scale per 16-element block along the last axis"
+    )
+
+    probe = tensor_ir_type(("4", "32"), "f32")
+    _, predicted_scale = _infer_result_types("tessera.quantize_nvfp4", [probe])
+    assert tuple(predicted_scale.shape) == ("4", "2")

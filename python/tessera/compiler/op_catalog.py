@@ -733,6 +733,14 @@ OP_SHAPE_RULE: dict = {
     # only score, candidates carry the data. `reduce_trailing` on operand 0
     # predicted (B,) with the energies' dtype -- wrong shape AND wrong dtype.
     "tessera.ebm_self_verify": "select_from_second",
+    # The quantize family is MULTI-RESULT: (codes, scale). `same_as_first` was
+    # a false contract for it. nvfp4 is separated because its scale is
+    # per-BLOCK (Blackwell's micro-scaled format), not per-tensor.
+    **{f"tessera.quantize_{n}": "quantize_per_tensor" for n in ("fp8", "fp6", "fp4")},
+    "tessera.quantize_nvfp4": "quantize_per_block",
+    # dequantize is single-result: (codes, scale) -> tensor shaped like codes.
+    **{f"tessera.dequantize_{n}": "same_as_first"
+       for n in ("fp8", "fp6", "fp4", "nvfp4")},
 
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
@@ -755,6 +763,8 @@ SHAPE_RULE_NAMES = frozenset({
     "complex_same",
     "rfft",
     "select_from_second",
+    "quantize_per_tensor",
+    "quantize_per_block",
     "from_shape_attr",
     "cast",
     "reduce_trailing",
@@ -782,10 +792,6 @@ DELIBERATELY_UNDECLARED: dict = {
     # the type system can express the storage the reference never materializes.
     # Producing real sub-byte storage is a backend-path question, not a shape
     # rule one.
-    **{f"tessera.{n}": "returns a (codes, scale) TUPLE rather than a single tensor; needs a tuple-aware rule vocabulary. Codes are fake-quant f32, not native fp8/fp4 storage"
-       for n in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
-                 "dequantize_fp6", "quantize_fp4", "dequantize_fp4",
-                 "quantize_nvfp4", "dequantize_nvfp4")},
     "tessera.popcount": "returns an INTEGER bit count, never the operand's storage dtype, so it is not storage-preserving despite sitting in the `elementwise` kind. The exact integer width is NumPy-version dependent (uint8 under 2.x, int64 under 1.26), so pinning one would be wrong; declaring a shape rule needs an int-width-agnostic vocabulary first",
     "tessera.adam": "optimizer keeps f32 compute/state while params are reduced precision; MEASURED: at fp16 a 1e-4 gradient squares to exactly zero, so an fp16 second moment would collapse -- the f32 default is load-bearing. Declaring it storage-preserving would force the state back to the param dtype and destroy the update. See tests/unit/test_optimizer_reduced_precision.py",
     "tessera.adamw": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",

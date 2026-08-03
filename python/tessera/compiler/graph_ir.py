@@ -1859,6 +1859,53 @@ def _shape_cast(operand_types: List[IRType],
     return tensor_ir_type(first.shape, target, layout=first.layout)
 
 
+def _shape_quantize_per_tensor(operand_types: List[IRType],
+                               attrs: Optional[Dict[str, Any]] = None):
+    """(codes, scale) with ONE scale for the whole tensor.
+
+    `quantize_fp8` / `fp6` / `fp4` return a tuple: codes shaped like the input,
+    plus a rank-0 scale. Declaring this as `same_as_first` was a false contract
+    -- it claims a single tensor for a two-result op.
+
+    The codes come back as f32 today (fake-quant), NOT as native fp8/fp4
+    storage. That is deliberate at the reference level and is a BACKEND-PATH
+    question: `fp8_e4m3` and `fp4_e2m1` are canonical dtypes and the per-target
+    contracts already model them (gfx1151 `unsupported`, x86 `emulated`), so
+    the type system can carry real sub-byte storage as soon as a lowering
+    produces it. The rule states what the op returns rather than what we wish
+    it returned.
+    """
+    first = operand_types[0]
+    codes = tensor_ir_type(first.shape, first.dtype, layout=first.layout)
+    scale = tensor_ir_type((), first.dtype, layout=first.layout)
+    return (codes, scale)
+
+
+def _shape_quantize_per_block(operand_types: List[IRType],
+                              attrs: Optional[Dict[str, Any]] = None):
+    """(codes, per-BLOCK scale) — the micro-scaled形 NVFP4 uses.
+
+    NVFP4 carries one scale per block of `block_size` elements along the last
+    axis (16 by default; a non-divisible last dim is a named error), so the
+    scale is rank-preserving with the last axis divided rather than rank-0.
+    Folding it into the per-tensor rule would misstate the format that
+    Blackwell actually implements.
+    """
+    first = operand_types[0]
+    attrs = attrs or {}
+    codes = tensor_ir_type(first.shape, first.dtype, layout=first.layout)
+    block = attrs.get("block_size", 16)
+    if first.rank is None or not first.shape:
+        return (codes, tensor_ir_type(("*",), first.dtype, layout=first.layout))
+    try:
+        blocks = max(1, int(first.shape[-1]) // int(block))
+    except (TypeError, ValueError):
+        return (codes, tensor_ir_type(("*",), first.dtype, layout=first.layout))
+    scale = tensor_ir_type(first.shape[:-1] + (str(blocks),), first.dtype,
+                           layout=first.layout)
+    return (codes, scale)
+
+
 def _shape_select_from_second(operand_types: List[IRType],
                               attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """Select along a candidate axis of operand 1, keyed by operand 0.
@@ -1908,6 +1955,8 @@ _SHAPE_RULES = {
     "complex_same": _shape_complex_same,
     "rfft": _shape_rfft,
     "select_from_second": _shape_select_from_second,
+    "quantize_per_tensor": _shape_quantize_per_tensor,
+    "quantize_per_block": _shape_quantize_per_block,
     "from_shape_attr": _shape_from_shape_attr,
     "cast": _shape_cast,
     "transpose": _shape_transpose,
@@ -1918,8 +1967,24 @@ _SHAPE_RULES = {
 }
 
 
+def _infer_result_types(op_name: str, operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None):
+    """All result types for `op_name`, as a tuple.
+
+    Most ops have exactly one result and this returns a 1-tuple. Multi-result
+    ops (the quantize family, which yields `(codes, scale)`) return the full
+    contract here; `_infer_result_type` below returns only the FIRST, which is
+    the primary tensor. Callers that emit multiple SSA results should use this
+    function -- the single-result one cannot express them and pretending
+    otherwise is how `same_as_first` came to be declared for a tuple op.
+    """
+    result = _infer_result_type(op_name, operand_types, attrs, _raw=True)
+    return result if isinstance(result, tuple) else (result,)
+
+
 def _infer_result_type(op_name: str, operand_types: List[IRType],
-                       attrs: Optional[Dict[str, Any]] = None) -> IRType:
+                       attrs: Optional[Dict[str, Any]] = None,
+                       *, _raw: bool = False) -> IRType:
     """Infer an op's result type from its operands AND its attributes.
 
     `attrs` was added in W1.2. Without it a whole class of ops -- `reshape`,
@@ -1941,7 +2006,12 @@ def _infer_result_type(op_name: str, operand_types: List[IRType],
             f"shape rule {rule!r} is declared for {op_name!r} in op_catalog "
             f"but has no implementation in graph_ir._SHAPE_RULES"
         )
-    return fn(operand_types, attrs)
+    result = fn(operand_types, attrs)
+    if isinstance(result, tuple) and not _raw:
+        # Single-result callers get the primary tensor; the full contract is
+        # available via `_infer_result_types`.
+        return result[0]
+    return result
 
 
 def _struct_result_type(op_name: str, in_type: Optional[IRType],

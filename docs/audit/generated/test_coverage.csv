@@ -339,12 +339,12 @@ prod,4,0,0,4,0,,directly_tested,4 direct test references
 psum,2,0,0,2,0,,directly_tested,2 direct test references
 qkv_projection,9,0,0,9,0,fp32,directly_tested,9 direct test references
 qr,13,3,0,16,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,16 direct test references
-quantize_fp4,15,0,3,15,0,f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,15 direct test references
-quantize_fp6,13,0,2,13,0,f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_tested,13 direct test references
-quantize_fp8,31,3,4,34,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,34 direct test references
+quantize_fp4,16,0,3,16,0,bf16 f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 int32 nvfp4,directly_tested,16 direct test references
+quantize_fp6,14,0,2,14,0,bf16 f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 int32 nvfp4,directly_tested,14 direct test references
+quantize_fp8,33,3,4,36,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,36 direct test references
 quantize_int4,6,0,0,6,0,,directly_tested,6 direct test references
 quantize_int8,5,0,0,5,0,,directly_tested,5 direct test references
-quantize_nvfp4,18,0,3,18,0,f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,18 direct test references
+quantize_nvfp4,21,0,3,21,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,21 direct test references
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,8,0,0,8,0,fp16,directly_tested,8 direct test references
 reciprocal,4,0,0,4,0,bf16 f32 fp16 fp32,directly_tested,4 direct test references

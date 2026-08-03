@@ -9,6 +9,42 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `SHAPE-RULE-REGISTRY-2026-08-03` — **parity validated at the capability level; device evidence missing.**
+PR #493 closed the Graph IR shape-rule registry: **303 declared / 6 deliberately
+undeclared / 0 unexamined**, with the `MAX_UNCLASSIFIED` ratchet dropped 106 -> 0.
+Shared contracts changed; all four backends are affected equally at the
+reference level:
+
+* **Result contracts.** Multi-result ops now emit every SSA result
+  (`kv_cache.read -> (K, V)`, `top_k`, `qr`/`svd`/`lu`/`nonzero`), and tuple
+  destructuring (`v, i = ...`) lowers. The emitter previously called the
+  single-result `_infer_result_type`, so a declared multi-result contract
+  stopped at Graph IR.
+* **Stateful handles.** `!tessera.kv_cache` is now reachable from Python; the
+  emitter had been printing `tensor<*x?>` for a type the ODS has always
+  declared.
+* **dtype policy.** An integer input to a float-producing op promotes to the
+  declared `COMPUTE_FLOAT_DTYPE` (fp32) instead of NumPy's width-derived float
+  (`cos(int8) -> f16`, `cos(int32) -> f64`); index/count results use a declared
+  `INDEX_DTYPE`; complex is a LOGICAL dtype carried in an interleaved real pair,
+  not a storage format.
+* **Diagnostics.** The whole `GRAPH_IR_*` family (17 codes) is registered - the
+  drift gate's scanner did not know the prefix, so it reported green while the
+  family accumulated unregistered.
+
+**This is the Python reference lane, not generated device code.** Complex FFT is SUPPORTED on `x86` - one of three targets (with `cpu` and
+`apple_cpu`) declaring an `fft` capability entry, and complex maps onto the
+interleaved fp32 pair AVX-512 already handles. No storage-contract change:
+appending complex to any target's `supported_dtypes` was tried and correctly
+broke `test_x86_dtype_contract`, because that tuple answers "what STORAGE has
+this backend proven" and complex is not a storage format the ISA has. Complex is
+declared on the transform ops that carry it, not on the target.
+
+`x86_ready_storage_dtypes()` is unchanged. The reduced-precision compute contract
+(promote -> compute at f32 -> store back) is reference-level; **the AVX-512 lane
+has no exact-device proof that generated kernels honour it.**
+
+
 Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **follow-up required, emulated path.**
 The x86 dtype contract records `fp8_e4m3` as `emulated`: packed-byte storage
 with software conversion and fp32 compute, since Zen 5 has no native FP8

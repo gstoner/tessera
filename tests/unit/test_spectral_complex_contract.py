@@ -129,3 +129,74 @@ def test_complex_support_follows_whether_the_target_declares_the_op_at_all():
     """
     assert supports_op("x86", "tessera.fft", dtype="complex64").supported
     assert not supports_op("nvidia_sm120", "tessera.fft", dtype="complex64").supported
+
+
+@pytest.mark.parametrize("axis", [-1, 0, 1])
+def test_rfft_halves_the_SELECTED_axis_not_always_the_last(axis):
+    """`rfft(8x16, axis=0)` is `5x16`, not `8x9`.
+
+    Both real-FFT rules resized the trailing dimension unconditionally. `fft` /
+    `ifft` were unaffected because they preserve shape — which is why the bug
+    lived only in the two rules that resize, and why a spot-check on the
+    default `axis=-1` could not see it.
+    """
+    from tessera import ops
+
+    x = np.linspace(0.0, 1.0, 8 * 16, dtype=np.float32).reshape(8, 16)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        actual = np.asarray(ops.rfft(x, axis=axis))
+    predicted = _infer_result_type(
+        "tessera.rfft", [tensor_ir_type(("8", "16"), "fp32")], {"axis": axis})
+    assert tuple(predicted.shape) == tuple(str(d) for d in actual.shape), (
+        f"axis={axis}: rule {predicted} vs actual {actual.shape}"
+    )
+
+
+def test_rfft_honours_the_axes_tuple_form():
+    """`axes=(0,)` selects axis 0, mirroring the reference's `_axis_from_axes`
+    (an explicit `axes` wins and its LAST entry is the transformed axis)."""
+    from tessera import ops
+
+    x = np.linspace(0.0, 1.0, 8 * 16, dtype=np.float32).reshape(8, 16)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        actual = np.asarray(ops.rfft(x, axes=(0,)))
+    predicted = _infer_result_type(
+        "tessera.rfft", [tensor_ir_type(("8", "16"), "fp32")], {"axes": (0,)})
+    assert tuple(predicted.shape) == tuple(str(d) for d in actual.shape)
+
+
+def test_irfft_restores_the_SELECTED_axis():
+    from tessera import ops
+
+    x = np.linspace(0.0, 1.0, 8 * 16, dtype=np.float32).reshape(8, 16)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        spectrum = np.asarray(ops.rfft(x, axis=0))
+        actual = np.asarray(ops.irfft(spectrum, axis=0))
+    predicted = _infer_result_type(
+        "tessera.irfft",
+        [tensor_ir_type(tuple(str(d) for d in spectrum.shape), "complex64")],
+        {"axis": 0})
+    assert tuple(predicted.shape) == tuple(str(d) for d in actual.shape)
+
+
+@pytest.mark.parametrize("width", ["int8", "int32", "int64"])
+def test_integer_fft_agrees_between_reference_and_rule(width):
+    """An integer input has no float storage width to inherit, so it takes the
+    declared compute float — the same promotion every other integer-input op
+    gets. Choosing the complex width from the INTEGER's byte width instead made
+    `fft(int64)` return complex128 while the rule inferred complex64, which is
+    the runtime-versus-compiler mismatch this work exists to remove.
+    """
+    from tessera import ops
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        actual = np.asarray(ops.fft(np.arange(1, 9, dtype=width)))
+    predicted = _infer_result_type(
+        "tessera.fft", [tensor_ir_type(("8",), width)])
+    assert predicted.dtype == actual.dtype.name == "complex64", (
+        f"{width}: rule {predicted.dtype}, reference {actual.dtype.name}"
+    )

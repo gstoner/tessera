@@ -28,7 +28,7 @@ import json
 import re
 import textwrap
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, cast
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, SourceLocation, TesseraDiagnostic, TesseraErrorCode
 from .legality import TensorContract, check_op_legality
@@ -97,6 +97,12 @@ _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.flatten": ("start", "end"),
     # reshape/view — their own ODS ops (same SameOperandsAndResultElementType
     # contract); the target shape binds as the `shape` attr, not an operand.
+    # `kv_cache.read(cache, start, end)` -- the bounds are scalars. Unlike
+    # `cache.commit`/`rollback`/`page_lookup`, which the ODS declares with
+    # `Index` OPERANDS, `kv_cache.read` has no Graph IR ODS op at all, so
+    # there is no operand contract to contradict and binding them as
+    # attributes is what lets the op emit and verify.
+    "tessera.kv_cache.read": ("start", "end"),
     "tessera.reshape": ("shape",),
     "tessera.view": ("shape",),
 }
@@ -599,6 +605,16 @@ class IROp:
     kwargs: Dict[str, Any] = field(default_factory=dict)
     source_span: Optional["SourceSpan"] = None
     inferred_type: Optional[IRType] = None
+    inferred_types: Tuple[IRType, ...] = ()
+    """The FULL result contract for a multi-result op.
+
+    `inferred_type` is the primary result and stays the single-result answer
+    every existing consumer reads. Without this field a declared multi-result
+    rule stopped at the emitter: `_try_map_call` called the single-result
+    `_infer_result_type`, which drops every element after the first, so
+    `kv_cache.read`'s `(K, V)` reached Graph IR as one SSA value and no caller
+    could destructure V. Declaring the contract in the registry is not the same
+    as emitting it."""
     numeric_policy: Optional[Any] = None  # NumericPolicy when populated
     # Phase A (2026-05-20) — optional metadata fields.  Producers
     # fill what they know; consumers must tolerate ``None`` /
@@ -1261,6 +1277,30 @@ class _OpExtractor(ast.NodeVisitor):
                 # collide with itself on a future reassignment); the
                 # alias map suffices for reads.
                 return
+        elif isinstance(tgt, ast.Tuple) and all(
+                isinstance(e, ast.Name) for e in tgt.elts):
+            # Destructuring a multi-result op: `v, i = ops.top_k(x, 2)`.
+            # Only a bare `ast.Name` target was handled, so a tuple target fell
+            # through and the RHS was never emitted at all -- the op vanished
+            # from the body rather than failing. Declaring a multi-result
+            # contract and emitting both SSA results is only half of it if no
+            # Python spelling can bind them.
+            first = self._emit_expr(node.value)
+            if first is None:
+                return
+            emitted = self.ops[-1] if self.ops else None
+            names = emitted.result_names if emitted is not None else []
+            if len(names) != len(tgt.elts):
+                # Arity mismatch: bind what we can rather than silently
+                # dropping the statement, and leave the rest unbound so a
+                # later use reports an undefined value instead of a wrong one.
+                names = names[:len(tgt.elts)]
+            # `all(isinstance(...))` above does not narrow the element type for
+            # the checker, so bind through an explicitly-typed list.
+            targets = [e for e in tgt.elts if isinstance(e, ast.Name)]
+            for target, ssa in zip(targets, names):
+                self._name_alias[target.id] = ssa
+            return
         elif isinstance(tgt, ast.Subscript):
             value = self._emit_expr(node.value)
             if value is not None:
@@ -1657,6 +1697,17 @@ class _OpExtractor(ast.NodeVisitor):
             op = self._try_map_call(node)
             if op is None:
                 return None
+            # One SSA name per declared result. A multi-result op given a
+            # single name would print `%v0 = ... -> (tK, tV)`, which is not
+            # valid MLIR and leaves V unnameable.
+            if len(op.inferred_types) > 1:
+                names = [result_name or self._fresh()]
+                names += [self._fresh() for _ in op.inferred_types[1:]]
+                op.result = ",".join(names)
+                for name, typ in zip(names, op.inferred_types):
+                    self._value_types[f"%{name}"] = typ
+                self.ops.append(op)
+                return f"%{names[0]}"
             op.result = result_name or self._fresh()
             _ir_type = op.inferred_type if hasattr(op, "inferred_type") else _parse_mlir_tensor_type(op.result_type or "tensor<*x?>")
             if _ir_type is not None:
@@ -1836,10 +1887,11 @@ class _OpExtractor(ast.NodeVisitor):
                 operand_types.append(
                     str(self._value_types.get(value, TENSOR_OPAQUE)))
 
-        result_type = _infer_result_type(
+        result_types = _infer_result_types(
             mlir_name,
             [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands],
             attrs=kwargs)
+        result_type = result_types[0]
 
         # Structural view ops: derive the result type from the shape/axes/perm
         # attr (now fully bound) instead of the input-type fallback, so a static
@@ -1851,16 +1903,23 @@ class _OpExtractor(ast.NodeVisitor):
             kwargs)
         if _struct is not None:
             result_type = _struct
+            result_types = (_struct,)
 
+        # MLIR spells a multi-result signature `-> (t0, t1)`; a single result
+        # has no parentheses. Emitting the tuple form for one result would be
+        # a different (and wrong) type.
+        printed = (str(result_type) if len(result_types) == 1
+                   else "(" + ", ".join(str(t) for t in result_types) + ")")
         return IROp(
             result=None,  # filled in by caller
             op_name=mlir_name,
             operands=operands,
             operand_types=operand_types,
-            result_type=str(result_type),
+            result_type=printed,
             kwargs=kwargs,
             source_span=_span_from_ast(call),
             inferred_type=result_type,
+            inferred_types=tuple(result_types),
         )
 
 
@@ -2020,22 +2079,46 @@ def _shape_complex_same(operand_types: List[IRType], attrs: Optional[Dict[str, A
     return tensor_ir_type(first.shape, _complex_of(first.dtype), layout=first.layout)
 
 
+def _transform_axis(t: IRType, attrs: Optional[Dict[str, Any]]) -> Optional[int]:
+    """The axis a spectral op transforms, normalised to a positive index.
+
+    Mirrors the reference's `_axis_from_axes`: an explicit `axes` tuple wins and
+    its LAST entry is the transformed axis, otherwise `axis` (default -1).
+
+    Reading this matters only for the rules that RESIZE an axis. `fft`/`ifft`
+    preserve shape, so they were correct while ignoring it; `rfft` and `irfft`
+    are not -- `rfft` on `8x16` with `axis=0` is `5x16`, and a rule that always
+    resizes the trailing dimension would claim `8x9`.
+    """
+    attrs = attrs or {}
+    axes = attrs.get("axes")
+    raw = tuple(axes)[-1] if isinstance(axes, (tuple, list)) and axes else attrs.get("axis", -1)
+    axis = _dim(raw)
+    if axis is None or t.rank is None or not t.shape:
+        return None
+    if axis < 0:
+        axis += len(t.shape)
+    return axis if 0 <= axis < len(t.shape) else None
+
+
 def _shape_rfft(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
-    """Real FFT: trailing axis becomes n//2 + 1, result complex.
+    """Real FFT: the TRANSFORMED axis becomes n//2 + 1, result complex.
 
     Only the non-redundant half of a real spectrum is kept, since a real
-    signal's transform is conjugate-symmetric.
+    signal's transform is conjugate-symmetric. Which axis is halved comes from
+    `axis`/`axes`, not from an assumption that it is the last one.
     """
     first = operand_types[0]
     complex_dtype = _complex_of(first.dtype)
-    if first.rank is None or not first.shape:
+    axis = _transform_axis(first, attrs)
+    if first.rank is None or not first.shape or axis is None:
         return tensor_ir_type(("*",), complex_dtype, layout=first.layout)
-    try:
-        n = int(first.shape[-1])
-    except (TypeError, ValueError):
+    n = _dim(first.shape[axis])
+    if n is None:
         return tensor_ir_type(("*",), complex_dtype, layout=first.layout)
-    return tensor_ir_type(first.shape[:-1] + (str(n // 2 + 1),), complex_dtype,
-                          layout=first.layout)
+    dims = list(first.shape)
+    dims[axis] = str(n // 2 + 1)
+    return tensor_ir_type(tuple(dims), complex_dtype, layout=first.layout)
 
 
 def _shape_irfft(operand_types: List[IRType],
@@ -2054,21 +2137,19 @@ def _shape_irfft(operand_types: List[IRType],
     """
     first = operand_types[0]
     real_dtype = _REAL_FOR_COMPLEX.get(first.dtype or "", "fp32")
-    explicit = (attrs or {}).get("n")
-    if first.rank is None or not first.shape:
+    axis = _transform_axis(first, attrs)
+    if first.rank is None or not first.shape or axis is None:
         return tensor_ir_type(("*",), real_dtype, layout=first.layout)
+    dims = list(first.shape)
+    explicit = _dim((attrs or {}).get("n"))
     if explicit is not None:
-        try:
-            return tensor_ir_type(first.shape[:-1] + (str(int(explicit)),),
-                                  real_dtype, layout=first.layout)
-        except (TypeError, ValueError):
-            pass
-    try:
-        n = int(first.shape[-1])
-    except (TypeError, ValueError):
+        dims[axis] = str(explicit)
+        return tensor_ir_type(tuple(dims), real_dtype, layout=first.layout)
+    n = _dim(first.shape[axis])
+    if n is None:
         return tensor_ir_type(("*",), real_dtype, layout=first.layout)
-    return tensor_ir_type(first.shape[:-1] + (str(2 * (n - 1)),), real_dtype,
-                          layout=first.layout)
+    dims[axis] = str(2 * (n - 1))
+    return tensor_ir_type(tuple(dims), real_dtype, layout=first.layout)
 
 
 def _shape_from_shape_attr(operand_types: List[IRType],
@@ -2442,7 +2523,12 @@ def _shape_pad(operand_types: List[IRType],
         pad = widths[axis] if axis < len(widths) else 0
         lo, hi = pad if isinstance(pad, (tuple, list)) else (pad, pad)
         lo, hi = _dim(lo), _dim(hi)
-        dims.append(str(n + lo + hi) if None not in (n, lo, hi) else "?")
+        # Explicit `is None` rather than `None not in (...)`: the latter reads
+        # fine and does not narrow, so mypy still sees `int | None` in the sum.
+        if n is None or lo is None or hi is None:
+            dims.append("?")
+        else:
+            dims.append(str(n + lo + hi))
     return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
 
 
@@ -2758,7 +2844,7 @@ def _shape_stft(operand_types: List[IRType],
     hop = _dim((attrs or {}).get("hop"))
     n = _dim(x.shape[-1]) if x.shape else None
     w = _dim(win.shape[-1]) if win is not None and win.shape else None
-    if None in (hop, n, w) or not hop:
+    if hop is None or n is None or w is None or not hop:
         return _unknown_like(x, dtype)
     return tensor_ir_type((str((n - w) // hop + 1), str(w // 2 + 1)), dtype,
                           layout=x.layout)
@@ -2841,7 +2927,7 @@ def _shape_istft(operand_types: List[IRType],
     hop = _dim((attrs or {}).get("hop"))
     frames = _dim(xf.shape[-2]) if xf.rank and len(xf.shape) >= 2 else None
     length = _dim(win.shape[-1]) if win is not None and win.shape else None
-    if None in (hop, frames, length):
+    if hop is None or frames is None or length is None:
         return _unknown_like(xf, dtype)
     return tensor_ir_type(xf.shape[:-2] + (str((frames - 1) * hop + length),),
                           dtype, layout=xf.layout)
@@ -3046,7 +3132,14 @@ def _infer_result_type(op_name: str, operand_types: List[IRType],
             f"but has no implementation in graph_ir._SHAPE_RULES"
         )
     if rule in _MESH_AWARE_RULES:
-        result = fn(operand_types, attrs, mesh)
+        # `_SHAPE_RULES` is heterogeneous: most rules take (operands, attrs)
+        # and the mesh-aware ones take a third argument. The dict's inferred
+        # value type is the 2-arg shape, so the extra argument is invisible to
+        # the checker -- `_MESH_AWARE_RULES` is the declaration that makes it
+        # safe, and this cast records that rather than widening every rule's
+        # signature to carry a parameter almost none of them read.
+        mesh_fn = cast(Callable[..., Any], fn)
+        result = mesh_fn(operand_types, attrs, mesh)
     else:
         result = fn(operand_types, attrs)
     if isinstance(result, tuple) and not _raw:

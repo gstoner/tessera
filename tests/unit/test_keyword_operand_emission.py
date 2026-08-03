@@ -196,3 +196,54 @@ def test_verifier_accepts_ordinary_string_attributes():
 
     codes = {d.code for d in module.verify().diagnostics}
     assert "GRAPH_IR_SSA_VALUE_IN_ATTRIBUTE" not in codes, codes
+
+
+# ── Multi-result emission (PR #493 review) ────────────────────────────────
+#
+# A declared multi-result rule stopped at the emitter: `_try_map_call` called
+# the single-result `_infer_result_type`, which drops every element after the
+# first, so `kv_cache.read`'s `(K, V)` reached Graph IR as ONE SSA value and no
+# caller could consume V. Declaring a contract in the registry is not the same
+# as emitting it.
+
+def _kv_read_fn(cache):
+    k = ops.kv_cache_read(cache, 0, 4)
+    return k
+
+
+def _top_k_destructure_fn(x):
+    v, i = ops.top_k(x, 2)
+    return v
+
+
+def _qr_destructure_fn(a):
+    q, r = ops.qr(a)
+    return q
+
+
+def test_multi_result_op_emits_every_ssa_result():
+    line = _op_line(_emit(_kv_read_fn), "tessera.kv_cache.read")
+    lhs = line.split("=")[0]
+    assert lhs.count("%") == 2, f"expected two SSA results: {line}"
+    assert "-> (" in line, f"expected a tuple result type: {line}"
+
+
+def test_tuple_destructuring_binds_each_result():
+    """`v, i = ops.top_k(x, 2)` must lower.
+
+    `visit_Assign` handled only a bare `ast.Name` target, so a tuple target fell
+    through and the RHS was never emitted — the op vanished from the body rather
+    than failing. Emitting two SSA results is only half the contract if no
+    Python spelling can bind them.
+    """
+    for fn, op_name in ((_top_k_destructure_fn, "tessera.top_k"),
+                        (_qr_destructure_fn, "tessera.qr")):
+        line = _op_line(_emit(fn), op_name)
+        assert line.split("=")[0].count("%") == 2, f"{op_name}: {line}"
+
+
+def test_single_result_ops_keep_the_unparenthesised_type():
+    """MLIR spells one result without parentheses; emitting the tuple form for
+    a single result would be a different (and wrong) type."""
+    line = _op_line(_emit(_kw_cast_fn), "tessera.cast")
+    assert "-> tensor<" in line and "-> (" not in line, line

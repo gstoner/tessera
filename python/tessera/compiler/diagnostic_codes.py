@@ -1842,6 +1842,151 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Route every cross-stage activation through send/recv; avoid stage-skipping SSA edges (or partition them adjacently).",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §pipeline", sprint="Pipeline-PP",
     ),
+
+    # ── GRAPH_IR_* — the Python Graph IR verifier ──────────────────────────
+    #
+    # W1.3 (2026-08-03). Review asked for the new
+    # `GRAPH_IR_SSA_VALUE_IN_ATTRIBUTE` to be registered here, and the gap
+    # turned out to be family-wide: NONE of the codes emitted by
+    # `GraphIRModule.verify()` were registered. Adding one and leaving eight
+    # siblings undiscoverable would reproduce the asymmetry Decision #29 is
+    # about, so the whole family lands together.
+    DiagnosticCode(
+        code="GRAPH_IR_SSA_VALUE_IN_ATTRIBUTE", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="An attribute holds an SSA name that is not also an operand — a dataflow edge hidden in an attribute.",
+        fix_hint="Declare the parameter in graph_ir._KEYWORD_OPERANDS so it emits as an operand; an attribute is not a value edge.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="W1.3",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_UNRESOLVED_OPERAND", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="An op carries the placeholder operand `%?` — the frontend could not lower that argument to a value.",
+        fix_hint="If the argument is an attribute rather than a tensor, declare it in graph_ir._POSITIONAL_ATTR_PARAMS.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_UNDEFINED_OPERAND", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="An op reads an SSA value that no argument or earlier result defines.",
+        fix_hint="Check that the producing op is emitted before this use and that its result name matches.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_OPERAND_TYPE_MISMATCH", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="An op's operand count disagrees with its operand-type count.",
+        fix_hint="Emit one type per operand; appending an operand without its type is the usual cause.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_RETURN_MISSING", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="A function declares result types but returns no values.",
+        fix_hint="Emit a return with one value per declared result type.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_RETURN_ARITY", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="A function returns a different number of values than it declares results.",
+        fix_hint="For a multi-result op use graph_ir._infer_result_types, which states the full contract.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_RETURN_UNDEFINED", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="A function returns an SSA value that is never defined in its body.",
+        fix_hint="Check the returned name against the emitted result names.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_CONTROL_UNBALANCED", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="A control region (if / for / while) was opened and never closed.",
+        fix_hint="Emit the matching region terminator; a lowering path that returns early is the usual cause.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_CONTROL_ELSE", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="An `else` region appears without an enclosing `if`.",
+        fix_hint="Emit the `if` region before its `else`.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_DUP_FUNC", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="Two functions in one module share a name.",
+        fix_hint="Rename one; module-level function names must be unique.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_DUP_ARG", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="Two arguments of one function share a name.",
+        fix_hint="Rename one; argument names form the initial SSA scope.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_DUP_VALUE", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="An SSA result name is assigned twice — SSA values are single-assignment.",
+        fix_hint="Allocate a fresh result name; reusing one silently rebinds later uses.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_DUP_MESH", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="Two mesh declarations in one module share a name.",
+        fix_hint="Rename one; mesh names are module-scoped.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_DUP_TYPE_ALIAS", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="Two type aliases in one module share a name.",
+        fix_hint="Rename one; alias names are module-scoped.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_DUP_CONSTANT", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="Two module-level constants share a name.",
+        fix_hint="Rename one; constant names are module-scoped.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_MATMUL_SHAPE", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="A matmul's K dimensions disagree between its two operands.",
+        fix_hint="Check the contracted dimension; lhs[1] must equal rhs[0].",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="GRAPH_IR_MESH_RANK", pass_origin="GraphIRModule.verify",
+        severity="error",
+        summary="A mesh declaration's axis count disagrees with its shape rank.",
+        fix_hint="Give one extent per named axis in the mesh declaration.",
+        spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
+        language="python", status="implemented",
+    ),
 )
 
 

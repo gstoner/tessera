@@ -2473,9 +2473,21 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     # store at the declared dtype" pattern as the reduced-precision work --
     # here it narrows the result rather than widening the compute.
     def _complex_for(real_dtype) -> "np.dtype":
-        """The complex type whose components match this real storage width."""
-        return np.dtype("complex128" if np.dtype(real_dtype).itemsize >= 8
-                        else "complex64")
+        """The complex type whose components match this real storage width.
+
+        INTEGER inputs promote to the declared compute float FIRST, then pick
+        their complex width from that. Choosing on raw byte width instead made
+        `fft(int64)` return complex128 while Graph IR's `_complex_of` inferred
+        complex64 -- reintroducing exactly the runtime-versus-compiler dtype
+        mismatch this work exists to remove, by a path that only integer inputs
+        take. An integer has no float storage width to inherit; it gets the
+        declared one (`COMPUTE_FLOAT_DTYPE`, fp32), same as every other
+        integer-input op.
+        """
+        dt = np.dtype(real_dtype)
+        if dt.kind in ("i", "u", "b"):
+            return np.dtype("complex64")
+        return np.dtype("complex128" if dt.itemsize >= 8 else "complex64")
 
     def _real_for(complex_dtype) -> "np.dtype":
         """The inverse: complex64 -> float32, complex128 -> float64."""

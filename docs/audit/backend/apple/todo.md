@@ -3,10 +3,21 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-02
+last_updated: 2026-08-03
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **not applicable to the Tile operand contract; unrelated Apple-visible change is IR-only.**
+Apple has no `tile.mma` consumer, so the data-operand correction does not reach
+it. Apple IS touched by the accompanying storage-dtype work: ops whose declared
+shape rule preserves the operand's storage dtype now have that enforced, and
+the enforcement deliberately runs AFTER `install_apple_gpu_interception` so it
+wraps outermost — the interceptor rebinds `rmsnorm`/`layer_norm`/`softmax`/
+`gelu`/`bmm`, and enforcing before it left those unprotected.
+**Validated at IR/reference level only** on the Ubuntu box; the Metal lanes
+cannot run there. Apple retains the follow-up to confirm no encode path
+depended on the previous (upcasting) dtypes.
 
 Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **follow-up required, contract changed.**
 The same W0.9 gate found Apple's emitted Target IR invalid: the function

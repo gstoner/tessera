@@ -19,6 +19,11 @@ class OpSpec:
     max_arity: int
     effect: str = "pure"
     lowering: str = "elementwise"
+    # W1.2 — the op's shape rule, by NAME. Empty means "take the declared
+    # default for my `lowering` kind" (see LOWERING_SHAPE_RULE); it does not
+    # mean "no rule". An op whose lowering kind has no declared default is
+    # `unclassified`, which is a real, counted status -- not a silent fallback.
+    shape_rule: str = ""
 
     def valid_arity(self, arity: int) -> bool:
         return self.min_arity <= arity <= self.max_arity
@@ -567,3 +572,308 @@ __all__ = [
     "graph_name_for",
     "normalize_op_name",
 ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# W1.2 — the one shape-rule registry
+#
+# `_infer_result_type` was a five-case if-chain ending in
+# `return operand_types[0]`: correct for the 60 elementwise ops and silently
+# wrong for anything else whose result shape differs from its first operand.
+# Worse, `primitive_coverage` reported the `shape_rule` axis as CLOSED across
+# 480 primitives while that if-chain was the whole implementation -- Decision
+# #29's "declared but not consumed" in its purest form.
+#
+# The fix is not to hand-write 313 rules. It is to make the rule NAMED for
+# every op, so that:
+#   * the common case is declared once per lowering kind rather than implied,
+#   * an op with no rule is a *counted* `unclassified`, not a silent default,
+#   * `primitive_coverage.shape_rule` can auto-flip from real declarations the
+#     same way it already does from `_VJPS` / `_JVPS`.
+#
+# Behavior is deliberately unchanged in this slice: `unclassified` still
+# resolves to same-as-first-operand. What changes is that it is now visible and
+# counted, so it can be driven down instead of read as closed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Shape rule per lowering kind. Only kinds whose shape behavior is genuinely
+#: uniform are declared here; the rest resolve to `unclassified` on purpose.
+LOWERING_SHAPE_RULE: dict = {
+    # Result has the shape and dtype of the first operand.
+    "elementwise": "same_as_first",
+    "normalization": "same_as_first",
+    "random_mask": "same_as_first",
+    "position_encoding": "same_as_first",
+    "rotary_embedding": "same_as_first",
+    "quantize": "same_as_first",
+    "numeric_helper": "same_as_first",
+    # NOT declared: `functional_optimizer_step` / `optimizer`. An optimizer
+    # legitimately keeps f32 master state while the parameters are bf16 --
+    # that is standard mixed precision, not a dtype bug. Declaring them
+    # storage-preserving would force the enforcement wrapper to *destroy* that
+    # by rounding the state back to bf16. Measured: `adam` returns f32 for bf16
+    # params, and it is right to.
+    # A comparison yields a predicate, not a value in the operand dtype.
+    "comparison": "same_shape_bool",
+    # Contractions and reductions get per-op rules; naming the kind here would
+    # be a guess. Left unclassified until each is declared.
+}
+
+#: Per-op rules that override the lowering-kind default.
+OP_SHAPE_RULE: dict = {
+    "tessera.matmul": "matmul_2d",
+    "tessera.batched_gemm": "batched_gemm_3d",
+    "tessera.transpose": "transpose",
+    "tessera.ebm_energy_quadratic": "reduce_trailing",
+    "tessera.ebm.langevin_step": "same_as_first",
+    # The `logical` kind is NOT uniform: the connectives yield a predicate
+    # while the bitwise ops preserve the operand's integer dtype. Declaring one
+    # default for the kind would be wrong for half of it.
+    "tessera.logical_and": "same_shape_bool",
+    "tessera.logical_or": "same_shape_bool",
+    "tessera.logical_not": "same_shape_bool",
+    "tessera.logical_xor": "same_shape_bool",
+    "tessera.bitwise_and": "same_as_first",
+    "tessera.bitwise_or": "same_as_first",
+    "tessera.bitwise_xor": "same_as_first",
+    "tessera.bitwise_not": "same_as_first",
+    # Predicates that happen to sit under the `numeric_helper` kind. Caught by
+    # differentially probing predicted vs actual dtype -- the shape agreed, so
+    # a shape-only check would have missed them exactly as it missed `eq`.
+    "tessera.isnan": "same_shape_bool",
+    "tessera.isinf": "same_shape_bool",
+    "tessera.isfinite": "same_shape_bool",
+
+    # ── Verified against actual op behavior (f32 AND bf16) ────────────────
+    # Full reductions to a scalar; storage dtype preserved.
+    **{f"tessera.{n}": "reduce_all" for n in
+       ("amax", "amin", "max", "mean", "min", "prod", "std", "var",
+        "logsumexp", "reduce")},
+    # Full reductions yielding an index.
+    **{f"tessera.{n}": "reduce_all_index" for n in
+       ("argmax", "argmin", "count_nonzero")},
+    # Shape-preserving: scans, softmax family, sort, and layout no-ops.
+    **{f"tessera.{n}": "same_as_first" for n in
+       ("cummax", "cummin", "cumprod", "cumsum", "softmax", "softmax_safe",
+        "log_softmax", "sort", "flip", "squeeze", "stack", "unpack",
+        "fused_epilogue", "all_reduce", "all_to_all")},
+    "tessera.argsort": "same_shape_index",
+    # Flattening layout transforms.
+    "tessera.flatten": "flatten",
+    "tessera.cat": "flatten",
+    # Grade-reducing Clifford norms: drop the trailing axis.
+    "tessera.clifford_norm": "reduce_trailing",
+    "tessera.clifford_norm_squared": "reduce_trailing",
+    # Spectral — WITHDRAWN, and the reason is worth keeping.
+    #
+    # `fft`/`ifft`/`rfft` genuinely return complex64; the probe confirms it.
+    # But declaring that rule propagates complex64 into Graph IR, and the dtype
+    # capability contracts mark complex64 `unsupported` / `planned_gated` on
+    # x86 and ROCm. Decision #15a is explicit that planned/gated dtypes are not
+    # first-class, so the verifier rejecting a complex-typed `dct` operand is
+    # the POLICY WORKING, not a bug.
+    #
+    # These ops previously "passed" only because the fallback mistyped their
+    # result as f32 — a wrong dtype that happened to satisfy the capability
+    # check. Declaring the true rule surfaced the real conflict: the spectral
+    # lane needs a first-class complex dtype, which is a dtype-policy decision
+    # (Decision #15a), not a shape-rule one. Left unclassified until that is
+    # taken; promoting complex64 in the capability tables here would silently
+    # make a planned_gated dtype first-class.
+
+    # ── Attribute-driven (needed the widened rule signature) ─────────────
+    # Result shape lives in an attribute, not in any operand's type.
+    **{f"tessera.{n}": "from_shape_attr" for n in
+       ("reshape", "view", "broadcast", "expand", "tile_view")},
+    "tessera.cast": "cast",
+
+    # ── n-ary, verified by probing at f32 and bf16 ───────────────────────
+    # Attention: the output carries the QUERY's shape and storage dtype. The
+    # reference returned float64 for BOTH f32 and bf16 inputs -- on the single
+    # hottest accelerator path -- so declaring this rule also makes the
+    # storage-dtype enforcement apply to it.
+    **{f"tessera.{n}": "same_as_first" for n in
+       ("flash_attn", "gated_attention", "mla_decode")},
+    # Elementwise-shaped indexing and transport: result keeps the data
+    # operand's shape and dtype.
+    **{f"tessera.{n}": "same_as_first" for n in
+       ("index_update", "scatter", "take", "moe_dispatch", "spectral_filter")},
+    # Clifford binary products keep the multivector shape; `inner` contracts
+    # the trailing (blade) axis to a scalar per row.
+    **{f"tessera.{n}": "same_as_first" for n in
+       ("clifford_geometric_product", "clifford_wedge",
+        "clifford_left_contraction", "clifford_rotor_sandwich")},
+    "tessera.clifford_inner": "reduce_trailing",
+    # Losses that reduce to a scalar in the operand's storage dtype. Several
+    # returned float64 regardless of input.
+    # NOTE the `loss.` prefix: the graph names are `tessera.loss.mse`, not
+    # `tessera.mse_loss`. The first version of this block used the PUBLIC names
+    # and therefore matched nothing -- 16 silently phantom declarations. A
+    # declaration that names no real op is the same "declared but not consumed"
+    # failure this registry exists to remove, so it is now drift-gated.
+    **{f"tessera.loss.{n}": "reduce_all" for n in
+       ("mse", "mae", "huber", "smooth_l1", "log_cosh", "cross_entropy",
+        "binary_cross_entropy", "asymmetric_bce", "kl_divergence",
+        "js_divergence", "contrastive_divergence", "persistent_cd",
+        "ddpm_noise_pred", "score_matching", "vlb")},
+
+    # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
+    # operand's shape only because the probe ran at world_size=1. Their real
+    # shapes scale with the mesh, so declaring from that measurement would bake
+    # in a degenerate case. They stay `unclassified` until probed multi-rank.
+}
+
+#: The declared vocabulary. `graph_ir` implements each name; a rule named here
+#: with no implementation (or vice versa) is a drift-gated error.
+SHAPE_RULE_NAMES = frozenset({
+    "same_as_first",
+    "matmul_2d",
+    "batched_gemm_3d",
+    "transpose",
+    "same_shape_bool",
+    "reduce_all",
+    "reduce_all_index",
+    "same_shape_index",
+    "flatten",
+    "complex_same",
+    "rfft",
+    "from_shape_attr",
+    "cast",
+    "reduce_trailing",
+    "unclassified",
+})
+
+
+#: Ops EXAMINED and deliberately left without a rule, with the reason. This is
+#: a third state, distinct from "not yet looked at": the shape or dtype is
+#: genuinely not a function of the operands alone, or declaring a rule would
+#: force wrong behavior. Answering "why is this unclassified?" is what makes the
+#: remaining count meaningful.
+DELIBERATELY_UNDECLARED: dict = {
+    "tessera.popcount": "returns an INTEGER bit count, never the operand's storage dtype, so it is not storage-preserving despite sitting in the `elementwise` kind. The exact integer width is NumPy-version dependent (uint8 under 2.x, int64 under 1.26), so pinning one would be wrong; declaring a shape rule needs an int-width-agnostic vocabulary first",
+    "tessera.adam": "optimizer keeps f32 compute/state while params are reduced precision; MEASURED: at fp16 a 1e-4 gradient squares to exactly zero, so an fp16 second moment would collapse -- the f32 default is load-bearing. Declaring it storage-preserving would force the state back to the param dtype and destroy the update. See tests/unit/test_optimizer_reduced_precision.py",
+    "tessera.adamw": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
+    "tessera.momentum": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
+    "tessera.nesterov": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
+    "tessera.adafactor": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
+    "tessera.lion": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
+    "tessera.sgd": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
+    "tessera.all_gather": "result shape scales with mesh size, not derivable from operand types",
+    "tessera.reduce_scatter": "result shape shrinks with mesh size, not derivable from operand types",
+    "tessera.fft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
+    "tessera.ifft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
+    "tessera.rfft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
+    "tessera.irfft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
+    "tessera.kv_cache.append": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
+    "tessera.kv_cache.prune": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
+    "tessera.kv_cache.read": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
+    "tessera.cache.commit": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
+    "tessera.cache.rollback": "opaque cache handle rather than a tensor type; its result is not describable by a tensor shape rule",
+}
+
+
+def undeclared_reason(graph_name: str):
+    """Why this op has no rule, when that was a decision rather than a gap."""
+    return DELIBERATELY_UNDECLARED.get(graph_name)
+
+
+def shape_rule_for(graph_name: str) -> str:
+    """The declared shape rule for `graph_name`.
+
+    Returns `"unclassified"` -- an explicit, counted status -- when neither the
+    op nor its lowering kind declares one. Never returns an empty string, so a
+    caller cannot mistake "no rule" for "no answer".
+    """
+    # A deliberate non-declaration outranks any lowering-kind default. Without
+    # this, an op could be listed as "examined, deliberately undeclared" while
+    # `shape_rule_for` still handed back its kind's default -- and the gates
+    # would enforce a rule the catalog had explicitly withdrawn. `popcount` hit
+    # exactly that: excluded from the ratchet, yet still reported
+    # `same_as_first` from the `elementwise` kind.
+    if graph_name in DELIBERATELY_UNDECLARED:
+        return "unclassified"
+    explicit = OP_SHAPE_RULE.get(graph_name)
+    if explicit:
+        return explicit
+    for spec in _SPECS:
+        if spec.graph_name == graph_name:
+            if spec.shape_rule:
+                return spec.shape_rule
+            return LOWERING_SHAPE_RULE.get(spec.lowering, "unclassified")
+    return "unclassified"
+
+
+def unclassified_shape_ops() -> list:
+    """Graph op names whose shape rule is still `unclassified`.
+
+    This list is a RATCHET: it may shrink, never grow. Driving it to zero is
+    what actually closes W1's "no op reaches the `operand_types[0]` fallback".
+    """
+    seen = set()
+    out = []
+    for spec in _SPECS:
+        if spec.graph_name in seen:
+            continue
+        seen.add(spec.graph_name)
+        if spec.graph_name in DELIBERATELY_UNDECLARED:
+            continue  # examined; the reason is recorded
+        if shape_rule_for(spec.graph_name) == "unclassified":
+            out.append(spec.graph_name)
+    return sorted(out)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# fp16 RANGE sensitivity — a separate axis from storage-dtype propagation
+#
+# bf16 and fp16 are the same WIDTH and fail in opposite ways, so neither
+# substitutes for the other:
+#
+#   bf16  8 mantissa bits, f32's exponent range  -> loses RESOLUTION
+#   fp16 10 mantissa bits, max 6.55e4            -> loses RANGE
+#
+# The shape-rule work above probes fp32 + bf16, which is right for *propagation*
+# (does the op return the dtype it was given). It is blind to range: measured on
+# this op set, 23 ops lose numerics at fp16 while fp32 AND bf16 are both fine.
+# bf16 testing alone would never surface any of them.
+#
+# The failure is usually silent rather than loud. `rmsnorm_safe` at fp16 with
+# 1e4 inputs returns 0.0 instead of ~1.0: sum(x**2) overflows to inf, then
+# x/inf underflows to zero. No inf, no NaN, no error -- just wrong numbers from
+# an op whose name asserts safety.
+#
+# These are DECLARED so the hazard is documented per op rather than rediscovered.
+# Membership means "this op's numerics depend on fp16 range and must be probed
+# there"; it does not by itself assert the op is broken.
+# ─────────────────────────────────────────────────────────────────────────────
+
+FP16_RANGE_SENSITIVE: dict = {
+    # Sum-of-squares / normalization: x**2 overflows fp16 well before fp32.
+    "tessera.rmsnorm": "RMS needs sum(x**2); (1e4)**2 = 1e8 overflows fp16 max 6.55e4",
+    "tessera.rmsnorm_safe": "despite the name, returns 0.0 instead of ~1.0 at fp16 for 1e4 inputs -- sum(x**2) -> inf, then x/inf -> 0. Silent, not an error",
+    "tessera.clifford_norm": "sum of squared blade coefficients overflows fp16",
+    "tessera.clifford_norm_squared": "squares by construction; overflows fp16",
+    # Attention: scores are a contraction, so magnitudes compound.
+    "tessera.flash_attn": "QK^T contraction overflows fp16 before the softmax can rescale",
+    "tessera.mla_decode": "same contraction hazard as flash_attn",
+    # Contractions / products.
+    **{f"tessera.{n}": "geometric-product contraction squares magnitudes; overflows fp16"
+       for n in ("clifford_geometric_product", "clifford_inner",
+                 "clifford_left_contraction", "clifford_rotor_sandwich",
+                 "clifford_wedge")},
+    # Accumulating reductions: the running value exceeds fp16 long before fp32.
+    **{f"tessera.{n}": "running accumulation overflows fp16"
+       for n in ("cumsum", "cumprod", "reduce", "segment_reduce")},
+    # Losses over large logits.
+    **{f"tessera.loss.{n}": "operates on logits; large values overflow fp16"
+       for n in ("cross_entropy", "binary_cross_entropy", "asymmetric_bce")},
+    # Transcendentals with steep growth.
+    "tessera.lgamma": "log-gamma grows rapidly; overflows fp16 for moderate inputs",
+    "tessera.clifford_log": "log of a large multivector norm overflows fp16 intermediates",
+    "tessera.silu_mul": "product of two large activations overflows fp16",
+    "tessera.spectral_filter": "spectral magnitudes accumulate beyond fp16 range",
+}
+
+
+def fp16_range_hazard(graph_name: str):
+    """Why this op needs an fp16 range probe, if it does."""
+    return FP16_RANGE_SENSITIVE.get(graph_name)

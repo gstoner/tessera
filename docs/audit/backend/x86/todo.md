@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-02
+last_updated: 2026-08-03
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,13 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **not applicable, with a reason.**
+x86 has no `tile.mma` consumer: `TileToX86Pass` lowers through the C-ABI shim
+and the `tessera_x86` Target IR models the boundary with `abi_call`. The shared
+`tessera::tile::dataOperands` helper is available to it but currently unused,
+so there is nothing to migrate. Re-assess when the `x86vector.*` (AVX-512)
+lowering lands, since that is where x86 would gain a matrix-op consumer.
 
 Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **parity validated, new dialect landed.**
 W0.10 closed x86's Decision #19 gap: it was the one backend with no Target IR

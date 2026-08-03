@@ -103,9 +103,10 @@ Two consequences to design around:
 
 ### 2.1 The blocker — the typed form and warp-spec token sync are mutually exclusive
 
-**Step 3b cannot start until this is resolved, and it explains why no C++
-producer emits the typed form: today it is structurally impossible, not
-neglected.**
+**RESOLVED 2026-08-03 — step 3b is now unblocked.** The fix is at the bottom of
+this section; the diagnosis is kept because it explains why no C++ producer
+emitted the typed form (it was structurally impossible, not neglected) and
+because the same shape recurs wherever a verifier counts operands.
 
 Two contracts on the same op contradict each other:
 

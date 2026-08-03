@@ -40,6 +40,31 @@ namespace tile {
 /// from any pass (TilingPass) whose getDependentDialects creates tile.* ops.
 void registerTileDialect(::mlir::DialectRegistry &registry);
 
+/// Whether `type` is a Tile *control* type — an ordering/ownership handle
+/// rather than a data operand.
+///
+/// Tile ops routinely carry both: `tile.mma` takes its A/B/accumulator data
+/// operands **and** the `!tile.async_token` edge that `WarpSpecLegalityPass`
+/// requires to gate the matrix op on copy completion
+/// (`WARPSPEC_MMA_NOT_TOKEN_SYNCED`). Anything reasoning about arity has to
+/// separate the two, or it will count an ordering edge as an operand.
+///
+/// This is deliberately Tile-level only. A backend that adds its own control
+/// types composes rather than forks:
+///
+///     isTileControlType(t) || isa<mlir::tessera_rocm::TokenType>(t)
+///
+/// Tile IR must not depend on a backend dialect.
+bool isTileControlType(::mlir::Type type);
+
+/// The data operands of `op` — every operand that is not a Tile control type.
+///
+/// Previously a file-local `static` in one backend lowering
+/// (`TileToROCM.cpp`), which is why the ODS verifier never learned the rule and
+/// counted raw operands instead. That mismatch made the typed `tile.mma` form
+/// and warp-spec token sync mutually exclusive: no producer could satisfy both.
+::llvm::SmallVector<::mlir::Value> dataOperands(::mlir::Operation *op);
+
 } // namespace tile
 } // namespace tessera
 

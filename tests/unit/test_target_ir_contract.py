@@ -241,9 +241,25 @@ import subprocess
 import tempfile
 
 
-_TESSERA_OPT_CANDIDATES = (
-    Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt",
+# A build can register ROCm or NVIDIA but not both (the lean registration path
+# has no arm for both), so a second build dir is the only way to exercise the
+# NVIDIA dialect. Probe both; each target skips unless ITS dialect is present.
+_TESSERA_OPT_CANDIDATES = tuple(
+    Path(__file__).resolve().parents[2] / p
+    for p in (
+        "build/tools/tessera-opt/tessera-opt",
+        "build-nvidia/tools/tessera-opt/tessera-opt",
+    )
 )
+
+
+def _opt_with_dialect(dialect: str):
+    """The first built tessera-opt that registers `dialect`, if any."""
+    for candidate in _TESSERA_OPT_CANDIDATES:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            if dialect in _registered_dialects(candidate):
+                return candidate
+    return None
 
 
 def _tessera_opt() -> Path | None:
@@ -344,11 +360,12 @@ def test_target_ir_parses_loads_dialect_and_verifies(target_kind):
         pytest.skip("tessera-opt not built; run `ninja -C build tessera-opt`")
 
     dialect = _TARGET_DIALECT[target_kind]
+    opt = _opt_with_dialect(dialect) or opt
     if dialect not in _registered_dialects(opt):
         pytest.skip(
-            f"{dialect} is not compiled into this tessera-opt build "
-            f"(e.g. -DTESSERA_BUILD_NVIDIA_BACKEND=OFF); skipping so the "
-            f"result measures the emitter, not the build config"
+            f"{dialect} is not compiled into any built tessera-opt "
+            f"(try `cmake -B build-nvidia -DTESSERA_BUILD_NVIDIA_BACKEND=ON`); "
+            f"skipping so the result measures the emitter, not the build config"
         )
 
     mlir_text = _emit_target_ir(target_kind)
@@ -434,8 +451,10 @@ def test_committed_golden_target_ir_parses_and_verifies(golden):
     # originating op in its `source` attribute, so it parses and verifies like
     # every other lane.
     dialect = _GOLDEN_SUFFIX_DIALECT.get(suffix)
-    if dialect is not None and dialect not in _registered_dialects(opt):
-        pytest.skip(f"{dialect} is not compiled into this tessera-opt build")
+    if dialect is not None:
+        opt = _opt_with_dialect(dialect) or opt
+        if dialect not in _registered_dialects(opt):
+            pytest.skip(f"{dialect} is not compiled into any tessera-opt build")
 
     ok, diagnostic = _parse_and_verify(opt, golden.read_text())
     assert ok, (
@@ -470,8 +489,9 @@ def test_probe_annotated_target_ir_still_parses(target_kind):
     if opt is None:
         pytest.skip("tessera-opt not built; run `ninja -C build tessera-opt`")
     dialect = _TARGET_DIALECT[target_kind]
+    opt = _opt_with_dialect(dialect) or opt
     if dialect not in _registered_dialects(opt):
-        pytest.skip(f"{dialect} is not compiled into this tessera-opt build")
+        pytest.skip(f"{dialect} is not compiled into any tessera-opt build")
 
     # Multi-op, so more than one lowering path is exercised.
     source = """

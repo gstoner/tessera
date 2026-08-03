@@ -140,7 +140,13 @@ def test_ops_dropout_accepts_typed_rng_key():
     a = ts.ops.dropout(x, p=0.25, rng=key)
     b = ts.ops.dropout(x, p=0.25, rng=RNGKey.from_state(key.to_state()))
     np.testing.assert_array_equal(a, b)
-    assert set(np.unique(a)).issubset({0.0, 1.0 / 0.75})
+    # dropout preserves the input's precision (it used to promote f32 -> f64
+    # because binomial()/(1-p) is float64). Compare against the scale AT THE
+    # INPUT'S dtype: the f64 literal 1.3333333333333333 is not bit-equal to
+    # its f32 rounding, so hard-coding it silently encoded the promotion.
+    assert a.dtype == x.dtype, "dropout must not change the input dtype"
+    scale = np.asarray(1.0 / 0.75, dtype=x.dtype)
+    assert set(np.unique(a)).issubset({np.asarray(0.0, dtype=x.dtype)[()], scale[()]})
 
 
 # ── samplers: shape + dtype + determinism ──────────────────────────────────

@@ -2289,6 +2289,33 @@ def _shape_reduce_scatter(operand_types: List[IRType],
     return _scaled_collective_shape(operand_types, attrs, mesh, multiply=False)
 
 
+def _shape_layout_permute(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`pack` / `rearrange`: permute by an explicit axis order, else identity.
+
+    Two shapes behind one op, and the rule has to read the attribute to tell
+    them apart. A tuple `layout` is an axis permutation; a named layout
+    (`"row_major"`, `"identity"`) is shape-preserving.
+
+    The reference used to return the input unchanged for ANY string, so an
+    einops-style `"a b -> b a"` was accepted and ignored. That is now a named
+    error (Decision #21a -- `layout` selects semantics, so it fails closed),
+    which is also what makes this rule expressible: an op that silently means
+    two different things cannot have one honest shape rule.
+    """
+    first = operand_types[0]
+    layout = (attrs or {}).get("layout")
+    if not isinstance(layout, (tuple, list)):
+        return first
+    if first.rank is None or len(layout) != len(first.shape):
+        return tensor_ir_type(("*",), first.dtype, layout=first.layout)
+    try:
+        dims = tuple(first.shape[int(axis)] for axis in layout)
+    except (TypeError, ValueError, IndexError):
+        return tensor_ir_type(("*",), first.dtype, layout=first.layout)
+    return tensor_ir_type(dims, first.dtype, layout=first.layout)
+
+
 def _shape_state_handle(operand_types: List[IRType],
                         attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """A cache mutator threads its handle through: `cache -> updated`.
@@ -2360,6 +2387,7 @@ _SHAPE_RULES = {
     "cast": _shape_cast,
     "transpose": _shape_transpose,
     "reduce_trailing": _shape_reduce_trailing,
+    "layout_permute": _shape_layout_permute,
     "state_handle": _shape_state_handle,
     "kv_cache_read": _shape_kv_cache_read,
     "all_gather": _shape_all_gather,

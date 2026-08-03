@@ -2636,12 +2636,35 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                 out.append(values.sum(axis=0))
         return np.stack(out, axis=0)
 
+    #: Layout names that genuinely denote the identity permutation. Anything
+    #: else is rejected rather than ignored -- see `rearrange`.
+    _IDENTITY_LAYOUTS = frozenset({"row_major", "identity", "c", "contiguous"})
+
     def rearrange(x, layout):
+        """Permute axes by an explicit permutation, or assert an identity layout.
+
+        The string branch used to `return np.asarray(x)` for ANY string, so an
+        einops-style spell like ``"a b -> b a"`` was accepted and silently
+        ignored -- the caller asked for a transpose and got the original array
+        back, with no error and a correct-looking shape for square inputs.
+
+        `layout` selects SEMANTICS, so Decision #21a applies: it fails closed.
+        A permutation is honoured, a known identity name is a no-op, and
+        anything else is a named error rather than a quiet wrong answer.
+        """
         if hasattr(x, "_data"):
             x = x._data
         if isinstance(layout, (tuple, list)):
             return np.transpose(x, tuple(layout))
-        return np.asarray(x)
+        if layout is None or (isinstance(layout, str)
+                              and layout.strip().lower() in _IDENTITY_LAYOUTS):
+            return np.asarray(x)
+        raise ValueError(
+            f"rearrange layout {layout!r} is not a permutation or a known "
+            f"identity layout {sorted(_IDENTITY_LAYOUTS)}. Pass an explicit "
+            f"axis permutation such as (0, 2, 1); an einops-style spec is not "
+            f"interpreted and must not be silently ignored."
+        )
 
     def pack(x, layout):
         return rearrange(x, layout if isinstance(layout, (tuple, list)) else None)
@@ -5197,6 +5220,25 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
             else:
                 out = fn(*args, **kwargs)
 
+            # Multi-result ops store back the PRIMARY tensor only. `out[0]` is
+            # the value carrying the operand's storage dtype; the rest is
+            # auxiliary state with its own declared width -- `gated_deltanet`'s
+            # recurrent state and an optimizer's moments are f32 master state
+            # on purpose, and dragging them down to bf16/fp16 storage would
+            # undo the very mixed-precision contract this wrapper enforces.
+            #
+            # Getting here mattered: promoting the inputs while being unable to
+            # store back through a tuple silently widened the primary result to
+            # f32, so declaring a multi-result op storage-preserving made its
+            # dtype WORSE than leaving it unclassified.
+            if isinstance(out, tuple) and out:
+                first = out[0]
+                if (isinstance(first, (_np.ndarray, _np.generic))
+                        and _is_float_storage(first.dtype)
+                        and first.dtype != want):
+                    return (_np.asarray(first).astype(want, copy=False),
+                            *out[1:])
+                return out
             if not isinstance(out, (_np.ndarray, _np.generic)):
                 return out
             if _is_float_storage(out.dtype) and out.dtype != want:

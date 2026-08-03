@@ -778,6 +778,34 @@ OP_SHAPE_RULE: dict = {
     "tessera.all_gather": "all_gather",
     "tessera.reduce_scatter": "reduce_scatter",
 
+    # W1.4 wave 1 -- ops whose result is exactly operand 0, CONFIRMED with all
+    # dims distinct (2,3,5,7 / 4x6). A square or equal-dim probe cannot tell
+    # `same_as_first` from `transpose`, `matmul_2d` or `select_from_second`:
+    # measured on a 4x4, `cholesky` matched six different rules. Every
+    # assignment below survived a shape where only one of them can.
+    #
+    # The whole linear/sparse attention family lands here -- these are
+    # attention VARIANTS, so the result is the query's shape whatever the
+    # interior does.
+    **{f"tessera.{n}": "same_as_first" for n in (
+        "hybrid_attention", "kimi_delta_attention", "lightning_attention",
+        "linear_attn", "modified_delta_attention", "power_attn", "retention",
+        "attn_compressed_blocks", "attn_sliding_window", "gated_deltanet",
+        "deepseek_sparse_attention", "lookahead_sparse_attention",
+        "msa_sparse_attention", "attn_top_k_blocks", "mla_decode_fused",
+        # Structural / in-place-shaped ops.
+        "masked_fill", "mor_scatter", "roll", "dynamic_update_slice",
+        "scatter_add", "scatter_reduce", "selective_ssm", "moe_swiglu_block",
+        # cholesky of an (N, N) matrix is (N, N) -- verified on 6x6, since a
+        # 4x4 probe would have matched five other rules equally well.
+        "cholesky",
+    )},
+
+    # `pack` / `rearrange` mean two things depending on their `layout`
+    # attribute: a tuple permutes, a named layout is identity.
+    "tessera.pack": "layout_permute",
+    "tessera.rearrange": "layout_permute",
+
     # Spectral family. `irfft` returns REAL values -- it is not `complex_same`.
     "tessera.fft": "complex_same",
     "tessera.ifft": "complex_same",
@@ -843,6 +871,7 @@ SHAPE_RULE_NAMES = frozenset({
     "cast",
     "reduce_trailing",
     "state_handle",
+    "layout_permute",
     "kv_cache_read",
     "all_gather",
     "reduce_scatter",

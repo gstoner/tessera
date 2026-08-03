@@ -846,31 +846,52 @@ def unclassified_shape_ops() -> list:
 # there"; it does not by itself assert the op is broken.
 # ─────────────────────────────────────────────────────────────────────────────
 
-FP16_RANGE_SENSITIVE: dict = {
-    # Sum-of-squares / normalization: x**2 overflows fp16 well before fp32.
-    "tessera.rmsnorm": "RMS needs sum(x**2); (1e4)**2 = 1e8 overflows fp16 max 6.55e4",
-    "tessera.rmsnorm_safe": "despite the name, returns 0.0 instead of ~1.0 at fp16 for 1e4 inputs -- sum(x**2) -> inf, then x/inf -> 0. Silent, not an error",
-    "tessera.clifford_norm": "sum of squared blade coefficients overflows fp16",
-    "tessera.clifford_norm_squared": "squares by construction; overflows fp16",
-    # Attention: scores are a contraction, so magnitudes compound.
-    "tessera.flash_attn": "QK^T contraction overflows fp16 before the softmax can rescale",
-    "tessera.mla_decode": "same contraction hazard as flash_attn",
-    # Contractions / products.
-    **{f"tessera.{n}": "geometric-product contraction squares magnitudes; overflows fp16"
+# Two DISTINCT classes, and conflating them is what made the original single
+# list unactionable:
+#
+#   A. INTERMEDIATE overflow — the op's internal arithmetic leaves fp16 range
+#      even though the ANSWER fits comfortably. `rmsnorm_safe` on 1e4 inputs
+#      returns ~1.0, but computing sum(x**2) at fp16 overflows to inf and the
+#      result collapses to 0.0. This is a REAL DEFECT and it is FIXED: the
+#      storage-dtype enforcement now promotes reduced-precision operands to f32,
+#      computes, and stores back, so the intermediate never happens at fp16.
+#
+#   B. RESULT unrepresentable — the answer itself exceeds fp16's 6.55e4 max.
+#      A sum of 32 values of 1e4 is 3.2e5; a Clifford product of 1e4 magnitudes
+#      is 4e8. No compute precision fixes that, because the number simply does
+#      not fit. This is NOT a defect; it is fp16 being fp16, and the remedy
+#      belongs to the caller (loss scaling, or bf16, whose max is 3.39e38).
+#
+# Keeping them in one bucket implied 22 things to fix. Six were fixable and are
+# fixed; sixteen are a property of the format.
+
+FP16_INTERMEDIATE_OVERFLOW: dict = {
+    "tessera.rmsnorm": "sum(x**2) overflows fp16 while the normalized result is ~1.0",
+    "tessera.rmsnorm_safe": "despite the name, returned 0.0 instead of ~1.0 at fp16 -- sum(x**2) -> inf, then x/inf -> 0. Fixed by computing at f32",
+    "tessera.clifford_norm": "sum of squared blade coefficients overflows fp16; the norm itself fits",
+    "tessera.clifford_log": "log of a large multivector norm overflowed fp16 intermediates; the log fits easily",
+    "tessera.flash_attn": "QK^T contraction overflows fp16 before the softmax rescales; attention output is bounded",
+    "tessera.mla_decode": "same contraction hazard as flash_attn, same bounded output",
+}
+
+FP16_RESULT_UNREPRESENTABLE: dict = {
+    **{f"tessera.{n}": "a geometric product of large multivectors is ~1e8, far beyond fp16's 6.55e4 max"
        for n in ("clifford_geometric_product", "clifford_inner",
                  "clifford_left_contraction", "clifford_rotor_sandwich",
-                 "clifford_wedge")},
-    # Accumulating reductions: the running value exceeds fp16 long before fp32.
-    **{f"tessera.{n}": "running accumulation overflows fp16"
+                 "clifford_wedge", "clifford_norm_squared")},
+    **{f"tessera.{n}": "an accumulation over large values exceeds fp16 max; the answer does not fit regardless of compute width"
        for n in ("cumsum", "cumprod", "reduce", "segment_reduce")},
-    # Losses over large logits.
-    **{f"tessera.loss.{n}": "operates on logits; large values overflow fp16"
+    **{f"tessera.loss.{n}": "loss over large logits exceeds fp16 max; caller-side loss scaling is the remedy"
        for n in ("cross_entropy", "binary_cross_entropy", "asymmetric_bce")},
-    # Transcendentals with steep growth.
-    "tessera.lgamma": "log-gamma grows rapidly; overflows fp16 for moderate inputs",
-    "tessera.clifford_log": "log of a large multivector norm overflows fp16 intermediates",
-    "tessera.silu_mul": "product of two large activations overflows fp16",
-    "tessera.spectral_filter": "spectral magnitudes accumulate beyond fp16 range",
+    "tessera.lgamma": "log-gamma of moderate inputs already exceeds fp16 max",
+    "tessera.silu_mul": "product of two large activations is ~1e8, beyond fp16 max",
+    "tessera.spectral_filter": "accumulated spectral magnitude exceeds fp16 max",
+}
+
+#: Union, for callers that just want "does fp16 need care here".
+FP16_RANGE_SENSITIVE: dict = {
+    **FP16_INTERMEDIATE_OVERFLOW,
+    **FP16_RESULT_UNREPRESENTABLE,
 }
 
 

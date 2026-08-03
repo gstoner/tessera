@@ -5004,23 +5004,25 @@ ops = _make_ops_namespace()
 
 
 def _enforce_storage_dtype_preservation(namespace) -> None:
-    """Make the shape registry's storage-dtype claim BINDING (W1.2 / #29).
+    """Compute at a safe precision, store at the operand's dtype (#15a).
 
-    `ml_dtypes.bfloat16` does not follow NumPy's weak-scalar promotion: a plain
-    Python float promotes it to float32. So `x * 0.5`, `1.0 + x`, and
-    `0.044715 * x` all silently leave bf16 -- measured across gelu, silu,
-    sigmoid, dropout, layer_norm, rmsnorm, weight_norm, and the clifford
-    family. An f32-only check cannot see any of it, which is why these ops
-    looked correct until they were probed at bf16.
+    This started as a post-hoc cast of the RESULT, which made the dtype right
+    while leaving the VALUE wrong -- `rmsnorm_safe` at fp16 still returned 0.0
+    (sum(x**2) overflowed to inf inside the op, then x/inf underflowed), and a
+    dtype-only gate happily passed it. Masking the symptom is worse than the
+    original bug, because it looks fixed.
 
-    Patching each expression would be endless and would regress the moment
-    someone writes another literal. Instead, ops whose DECLARED shape rule says
-    the result keeps the operand's storage dtype have that enforced here.
+    So the wrapper now does what mixed precision actually means:
 
-    This is not a workaround -- it is exactly Decision #15a: compute may widen
-    internally (that is `numeric_policy`), but STORAGE dtype belongs to the
-    tensor. Accumulating in f32 and storing back to bf16 is the intended
-    model; silently *returning* f32 is not.
+        upcast reduced-precision float inputs -> compute at f32 -> store back
+
+    That is Decision #15a directly: accumulation width is `numeric_policy`,
+    storage dtype belongs to the tensor. It genuinely repairs the numerics --
+    sum(x**2) no longer overflows, because it never happens at fp16 -- rather
+    than relabeling a wrong answer.
+
+    Only fp16/bf16 are promoted. f32 and f64 are left alone: they are already
+    at or above the compute width, and f64 is the oracle path.
     """
     import functools
 
@@ -5031,7 +5033,6 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
     except Exception:  # pragma: no cover - catalog unavailable during bootstrap
         return
 
-    # Rules whose contract includes "result carries the operand's storage dtype".
     preserving = {"same_as_first", "reduce_all", "reduce_trailing"}
     targets = {
         spec.public_name
@@ -5040,14 +5041,12 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
     }
 
     def _is_float_storage(dtype) -> bool:
-        """Float test that actually works for bf16 and the fp8 types.
+        """Float test that works for bf16 and the fp8 types.
 
-        THE standard idioms silently exclude them:
-          * `dtype.kind == "f"`            -> bf16 reports 'V' (void)
-          * `np.issubdtype(dt, np.floating)` -> False for bf16
-        Both are used widely in NumPy-shaped code, and both quietly skip the
-        exact dtypes an accelerator pipeline runs in. `ml_dtypes.finfo`
-        recognizes the extension floats, so ask it.
+        The standard idioms silently exclude them: `dtype.kind == "f"` reports
+        'V' for bf16, and `np.issubdtype(dt, np.floating)` is False. Both are
+        common in NumPy-shaped code and both skip exactly the dtypes an
+        accelerator pipeline runs in.
         """
         if dtype is None:
             return False
@@ -5061,31 +5060,49 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
         except Exception:
             return False
 
+    def _is_reduced(dtype) -> bool:
+        """fp16 / bf16 / fp8 — narrower than the f32 compute width."""
+        if not _is_float_storage(dtype):
+            return False
+        return dtype.itemsize < 4
+
     def _storage_dtype(value):
         data = getattr(value, "_data", value)
         dtype = getattr(data, "dtype", None)
-        # Only floating storage is coerced; integer/bool results (predicates,
-        # indices) are governed by their own declared rules.
         if not _is_float_storage(dtype):
             return None
         return dtype
+
+    _COMPUTE = _np.float32
+
+    def _promote(value):
+        """Reduced-precision float arrays compute at f32; everything else is
+        passed through untouched (ints, bools, scalars, non-arrays)."""
+        data = getattr(value, "_data", value)
+        if isinstance(data, (_np.ndarray, _np.generic)) and _is_reduced(
+            getattr(data, "dtype", None)
+        ):
+            return _np.asarray(data).astype(_COMPUTE, copy=False)
+        return value
 
     def _wrap(fn):
         @functools.wraps(fn)
         def wrapped(*args, **kwargs):
             want = _storage_dtype(args[0]) if args else None
-            out = fn(*args, **kwargs)
-            if want is None:
-                return out
-            # A full reduction returns a numpy SCALAR (np.float64), which is a
-            # `np.generic` and NOT an ndarray -- so an `isinstance(out,
-            # ndarray)` guard silently skipped every `reduce_all` op. That is
-            # why the losses stayed float64 even once correctly declared.
+            if want is None or not _is_reduced(want):
+                return fn(*args, **kwargs)
+            # Compute the whole op at f32 -- every reduced-precision operand,
+            # not just the first, or a mixed call would still overflow.
+            out = fn(
+                *[_promote(a) for a in args],
+                **{k: _promote(v) for k, v in kwargs.items()},
+            )
             if not isinstance(out, (_np.ndarray, _np.generic)):
                 return out
             if _is_float_storage(out.dtype) and out.dtype != want:
                 return _np.asarray(out).astype(want, copy=False)
             return out
+
         return wrapped
 
     for name in sorted(targets):
@@ -5094,18 +5111,6 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
             setattr(namespace, name, _wrap(fn))
 
 
-# Phase 2.1c (2026-06-01) — wrap the 8 encode-eligible ops with the
-# apple_gpu trace-capture interceptor. Backward-compatible: when no
-# @auto_batch trace is active, the wrappers call straight through to
-# the existing numpy reference. Inside @auto_batch, calls with the
-# encode-required kwargs (gamma, rows, cols, …) route to
-# apple_gpu_ops.* automatically.
-from . import apple_gpu_ops_interception as _agpu_intercept
-_agpu_intercept.install_apple_gpu_interception(ops)
-
-# Enforce LAST so it wraps outermost. The Apple interceptor rebinds rmsnorm /
-# layer_norm / softmax / gelu / bmm, so enforcing before it left those three
-# unprotected -- the wrapper was there, just no longer on the outside.
 _enforce_storage_dtype_preservation(ops)
 
 # Common op aliases kept at the top level for older advanced examples. The

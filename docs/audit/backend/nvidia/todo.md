@@ -8,6 +8,45 @@ last_updated: 2026-08-03
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `FFT-MIXED-RADIX-BLUESTEIN-2026-08-03` — **follow-up required — mixed-radix only, no Bluestein, unverified.**
+Tessera's own FFT (Stockham, `TargetHooks/`) extends from powers of two to
+every length: a generic radix-r stage for the odd small primes and Bluestein
+for the rest. Shared contracts changed, so all four backends are affected:
+
+* **Planning is now one implementation** (`TargetHooks/Common/FFTPlan.h`).
+  CPU, AMD and NVIDIA each carried their own `while (n%4) ... while (n%2)`
+  driver loop, and all three silently returned a HALF-FINISHED transform for
+  any other N while reporting success. `LegalizeSpectral::pickRadixSequence`
+  was a fourth copy, factoring over radices 7/5/3/4/2 and pushing a residual
+  prime as a "stage" of that radix -- a stage nothing could execute.
+* **Compiler routing was wrong independently of the kernels.**
+  `LowerToTargetIR::stageSymbolFor` mapped every radix other than 4 to
+  `ts_stockham_r2_*`, so a static N = 12 = 4x3 emitted a radix-2 call for a
+  radix-3 stage. The runtime driver was correct; the compiler path was not, and
+  direct driver tests could not see the difference.
+* **New C ABI surface:** `ts_stockham_rn_<backend>(in, out, N, L, r, sign)`
+  (note the extra radix argument, which r4/r2 do not take), plus
+  `tessera.target_ir.stage_radices` carrying it, and a
+  `tessera.target_ir.bluestein` marker routing those lengths to the driver.
+
+NVIDIA gets the shared plan and the generic radix-r stage, so every
+mixed-radix length is routed and emitted correctly. It does NOT get Bluestein.
+
+There is no CUDA toolchain on the development box, so ~60 lines of device code
+written for it could not be compiled, let alone checked against a reference.
+Shipping unverifiable device code is the same unproven-claim pattern the silent
+truncation was an instance of, so the driver DECLINES instead:
+`ts_fft_supported_nvidia(N)` answers the question and the driver returns
+without writing `d_out` rather than truncating.
+
+**Nothing in this change has been compiled for NVIDIA.** The generic radix
+kernel is a mechanical mirror of the gfx1151-verified AMD one, which lowers but
+does not remove the risk. First task on the CUDA box: compile the `.cu`, run
+the mixed-radix sizes against numpy, then implement and verify Bluestein.
+Registering the lane as a `spectral_fft` arbiter candidate is a separate,
+still-open item.
+
+
 Cross-backend sync `SHAPE-RULE-REGISTRY-2026-08-03` — **follow-up required - scale operands changed, and NVIDIA has no FFT lane.**
 PR #493 closed the Graph IR shape-rule registry: **303 declared / 6 deliberately
 undeclared / 0 unexamined**, with the `MAX_UNCLASSIFIED` ratchet dropped 106 -> 0.

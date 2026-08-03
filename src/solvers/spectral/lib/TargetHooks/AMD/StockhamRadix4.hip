@@ -201,6 +201,22 @@ extern "C" __global__ void ts_conj_scale_amd(float2 *__restrict__ a, int M,
   a[i] = make_float2(a[i].x * s, -a[i].y * s);
 }
 
+// Last error from a void-returning driver call on this thread.
+//
+// `ts_fft_stockham_amd` is a stream-ordered launch helper and returns void, so
+// an allocation failure inside the Bluestein path had nowhere to go. Rather
+// than change a published C ABI signature, the status is parked here and the
+// host-pointer wrapper -- which DOES return a status -- reads it.
+static int &fft_last_error_slot() {
+  static thread_local int last = 0;
+  return last;
+}
+
+// C-callable accessors.  A reference return is not C-compatible, so the slot
+// stays internal and the ABI exposes plain ints.
+extern "C" int ts_fft_last_error_amd(void) { return fft_last_error_slot(); }
+extern "C" void ts_fft_clear_error_amd(void) { fft_last_error_slot() = 0; }
+
 extern "C" void ts_fft_stockham_amd(const float2 *d_in, float2 *d_out,
                                     float2 *d_scratch, int N, int sign,
                                     hipStream_t stream);
@@ -266,7 +282,18 @@ extern "C" void ts_fft_stockham_amd(const float2 *d_in, float2 *d_out,
   }
   const tessera::spectral::FFTPlan plan = tessera::spectral::fft_plan(N);
   if (plan.kind == tessera::spectral::kFFTBluestein) {
-    bluestein_amd(d_in, d_out, N, plan.bluestein_m, sign, stream);
+    // Bluestein allocates five M-sized buffers and M can be nearly 4N, so this
+    // fails in practice under memory pressure or at a large prime length.
+    // Discarding the status let the host wrapper synchronise, copy an
+    // UNINITIALISED d_out, and return 0 -- the Python candidate would then
+    // label garbage `rocm_stockham`, which is the exact wrong-answer-under-a-
+    // kernel-name failure this PR set out to remove. Record it so the wrapper
+    // can report it; the driver's own signature is void (it is a stream-
+    // ordered launch helper), so the status travels in a thread-local.
+    if (bluestein_amd(d_in, d_out, N, plan.bluestein_m, sign, stream) != 0) {
+      fft_last_error_slot() = 5;
+      return;
+    }
     if (sign > 0) {
       int blocks = (N + TPB - 1) / TPB;
       hipLaunchKernelGGL(ts_fft_scale_amd, dim3(blocks), dim3(TPB), 0, stream,
@@ -324,6 +351,7 @@ extern "C" int ts_fft_stockham_amd_hostptr(const float2 *in_host,
   float2 *d_in = nullptr, *d_out = nullptr, *d_scr = nullptr;
   int rc = 0;
   size_t bytes = size_t(N) * sizeof(float2);
+  ts_fft_clear_error_amd();
   if (hipMalloc(&d_in, bytes) != hipSuccess ||
       hipMalloc(&d_out, bytes) != hipSuccess ||
       hipMalloc(&d_scr, bytes) != hipSuccess) {
@@ -335,6 +363,12 @@ extern "C" int ts_fft_stockham_amd_hostptr(const float2 *in_host,
     goto cleanup;
   }
   ts_fft_stockham_amd(d_in, d_out, d_scr, N, sign, /*stream=*/0);
+  if (ts_fft_last_error_amd() != 0) {
+    // The transform never ran; d_out holds uninitialised device memory and
+    // must NOT be copied back as a result.
+    rc = ts_fft_last_error_amd();
+    goto cleanup;
+  }
   if (hipDeviceSynchronize() != hipSuccess) {
     rc = 3;
     goto cleanup;

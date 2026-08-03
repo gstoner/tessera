@@ -40,18 +40,32 @@ namespace tessera {
 namespace {
 
 static StringRef stageSymbolFor(StringRef backend, int64_t radix) {
-  // Route each stage to the matching mixed-radix Stockham kernel shipped
-  // under lib/TargetHooks/{CPU,NVIDIA,AMD}/StockhamRadix4.*.  Radix-4 stages
-  // drain factors of 4; a radix-2 tail handles the residual factor of 2.
-  // Radices other than 4 (the radix-2 tail, plus composite/prime residues
-  // the legalizer may emit) route through the radix-2 stage symbol for now
-  // — a scalar mixed-radix stage — until radix-3/5/7 specializations land.
-  const bool r4 = (radix == 4);
-  if (backend == "nvidia")
-    return r4 ? "ts_stockham_r4_nvidia" : "ts_stockham_r2_nvidia";
-  if (backend == "amd")
-    return r4 ? "ts_stockham_r4_amd" : "ts_stockham_r2_amd";
-  return r4 ? "ts_stockham_r4_cpu" : "ts_stockham_r2_cpu";
+  // Route each stage to the matching Stockham kernel shipped under
+  // lib/TargetHooks/{CPU,NVIDIA,AMD}/StockhamRadix4.*.
+  //
+  // Radix 4 and radix 2 have hand-written butterflies; every other radix the
+  // planner emits (3, 5, 7, 11, 13) goes to the generic radix-r stage.
+  //
+  // This used to map EVERY radix other than 4 to the radix-2 symbol, with a
+  // comment saying "until radix-3/5/7 specializations land".  They have
+  // landed, and until now nothing routed to them: a statically-shaped length
+  // like 12 = 4x3 emitted a radix-4 call followed by a radix-2 call for a
+  // stage that is radix 3, producing an incorrect transform through the
+  // compiler path even though the runtime driver -- which factors N itself --
+  // was correct. Direct driver tests could not see it.
+  if (radix == 4) {
+    if (backend == "nvidia") return "ts_stockham_r4_nvidia";
+    if (backend == "amd") return "ts_stockham_r4_amd";
+    return "ts_stockham_r4_cpu";
+  }
+  if (radix == 2) {
+    if (backend == "nvidia") return "ts_stockham_r2_nvidia";
+    if (backend == "amd") return "ts_stockham_r2_amd";
+    return "ts_stockham_r2_cpu";
+  }
+  if (backend == "nvidia") return "ts_stockham_rn_nvidia";
+  if (backend == "amd") return "ts_stockham_rn_amd";
+  return "ts_stockham_rn_cpu";
 }
 
 /// Runtime driver symbol: factors the runtime N and launches the matching
@@ -120,9 +134,31 @@ struct LowerToTargetIRPass
         return WalkResult::advance();
       }
 
+      // Bluestein lengths have NO stage list -- it is a different algorithm,
+      // not a longer sequence of butterflies -- so they route to the driver
+      // exactly as dynamic shapes do.  The legalizer signals this by emitting
+      // an empty stage list for a statically-shaped op.
+      if (op->hasAttr("tessera.spectral.bluestein")) {
+        StringAttr drv = StringAttr::get(ctx, driverSymbolFor(backend));
+        op->setAttr("tessera.target_ir.call", drv);
+        op->setAttr("tessera.target_ir.stage_calls",
+                    ArrayAttr::get(ctx, {drv}));
+        op->setAttr("tessera.target_ir.bluestein", builder.getUnitAttr());
+        if (isConv)
+          op->setAttr("tessera.target_ir.composite",
+                      StringAttr::get(ctx, "conv_fft"));
+        op->setAttr("tessera.target_ir.lowered", builder.getUnitAttr());
+        return WalkResult::advance();
+      }
+
       // Static shape: one C ABI symbol per resolved radix stage.  Composite
       // ops mark themselves so codegen knows to wrap with pad/cmul/crop.
+      //
+      // The radix travels alongside the symbol: `ts_stockham_rn_*` takes it as
+      // an argument (r4/r2 do not), so a consumer that builds the actual call
+      // needs it and cannot recover it from the symbol name.
       SmallVector<Attribute, 8> stageCalls;
+      SmallVector<Attribute, 8> stageRadices;
       if (auto stages =
               op->getAttrOfType<ArrayAttr>("tessera.spectral.stages")) {
         for (Attribute a : stages) {
@@ -134,6 +170,7 @@ struct LowerToTargetIRPass
             continue; // axis separator from LegalizeSpectralPass
           stageCalls.push_back(
               StringAttr::get(ctx, stageSymbolFor(backend, r)));
+          stageRadices.push_back(builder.getI64IntegerAttr(r));
         }
       }
       // A static, legalized FFT always has at least one stage.  If we somehow
@@ -146,6 +183,9 @@ struct LowerToTargetIRPass
       op->setAttr("tessera.target_ir.call", stageCalls.front());
       op->setAttr("tessera.target_ir.stage_calls",
                   ArrayAttr::get(ctx, stageCalls));
+      if (!stageRadices.empty())
+        op->setAttr("tessera.target_ir.stage_radices",
+                    ArrayAttr::get(ctx, stageRadices));
       if (isConv)
         op->setAttr("tessera.target_ir.composite",
                     StringAttr::get(ctx, "conv_fft"));

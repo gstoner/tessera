@@ -8,6 +8,36 @@ last_updated: 2026-08-03
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `FFT-MIXED-RADIX-BLUESTEIN-2026-08-03` — **not applicable today; inherits when a lane lands.**
+Tessera's own FFT (Stockham, `TargetHooks/`) extends from powers of two to
+every length: a generic radix-r stage for the odd small primes and Bluestein
+for the rest. Shared contracts changed, so all four backends are affected:
+
+* **Planning is now one implementation** (`TargetHooks/Common/FFTPlan.h`).
+  CPU, AMD and NVIDIA each carried their own `while (n%4) ... while (n%2)`
+  driver loop, and all three silently returned a HALF-FINISHED transform for
+  any other N while reporting success. `LegalizeSpectral::pickRadixSequence`
+  was a fourth copy, factoring over radices 7/5/3/4/2 and pushing a residual
+  prime as a "stage" of that radix -- a stage nothing could execute.
+* **Compiler routing was wrong independently of the kernels.**
+  `LowerToTargetIR::stageSymbolFor` mapped every radix other than 4 to
+  `ts_stockham_r2_*`, so a static N = 12 = 4x3 emitted a radix-2 call for a
+  radix-3 stage. The runtime driver was correct; the compiler path was not, and
+  direct driver tests could not see the difference.
+* **New C ABI surface:** `ts_stockham_rn_<backend>(in, out, N, L, r, sign)`
+  (note the extra radix argument, which r4/r2 do not take), plus
+  `tessera.target_ir.stage_radices` carrying it, and a
+  `tessera.target_ir.bluestein` marker routing those lengths to the driver.
+
+Apple has no `spectral_fft` kernel and no `TargetHooks/Apple/` entry, so
+nothing here changes its behaviour. It is listed because the composition path
+is now driven off registration: the moment an Apple FFT lane registers, it
+receives `rfft`/`irfft`/`stft`/`istft`/`spectral_filter` automatically, and the
+shared planner means it would only need to supply butterflies, not a plan.
+
+Nothing touches `apple_gpu_runtime.mm` or the hand-written MSL kernels.
+
+
 Cross-backend sync `SHAPE-RULE-REGISTRY-2026-08-03` — **follow-up required - CPU lane supported, GPU lane rejected.**
 PR #493 closed the Graph IR shape-rule registry: **303 declared / 6 deliberately
 undeclared / 0 unexamined**, with the `MAX_UNCLASSIFIED` ratchet dropped 106 -> 0.

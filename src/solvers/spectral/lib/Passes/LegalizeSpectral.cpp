@@ -26,6 +26,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "../TargetHooks/Common/FFTPlan.h"
+
 #include "tessera/Spectral/SpectralPasses.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -53,25 +55,28 @@ static SmallVector<int64_t, 8> pickRadixSequence(int64_t N) {
   SmallVector<int64_t, 8> stages;
   if (N <= 0)
     return stages; // dynamic: defer radix selection to runtime
-  static const int64_t kRadices[] = {7, 5, 3, 4, 2};
-  int64_t n = N;
-  // Prefer 4 first (better register reuse for Stockham), then 2, then 3/5/7.
-  while (n > 1 && (n % 4) == 0) {
-    stages.push_back(4);
-    n /= 4;
-  }
-  for (int64_t r : kRadices) {
-    if (r == 4)
-      continue; // already drained
-    while (n > 1 && (n % r) == 0) {
-      stages.push_back(r);
-      n /= r;
-    }
-  }
-  if (n > 1) {
-    // residual prime > 7: keep as a Bluestein-style single stage marker
-    stages.push_back(n);
-  }
+
+  // ONE planner, shared with the runtime drivers.
+  //
+  // This function used to factor N itself, over radices {7,5,3,4,2}, and push
+  // any residual prime as a "Bluestein-style single stage marker".  That made
+  // it a THIRD copy of the planning decision -- alongside the per-backend
+  // driver loops, which have since been unified into
+  // TargetHooks/Common/FFTPlan.h -- and the copies disagreed: the shared
+  // planner drains radices up to 13, this one stopped at 7.  A length like 11
+  // or 13 was therefore planned as a single "stage" of radix 11 by the
+  // compiler and as three radix-11 mixed-radix stages by the runtime.
+  //
+  // Worse, the residual marker was not a radix at all: nothing could execute a
+  // "stage" of radix 101.  Bluestein is not a stage, it is a different
+  // algorithm, so the plan now says so by emitting NO stages -- the caller
+  // marks the op and the lowering routes it to the driver (Decision #31).
+  const tessera::spectral::FFTPlan plan =
+      tessera::spectral::fft_plan(static_cast<int>(N));
+  if (plan.kind != tessera::spectral::kFFTMixedRadix)
+    return stages; // Bluestein: no stage list exists to emit
+  for (int i = 0; i < plan.stage_count; ++i)
+    stages.push_back(plan.stages[i]);
   // Stages are returned in application order — radix-4 stages first (L grows
   // 1,4,16,…), then the radix-2 tail last, so the final stage writes the
   // natural-order output buffer.  This matches the proven Stockham driver in
@@ -145,6 +150,7 @@ struct LegalizeSpectralPass
       SmallVector<int64_t, 4> perAxisLen;
       SmallVector<bool, 4> perAxisDynamic;
       bool anyDynamic = false;
+      bool anyBluestein = false;
       for (Attribute a : axesAttr) {
         auto ia = dyn_cast<IntegerAttr>(a);
         if (!ia)
@@ -155,7 +161,15 @@ struct LegalizeSpectralPass
         bool dyn = (N <= 0);
         perAxisDynamic.push_back(dyn);
         anyDynamic |= dyn;
-        auto radices = pickRadixSequence(N); // empty when dynamic
+        auto radices = pickRadixSequence(N); // empty when dynamic OR Bluestein
+        // A STATIC axis with no stages means the shared planner chose
+        // Bluestein.  Flag it explicitly rather than letting a downstream pass
+        // infer it from an empty list -- an empty list already means "dynamic"
+        // there, and the two need different handling (one defers to the
+        // runtime driver because N is unknown, the other because there is no
+        // stage decomposition at all).
+        if (!dyn && radices.empty())
+          anyBluestein = true;
         for (int64_t r : radices)
           stagesFlat.push_back(builder.getI64IntegerAttr(r));
         stagesFlat.push_back(builder.getI64IntegerAttr(-1)); // axis separator
@@ -175,6 +189,8 @@ struct LegalizeSpectralPass
                     ArrayAttr::get(ctx, dynAttrs));
         op->setAttr("tessera.spectral.dynamic_shape", builder.getUnitAttr());
       }
+      if (anyBluestein)
+        op->setAttr("tessera.spectral.bluestein", builder.getUnitAttr());
 
       // Mirror norm policy + real-input flag onto the exec op so downstream
       // passes don't have to chase the plan.

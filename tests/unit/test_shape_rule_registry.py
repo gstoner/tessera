@@ -38,7 +38,7 @@ from tessera.compiler.op_catalog import (
 
 #: Ratchet. May shrink, never grow. Driving it to zero is what closes W1's
 #: "no op reaches the `operand_types[0]` fallback".
-MAX_UNCLASSIFIED = 189
+MAX_UNCLASSIFIED = 113
 
 
 def test_declared_rule_names_match_implementations():
@@ -63,6 +63,43 @@ def test_every_catalog_op_resolves_to_a_named_rule():
         assert rule in SHAPE_RULE_NAMES, (
             f"{spec.graph_name} resolved to undeclared rule {rule!r}"
         )
+
+
+def test_deliberately_undeclared_ops_are_real_and_explained():
+    """The third state must stay honest.
+
+    "Examined and deliberately left without a rule" is not the same as "not yet
+    looked at", and collapsing them makes the remaining count meaningless. Each
+    entry must name a real op and carry a substantive reason — an optimizer
+    keeping f32 master state with bf16 params is a *correct* design, not a gap,
+    and declaring it storage-preserving would make the enforcement wrapper
+    round that state back to bf16.
+    """
+    from tessera.compiler.op_catalog import DELIBERATELY_UNDECLARED
+
+    real = {spec.graph_name for spec in _SPECS}
+    for name, reason in DELIBERATELY_UNDECLARED.items():
+        assert name in real, f"{name} is not a catalog op"
+        assert len(reason) > 20, f"{name}: reason too thin to be a decision"
+
+
+def test_no_phantom_declarations():
+    """Every declared op key must name a REAL catalog op.
+
+    The first version of the loss block used public names (`tessera.mse_loss`)
+    where the graph names are `tessera.loss.mse`. All 16 matched nothing and
+    declared nothing -- while *looking* like coverage. That is precisely the
+    "declared but not consumed" failure the registry exists to remove, so it
+    gets a gate rather than a comment.
+    """
+    from tessera.compiler.op_catalog import OP_SHAPE_RULE
+
+    real = {spec.graph_name for spec in _SPECS}
+    phantom = sorted(k for k in OP_SHAPE_RULE if k not in real)
+    assert not phantom, (
+        "these shape-rule declarations name no catalog op, so they silently "
+        f"declare nothing: {phantom}"
+    )
 
 
 def test_unclassified_ratchet_does_not_grow():

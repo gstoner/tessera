@@ -5075,10 +5075,16 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
         def wrapped(*args, **kwargs):
             want = _storage_dtype(args[0]) if args else None
             out = fn(*args, **kwargs)
-            if want is None or not isinstance(out, _np.ndarray):
+            if want is None:
+                return out
+            # A full reduction returns a numpy SCALAR (np.float64), which is a
+            # `np.generic` and NOT an ndarray -- so an `isinstance(out,
+            # ndarray)` guard silently skipped every `reduce_all` op. That is
+            # why the losses stayed float64 even once correctly declared.
+            if not isinstance(out, (_np.ndarray, _np.generic)):
                 return out
             if _is_float_storage(out.dtype) and out.dtype != want:
-                return out.astype(want, copy=False)
+                return _np.asarray(out).astype(want, copy=False)
             return out
         return wrapped
 

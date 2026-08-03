@@ -7,6 +7,23 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **not applicable on gfx1151, by hardware.**
+Same multi-result quantize declaration as NVIDIA. The sub-byte STORAGE path
+does not apply to the current ROCm target: the dtype contract already records
+`fp8_e4m3` and `fp4_e2m1` as `unsupported` on gfx1151, which matches RDNA 3.5
+having no FP8 WMMA (RDNA 4 / CDNA 4 add it). That contract is doing its job —
+it is why declaring a real fp8 lowering here would be wrong rather than merely
+unimplemented. Re-assess for gfx950 / gfx1201, which are MASTER_AUDIT P2.
+
+Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **follow-up required, reference-level only.**
+Same shared policy change as NVIDIA. The reference lane now computes at f32 and
+stores narrow, which fixed `rmsnorm` / `rmsnorm_safe` (the latter returned 0.0
+instead of ~1.0 at fp16: sum(x**2) overflowed to inf, then x/inf underflowed).
+The ROCm `generate-rocm-norm-kernel` lane already documents f32 reductions
+regardless of storage dtype, so the contracts agree on paper — but that was not
+re-verified on gfx1151 in this change. ROCm owns an execute-and-compare at
+fp16/bf16 against the corrected reference.
+
 Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **parity validated, no ROCm behavior change.**
 The `dataOperands` / `isTileControlType` rule ROCm already applied privately in
 `TileToROCM.cpp` is now a shared Tile helper. ROCm **composes** rather than

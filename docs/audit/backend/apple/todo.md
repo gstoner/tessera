@@ -8,6 +8,33 @@ last_updated: 2026-08-03
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **follow-up required, capability unverified here.**
+Same multi-result quantize declaration. Whether Metal exposes native FP8/FP4
+arithmetic on the M-series was NOT verified in this change, and per Decision #27
+that question must be answered from on-machine SDK headers rather than
+inference — which cannot be done on the Ubuntu box. Apple owns checking the
+Metal/MPS capability before any sub-byte storage lowering is scoped.
+
+Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **follow-up required; a real Apple regression was introduced and reverted here.**
+The reduced-precision enforcement now computes at f32 and stores back at the
+operand's dtype, rather than casting the result (which made dtypes right while
+leaving values wrong). Apple is affected twice:
+(1) **Regression, now fixed.** A refactor of
+`_enforce_storage_dtype_preservation` replaced a region of `tessera/__init__.py`
+that spanned `install_apple_gpu_interception(ops)` and deleted the call.
+Nothing else installs it, so the eight canonical intercepted ops silently
+reverted to the numpy reference and `ops.rmsnorm(..., rows=..., cols=...)` would
+reject its trace-only kwargs and never return a `TraceRef`. The whole suite
+stayed green because non-trace calls pass through by design and the Apple lanes
+skip on this box. Restored, and guarded by
+`tests/unit/test_apple_interception_installed.py`, which asserts the call site
+AND the ordering (enforcement must wrap outermost or the five rebound ops lose
+their dtype contract).
+(2) **Ordering contract.** Enforcement runs after interception; it is a no-op
+for trace calls because a `TraceRef` has no `.dtype`.
+**Apple owns the follow-up** to run its device suites and confirm no encode
+path depended on the previous (upcasting) dtypes. IR/reference-level only here.
+
 Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **not applicable to the Tile operand contract; unrelated Apple-visible change is IR-only.**
 Apple has no `tile.mma` consumer, so the data-operand correction does not reach
 it. Apple IS touched by the accompanying storage-dtype work: ops whose declared

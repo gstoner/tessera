@@ -9,6 +9,22 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `SUBBYTE-STORAGE-PATH-2026-08-03` — **follow-up required, emulated path.**
+The x86 dtype contract records `fp8_e4m3` as `emulated`: packed-byte storage
+with software conversion and fp32 compute, since Zen 5 has no native FP8
+arithmetic. So x86 CAN carry real sub-byte STORAGE even though it cannot
+compute in it — which makes it a useful place to prove the storage path
+independently of native arithmetic. x86 owns deciding whether to materialize
+packed fp8 storage or keep the f32 fake-quant reference.
+
+Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **follow-up required, reference-level only.**
+The reference lane now computes reduced-precision ops at f32 and stores back.
+x86's AVX-512 kernels are the executable lane on this fleet and were not
+re-verified against the corrected reference; the fp16/bf16 accumulate contract
+is now stated explicitly, so a mismatch would be a real divergence rather than
+an ambiguity. x86 owns an AVX-512 execute-and-compare — obtainable on the
+Strix Halo box, unlike the AMX lane.
+
 Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **not applicable, with a reason.**
 x86 has no `tile.mma` consumer: `TileToX86Pass` lowers through the C-ABI shim
 and the `tessera_x86` Target IR models the boundary with `abi_call`. The shared

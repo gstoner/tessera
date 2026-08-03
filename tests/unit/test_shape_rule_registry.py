@@ -38,7 +38,7 @@ from tessera.compiler.op_catalog import (
 
 #: Ratchet. May shrink, never grow. Driving it to zero is what closes W1's
 #: "no op reaches the `operand_types[0]` fallback".
-MAX_UNCLASSIFIED = 113
+MAX_UNCLASSIFIED = 106
 
 
 def test_declared_rule_names_match_implementations():
@@ -231,10 +231,16 @@ def test_declared_rules_hold_at_reduced_precision():
     does NOT follow NumPy's weak-scalar promotion, so `x * 0.5` silently yields
     float32.
 
-    fp16 is deliberately not probed here: measured against this same op set it
-    caught nothing bf16 did not (bf16 is a strict superset for *propagation*).
-    fp16's distinct value is RANGE -- its max is 6.55e4 versus bf16's 3.39e38 --
-    which belongs in a numerics/overflow gate, not a dtype-propagation one.
+    All THREE production dtypes are probed. fp16 was originally excluded on the
+    grounds that bf16 caught a strict superset for *propagation* -- true at the
+    time, and too narrow a conclusion. Several ops ignored the input dtype
+    entirely and returned f64 for f32, bf16 and fp16 alike, and f32 is a
+    production dtype rather than an oracle: a wrapper that only handled reduced
+    precision left f32 callers still getting f64. Probing all three is what made
+    that visible.
+
+    fp64 remains the oracle and is not asserted here; its range/precision
+    hazards live in test_fp16_range_sensitivity.py.
     """
     import ml_dtypes
 
@@ -256,16 +262,31 @@ def test_declared_rules_hold_at_reduced_precision():
             fn = getattr(ops, spec.public_name, None)
             if fn is None:
                 continue
+            # All five production storage widths. fp8/fp4 are canonical dtypes
+            # in `tessera.dtype`, not hypotheticals -- the per-backend contracts
+            # already model them (gfx1151 `unsupported`, x86 `emulated`), and an
+            # op that silently leaves fp8 forfeits the entire reason an
+            # accelerator pipeline chose it.
+            probes = (
+                ("f32", np.float32, np.dtype(np.float32)),
+                ("bf16", bf16, np.dtype(bf16)),
+                ("fp16", np.float16, np.dtype(np.float16)),
+                ("fp8_e4m3", ml_dtypes.float8_e4m3fn, np.dtype(ml_dtypes.float8_e4m3fn)),
+                ("fp4_e2m1", ml_dtypes.float4_e2m1fn, np.dtype(ml_dtypes.float4_e2m1fn)),
+            )
             try:
-                got_f32 = np.asarray(fn(sample.astype(np.float32))).dtype
-                got_bf16 = np.asarray(fn(sample.astype(bf16))).dtype
+                observed = [
+                    (label, np.asarray(fn(sample.astype(dt))).dtype, expected)
+                    for label, dt, expected in probes
+                ]
             except Exception:
                 continue
             checked += 1
-            if got_f32 != np.float32:
-                failures.append(f"{spec.public_name}: f32 in -> {got_f32}")
-            if got_bf16 != np.dtype(bf16):
-                failures.append(f"{spec.public_name}: bf16 in -> {got_bf16}")
+            for label, got, expected in observed:
+                if got != expected:
+                    failures.append(
+                        f"{spec.public_name}: {label} in -> {got}"
+                    )
 
     assert checked > 40, f"only {checked} ops probed; the sweep likely broke"
     assert not failures, (
@@ -292,3 +313,88 @@ def test_bfloat16_is_not_detected_by_the_usual_numpy_float_idioms():
     assert bf16.kind == "V", f"bf16.kind is {bf16.kind!r}, expected 'V' (void)"
     # ml_dtypes.finfo is the detection that actually works.
     assert ml_dtypes.finfo(bf16).max > 3e38
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Multi-result contracts
+# ─────────────────────────────────────────────────────────────────────────────
+
+MULTI_RESULT_OPS = {
+    "tessera.quantize_fp8": "quantize_fp8",
+    "tessera.quantize_fp6": "quantize_fp6",
+    "tessera.quantize_fp4": "quantize_fp4",
+    "tessera.quantize_nvfp4": "quantize_nvfp4",
+}
+
+
+def test_multi_result_rules_match_actual_arity_and_shapes():
+    """The quantize family returns (codes, scale) — verify BOTH results.
+
+    These were declared `same_as_first`: a single-tensor claim for a two-result
+    op. It survived because the differential probe did `np.asarray(fn(...))`,
+    which raises on a tuple, so the op was silently SKIPPED. A gate that skips
+    the thing it cannot express is indistinguishable from a passing gate — the
+    same failure mode as the substring assertions this registry replaced.
+
+    `_infer_result_types` returns the full contract; `_infer_result_type`
+    returns only the primary tensor and cannot express these at all.
+    """
+    from tessera import ops
+    from tessera.compiler.graph_ir import _infer_result_types, tensor_ir_type
+
+    sample = np.random.default_rng(0).standard_normal((4, 16)).astype(np.float32)
+    probe = tensor_ir_type(("4", "16"), "f32")
+
+    for graph_name, public_name in sorted(MULTI_RESULT_OPS.items()):
+        fn = getattr(ops, public_name, None)
+        if fn is None:
+            continue
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                actual = fn(sample)
+            except Exception:
+                continue
+        assert isinstance(actual, tuple), (
+            f"{public_name} no longer returns a tuple — update MULTI_RESULT_OPS"
+        )
+        predicted = _infer_result_types(graph_name, [probe])
+        assert len(predicted) == len(actual), (
+            f"{public_name}: rule predicts {len(predicted)} results, op returns "
+            f"{len(actual)}"
+        )
+        for index, (want, got) in enumerate(zip(predicted, actual)):
+            got_arr = np.asarray(got)
+            want_shape = tuple(str(d) for d in want.shape)
+            real_shape = tuple(str(d) for d in got_arr.shape)
+            assert want_shape == real_shape, (
+                f"{public_name} result[{index}]: rule predicts shape "
+                f"{want_shape}, op returns {real_shape}"
+            )
+
+
+def test_nvfp4_scale_is_per_block_not_per_tensor():
+    """NVFP4 is micro-scaled; folding it into the per-tensor rule misstates it.
+
+    `quantize_fp8/fp6/fp4` carry ONE scale for the whole tensor (rank-0), while
+    `quantize_nvfp4` carries one per block of 16 along the last axis — the
+    format Blackwell actually implements. A shared rule would have been wrong
+    for exactly the target that motivates the format.
+    """
+    from tessera import ops
+    from tessera.compiler.graph_ir import _infer_result_types, tensor_ir_type
+
+    sample = np.random.default_rng(0).standard_normal((4, 32)).astype(np.float32)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _, per_tensor_scale = ops.quantize_fp8(sample)
+        _, per_block_scale = ops.quantize_nvfp4(sample)
+
+    assert np.asarray(per_tensor_scale).shape == ()
+    assert np.asarray(per_block_scale).shape == (4, 2), (
+        "expected one scale per 16-element block along the last axis"
+    )
+
+    probe = tensor_ir_type(("4", "32"), "f32")
+    _, predicted_scale = _infer_result_types("tessera.quantize_nvfp4", [probe])
+    assert tuple(predicted_scale.shape) == ("4", "2")

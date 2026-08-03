@@ -437,7 +437,7 @@ _SPECS = [
     OpSpec("normalize_group_advantages", "tessera.rl.normalize_group_advantages", 1, 1, lowering="rl_loss"),
     # State-space / Mamba2 selective scan.  Inputs: x, A, B, C, [D, initial_state].
     # Lowered as a stateful sequence-axis scan (`state_space` lowering kind).
-    OpSpec("selective_ssm", "tessera.selective_ssm", 4, 6, effect="state", lowering="state_space"),
+    OpSpec("selective_ssm", "tessera.selective_ssm", 5, 6, effect="state", lowering="state_space"),
 
     # M7 Visual Complex Analysis (E3, 2026-05-20).  These ops give the
     # M7 long-tail a real Graph IR identity so the frontend can emit
@@ -605,7 +605,6 @@ LOWERING_SHAPE_RULE: dict = {
     "random_mask": "same_as_first",
     "position_encoding": "same_as_first",
     "rotary_embedding": "same_as_first",
-    "quantize": "same_as_first",
     "numeric_helper": "same_as_first",
     # NOT declared: `functional_optimizer_step` / `optimizer`. An optimizer
     # legitimately keeps f32 master state while the parameters are bf16 --
@@ -717,6 +716,40 @@ OP_SHAPE_RULE: dict = {
         "js_divergence", "contrastive_divergence", "persistent_cd",
         "ddpm_noise_pred", "score_matching", "vlb")},
 
+    # ── Probed at f32 / bf16 / fp16; several ignored the input dtype ─────
+    # These returned float64 for EVERY input dtype -- f32, bf16 and fp16 alike.
+    # They are unclassified only in the sense that nobody had looked; declaring
+    # the rule also FIXES them, because the storage-dtype enforcement then
+    # computes at f32 and stores back at the operand's dtype.
+    **{f"tessera.loss.{n}": "reduce_all" for n in ("z_loss", "load_balance_loss")},
+    "tessera.rl.ppo_policy_loss": "reduce_all",
+    "tessera.rl.normalize_group_advantages": "same_as_first",
+    # sigmoid_safe was inconsistent: f32 for a bf16 input but f16 for an f16
+    # input. Declaring it makes the behavior uniform instead of accidental.
+    "tessera.sigmoid_safe": "same_as_first",
+    "tessera.dct": "same_as_first",
+    # Shape-reducing, dtype-preserving.
+    # Derives from operand 1 (candidates), NOT operand 0 (energies): energies
+    # only score, candidates carry the data. `reduce_trailing` on operand 0
+    # predicted (B,) with the energies' dtype -- wrong shape AND wrong dtype.
+    "tessera.ebm_self_verify": "select_from_second",
+    # The quantize family is MULTI-RESULT: (codes, scale). `same_as_first` was
+    # a false contract for it. nvfp4 is separated because its scale is
+    # per-BLOCK (Blackwell's micro-scaled format), not per-tensor.
+    **{f"tessera.quantize_{n}": "quantize_per_tensor" for n in ("fp8", "fp6", "fp4")},
+    "tessera.quantize_nvfp4": "quantize_per_block",
+    # dequantize is single-result: (codes, scale) -> tensor shaped like codes.
+    **{f"tessera.dequantize_{n}": "same_as_first"
+       for n in ("fp8", "fp6", "fp4", "nvfp4")},
+    # Optimizers: (param, moment1, moment2). The param keeps its own storage
+    # dtype while the moments follow the `state_dtype` attribute -- f32 master
+    # state with bf16 params is standard mixed precision. Previously exempted
+    # as "deliberately undeclared"; that was a vocabulary gap, not a genuine
+    # exception, and the exemption also silently covered an optimizer wrongly
+    # rounding its state DOWN to the param dtype.
+    **{f"tessera.{n}": "optimizer_step" for n in
+       ("adam", "adamw", "momentum", "nesterov", "adafactor", "lion", "sgd")},
+
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
     # shapes scale with the mesh, so declaring from that measurement would bake
@@ -737,6 +770,10 @@ SHAPE_RULE_NAMES = frozenset({
     "flatten",
     "complex_same",
     "rfft",
+    "select_from_second",
+    "quantize_per_tensor",
+    "quantize_per_block",
+    "optimizer_step",
     "from_shape_attr",
     "cast",
     "reduce_trailing",
@@ -750,14 +787,21 @@ SHAPE_RULE_NAMES = frozenset({
 #: force wrong behavior. Answering "why is this unclassified?" is what makes the
 #: remaining count meaningful.
 DELIBERATELY_UNDECLARED: dict = {
+    # The quantize family returns a TUPLE (codes, scale), not a single tensor,
+    # so `same_as_first` was a false declaration -- it claims one result type
+    # for a multi-result contract. The wrapper happened not to corrupt anything
+    # (it passes non-arrays through), but a rule that misstates the contract is
+    # exactly what this registry exists to remove. Declaring these needs a
+    # tuple-aware rule vocabulary, which does not exist yet.
+    #
+    # Note the codes come back as f32, NOT as fp8/fp4 storage: this is
+    # fake-quant. fp8_e4m3 / fp8_e5m2 / fp4_e2m1 / nvfp4 ARE canonical dtypes
+    # in `tessera.dtype` and the per-backend contracts model them honestly
+    # (gfx1151 `unsupported` -- RDNA 3.5 has no FP8 WMMA; x86 `emulated`), so
+    # the type system can express the storage the reference never materializes.
+    # Producing real sub-byte storage is a backend-path question, not a shape
+    # rule one.
     "tessera.popcount": "returns an INTEGER bit count, never the operand's storage dtype, so it is not storage-preserving despite sitting in the `elementwise` kind. The exact integer width is NumPy-version dependent (uint8 under 2.x, int64 under 1.26), so pinning one would be wrong; declaring a shape rule needs an int-width-agnostic vocabulary first",
-    "tessera.adam": "optimizer keeps f32 compute/state while params are reduced precision; MEASURED: at fp16 a 1e-4 gradient squares to exactly zero, so an fp16 second moment would collapse -- the f32 default is load-bearing. Declaring it storage-preserving would force the state back to the param dtype and destroy the update. See tests/unit/test_optimizer_reduced_precision.py",
-    "tessera.adamw": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.momentum": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.nesterov": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.adafactor": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.lion": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
-    "tessera.sgd": "optimizer keeps f32 master state while parameters are bf16 (standard mixed precision); declaring it storage-preserving would round the state back to bf16 and destroy the update",
     "tessera.all_gather": "result shape scales with mesh size, not derivable from operand types",
     "tessera.reduce_scatter": "result shape shrinks with mesh size, not derivable from operand types",
     "tessera.fft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
@@ -775,6 +819,23 @@ DELIBERATELY_UNDECLARED: dict = {
 def undeclared_reason(graph_name: str):
     """Why this op has no rule, when that was a decision rather than a gap."""
     return DELIBERATELY_UNDECLARED.get(graph_name)
+
+
+#: Which OPERAND carries the result's storage dtype, per rule. Defaults to 0.
+#: `ebm_self_verify` is the counterexample that forced this to be explicit:
+#: operand 0 is a score vector and operand 1 is the data, so casting the result
+#: to operand 0's dtype silently changed a bf16 candidate tensor to f32.
+#: An "operand 0 is the tensor" assumption is a per-op question, not a global
+#: one, and baking it in is how the wrapper produced a wrong dtype while
+#: looking principled.
+SHAPE_RULE_DTYPE_SOURCE: dict = {
+    "select_from_second": 1,
+}
+
+
+def dtype_source_index(graph_name: str) -> int:
+    """Index of the operand whose storage dtype the result should carry."""
+    return SHAPE_RULE_DTYPE_SOURCE.get(shape_rule_for(graph_name), 0)
 
 
 def shape_rule_for(graph_name: str) -> str:
@@ -846,31 +907,52 @@ def unclassified_shape_ops() -> list:
 # there"; it does not by itself assert the op is broken.
 # ─────────────────────────────────────────────────────────────────────────────
 
-FP16_RANGE_SENSITIVE: dict = {
-    # Sum-of-squares / normalization: x**2 overflows fp16 well before fp32.
-    "tessera.rmsnorm": "RMS needs sum(x**2); (1e4)**2 = 1e8 overflows fp16 max 6.55e4",
-    "tessera.rmsnorm_safe": "despite the name, returns 0.0 instead of ~1.0 at fp16 for 1e4 inputs -- sum(x**2) -> inf, then x/inf -> 0. Silent, not an error",
-    "tessera.clifford_norm": "sum of squared blade coefficients overflows fp16",
-    "tessera.clifford_norm_squared": "squares by construction; overflows fp16",
-    # Attention: scores are a contraction, so magnitudes compound.
-    "tessera.flash_attn": "QK^T contraction overflows fp16 before the softmax can rescale",
-    "tessera.mla_decode": "same contraction hazard as flash_attn",
-    # Contractions / products.
-    **{f"tessera.{n}": "geometric-product contraction squares magnitudes; overflows fp16"
+# Two DISTINCT classes, and conflating them is what made the original single
+# list unactionable:
+#
+#   A. INTERMEDIATE overflow — the op's internal arithmetic leaves fp16 range
+#      even though the ANSWER fits comfortably. `rmsnorm_safe` on 1e4 inputs
+#      returns ~1.0, but computing sum(x**2) at fp16 overflows to inf and the
+#      result collapses to 0.0. This is a REAL DEFECT and it is FIXED: the
+#      storage-dtype enforcement now promotes reduced-precision operands to f32,
+#      computes, and stores back, so the intermediate never happens at fp16.
+#
+#   B. RESULT unrepresentable — the answer itself exceeds fp16's 6.55e4 max.
+#      A sum of 32 values of 1e4 is 3.2e5; a Clifford product of 1e4 magnitudes
+#      is 4e8. No compute precision fixes that, because the number simply does
+#      not fit. This is NOT a defect; it is fp16 being fp16, and the remedy
+#      belongs to the caller (loss scaling, or bf16, whose max is 3.39e38).
+#
+# Keeping them in one bucket implied 22 things to fix. Six were fixable and are
+# fixed; sixteen are a property of the format.
+
+FP16_INTERMEDIATE_OVERFLOW: dict = {
+    "tessera.rmsnorm": "sum(x**2) overflows fp16 while the normalized result is ~1.0",
+    "tessera.rmsnorm_safe": "despite the name, returned 0.0 instead of ~1.0 at fp16 -- sum(x**2) -> inf, then x/inf -> 0. Fixed by computing at f32",
+    "tessera.clifford_norm": "sum of squared blade coefficients overflows fp16; the norm itself fits",
+    "tessera.clifford_log": "log of a large multivector norm overflowed fp16 intermediates; the log fits easily",
+    "tessera.flash_attn": "QK^T contraction overflows fp16 before the softmax rescales; attention output is bounded",
+    "tessera.mla_decode": "same contraction hazard as flash_attn, same bounded output",
+}
+
+FP16_RESULT_UNREPRESENTABLE: dict = {
+    **{f"tessera.{n}": "a geometric product of large multivectors is ~1e8, far beyond fp16's 6.55e4 max"
        for n in ("clifford_geometric_product", "clifford_inner",
                  "clifford_left_contraction", "clifford_rotor_sandwich",
-                 "clifford_wedge")},
-    # Accumulating reductions: the running value exceeds fp16 long before fp32.
-    **{f"tessera.{n}": "running accumulation overflows fp16"
+                 "clifford_wedge", "clifford_norm_squared")},
+    **{f"tessera.{n}": "an accumulation over large values exceeds fp16 max; the answer does not fit regardless of compute width"
        for n in ("cumsum", "cumprod", "reduce", "segment_reduce")},
-    # Losses over large logits.
-    **{f"tessera.loss.{n}": "operates on logits; large values overflow fp16"
+    **{f"tessera.loss.{n}": "loss over large logits exceeds fp16 max; caller-side loss scaling is the remedy"
        for n in ("cross_entropy", "binary_cross_entropy", "asymmetric_bce")},
-    # Transcendentals with steep growth.
-    "tessera.lgamma": "log-gamma grows rapidly; overflows fp16 for moderate inputs",
-    "tessera.clifford_log": "log of a large multivector norm overflows fp16 intermediates",
-    "tessera.silu_mul": "product of two large activations overflows fp16",
-    "tessera.spectral_filter": "spectral magnitudes accumulate beyond fp16 range",
+    "tessera.lgamma": "log-gamma of moderate inputs already exceeds fp16 max",
+    "tessera.silu_mul": "product of two large activations is ~1e8, beyond fp16 max",
+    "tessera.spectral_filter": "accumulated spectral magnitude exceeds fp16 max",
+}
+
+#: Union, for callers that just want "does fp16 need care here".
+FP16_RANGE_SENSITIVE: dict = {
+    **FP16_INTERMEDIATE_OVERFLOW,
+    **FP16_RESULT_UNREPRESENTABLE,
 }
 
 

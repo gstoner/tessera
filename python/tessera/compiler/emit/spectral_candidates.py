@@ -144,28 +144,29 @@ def _cptr(a: np.ndarray) -> ctypes.c_void_p:
     return a.ctypes.data_as(ctypes.c_void_p)
 
 
-def _is_pow2(n: int) -> bool:
-    """Whether the shipped Stockham kernels can transform a length-`n` signal.
+def _supported_length(n: int) -> bool:
+    """Whether the shipped CPU / ROCm kernels can transform a length-`n` signal.
 
-    They are radix-4 with a radix-2 stage, so they handle powers of two and
-    nothing else -- and they do NOT validate `n`. Measured against `numpy.fft`
-    on both the CPU and ROCm lanes: every power of two from 1 to 1024 agrees to
-    ~1e-7, while 3, 12, 24, 48, 100, 255 and 257 come back with relative error
-    ~1.0. Not a precision shortfall; a different answer.
-    
-    That made it a SILENT wrong result rather than a decline: the kernels
-    returned their own lane name, so the arbiter recorded a successful
-    `cpu_stockham` / `rocm_stockham` run and the F4 reference check never ran at
-    a size that would expose it. Decision #21 requires an unsupported case to
-    say so; returning a plausible-looking wrong array is worse than the no-op it
-    prohibits.
-    
-    Extending the kernels to arbitrary `n` (mixed-radix, or Bluestein for
-    primes) is real work and separate. Declining is what makes the current
-    kernels honest in the meantime -- the arbiter falls back to a correct
-    reference instead of shipping a wrong transform.
+    Every positive `n`, since the mixed-radix + Bluestein build-out. History,
+    because the shape of the previous bug is worth keeping:
+
+    The kernels were radix-4 with a radix-2 tail, handled only powers of two,
+    and did NOT validate `n` -- the driver drained factors of 4 and 2 and
+    stopped, returning a partially-transformed buffer under its own lane name.
+    Measured against `numpy.fft`: powers of two from 1 to 1024 agreed to ~1e-7
+    while 3, 12, 24, 48, 100, 255 and 257 came back with relative error ~1.0. A
+    different answer, recorded by the arbiter as a successful kernel run.
+
+    Now the driver plans first (shared `TargetHooks/Common/FFTPlan.h`): factors
+    within the radix set run mixed-radix stages, and anything else -- large
+    primes included -- goes through Bluestein over a power-of-two convolution.
+    Verified against numpy across 63 sizes on CPU and 48 on live gfx1151.
+
+    Kept as a named predicate rather than deleted: `applies_to` is the arbiter's
+    hook for exactly this question, and a future target whose kernel is narrower
+    (the NVIDIA hook has no Bluestein yet) needs somewhere to say so.
     """
-    return n > 0 and (n & (n - 1)) == 0
+    return n > 0
 
 
 # --- candidates --------------------------------------------------------------
@@ -182,12 +183,12 @@ class CpuStockhamFFTCandidate(Candidate):
         return _cpu_lib() is not None
 
     def applies_to(self, region: Any) -> bool:
-        return _is_pow2(getattr(region, "n", 0))
+        return _supported_length(getattr(region, "n", 0))
 
     def run(self, region: SpectralFFTRegion, x: np.ndarray, *a: Any,
             **k: Any) -> tuple[Any, str]:
         lib = _cpu_lib()
-        if lib is None or not _is_pow2(region.n):
+        if lib is None or not _supported_length(region.n):
             return region.reference(x), "reference"
         try:
             xin = np.ascontiguousarray(x, np.complex64)
@@ -209,7 +210,7 @@ class RocmStockhamFFTCandidate(Candidate):
     op = OP_SPECTRAL_FFT
 
     def applies_to(self, region: Any) -> bool:
-        return _is_pow2(getattr(region, "n", 0))
+        return _supported_length(getattr(region, "n", 0))
 
     def available(self) -> bool:
         # Needs hipcc AND a usable device; the host-pointer wrapper returns 0 on
@@ -228,7 +229,7 @@ class RocmStockhamFFTCandidate(Candidate):
     def run(self, region: SpectralFFTRegion, x: np.ndarray, *a: Any,
             **k: Any) -> tuple[Any, str]:
         lib = _amd_lib()
-        if lib is None or not _is_pow2(region.n):
+        if lib is None or not _supported_length(region.n):
             return region.reference(x), "reference"
         try:
             xin = np.ascontiguousarray(x, np.complex64)
@@ -509,7 +510,7 @@ class _ComposedSpectralCandidate(Candidate):
         1024-sample signal with a 60-sample window is not. Reading the signal
         length there would be the wrong test in both directions.
         """
-        return _is_pow2(int(getattr(region, self.inner_len_attr, 0) or 0))
+        return _supported_length(int(getattr(region, self.inner_len_attr, 0) or 0))
 
     def available(self) -> bool:
         from tessera.compiler.emit.candidate import candidates_for

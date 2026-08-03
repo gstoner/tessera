@@ -1,6 +1,6 @@
 //===- StockhamRadix4.cu (NVIDIA CUDA target hook) ------------*- CUDA -*-===//
 //
-// Complete mixed-radix Stockham *autosort* FFT for the NVIDIA backend.
+// Mixed-radix Stockham *autosort* FFT for the NVIDIA backend.
 //
 // Direct mirror of the AMD/ROCm hook (TargetHooks/AMD/StockhamRadix4.hip)
 // and the CPU reference: one kernel launch per stage, ping-ponging between
@@ -18,6 +18,8 @@
 // Build: nvcc -arch=sm_90 -c StockhamRadix4.cu   (sm_80+/sm_120 all fine)
 //
 //===----------------------------------------------------------------------===//
+
+#include "../Common/FFTPlan.h"
 
 #include <cuda_runtime.h>
 #include <math_constants.h>
@@ -93,10 +95,80 @@ extern "C" __global__ void ts_fft_scale_nvidia(float2 *__restrict__ x, int N,
   x[t].y *= inv;
 }
 
+// One generic radix-r Stockham stage for the odd small primes (3..13).
+// Mechanical mirror of ts_stockham_rn_amd, which is verified on gfx1151.
+extern "C" __global__ void ts_stockham_rn_nvidia(const float2 *__restrict__ in,
+                                                 float2 *__restrict__ out,
+                                                 int N, int L, int r,
+                                                 int sign) {
+  int t = blockIdx.x * blockDim.x + threadIdx.x;
+  int nbf = N / r;
+  if (t >= nbf) return;
+  int m = N / (r * L);
+  int j = t / m;
+  int k = t % m;
+  int i = k * L + j;
+  int o = k * (r * L) + j;
+
+  float2 c[16];  // kMaxRadix is 13
+  for (int q = 0; q < r; ++q) {
+    float ang = sign * 2.0f * float(M_PI) * float(j) * float(q) /
+                (float(r) * float(L));
+    float sn, cs;
+    __sincosf(ang, &sn, &cs);
+    float2 v = in[i + (size_t)q * L * m];
+    c[q] = q == 0 ? v : cmul(v, make_float2(cs, sn));
+  }
+  for (int p = 0; p < r; ++p) {
+    float2 acc = make_float2(0.0f, 0.0f);
+    for (int q = 0; q < r; ++q) {
+      float ang = sign * 2.0f * float(M_PI) * float((p * q) % r) / float(r);
+      float sn, cs;
+      __sincosf(ang, &sn, &cs);
+      float2 prod = cmul(c[q], make_float2(cs, sn));
+      acc.x += prod.x;
+      acc.y += prod.y;
+    }
+    out[o + (size_t)p * L] = acc;
+  }
+}
+
+// Whether this hook can transform a length-N signal.
+//
+// The CPU and AMD hooks additionally implement Bluestein, so they answer yes
+// for every N.  This one does not YET: it covers any N that factors within the
+// shared radix set and declines the rest.
+//
+// That asymmetry is deliberate and recorded rather than papered over. There is
+// no CUDA toolchain on the development box, so a device Bluestein written here
+// could not be compiled, let alone checked against a reference -- and shipping
+// ~60 lines of unverifiable device code is the same unproven-claim pattern the
+// silent truncation above was an instance of. The gap closes on the CUDA box;
+// until then the driver declines instead of returning a wrong spectrum.
+extern "C" int ts_fft_supported_nvidia(int N) {
+  if (N <= 1) return 1;
+  const tessera::spectral::FFTPlan plan = tessera::spectral::fft_plan(N);
+  return plan.kind == tessera::spectral::kFFTMixedRadix ? 1 : 0;
+}
+
 extern "C" void ts_fft_stockham_nvidia(const float2 *d_in, float2 *d_out,
                                        float2 *d_scratch, int N, int sign,
                                        cudaStream_t stream) {
   const int TPB = 256;
+  if (N <= 1) {
+    if (N == 1)
+      cudaMemcpyAsync(d_out, d_in, sizeof(float2), cudaMemcpyDeviceToDevice,
+                      stream);
+    return;
+  }
+  const tessera::spectral::FFTPlan plan = tessera::spectral::fft_plan(N);
+  if (plan.kind != tessera::spectral::kFFTMixedRadix) {
+    // Declines rather than truncating.  `ts_fft_supported_nvidia` is the query
+    // a caller should make first; returning here leaves d_out untouched, which
+    // is detectable, where the previous behaviour (falling out of the radix
+    // loop mid-transform) produced a plausible-looking wrong spectrum.
+    return;
+  }
   // Ping-pong strictly between d_scratch and d_out; copy to d_out at the end
   // only if the result didn't already land there.  See the AMD hook for why
   // we avoid precomputing a stage-count parity (the radix-2 tail is easy to
@@ -106,19 +178,22 @@ extern "C" void ts_fft_stockham_nvidia(const float2 *d_in, float2 *d_out,
   cudaMemcpyAsync(cur, d_in, size_t(N) * sizeof(float2),
                   cudaMemcpyDeviceToDevice, stream);
 
-  int L = 1, n = N;
+  int L = 1;
   auto launch = [&](int radix) {
     int nbf = N / radix;
     int blocks = (nbf + TPB - 1) / TPB;
     if (radix == 4)
       ts_stockham_r4_nvidia<<<blocks, TPB, 0, stream>>>(cur, other, N, L, sign);
-    else
+    else if (radix == 2)
       ts_stockham_r2_nvidia<<<blocks, TPB, 0, stream>>>(cur, other, N, L, sign);
+    else
+      ts_stockham_rn_nvidia<<<blocks, TPB, 0, stream>>>(cur, other, N, L, radix,
+                                                        sign);
     L *= radix;
     float2 *tmp = cur; cur = other; other = tmp;
   };
-  while (n % 4 == 0) { launch(4); n /= 4; }
-  while (n % 2 == 0) { launch(2); n /= 2; }
+  for (int st = 0; st < plan.stage_count; ++st)
+    launch(plan.stages[st]);
   if (cur != d_out)
     cudaMemcpyAsync(d_out, cur, size_t(N) * sizeof(float2),
                     cudaMemcpyDeviceToDevice, stream);

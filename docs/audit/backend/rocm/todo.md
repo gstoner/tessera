@@ -7,6 +7,44 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `FFT-MIXED-RADIX-BLUESTEIN-2026-08-03` — **parity validated on device; one follow-up.**
+Tessera's own FFT (Stockham, `TargetHooks/`) extends from powers of two to
+every length: a generic radix-r stage for the odd small primes and Bluestein
+for the rest. Shared contracts changed, so all four backends are affected:
+
+* **Planning is now one implementation** (`TargetHooks/Common/FFTPlan.h`).
+  CPU, AMD and NVIDIA each carried their own `while (n%4) ... while (n%2)`
+  driver loop, and all three silently returned a HALF-FINISHED transform for
+  any other N while reporting success. `LegalizeSpectral::pickRadixSequence`
+  was a fourth copy, factoring over radices 7/5/3/4/2 and pushing a residual
+  prime as a "stage" of that radix -- a stage nothing could execute.
+* **Compiler routing was wrong independently of the kernels.**
+  `LowerToTargetIR::stageSymbolFor` mapped every radix other than 4 to
+  `ts_stockham_r2_*`, so a static N = 12 = 4x3 emitted a radix-2 call for a
+  radix-3 stage. The runtime driver was correct; the compiler path was not, and
+  direct driver tests could not see the difference.
+* **New C ABI surface:** `ts_stockham_rn_<backend>(in, out, N, L, r, sign)`
+  (note the extra radix argument, which r4/r2 do not take), plus
+  `tessera.target_ir.stage_radices` carrying it, and a
+  `tessera.target_ir.bluestein` marker routing those lengths to the driver.
+
+Verified on live gfx1151: 48 sizes against numpy with zero failures, round
+trips to ~5.7e-6, covering mixed-radix (12, 15, 45, 255) and Bluestein (101,
+257, 509, 1009) paths. The generic radix-r kernel evaluates its r-point DFT
+inline rather than from a table -- the opposite of the CPU choice, because the
+extra global traffic a table would cost outweighs the arithmetic at these
+radices. That divergence is deliberate: the PLAN is shared, the EXECUTION is
+not.
+
+**Follow-up (fixed in review):** `bluestein_amd` allocates five M-sized buffers
+where M can be nearly 4N, and its failure status was discarded by the driver.
+The host wrapper would then synchronise, copy an UNINITIALISED `d_out`, and
+return 0 -- the Python candidate labelling garbage as `rocm_stockham`. The
+status now reaches the wrapper via `ts_fft_last_error_amd()`. No exact-device
+evidence exists for the failure path itself (it needs induced allocation
+pressure); the success paths are covered.
+
+
 Cross-backend sync `SHAPE-RULE-REGISTRY-2026-08-03` — **follow-up required - closest to a complex FFT lane, and still rejected.**
 PR #493 closed the Graph IR shape-rule registry: **303 declared / 6 deliberately
 undeclared / 0 unexamined**, with the `MAX_UNCLASSIFIED` ratchet dropped 106 -> 0.

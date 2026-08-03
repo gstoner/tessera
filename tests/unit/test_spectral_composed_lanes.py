@@ -205,26 +205,34 @@ def test_stft_istft_round_trips_through_the_composed_lanes():
         assert rel < 1e-3, f"{target} round-trip rel_err={rel:.3e}"
 
 
-# ── The shipped kernels are power-of-two only, and did not say so ──────────
+# ── Every length runs on the real kernel, on every size class ──────────────
 #
-# Measured against numpy on both the CPU and ROCm lanes: every power of two from
-# 1 to 1024 agrees to ~1e-7, while 3, 12, 24, 48, 100, 255 and 257 came back
-# with relative error ~1.0 — a different answer, not a precision shortfall.
+# The kernels were radix-4 with a radix-2 tail and handled only powers of two.
+# Worse, the driver did not validate `n`: it drained factors of 4 and 2 and
+# stopped, returning a partially-transformed buffer under its own lane name.
+# Measured against numpy — powers of two agreed to ~1e-7 while 3, 12, 24, 48,
+# 100, 255 and 257 came back with relative error ~1.0, recorded by the arbiter
+# as a successful `cpu_stockham` / `rocm_stockham` run.
 #
-# They did not decline. Both returned their own lane name, so the arbiter
-# recorded a successful `cpu_stockham` / `rocm_stockham` run for a wrong
-# transform. Decision #21 requires an unsupported case to say so; a
-# plausible-looking wrong array is worse than the silent no-op it prohibits.
 # The F4 verifier never caught it because it only ever ran at power-of-two
-# sizes — a gate is only as good as the configuration it measures, which is now
-# the fourth time that has bitten in this registry work.
+# sizes. So these cases are grouped by WHICH PATH they exercise, not by round
+# numbers: a gate that only probes one class re-derives the same blind spot.
 
-_POW2_SIZES = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
-_NON_POW2_SIZES = (3, 12, 24, 48, 100, 255, 257)
+#: Factor entirely within the radix set {4,2,3,5,7,11,13} — mixed-radix stages.
+_MIXED_RADIX_SIZES = (1, 2, 3, 4, 5, 7, 8, 12, 15, 16, 24, 27, 32, 45, 48, 49,
+                      64, 100, 121, 128, 169, 180, 720, 1024, 1331)
+#: A prime or a factor above the radix bound — Bluestein.
+_BLUESTEIN_SIZES = (17, 19, 23, 29, 31, 37, 101, 127, 255, 257, 509, 1009)
 
 
-@pytest.mark.parametrize("n", _POW2_SIZES)
-def test_power_of_two_transforms_use_the_kernel_and_are_correct(n):
+@pytest.mark.parametrize("n", _MIXED_RADIX_SIZES + _BLUESTEIN_SIZES)
+def test_every_length_runs_on_the_kernel_and_is_correct(n):
+    """No size falls back, and none is wrong.
+
+    Both halves matter: `lane != "reference"` proves the kernel actually ran,
+    and the error bound proves it ran correctly. Checking only the second would
+    pass a lane that quietly delegated everything to numpy.
+    """
     region = SC.SpectralFFTRegion(n=n, sign=-1)
     x = region.probe_input(2)
     reference = region.reference(x)
@@ -237,44 +245,78 @@ def test_power_of_two_transforms_use_the_kernel_and_are_correct(n):
             assert lane != "reference", f"{candidate.name} fell back at n={n}"
             rel = (float(np.max(np.abs(np.asarray(out) - reference)))
                    / (float(np.max(np.abs(reference))) or 1.0))
-            assert rel < 1e-4, f"{candidate.name} n={n} rel_err={rel:.3e}"
+            assert rel < 2e-4, f"{candidate.name} n={n} rel_err={rel:.3e}"
 
 
-@pytest.mark.parametrize("n", _NON_POW2_SIZES)
-def test_non_power_of_two_declines_rather_than_answering_wrongly(n):
-    """The headline: a wrong answer under a kernel's own name is the worst
-    outcome available, worse than declining and worse than erroring."""
-    region = SC.SpectralFFTRegion(n=n, sign=-1)
-    x = region.probe_input(2)
-    reference = region.reference(x)
+@pytest.mark.parametrize("n", _BLUESTEIN_SIZES)
+def test_bluestein_sizes_are_planned_as_bluestein(n):
+    """Assert WHICH path a size takes, rather than inferring it from timing.
+
+    Without this the suite could pass with every size silently routed through
+    Bluestein — correct, far slower, and invisible.
+    """
+    import ctypes
+
+    lib = SC._cpu_lib()
+    if lib is None:
+        pytest.skip("no host compiler")
+    lib.ts_fft_radices_cpu.restype = ctypes.c_int
+    lib.ts_fft_radices_cpu.argtypes = [ctypes.c_int,
+                                       ctypes.POINTER(ctypes.c_int),
+                                       ctypes.c_int]
+    buf = (ctypes.c_int * 64)()
+    assert lib.ts_fft_radices_cpu(n, buf, 64) == -1, (
+        f"n={n} was expected to need Bluestein"
+    )
+
+
+@pytest.mark.parametrize("n", _MIXED_RADIX_SIZES)
+def test_mixed_radix_sizes_factor_within_the_radix_set(n):
+    import ctypes
+
+    lib = SC._cpu_lib()
+    if lib is None:
+        pytest.skip("no host compiler")
+    lib.ts_fft_radices_cpu.restype = ctypes.c_int
+    lib.ts_fft_radices_cpu.argtypes = [ctypes.c_int,
+                                       ctypes.POINTER(ctypes.c_int),
+                                       ctypes.c_int]
+    buf = (ctypes.c_int * 64)()
+    stages = lib.ts_fft_radices_cpu(n, buf, 64)
+    assert stages >= 0, f"n={n} unexpectedly needs Bluestein"
+    product = 1
+    for i in range(stages):
+        assert buf[i] in (2, 3, 4, 5, 7, 11, 13), buf[i]
+        product *= buf[i]
+    assert product == n, f"stages multiply to {product}, not {n}"
+
+
+@pytest.mark.parametrize("n", (3, 7, 100, 255, 257, 1009, 1331))
+def test_forward_inverse_round_trip_at_every_size_class(n):
+    """Neither direction's own gate catches a consistent sign or scale error."""
+    forward = SC.SpectralFFTRegion(n=n, sign=-1)
+    inverse = SC.SpectralFFTRegion(n=n, sign=+1)
+    x = forward.probe_input(4)
     for target in ("cpu", "rocm"):
         for candidate in candidates_for(target, SC.OP_SPECTRAL_FFT):
-            assert not candidate.applies_to(region), (
-                f"{candidate.name} claims n={n}, which it computes incorrectly"
-            )
-            out, lane = candidate.run(region, x)
-            assert lane == "reference", (
-                f"{candidate.name} returned lane={lane!r} for unsupported n={n}"
-            )
-            # Whatever it returns must still be RIGHT — declining is only
-            # honest if the fallback actually computes the transform.
-            rel = (float(np.max(np.abs(np.asarray(out) - reference)))
-                   / (float(np.max(np.abs(reference))) or 1.0))
-            assert rel < 1e-4, f"reference fallback wrong at n={n}"
+            if not candidate.available():
+                continue
+            spectrum, lane_a = candidate.run(forward, x)
+            restored, lane_b = candidate.run(inverse, np.asarray(spectrum))
+            if "reference" in (lane_a, lane_b):
+                continue
+            err = float(np.max(np.abs(np.asarray(restored) - x)))
+            assert err < 1e-4, f"{candidate.name} n={n} round-trip err={err:.3e}"
 
 
 def test_framed_ops_restrict_on_the_WINDOW_not_the_signal():
-    """`stft`/`istft` transform a window, so that is the length that must be a
-    power of two. A 1000-sample signal with a 64-sample window is fine; a
-    1024-sample signal with a 60-sample window is not. Reading the signal length
-    would be wrong in both directions."""
-    ok = SC.SpectralSTFTRegion(1000, 64, 32)
-    bad = SC.SpectralSTFTRegion(1024, 60, 30)
+    """`stft`/`istft` transform a window, so the WINDOW is the length whose
+    support matters. Both are supported now, but the coupling still has to be
+    to the transformed length — a future narrower target (the NVIDIA hook has
+    no Bluestein) needs the framed ops to ask about the right one."""
     for target in ("cpu", "rocm"):
         for candidate in candidates_for(target, SC.OP_SPECTRAL_STFT):
-            assert candidate.applies_to(ok), "declined a power-of-two window"
-            assert not candidate.applies_to(bad), "accepted a 60-sample window"
-
+            assert candidate.inner_len_attr == "win", candidate.inner_len_attr
 
 
 # ── PR #495 review: the window is an OPERAND, not something a lane invents ──

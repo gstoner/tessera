@@ -2161,6 +2161,73 @@ def _shape_select_from_second(operand_types: List[IRType],
     return tensor_ir_type(dims, candidates.dtype, layout=candidates.layout)
 
 
+def _collective_axis(operand_types: List[IRType],
+                     attrs: Optional[Dict[str, Any]]) -> tuple[int, Optional[str]]:
+    """(tensor axis that scales, mesh axis name) for a collective.
+
+    `all_gather(x, axis="dp")` overloads one parameter: an `int` names a TENSOR
+    axis, a `str` names a MESH axis. When it is a mesh axis the tensor axis is
+    0, matching the `Block(mesh_axes=("dp",)) -> partition=(0,)` convention
+    (CLAUDE.md, "Domain & distribution").
+    """
+    axis = (attrs or {}).get("axis", "dp")
+    if isinstance(axis, int) and not isinstance(axis, bool):
+        return axis, None
+    return 0, str(axis).strip("\"'")
+
+
+def _scaled_collective_shape(operand_types: List[IRType],
+                             attrs: Optional[Dict[str, Any]],
+                             mesh: Optional[Mapping[str, int]],
+                             *, multiply: bool) -> IRType:
+    """Shared body for all_gather (multiply) and reduce_scatter (divide).
+
+    FAILS CLOSED. When the mesh size is unknown the scaled dimension becomes
+    `?` -- explicitly unknown -- rather than the operand's own extent. That
+    distinction is the whole point of this rule: returning the operand shape
+    is not a neutral fallback, it is the positive claim `world_size == 1`.
+    Both ops previously did exactly that, and it went undetected because the
+    reference collectives are single-rank no-op stubs, so a probe at
+    world_size=1 confirmed the wrong rule. Decision #30: a rule that cannot
+    derive a fact must fail closed, not assume the convenient answer.
+    """
+    first = operand_types[0]
+    tensor_axis, mesh_axis = _collective_axis(operand_types, attrs)
+    if first.rank is None or not first.shape:
+        return first
+    dims = list(first.shape)
+    if tensor_axis < 0:
+        tensor_axis += len(dims)
+    if not 0 <= tensor_axis < len(dims):
+        return first
+    size = (mesh or {}).get(mesh_axis) if mesh_axis else None
+    scaled = "?"
+    if size:
+        try:
+            extent = int(dims[tensor_axis])
+            scaled = str(extent * int(size)) if multiply else (
+                str(extent // int(size)) if extent % int(size) == 0 else "?"
+            )
+        except (TypeError, ValueError):
+            scaled = "?"
+    dims[tensor_axis] = scaled
+    return tensor_ir_type(tuple(dims), first.dtype, layout=first.layout)
+
+
+def _shape_all_gather(operand_types: List[IRType],
+                      attrs: Optional[Dict[str, Any]] = None,
+                      mesh: Optional[Mapping[str, int]] = None) -> IRType:
+    """Gathered axis grows by the mesh extent: `d -> d * world_size`."""
+    return _scaled_collective_shape(operand_types, attrs, mesh, multiply=True)
+
+
+def _shape_reduce_scatter(operand_types: List[IRType],
+                          attrs: Optional[Dict[str, Any]] = None,
+                          mesh: Optional[Mapping[str, int]] = None) -> IRType:
+    """Scattered axis shrinks by the mesh extent: `d -> d / world_size`."""
+    return _scaled_collective_shape(operand_types, attrs, mesh, multiply=False)
+
+
 def _shape_state_handle(operand_types: List[IRType],
                         attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """A cache mutator threads its handle through: `cache -> updated`.
@@ -2233,14 +2300,24 @@ _SHAPE_RULES = {
     "reduce_trailing": _shape_reduce_trailing,
     "state_handle": _shape_state_handle,
     "kv_cache_read": _shape_kv_cache_read,
+    "all_gather": _shape_all_gather,
+    "reduce_scatter": _shape_reduce_scatter,
     # Not yet classified. Same result as the historical fallback, but reached
     # through a NAME, so it is countable and cannot masquerade as a rule.
     "unclassified": _shape_same_as_first,
 }
 
 
+#: Rules that take a third `mesh` argument -- a `{axis_name: size}` mapping.
+#: DECLARED rather than discovered by signature introspection, so adding a
+#: mesh parameter to a rule is a visible edit here and not an implicit
+#: behaviour change in the dispatcher.
+_MESH_AWARE_RULES = frozenset({"all_gather", "reduce_scatter"})
+
+
 def _infer_result_types(op_name: str, operand_types: List[IRType],
-                        attrs: Optional[Dict[str, Any]] = None):
+                        attrs: Optional[Dict[str, Any]] = None,
+                        mesh: Optional[Mapping[str, int]] = None):
     """All result types for `op_name`, as a tuple.
 
     Most ops have exactly one result and this returns a 1-tuple. Multi-result
@@ -2250,20 +2327,29 @@ def _infer_result_types(op_name: str, operand_types: List[IRType],
     function -- the single-result one cannot express them and pretending
     otherwise is how `same_as_first` came to be declared for a tuple op.
     """
-    result = _infer_result_type(op_name, operand_types, attrs, _raw=True)
+    result = _infer_result_type(op_name, operand_types, attrs, mesh=mesh, _raw=True)
     return result if isinstance(result, tuple) else (result,)
 
 
 def _infer_result_type(op_name: str, operand_types: List[IRType],
                        attrs: Optional[Dict[str, Any]] = None,
-                       *, _raw: bool = False) -> IRType:
-    """Infer an op's result type from its operands AND its attributes.
+                       *, mesh: Optional[Mapping[str, int]] = None,
+                       _raw: bool = False) -> IRType:
+    """Infer an op's result type from its operands, attributes AND mesh.
 
     `attrs` was added in W1.2. Without it a whole class of ops -- `reshape`,
     `expand`, `cast`, `arange`, and the strided stencils -- could not be
     expressed at all, because their result shape or dtype lives in an
     attribute rather than in any operand's type. Classifying them was blocked
     on the signature, not on the analysis.
+
+    `mesh` is the same story one level out (W1.3). A collective's result shape
+    is a function of the MESH -- `all_gather` multiplies its axis by the mesh
+    extent, `reduce_scatter` divides -- and no operand type or attribute
+    carries that. With no way to say so, both ops returned the operand shape,
+    which is not a neutral fallback but the positive claim `world_size == 1`.
+    The reference collectives are single-rank no-op stubs, so a probe agreed
+    and the wrong rule looked confirmed.
     """
     if not operand_types:
         return TENSOR_OPAQUE
@@ -2278,7 +2364,10 @@ def _infer_result_type(op_name: str, operand_types: List[IRType],
             f"shape rule {rule!r} is declared for {op_name!r} in op_catalog "
             f"but has no implementation in graph_ir._SHAPE_RULES"
         )
-    result = fn(operand_types, attrs)
+    if rule in _MESH_AWARE_RULES:
+        result = fn(operand_types, attrs, mesh)
+    else:
+        result = fn(operand_types, attrs)
     if isinstance(result, tuple) and not _raw:
         # Single-result callers get the primary tensor; the full contract is
         # available via `_infer_result_types`.

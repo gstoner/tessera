@@ -120,8 +120,23 @@ def test_declared_rules_agree_with_actual_op_behavior():
     Unary ops only — they can be probed with a single sample without guessing
     each op's operand contract. Extending this to n-ary ops is the natural
     follow-up and would widen the net further.
+
+    EXCLUDES the mesh-scaling collectives, and the reason is the point of the
+    exclusion rather than a convenience. The reference `all_gather` /
+    `reduce_scatter` are single-rank no-op stubs (`return x`), so probing them
+    in-process can only ever report `world_size == 1`. Holding a mesh-scaling
+    rule to that measurement does not verify it — it re-derives the wrong
+    answer the exemption was originally written from, and would force the rule
+    back to same-as-first to make this test pass. Their contract is verified
+    against declared mesh extents in `test_collective_mesh_shape_rules.py`.
+
+    A behavioural gate is only as good as the configuration it measures. This
+    is the second time that has bitten here: the first was `ebm_self_verify`,
+    probed with two same-shaped tensors, where operand 0 and operand 1 gave the
+    same answer.
     """
     from tessera import ops
+    from tessera.compiler.graph_ir import _MESH_AWARE_RULES
     from tessera.dtype import canonicalize_dtype
 
     x = np.random.default_rng(0).standard_normal((4, 8)).astype(np.float32)
@@ -138,6 +153,8 @@ def test_declared_rules_agree_with_actual_op_behavior():
             rule = shape_rule_for(spec.graph_name)
             if rule == "unclassified":
                 continue  # honest gap, covered by the ratchet above
+            if rule in _MESH_AWARE_RULES:
+                continue  # single-rank stub; see the docstring
             fn = getattr(ops, spec.public_name, None)
             if fn is None:
                 continue

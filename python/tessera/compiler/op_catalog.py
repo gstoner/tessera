@@ -773,6 +773,11 @@ OP_SHAPE_RULE: dict = {
     # would claim the operand's storage dtype and is wrong for a count.
     "tessera.popcount": "same_shape_index",
 
+    # Mesh-scaling collectives. `all_reduce` and `all_to_all` are NOT here:
+    # both preserve shape, so their `same_as_first` default is already right.
+    "tessera.all_gather": "all_gather",
+    "tessera.reduce_scatter": "reduce_scatter",
+
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
     # shapes scale with the mesh, so declaring from that measurement would bake
@@ -832,6 +837,8 @@ SHAPE_RULE_NAMES = frozenset({
     "reduce_trailing",
     "state_handle",
     "kv_cache_read",
+    "all_gather",
+    "reduce_scatter",
     "unclassified",
 })
 
@@ -864,8 +871,15 @@ DELIBERATELY_UNDECLARED: dict = {
     # compiler owes its users. It is `same_shape_index` over `INDEX_DTYPE` --
     # operand shape, declared index width -- and the reference now returns that
     # on every NumPy rather than inheriting the host's answer.
-    "tessera.all_gather": "result shape scales with mesh size, not derivable from operand types",
-    "tessera.reduce_scatter": "result shape shrinks with mesh size, not derivable from operand types",
+    # `all_gather` and `reduce_scatter` were here: "result shape scales with
+    # mesh size, not derivable from operand types". The premise was right and
+    # the conclusion did not follow -- it is not derivable from OPERAND TYPES,
+    # which is an argument for giving the rule signature mesh context, not for
+    # leaving the ops undeclared. They now take a `{axis: size}` mesh and FAIL
+    # CLOSED to `?` on the scaled axis when it is unknown. Leaving them
+    # unclassified meant falling back to the operand shape, which is not a
+    # neutral answer but the positive claim `world_size == 1` -- and the
+    # single-rank reference stubs made a probe agree with it.
     "tessera.fft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
     "tessera.ifft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
     "tessera.rfft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",

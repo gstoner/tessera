@@ -2461,25 +2461,59 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def _axis_from_axes(axis: int = -1, axes=None) -> int:
         return int(axis if axes is None else tuple(axes)[-1])
 
+    # `np.fft.*` always computes AND returns in double, so a f32 signal came
+    # back as complex128 and an inverse transform as float64. That contradicts
+    # the numeric policy this family already declares -- `_spectral_policy` is
+    # `storage="fp32", accum="fp32"` ("FFT numerics need the full mantissa",
+    # meaning fp32) -- and it is the same defect as `cos(int32) -> float64`:
+    # the host library's precision choice overriding the compiler's.
+    #
+    # Computing in double and STORING BACK is the right shape (NumPy has no
+    # single-precision FFT), and is the same "compute at a safe precision,
+    # store at the declared dtype" pattern as the reduced-precision work --
+    # here it narrows the result rather than widening the compute.
+    def _complex_for(real_dtype) -> "np.dtype":
+        """The complex type whose components match this real storage width."""
+        return np.dtype("complex128" if np.dtype(real_dtype).itemsize >= 8
+                        else "complex64")
+
+    def _real_for(complex_dtype) -> "np.dtype":
+        """The inverse: complex64 -> float32, complex128 -> float64."""
+        return np.dtype("float64" if np.dtype(complex_dtype).itemsize >= 16
+                        else "float32")
+
     def fft(x, axis: int = -1, axes=None):
         if hasattr(x, "_data"):
             x = x._data
-        return np.fft.fft(x, axis=_axis_from_axes(axis, axes))
+        x = np.asarray(x)
+        want = _complex_for(x.dtype) if x.dtype.kind != "c" else x.dtype
+        return np.fft.fft(x, axis=_axis_from_axes(axis, axes)).astype(want, copy=False)
 
     def ifft(xf, axis: int = -1, axes=None):
         if hasattr(xf, "_data"):
             xf = xf._data
-        return np.fft.ifft(xf, axis=_axis_from_axes(axis, axes))
+        xf = np.asarray(xf)
+        want = xf.dtype if xf.dtype.kind == "c" else _complex_for(xf.dtype)
+        return np.fft.ifft(xf, axis=_axis_from_axes(axis, axes)).astype(want, copy=False)
 
     def rfft(x, axis: int = -1, axes=None):
         if hasattr(x, "_data"):
             x = x._data
-        return np.fft.rfft(x, axis=_axis_from_axes(axis, axes))
+        x = np.asarray(x)
+        want = _complex_for(x.dtype)
+        return np.fft.rfft(x, axis=_axis_from_axes(axis, axes)).astype(want, copy=False)
 
     def irfft(xf, axis: int = -1, axes=None, n=None):
+        # The one member of the family that returns REAL values, not complex.
+        # It was exempted alongside the other three under "returns complex64,
+        # which is planned_gated" -- a sentence true of its siblings and simply
+        # wrong here.
         if hasattr(xf, "_data"):
             xf = xf._data
-        return np.fft.irfft(xf, n=n, axis=_axis_from_axes(axis, axes))
+        xf = np.asarray(xf)
+        want = _real_for(xf.dtype) if xf.dtype.kind == "c" else xf.dtype
+        out = np.fft.irfft(xf, n=n, axis=_axis_from_axes(axis, axes))
+        return out.astype(want, copy=False)
 
     def dct(x, type: int = 2, axis: int = -1):
         if hasattr(x, "_data"):

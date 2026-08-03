@@ -4772,7 +4772,34 @@ def _capability_status(target_name: str, op_name: str) -> tuple[str, tuple[str, 
     if canonical not in cap.supported_ops:
         return None
     op_cap = cap.supported_ops[canonical]
-    return (op_cap.runtime_status, tuple(op_cap.dtypes))
+    # A manifest row is a KERNEL claim -- "this (op, target, dtype) has a
+    # kernel" -- so it is a narrower statement than legality, which only asks
+    # whether the type system can express the value. `planned_gated` dtypes are
+    # exactly the ones with no proven kernel, and the manifest audit enforces
+    # that retained rows use canonical dtypes only.
+    #
+    # W1.3 made this distinction load-bearing: the spectral family now declares
+    # complex64/complex128 so an honest `fft(f32) -> complex64` passes the
+    # legality gate, but no backend has a complex FFT kernel (measured: zero
+    # NVIDIA source files mention FFT at all). Letting the capability widening
+    # flow into the manifest would have turned an expressible type into a
+    # claimed kernel on six targets.
+    dtypes = tuple(d for d in op_cap.dtypes if not _is_planned_gated_dtype(d))
+    return (op_cap.runtime_status, dtypes)
+
+
+def _is_planned_gated_dtype(dtype: str) -> bool:
+    try:
+        from ..dtype import canonicalize_dtype
+
+        canonicalize_dtype(dtype)
+        return False
+    except Exception:
+        try:
+            canonicalize_dtype(dtype, allow_planned_gated=True)
+            return True
+        except Exception:
+            return False
 
 
 # M7 follow-up (2026-05-18) — MSL kernels for the conformal-primitive

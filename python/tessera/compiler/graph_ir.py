@@ -1991,22 +1991,83 @@ def _shape_flatten(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] 
     return tensor_ir_type((str(total),), first.dtype, layout=first.layout)
 
 
+#: Real storage width -> the complex type whose COMPONENTS have that width.
+#: These spellings are `planned_gated` in `tessera.dtype`, which the exemption
+#: read as "declaring it conflicts with the dtype capability contract". It does
+#: not: the contract has an explicit path for planned/gated dtypes
+#: (`allow_planned_gated=True` plus `metadata.dtype_status`), and naming one in
+#: a shape rule is not the same as claiming a backend implements it. Promoting
+#: complex to CANONICAL would be a capability change; this is not that.
+_COMPLEX_FOR_REAL = {"fp64": "complex128", "f64": "complex128"}
+_REAL_FOR_COMPLEX = {"complex128": "fp64", "complex64": "fp32"}
+
+
+def _complex_of(dtype: Optional[str]) -> str:
+    """complex64 unless the operand is genuinely double precision.
+
+    Hard-coding `complex64` (as this did) is wrong for an f64 signal, and
+    hard-coding `complex128` -- which is what the numpy-backed reference
+    actually returned for every input -- is the `cos(int32) -> float64` defect
+    again: the host library's precision choice overriding the compiler's. The
+    family's own `_spectral_policy` declares `storage="fp32"`.
+    """
+    return _COMPLEX_FOR_REAL.get(dtype or "", "complex64")
+
+
 def _shape_complex_same(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
-    """Same shape, complex result (fft / ifft)."""
+    """Same shape, complex result with matching component width (fft / ifft)."""
     first = operand_types[0]
-    return tensor_ir_type(first.shape, "complex64", layout=first.layout)
+    return tensor_ir_type(first.shape, _complex_of(first.dtype), layout=first.layout)
 
 
 def _shape_rfft(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
-    """Real FFT: trailing axis becomes n//2 + 1, result complex."""
+    """Real FFT: trailing axis becomes n//2 + 1, result complex.
+
+    Only the non-redundant half of a real spectrum is kept, since a real
+    signal's transform is conjugate-symmetric.
+    """
     first = operand_types[0]
+    complex_dtype = _complex_of(first.dtype)
     if first.rank is None or not first.shape:
-        return tensor_ir_type(("*",), "complex64", layout=first.layout)
+        return tensor_ir_type(("*",), complex_dtype, layout=first.layout)
     try:
         n = int(first.shape[-1])
     except (TypeError, ValueError):
-        return tensor_ir_type(("*",), "complex64", layout=first.layout)
-    return tensor_ir_type(first.shape[:-1] + (str(n // 2 + 1),), "complex64",
+        return tensor_ir_type(("*",), complex_dtype, layout=first.layout)
+    return tensor_ir_type(first.shape[:-1] + (str(n // 2 + 1),), complex_dtype,
+                          layout=first.layout)
+
+
+def _shape_irfft(operand_types: List[IRType],
+                 attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Inverse real FFT: complex -> REAL, trailing axis 2 * (n - 1).
+
+    `irfft` was exempted with its three siblings under one sentence -- "returns
+    complex64, which is planned_gated per Decision #15a" -- which is true of
+    them and simply wrong here: it is the member of the family that returns
+    real values. The same one-reason-for-N-ops error that hid `kv_cache.read`
+    among the cache mutators.
+
+    The inverse of `rfft`'s `n // 2 + 1`. It is the inverse of the EVEN-length
+    case; an odd-length original is not recoverable from the spectrum alone,
+    which is why `irfft` takes an explicit `n` -- honoured here when given.
+    """
+    first = operand_types[0]
+    real_dtype = _REAL_FOR_COMPLEX.get(first.dtype or "", "fp32")
+    explicit = (attrs or {}).get("n")
+    if first.rank is None or not first.shape:
+        return tensor_ir_type(("*",), real_dtype, layout=first.layout)
+    if explicit is not None:
+        try:
+            return tensor_ir_type(first.shape[:-1] + (str(int(explicit)),),
+                                  real_dtype, layout=first.layout)
+        except (TypeError, ValueError):
+            pass
+    try:
+        n = int(first.shape[-1])
+    except (TypeError, ValueError):
+        return tensor_ir_type(("*",), real_dtype, layout=first.layout)
+    return tensor_ir_type(first.shape[:-1] + (str(2 * (n - 1)),), real_dtype,
                           layout=first.layout)
 
 
@@ -2290,6 +2351,7 @@ _SHAPE_RULES = {
     "flatten": _shape_flatten,
     "complex_same": _shape_complex_same,
     "rfft": _shape_rfft,
+    "irfft": _shape_irfft,
     "select_from_second": _shape_select_from_second,
     "quantize_per_tensor": _shape_quantize_per_tensor,
     "quantize_per_block": _shape_quantize_per_block,

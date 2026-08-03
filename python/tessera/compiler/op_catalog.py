@@ -778,6 +778,12 @@ OP_SHAPE_RULE: dict = {
     "tessera.all_gather": "all_gather",
     "tessera.reduce_scatter": "reduce_scatter",
 
+    # Spectral family. `irfft` returns REAL values -- it is not `complex_same`.
+    "tessera.fft": "complex_same",
+    "tessera.ifft": "complex_same",
+    "tessera.rfft": "rfft",
+    "tessera.irfft": "irfft",
+
     # NOT declared on purpose: `all_gather` and `reduce_scatter` returned the
     # operand's shape only because the probe ran at world_size=1. Their real
     # shapes scale with the mesh, so declaring from that measurement would bake
@@ -828,6 +834,7 @@ SHAPE_RULE_NAMES = frozenset({
     "flatten",
     "complex_same",
     "rfft",
+    "irfft",
     "select_from_second",
     "quantize_per_tensor",
     "quantize_per_block",
@@ -880,10 +887,19 @@ DELIBERATELY_UNDECLARED: dict = {
     # unclassified meant falling back to the operand shape, which is not a
     # neutral answer but the positive claim `world_size == 1` -- and the
     # single-rank reference stubs made a probe agree with it.
-    "tessera.fft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
-    "tessera.ifft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
-    "tessera.rfft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
-    "tessera.irfft": "returns complex64, which is planned_gated per Decision #15a; declaring it conflicts with the dtype capability contract",
+    # The four spectral ops were here: "returns complex64, which is
+    # planned_gated per Decision #15a; declaring it conflicts with the dtype
+    # capability contract". It does not conflict -- the contract has an
+    # explicit path for planned/gated dtypes (`allow_planned_gated=True` plus
+    # `metadata.dtype_status`), and NAMING a dtype in a shape rule is not the
+    # same as claiming a backend implements it. Promoting complex to CANONICAL
+    # would be a capability change; declaring these rules is not, and complex
+    # stays planned_gated.
+    #
+    # `complex_same` and `_shape_rfft` were already written and registered
+    # while all four ops stayed exempt -- two rules with no consumer, which
+    # Decision #29 exists to prevent, sitting next to the ops they were
+    # written for.
     # The five cache ops were here, under one shared sentence: "opaque cache
     # handle rather than a tensor type; its result is not describable by a
     # tensor shape rule". Both halves of that turned out to be wrong.

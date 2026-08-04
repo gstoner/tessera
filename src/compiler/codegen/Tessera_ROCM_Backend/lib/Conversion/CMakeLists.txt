@@ -81,6 +81,12 @@ add_mlir_library(TesseraROCMConversion
   LINK_LIBS PUBLIC
     MLIRIR MLIRLLVMDialect MLIRROCDLDialect MLIRFuncDialect MLIRTransformUtils
     MLIRGPUDialect MLIRSCFDialect MLIRVectorDialect MLIRArithDialect
+    # MLIRSCFTransforms carries populateSCFStructuralTypeConversionsAndLegality,
+    # which TileToROCM.cpp uses to convert `scf.for` iter-arg types. It is
+    # distinct from MLIRSCFDialect: linking only the dialect builds fine against
+    # `tessera-opt` (which pulls MLIROptLib's broader set) and fails to LINK the
+    # standalone `tessera-rocm-opt`.
+    MLIRSCFTransforms
     MLIRMemRefDialect MLIRMathDialect
     TesseraIR
     TesseraPasses

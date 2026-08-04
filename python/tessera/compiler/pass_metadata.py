@@ -96,6 +96,40 @@ class PassMetadata:
 
 REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
+        name="lower-tile-to-rocm",
+        cpp_class="LowerTileToROCMPass",
+        summary=(
+            "Lowers Tessera Tile IR matmul/attention movement contracts to "
+            "ROCm Target IR. Typed `!tile.fragment` values go through a "
+            "dialect conversion (fragment -> physical per-lane vector) so a "
+            "K-loop accumulator, chained MMAs, and a non-zero accumulator all "
+            "compose; the legacy bare `!tile.fragment` spelling still takes "
+            "the single-shot whole-chain path."
+        ),
+        input_dialects=("tile", "tessera_rocm", "func", "scf", "vector",
+                        "memref", "arith", "gpu"),
+        output_dialects=("tessera_rocm", "func", "scf", "vector", "memref",
+                         "arith", "gpu"),
+        required_attrs=("tile.layout", "tile.memory"),
+        diagnostic_codes=(
+            "ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR",
+            "ROCM_FRAGMENT_MATERIALIZATION_GATED",
+            "ROCM_FRAGMENT_MISSING_CONTRACT",
+            "ROCM_FRAGMENT_SOURCE_RANK",
+            "ROCM_FRAGMENT_SOURCE_TYPE",
+            "ROCM_FRAGMENT_STORE_LAYOUT",
+            "ROCM_FRAGMENT_STORE_TYPE",
+            "ROCM_FRAGMENT_TYPE_DISAGREES",
+            "ROCM_FRAGMENT_UNPACK_UNCONSUMED",
+            "ROCM_FRAGMENT_UNSUPPORTED_SOURCE_LAYOUT",
+            "ROCM_LOWERING_LAYOUT_NOT_LDS",
+            "ROCM_LOWERING_UNCONSUMED_STORAGE_PACK",
+            "ROCM_TILE_UNSUPPORTED_DTYPE",
+        ),
+        pass_kind="lowering",
+        sprint="ROCm Tile-IR convergence",
+    ),
+    PassMetadata(
         name="rocm-materialize-dynamic-lds",
         cpp_class="ROCMDynamicLDS",
         summary=(

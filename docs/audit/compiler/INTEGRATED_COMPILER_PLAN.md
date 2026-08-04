@@ -230,8 +230,21 @@ design before migration.
 >
 > **What is really open, in dependency order:**
 >
-> 0. **Make the typed lowering COMPOSE — a dialect conversion (§4.6).** Newly
->    identified 2026-08-04 and it reorders the rest. `TileToROCM`'s typed path is
+> 0. ✅ **LANDED 2026-08-04 — the typed lowering COMPOSES (§4.6.1).**
+>    `convertTypedFragments()` in `TileToROCM.cpp`: `TileFragmentTypeConverter`
+>    + four conversion patterns + `applyPartialConversion`, running ahead of the
+>    legacy walk, which still owns the bare `!tile.fragment` spelling. The
+>    K-loop, an mma feeding an mma, and a non-`fragment_zero` accumulator all
+>    lower — `rocm_typed_fragment_composition.mlir`, verified to fail when the
+>    synthesized-zero defect is re-injected. `scf.for` was one library call, as
+>    predicted. **Not yet on an executing lane: no producer emits typed
+>    fragments until step 3, so this is proven by fixture only.** Two defects it
+>    exposed, both with green positive tests, are in §4.6.1 and the paired
+>    `_invalid` fixture. Original scoping below.
+>
+>    <details><summary>Original scoping (2026-08-04)</summary>
+>
+>    `TileToROCM`'s typed path is
 >    a single-shot whole-chain pattern match (`view → pack → zero → mma → unpack
 >    → store`, then erase), so an accumulator that is not a `fragment_zero`, an
 >    mma feeding another mma, and a chain crossing a loop boundary are all
@@ -242,16 +255,22 @@ design before migration.
 >    — the hand-rolled region conversion §4.2 sized as the largest step is a
 >    library call. Cost is that **no pass in this tree uses a `TypeConverter`
 >    yet**; this is the first.
+>
+>    </details>
+>
 > 1. **step 3 — restructure producers onto `tile.view` + `fragment_pack`.**
 >    `fragment_pack` requires a `!tile.tile`; zero producers supply one
 >    (`TileIRLoweringPass` passes tensors, the three `GenerateWMMA*Kernel` passes
 >    pass lane-level vectors). Option (a) chosen 2026-08-04; 3a landed. **Made
 >    materially smaller by (0)** — the producer then emits well-typed ops rather
 >    than a pattern one matcher must recognise whole.
-> 2. **step 2b — subsumed by (0), no longer a discrete task.** A non-zero
->    accumulator becomes a converted operand, and "synthesise a zero" becomes the
->    lowering of `fragment_zero`. The NVIDIA fail-closed guard (#506) stays until
->    that lands.
+> 2. ✅ **step 2b — CLOSED by (0) as a capability.** A non-zero accumulator is a
+>    converted operand, and "synthesise a zero" is now the lowering of
+>    `fragment_zero`. Closed on the **ROCm** side only, and closed as a
+>    capability rather than as shipped codegen — nothing emits it until step 3.
+>    The NVIDIA fail-closed guard (#506) stays: `NVWGMMALoweringPass` has had no
+>    equivalent conversion built, and step 6's NVIDIA half remains unverifiable
+>    on this box (needs `-DTESSERA_ENABLE_CUDA=ON`).
 > 3. **step 4** — the five Python text emitters.
 > 4. **step 5** — delete `MMAOp::verify`'s permissive branch. Unreachable until
 >    (1) and (3) complete; deleting it earlier breaks every producer.
@@ -269,7 +288,7 @@ design before migration.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| W1.1 | **2 of 6 numbered steps landed (1, 2); steps 2b and 3–6 open, and 3–5 are BLOCKED on a measured finding rather than on effort.** Design + inventory: [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md), [`W1_1_TYPING_INVENTORY.md`](W1_1_TYPING_INVENTORY.md). **Landed:** (1) `!tile.fragment` parameterized on `m/n/k, elem, acc, role, layout, family` — `family` is in the TYPE because it selects a physical register ABI (wave 32 RDNA/WMMA vs 64 CDNA/MFMA), which an earlier draft got backwards (#502). (2) `MMAOp::verify` reads the contract from the operand types, and `fragment_pack`/`fragment_zero` do the same for their result, so **the canonical K-loop verifies** — its accumulator is an `scf.for` iter-arg with no defining op, which is why producer-chasing made the typed form unusable by every real GEMM (#503). (2b-guard) `NVWGMMALoweringPass` now REFUSES an mma carrying an accumulator instead of lowering it to a two-operand call that silently dropped it — a pre-existing wrong-answer bug, not a regression (#506). (3a) `materializeFragmentPack` can mask a ragged edge, and the bounded `tile.view` arity is defined in the SHARED verifier rather than per backend (#510). The 2b guard and 3a are landed work but are NOT numbered steps — counting them was how an earlier version of this row reached "4 of 6". **Open:** step 2b's real accumulator threading; step 3 producer restructure; step 4 Python emitters; step 5 delete the permissive branch; **step 6 Target IR dialects** (`tessera_nvidia` 3/3, `tessera_apple` 12/12 unexplained `AnyType`, with `tessera_x86` 0/0 as the reference), which is independent of the producer chain. **The blocker (§4.5):** `fragment_pack` requires a `!tile.tile`, and **zero producers supply one** — `TileIRLoweringPass` passes tensors, the three `GenerateWMMA*Kernel` passes pass lane-level vectors whose lane math they did themselves. That is a division-of-labour mismatch, not a syntax gap, so step 3 is a rewrite of working numerically-verified generators and step 5 is unreachable until it completes. Option **(a)** (restructure producers) was chosen 2026-08-04; 3a was its prerequisite. | IR Stack §U1 + Target §X2 | 5w |
+| W1.1 | **2 of 6 numbered steps landed (1, 2), plus the unnumbered step 0 that unblocks the rest; steps 3–6 open.** Step 2b is closed on ROCm by step 0.  Design + inventory: [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md), [`W1_1_TYPING_INVENTORY.md`](W1_1_TYPING_INVENTORY.md). **Landed:** (1) `!tile.fragment` parameterized on `m/n/k, elem, acc, role, layout, family` — `family` is in the TYPE because it selects a physical register ABI (wave 32 RDNA/WMMA vs 64 CDNA/MFMA), which an earlier draft got backwards (#502). (2) `MMAOp::verify` reads the contract from the operand types, and `fragment_pack`/`fragment_zero` do the same for their result, so **the canonical K-loop verifies** — its accumulator is an `scf.for` iter-arg with no defining op, which is why producer-chasing made the typed form unusable by every real GEMM (#503). (2b-guard) `NVWGMMALoweringPass` now REFUSES an mma carrying an accumulator instead of lowering it to a two-operand call that silently dropped it — a pre-existing wrong-answer bug, not a regression (#506). (3a) `materializeFragmentPack` can mask a ragged edge, and the bounded `tile.view` arity is defined in the SHARED verifier rather than per backend (#510). (0) `TileToROCM`'s typed path is now a **dialect conversion** (`TypeConverter`: `!tile.fragment` → `vector<N × T>`), the first in the tree, so a K-loop / chained / non-zero accumulator all lower by composition — which is what closed 2b on ROCm. The 2b guard and 3a are landed work but are NOT numbered steps — counting them was how an earlier version of this row reached "4 of 6". **Open:** step 3 producer restructure; step 4 Python emitters; step 5 delete the permissive branch; **step 6 Target IR dialects** (`tessera_nvidia` 3/3, `tessera_apple` 12/12 unexplained `AnyType`, with `tessera_x86` 0/0 as the reference), which is independent of the producer chain. **The blocker (§4.5):** `fragment_pack` requires a `!tile.tile`, and **zero producers supply one** — `TileIRLoweringPass` passes tensors, the three `GenerateWMMA*Kernel` passes pass lane-level vectors whose lane math they did themselves. That is a division-of-labour mismatch, not a syntax gap, so step 3 is a rewrite of working numerically-verified generators and step 5 is unreachable until it completes. Option **(a)** (restructure producers) was chosen 2026-08-04; 3a was its prerequisite. | IR Stack §U1 + Target §X2 | 5w |
 | W1.1b | **Partially landed; the row's premise did not survive measurement.** It said "62 × `$name`, 4 × `$kind`, 1 × `$mode`". Measured: **17** ops carry `$kind`, **3 of them are `I64Attr`** rather than strings, and **14 of 17 already fail closed** in their generators. `$name` is the emitted kernel SYMBOL (`flash`, `fc1`, `bwd`, …), an open set chosen by the caller — enumerating it would reject valid programs, so it is deliberately left a free string and gated as such. **Landed:** `$dtype` split into three per-op-family constraints (#499, after review showed one shared union let `softmax` accept `int8`); `reduction` / `mode` closed sets (#499); and the **three `$kind` ops that failed OPEN** — `predicate`, `optimizer`, `clifford` — closed (#505). Those three each had a trailing `else` doubling as an unnamed semantic default, so a typo silently computed `isfinite`, trained with Adam, or evaluated the **geometric product** instead of the requested Clifford operation. **Open:** hoisting the other 14 already-fail-closed `$kind` sets from their generators into ODS — a layering improvement (reject at verification, not in the generator), not a correctness fix. | Target §X3 | 1w |
 | W1.2 | **Landed 2026-08-03.** Both halves now hold. (a) Unknown op ⇒ diagnostic: `_infer_result_type` raises when a catalog-declared rule has no implementation, instead of the old five-case if-chain ending in `return operand_types[0]` — correct for the ~60 elementwise ops and silently wrong for everything else. (b) **Auto-flip wired** — `primitive_coverage.shape_rule` is derived from `op_catalog` via `_catalog_shape_rule_status`, the mechanism `op_catalog`'s own source predicted and nobody had connected. It found a live defect: the dashboard promoted `shape_rule` off the LOWERING KIND and never consulted the catalog, so **all six ops whose rule the catalog had explicitly withdrawn reported `complete`** — the same bug `shape_rule_for` had already fixed one layer down. 456 complete → 450 + 6 partial, with no other entry moving, which is the proof the derivation agrees with the rest. 16 now-inert override lines deleted (Decision #29); the surviving 39 are gated by `test_shape_rule_autoflip.py` so a contradicting override fails the build rather than quietly winning. Ops the catalog does not own (~169 Python-reference/host-API) are deliberately untouched. | Frontend §U2 | 2w |
 | W1.3 | **Landed 2026-08-03.** `--tessera-record-metadata` + `--tessera-verify-metadata-obligation`: the snapshot rides in the IR as a module attribute, so record → lower → verify is ONE `tessera-opt` invocation and is lit-testable (a `PassInstrumentation`, the more obvious idiom, is registered in the driver and could not be fixtured — an unfixturable verifier is what Decision #29 rejects). Comparison is per function and normalized to the attribute's last dot-component, so `tessera.layout` → `tile.layout` is not a drop; `shape`/`dtype` are untracked because they live in types. **Found a live bug on its first real program:** `TileIRLoweringPass` has two `tile.mma` producers and only the fused K-step forwarded `numeric_policy`, so the main matmul path stated the accumulator contract at Graph IR and lost it one level down — fixed. Five fail-closed refusals incl. STALE_DECLARATION (a declared drop that did not happen) and NO_SNAPSHOT (an unrun check must not look like a passed one); `not_yet_carried:<item>` keeps declared debt attributable. | IR Stack §U5 | 2w |

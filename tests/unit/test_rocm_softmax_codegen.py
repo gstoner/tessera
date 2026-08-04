@@ -58,9 +58,26 @@ def test_low_precision_roundtrips_through_f32(dtype):
 
 
 def test_unknown_dtype_is_named_error():
+    """The rejection MOVED to ODS (W1.1b) — it did not weaken.
+
+    This used to assert the generator's own "dtype must be f32, f16, or bf16".
+    `ROCM_FloatDTypeAttr` now rejects `int8` at verification, before the pass
+    runs, so the generator's message is never reached. That is the point of the
+    item rather than a regression: the same program is still refused, with a
+    message that still names the attribute and its legal set, one layer earlier.
+
+    Both messages are accepted so the test states the CONTRACT — an illegal
+    dtype is a named error, not a silent fallthrough — instead of pinning which
+    layer happens to catch it. Asserting only the ODS text would break again if
+    the constraint is ever narrowed to leave `int8` for the generator to reject.
+    """
     r = _opt(_directive("int8"), "--generate-rocm-softmax-kernel")
     assert r.returncode != 0
-    assert "dtype must be f32, f16, or bf16" in r.stderr
+    assert ("dtype must be f32, f16, or bf16" in r.stderr
+            or "attribute 'dtype' failed to satisfy constraint" in r.stderr), \
+        r.stderr
+    # Whichever layer refuses it, the diagnostic must name the attribute.
+    assert "dtype" in r.stderr
 
 
 @pytest.mark.parametrize("dtype", ["f32", "f16", "bf16"])

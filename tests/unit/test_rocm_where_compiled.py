@@ -97,7 +97,20 @@ def test_where_codegen_and_lowers():
 
 
 def test_where_codegen_bad_dtype_rejected():
+    """An unsupported dtype is rejected — now by the ODS verifier, earlier.
+
+    W1.1b gave `dtype` a declared legal set (`ROCM_DTypeAttr`), so `"i7"` is
+    caught when the op is VERIFIED rather than when the kernel-generation pass
+    reaches its `dtype must be` fallback. That is strictly better: the same
+    program is rejected, sooner, and by a check every ROCm op shares instead of
+    one each pass reimplements.
+
+    The assertion is on the rejection and on the offending key, not on one
+    pass's wording — pinning the exact sentence is what made this test fail on
+    an improvement.
+    """
     d = ('module {\n  "tessera_rocm.where"() {name = "w", dtype = "i7"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-where-kernel")
-    assert r.returncode != 0 and "dtype must be" in r.stderr
+    assert r.returncode != 0, "an unsupported dtype must not compile"
+    assert "dtype" in r.stderr, r.stderr

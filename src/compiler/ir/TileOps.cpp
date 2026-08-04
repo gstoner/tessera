@@ -75,6 +75,64 @@ FragmentType typedFragment(Value v) {
   return (f && !f.isUnknown()) ? f : FragmentType();
 }
 
+// Does a `#tile.mma_desc` agree with ONE fragment type, given that fragment's
+// role? (PR #503 review.)
+//
+// The first version compared only m/n/k/family/accType, which let a descriptor
+// contradict the type on exactly the fields codegen reads: a bf16 `elem` paired
+// with `a = "f16"`, or a `row_major` fragment paired with
+// `a_layout = "col_major"`. Both `NVIDIALowering.cpp` and `TileToROCM.cpp`
+// select the instruction variant and the physical register layout from the
+// DESCRIPTOR, so that IR verifies while codegen follows a different contract
+// than the type states -- silently wrong, in the one place the two sources of
+// truth still overlap.
+//
+// Role-dependent because the descriptor has always carried A and B separately
+// (`aType`/`bType`, `a_layout`/`b_layout`); that asymmetry is why the shared
+// checks in `verifyMMAFromTypes` deliberately exclude `elem` and `layout`.
+// One implementation, used by both the consumer and the producer side.
+LogicalResult descriptorAgreesWithFragment(Operation *op, TileMmaDescAttr desc,
+                                           FragmentType f) {
+  auto err = [&]() -> InFlightDiagnostic {
+    return op->emitOpError() << "TILE_MMA_DESC_DISAGREES: ";
+  };
+  if (desc.getM() != f.getM() || desc.getN() != f.getN() ||
+      desc.getK() != f.getK())
+    return err() << "#tile.mma_desc states m/n/k that the fragment type does not";
+  if (desc.getFamily() != f.getFamily())
+    return err() << "#tile.mma_desc family \"" << desc.getFamily()
+                 << "\" contradicts the fragment type's \"" << f.getFamily()
+                 << "\"";
+  if (desc.getAccType() != f.getAcc())
+    return err() << "#tile.mma_desc acc \"" << desc.getAccType()
+                 << "\" contradicts the fragment type's \"" << f.getAcc() << "\"";
+
+  StringRef role = f.getRole();
+  StringRef descElem, descLayout, which;
+  if (role == "a") {
+    descElem = desc.getAType(); descLayout = desc.getALayout(); which = "a";
+  } else if (role == "b") {
+    descElem = desc.getBType(); descLayout = desc.getBLayout(); which = "b";
+  } else if (role == "acc") {
+    descElem = desc.getAccType(); which = "acc";
+  } else {
+    // scale_a / scale_b: the descriptor has no per-scale element or layout
+    // field, so there is nothing further to cross-check.
+    return success();
+  }
+  if (descElem != f.getElem())
+    return err() << "#tile.mma_desc " << which << " = \"" << descElem
+                 << "\" contradicts the fragment type's elem \"" << f.getElem()
+                 << "\" -- codegen selects the instruction from the descriptor";
+  if (!descLayout.empty() && descLayout != f.getLayout())
+    return err() << "#tile.mma_desc " << which << "_layout \"" << descLayout
+                 << "\" contradicts the fragment type's layout \""
+                 << f.getLayout()
+                 << "\" -- codegen selects the register layout from the "
+                    "descriptor";
+  return success();
+}
+
 // The typed `tile.mma` contract, read from the OPERAND TYPES.
 //
 // This is W1.1's point. The legacy path below recovers the same facts by
@@ -154,13 +212,10 @@ LogicalResult verifyMMAFromTypes(Operation *op, ArrayRef<Value> data) {
   // The descriptor is now OPTIONAL -- the type carries everything except
   // `k_blocks`. When present it must agree, so a stale descriptor cannot
   // contradict the types it used to be the sole source of.
-  if (auto desc = mmaDescAttr(op)) {
-    if (desc.getM() != a.getM() || desc.getN() != a.getN() ||
-        desc.getK() != a.getK() || desc.getFamily() != a.getFamily() ||
-        desc.getAccType() != a.getAcc())
-      return err() << "TILE_MMA_DESC_DISAGREES: #tile.mma_desc contradicts the "
-                      "operand types it accompanies";
-  }
+  if (auto desc = mmaDescAttr(op))
+    for (Value v : data)
+      if (failed(descriptorAgreesWithFragment(op, desc, typedFragment(v))))
+        return failure();
   return success();
 }
 
@@ -694,13 +749,7 @@ static LogicalResult verifyFragmentProducerAgainstType(Operation *op,
              << role.getValue() << "\" contradicts the result type's role \""
              << result.getRole() << "\"";
   if (auto desc = mmaDescAttr(op))
-    if (desc.getM() != result.getM() || desc.getN() != result.getN() ||
-        desc.getK() != result.getK() ||
-        desc.getFamily() != result.getFamily() ||
-        desc.getAccType() != result.getAcc())
-      return op->emitOpError()
-             << "TILE_MMA_DESC_DISAGREES: #tile.mma_desc contradicts the "
-                "result fragment type it accompanies";
+    return descriptorAgreesWithFragment(op, desc, result);
   return success();
 }
 
@@ -882,6 +931,28 @@ LogicalResult MMAOp::verify() {
 LogicalResult FragmentUnpackOp::verify() {
   if (getInputs().size() != 1 || !isa<FragmentType>(getInputs().front().getType()))
     return emitOpError("expects exactly one !tile.fragment input");
+
+  // W1.1 step 2 (PR #503 review) — read the input TYPE when it carries the
+  // contract. Without this the descriptor is only optional while the result is
+  // left packed: the moment a typed `tile.mma` feeds the ordinary epilogue,
+  // this verifier demanded `mmaDescAttr(producer)` and rejected the module.
+  //
+  // It also producer-chased, so it had the block-argument problem too: a K-loop
+  // accumulator unpacked after the loop is an `scf.for` RESULT, whose defining
+  // op is the loop and carries no descriptor.
+  if (FragmentType typed = typedFragment(getInputs().front())) {
+    if (typed.getRole() != "acc")
+      return emitOpError()
+             << "TILE_FRAGMENT_UNPACK_ROLE: only an accumulator fragment may be "
+                "unpacked, got role \"" << typed.getRole() << "\"";
+    if (auto desc = mmaDescAttr(getOperation()))
+      if (failed(descriptorAgreesWithFragment(getOperation(), desc, typed)))
+        return failure();
+    if (!getOperation()->getAttrOfType<TileLayoutAttr>("tile.layout"))
+      return emitOpError("requires a #tile.layout attribute");
+    return success();
+  }
+
   Operation *producer = getInputs().front().getDefiningOp();
   if (!producer || !mmaDescAttr(producer))
     return emitOpError("fragment must be produced by a descriptor-carrying Tile op");

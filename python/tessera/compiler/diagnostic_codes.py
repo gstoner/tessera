@@ -903,7 +903,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     ),
     DiagnosticCode(
         code="TILE_MMA_DESC_DISAGREES",
-        pass_origin="MMAOp::verify",
+        pass_origin="tile::descriptorAgreesWithFragment",
         severity="error",
         summary=(
             "A #tile.mma_desc contradicts the fragment types it accompanies. The descriptor is optional on the typed path (it still carries k_blocks), but a stale one must not contradict the types that superseded it."
@@ -916,7 +916,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     ),
     DiagnosticCode(
         code="TILE_FRAGMENT_ROLE_DISAGREES",
-        pass_origin="MMAOp::verify",
+        pass_origin="FragmentPackOp::verify / FragmentZeroOp::verify",
         severity="error",
         summary=(
             "A role attribute contradicts the result fragment type's role."
@@ -928,8 +928,22 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="W1.1",
     ),
     DiagnosticCode(
+        code="TILE_FRAGMENT_UNPACK_ROLE",
+        pass_origin="FragmentUnpackOp::verify",
+        severity="error",
+        summary=(
+            "Only an accumulator fragment may be unpacked. Read from the input "
+            "TYPE: the previous check chased the producing op, so it rejected a "
+            "K-loop accumulator unpacked after the loop (an scf.for result, "
+            "whose defining op is the loop and carries no descriptor)."
+        ),
+        fix_hint="Unpack the accumulator, whose fragment type has role acc.",
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
         code="TILE_FRAGMENT_ZERO_ROLE",
-        pass_origin="MMAOp::verify",
+        pass_origin="FragmentZeroOp::verify",
         severity="error",
         summary=(
             "tile.fragment_zero produces the accumulator, so its result type must have role acc."

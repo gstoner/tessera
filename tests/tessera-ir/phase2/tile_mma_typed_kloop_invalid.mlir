@@ -91,3 +91,49 @@ func.func @mixed_typed_and_bare(
   %r = tile.mma %x, %y, %z : (!ja, !tile.fragment, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
   return %r : !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
 }
+
+// -----
+
+// ── Descriptor / type disagreement (PR #503 review) ───────────────────────
+//
+// The first cut compared only m/n/k/family/accType, which let a retained
+// descriptor contradict the type on exactly the fields codegen reads. Both
+// `NVIDIALowering.cpp` and `TileToROCM.cpp` select the instruction variant AND
+// the physical register layout from the DESCRIPTOR — so such IR verified while
+// codegen followed a different contract than the type stated. The comparison is
+// role-dependent because the descriptor has always carried A and B separately.
+
+#bad_elem = #tile.mma_desc<family = "auto", m = 16, n = 16, k = 16,
+                           a = "f16", b = "bf16", acc = "f32",
+                           a_layout = "row_major", b_layout = "col_major",
+                           k_blocks = 1>
+!ka = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "auto">
+!kb = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "b", layout = "col_major", family = "auto">
+!kc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
+
+// A bf16 A-fragment paired with `a = "f16"`.
+func.func @descriptor_element_contradicts_type(%x: !ka, %y: !kb, %z: !kc) -> !kc {
+  // CHECK: TILE_MMA_DESC_DISAGREES
+  // CHECK-SAME: contradicts the fragment type's elem
+  %r = tile.mma %x, %y, %z {mma = #bad_elem} : (!ka, !kb, !kc) -> !kc
+  return %r : !kc
+}
+
+// -----
+
+#bad_layout = #tile.mma_desc<family = "auto", m = 16, n = 16, k = 16,
+                             a = "bf16", b = "bf16", acc = "f32",
+                             a_layout = "col_major", b_layout = "col_major",
+                             k_blocks = 1>
+!la = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "auto">
+!lb = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "b", layout = "col_major", family = "auto">
+!lc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
+
+// A row_major A-fragment paired with `a_layout = "col_major"`. This one decides
+// the physical register layout, so the wrong answer is a transposed operand.
+func.func @descriptor_layout_contradicts_type(%x: !la, %y: !lb, %z: !lc) -> !lc {
+  // CHECK: TILE_MMA_DESC_DISAGREES
+  // CHECK-SAME: contradicts the fragment type's layout
+  %r = tile.mma %x, %y, %z {mma = #bad_layout} : (!la, !lb, !lc) -> !lc
+  return %r : !lc
+}

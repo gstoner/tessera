@@ -69,3 +69,34 @@ func.func @canonical_k_loop(%a: tensor<16x16xbf16>, %b: tensor<16x16xbf16>,
   }
   return %r : !fac
 }
+
+// -----
+
+#l2 = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
+                   replica = [] : [] on [], offset = 0>
+!ga  = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32",
+                      role = "a", layout = "row_major", family = "auto">
+!gb  = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32",
+                      role = "b", layout = "col_major", family = "auto">
+!gac = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32",
+                      role = "acc", layout = "row_major", family = "auto">
+
+// The epilogue, descriptorless (PR #503 review). "The descriptor is optional"
+// was only half true: `FragmentUnpackOp::verify()` still demanded
+// `mmaDescAttr(producer)`, so a descriptorless typed `tile.mma` verified right
+// up until it fed the ordinary `fragment_unpack` epilogue — i.e. it worked only
+// while the result was left packed.
+//
+// That verifier also producer-chased, so it carried the block-argument problem
+// too: a K-loop accumulator unpacked AFTER the loop is an `scf.for` result,
+// whose defining op is the loop and carries no descriptor.
+// CHECK-LABEL: func.func @typed_mma_reaches_the_epilogue
+func.func @typed_mma_reaches_the_epilogue(%x: !ga, %y: !gb, %z: !gac)
+    -> !tile.tile {
+  // CHECK: tile.mma
+  // CHECK-NOT: mma_desc
+  %r = tile.mma %x, %y, %z : (!ga, !gb, !gac) -> !gac
+  // CHECK: tile.fragment_unpack
+  %o = tile.fragment_unpack %r {tile.layout = #l2} : (!gac) -> !tile.tile
+  return %o : !tile.tile
+}

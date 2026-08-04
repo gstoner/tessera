@@ -123,8 +123,8 @@ principled line.**
 | Field | Home | Why |
 |---|---|---|
 | `m`/`n`/`k`, `elem`, `acc`, `role`, `layout` | **type** | Determine whether a value may be used where another is expected. Needed at every use site, including block arguments. |
-| `family` (`auto`/`mma_sync`/`wgmma`/`tcgen05`/`wmma`/`mfma`) | attribute | Instruction *selection* — a property of the op, and resolved per target by the lowering. Two fragments do not become incompatible because one op chose WGMMA. |
-| `k_blocks` | attribute | Operation-level unrolling. |
+| `family` (`auto`/`mma_sync`/`wgmma`/`tcgen05`/`wmma`/`mfma`) | **type** | **Corrected after PR #501 review — an earlier draft of this document put it in the attribute, and that was wrong.** See §3.1. |
+| `k_blocks` | attribute | Operation-level unrolling. It changes how many steps the op runs, not whether two fragments are interchangeable. |
 
 What this buys, concretely:
 
@@ -135,6 +135,43 @@ What this buys, concretely:
    collapse into ODS type equality; the 5 producer-chasing sites go away.
 3. `elem`/`acc` in the type is exactly Decision #15a's storage/accumulator split
    (`storage=bf16, accum=fp32`) expressed where codegen reads it.
+
+### 3.1 Why `family` is in the type — a corrected claim
+
+The first draft of this document argued: *"two fragments do not become
+incompatible because one op chose WGMMA."* **That is false**, and the reason is
+worth stating because it is the one place where the "type = interchangeability"
+rule is easy to apply backwards.
+
+`family` does not merely name an instruction; it selects a **physical register
+ABI**, and the backends read it as such:
+
+* `ROCMFragmentLayout.h` resolves a descriptor to a `FragmentLayoutDescriptor`
+  whose **wave size differs by family** — 32 for RDNA3/RDNA4/gfx125x WMMA, 64
+  for CDNA MFMA — along with the input element count and format.
+* `TileToROCM.cpp` emits, in as many words:
+  `"RDNA3, RDNA4, gfx125x WMMA-v2, and CDNA MFMA descriptors are intentionally
+  non-interchangeable"`.
+* `NVIDIALowering.cpp` gates on `family` before matching (m, n, k, dtype) to an
+  `mma.sync` variant.
+
+Today the full descriptor-equality check in `MMAOp::verify()` prevents mixing
+them. Removing producer-chasing without moving `family` into the type would
+**weaken an existing contract precisely at the edge this design exists to
+open**: a loop whose `iter_args` accumulator was packed for `mma_sync` could
+feed a body `tile.mma` that selects `wgmma`, and the iter-arg/yield types would
+compare equal.
+
+So `family` is a type parameter. `family = "auto"` is the legal pre-resolution
+value and compares equal only to itself, which reproduces today's
+descriptor-equality semantics exactly rather than approximating them.
+
+The general lesson for the rest of this migration: **"the op chooses it" does
+not imply "the value does not carry it."** An operation-local *decision* can
+still determine a value-level *representation*, and it is the representation
+that decides interchangeability.
+
+---
 
 **Do not** delete `#tile.mma_desc`. It keeps a real job (`family`, `k_blocks`),
 and deleting it would be the Decision #31 ordering error the plan's own risk
@@ -151,14 +188,60 @@ producer migration rather than after it.
 | Step | Work | Gate |
 |---|---|---|
 | **1** | Parameterize `Tile_FragmentType` per §3; keep the bare form parseable as `!tile.fragment` = all-unknown, so nothing breaks on day one | round-trip fixture; existing 3 fixture files still pass |
-| **2** | Teach `MMAOp::verify()` to prefer the type when parameterized and fall back to producer-chasing when bare | both forms verify; the §2 K-loop case now **passes** — this is the step's real gate and it must be the fixture |
-| **3** | Migrate the 5 construction sites (`TileIRLoweringPass.cpp` ×2, `GenerateWMMA{Gemm,LinearAttn,FlashAttn}Kernel.cpp`), one per PR, each with a lit fixture | per-producer fixture pairs `!tile.fragment<…>` with `tile.mma` |
+| **2** | Teach `MMAOp::verify()` to prefer the type when parameterized and fall back to producer-chasing when bare | both forms verify; the §2 K-loop case **verifies** — necessary, and per §4.1 **not sufficient** |
+| **2b** | **Block-argument-aware target lowering** — NVIDIA and ROCm both require the accumulator's direct defining op to be `FragmentZeroOp`; teach both to accept a region iter-arg whose type carries the contract | the §2 K-loop **lowers** on each backend, with a per-backend lowering fixture. This is the step that makes the motivating GEMM compile |
+| **3** | Migrate the 5 construction sites (`TileIRLoweringPass.cpp` ×2, `GenerateWMMA{Gemm,LinearAttn,FlashAttn}Kernel.cpp`), one per PR, each with a lit fixture | per-producer fixture pairs `!tile.fragment<…>` with `tile.mma`, **and a backend lowering fixture** for the producers that feed one |
 | **4** | Migrate the 5 Python text emitters (`nvidia_native.py` ×4, `runtime.py`) | the Python-side tests named in inventory §2 |
 | **5** | Delete `MMAOp::verify()`'s permissive branch and the bare-type fallback | inventory step 4's gate: the contract becomes binding |
 | **6** | Target IR dialects — `tessera_nvidia` (3/3) then `tessera_apple` (12/12), with `tessera_x86` (0/0) as the reference shape | per inventory §4 step 5 |
 
-**Steps 1–2 are the design risk; 3–5 are mechanical.** Do not start at 5
-(inventory: "Do not start at (4)" — same rule, renumbered).
+**Steps 1–2b are the design risk. Steps 3–5 are *routine*, not mechanical** —
+see §4.1; each producer still needs its own fixture and at least one needs a
+backend lowering fixture. Do not start at 5 (inventory: "Do not start at (4)" —
+same rule, renumbered).
+
+### 4.1 Verifying is not lowering — a corrected gate
+
+An earlier draft made step 2's gate "the K-loop case now passes" and called
+steps 3–5 mechanical. **PR #501 review showed that gate is insufficient, and it
+is right.**
+
+Making `MMAOp::verify()` accept a block-argument accumulator does not make that
+GEMM *lowerable*. Both backends independently require the accumulator's direct
+defining op to be a `FragmentZeroOp`:
+
+```cpp
+// NVIDIALowering.cpp — and the same shape in TileToROCM.cpp
+auto cZero = mmaData[2].getDefiningOp<tessera::tile::FragmentZeroOp>();
+...
+if (!aPack || !bPack || !cZero || !physical) { op->emitError(...); }
+```
+
+A region iter-arg has no defining op, so `cZero` is null and both backends
+error out — *after* the verifier has accepted the program. So the typed K-loop
+would verify and still fail to compile, which is the worst of the two states:
+the gate would be green while the motivating main-matmul path remained broken.
+
+Hence step 2b, and hence the softened claim about 3–5. The underlying pattern is
+the same one §2 found one level up — **a contract recovered by chasing the
+producing op cannot survive a block-argument edge** — and it recurs in every
+consumer that does the chase, not only in the verifier.
+
+Scoped, so step 2b is not open-ended. Every site that chases a producer off a
+fragment operand (measured 2026-08-03):
+
+```
+$ grep -rn "getDefiningOp<tessera::tile::Fragment" --include=*.cpp --include=*.h src/
+  3  NVIDIALowering.cpp
+  3  TileToROCM.cpp
+```
+
+**Two files, three sites each, and they are exactly the two the review named.**
+`WarpSpecializationPass` and the epilogue materializers do *not* do this — an
+earlier draft of this section guessed that they did, which would have widened
+step 2b on an assumption instead of a count. Re-run the grep before declaring
+step 2b done rather than trusting this number, but the shape of the work is
+bounded.
 
 ### Blast radius (measured 2026-08-03)
 
@@ -222,7 +305,9 @@ W1.1 is complete when:
 
 1. A `tile.mma` whose operand types disagree fails **type** verification, with no
    producer chase.
-2. The §2 K-loop fixture — accumulator as `scf.for` `iter_args` — verifies.
+2. The §2 K-loop fixture — accumulator as `scf.for` `iter_args` — both
+   **verifies and lowers**, with a per-backend lowering fixture on NVIDIA and
+   ROCm (§4.1: verifying alone leaves the motivating GEMM uncompilable).
 3. `MMAOp::verify()` has no permissive branch.
 4. Every `tile.mma` producer in `src/` and `python/` emits the typed form.
 5. `tessera_nvidia` and `tessera_apple` have no unexplained `AnyType` on true

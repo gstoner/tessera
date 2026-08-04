@@ -6,9 +6,9 @@ Reference date for staleness: **2026-08-04**.
 
 ## Headline
 
-- **136** docs catalogued across the canonical doc tree.
-- **135** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **81** updated within the last 30 days.
+- **137** docs catalogued across the canonical doc tree.
+- **136** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **82** updated within the last 30 days.
 - **8** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -133,7 +133,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `MASTER_AUDIT.md` | - | 2026-08-02 | 2 | ✓ |
+| `MASTER_AUDIT.md` | - | 2026-08-04 | 0 | ✓ |
 | `README.md` | - | 2026-07-28 | 7 | ✓ |
 | `backend/BACKEND_AUDIT.md` | - | 2026-07-31 | 4 | ✓ |
 | `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-07-27 | 8 | ✓ |
@@ -149,6 +149,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 22 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 41 | ✓ |
 | `backend/nvidia/todo.md` | - | 2026-08-03 | 1 | ✓ |
+| `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 0 | ✓ |
 | `backend/rocm/GFX1250_MI450_COMPILER_REFERENCE.md` | - | 2026-07-28 | 7 | ✓ |
 | `backend/rocm/ROCM_AUDIT.md` | - | 2026-07-16 | 19 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 7 | ✓ |
@@ -164,7 +165,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 7 | ✓ |
 | `compiler/EVALUATOR_PLAN.md` | - | 2026-07-22 | 13 | ✓ |
 | `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 2 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-08-02 | 2 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-08-04 | 0 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 2 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 8 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-07-14 | 21 | ✓ |
@@ -174,7 +175,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/STAGE_A_EMIT_PLAN.md` | - | 2026-07-11 | 24 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 2 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 5 | ✓ |
-| `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-03 | 1 | ✓ |
+| `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-04 | 0 | ✓ |
 | `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 2 | ✓ |
 | `compiler/WORKSTREAM_C_HANDOFF.md` | - | 2026-07-06 | 29 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-06-21 | 44 | ✓ |

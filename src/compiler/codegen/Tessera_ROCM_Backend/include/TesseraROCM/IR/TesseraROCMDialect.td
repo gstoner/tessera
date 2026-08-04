@@ -107,6 +107,59 @@ def ROCM_GemmDTypeAttr
                        "ROCm WMMA GEMM dtype: f16/bf16 or the iu8/iu4 "
                        "integer matrix-core widths">;
 
+// ── W1.1b — `$kind` on the three ops that FAILED OPEN ─────────────────────
+//
+// 17 ops carry `$kind` (the plan says 4; three of the 17 are `I64Attr`, not
+// strings at all). Measured by probing each with a bogus kind and inspecting
+// the OUTPUT rather than the exit code: 14 already reject it with a named
+// error. These three generated a complete GPU kernel and returned 0.
+//
+// All three failed the same way -- a trailing `else` acting as an unnamed
+// semantic default:
+//
+//   predicate  else { /* isfinite */ }        -> a typo silently tests isfinite
+//   clifford   else { *t = GP; }              -> a typo silently computes the
+//                                               GEOMETRIC PRODUCT, a different
+//                                               algebra operation
+//   optimizer  falls through to the Adam path -> a typo silently trains with Adam
+//
+// Decision #21a: an attribute that selects SEMANTICS fails closed; it may never
+// be silently defaulted.
+//
+// Each set below includes the ELSE BRANCH'S OWN NAME, which is the subtlety
+// that makes this worth stating. Deriving these from `kind ==` comparisons --
+// the obvious scan -- yields {isnan, isinf} and {wedge, left_contraction} and
+// omits `isfinite`, `geometric_product`, and `adam`, all of which are real
+// values producers emit (`runtime.py` line 4000 `kinds = {"isnan", "isinf",
+// "isfinite"}`, `_CLIFFORD_KIND_NAME`, and 4 uses of `"adam"`). A constraint
+// built that way would reject valid programs -- the same defect as the earlier
+// `mode` set that omitted `"set"`.
+
+def ROCM_PredicateKindAttr
+    : ROCM_EnumStrAttr<["isnan", "isinf", "isfinite"],
+                       "ROCm predicate kind">;
+
+def ROCM_CliffordKindAttr
+    : ROCM_EnumStrAttr<["geometric_product", "wedge", "left_contraction"],
+                       "ROCm Cl(3,0) bilinear product kind">;
+
+// `adafactor` is in this set because the UNIT SUITE caught its absence, not
+// because a scan found it: the first version of this enum omitted it, and
+// `test_rocm_optimizer_compiled.py` failed six ways -- including
+// `test_adafactor_full_backward_executes_on_gfx1151`, i.e. a rule that EXECUTES
+// on this box. The negative fixture had even used `adafactor` as its example of
+// a plausible-but-unimplemented value.
+//
+// Recorded because it is the same defect twice in one change: a 15-line window
+// of the consumer showed `sgd/momentum/nesterov/lion` and an `adamw` check, and
+// I took that for the vocabulary. Reading the pass's full literal set gives
+// seven. The durable lesson is that the existing tests encode producer reality
+// better than any scan of the consumer does -- run them before trusting a set.
+def ROCM_OptimizerKindAttr
+    : ROCM_EnumStrAttr<["sgd", "momentum", "nesterov", "lion", "adam", "adamw",
+                        "adafactor"],
+                       "ROCm optimizer update rule">;
+
 def ROCM_ReductionAttr
     : ROCM_EnumStrAttr<["none", "sum", "mean"],
                        "ROCm reduction policy: 'none', 'sum', or 'mean'">;

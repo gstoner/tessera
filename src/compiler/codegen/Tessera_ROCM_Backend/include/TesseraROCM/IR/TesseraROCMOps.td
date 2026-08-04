@@ -641,7 +641,7 @@ def ROCM_PredicateKernelOp : TesseraROCM_Op<"predicate"> {
     isnan (x!=x) / isinf (|x|==inf) / isfinite (ordered & |x|<inf). One thread per
     element. CPU analog: avx512_predicate_f32.
   }];
-  let arguments = (ins StrAttr:$name, StrAttr:$kind);
+  let arguments = (ins StrAttr:$name, ROCM_PredicateKindAttr:$kind);
   let assemblyFormat = "attr-dict";
 }
 
@@ -654,7 +654,7 @@ def ROCM_OptimizerKernelOp : TesseraROCM_Op<"optimizer"> {
     host-computed bias-correction scalars (b1c,b2c) are f32 args. sqrt via
     math→ROCDL. All f32. CPU analog: avx512_optimizer_f32.
   }];
-  let arguments = (ins StrAttr:$name, StrAttr:$kind);
+  let arguments = (ins StrAttr:$name, ROCM_OptimizerKindAttr:$kind);
   let assemblyFormat = "attr-dict";
 }
 
@@ -1274,7 +1274,7 @@ def ROCM_CliffordKernelOp : TesseraROCM_Op<"clifford"> {
     avx512_clifford_f32. Args:
     `(A : memref<?xf32>, B : memref<?xf32>, n : index, out : memref<?xf32>)`.
   }];
-  let arguments = (ins StrAttr:$name, StrAttr:$kind);
+  let arguments = (ins StrAttr:$name, ROCM_CliffordKindAttr:$kind);
   let assemblyFormat = "attr-dict";
 }
 

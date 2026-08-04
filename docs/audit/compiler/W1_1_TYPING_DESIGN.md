@@ -201,6 +201,113 @@ see §4.1; each producer still needs its own fixture and at least one needs a
 backend lowering fixture. Do not start at 5 (inventory: "Do not start at (4)" —
 same rule, renumbered).
 
+### 4.5 Step 3 is not a migration — no producer is fragment-shaped
+
+Measured 2026-08-04, on starting step 3. The inventory (§6) warned to "expect
+per-producer surprises"; the surprise is not per-producer, it is all of them.
+
+`FragmentPackOp::verify` requires **exactly one `!tile.tile` input**. What the
+five construction sites actually pass to `tile.mma`:
+
+| site | operands |
+|---|---|
+| `TileIRLoweringPass` ×2 | `tile.async_copy` results — **tensors** (`st.addTypes({src.getType(), …})`) |
+| `GenerateWMMAGemmKernel` | lane-level **vectors** (`toFrag` → `vector::BitCastOp`) |
+| `GenerateWMMALinearAttnKernel` | same shape |
+| `GenerateWMMAFlashAttnKernel` | same shape |
+
+**Zero producers pass a `!tile.tile` or a `tile.view` result.** No operand can be
+wrapped in `fragment_pack`: the typed contract expects
+`tile.view → fragment_pack → tile.mma`, and every producer supplies either a
+tensor or a vector whose lane math it has already done.
+
+That is a **division-of-labour mismatch**, not a syntax gap. The typed form
+assumes the COMPILER performs the lane mapping (`materializeFragmentPack`); the
+hand-written generators perform it themselves and hand over finished vectors.
+Both are coherent; they are different models.
+
+**Consequences the plan's wording does not survive:**
+
+* Step 3 ("migrate the 5 construction sites, one per PR") is not a migration. It
+  is a rewrite of working, numerically-verified generators — including the
+  production ROCm GEMM lane — to emit logical tile views and surrender their
+  lane math.
+* Step 5 ("delete `MMAOp::verify()`'s permissive branch") is **unreachable as
+  written**: deleting it breaks every existing producer.
+
+**Three options; this is an architectural choice, not a task:**
+
+  a. **Restructure the producers** to `tile.view → fragment_pack`. Rewrites
+     proven kernels for no measured performance benefit.
+  b. **Widen `fragment_pack`** to accept tensors/vectors. Cheap, and it discards
+     most of what the typed contract buys — §3's whole point was that the type
+     states what makes two fragments interchangeable.
+  c. **Scope the typed form to synthesized kernels** (the Decision #28 lane) and
+     treat the permissive branch as the documented boundary between two
+     legitimate models rather than debt awaiting deletion.
+
+**Recommendation: (c).** The typed contract earns its keep where the compiler
+owns the lane mapping — exactly the synthesizer's job. The hand-written
+generators are a separate working lane whose operands are physical by design.
+Under (c) step 5 becomes "the permissive branch is a declared compatibility
+envelope, and any path where the compiler owns lane mapping must use the typed
+form" — a Decision #32-style declared boundary rather than an open TODO.
+
+This also closes W1.1 honestly: steps 1, 2 and 2b's guard are real contract
+improvements that landed and are gated; steps 3–5 as written were premised on a
+producer shape that does not exist.
+
+---
+
+### 4.4 Gap 2 is not independently actionable — it is coupled to step 3
+
+§4.3 listed two remaining ROCm gaps. The first (the pipeline could not lower
+`tile.mma`) is closed. The second — `TileToROCM`'s TYPED branch requiring a
+`FragmentZeroOp` accumulator — **should not be fixed yet**, and the reason is
+worth stating so it is not picked up as ready work.
+
+**The typed branch has no producer and no test.** Measured 2026-08-04:
+
+| question | answer |
+|---|---|
+| C++ passes emitting `fragment_pack` / `fragment_zero` | **none** (only the two consumers and the verifier mention them) |
+| Python emitters producing them for ROCm | **none** — `runtime.py` has 0 occurrences |
+| lit fixtures pairing a typed fragment with a ROCm lowering | **none** |
+| tests asserting its `"typed ROCm lowering requires ..."` diagnostic | **none** |
+| other users of `materializeFragmentPack` | none — it is local to `TileToROCM.cpp` |
+
+**And the fix is not the obvious one.** Relaxing the `FragmentZeroOp` check
+alone would reproduce the NVIDIA defect exactly: the typed branch synthesises
+its own accumulator —
+
+```cpp
+Value zero = arith::ConstantOp::create(builder, loc, accTy,
+                                       builder.getZeroAttr(accTy));
+state.addOperands({*a, *b, zero});      // typed branch  — accumulator DISCARDED
+state.addOperands({mmaData[0], mmaData[1], acc});  // untyped branch — threaded
+```
+
+— so accepting a non-zero accumulator without threading it would silently drop
+it. Threading requires materialising the incoming accumulator fragment into the
+physical `accTy` vector, the accumulator-side counterpart of
+`materializeFragmentPack`, which A and B already have and the accumulator does
+not.
+
+That is real work, and it is **unverifiable today**: with no producer, there is
+no program to run and therefore no numeric gate. Building it now would repeat
+the mistake §4.3 corrected — infrastructure for a path nothing executes, sized
+by reasoning rather than measurement.
+
+**So gap 2 is a step-3 obligation, not a predecessor of it.** When a producer
+migrates to emit typed fragments for ROCm, that migration must carry the
+accumulator materialisation with it, and its numeric gate covers both. Until
+then the branch is unexercised code whose contract cannot be checked.
+
+The untyped path — which production uses via `via-tile` — already threads the
+accumulator correctly and is proven bit-identical on gfx1151 (§4.3).
+
+---
+
 ### 4.3 Measured 2026-08-04 — 2b for ROCm is NOT a region-signature conversion
 
 §4.2 concluded that threading the accumulator means converting the `scf.for`

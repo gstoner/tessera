@@ -3131,6 +3131,24 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
   auto memory = view->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>(
       "tile.memory");
   auto layout = view->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout");
+  // The BOUNDED view is valid shared Tile IR (ViewOp::verify accepts 3 or 5
+  // pointer-backed operands), and this materializer cannot honour it: it emits
+  // an unguarded load, so silently ignoring (rowBound, colBound) would read
+  // past the edge of a ragged matrix. Decision #21 -- name the op and the
+  // target rather than folding it into the generic arity message, which would
+  // read as "malformed IR" for IR that is in fact well-formed and simply
+  // unsupported here.
+  //
+  // Recorded as a sibling outcome of the ROCm masking work (PR #510 review):
+  // ROCm masks bounded views, NVIDIA refuses them, and until this materializer
+  // grows the same masking a portable producer must emit the 3-operand form.
+  if (memory && layout && view.getInputs().size() == 5) {
+    op->emitError("NVFRAGMENT_BOUNDED_VIEW_UNSUPPORTED: this fragment "
+                  "materializer emits an unguarded load and cannot mask a "
+                  "bounded tile.view (base, rowOrigin, colOrigin, rowBound, "
+                  "colBound); ROCm supports it, NVIDIA does not yet");
+    return failure();
+  }
   if (!memory || !layout || view.getInputs().size() != 3) {
     op->emitError("fragment_pack requires pointer-backed tile.view with "
                   "base, row origin, and column origin");

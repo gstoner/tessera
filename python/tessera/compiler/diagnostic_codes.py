@@ -796,6 +796,40 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="IRContractLegality",
     ),
 
+    # ── W1.1 step 3a — the bounded tile.view contract ──────────────────────
+    DiagnosticCode(
+        code="TILE_VIEW_POINTER_ARITY",
+        pass_origin="ViewOp::verify",
+        severity="error",
+        summary=(
+            "A pointer-backed tile.view takes (base, rowOrigin, colOrigin), "
+            "optionally followed by (rowBound, colBound). The verifier used to "
+            "accept any count >= 3, which made a 4-operand view legal and "
+            "meaningless and left the bounded form's validity to whichever "
+            "backend happened to look."
+        ),
+        fix_hint="Pass exactly 3 operands, or 5 for the bounded (ragged) form.",
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="NVFRAGMENT_BOUNDED_VIEW_UNSUPPORTED",
+        pass_origin="NVIDIALowering",
+        severity="error",
+        summary=(
+            "The NVIDIA fragment materializer emits an unguarded load and "
+            "cannot mask a bounded tile.view, so it refuses one rather than "
+            "ignoring the bounds and reading past the edge of a ragged matrix. "
+            "ROCm masks bounded views; NVIDIA does not yet."
+        ),
+        fix_hint=(
+            "Emit the 3-operand tile.view for NVIDIA until this materializer "
+            "grows masking, or lower through ROCm."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+
     # ── W1.1 step 2b (guard) — NVIDIA WGMMA accumulator ────────────────────
     DiagnosticCode(
         code="NVWGMMA_ACCUMULATOR_DROPPED",

@@ -2244,3 +2244,15 @@ Measured before the fix: a deliberately broken pass pipeline returned `ok=True, 
 Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{arch=<chip>}` after `generate-wmma-gemm-kernel`. Verified byte-identical hsaco with and without the pass on the default path, so the production lane is unchanged.
 
 **Outcome: follow-up required — recorded, not fixed here.** The equivalent NVIDIA seam is worse, not merely missing: `NVWGMMALoweringPass` lowered a `tile.mma` carrying an accumulator to a two-operand call and dropped it (`NVWGMMA-ACCUMULATOR-GUARD-2026-08-03`). That is guarded to fail closed; threading it for real is W1.1 step 2b on this backend and needs an sm_120 host for the numeric gate that ROCm just got.
+
+## Cross-backend sync `TILE-VIEW-BOUNDED-CONTRACT-2026-08-04` — bounded `tile.view` is a shared contract
+
+`ViewOp::verify` now defines the pointer-backed operand contract: exactly 3 `(base, rowOrigin, colOrigin)` or 5 with `(rowBound, colBound)`. It previously accepted any count >= 3, so a 4-operand view was legal and meaningless and the bounded form's validity was decided by whichever backend looked.
+
+**Outcome: follow-up required — refuses the bounded form, and the refusal is UNVERIFIED on this box.**
+
+`NVIDIALowering`'s fragment materializer emits an unguarded load, so ignoring `(rowBound, colBound)` would read past the edge of a ragged matrix. It now emits `NVFRAGMENT_BOUNDED_VIEW_UNSUPPORTED` naming op and target (Decision #21) instead of folding the case into the generic arity message, which would have read as "malformed IR" for IR that is well-formed and merely unsupported here.
+
+**Explicitly not verified:** the NVIDIA dialect is off by default in this build, and neither `--tessera-lower-to-gpu` nor `--tessera-nvidia-pipeline-sm120` reached the materializer with a bounded view on this host — no diagnostic, no error. The code path is written and compiles; it has not been executed. Verifying it needs a build with `-DTESSERA_ENABLE_CUDA=ON` and, for the numeric half, an sm_120 host.
+
+Until this materializer grows masking, a portable producer must emit the 3-operand form; only ROCm can consume the bounded one.

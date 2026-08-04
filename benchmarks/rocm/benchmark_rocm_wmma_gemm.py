@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -140,7 +141,30 @@ def _bench_pipe(lib, M, N, K, iters, wm, wn, mt, nt) -> Optional[float]:
                          M, N, K, iters, wm, wn, mt, nt)
 
 
+def _reject_bad_measurement(ms, label: str) -> float:
+    """A benchmark that cannot fail is not a measurement.
+
+    Device-event timing is not trustworthy everywhere: measured 2026-08-04 on a
+    WSL2 / `/dev/dxg` host, every HIP event call returned hipSuccess while
+    `hipEventElapsedTime` wrote garbage (0.0 through this harness, -1.28e8 ms in
+    a direct probe). The C side now validates and falls back to a host clock,
+    but the Python side must refuse a bad number rather than divide by it -- the
+    original symptom here was a ZeroDivisionError in `_row`, which is the lucky
+    case. The unlucky case is a plausible-looking TFLOP/s built on garbage.
+    """
+    if ms is None:
+        raise ValueError(f"{label}: no measurement returned")
+    if not math.isfinite(ms) or ms <= 0.0:
+        raise ValueError(
+            f"{label}: implausible timing {ms!r} ms -- device timing is "
+            "unreliable on this host; the C harness should have fallen back to "
+            "the host clock, so this indicates a real failure, not slowness"
+        )
+    return float(ms)
+
+
 def _row(M, N, K, ms, mt, nt, device, version) -> dict:
+    ms = _reject_bad_measurement(ms, f"gemm {M}x{N}x{K} mt={mt} nt={nt}")
     sec = ms * 1e-3
     flops = 2 * M * N * K
     bytes_accessed = 2 * (M * K + K * N) + 4 * (M * N)  # f16 in, f32 out

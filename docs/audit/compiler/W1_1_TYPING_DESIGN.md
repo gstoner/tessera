@@ -201,6 +201,49 @@ see §4.1; each producer still needs its own fixture and at least one needs a
 backend lowering fixture. Do not start at 5 (inventory: "Do not start at (4)" —
 same rule, renumbered).
 
+### 4.3 Measured 2026-08-04 — 2b for ROCm is NOT a region-signature conversion
+
+§4.2 concluded that threading the accumulator means converting the `scf.for`
+region signature, and sized 2b as the largest remaining W1.1 step. **Measured on
+gfx1151, that is wrong for ROCm.**
+
+`GenerateWMMAGemmKernel`'s `via-tile` option emits `tile.mma %a, %b, %acc`
+instead of `tessera_rocm.wmma`. Routed through
+`lower-tile-to-rocm{arch=gfx1151}` it compiles, serializes an hsaco, executes,
+and is **bit-identical** to the production lane:
+
+| shape | \|base − via-tile\| | \|via-tile − numpy\| |
+|---|---|---|
+| 64×64×64 | **0** | 2.4e-06 |
+| 256×256×256 | **0** | 1.4e-05 |
+| 128×96×64 | **0** | 2.4e-06 |
+
+So the accumulator already survives the `tile.mma` round trip on the untyped
+path. No region-signature conversion is required to carry it.
+
+**Two real gaps remain, both smaller than the conversion:**
+
+1. The runtime's compiled-matmul pipeline is
+   `generate-wmma-gemm-kernel → lower-tessera-target-to-rocdl → …` and **omits
+   `lower-tile-to-rocm` entirely**, so `via-tile` is unreachable in production —
+   `tile.mma` survives to LLVM translation and fails with *"missing
+   LLVMTranslationDialectInterface registration … for op: tile.mma"*.
+2. The TYPED fragment branch of `TileToROCM` still requires a `FragmentZeroOp`
+   accumulator (§4.2), so the typed form cannot yet do what the untyped one
+   demonstrably does.
+
+**How nearly this was recorded backwards.** The first run of this experiment
+reported bit-identical output too — and was meaningless: the injection never
+applied (wrong match string), so the production lane ran twice. The compiled
+lane also swallowed a hard `tessera-opt` failure and returned `ok=True` with
+`compiler_path="rocm_compiled"`, so even a correct injection could not have been
+distinguished from a fallback. Both had to be fixed before the number meant
+anything, and the control — inject a bogus pass option, require `ok=False` —
+is what separates the two runs. Any future 2b or step-3 measurement must carry
+that control.
+
+---
+
 ### 4.2 Accepting is not lowering correctly — 2b is bigger than it looks
 
 Found while implementing step 2 (2026-08-03), and it changes 2b's design.

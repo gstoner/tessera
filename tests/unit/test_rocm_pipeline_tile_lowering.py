@@ -92,6 +92,31 @@ def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
     monkeypatch.setenv("TESSERA_STRICT_DISPATCH", "1")
     real_run = subprocess.run
 
+    # PR #508 review — without this the comparison proves nothing.
+    #
+    # `_execute_rocm_compiled_gemm` is `try: _rocm_compiled_gemm_impl(...)
+    # except _RocmCompiledUnavailable: _execute_rocm_wmma_artifact(...)`, and a
+    # module-load failure (e.g. the live chip differs from `_rocm_chip()`'s
+    # default) raises exactly that. It is ENVELOPE-class by deliberate design,
+    # so TESSERA_STRICT_DISPATCH does not reject it -- that classification is
+    # what keeps strict runs working on CPU-only hosts.
+    #
+    # The consequence here is sharp: both launches below could execute the same
+    # hand-written oracle and be TRIVIALLY bit-identical while no tile.mma
+    # hsaco ever ran. That is the "ran the same lane twice" failure this file's
+    # own control was written to catch, arriving through a second door.
+    #
+    # So make the fallback fatal for the duration of the test: if the compiled
+    # lane degrades for any reason, the test says so instead of passing.
+    def _no_fallback(*_args, **_kwargs):
+        raise AssertionError(
+            "the compiled ROCm lane degraded to the hand-written WMMA oracle; "
+            "the tile.mma hsaco never ran, so a bit-identical comparison would "
+            "be vacuous"
+        )
+
+    monkeypatch.setattr(rt, "_execute_rocm_wmma_artifact", _no_fallback)
+
     def launch(inject, a, b):
         rt._rocm_compiled_hsaco_cache.clear()
         hits = [0]

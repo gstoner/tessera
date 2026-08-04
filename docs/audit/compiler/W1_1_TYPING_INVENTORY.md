@@ -10,6 +10,17 @@ W1.1 says, in its own text: **"Inventory every backend producer/consumer before
 tightening each op."** This is that inventory. It is a precondition, not the
 migration; nothing here changes an ODS file.
 
+> **Read [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md) next — it supersedes
+> this document's migration order.** Two experiments run on 2026-08-03 show the
+> typed fragment form **cannot cross a block-argument edge**: neither a function
+> argument nor an `scf.for` `iter_args` accumulator can satisfy
+> `MMAOp::verify()`, because the contract is recovered by chasing the producing
+> op and a block argument has none. Since a K-loop accumulator is a block
+> argument by construction, the typed form is unusable by every real GEMM. That
+> is a better explanation of §2's zero-producer count than the token conflict in
+> §2.1 (now fixed, with the count still zero), and it moves the type change
+> **before** the producer migration in §4.
+
 Status truth stays `MASTER_AUDIT.md` + `docs/audit/generated/` (Decision #26).
 Every count below was measured on 2026-08-02 against the working tree and is
 reproducible with the commands in §5.

@@ -13,12 +13,14 @@
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/SCF/Transforms/Patterns.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Twine.h"
@@ -67,13 +69,16 @@ static Value toIndex(OpBuilder &builder, Location loc, Value value) {
   return arith::IndexCastOp::create(builder, loc, builder.getIndexType(), value);
 }
 
+// `desc` is passed rather than read off the op: on the typed path there is no
+// `mma` attribute at all -- the fragment TYPE carries the contract, and the
+// descriptor is synthesized from it (see `descriptorFromFragment`). Reading it
+// off the op here is what made this helper usable only by the attribute form.
 static FailureOr<Value> materializeFragmentPack(
-    tessera::tile::FragmentPackOp pack, OpBuilder &builder, Value lane,
-    Value laneGroup,
+    tessera::tile::FragmentPackOp pack, tessera::tile::TileMmaDescAttr desc,
+    OpBuilder &builder, Value lane, Value laneGroup,
     const tessera_rocm::FragmentLayoutDescriptor &physical) {
   Operation *op = pack.getOperation();
   auto role = op->getAttrOfType<StringAttr>("role");
-  auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
   auto view = pack.getInputs().front().getDefiningOp<tessera::tile::ViewOp>();
   if (!role || !view || !desc) {
     op->emitError("ROCM_FRAGMENT_MISSING_CONTRACT: fragment materialization "
@@ -263,13 +268,16 @@ static FailureOr<Value> materializeFragmentPack(
   return packed;
 }
 
+// Takes the accumulator as a VALUE, not as the producing operation. The typed
+// path's accumulator may be an `scf.for` iter-arg -- a block argument with no
+// defining op -- which is precisely the case W1.1 exists to make expressible.
 static LogicalResult materializeFragmentStore(
-    Operation *target, tessera::tile::FragmentUnpackOp unpack,
+    Value accumulator, tessera::tile::TileMmaDescAttr desc,
+    tessera::tile::FragmentUnpackOp unpack,
     tessera::tile::StoreOp store, OpBuilder &builder, Value lane,
     Value laneGroup,
     const tessera_rocm::FragmentLayoutDescriptor &physical) {
   Operation *op = store.getOperation();
-  auto desc = unpack->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
   auto unpackLayout =
       unpack->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout");
   auto storeLayout =
@@ -328,10 +336,425 @@ static LogicalResult materializeFragmentStore(
     Value linear = arith::AddIOp::create(
         builder, loc,
         arith::MulIOp::create(builder, loc, row, leadingDim), col);
-    Value scalar = vector::ExtractOp::create(builder, loc, target->getResult(0),
+    Value scalar = vector::ExtractOp::create(builder, loc, accumulator,
                                              ArrayRef<int64_t>{i});
     memref::StoreOp::create(builder, loc, scalar, base, ValueRange{linear});
   }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// W1.1 step 0 — the typed fragment path as a dialect conversion.
+//
+// The legacy typed path (in `runOnOperation`, below) is a single-shot
+// WHOLE-CHAIN pattern match: starting from `tile.mma` it chases operands for
+// `fragment_pack` A/B and a `fragment_zero` accumulator, requires a
+// `fragment_unpack -> tile.store` consumer, emits one physical op, then erases
+// the entire chain. Three things are therefore inexpressible *by construction*:
+//
+//   * an accumulator that is not a literal `fragment_zero`  (plan step 2b),
+//   * an `tile.mma` whose result feeds another `tile.mma`,
+//   * a chain crossing a loop boundary — i.e. a K-loop, which is what a GEMM
+//     *is* (`tile_mma_typed_kloop.mlir` verifies but nothing could lower it).
+//
+// This replaces chasing with composition. `!tile.fragment<...>` converts to the
+// physical per-lane `vector<N x T>`; each op lowers against its ALREADY
+// CONVERTED operands and never looks at its producer; SSA does the rest.
+// `scf.for` iter-args need no Tile-specific reasoning at all — they come from
+// upstream's `populateSCFStructuralTypeConversionsAndLegality`.
+//
+// The bare `!tile.fragment` spelling converts to itself, so it stays legal and
+// the legacy walk keeps handling it. The two forms coexist until plan step 5
+// deletes the permissive path.
+//===----------------------------------------------------------------------===//
+
+// Defined below. NOT `tessera::tile::isTileControlType`: the local overload is
+// a superset that also admits `tessera_rocm::TokenType`, and narrowing to the
+// upstream one here would misclassify a ROCm token as a data operand.
+static bool isTileControlType(Type type);
+
+namespace {
+
+static Type accumulatorElementType(MLIRContext *ctx, StringRef acc) {
+  if (acc == "i32" || acc == "int32")
+    return IntegerType::get(ctx, 32);
+  if (acc == "f32")
+    return Float32Type::get(ctx);
+  return {};
+}
+
+// Mirrors `materializeFragmentPack`'s own element-type choice, including int4
+// riding in i8 storage. Divergence here would silently mistype the loads.
+static Type inputElementType(MLIRContext *ctx, StringRef elem) {
+  if (elem == "int8" || elem == "int4")
+    return IntegerType::get(ctx, 8);
+  if (elem == "bf16")
+    return BFloat16Type::get(ctx);
+  if (elem == "f16")
+    return Float16Type::get(ctx);
+  if (elem == "e4m3" || elem == "fp8")
+    return Float8E4M3FNType::get(ctx);
+  if (elem == "e5m2" || elem == "bf8")
+    return Float8E5M2Type::get(ctx);
+  return {};
+}
+
+/// The architecture descriptor a fragment TYPE implies, for the typed path
+/// where no `#tile.mma_desc` attribute exists.
+///
+/// An `acc` fragment names no input dtype. Every accumulator width in
+/// `resolveFragmentLayout` is `256 / waveSize` — a function of the wave, not of
+/// the input dtype — so a representative input consistent with the accumulator
+/// resolves the identical physical layout. It must still be a dtype the target
+/// accepts, or the fragment would report unconvertible for the wrong reason.
+///
+/// The layout parameter is placed on the side the role names and the opposite
+/// side is given its canonical orientation, so a fragment declaring the wrong
+/// orientation fails to resolve rather than being silently corrected.
+static tessera::tile::TileMmaDescAttr
+descriptorFromFragment(tessera::tile::FragmentType f) {
+  MLIRContext *ctx = f.getContext();
+  if (f.isUnknown() || f.getM() <= 0 || f.getN() <= 0 || f.getK() <= 0 ||
+      f.getRole().empty() || f.getLayout().empty() || f.getFamily().empty())
+    return {};
+  StringRef acc = f.getAcc();
+  StringRef input = f.getElem();
+  if (f.getRole() == "acc") {
+    if (acc == "i32" || acc == "int32")
+      input = "int8";
+    else if (acc == "f32")
+      input = "f16";
+    else
+      return {};
+  }
+  StringRef aLayout = f.getRole() == "a" ? f.getLayout() : StringRef("row_major");
+  StringRef bLayout = f.getRole() == "b" ? f.getLayout() : StringRef("col_major");
+  return tessera::tile::TileMmaDescAttr::get(ctx, f.getFamily(), f.getM(),
+                                             f.getN(), f.getK(), input, input,
+                                             acc, aLayout, bLayout,
+                                             /*kBlocks=*/1);
+}
+
+class TileFragmentTypeConverter : public TypeConverter {
+public:
+  explicit TileFragmentTypeConverter(StringRef arch) : arch(arch.str()) {
+    // The identity conversion deliberately EXCLUDES fragments. A blanket
+    // identity is a trap here: `convertType` reads `std::nullopt` from a
+    // callback as "not applicable, try the next one", so an unresolvable
+    // fragment fell through to identity, was declared legal, and sailed
+    // through unconverted -- yielding a `tessera_rocm.wmma` with
+    // `!tile.fragment` operands and a SUCCESSFUL exit code. With no callback
+    // applicable, `convertType` fails, the op stays illegal, and the
+    // conversion reports it.
+    addConversion([](Type type) -> std::optional<Type> {
+      if (isa<tessera::tile::FragmentType>(type))
+        return std::nullopt;
+      return type;
+    });
+    addConversion([this](tessera::tile::FragmentType f) -> std::optional<Type> {
+      // The legacy bare spelling is not ours: converting it to itself keeps
+      // every op that uses it LEGAL, so the single-shot path still sees it.
+      if (f.isUnknown())
+        return Type(f);
+      std::optional<tessera_rocm::FragmentLayoutDescriptor> physical =
+          layoutFor(f);
+      if (!physical || !physical->materializationReady)
+        return std::nullopt;
+      MLIRContext *ctx = f.getContext();
+      if (f.getRole() == "acc") {
+        Type elem = accumulatorElementType(ctx, f.getAcc());
+        return elem ? std::optional<Type>(VectorType::get(
+                          {physical->accumulatorElementsPerLane}, elem))
+                    : std::nullopt;
+      }
+      Type elem = inputElementType(ctx, f.getElem());
+      return elem ? std::optional<Type>(VectorType::get(
+                        {physical->inputElementsPerLane}, elem))
+                  : std::nullopt;
+    });
+  }
+
+  std::optional<tessera_rocm::FragmentLayoutDescriptor>
+  layoutFor(tessera::tile::FragmentType f) const {
+    tessera::tile::TileMmaDescAttr desc = descriptorFromFragment(f);
+    if (!desc)
+      return std::nullopt;
+    return tessera_rocm::resolveFragmentLayout(desc, arch);
+  }
+
+  StringRef getArch() const { return arch; }
+
+private:
+  std::string arch;
+};
+
+/// Wave-relative lane coordinates, identical to the legacy path's.
+struct FragmentLaneCoords {
+  Value lane;       // column within the 16-wide matrix row
+  Value packGroup;  // input half-wave selector, forced to 0 when replicated
+  Value storeGroup; // accumulator half-wave selector, never forced
+};
+
+static FragmentLaneCoords
+computeLaneCoords(OpBuilder &builder, Location loc,
+                  const tessera_rocm::FragmentLayoutDescriptor &physical) {
+  Value tx = gpu::ThreadIdOp::create(builder, loc, gpu::Dimension::x);
+  Value waveSize =
+      arith::ConstantIndexOp::create(builder, loc, physical.waveSize);
+  Value waveLane = arith::RemUIOp::create(builder, loc, tx, waveSize);
+  Value c16 = arith::ConstantIndexOp::create(builder, loc, 16);
+  FragmentLaneCoords coords;
+  coords.lane = arith::RemUIOp::create(builder, loc, waveLane, c16);
+  coords.storeGroup = arith::DivUIOp::create(builder, loc, waveLane, c16);
+  coords.packGroup =
+      physical.inputLaneReplication > 1
+          ? Value(arith::ConstantIndexOp::create(builder, loc, 0))
+          : coords.storeGroup;
+  return coords;
+}
+
+/// Shared failure path: a stated fragment contract this target cannot realize
+/// is an ERROR, not a quiet non-match. Returning `notifyMatchFailure` here
+/// would surface as an unexplained "failed to legalize operation".
+static LogicalResult emitUnresolvableFragment(Operation *op,
+                                              tessera::tile::FragmentType f,
+                                              StringRef arch) {
+  return op->emitError(
+             "ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: no exact ")
+         << arch << " fragment layout accepts the typed fragment " << f;
+}
+
+struct ConvertFragmentZero
+    : public OpConversionPattern<tessera::tile::FragmentZeroOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(tessera::tile::FragmentZeroOp op, OpAdaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto f = dyn_cast<tessera::tile::FragmentType>(op.getResult().getType());
+    if (!f || f.isUnknown())
+      return rewriter.notifyMatchFailure(op, "legacy bare fragment");
+    auto vecTy = dyn_cast_or_null<VectorType>(
+        getTypeConverter()->convertType(op.getResult().getType()));
+    if (!vecTy)
+      return emitUnresolvableFragment(
+          op, f,
+          static_cast<const TileFragmentTypeConverter *>(getTypeConverter())
+              ->getArch());
+    rewriter.replaceOpWithNewOp<arith::ConstantOp>(
+        op, vecTy, rewriter.getZeroAttr(vecTy));
+    return success();
+  }
+};
+
+struct ConvertFragmentPack
+    : public OpConversionPattern<tessera::tile::FragmentPackOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(tessera::tile::FragmentPackOp op, OpAdaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto f = dyn_cast<tessera::tile::FragmentType>(op.getResult().getType());
+    if (!f || f.isUnknown())
+      return rewriter.notifyMatchFailure(op, "legacy bare fragment");
+    const auto *converter =
+        static_cast<const TileFragmentTypeConverter *>(getTypeConverter());
+    std::optional<tessera_rocm::FragmentLayoutDescriptor> physical =
+        converter->layoutFor(f);
+    if (!physical || !physical->materializationReady)
+      return emitUnresolvableFragment(op, f, converter->getArch());
+    FragmentLaneCoords coords =
+        computeLaneCoords(rewriter, op.getLoc(), *physical);
+    // The source `tile.view` is untouched by this conversion (`!tile.tile`
+    // converts to itself), so the original operand still reaches it.
+    FailureOr<Value> packed =
+        materializeFragmentPack(op, descriptorFromFragment(f), rewriter,
+                                coords.lane, coords.packGroup, *physical);
+    if (failed(packed))
+      return failure();
+    rewriter.replaceOp(op, *packed);
+    return success();
+  }
+};
+
+struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(tessera::tile::MMAOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Pair originals with converted values: the filter is on the ORIGINAL
+    // type, since control tokens convert to themselves.
+    SmallVector<Value> data;
+    SmallVector<Type> dataTypes;
+    for (auto [original, converted] :
+         llvm::zip_equal(op.getInputs(), adaptor.getInputs())) {
+      if (isTileControlType(original.getType()))
+        continue;
+      data.push_back(converted);
+      dataTypes.push_back(original.getType());
+    }
+    if (data.size() != 3 || op->getNumResults() != 1)
+      return rewriter.notifyMatchFailure(op, "not the A,B,acc -> acc form");
+    auto accTy = dyn_cast<tessera::tile::FragmentType>(dataTypes[2]);
+    if (!accTy || accTy.isUnknown())
+      return rewriter.notifyMatchFailure(op, "legacy bare fragment");
+    const auto *converter =
+        static_cast<const TileFragmentTypeConverter *>(getTypeConverter());
+    std::optional<tessera_rocm::FragmentLayoutDescriptor> physical =
+        converter->layoutFor(accTy);
+    Type resultTy =
+        getTypeConverter()->convertType(op->getResult(0).getType());
+    if (!physical || !physical->materializationReady || !resultTy)
+      return emitUnresolvableFragment(op, accTy, converter->getArch());
+    auto aTy = dyn_cast<tessera::tile::FragmentType>(dataTypes[0]);
+    if (!aTy)
+      return rewriter.notifyMatchFailure(op, "A operand is not a fragment");
+    // The accumulator resolving does NOT imply the inputs did: an `acc`
+    // fragment names no input dtype, so it resolves via a representative one
+    // (see `descriptorFromFragment`). On gfx1151 an e4m3 A/B pair is
+    // unsupported while its f32 accumulator resolves happily -- which emitted a
+    // `tessera_rocm.wmma` still holding `!tile.fragment` operands.
+    for (auto [value, type] : llvm::zip_equal(data, dataTypes)) {
+      if (isa<VectorType>(value.getType()))
+        continue;
+      auto f = dyn_cast<tessera::tile::FragmentType>(type);
+      return f ? emitUnresolvableFragment(op, f, converter->getArch())
+               : rewriter.notifyMatchFailure(op, "operand did not convert");
+    }
+
+    bool integer = aTy.getElem() == "int8" || aTy.getElem() == "int4";
+    OperationState state(op.getLoc(), physical->matrixOp == "wmma"
+                                          ? "tessera_rocm.wmma"
+                                          : "tessera_rocm.mfma");
+    // The accumulator is the CONVERTED third operand. The legacy path
+    // synthesized a zero here and discarded whatever was passed, which is the
+    // defect plan step 2b names.
+    state.addOperands({data[0], data[1], data[2]});
+    state.addTypes({resultTy});
+    state.addAttribute("arch", rewriter.getStringAttr(converter->getArch()));
+    state.addAttribute(
+        "shape", rewriter.getStringAttr(("m16n16k" + Twine(aTy.getK())).str()));
+    state.addAttribute("accum",
+                       rewriter.getStringAttr(integer ? "i32" : "f32"));
+    state.addAttribute("input_dtype", rewriter.getStringAttr(aTy.getElem()));
+    state.addAttribute("source", rewriter.getStringAttr("tile.fragment_pack"));
+    state.addAttribute("fragment_family",
+                       rewriter.getStringAttr(physical->familyName));
+    state.addAttribute(
+        "fragment_input_format",
+        rewriter.getStringAttr(
+            tessera_rocm::registerFormatName(physical->inputFormat)));
+    state.addAttribute("fragment_wave_size",
+                       rewriter.getI64IntegerAttr(physical->waveSize));
+    state.addAttribute("fragment_intrinsic_abi",
+                       rewriter.getStringAttr(physical->intrinsicABI));
+    state.addAttribute("ordinal", rewriter.getI64IntegerAttr(0));
+    Operation *lowered = rewriter.create(state);
+    rewriter.replaceOp(op, lowered->getResults());
+    return success();
+  }
+};
+
+/// `fragment_unpack` produces a `!tile.tile`, which has no physical form of its
+/// own — the value only becomes real at the `tile.store` that consumes it. So
+/// the pair lowers together. This is still a LOCAL two-op match, not a chain
+/// walk: it looks only at its own single use and never at its producer, which
+/// is what lets the accumulator arrive from a loop.
+struct ConvertFragmentUnpackStore
+    : public OpConversionPattern<tessera::tile::FragmentUnpackOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(tessera::tile::FragmentUnpackOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto f =
+        dyn_cast<tessera::tile::FragmentType>(op.getInputs().front().getType());
+    if (!f || f.isUnknown())
+      return rewriter.notifyMatchFailure(op, "legacy bare fragment");
+    if (!op.getResult().hasOneUse())
+      return op->emitError(
+          "ROCM_FRAGMENT_UNPACK_UNCONSUMED: a typed fragment_unpack must have "
+          "exactly one tile.store consumer on this target");
+    auto store = dyn_cast<tessera::tile::StoreOp>(
+        *op.getResult().getUsers().begin());
+    if (!store)
+      return op->emitError(
+          "ROCM_FRAGMENT_UNPACK_UNCONSUMED: a typed fragment_unpack must be "
+          "consumed by tile.store on this target");
+    const auto *converter =
+        static_cast<const TileFragmentTypeConverter *>(getTypeConverter());
+    std::optional<tessera_rocm::FragmentLayoutDescriptor> physical =
+        converter->layoutFor(f);
+    if (!physical || !physical->materializationReady)
+      return emitUnresolvableFragment(op, f, converter->getArch());
+
+    rewriter.setInsertionPoint(store);
+    FragmentLaneCoords coords =
+        computeLaneCoords(rewriter, store.getLoc(), *physical);
+    if (failed(materializeFragmentStore(
+            adaptor.getInputs().front(), descriptorFromFragment(f), op, store,
+            rewriter, coords.lane, coords.storeGroup, *physical)))
+      return failure();
+    rewriter.eraseOp(store);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+} // namespace
+
+/// Legalize every op that names a STATED `!tile.fragment` contract. Returns
+/// failure only when a stated contract could not be realized.
+static LogicalResult convertTypedFragments(Operation *root, StringRef arch) {
+  MLIRContext *ctx = root->getContext();
+  TileFragmentTypeConverter converter(arch);
+
+  // Nothing to do unless a stated fragment contract is actually present. This
+  // keeps the whole conversion off the legacy attribute-form path rather than
+  // relying on every pattern to decline it.
+  bool hasTypedFragment = false;
+  root->walk([&](Operation *op) {
+    auto typed = [](Type t) {
+      auto f = dyn_cast<tessera::tile::FragmentType>(t);
+      return f && !f.isUnknown();
+    };
+    if (llvm::any_of(op->getOperandTypes(), typed) ||
+        llvm::any_of(op->getResultTypes(), typed)) {
+      hasTypedFragment = true;
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  if (!hasTypedFragment)
+    return success();
+
+  RewritePatternSet patterns(ctx);
+  patterns.add<ConvertFragmentZero, ConvertFragmentPack, ConvertMMA,
+               ConvertFragmentUnpackStore>(converter, ctx);
+
+  ConversionTarget target(*ctx);
+  target.markUnknownOpDynamicallyLegal(
+      [&converter](Operation *op) { return converter.isLegal(op); });
+  // `scf.for` iter-args, `scf.yield`, and friends — the case that motivated
+  // this whole item is handled entirely by upstream.
+  scf::populateSCFStructuralTypeConversionsAndLegality(converter, patterns,
+                                                       target);
+  if (failed(applyPartialConversion(root, target, std::move(patterns))))
+    return failure();
+
+  // The pointer-backed source views are dead once the fragments materialize:
+  // the physical loads address the base memref directly. `tile.view` is `Pure`,
+  // but `applyPartialConversion` does not DCE, and a Tile-dialect op surviving
+  // into Target IR is a level-boundary leak (Decision #19) -- the legacy path
+  // erased them explicitly and so must this one.
+  SmallVector<tessera::tile::ViewOp> deadViews;
+  root->walk([&](tessera::tile::ViewOp view) {
+    if (view.getResult().use_empty())
+      deadViews.push_back(view);
+  });
+  for (tessera::tile::ViewOp view : deadViews)
+    view->erase();
   return success();
 }
 
@@ -1113,6 +1536,13 @@ struct LowerTileToROCMPass
 
   void runOnOperation() override {
     StringRef arch = archOpt;
+    // W1.1 step 0 — legalize the typed fragment form first, by composition.
+    // Anything still carrying the legacy bare `!tile.fragment` falls through to
+    // the single-shot walk below, unchanged.
+    if (failed(convertTypedFragments(getOperation(), arch))) {
+      signalPassFailure();
+      return;
+    }
     SmallVector<func::FuncOp> canonicalAttentionFunctions;
     llvm::SmallPtrSet<Operation *, 4> seenFunctions;
     getOperation().walk([&](scf::ForOp loop) {
@@ -1469,10 +1899,12 @@ struct LowerTileToROCMPass
           Value laneGroup = arith::DivUIOp::create(builder, loc, waveLane, c16);
           if (physical->inputLaneReplication > 1)
             laneGroup = arith::ConstantIndexOp::create(builder, loc, 0);
-          FailureOr<Value> a =
-              materializeFragmentPack(aPack, builder, lane, laneGroup, *physical);
-          FailureOr<Value> b =
-              materializeFragmentPack(bPack, builder, lane, laneGroup, *physical);
+          FailureOr<Value> a = materializeFragmentPack(
+              aPack, aPack->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"),
+              builder, lane, laneGroup, *physical);
+          FailureOr<Value> b = materializeFragmentPack(
+              bPack, bPack->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"),
+              builder, lane, laneGroup, *physical);
           if (failed(a) || failed(b)) {
             signalPassFailure();
             return;
@@ -1514,8 +1946,10 @@ struct LowerTileToROCMPass
           state.addAttribute("ordinal", builder.getI64IntegerAttr(0));
           Operation *target = builder.create(state);
           Value storeGroup = arith::DivUIOp::create(builder, loc, waveLane, c16);
-          if (failed(materializeFragmentStore(target, unpack, store, builder,
-                                              lane, storeGroup, *physical))) {
+          if (failed(materializeFragmentStore(
+                  target->getResult(0),
+                  unpack->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"),
+                  unpack, store, builder, lane, storeGroup, *physical))) {
             signalPassFailure();
             return;
           }

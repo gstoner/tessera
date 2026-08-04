@@ -187,8 +187,15 @@ linked platform audits and [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md
 > **Status correction (2026-08-03).** This heading read "proposal — not adopted;
 > no code landed" until now, which is no longer true: **Wave 0 is complete and
 > W1.2 is complete**, with the six governance decisions (#21a, #10a, #29, #30,
-> #31, #32) adopted into `CLAUDE.md`. W1.1 is partially done, and W1.1b / W1.3 /
-> W1.4 are untouched. Per-item state is in
+> #31, #32) adopted into `CLAUDE.md`.
+>
+> **Updated 2026-08-04.** The line above previously read "W1.1b / W1.3 / W1.4 are
+> untouched", which is stale. Current: **W1.2, W1.3 and W1.4 are complete**;
+> **W1.1b is partial** (its `$kind` premise was measured wrong — 17 ops, not 4;
+> the three that failed OPEN are closed, the other 14 already fail closed);
+> **W1.1 has 4 of 6 steps landed** and steps 3–5 are blocked because no producer
+> emits a `!tile.tile`, so `fragment_pack` cannot wrap what they supply. W1 is
+> therefore NOT closed. Per-item state is in
 > [`compiler/INTEGRATED_COMPILER_PLAN.md`](compiler/INTEGRATED_COMPILER_PLAN.md);
 > do not read this section's prose as a snapshot.
 

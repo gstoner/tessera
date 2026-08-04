@@ -796,6 +796,151 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="IRContractLegality",
     ),
 
+    # ── W1.1 step 2 — the type-based tile.mma contract ─────────────────────
+    DiagnosticCode(
+        code="TILE_MMA_MIXED_FRAGMENT_FORMS",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "A tile.mma mixes parameterized and bare !tile.fragment operands. The typed form is all-or-nothing: otherwise the op gets the weaker contract on whichever operand still carries the bare type."
+        ),
+        fix_hint=(
+            "Migrate every operand of this op together, or leave them all bare."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_ARITY",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "Wrong number of DATA operands (3, or 5 for NVFP4). Control operands such as !tile.async_token are excluded from the count."
+        ),
+        fix_hint=(
+            "Pass A, B, accumulator (plus scale_a/scale_b for NVFP4)."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_OPERAND_ROLE",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "Operand roles are positional -- A, B, accumulator. A fragment in the wrong slot is a swapped-operand bug that type-checks under any contract that does not state the role."
+        ),
+        fix_hint=(
+            "Reorder the operands, or fix the role in the fragment type."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_SHAPE_MISMATCH",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "Operands state different m/n/k. One MMA is one instruction shape."
+        ),
+        fix_hint=(
+            "Give every operand of this MMA the same m/n/k."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_FAMILY_MISMATCH",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "Operands state different instruction families. family selects a physical register ABI (wave 32 for RDNA/WMMA vs 64 for CDNA/MFMA), so fragments from different families are not interchangeable."
+        ),
+        fix_hint=(
+            "Use one family per MMA; auto before target resolution."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_ACCUM_MISMATCH",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "Operands state different accumulator dtypes. Decision #15a: one accumulator contract per MMA -- and this is the fact W1.3's boundary verifier carries down from Graph IR."
+        ),
+        fix_hint=(
+            "Give every operand the same acc."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_ACCUM_ELEMENT",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "The accumulator fragment's elem is not its acc. Without this a producer could hand over a bf16-element fragment while every operand agreed on an fp32 accumulator -- accumulator-width confusion wearing a correct label."
+        ),
+        fix_hint=(
+            "Set the accumulator fragment's elem to its acc."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_RESULT_TYPE",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "tile.mma returns exactly one value, the updated accumulator, whose type must equal the accumulator operand's. This equality is what lets scf.for's own iter-arg/yield rule close a K-loop with no Tile-specific loop reasoning."
+        ),
+        fix_hint=(
+            "Give the result the accumulator operand's type."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_DESC_DISAGREES",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "A #tile.mma_desc contradicts the fragment types it accompanies. The descriptor is optional on the typed path (it still carries k_blocks), but a stale one must not contradict the types that superseded it."
+        ),
+        fix_hint=(
+            "Update or remove the descriptor."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_FRAGMENT_ROLE_DISAGREES",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "A role attribute contradicts the result fragment type's role."
+        ),
+        fix_hint=(
+            "Drop the attribute -- the type states it -- or make them agree."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_FRAGMENT_ZERO_ROLE",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "tile.fragment_zero produces the accumulator, so its result type must have role acc."
+        ),
+        fix_hint=(
+            "Set the result fragment type's role to acc."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+
     # ── W1.1 step 1 — !tile.fragment domain validation ────────────────────
     DiagnosticCode(
         code="TILE_FRAGMENT_PARTIAL_CONTRACT",

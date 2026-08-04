@@ -2304,3 +2304,23 @@ Shared Tile IR type changed: `!tile.fragment` gained `(m, n, k, elem, acc, role,
 This backend is the reason `family` lives in the TYPE rather than the attribute. `ROCMFragmentLayout.h` resolves a family to a `FragmentLayoutDescriptor` whose **wave size differs** — 32 for RDNA3/RDNA4/gfx125x WMMA, 64 for CDNA MFMA — with different element counts and formats, and `TileToROCM.cpp` states outright that those descriptors "are intentionally non-interchangeable". The fragment type now encodes that, so a mismatch is a type error rather than a lowering-time one.
 
 No gfx1151 device evidence in this PR; no generated code changed, so none is due.
+
+## Cross-backend sync `TILE-FRAGMENT-KLOOP-ACCUM-2026-08-03` — typed `tile.mma` K-loop (W1.1 step 2)
+
+Shared Tile IR contract changed: `MMAOp::verify()` (and the `fragment_pack` / `fragment_zero` producers) now read the operand contract from the fragment TYPE when it is parameterized, falling back to producer-chasing for the bare form. `#tile.mma_desc` is optional on the typed path and cross-checked when present. **The canonical K-loop now verifies.** No lowering changed in this PR, and no existing IR is affected — the bare form keeps its old path.
+
+**Outcome: follow-up required — and larger than previously recorded.**
+
+Step 2b was scoped as "teach the lowering to accept a region iter-arg". Measuring `TileToROCM.cpp` while implementing step 2 shows that is wrong and would have been a correctness bug: the typed path **materializes a zero** and passes it as the MMA's C operand —
+
+```cpp
+Value zero = arith::ConstantOp::create(builder, loc, accTy,
+                                       builder.getZeroAttr(accTy));
+state.addOperands({*a, *b, zero});
+```
+
+— and never reads `mmaData[2]` as a value (`cZero` is used only for the null check and a dead-op erase). `FragmentZeroOp` is therefore a **precondition the lowering relies on**, not a pattern it matches. Accepting a block-argument accumulator without threading the value would make every K-loop iteration recompute from zero: the GEMM returns the last K-step's partial product, with no diagnostic.
+
+Real 2b here: thread the accumulator into the MMA, which means **converting the `scf.for` region signature** (Tile `!tile.fragment` -> lowered `vector<N x f32>`), not swapping an operand.
+
+**Gate must include numerics.** This box executes gfx1151, so the ROCm half is verifiable here: run a K-loop GEMM and compare against a reference. A lowering fixture that only checks emitted ops would pass while the kernel returned a wrong answer — exactly this failure mode. No device evidence in this PR; none due, since no generated code changed.

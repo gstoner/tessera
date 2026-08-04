@@ -2214,3 +2214,17 @@ Shared Tile IR contract changed: `MMAOp::verify()` (and the `fragment_pack` / `f
 Same finding as ROCm under this key. `NVIDIALowering.cpp` synthesizes zero constants for the accumulator (`operands.append(4, zero)` for f32, and the f16/s32 equivalents) and never reads `mmaData[2]` as a value. So step 2b is accumulator threading plus an `scf.for` region-signature conversion, not a relaxed check — and relaxing it alone would emit a silently wrong GEMM.
 
 No sm_120 device evidence in this PR; no generated code changed. When 2b lands, its gate needs numerics on real hardware for the same reason ROCm's does.
+
+## Cross-backend sync `NVWGMMA-ACCUMULATOR-GUARD-2026-08-03` — WGMMA accumulator drop (W1.1 step 2b guard)
+
+A `tile.mma` carrying an accumulator was lowered by `NVWGMMALoweringPass` to a **two-operand** WGMMA call: the accumulator was discarded, the shape hardcoded `m64n64k16`, and the dtype inferred through `dyn_cast<ShapedType>` (which a `!tile.fragment` is not, so it defaulted to bf16) — with **rc=0 and no diagnostic**. A K-loop recomputed A×B from nothing each step and returned the last partial product.
+
+Measured on merged main, this was **not** specific to the typed fragment form: a legacy bare `tile.mma(A, B, C)` — what `LowerKReductionAddToTileMMA` emits for the canonical K-step — was dropped identically. **No fixture in the tree covered either case**, which is how it survived. The guard therefore keys on *has an accumulator*, not *is typed*.
+
+**Outcome: follow-up required — this backend owned the defect.**
+
+`NVWGMMALoweringPass` now refuses such an mma with `NVWGMMA_ACCUMULATOR_DROPPED` and calls `signalPassFailure()`. The check lives in the PASS BODY, not the pattern: a pattern that emits an error and returns `failure()` only declines to match, so the diagnostic printed while the tool still exited 0 and the pipeline continued — an error that does not fail compilation is a warning in disguise, the same fail-open shape as the bug.
+
+The two-operand lane is untouched: `nvwgmma_lowering.mlir`'s emitted call is byte-identical before and after (diffed, not assumed).
+
+**Follow-up:** W1.1 step 2b threads the accumulator for real, which needs an `scf.for` region-signature conversion. This guard is replaced by lowering then, not relaxed. No sm_120 device evidence here; no working codegen changed, only a refusal added.

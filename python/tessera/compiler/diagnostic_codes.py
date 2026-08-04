@@ -796,6 +796,29 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="IRContractLegality",
     ),
 
+    # ── W1.1 step 2b (guard) — NVIDIA WGMMA accumulator ────────────────────
+    DiagnosticCode(
+        code="NVWGMMA_ACCUMULATOR_DROPPED",
+        pass_origin="NVWGMMALoweringPass",
+        severity="error",
+        summary=(
+            "NVWGMMALoweringPass lowers tile.mma to a two-operand WGMMA call "
+            "and cannot carry an accumulator. It previously discarded one that "
+            "was present: a K-loop recomputed A x B from nothing each step and "
+            "the GEMM returned the last partial product, with rc=0 and no "
+            "diagnostic. Not specific to the typed fragment form -- a legacy "
+            "bare tile.mma(A, B, C), what LowerKReductionAddToTileMMA emits for "
+            "the canonical K-step, was dropped identically."
+        ),
+        fix_hint=(
+            "Until W1.1 step 2b threads the accumulator, keep the accumulation "
+            "outside tile.mma on this path, or target a backend that carries it "
+            "(ROCm already fails closed at this seam)."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+
     # ── W1.1 step 2 — the type-based tile.mma contract ─────────────────────
     DiagnosticCode(
         code="TILE_MMA_MIXED_FRAGMENT_FORMS",

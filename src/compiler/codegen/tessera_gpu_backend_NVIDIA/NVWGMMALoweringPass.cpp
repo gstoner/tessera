@@ -24,6 +24,7 @@
 //     --sm  target SM version (int, default 90)
 //===----------------------------------------------------------------------===//
 
+#include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -151,6 +152,55 @@ struct NVWGMMALoweringPass
 
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
+
+    // Decision #21 — refuse an mma this pass would silently mis-compile.
+    //
+    // The WGMMA path below builds `ValueRange{A, B}`. It NEVER passes a third
+    // (accumulator) operand, hardcodes `m64n64k16` regardless of the real
+    // instruction shape, and infers the dtype through `dyn_cast<ShapedType>`,
+    // which a `!tile.fragment` is not -- so it silently defaults to bf16.
+    //
+    // For a two-operand `tile.mma` that is correct, and is what every existing
+    // fixture emits (`nvwgmma_lowering.mlir` checks exactly that call). For an
+    // mma that HAS an accumulator, the accumulator was discarded: a K-loop
+    // recomputed A x B from nothing each step and the GEMM returned the last
+    // partial product -- rc=0, no diagnostic, a wrong number.
+    //
+    // Measured on merged main, this is NOT specific to the typed fragment form:
+    // a legacy bare `tile.mma(A, B, C)` -- precisely what
+    // `LowerKReductionAddToTileMMA` emits for the canonical K-step -- was
+    // dropped the same way, and no fixture in the tree covered either case.
+    // So the condition is "has an accumulator", not "is typed".
+    //
+    // This runs in the PASS BODY, not in the pattern. A pattern that emits an
+    // error and returns `failure()` only declines to match: the diagnostic
+    // prints, the pass still succeeds, and the pipeline continues with an
+    // unlowered `tile.mma` -- an error that does not fail the compilation is a
+    // warning in disguise, which is the same fail-open shape as the bug itself.
+    // ROCm calls `signalPassFailure()` at this seam; this is NVIDIA catching up.
+    //
+    // Counting DATA operands via the shared helper keeps warp-spec tokens from
+    // being mistaken for an accumulator (the #491 rule).
+    //
+    // Temporary: W1.1 step 2b threads the accumulator for real, and then this
+    // is replaced by lowering, not relaxed.
+    bool refused = false;
+    getOperation()->walk([&](Operation *op) {
+      if (op->getName().getStringRef() != "tile.mma")
+        return;
+      if (tessera::tile::dataOperands(op).size() <= 2)
+        return;
+      op->emitError(
+          "NVWGMMA_ACCUMULATOR_DROPPED: this pass lowers tile.mma to a "
+          "two-operand WGMMA call and cannot carry an accumulator, so it would "
+          "discard one that is present. Refusing rather than emitting a kernel "
+          "that silently returns a partial product (W1.1 step 2b threads the "
+          "accumulator).");
+      refused = true;
+    });
+    if (refused)
+      return signalPassFailure();
+
     RewritePatternSet patterns(ctx);
     patterns.add<LowerTileMMA>(ctx, smVersion);
     FrozenRewritePatternSet frozenPatterns(std::move(patterns));

@@ -564,21 +564,54 @@ int timedKernelLaunches(hipFunction_t fn, unsigned gx, unsigned gy, int threads,
     hipMemset(dA, 0, (size_t)M * K * elemBytes);
     hipMemset(dB, 0, (size_t)K * N * elemBytes);
     void* args[] = {&dA, &dB, &dD, &M, &N, &K};
-    for (int w = 0; w < 5; ++w)
+    // NOTE: `break` inside these for-loops exits the FOR, not the do{}while(0).
+    // A launch failure therefore used to set rc=3 and keep going, timing a
+    // kernel that never ran. `launchFailed` propagates it out properly.
+    bool launchFailed = false;
+    for (int w = 0; w < 5 && !launchFailed; ++w)
       if (hipModuleLaunchKernel(fn, gx, gy, 1, threads, 1, 1, 0, nullptr,
-                                args, nullptr) != hipSuccess) { rc = 3; break; }
+                                args, nullptr) != hipSuccess) launchFailed = true;
+    if (launchFailed) { rc = 3; break; }
     if (hipDeviceSynchronize() != hipSuccess) break;
+
+    // Device-event timing is the preferred measure, but it is NOT trustworthy
+    // everywhere. Measured 2026-08-04 on this WSL2 / `/dev/dxg` host: every HIP
+    // event call returns hipSuccess and `hipEventElapsedTime` writes garbage --
+    // 0.0 in the harness, -1.28e8 ms in a direct probe. The old code took that
+    // at face value, wrote avg_ms = 0, and returned SUCCESS, so every TFLOP/s
+    // this harness produced here was either 0 or a divide-by-zero in the
+    // caller. A performance number that cannot fail is not a measurement.
+    //
+    // So: time with the device events AND with a host clock around a
+    // synchronized loop, then accept the event result only if it is finite,
+    // positive, and within 2x of the wall measurement. Otherwise fall back to
+    // the wall clock, which is a valid kernel-time measure here because the
+    // buffers are reused, nothing is transferred inside the loop, and the queue
+    // is synchronized before the start and after the end.
     if (hipEventCreate(&start) != hipSuccess) break;
     if (hipEventCreate(&stop) != hipSuccess) break;
     if (hipEventRecord(start, nullptr) != hipSuccess) break;
-    for (int it = 0; it < iters; ++it)
+    const auto wall0 = std::chrono::steady_clock::now();
+    for (int it = 0; it < iters && !launchFailed; ++it)
       if (hipModuleLaunchKernel(fn, gx, gy, 1, threads, 1, 1, 0, nullptr,
-                                args, nullptr) != hipSuccess) { rc = 3; break; }
+                                args, nullptr) != hipSuccess) launchFailed = true;
+    if (launchFailed) { rc = 3; break; }
     if (hipEventRecord(stop, nullptr) != hipSuccess) break;
     if (hipEventSynchronize(stop) != hipSuccess) break;
+    if (hipDeviceSynchronize() != hipSuccess) break;
+    const double wallMs =
+        std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - wall0).count();
+
     float ms = 0.0f;
-    if (hipEventElapsedTime(&ms, start, stop) != hipSuccess) break;
-    *avg_ms = (double)ms / (double)iters;
+    const bool eventOk =
+        hipEventElapsedTime(&ms, start, stop) == hipSuccess &&
+        std::isfinite(ms) && ms > 0.0f &&
+        (double)ms <= 2.0 * wallMs;
+
+    const double totalMs = eventOk ? (double)ms : wallMs;
+    if (!(std::isfinite(totalMs) && totalMs > 0.0)) { rc = 4; break; }
+    *avg_ms = totalMs / (double)iters;
     rc = 0;
   } while (0);
   if (start) hipEventDestroy(start);

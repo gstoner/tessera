@@ -2336,3 +2336,15 @@ Measured on merged main, this was **not** specific to the typed fragment form: a
 Probed with the same legacy 3-operand `tile.mma`: `--tessera-lower-to-rocm` fails closed with a named error and leaves `tile.mma` in place. `TileToROCM` already requires a `FragmentZeroOp` accumulator and materialises its own zero, so it never silently discards a caller's accumulator.
 
 ROCm remains the reference behaviour for this seam, and its own step-2b work (real accumulator threading, gated on gfx1151 numerics) is tracked under `TILE-FRAGMENT-KLOOP-ACCUM-2026-08-03`.
+
+## Cross-backend sync `ROCM-COMPILED-STRICT-DISPATCH-2026-08-04` — compiled-lane failures stop masquerading
+
+Runtime dispatch contract changed. A compiled-ROCm **failure** (tessera-opt ran and serialized no kernel, or emitted a non-ELF blob) now routes through the existing `_note_dispatch_fallback` funnel, so `TESSERA_STRICT_DISPATCH=1` raises instead of degrading. **Envelope limits** (no libamdhip64, hipInit failed, tessera-opt not built, dtype/rank/arch out of range) are unchanged and still degrade silently — making those raise would break strict runs on every CPU-only host.
+
+Measured before the fix: a deliberately broken pass pipeline returned `ok=True, compiler_path="rocm_compiled", execution_kind="native_gpu"` with correct numbers. Strict-mode suite results are identical before and after (18 fail both ways, all pre-existing), so this adds no new failures.
+
+**Outcome: follow-up required — this backend owns the change.**
+
+18 failure-class raise sites across the gemm, canonical gemm, flash_attn fwd/bwd, linear_attn, softmax and norm fwd/bwd lanes now go through `_rocm_compiled_failed`. Two were missed on the first pass because the conversion matched MESSAGE TEXT; the structural gate `test_every_non_elf_check_routes_through_the_funnel` now enumerates by the `!= b"\x7fELF"` guard instead, so wording cannot hide one again.
+
+**Why it mattered here specifically:** W1.1 step 2b is gated on gfx1151 numerics, and that gate could not distinguish a working lowering from a silent fallback. With it fixed, the 2b measurement ran and inverted the plan (see `W1_1_TYPING_DESIGN.md` §4.3).

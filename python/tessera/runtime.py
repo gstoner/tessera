@@ -9687,7 +9687,7 @@ def _build_compiled_norm_backward_hsaco(kind: str, dtype: str = "f32") -> bytes:
         )
     hsaco = _extract_hsaco_blob(result.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise _RocmCompiledUnavailable("compiled ROCm norm backward lane: gpu.binary was not ELF")
+        _rocm_compiled_failed("compiled ROCm norm backward lane: gpu.binary was not ELF")
     _rocm_norm_bwd_hsaco_cache[key] = hsaco
     return hsaco
 
@@ -19375,7 +19375,7 @@ def _build_rocm_elementwise_hsaco(pass_name: str, directive: str, cache: dict, k
         )
     hsaco = _extract_hsaco_blob(r.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise _RocmCompiledUnavailable(f"{pass_name}: gpu.binary not an ELF hsaco")
+        _rocm_compiled_failed(f"{pass_name}: gpu.binary not an ELF hsaco")
     cache[key] = hsaco
     return hsaco
 

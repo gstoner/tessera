@@ -2228,3 +2228,13 @@ Measured on merged main, this was **not** specific to the typed fragment form: a
 The two-operand lane is untouched: `nvwgmma_lowering.mlir`'s emitted call is byte-identical before and after (diffed, not assumed).
 
 **Follow-up:** W1.1 step 2b threads the accumulator for real, which needs an `scf.for` region-signature conversion. This guard is replaced by lowering then, not relaxed. No sm_120 device evidence here; no working codegen changed, only a refusal added.
+
+## Cross-backend sync `ROCM-COMPILED-STRICT-DISPATCH-2026-08-04` — compiled-lane failures stop masquerading
+
+Runtime dispatch contract changed. A compiled-ROCm **failure** (tessera-opt ran and serialized no kernel, or emitted a non-ELF blob) now routes through the existing `_note_dispatch_fallback` funnel, so `TESSERA_STRICT_DISPATCH=1` raises instead of degrading. **Envelope limits** (no libamdhip64, hipInit failed, tessera-opt not built, dtype/rank/arch out of range) are unchanged and still degrade silently — making those raise would break strict runs on every CPU-only host.
+
+Measured before the fix: a deliberately broken pass pipeline returned `ok=True, compiler_path="rocm_compiled", execution_kind="native_gpu"` with correct numbers. Strict-mode suite results are identical before and after (18 fail both ways, all pre-existing), so this adds no new failures.
+
+**Outcome: not applicable — architecture-specific reason.** The changed sites are all `_RocmCompiledUnavailable` raise points inside ROCm compiled-lane hsaco builders. NVIDIA's compiled lanes do not raise that exception and are untouched.
+
+**Follow-up worth recording, not created here:** NVIDIA has no equivalent failure/envelope split on its own compiled paths, so the same masking may exist there. Establishing that needs an sm_120 host, which this box is not — asserting it either way from here would be the guesswork this thread has been eliminating.

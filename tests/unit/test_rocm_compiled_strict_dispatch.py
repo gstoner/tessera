@@ -114,3 +114,34 @@ def test_the_two_classes_are_distinguishable():
         assert "_rocm_compiled_failed(" not in window, (
             f"envelope case {envelope!r} was routed through the failure helper"
         )
+
+
+def test_every_non_elf_check_routes_through_the_funnel():
+    """Structural, not message-based — the way the first cut got this wrong.
+
+    PR #507 review found a non-ELF branch still raising directly. The cause was
+    the transformation, not the branch: I converted raise sites by MATCHING
+    THEIR MESSAGE TEXT ("was not an ELF hsaco"), which silently skipped
+    ``"{pass_name}: gpu.binary not an ELF hsaco"`` (no "was") and
+    ``"...gpu.binary was not ELF"`` (no "hsaco"). Seven of nine converted; two
+    kept masking a malformed-compiler-output failure under strict dispatch.
+
+    So this gate enumerates by STRUCTURE: every `!= b"\\x7fELF"` guard is a
+    compiler-output-validity check by construction, whatever its wording, and
+    must reach `_rocm_compiled_failed`. A message-keyed gate would have
+    reproduced the original bug.
+    """
+    import inspect
+
+    src = inspect.getsource(rt).split("\n")
+    offenders = []
+    for i, line in enumerate(src):
+        if '[:4] != b"\\x7fELF"' not in line:
+            continue
+        body = "\n".join(src[i + 1:i + 4])
+        if "_rocm_compiled_failed(" not in body:
+            offenders.append((i + 1, body.strip().splitlines()[0][:80]))
+    assert not offenders, (
+        "non-ELF (malformed compiler output) checks that bypass the strict "
+        f"dispatch funnel: {offenders}"
+    )

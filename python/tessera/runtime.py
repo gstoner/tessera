@@ -5538,10 +5538,41 @@ _rocm_canonical_gemm_hsaco_cache: dict[tuple[int, int, int, str, str, str], byte
 
 
 class _RocmCompiledUnavailable(RuntimeError):
-    """The compiled ROCm lane can't run on this host (no tessera-opt, no
-    in-process serialization, or no usable AMD GPU). The executor degrades to the
-    hand-written ``rocm_wmma`` oracle on this — but NOT on a genuine kernel
-    failure (those surface, so a real compiled-lane bug is never masked)."""
+    """The compiled ROCm lane cannot run on this host or for these inputs.
+
+    Two distinct causes wear this one exception, and they must not be treated
+    alike:
+
+      * ENVELOPE LIMIT -- no libamdhip64, hipInit failed, tessera-opt not
+        built, a dtype/rank/arch outside a lane's documented range. Degrading
+        to the hand-written oracle is correct here.
+      * FAILURE -- tessera-opt ran and did not serialize a kernel, or emitted
+        something that is not an ELF hsaco. The compiled lane is BROKEN.
+
+    This docstring used to claim the second class "surfaces, so a real
+    compiled-lane bug is never masked". Measured 2026-08-04, it did not: a
+    deliberately broken pass pipeline still returned ok=True with
+    compiler_path="rocm_compiled", execution_kind="native_gpu" and correct
+    numbers, because every handler caught this exception and fell back --
+    even under TESSERA_STRICT_DISPATCH=1, which exists precisely to stop that
+    (audit 2026-06-10 finding #5).
+
+    Failure-class sites now raise through `_rocm_compiled_failed`, so strict
+    dispatch raises a TesseraStrictDispatchError that escapes all 16 handlers
+    and non-strict behaviour is unchanged apart from a fallback-log entry.
+    """
+
+
+def _rocm_compiled_failed(reason: str):
+    """Raise for a compiled-ROCm FAILURE (never for an envelope limit).
+
+    Routes through the existing `_note_dispatch_fallback` funnel rather than a
+    parallel mechanism (Decision #31): it records the fallback and, under
+    TESSERA_STRICT_DISPATCH=1, raises instead of degrading. The subsequent
+    raise keeps non-strict callers on exactly their previous path.
+    """
+    _note_dispatch_fallback("rocm_compiled", reason)
+    raise _RocmCompiledUnavailable(reason)
 
 
 def _tessera_opt_path() -> Optional[Path]:
@@ -5735,13 +5766,13 @@ def _build_compiled_gemm_hsaco(
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        raise _RocmCompiledUnavailable(
+        _rocm_compiled_failed(
             "tessera-opt did not serialize the compiled GEMM in-process "
             f"(Stage L3 spine missing? rc={r.returncode}): {r.stderr[:400]}"
         )
     hsaco = _extract_hsaco_blob(r.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise _RocmCompiledUnavailable("compiled ROCm lane: gpu.binary was not an ELF hsaco")
+        _rocm_compiled_failed("compiled ROCm lane: gpu.binary was not an ELF hsaco")
     _rocm_compiled_hsaco_cache[key] = hsaco
     return hsaco
 
@@ -5822,10 +5853,10 @@ def _build_canonical_gemm_hsaco(
         text=True,
     )
     if result.returncode != 0 or "gpu.binary" not in result.stdout:
-        raise _RocmCompiledUnavailable(f"canonical M/N/K ROCm GEMM did not serialize: {result.stderr[:400]}")
+        _rocm_compiled_failed(f"canonical M/N/K ROCm GEMM did not serialize: {result.stderr[:400]}")
     hsaco = _extract_hsaco_blob(result.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise _RocmCompiledUnavailable("canonical ROCm GEMM output was not an ELF hsaco")
+        _rocm_compiled_failed("canonical ROCm GEMM output was not an ELF hsaco")
     _rocm_canonical_gemm_hsaco_cache[key] = hsaco
     return hsaco
 
@@ -6548,12 +6579,12 @@ def _build_compiled_flash_attn_hsaco(
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        raise _RocmCompiledUnavailable(
+        _rocm_compiled_failed(
             f"tessera-opt did not serialize the compiled flash_attn in-process (rc={r.returncode}): {r.stderr[:400]}"
         )
     hsaco = _extract_hsaco_blob(r.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise _RocmCompiledUnavailable("compiled ROCm flash_attn lane: gpu.binary was not an ELF hsaco")
+        _rocm_compiled_failed("compiled ROCm flash_attn lane: gpu.binary was not an ELF hsaco")
     _rocm_fa_hsaco_cache[key] = hsaco
     return hsaco
 
@@ -6881,13 +6912,13 @@ def _build_compiled_flash_attn_bwd_hsaco(
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        raise _RocmCompiledUnavailable(
+        _rocm_compiled_failed(
             "tessera-opt did not serialize the compiled flash_attn backward "
             f"in-process (rc={r.returncode}): {r.stderr[:400]}"
         )
     hsaco = _extract_hsaco_blob(r.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise _RocmCompiledUnavailable("compiled ROCm flash_attn backward lane: gpu.binary was not an ELF hsaco")
+        _rocm_compiled_failed("compiled ROCm flash_attn backward lane: gpu.binary was not an ELF hsaco")
     _rocm_fa_bwd_hsaco_cache[key] = hsaco
     return hsaco
 
@@ -8016,12 +8047,12 @@ def _build_compiled_linear_attn_hsaco(
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        raise _RocmCompiledUnavailable(
+        _rocm_compiled_failed(
             f"tessera-opt did not serialize the compiled linear_attn in-process (rc={r.returncode}): {r.stderr[:400]}"
         )
     hsaco = _extract_hsaco_blob(r.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise _RocmCompiledUnavailable("compiled ROCm linear_attn lane: gpu.binary was not an ELF hsaco")
+        _rocm_compiled_failed("compiled ROCm linear_attn lane: gpu.binary was not an ELF hsaco")
     _rocm_la_hsaco_cache[key] = hsaco
     return hsaco
 
@@ -9419,12 +9450,12 @@ def _build_compiled_softmax_hsaco(dtype: str = "f32") -> bytes:
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        raise _RocmCompiledUnavailable(
+        _rocm_compiled_failed(
             f"tessera-opt did not serialize the compiled softmax in-process (rc={r.returncode}): {r.stderr[:400]}"
         )
     hsaco = _extract_hsaco_blob(r.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise _RocmCompiledUnavailable("compiled ROCm softmax lane: gpu.binary was not an ELF hsaco")
+        _rocm_compiled_failed("compiled ROCm softmax lane: gpu.binary was not an ELF hsaco")
     _rocm_softmax_hsaco_cache[key] = hsaco
     return hsaco
 
@@ -9604,12 +9635,12 @@ def _build_compiled_norm_hsaco(
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        raise _RocmCompiledUnavailable(
+        _rocm_compiled_failed(
             f"tessera-opt did not serialize the compiled norm in-process (rc={r.returncode}): {r.stderr[:400]}"
         )
     hsaco = _extract_hsaco_blob(r.stdout)
     if hsaco[:4] != b"\x7fELF":
-        raise _RocmCompiledUnavailable("compiled ROCm norm lane: gpu.binary was not an ELF hsaco")
+        _rocm_compiled_failed("compiled ROCm norm lane: gpu.binary was not an ELF hsaco")
     _rocm_norm_hsaco_cache[key] = hsaco
     return hsaco
 
@@ -9651,7 +9682,7 @@ def _build_compiled_norm_backward_hsaco(kind: str, dtype: str = "f32") -> bytes:
         text=True,
     )
     if result.returncode != 0 or "gpu.binary" not in result.stdout:
-        raise _RocmCompiledUnavailable(
+        _rocm_compiled_failed(
             f"tessera-opt did not serialize compiled norm backward (rc={result.returncode}): {result.stderr[:400]}"
         )
     hsaco = _extract_hsaco_blob(result.stdout)
@@ -19339,7 +19370,7 @@ def _build_rocm_elementwise_hsaco(pass_name: str, directive: str, cache: dict, k
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        raise _RocmCompiledUnavailable(
+        _rocm_compiled_failed(
             f"tessera-opt did not serialize {pass_name} in-process (rc={r.returncode}): {r.stderr[:400]}"
         )
     hsaco = _extract_hsaco_blob(r.stdout)

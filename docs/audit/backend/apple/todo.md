@@ -2665,3 +2665,9 @@ Measured before the fix: a deliberately broken pass pipeline returned `ok=True, 
 Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{arch=<chip>}` after `generate-wmma-gemm-kernel`. Verified byte-identical hsaco with and without the pass on the default path, so the production lane is unchanged.
 
 **Outcome: not applicable — architecture-specific reason.** No `!tile.fragment` or `tile.mma` consumers on this backend (`TILE-FRAGMENT-TYPE-PARAM-2026-08-03`), and no ROCm pipeline is involved.
+
+## Cross-backend sync `TILE-VIEW-BOUNDED-CONTRACT-2026-08-04` — bounded `tile.view` is a shared contract
+
+`ViewOp::verify` now defines the pointer-backed operand contract: exactly 3 `(base, rowOrigin, colOrigin)` or 5 with `(rowBound, colBound)`. It previously accepted any count >= 3, so a 4-operand view was legal and meaningless and the bounded form's validity was decided by whichever backend looked.
+
+**Outcome: not applicable — architecture-specific reason.** No `!tile.fragment` or `tile.view` consumers on this backend (`TILE-FRAGMENT-TYPE-PARAM-2026-08-03`).

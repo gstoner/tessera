@@ -688,8 +688,25 @@ LogicalResult ViewOp::verify() {
   if (!getOperation()->getAttrOfType<TileLayoutAttr>("tile.layout"))
     return emitOpError("requires a #tile.layout attribute");
   if (auto memory = getOperation()->getAttrOfType<TileMemoryLayoutAttr>("tile.memory")) {
-    if (getInputs().size() < 3)
-      return emitOpError("pointer-backed tile.view requires base pointer plus row/column origins");
+    // The pointer-backed operand contract, defined HERE rather than per
+    // backend (PR #510 review).
+    //
+    //   3 inputs: (base, rowOrigin, colOrigin)
+    //   5 inputs: + (rowBound, colBound) -- the LOGICAL extents, runtime values
+    //             on a ragged problem, so a fragment straddling the edge can be
+    //             masked instead of reading past it.
+    //
+    // This used to accept any count >= 3, which made a 4-operand view legal and
+    // meaningless, and left "is the bounded form valid?" to whichever backend
+    // happened to look. A shared-IR op whose accepted shape is decided by its
+    // consumers is how the same valid Tile IR becomes backend-dependent.
+    const size_t inputs = getInputs().size();
+    if (inputs != 3 && inputs != 5)
+      return emitOpError()
+             << "TILE_VIEW_POINTER_ARITY: pointer-backed tile.view takes "
+                "(base, rowOrigin, colOrigin), optionally followed by "
+                "(rowBound, colBound); got "
+             << inputs << " operands";
     (void)memory;
   }
   return success();

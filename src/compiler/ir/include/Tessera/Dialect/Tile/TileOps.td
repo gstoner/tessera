@@ -535,6 +535,22 @@ def Tile_MMAOp : Tile_Op<"mma"> {
 // It is a pure coordinate/layout view, not a physical register-pack operation.
 def Tile_ViewOp : Tile_Op<"view", [Pure]> {
   let summary = "Create a logical distributed tile view";
+  let description = [{
+    Pointer-backed form (`tile.memory` present) takes either
+
+      `(base, rowOrigin, colOrigin)`                         -- unbounded, or
+      `(base, rowOrigin, colOrigin, rowBound, colBound)`     -- bounded.
+
+    The bounds are the matrix's LOGICAL extents and are runtime values on a
+    ragged problem. A backend that materializes fragments from a bounded view
+    must mask loads against them; one that cannot must say so with a named
+    diagnostic rather than ignoring the operands, since dropping them reads
+    past the edge of the matrix.
+
+    Arity is checked by `ViewOp::verify`, not by each consumer -- a shared-IR
+    op whose accepted shape is decided per backend makes the same valid Tile IR
+    compile on one target and fail on another.
+  }];
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs Tile_TileValueType:$result);
   let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";

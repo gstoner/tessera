@@ -2362,3 +2362,9 @@ With the pass in place, via-tile compiles and runs **bit-identical** to the prod
 `arch=` is mandatory and gated separately: the pass defaults to a CDNA part and emits `llvm.amdgcn.mfma.contract`, an MFMA intrinsic wrong for RDNA 3.5 that does not resolve.
 
 **Remaining:** `TileToROCM`'s TYPED fragment branch still requires a `FragmentZeroOp` accumulator, so the typed form cannot yet do what the untyped one now demonstrably does.
+
+## Cross-backend sync `TILE-VIEW-BOUNDED-CONTRACT-2026-08-04` — bounded `tile.view` is a shared contract
+
+`ViewOp::verify` now defines the pointer-backed operand contract: exactly 3 `(base, rowOrigin, colOrigin)` or 5 with `(rowBound, colBound)`. It previously accepted any count >= 3, so a 4-operand view was legal and meaningless and the bounded form's validity was decided by whichever backend looked.
+
+**Outcome: parity validated — supports the bounded form.** `materializeFragmentPack` masks loads against the bounds with `vector.create_mask` + `maskedload` (PR #510). Fixture: `rocm_fragment_ragged_bounds.mlir`.

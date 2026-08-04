@@ -75,8 +75,62 @@ def Tile_TileValueType : Tile_Type<"TileValue", "tile"> {
   let summary = "Logical distributed tile value";
 }
 
+// W1.1 step 1 (2026-08-03) — the fragment carries its own instruction contract.
+//
+// It was `Opaque`, which made `!tile.fragment == !tile.fragment` ALWAYS TRUE,
+// so MLIR's own type equality checked nothing and `MMAOp::verify()` recovered
+// the contract by chasing each operand's producing op. That chase cannot cross
+// a block-argument edge, and a K-loop accumulator is an `scf.for` iter-arg by
+// construction -- so the typed form was unusable by every real GEMM. See
+// docs/audit/compiler/W1_1_TYPING_DESIGN.md §2.
+//
+// Split rule: the TYPE carries what makes two fragments interchangeable; the
+// `#tile.mma_desc` ATTRIBUTE keeps how the operation executes (`k_blocks`).
+//
+// `family` IS a type parameter, deliberately. An earlier draft put it on the
+// attribute, reasoning that instruction selection is an operation-local choice.
+// That is wrong: `family` selects a physical register ABI -- wave 32 for
+// RDNA3/RDNA4/gfx125x WMMA vs 64 for CDNA MFMA, with different element counts
+// and formats (`ROCMFragmentLayout.h`) -- and `TileToROCM.cpp` states that those
+// descriptors "are intentionally non-interchangeable". Leaving it off the type
+// would let a loop init packed for `mma_sync` feed a body `tile.mma` selecting
+// `wgmma`, with the types comparing equal. "The op chooses it" does not imply
+// "the value does not carry it".
+//
+// The BARE spelling `!tile.fragment` remains legal and means all-unknown, so
+// the existing fixtures and the Python text emitters keep parsing while
+// producers migrate (W1.1 steps 3-4). `family = "auto"` is the legal
+// pre-resolution value and compares equal only to itself, which reproduces
+// today's descriptor-equality semantics rather than approximating them.
 def Tile_FragmentType : Tile_Type<"Fragment", "fragment"> {
-  let summary = "Opaque cooperative-matrix fragment";
+  let summary = "Cooperative-matrix fragment and its instruction contract";
+  let parameters = (ins "int64_t":$m, "int64_t":$n, "int64_t":$k,
+                        StringRefParameter<"">:$elem,
+                        StringRefParameter<"">:$acc,
+                        StringRefParameter<"">:$role,
+                        StringRefParameter<"">:$layout,
+                        StringRefParameter<"">:$family);
+  let hasCustomAssemblyFormat = 1;
+  // Domain validation, mirroring TileMmaDescAttr::verify (PR #502 review).
+  // Without it, `get()` accepted a nonpositive shape, an empty dtype, an
+  // unknown role/layout/family, and -- worst -- a PARTIALLY populated tuple,
+  // which `isUnknown()` does not recognise and step 2's type-based checks would
+  // therefore treat as a stated contract.
+  let genVerifyDecl = 1;
+  let extraClassDeclaration = [{
+    /// The legacy all-unknown fragment, spelled `!tile.fragment`. Producers
+    /// that have not migrated yet still emit this; `MMAOp::verify()` falls back
+    /// to producer-chasing for it.
+    static FragmentType getUnknown(::mlir::MLIRContext *ctx) {
+      return get(ctx, 0, 0, 0, "", "", "", "", "");
+    }
+    /// True when no parameter is stated -- i.e. the bare spelling.
+    bool isUnknown() const {
+      return getM() == 0 && getN() == 0 && getK() == 0 && getElem().empty() &&
+             getAcc().empty() && getRole().empty() && getLayout().empty() &&
+             getFamily().empty();
+    }
+  }];
 }
 
 // SSA handle for a physical allocation. The handle carries identity through

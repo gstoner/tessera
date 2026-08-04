@@ -2291,3 +2291,16 @@ chunk-64 baseline (13.689 and 13.710 ms), with `2.21e-7` maximum error and
 0.20% cross-cohort variation. The packet is intentionally selector-ineligible:
 this exact gfx1151 host is WSL, so bare-metal timing remains the production
 selector gate. Apple/CUDA schedules are not inferred from this AMD package.
+
+## Cross-backend sync `TILE-FRAGMENT-TYPE-PARAM-2026-08-03` — `!tile.fragment` parameterized (W1.1 step 1)
+
+Shared Tile IR type changed: `!tile.fragment` gained `(m, n, k, elem, acc, role, layout, family)` and a domain verifier. **No behaviour changes in this PR** — the bare `!tile.fragment` still parses AND still prints bare, so every existing producer and fixture is unaffected. All 7 C++ `FragmentType` uses are `isa<>` checks, so there were no construction sites to migrate.
+
+**Outcome: follow-up required.** 5 files under this backend reference `FragmentType` / `!tile.fragment`. Same two obligations as NVIDIA:
+
+* **Step 2b (blocking).** `TileToROCM.cpp` requires a `FragmentZeroOp` accumulator (3 sites), so a K-loop iter-arg accumulator cannot lower here either.
+* **Step 3.** `GenerateWMMA{Gemm,LinearAttn,FlashAttn}Kernel.cpp` are 3 of the 5 `tile.mma` construction sites to migrate.
+
+This backend is the reason `family` lives in the TYPE rather than the attribute. `ROCMFragmentLayout.h` resolves a family to a `FragmentLayoutDescriptor` whose **wave size differs** — 32 for RDNA3/RDNA4/gfx125x WMMA, 64 for CDNA MFMA — with different element counts and formats, and `TileToROCM.cpp` states outright that those descriptors "are intentionally non-interchangeable". The fragment type now encodes that, so a mismatch is a type error rather than a lowering-time one.
+
+No gfx1151 device evidence in this PR; no generated code changed, so none is due.

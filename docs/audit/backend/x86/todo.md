@@ -386,3 +386,11 @@ backend device commands are unchanged.
 drive `tessera-opt` route through the shared capability-aware helper, so a build
 without the owning backend skips with the missing pass named. No x86 pass body,
 ABI, or numerical contract changed; no exact-device evidence claimed.
+
+## Cross-backend sync `TILE-FRAGMENT-TYPE-PARAM-2026-08-03` — `!tile.fragment` parameterized (W1.1 step 1)
+
+Shared Tile IR type changed: `!tile.fragment` gained `(m, n, k, elem, acc, role, layout, family)` and a domain verifier. **No behaviour changes in this PR** — the bare `!tile.fragment` still parses AND still prints bare, so every existing producer and fixture is unaffected. All 7 C++ `FragmentType` uses are `isa<>` checks, so there were no construction sites to migrate.
+
+**Outcome: not applicable — architecture-specific reason.** Zero files under `tessera_x86_backend/` reference `FragmentType` or `!tile.fragment` (measured 2026-08-03), and x86 has no cooperative-matrix fragment to model: it carries its own `!tessera_x86.tile` value type over AMX/AVX-512 ops (Decision #19, built typed from the start in W0.10).
+
+That backend is in fact the reference shape for where W1.1 is heading — 0 `AnyType` / 0 `Variadic<AnyType>`, with a negative fixture proving the verifier rejects a dot-product whose operands never came from a tile load. Per project direction the AMX half stays an IR-level contract with no `amx.*` lowering, so no follow-up is created here.

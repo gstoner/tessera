@@ -2629,3 +2629,11 @@ changes shared algorithm evidence, not Metal execution. The five-entry gfx1151
 HSACO, AVX-512 ABI, and their resident timing packets do not transfer to Apple.
 Metal sequence-mixer backward packaging, nonlinear/erase chunk scheduling, and
 a refreshed exact-Apple-host selector packet remain architecture-owned.
+
+## Cross-backend sync `TILE-FRAGMENT-TYPE-PARAM-2026-08-03` — `!tile.fragment` parameterized (W1.1 step 1)
+
+Shared Tile IR type changed: `!tile.fragment` gained `(m, n, k, elem, acc, role, layout, family)` and a domain verifier. **No behaviour changes in this PR** — the bare `!tile.fragment` still parses AND still prints bare, so every existing producer and fixture is unaffected. All 7 C++ `FragmentType` uses are `isa<>` checks, so there were no construction sites to migrate.
+
+**Outcome: not applicable — architecture-specific reason.** Zero files under `Tessera_Apple_Backend/` reference `FragmentType` or `!tile.fragment` (measured 2026-08-03). The Apple GPU lane does not consume the cooperative-matrix fragment contract: its Tile→Target lowering emits `func.call` to hand-written runtime symbols, and the compiler-synthesized `simdgroup_matrix` path lives in the Python synthesizer (`emit/apple_msl.py`), not in this Tile type. See CLAUDE.md's Apple seam note.
+
+**This is worth revisiting when that seam closes.** `simdgroup_matrix` IS a cooperative-matrix fragment in every meaningful sense, so if the MLIR lane ever synthesizes it, Apple should acquire a `family` value here rather than growing a parallel fragment concept — which would be the Decision #31 duplication this project keeps finding.

@@ -1669,5 +1669,93 @@ LogicalResult TCGen05MMAOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// W1.1 step 1 — !tile.fragment assembly
+//
+// Two spellings, one type:
+//
+//   !tile.fragment                      the legacy all-unknown form
+//   !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32",
+//                  role = "a", layout = "row_major", family = "auto">
+//
+// The bare form has to keep parsing: every fixture in the tree and every Python
+// text emitter writes it, and W1.1 migrates producers one at a time (steps
+// 3-4). Making the parameters mandatory on day one would have broken all of
+// them at once for no gain -- and the plan's own risk table names exactly that
+// ordering error.
+//===----------------------------------------------------------------------===//
+
+Type FragmentType::parse(AsmParser &parser) {
+  MLIRContext *ctx = parser.getContext();
+  SMLoc loc = parser.getCurrentLocation();
+  // No `<` means the bare form. `parseOptionalLess` fails when absent, which is
+  // not an error here -- it is the legacy spelling.
+  if (parser.parseOptionalLess())
+    return FragmentType::getUnknown(ctx);
+
+  int64_t m = 0, n = 0, k = 0;
+  std::string elem, acc, role, layout, family;
+
+  auto intField = [&](StringRef name, int64_t &out) -> ParseResult {
+    if (parser.parseKeyword(name) || parser.parseEqual() ||
+        parser.parseInteger(out) || parser.parseComma())
+      return failure();
+    return success();
+  };
+  auto strField = [&](StringRef name, std::string &out,
+                      bool last = false) -> ParseResult {
+    if (parser.parseKeyword(name) || parser.parseEqual() ||
+        parser.parseString(&out))
+      return failure();
+    if (!last && parser.parseComma())
+      return failure();
+    return success();
+  };
+
+  if (intField("m", m) || intField("n", n) || intField("k", k) ||
+      strField("elem", elem) || strField("acc", acc) ||
+      strField("role", role) || strField("layout", layout) ||
+      strField("family", family, /*last=*/true) || parser.parseGreater())
+    return Type();
+
+  // getChecked, not get: the parser is the ONLY entry point for textual IR, so
+  // an unchecked construction here would let a malformed contract into the IR
+  // and only fail later (or not at all). PR #502 review.
+  return FragmentType::getChecked([&] { return parser.emitError(loc); }, ctx, m,
+                                  n, k, StringRef(elem), StringRef(acc),
+                                  StringRef(role), StringRef(layout),
+                                  StringRef(family));
+}
+
+void FragmentType::print(AsmPrinter &printer) const {
+  // Round-trip: the all-unknown form prints as the bare mnemonic, so a file
+  // that came in legacy goes out legacy and existing fixtures keep matching.
+  if (isUnknown())
+    return;
+  // Print each string through a StringAttr rather than concatenating the raw
+  // bytes between quotes. `parseString` DECODES escapes, so a value containing
+  // a quote, backslash or newline would come back in and go straight out
+  // unescaped -- emitting IR the second parse cannot read. PR #502 review; the
+  // round-trip fixture used only clean values and would not have caught it.
+  // The verifier now constrains role/layout/family to closed sets, but `elem`
+  // and `acc` are open dtype names, and correctness here should not depend on
+  // a neighbouring check.
+  auto quoted = [&](StringRef s) {
+    printer << StringAttr::get(getContext(), s);
+  };
+  printer << "<m = " << getM() << ", n = " << getN() << ", k = " << getK()
+          << ", elem = ";
+  quoted(getElem());
+  printer << ", acc = ";
+  quoted(getAcc());
+  printer << ", role = ";
+  quoted(getRole());
+  printer << ", layout = ";
+  quoted(getLayout());
+  printer << ", family = ";
+  quoted(getFamily());
+  printer << ">";
+}
+
 } // namespace tile
 } // namespace tessera

@@ -201,6 +201,64 @@ see §4.1; each producer still needs its own fixture and at least one needs a
 backend lowering fixture. Do not start at 5 (inventory: "Do not start at (4)" —
 same rule, renumbered).
 
+### 4.5 Step 3 is not a migration — no producer is fragment-shaped
+
+Measured 2026-08-04, on starting step 3. The inventory (§6) warned to "expect
+per-producer surprises"; the surprise is not per-producer, it is all of them.
+
+`FragmentPackOp::verify` requires **exactly one `!tile.tile` input**. What the
+five construction sites actually pass to `tile.mma`:
+
+| site | operands |
+|---|---|
+| `TileIRLoweringPass` ×2 | `tile.async_copy` results — **tensors** (`st.addTypes({src.getType(), …})`) |
+| `GenerateWMMAGemmKernel` | lane-level **vectors** (`toFrag` → `vector::BitCastOp`) |
+| `GenerateWMMALinearAttnKernel` | same shape |
+| `GenerateWMMAFlashAttnKernel` | same shape |
+
+**Zero producers pass a `!tile.tile` or a `tile.view` result.** No operand can be
+wrapped in `fragment_pack`: the typed contract expects
+`tile.view → fragment_pack → tile.mma`, and every producer supplies either a
+tensor or a vector whose lane math it has already done.
+
+That is a **division-of-labour mismatch**, not a syntax gap. The typed form
+assumes the COMPILER performs the lane mapping (`materializeFragmentPack`); the
+hand-written generators perform it themselves and hand over finished vectors.
+Both are coherent; they are different models.
+
+**Consequences the plan's wording does not survive:**
+
+* Step 3 ("migrate the 5 construction sites, one per PR") is not a migration. It
+  is a rewrite of working, numerically-verified generators — including the
+  production ROCm GEMM lane — to emit logical tile views and surrender their
+  lane math.
+* Step 5 ("delete `MMAOp::verify()`'s permissive branch") is **unreachable as
+  written**: deleting it breaks every existing producer.
+
+**Three options; this is an architectural choice, not a task:**
+
+  a. **Restructure the producers** to `tile.view → fragment_pack`. Rewrites
+     proven kernels for no measured performance benefit.
+  b. **Widen `fragment_pack`** to accept tensors/vectors. Cheap, and it discards
+     most of what the typed contract buys — §3's whole point was that the type
+     states what makes two fragments interchangeable.
+  c. **Scope the typed form to synthesized kernels** (the Decision #28 lane) and
+     treat the permissive branch as the documented boundary between two
+     legitimate models rather than debt awaiting deletion.
+
+**Recommendation: (c).** The typed contract earns its keep where the compiler
+owns the lane mapping — exactly the synthesizer's job. The hand-written
+generators are a separate working lane whose operands are physical by design.
+Under (c) step 5 becomes "the permissive branch is a declared compatibility
+envelope, and any path where the compiler owns lane mapping must use the typed
+form" — a Decision #32-style declared boundary rather than an open TODO.
+
+This also closes W1.1 honestly: steps 1, 2 and 2b's guard are real contract
+improvements that landed and are gated; steps 3–5 as written were premised on a
+producer shape that does not exist.
+
+---
+
 ### 4.4 Gap 2 is not independently actionable — it is coupled to step 3
 
 §4.3 listed two remaining ROCm gaps. The first (the pipeline could not lower

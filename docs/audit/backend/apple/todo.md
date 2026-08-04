@@ -2651,3 +2651,11 @@ A `tile.mma` carrying an accumulator was lowered by `NVWGMMALoweringPass` to a *
 Measured on merged main, this was **not** specific to the typed fragment form: a legacy bare `tile.mma(A, B, C)` — what `LowerKReductionAddToTileMMA` emits for the canonical K-step — was dropped identically. **No fixture in the tree covered either case**, which is how it survived. The guard therefore keys on *has an accumulator*, not *is typed*.
 
 **Outcome: not applicable — architecture-specific reason.** Probed: `--tessera-lower-to-apple_gpu` leaves `tile.mma` unlowered, so there is no path on which an accumulator could be silently dropped. Consistent with this backend having zero `!tile.fragment` consumers (`TILE-FRAGMENT-TYPE-PARAM-2026-08-03`).
+
+## Cross-backend sync `ROCM-COMPILED-STRICT-DISPATCH-2026-08-04` — compiled-lane failures stop masquerading
+
+Runtime dispatch contract changed. A compiled-ROCm **failure** (tessera-opt ran and serialized no kernel, or emitted a non-ELF blob) now routes through the existing `_note_dispatch_fallback` funnel, so `TESSERA_STRICT_DISPATCH=1` raises instead of degrading. **Envelope limits** (no libamdhip64, hipInit failed, tessera-opt not built, dtype/rank/arch out of range) are unchanged and still degrade silently — making those raise would break strict runs on every CPU-only host.
+
+Measured before the fix: a deliberately broken pass pipeline returned `ok=True, compiler_path="rocm_compiled", execution_kind="native_gpu"` with correct numbers. Strict-mode suite results are identical before and after (18 fail both ways, all pre-existing), so this adds no new failures.
+
+**Outcome: parity validated — no change required.** Apple already routes failure-class dispatch through `_note_dispatch_fallback`; those sites are among the 18 pre-existing strict-mode failures measured on main (`tessera.matmul: MPS matmul symbol unavailable for dtype float32`). That is the funnel working as designed on this backend, and it is the precedent this change follows rather than a parallel mechanism (Decision #31).

@@ -408,3 +408,11 @@ A `tile.mma` carrying an accumulator was lowered by `NVWGMMALoweringPass` to a *
 Measured on merged main, this was **not** specific to the typed fragment form: a legacy bare `tile.mma(A, B, C)` — what `LowerKReductionAddToTileMMA` emits for the canonical K-step — was dropped identically. **No fixture in the tree covered either case**, which is how it survived. The guard therefore keys on *has an accumulator*, not *is typed*.
 
 **Outcome: not applicable — architecture-specific reason.** Probed: `--tessera-lower-to-x86` leaves `tile.mma` unlowered. x86 has no cooperative-matrix MMA path; AVX-512 K-loop accumulation is expressed in its own ops and never routes through this lowering.
+
+## Cross-backend sync `ROCM-COMPILED-STRICT-DISPATCH-2026-08-04` — compiled-lane failures stop masquerading
+
+Runtime dispatch contract changed. A compiled-ROCm **failure** (tessera-opt ran and serialized no kernel, or emitted a non-ELF blob) now routes through the existing `_note_dispatch_fallback` funnel, so `TESSERA_STRICT_DISPATCH=1` raises instead of degrading. **Envelope limits** (no libamdhip64, hipInit failed, tessera-opt not built, dtype/rank/arch out of range) are unchanged and still degrade silently — making those raise would break strict runs on every CPU-only host.
+
+Measured before the fix: a deliberately broken pass pipeline returned `ok=True, compiler_path="rocm_compiled", execution_kind="native_gpu"` with correct numbers. Strict-mode suite results are identical before and after (18 fail both ways, all pre-existing), so this adds no new failures.
+
+**Outcome: not applicable — architecture-specific reason.** x86 elementwise lanes raise `_RocmCompiledUnavailable` only for `lib is None` / missing-symbol conditions — envelope limits by construction, since there is no compile step whose output could be malformed. No x86 site was reclassified.

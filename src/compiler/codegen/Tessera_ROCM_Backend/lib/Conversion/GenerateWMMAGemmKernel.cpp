@@ -673,9 +673,30 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
 // answer: cooperative global loads, address-space-3 storage, s_barrier on both
 // sides of the WMMA consumer, ragged zero fill, and a loop-carried accumulator.
 //
-// The measured gfx1151 incumbent remains the register schedule. Keeping this
-// strategy explicit lets benchmarks compare it without silently promoting an
-// LDS schedule that is slower on unified-memory Strix Halo.
+// CORRECTED 2026-08-04 -- the note here previously read "the measured gfx1151
+// incumbent remains the register schedule ... an LDS schedule that is slower on
+// unified-memory Strix Halo". The measurement was right; the conclusion
+// generalized from a configuration in which LDS CANNOT help.
+//
+// This body is one-wave, MT=NT=1, so its block tile is 16x16 and its arithmetic
+// intensity is BM*BN/(BM+BN) = 8 FLOP/byte -- IDENTICAL to the naive register
+// schedule. Staging through LDS at equal AI buys no reuse and costs barriers
+// plus a round trip, so it must be slower, and it is. Measured at 2048^3 f16 on
+// gfx1151:
+//
+//   naive          MT=NT=1                16x16 tile   AI  8.0    3.62 TFLOP/s
+//   LDS  1x1 waves MT=NT=1                16x16 tile   AI  8.0    2.90
+//   LDS  2x2 waves MT=NT=2                64x64 tile   AI 32.0    8.47
+//   LDS  4x2 waves MT=NT=2               128x64 tile   AI 42.7    9.78
+//   LDS+pipelined 4x2 waves MT=NT=2      128x64 tile   AI 42.7   10.33
+//
+// LDS staging pays exactly when it enables reuse across a MULTI-WAVE,
+// MULTI-TILE block; at 1x1 there is no reuse to capture. The hand-written
+// `tessera_rocm_wmma_gemm_f16_bench_{lds,pipe}` kernels reach 2.7-3.5x the
+// production register schedule, so the incumbent is not the ceiling -- it is
+// the configuration this generator happens to support.
+//
+// Do not re-derive "LDS is slower here" from a 1x1 experiment.
 void emitCanonicalLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                           const WmmaTypes &T, Type outputType) {
   MLIRContext *ctx = b.getContext();

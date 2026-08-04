@@ -73,3 +73,68 @@ func.func @bare_is_not_a_wildcard(%a: !tile.fragment)
   // CHECK: error: type of return operand 0
   return %a : !tile.fragment
 }
+
+// -----
+
+// ── Domain validation (PR #502 review) ────────────────────────────────────
+//
+// `get()` was unchecked, so all of the below were constructible. The parser now
+// goes through `getChecked`, and `FragmentType::verify` mirrors
+// `TileMmaDescAttr::verify` value for value -- the two describe the same
+// instruction contract from opposite sides, and letting them drift would let a
+// fragment state a family the descriptor rejects.
+
+// The dangerous middle state, and the reason this is a P1-shaped bug rather
+// than tidiness: a PARTIALLY populated tuple is not `isUnknown()`, so step 2's
+// type-based verification would read it as a stated contract when the producer
+// only filled in half of it.
+func.func @partial_contract(
+    %a: !tile.fragment<m = 16, n = 0, k = 0, elem = "", acc = "", role = "",
+                       layout = "", family = "">) {
+  // CHECK: TILE_FRAGMENT_PARTIAL_CONTRACT
+  return
+}
+
+// -----
+
+func.func @nonpositive_shape(
+    %a: !tile.fragment<m = 0, n = 16, k = 16, elem = "bf16", acc = "f32",
+                       role = "a", layout = "row_major", family = "auto">) {
+  // CHECK: TILE_FRAGMENT_NONPOSITIVE_SHAPE
+  return
+}
+
+// -----
+
+func.func @unknown_family(
+    %a: !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32",
+                       role = "a", layout = "row_major", family = "hmma">) {
+  // CHECK: TILE_FRAGMENT_BAD_FAMILY
+  return
+}
+
+// -----
+
+// `role` is heavily overloaded in this tree — "producer"/"consumer"/"manager"
+// are WARP roles, "input"/"scratch" are BUFFER roles, and all of them appear as
+// `role = ` on other ops. A plausible value from a neighbouring vocabulary is
+// exactly what an open string would have accepted here.
+func.func @role_from_the_wrong_vocabulary(
+    %a: !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32",
+                       role = "producer", layout = "row_major",
+                       family = "auto">) {
+  // CHECK: TILE_FRAGMENT_BAD_ROLE
+  return
+}
+
+// -----
+
+// The fragment's `layout` is the operand layout the INSTRUCTION requires
+// (row_major/col_major), not the `#tile.layout` shard map. Similar names,
+// different facts — so a shard-map word is refused here.
+func.func @layout_is_the_instruction_operand_layout(
+    %a: !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32",
+                       role = "a", layout = "swizzled", family = "auto">) {
+  // CHECK: TILE_FRAGMENT_BAD_LAYOUT
+  return
+}

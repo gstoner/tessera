@@ -426,6 +426,60 @@ LogicalResult TileMmaDescAttr::verify(
   return success();
 }
 
+// W1.1 step 1 (PR #502 review) — domain validation for !tile.fragment.
+//
+// Deliberately mirrors TileMmaDescAttr::verify above, value for value: the two
+// describe the same instruction contract from opposite sides, and letting them
+// drift would mean a fragment could state a family or layout the descriptor
+// rejects. Decision #31's one-rule principle -- if these ever need to differ,
+// that is a finding, not a convenience.
+//
+// The bare `!tile.fragment` (all-unknown) is legal and is the legacy spelling.
+// A PARTIALLY populated tuple is not: it is the dangerous middle state the
+// review identified, because `isUnknown()` returns false for it, so step 2's
+// type-based verification would read it as a stated contract when the producer
+// only filled in half.
+LogicalResult FragmentType::verify(
+    llvm::function_ref<InFlightDiagnostic()> emitError, int64_t m, int64_t n,
+    int64_t k, StringRef elem, StringRef acc, StringRef role, StringRef layout,
+    StringRef family) {
+  const bool shapeUnset = m == 0 && n == 0 && k == 0;
+  const bool stringsUnset = elem.empty() && acc.empty() && role.empty() &&
+                            layout.empty() && family.empty();
+  if (shapeUnset && stringsUnset)
+    return success();  // the legacy bare form
+  if (shapeUnset || stringsUnset ||
+      elem.empty() || acc.empty() || role.empty() || layout.empty() ||
+      family.empty())
+    return emitError()
+           << "TILE_FRAGMENT_PARTIAL_CONTRACT: a fragment states its whole "
+              "instruction contract or none of it; write `!tile.fragment` for "
+              "the unknown form";
+
+  static const llvm::StringSet<> kFamilies = {
+      "auto", "mma_sync", "wgmma", "tcgen05", "wmma", "mfma"};
+  if (!kFamilies.contains(family))
+    return emitError() << "TILE_FRAGMENT_BAD_FAMILY: family \"" << family
+                       << "\" is not one of {auto, mma_sync, wgmma, tcgen05, "
+                          "wmma, mfma}";
+  if (m <= 0 || n <= 0 || k <= 0)
+    return emitError() << "TILE_FRAGMENT_NONPOSITIVE_SHAPE: m/n/k must be > 0";
+  // `role` is a heavily overloaded name in this tree -- warp roles
+  // (producer/consumer/manager), buffer roles (input/scratch), pass roles
+  // (backward) all use it on OTHER ops. These five are the fragment roles, and
+  // they are exactly the ones MMAOp::verify and the two backend lowerings read.
+  static const llvm::StringSet<> kRoles = {"a", "b", "acc", "scale_a",
+                                           "scale_b"};
+  if (!kRoles.contains(role))
+    return emitError() << "TILE_FRAGMENT_BAD_ROLE: role \"" << role
+                       << "\" is not one of {a, b, acc, scale_a, scale_b}";
+  static const llvm::StringSet<> kLayouts = {"row_major", "col_major"};
+  if (!kLayouts.contains(layout))
+    return emitError()
+           << "TILE_FRAGMENT_BAD_LAYOUT: layout must be row_major or col_major";
+  return success();
+}
+
 LogicalResult TileMemoryLayoutAttr::verify(
     llvm::function_ref<InFlightDiagnostic()> emitError, StringRef space,
     StringRef order, int64_t leadingDim) {

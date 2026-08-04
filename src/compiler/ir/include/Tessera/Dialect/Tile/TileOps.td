@@ -111,6 +111,12 @@ def Tile_FragmentType : Tile_Type<"Fragment", "fragment"> {
                         StringRefParameter<"">:$layout,
                         StringRefParameter<"">:$family);
   let hasCustomAssemblyFormat = 1;
+  // Domain validation, mirroring TileMmaDescAttr::verify (PR #502 review).
+  // Without it, `get()` accepted a nonpositive shape, an empty dtype, an
+  // unknown role/layout/family, and -- worst -- a PARTIALLY populated tuple,
+  // which `isUnknown()` does not recognise and step 2's type-based checks would
+  // therefore treat as a stated contract.
+  let genVerifyDecl = 1;
   let extraClassDeclaration = [{
     /// The legacy all-unknown fragment, spelled `!tile.fragment`. Producers
     /// that have not migrated yet still emit this; `MMAOp::verify()` falls back

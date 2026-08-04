@@ -57,3 +57,20 @@ func.func @storage_and_accumulator_are_separate(
                              acc = "f32", role = "acc", layout = "col_major",
                              family = "mma_sync">
 }
+
+// -----
+
+// Escaping, PR #502 review. `parseString` DECODES escapes, so a printer that
+// concatenated raw bytes between quotes emitted IR the second parse could not
+// read. The double `tessera-opt` in the RUN line is what makes this a test:
+// with the old printer the first invocation succeeded and the second failed.
+//
+// `elem` and `acc` are open dtype names -- unlike role/layout/family they have
+// no closed set -- so printer correctness here cannot lean on the verifier.
+// CHECK-LABEL: func.func @string_parameters_are_escaped
+// CHECK-SAME: elem = "b\22f16"
+func.func @string_parameters_are_escaped(
+    %a: !tile.fragment<m = 16, n = 16, k = 16, elem = "b\22f16", acc = "f32",
+                       role = "a", layout = "row_major", family = "auto">) {
+  return
+}

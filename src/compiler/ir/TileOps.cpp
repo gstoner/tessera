@@ -1687,6 +1687,7 @@ LogicalResult TCGen05MMAOp::verify() {
 
 Type FragmentType::parse(AsmParser &parser) {
   MLIRContext *ctx = parser.getContext();
+  SMLoc loc = parser.getCurrentLocation();
   // No `<` means the bare form. `parseOptionalLess` fails when absent, which is
   // not an error here -- it is the legacy spelling.
   if (parser.parseOptionalLess())
@@ -1717,7 +1718,13 @@ Type FragmentType::parse(AsmParser &parser) {
       strField("family", family, /*last=*/true) || parser.parseGreater())
     return Type();
 
-  return FragmentType::get(ctx, m, n, k, elem, acc, role, layout, family);
+  // getChecked, not get: the parser is the ONLY entry point for textual IR, so
+  // an unchecked construction here would let a malformed contract into the IR
+  // and only fail later (or not at all). PR #502 review.
+  return FragmentType::getChecked([&] { return parser.emitError(loc); }, ctx, m,
+                                  n, k, StringRef(elem), StringRef(acc),
+                                  StringRef(role), StringRef(layout),
+                                  StringRef(family));
 }
 
 void FragmentType::print(AsmPrinter &printer) const {
@@ -1725,10 +1732,29 @@ void FragmentType::print(AsmPrinter &printer) const {
   // that came in legacy goes out legacy and existing fixtures keep matching.
   if (isUnknown())
     return;
+  // Print each string through a StringAttr rather than concatenating the raw
+  // bytes between quotes. `parseString` DECODES escapes, so a value containing
+  // a quote, backslash or newline would come back in and go straight out
+  // unescaped -- emitting IR the second parse cannot read. PR #502 review; the
+  // round-trip fixture used only clean values and would not have caught it.
+  // The verifier now constrains role/layout/family to closed sets, but `elem`
+  // and `acc` are open dtype names, and correctness here should not depend on
+  // a neighbouring check.
+  auto quoted = [&](StringRef s) {
+    printer << StringAttr::get(getContext(), s);
+  };
   printer << "<m = " << getM() << ", n = " << getN() << ", k = " << getK()
-          << ", elem = \"" << getElem() << "\", acc = \"" << getAcc()
-          << "\", role = \"" << getRole() << "\", layout = \"" << getLayout()
-          << "\", family = \"" << getFamily() << "\">";
+          << ", elem = ";
+  quoted(getElem());
+  printer << ", acc = ";
+  quoted(getAcc());
+  printer << ", role = ";
+  quoted(getRole());
+  printer << ", layout = ";
+  quoted(getLayout());
+  printer << ", family = ";
+  quoted(getFamily());
+  printer << ">";
 }
 
 } // namespace tile

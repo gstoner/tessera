@@ -2191,3 +2191,16 @@ stable (94.77/94.70% L2 and 779,776/715,008 DRAM B); plain and affine counter
 cohorts diverged materially, so they are evidence of collection instability,
 not a schedule result. The packet changes no selector: there is one
 correctness-first implementation and no controlled alternative to promote.
+
+## Cross-backend sync `TILE-FRAGMENT-TYPE-PARAM-2026-08-03` — `!tile.fragment` parameterized (W1.1 step 1)
+
+Shared Tile IR type changed: `!tile.fragment` gained `(m, n, k, elem, acc, role, layout, family)` and a domain verifier. **No behaviour changes in this PR** — the bare `!tile.fragment` still parses AND still prints bare, so every existing producer and fixture is unaffected. All 7 C++ `FragmentType` uses are `isa<>` checks, so there were no construction sites to migrate.
+
+**Outcome: follow-up required.** 8 files under this backend reference `FragmentType` / `!tile.fragment`. Two obligations, both already scoped in [`W1_1_TYPING_DESIGN.md`](../../compiler/W1_1_TYPING_DESIGN.md):
+
+* **Step 2b (blocking for the motivating GEMM).** `NVIDIALowering.cpp` requires the accumulator's direct defining op to be `FragmentZeroOp` (3 sites). A K-loop accumulator is an `scf.for` iter-arg with no defining op, so a typed K-loop will verify and still fail to lower until this is block-argument-aware. Needs a per-backend *lowering* fixture, not just a verifier one.
+* **Step 3.** `GenerateWMMA*`-equivalent producers migrate to the typed form one PR at a time.
+
+`family` is a type parameter partly because `NVIDIALowering.cpp` gates on it before matching (m, n, k, dtype) to an `mma.sync` variant — leaving it on the attribute would have let a fragment packed for one family feed an op selecting another.
+
+No exact-device evidence in this PR; none required, since no generated code changed.

@@ -796,6 +796,73 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="IRContractLegality",
     ),
 
+    # ── W1.1 step 1 — !tile.fragment domain validation ────────────────────
+    DiagnosticCode(
+        code="TILE_FRAGMENT_PARTIAL_CONTRACT",
+        pass_origin="FragmentType::verify",
+        severity="error",
+        summary=(
+            "A `!tile.fragment` states part of its instruction contract and not the rest. This is the dangerous middle state: `isUnknown()` returns false for it, so type-based verification reads it as a stated contract when the producer only filled in half."
+        ),
+        fix_hint=(
+            "State the whole contract, or write the bare `!tile.fragment` for the unknown form."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_FRAGMENT_BAD_FAMILY",
+        pass_origin="FragmentType::verify",
+        severity="error",
+        summary=(
+            "`family` is outside {auto, mma_sync, wgmma, tcgen05, wmma, mfma}. It selects a physical register ABI (wave 32 for RDNA/WMMA vs 64 for CDNA/MFMA), not just a mnemonic."
+        ),
+        fix_hint=(
+            "Use one of the six families, or `auto` before target resolution."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_FRAGMENT_NONPOSITIVE_SHAPE",
+        pass_origin="FragmentType::verify",
+        severity="error",
+        summary=(
+            "A fragment's m/n/k must be > 0. Mirrors TILE_MMA_DESC_NONPOSITIVE_SHAPE."
+        ),
+        fix_hint=(
+            "State the instruction tile shape."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_FRAGMENT_BAD_ROLE",
+        pass_origin="FragmentType::verify",
+        severity="error",
+        summary=(
+            "`role` is outside {a, b, acc, scale_a, scale_b}. The name is overloaded in this tree — producer/consumer/manager are WARP roles and input/scratch are BUFFER roles — so a plausible value from a neighbouring vocabulary is the likely mistake."
+        ),
+        fix_hint=(
+            "Use a fragment role: a, b, acc, scale_a, or scale_b."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_FRAGMENT_BAD_LAYOUT",
+        pass_origin="FragmentType::verify",
+        severity="error",
+        summary=(
+            "A fragment's `layout` is the operand layout the INSTRUCTION requires (row_major/col_major), not the `#tile.layout` shard map. Similar names, different facts."
+        ),
+        fix_hint=(
+            "Use row_major or col_major."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+
     # ── W1.3 — Decision #32 metadata lowering obligation ──────────────────
     #
     # A boundary lowering carries each Decision #15a attribute forward, or

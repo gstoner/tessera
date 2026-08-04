@@ -320,6 +320,18 @@ std::unique_ptr<mlir::Pass> createTileBufferArenaPass();
 // tessera.binding). Registered standalone as `--tessera-ir-contracts`.
 std::unique_ptr<mlir::Pass> createIRContractLegalityPass();
 
+// ── 2026-08-03 — W1.3 / Decision #32 metadata lowering obligation ──
+//
+// A snapshot/verify PAIR, not one pass: a boundary has two sides and a pass
+// sees one module. `record` writes the Decision #15a attribute inventory into
+// the module as `tessera.metadata_snapshot`; `verify` compares after the
+// boundary lowering and fails on loss that no `tessera.lowering.dropped` record
+// explains. Carrying the snapshot in the IR (rather than in a
+// PassInstrumentation) is what makes the whole thing expressible in one
+// `tessera-opt` invocation, and therefore lit-testable.
+std::unique_ptr<mlir::Pass> createRecordMetadataPass();
+std::unique_ptr<mlir::Pass> createVerifyMetadataObligationPass();
+
 // ── CF0 — ControlFlowTargetGuardPass ─────────────────────────────────────
 // Rejects tessera.control_{for,if,while,scan} forms that remain outside the
 // selected backend's supported control-flow envelope with a stable

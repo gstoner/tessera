@@ -100,7 +100,22 @@ static FailureOr<Value> materializeFragmentPack(
       role == "a"
           ? std::array<int64_t, 2>{desc.getM(), desc.getK()}
           : std::array<int64_t, 2>{desc.getK(), desc.getN()};
-  StringRef expectedOrder = role == "a" ? "row_major" : "col_major";
+  // Both memory orders are addressable. The fragment ALWAYS walks K; what the
+  // order decides is whether K is contiguous in memory or strided by the
+  // leading dimension:
+  //
+  //   role  order        K axis   linear                  K stride
+  //   a     row_major    col      row * ld + col          1
+  //   a     col_major    col      col * ld + row          ld
+  //   b     row_major    row      row * ld + col          ld
+  //   b     col_major    row      col * ld + row          1
+  //
+  // Only the two contiguous cases used to be accepted, and the strided ones
+  // were rejected as an "unsupported source layout". That is why
+  // `GenerateWMMAGemmKernel` could not migrate: it stores B row-major
+  // (`k * N + col`), so its B fragment is a stride-N gather, which it does by
+  // hand with 16 scalar loads.
+  const bool kIsContiguous = (role == "a") == (memory.getOrder() == "row_major");
   // 3 inputs = (base, rowOrigin, colOrigin); 5 adds (rowBound, colBound) for a
   // ragged problem. Anything else is malformed rather than merely unsupported.
   // This guard used to require exactly 3, which made the bounded form
@@ -109,7 +124,8 @@ static FailureOr<Value> materializeFragmentPack(
   const size_t viewInputs = view.getInputs().size();
   if ((role != "a" && role != "b") || !memory ||
       !layout || (viewInputs != 3 && viewInputs != 5) ||
-      memory.getSpace() != "gmem" || memory.getOrder() != expectedOrder ||
+      memory.getSpace() != "gmem" ||
+      (memory.getOrder() != "row_major" && memory.getOrder() != "col_major") ||
       layout.getShardExtents() != ArrayRef<int64_t>(expectedShape) ||
       layout.getSwizzle()) {
     op->emitError("ROCM_FRAGMENT_UNSUPPORTED_SOURCE_LAYOUT: unsupported ")
@@ -179,14 +195,11 @@ static FailureOr<Value> materializeFragmentPack(
   Value fastBound, slowIndex, slowBound;
 
   Value linear, fastIndex;
+  Value row, col;
   if (role == "a") {
-    Value row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
-    Value col = arith::AddIOp::create(builder, loc, colOrigin, kBase);
-    linear = arith::AddIOp::create(
-        builder, loc,
-        arith::MulIOp::create(builder, loc, row, leadingDim), col);
-    // A is row-major here: the load walks columns, so the tail bound is the
-    // column extent and the row is a single scalar guard.
+    // K is the column; the lane selects the row.
+    row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
+    col = arith::AddIOp::create(builder, loc, colOrigin, kBase);
     fastIndex = col;
     slowIndex = row;
     if (haveBounds) {
@@ -194,14 +207,9 @@ static FailureOr<Value> materializeFragmentPack(
       fastBound = toIndex(builder, loc, view.getInputs()[4]);   // colBound
     }
   } else {
-    Value row = arith::AddIOp::create(builder, loc, rowOrigin, kBase);
-    Value col = arith::AddIOp::create(builder, loc, colOrigin, lane);
-    linear = arith::AddIOp::create(
-        builder, loc,
-        arith::MulIOp::create(builder, loc, col, leadingDim), row);
-    // B is column-major here (`col * leadingDim + row`), so the load walks
-    // ROWS. The fast/slow roles swap with the operand -- getting this backwards
-    // would mask the wrong axis and silently zero live data on ragged shapes.
+    // K is the row; the lane selects the column.
+    row = arith::AddIOp::create(builder, loc, rowOrigin, kBase);
+    col = arith::AddIOp::create(builder, loc, colOrigin, lane);
     fastIndex = row;
     slowIndex = col;
     if (haveBounds) {
@@ -209,8 +217,55 @@ static FailureOr<Value> materializeFragmentPack(
       slowBound = toIndex(builder, loc, view.getInputs()[4]);   // colBound
     }
   }
+  // The fast axis is K for BOTH roles, so the bound mapping above does not
+  // depend on the memory order -- only the linearization below does. Getting
+  // the fast/slow roles backwards would mask the wrong axis and silently zero
+  // live data on ragged shapes.
+  linear = memory.getOrder() == "row_major"
+               ? arith::AddIOp::create(
+                     builder, loc,
+                     arith::MulIOp::create(builder, loc, row, leadingDim), col)
+               : arith::AddIOp::create(
+                     builder, loc,
+                     arith::MulIOp::create(builder, loc, col, leadingDim), row);
 
-  if (!haveBounds) {
+  if (!kIsContiguous) {
+    // Strided K: element j lives `j * leadingDim` away, so neither `vector.load`
+    // nor `vector.maskedload` applies. Gather element by element with the same
+    // `inb ? value : zero` shape `GenerateWMMAGemmKernel` uses by hand, which is
+    // what lets that producer migrate bit-identically rather than merely close.
+    Value zeroScalar = arith::ConstantOp::create(
+        builder, loc, elementTy, builder.getZeroAttr(elementTy));
+    Value zeroIdx = arith::ConstantIndexOp::create(builder, loc, 0);
+    Value slowOk;
+    if (haveBounds)
+      slowOk = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::slt,
+                                     slowIndex, slowBound);
+    for (int64_t j = 0; j < physical.inputElementsPerLane; ++j) {
+      Value cj = arith::ConstantIndexOp::create(builder, loc, j);
+      Value index = arith::AddIOp::create(
+          builder, loc, linear,
+          arith::MulIOp::create(builder, loc, cj, leadingDim));
+      Value element;
+      if (!haveBounds) {
+        element = memref::LoadOp::create(builder, loc, base, ValueRange{index});
+      } else {
+        Value fastOk = arith::CmpIOp::create(
+            builder, loc, arith::CmpIPredicate::slt,
+            arith::AddIOp::create(builder, loc, fastIndex, cj), fastBound);
+        Value inBounds = arith::AndIOp::create(builder, loc, fastOk, slowOk);
+        // Clamp the ADDRESS too: an out-of-bounds lane must not fault, and a
+        // select on the loaded value alone still performs the load.
+        Value safe =
+            arith::SelectOp::create(builder, loc, inBounds, index, zeroIdx);
+        element = memref::LoadOp::create(builder, loc, base, ValueRange{safe});
+        element = arith::SelectOp::create(builder, loc, inBounds, element,
+                                          zeroScalar);
+      }
+      fragment = vector::InsertOp::create(builder, loc, element, fragment,
+                                          ArrayRef<int64_t>{j});
+    }
+  } else if (!haveBounds) {
     fragment = vector::LoadOp::create(builder, loc, vectorTy, base,
                                       ValueRange{linear});
   } else {

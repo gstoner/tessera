@@ -546,6 +546,96 @@ Gate stays numeric (§5 of `GEMM_PERF_LADDER.md`): a structural fixture passes
 while the kernel returns a partial product. The differential oracles
 (`tessera_rocm_wmma_gemm_f16_bench_{lds,pipe}`) and the γ_K bound both apply.
 
+### 4.6.1 Built 2026-08-04 — what shipped, and the two defects it exposed
+
+`convertTypedFragments()` in `TileToROCM.cpp`: a `TileFragmentTypeConverter`
+mapping `!tile.fragment<...>` → `vector<N × T>`, four `OpConversionPattern`s
+(`fragment_zero`, `fragment_pack`, `mma`, `fragment_unpack`+`store`), and
+`applyPartialConversion`. It runs **before** the legacy walk; the bare
+`!tile.fragment` spelling converts to itself, stays legal, and falls through
+unchanged, so the two forms coexist until step 5.
+
+`scf.for` cost one line, as predicted:
+`populateSCFStructuralTypeConversionsAndLegality`. No Tile-specific loop
+reasoning exists anywhere in the result.
+
+Proven by `rocm_typed_fragment_composition.mlir` — one function per shape the
+single-shot path cannot express: a K-loop accumulator arriving as an `scf.for`
+iter-arg, an `mma` feeding an `mma`, and an accumulator that is not a
+`fragment_zero`. **The fixture was verified to fail**: re-injecting the
+synthesized-zero defect makes it red, so it is checking the accumulator operand
+and not merely that a `wmma` was emitted.
+
+Two defects surfaced only because the negative case was run. Both had green
+positive tests.
+
+1. **A blanket identity type conversion silently disabled the whole thing.**
+   `TypeConverter::convertType` reads a `std::nullopt` callback result as *"not
+   applicable, try the next callback"*, so an **unresolvable** fragment fell
+   through to the identity conversion, was declared legal, and passed through
+   untouched — emitting a `tessera_rocm.wmma` whose operands were still
+   `!tile.fragment`, and **exiting 0**. The identity conversion must exclude
+   fragments so that no callback applies and `convertType` fails.
+
+2. **Accumulator convertibility does not imply input convertibility.** An `acc`
+   fragment names no input dtype, so §4.6's representative-dtype device
+   resolves its physical layout — correct for the *width*, which is
+   `256 / waveSize` regardless of input dtype, but it means an acc-based check
+   cannot police the inputs. On gfx1151 an e4m3 A/B pair is unsupported while
+   its f32 accumulator resolves happily. `ConvertMMA` now checks all three
+   operands converted.
+
+Both are recorded in `rocm_typed_fragment_composition_invalid.mlir`, whose
+correct output is a diagnostic (Decision #10a).
+
+Review of the landed change (#517) found three more, all of the same shape —
+**a fact stated in two places that drifted**:
+
+3. **`role` was read from the op attribute, not the type.**
+   `FragmentPackOp::verify` returns success *without ever requiring a `role`
+   attribute* once the result is typed, so `tile.fragment_pack %v : (!tile.tile)
+   -> !fa` is valid IR — and it is exactly what a migrated producer emits, since
+   removing the redundant attribute is the point of typing. The lowering
+   rejected it with `ROCM_FRAGMENT_MISSING_CONTRACT`. `role` is now a parameter,
+   sourced from the type on the typed path and from the attribute on the legacy
+   one.
+
+4. **A fixed representative accumulator dtype was wrong on every architecture
+   with a dtype-dependent `k`.** `resolveFragmentLayout` derives the legal `k`
+   *from* the input dtype — RDNA4 int4 takes k=32 where int8 takes k=16;
+   gfx125x fp8 takes k=64 where f16 takes k=32; CDNA spans k=8 to k=64 — so
+   pinning "int8"/"f16" made a *supported* MMA's accumulator unresolvable. Now
+   probed over a candidate list. Sound because the accumulator width is
+   `256 / waveSize` in every branch and `waveSize` is fixed per architecture, so
+   any candidate that resolves gives the same answer.
+
+5. **The converted type and the materialized value disagreed for packed
+   inputs.** `materializeFragmentPack` packs sub-16-bit inputs into i32
+   registers (bitcast for int8/SOA-int, nibble compaction for int4), so an RDNA4
+   int4 fragment leaves as `vector<2xi32>` — while the converter promised
+   `vector<16xi8>`. The conversion then stranded an unresolved materialization.
+   **The gfx1151 f16 path could never expose this**, because there the packing
+   is the identity. Both now derive from one `packedFragmentType()`, with a
+   `ROCM_FRAGMENT_TYPE_DISAGREES` guard so a future divergence is named rather
+   than surfacing as an unresolved cast.
+
+Defect 5 is the general lesson: a type converter restates, in a second place,
+what the materializer decides. That is a Decision #31 duplication in miniature,
+and it failed exactly the way #31 predicts — silently, on the path the default
+test configuration does not cover.
+
+**A local gate gap, found by CI, not by me.** `MLIRSCFTransforms` was missing
+from `TesseraROCMConversion`'s link libraries. `ninja -C build tessera-opt`
+links `MLIROptLib`'s broader set and hid it; the standalone `tessera-rocm-opt`
+does not. Build **all** targets (`ninja -C build`) before pushing a change that
+adds an upstream MLIR dependency — a single-target build is not a link check.
+
+**What is NOT yet true.** No producer emits typed fragments (step 3 is
+unstarted), so this path is proven by fixture and is not yet on any executing
+lane. The numeric gate above therefore has nothing to run against yet — it
+applies at step 3, not here. 2b is closed as a *capability*, not as shipped
+codegen.
+
 ---
 
 ## 5. Interaction with W1.3 (Decision #32)

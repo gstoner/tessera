@@ -2092,6 +2092,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/backend/rocm/todo.md §ROCM-5", sprint="ROCM-5",
     ),
     DiagnosticCode(
+        code="ROCM_FRAGMENT_TYPE_DISAGREES", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="The materialized fragment value's type differs from the type the Tile fragment type converter promised.",
+        fix_hint="Derive both the pack materialization and the converted fragment type from packedFragmentType(); sub-16-bit inputs pack into i32 registers rather than staying element-typed.",
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md §4.6", sprint="W1.1",
+    ),
+    DiagnosticCode(
         code="ROCM_FRAGMENT_UNPACK_UNCONSUMED", pass_origin="LowerTileToROCMPass",
         severity="error",
         summary="A typed tile.fragment_unpack has no single tile.store consumer, so its accumulator has no physical form on this target.",

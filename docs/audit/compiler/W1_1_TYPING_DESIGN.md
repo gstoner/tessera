@@ -588,6 +588,48 @@ positive tests.
 Both are recorded in `rocm_typed_fragment_composition_invalid.mlir`, whose
 correct output is a diagnostic (Decision #10a).
 
+Review of the landed change (#517) found three more, all of the same shape —
+**a fact stated in two places that drifted**:
+
+3. **`role` was read from the op attribute, not the type.**
+   `FragmentPackOp::verify` returns success *without ever requiring a `role`
+   attribute* once the result is typed, so `tile.fragment_pack %v : (!tile.tile)
+   -> !fa` is valid IR — and it is exactly what a migrated producer emits, since
+   removing the redundant attribute is the point of typing. The lowering
+   rejected it with `ROCM_FRAGMENT_MISSING_CONTRACT`. `role` is now a parameter,
+   sourced from the type on the typed path and from the attribute on the legacy
+   one.
+
+4. **A fixed representative accumulator dtype was wrong on every architecture
+   with a dtype-dependent `k`.** `resolveFragmentLayout` derives the legal `k`
+   *from* the input dtype — RDNA4 int4 takes k=32 where int8 takes k=16;
+   gfx125x fp8 takes k=64 where f16 takes k=32; CDNA spans k=8 to k=64 — so
+   pinning "int8"/"f16" made a *supported* MMA's accumulator unresolvable. Now
+   probed over a candidate list. Sound because the accumulator width is
+   `256 / waveSize` in every branch and `waveSize` is fixed per architecture, so
+   any candidate that resolves gives the same answer.
+
+5. **The converted type and the materialized value disagreed for packed
+   inputs.** `materializeFragmentPack` packs sub-16-bit inputs into i32
+   registers (bitcast for int8/SOA-int, nibble compaction for int4), so an RDNA4
+   int4 fragment leaves as `vector<2xi32>` — while the converter promised
+   `vector<16xi8>`. The conversion then stranded an unresolved materialization.
+   **The gfx1151 f16 path could never expose this**, because there the packing
+   is the identity. Both now derive from one `packedFragmentType()`, with a
+   `ROCM_FRAGMENT_TYPE_DISAGREES` guard so a future divergence is named rather
+   than surfacing as an unresolved cast.
+
+Defect 5 is the general lesson: a type converter restates, in a second place,
+what the materializer decides. That is a Decision #31 duplication in miniature,
+and it failed exactly the way #31 predicts — silently, on the path the default
+test configuration does not cover.
+
+**A local gate gap, found by CI, not by me.** `MLIRSCFTransforms` was missing
+from `TesseraROCMConversion`'s link libraries. `ninja -C build tessera-opt`
+links `MLIROptLib`'s broader set and hid it; the standalone `tessera-rocm-opt`
+does not. Build **all** targets (`ninja -C build`) before pushing a change that
+adds an upstream MLIR dependency — a single-target build is not a link check.
+
 **What is NOT yet true.** No producer emits typed fragments (step 3 is
 unstarted), so this path is proven by fixture and is not yet on any executing
 lane. The numeric gate above therefore has nothing to run against yet — it

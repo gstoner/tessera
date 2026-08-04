@@ -72,3 +72,57 @@ func.func @unpack_without_store(%out: memref<?xf32>) -> !tile.tile {
       : (!fac) -> !tile.tile
   return %o : !tile.tile
 }
+
+// -----
+
+#lay = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
+                    replica = [] : [] on [], offset = 0>
+#memA = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 64>
+#memB = #tile.memory_layout<space = "gmem", order = "col_major", leading_dim = 64>
+
+// A and B disagree on `elem`. This is WELL-FORMED Tile IR: `MMAOp::verify`
+// deliberately does not require them to agree, because `#tile.mma_desc` has
+// always carried aType/bType separately. ROCm cannot execute it —
+// `resolveFragmentLayout` only admits descriptors with aType == bType.
+//
+// It slipped through because each fragment resolves INDIVIDUALLY: the
+// descriptor synthesized from a fragment puts that fragment's own dtype on both
+// the A and B sides, so f16 and bf16 each look fine alone. The emitted wmma then
+// recorded A's dtype and silently dropped B's.
+//
+// Checked on the MESSAGE, not just the code: this file emits
+// ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR in an earlier section too, and a bare
+// code check would be satisfied by that one.
+// CHECK: no mixed-input matrix form; A states elem "f16" and B states "bf16"
+func.func @mixed_a_b_dtypes(%a: memref<?xf16>, %b: memref<?xbf16>,
+                            %out: memref<?xf32>, %r: index, %c: index) {
+  %acc = tile.fragment_zero : !tile.fragment<m = 16, n = 16, k = 16,
+      elem = "f32", acc = "f32", role = "acc", layout = "row_major",
+      family = "wmma">
+  %va = tile.view %a, %r, %c {tile.layout = #lay, tile.memory = #memA}
+      : (memref<?xf16>, index, index) -> !tile.tile
+  %vb = tile.view %b, %r, %c {tile.layout = #lay, tile.memory = #memB}
+      : (memref<?xbf16>, index, index) -> !tile.tile
+  %fa = tile.fragment_pack %va : (!tile.tile) -> !tile.fragment<m = 16, n = 16,
+      k = 16, elem = "f16", acc = "f32", role = "a", layout = "row_major",
+      family = "wmma">
+  %fb = tile.fragment_pack %vb : (!tile.tile) -> !tile.fragment<m = 16, n = 16,
+      k = 16, elem = "bf16", acc = "f32", role = "b", layout = "col_major",
+      family = "wmma">
+  %m = tile.mma %fa, %fb, %acc : (
+      !tile.fragment<m = 16, n = 16, k = 16, elem = "f16", acc = "f32",
+                     role = "a", layout = "row_major", family = "wmma">,
+      !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32",
+                     role = "b", layout = "col_major", family = "wmma">,
+      !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32",
+                     role = "acc", layout = "row_major", family = "wmma">)
+      -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32",
+                        role = "acc", layout = "row_major", family = "wmma">
+  %o = tile.fragment_unpack %m {tile.layout = #lay}
+      : (!tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32",
+                        role = "acc", layout = "row_major", family = "wmma">)
+      -> !tile.tile
+  tile.store %o, %out, %r, %c {tile.layout = #lay, tile.memory = #memA}
+      : !tile.tile, memref<?xf32>, index, index
+  return
+}

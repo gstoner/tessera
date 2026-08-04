@@ -109,7 +109,31 @@ def _load_capi() -> ctypes.CDLL | None:
         if not p.is_file():
             continue
         try:
-            lib = ctypes.CDLL(str(p))
+            # RTLD_DEEPBIND: bind this library's LLVM/MLIR to ITS OWN copy.
+            #
+            # Root-caused 2026-08-04. `runtime.py` loads `libhiprtc.so` with
+            # RTLD_GLOBAL, and HIPRTC statically links its own LLVM. That
+            # publishes a full set of LLVM symbols into the global namespace, so
+            # this library -- which statically links a DIFFERENT LLVM/MLIR build
+            # -- resolved its LLVM references against HIPRTC's copy. Two
+            # incompatible LLVMs sharing global state segfault the moment a pass
+            # pipeline runs.
+            #
+            # Symptom: three `test_solvers_tpp.py` tests "failed" whenever the
+            # full unit suite ran, and passed standalone. They were repeatedly
+            # dismissed as xdist ordering flakes. They are neither flaky nor
+            # xdist-specific -- the suite segfaulted single-process too (exit
+            # 139), deterministically, inside `tessera_tpp_run_pipeline`.
+            #
+            # Reproduce in three lines:
+            #     ctypes.CDLL("libhiprtc.so", mode=ctypes.RTLD_GLOBAL)
+            #     from tessera.solvers import tpp
+            #     tpp.solve("module {}\n")        # <- segfault
+            #
+            # DEEPBIND is glibc-only; `getattr(..., 0)` degrades to plain
+            # RTLD_NOW elsewhere (macOS), which is the previous behaviour.
+            mode = os.RTLD_NOW | getattr(os, "RTLD_DEEPBIND", 0)
+            lib = ctypes.CDLL(str(p), mode=mode)
             lib.tessera_tpp_capi_available.restype = ctypes.c_int
             lib.tessera_tpp_run_pipeline.argtypes = [
                 ctypes.c_char_p, ctypes.c_char_p,

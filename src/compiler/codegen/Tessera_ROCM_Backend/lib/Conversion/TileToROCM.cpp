@@ -90,8 +90,14 @@ static FailureOr<Value> materializeFragmentPack(
           ? std::array<int64_t, 2>{desc.getM(), desc.getK()}
           : std::array<int64_t, 2>{desc.getK(), desc.getN()};
   StringRef expectedOrder = role.getValue() == "a" ? "row_major" : "col_major";
+  // 3 inputs = (base, rowOrigin, colOrigin); 5 adds (rowBound, colBound) for a
+  // ragged problem. Anything else is malformed rather than merely unsupported.
+  // This guard used to require exactly 3, which made the bounded form
+  // unreachable -- and silently so, since it fell into the generic
+  // "unsupported source layout" diagnostic rather than naming the arity.
+  const size_t viewInputs = view.getInputs().size();
   if ((role.getValue() != "a" && role.getValue() != "b") || !memory ||
-      !layout || view.getInputs().size() != 3 ||
+      !layout || (viewInputs != 3 && viewInputs != 5) ||
       memory.getSpace() != "gmem" || memory.getOrder() != expectedOrder ||
       layout.getShardExtents() != ArrayRef<int64_t>(expectedShape) ||
       layout.getSwizzle()) {
@@ -140,22 +146,84 @@ static FailureOr<Value> materializeFragmentPack(
       builder, loc, laneGroup,
       arith::ConstantIndexOp::create(builder, loc,
                                      physical.inputElementsPerLane));
+  // W1.1 step 3 — ragged-edge masking.
+  //
+  // `tile.view` is pointer-backed as (base, rowOrigin, colOrigin). A view may
+  // additionally carry (rowBound, colBound): the LOGICAL extents of the matrix,
+  // which are runtime values on a ragged problem.
+  //
+  // Without them this loaded `inputElementsPerLane` contiguous elements
+  // unguarded, so a fragment straddling the edge of a ragged matrix read past
+  // it. `GenerateWMMAGemmKernel` avoids that by assembling fragments element by
+  // element with an `inb ? value : zero` select -- lane math the typed contract
+  // is supposed to own, which is exactly why the producer could not migrate
+  // (design doc §4.5).
+  //
+  // The out-of-bounds elements are always a contiguous TAIL: the load walks the
+  // fast axis, so element j is in bounds iff `fast + j < fastBound`. That makes
+  // `vector.create_mask` of the clamped remaining length exactly right, and
+  // `maskedload` with a zero passthru reproduces the generator's `storeZero`
+  // element for element -- which is what lets the migrated producer stay
+  // bit-identical rather than merely close.
+  const bool haveBounds = view.getInputs().size() >= 5;
+  Value fastBound, slowIndex, slowBound;
+
+  Value linear, fastIndex;
   if (role.getValue() == "a") {
     Value row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
     Value col = arith::AddIOp::create(builder, loc, colOrigin, kBase);
-    Value linear = arith::AddIOp::create(
+    linear = arith::AddIOp::create(
         builder, loc,
         arith::MulIOp::create(builder, loc, row, leadingDim), col);
-    fragment = vector::LoadOp::create(builder, loc, vectorTy, base,
-                                      ValueRange{linear});
+    // A is row-major here: the load walks columns, so the tail bound is the
+    // column extent and the row is a single scalar guard.
+    fastIndex = col;
+    slowIndex = row;
+    if (haveBounds) {
+      slowBound = toIndex(builder, loc, view.getInputs()[3]);   // rowBound
+      fastBound = toIndex(builder, loc, view.getInputs()[4]);   // colBound
+    }
   } else {
     Value row = arith::AddIOp::create(builder, loc, rowOrigin, kBase);
     Value col = arith::AddIOp::create(builder, loc, colOrigin, lane);
-    Value linear = arith::AddIOp::create(
+    linear = arith::AddIOp::create(
         builder, loc,
         arith::MulIOp::create(builder, loc, col, leadingDim), row);
+    // B is column-major here (`col * leadingDim + row`), so the load walks
+    // ROWS. The fast/slow roles swap with the operand -- getting this backwards
+    // would mask the wrong axis and silently zero live data on ragged shapes.
+    fastIndex = row;
+    slowIndex = col;
+    if (haveBounds) {
+      fastBound = toIndex(builder, loc, view.getInputs()[3]);   // rowBound
+      slowBound = toIndex(builder, loc, view.getInputs()[4]);   // colBound
+    }
+  }
+
+  if (!haveBounds) {
     fragment = vector::LoadOp::create(builder, loc, vectorTy, base,
                                       ValueRange{linear});
+  } else {
+    Value zeroIdx = arith::ConstantIndexOp::create(builder, loc, 0);
+    Value lanes = arith::ConstantIndexOp::create(
+        builder, loc, physical.inputElementsPerLane);
+    // remaining = clamp(fastBound - fastIndex, 0, lanes)
+    Value remaining =
+        arith::SubIOp::create(builder, loc, fastBound, fastIndex);
+    remaining = arith::MaxSIOp::create(builder, loc, remaining, zeroIdx);
+    remaining = arith::MinSIOp::create(builder, loc, remaining, lanes);
+    // The slow axis is a single scalar guard: out of range zeroes the fragment.
+    Value slowOk = arith::CmpIOp::create(builder, loc,
+                                         arith::CmpIPredicate::slt,
+                                         slowIndex, slowBound);
+    Value length =
+        arith::SelectOp::create(builder, loc, slowOk, remaining, zeroIdx);
+    Value mask = vector::CreateMaskOp::create(
+        builder, loc, VectorType::get({physical.inputElementsPerLane},
+                                      builder.getI1Type()),
+        ValueRange{length});
+    fragment = vector::MaskedLoadOp::create(builder, loc, vectorTy, base,
+                                            ValueRange{linear}, mask, zero);
   }
   bool packToI32 = physical.inputFormat ==
                        tessera_rocm::FragmentRegisterFormat::SOAInt ||

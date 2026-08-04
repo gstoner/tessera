@@ -2361,7 +2361,19 @@ With the pass in place, via-tile compiles and runs **bit-identical** to the prod
 
 `arch=` is mandatory and gated separately: the pass defaults to a CDNA part and emits `llvm.amdgcn.mfma.contract`, an MFMA intrinsic wrong for RDNA 3.5 that does not resolve.
 
-**Remaining:** `TileToROCM`'s TYPED fragment branch still requires a `FragmentZeroOp` accumulator, so the typed form cannot yet do what the untyped one now demonstrably does.
+**Closed 2026-08-04 (W1.1 step 0).** `TileToROCM`'s typed branch no longer
+requires a `FragmentZeroOp` accumulator: the typed path is now a dialect
+conversion (`!tile.fragment<...>` -> `vector<N x T>`), so a K-loop iter-arg
+accumulator, chained MMAs, and any non-zero accumulator lower by
+composition. Fixture: `rocm_typed_fragment_composition.mlir`.
+
+**Remaining:** the typed form still has NO PRODUCER — `GenerateWMMAGemmKernel`
+assembles fragments itself with its own lane math, so nothing emits
+`tile.view` + `tile.fragment_pack` yet (W1.1 step 3). A measured prerequisite
+found while scoping it: `materializeFragmentPack` only addresses fragments
+whose K axis is CONTIGUOUS in memory, and the producer stores B row-major
+(`k * N + col`, stride N), which is why it gathers B with 16 scalar loads.
+Strided-K support has to land before the producer can migrate.
 
 ## Cross-backend sync `TILE-VIEW-BOUNDED-CONTRACT-2026-08-04` — bounded `tile.view` is a shared contract
 

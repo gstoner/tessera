@@ -1669,5 +1669,67 @@ LogicalResult TCGen05MMAOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// W1.1 step 1 — !tile.fragment assembly
+//
+// Two spellings, one type:
+//
+//   !tile.fragment                      the legacy all-unknown form
+//   !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32",
+//                  role = "a", layout = "row_major", family = "auto">
+//
+// The bare form has to keep parsing: every fixture in the tree and every Python
+// text emitter writes it, and W1.1 migrates producers one at a time (steps
+// 3-4). Making the parameters mandatory on day one would have broken all of
+// them at once for no gain -- and the plan's own risk table names exactly that
+// ordering error.
+//===----------------------------------------------------------------------===//
+
+Type FragmentType::parse(AsmParser &parser) {
+  MLIRContext *ctx = parser.getContext();
+  // No `<` means the bare form. `parseOptionalLess` fails when absent, which is
+  // not an error here -- it is the legacy spelling.
+  if (parser.parseOptionalLess())
+    return FragmentType::getUnknown(ctx);
+
+  int64_t m = 0, n = 0, k = 0;
+  std::string elem, acc, role, layout, family;
+
+  auto intField = [&](StringRef name, int64_t &out) -> ParseResult {
+    if (parser.parseKeyword(name) || parser.parseEqual() ||
+        parser.parseInteger(out) || parser.parseComma())
+      return failure();
+    return success();
+  };
+  auto strField = [&](StringRef name, std::string &out,
+                      bool last = false) -> ParseResult {
+    if (parser.parseKeyword(name) || parser.parseEqual() ||
+        parser.parseString(&out))
+      return failure();
+    if (!last && parser.parseComma())
+      return failure();
+    return success();
+  };
+
+  if (intField("m", m) || intField("n", n) || intField("k", k) ||
+      strField("elem", elem) || strField("acc", acc) ||
+      strField("role", role) || strField("layout", layout) ||
+      strField("family", family, /*last=*/true) || parser.parseGreater())
+    return Type();
+
+  return FragmentType::get(ctx, m, n, k, elem, acc, role, layout, family);
+}
+
+void FragmentType::print(AsmPrinter &printer) const {
+  // Round-trip: the all-unknown form prints as the bare mnemonic, so a file
+  // that came in legacy goes out legacy and existing fixtures keep matching.
+  if (isUnknown())
+    return;
+  printer << "<m = " << getM() << ", n = " << getN() << ", k = " << getK()
+          << ", elem = \"" << getElem() << "\", acc = \"" << getAcc()
+          << "\", role = \"" << getRole() << "\", layout = \"" << getLayout()
+          << "\", family = \"" << getFamily() << "\">";
+}
+
 } // namespace tile
 } // namespace tessera

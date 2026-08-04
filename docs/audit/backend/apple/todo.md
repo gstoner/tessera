@@ -2643,3 +2643,11 @@ Shared Tile IR type changed: `!tile.fragment` gained `(m, n, k, elem, acc, role,
 Shared Tile IR contract changed: `MMAOp::verify()` (and the `fragment_pack` / `fragment_zero` producers) now read the operand contract from the fragment TYPE when it is parameterized, falling back to producer-chasing for the bare form. `#tile.mma_desc` is optional on the typed path and cross-checked when present. **The canonical K-loop now verifies.** No lowering changed in this PR, and no existing IR is affected — the bare form keeps its old path.
 
 **Outcome: not applicable — architecture-specific reason.** Unchanged from `TILE-FRAGMENT-TYPE-PARAM-2026-08-03`: zero files under this backend consume `!tile.fragment`, so the typed `tile.mma` contract and the K-loop accumulator question do not reach the Apple lane. The `simdgroup_matrix` note recorded under that key still stands as the thing to revisit when the MLIR/synthesizer seam closes.
+
+## Cross-backend sync `NVWGMMA-ACCUMULATOR-GUARD-2026-08-03` — WGMMA accumulator drop (W1.1 step 2b guard)
+
+A `tile.mma` carrying an accumulator was lowered by `NVWGMMALoweringPass` to a **two-operand** WGMMA call: the accumulator was discarded, the shape hardcoded `m64n64k16`, and the dtype inferred through `dyn_cast<ShapedType>` (which a `!tile.fragment` is not, so it defaulted to bf16) — with **rc=0 and no diagnostic**. A K-loop recomputed A×B from nothing each step and returned the last partial product.
+
+Measured on merged main, this was **not** specific to the typed fragment form: a legacy bare `tile.mma(A, B, C)` — what `LowerKReductionAddToTileMMA` emits for the canonical K-step — was dropped identically. **No fixture in the tree covered either case**, which is how it survived. The guard therefore keys on *has an accumulator*, not *is typed*.
+
+**Outcome: not applicable — architecture-specific reason.** Probed: `--tessera-lower-to-apple_gpu` leaves `tile.mma` unlowered, so there is no path on which an accumulator could be silently dropped. Consistent with this backend having zero `!tile.fragment` consumers (`TILE-FRAGMENT-TYPE-PARAM-2026-08-03`).

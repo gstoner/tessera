@@ -400,3 +400,11 @@ That backend is in fact the reference shape for where W1.1 is heading — 0 `Any
 Shared Tile IR contract changed: `MMAOp::verify()` (and the `fragment_pack` / `fragment_zero` producers) now read the operand contract from the fragment TYPE when it is parameterized, falling back to producer-chasing for the bare form. `#tile.mma_desc` is optional on the typed path and cross-checked when present. **The canonical K-loop now verifies.** No lowering changed in this PR, and no existing IR is affected — the bare form keeps its old path.
 
 **Outcome: not applicable — architecture-specific reason.** Unchanged from `TILE-FRAGMENT-TYPE-PARAM-2026-08-03`: no cooperative-matrix fragment on this backend (it carries `!tessera_x86.tile`), so neither the typed `tile.mma` contract nor the accumulator-threading follow-up applies. AVX-512 K-loop accumulation is expressed in its own ops and is unaffected.
+
+## Cross-backend sync `NVWGMMA-ACCUMULATOR-GUARD-2026-08-03` — WGMMA accumulator drop (W1.1 step 2b guard)
+
+A `tile.mma` carrying an accumulator was lowered by `NVWGMMALoweringPass` to a **two-operand** WGMMA call: the accumulator was discarded, the shape hardcoded `m64n64k16`, and the dtype inferred through `dyn_cast<ShapedType>` (which a `!tile.fragment` is not, so it defaulted to bf16) — with **rc=0 and no diagnostic**. A K-loop recomputed A×B from nothing each step and returned the last partial product.
+
+Measured on merged main, this was **not** specific to the typed fragment form: a legacy bare `tile.mma(A, B, C)` — what `LowerKReductionAddToTileMMA` emits for the canonical K-step — was dropped identically. **No fixture in the tree covered either case**, which is how it survived. The guard therefore keys on *has an accumulator*, not *is typed*.
+
+**Outcome: not applicable — architecture-specific reason.** Probed: `--tessera-lower-to-x86` leaves `tile.mma` unlowered. x86 has no cooperative-matrix MMA path; AVX-512 K-loop accumulation is expressed in its own ops and never routes through this lowering.

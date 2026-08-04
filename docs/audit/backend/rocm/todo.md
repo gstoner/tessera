@@ -2324,3 +2324,15 @@ state.addOperands({*a, *b, zero});
 Real 2b here: thread the accumulator into the MMA, which means **converting the `scf.for` region signature** (Tile `!tile.fragment` -> lowered `vector<N x f32>`), not swapping an operand.
 
 **Gate must include numerics.** This box executes gfx1151, so the ROCm half is verifiable here: run a K-loop GEMM and compare against a reference. A lowering fixture that only checks emitted ops would pass while the kernel returned a wrong answer — exactly this failure mode. No device evidence in this PR; none due, since no generated code changed.
+
+## Cross-backend sync `NVWGMMA-ACCUMULATOR-GUARD-2026-08-03` — WGMMA accumulator drop (W1.1 step 2b guard)
+
+A `tile.mma` carrying an accumulator was lowered by `NVWGMMALoweringPass` to a **two-operand** WGMMA call: the accumulator was discarded, the shape hardcoded `m64n64k16`, and the dtype inferred through `dyn_cast<ShapedType>` (which a `!tile.fragment` is not, so it defaulted to bf16) — with **rc=0 and no diagnostic**. A K-loop recomputed A×B from nothing each step and returned the last partial product.
+
+Measured on merged main, this was **not** specific to the typed fragment form: a legacy bare `tile.mma(A, B, C)` — what `LowerKReductionAddToTileMMA` emits for the canonical K-step — was dropped identically. **No fixture in the tree covered either case**, which is how it survived. The guard therefore keys on *has an accumulator*, not *is typed*.
+
+**Outcome: parity validated — no change required.**
+
+Probed with the same legacy 3-operand `tile.mma`: `--tessera-lower-to-rocm` fails closed with a named error and leaves `tile.mma` in place. `TileToROCM` already requires a `FragmentZeroOp` accumulator and materialises its own zero, so it never silently discards a caller's accumulator.
+
+ROCm remains the reference behaviour for this seam, and its own step-2b work (real accumulator threading, gated on gfx1151 numerics) is tracked under `TILE-FRAGMENT-KLOOP-ACCUM-2026-08-03`.

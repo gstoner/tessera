@@ -390,6 +390,21 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="CORE-COMPILER-FOLLOWON",
     ),
     PassMetadata(
+        name="tessera-nvwgmma-lowering",
+        cpp_class="NVWGMMALoweringPass",
+        summary=(
+            "Lowers tile.mma to a tessera_nvidia_wgmma_mma_async runtime call "
+            "(SM>=90) or the WMMA path below it. Refuses an mma carrying an "
+            "accumulator: the call is two-operand, so it would silently "
+            "discard one and return a partial product."
+        ),
+        input_dialects=("tile", "func"),
+        output_dialects=("func", "tile"),
+        diagnostic_codes=("NVWGMMA_ACCUMULATOR_DROPPED",),
+        pass_kind="lowering",
+        sprint="NVWGMMA-ACCUMULATOR-GUARD-2026-08-03",
+    ),
+    PassMetadata(
         name="tessera-pipeline-partition",
         cpp_class="PipelineStagePartitionPass",
         summary=(

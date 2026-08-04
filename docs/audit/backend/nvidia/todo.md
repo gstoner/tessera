@@ -2238,3 +2238,9 @@ Measured before the fix: a deliberately broken pass pipeline returned `ok=True, 
 **Outcome: not applicable — architecture-specific reason.** The changed sites are all `_RocmCompiledUnavailable` raise points inside ROCm compiled-lane hsaco builders. NVIDIA's compiled lanes do not raise that exception and are untouched.
 
 **Follow-up worth recording, not created here:** NVIDIA has no equivalent failure/envelope split on its own compiled paths, so the same masking may exist there. Establishing that needs an sm_120 host, which this box is not — asserting it either way from here would be the guesswork this thread has been eliminating.
+
+## Cross-backend sync `ROCM-PIPELINE-TILE-LOWERING-2026-08-04` — the compiled pipeline can lower `tile.mma`
+
+Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{arch=<chip>}` after `generate-wmma-gemm-kernel`. Verified byte-identical hsaco with and without the pass on the default path, so the production lane is unchanged.
+
+**Outcome: follow-up required — recorded, not fixed here.** The equivalent NVIDIA seam is worse, not merely missing: `NVWGMMALoweringPass` lowered a `tile.mma` carrying an accumulator to a two-operand call and dropped it (`NVWGMMA-ACCUMULATOR-GUARD-2026-08-03`). That is guarded to fail closed; threading it for real is W1.1 step 2b on this backend and needs an sm_120 host for the numeric gate that ROCm just got.

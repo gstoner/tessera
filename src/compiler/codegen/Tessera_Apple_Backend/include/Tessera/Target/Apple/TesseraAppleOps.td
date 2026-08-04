@@ -206,9 +206,26 @@ def AppleGPU_KVCacheGPUOp : TesseraApple_Op<"gpu.kv_cache_gpu"> {
 //===----------------------------------------------------------------------===//
 
 // Apple CPU value call — dispatches to an Accelerate/LAPACK/BNNS C ABI symbol.
+// W1.1 step 6 — the value domain of an Apple runtime call.
+//
+// `Variadic<AnyType>` on a call into Accelerate / a compiled MSL kernel is
+// unexplained: those entry points take BUFFERS OF DATA. It admitted things that
+// are meaningless at that boundary -- a `!tile.fragment`, an async token, a
+// symbol ref -- and the ODS said nothing about it.
+//
+// Scalar parameters are NOT operands on these ops; they ride as attributes
+// (`lower`, `trans`, `unit_diag`, `full_matrices`, `dtype`, ...), which is why
+// this can be buffers-only without losing expressiveness.
+//
+// Deliberately NOT applied to the control-flow ops: `gpu.control_{if,loop,while}`
+// carry `iter_args`, and loop-carried values are legitimately polymorphic.
+// `AnyType` there is explained, not unexplained -- see the note on those ops.
+def AppleTarget_Buffer : AnyTypeOf<[AnyRankedTensor, AnyMemRef],
+                                   "a ranked tensor or memref data buffer">;
+
 def AppleCPU_CallOp : TesseraApple_Op<"cpu.call", [Pure]> {
   let summary = "Value-producing Apple CPU runtime call (Accelerate/LAPACK)";
-  let arguments = (ins Variadic<AnyType>:$operands,
+  let arguments = (ins Variadic<AppleTarget_Buffer>:$operands,
                        StrAttr:$op_kind,
                        StrAttr:$symbol,
                        OptionalAttr<StrAttr>:$abi,
@@ -223,7 +240,7 @@ def AppleCPU_CallOp : TesseraApple_Op<"cpu.call", [Pure]> {
                        OptionalAttr<BoolAttr>:$trans,
                        OptionalAttr<BoolAttr>:$unit_diag,
                        OptionalAttr<BoolAttr>:$full_matrices);
-  let results = (outs Variadic<AnyType>:$results);
+  let results = (outs Variadic<AppleTarget_Buffer>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
@@ -232,7 +249,7 @@ def AppleCPU_CallOp : TesseraApple_Op<"cpu.call", [Pure]> {
 // Apple GPU value call — dispatches to a custom MSL kernel C ABI symbol.
 def AppleGPU_KernelCallOp : TesseraApple_Op<"gpu.kernel_call", [Pure]> {
   let summary = "Value-producing Apple GPU MSL kernel call";
-  let arguments = (ins Variadic<AnyType>:$operands,
+  let arguments = (ins Variadic<AppleTarget_Buffer>:$operands,
                        StrAttr:$op_kind,
                        StrAttr:$symbol,
                        OptionalAttr<StrAttr>:$abi,
@@ -247,7 +264,7 @@ def AppleGPU_KernelCallOp : TesseraApple_Op<"gpu.kernel_call", [Pure]> {
                        OptionalAttr<BoolAttr>:$trans,
                        OptionalAttr<BoolAttr>:$unit_diag,
                        OptionalAttr<BoolAttr>:$full_matrices);
-  let results = (outs Variadic<AnyType>:$results);
+  let results = (outs Variadic<AppleTarget_Buffer>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
@@ -256,7 +273,7 @@ def AppleGPU_KernelCallOp : TesseraApple_Op<"gpu.kernel_call", [Pure]> {
 // Apple GPU value call — dispatches through an authored .mtlpackage (PK8 lane).
 def AppleGPU_PackageCallOp : TesseraApple_Op<"gpu.package_call", [Pure]> {
   let summary = "Value-producing Apple GPU packaged (.mtlpackage) call";
-  let arguments = (ins Variadic<AnyType>:$operands,
+  let arguments = (ins Variadic<AppleTarget_Buffer>:$operands,
                        StrAttr:$op_kind,
                        StrAttr:$symbol,
                        OptionalAttr<StrAttr>:$abi,
@@ -271,7 +288,7 @@ def AppleGPU_PackageCallOp : TesseraApple_Op<"gpu.package_call", [Pure]> {
                        OptionalAttr<BoolAttr>:$trans,
                        OptionalAttr<BoolAttr>:$unit_diag,
                        OptionalAttr<BoolAttr>:$full_matrices);
-  let results = (outs Variadic<AnyType>:$results);
+  let results = (outs Variadic<AppleTarget_Buffer>:$results);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
@@ -307,6 +324,19 @@ def AppleGPU_ControlLoopOp : TesseraApple_Op<"gpu.control_loop", [Pure]> {
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
 }
+
+// W1.1 step 6 — `AnyType` on the control-flow ops is EXPLAINED, not residual.
+//
+// `gpu.control_{if,loop,while}` carry `iter_args`: values threaded across
+// iterations of a bounded loop or across the arms of a conditional. Those are
+// legitimately polymorphic -- an accumulator tensor, a scalar induction value, a
+// predicate -- exactly as `scf.for`'s iter_args are. Constraining them to the
+// buffer domain used by the runtime CALL ops would reject valid programs.
+//
+// Step 6 asks for the removal of UNEXPLAINED `AnyType`. This is the explanation,
+// recorded so the next audit does not read these three as leftovers and tighten
+// them. If they are ever narrowed, it must be to the set `scf` itself permits,
+// not to the call-operand set.
 
 def AppleGPU_ControlIfOp : TesseraApple_Op<"gpu.control_if", [Pure]> {
   let summary = "Apple GPU divergent control-flow if/else (Phase-G close-out C)";

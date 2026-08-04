@@ -1,5 +1,6 @@
 // RUN: tessera-opt %s --split-input-file --tessera-verify-metadata-obligation \
 // RUN:   | FileCheck %s
+//
 // W1.3 / Decision #32 — the drops the verifier ACCEPTS.
 //
 // The snapshot is hand-written here rather than produced by
@@ -9,8 +10,12 @@
 // "before" state directly is what lets these cases test the verifier's decision
 // rather than some other pass's behaviour.
 //
+// Encoding: {scope: {attr_name: ["<printed value>", <count>, ...]}}. Flat pairs
+// rather than a nested dictionary because a printed attribute is not a legal
+// MLIR identifier and so cannot be a dictionary key.
+//
 // This is the accepting half. A verifier exercised only by its rejections
-// proves it says no, never that it says yes to the right things -- and an
+// proves it says no, never that it says yes to the right things — and an
 // over-strict boundary verifier would be worse than none, because the first
 // team to hit a false positive would delete it.
 
@@ -19,7 +24,8 @@
 // parameterizes `!tile.fragment` on the accumulator.
 // CHECK-LABEL: func.func @represented_in_type
 module attributes {
-  tessera.metadata_snapshot = {represented_in_type = ["numeric_policy"]}
+  tessera.metadata_snapshot = {
+    represented_in_type = {numeric_policy = ["{accum = \22fp32\22}", 1]}}
 } {
   func.func @represented_in_type(%a: tensor<8xf32>) -> tensor<8xf32>
       attributes {
@@ -32,13 +38,14 @@ module attributes {
 
 // -----
 
-// Declared debt. The `:W1.1` suffix is mandatory -- see the invalid fixture for
+// Declared debt. The `:W1.1` suffix is mandatory — see the invalid fixture for
 // the bare `not_yet_carried` case. This is the escape hatch that keeps the
 // verifier adoptable: a boundary that cannot yet carry an attribute records who
 // will fix it instead of being exempted or having the gate switched off.
 // CHECK-LABEL: func.func @declared_debt
 module attributes {
-  tessera.metadata_snapshot = {declared_debt = ["distribution"]}
+  tessera.metadata_snapshot = {
+    declared_debt = {distribution = ["\22block\22", 1]}}
 } {
   func.func @declared_debt(%a: tensor<8xf32>) -> tensor<8xf32>
       attributes {
@@ -55,7 +62,8 @@ module attributes {
 // single function owns the decision.
 // CHECK-LABEL: func.func @module_level_declaration
 module attributes {
-  tessera.metadata_snapshot = {module_level_declaration = ["target"]},
+  tessera.metadata_snapshot = {
+    module_level_declaration = {target = ["\22sm90\22", 1]}},
   tessera.lowering.dropped = {target = "target_invariant"}
 } {
   func.func @module_level_declaration(%a: tensor<8xf32>) -> tensor<8xf32> {
@@ -66,19 +74,46 @@ module attributes {
 
 // -----
 
-// Re-spelling is NOT a drop. `tessera.layout` at one level and `tile.layout` at
-// the next are the same fact, and #32 requires the INFORMATION to survive, not
-// the string. A verifier keyed on the exact attribute name would report a false
-// drop every time a level renamed one -- and false positives are how a gate
-// gets disabled.
-// CHECK-LABEL: func.func @respelled_is_not_dropped
+// Re-spelling the NAME is not a drop. `tessera.layout` at one level and
+// `tile.layout` at the next are the same fact, and #32 requires the INFORMATION
+// to survive, not the string. A verifier keyed on the exact attribute name
+// would report a false drop every time a level renamed one — and false
+// positives are how a gate gets disabled.
+// CHECK-LABEL: func.func @respelled_name_is_not_dropped
 module attributes {
-  tessera.metadata_snapshot = {respelled_is_not_dropped = ["layout"]}
+  tessera.metadata_snapshot = {
+    respelled_name_is_not_dropped = {layout = ["\22row_major\22", 1]}}
 } {
-  func.func @respelled_is_not_dropped(%a: tensor<8xf32>) -> tensor<8xf32> {
+  func.func @respelled_name_is_not_dropped(%a: tensor<8xf32>) -> tensor<8xf32> {
     // CHECK: return
-    %0 = "tessera.cast"(%a) {tile.layout = "swizzled"}
+    %0 = "tessera.cast"(%a) {tile.layout = "row_major"}
       : (tensor<8xf32>) -> tensor<8xf32>
+    return %0 : tensor<8xf32>
+  }
+}
+
+// -----
+
+// Re-expressing the VALUE is a declared drop, not a free one.
+//
+// This is the case the production pipelines actually hit: Graph IR states
+// `tessera.layout = "row_major"` and `TileIRLoweringPass` restates it as
+// `#tile.layout<shard = ...>`. The name survives, the value does not, and the
+// verifier cannot tell a re-encoding from a replaced accumulator policy — so
+// the lowering says which it is. `TileIRLoweringPass` now stamps exactly this
+// attribute, per function and only where a re-expression really happened.
+// CHECK-LABEL: func.func @re_expressed_value
+module attributes {
+  tessera.metadata_snapshot = {
+    re_expressed_value = {layout = ["\22row_major\22", 1]}}
+} {
+  func.func @re_expressed_value(%a: tensor<8xf32>) -> tensor<8xf32>
+      attributes {tessera.lowering.dropped = {layout = "re_expressed"}} {
+    // CHECK: return
+    %0 = "tessera.cast"(%a) {
+      tile.layout = #tile.layout<shard = [8] : [1] on ["reg"],
+                                 replica = [] : [] on [], offset = 0>
+    } : (tensor<8xf32>) -> tensor<8xf32>
     return %0 : tensor<8xf32>
   }
 }

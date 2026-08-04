@@ -38,6 +38,8 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/DenseMap.h"
 
 #include <algorithm>
 
@@ -1093,8 +1095,87 @@ struct TileIRLoweringPass
     registry.insert<tessera::attn::TesseraAttnDialect>();
   }
 
+  // Same last-dot-component rule the W1.3 verifier uses, for the same reason:
+  // the attribute is spelled `tessera.layout` here and `tile.layout` after
+  // lowering, and matching the bare name misses both. The first version of this
+  // helper did exactly that -- it looked for a plain `"layout"`, found nothing,
+  // and declared nothing, so the two production fixtures kept failing.
+  static bool isLayoutName(StringRef full) {
+    auto pos = full.rfind('.');
+    return (pos == StringRef::npos ? full : full.drop_front(pos + 1)) ==
+           "layout";
+  }
+
+  // Decision #32 — this pass RE-EXPRESSES `layout` rather than carrying it.
+  //
+  // Graph IR states `layout = "row_major"` (or `"bhsd"` on attention) as a bare
+  // string; the Tile ops this pass emits state the same fact as a structured
+  // `#tile.layout<shard = ... : ... on [...]>`. The name survives, the value
+  // does not, so the W1.3 boundary verifier reports VALUE_DROP -- correctly:
+  // it cannot tell a re-encoding from a replaced accumulator policy, and
+  // guessing in favour of the permissive answer is what #32 exists to stop.
+  //
+  // So say it out loud. Recorded per function and only where a re-expression
+  // ACTUALLY happened, because a blanket declaration would itself be refused
+  // (METADATA_OBLIGATION_STALE_DECLARATION) on functions that carried their
+  // layout through unchanged.
+  //
+  // Found by wiring the verifier into the production pipelines (PR #500
+  // review): `flash_attn_full.mlir` and `nvidia_pipeline_alias.mlir` both
+  // reported it immediately. Registering the passes standalone would have left
+  // this undeclared indefinitely.
+  static void declareLayoutReExpressions(
+      ModuleOp module,
+      const llvm::DenseMap<Operation *, llvm::StringSet<>> &before) {
+    OpBuilder builder(module.getContext());
+    for (auto &entry : before) {
+      auto fn = dyn_cast<func::FuncOp>(entry.first);
+      if (!fn) continue;
+      // Did any recorded plain-string layout value survive verbatim?
+      llvm::StringSet<> after;
+      fn.walk([&](Operation *op) {
+        for (NamedAttribute a : op->getAttrs())
+          if (isLayoutName(a.getName().strref()))
+            if (auto s = dyn_cast<StringAttr>(a.getValue()))
+              after.insert(s.getValue());
+      });
+      bool lostOne = false;
+      for (StringRef was : entry.second.keys())
+        if (!after.contains(was)) lostOne = true;
+      if (!lostOne) continue;
+
+      SmallVector<NamedAttribute> merged;
+      if (auto existing =
+              fn->getAttrOfType<DictionaryAttr>("tessera.lowering.dropped"))
+        merged.assign(existing.begin(), existing.end());
+      if (llvm::none_of(merged, [](const NamedAttribute &a) {
+            return a.getName() == "layout";
+          }))
+        merged.push_back(builder.getNamedAttr(
+            "layout", builder.getStringAttr("re_expressed")));
+      fn->setAttr("tessera.lowering.dropped",
+                  builder.getDictionaryAttr(merged));
+    }
+  }
+
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
+
+    // Snapshot the plain-string `layout` values per function, before rewriting.
+    llvm::DenseMap<Operation *, llvm::StringSet<>> layoutsBefore;
+    getOperation().walk([&](Operation *op) {
+      for (NamedAttribute a : op->getAttrs()) {
+        if (!isLayoutName(a.getName().strref())) continue;
+        auto s = dyn_cast<StringAttr>(a.getValue());
+        if (!s) continue;
+        for (Operation *cur = op; cur; cur = cur->getParentOp())
+          if (isa<func::FuncOp>(cur)) {
+            layoutsBefore[cur].insert(s.getValue());
+            break;
+          }
+      }
+    });
+
     RewritePatternSet patterns(ctx);
     patterns.add<LowerAttentionBackwardToLoops>(ctx);
     patterns.add<DistributeRank4FlashAttn>(ctx);
@@ -1116,6 +1197,8 @@ struct TileIRLoweringPass
       signalPassFailure();
       return;
     }
+
+    declareLayoutReExpressions(getOperation(), layoutsBefore);
 
     // Decision #21: applyPatternsGreedily returns success even when it
     // matched nothing, so a supported source op that failed a

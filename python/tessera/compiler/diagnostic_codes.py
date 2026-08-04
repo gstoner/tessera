@@ -820,6 +820,26 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="W1.3",
     ),
     DiagnosticCode(
+        code="METADATA_OBLIGATION_VALUE_DROP",
+        pass_origin="VerifyMetadataObligationPass",
+        severity="error",
+        summary=(
+            "A Decision #15a attribute still exists after the boundary, but a "
+            "VALUE it carried before does not — an occurrence was lost, or a "
+            "policy was replaced. The first version of this pass snapshotted "
+            "only attribute NAMES, so `accum = \"fp32\"` becoming "
+            "`accum = \"fp16\"` fired nothing: exactly the instruction-selection "
+            "corruption the verifier exists to prevent."
+        ),
+        fix_hint=(
+            "Carry the value forward, or declare a reason — `re_expressed` when "
+            "the value was re-encoded in the target level's vocabulary (e.g. "
+            "`layout = \"row_major\"` becoming `#tile.layout<...>`)."
+        ),
+        spec="docs/audit/compiler/IR_STACK_INTEGRATION_REVIEW.md §U5",
+        sprint="W1.3",
+    ),
+    DiagnosticCode(
         code="METADATA_OBLIGATION_UNKNOWN_REASON",
         pass_origin="VerifyMetadataObligationPass",
         severity="error",

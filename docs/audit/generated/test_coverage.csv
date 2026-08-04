@@ -47,7 +47,7 @@ bsmm,7,0,0,7,0,,directly_tested,7 direct test references
 cache_commit,2,0,1,2,0,,directly_tested,2 direct test references
 cache_rollback,3,0,1,3,0,,directly_tested,3 direct test references
 calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fake_quantize loop
-cast,24,58,1,82,0,bf16 fp16 fp32 int8,directly_tested,82 direct test references
+cast,24,61,1,85,0,bf16 fp16 fp32 int8,directly_tested,85 direct test references
 cat,14,0,0,14,0,,directly_tested,14 direct test references
 ceil,4,0,0,4,0,bf16 f32 fp16 fp32,directly_tested,4 direct test references
 center_crop,10,0,1,10,0,fp16,directly_tested,10 direct test references

@@ -109,7 +109,15 @@ static void addCUDA13PipelineForSM(
     pm.addPass(createComputeLegalizePass());
   pm.addPass(createIRContractLegalityPass());
   pm.addPass(createSymbolicDimEqualityPass());
+  // W1.3 / Decision #32 — bracket the Graph -> Tile boundary. Registering
+  // these standalone was not enough (PR #500 review): production
+  // compilation got no boundary checking, and a future metadata drop
+  // would stay silent unless a caller reproduced the fixture's CLI by
+  // hand. The record pass only stamps a module attribute, so the cost is
+  // one walk.
+  pm.addPass(createRecordMetadataPass());
   pm.addPass(createTileIRLoweringPass(sm));
+  pm.addPass(createVerifyMetadataObligationPass());
   pm.addPass(createControlFlowTargetGuardPass(target));
   pm.addPass(createWarpSpecializationPass());
   pm.addPass(createTilePipelineLegalityPass());
@@ -409,7 +417,15 @@ void registerTesseraPasses() {
         // Sprint V6b (2026-05-22): symbolic-dim equality recheck
         // after distribution lowering (see lowerToX86 comment).
         pm.addPass(createSymbolicDimEqualityPass());
+        // W1.3 / Decision #32 — bracket the Graph -> Tile boundary. Registering
+        // these standalone was not enough (PR #500 review): production
+        // compilation got no boundary checking, and a future metadata drop
+        // would stay silent unless a caller reproduced the fixture's CLI by
+        // hand. The record pass only stamps a module attribute, so the cost is
+        // one walk.
+        pm.addPass(createRecordMetadataPass());
         pm.addPass(createTileIRLoweringPass());
+        pm.addPass(createVerifyMetadataObligationPass());
         pm.addPass(createControlFlowTargetGuardPass("nvidia_sm90"));
         pm.addPass(createWarpSpecializationPass());
         // C2/C3/C6 (2026-06-23): warp-spec legality gates run on the markers

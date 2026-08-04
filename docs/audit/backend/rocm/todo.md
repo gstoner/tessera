@@ -2348,3 +2348,17 @@ Measured before the fix: a deliberately broken pass pipeline returned `ok=True, 
 18 failure-class raise sites across the gemm, canonical gemm, flash_attn fwd/bwd, linear_attn, softmax and norm fwd/bwd lanes now go through `_rocm_compiled_failed`. Two were missed on the first pass because the conversion matched MESSAGE TEXT; the structural gate `test_every_non_elf_check_routes_through_the_funnel` now enumerates by the `!= b"\x7fELF"` guard instead, so wording cannot hide one again.
 
 **Why it mattered here specifically:** W1.1 step 2b is gated on gfx1151 numerics, and that gate could not distinguish a working lowering from a silent fallback. With it fixed, the 2b measurement ran and inverted the plan (see `W1_1_TYPING_DESIGN.md` §4.3).
+
+## Cross-backend sync `ROCM-PIPELINE-TILE-LOWERING-2026-08-04` — the compiled pipeline can lower `tile.mma`
+
+Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{arch=<chip>}` after `generate-wmma-gemm-kernel`. Verified byte-identical hsaco with and without the pass on the default path, so the production lane is unchanged.
+
+**Outcome: follow-up required — this backend owns the change.**
+
+`GenerateWMMAGemmKernel{via-tile=true}` emits `tile.mma %a, %b, %acc`, but no runtime pipeline lowered it: the op reached LLVM translation and died on *"missing LLVMTranslationDialectInterface registration ... for op: tile.mma"*. W1.1's Tile-IR seam was therefore unreachable from the lane that actually executes.
+
+With the pass in place, via-tile compiles and runs **bit-identical** to the production `tessera_rocm.wmma` lane on gfx1151 at 64^3, 256^3 and 128x96x64 — so the accumulator survives the round trip. Gated by `test_rocm_pipeline_tile_lowering.py`: a structural count (every wmma-gemm lane must have a lowering) plus a hardware numeric comparison carrying the bogus-option control.
+
+`arch=` is mandatory and gated separately: the pass defaults to a CDNA part and emits `llvm.amdgcn.mfma.contract`, an MFMA intrinsic wrong for RDNA 3.5 that does not resolve.
+
+**Remaining:** `TileToROCM`'s TYPED fragment branch still requires a `FragmentZeroOp` accumulator, so the typed form cannot yet do what the untyped one now demonstrably does.

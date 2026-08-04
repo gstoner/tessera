@@ -416,3 +416,9 @@ Runtime dispatch contract changed. A compiled-ROCm **failure** (tessera-opt ran 
 Measured before the fix: a deliberately broken pass pipeline returned `ok=True, compiler_path="rocm_compiled", execution_kind="native_gpu"` with correct numbers. Strict-mode suite results are identical before and after (18 fail both ways, all pre-existing), so this adds no new failures.
 
 **Outcome: not applicable — architecture-specific reason.** x86 elementwise lanes raise `_RocmCompiledUnavailable` only for `lib is None` / missing-symbol conditions — envelope limits by construction, since there is no compile step whose output could be malformed. No x86 site was reclassified.
+
+## Cross-backend sync `ROCM-PIPELINE-TILE-LOWERING-2026-08-04` — the compiled pipeline can lower `tile.mma`
+
+Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{arch=<chip>}` after `generate-wmma-gemm-kernel`. Verified byte-identical hsaco with and without the pass on the default path, so the production lane is unchanged.
+
+**Outcome: not applicable — architecture-specific reason.** x86 carries `!tessera_x86.tile` and has no cooperative-matrix `tile.mma` path; its pipelines are untouched.

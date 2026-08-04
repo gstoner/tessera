@@ -5756,6 +5756,21 @@ def _build_compiled_gemm_hsaco(
     pipeline = (
         "builtin.module("
         "generate-wmma-gemm-kernel,"
+        # W1.1 — lower any tile.mma the generator emitted.
+        #
+        # `generate-wmma-gemm-kernel{via-tile=true}` emits
+        # `tile.mma %a, %b, %acc` at the Tile-IR seam instead of
+        # `tessera_rocm.wmma`. Without this pass that op survives to LLVM
+        # translation and the build dies with "missing
+        # LLVMTranslationDialectInterface registration ... for op:
+        # tile.mma", so via-tile was unreachable in production.
+        #
+        # A no-op when via-tile is off: verified byte-identical hsaco
+        # with and without the pass on the default path. The arch is
+        # mandatory -- lower-tile-to-rocm defaults to a CDNA part and
+        # would emit `llvm.amdgcn.mfma.contract`, an MFMA intrinsic that
+        # is wrong for RDNA 3.5 and does not resolve.
+        f"lower-tile-to-rocm{{arch={chip}}},"
         "lower-tessera-target-to-rocdl,"
         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
         "reconcile-unrealized-casts),"
@@ -5838,6 +5853,21 @@ def _build_canonical_gemm_hsaco(
         "rocm-wave-lds-pipeline,"
         "rocm-wave-lds-legality,"
         f"generate-wmma-gemm-kernel{{canonical-staging={staging}}},"
+        # W1.1 — lower any tile.mma the generator emitted.
+        #
+        # `generate-wmma-gemm-kernel{via-tile=true}` emits
+        # `tile.mma %a, %b, %acc` at the Tile-IR seam instead of
+        # `tessera_rocm.wmma`. Without this pass that op survives to LLVM
+        # translation and the build dies with "missing
+        # LLVMTranslationDialectInterface registration ... for op:
+        # tile.mma", so via-tile was unreachable in production.
+        #
+        # A no-op when via-tile is off: verified byte-identical hsaco
+        # with and without the pass on the default path. The arch is
+        # mandatory -- lower-tile-to-rocm defaults to a CDNA part and
+        # would emit `llvm.amdgcn.mfma.contract`, an MFMA intrinsic that
+        # is wrong for RDNA 3.5 and does not resolve.
+        f"lower-tile-to-rocm{{arch={chip}}},"
         "lower-tessera-target-to-rocdl,"
         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
         "reconcile-unrealized-casts),"

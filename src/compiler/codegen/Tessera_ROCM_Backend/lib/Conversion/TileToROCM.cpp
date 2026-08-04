@@ -73,14 +73,20 @@ static Value toIndex(OpBuilder &builder, Location loc, Value value) {
 // `mma` attribute at all -- the fragment TYPE carries the contract, and the
 // descriptor is synthesized from it (see `descriptorFromFragment`). Reading it
 // off the op here is what made this helper usable only by the attribute form.
+// `role` is passed rather than read off the op for the same reason as `desc`:
+// on the typed path the RESULT TYPE carries the role, and
+// `FragmentPackOp::verify` returns success without ever requiring the `role`
+// attribute once the result is typed. So `tile.fragment_pack %v : (!tile.tile)
+// -> !fa` is valid IR -- and it is exactly the shape a migrated producer emits.
+// Reading the attribute here rejected it with ROCM_FRAGMENT_MISSING_CONTRACT.
 static FailureOr<Value> materializeFragmentPack(
-    tessera::tile::FragmentPackOp pack, tessera::tile::TileMmaDescAttr desc,
-    OpBuilder &builder, Value lane, Value laneGroup,
+    tessera::tile::FragmentPackOp pack, StringRef role,
+    tessera::tile::TileMmaDescAttr desc, OpBuilder &builder, Value lane,
+    Value laneGroup,
     const tessera_rocm::FragmentLayoutDescriptor &physical) {
   Operation *op = pack.getOperation();
-  auto role = op->getAttrOfType<StringAttr>("role");
   auto view = pack.getInputs().front().getDefiningOp<tessera::tile::ViewOp>();
-  if (!role || !view || !desc) {
+  if (role.empty() || !view || !desc) {
     op->emitError("ROCM_FRAGMENT_MISSING_CONTRACT: fragment materialization "
                   "requires tile.view-backed A/B fragments and a resolved "
                   "architecture descriptor");
@@ -91,24 +97,23 @@ static FailureOr<Value> materializeFragmentPack(
   auto layout = view->getAttrOfType<tessera::tile::TileLayoutAttr>(
       "tile.layout");
   std::array<int64_t, 2> expectedShape =
-      role.getValue() == "a"
+      role == "a"
           ? std::array<int64_t, 2>{desc.getM(), desc.getK()}
           : std::array<int64_t, 2>{desc.getK(), desc.getN()};
-  StringRef expectedOrder = role.getValue() == "a" ? "row_major" : "col_major";
+  StringRef expectedOrder = role == "a" ? "row_major" : "col_major";
   // 3 inputs = (base, rowOrigin, colOrigin); 5 adds (rowBound, colBound) for a
   // ragged problem. Anything else is malformed rather than merely unsupported.
   // This guard used to require exactly 3, which made the bounded form
   // unreachable -- and silently so, since it fell into the generic
   // "unsupported source layout" diagnostic rather than naming the arity.
   const size_t viewInputs = view.getInputs().size();
-  if ((role.getValue() != "a" && role.getValue() != "b") || !memory ||
+  if ((role != "a" && role != "b") || !memory ||
       !layout || (viewInputs != 3 && viewInputs != 5) ||
       memory.getSpace() != "gmem" || memory.getOrder() != expectedOrder ||
       layout.getShardExtents() != ArrayRef<int64_t>(expectedShape) ||
       layout.getSwizzle()) {
     op->emitError("ROCM_FRAGMENT_UNSUPPORTED_SOURCE_LAYOUT: unsupported ")
-        << physical.familyName << " fragment source layout for role "
-        << (role ? role.getValue() : StringRef("<missing>"));
+        << physical.familyName << " fragment source layout for role " << role;
     return failure();
   }
 
@@ -174,7 +179,7 @@ static FailureOr<Value> materializeFragmentPack(
   Value fastBound, slowIndex, slowBound;
 
   Value linear, fastIndex;
-  if (role.getValue() == "a") {
+  if (role == "a") {
     Value row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
     Value col = arith::AddIOp::create(builder, loc, colOrigin, kBase);
     linear = arith::AddIOp::create(
@@ -399,40 +404,72 @@ static Type inputElementType(MLIRContext *ctx, StringRef elem) {
   return {};
 }
 
+/// The physical value type `materializeFragmentPack` actually produces for an
+/// A/B fragment.
+///
+/// This is NOT simply `inputElementsPerLane x elem`: the materializer packs
+/// sub-16-bit inputs into i32 registers (bitcast for int8/SOA-int, explicit
+/// nibble compaction for int4), so an RDNA4 int4 fragment leaves as
+/// `vector<2xi32>`, not `vector<16xi8>`. The type converter and the
+/// materializer MUST agree or the conversion strands an unresolved
+/// materialization; stating the rule in one place is what keeps them agreeing.
+static Type packedFragmentType(
+    MLIRContext *ctx, StringRef elem,
+    const tessera_rocm::FragmentLayoutDescriptor &physical) {
+  if (physical.inputFormat == tessera_rocm::FragmentRegisterFormat::SOAInt ||
+      elem == "int8" || elem == "int4")
+    return VectorType::get({physical.inputRegistersPerLane},
+                           IntegerType::get(ctx, 32));
+  Type element = inputElementType(ctx, elem);
+  return element ? VectorType::get({physical.inputElementsPerLane}, element)
+                 : Type();
+}
+
 /// The architecture descriptor a fragment TYPE implies, for the typed path
 /// where no `#tile.mma_desc` attribute exists.
-///
-/// An `acc` fragment names no input dtype. Every accumulator width in
-/// `resolveFragmentLayout` is `256 / waveSize` — a function of the wave, not of
-/// the input dtype — so a representative input consistent with the accumulator
-/// resolves the identical physical layout. It must still be a dtype the target
-/// accepts, or the fragment would report unconvertible for the wrong reason.
 ///
 /// The layout parameter is placed on the side the role names and the opposite
 /// side is given its canonical orientation, so a fragment declaring the wrong
 /// orientation fails to resolve rather than being silently corrected.
+///
+/// An `acc` fragment names no input dtype, so one must be supplied by the
+/// caller; see `descriptorFor`.
 static tessera::tile::TileMmaDescAttr
-descriptorFromFragment(tessera::tile::FragmentType f) {
+descriptorFromFragment(tessera::tile::FragmentType f, StringRef input) {
   MLIRContext *ctx = f.getContext();
   if (f.isUnknown() || f.getM() <= 0 || f.getN() <= 0 || f.getK() <= 0 ||
-      f.getRole().empty() || f.getLayout().empty() || f.getFamily().empty())
+      f.getRole().empty() || f.getLayout().empty() || f.getFamily().empty() ||
+      input.empty())
     return {};
-  StringRef acc = f.getAcc();
-  StringRef input = f.getElem();
-  if (f.getRole() == "acc") {
-    if (acc == "i32" || acc == "int32")
-      input = "int8";
-    else if (acc == "f32")
-      input = "f16";
-    else
-      return {};
-  }
   StringRef aLayout = f.getRole() == "a" ? f.getLayout() : StringRef("row_major");
   StringRef bLayout = f.getRole() == "b" ? f.getLayout() : StringRef("col_major");
   return tessera::tile::TileMmaDescAttr::get(ctx, f.getFamily(), f.getM(),
                                              f.getN(), f.getK(), input, input,
-                                             acc, aLayout, bLayout,
+                                             f.getAcc(), aLayout, bLayout,
                                              /*kBlocks=*/1);
+}
+
+/// Input dtypes to try when resolving an `acc` fragment, which names none.
+///
+/// A single fixed representative is WRONG: `resolveFragmentLayout` derives the
+/// legal `k` FROM the input dtype, and that mapping is not constant. RDNA4 int4
+/// takes k=32 while int8 takes k=16; gfx125x fp8 takes k=64 while f16 takes
+/// k=32; CDNA spans k=8 (f32) through k=64 (fp4). Pinning "int8"/"f16" made an
+/// accumulator fail to resolve on every one of those, even though the MMA
+/// itself was supported.
+///
+/// Searching is sound because the accumulator's width does not depend on which
+/// candidate matches: every branch of `resolveFragmentLayout` sets both
+/// accumulator fields to `256 / waveSize`, and `waveSize` is fixed per
+/// architecture. So any candidate that resolves yields the same answer; the
+/// search only has to find one. Candidates preserve integer-ness, which is what
+/// selects the i32-vs-f32 accumulator element type downstream.
+static SmallVector<StringRef> accumulatorProbeDtypes(StringRef acc) {
+  if (acc == "i32" || acc == "int32")
+    return {"int8", "int4"};
+  if (acc == "f32")
+    return {"f16", "bf16", "e4m3", "e5m2", "f32", "fp4"};
+  return {};
 }
 
 class TileFragmentTypeConverter : public TypeConverter {
@@ -467,16 +504,33 @@ public:
                           {physical->accumulatorElementsPerLane}, elem))
                     : std::nullopt;
       }
-      Type elem = inputElementType(ctx, f.getElem());
-      return elem ? std::optional<Type>(VectorType::get(
-                        {physical->inputElementsPerLane}, elem))
-                  : std::nullopt;
+      Type packed = packedFragmentType(ctx, f.getElem(), *physical);
+      return packed ? std::optional<Type>(packed) : std::nullopt;
     });
+  }
+
+  /// The descriptor this fragment resolves under on this architecture, or null.
+  ///
+  /// For A/B the input dtype is stated by the type. For `acc` it is not, so the
+  /// candidate list is probed — see `accumulatorProbeDtypes` for why searching
+  /// is sound and why a single fixed representative is not.
+  tessera::tile::TileMmaDescAttr
+  descriptorFor(tessera::tile::FragmentType f) const {
+    if (f.isUnknown())
+      return {};
+    if (f.getRole() != "acc")
+      return descriptorFromFragment(f, f.getElem());
+    for (StringRef candidate : accumulatorProbeDtypes(f.getAcc())) {
+      tessera::tile::TileMmaDescAttr desc = descriptorFromFragment(f, candidate);
+      if (desc && tessera_rocm::resolveFragmentLayout(desc, arch))
+        return desc;
+    }
+    return {};
   }
 
   std::optional<tessera_rocm::FragmentLayoutDescriptor>
   layoutFor(tessera::tile::FragmentType f) const {
-    tessera::tile::TileMmaDescAttr desc = descriptorFromFragment(f);
+    tessera::tile::TileMmaDescAttr desc = descriptorFor(f);
     if (!desc)
       return std::nullopt;
     return tessera_rocm::resolveFragmentLayout(desc, arch);
@@ -567,11 +621,23 @@ struct ConvertFragmentPack
         computeLaneCoords(rewriter, op.getLoc(), *physical);
     // The source `tile.view` is untouched by this conversion (`!tile.tile`
     // converts to itself), so the original operand still reaches it.
-    FailureOr<Value> packed =
-        materializeFragmentPack(op, descriptorFromFragment(f), rewriter,
-                                coords.lane, coords.packGroup, *physical);
+    // Role comes from the TYPE. `FragmentPackOp::verify` returns success
+    // without a `role` attribute once the result is typed, so requiring the
+    // attribute here rejected valid IR -- and it is precisely the shape a
+    // migrated producer emits.
+    FailureOr<Value> packed = materializeFragmentPack(
+        op, f.getRole(), converter->descriptorFor(f), rewriter, coords.lane,
+        coords.packGroup, *physical);
     if (failed(packed))
       return failure();
+    Type expected = getTypeConverter()->convertType(f);
+    if (packed->getType() != expected)
+      return op->emitError(
+                 "ROCM_FRAGMENT_TYPE_DISAGREES: the materialized fragment is ")
+             << packed->getType() << " but the type converter promised "
+             << expected
+             << "; the pack rule and the converted type must be derived from "
+                "the same place (packedFragmentType)";
     rewriter.replaceOp(op, *packed);
     return success();
   }
@@ -608,8 +674,20 @@ struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
     if (!physical || !physical->materializationReady || !resultTy)
       return emitUnresolvableFragment(op, accTy, converter->getArch());
     auto aTy = dyn_cast<tessera::tile::FragmentType>(dataTypes[0]);
-    if (!aTy)
-      return rewriter.notifyMatchFailure(op, "A operand is not a fragment");
+    auto bTy = dyn_cast<tessera::tile::FragmentType>(dataTypes[1]);
+    if (!aTy || !bTy)
+      return rewriter.notifyMatchFailure(op, "A/B operand is not a fragment");
+    // `MMAOp::verify` deliberately does NOT require A and B to agree on `elem`
+    // -- `#tile.mma_desc` has always carried aType/bType separately, so a mixed
+    // pair is well-formed Tile IR. ROCm cannot execute one:
+    // `resolveFragmentLayout` only admits descriptors with aType == bType. Each
+    // fragment resolving INDIVIDUALLY (its own descriptor uses its own dtype on
+    // both sides) hid that, and the emitted wmma recorded A's dtype alone.
+    if (aTy.getElem() != bTy.getElem())
+      return op->emitError("ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: ")
+             << converter->getArch() << " has no mixed-input matrix form; A "
+             << "states elem \"" << aTy.getElem() << "\" and B states \""
+             << bTy.getElem() << "\"";
     // The accumulator resolving does NOT imply the inputs did: an `acc`
     // fragment names no input dtype, so it resolves via a representative one
     // (see `descriptorFromFragment`). On gfx1151 an e4m3 A/B pair is
@@ -693,7 +771,7 @@ struct ConvertFragmentUnpackStore
     FragmentLaneCoords coords =
         computeLaneCoords(rewriter, store.getLoc(), *physical);
     if (failed(materializeFragmentStore(
-            adaptor.getInputs().front(), descriptorFromFragment(f), op, store,
+            adaptor.getInputs().front(), converter->descriptorFor(f), op, store,
             rewriter, coords.lane, coords.storeGroup, *physical)))
       return failure();
     rewriter.eraseOp(store);
@@ -1899,11 +1977,17 @@ struct LowerTileToROCMPass
           Value laneGroup = arith::DivUIOp::create(builder, loc, waveLane, c16);
           if (physical->inputLaneReplication > 1)
             laneGroup = arith::ConstantIndexOp::create(builder, loc, 0);
+          auto packRole = [](Operation *p) -> StringRef {
+            auto attr = p->getAttrOfType<StringAttr>("role");
+            return attr ? attr.getValue() : StringRef();
+          };
           FailureOr<Value> a = materializeFragmentPack(
-              aPack, aPack->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"),
+              aPack, packRole(aPack),
+              aPack->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"),
               builder, lane, laneGroup, *physical);
           FailureOr<Value> b = materializeFragmentPack(
-              bPack, bPack->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"),
+              bPack, packRole(bPack),
+              bPack->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"),
               builder, lane, laneGroup, *physical);
           if (failed(a) || failed(b)) {
             signalPassFailure();

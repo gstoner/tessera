@@ -121,3 +121,45 @@ func.func @chained_accumulator(%a: memref<?xf16>, %b: memref<?xf16>,
       : !tile.tile, memref<?xf32>, index, index
   return
 }
+
+// -----
+
+#lay = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
+                    replica = [] : [] on [], offset = 0>
+#memA = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 64>
+#memB = #tile.memory_layout<space = "gmem", order = "col_major", leading_dim = 64>
+
+!fa  = !tile.fragment<m = 16, n = 16, k = 16, elem = "f16", acc = "f32",
+                      role = "a", layout = "row_major", family = "wmma">
+!fb  = !tile.fragment<m = 16, n = 16, k = 16, elem = "f16", acc = "f32",
+                      role = "b", layout = "col_major", family = "wmma">
+!fac = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32",
+                      role = "acc", layout = "row_major", family = "wmma">
+
+// 4. NO `role` attribute anywhere — the TYPE carries it.
+//
+// `FragmentPackOp::verify` returns success without ever reading a `role`
+// attribute once the result type is a stated fragment, so this is valid Tile
+// IR, and it is the shape a migrated producer (step 3) emits: the redundant
+// attribute is exactly what typing was supposed to remove. The lowering read
+// `role` off the op and rejected this with ROCM_FRAGMENT_MISSING_CONTRACT.
+//
+// CHECK-LABEL: func.func @role_comes_from_the_type
+// CHECK: tessera_rocm.wmma
+// CHECK-SAME: input_dtype = "f16"
+func.func @role_comes_from_the_type(%a: memref<?xf16>, %b: memref<?xf16>,
+                                    %out: memref<?xf32>, %r: index,
+                                    %c: index) {
+  %acc = tile.fragment_zero : !fac
+  %va = tile.view %a, %r, %c {tile.layout = #lay, tile.memory = #memA}
+      : (memref<?xf16>, index, index) -> !tile.tile
+  %vb = tile.view %b, %r, %c {tile.layout = #lay, tile.memory = #memB}
+      : (memref<?xf16>, index, index) -> !tile.tile
+  %fa = tile.fragment_pack %va : (!tile.tile) -> !fa
+  %fb = tile.fragment_pack %vb : (!tile.tile) -> !fb
+  %m = tile.mma %fa, %fb, %acc : (!fa, !fb, !fac) -> !fac
+  %o = tile.fragment_unpack %m {tile.layout = #lay} : (!fac) -> !tile.tile
+  tile.store %o, %out, %r, %c {tile.layout = #lay, tile.memory = #memA}
+      : !tile.tile, memref<?xf32>, index, index
+  return
+}

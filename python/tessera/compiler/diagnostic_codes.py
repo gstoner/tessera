@@ -2092,6 +2092,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/backend/rocm/todo.md §ROCM-5", sprint="ROCM-5",
     ),
     DiagnosticCode(
+        code="ROCM_FRAGMENT_UNPACK_UNCONSUMED", pass_origin="LowerTileToROCMPass",
+        severity="error",
+        summary="A typed tile.fragment_unpack has no single tile.store consumer, so its accumulator has no physical form on this target.",
+        fix_hint="Consume the unpacked accumulator with exactly one tile.store; the !tile.tile it yields only becomes a physical value at the store.",
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md §4.6", sprint="W1.1",
+    ),
+    DiagnosticCode(
         code="ROCM_FRAGMENT_MATERIALIZATION_GATED", pass_origin="LowerTileToROCMPass",
         severity="error",
         summary="The exact architecture recognizes the matrix instruction ABI, but Tessera has not enabled its physical fragment pack/unpack map.",

@@ -546,6 +546,54 @@ Gate stays numeric (§5 of `GEMM_PERF_LADDER.md`): a structural fixture passes
 while the kernel returns a partial product. The differential oracles
 (`tessera_rocm_wmma_gemm_f16_bench_{lds,pipe}`) and the γ_K bound both apply.
 
+### 4.6.1 Built 2026-08-04 — what shipped, and the two defects it exposed
+
+`convertTypedFragments()` in `TileToROCM.cpp`: a `TileFragmentTypeConverter`
+mapping `!tile.fragment<...>` → `vector<N × T>`, four `OpConversionPattern`s
+(`fragment_zero`, `fragment_pack`, `mma`, `fragment_unpack`+`store`), and
+`applyPartialConversion`. It runs **before** the legacy walk; the bare
+`!tile.fragment` spelling converts to itself, stays legal, and falls through
+unchanged, so the two forms coexist until step 5.
+
+`scf.for` cost one line, as predicted:
+`populateSCFStructuralTypeConversionsAndLegality`. No Tile-specific loop
+reasoning exists anywhere in the result.
+
+Proven by `rocm_typed_fragment_composition.mlir` — one function per shape the
+single-shot path cannot express: a K-loop accumulator arriving as an `scf.for`
+iter-arg, an `mma` feeding an `mma`, and an accumulator that is not a
+`fragment_zero`. **The fixture was verified to fail**: re-injecting the
+synthesized-zero defect makes it red, so it is checking the accumulator operand
+and not merely that a `wmma` was emitted.
+
+Two defects surfaced only because the negative case was run. Both had green
+positive tests.
+
+1. **A blanket identity type conversion silently disabled the whole thing.**
+   `TypeConverter::convertType` reads a `std::nullopt` callback result as *"not
+   applicable, try the next callback"*, so an **unresolvable** fragment fell
+   through to the identity conversion, was declared legal, and passed through
+   untouched — emitting a `tessera_rocm.wmma` whose operands were still
+   `!tile.fragment`, and **exiting 0**. The identity conversion must exclude
+   fragments so that no callback applies and `convertType` fails.
+
+2. **Accumulator convertibility does not imply input convertibility.** An `acc`
+   fragment names no input dtype, so §4.6's representative-dtype device
+   resolves its physical layout — correct for the *width*, which is
+   `256 / waveSize` regardless of input dtype, but it means an acc-based check
+   cannot police the inputs. On gfx1151 an e4m3 A/B pair is unsupported while
+   its f32 accumulator resolves happily. `ConvertMMA` now checks all three
+   operands converted.
+
+Both are recorded in `rocm_typed_fragment_composition_invalid.mlir`, whose
+correct output is a diagnostic (Decision #10a).
+
+**What is NOT yet true.** No producer emits typed fragments (step 3 is
+unstarted), so this path is proven by fixture and is not yet on any executing
+lane. The numeric gate above therefore has nothing to run against yet — it
+applies at step 3, not here. 2b is closed as a *capability*, not as shipped
+codegen.
+
 ---
 
 ## 5. Interaction with W1.3 (Decision #32)

@@ -6,9 +6,9 @@ Reference date for staleness: **2026-08-03**.
 
 ## Headline
 
-- **135** docs catalogued across the canonical doc tree.
-- **134** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **80** updated within the last 30 days.
+- **136** docs catalogued across the canonical doc tree.
+- **135** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **81** updated within the last 30 days.
 - **8** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -174,6 +174,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/STAGE_A_EMIT_PLAN.md` | - | 2026-07-11 | 23 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 1 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 4 | ✓ |
+| `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-03 | 0 | ✓ |
 | `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 1 | ✓ |
 | `compiler/WORKSTREAM_C_HANDOFF.md` | - | 2026-07-06 | 28 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-06-21 | 43 | ✓ |

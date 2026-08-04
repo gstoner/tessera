@@ -64,6 +64,47 @@ def _jvp_registered_names() -> frozenset[str]:
     return frozenset()
 
 
+def _catalog_shape_rule_status(public_name: str) -> str | None:
+    """The `shape_rule` axis status derived from `op_catalog`, or None.
+
+    W1.2's auto-flip, and the mechanism `op_catalog` itself predicted:
+
+        "`primitive_coverage.shape_rule` can auto-flip from real declarations
+         the same way it already does from `_VJPS` / `_JVPS`."
+
+    Returns None for a primitive the catalog does not own (no Graph IR name --
+    the Python-reference and host-API surface). Those keep whatever the category
+    tables say; the catalog has no rule to offer and inventing one here would be
+    a different over-claim.
+
+    Why this must OUTRANK the lowering-kind category default: `shape_rule_for`
+    already learned exactly this lesson one layer down, and its own comment says
+    why --
+
+        "A deliberate non-declaration outranks any lowering-kind default.
+         Without this, an op could be listed as 'examined, deliberately
+         undeclared' while `shape_rule_for` still handed back its kind's
+         default -- and the gates would enforce a rule the catalog had
+         explicitly withdrawn."
+
+    The dashboard had the same bug one layer up: `_apply_category_overrides`
+    promoted `shape_rule` from `partial` to `complete` off the LOWERING KIND and
+    never consulted the catalog, so all six `DELIBERATELY_UNDECLARED` ops read
+    as closed contracts. Measured before this landed: `dz`, `dbar`,
+    `conformal_jacobian`, `check_cauchy_riemann`, `training.loss_adamw`,
+    `training.loss_sgd` all reported `complete` for a rule the catalog had
+    explicitly withdrawn.
+    """
+    from .op_catalog import graph_name_for, shape_rule_for
+
+    graph_name = graph_name_for(public_name)
+    if graph_name is None:
+        return None
+    # `unclassified` covers both "no rule declared" and DELIBERATELY_UNDECLARED.
+    # Neither is a closed contract, so neither may report `complete`.
+    return "partial" if shape_rule_for(graph_name) == "unclassified" else "complete"
+
+
 CONTRACT_FIELDS: tuple[str, ...] = (
     "math_semantics",
     "shape_rule",
@@ -450,7 +491,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
         "jvp": "not_applicable",
         "transpose_rule": "not_applicable",
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "masking_effect_rule": "complete",
         "batching_rule": "complete",
@@ -461,7 +501,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
         "jvp": "not_applicable",
         "transpose_rule": "not_applicable",
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "masking_effect_rule": "complete",
         "batching_rule": "complete",
@@ -472,7 +511,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
         "jvp": "not_applicable",
         "transpose_rule": "not_applicable",
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "masking_effect_rule": "complete",
         "batching_rule": "complete",
@@ -483,7 +521,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     # per-position cosine/sine transform, and shards trivially per-token.
     "rope": {
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "batching_rule": "complete",
         "transpose_rule": "complete",
@@ -492,7 +529,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     },
     "rope_split": {
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "batching_rule": "complete",
         "transpose_rule": "complete",
@@ -501,7 +537,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     },
     "rope_merge": {
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "batching_rule": "complete",
         "transpose_rule": "complete",
@@ -510,7 +545,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     },
     "alibi": {
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "batching_rule": "complete",
         "transpose_rule": "complete",
@@ -519,7 +553,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     },
     "ntk_rope": {
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "batching_rule": "complete",
         "transpose_rule": "complete",
@@ -542,7 +575,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     # pass body lands.
     "factorized_matmul": {
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "batching_rule": "complete",
         "transpose_rule": "complete",
@@ -571,7 +603,6 @@ _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
 # softmax(QKᵀ/√d)V w.r.t. {Q, K, V} IS the VJP.
 _ATTN_STANDARD_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
     "transpose_rule": "complete",
@@ -581,7 +612,6 @@ _ATTN_STANDARD_HARDENED: dict[str, str] = {
 
 _ATTN_REASONING_FUSED_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
     "transpose_rule": "complete",
@@ -593,7 +623,6 @@ _ATTN_REASONING_FUSED_HARDENED: dict[str, str] = {
 # KL regularization. Pure functions; transpose is not applicable.
 _RL_LOSS_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
     "transpose_rule": "not_applicable",
@@ -718,7 +747,6 @@ for _name in (
 # non-diff set below). sharding stays partial pending mesh proof.
 _MEMORY_INDEX_SELECT_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
     "transpose_rule": "not_applicable",
@@ -737,7 +765,6 @@ _EXISTING_CONTRACT_OVERRIDES["memory_index_select"] = _MEMORY_INDEX_SELECT_HARDE
 # KV-outer lowering lit-only on this Mac). See docs/architecture/workloads/msa.md.
 _MSA_INDEX_SCORES_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
     "transpose_rule": "complete",
@@ -746,7 +773,6 @@ _MSA_INDEX_SCORES_HARDENED: dict[str, str] = {
 }
 _MSA_SELECT_BLOCKS_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
     "vjp": "not_applicable",
@@ -757,7 +783,6 @@ _MSA_SELECT_BLOCKS_HARDENED: dict[str, str] = {
 }
 _MSA_SPARSE_ATTENTION_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
     "transpose_rule": "complete",
@@ -778,7 +803,6 @@ for _name in (
     _EXISTING_CONTRACT_OVERRIDES[_name] = {
         **_EXISTING_CONTRACT_OVERRIDES.get(_name, {}),
         "math_semantics": "complete",
-        "shape_rule": "complete",
         "dtype_layout_rule": "complete",
         "vjp": "not_applicable",
         "jvp": "not_applicable",
@@ -789,7 +813,6 @@ for _name in (
 _EXISTING_CONTRACT_OVERRIDES["varlen_sdpa"] = {
     **_EXISTING_CONTRACT_OVERRIDES.get("varlen_sdpa", {}),
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "tests": "complete",
 }
@@ -801,7 +824,6 @@ _EXISTING_CONTRACT_OVERRIDES["varlen_sdpa"] = {
 # the still-"planned" jvp and leaves the registered vjp=complete).
 _MEMORY_INDEX_SCORE_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "batching_rule": "complete",
     "masking_effect_rule": "not_applicable",
@@ -864,7 +886,6 @@ del _name
 # transpose/sharding/batching stay partial pending mesh proof (Phase G).
 _QUANT_GEMM_HARDENED: dict[str, str] = {
     "math_semantics": "complete",
-    "shape_rule": "complete",
     "dtype_layout_rule": "complete",
     "lowering_rule": "complete",
     "masking_effect_rule": "not_applicable",
@@ -2671,6 +2692,14 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         _apply_effect_overrides(contract_status, spec.effect)
         _apply_per_name_overrides(contract_status, name)
         contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
+        # W1.2 — the catalog OWNS the shape_rule axis for the ops it declares,
+        # so it is applied last. All 50 per-name `shape_rule` overrides were
+        # measured to agree with it when this landed, i.e. they were redundant
+        # restatements; the six disagreements were category-table promotions of
+        # rules the catalog had deliberately withdrawn.
+        derived_shape_rule = _catalog_shape_rule_status(name)
+        if derived_shape_rule is not None:
+            contract_status["shape_rule"] = derived_shape_rule
         schema = ("explicit_semantic" if name in _EXPLICIT_SEMANTIC_NAMES
                   else "explicit_partial")
         # Sprint C2 (2026-05-11): attach numeric_policy when this op has an
@@ -2738,6 +2767,11 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         _apply_effect_overrides(contract_status, effect)
         _apply_per_name_overrides(contract_status, name)
         contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
+        # W1.2 — same derivation for the supplemental surface. Most of these
+        # have no Graph IR name, so the helper returns None and leaves them be.
+        derived_shape_rule = _catalog_shape_rule_status(name)
+        if derived_shape_rule is not None:
+            contract_status["shape_rule"] = derived_shape_rule
         # Sprint B (2026-05-11): supplemental_public_ops default to "missing"
         # (they're outside OP_SPECS), but per-name overrides flip
         # depthwise_conv1d / online_softmax / online_softmax_state to
@@ -3020,7 +3054,6 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "sgd": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "training.loss_sgd": {
             "math_semantics": "complete",
-            "shape_rule": "complete",
             "dtype_layout_rule": "complete",
             "vjp": "non_differentiable",
             "jvp": "non_differentiable",
@@ -3031,7 +3064,6 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         },
         "training.loss_adamw": {
             "math_semantics": "complete",
-            "shape_rule": "complete",
             "dtype_layout_rule": "complete",
             "vjp": "non_differentiable",
             "jvp": "non_differentiable",
@@ -3092,7 +3124,6 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         #     constants matches the shipped VJP convention)
         "memory_read": {
             "math_semantics": "complete",
-            "shape_rule": "complete",
             "dtype_layout_rule": "complete",
             "batching_rule": "complete",
             "transpose_rule": "complete",
@@ -3100,7 +3131,6 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         },
         "memory_write": {
             "math_semantics": "complete",
-            "shape_rule": "complete",
             "dtype_layout_rule": "complete",
             "vjp": "not_applicable",
             "jvp": "not_applicable",
@@ -3110,7 +3140,6 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         },
         "memory_evict": {
             "math_semantics": "complete",
-            "shape_rule": "complete",
             "dtype_layout_rule": "complete",
             "vjp": "not_applicable",
             "jvp": "not_applicable",

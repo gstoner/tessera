@@ -86,7 +86,7 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
   let arguments = (ins StrAttr:$name, I64Attr:$m, I64Attr:$n, I64Attr:$k,
                        DefaultValuedAttr<I64Attr, "1">:$mt,
                        DefaultValuedAttr<I64Attr, "1">:$nt,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f16\"">:$dtype,
+                       DefaultValuedAttr<ROCM_GemmDTypeAttr, "\"f16\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$bias,
                        DefaultValuedAttr<StrAttr, "\"none\"">:$activation);
   let assemblyFormat = "attr-dict";
@@ -136,7 +136,7 @@ def ROCM_FlashAttnOp : TesseraROCM_Op<"flash_attn"> {
     CPU analog: `tessera_x86_flash_attn_ext_f32`.
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f16\"">:$dtype,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f16\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$gqa,
                        DefaultValuedAttr<BoolAttr, "false">:$sliding_window,
                        DefaultValuedAttr<BoolAttr, "false">:$logit_softcap,
@@ -185,7 +185,7 @@ def ROCM_FlashAttnBwdOp : TesseraROCM_Op<"flash_attn_bwd"> {
     no atomics).
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f16\"">:$dtype,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f16\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$gqa);
   let assemblyFormat = "attr-dict";
 }
@@ -224,7 +224,7 @@ def ROCM_LinearAttnOp : TesseraROCM_Op<"linear_attn"> {
     row-major; O is f32.
   }];
   let arguments = (ins StrAttr:$name, I64Attr:$head_dim,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f16\"">:$dtype,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f16\"">:$dtype,
                        DefaultValuedAttr<StrAttr, "\"identity\"">:$feature_map,
                        DefaultValuedAttr<BoolAttr, "false">:$decay);
   let assemblyFormat = "attr-dict";
@@ -248,7 +248,7 @@ def ROCM_SoftmaxOp : TesseraROCM_Op<"softmax"> {
     `index` args (problem-generic). `dtype` is the f16/bf16/f32 storage.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -286,7 +286,7 @@ def ROCM_ActivationKernelOp : TesseraROCM_Op<"activation"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"gelu\"">:$kind,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -305,7 +305,7 @@ def ROCM_SiluMulKernelOp : TesseraROCM_Op<"silu_mul"> {
     runtime `index` arg; `dtype` is the f16/bf16/f32 storage.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -331,7 +331,7 @@ def ROCM_PointwiseLossKernelOp : TesseraROCM_Op<"pointwise_loss"> {
     through `math` → ROCDL. The CPU analog is `avx512_loss_f32.cpp`.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<I64Attr, "0">:$kind,
                        DefaultValuedAttr<F32Attr, "1.0">:$param,
                        DefaultValuedAttr<BoolAttr, "false">:$backward,
@@ -353,7 +353,7 @@ def ROCM_BinaryLossKernelOp : TesseraROCM_Op<"binary_loss"> {
     none/sum/mean scaling. CPU analog: avx512_loss_f32.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<I64Attr, "0">:$kind,
                        DefaultValuedAttr<F32Attr, "1.0">:$pos_weight,
                        DefaultValuedAttr<F32Attr, "1.0">:$neg_weight,
@@ -371,7 +371,7 @@ def ROCM_ClassLossBackwardKernelOp :
     explicit none/sum/valid-mean cotangent scaling, then writes dLogits.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<F32Attr, "0.0">:$label_smoothing,
                        DefaultValuedAttr<I64Attr, "-100">:$ignore_index,
                        DefaultValuedAttr<ROCM_ReductionAttr, "\"mean\"">:$reduction);
@@ -389,7 +389,7 @@ def ROCM_PolicyLossKernelOp : TesseraROCM_Op<"policy_loss"> {
     avx512_policy_loss_f32.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<I64Attr, "0">:$kind,
                        DefaultValuedAttr<F32Attr, "0.2">:$clip);
   let assemblyFormat = "attr-dict";
@@ -407,7 +407,7 @@ def ROCM_FpQuantKernelOp : TesseraROCM_Op<"fpquant"> {
     per-tensor / per-block scale. CPU analog: avx512_fpquant_f32.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<F32Attr, "6.0">:$max_normal,
                        DefaultValuedAttr<I64Attr, "1">:$mantissa_bits,
                        DefaultValuedAttr<I64Attr, "-126">:$min_exp);
@@ -481,7 +481,7 @@ def ROCM_SelectiveSsmKernelOp : TesseraROCM_Op<"selective_ssm"> {
     half the resident IO for f16/bf16). CPU analog: avx512_ssm_{f32,f16,bf16}.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -674,7 +674,7 @@ def ROCM_AlibiKernelOp : TesseraROCM_Op<"alibi"> {
     `dtype` is the output storage.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -712,7 +712,7 @@ def ROCM_DeltaNetKernelOp : TesseraROCM_Op<"deltanet"> {
                        DefaultValuedAttr<BoolAttr, "false">:$has_gate,
                        DefaultValuedAttr<BoolAttr, "false">:$has_beta,
                        DefaultValuedAttr<BoolAttr, "false">:$has_decay,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -733,7 +733,7 @@ def ROCM_RopeKernelOp : TesseraROCM_Op<"rope"> {
     `index` args; `dtype` is the f16/bf16/f32 storage.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -832,7 +832,7 @@ def ROCM_NormKernelOp : TesseraROCM_Op<"norm"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"rmsnorm\"">:$kind,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$backward);
   let assemblyFormat = "attr-dict";
 }
@@ -871,7 +871,7 @@ def ROCM_ReduceKernelOp : TesseraROCM_Op<"reduce"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"sum\"">:$kind,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -924,7 +924,7 @@ def ROCM_ArgReduceKernelOp : TesseraROCM_Op<"argreduce"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"argmax\"">:$kind,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -947,7 +947,7 @@ def ROCM_ScanKernelOp : TesseraROCM_Op<"scan"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"cumsum\"">:$kind,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -970,7 +970,7 @@ def ROCM_UnaryKernelOp : TesseraROCM_Op<"unary"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"exp\"">:$kind,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -992,7 +992,7 @@ def ROCM_BinaryKernelOp : TesseraROCM_Op<"binary"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"sub\"">:$kind,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -1015,7 +1015,7 @@ def ROCM_CompareKernelOp : TesseraROCM_Op<"compare"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"eq\"">:$kind,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_NumericDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -1073,7 +1073,7 @@ def ROCM_WhereKernelOp : TesseraROCM_Op<"where"> {
     `N` is a runtime `index` arg. Validated vs `np.where` on gfx1151.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<ROCM_DTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
 

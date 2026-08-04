@@ -163,7 +163,29 @@ def _reject_bad_measurement(ms, label: str) -> float:
     return float(ms)
 
 
-def _row(M, N, K, ms, mt, nt, device, version) -> dict:
+_TIMER_NAMES = {0: "device_event", 1: "host_wall", -1: "unknown"}
+
+
+def _timer_source(lib) -> str:
+    """Which clock produced the last measurement (PR #512 review).
+
+    `host_wall` is NOT the same measurement as `device_event`: it includes host
+    launch and synchronization overhead. Recording it in the same `latency_ms`
+    column without saying so mixes modalities -- and since the overhead is
+    roughly constant per launch, it penalizes SMALL kernels most, which is
+    precisely where it can reorder a schedule ranking.
+
+    On a host where events are broken (WSL2 / /dev/dxg, where every HIP event
+    call succeeds and returns garbage) EVERY row is a fallback row, so this is
+    the normal case there, not an edge case.
+    """
+    fn = getattr(lib, "tessera_rocm_bench_last_timer_source", None)
+    if fn is None:                      # older library: cannot tell
+        return "unknown"
+    return _TIMER_NAMES.get(int(fn()), "unknown")
+
+
+def _row(M, N, K, ms, mt, nt, device, version, timer_source="unknown") -> dict:
     ms = _reject_bad_measurement(ms, f"gemm {M}x{N}x{K} mt={mt} nt={nt}")
     sec = ms * 1e-3
     flops = 2 * M * N * K
@@ -175,6 +197,10 @@ def _row(M, N, K, ms, mt, nt, device, version) -> dict:
         "dtype": "fp16",
         "latency_ms": ms,
         "tflops": flops / sec / 1e12,
+        # Additive to the Decision #12 schema -- no existing field is renamed or
+        # removed, and the consumers read named keys rather than validating the
+        # whole dict. A row without it is pre-fix data of unknown provenance.
+        "timer_source": timer_source,
         "memory_bw_gb_s": bytes_accessed / sec / 1e9,
         "device": device,
         "tessera_version": version,
@@ -226,7 +252,7 @@ def main() -> int:
             print(f"\n{M}x{N}x{K}:")
             ms = _bench_one(lib, M, N, K, args.iters, PROD_MT, PROD_NT)
             if ms:
-                r = _row(M, N, K, ms, PROD_MT, PROD_NT, device, version)
+                r = _row(M, N, K, ms, PROD_MT, PROD_NT, device, version, _timer_source(lib))
                 r["rung"] = "1_register"
                 rows.append(r)
                 print(f"  rung1 reg {PROD_MT}x{PROD_NT}:    {ms:8.4f} ms   "
@@ -235,12 +261,12 @@ def main() -> int:
                 ms = _bench_lds(lib, M, N, K, args.iters, wm, wn, mt, nt)
                 if ms is None:
                     continue
-                r = _row(M, N, K, ms, mt, nt, device, version)
+                r = _row(M, N, K, ms, mt, nt, device, version, _timer_source(lib))
                 r["rung"] = "2_lds"
                 r["lds_waves_wm_wn"] = [wm, wn]
                 rows.append(r)
                 print(f"  rung2 LDS {wm}x{wn}w {mt}x{nt}t: {ms:8.4f} ms   "
-                      f"{r['tflops']:6.2f} TFLOP/s")
+                      f"{r['tflops']:6.2f} TFLOP/s [{r['timer_source']}]")
         if args.output:
             Path(args.output).write_text(json.dumps(rows, indent=2))
             print(f"\nwrote {len(rows)} rows -> {args.output}")
@@ -256,7 +282,7 @@ def main() -> int:
             print(f"\n{M}x{N}x{K}:")
             ms = _bench_one(lib, M, N, K, args.iters, PROD_MT, PROD_NT)
             if ms:
-                r = _row(M, N, K, ms, PROD_MT, PROD_NT, device, version)
+                r = _row(M, N, K, ms, PROD_MT, PROD_NT, device, version, _timer_source(lib))
                 r["rung"] = "1_register"
                 rows.append(r)
                 print(f"  rung1 reg {PROD_MT}x{PROD_NT}:     {ms:8.4f} ms   "
@@ -265,12 +291,12 @@ def main() -> int:
                 ms = _bench_pipe(lib, M, N, K, args.iters, wm, wn, mt, nt)
                 if ms is None:
                     continue
-                r = _row(M, N, K, ms, mt, nt, device, version)
+                r = _row(M, N, K, ms, mt, nt, device, version, _timer_source(lib))
                 r["rung"] = "3_pipe"
                 r["pipe_waves_wm_wn"] = [wm, wn]
                 rows.append(r)
                 print(f"  rung3 pipe {wm}x{wn}w {mt}x{nt}t: {ms:8.4f} ms   "
-                      f"{r['tflops']:6.2f} TFLOP/s")
+                      f"{r['tflops']:6.2f} TFLOP/s [{r['timer_source']}]")
         if args.output:
             Path(args.output).write_text(json.dumps(rows, indent=2))
             print(f"\nwrote {len(rows)} rows -> {args.output}")
@@ -287,11 +313,11 @@ def main() -> int:
             if ms is None:
                 print(f"  {mt}x{nt}: (kernel error)")
                 continue
-            r = _row(M, N, K, ms, mt, nt, device, version)
+            r = _row(M, N, K, ms, mt, nt, device, version, _timer_source(lib))
             rows.append(r)
             tag = "  <- production" if (mt, nt) == (PROD_MT, PROD_NT) else ""
             print(f"  {mt}x{nt}: {ms:8.4f} ms   {r['tflops']:6.2f} TFLOP/s   "
-                  f"{r['memory_bw_gb_s']:7.1f} GB/s{tag}")
+                  f"{r['memory_bw_gb_s']:7.1f} GB/s [{r['timer_source']}]{tag}")
 
     if args.output:
         Path(args.output).write_text(json.dumps(rows, indent=2))

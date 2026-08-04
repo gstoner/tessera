@@ -551,8 +551,30 @@ int runGemm(Kernel* k, const void* A, const void* B, void* D,
 // Device-time `iters` kernel-only launches of `fn` (buffers allocated + zeroed
 // once, warmup, hipEvent timing — no H2D/D2H in the timed loop) so the measure
 // is GEMM compute, not transfer. avg_ms <- mean per-launch ms. The rung-prover.
+// Which clock produced the most recent measurement (PR #512 review).
+//
+// The wall fallback is not the same measurement as a device event: it includes
+// host launch and synchronization overhead. Reporting it as kernel-only device
+// time silently mixes modalities into the same JSON column -- and because the
+// overhead is roughly constant per launch, it hurts SMALL kernels most, which
+// is exactly where it can reorder a schedule ranking. On a host where events
+// are broken (WSL2 / /dev/dxg) EVERY row is a fallback row, so this is not an
+// edge case there.
+//
+// Exposed as a query rather than a new out-parameter so the existing bench ABI
+// is unchanged; callers that do not ask still behave as before, and callers
+// that do can label or exclude fallback rows.
+enum TesseraBenchTimerSource { kTimerUnknown = -1, kTimerDeviceEvent = 0,
+                               kTimerHostWall = 1 };
+static thread_local int g_lastTimerSource = kTimerUnknown;
+
+extern "C" int tessera_rocm_bench_last_timer_source() {
+  return g_lastTimerSource;
+}
+
 int timedKernelLaunches(hipFunction_t fn, unsigned gx, unsigned gy, int threads,
                         int M, int N, int K, int iters, double* avg_ms) {
+  g_lastTimerSource = kTimerUnknown;
   const size_t elemBytes = sizeof(unsigned short);
   void *dA = nullptr, *dB = nullptr, *dD = nullptr;
   hipEvent_t start = nullptr, stop = nullptr;
@@ -631,6 +653,7 @@ int timedKernelLaunches(hipFunction_t fn, unsigned gx, unsigned gy, int threads,
         (double)ms <= 2.0 * wallMs &&
         (double)ms >= 0.5 * wallMs;
 
+    g_lastTimerSource = eventOk ? kTimerDeviceEvent : kTimerHostWall;
     const double totalMs = eventOk ? (double)ms : wallMs;
     *avg_ms = totalMs / (double)iters;
     rc = 0;

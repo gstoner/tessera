@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-02
+last_updated: 2026-08-04
 audit_role: root
 ---
 
@@ -193,9 +193,12 @@ linked platform audits and [`roadmap/ROADMAP_AUDIT.md`](roadmap/ROADMAP_AUDIT.md
 > untouched", which is stale. Current: **W1.2, W1.3 and W1.4 are complete**;
 > **W1.1b is partial** (its `$kind` premise was measured wrong — 17 ops, not 4;
 > the three that failed OPEN are closed, the other 14 already fail closed);
-> **W1.1 has 4 of 6 steps landed** and steps 3–5 are blocked because no producer
-> emits a `!tile.tile`, so `fragment_pack` cannot wrap what they supply. W1 is
-> therefore NOT closed. Per-item state is in
+> **W1.1 has 2 of 6 numbered steps landed** (1 and 2; the 2b guard and the 3a
+> prerequisite are real work but are not numbered steps), and steps 3–5 are
+> blocked because no producer emits a `!tile.tile`, so `fragment_pack` cannot
+> wrap what they supply. Step 6 — removing unexplained `AnyType` from the
+> NVIDIA and Apple Target IR dialects — is also open and independent of that
+> chain. W1 is therefore NOT closed. Per-item state is in
 > [`compiler/INTEGRATED_COMPILER_PLAN.md`](compiler/INTEGRATED_COMPILER_PLAN.md);
 > do not read this section's prose as a snapshot.
 

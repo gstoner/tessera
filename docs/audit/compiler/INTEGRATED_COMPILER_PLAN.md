@@ -230,14 +230,28 @@ design before migration.
 >
 > **What is really open, in dependency order:**
 >
+> 0. **Make the typed lowering COMPOSE — a dialect conversion (§4.6).** Newly
+>    identified 2026-08-04 and it reorders the rest. `TileToROCM`'s typed path is
+>    a single-shot whole-chain pattern match (`view → pack → zero → mma → unpack
+>    → store`, then erase), so an accumulator that is not a `fragment_zero`, an
+>    mma feeding another mma, and a chain crossing a loop boundary are all
+>    inexpressible *by construction*. Replace it with a `TypeConverter`
+>    (`!tile.fragment` → `vector<N × T>`) + conversion patterns. `scf.for`
+>    iter_args come free from
+>    `populateSCFStructuralTypeConversionsAndLegality`, which this LLVM 23 ships
+>    — the hand-rolled region conversion §4.2 sized as the largest step is a
+>    library call. Cost is that **no pass in this tree uses a `TypeConverter`
+>    yet**; this is the first.
 > 1. **step 3 — restructure producers onto `tile.view` + `fragment_pack`.**
->    The whole blocker. `fragment_pack` requires a `!tile.tile`; zero producers
->    supply one (`TileIRLoweringPass` passes tensors, the three
->    `GenerateWMMA*Kernel` passes pass lane-level vectors). Option (a) chosen
->    2026-08-04; 3a was its prerequisite and is landed.
-> 2. **step 2b — thread the accumulator** in the backends. Guarded to fail
->    closed on NVIDIA; ROCm's typed branch still synthesizes its own zero.
->    Coupled to (1): testable once a producer emits typed fragments (§4.4).
+>    `fragment_pack` requires a `!tile.tile`; zero producers supply one
+>    (`TileIRLoweringPass` passes tensors, the three `GenerateWMMA*Kernel` passes
+>    pass lane-level vectors). Option (a) chosen 2026-08-04; 3a landed. **Made
+>    materially smaller by (0)** — the producer then emits well-typed ops rather
+>    than a pattern one matcher must recognise whole.
+> 2. **step 2b — subsumed by (0), no longer a discrete task.** A non-zero
+>    accumulator becomes a converted operand, and "synthesise a zero" becomes the
+>    lowering of `fragment_zero`. The NVIDIA fail-closed guard (#506) stays until
+>    that lands.
 > 3. **step 4** — the five Python text emitters.
 > 4. **step 5** — delete `MMAOp::verify`'s permissive branch. Unreachable until
 >    (1) and (3) complete; deleting it earlier breaks every producer.

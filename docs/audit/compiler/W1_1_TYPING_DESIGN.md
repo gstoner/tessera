@@ -469,6 +469,85 @@ of five weeks of known work.
 
 ---
 
+### 4.6 The shape steps 2b/3/4/5 actually need — a dialect conversion
+
+Measured 2026-08-04, and it reframes the chain. The blocker is not only that
+producers are not fragment-shaped (§4.5); it is that **the typed lowering cannot
+compose**, so there is nothing for a migrated producer to emit *into*.
+
+**What `TileToROCM`'s typed path actually is.** Not an op-by-op lowering — a
+**single-shot whole-chain pattern match**:
+
+1. from `tile.mma`, chase operands to find `aPack`, `bPack`, `cZero`;
+2. require a `fragment_unpack → tile.store` consumer (`hasOutputStore`);
+3. materialise A and B from their `tile.view`s, **synthesise a zero accumulator**;
+4. emit one `tessera_rocm.wmma` + the store;
+5. **erase** store, unpack, mma, aPack, bPack.
+
+The whole `view → pack → zero → mma → unpack → store` chain collapses into one
+physical op. Three things are therefore inexpressible by construction:
+
+* an accumulator that is not a `fragment_zero` (**step 2b**),
+* an mma whose result feeds another mma rather than an unpack/store,
+* a chain crossing a loop-body boundary (**the K-loop**).
+
+That is why "thread the accumulator" looked small and kept growing: there is no
+seam to thread it through.
+
+**The architecture.** Convert the typed path from pattern-match-and-erase into a
+**dialect conversion with a `TypeConverter`**:
+
+| element | conversion |
+|---|---|
+| `!tile.fragment<…>` | → `vector<N × elem>` (input) / `vector<N × acc>` (accumulator) |
+| `tile.fragment_pack` | → the existing `materializeFragmentPack` (already bounds-masked, §3a) |
+| `tile.fragment_zero` | → `arith.constant` zero vector |
+| `tile.mma` | → `tessera_rocm.wmma` on **converted operands** — no producer chasing |
+| `fragment_unpack` + `tile.store` | → the existing store materialisation |
+| `scf.for` / `scf.if` iter_args | → **free**, via `populateSCFStructuralTypeConversionsAndLegality` |
+
+Each op lowers independently against converted operand types, so chains and
+loops compose because SSA composes.
+
+**Why this is smaller than §4.2 sized it.** That section sized 2b as a
+hand-rolled `scf.for` region-signature conversion and called it the largest
+remaining step. **MLIR already ships that**:
+`populateSCFStructuralTypeConversionsAndLegality` is present in this LLVM 23
+build (`mlir/Dialect/SCF/Transforms/Patterns.h:52`). The loop-carried case is a
+library call, not a rewrite.
+
+The cost concentrates in one place instead: **no pass in this tree uses a
+`TypeConverter` today** (measured: zero hits across `src/**/*.cpp`). This would
+be the first — which is precisely why every lowering here is a whole-chain
+rewrite; the idiom was never available to copy.
+
+**What falls out, per step.**
+
+* **2b** — no longer a discrete task. A non-zero accumulator is just a converted
+  operand, and "synthesise a zero" becomes the lowering of `fragment_zero`,
+  which is where it belonged.
+* **3** — the producer no longer emits a recognisable *pattern*, only well-typed
+  ops. It must still supply `tile.view` + `fragment_pack` (§4.5), but need not
+  arrange them so one matcher finds them all — a material reduction in the
+  `GenerateWMMAGemmKernel` rewrite.
+* **4** — the Python text emitters gain the same freedom.
+* **5** — unchanged, and still last.
+
+**Order, and the gate.**
+
+1. Introduce the `TypeConverter` + conversion patterns behind the existing entry
+   point, leaving the single-shot path handling what it already handles.
+2. Prove composition with a fixture the old path **cannot** express: a K-loop
+   whose accumulator is an `scf.for` iter-arg — the case
+   `tile_mma_typed_kloop.mlir` verifies but nothing can lower.
+3. Then migrate producers (step 3) and retire the single-shot path.
+
+Gate stays numeric (§5 of `GEMM_PERF_LADDER.md`): a structural fixture passes
+while the kernel returns a partial product. The differential oracles
+(`tessera_rocm_wmma_gemm_f16_bench_{lds,pipe}`) and the γ_K bound both apply.
+
+---
+
 ## 5. Interaction with W1.3 (Decision #32)
 
 W1.3 landed the boundary verifier and, in doing so, fixed

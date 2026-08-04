@@ -394,3 +394,9 @@ Shared Tile IR type changed: `!tile.fragment` gained `(m, n, k, elem, acc, role,
 **Outcome: not applicable — architecture-specific reason.** Zero files under `tessera_x86_backend/` reference `FragmentType` or `!tile.fragment` (measured 2026-08-03), and x86 has no cooperative-matrix fragment to model: it carries its own `!tessera_x86.tile` value type over AMX/AVX-512 ops (Decision #19, built typed from the start in W0.10).
 
 That backend is in fact the reference shape for where W1.1 is heading — 0 `AnyType` / 0 `Variadic<AnyType>`, with a negative fixture proving the verifier rejects a dot-product whose operands never came from a tile load. Per project direction the AMX half stays an IR-level contract with no `amx.*` lowering, so no follow-up is created here.
+
+## Cross-backend sync `TILE-FRAGMENT-KLOOP-ACCUM-2026-08-03` — typed `tile.mma` K-loop (W1.1 step 2)
+
+Shared Tile IR contract changed: `MMAOp::verify()` (and the `fragment_pack` / `fragment_zero` producers) now read the operand contract from the fragment TYPE when it is parameterized, falling back to producer-chasing for the bare form. `#tile.mma_desc` is optional on the typed path and cross-checked when present. **The canonical K-loop now verifies.** No lowering changed in this PR, and no existing IR is affected — the bare form keeps its old path.
+
+**Outcome: not applicable — architecture-specific reason.** Unchanged from `TILE-FRAGMENT-TYPE-PARAM-2026-08-03`: no cooperative-matrix fragment on this backend (it carries `!tessera_x86.tile`), so neither the typed `tile.mma` contract nor the accumulator-threading follow-up applies. AVX-512 K-loop accumulation is expressed in its own ops and is unaffected.

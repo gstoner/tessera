@@ -2204,3 +2204,13 @@ Shared Tile IR type changed: `!tile.fragment` gained `(m, n, k, elem, acc, role,
 `family` is a type parameter partly because `NVIDIALowering.cpp` gates on it before matching (m, n, k, dtype) to an `mma.sync` variant — leaving it on the attribute would have let a fragment packed for one family feed an op selecting another.
 
 No exact-device evidence in this PR; none required, since no generated code changed.
+
+## Cross-backend sync `TILE-FRAGMENT-KLOOP-ACCUM-2026-08-03` — typed `tile.mma` K-loop (W1.1 step 2)
+
+Shared Tile IR contract changed: `MMAOp::verify()` (and the `fragment_pack` / `fragment_zero` producers) now read the operand contract from the fragment TYPE when it is parameterized, falling back to producer-chasing for the bare form. `#tile.mma_desc` is optional on the typed path and cross-checked when present. **The canonical K-loop now verifies.** No lowering changed in this PR, and no existing IR is affected — the bare form keeps its old path.
+
+**Outcome: follow-up required — and larger than previously recorded.**
+
+Same finding as ROCm under this key. `NVIDIALowering.cpp` synthesizes zero constants for the accumulator (`operands.append(4, zero)` for f32, and the f16/s32 equivalents) and never reads `mmaData[2]` as a value. So step 2b is accumulator threading plus an `scf.for` region-signature conversion, not a relaxed check — and relaxing it alone would emit a silently wrong GEMM.
+
+No sm_120 device evidence in this PR; no generated code changed. When 2b lands, its gate needs numerics on real hardware for the same reason ROCm's does.

@@ -2637,3 +2637,9 @@ Shared Tile IR type changed: `!tile.fragment` gained `(m, n, k, elem, acc, role,
 **Outcome: not applicable — architecture-specific reason.** Zero files under `Tessera_Apple_Backend/` reference `FragmentType` or `!tile.fragment` (measured 2026-08-03). The Apple GPU lane does not consume the cooperative-matrix fragment contract: its Tile→Target lowering emits `func.call` to hand-written runtime symbols, and the compiler-synthesized `simdgroup_matrix` path lives in the Python synthesizer (`emit/apple_msl.py`), not in this Tile type. See CLAUDE.md's Apple seam note.
 
 **This is worth revisiting when that seam closes.** `simdgroup_matrix` IS a cooperative-matrix fragment in every meaningful sense, so if the MLIR lane ever synthesizes it, Apple should acquire a `family` value here rather than growing a parallel fragment concept — which would be the Decision #31 duplication this project keeps finding.
+
+## Cross-backend sync `TILE-FRAGMENT-KLOOP-ACCUM-2026-08-03` — typed `tile.mma` K-loop (W1.1 step 2)
+
+Shared Tile IR contract changed: `MMAOp::verify()` (and the `fragment_pack` / `fragment_zero` producers) now read the operand contract from the fragment TYPE when it is parameterized, falling back to producer-chasing for the bare form. `#tile.mma_desc` is optional on the typed path and cross-checked when present. **The canonical K-loop now verifies.** No lowering changed in this PR, and no existing IR is affected — the bare form keeps its old path.
+
+**Outcome: not applicable — architecture-specific reason.** Unchanged from `TILE-FRAGMENT-TYPE-PARAM-2026-08-03`: zero files under this backend consume `!tile.fragment`, so the typed `tile.mma` contract and the K-loop accumulator question do not reach the Apple lane. The `simdgroup_matrix` note recorded under that key still stands as the thing to revisit when the MLIR/synthesizer seam closes.

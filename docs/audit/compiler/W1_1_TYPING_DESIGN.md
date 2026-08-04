@@ -188,17 +188,75 @@ producer migration rather than after it.
 | Step | Work | Gate |
 |---|---|---|
 | **1** | **Landed 2026-08-03.** `!tile.fragment<m, n, k, elem, acc, role, layout, family>` with a custom parser/printer; the bare `!tile.fragment` still parses and prints as all-unknown. Cheaper than the 5w estimate implied: all 7 C++ `FragmentType` uses are `isa<>` checks, so there were **no construction sites to migrate** — the only producers were fixtures and Python text emitters, and both keep working. Differing `family` / `acc` / `role` now fail on MLIR's own type equality with **zero verifier code**, and the bare form is deliberately NOT a wildcard (else the legacy spelling would be a hole through the contract). Fixtures: `tile_fragment_type{,_invalid}.mlir` — the positive one pipes through `tessera-opt` twice so it asserts a real round-trip, not just that the printer emits something FileCheck likes. | round-trip fixture; existing fixture files still pass |
-| **2** | Teach `MMAOp::verify()` to prefer the type when parameterized and fall back to producer-chasing when bare | both forms verify; the §2 K-loop case **verifies** — necessary, and per §4.1 **not sufficient** |
-| **2b** | **Block-argument-aware target lowering** — NVIDIA and ROCm both require the accumulator's direct defining op to be `FragmentZeroOp`; teach both to accept a region iter-arg whose type carries the contract | the §2 K-loop **lowers** on each backend, with a per-backend lowering fixture. This is the step that makes the motivating GEMM compile |
+| **2** | **Landed 2026-08-03.** `MMAOp::verify()` reads the contract from the operand types when any data operand is parameterized, and `FragmentPackOp` / `FragmentZeroOp` do the same for their result — without that producer half, no typed fragment could be produced at all. `#tile.mma_desc` became OPTIONAL on the typed path (it still carries `k_blocks`) and is cross-checked when present. **The canonical K-loop now verifies** (`tile_mma_typed_kloop.mlir`). | both forms verify; the §2 K-loop **verifies** — necessary, and per §4.1 not sufficient |
+| **2b** | **Bigger than "accept a block argument" — see §4.2.** Both backends **materialize a zero constant** as the MMA's C operand and never read the accumulator value, so relaxing the `FragmentZeroOp` check alone would emit a silently WRONG GEMM. The real work is threading the loop-carried accumulator through the lowering, which means type-converting the `scf.for` region signature | the §2 K-loop **lowers** AND is numerically verified on gfx1151 (this box executes) — a lowering fixture alone cannot catch the wrong-answer failure mode |
 | **3** | Migrate the 5 construction sites (`TileIRLoweringPass.cpp` ×2, `GenerateWMMA{Gemm,LinearAttn,FlashAttn}Kernel.cpp`), one per PR, each with a lit fixture | per-producer fixture pairs `!tile.fragment<…>` with `tile.mma`, **and a backend lowering fixture** for the producers that feed one |
 | **4** | Migrate the 5 Python text emitters (`nvidia_native.py` ×4, `runtime.py`) | the Python-side tests named in inventory §2 |
 | **5** | Delete `MMAOp::verify()`'s permissive branch and the bare-type fallback | inventory step 4's gate: the contract becomes binding |
 | **6** | Target IR dialects — `tessera_nvidia` (3/3) then `tessera_apple` (12/12), with `tessera_x86` (0/0) as the reference shape | per inventory §4 step 5 |
 
-**Steps 1–2b are the design risk. Steps 3–5 are *routine*, not mechanical** —
+**Steps 1–2b are the design risk, and 2b is now the largest of them (§4.2).
+Steps 3–5 are *routine*, not mechanical** —
 see §4.1; each producer still needs its own fixture and at least one needs a
 backend lowering fixture. Do not start at 5 (inventory: "Do not start at (4)" —
 same rule, renumbered).
+
+### 4.2 Accepting is not lowering correctly — 2b is bigger than it looks
+
+Found while implementing step 2 (2026-08-03), and it changes 2b's design.
+
+§4.1 established that both backends require the accumulator's defining op to be
+a `FragmentZeroOp`. The natural reading — the one this document previously
+implied — is that the check is structural pattern-matching, so teaching it to
+accept a block argument is the fix. **That reading is wrong and the fix would
+have been a correctness bug.**
+
+Measured: neither typed lowering path ever reads the accumulator as a *value*.
+Both synthesize a zero and pass it as the MMA's C operand.
+
+```cpp
+// TileToROCM.cpp
+Value zero = arith::ConstantOp::create(builder, loc, accTy,
+                                       builder.getZeroAttr(accTy));
+state.addOperands({*a, *b, zero});
+
+// NVIDIALowering.cpp — same shape, per accumulator dtype
+Value zero = arith::ConstantFloatOp::create(...);
+operands.append(4, zero);
+```
+
+`cZero` is used for exactly two things: the null check, and a dead-op erase at
+the end. So `FragmentZeroOp` is not a pattern the lowering matches — it is a
+**precondition the lowering relies on**. The generated code is correct only
+because the accumulator really is zero.
+
+Accept a block-argument accumulator without changing that, and every K-loop
+iteration recomputes A×B from zero: the loop-carried value is discarded and the
+GEMM returns the last K-step's partial product. No diagnostic, no crash, a
+wrong number.
+
+**So 2b is: thread the accumulator SSA value into the MMA, replacing the
+synthesized zero.** That is not a local patch. At Tile level the accumulator is
+a `!tile.fragment`; the lowered MMA consumes a `vector<N x f32>`. Threading it
+across a loop means the `scf.for`'s iter-arg must itself be converted, i.e. a
+**region-signature type conversion**, not an operand swap.
+
+Consequences for the plan:
+
+* 2b needs a dialect-conversion type converter over loop regions on both
+  backends. Re-estimate it as the largest remaining W1.1 step, not a follow-on
+  to step 2.
+* Its gate must include **numerics**, not just a lowering fixture. This box
+  executes gfx1151, so the ROCm half is verifiable here: a K-loop GEMM whose
+  result is compared against a reference. A fixture that only checks the emitted
+  ops would pass while the kernel returned the wrong answer — which is precisely
+  the failure mode.
+* Steps 3-5 are unblocked for the STRAIGHT-LINE producers, which do start from a
+  real `fragment_zero`. Only the K-reduction producer waits on 2b.
+
+The general form, now twice in this document: §4.1 was "verifying is not
+lowering"; this is **"accepting is not lowering correctly"**. Both come from
+reading a consumer's precondition as if it were a pattern match.
 
 ### 4.1 Verifying is not lowering — a corrected gate
 

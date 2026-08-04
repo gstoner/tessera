@@ -68,6 +68,157 @@ LogicalResult requireFragmentProducer(Operation *op, Value value,
   return success();
 }
 
+// W1.1 step 2 — the parameterized fragment, if this value carries one.
+// Null for a bare `!tile.fragment` (legacy) or a non-fragment.
+FragmentType typedFragment(Value v) {
+  auto f = dyn_cast<FragmentType>(v.getType());
+  return (f && !f.isUnknown()) ? f : FragmentType();
+}
+
+// Does a `#tile.mma_desc` agree with ONE fragment type, given that fragment's
+// role? (PR #503 review.)
+//
+// The first version compared only m/n/k/family/accType, which let a descriptor
+// contradict the type on exactly the fields codegen reads: a bf16 `elem` paired
+// with `a = "f16"`, or a `row_major` fragment paired with
+// `a_layout = "col_major"`. Both `NVIDIALowering.cpp` and `TileToROCM.cpp`
+// select the instruction variant and the physical register layout from the
+// DESCRIPTOR, so that IR verifies while codegen follows a different contract
+// than the type states -- silently wrong, in the one place the two sources of
+// truth still overlap.
+//
+// Role-dependent because the descriptor has always carried A and B separately
+// (`aType`/`bType`, `a_layout`/`b_layout`); that asymmetry is why the shared
+// checks in `verifyMMAFromTypes` deliberately exclude `elem` and `layout`.
+// One implementation, used by both the consumer and the producer side.
+LogicalResult descriptorAgreesWithFragment(Operation *op, TileMmaDescAttr desc,
+                                           FragmentType f) {
+  auto err = [&]() -> InFlightDiagnostic {
+    return op->emitOpError() << "TILE_MMA_DESC_DISAGREES: ";
+  };
+  if (desc.getM() != f.getM() || desc.getN() != f.getN() ||
+      desc.getK() != f.getK())
+    return err() << "#tile.mma_desc states m/n/k that the fragment type does not";
+  if (desc.getFamily() != f.getFamily())
+    return err() << "#tile.mma_desc family \"" << desc.getFamily()
+                 << "\" contradicts the fragment type's \"" << f.getFamily()
+                 << "\"";
+  if (desc.getAccType() != f.getAcc())
+    return err() << "#tile.mma_desc acc \"" << desc.getAccType()
+                 << "\" contradicts the fragment type's \"" << f.getAcc() << "\"";
+
+  StringRef role = f.getRole();
+  StringRef descElem, descLayout, which;
+  if (role == "a") {
+    descElem = desc.getAType(); descLayout = desc.getALayout(); which = "a";
+  } else if (role == "b") {
+    descElem = desc.getBType(); descLayout = desc.getBLayout(); which = "b";
+  } else if (role == "acc") {
+    descElem = desc.getAccType(); which = "acc";
+  } else {
+    // scale_a / scale_b: the descriptor has no per-scale element or layout
+    // field, so there is nothing further to cross-check.
+    return success();
+  }
+  if (descElem != f.getElem())
+    return err() << "#tile.mma_desc " << which << " = \"" << descElem
+                 << "\" contradicts the fragment type's elem \"" << f.getElem()
+                 << "\" -- codegen selects the instruction from the descriptor";
+  if (!descLayout.empty() && descLayout != f.getLayout())
+    return err() << "#tile.mma_desc " << which << "_layout \"" << descLayout
+                 << "\" contradicts the fragment type's layout \""
+                 << f.getLayout()
+                 << "\" -- codegen selects the register layout from the "
+                    "descriptor";
+  return success();
+}
+
+// The typed `tile.mma` contract, read from the OPERAND TYPES.
+//
+// This is W1.1's point. The legacy path below recovers the same facts by
+// chasing each operand's defining op, which cannot cross a block-argument edge
+// -- and a K-loop accumulator is an `scf.for` iter-arg by construction, so the
+// typed form was unusable by every real GEMM (W1_1_TYPING_DESIGN.md §2). Read
+// from the type and a block argument is just another value.
+//
+// The result type equals the accumulator type on purpose: that is what lets
+// `scf.for`'s own iter-arg/yield equality close the loop, with no Tile-specific
+// loop reasoning anywhere.
+LogicalResult verifyMMAFromTypes(Operation *op, ArrayRef<Value> data) {
+  auto err = [&]() -> InFlightDiagnostic { return op->emitOpError(); };
+
+  // No mixing. A half-migrated op would otherwise get the weaker of the two
+  // contracts on whichever operand still carried the bare type.
+  for (auto [index, value] : llvm::enumerate(data))
+    if (!typedFragment(value))
+      return err() << "TILE_MMA_MIXED_FRAGMENT_FORMS: operand " << index
+                   << " is not a parameterized !tile.fragment; the typed form "
+                      "is all-or-nothing";
+
+  FragmentType a = typedFragment(data[0]);
+  const bool isNVFP4 = a.getElem() == "nvfp4" || a.getElem() == "fp4_e2m1";
+  const size_t expected = isNVFP4 ? 5 : 3;
+  if (data.size() != expected)
+    return err() << "TILE_MMA_ARITY: expected " << expected
+                 << " data operands (" 
+                 << (isNVFP4 ? "A, B, accumulator, scale_a, scale_b"
+                             : "A, B, accumulator")
+                 << "), got " << data.size();
+
+  static const char *kRoles[] = {"a", "b", "acc", "scale_a", "scale_b"};
+  for (size_t i = 0; i < data.size(); ++i)
+    if (typedFragment(data[i]).getRole() != kRoles[i])
+      return err() << "TILE_MMA_OPERAND_ROLE: operand " << i
+                   << " must have role \"" << kRoles[i] << "\", got \""
+                   << typedFragment(data[i]).getRole() << "\"";
+
+  // Shared instruction context. `elem` and `layout` are deliberately NOT here:
+  // `#tile.mma_desc` has always carried aType/bType and a_layout/b_layout
+  // separately, so A and B may legitimately differ in both.
+  for (size_t i = 1; i < data.size(); ++i) {
+    FragmentType f = typedFragment(data[i]);
+    if (f.getM() != a.getM() || f.getN() != a.getN() || f.getK() != a.getK())
+      return err() << "TILE_MMA_SHAPE_MISMATCH: operand " << i
+                   << " states a different m/n/k than operand 0";
+    if (f.getFamily() != a.getFamily())
+      return err() << "TILE_MMA_FAMILY_MISMATCH: operand " << i << " states "
+                      "family \"" << f.getFamily() << "\" but operand 0 states \""
+                   << a.getFamily()
+                   << "\". Family selects a physical register ABI (wave 32 for "
+                      "RDNA/WMMA vs 64 for CDNA/MFMA), so these fragments are "
+                      "not interchangeable";
+    if (f.getAcc() != a.getAcc())
+      return err() << "TILE_MMA_ACCUM_MISMATCH: operand " << i
+                   << " states accumulator \"" << f.getAcc()
+                   << "\" but operand 0 states \"" << a.getAcc()
+                   << "\" (Decision #15a: one accumulator contract per MMA)";
+  }
+
+  // The accumulator's own element type IS the accumulator dtype. Without this a
+  // producer could hand over a bf16-element fragment while every operand agreed
+  // `acc = "f32"`, which is the accumulator-width confusion Decision #15a and
+  // W1.3 both exist to prevent.
+  FragmentType acc = typedFragment(data[2]);
+  if (acc.getElem() != acc.getAcc())
+    return err() << "TILE_MMA_ACCUM_ELEMENT: the accumulator fragment's elem (\""
+                 << acc.getElem() << "\") must be its acc (\"" << acc.getAcc()
+                 << "\")";
+
+  if (op->getNumResults() != 1 || op->getResult(0).getType() != acc)
+    return err() << "TILE_MMA_RESULT_TYPE: tile.mma returns exactly one value, "
+                    "the updated accumulator, whose type must equal the "
+                    "accumulator operand's";
+
+  // The descriptor is now OPTIONAL -- the type carries everything except
+  // `k_blocks`. When present it must agree, so a stale descriptor cannot
+  // contradict the types it used to be the sole source of.
+  if (auto desc = mmaDescAttr(op))
+    for (Value v : data)
+      if (failed(descriptorAgreesWithFragment(op, desc, typedFragment(v))))
+        return failure();
+  return success();
+}
+
 int64_t i64AttrOr(Operation *op, llvm::StringRef name, int64_t fallback) {
   if (auto attr = op->getAttrOfType<IntegerAttr>(name))
     return attr.getInt();
@@ -584,9 +735,39 @@ LogicalResult PackedStoreOp::verify() {
   return verifyPackedAddressing(getOperation(), getInputs(), /*store=*/true);
 }
 
+// W1.1 step 2 — when the RESULT is a parameterized fragment, the type is the
+// contract: `role` and `#tile.mma_desc` become redundant restatements, so they
+// are optional and merely have to agree. This is the producer half of the same
+// collapse `MMAOp::verify()` gets; without it the typed form is unusable,
+// because every typed fragment has to come from one of these two ops.
+static LogicalResult verifyFragmentProducerAgainstType(Operation *op,
+                                                       FragmentType result) {
+  if (auto role = op->getAttrOfType<StringAttr>("role"))
+    if (role.getValue() != result.getRole())
+      return op->emitOpError()
+             << "TILE_FRAGMENT_ROLE_DISAGREES: role attribute \""
+             << role.getValue() << "\" contradicts the result type's role \""
+             << result.getRole() << "\"";
+  if (auto desc = mmaDescAttr(op))
+    return descriptorAgreesWithFragment(op, desc, result);
+  return success();
+}
+
 LogicalResult FragmentPackOp::verify() {
   if (getInputs().size() != 1 || !isa<TileValueType>(getInputs().front().getType()))
     return emitOpError("expects exactly one !tile.tile input");
+  if (getOperation()->getNumResults() == 1)
+    if (FragmentType typed = typedFragment(getOperation()->getResult(0))) {
+      if (failed(verifyFragmentProducerAgainstType(getOperation(), typed)))
+        return failure();
+      const bool isScale =
+          typed.getRole() == "scale_a" || typed.getRole() == "scale_b";
+      const bool isNVFP4 =
+          typed.getElem() == "nvfp4" || typed.getElem() == "fp4_e2m1";
+      if (isScale && !isNVFP4)
+        return emitOpError("scale fragments require an NVFP4 element type");
+      return success();
+    }
   auto role = getOperation()->getAttrOfType<StringAttr>("role");
   if (!role || (role.getValue() != "a" && role.getValue() != "b" &&
                 role.getValue() != "acc" && role.getValue() != "scale_a" &&
@@ -603,6 +784,15 @@ LogicalResult FragmentPackOp::verify() {
 }
 
 LogicalResult FragmentZeroOp::verify() {
+  if (getOperation()->getNumResults() == 1)
+    if (FragmentType typed = typedFragment(getOperation()->getResult(0))) {
+      if (typed.getRole() != "acc")
+        return emitOpError()
+               << "TILE_FRAGMENT_ZERO_ROLE: tile.fragment_zero produces the "
+                  "accumulator, so its type must have role \"acc\", got \""
+               << typed.getRole() << "\"";
+      return verifyFragmentProducerAgainstType(getOperation(), typed);
+    }
   auto role = getOperation()->getAttrOfType<StringAttr>("role");
   if (!role || role.getValue() != "acc")
     return emitOpError("requires role = acc");
@@ -672,6 +862,19 @@ LogicalResult WaitAsyncOp::verify() {
 }
 
 LogicalResult MMAOp::verify() {
+  // W1.1 step 2 — prefer the TYPE.
+  //
+  // If any data operand carries a parameterized fragment, the contract is read
+  // from the types and no producer is chased. That is what makes the canonical
+  // K-loop expressible: its accumulator is an `scf.for` iter-arg, so it has no
+  // defining op for the legacy path below to interrogate.
+  {
+    SmallVector<Value> typedData = dataOperands(getOperation());
+    if (llvm::any_of(typedData,
+                     [](Value v) { return (bool)typedFragment(v); }))
+      return verifyMMAFromTypes(getOperation(), typedData);
+  }
+
   // Preserve the legacy permissive form during migration. Only the typed
   // fragment form is eligible for physical cooperative-matrix lowering.
   bool hasFragment = llvm::any_of(getInputs(), [](Value v) {
@@ -728,6 +931,28 @@ LogicalResult MMAOp::verify() {
 LogicalResult FragmentUnpackOp::verify() {
   if (getInputs().size() != 1 || !isa<FragmentType>(getInputs().front().getType()))
     return emitOpError("expects exactly one !tile.fragment input");
+
+  // W1.1 step 2 (PR #503 review) — read the input TYPE when it carries the
+  // contract. Without this the descriptor is only optional while the result is
+  // left packed: the moment a typed `tile.mma` feeds the ordinary epilogue,
+  // this verifier demanded `mmaDescAttr(producer)` and rejected the module.
+  //
+  // It also producer-chased, so it had the block-argument problem too: a K-loop
+  // accumulator unpacked after the loop is an `scf.for` RESULT, whose defining
+  // op is the loop and carries no descriptor.
+  if (FragmentType typed = typedFragment(getInputs().front())) {
+    if (typed.getRole() != "acc")
+      return emitOpError()
+             << "TILE_FRAGMENT_UNPACK_ROLE: only an accumulator fragment may be "
+                "unpacked, got role \"" << typed.getRole() << "\"";
+    if (auto desc = mmaDescAttr(getOperation()))
+      if (failed(descriptorAgreesWithFragment(getOperation(), desc, typed)))
+        return failure();
+    if (!getOperation()->getAttrOfType<TileLayoutAttr>("tile.layout"))
+      return emitOpError("requires a #tile.layout attribute");
+    return success();
+  }
+
   Operation *producer = getInputs().front().getDefiningOp();
   if (!producer || !mmaDescAttr(producer))
     return emitOpError("fragment must be produced by a descriptor-carrying Tile op");

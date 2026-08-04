@@ -924,6 +924,17 @@ struct LowerMatmulToTileMMA : public RewritePattern {
                           cpA->getResult(1), cpB->getResult(1)});
     mmaState.addTypes(resType);
     mmaState.addAttribute("sm", rewriter.getI32IntegerAttr(smVersion));
+    // Decision #32 — carry the accumulator contract across the boundary.
+    //
+    // Found by `--tessera-verify-metadata-obligation` (W1.1) on the first real
+    // program it was pointed at. `LowerKReductionAddToTileMMA` below has always
+    // forwarded this; this pattern -- the MAIN matmul producer -- did not, so
+    // `numeric_policy = {storage="bf16", accum="fp32"}` reached Graph IR, was
+    // checked by `IRContractLegalityPass`, and then ceased to exist one level
+    // down. Codegen picked an MMA instruction with no record of the required
+    // accumulator width. Two patterns, same information, one silently lossy.
+    if (auto policy = op->getAttr("numeric_policy"))
+      mmaState.addAttribute("numeric_policy", policy);
     Operation *mma = rewriter.create(mmaState);
 
     if (!op->getResults().empty())

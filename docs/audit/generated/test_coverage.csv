@@ -47,7 +47,7 @@ bsmm,7,0,0,7,0,,directly_tested,7 direct test references
 cache_commit,2,0,1,2,0,,directly_tested,2 direct test references
 cache_rollback,3,0,1,3,0,,directly_tested,3 direct test references
 calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fake_quantize loop
-cast,24,56,1,80,0,bf16 fp16 fp32 int8,directly_tested,80 direct test references
+cast,24,58,1,82,0,bf16 fp16 fp32 int8,directly_tested,82 direct test references
 cat,14,0,0,14,0,,directly_tested,14 direct test references
 ceil,4,0,0,4,0,bf16 f32 fp16 fp32,directly_tested,4 direct test references
 center_crop,10,0,1,10,0,fp16,directly_tested,10 direct test references
@@ -267,7 +267,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,459,246,20,705,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,705 direct test references
+matmul,459,247,20,706,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,706 direct test references
 max,7,0,2,7,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,7 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,10,0,2,10,0,bf16 f32 fp16 fp32,directly_tested,10 direct test references

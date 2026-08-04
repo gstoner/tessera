@@ -315,6 +315,8 @@ void registerTesseraPasses() {
   // LayoutLegalityPass's sibling for the remaining contract families;
   // registered standalone as --tessera-ir-contracts.
   ::mlir::registerPass([]() { return createIRContractLegalityPass(); });
+  ::mlir::registerPass([]() { return createRecordMetadataPass(); });
+  ::mlir::registerPass([]() { return createVerifyMetadataObligationPass(); });
   // 2026-06-23: C2 — barriers as a layout-reuse correctness property (TIRx
   // review). Standalone as --tessera-tile-barrier-reuse-legality.
   ::mlir::registerPass([]() { return createTileBarrierReuseLegalityPass(); });

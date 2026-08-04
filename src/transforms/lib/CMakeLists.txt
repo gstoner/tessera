@@ -71,6 +71,7 @@ add_library(TesseraPasses
   TileBufferArenaPass.cpp
   # 2026-06-19 — dtype / aliasing / buffer-binding contracts (Decision #15a).
   IRContractLegalityPass.cpp
+  MetadataObligationPass.cpp
   # 2026-06-23 — C2: barriers as a layout-reuse correctness property (TIRx review).
   TileBarrierReuseLegalityPass.cpp
   # 2026-06-23 — C3: typed barriers + PipelineState cross-op legality (TIRx review).

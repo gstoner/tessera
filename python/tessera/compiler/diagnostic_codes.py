@@ -796,6 +796,90 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="IRContractLegality",
     ),
 
+    # ── W1.3 — Decision #32 metadata lowering obligation ──────────────────
+    #
+    # A boundary lowering carries each Decision #15a attribute forward, or
+    # records a named reason it dropped it. These five are the refusals.
+    DiagnosticCode(
+        code="METADATA_OBLIGATION_SILENT_DROP",
+        pass_origin="VerifyMetadataObligationPass",
+        severity="error",
+        summary=(
+            "A Decision #15a attribute was present before a level boundary and "
+            "is gone after it, with no reason recorded — the defect Decision "
+            "#32 names: `numeric_policy` stated at Graph IR and absent by the "
+            "time codegen picks an MMA instruction."
+        ),
+        fix_hint=(
+            "Carry the attribute forward in the target level's vocabulary (a "
+            "re-spelling such as `tessera.layout` -> `tile.layout` counts), or "
+            "declare `tessera.lowering.dropped = { <attr> = \"<reason>\" }` on "
+            "the function or module."
+        ),
+        spec="docs/audit/compiler/IR_STACK_INTEGRATION_REVIEW.md §U5",
+        sprint="W1.3",
+    ),
+    DiagnosticCode(
+        code="METADATA_OBLIGATION_UNKNOWN_REASON",
+        pass_origin="VerifyMetadataObligationPass",
+        severity="error",
+        summary=(
+            "The recorded drop reason is outside the closed set. Per Decision "
+            "#21a the reason selects semantics — it distinguishes \"moved into "
+            "the type\" from \"nobody has done this yet\" — so it fails closed."
+        ),
+        fix_hint=(
+            "Use one of: represented_in_type, target_invariant, "
+            "consumed_by_pass, not_yet_carried:<plan item>."
+        ),
+        spec="docs/audit/compiler/IR_STACK_INTEGRATION_REVIEW.md §U5",
+        sprint="W1.3",
+    ),
+    DiagnosticCode(
+        code="METADATA_OBLIGATION_DEBT_UNATTRIBUTED",
+        pass_origin="VerifyMetadataObligationPass",
+        severity="error",
+        summary=(
+            "A drop declared `not_yet_carried` with no plan item — a silent "
+            "drop with extra syntax: it satisfies the verifier's letter, "
+            "records nothing actionable, and no item is on the hook for it."
+        ),
+        fix_hint="Write `not_yet_carried:<item>`, e.g. not_yet_carried:W1.1.",
+        spec="docs/audit/compiler/IR_STACK_INTEGRATION_REVIEW.md §U5",
+        sprint="W1.3",
+    ),
+    DiagnosticCode(
+        code="METADATA_OBLIGATION_STALE_DECLARATION",
+        pass_origin="VerifyMetadataObligationPass",
+        severity="error",
+        summary=(
+            "An attribute is declared dropped but is still present. Decision "
+            "#29 applied to this mechanism: the exception carries nothing, yet "
+            "reads in review as a considered decision and would license a real "
+            "future drop nobody looked at."
+        ),
+        fix_hint="Remove the `tessera.lowering.dropped` entry.",
+        spec="docs/audit/compiler/IR_STACK_INTEGRATION_REVIEW.md §U5",
+        sprint="W1.3",
+    ),
+    DiagnosticCode(
+        code="METADATA_OBLIGATION_NO_SNAPSHOT",
+        pass_origin="VerifyMetadataObligationPass",
+        severity="error",
+        summary=(
+            "The verify pass ran with no recorded snapshot. Failing closed is "
+            "the point: succeeding would make the gate green on every pipeline "
+            "that forgot to record, which is indistinguishable from a pipeline "
+            "with no losses — an unrun check must not look like a passed one."
+        ),
+        fix_hint=(
+            "Run --tessera-record-metadata before the boundary lowering in the "
+            "same tessera-opt invocation."
+        ),
+        spec="docs/audit/compiler/IR_STACK_INTEGRATION_REVIEW.md §U5",
+        sprint="W1.3",
+    ),
+
     # ── CF0 — control-flow target guard ──────────────────────────────────
     DiagnosticCode(
         code="CONTROL_FLOW_UNSUPPORTED_ON_TARGET",

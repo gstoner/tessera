@@ -170,10 +170,14 @@ def test_canonical_x86_selector_defaults_to_descriptor(
     monkeypatch, module, abi,
 ) -> None:
     # This legacy selector test isolates the retained Graph-owned packagers.
-    # The production scheduled-matmul route has dedicated exact-artifact and
-    # no-tool mocks in test_scheduled_matmul_consumers.py.
+    # The production scheduled routes have dedicated exact-artifact and
+    # no-tool mocks in their consumer test modules.
     monkeypatch.setattr(
         "tessera.compiler.scheduled_matmul.supports_scheduled_matmul",
+        lambda module, *, target: False,
+    )
+    monkeypatch.setattr(
+        "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
         lambda module, *, target: False,
     )
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
@@ -295,6 +299,10 @@ def test_x86_loader_keeps_base_and_avx512_images_distinct() -> None:
 
 
 def test_driver_joins_x86_native_package(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
+        lambda module, *, target: False,
+    )
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
     bundle = compile_graph_module(
         _softmax_module(), source_origin="unit", target="x86",

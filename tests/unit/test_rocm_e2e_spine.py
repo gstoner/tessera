@@ -842,6 +842,10 @@ def test_rocm_softmax_descriptor_rejects_invalid_invocations(monkeypatch, failur
 
 
 def test_driver_joins_exact_gfx1151_native_package(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
+        lambda module, *, target: False,
+    )
     monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
     bundle = compile_graph_module(
         _softmax_module(),
@@ -859,6 +863,10 @@ def test_driver_joins_exact_gfx1151_native_package(monkeypatch) -> None:
 
 
 def test_canonical_gfx1151_selector_defaults_to_native_descriptor(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
+        lambda module, *, target: False,
+    )
     monkeypatch.setattr("tessera.compiler.rocm_native._compile_tile_ir", _fake_compile)
     monkeypatch.setattr(
         "tessera.compiler.rocm_native.native_packaging_available", lambda: True
@@ -946,6 +954,12 @@ def test_rocm_reduction_package_has_storage_keyed_f32_output_abi(monkeypatch, dt
 
 
 def test_driver_joins_gfx1151_reduction_native_package(monkeypatch) -> None:
+    # Keep this retained Graph-owned packager check distinct from the
+    # E2E-REAL-5 exact-artifact coverage in test_scheduled_kernel_consumers.py.
+    monkeypatch.setattr(
+        "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
+        lambda module, *, target: False,
+    )
     monkeypatch.setattr(
         "tessera.compiler.rocm_native._compile_reduction_tile_ir",
         _fake_reduce_compile,
@@ -960,8 +974,7 @@ def test_driver_joins_gfx1151_reduction_native_package(monkeypatch) -> None:
     assert bundle.orchestration_state == "launchable"
     assert bundle.tile is not None and "tile.reduce_kernel" in bundle.tile.text
     assert bundle.launch_descriptor is not None
-    assert bundle.launch_descriptor.provenance["work_item"] == "E2E-REAL-5"
-    assert bundle.lineage_complete
+    assert bundle.launch_descriptor.provenance["work_item"] == "ROCM-E2E-2"
 
 
 def test_rocm_paged_kv_owns_typed_direct_descriptor(monkeypatch) -> None:

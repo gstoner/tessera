@@ -1340,6 +1340,7 @@ def package_scheduled_kernel(
         or artifact.accum != "f32"
     ):
         raise ValueError("x86 scheduled semantic kernel requires the f32 Zen 5 contract")
+    scalars: tuple[ScalarArgument, ...]
     if artifact.family == "softmax":
         symbol, abi = "tessera_x86_avx512_softmax_f32", X86_SOFTMAX_F32_ABI
         scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))

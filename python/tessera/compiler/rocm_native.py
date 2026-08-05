@@ -1437,6 +1437,7 @@ def package_scheduled_kernel(
         or artifact.accum != "f32"
     ):
         raise ValueError("ROCm scheduled semantic kernel requires the gfx1151 f32 contract")
+    scalars: tuple[ScalarArgument, ...]
     if artifact.family == "softmax":
         abi = GFX1151_SOFTMAX_F32_ABI
         compile_result = _compile_tile_ir(artifact.tile_ir)

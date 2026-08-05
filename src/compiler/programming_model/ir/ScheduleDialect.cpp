@@ -5,6 +5,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
 using namespace tessera::schedule;
@@ -42,6 +43,22 @@ LogicalResult MeshRegionOp::verify() {
     return emitOpError("requires a non-empty mesh axis");
   if (getBody().empty())
     return emitOpError("requires a non-empty body");
+  if (!llvm::hasSingleElement(getBody()))
+    return emitOpError("requires exactly one body block");
+  Operation *terminator = getBody().front().getTerminator();
+  if (!terminator || terminator->getName().getStringRef() != "schedule.yield")
+    return emitOpError("body must terminate with schedule.yield");
+  // Legacy marker-only regions may yield an informational value while exposing
+  // no SSA result. Preserve those until their owning passes migrate; once the
+  // region declares results, enforce the real value contract exactly.
+  if (getNumResults() == 0)
+    return success();
+  if (terminator->getNumOperands() != getNumResults())
+    return emitOpError("yield operand count must match region result count");
+  for (auto [yielded, result] :
+       llvm::zip_equal(terminator->getOperands(), getResults()))
+    if (yielded.getType() != result.getType())
+      return emitOpError("yield operand types must match region result types");
   return success();
 }
 

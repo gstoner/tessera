@@ -17,6 +17,7 @@ def Schedule_MeshDefineOp : Op<ScheduleDialect, "mesh.define"> {
 def Schedule_MeshRegionOp : Op<ScheduleDialect, "mesh.region"> {
   let summary = "Enter a mesh axis region";
   let arguments = (ins SymbolRefAttr:$mesh, StrAttr:$axis);
+  let results = (outs Variadic<AnyType>:$results);
   let regions = (region AnyRegion:$body);
   let hasVerifier = 1;
 }

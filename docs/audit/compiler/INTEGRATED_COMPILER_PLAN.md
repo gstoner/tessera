@@ -279,17 +279,37 @@ design before migration.
 >    (0/0) as the reference shape. Independent of the producer chain, and it
 >    was omitted from an earlier version of this list — which is how still-
 >    required Target IR work disappears from the owning queue.
-> 6. **W1.1b** — hoist the already-fail-closed `$kind` sets into ODS.
+> 6. **W1.1b** — close/hoist the semantic `$kind` sets.
 >    **Re-measured 2026-08-05: 11 `StrAttr:$kind` sites across FIVE
 >    dialects** — Graph IR `TesseraOps.td` (6), Apple (2), NVIDIA (1),
 >    ROCm (1), Neighbors (1) — not one backend's ODS. That makes it a
->    shared-contract change under AGENTS.md (same PR assesses every
->    backend), and each site needs its legal set derived from its actual
->    consumer dispatch. Deriving such a set from a partial read is how
+>    shared-contract change under AGENTS.md (same PR assesses every backend).
+>
+>    **The "already fail closed" label does not hold, and was inherited rather
+>    than measured** (found by #521 review). Verified both directions:
+>    `ROCM_Int4PackKernelOp` DOES fail closed — its generator validates against
+>    an explicit set and errors naming
+>    `kind=pack|unpack|relu|sparse_gather|cache_append`. But
+>    **`tessera.neighbors.topology.create` fails OPEN**, and it is a
+>    **Decision #21a violation**, not a layering nit: `CreateTopologyOp::verify()`
+>    checks only that `kind` EXISTS, and `DynamicTopologyPass::isMutableKind`
+>    dispatches by **substring** —
+>    `contains("dynamic")||contains("adaptive")||contains("fault")||contains("custom_graph")`.
+>    So a typo (`2d_mseh`) silently becomes a STATIC topology, and the substring
+>    test is wrong in the other direction too — `not_dynamic` classifies as
+>    MUTABLE. `kind` there drives `topology.dynamic`/`topology.replan`/
+>    `topology.replan_hook`, so this is the same unnamed-semantic-default class
+>    #505 closed for `predicate`/`optimizer`/`clifford`.
+>
+>    So the item is **per-site triage first** (fail-open ⇒ correctness fix with a
+>    negative fixture; fail-closed ⇒ ODS hoist), and its remaining size is not
+>    yet known. Each site's legal set must be derived from its actual consumer
+>    dispatch: deriving one from a partial read is how
 >    #499 shipped an optimizer enum missing `adafactor` and broke six
 >    tests including one that executes on gfx1151, so budget per-site
->    derivation plus a run of the existing tests, not a bulk edit. A
->    layering improvement, independent of everything above.
+>    derivation plus a run of the existing tests, not a bulk edit.
+>    Independent of everything above; no longer purely a layering
+>    improvement, since at least one site is a live fail-open defect.
 >
 > Items 1–4 are one chain. Items 5 and 6 can proceed in parallel with it.
 

@@ -17,11 +17,9 @@
 // into the generic "unsupported source layout" diagnostic rather than naming
 // the arity.
 //
-// Out-of-bounds elements are always a contiguous TAIL (the load walks the fast
-// axis), so `vector.create_mask` of the clamped remaining length is exact and
-// `maskedload` with a zero passthru reproduces the generator's `storeZero`
-// element for element. That equivalence is what will let the migrated producer
-// stay bit-identical rather than merely close.
+// Bounded fragments use explicit guarded scalar loads. This reproduces the
+// generator's `inb ? value : zero` sequence and stays legal through ROCm's
+// GPU-to-LLVM pipeline, which does not lower vector.create_mask/maskedload.
 //
 // The fast axis differs by role: A is row-major so the load walks columns; B is
 // col-major (`col * leadingDim + row`) so it walks rows. Masking the wrong axis
@@ -37,8 +35,10 @@
 #memB = #tile.memory_layout<space = "gmem", order = "col_major", leading_dim = 64>
 
 // CHECK-LABEL: func.func @ragged_view_masks_every_load
-// CHECK: vector.create_mask
-// CHECK: vector.maskedload
+// CHECK-NOT: vector.maskedload
+// CHECK-NOT: vector.create_mask
+// CHECK-COUNT-32: memref.load
+// CHECK: vector.insert {{.*}} [15]
 func.func @ragged_view_masks_every_load(
     %base: memref<?xf16>, %out: memref<?xf32>,
     %r: index, %c: index, %rb: index, %cb: index) {
@@ -78,6 +78,7 @@ func.func @ragged_view_masks_every_load(
 // on the working lane rather than a new feature misbehaving.
 // CHECK-LABEL: func.func @unbounded_view_loads_unmasked
 // CHECK-NOT: vector.create_mask
+// CHECK-NOT: vector.maskedload
 // CHECK: vector.load
 func.func @unbounded_view_loads_unmasked(
     %base: memref<?xf16>, %out: memref<?xf32>, %r: index, %c: index) {

@@ -361,13 +361,58 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   Value baseRow = b.create<arith::MulIOp>(loc, tileM, c16mt);
   Value baseCol = b.create<arith::MulIOp>(loc, tileN, c16nt);
 
+  // W1.1 step 3 pilot. The typed Tile chain must retain the runtime leading
+  // dimensions of this problem-size-generic kernel, so leading_dim=0 means the
+  // final tile.view/tile.store operand supplies K or N as SSA.
+  MLIRContext *ctx = b.getContext();
+  SmallVector<StringAttr> tileAxes{b.getStringAttr("tlane"),
+                                   b.getStringAttr("reg")};
+  auto tileLayout = tessera::tile::TileLayoutAttr::get(
+      ctx, {16, 16}, {16, 1}, tileAxes, {}, {}, {}, 0,
+      tessera::tile::TileSwizzleAttr());
+  auto dynamicRowMajor = tessera::tile::TileMemoryLayoutAttr::get(
+      ctx, "gmem", "row_major", 0);
+  auto tileValueTy = tessera::tile::TileValueType::get(ctx);
+  StringRef fragmentElem = T.store.isF16() ? "f16"
+                           : T.store.isBF16() ? "bf16"
+                           : T.pack == 1      ? "int8"
+                                              : "int4";
+  StringRef fragmentAcc = T.isInt ? "i32" : "f32";
+  auto aFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
+  auto bFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, fragmentElem, fragmentAcc, "b", "col_major", "wmma");
+  auto accFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
+
+  auto makeTileView = [&](OpBuilder &bb, Location l, Value base, Value row,
+                          Value col, Value rowBound, Value colBound,
+                          Value leadingDim, bool bounded) -> Value {
+    OperationState state(l, "tile.view");
+    if (bounded)
+      state.addOperands({base, row, col, rowBound, colBound, leadingDim});
+    else
+      state.addOperands({base, row, col, leadingDim});
+    state.addTypes(tileValueTy);
+    state.addAttribute("tile.layout", tileLayout);
+    state.addAttribute("tile.memory", dynamicRowMajor);
+    return bb.create(state)->getResult(0);
+  };
+  auto packFragment = [&](OpBuilder &bb, Location l, Value tile,
+                          Type type) -> Value {
+    OperationState state(l, "tile.fragment_pack");
+    state.addOperands(tile);
+    state.addTypes(type);
+    return bb.create(state)->getResult(0);
+  };
+
   // Per-tile (loop-invariant) values.
   //   arK[mi]     = row*K              — A-fragment base offset (fast path).
   //   arKsafe[mi] = clamp(row,0)*K     — same, OOB row clamped to 0 so the edge
   //                                      path can still issue a vector.load.
   //   colSafe[ni] = clamp(col,0)       — likewise for the B column.
   SmallVector<Value> arM(mt), arK(mt), arKsafe(mt), arInb(mt), rowOrigin(mt);
-  SmallVector<Value> colN(nt), colSafe(nt), colInb(nt);
+  SmallVector<Value> colN(nt), colSafe(nt), colInb(nt), colOrigin(nt);
   for (int64_t mi = 0; mi < mt; ++mi) {
     Value off = b.create<arith::ConstantIndexOp>(loc, mi * 16);
     Value rowBase = b.create<arith::AddIOp>(loc, baseRow, off);
@@ -381,6 +426,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   for (int64_t ni = 0; ni < nt; ++ni) {
     Value off = b.create<arith::ConstantIndexOp>(loc, ni * 16);
     Value colBase = b.create<arith::AddIOp>(loc, baseCol, off);
+    colOrigin[ni] = colBase;
     colN[ni] = b.create<arith::AddIOp>(loc, colBase, lane);
     colInb[ni] = b.create<arith::CmpIOp>(loc, slt, colN[ni], N);
     colSafe[ni] = b.create<arith::SelectOp>(loc, colInb[ni], colN[ni], c0);
@@ -456,13 +502,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     SmallVector<Value> next(mt * nt);
     for (int64_t mi = 0; mi < mt; ++mi)
       for (int64_t ni = 0; ni < nt; ++ni) {
-        // Fork A (via-tile): emit the matrix op at the Tile-IR seam
-        // (tile.mma %a, %b, %acc) so it flows through rocm-wave-lds-pipeline +
-        // lower-tile-to-rocm, which lowers it back to tessera_rocm.wmma with the
-        // SAME (a, b, acc) operands. Default path emits tessera_rocm.wmma
-        // directly (the established executable lane). Same operands/types either
-        // way — only the op name differs, so the lowered kernel is identical.
-        OperationState wmma(l, viaTile ? "tile.mma" : "tessera_rocm.wmma");
+        // The typed path returns from each panel before reaching this helper.
+        // This is the established direct, generator-owned vector lane.
+        OperationState wmma(l, "tessera_rocm.wmma");
         wmma.addOperands({af[mi], bf[ni], acc[mi * nt + ni]});
         wmma.addTypes({accTy});
         next[mi * nt + ni] = bb.create(wmma)->getResult(0);
@@ -470,8 +512,37 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     return next;
   };
 
+  // The typed producer path owns logical origins and bounds only. ROCm's
+  // fragment_pack lowering owns lane mapping, masking, strided-B gathering,
+  // register packing, and the physical WMMA ABI.
+  auto typedWmmaAll = [&](OpBuilder &bb, Location l, Value k0,
+                          ValueRange acc, bool bounded) {
+    SmallVector<Value> af(mt), bf(nt);
+    for (int64_t mi = 0; mi < mt; ++mi) {
+      Value view =
+          makeTileView(bb, l, A, rowOrigin[mi], k0, M, K, K, bounded);
+      af[mi] = packFragment(bb, l, view, aFragmentTy);
+    }
+    for (int64_t ni = 0; ni < nt; ++ni) {
+      Value view =
+          makeTileView(bb, l, B, k0, colOrigin[ni], K, N, N, bounded);
+      bf[ni] = packFragment(bb, l, view, bFragmentTy);
+    }
+    SmallVector<Value> next(mt * nt);
+    for (int64_t mi = 0; mi < mt; ++mi)
+      for (int64_t ni = 0; ni < nt; ++ni) {
+        OperationState mma(l, "tile.mma");
+        mma.addOperands({af[mi], bf[ni], acc[mi * nt + ni]});
+        mma.addTypes(accFragmentTy);
+        next[mi * nt + ni] = bb.create(mma)->getResult(0);
+      }
+    return next;
+  };
+
   // --- fast panel: interior tile, full K panel — no masking. ---
   auto fastPanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
+    if (viaTile)
+      return typedWmmaAll(bb, l, k0, acc, /*bounded=*/false);
     SmallVector<Value> aFrag(mt), bFrag(nt, loadZero);
     for (int64_t mi = 0; mi < mt; ++mi) {
       Value base = bb.create<arith::AddIOp>(l, arK[mi], k0);
@@ -505,6 +576,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // --- edge panel: full K panel, ragged M/N — coalesced loads at a clamped
   //     row/col, then one vector select zeroes an OOB fragment. ---
   auto edgePanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
+    if (viaTile)
+      return typedWmmaAll(bb, l, k0, acc, /*bounded=*/true);
     SmallVector<Value> aFrag(mt), bFrag(nt, loadZero);
     for (int64_t mi = 0; mi < mt; ++mi) {
       Value base = bb.create<arith::AddIOp>(l, arKsafe[mi], k0);
@@ -544,6 +617,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   //     M/N. Runs once (the [kMain,K) remainder), so the cost is off the hot
   //     path. Correct for full or ragged M/N (masks are no-ops when in-bounds).
   auto maskedPanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
+    if (viaTile)
+      return typedWmmaAll(bb, l, k0, acc, /*bounded=*/true);
     SmallVector<Value> aFrag(mt, loadZero), bFrag(nt, loadZero);
     for (int64_t i = 0; i < 16; ++i) {
       Value ci = bb.create<arith::ConstantIndexOp>(l, i);
@@ -577,6 +652,26 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // invariant across all eight accumulator elements and every M tile for one
   // output column, so load it once per N tile and reuse it.
   auto emitStore = [&](OpBuilder &sb, ValueRange accs, bool masked) {
+    if (viaTile) {
+      for (int64_t ni = 0; ni < nt; ++ni)
+        for (int64_t mi = 0; mi < mt; ++mi) {
+          OperationState unpack(loc, "tile.fragment_unpack");
+          unpack.addOperands(accs[mi * nt + ni]);
+          unpack.addTypes(tileValueTy);
+          unpack.addAttribute("tile.layout", tileLayout);
+          Value tile = sb.create(unpack)->getResult(0);
+          OperationState store(loc, "tile.store");
+          if (masked)
+            store.addOperands(
+                {tile, D, rowOrigin[mi], colOrigin[ni], M, N, N});
+          else
+            store.addOperands({tile, D, rowOrigin[mi], colOrigin[ni], N});
+          store.addAttribute("tile.layout", tileLayout);
+          store.addAttribute("tile.memory", dynamicRowMajor);
+          sb.create(store);
+        }
+      return;
+    }
     for (int64_t ni = 0; ni < nt; ++ni) {
       Value biasValue = bias
           ? Value(sb.create<memref::LoadOp>(loc, bias,
@@ -615,7 +710,17 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     }
   };
 
-  SmallVector<Value> initAccs(mt * nt, accZero);
+  SmallVector<Value> initAccs;
+  if (viaTile) {
+    initAccs.reserve(mt * nt);
+    for (int64_t i = 0; i < mt * nt; ++i) {
+      OperationState zero(loc, "tile.fragment_zero");
+      zero.addTypes(accFragmentTy);
+      initAccs.push_back(b.create(zero)->getResult(0));
+    }
+  } else {
+    initAccs.assign(mt * nt, accZero);
+  }
 
   // kMain = largest multiple of 16 <= K; the tail panel covers [kMain, K).
   Value kRem = b.create<arith::RemUIOp>(loc, K, c16);
@@ -1262,6 +1367,14 @@ struct GenerateWMMAGemmKernelPass
       }
 
       OpBuilder bodyB(gpuFunc.getContext());
+      if (viaTile &&
+          (hasBias || activation != "none" || T.pack == 2 ||
+           outputTy != T.accElem)) {
+        op->emitError(
+            "generate-wmma-gemm-kernel: typed via-tile pilot requires an "
+            "unfused f16/bf16/int8 GEMM stored in its accumulator type");
+        return signalPassFailure();
+      }
       if (request.canonicalKLoop && canonicalStaging == "lds") {
         if (hasBias || activation != "none" || T.pack == 2 || mt != 1 ||
             nt != 1) {

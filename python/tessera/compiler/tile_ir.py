@@ -165,7 +165,7 @@ class TileIRVerifier:
             elif op.op_name == "tile.wait_async":
                 if int(op.attrs.get("stage", -1)) < 0:
                     diagnostics.append(TileIRDiagnostic("error", "wait_async stage must be >= 0", "TILE_IR_WAIT_STAGE"))
-            elif op.op_name == "tile.mma":
+            elif op.op_name in {"tile.matmul", "tile.mma"}:
                 self._require_attrs(op, diagnostics, "source", "result", "ordinal")
             elif op.op_name == "tile.reduce":
                 self._require_attrs(op, diagnostics, "op", "order")
@@ -350,13 +350,16 @@ def _lower_pipeline_region(op: ScheduleOp) -> list[TileOp]:
 def _tile_compute_op(op: ScheduleOp) -> TileOp:
     source = str(op.attrs.get("source", ""))
     if source in {"tessera.matmul", "tessera.gemm"}:
-        tile_name = "tile.mma"
+        # This object model has metadata operands/results, not typed fragment
+        # SSA values. Keep it at the logical contraction level; target lowering
+        # owns architecture fragment materialization.
+        tile_name = "tile.matmul"
     elif source in {"tessera.conv2d", "tessera.conv2d_nhwc"}:
         tile_name = "tile.conv2d"
     else:
         tile_name = "tile.generic"
     attrs = {**dict(op.attrs), "lowering": _lowering_kind(source), "vectorize": True}
-    if tile_name == "tile.mma":
+    if tile_name == "tile.matmul":
         attrs.update(_mma_resource_estimate(attrs))
     return TileOp(tile_name, attrs)
 

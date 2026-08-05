@@ -3131,6 +3131,11 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
   auto memory = view->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>(
       "tile.memory");
   auto layout = view->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout");
+  if (memory && memory.getLeadingDim() == 0) {
+    op->emitError("sm_120 fragment materialization does not yet support an "
+                  "SSA-supplied dynamic leading dimension");
+    return failure();
+  }
   // The BOUNDED view is valid shared Tile IR (ViewOp::verify accepts 3 or 5
   // pointer-backed operands), and this materializer cannot honour it: it emits
   // an unguarded load, so silently ignoring (rowBound, colBound) would read
@@ -3388,7 +3393,8 @@ static LogicalResult materializeSm120AccumulatorStore(
       storeLayout.getShardExtents() != ArrayRef<int64_t>(outputShape) ||
       unpackLayout.getSwizzle() ||
       storeLayout.getSwizzle() || memory.getSpace() != "gmem" ||
-      memory.getOrder() != "row_major") {
+      memory.getOrder() != "row_major" || memory.getLeadingDim() == 0 ||
+      store.getInputs().size() != 4) {
     op->emitError("sm_120 accumulator store requires unswizzled 16x8 row-major "
                   "gmem output and f32 or s32 accumulator");
     return failure();
@@ -4205,6 +4211,16 @@ struct LowerTileToNVIDIAPass
 
       if (isTileOp(op, "tile.store")) {
         auto store = cast<tessera::tile::StoreOp>(op);
+        auto memory =
+            store->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>(
+                "tile.memory");
+        if (!memory || memory.getLeadingDim() == 0 ||
+            store.getInputs().size() != 4) {
+          op->emitError("generic packed tile.store does not yet support bounds "
+                        "or an SSA-supplied dynamic leading dimension");
+          signalPassFailure();
+          return;
+        }
         auto load =
             store.getInputs().front().getDefiningOp<
                 tessera::tile::PackedLoadOp>();

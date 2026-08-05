@@ -95,11 +95,11 @@ def _hip():
         p = os.path.join(rocm_lib, dep)
         if os.path.isfile(p):
             try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+                ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL)
             except OSError:
                 pass
     try:
-        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_GLOBAL)
+        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_LOCAL)
     except OSError:
         return None
 

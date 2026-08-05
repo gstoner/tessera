@@ -1307,7 +1307,7 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op, target="rocm")
-    if op.op_name == "tile.mma":
+    if op.op_name in {"tile.matmul", "tile.mma"}:
         # `tessera_rocm.mfma` is the hardware-free abstract matrix-core marker
         # (Decision #19, lit-testable). `tessera_rocm.wmma_gemm` is the CONCRETE
         # RDNA executable directive the `generate-wmma-gemm-kernel` pass expands
@@ -1494,7 +1494,7 @@ def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
     arch = _nvidia_arch(target_kind)
-    if op.op_name == "tile.mma":
+    if op.op_name in {"tile.matmul", "tile.mma"}:
         if target_kind == "nvidia_sm100":
             # Datacenter Blackwell (sm_100a) only — tcgen05 + TMEM + CTA-pair
             # block-scaled MMA. Consumer Blackwell (sm_120) is NOT a superset
@@ -1685,7 +1685,7 @@ def _lower_apple_cpu_op(op: TileOp) -> list[TargetOp]:
             "severity": "unsupported",
             "reason": "KV-cache mutation target lowering is not implemented for Apple CPU",
         })]
-    if op.op_name == "tile.mma":
+    if op.op_name in {"tile.matmul", "tile.mma"}:
         return [TargetOp("tessera_apple.cpu.accelerate_gemm", {**base, "framework": "Accelerate", "abi": "cblas_sgemm", "dtype": "f32"})]
     # Sprint 6: batched matmul artifact lane — route to the real (batched) GEMM
     # artifact, not the generic vector_op fallback. Matches the C++ TileToApple
@@ -1742,7 +1742,7 @@ def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[Target
     # dispatch to (f32, f16, or bf16). The MatmulToAppleGPU lowering pass
     # picks the matching runtime symbol; the IR-level dtype attr is the
     # introspection mirror.
-    if mps_runtime and op.op_name == "tile.mma" and source in {"tessera.matmul", "tessera.gemm"}:
+    if mps_runtime and op.op_name in {"tile.matmul", "tile.mma"} and source in {"tessera.matmul", "tessera.gemm"}:
         # Resolve dtype from the tile op's attrs if present (Phase 8.4.4),
         # else default to f32 (preserves Phase 8.3 contract).
         tile_dtype = str(op.attrs.get("dtype", "f32"))
@@ -1930,7 +1930,7 @@ def _base_attrs(op: TileOp, *, target: Optional[str] = None) -> dict[str, Any]:
 
 def _launch_metadata(op: TileOp) -> dict[str, Any]:
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
-    if op.op_name == "tile.mma" or source in {"tessera.matmul", "tessera.gemm"}:
+    if op.op_name in {"tile.matmul", "tile.mma"} or source in {"tessera.matmul", "tessera.gemm"}:
         return {
             "kernel_id": "matmul",
             "grid": "mn_tiles",
@@ -2016,7 +2016,7 @@ def _copy_target_op(op: TargetOp) -> TargetOp:
 
 
 def _source_from_tile_op(op: TileOp) -> str:
-    if op.op_name == "tile.mma":
+    if op.op_name in {"tile.matmul", "tile.mma"}:
         return "tessera.matmul"
     if op.op_name == "tessera_attn.msa_kv_outer_sparse":
         return "tessera.msa_sparse_attention"

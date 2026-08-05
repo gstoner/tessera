@@ -100,14 +100,19 @@ static FailureOr<Value> materializeFragmentPack(
       role == "a"
           ? std::array<int64_t, 2>{desc.getM(), desc.getK()}
           : std::array<int64_t, 2>{desc.getK(), desc.getN()};
-  // 3 inputs = (base, rowOrigin, colOrigin); 5 adds (rowBound, colBound) for a
-  // ragged problem. Anything else is malformed rather than merely unsupported.
+  // Static leading dimension: 3 inputs, or 5 with bounds. Dynamic leading
+  // dimension (tile.memory leading_dim=0): 4 inputs, or 6 with bounds, with
+  // the runtime leading dimension last.
   // This guard used to require exactly 3, which made the bounded form
   // unreachable -- and silently so, since it fell into the generic
   // "unsupported source layout" diagnostic rather than naming the arity.
   const size_t viewInputs = view.getInputs().size();
+  const bool dynamicLeadingDim = memory && memory.getLeadingDim() == 0;
+  const bool validArity = dynamicLeadingDim
+                              ? (viewInputs == 4 || viewInputs == 6)
+                              : (viewInputs == 3 || viewInputs == 5);
   if ((role != "a" && role != "b") || !memory ||
-      !layout || (viewInputs != 3 && viewInputs != 5) ||
+      !layout || !validArity ||
       memory.getSpace() != "gmem" ||
       (memory.getOrder() != "row_major" && memory.getOrder() != "col_major") ||
       layout.getShardExtents() != ArrayRef<int64_t>(expectedShape) ||
@@ -168,8 +173,10 @@ static FailureOr<Value> materializeFragmentPack(
   Location loc = op->getLoc();
   Value rowOrigin = toIndex(builder, loc, view.getInputs()[1]);
   Value colOrigin = toIndex(builder, loc, view.getInputs()[2]);
-  Value leadingDim = arith::ConstantIndexOp::create(
-      builder, loc, memory.getLeadingDim());
+  Value leadingDim = dynamicLeadingDim
+                         ? toIndex(builder, loc, view.getInputs().back())
+                         : Value(arith::ConstantIndexOp::create(
+                               builder, loc, memory.getLeadingDim()));
   auto vectorTy =
       VectorType::get({physical.inputElementsPerLane}, elementTy);
   Value zero = arith::ConstantOp::create(builder, loc, vectorTy,
@@ -198,7 +205,7 @@ static FailureOr<Value> materializeFragmentPack(
   // `maskedload` with a zero passthru reproduces the generator's `storeZero`
   // element for element -- which is what lets the migrated producer stay
   // bit-identical rather than merely close.
-  const bool haveBounds = view.getInputs().size() >= 5;
+  const bool haveBounds = dynamicLeadingDim ? viewInputs == 6 : viewInputs == 5;
   Value fastBound, slowIndex, slowBound;
 
   Value linear, fastIndex;
@@ -236,11 +243,13 @@ static FailureOr<Value> materializeFragmentPack(
                      builder, loc,
                      arith::MulIOp::create(builder, loc, col, leadingDim), row);
 
-  if (!kIsContiguous) {
-    // Strided K: element j lives `j * leadingDim` away, so neither `vector.load`
-    // nor `vector.maskedload` applies. Gather element by element with the same
-    // `inb ? value : zero` shape `GenerateWMMAGemmKernel` uses by hand, which is
-    // what lets that producer migrate bit-identically rather than merely close.
+  if (!kIsContiguous || haveBounds) {
+    // A bounded fragment is scalarized even when K is contiguous. The ROCm
+    // GPU-to-LLVM pipeline does not legalize vector.create_mask/maskedload;
+    // emitting them left an index cast and vector op at LLVM translation.
+    // Scalar guarded loads are the same address/value sequence used by the
+    // production generator's ragged path. For strided K, element j lives
+    // `j * leadingDim` away; for contiguous K the stride is one.
     Value zeroScalar = arith::ConstantOp::create(
         builder, loc, elementTy, builder.getZeroAttr(elementTy));
     Value zeroIdx = arith::ConstantIndexOp::create(builder, loc, 0);
@@ -250,9 +259,12 @@ static FailureOr<Value> materializeFragmentPack(
                                      slowIndex, slowBound);
     for (int64_t j = 0; j < physical.inputElementsPerLane; ++j) {
       Value cj = arith::ConstantIndexOp::create(builder, loc, j);
+      Value stride = kIsContiguous
+                         ? Value(arith::ConstantIndexOp::create(builder, loc, 1))
+                         : leadingDim;
       Value index = arith::AddIOp::create(
           builder, loc, linear,
-          arith::MulIOp::create(builder, loc, cj, leadingDim));
+          arith::MulIOp::create(builder, loc, cj, stride));
       Value element;
       if (!haveBounds) {
         element = memref::LoadOp::create(builder, loc, base, ValueRange{index});
@@ -272,30 +284,9 @@ static FailureOr<Value> materializeFragmentPack(
       fragment = vector::InsertOp::create(builder, loc, element, fragment,
                                           ArrayRef<int64_t>{j});
     }
-  } else if (!haveBounds) {
+  } else {
     fragment = vector::LoadOp::create(builder, loc, vectorTy, base,
                                       ValueRange{linear});
-  } else {
-    Value zeroIdx = arith::ConstantIndexOp::create(builder, loc, 0);
-    Value lanes = arith::ConstantIndexOp::create(
-        builder, loc, physical.inputElementsPerLane);
-    // remaining = clamp(fastBound - fastIndex, 0, lanes)
-    Value remaining =
-        arith::SubIOp::create(builder, loc, fastBound, fastIndex);
-    remaining = arith::MaxSIOp::create(builder, loc, remaining, zeroIdx);
-    remaining = arith::MinSIOp::create(builder, loc, remaining, lanes);
-    // The slow axis is a single scalar guard: out of range zeroes the fragment.
-    Value slowOk = arith::CmpIOp::create(builder, loc,
-                                         arith::CmpIPredicate::slt,
-                                         slowIndex, slowBound);
-    Value length =
-        arith::SelectOp::create(builder, loc, slowOk, remaining, zeroIdx);
-    Value mask = vector::CreateMaskOp::create(
-        builder, loc, VectorType::get({physical.inputElementsPerLane},
-                                      builder.getI1Type()),
-        ValueRange{length});
-    fragment = vector::MaskedLoadOp::create(builder, loc, vectorTy, base,
-                                            ValueRange{linear}, mask, zero);
   }
   bool packToI32 = physical.inputFormat ==
                        tessera_rocm::FragmentRegisterFormat::SOAInt ||
@@ -378,8 +369,19 @@ static LogicalResult materializeFragmentStore(
   Location loc = op->getLoc();
   Value rowOrigin = toIndex(builder, loc, store.getInputs()[2]);
   Value colOrigin = toIndex(builder, loc, store.getInputs()[3]);
-  Value leadingDim = arith::ConstantIndexOp::create(
-      builder, loc, memory.getLeadingDim());
+  const size_t storeInputs = store.getInputs().size();
+  const bool dynamicLeadingDim = memory.getLeadingDim() == 0;
+  const bool haveBounds = dynamicLeadingDim ? storeInputs == 7
+                                            : storeInputs == 6;
+  Value leadingDim = dynamicLeadingDim
+                         ? toIndex(builder, loc, store.getInputs().back())
+                         : Value(arith::ConstantIndexOp::create(
+                               builder, loc, memory.getLeadingDim()));
+  Value rowBound, colBound;
+  if (haveBounds) {
+    rowBound = toIndex(builder, loc, store.getInputs()[4]);
+    colBound = toIndex(builder, loc, store.getInputs()[5]);
+  }
   Value groupStride = arith::ConstantIndexOp::create(
       builder, loc, physical.accumulatorElementsPerLane);
   for (int64_t i = 0; i < physical.accumulatorElementsPerLane; ++i) {
@@ -405,6 +407,19 @@ static LogicalResult materializeFragmentStore(
         arith::MulIOp::create(builder, loc, row, leadingDim), col);
     Value scalar = vector::ExtractOp::create(builder, loc, accumulator,
                                              ArrayRef<int64_t>{i});
+    if (!haveBounds) {
+      memref::StoreOp::create(builder, loc, scalar, base, ValueRange{linear});
+      continue;
+    }
+    Value rowOk = arith::CmpIOp::create(
+        builder, loc, arith::CmpIPredicate::slt, row, rowBound);
+    Value colOk = arith::CmpIOp::create(
+        builder, loc, arith::CmpIPredicate::slt, col, colBound);
+    Value inBounds = arith::AndIOp::create(builder, loc, rowOk, colOk);
+    auto guarded = scf::IfOp::create(builder, loc, inBounds,
+                                     /*withElseRegion=*/false);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(guarded.thenBlock());
     memref::StoreOp::create(builder, loc, scalar, base, ValueRange{linear});
   }
   return success();
@@ -663,6 +678,37 @@ struct ConvertFragmentZero
   }
 };
 
+// Register-owned producers (currently the ROCm attention generators) already
+// hold the exact physical lane vector: feature maps and softmax have changed
+// the values after any pointer-backed tile.view could describe them. They use
+// unrealized_conversion_cast solely to attach/remove the portable fragment
+// type at the Tile boundary. Once both sides convert to the same architecture
+// vector ABI, the bridge is identity and must disappear.
+struct ConvertFragmentBridge
+    : public OpConversionPattern<UnrealizedConversionCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnrealizedConversionCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return rewriter.notifyMatchFailure(op, "not a one-value fragment bridge");
+    bool touchesFragment =
+        isa<tessera::tile::FragmentType>(op->getOperand(0).getType()) ||
+        isa<tessera::tile::FragmentType>(op->getResult(0).getType());
+    if (!touchesFragment)
+      return rewriter.notifyMatchFailure(op, "does not bridge a Tile fragment");
+    Type convertedResult =
+        getTypeConverter()->convertType(op->getResult(0).getType());
+    if (!convertedResult || adaptor.getOperands().front().getType() != convertedResult)
+      return op->emitError(
+          "ROCm register-owned fragment bridge does not match the exact "
+          "architecture vector ABI");
+    rewriter.replaceOp(op, adaptor.getOperands().front());
+    return success();
+  }
+};
+
 struct ConvertFragmentPack
     : public OpConversionPattern<tessera::tile::FragmentPackOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -870,8 +916,8 @@ static LogicalResult convertTypedFragments(Operation *root, StringRef arch) {
     return success();
 
   RewritePatternSet patterns(ctx);
-  patterns.add<ConvertFragmentZero, ConvertFragmentPack, ConvertMMA,
-               ConvertFragmentUnpackStore>(converter, ctx);
+  patterns.add<ConvertFragmentZero, ConvertFragmentBridge, ConvertFragmentPack,
+               ConvertMMA, ConvertFragmentUnpackStore>(converter, ctx);
 
   ConversionTarget target(*ctx);
   target.markUnknownOpDynamicallyLegal(

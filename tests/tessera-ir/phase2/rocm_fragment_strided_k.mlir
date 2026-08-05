@@ -91,8 +91,9 @@ func.func @row_major_b_gathers_at_stride_ld(
 // before the select could discard it.
 //
 // CHECK-LABEL: func.func @ragged_row_major_b_guards_every_element
-// A stays contiguous, so it keeps the mask + maskedload form.
-// CHECK: vector.maskedload
+// Bounded A and B both use scalar guards because ROCm's GPU-to-LLVM pipeline
+// does not legalize vector.create_mask/maskedload.
+// CHECK-NOT: vector.maskedload
 // One element's full shape: two-axis guard, clamped ADDRESS, load, clamped
 // VALUE, insert. These ops interleave per element, so this is checked once as a
 // sequence rather than as two separate CHECK-COUNT blocks — those cannot both
@@ -102,9 +103,9 @@ func.func @row_major_b_gathers_at_stride_ld(
 // CHECK: memref.load
 // CHECK: arith.select
 // CHECK: vector.insert
-// Then the remaining 15 elements, ending at the last ordinal — which is what
-// proves the full K walk rather than a truncated one.
-// CHECK-COUNT-15: memref.load
+// The pair contributes 32 guarded scalar loads; the last ordinal proves the
+// full K walk rather than a truncated one.
+// CHECK-COUNT-31: memref.load
 // CHECK: vector.insert %{{.*}}, %{{.*}} [15]
 func.func @ragged_row_major_b_guards_every_element(
     %a: memref<?xf16>, %b: memref<?xf16>, %out: memref<?xf32>,

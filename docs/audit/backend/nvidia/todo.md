@@ -2268,13 +2268,26 @@ K loop. The open question is whether `tile.view` should be able to carry a
 precomputed linear base so that hoisting is expressible at Tile level, or
 whether the migration should rely on LICM/CSE to recover it.
 
-**How much it costs is not quantified** — the affected multiplies are largely
-loop-invariant. The decision is to be made from a measurement taken after ROCm's
-simplest configuration migrates, not from an estimate.
+**ROCm has now quantified the cost.** At 2048^3 the typed producer reaches
+12.53 TFLOP/s, above its committed 8.02 baseline but only 0.685x of the
+same-run direct compiler lane (18.28 TFLOP/s). The shared contract therefore
+needs an explicit precomputed-base/address-sharing answer or equivalent proven
+optimization before promotion; relying on implicit recovery was insufficient.
 
 **Outcome for NVIDIA: FOLLOW-UP REQUIRED.** This backend consumes `tile.view`
 and `tile.fragment_pack` (8 files each), so the same per-fragment address
 isolation applies here, and adding a base operand to `tile.view` would change
 this backend's lowering too. No exact-device evidence from an NVIDIA host is
-claimed; this is a plan-level record pending the ROCm measurement that decides
-the contract.
+claimed. This is also the owner of W1.1's final two untyped C++ `tile.mma`
+construction sites: both are tensor-valued producers in
+`TileIRLoweringPass`. They must migrate together with NVIDIA's typed
+tensor-to-fragment materializer and accumulator-threading gate; ROCm/x86
+hardware cannot validate that physical decision.
+
+## Cross-backend sync `TILE-DYNAMIC-LEADING-DIM-2026-08-04` — generic typed fragment addresses
+
+Shared `tile.view` / `tile.store` can now carry an SSA leading dimension when
+`#tile.memory_layout` states zero. **Outcome for NVIDIA: FOLLOW-UP REQUIRED.**
+The sm_120 fragment materializer fails closed on this valid shared form and
+still requires a static leading dimension. No CUDA-enabled build or sm_120
+device evidence is claimed from this ROCm/x86 host.

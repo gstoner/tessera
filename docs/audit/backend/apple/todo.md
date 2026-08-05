@@ -2683,9 +2683,9 @@ K loop. The open question is whether `tile.view` should be able to carry a
 precomputed linear base so that hoisting is expressible at Tile level, or
 whether the migration should rely on LICM/CSE to recover it.
 
-**How much it costs is not quantified** — the affected multiplies are largely
-loop-invariant. The decision is to be made from a measurement taken after ROCm's
-simplest configuration migrates, not from an estimate.
+ROCm has now measured the migrated lane: 12.53 TFLOP/s clears the committed
+8.02 baseline but reaches only 0.685x of its same-run direct compiler lane.
+That selects explicit address sharing as follow-up for Tile-fragment backends.
 
 **Outcome for Apple: NOT APPLICABLE.** This backend consumes neither
 `tile.view` nor `tile.fragment_pack` (0 files). The MLIR lane lowers to
@@ -2693,3 +2693,10 @@ simplest configuration migrates, not from an estimate.
 separate Python path (`compiler/emit/apple_msl.py`); neither consumes Tile
 fragment ops, so there is no address form to hoist. Re-open under this key if
 the synthesizer/MLIR seam closes onto Tile fragments.
+
+## Cross-backend sync `TILE-DYNAMIC-LEADING-DIM-2026-08-04` — generic typed fragment addresses
+
+Shared `tile.view` / `tile.store` can now carry an SSA leading dimension when
+`#tile.memory_layout` states zero. **Outcome for Apple: NOT APPLICABLE.** Apple
+has no Tile-fragment or pointer-backed `tile.view` consumer; neither its MLIR
+runtime-call lane nor its MSL synthesizer changed.

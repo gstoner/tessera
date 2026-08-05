@@ -190,8 +190,8 @@ producer migration rather than after it.
 | **1** | **Landed 2026-08-03.** `!tile.fragment<m, n, k, elem, acc, role, layout, family>` with a custom parser/printer; the bare `!tile.fragment` still parses and prints as all-unknown. Cheaper than the 5w estimate implied: all 7 C++ `FragmentType` uses are `isa<>` checks, so there were **no construction sites to migrate** — the only producers were fixtures and Python text emitters, and both keep working. Differing `family` / `acc` / `role` now fail on MLIR's own type equality with **zero verifier code**, and the bare form is deliberately NOT a wildcard (else the legacy spelling would be a hole through the contract). Fixtures: `tile_fragment_type{,_invalid}.mlir` — the positive one pipes through `tessera-opt` twice so it asserts a real round-trip, not just that the printer emits something FileCheck likes. | round-trip fixture; existing fixture files still pass |
 | **2** | **Landed 2026-08-03.** `MMAOp::verify()` reads the contract from the operand types when any data operand is parameterized, and `FragmentPackOp` / `FragmentZeroOp` do the same for their result — without that producer half, no typed fragment could be produced at all. `#tile.mma_desc` became OPTIONAL on the typed path (it still carries `k_blocks`) and is cross-checked when present. **The canonical K-loop now verifies** (`tile_mma_typed_kloop.mlir`). | both forms verify; the §2 K-loop **verifies** — necessary, and per §4.1 not sufficient |
 | **2b** | **Bigger than "accept a block argument" — see §4.2.** Both backends **materialize a zero constant** as the MMA's C operand and never read the accumulator value, so relaxing the `FragmentZeroOp` check alone would emit a silently WRONG GEMM. The real work is threading the loop-carried accumulator through the lowering, which means type-converting the `scf.for` region signature | the §2 K-loop **lowers** AND is numerically verified on gfx1151 (this box executes) — a lowering fixture alone cannot catch the wrong-answer failure mode |
-| **3** | Migrate the 5 construction sites (`TileIRLoweringPass.cpp` ×2, `GenerateWMMA{Gemm,LinearAttn,FlashAttn}Kernel.cpp`), one per PR, each with a lit fixture | per-producer fixture pairs `!tile.fragment<…>` with `tile.mma`, **and a backend lowering fixture** for the producers that feed one |
-| **4** | Migrate the 5 Python text emitters (`nvidia_native.py` ×4, `runtime.py`) | the Python-side tests named in inventory §2 |
+| **3** | **Landing: 3 of 5 sites migrated.** ROCm GEMM uses the full view/pack/mma/unpack/store chain; ROCm flash/linear attention use exact-ABI typed bridges for computed register fragments. The two tensor-valued `TileIRLoweringPass` sites remain NVIDIA-owned. | per-producer typed structure plus backend lowering; exact-device where the host exists |
+| **4** | **Landed by convergence, 2026-08-04.** The five old text sites emit `tile.matmul_kernel`, not `tile.mma`. The structured Python Tile builder now emits logical `tile.matmul`; target lowering owns physical fragment construction. Compatibility consumers may still read historical `tile.mma`, but no Python lowering constructs one. | Tile→Target spine tests across ROCm/NVIDIA/Apple/x86 |
 | **5** | Delete `MMAOp::verify()`'s permissive branch and the bare-type fallback | inventory step 4's gate: the contract becomes binding |
 | **6** | **Apple half landed 2026-08-04; NVIDIA half is NOT verifiable on the primary box.** `tessera_apple` had 12 `Variadic<AnyType>`: 6 are the runtime-call ops (`cpu.call`, `gpu.kernel_call`, `gpu.package_call`) and are now `Variadic<AppleTarget_Buffer>` (ranked tensor or memref) — those lower to an Accelerate/LAPACK entry point or a compiled MSL kernel, which take buffers; scalar parameters ride as attributes, so nothing is lost. The other 6 are `gpu.control_{if,loop,while}` `iter_args`/`results`, where `AnyType` is **explained and correct** (loop-carried values are polymorphic, exactly as `scf.for`'s are) and is now documented as such so a later audit does not read them as leftovers. All 303 pre-existing fixtures passed unchanged, so no producer relied on the wider set; a negative fixture proves the constraint bites on a scalar operand and a scalar result. **NVIDIA half deferred with a reason:** the `tessera_nvidia` dialect is **not registered in the default build** — `tessera-opt` rejects its ops as an unregistered dialect and its lit fixtures run under `-allow-unregistered-dialect`. Tightening its ODS here would be unverifiable, and its 3 occurrences are 2 on a shared `TesseraNVIDIA_Op` base class (deliberately generic to tolerate per-SM attribute combinations, per its own header comment) plus `cuda_math_kernel`. Needs `-DTESSERA_ENABLE_CUDA=ON`. | per inventory §4 step 5 |
 
@@ -459,6 +459,10 @@ bounded.
 | `FragmentType` in C++ | 3 files / 7 occurrences |
 | `mma_desc` in fixtures | 11 files |
 | `mma_desc` in Python emitters | 5 files |
+
+This table is the 2026-08-03 snapshot, not current producer truth. The current
+Python occurrences belong to `tile.matmul_kernel` launch envelopes; there are
+zero Python `tile.mma` construction sites (see §4.8).
 
 This is **much smaller than the 5-week estimate implies**, and the reason is not
 comfort: the typed form has almost no adoption precisely *because* §2 made it
@@ -738,6 +742,54 @@ what `via-tile` emits — from "same operands, different op name" to the full
 chain — and inherits that gate unchanged. Throughput is then read against
 `GEMM_PERF_LADDER.md`'s 8.02 TFLOP/s naive-register row, at the same
 `timer_source`.
+
+### 4.8 First step-3 producer landed — dynamic addresses, full 2x4 chain
+
+`GenerateWMMAGemmKernel{via-tile=true}` now emits the complete typed chain for
+the production `mt=2, nt=4` schedule. The producer states logical origins,
+bounds, and runtime leading dimensions; `fragment_pack` owns wave32 lane
+mapping, ragged masking, strided-B gathering, and register packing. The
+unpacked accumulators store through the same typed address contract.
+
+This required one shared contract closure that §4.7 did not inventory:
+problem-size-generic N/K cannot inhabit the static `leading_dim` field.
+`#tile.memory_layout<leading_dim = 0>` therefore denotes an SSA leading
+dimension in the final `tile.view` / `tile.store` operand. Hard-coding 64 would
+have passed the only hardware gate while making the experimental lane wrong for
+other shapes.
+
+Gates: exact structural counts (24 views/packs, 8 zeros, 32 MMAs, 16
+unpack/stores), no Tile/cast leaks after ROCDL lowering, and zero-difference
+output against the direct lane on gfx1151. Exact-device coverage now includes
+aligned `64x64x64` and ragged `65x67x31`, so M/N edges and the K tail execute.
+
+The 2048^3 throughput gate is intentionally two-sided. The typed lane reaches
+**12.53 TFLOP/s**, clearing the committed **8.02 TFLOP/s** row by **1.562x**,
+but reaches only **0.685x** of the same-run direct compiler lane
+(18.28 TFLOP/s). Therefore the producer is retained behind `via-tile` and is
+not promoted. This measurement answers §4.7's open question: relying on the
+backend to recover all producer-level address sharing is not sufficient on the
+current pipeline; `TILE-VIEW-LINEAR-BASE-2026-08-05` remains required.
+
+Two ROCm attention construction sites are now typed as well. Flash attention
+and linear attention cannot truthfully use pointer-backed `tile.view` for every
+operand: softmax probabilities and feature-mapped Q/K are computed values whose
+register vectors already carry the architecture lane map. They attach the
+parameterized fragment types at that register-owned boundary, and
+`ConvertFragmentBridge` erases the vector-identical bridges only when the
+stated type resolves to the exact gfx architecture ABI. Both routed lanes lower
+to the same ROCDL operation multiset as their direct generators, including the
+ReLU feature-map case. This is a typed boundary, not a permissive vector
+`tile.mma`.
+
+The remaining **two** C++ construction sites are the tensor-valued producers in
+`TileIRLoweringPass`; they feed the NVIDIA warp-specialization/WGMMA lane and
+require that backend's typed tensor-to-fragment materializer. Step 3 is landing,
+not complete. Step 4's old “five Python text emitters” count is no longer a live
+migration surface: current `nvidia_native.py` and `runtime.py` emit the typed
+launch-level `tile.matmul_kernel` envelope and no Python file constructs
+`tile.mma`. That outcome is recorded by re-inventory rather than manufacturing
+fragment ops in Python merely to satisfy a stale count.
 
 `via-tile` is also the right seam for *staging*: the default path stays
 untouched while the typed chain is built behind the option, so a partial

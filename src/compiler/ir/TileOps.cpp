@@ -691,23 +691,25 @@ LogicalResult ViewOp::verify() {
     // The pointer-backed operand contract, defined HERE rather than per
     // backend (PR #510 review).
     //
-    //   3 inputs: (base, rowOrigin, colOrigin)
-    //   5 inputs: + (rowBound, colBound) -- the LOGICAL extents, runtime values
-    //             on a ragged problem, so a fragment straddling the edge can be
-    //             masked instead of reading past it.
+    //   static leading_dim:  3 inputs, or 5 with (rowBound, colBound)
+    //   dynamic leading_dim: 4 inputs, or 6 with bounds; the final operand is
+    //                        the runtime leading dimension.
     //
     // This used to accept any count >= 3, which made a 4-operand view legal and
     // meaningless, and left "is the bounded form valid?" to whichever backend
     // happened to look. A shared-IR op whose accepted shape is decided by its
     // consumers is how the same valid Tile IR becomes backend-dependent.
     const size_t inputs = getInputs().size();
-    if (inputs != 3 && inputs != 5)
+    const bool dynamic = memory.getLeadingDim() == 0;
+    const bool valid = dynamic ? (inputs == 4 || inputs == 6)
+                               : (inputs == 3 || inputs == 5);
+    if (!valid)
       return emitOpError()
              << "TILE_VIEW_POINTER_ARITY: pointer-backed tile.view takes "
                 "(base, rowOrigin, colOrigin), optionally followed by "
-                "(rowBound, colBound); got "
+                "(rowBound, colBound), and requires a final SSA leading "
+                "dimension exactly when tile.memory leading_dim is zero; got "
              << inputs << " operands";
-    (void)memory;
   }
   return success();
 }
@@ -985,14 +987,27 @@ LogicalResult FragmentUnpackOp::verify() {
 }
 
 LogicalResult StoreOp::verify() {
-  if (getInputs().size() != 4 ||
+  if (getInputs().empty() ||
       !isa<TileValueType>(getInputs().front().getType()))
     return emitOpError(
         "pointer-backed form expects tile, base, row origin, column origin");
   if (!getOperation()->getAttrOfType<TileLayoutAttr>("tile.layout"))
     return emitOpError("requires a #tile.layout attribute");
-  if (!getOperation()->getAttrOfType<TileMemoryLayoutAttr>("tile.memory"))
+  auto memory =
+      getOperation()->getAttrOfType<TileMemoryLayoutAttr>("tile.memory");
+  if (!memory)
     return emitOpError("requires a #tile.memory_layout attribute");
+  const size_t inputs = getInputs().size();
+  const bool dynamic = memory.getLeadingDim() == 0;
+  const bool valid = dynamic ? (inputs == 5 || inputs == 7)
+                             : (inputs == 4 || inputs == 6);
+  if (!valid)
+    return emitOpError()
+           << "TILE_STORE_POINTER_ARITY: pointer-backed tile.store takes "
+              "(tile, base, rowOrigin, colOrigin), optionally followed by "
+              "(rowBound, colBound), and requires a final SSA leading "
+              "dimension exactly when tile.memory leading_dim is zero; got "
+           << inputs << " operands";
   return success();
 }
 

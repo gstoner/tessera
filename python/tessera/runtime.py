@@ -1789,16 +1789,13 @@ def _load_rocm_gemm_runtime() -> ctypes.CDLL | None:
     path = _rocm_gemm_lib_path()
     if path is None:
         return None
-    rocm_lib = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
-    for dep in ("libamdhip64.so", "libhiprtc.so"):
-        p = os.path.join(rocm_lib, dep)
-        if os.path.isfile(p):
-            try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
-            except OSError:
-                pass
     try:
-        lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_GLOBAL)
+        # This shared library links HIP and HIPRTC directly; dlopen resolves
+        # those DT_NEEDED dependencies itself. Preloading both dependencies as
+        # RTLD_GLOBAL and then resolving the GEMM symbol corrupts interpreter
+        # shutdown on WSL ROCm (double free after otherwise-passing tests).
+        # Keep the plugin and its dependency closure local instead.
+        lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_LOCAL)
     except OSError:
         return None
     for sym in _ROCM_GEMM_SYMBOLS.values():
@@ -5758,9 +5755,8 @@ def _build_compiled_gemm_hsaco(
         "generate-wmma-gemm-kernel,"
         # W1.1 — lower any tile.mma the generator emitted.
         #
-        # `generate-wmma-gemm-kernel{via-tile=true}` emits
-        # `tile.mma %a, %b, %acc` at the Tile-IR seam instead of
-        # `tessera_rocm.wmma`. Without this pass that op survives to LLVM
+        # `generate-wmma-gemm-kernel{via-tile=true}` emits the typed
+        # view/pack/mma/unpack/store chain. Without this pass those ops survive to LLVM
         # translation and the build dies with "missing
         # LLVMTranslationDialectInterface registration ... for op:
         # tile.mma", so via-tile was unreachable in production.
@@ -5855,9 +5851,8 @@ def _build_canonical_gemm_hsaco(
         f"generate-wmma-gemm-kernel{{canonical-staging={staging}}},"
         # W1.1 — lower any tile.mma the generator emitted.
         #
-        # `generate-wmma-gemm-kernel{via-tile=true}` emits
-        # `tile.mma %a, %b, %acc` at the Tile-IR seam instead of
-        # `tessera_rocm.wmma`. Without this pass that op survives to LLVM
+        # `generate-wmma-gemm-kernel{via-tile=true}` emits the typed
+        # view/pack/mma/unpack/store chain. Without this pass those ops survive to LLVM
         # translation and the build dies with "missing
         # LLVMTranslationDialectInterface registration ... for op:
         # tile.mma", so via-tile was unreachable in production.
@@ -5925,20 +5920,25 @@ def _load_hip_for_launch() -> ctypes.CDLL | None:
     global _rocm_hip_launch_lib
     if _rocm_hip_launch_lib is not None:
         return _rocm_hip_launch_lib
-    rocm_lib = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
-    for dep in ("libamdhip64.so", "libhiprtc.so"):
-        p = os.path.join(rocm_lib, dep)
-        if os.path.isfile(p):
-            try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
-            except OSError:
-                pass
     try:
-        hip = ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_GLOBAL)
+        # Calls go through this handle; generated modules do not require HIP's
+        # host symbols to be promoted process-wide. RTLD_GLOBAL promotion after
+        # loading a local HIPRTC plugin is the second half of the WSL teardown
+        # double-free reproduced by the compiled GEMM tests.
+        hip = ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_LOCAL)
     except OSError:
         return None
+    hip.hipInit.argtypes = [ctypes.c_uint]
     hip.hipMalloc.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+    hip.hipFree.argtypes = [ctypes.c_void_p]
     hip.hipMemcpy.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+    hip.hipModuleGetFunction.argtypes = [
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.c_void_p,
+        ctypes.c_char_p,
+    ]
+    hip.hipModuleUnload.argtypes = [ctypes.c_void_p]
+    hip.hipDeviceSynchronize.argtypes = []
     hip.hipModuleLaunchKernel.argtypes = (
         [ctypes.c_void_p] + [ctypes.c_uint] * 6 + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
     )

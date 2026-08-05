@@ -79,11 +79,11 @@ def test_the_tile_lowering_always_states_its_arch():
 def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
     """The claim the structural gate cannot make: the accumulator survives.
 
-    `via-tile` routes the GEMM through `tile.mma %a, %b, %acc`. If the
-    accumulator were dropped in the round trip — the defect found on the NVIDIA
-    side, where the WGMMA lowering passes only (A, B) — a K-loop would return
-    the last partial product. Bit-identical output is what rules that out; a
-    lowering fixture checking emitted ops would not.
+    `via-tile` routes the production 2x4 macro tile through the complete typed
+    `tile.view -> fragment_pack -> tile.mma -> fragment_unpack -> tile.store`
+    chain. If addressing, masking, accumulator threading, or stores diverge,
+    bit-identical output fails; a lowering fixture checking emitted ops would
+    not prove any of those properties.
 
     The control matters as much as the comparison: an earlier version of this
     experiment reported bit-identical output while the injection silently never
@@ -153,15 +153,20 @@ def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
     )
 
     rng = np.random.default_rng(21)
-    a = (rng.standard_normal((64, 64)) * 0.4).astype(np.float16)
-    b = (rng.standard_normal((64, 64)) * 0.4).astype(np.float16)
-    base, _ = launch(None, a, b)
-    tiled, hits = launch("generate-wmma-gemm-kernel{via-tile=true},", a, b)
+    # The second shape crosses every dynamic-address boundary: ragged M/N make
+    # the edge stores and A/B bounds live, while ragged K executes the scalar
+    # guarded tail pack. The aligned case remains the production 2x4 baseline.
+    for m, n, k in ((64, 64, 64), (65, 67, 31)):
+        a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)
+        b = (rng.standard_normal((k, n)) * 0.4).astype(np.float16)
+        base, _ = launch(None, a, b)
+        tiled, hits = launch(
+            "generate-wmma-gemm-kernel{via-tile=true},", a, b
+        )
 
-    assert hits == 1, "via-tile injection did not reach the pipeline"
-    assert base.get("ok") is True, base.get("reason")
-    assert tiled.get("ok") is True, tiled.get("reason")
-    assert float(np.max(np.abs(base["output"] - tiled["output"]))) == 0.0, (
-        "via-tile diverged from the production lane — the accumulator did not "
-        "survive the tile.mma round trip"
-    )
+        assert hits == 1, "via-tile injection did not reach the pipeline"
+        assert base.get("ok") is True, base.get("reason")
+        assert tiled.get("ok") is True, tiled.get("reason")
+        assert float(np.max(np.abs(base["output"] - tiled["output"]))) == 0.0, (
+            f"via-tile diverged from production at ragged shape {m}x{n}x{k}"
+        )

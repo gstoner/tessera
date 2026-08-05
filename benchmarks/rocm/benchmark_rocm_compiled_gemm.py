@@ -46,7 +46,6 @@ TESSERA_OPT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
 GEMM_LIB = (REPO_ROOT / "build" / "src" / "compiler" / "codegen"
             / "Tessera_ROCM_Backend" / "runtime" / "hip"
             / "libtessera_rocm_gemm.so")
-ROCM_LIB_DIR = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 # The macro-tiles to sweep: the L1 baseline (1x1), small (2x4), and the
@@ -114,15 +113,8 @@ def _build_hsaco(mlir_opt, mt, nt) -> bytes:
 
 
 def _load_hip():
-    for dep in ("libamdhip64.so", "libhiprtc.so"):
-        p = os.path.join(ROCM_LIB_DIR, dep)
-        if os.path.isfile(p):
-            try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
-            except OSError:
-                pass
     try:
-        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_GLOBAL)
+        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_LOCAL)
     except OSError:
         return None
 
@@ -217,7 +209,7 @@ def main() -> int:
         if args.output:
             Path(args.output).write_text("[]\n")
         return 0
-    lib = ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_GLOBAL) \
+    lib = ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_LOCAL) \
         if GEMM_LIB.is_file() else None
 
     flop = 2.0 * M * N * K

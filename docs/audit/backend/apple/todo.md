@@ -2742,3 +2742,18 @@ outcome: follow-up required on the owning Mac.** No MSL/MPS/Accelerate schedule
 or selector changed, and Apple inherits neither gfx1151's 32x64 macro tile nor
 Zen 5 evidence. Its later scheduled consumer must select and measure an
 Apple-owned macro tile before promotion.
+
+## Cross-backend sync `E2E-REAL-SEMANTIC-KERNELS-2026-08-05`
+
+The shared spine now has content-addressed `schedule.softmax` and
+`schedule.reduce` SSA edges and atomically lowers the bounded canonical f32
+contracts to launch-level Tile artifacts. x86 and gfx1151 packages consume the
+exact emitted artifact and have owning-host numerical proof. **Apple outcome:
+follow-up required on the owning Mac.** Apple CPU/GPU packages still consume
+`GraphIRModule`; no MSL, MPSGraph, Accelerate, metallib, descriptor, schedule,
+or selector changed here. Apple must define its own Schedule policy and consume
+this artifact boundary before its existing softmax/reduction kernels can earn
+lineage-complete evidence. The x86/gfx1151 workgroup choices and device results
+do not transfer. Canonical Graph reduction currently excludes mixed-output and
+keepdims forms, so those need a shared Graph-contract extension before any
+backend can claim them through this spine.

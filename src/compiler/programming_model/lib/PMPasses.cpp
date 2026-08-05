@@ -29,6 +29,8 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/SHA256.h"
 
+#include <optional>
+
 using namespace mlir;
 
 namespace tessera {
@@ -304,6 +306,123 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
                      /*LowerCase=*/true);
 }
 
+struct SemanticKernelSchedule {
+  StringRef family;
+  StringRef kind;
+  StringRef target;
+  StringRef arch;
+  StringRef storage;
+  StringRef accum = "f32";
+  SmallVector<int64_t> inputShape;
+  SmallVector<int64_t> outputShape;
+  int64_t axis = -1;
+  bool keepdims = false;
+  int64_t rows = 1;
+  int64_t columns = 1;
+  int64_t outer = 1;
+  int64_t axisExtent = 1;
+  int64_t inner = 1;
+  int64_t workgroupSize = 1;
+};
+
+static StringRef storageName(Type type) {
+  if (type.isF16()) return "f16";
+  if (type.isBF16()) return "bf16";
+  if (type.isF32()) return "f32";
+  return {};
+}
+
+static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op) {
+  ModuleOp module = op->getParentOfType<ModuleOp>();
+  if (!module || op->getNumOperands() != 1 || op->getNumResults() != 1)
+    return failure();
+  auto input = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto output = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!input || !output || input.getRank() < 1 || !input.hasStaticShape() ||
+      !output.hasStaticShape())
+    return failure();
+
+  SemanticKernelSchedule schedule;
+  schedule.target = moduleString(module, "tessera.target", "target");
+  schedule.arch = moduleString(module, "tessera.arch", "arch");
+  schedule.storage = storageName(input.getElementType());
+  schedule.inputShape.assign(input.getShape().begin(), input.getShape().end());
+  schedule.outputShape.assign(output.getShape().begin(), output.getShape().end());
+  bool x86 = schedule.target == "x86" || schedule.arch.contains("avx512") ||
+             schedule.arch.contains("zen5");
+  bool rocm = schedule.arch.contains("gfx1151");
+  if (!x86 && !rocm)
+    return failure();
+
+  StringRef opName = op->getName().getStringRef();
+  if (opName == "tessera.softmax") {
+    auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
+    if ((axisAttr && axisAttr.getInt() != -1) || input != output ||
+        (x86 && schedule.storage != "f32") ||
+        (rocm && schedule.storage != "f16" && schedule.storage != "f32"))
+      return failure();
+    schedule.family = "softmax";
+    schedule.rows = 1;
+    for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
+    schedule.columns = input.getShape().back();
+    schedule.workgroupSize = rocm ? 256 : 1;
+    return schedule;
+  }
+
+  if (opName != "tessera.reduce")
+    return failure();
+  auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
+  int64_t axis = axisAttr ? axisAttr.getInt() : -1;
+  if (axis < 0) axis += input.getRank();
+  if (axis < 0 || axis >= input.getRank() || !output.getElementType().isF32())
+    return failure();
+  auto kindAttr = op->getAttrOfType<StringAttr>("kind");
+  if (!kindAttr || (kindAttr.getValue() != "sum" &&
+                    kindAttr.getValue() != "mean" &&
+                    kindAttr.getValue() != "max"))
+    return failure();
+  bool keepdims = false;
+  SmallVector<int64_t> expected(input.getShape().begin(), input.getShape().end());
+  if (keepdims) expected[axis] = 1;
+  else expected.erase(expected.begin() + axis);
+  if (ArrayRef<int64_t>(expected) != output.getShape() ||
+      schedule.storage != "f32" ||
+      (x86 && axis != input.getRank() - 1))
+    return failure();
+  schedule.family = "reduce";
+  schedule.kind = kindAttr.getValue();
+  schedule.axis = axis;
+  schedule.keepdims = keepdims;
+  for (int64_t dim : input.getShape().take_front(axis)) schedule.outer *= dim;
+  schedule.axisExtent = input.getDimSize(axis);
+  for (int64_t dim : input.getShape().drop_front(axis + 1)) schedule.inner *= dim;
+  schedule.workgroupSize = rocm ? 256 : 1;
+  return schedule;
+}
+
+static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) {
+  std::string inputShape;
+  std::string outputShape;
+  for (int64_t dim : schedule.inputShape)
+    inputShape += (inputShape.empty() ? "" : "x") + Twine(dim).str();
+  for (int64_t dim : schedule.outputShape)
+    outputShape += (outputShape.empty() ? "" : "x") + Twine(dim).str();
+  std::string contract =
+      (Twine("family=") + schedule.family + ";kind=" + schedule.kind +
+       ";target=" + schedule.target + ";arch=" + schedule.arch +
+       ";input=" + inputShape + ";output=" + outputShape +
+       ";storage=" + schedule.storage + ";accum=" + schedule.accum +
+       ";axis=" + Twine(schedule.axis) + ";keepdims=" +
+       Twine(schedule.keepdims ? 1 : 0) + ";rows=" + Twine(schedule.rows) +
+       ";columns=" + Twine(schedule.columns) + ";outer=" +
+       Twine(schedule.outer) + ";axis_extent=" + Twine(schedule.axisExtent) +
+       ";inner=" + Twine(schedule.inner) + ";workgroup=" +
+       Twine(schedule.workgroupSize) + ";exp=accurate;ftz=0;schedule=serial;nan=propagate")
+          .str();
+  return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
+                     /*LowerCase=*/true);
+}
+
 struct GraphToSchedulePass
     : public PassWrapper<GraphToSchedulePass, OperationPass<ModuleOp>> {
 
@@ -401,6 +520,71 @@ struct GraphToSchedulePass
           "numeric_policy",
           builder.getStringAttr((Twine(selected->storage) + "->" +
                                  selected->accum)
+                                    .str()));
+      builder.create(artifactState);
+    }
+
+    SmallVector<Operation *> semanticKernels;
+    mod.walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name == "tessera.softmax" || name == "tessera.reduce")
+        semanticKernels.push_back(op);
+    });
+    for (Operation *op : semanticKernels) {
+      FailureOr<SemanticKernelSchedule> selected = getSemanticKernelSchedule(op);
+      if (failed(selected)) {
+        op->emitError("E2E-REAL-5 Graph->Schedule requires a supported static "
+                      "x86 or gfx1151 softmax/reduction contract");
+        return signalPassFailure();
+      }
+      std::string digest = semanticKernelDigest(*selected);
+      op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
+      builder.setInsertionPointAfter(op);
+      OperationState state(op->getLoc(),
+                           selected->family == "softmax" ? "schedule.softmax"
+                                                         : "schedule.reduce");
+      state.addOperands(op->getResult(0));
+      state.addTypes(op->getResult(0).getType());
+      state.addAttribute("artifact_hash", builder.getStringAttr(digest));
+      state.addAttribute("arch", builder.getStringAttr(selected->arch));
+      state.addAttribute("storage", builder.getStringAttr(selected->storage));
+      state.addAttribute("accum", builder.getStringAttr(selected->accum));
+      state.addAttribute("axis", builder.getI64IntegerAttr(selected->axis));
+      state.addAttribute("workgroup_size",
+                         builder.getI64IntegerAttr(selected->workgroupSize));
+      if (selected->family == "softmax") {
+        state.addAttribute("exp_mode", builder.getStringAttr("accurate"));
+        state.addAttribute("ftz", builder.getBoolAttr(false));
+      } else {
+        state.addAttribute("kind", builder.getStringAttr(selected->kind));
+        state.addAttribute("keepdims", builder.getBoolAttr(selected->keepdims));
+        state.addAttribute("schedule", builder.getStringAttr("serial"));
+        state.addAttribute("nan_mode", builder.getStringAttr("propagate"));
+        state.addAttribute("inner_is_one", builder.getBoolAttr(selected->inner == 1));
+      }
+      Operation *scheduled = builder.create(state);
+      for (OpOperand &use : llvm::make_early_inc_range(op->getResult(0).getUses()))
+        if (use.getOwner() != scheduled)
+          use.set(scheduled->getResult(0));
+
+      builder.setInsertionPointAfter(scheduled);
+      OperationState artifactState(op->getLoc(), "schedule.artifact");
+      artifactState.addAttribute("hash", builder.getStringAttr(digest));
+      artifactState.addAttribute("arch", builder.getStringAttr(selected->arch));
+      artifactState.addAttribute(
+          "shape_key",
+          builder.getStringAttr((Twine("family=") + selected->family +
+                                 ";storage=" + selected->storage +
+                                 ";axis=" + Twine(selected->axis))
+                                    .str()));
+      artifactState.addAttribute(
+          "tile", builder.getDictionaryAttr({
+                      builder.getNamedAttr("workgroup_size",
+                                           builder.getI64IntegerAttr(selected->workgroupSize)),
+                  }));
+      artifactState.addAttribute(
+          "numeric_policy",
+          builder.getStringAttr((Twine(selected->storage) + "->" + selected->accum)
                                     .str()));
       builder.create(artifactState);
     }
@@ -565,6 +749,138 @@ struct ScheduleToTilePass
 
       for (schedule::ArtifactOp artifact : matchingArtifacts)
         artifact.erase();
+    }
+
+    SmallVector<Operation *> scheduledKernels;
+    mod.walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name == "schedule.softmax" || name == "schedule.reduce")
+        scheduledKernels.push_back(op);
+    });
+    for (Operation *scheduled : scheduledKernels) {
+      bool isSoftmax = scheduled->getName().getStringRef() == "schedule.softmax";
+      Operation *graph = scheduled->getOperand(0).getDefiningOp();
+      if (!graph || graph->getNumOperands() != 1 || graph->getNumResults() != 1) {
+        scheduled->emitError(
+            "E2E-REAL-5 requires the retained Graph semantic-kernel result");
+        return signalPassFailure();
+      }
+      auto selected = getSemanticKernelSchedule(graph);
+      auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
+      if (failed(selected) || !hash || semanticKernelDigest(*selected) != hash.getValue() ||
+          (isSoftmax && selected->family != "softmax") ||
+          (!isSoftmax && selected->family != "reduce")) {
+        scheduled->emitError(
+            "scheduled decision does not match the retained Graph kernel contract");
+        return signalPassFailure();
+      }
+      auto attrString = [&](StringRef name) -> StringRef {
+        if (auto attr = scheduled->getAttrOfType<StringAttr>(name)) return attr.getValue();
+        return {};
+      };
+      auto attrInt = [&](StringRef name) -> std::optional<int64_t> {
+        if (auto attr = scheduled->getAttrOfType<IntegerAttr>(name)) return attr.getInt();
+        return std::nullopt;
+      };
+      auto attrBool = [&](StringRef name) -> std::optional<bool> {
+        if (auto attr = scheduled->getAttrOfType<BoolAttr>(name)) return attr.getValue();
+        return std::nullopt;
+      };
+      bool altered = attrString("arch") != selected->arch ||
+                     attrString("storage") != selected->storage ||
+                     attrString("accum") != selected->accum ||
+                     attrInt("axis") != selected->axis ||
+                     attrInt("workgroup_size") != selected->workgroupSize;
+      if (isSoftmax)
+        altered = altered || attrString("exp_mode") != "accurate" ||
+                  attrBool("ftz") != false;
+      else
+        altered = altered || attrString("kind") != selected->kind ||
+                  attrBool("keepdims") != selected->keepdims ||
+                  attrString("schedule") != "serial" ||
+                  attrString("nan_mode") != "propagate" ||
+                  attrBool("inner_is_one") != (selected->inner == 1);
+      if (altered) {
+        scheduled->emitError(
+            "scheduled semantic-kernel policy was altered after hashing");
+        return signalPassFailure();
+      }
+      auto graphDigest = graph->getAttrOfType<StringAttr>("schedule.artifact_hash");
+      SmallVector<schedule::ArtifactOp> matchingArtifacts;
+      mod.walk([&](schedule::ArtifactOp artifact) {
+        if (artifact.getHash() == hash.getValue()) matchingArtifacts.push_back(artifact);
+      });
+      if (!graphDigest || graphDigest.getValue() != hash.getValue() ||
+          matchingArtifacts.size() != 1) {
+        scheduled->emitError(
+            "requires exactly one matching Graph hash and schedule.artifact");
+        return signalPassFailure();
+      }
+
+      auto inputType = cast<RankedTensorType>(graph->getOperand(0).getType());
+      auto outputType = cast<RankedTensorType>(graph->getResult(0).getType());
+      Location loc = scheduled->getLoc();
+      builder.setInsertionPoint(scheduled);
+      auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      auto inputMemref = MemRefType::get(inputType.getShape(), inputType.getElementType());
+      Value inputBuffer = builder.create<bufferization::ToBufferOp>(
+          loc, inputMemref, graph->getOperand(0));
+      Value inputIndex =
+          builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, inputBuffer);
+      Value inputInteger =
+          builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), inputIndex);
+      Value inputPointer =
+          builder.create<LLVM::IntToPtrOp>(loc, pointerType, inputInteger);
+      auto outputMemref =
+          MemRefType::get(outputType.getShape(), outputType.getElementType());
+      Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      Value outputIndex =
+          builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      Value outputInteger =
+          builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), outputIndex);
+      Value outputPointer =
+          builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger);
+
+      OperationState kernelState(
+          loc, isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");
+      if (isSoftmax) {
+        Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);
+        Value columns =
+            builder.create<arith::ConstantIntOp>(loc, selected->columns, 64);
+        kernelState.addOperands({inputPointer, outputPointer, rows, columns});
+        kernelState.addAttribute("storage", builder.getStringAttr(selected->storage));
+        kernelState.addAttribute("accum", builder.getStringAttr(selected->accum));
+        kernelState.addAttribute("axis", builder.getI64IntegerAttr(-1));
+        kernelState.addAttribute("exp_mode", builder.getStringAttr("accurate"));
+        kernelState.addAttribute("ftz", builder.getBoolAttr(false));
+      } else {
+        Value outer = builder.create<arith::ConstantIntOp>(loc, selected->outer, 64);
+        Value extent =
+            builder.create<arith::ConstantIntOp>(loc, selected->axisExtent, 64);
+        Value inner = builder.create<arith::ConstantIntOp>(loc, selected->inner, 64);
+        kernelState.addOperands(
+            {inputPointer, outputPointer, outer, extent, inner});
+        kernelState.addAttribute("storage", builder.getStringAttr(selected->storage));
+        kernelState.addAttribute("accum", builder.getStringAttr(selected->accum));
+        kernelState.addAttribute("kind", builder.getStringAttr(selected->kind));
+        kernelState.addAttribute("axis", builder.getI64IntegerAttr(selected->axis));
+        kernelState.addAttribute("keepdims", builder.getBoolAttr(selected->keepdims));
+        kernelState.addAttribute("schedule", builder.getStringAttr("serial"));
+        kernelState.addAttribute("nan_mode", builder.getStringAttr("propagate"));
+        kernelState.addAttribute("inner_is_one",
+                                 builder.getBoolAttr(selected->inner == 1));
+      }
+      kernelState.addAttribute("tessera.workgroup_size",
+                               builder.getI64IntegerAttr(selected->workgroupSize));
+      kernelState.addAttribute("tessera.schedule_hash", hash);
+      builder.create(kernelState);
+
+      Value result = builder.create<bufferization::ToTensorOp>(
+          loc, outputType, outputBuffer);
+      scheduled->getResult(0).replaceAllUsesWith(result);
+      scheduled->erase();
+      if (graph->use_empty()) graph->erase();
+      for (schedule::ArtifactOp artifact : matchingArtifacts) artifact.erase();
     }
   }
 };

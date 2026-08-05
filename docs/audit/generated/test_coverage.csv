@@ -271,7 +271,7 @@ matmul,462,265,21,727,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3
 max,7,0,2,7,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,7 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,10,0,2,10,0,bf16 f32 fp16 fp32,directly_tested,10 direct test references
-mean,14,0,0,14,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,14 direct test references
+mean,16,0,0,16,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,16 direct test references
 memory_evict,0,0,0,0,1,,structural_only,state-management wrapper; covered by memory state tests
 memory_index_score,9,0,1,9,0,,directly_tested,9 direct test references
 memory_index_select,4,0,1,4,0,,directly_tested,4 direct test references
@@ -348,7 +348,7 @@ quantize_nvfp4,21,0,3,21,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,8,0,0,8,0,fp16,directly_tested,8 direct test references
 reciprocal,4,0,0,4,0,bf16 f32 fp16 fp32,directly_tested,4 direct test references
-reduce,99,15,7,114,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,114 direct test references
+reduce,101,17,7,118,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,118 direct test references
 reduce_scatter,1,10,0,11,0,,directly_tested,11 direct test references
 relu,114,36,9,150,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,150 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
@@ -412,7 +412,7 @@ sinh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,9,0,0,9,0,f32,directly_tested,9 direct test references
 softcap,11,0,1,11,0,bf16,directly_tested,11 direct test references
-softmax,144,44,31,188,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,188 direct test references
+softmax,146,48,31,194,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,194 direct test references
 softmax_safe,7,4,1,11,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,11 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 sort,13,0,0,13,0,,directly_tested,13 direct test references

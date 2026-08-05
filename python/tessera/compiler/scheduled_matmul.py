@@ -42,15 +42,15 @@ class ScheduledMatmulArtifact:
 
     @property
     def graph_digest(self) -> str:
-        return _digest(self.graph_ir)
+        return digest_text(self.graph_ir)
 
     @property
     def schedule_ir_digest(self) -> str:
-        return _digest(self.schedule_ir)
+        return digest_text(self.schedule_ir)
 
     @property
     def tile_digest(self) -> str:
-        return _digest(self.tile_ir)
+        return digest_text(self.tile_ir)
 
     def validate(self) -> None:
         if len(re.findall(r"(?m)^\s*%[^=]+ = schedule\.matmul\b", self.schedule_ir)) != 1:
@@ -72,7 +72,7 @@ class ScheduledMatmulArtifact:
         ):
             if not re.search(rf"{re.escape(name)} = {value} : i64", self.tile_ir):
                 raise ValueError(f"scheduled matmul Tile artifact has stale {name}")
-        if _digest(self.schedule_ir) == self.tile_digest:
+        if digest_text(self.schedule_ir) == self.tile_digest:
             raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
 
 
@@ -84,7 +84,7 @@ def lower_scheduled_matmul(
     """Lower one bounded Graph matmul through the production C++ boundaries."""
 
     contract = _graph_contract(module, target)
-    tool = _tessera_opt()
+    tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("scheduled matmul lowering requires production tessera-opt")
 
@@ -92,8 +92,8 @@ def lower_scheduled_matmul(
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
     graph_ir = targeted.to_mlir(target=target, canonical=True)
-    schedule_ir = _run_opt(tool, graph_ir, "--tessera-graph-to-schedule")
-    tile_ir = _run_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+    tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
     hashes = _HASH_RE.findall(tile_ir)
     if len(hashes) != 1:
         raise RuntimeError("scheduled matmul lowering did not preserve one schedule digest")
@@ -229,7 +229,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     )
 
 
-def _tessera_opt() -> Path | None:
+def find_tessera_opt() -> Path | None:
     if configured := os.environ.get("TESSERA_OPT"):
         path = Path(configured).expanduser()
         return path if path.is_file() else None
@@ -244,7 +244,7 @@ def _tessera_opt() -> Path | None:
     return Path(found) if found else None
 
 
-def _run_opt(tool: Path, source: str, option: str) -> str:
+def run_tessera_opt(tool: Path, source: str, option: str) -> str:
     result = subprocess.run(
         [str(tool), "-", option],
         input=source,
@@ -254,11 +254,11 @@ def _run_opt(tool: Path, source: str, option: str) -> str:
     )
     if result.returncode:
         raise RuntimeError(
-            f"scheduled matmul compiler boundary {option} failed: "
+            f"scheduled compiler boundary {option} failed: "
             + (result.stderr.strip() or str(result.returncode))
         )
     return result.stdout
 
 
-def _digest(text: str) -> str:
+def digest_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()

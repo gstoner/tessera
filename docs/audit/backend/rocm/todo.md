@@ -2524,3 +2524,20 @@ selector-grade device-event evidence:
 Bare-metal timing can promote the route without another schedule redesign.
 gfx1200/gfx1250 must provide their own macro tile and instruction-family
 profiles and fail closed until their exact-device packets land.
+
+## Cross-backend sync `E2E-REAL-SEMANTIC-KERNELS-2026-08-05`
+
+The bounded canonical f32 softmax/reduction route now crosses real
+Graph→Schedule→Tile boundaries. `schedule.softmax` and `schedule.reduce` bind
+architecture, numeric policy, axis/kind, launch width, and durable SHA-256
+identity; `ScheduledKernelArtifact` then feeds the exact Tile text to the
+existing gfx1151 physical compiler without Graph re-entry. Static last-axis
+softmax and arbitrary-axis rank-reducing sum/mean/max are lineage-complete.
+Tampered policy fails closed. On the exact WSL-visible Radeon 8060S/gfx1151,
+both scheduled descriptor launches agree numerically with NumPy. **ROCm
+outcome: parity validated for the bounded E2E-REAL-5 slice; no selector or
+performance promotion.** Existing f16/bf16→f32 reductions, f16 softmax, and
+`keepdims=true` descriptors remain explicit Graph-owned routes because the
+canonical `tessera.reduce` op currently requires same-element-type,
+rank-reduced output. gfx1200/gfx1250 remain fail-closed and require their own
+Schedule policy and exact-device evidence.

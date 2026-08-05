@@ -2333,3 +2333,17 @@ contract is applicable, but no CUDA lowering, SM120 schedule, PTX, selector, or
 device evidence changed. NVIDIA must choose its own macro tile after its two
 untyped producers, accumulator threading, and bounded/dynamic view gates land;
 the gfx1151 32x64 decision does not transfer.
+
+## Cross-backend sync `E2E-REAL-SEMANTIC-KERNELS-2026-08-05`
+
+The shared spine now has content-addressed `schedule.softmax` and
+`schedule.reduce` SSA edges and atomically lowers the bounded canonical f32
+contracts to launch-level Tile artifacts. **NVIDIA outcome: follow-up required
+on a CUDA-enabled SM120 host.** Existing NVIDIA physical Tile softmax/reduction
+lowering is unchanged, but SM120 packaging still synthesizes its Tile program
+from `GraphIRModule`; no PTX, cubin, descriptor, schedule, selector, or device
+claim changed. Its consumer must accept the exact scheduled artifact and run
+the established SM120 numerical/performance gates. x86/gfx1151 schedules and
+evidence do not transfer. Canonical Graph reduction currently excludes
+mixed-output and keepdims forms; widening that shared contract is separate
+from adopting this first f32 boundary.

@@ -433,14 +433,14 @@ def _scheduled_package_artifacts(
     target = LoweringArtifact(
         "target",
         target_text,
-        producer=f"{target_kind}.package_scheduled_matmul.target",
+        producer=f"{target_kind}.package_scheduled.target",
         input_digest=tile.output_digest,
         representation="target_ir",
     )
     backend = LoweringArtifact(
         "backend",
         backend_text,
-        producer=f"{target_kind}.package_scheduled_matmul.backend",
+        producer=f"{target_kind}.package_scheduled.backend",
         input_digest=target.output_digest,
         representation="target_ir",
     )
@@ -486,6 +486,7 @@ def compile_graph_module(
     # must carry its normalized target through this pre-lowering verification.
     graph_text = module.to_mlir(target=target_kind)
     scheduled_matmul_artifact = None
+    scheduled_kernel_artifact = None
     if bool(options.get("package_native", False)) and target_kind in {
         "x86",
         "rocm_gfx1151",
@@ -498,6 +499,15 @@ def compile_graph_module(
                 target=target_kind,
             )
             graph_text = scheduled_matmul_artifact.graph_ir
+        else:
+            from . import scheduled_kernel
+
+            if scheduled_kernel.supports_scheduled_kernel(module, target=target_kind):
+                scheduled_kernel_artifact = scheduled_kernel.lower_scheduled_kernel(
+                    module,
+                    target=target_kind,
+                )
+                graph_text = scheduled_kernel_artifact.graph_ir
     function_name = module.functions[0].name if module.functions else "<unknown>"
     request = CompileRequest(
         source_origin=source_origin,
@@ -550,7 +560,7 @@ def compile_graph_module(
         graph_text,
         producer=(
             "graph-ir-renderer.targeted"
-            if scheduled_matmul_artifact is not None
+            if scheduled_matmul_artifact is not None or scheduled_kernel_artifact is not None
             else "graph-ir-renderer"
         ),
         representation="mlir",
@@ -713,6 +723,20 @@ def compile_graph_module(
                 rocm_package.target_ir,
                 rocm_package.backend_ir,
             )
+        elif scheduled_kernel_artifact is not None:
+            package_kind = scheduled_kernel_artifact.family
+            rocm_package = rocm_native.package_scheduled_kernel(
+                scheduled_kernel_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_kernel_artifact.schedule_ir,
+                rocm_package.tile_ir,
+                target_kind,
+                rocm_package.target_ir,
+                rocm_package.backend_ir,
+            )
         else:
             package_kind = rocm_native.native_package_kind(module)
             rocm_package = rocm_native.package_native(
@@ -750,6 +774,8 @@ def compile_graph_module(
                     "work_item": (
                         "E2E-REAL-3"
                         if package_kind == "matmul"
+                        else "E2E-REAL-5"
+                        if scheduled_kernel_artifact is not None
                         else "ROCM-E2E-1" if package_kind == "softmax" else "ROCM-E2E-2"
                     ),
                 },
@@ -772,6 +798,20 @@ def compile_graph_module(
             schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
                 graph,
                 scheduled_matmul_artifact.schedule_ir,
+                x86_package.tile_ir,
+                target_kind,
+                x86_package.target_ir,
+                x86_package.backend_ir,
+            )
+        elif scheduled_kernel_artifact is not None:
+            package_kind = scheduled_kernel_artifact.family
+            x86_package = x86_native.package_scheduled_kernel(
+                scheduled_kernel_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_kernel_artifact.schedule_ir,
                 x86_package.tile_ir,
                 target_kind,
                 x86_package.target_ir,
@@ -814,6 +854,8 @@ def compile_graph_module(
                     "work_item": (
                         "E2E-REAL-3"
                         if scheduled_matmul_artifact is not None
+                        else "E2E-REAL-5"
+                        if scheduled_kernel_artifact is not None
                         else "X86-E2E-2"
                         if package_kind in {"elementwise", "cohort2", "breadth"}
                         else "X86-E2E-1"

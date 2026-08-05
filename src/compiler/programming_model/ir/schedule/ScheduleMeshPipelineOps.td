@@ -87,6 +87,44 @@ def Schedule_MatmulOp : Op<ScheduleDialect, "matmul", [Pure]> {
   let hasVerifier = 1;
 }
 
+// Content-addressed semantic-kernel edges used by E2E-REAL-5.  These retain
+// the Graph result as the subject until Schedule->Tile atomically replaces the
+// pair with one launch-level physical kernel.
+def Schedule_SoftmaxOp : Op<ScheduleDialect, "softmax", [Pure]> {
+  let summary = "Scheduled Graph softmax with explicit numeric policy";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$arch,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       I64Attr:$axis,
+                       StrAttr:$exp_mode,
+                       BoolAttr:$ftz,
+                       I64Attr:$workgroup_size);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
+def Schedule_ReduceOp : Op<ScheduleDialect, "reduce", [Pure]> {
+  let summary = "Scheduled Graph reduction with explicit numeric policy";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$arch,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       StrAttr:$kind,
+                       I64Attr:$axis,
+                       BoolAttr:$keepdims,
+                       StrAttr:$schedule,
+                       StrAttr:$nan_mode,
+                       BoolAttr:$inner_is_one,
+                       I64Attr:$workgroup_size);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
 def Schedule_ElementwiseOp : Op<ScheduleDialect, "elementwise"> {
   let summary = "Materialized elementwise or reduction schedule plan";
   let arguments = (ins StrAttr:$source,

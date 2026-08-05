@@ -33,7 +33,7 @@ SuperBench / GEMM tail.
 | `tests/kernel_tests/` | C++ kernel-level tests | Built via CMake when CUDA/HIP backends are enabled |
 | `tests/integration/` | Cross-component integration tests | Opt-in |
 | `tests/regression/` | Regression cases that locked in past bug fixes | Auto-run with unit |
-| `tests/tessera_numerical_validation/` | Reference-vs-runtime comparisons for compiled CPU/mock and future hardware backends | Opt-in pytest suite |
+| `tests/tessera_numerical_validation/` | Cross-backend reference comparisons, dtype tolerances, determinism, and numerical-policy checks | Opt-in pytest suite |
 | `tests/tessera_tests/` | Test utilities and harness fixtures | Shared infra |
 | `archive/tests/` | Historical tests preserved for reference; not run | n/a |
 
@@ -72,7 +72,7 @@ each marker actually costs.
 
 | Document | Purpose |
 |---|---|
-| [`COMPILER_TEST_PLAN.md`](COMPILER_TEST_PLAN.md) | Authoritative test plan — Tier 0–4 CI matrix, layering by IR stage, test ownership |
+| [`COMPILER_TEST_PLAN.md`](COMPILER_TEST_PLAN.md) | Authoritative test plan — Tier 0–6 validation matrix, artifact lineage, exact-device routing, and test ownership |
 | [`MEMORY_AND_PERFORMANCE.md`](MEMORY_AND_PERFORMANCE.md) | What to expect when you run the suites — peak RAM, wall clock, parallelism budget, `slow` marker rationale |
 | [`compiler_test_architecture.md`](../docs/architecture/compiler_test_architecture.md) | Normative proof-layer, environment-state, and migration rules |
 

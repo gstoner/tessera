@@ -440,9 +440,9 @@ K loop. The open question is whether `tile.view` should be able to carry a
 precomputed linear base so that hoisting is expressible at Tile level, or
 whether the migration should rely on LICM/CSE to recover it.
 
-**How much it costs is not quantified** — the affected multiplies are largely
-loop-invariant. The decision is to be made from a measurement taken after ROCm's
-simplest configuration migrates, not from an estimate.
+ROCm has now measured the migrated lane: 12.53 TFLOP/s clears the committed
+8.02 baseline but reaches only 0.685x of its same-run direct compiler lane.
+That selects explicit address sharing as follow-up for Tile-fragment backends.
 
 **Outcome for x86: NOT APPLICABLE.** This backend consumes neither `tile.view`
 nor `tile.fragment_pack` (0 files). AMX/AVX-512 operands come from
@@ -450,3 +450,11 @@ nor `tile.fragment_pack` (0 files). AMX/AVX-512 operands come from
 which addresses its own source directly; there is no `tile.view`-backed fragment
 path whose base could be hoisted. If a future x86 path adopts Tile fragments,
 re-open under this key.
+
+## Cross-backend sync `TILE-DYNAMIC-LEADING-DIM-2026-08-04` — generic typed fragment addresses
+
+Shared `tile.view` / `tile.store` can now carry an SSA leading dimension when
+`#tile.memory_layout` states zero. **Outcome for x86: NOT APPLICABLE.** AVX-512
+and access-gated AMX consume `!tessera_x86.tile`, not Tile fragments or
+pointer-backed `tile.view`; no x86 lowering changed. Host Zen 5 validation:
+x86 dtype + matmul-family suites, 21 passed.

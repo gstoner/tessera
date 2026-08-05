@@ -1,7 +1,8 @@
 """The embedded TPP driver must not bind to another library's LLVM.
 
-Root-caused 2026-08-04. `runtime.py` loads `libhiprtc.so` with `RTLD_GLOBAL`,
-and HIPRTC statically links its own LLVM. That publishes a full set of LLVM
+Root-caused 2026-08-04. The historical ROCm runtime loader opened
+`libhiprtc.so` with `RTLD_GLOBAL`, and HIPRTC statically links its own LLVM.
+That publishes a full set of LLVM
 symbols into the global namespace, so `libtessera_tpp_capi.so` -- which
 statically links a *different* LLVM/MLIR build -- resolved its LLVM references
 against HIPRTC's copy. Two incompatible LLVMs sharing global state segfault the
@@ -15,7 +16,9 @@ with exit 139 inside `tessera_tpp_run_pipeline`. A crash is not a flake, and
 "passes alone, fails together" is a symptom of shared process state, not of
 scheduling luck.
 
-The fix is `RTLD_DEEPBIND` on the CAPI load, so it prefers its own symbol table.
+The runtime and exact-device harnesses now keep HIP/HIPRTC local as well. The
+independent defensive fix remains `RTLD_DEEPBIND` on the CAPI load, so the TPP
+driver survives a foreign library that another application promotes globally.
 
 This file is the behavioural gate: it reproduces the collision directly rather
 than asserting that a particular flag is passed, because the property that
@@ -40,8 +43,8 @@ from tessera.solvers import tpp
 def _hiprtc_path() -> str | None:
     """A shared library that statically links its own LLVM, if present.
 
-    HIPRTC is the one that actually caused this, and it is what `runtime.py`
-    loads RTLD_GLOBAL on any ROCm host.
+    HIPRTC is the library that originally exposed the defect. The runtime no
+    longer promotes it, but an embedding application still can.
     """
     for pattern in ("/opt/rocm/core/lib/libhiprtc.so*",
                     "/opt/rocm*/lib/libhiprtc.so*"):
@@ -65,7 +68,8 @@ def test_tpp_survives_a_foreign_llvm_in_the_global_namespace():
     script = textwrap.dedent(
         f"""
         import ctypes
-        # Publish a foreign LLVM into the global namespace, as runtime.py does.
+        # Publish a foreign LLVM into the global namespace, reproducing the
+        # historical runtime behavior and a possible embedding application.
         ctypes.CDLL({_hiprtc_path()!r}, mode=ctypes.RTLD_GLOBAL)
         from tessera.solvers import tpp
         out = tpp.solve("module {{}}\\n")

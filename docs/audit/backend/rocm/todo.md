@@ -2389,10 +2389,18 @@ fragment contract (steps 3-5) is **5 C++ `tile.mma` creation sites + the Python
 emitters**, while making the backend traverse Tile IR is **58 expanders** and is
 unpriced. Only the second scales with the expander population.
 
-**Remaining:** the typed form still has NO PRODUCER — `GenerateWMMAGemmKernel`
-assembles fragments itself with its own lane math, so nothing emits
-`tile.view` + `tile.fragment_pack` yet (W1.1 step 3). That migration is now
-unblocked on the layout side, and scoped by measurement in
+**Step 3 pilot landed:** `GenerateWMMAGemmKernel{via-tile=true}` is the first
+C++ producer of the full typed `tile.view` -> `fragment_pack` -> `tile.mma` ->
+`fragment_unpack` -> `tile.store` chain. At production `mt=2, nt=4`, the
+structural gate sees 24 views/packs, 8 typed zeros, 32 MMAs, and 16
+unpack/stores; no Tile op or unrealized cast survives ROCDL lowering. The
+default production lane remains direct. The ROCm flash- and linear-attention
+sites now use typed register-owned fragment bridges for computed values that
+cannot be reconstructed from pointer-backed views; their final ROCDL operation
+multisets match the direct lanes. The only remaining C++ sites are the two
+NVIDIA-owned tensor producers in `TileIRLoweringPass`, and Python has no direct
+`tile.mma` emitter after converging on `tile.matmul_kernel` launch envelopes.
+The migration is scoped by measurement in
 `W1_1_TYPING_DESIGN.md` §4.7:
 
 * **Bit-identity is reachable** — the producer's B addressing `(k0+j)*N + col`
@@ -2421,6 +2429,38 @@ Gate: `test_via_tile_matches_the_production_lane_on_hardware` (bit-identical vs
 the production lane, with a control that must fail and a fallback-fatal guard),
 then throughput against `GEMM_PERF_LADDER.md`'s 8.02 TFLOP/s row at the same
 `timer_source`.
+
+**Exact gfx1151 outcome, 2026-08-04.** The hardware test passes with
+zero-difference output at both aligned `64x64x64` and ragged `65x67x31`; the
+second case makes the M/N edge masks, K-tail masks, dynamic K/N leading
+dimensions, and bounded stores live. The corrected, order-balanced 2048^3
+host-wall run (100 launches x 3 interleaved trials) measures **12.53 TFLOP/s**
+for the typed lane, **1.562x** the committed 8.02 baseline. The unchanged
+shared-library baseline harness remeasures **8.07 TFLOP/s**, confirming the
+reference row. The direct compiler-generated lane measures **18.28 TFLOP/s**,
+so typed/direct is only **0.685x**. Verdict: **retain the typed lane as an
+experimental correctness path, do not promote it**; pursue the precomputed-base
+or equivalent address-hoisting work under
+`TILE-VIEW-LINEAR-BASE-2026-08-05` before another promotion measurement.
+
+The pre-existing WSL teardown abort is resolved rather than waived. ROCm
+runtime and benchmark loaders no longer preload HIP/HIPRTC or promote their
+symbols process-wide; directly linked plugins and `libamdhip64.so` are opened
+with `RTLD_LOCAL`. The combined aligned+ragged pytest exits normally, and the
+original `benchmark_rocm_wmma_gemm.py --iters 100` baseline run now exits zero
+after printing all three sizes.
+
+## Cross-backend sync `TILE-DYNAMIC-LEADING-DIM-2026-08-04` — generic typed fragment addresses
+
+`#tile.memory_layout<leading_dim = 0>` now means `tile.view` / `tile.store`
+carry the runtime leading dimension as their final SSA operand. Bounded forms
+retain row/column bounds immediately before it. This is required by the
+problem-size-generic ROCm GEMM: hard-coding the 64x64 hardware-gate shape would
+have made the gate green while misaddressing every other N/K.
+
+**Outcome: owning backend; parity validated on gfx1151.** ROCm consumes bounded
+and unbounded dynamic forms, masks ragged loads/stores, and lowers the full
+chain. The default direct lane is unchanged.
 
 ## Cross-backend sync `TILE-VIEW-BOUNDED-CONTRACT-2026-08-04` — bounded `tile.view` is a shared contract
 

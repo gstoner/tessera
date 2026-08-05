@@ -44,10 +44,10 @@ def _load_lib():
         p = os.path.join(ROCM_LIB_DIR, dep)
         if os.path.isfile(p):
             try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+                ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL)
             except OSError:
                 pass
-    return ctypes.CDLL(str(ATTN_LIB), mode=ctypes.RTLD_GLOBAL)
+    return ctypes.CDLL(str(ATTN_LIB), mode=ctypes.RTLD_LOCAL)
 
 
 def _bind(lib, name):

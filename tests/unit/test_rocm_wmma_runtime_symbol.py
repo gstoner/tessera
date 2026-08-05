@@ -43,10 +43,10 @@ def _load_lib():
         p = os.path.join(ROCM_LIB_DIR, dep)
         if os.path.isfile(p):
             try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+                ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL)
             except OSError:
                 pass
-    return ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_GLOBAL)
+    return ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_LOCAL)
 
 
 def _bind(lib, name):
@@ -185,9 +185,9 @@ import numpy as np
 for dep in ("libamdhip64.so", "libhiprtc.so"):
     p = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib", dep)
     if os.path.isfile(p):
-        try: ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+        try: ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL)
         except OSError: pass
-lib = ctypes.CDLL({str(GEMM_LIB)!r}, mode=ctypes.RTLD_GLOBAL)
+lib = ctypes.CDLL({str(GEMM_LIB)!r}, mode=ctypes.RTLD_LOCAL)
 fn = lib.tessera_rocm_wmma_gemm_f16
 fn.argtypes = [ctypes.c_void_p]*3 + [ctypes.c_int]*3
 fn.restype = ctypes.c_int

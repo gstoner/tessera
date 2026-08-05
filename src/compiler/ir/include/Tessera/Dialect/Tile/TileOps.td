@@ -621,7 +621,9 @@ def Tile_FragmentUnpackOp : Tile_Op<"fragment_unpack"> {
 
 // Store a logical tile to a physical destination. For a pointer-backed store,
 // inputs are (tile, base pointer, row origin, column origin) and `tile.memory`
-// supplies address space/order/leading dimension. Conservatively side-effecting.
+// supplies address space/order/leading dimension. A zero attribute leading
+// dimension means the final SSA operand supplies it at runtime. Conservatively
+// side-effecting.
 def Tile_StoreOp : Tile_Op<"store"> {
   let summary = "Store a logical tile through a physical memory layout";
   let arguments = (ins Variadic<AnyType>:$inputs);
@@ -1088,7 +1090,9 @@ def Tile_MmaDescAttr : Tile_Attr<"TileMmaDesc", "mma_desc"> {
 }
 
 // Physical address contract for a pointer-backed tile.view. `leading_dim` is
-// measured in elements; origin coordinates are SSA operands of tile.view.
+// measured in elements; zero means a dynamic leading dimension is supplied as
+// the final SSA operand of tile.view/tile.store. Origin coordinates and bounds
+// are SSA operands.
 def Tile_MemoryLayoutAttr : Tile_Attr<"TileMemoryLayout", "memory_layout"> {
   let summary = "Physical storage layout for a pointer-backed logical tile";
   let parameters = (ins StringRefParameter<"">:$space,

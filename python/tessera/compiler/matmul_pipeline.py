@@ -1098,7 +1098,10 @@ def _tile_op_name(op_name: str) -> str:
     op_name = _canonical_op_name(op_name)
     bare = op_name.split(".")[-1]
     if op_name in MATMUL_OPS:
-        return "tile.mma"
+        # The Python lane carries a value-level/launch-level contraction, not
+        # physical cooperative-matrix fragments. `tile.mma` is reserved for
+        # the typed SSA dialect contract materialized by C++ backends.
+        return "tile.matmul"
     if op_name in CONV2D_OPS:
         return "tile.conv2d"
     if op_name in ROPE_OPS:

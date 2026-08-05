@@ -489,8 +489,9 @@ LogicalResult TileMemoryLayoutAttr::verify(
     return emitError() << "TILE_MEMORY_LAYOUT_BAD_SPACE: space must be gmem, smem, or lds";
   if (!kOrders.contains(order))
     return emitError() << "TILE_MEMORY_LAYOUT_BAD_ORDER: order must be row_major or col_major";
-  if (leadingDim < 1)
-    return emitError() << "TILE_MEMORY_LAYOUT_BAD_LEADING_DIM: leading_dim must be >= 1";
+  if (leadingDim < 0)
+    return emitError() << "TILE_MEMORY_LAYOUT_BAD_LEADING_DIM: leading_dim must "
+                          "be >= 0 (zero denotes an SSA-supplied dynamic value)";
   return success();
 }
 

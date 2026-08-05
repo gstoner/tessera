@@ -109,11 +109,11 @@ def _hip():
         p = os.path.join(rocm_lib, dep)
         if os.path.isfile(p):
             try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+                ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL)
             except OSError:
                 pass
     try:
-        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_GLOBAL)
+        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_LOCAL)
     except OSError:
         return None
 
@@ -203,7 +203,7 @@ def _launch_gemm(hip, hsaco: bytes, A, B):
 
 def _oracle(hip, A, B):
     """The device_verified_abi hand-written kernel — the on-silicon oracle."""
-    lib = ctypes.CDLL(str(ORACLE_LIB), mode=ctypes.RTLD_GLOBAL)
+    lib = ctypes.CDLL(str(ORACLE_LIB), mode=ctypes.RTLD_LOCAL)
     fn = lib.tessera_rocm_wmma_gemm_f16
     fn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3
     fn.restype = ctypes.c_int

@@ -38,7 +38,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 GEMM_LIB = (REPO_ROOT / "build" / "src" / "compiler" / "codegen"
             / "Tessera_ROCM_Backend" / "runtime" / "hip"
             / "libtessera_rocm_gemm.so")
-ROCM_LIB_DIR = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
 
 # The shipped production output-tile blocking is SIZE-ADAPTIVE (mirror of
 # prodTile() in tessera_rocm_gemm.cpp): 2x4 for small problems, 3x4 once
@@ -63,15 +62,8 @@ PIPE_CONFIGS = [(4, 1, 1, 4), (2, 2, 2, 4), (2, 1, 2, 4), (2, 2, 1, 4)]
 def _load_bench() -> Optional[ctypes.CDLL]:
     if not GEMM_LIB.is_file():
         return None
-    for dep in ("libamdhip64.so", "libhiprtc.so"):
-        p = os.path.join(ROCM_LIB_DIR, dep)
-        if os.path.isfile(p):
-            try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
-            except OSError:
-                pass
     try:
-        lib = ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_GLOBAL)
+        lib = ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_LOCAL)
     except OSError:
         return None
     fn = getattr(lib, "tessera_rocm_wmma_gemm_f16_bench", None)

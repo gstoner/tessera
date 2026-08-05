@@ -91,11 +91,11 @@ def _hip():
         p = os.path.join(rocm_lib, dep)
         if os.path.isfile(p):
             try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+                ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL)
             except OSError:
                 pass
     try:
-        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_GLOBAL)
+        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_LOCAL)
     except OSError:
         return None
 
@@ -151,7 +151,7 @@ def _launch(hip, fn, A, B, M, N, K, mt, nt):
 def _oracle(A, B, M, N, K):
     if not ORACLE_LIB.is_file():
         pytest.skip("oracle lib not built: ninja -C build tessera_rocm_gemm")
-    lib = ctypes.CDLL(str(ORACLE_LIB), mode=ctypes.RTLD_GLOBAL)
+    lib = ctypes.CDLL(str(ORACLE_LIB), mode=ctypes.RTLD_LOCAL)
     ofn = lib.tessera_rocm_wmma_gemm_f16
     ofn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3
     ofn.restype = ctypes.c_int

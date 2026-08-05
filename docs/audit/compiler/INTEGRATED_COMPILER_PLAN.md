@@ -35,6 +35,141 @@ estimates for a single track with no hardware gates, not commitments.
 
 ---
 
+## 0. End-to-end reset — one artifact must cross every boundary
+
+The original waves are useful root-cause groupings, but they are not by
+themselves an executable compiler program. A source review on 2026-08-04 found
+that Tessera can report all of Graph, Schedule, Tile, Target, native-image, and
+launch-descriptor stages without proving that stage N+1 consumed stage N. This
+section is therefore the **delivery order** for the plan. The thematic W0-W6
+queues remain the owning backlog; when their ordering conflicts with this
+vertical program, this section wins.
+
+### 0.1 Rechecked current truth
+
+The repository has substantially more real machinery than the seven source
+reviews originally credited:
+
+- `canonical_compile()` is the common orchestration entry and
+  `CompileArtifactBundle` carries typed stage artifacts, native images, launch
+  descriptors, content hashes, and runtime state.
+- The Python `lower_graph_to_schedule_ir` → `lower_schedule_to_tile_ir` →
+  `lower_tile_to_target_ir` ladder is a real object-model lowering and is useful
+  as an oracle.
+- NVIDIA SM120, ROCm gfx1151, x86, Apple GPU, and Apple CPU all have bounded
+  native package producers and descriptor launch paths. Existing E2E-SPINE work
+  made the image/descriptor/cache/runtime contracts real.
+- Schedule runtime steps are consumed. Pipeline-step execution, supported
+  collective overlap, and optimizer-shard state transitions are no longer a
+  missing-runtime item.
+- W1.1's current ROCm work proves a typed
+  `view → fragment_pack → mma → fragment_unpack → store` chain on gfx1151,
+  including ragged shapes. That is a valid backend-lowering proof.
+
+Those facts do **not** yet make one compiler spine:
+
+| Boundary | What exists | Why it is not yet canonical end to end |
+|---|---|---|
+| Python source → Graph | `@jit` AST extraction, a separate tracer, textual parsing, and constrained adapters | More than one producer remains; the general `@jit` path is still AST-owned. |
+| Graph → Schedule | Python lowering is substantive; C++ `GraphToSchedulePass` only stamps `schedule.artifact_hash = "__pending__"` | The C++ pass rewrites no operation. The Schedule ODS is tablegen input but has no built dialect library/registration in production `tessera-opt`. |
+| Schedule → Tile | Python lowering is substantive; C++ `ScheduleToTilePass` only stamps `tile.staged` | The Python schedule model drops value types in its textual form, while C++ `schedule.tile` is metadata-only and has no SSA inputs/results. Neither is a production value-carrying boundary. |
+| Shared Tile → backend package | Typed value and launch-level Tile contracts exist | Native packagers accept the original `GraphIRModule`, classify it again, and synthesize backend-owned Tile text. They do not consume the shared ladder's Tile artifact. |
+| Target → image → runtime | Image/descriptor validation and launch are real | This validates the package-internal Target digest, not continuity from the earlier shared Schedule/Tile artifacts. |
+
+The concrete discontinuity is in `driver.compile_graph_module`: it builds a
+`cpu_plan`, then a native branch calls `*_native.package_native(module, ...)`
+with the **original Graph module** and replaces `bundle.tile` and
+`bundle.target_ir` with the package's artifacts. `spine_stages()` records that
+all stages exist, but carries no parent digest and cannot detect the fork. The
+existing E2E-SPINE claims are therefore correctly interpreted as
+**package/runtime E2E**, not yet **compiler-boundary E2E**.
+
+Backend recheck:
+
+| Target | Proven today | Remaining lineage break |
+|---|---|---|
+| x86 / AVX-512 | Broad typed native packages, runtime descriptors, and exact Zen 5 execution | `x86_native` re-derives a family-specific `tile.*_kernel` from Graph IR before `TileToX86Pass`; it does not consume the shared Schedule/Tile result. |
+| ROCm / gfx1151 | Exact-device package families plus the typed WMMA GEMM differential path | Canonical `rocm_native` does not admit matmul, and its admitted families synthesize their own Graph/Tile envelopes. GEMM starts from a separate launch directive; `GenerateWMMAGemmKernel` must run before `TileToROCM`. |
+| NVIDIA / SM120 | Typed PTX/native packages for bounded families | `nvidia_native` classifies Graph IR and emits NVIDIA-owned launch Tile programs; shared Schedule/Tile is bypassed. |
+| Apple GPU/CPU | Descriptor launch and exact-host packets for bounded families | Packaging largely binds a prebuilt runtime image to a synthesized Target call. It does not compile the preceding shared Tile artifact, and Apple execution must be re-proven on the Mac. |
+
+### 0.2 Definition of a real E2E compiler path
+
+A lane is **compiler-boundary E2E** only when one compile request satisfies all
+of the following:
+
+1. Each artifact records `producer`, `input_digest`, `output_digest`, target,
+   and contract version. For every adjacent pair,
+   `next.input_digest == previous.output_digest`.
+2. Graph semantics are never reconstructed from op names after Graph lowering.
+   A backend may select among candidates, but the selected compiler candidate
+   consumes the canonical Tile or Target artifact rather than the original
+   `GraphIRModule`.
+3. Schedule IR preserves the SSA computation it schedules. The initial design
+   is mixed-level: Graph ops remain the semantic payload while `schedule.*`
+   records decisions; Schedule→Tile atomically replaces the payload with typed
+   Tile values/launch envelopes. A metadata-only `schedule.tile` is not a
+   substitute for the computation.
+4. Every boundary parses and verifies in production `tessera-opt`; Python
+   models may be differential oracles but cannot be the only executable
+   lowering behind a C++ capability claim.
+5. Selected tile sizes, warps, stages, raster policy, numeric policy, layouts,
+   and dynamic-memory expressions survive into the physical package or carry a
+   named, verified drop reason.
+6. The native image is derived from that Target artifact, the descriptor is
+   validated against that image, and the runtime launches the descriptor with
+   fallback disabled.
+7. A hardware lane compares against the numerical oracle and records the
+   correct timing domain. Promotion remains separate: a correct compiler lane
+   does not replace a faster production candidate until its architecture-owned
+   performance ratchet passes.
+
+### 0.3 Delivery program — vertical slices, not horizontal completion
+
+The first capability is deliberately narrow: one static rank-2 matmul semantic
+fixture with two typed instances — x86 f32 and ROCm f16 storage with f32
+accumulation/output. This is the smallest workload with existing Graph
+semantics, schedule knobs, logical and launch Tile contracts, two locally
+available physical backends, numerical oracles, and performance baselines. A
+future shared bf16 instance can compare both architectures under one storage
+contract; the initial proof does not pretend target-specific Graph digests are
+identical.
+
+| Order | Work item | Deliverable | Stop-the-line gate |
+|---|---|---|---|
+| 0 | **E2E-REAL-0 — lineage truth** | Extend `LoweringArtifact`/`CompileArtifactBundle` with parent digests, producer identity, representation (`python_object`, `mlir`, `target_ir`, `native`), and `lineage_complete`. Initially report existing forked packages honestly; do not delete or demote them. | New `test_compiler_artifact_lineage.py` proves a substituted Tile artifact is detected, a package cannot claim boundary-E2E from mere stage presence, and serialization/cache round-trips retain lineage. |
+| 1 | **E2E-REAL-1 — make Schedule IR real** | Build and register the Schedule dialect and `TesseraPM` in production `tessera-opt`. Define the mixed-level SSA contract above. Replace `__pending__` with a content-addressed schedule artifact for static matmul while retaining the Graph value op until consumption. Remove duplicate/dead plugin registration surfaces rather than registering the same pass twice. | `tessera-opt --show-dialects` lists `schedule`; `--help` exposes no pass falsely described as a full lowering; positive and fail-closed lit fixtures parse without `--allow-unregistered-dialect`. |
+| 2 | **E2E-REAL-2 — Graph/Schedule → launch Tile matmul** | Implement one C++ Schedule→Tile conversion for the bounded static rank-2 x86-f32 and ROCm-f16/f32 contracts. It consumes the scheduled Graph SSA value and bufferizes/materializes the portable six-operand `tile.matmul_kernel` ABI with selected M/N/K, storage/accumulation policy, layout, and schedule attributes. The Python ladder becomes the differential oracle for this slice. | New `e2e_matmul_graph_schedule_tile.mlir` checks Graph op consumed, Schedule decision consumed, exactly one launch Tile op produced, all required metadata preserved, and unsupported dtype/shape/dynamic cases fail closed. |
+| 3 | **E2E-REAL-3 — two physical consumers on this host** | Change canonical x86 and ROCm compiler-package APIs to accept the produced Tile artifact. x86 runs `TileToX86Pass`; ROCm runs `GenerateWMMAGemmKernel` then `TileToROCM`/LLVM/HSACO. Keep existing Graph-to-emitter packages as separately named retained candidates during migration. | The same semantic case ID, instantiated with each target's bounded dtype contract, reaches AVX-512 and gfx1151 with complete per-request digest adjacency, descriptor launch, no Graph re-entry, numerical agreement, and no reference fallback. ROCm includes aligned and ragged shapes; x86 includes the established AVX-512 shape corpus. |
+| 4 | **E2E-REAL-4 — performance and promotion decision** | Compare the new compiler candidate with each backend's production candidate. For ROCm retain the 8.02 TFLOP/s committed floor and same-run direct-lane comparison; for x86 retain its existing AVX-512 ratchet. Address sharing from `TILE-VIEW-LINEAR-BASE-2026-08-05` is a measured ROCm optimization, not a semantic prerequisite. | Exact-device reports name device, toolchain, artifact digests, warm/cold state, resources, numerical error, and timing domain. Promote independently per architecture only when its own ratchet passes. |
+| 5 | **E2E-REAL-5 — migrate breadth one family at a time** | Move softmax/reduction next, then canonical attention forward/backward, then stateful/training families. Each migration changes `package_native(GraphIRModule)` into a consumer of the canonical Tile/Target artifact and retires its Graph resynthesis only after differential and device gates. | Per-family lineage + numerical + architecture evidence. NVIDIA follows on SM120; Apple follows on the Mac. No evidence transfers between targets. |
+| 6 | **E2E-REAL-6 — delete duplicate authorities** | After migrated families cover the required envelope, make the tracer the sole general frontend, demote the Python lowering ladder to an oracle, remove the C++ annotation skeletons, and delete backend Graph-to-Tile resynthesizers that have no retained candidate role. | Decision #31 inventory reports one production lowering per boundary; every retained second implementation is named `oracle` or `candidate` and has a differential gate. |
+
+The **first implementation PR** should contain E2E-REAL-0 and the minimal
+Schedule dialect build/registration portion of E2E-REAL-1 only. It must not mix
+in a backend kernel rewrite. The second PR makes one matmul cross the first two
+IR boundaries. The third is the gfx1151/AVX-512 hardware synchronization point.
+This keeps failures attributable and makes each PR independently reviewable.
+
+### 0.4 Relationship to W0-W6
+
+- W1.1 supplies the typed Tile contract E2E-REAL-2/3 consume; finish its two
+  NVIDIA producers and permissive-verifier removal without treating that as a
+  full spine.
+- W2 analyses should attach to the real mixed-level Graph/Schedule program after
+  E2E-REAL-1, not to the Python shadow alone.
+- W3.1 and W3.2 are delivered by E2E-REAL-0 through E2E-REAL-6. Their old
+  three- and four-week estimates are retired; they omitted Schedule dialect
+  construction, SSA preservation, bufferization, backend API migration, and
+  exact-device gates.
+- W4 control flow starts only after the matmul slice proves adjacency. Its
+  acceptance test remains valuable, but it must traverse the same lineage gate.
+- W5 schedule and residual decisions are admitted only when the chosen values
+  appear in the physical artifact and descriptor provenance. Stamping an
+  attribute into an unused Python artifact does not close W5.
+
+---
+
 ## 1. The thesis
 
 Across seven independent reviews, roughly forty findings reduce to **two root
@@ -183,6 +318,16 @@ items are merged; it is done when the criterion holds.
 Live defects, fail-open paths, inert machinery, and false documentation. Every item is
 independent; run them in parallel.
 
+> **W1.1 step 3 status (landing):** `GenerateWMMAGemmKernel{via-tile=true}`
+> emits the complete
+> view/pack/mma/unpack/store chain at production `mt=2, nt=4`; the gfx1151
+> aligned and ragged differential gates are zero-difference. Flash and linear
+> attention now attach typed fragments at their register-owned computed-value
+> boundary and lower identically to their direct ROCDL lanes. Dynamic N/K are SSA leading dimensions
+> (`#tile.memory_layout<leading_dim = 0>`), not a 64x64 specialization. The
+> default direct lane remains unchanged. Two NVIDIA-owned tensor producers in
+> `TileIRLoweringPass` remain; Python has no direct `tile.mma` producer.
+
 | # | Item | Source | Effort |
 |---|---|---|---|
 | W0.1 | **Landed 2026-08-02.** `manifold` is now `EBM_ManifoldAttr` (a `StringBasedAttr` pinning `euclidean`/`sphere`/`bivector`), and `Canonicalize`'s Euclidean fallback is replaced with `emitError`+interrupt+`signalPassFailure`. Verified: unknown value and missing value are both rejected before any pass runs; negative fixture `canonicalize_rejects_bad_manifold.mlir`. The typed-`EnumAttr` upgrade stays with W1.1b. Two side findings, both fixed: the `.td` comment claiming ODS "doesn't support" a constrained string alias was false (`StringBasedAttr` is already used by the ROCm dialect in this tree), and `ts-ebm-opt` never registered `arith`, so **6 of its 12 lit fixtures could not parse** — invisible because `TESSERA_BUILD_EBM_BACKEND` is OFF by default. EBM lit is now 12/12. | GA/EBM §1.1 | 3d |
@@ -330,7 +475,7 @@ design before migration.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| W1.1 | **2 of 6 numbered steps landed (1, 2), plus the unnumbered step 0 that unblocks the rest; steps 3–6 open.** Step 2b is closed on ROCm by step 0.  Design + inventory: [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md), [`W1_1_TYPING_INVENTORY.md`](W1_1_TYPING_INVENTORY.md). **Landed:** (1) `!tile.fragment` parameterized on `m/n/k, elem, acc, role, layout, family` — `family` is in the TYPE because it selects a physical register ABI (wave 32 RDNA/WMMA vs 64 CDNA/MFMA), which an earlier draft got backwards (#502). (2) `MMAOp::verify` reads the contract from the operand types, and `fragment_pack`/`fragment_zero` do the same for their result, so **the canonical K-loop verifies** — its accumulator is an `scf.for` iter-arg with no defining op, which is why producer-chasing made the typed form unusable by every real GEMM (#503). (2b-guard) `NVWGMMALoweringPass` now REFUSES an mma carrying an accumulator instead of lowering it to a two-operand call that silently dropped it — a pre-existing wrong-answer bug, not a regression (#506). (3a) `materializeFragmentPack` can mask a ragged edge, and the bounded `tile.view` arity is defined in the SHARED verifier rather than per backend (#510). (0) `TileToROCM`'s typed path is now a **dialect conversion** (`TypeConverter`: `!tile.fragment` → `vector<N × T>`), the first in the tree, so a K-loop / chained / non-zero accumulator all lower by composition — which is what closed 2b on ROCm. The 2b guard and 3a are landed work but are NOT numbered steps — counting them was how an earlier version of this row reached "4 of 6". **Open:** step 3 producer restructure; step 4 Python emitters; step 5 delete the permissive branch; **step 6 Target IR dialects** (`tessera_nvidia` 3/3, `tessera_apple` 12/12 unexplained `AnyType`, with `tessera_x86` 0/0 as the reference), which is independent of the producer chain. **The blocker (§4.5):** `fragment_pack` requires a `!tile.tile`, and **zero producers supply one** — `TileIRLoweringPass` passes tensors, the three `GenerateWMMA*Kernel` passes pass lane-level vectors whose lane math they did themselves. That is a division-of-labour mismatch, not a syntax gap, so step 3 is a rewrite of working numerically-verified generators and step 5 is unreachable until it completes. Option **(a)** (restructure producers) was chosen 2026-08-04; 3a was its prerequisite. | IR Stack §U1 + Target §X2 | 5w |
+| W1.1 | **Steps 1–2 landed; step 3 is landing; step 4 is closed; steps 5–6 remain open.** Step 2b is closed on ROCm by step 0. Design + inventory: [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md), [`W1_1_TYPING_INVENTORY.md`](W1_1_TYPING_INVENTORY.md). **Landed:** (1) `!tile.fragment` parameterized on `m/n/k, elem, acc, role, layout, family`. (2) `MMAOp::verify` reads the contract from operand types and fragment producers do the same from result types, so the canonical K-loop verifies. (0) ROCm uses dialect conversion, threading loop/chained/non-zero accumulators. (3) `GenerateWMMAGemmKernel{via-tile=true}` emits the full typed 2x4 view/pack/mma/unpack/store chain; aligned and ragged exact-device outputs are bit-identical. It measures 12.53 TFLOP/s on gfx1151, above the committed 8.02 baseline but only 0.685x of the same-run direct compiler lane, so it remains experimental pending `TILE-VIEW-LINEAR-BASE-2026-08-05`. ROCm flash and linear attention now use exact-ABI typed bridges for register-owned computed fragments and preserve the direct ROCDL op multiset. **Step 4:** Python text emitters use `tile.matmul_kernel`, and the structured Python Tile builder now emits logical `tile.matmul`; no Python lowering constructs physical `tile.mma`. **Open:** the two NVIDIA-owned tensor producers in `TileIRLoweringPass`; step 5 delete the permissive branch only after they migrate; and step 6 NVIDIA Target IR typing. Apple step 6 is landed and x86's 0/0 is the reference. | IR Stack §U1 + Target §X2 | 5w |
 | W1.1b | **Partially landed; the row's premise did not survive measurement.** It said "62 × `$name`, 4 × `$kind`, 1 × `$mode`". Measured: **17** ops carry `$kind`, **3 of them are `I64Attr`** rather than strings, and **14 of 17 already fail closed** in their generators. `$name` is the emitted kernel SYMBOL (`flash`, `fc1`, `bwd`, …), an open set chosen by the caller — enumerating it would reject valid programs, so it is deliberately left a free string and gated as such. **Landed:** `$dtype` split into three per-op-family constraints (#499, after review showed one shared union let `softmax` accept `int8`); `reduction` / `mode` closed sets (#499); and the **three `$kind` ops that failed OPEN** — `predicate`, `optimizer`, `clifford` — closed (#505). Those three each had a trailing `else` doubling as an unnamed semantic default, so a typo silently computed `isfinite`, trained with Adam, or evaluated the **geometric product** instead of the requested Clifford operation. **Open:** hoisting the other 14 already-fail-closed `$kind` sets from their generators into ODS — a layering improvement (reject at verification, not in the generator), not a correctness fix. | Target §X3 | 1w |
 | W1.2 | **Landed 2026-08-03.** Both halves now hold. (a) Unknown op ⇒ diagnostic: `_infer_result_type` raises when a catalog-declared rule has no implementation, instead of the old five-case if-chain ending in `return operand_types[0]` — correct for the ~60 elementwise ops and silently wrong for everything else. (b) **Auto-flip wired** — `primitive_coverage.shape_rule` is derived from `op_catalog` via `_catalog_shape_rule_status`, the mechanism `op_catalog`'s own source predicted and nobody had connected. It found a live defect: the dashboard promoted `shape_rule` off the LOWERING KIND and never consulted the catalog, so **all six ops whose rule the catalog had explicitly withdrawn reported `complete`** — the same bug `shape_rule_for` had already fixed one layer down. 456 complete → 450 + 6 partial, with no other entry moving, which is the proof the derivation agrees with the rest. 16 now-inert override lines deleted (Decision #29); the surviving 39 are gated by `test_shape_rule_autoflip.py` so a contradicting override fails the build rather than quietly winning. Ops the catalog does not own (~169 Python-reference/host-API) are deliberately untouched. | Frontend §U2 | 2w |
 | W1.3 | **Landed 2026-08-03.** `--tessera-record-metadata` + `--tessera-verify-metadata-obligation`: the snapshot rides in the IR as a module attribute, so record → lower → verify is ONE `tessera-opt` invocation and is lit-testable (a `PassInstrumentation`, the more obvious idiom, is registered in the driver and could not be fixtured — an unfixturable verifier is what Decision #29 rejects). Comparison is per function and normalized to the attribute's last dot-component, so `tessera.layout` → `tile.layout` is not a drop; `shape`/`dtype` are untracked because they live in types. **Found a live bug on its first real program:** `TileIRLoweringPass` has two `tile.mma` producers and only the fused K-step forwarded `numeric_policy`, so the main matmul path stated the accumulator contract at Graph IR and lost it one level down — fixed. Five fail-closed refusals incl. STALE_DECLARATION (a declared drop that did not happen) and NO_SNAPSHOT (an unrun check must not look like a passed one); `not_yet_carried:<item>` keeps declared debt attributable. | IR Stack §U5 | 2w |
@@ -372,8 +517,8 @@ path was carrying.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| W3.1 | **One differential harness**, then promote the tracer to the only frontend; delete `_OpExtractor` | Frontend §U1 + IR Stack §U3 | 4w |
-| W3.2 | One lowering per boundary: converge Graph→Schedule→Tile on MLIR; Python spine demoted to oracle | IR Stack §U3 | 3w |
+| W3.1 | **One differential harness**, then promote the tracer to the only frontend; delete `_OpExtractor`. Delivery is E2E-REAL-0/6: the harness must compare typed artifacts and observable execution, not only op-name lists. | Frontend §U1 + IR Stack §U3 | re-estimate after E2E-REAL-3 |
+| W3.2 | **Superseded in delivery shape by E2E-REAL-0 through E2E-REAL-5.** Build and register a real Schedule dialect, preserve Graph SSA under schedule decisions, lower one scheduled matmul to the launch-level Tile ABI, make x86/ROCm packages consume that artifact, then migrate families. The Python spine is the differential oracle. This is three boundaries plus bufferization/package API work, not a 3-week convergence edit. | IR Stack §U3 + Target §X5 | re-estimate after the matmul vertical slice |
 | W3.3 | Split the Tile dialect by level: primitives stay `tile.*`; whole-kernel ops → Graph IR / `tessera.kernel.*`; domain ops → `tessera_ebm`; `svd`/`qr`/`cholesky`/`lu` → linalg solver | IR Stack §U4 | 2w |
 | W3.4 | Decompose `JitFn` (11 `_native_*_backward` → `emit/candidate.py` candidates behind `@f__bwd`); split `__init__.py`'s 315 nested defs into `tessera/ops/` | Frontend §U5–U6 | 3w |
 | W3.5 | Finish `NewtonAutodiff`'s IFT body (`dF/dx = -(dR/dx)⁻¹dR/du`) — emits real `residual` + `linear_solve` ops | Autodiff §B8 + OT R2 | 2w |
@@ -475,10 +620,14 @@ W0 ─────────────────────────�
                        W3.1 one frontend ──► W4.1
 ```
 
-Critical dependency chain: **W0 → W1.1 → W2.1 → W3.1 → W4 → W5**. The earlier
-40-week/63-week totals are not retained as commitments: W1.1 is new type-system
-design and W6.3 needs research scoping, while the rejected blanket ROCm
-migration removed six weeks of unjustified work.
+Delivery-critical chain: **E2E-REAL-0 → E2E-REAL-1 → E2E-REAL-2 →
+E2E-REAL-3 → E2E-REAL-4**. W1.1 is an input to E2E-REAL-2/3; W2.1 can proceed
+once E2E-REAL-1 supplies a real program to analyze. W4 and W5 then extend a
+proven spine instead of building capability beside it. The earlier
+40-week/63-week totals are not retained as commitments: the old W3.2 estimate
+omitted an entire registered Schedule dialect, SSA-preserving boundary design,
+bufferization, package API migration, and hardware gates; W6.3 still needs
+research scoping.
 
 ---
 
@@ -490,11 +639,11 @@ inert checkpoint policy from the default pipeline, corrects architecture
 documentation, removes a duplicate-dialect trap, and upgrades the generic
 Target-IR contract test. Adopts the six governance rules so nothing regrows.
 
-**Recommended scope — W0 + W1 + W2 + W3.1; re-estimate after the W1.1 design
-spike.** Root causes A and B are fixed,
-the frontend duplication is gone, and every subsequent piece of work becomes
-cheaper rather than adding to the pile. This is the point at which the compiler
-stops accumulating parallel systems. If one number is chosen, choose this.
+**Recommended scope — finish the live W1.1 contract, then E2E-REAL-0 through
+E2E-REAL-4, with W2.1 starting after E2E-REAL-1.** This produces one measured,
+lineage-complete matmul on the two locally available architectures rather than
+funding several horizontal subsystems before any one request traverses them.
+Re-estimate frontend deletion and family breadth from that measured slice.
 
 **Full — W0…W6, re-estimate after W1.1 and W6.3 design spikes.** ROCm ownership/inventory work is host-free;
 subsequent kernel-producing migrations are hardware-routed individually (§6a).
@@ -551,6 +700,8 @@ accumulate.
 | **W3.1 is a broad behavior change** — the AST frontend is the default on every non-Apple target | W3 | The differential harness ships *before* the switch, not after; promote per-target with the harness green |
 | **W4 will exceed its estimate.** Region adjoints are the hardest item here and structured reverse mode is genuinely difficult | W4 | Land W4.1+W4.2 with a forward-only gate first, so partial progress is observable before W4.3 |
 | **W1.1 touches every Tile-consuming backend** | W1 | Parameterized types and verifier contracts can invalidate producers and consumers; land per primitive/variant with parser, verifier, lowering, and backend fixtures |
+| **Stage presence is mistaken for stage lineage.** A bundle can contain Graph/Schedule/Tile/Target/image/descriptor while its backend package was re-synthesized from Graph | E2E | E2E-REAL-0 records parent digests and a separate `lineage_complete` answer; no capability or dashboard may infer it from non-null stages |
+| **Schedule IR cannot currently carry the computation it claims to schedule.** Its C++ `schedule.tile` is metadata-only and the Python textual model emits `() -> ()` | E2E | E2E-REAL-1 chooses and gates the mixed-level SSA contract before implementing a broad lowering |
 | **Waves 1–3 produce no user-visible feature.** Fifteen weeks of "the compiler now enforces what it already said" is hard to fund | all | RNOT (§4) is the visible acceptance workload; state the intermediate gates as capability claims, not cleanup |
 | **The governance rules are ignored under delivery pressure** | all | #29 and #31 are drift-gateable; make them tests, not conventions |
 | **Someone starts at W3** (deleting duplications first, because they are the most visible waste) | — | It fails: the surviving path cannot yet carry what the deleted one carried. Ordering A→B→C is the plan's core claim |

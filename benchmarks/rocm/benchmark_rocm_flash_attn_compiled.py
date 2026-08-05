@@ -31,7 +31,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TESSERA_OPT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
-ROCM_LIB_DIR = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 # (head_dim, B, H, Sq, Sk). Non-causal full attention for clean FLOP accounting.
@@ -92,15 +91,8 @@ def _build(mlir_opt, head_dim):
 
 
 def _load_hip():
-    for dep in ("libamdhip64.so", "libhiprtc.so"):
-        p = os.path.join(ROCM_LIB_DIR, dep)
-        if os.path.isfile(p):
-            try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
-            except OSError:
-                pass
     try:
-        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_GLOBAL)
+        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_LOCAL)
     except OSError:
         return None
 

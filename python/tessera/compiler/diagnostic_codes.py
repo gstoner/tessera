@@ -796,19 +796,36 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="IRContractLegality",
     ),
 
-    # ── W1.1 step 3a — the bounded tile.view contract ──────────────────────
+    # ── W1.1 step 3 — pointer-backed Tile address contracts ────────────────
     DiagnosticCode(
         code="TILE_VIEW_POINTER_ARITY",
         pass_origin="ViewOp::verify",
         severity="error",
         summary=(
             "A pointer-backed tile.view takes (base, rowOrigin, colOrigin), "
-            "optionally followed by (rowBound, colBound). The verifier used to "
-            "accept any count >= 3, which made a 4-operand view legal and "
-            "meaningless and left the bounded form's validity to whichever "
-            "backend happened to look."
+            "optionally followed by (rowBound, colBound); when memory layout "
+            "leading_dim is zero, a final SSA leading dimension is required."
         ),
-        fix_hint="Pass exactly 3 operands, or 5 for the bounded (ragged) form.",
+        fix_hint=(
+            "Use 3/5 operands for a static leading dimension or 4/6 for a "
+            "dynamic one, with the leading dimension last."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_STORE_POINTER_ARITY",
+        pass_origin="StoreOp::verify",
+        severity="error",
+        summary=(
+            "A pointer-backed tile.store takes tile, base, row/column origin, "
+            "optional row/column bounds, and a final SSA leading dimension "
+            "exactly when memory layout leading_dim is zero."
+        ),
+        fix_hint=(
+            "Use 4/6 operands for a static leading dimension or 5/7 for a "
+            "dynamic one, with the leading dimension last."
+        ),
         spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
         sprint="W1.1",
     ),

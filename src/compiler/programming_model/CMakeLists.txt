@@ -24,12 +24,19 @@ foreach(_td_rel
     mlir_tablegen(${_td_name}.cpp.inc -gen-op-defs  -I ${PM_TD_INC_DIR})
 endforeach()
 
+set(LLVM_TARGET_DEFINITIONS ${PM_TD_INC_DIR}/schedule/ScheduleMeshPipelineOps.td)
+mlir_tablegen(ScheduleDialect.h.inc -gen-dialect-decls -dialect=schedule
+              -I ${PM_TD_INC_DIR})
+mlir_tablegen(ScheduleDialect.cpp.inc -gen-dialect-defs -dialect=schedule
+              -I ${PM_TD_INC_DIR})
+
 add_public_tablegen_target(TesseraPMTableGen)
 
 # ------------------------------------------------------------------
 # PassPipelines compiler driver
 # ------------------------------------------------------------------
 add_library(TesseraPM
+    ir/ScheduleDialect.cpp
     lib/PMPasses.cpp
 )
 

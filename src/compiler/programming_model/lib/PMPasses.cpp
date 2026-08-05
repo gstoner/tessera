@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "tessera/ProgrammingModel/PMPasses.h"
+#include "tessera/ProgrammingModel/ScheduleDialect.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -30,12 +31,7 @@ namespace tessera {
 // ---------------------------------------------------------------------------
 
 void registerPMPipelinesV11(DialectRegistry &registry) {
-  // The PM v1.1 dialects (schedule / cache / moe) auto-register when their ops
-  // are parsed. The production `tile` dialect is owned by TesseraIR and is
-  // registered as `tessera::tile::TesseraTileDialect` by its own component --
-  // a second `tile` ODS that used to live under this directory was deleted in
-  // W0.6 (it was never registered and never included by any source file).
-  (void)registry;
+  schedule::registerScheduleDialect(registry);
 }
 
 // ---------------------------------------------------------------------------

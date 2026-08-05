@@ -79,8 +79,11 @@ def _bundle(
     if not pipeline_name and resolution is not None:
         pipeline_name = resolution.current_driver_pipeline
     request = CompileRequest(
-        source_origin="unit", function_name="spine", graph_ir="graph-ir",
-        target=target, pipeline_name=pipeline_name,
+        source_origin="unit",
+        function_name="spine",
+        graph_ir="graph-ir",
+        target=target,
+        pipeline_name=pipeline_name,
     )
     return CompileArtifactBundle(
         request=request,
@@ -97,7 +100,9 @@ def _bundle(
 def _runtime_artifact() -> RuntimeArtifact:
     image = _image()
     return RuntimeArtifact(
-        graph_ir="graph-ir", schedule_ir="schedule-ir", tile_ir="tile-ir",
+        graph_ir="graph-ir",
+        schedule_ir="schedule-ir",
+        tile_ir="tile-ir",
         target_ir="target-ir",
         metadata={"target": "nvidia_sm120", "compiler_path": "typed_spine"},
         abi_signature="tessera.canonical.v1.nvidia_sm120",
@@ -125,10 +130,18 @@ def test_bundle_records_packaged_and_launchable_stages() -> None:
     assert packaged.orchestration_state == "packaged"
     assert launchable.orchestration_state == "launchable"
     assert [stage["stage"] for stage in launchable.spine_stages()] == [
-        "graph", "schedule", "tile", "target", "backend",
-        "native_image", "launch_descriptor",
+        "graph",
+        "schedule",
+        "tile",
+        "target",
+        "backend",
+        "native_image",
+        "launch_descriptor",
     ]
     assert launchable.to_metadata()["launch_descriptor_digest"]
+    # Stage presence is not lineage: these legacy fixtures do not name any
+    # producer or parent digest.
+    assert launchable.to_metadata()["lineage_complete"] is False
 
 
 def test_bundle_rejects_image_provenance_drift() -> None:
@@ -183,6 +196,9 @@ def test_compile_result_projects_typed_artifacts_without_reconstruction() -> Non
     assert runtime.native_image is image
     assert runtime.launch_descriptor is descriptor
     assert runtime.metadata["orchestration_state"] == "launchable"
+    assert runtime.metadata["lineage_complete"] is False
+    restored = RuntimeArtifact.from_json(runtime.to_json())
+    assert restored.metadata["artifact_lineage"] == runtime.metadata["artifact_lineage"]
 
 
 def test_runtime_artifact_round_trip_validates_nested_hashes() -> None:
@@ -218,7 +234,9 @@ def test_generic_runtime_validates_then_submits_exact_descriptor() -> None:
         return buffers["x"] * scalars["count"]
 
     register_native_launcher(
-        "nvidia_sm120", binary_formats=("ptx",), submit=submit,
+        "nvidia_sm120",
+        binary_formats=("ptx",),
+        submit=submit,
     )
     try:
         result = launch(_runtime_artifact(), _args(), stream="stream-7")
@@ -237,7 +255,8 @@ def test_generic_runtime_validates_then_submits_exact_descriptor() -> None:
 def test_binding_failure_happens_before_backend_submission() -> None:
     calls = []
     register_native_launcher(
-        "nvidia_sm120", binary_formats=("ptx",),
+        "nvidia_sm120",
+        binary_formats=("ptx",),
         submit=lambda *values: calls.append(values),
     )
     bad = _args(np.ones((2, 4), dtype=np.float32))

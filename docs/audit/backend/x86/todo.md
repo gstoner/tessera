@@ -458,3 +458,14 @@ Shared `tile.view` / `tile.store` can now carry an SSA leading dimension when
 and access-gated AMX consume `!tessera_x86.tile`, not Tile fragments or
 pointer-backed `tile.view`; no x86 lowering changed. Host Zen 5 validation:
 x86 dtype + matmul-family suites, 21 passed.
+
+## Cross-backend sync `E2E-REAL-LINEAGE-SCHEDULE-2026-08-05`
+
+Shared compiler orchestration now records explicit artifact ancestry and
+production `tessera-opt` registers the generated Schedule dialect. **x86
+outcome: follow-up required under E2E-REAL-3.** Canonical x86 packaging still
+accepts `GraphIRModule` and re-derives its launch Tile program, so the recorded
+Graph→package-Tile edge exposes the fork and `lineage_complete` remains false.
+No AVX-512 ABI, generated code, selector, or AMX gate changed. The consumer PR
+must accept the canonical launch-Tile artifact and rerun Zen 5 exact execution;
+this does not supply the separately access-gated Intel AMX packet.

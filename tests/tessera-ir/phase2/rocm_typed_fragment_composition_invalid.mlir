@@ -126,3 +126,49 @@ func.func @mixed_a_b_dtypes(%a: memref<?xf16>, %b: memref<?xbf16>,
       : !tile.tile, memref<?xf32>, index, index
   return
 }
+
+// -----
+
+#l = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
+                  replica = [] : [] on [], offset = 0>
+
+// `tile.memory` is OPTIONAL — a `tile.view` over a tensor carries only
+// `tile.layout`, which is exactly the form `tile_mma_typed_kloop.mlir` uses.
+// The ROCm materializer is the layer that diagnoses a source it cannot address,
+// so this must be a named diagnostic.
+//
+// It SEGFAULTED (exit 139). The strided-K change hoisted a `memory.getOrder()`
+// read above the `!memory` check to compute the K stride; before that, the
+// order test sat inside the guard expression after `!memory`, where `||`
+// short-circuits. A crash is not a diagnostic, and reaching one on valid IR is
+// strictly worse than rejecting it — hence the regression gate here rather than
+// only a code fix.
+//
+// CHECK: ROCM_FRAGMENT_UNSUPPORTED_SOURCE_LAYOUT
+func.func @view_without_tile_memory(%a: tensor<16x16xf16>,
+                                    %b: tensor<16x16xf16>)
+    -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32",
+                      role = "acc", layout = "row_major", family = "wmma"> {
+  %acc = tile.fragment_zero : !tile.fragment<m = 16, n = 16, k = 16,
+      elem = "f32", acc = "f32", role = "acc", layout = "row_major",
+      family = "wmma">
+  %va = tile.view %a {tile.layout = #l} : (tensor<16x16xf16>) -> !tile.tile
+  %vb = tile.view %b {tile.layout = #l} : (tensor<16x16xf16>) -> !tile.tile
+  %fa = tile.fragment_pack %va : (!tile.tile) -> !tile.fragment<m = 16, n = 16,
+      k = 16, elem = "f16", acc = "f32", role = "a", layout = "row_major",
+      family = "wmma">
+  %fb = tile.fragment_pack %vb : (!tile.tile) -> !tile.fragment<m = 16, n = 16,
+      k = 16, elem = "f16", acc = "f32", role = "b", layout = "col_major",
+      family = "wmma">
+  %m = tile.mma %fa, %fb, %acc : (
+      !tile.fragment<m = 16, n = 16, k = 16, elem = "f16", acc = "f32",
+                     role = "a", layout = "row_major", family = "wmma">,
+      !tile.fragment<m = 16, n = 16, k = 16, elem = "f16", acc = "f32",
+                     role = "b", layout = "col_major", family = "wmma">,
+      !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32",
+                     role = "acc", layout = "row_major", family = "wmma">)
+      -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32",
+                        role = "acc", layout = "row_major", family = "wmma">
+  return %m : !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32",
+                             role = "acc", layout = "row_major", family = "wmma">
+}

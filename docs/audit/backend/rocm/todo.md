@@ -2367,13 +2367,24 @@ conversion (`!tile.fragment<...>` -> `vector<N x T>`), so a K-loop iter-arg
 accumulator, chained MMAs, and any non-zero accumulator lower by
 composition. Fixture: `rocm_typed_fragment_composition.mlir`.
 
+**Strided-K landed 2026-08-04.** The prerequisite named here — that
+`materializeFragmentPack` addressed only fragments whose K axis is CONTIGUOUS
+in memory, while the producer stores B row-major (`k * N + col`, stride N) — is
+closed. The fragment always walks K; the memory order now only decides whether
+that walk is contiguous (`vector.load` / `maskedload`) or strided by the leading
+dimension (element-by-element gather with the same `inb ? value : zero` shape
+the generator uses by hand). All four (role x order) combinations are
+addressable; two of them were previously rejected as an "unsupported source
+layout". The contiguous path is **byte-identical** — verified by diffing lowered
+output for the composition, ragged-bounds, and RDNA4-int4 fixtures. Fixture:
+`rocm_fragment_strided_k.mlir`.
+
 **Remaining:** the typed form still has NO PRODUCER — `GenerateWMMAGemmKernel`
 assembles fragments itself with its own lane math, so nothing emits
-`tile.view` + `tile.fragment_pack` yet (W1.1 step 3). A measured prerequisite
-found while scoping it: `materializeFragmentPack` only addresses fragments
-whose K axis is CONTIGUOUS in memory, and the producer stores B row-major
-(`k * N + col`, stride N), which is why it gathers B with 16 scalar loads.
-Strided-K support has to land before the producer can migrate.
+`tile.view` + `tile.fragment_pack` yet (W1.1 step 3). That migration is now
+unblocked on the layout side. Its gate is numeric, not structural: the
+differential oracles `tessera_rocm_wmma_gemm_f16_bench_{lds,pipe}` and the
+inner-product bound, per `GEMM_PERF_LADDER.md` §5.
 
 ## Cross-backend sync `TILE-VIEW-BOUNDED-CONTRACT-2026-08-04` — bounded `tile.view` is a shared contract
 

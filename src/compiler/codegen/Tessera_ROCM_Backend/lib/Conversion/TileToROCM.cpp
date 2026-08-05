@@ -100,22 +100,6 @@ static FailureOr<Value> materializeFragmentPack(
       role == "a"
           ? std::array<int64_t, 2>{desc.getM(), desc.getK()}
           : std::array<int64_t, 2>{desc.getK(), desc.getN()};
-  // Both memory orders are addressable. The fragment ALWAYS walks K; what the
-  // order decides is whether K is contiguous in memory or strided by the
-  // leading dimension:
-  //
-  //   role  order        K axis   linear                  K stride
-  //   a     row_major    col      row * ld + col          1
-  //   a     col_major    col      col * ld + row          ld
-  //   b     row_major    row      row * ld + col          ld
-  //   b     col_major    row      col * ld + row          1
-  //
-  // Only the two contiguous cases used to be accepted, and the strided ones
-  // were rejected as an "unsupported source layout". That is why
-  // `GenerateWMMAGemmKernel` could not migrate: it stores B row-major
-  // (`k * N + col`), so its B fragment is a stride-N gather, which it does by
-  // hand with 16 scalar loads.
-  const bool kIsContiguous = (role == "a") == (memory.getOrder() == "row_major");
   // 3 inputs = (base, rowOrigin, colOrigin); 5 adds (rowBound, colBound) for a
   // ragged problem. Anything else is malformed rather than merely unsupported.
   // This guard used to require exactly 3, which made the bounded form
@@ -132,6 +116,29 @@ static FailureOr<Value> materializeFragmentPack(
         << physical.familyName << " fragment source layout for role " << role;
     return failure();
   }
+
+  // Both memory orders are addressable. The fragment ALWAYS walks K; what the
+  // order decides is whether K is contiguous in memory or strided by the
+  // leading dimension:
+  //
+  //   role  order        K axis   linear                  K stride
+  //   a     row_major    col      row * ld + col          1
+  //   a     col_major    col      col * ld + row          ld
+  //   b     row_major    row      row * ld + col          ld
+  //   b     col_major    row      col * ld + row          1
+  //
+  // Only the two contiguous cases used to be accepted, and the strided ones
+  // were rejected as an "unsupported source layout". That is why
+  // `GenerateWMMAGemmKernel` could not migrate: it stores B row-major
+  // (`k * N + col`), so its B fragment is a stride-N gather, which it does by
+  // hand with 16 scalar loads.
+  //
+  // Computed BELOW the guard, not above it. `tile.memory` is optional -- a
+  // `tile.view` over a tensor carries only `tile.layout` -- so reading
+  // `memory.getOrder()` before the `!memory` check SEGFAULTS on valid IR. The
+  // pre-existing code was safe only because the order test sat inside the guard
+  // expression, after `!memory`, where `||` short-circuits.
+  const bool kIsContiguous = (role == "a") == (memory.getOrder() == "row_major");
 
   Value base = view.getInputs()[0];
   auto memrefTy = dyn_cast<MemRefType>(base.getType());

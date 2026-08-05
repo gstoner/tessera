@@ -2379,6 +2379,14 @@ layout". The contiguous path is **byte-identical** — verified by diffing lower
 output for the composition, ragged-bounds, and RDNA4-int4 fixtures. Fixture:
 `rocm_fragment_strided_k.mlir`.
 
+**Stack context (measured 2026-08-05):** see
+[`ROCM_LANE_MAP.md`](ROCM_LANE_MAP.md). The executing ROCm GEMM lane starts
+from a hand-built **Target-IR** directive and traverses no Graph IR, no
+Schedule IR, and no Tile IR; `lower-tile-to-rocm` is in its pipeline but is a
+verified no-op on the default path. So W1.1's typed contract affects no
+executing kernel until step 3 lands, and step 3 migrates **1 of 58**
+`generate-*` expanders. That reframes the remaining adoption cost.
+
 **Remaining:** the typed form still has NO PRODUCER — `GenerateWMMAGemmKernel`
 assembles fragments itself with its own lane math, so nothing emits
 `tile.view` + `tile.fragment_pack` yet (W1.1 step 3). That migration is now

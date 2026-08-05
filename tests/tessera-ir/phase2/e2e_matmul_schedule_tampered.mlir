@@ -11,6 +11,7 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
       a_layout = "row_major", accum = "f32", arch = "zen5-avx512",
       artifact_hash = "0000000000000000000000000000000000000000000000000000000000000000",
       b_layout = "col_major", pipeline_depth = 1 : i64,
+      macro_tile_m = 16 : i64, macro_tile_n = 16 : i64,
       raster_group = 1 : i64, raster_order = "row_major", storage = "f32",
       tile_k = 16 : i64, tile_m = 16 : i64, tile_n = 16 : i64,
       warps = 1 : i64

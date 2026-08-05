@@ -107,6 +107,11 @@ LogicalResult MatmulOp::verify() {
     return emitOpError("requires a non-empty architecture");
   if (getTileM() <= 0 || getTileN() <= 0 || getTileK() <= 0)
     return emitOpError("tile dimensions must be positive");
+  if (getMacroTileM() < getTileM() || getMacroTileN() < getTileN() ||
+      getMacroTileM() % getTileM() != 0 ||
+      getMacroTileN() % getTileN() != 0)
+    return emitOpError(
+        "macro tile dimensions must be positive multiples of tile_m/tile_n");
   if (getWarps() != 1 && getWarps() != 4)
     return emitOpError("warps must be 1 or 4");
   if (getPipelineDepth() <= 0)
@@ -129,6 +134,17 @@ LogicalResult WarpOp::verify() {
     return emitOpError("warp count must be positive");
   if (getBody().empty())
     return emitOpError("requires a non-empty body");
+  if (!llvm::hasSingleElement(getBody()))
+    return emitOpError("requires exactly one body block");
+  Operation *terminator = getBody().front().getTerminator();
+  if (!terminator || terminator->getName().getStringRef() != "schedule.yield")
+    return emitOpError("body must terminate with schedule.yield");
+  if (terminator->getNumOperands() != getNumResults())
+    return emitOpError("yield operand count must match region result count");
+  for (auto [yielded, result] :
+       llvm::zip_equal(terminator->getOperands(), getResults()))
+    if (yielded.getType() != result.getType())
+      return emitOpError("yield operand types must match region result types");
   return success();
 }
 

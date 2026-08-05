@@ -2323,3 +2323,13 @@ follow-up required.** No CUDA code changed and no SM120 evidence is claimed.
 The NVIDIA consumer remains blocked on its two untyped `tile.mma` producers,
 accumulator threading, dynamic/bounded view support, and CUDA-enabled SM120
 validation before it can adopt this boundary without recreating Graph intent.
+
+## Cross-backend sync `E2E-REAL-PERFORMANCE-2026-08-05`
+
+Schedule/Tile matmul now distinguishes instruction-tile shape from an
+architecture-owned macro tile and carries that value through artifact identity
+and launch provenance. **NVIDIA outcome: follow-up required.** This generic
+contract is applicable, but no CUDA lowering, SM120 schedule, PTX, selector, or
+device evidence changed. NVIDIA must choose its own macro tile after its two
+untyped producers, accumulator threading, and bounded/dynamic view gates land;
+the gfx1151 32x64 decision does not transfer.

@@ -3464,8 +3464,16 @@ def _submit_rocm_gfx1151_native(
             raise RuntimeError("gfx1151 matmul arrays disagree with M/N/K or descriptor dtype")
         input_arrays = [np.ascontiguousarray(a), np.ascontiguousarray(b_matrix)]
         dimensions = (m, n, k)
-        grid_x = (n + 15) // 16
-        grid_y = (m + 15) // 16
+        macro_tile = descriptor.provenance.get("macro_tile")
+        if (
+            not isinstance(macro_tile, list)
+            or len(macro_tile) != 2
+            or any(not isinstance(value, int) or value <= 0 for value in macro_tile)
+        ):
+            raise RuntimeError("gfx1151 matmul descriptor requires a positive macro_tile")
+        macro_m, macro_n = macro_tile
+        grid_x = (n + macro_n - 1) // macro_n
+        grid_y = (m + macro_m - 1) // macro_m
     elif attention:
         q, key, value = (buffers[item.name] for item in ordered[:3])
         bias = buffers[ordered[3].name] if attention_bias else None

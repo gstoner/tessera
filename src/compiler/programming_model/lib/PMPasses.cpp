@@ -210,6 +210,8 @@ struct MatmulSchedule {
   int64_t tileM = 16;
   int64_t tileN = 16;
   int64_t tileK = 16;
+  int64_t macroTileM = 16;
+  int64_t macroTileN = 16;
   int64_t warps = 1;
   int64_t pipelineDepth = 1;
   StringRef rasterOrder = "row_major";
@@ -259,7 +261,10 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
   Type outElement = out.getElementType();
   bool x86 = schedule.target == "x86" || schedule.arch.contains("avx512") ||
              schedule.arch.contains("zen5");
-  bool rocm = schedule.target == "rocm" || schedule.arch.contains("gfx1151");
+  // This bounded physical schedule is gfx1151-owned.  The shared macro-tile
+  // vocabulary is portable, but gfx1200/gfx1250 must supply their own exact-
+  // device schedule and instruction-family profile rather than inheriting it.
+  bool rocm = schedule.arch.contains("gfx1151");
   if (x86 && lhsElement.isF32() && rhsElement.isF32() && outElement.isF32()) {
     schedule.storage = "f32";
     schedule.accum = "f32";
@@ -270,6 +275,11 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
   if (rocm && lhsElement.isF16() && rhsElement.isF16() && outElement.isF32()) {
     schedule.storage = "f16";
     schedule.accum = "f32";
+    // gfx1151's committed production GEMM is a 2x4 register-blocked WMMA
+    // macro-tile.  Schedule IR carries logical element extents, not the
+    // backend's mt/nt spelling, so preserve that decision as 32x64x16.
+    schedule.macroTileM = 32;
+    schedule.macroTileN = 64;
     if (schedule.arch.empty())
       schedule.arch = "gfx1151";
     return schedule;
@@ -282,7 +292,10 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
       (Twine("target=") + schedule.target + ";arch=" + schedule.arch +
        ";M=" + Twine(schedule.m) + ";N=" + Twine(schedule.n) +
        ";K=" + Twine(schedule.k) + ";storage=" + schedule.storage +
-       ";accum=" + schedule.accum + ";tile=16x16x16;warps=" +
+       ";accum=" + schedule.accum + ";tile=" + Twine(schedule.tileM) + "x" +
+       Twine(schedule.tileN) + "x" + Twine(schedule.tileK) +
+       ";macro_tile=" + Twine(schedule.macroTileM) + "x" +
+       Twine(schedule.macroTileN) + ";warps=" +
        Twine(schedule.warps) + ";pipeline_depth=" +
        Twine(schedule.pipelineDepth) + ";raster=row_major;group=" +
        Twine(schedule.rasterGroup))
@@ -333,6 +346,10 @@ struct GraphToSchedulePass
       state.addAttribute("tile_m", builder.getI64IntegerAttr(selected->tileM));
       state.addAttribute("tile_n", builder.getI64IntegerAttr(selected->tileN));
       state.addAttribute("tile_k", builder.getI64IntegerAttr(selected->tileK));
+      state.addAttribute("macro_tile_m",
+                         builder.getI64IntegerAttr(selected->macroTileM));
+      state.addAttribute("macro_tile_n",
+                         builder.getI64IntegerAttr(selected->macroTileN));
       state.addAttribute("warps", builder.getI64IntegerAttr(selected->warps));
       state.addAttribute("pipeline_depth",
                          builder.getI64IntegerAttr(selected->pipelineDepth));
@@ -362,11 +379,23 @@ struct GraphToSchedulePass
                                     .str()));
       artifactState.addAttribute(
           "tile", builder.getDictionaryAttr({
-                      builder.getNamedAttr("m", builder.getI64IntegerAttr(16)),
-                      builder.getNamedAttr("n", builder.getI64IntegerAttr(16)),
-                      builder.getNamedAttr("k", builder.getI64IntegerAttr(16)),
-                      builder.getNamedAttr("warps", builder.getI64IntegerAttr(selected->warps)),
-                      builder.getNamedAttr("pipeline_depth", builder.getI64IntegerAttr(selected->pipelineDepth)),
+                      builder.getNamedAttr(
+                          "m", builder.getI64IntegerAttr(selected->tileM)),
+                      builder.getNamedAttr(
+                          "n", builder.getI64IntegerAttr(selected->tileN)),
+                      builder.getNamedAttr(
+                          "k", builder.getI64IntegerAttr(selected->tileK)),
+                      builder.getNamedAttr(
+                          "macro_m",
+                          builder.getI64IntegerAttr(selected->macroTileM)),
+                      builder.getNamedAttr(
+                          "macro_n",
+                          builder.getI64IntegerAttr(selected->macroTileN)),
+                      builder.getNamedAttr(
+                          "warps", builder.getI64IntegerAttr(selected->warps)),
+                      builder.getNamedAttr(
+                          "pipeline_depth",
+                          builder.getI64IntegerAttr(selected->pipelineDepth)),
                   }));
       artifactState.addAttribute(
           "numeric_policy",
@@ -424,6 +453,8 @@ struct ScheduleToTilePass
       if (scheduled.getTileMAttr().getInt() != selected->tileM ||
           scheduled.getTileNAttr().getInt() != selected->tileN ||
           scheduled.getTileKAttr().getInt() != selected->tileK ||
+          scheduled.getMacroTileMAttr().getInt() != selected->macroTileM ||
+          scheduled.getMacroTileNAttr().getInt() != selected->macroTileN ||
           scheduled.getWarpsAttr().getInt() != selected->warps ||
           scheduled.getPipelineDepthAttr().getInt() != selected->pipelineDepth ||
           scheduled.getStorage() != selected->storage ||
@@ -509,6 +540,12 @@ struct ScheduleToTilePass
                                builder.getI64IntegerAttr(selected->tileN));
       kernelState.addAttribute("tessera.tile_k",
                                builder.getI64IntegerAttr(selected->tileK));
+      kernelState.addAttribute(
+          "tessera.macro_tile_m",
+          builder.getI64IntegerAttr(selected->macroTileM));
+      kernelState.addAttribute(
+          "tessera.macro_tile_n",
+          builder.getI64IntegerAttr(selected->macroTileN));
       kernelState.addAttribute("tessera.pipeline_depth",
                                builder.getI64IntegerAttr(selected->pipelineDepth));
       kernelState.addAttribute("tessera.raster_order",

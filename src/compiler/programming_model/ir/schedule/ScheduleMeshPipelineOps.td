@@ -72,6 +72,8 @@ def Schedule_MatmulOp : Op<ScheduleDialect, "matmul", [Pure]> {
                        I64Attr:$tile_m,
                        I64Attr:$tile_n,
                        I64Attr:$tile_k,
+                       I64Attr:$macro_tile_m,
+                       I64Attr:$macro_tile_n,
                        I64Attr:$warps,
                        I64Attr:$pipeline_depth,
                        StrAttr:$storage,
@@ -106,8 +108,8 @@ def Schedule_WarpOp : Op<ScheduleDialect, "warp"> {
   let summary = "Warp role region for producer/consumer specialization";
   let arguments = (ins StrAttr:$role,
                        OptionalAttr<I32Attr>:$count);
+  let results = (outs Variadic<AnyType>:$results);
   let regions = (region AnyRegion:$body);
-  let assemblyFormat = "attr-dict-with-keyword $body";
   let hasVerifier = 1;
 }
 

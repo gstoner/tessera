@@ -1072,6 +1072,19 @@ LogicalResult MatmulKernelOp::verify() {
         tileK.getInt() != desc.getK())
       return emitOpError(
           "canonical K-loop tile sizes must match the physical MMA descriptor");
+    auto macroM = getOperation()->getAttrOfType<IntegerAttr>(
+        "tessera.macro_tile_m");
+    auto macroN = getOperation()->getAttrOfType<IntegerAttr>(
+        "tessera.macro_tile_n");
+    if (bool(macroM) != bool(macroN))
+      return emitOpError(
+          "canonical K-loop macro_tile_m and macro_tile_n must appear together");
+    if (macroM &&
+        (macroM.getInt() < desc.getM() || macroN.getInt() < desc.getN() ||
+         macroM.getInt() % desc.getM() != 0 ||
+         macroN.getInt() % desc.getN() != 0))
+      return emitOpError(
+          "canonical K-loop macro tile must be a positive multiple of the physical MMA tile");
     if (desc.getAccType() != "f32" && desc.getAccType() != "s32" &&
         desc.getAccType() != "int32" && desc.getAccType() != "f64")
       return emitOpError(

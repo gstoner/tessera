@@ -2506,3 +2506,21 @@ Graph, Schedule, or launch-level matmul op survives. This does not promote the
 route: E2E-REAL-4 must still record device-event throughput against the 8.02
 TFLOP/s floor and same-run direct lane. NVIDIA and Apple schedules are not
 inferred from this gfx1151 evidence.
+
+## Cross-backend sync `E2E-REAL-PERFORMANCE-2026-08-05`
+
+The first canonical run exposed a real schedule-loss defect: carrying only the
+16x16 WMMA instruction tile produced 4.14 TFLOP/s. The shared Schedule/Tile and
+descriptor contracts now carry a separate architecture-owned macro tile;
+gfx1151 selects its already committed 32x64 shape, and the ROCm adapter derives
+2x4 without embedding that spelling in shared IR. Runtime launch geometry
+consumes the same descriptor value. **ROCm outcome: retain, not promote.** The
+corrected 2048-cubed run reaches 18.29 TFLOP/s versus 18.34 direct (0.997x) and
+2.281x the 8.02 floor. Aligned `64x64x64` and ragged `65x67x31` outputs are
+bit-identical between routes. The WSL `/dev/dxg` packet records synchronized
+resident host-wall timing, so it is valid comparison evidence but not
+selector-grade device-event evidence:
+[`../../../../benchmarks/baselines/rocm_gfx1151_e2e_real4_matmul_2026_08_05.json`](../../../../benchmarks/baselines/rocm_gfx1151_e2e_real4_matmul_2026_08_05.json).
+Bare-metal timing can promote the route without another schedule redesign.
+gfx1200/gfx1250 must provide their own macro tile and instruction-family
+profiles and fail closed until their exact-device packets land.

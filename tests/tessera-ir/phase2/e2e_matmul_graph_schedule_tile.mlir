@@ -22,6 +22,8 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
 // X86-SAME: a_layout = "row_major"
 // X86-SAME: b_layout = "col_major"
 // X86-SAME: tessera.canonical_k_loop = true
+// X86-SAME: tessera.macro_tile_m = 16
+// X86-SAME: tessera.macro_tile_n = 16
 // X86-SAME: tessera.pipeline_depth = 1
 // X86-SAME: tessera.raster_group = 1
 // X86-SAME: tessera.raster_order = "row_major"
@@ -35,6 +37,8 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
 // SCHEDULE: %[[GRAPH:.*]] = tessera.matmul {{.*}}schedule.artifact_hash = "[[HASH:[0-9a-f]+]]"
 // SCHEDULE: %[[SCHEDULED:.*]] = schedule.matmul %[[GRAPH]]
 // SCHEDULE-SAME: artifact_hash = "[[HASH]]"
+// SCHEDULE-SAME: macro_tile_m = 16
+// SCHEDULE-SAME: macro_tile_n = 16
 // SCHEDULE-SAME: storage = "f32"
 // SCHEDULE-SAME: tile_m = 16
 // SCHEDULE: schedule.artifact
@@ -60,5 +64,10 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
 // ROCM-SAME: a = "f16"
 // ROCM-SAME: b = "f16"
 // ROCM-SAME: acc = "f32"
+// ROCM-SAME: tessera.macro_tile_m = 32
+// ROCM-SAME: tessera.macro_tile_n = 64
 // ROCM-SAME: tessera.schedule_hash = "{{[0-9a-f]+}}"
+// ROCM-SAME: tessera.tile_k = 16
+// ROCM-SAME: tessera.tile_m = 16
+// ROCM-SAME: tessera.tile_n = 16
 // ROCM: return %{{.*}} : tensor<48x80xf32>

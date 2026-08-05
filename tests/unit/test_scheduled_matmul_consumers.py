@@ -55,7 +55,9 @@ def _artifact(*, target: str) -> ScheduledMatmulArtifact:
   llvm.func @{target}_scheduled_matmul(%a: !llvm.ptr, %b: !llvm.ptr,
       %o: !llvm.ptr, %m: i64, %n: i64, %k: i64) {{
     tile.matmul_kernel %a, %b, %o, %m, %n, %k {{
-      tessera.schedule_hash = "{digest}", storage = "{storage}", accum = "f32"
+      tessera.schedule_hash = "{digest}", storage = "{storage}", accum = "f32",
+      tessera.macro_tile_m = {16 if target == "x86" else 32} : i64,
+      tessera.macro_tile_n = {16 if target == "x86" else 64} : i64
     }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     llvm.return
   }}
@@ -84,6 +86,8 @@ def _artifact(*, target: str) -> ScheduledMatmulArtifact:
         output_dtype="fp32",
         storage=storage,
         accum="f32",
+        macro_tile_m=16 if target == "x86" else 32,
+        macro_tile_n=16 if target == "x86" else 64,
         schedule_digest=digest,
     )
 

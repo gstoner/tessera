@@ -1079,8 +1079,22 @@ struct GenerateWMMAGemmKernelPass
         return signalPassFailure();
       }
       int64_t mt = 1, nt = 1;
-      if (auto warps = op->getAttrOfType<IntegerAttr>("warps");
-          warps && warps.getInt() == 4) {
+      auto logicalM = op->getAttrOfType<IntegerAttr>("tessera.macro_tile_m");
+      auto logicalN = op->getAttrOfType<IntegerAttr>("tessera.macro_tile_n");
+      if (logicalM || logicalN) {
+        if (!logicalM || !logicalN || logicalM.getInt() < 16 ||
+            logicalN.getInt() < 16 || logicalM.getInt() % 16 != 0 ||
+            logicalN.getInt() % 16 != 0) {
+          op->emitError("ROCm tile.matmul_kernel macro_tile_m/macro_tile_n must "
+                        "both be positive multiples of the 16x16 WMMA tile");
+          return signalPassFailure();
+        }
+        mt = logicalM.getInt() / 16;
+        nt = logicalN.getInt() / 16;
+      } else if (auto warps = op->getAttrOfType<IntegerAttr>("warps");
+                 warps && warps.getInt() == 4) {
+        // Compatibility for portable launch carriers authored before logical
+        // macro-tile extents became the schedule-owned source of truth.
         mt = 2;
         nt = 2;
       }

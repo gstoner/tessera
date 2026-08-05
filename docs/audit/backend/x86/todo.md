@@ -494,3 +494,16 @@ Exact Zen 5 descriptor execution agrees numerically on the established
 no Graph, Schedule, or launch-level matmul op survives. E2E-REAL-4 still owns
 the AVX-512 performance ratchet and promotion decision. This is not Intel AMX
 evidence; that named-host packet remains access-gated.
+
+## Cross-backend sync `E2E-REAL-PERFORMANCE-2026-08-05`
+
+The scheduled artifact now separates the physical 16x16 instruction tile from
+an architecture-owned macro tile; x86 selects 16x16 for both. **x86 outcome:
+promote.** On the exact Ryzen AI MAX+ 395 Zen 5 host, the established aligned
+`64x128x96` and ragged `127x65x79` rows are bit-identical to the production
+AVX-512 package. Scheduled/production median ratios are 1.031x and 0.988x,
+inside the existing 10% ratchet. The report records compiler/toolchain and all
+Graph/Schedule/Tile/Target/image digests, compile state, image size, CPU
+features, and host-wall operation-total timing:
+[`../../../../benchmarks/baselines/x86_avx512_e2e_real4_matmul_2026_08_05.json`](../../../../benchmarks/baselines/x86_avx512_e2e_real4_matmul_2026_08_05.json).
+This is AVX-512 evidence only; Intel AMX remains access-gated.

@@ -1308,6 +1308,7 @@ def package_scheduled_matmul(
             "b_storage": artifact.storage,
             "output_storage": artifact.accum,
             "accum": artifact.accum,
+            "macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
             "required_features": ["avx512f", "fma"],
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,

@@ -429,7 +429,12 @@ struct WarpSpecializationPass
       for (auto [i, v] : llvm::enumerate(consCross))
         v.replaceUsesWithIf(consWarp->getResult(i), [&](OpOperand &use) {
           Operation *owner = use.getOwner();
-          return !consSet.contains(owner) && owner != consWarp;
+          // Newly created pipeline-state ops also consume the value inside the
+          // consumer region.  They must keep using the region-local producer;
+          // the warp result is only defined outside this operation and cannot
+          // dominate a use nested in its own body.
+          return !consSet.contains(owner) && owner != consWarp &&
+                 !consWarp->isProperAncestor(owner);
         });
 
       // ── Writeback-dealloc epilogue ────────────────────────────────────────

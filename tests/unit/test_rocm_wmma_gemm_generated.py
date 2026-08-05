@@ -73,7 +73,10 @@ module {
     tile.matmul_kernel %a, %b, %d, %m, %n, %k {
       mma = #tile.mma_desc<family = "auto", m = 16, n = 16, k = 16, a = "f16", b = "f16", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
       epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">,
-      warps = 1 : i64, staging = "global"
+      warps = 1 : i64, staging = "global",
+      tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64,
+      tessera.tile_k = 16 : i64, tessera.macro_tile_m = 32 : i64,
+      tessera.macro_tile_n = 64 : i64
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
     return
   }
@@ -215,6 +218,8 @@ def test_portable_tile_kernel_reuses_fragment_materialized_generator():
     assert "vector.load" in r.stdout
     assert "tessera_rocm.wmma" in r.stdout
     assert "memref.store" in r.stdout
+    # Two paths (fast/edge) x two K phases (main/tail) x 2x4 macro tile.
+    assert r.stdout.count("tessera_rocm.wmma") == 32
 
 
 @pytest.mark.parametrize(

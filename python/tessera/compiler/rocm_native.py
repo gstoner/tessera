@@ -1391,7 +1391,7 @@ def package_scheduled_matmul(
             ShapeGuard(artifact.output_name, 0, "eq", artifact.m),
             ShapeGuard(artifact.output_name, 1, "eq", artifact.n),
         ),
-        geometry=LaunchGeometry(policy="gfx1151_wmma_m16n16_grid"),
+        geometry=LaunchGeometry(policy="rocm_wmma_macro_tile_grid"),
         ordering=OrderingSemantics(
             ordered_submission=True,
             residency="none",
@@ -1406,6 +1406,7 @@ def package_scheduled_matmul(
             "b_storage": artifact.storage,
             "output_storage": artifact.accum,
             "accum": artifact.accum,
+            "macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },

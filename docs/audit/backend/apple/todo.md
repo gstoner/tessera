@@ -2733,3 +2733,12 @@ metallib, Accelerate, MPS, or selector changed. A later Apple slice must define
 its own bounded dtype/schedule instance, consume the same boundary, and produce
 Apple-host numerical and performance evidence; x86/ROCm evidence does not
 transfer.
+
+## Cross-backend sync `E2E-REAL-PERFORMANCE-2026-08-05`
+
+The shared scheduled-matmul contract now separates instruction and macro tile
+extents and binds the latter into artifact and launch provenance. **Apple
+outcome: follow-up required on the owning Mac.** No MSL/MPS/Accelerate schedule
+or selector changed, and Apple inherits neither gfx1151's 32x64 macro tile nor
+Zen 5 evidence. Its later scheduled consumer must select and measure an
+Apple-owned macro tile before promotion.

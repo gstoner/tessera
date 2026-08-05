@@ -36,6 +36,8 @@ class ScheduledMatmulArtifact:
     output_dtype: str
     storage: str
     accum: str
+    macro_tile_m: int
+    macro_tile_n: int
     schedule_digest: str
 
     @property
@@ -64,6 +66,12 @@ class ScheduledMatmulArtifact:
         hashes = _HASH_RE.findall(self.tile_ir)
         if hashes != [self.schedule_digest]:
             raise ValueError("scheduled matmul Tile artifact has a stale schedule digest")
+        for name, value in (
+            ("tessera.macro_tile_m", self.macro_tile_m),
+            ("tessera.macro_tile_n", self.macro_tile_n),
+        ):
+            if not re.search(rf"{re.escape(name)} = {value} : i64", self.tile_ir):
+                raise ValueError(f"scheduled matmul Tile artifact has stale {name}")
         if _digest(self.schedule_ir) == self.tile_digest:
             raise ValueError("Schedule and Tile artifacts must be distinct boundary outputs")
 
@@ -105,6 +113,8 @@ def lower_scheduled_matmul(
         output_dtype,
         storage,
         accum,
+        macro_tile_m,
+        macro_tile_n,
     ) = contract
     artifact = ScheduledMatmulArtifact(
         graph_ir=graph_ir,
@@ -124,6 +134,8 @@ def lower_scheduled_matmul(
         output_dtype=output_dtype,
         storage=storage,
         accum=accum,
+        macro_tile_m=macro_tile_m,
+        macro_tile_n=macro_tile_n,
         schedule_digest=hashes[0],
     )
     artifact.validate()
@@ -174,22 +186,26 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("scheduled matmul requires one named Graph result")
         output_name = function.return_values[0].removeprefix("%")
     if target == "x86" and (a_dtype, b_dtype, output_dtype) == ("fp32", "fp32", "fp32"):
-        compiler_target, architecture, storage, accum = (
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "x86",
             "zen5-avx512",
             "f32",
             "f32",
+            16,
+            16,
         )
     elif target == "rocm_gfx1151" and (a_dtype, b_dtype, output_dtype) == (
         "fp16",
         "fp16",
         "fp32",
     ):
-        compiler_target, architecture, storage, accum = (
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "rocm",
             "gfx1151",
             "f16",
             "f32",
+            32,
+            64,
         )
     else:
         raise ValueError("unsupported target dtype contract for scheduled matmul")
@@ -208,6 +224,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         output_dtype,
         storage,
         accum,
+        macro_tile_m,
+        macro_tile_n,
     )
 
 

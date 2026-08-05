@@ -966,8 +966,11 @@ def complex_log(z: Any) -> ComplexScalar:
     a, b = _as_pair(z)
     mag = np.sqrt(a * a + b * b)
     # log(0) → -inf (NumPy convention); np.log handles this.
-    re = np.log(np.where(mag > 0, mag, np.float64(1.0)))
-    re = np.where(mag > 0, re, np.float64(-np.inf))
+    # Keep the sentinel constants in the component dtype: explicit float64
+    # values here promote an otherwise-complex64 logarithm to complex128.
+    component_type = mag.dtype.type
+    re = np.log(np.where(mag > 0, mag, component_type(1.0)))
+    re = np.where(mag > 0, re, component_type(-np.inf))
     im = np.arctan2(b, a)
     return ComplexScalar(re, im)
 

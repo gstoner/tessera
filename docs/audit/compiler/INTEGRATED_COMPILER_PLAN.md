@@ -228,6 +228,19 @@ design before migration.
 > table. Counting either as a numbered step overstates progress — an earlier
 > version of this block said "4 of 6" by doing exactly that.
 >
+> **Stack context — read before sizing any of this.**
+> [`ROCM_LANE_MAP.md`](../backend/rocm/ROCM_LANE_MAP.md) measures the lane
+> W1.1 is supposed to improve. The executing ROCm GEMM lane begins at a
+> **Target-IR directive** built as a string in Python: no Graph IR, no
+> Schedule IR, no Tile IR. `lower-tile-to-rocm` runs but is a verified
+> no-op there. A Graph-IR lane exists and is compiled, but its only caller
+> in the tree is a benchmark. Consequences: W1.1 changes no executing
+> kernel until step 3. Two costs, kept apart: closing the Tile fragment
+> contract (steps 3-5) spans **5 C++ `tile.mma` creation sites + the Python
+> emitters** — step 5 is NOT behind the expander population; making the ROCm
+> backend traverse Tile IR is a separate, unpriced **58**-expander question.
+> The 5w estimate covers building the contract, not adopting it.
+>
 > **What is really open, in dependency order:**
 >
 > 0. ✅ **LANDED 2026-08-04 — the typed lowering COMPOSES (§4.6.1).**

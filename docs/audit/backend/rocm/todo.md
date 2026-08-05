@@ -2382,9 +2382,27 @@ output for the composition, ragged-bounds, and RDNA4-int4 fixtures. Fixture:
 **Remaining:** the typed form still has NO PRODUCER — `GenerateWMMAGemmKernel`
 assembles fragments itself with its own lane math, so nothing emits
 `tile.view` + `tile.fragment_pack` yet (W1.1 step 3). That migration is now
-unblocked on the layout side. Its gate is numeric, not structural: the
-differential oracles `tessera_rocm_wmma_gemm_f16_bench_{lds,pipe}` and the
-inner-product bound, per `GEMM_PERF_LADDER.md` §5.
+unblocked on the layout side, and scoped by measurement in
+`W1_1_TYPING_DESIGN.md` §4.7:
+
+* **Bit-identity is reachable** — the producer's B addressing `(k0+j)*N + col`
+  and the strided gather's `(k0*N + col) + j*N` are the same integer, and the
+  producer already assembles B as `memref.load` + `vector.insert`, the same
+  shape the gather emits. That was step 3's main risk.
+* **Address FORM differs structurally.** The producer hoists `arK[mi]` out of
+  the K loop and shares `(k0+j)*N` across all `nt` B fragments — 32 `arith.muli`
+  in the K-loop body at `mt=nt=16`, versus ~288 for per-fragment packs.
+  `fragment_pack` derives its address from `(base, rowOrigin, colOrigin)` in
+  isolation and cannot see its siblings. **This is an unmeasured upper bound**:
+  most of those multiplies are loop-invariant and LICM/CSE may recover them.
+* **The open design question:** should `tile.view` carry a precomputed linear
+  base so the hoisting is expressible at Tile level, or should the migration
+  rely on LICM? Decide by measurement.
+
+Gate: `test_via_tile_matches_the_production_lane_on_hardware` (bit-identical vs
+the production lane, with a control that must fail and a fallback-fatal guard),
+then throughput against `GEMM_PERF_LADDER.md`'s 8.02 TFLOP/s row at the same
+`timer_source`.
 
 ## Cross-backend sync `TILE-VIEW-BOUNDED-CONTRACT-2026-08-04` — bounded `tile.view` is a shared contract
 

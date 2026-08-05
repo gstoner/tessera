@@ -638,6 +638,81 @@ codegen.
 
 ---
 
+### 4.7 Step 3 scoped by measurement — bit-identity is reachable, address *form* is not
+
+Measured 2026-08-05 against `GenerateWMMAGemmKernel`'s own emitted IR, at its
+default `mt = nt = 16` (16 A fragments, 16 B fragments, 256 accumulators carried
+as `scf.for` iter-args).
+
+**The good news, and it is the load-bearing one: the addresses are algebraically
+identical, so bit-identity is achievable.** For B element *j* the producer
+computes
+
+$$(k_0 + j)\cdot N + \mathrm{col}$$
+
+and `materializeFragmentPack`'s strided gather computes
+
+$$\underbrace{(k_0 \cdot N + \mathrm{col})}_{\text{linear}} + j \cdot N$$
+
+which is the same integer. Same addresses in the same order ⇒ same loads ⇒ same
+`wmma` inputs ⇒ bit-identical output. The producer's B assembly is already
+`memref.load` + `vector.insert`, exactly the shape the gather emits, so this is
+a match in structure as well as in value. **That was the main risk in step 3 and
+it is retired.**
+
+**What does not match is the expression form, and the gap is structural.** The
+producer hoists aggressively across fragments and across the K loop:
+
+| | producer | `fragment_pack` |
+|---|---|---|
+| A base | `arK[mi] = arM[mi] * K` hoisted **out of the K loop**; inside it is one `addi` | `row * ld` re-derived per fragment, per iteration |
+| B row offset | `(k0 + j) * N` computed once per *j* and **shared across all `nt` B fragments** | `j * ld` re-derived per fragment |
+| `arith.muli` in the K-loop body | **32** (measured) | ~**288** (16 A + 16 × 17 B) |
+
+That is ~9× more address multiplies in the innermost loop. The cause is not
+sloppiness in the gather — it is that **`fragment_pack` derives its address from
+`(base, rowOrigin, colOrigin)` operands in isolation.** It cannot express "this
+row offset is shared with my 15 siblings" or "this base is loop-invariant",
+because it cannot see its siblings and has no operand for a precomputed base.
+Per-fragment granularity is exactly what makes the contract composable (§4.6);
+here that same granularity discards a cross-fragment CSE the hand-written
+producer performs by construction.
+
+**Do not read the 9× as a 9× slowdown — it is an unmeasured upper bound.** Most
+of those multiplies are loop-invariant: `j * ld` has both operands invariant,
+and A's `row * ld` is invariant in the K loop. LICM and CSE may recover most of
+the gap. After hoisting, the counts could be comparable. Which way it lands is
+an empirical question about LLVM's reassociation, and it has **not** been
+measured, because measuring it requires the migration to exist.
+
+So step 3 carries a real design question, not just an implementation:
+
+> Should `tile.view` be able to carry a **precomputed linear base**, so the
+> hoisting the producer does by hand is expressible at Tile level — or should
+> the migration rely on LICM/CSE to recover it?
+
+Answer that with a measurement, not a preference. The order is: migrate the
+simplest configuration first (fast panel, `mt = nt = 1`, no bias/activation),
+run the **existing** hardware oracle, and read both numbers it can produce.
+
+**The oracle already exists and is the right one.**
+`test_via_tile_matches_the_production_lane_on_hardware` routes the GEMM through
+`tile.mma` and demands bit-identical output against the production lane, with a
+bogus-option control that must fail and a fallback-fatal guard so the comparison
+cannot be satisfied by running the hand-written oracle twice. Step 3 extends
+what `via-tile` emits — from "same operands, different op name" to the full
+`tile.view` → `fragment_pack` → `tile.mma` → `fragment_unpack` → `tile.store`
+chain — and inherits that gate unchanged. Throughput is then read against
+`GEMM_PERF_LADDER.md`'s 8.02 TFLOP/s naive-register row, at the same
+`timer_source`.
+
+`via-tile` is also the right seam for *staging* the migration: the default path
+stays untouched while the typed chain is built behind the option, so a partial
+migration is never a partial production lane. Note that a partial migration
+**within one `tile.mma`** is not expressible — `MMAOp::verify` enforces
+all-or-nothing typing (`TILE_MMA_MIXED_FRAGMENT_FORMS`), so the unit of
+migration is a whole MMA, not an operand.
+
 ## 5. Interaction with W1.3 (Decision #32)
 
 W1.3 landed the boundary verifier and, in doing so, fixed

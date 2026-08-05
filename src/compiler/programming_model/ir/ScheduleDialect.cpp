@@ -127,6 +127,53 @@ LogicalResult MatmulOp::verify() {
   return success();
 }
 
+static LogicalResult verifyContentAddressedKernel(Operation *op, Value subject,
+                                                  Value scheduled,
+                                                  StringRef artifactHash,
+                                                  StringRef arch,
+                                                  StringRef storage,
+                                                  StringRef accum,
+                                                  int64_t workgroupSize) {
+  if (subject.getType() != scheduled.getType())
+    return op->emitOpError("must preserve the scheduled Graph value type");
+  if (artifactHash.size() != 64 ||
+      !llvm::all_of(artifactHash, [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }))
+    return op->emitOpError("requires a lowercase SHA-256 artifact_hash");
+  if (arch.empty() || storage.empty() || accum.empty())
+    return op->emitOpError("requires explicit architecture and numeric types");
+  if (workgroupSize <= 0)
+    return op->emitOpError("requires workgroup_size > 0");
+  return success();
+}
+
+LogicalResult SoftmaxOp::verify() {
+  if (failed(verifyContentAddressedKernel(
+          *this, getSubject(), getScheduled(), getArtifactHash(), getArch(),
+          getStorage(), getAccum(), getWorkgroupSize())))
+    return failure();
+  if (getAxisAttr().getInt() != -1)
+    return emitOpError("initial softmax contract requires the last axis");
+  if (getExpMode() != "accurate")
+    return emitOpError("initial softmax contract requires accurate exp");
+  return success();
+}
+
+LogicalResult ReduceOp::verify() {
+  if (failed(verifyContentAddressedKernel(
+          *this, getSubject(), getScheduled(), getArtifactHash(), getArch(),
+          getStorage(), getAccum(), getWorkgroupSize())))
+    return failure();
+  if (getAxisAttr().getInt() < 0)
+    return emitOpError("requires a normalized non-negative axis");
+  if (getKind() != "sum" && getKind() != "mean" && getKind() != "max")
+    return emitOpError("kind must be sum, mean, or max");
+  if (getSchedule() != "serial" || getNanMode() != "propagate")
+    return emitOpError("initial reduction contract requires serial/propagate policy");
+  return success();
+}
+
 LogicalResult WarpOp::verify() {
   if (getRole().empty())
     return emitOpError("requires a non-empty warp role");

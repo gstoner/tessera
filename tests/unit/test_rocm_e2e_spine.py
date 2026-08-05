@@ -960,7 +960,8 @@ def test_driver_joins_gfx1151_reduction_native_package(monkeypatch) -> None:
     assert bundle.orchestration_state == "launchable"
     assert bundle.tile is not None and "tile.reduce_kernel" in bundle.tile.text
     assert bundle.launch_descriptor is not None
-    assert bundle.launch_descriptor.provenance["work_item"] == "ROCM-E2E-2"
+    assert bundle.launch_descriptor.provenance["work_item"] == "E2E-REAL-5"
+    assert bundle.lineage_complete
 
 
 def test_rocm_paged_kv_owns_typed_direct_descriptor(monkeypatch) -> None:

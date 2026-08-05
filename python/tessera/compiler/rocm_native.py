@@ -33,6 +33,7 @@ from .native_artifact import (
     WorkspaceRequirement,
 )
 from .scheduled_matmul import ScheduledMatmulArtifact
+from .scheduled_kernel import ScheduledKernelArtifact
 
 
 GFX1151_SOFTMAX_F16_ABI = "tessera.rocm.softmax.x_o_rows_k.f16.v1"
@@ -1420,6 +1421,89 @@ def package_scheduled_matmul(
     )
 
 
+def package_scheduled_kernel(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> ROCMNativePackage:
+    """Package the exact E2E-REAL-5 Tile artifact without Graph resynthesis."""
+
+    artifact.validate()
+    if (
+        artifact.target != "rocm"
+        or artifact.architecture != "gfx1151"
+        or artifact.dtype != "fp32"
+        or artifact.storage != "f32"
+        or artifact.accum != "f32"
+    ):
+        raise ValueError("ROCm scheduled semantic kernel requires the gfx1151 f32 contract")
+    if artifact.family == "softmax":
+        abi = GFX1151_SOFTMAX_F32_ABI
+        compile_result = _compile_tile_ir(artifact.tile_ir)
+        scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
+        geometry = "gfx1151_softmax_workgroup_per_row_256"
+    elif artifact.family == "reduce":
+        abi = GFX1151_REDUCE_F32_ABI
+        compile_result = _compile_reduction_tile_ir(artifact.tile_ir)
+        scalars = (
+            ScalarArgument(2, "Outer", "int64"),
+            ScalarArgument(3, "AxisExtent", "int64"),
+            ScalarArgument(4, "Inner", "int64"),
+        )
+        geometry = "gfx1151_reduce_workgroup_per_output_256"
+    else:
+        raise ValueError("unsupported ROCm scheduled semantic-kernel family")
+    target_ir, backend_ir, payload, compiler_fp, toolchain_fp, device_libraries, compile_state = compile_result
+    entry = artifact.function_name
+    image = NativeImageArtifact(
+        target="rocm_gfx1151", architecture="gfx1151", pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="hsaco", payload=payload,
+        entry_points=(NativeEntryPoint(entry, abi),), compile_state=compile_state,
+        device_libraries=device_libraries,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=abi,
+        buffers=(
+            BufferBinding(0, artifact.input_name, "input", "fp32", len(artifact.input_shape), "row_major", 4),
+            BufferBinding(1, artifact.output_name, "output", "fp32", len(artifact.output_shape), "row_major", 4),
+        ),
+        scalars=scalars,
+        shape_guards=tuple(
+            [ShapeGuard(artifact.input_name, i, "eq", extent) for i, extent in enumerate(artifact.input_shape)]
+            + [ShapeGuard(artifact.output_name, i, "eq", extent) for i, extent in enumerate(artifact.output_shape)]
+        ),
+        geometry=LaunchGeometry(policy=geometry),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
+        provenance={
+            "work_item": "E2E-REAL-5",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "route": "canonical_scheduled_tile_consumer",
+            "family": artifact.family,
+            "kind": artifact.kind,
+            "shape": list(artifact.input_shape),
+            "output_shape": list(artifact.output_shape),
+            "axis": artifact.axis,
+            "keepdims": artifact.keepdims,
+            "rows": artifact.rows,
+            "columns": artifact.columns,
+            "outer": artifact.outer,
+            "axis_extent": artifact.axis_extent,
+            "inner": artifact.inner,
+            "exp_mode": "accurate",
+            "ftz": False,
+            "storage": artifact.storage,
+            "accum": artifact.accum,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return ROCMNativePackage(artifact.tile_ir, target_ir, backend_ir, image, descriptor)
+
+
 def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativePackage:
     contract = _softmax_contract(module)
     if contract is None:
@@ -2345,6 +2429,7 @@ __all__ = [
     "emit_softmax_tile_ir",
     "package_moe_dispatch",
     "package_native",
+    "package_scheduled_kernel",
     "package_scheduled_matmul",
     "package_attention",
     "package_attention_backward",

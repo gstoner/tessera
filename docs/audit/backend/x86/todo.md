@@ -507,3 +507,18 @@ Graph/Schedule/Tile/Target/image digests, compile state, image size, CPU
 features, and host-wall operation-total timing:
 [`../../../../benchmarks/baselines/x86_avx512_e2e_real4_matmul_2026_08_05.json`](../../../../benchmarks/baselines/x86_avx512_e2e_real4_matmul_2026_08_05.json).
 This is AVX-512 evidence only; Intel AMX remains access-gated.
+
+## Cross-backend sync `E2E-REAL-SEMANTIC-KERNELS-2026-08-05`
+
+The bounded canonical f32 softmax/reduction route now crosses real
+Graph→Schedule→Tile boundaries. `schedule.softmax` and `schedule.reduce` bind
+architecture, numeric policy, axis/kind, launch width, and durable SHA-256
+identity; `ScheduledKernelArtifact` feeds the exact Tile text to TileToX86
+without Graph re-entry. Static last-axis softmax and last-axis rank-reducing
+sum/mean/max are lineage-complete, and tampered policy fails closed. Exact Zen
+5 AVX-512 descriptor launches for scheduled softmax and reduction agree with
+NumPy. **x86 outcome: parity validated for the bounded E2E-REAL-5 slice; no new
+selector or performance promotion.** `keepdims=true` remains on the explicit
+Graph-owned descriptor route because canonical `tessera.reduce` is presently
+rank-reducing. This is AVX-512 evidence only; the named Intel AMX lane remains
+access-gated and unchanged.

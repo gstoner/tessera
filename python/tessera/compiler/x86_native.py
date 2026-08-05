@@ -23,6 +23,7 @@ from .native_artifact import (
     ShapeGuard,
 )
 from .scheduled_matmul import ScheduledMatmulArtifact
+from .scheduled_kernel import ScheduledKernelArtifact
 
 
 X86_SOFTMAX_F32_ABI = "tessera.x86.softmax.x_o_rows_k.f32.v1"
@@ -1323,6 +1324,83 @@ def package_scheduled_matmul(
     )
 
 
+def package_scheduled_kernel(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> X86NativePackage:
+    """Package the exact E2E-REAL-5 Tile artifact without Graph resynthesis."""
+
+    artifact.validate()
+    if (
+        artifact.target != "x86"
+        or artifact.architecture != "zen5-avx512"
+        or artifact.dtype != "fp32"
+        or artifact.storage != "f32"
+        or artifact.accum != "f32"
+    ):
+        raise ValueError("x86 scheduled semantic kernel requires the f32 Zen 5 contract")
+    if artifact.family == "softmax":
+        symbol, abi = "tessera_x86_avx512_softmax_f32", X86_SOFTMAX_F32_ABI
+        scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
+        geometry = "x86_64_avx512_rows"
+    elif artifact.family == "reduce" and artifact.axis == len(artifact.input_shape) - 1:
+        symbol, abi = "tessera_x86_avx512_reduce_f32", X86_REDUCE_F32_ABI
+        scalars = (
+            ScalarArgument(2, "Outer", "int64"),
+            ScalarArgument(3, "AxisExtent", "int64"),
+            ScalarArgument(4, "Inner", "int64"),
+        )
+        geometry = "x86_64_avx512_rows"
+    else:
+        raise ValueError("unsupported x86 scheduled semantic-kernel family")
+    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    image = _image(
+        target_ir=target_ir, payload=payload, compiler=compiler,
+        toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=symbol,
+        abi_id=abi,
+        buffers=(
+            BufferBinding(0, artifact.input_name, "input", "fp32", len(artifact.input_shape), "row_major", 4),
+            BufferBinding(1, artifact.output_name, "output", "fp32", len(artifact.output_shape), "row_major", 4),
+        ),
+        scalars=scalars,
+        shape_guards=tuple(
+            [ShapeGuard(artifact.input_name, i, "eq", extent) for i, extent in enumerate(artifact.input_shape)]
+            + [ShapeGuard(artifact.output_name, i, "eq", extent) for i, extent in enumerate(artifact.output_shape)]
+        ),
+        geometry=LaunchGeometry(policy=geometry),
+        ordering=OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",)),
+        provenance={
+            "work_item": "E2E-REAL-5",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "route": "canonical_scheduled_tile_consumer",
+            "family": artifact.family,
+            "kind": artifact.kind,
+            "shape": list(artifact.input_shape),
+            "output_shape": list(artifact.output_shape),
+            "axis": artifact.axis,
+            "keepdims": artifact.keepdims,
+            "rows": artifact.rows,
+            "columns": artifact.columns,
+            "outer": artifact.outer,
+            "axis_extent": artifact.axis_extent,
+            "inner": artifact.inner,
+            "exp_mode": "accurate",
+            "ftz": False,
+            "storage": artifact.storage,
+            "accum": artifact.accum,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+            "required_features": ["avx512f"],
+        },
+    )
+    return X86NativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
 def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
     contract = _attention_contract(module)
     if contract is None:
@@ -1487,7 +1565,7 @@ __all__ = [
     "X86_LOGICAL_KINDS", "X86_TRANSCENDENTAL_KINDS", "X86_WHERE_KINDS",
     "emit_attention_tile_ir", "emit_cohort2_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir", "emit_reduce_tile_ir",
     "emit_softmax_tile_ir", "native_package_kind", "package_attention", "package_matmul",
-    "package_native", "package_scheduled_matmul",
+    "package_native", "package_scheduled_kernel", "package_scheduled_matmul",
     "emit_attention_graph_ir", "package_attention_backward_semantics",
     "package_cohort2", "package_elementwise",
     "package_reduction", "package_softmax", "requests_attention",

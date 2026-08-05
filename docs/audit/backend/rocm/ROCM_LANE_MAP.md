@@ -107,8 +107,25 @@ grep -rl "tile::ViewOp\|tile::FragmentPackOp" \
 | `Generate*.cpp` expanders in the ROCm backend | **71** |
 | distinct `generate-*` passes the runtime drives | **58** |
 | expanders that consume `tile.view` / `tile.fragment_pack` | **0** |
-| runtime pipelines that include `lower-tile-to-rocm` | **4** of 9 |
-| runtime pipelines that include `lower-tessera-target-to-rocdl` | **8** of 9 |
+| runtime pipelines that include `lower-tile-to-rocm` | **2** of 9 |
+| runtime pipelines that include `lower-tessera-target-to-rocdl` | **5** of 9 |
+
+> **Corrected after #522 review.** The first version of this table published 4
+> and 8. Those were `grep -c` substring counts over `runtime.py`, which also
+> match the long explanatory COMMENTS next to the two GEMM builders. Counting
+> actual pipeline entries — a quoted, comma-terminated pass name inside a
+> pipeline string — gives 2 and 5. Denominator 9 is the number of pipelines that
+> terminate in `gpu-module-to-binary`, which is unchanged.
+>
+> ```bash
+> grep -cE '^\s*f?"lower-tile-to-rocm' python/tessera/runtime.py            # 2
+> grep -cE '^\s*f?"lower-tessera-target-to-rocdl' python/tessera/runtime.py # 5
+> grep -cE '^\s*f?"gpu-module-to-binary' python/tessera/runtime.py          # 9
+> ```
+>
+> The correction **strengthens** the finding rather than weakening it: only two
+> of nine runtime pipelines reach `lower-tile-to-rocm` at all, and both are the
+> GEMM lanes (A and B).
 
 Every expander does its own lane math and emits `tessera_rocm.*` plus raw
 `vector`/`memref` ops. **None consumes the Tile fragment contract.**
@@ -127,12 +144,38 @@ So, stated plainly:
 * **W1.1 has no effect on any executing ROCm kernel today.** It is a capability
   with no producer — precisely the shape Decision #29 exists to flag, and the
   reason step 3 is the item that matters rather than one item among five.
-* **Step 3 targets 1 of 58 expanders.** Migrating `generate-wmma-gemm-kernel`
-  puts the typed contract on the GEMM lane. The other 57 would each need the
-  same treatment before "the ROCm backend goes through Tile IR" is true.
-* **Step 5 (delete the permissive branch) is further away than the step numbers
-  suggest.** It is unreachable until the producers migrate, and there are 57
-  more of them behind the first.
+* **Step 3 puts the typed contract on the GEMM lane**, by migrating
+  `generate-wmma-gemm-kernel`. That is what makes W1.1 affect a running kernel.
+  Separately — and *not* a gate on step 3 or step 5 — the other 57 expanders
+  would each need the same treatment before "the ROCm backend goes through
+  Tile IR" is true. That second statement is the adoption question of §5.
+* **Step 5 is NOT gated by the expander population — a correction to this
+  document's first version.** It claimed step 5 sat "behind the other 57"
+  expanders. That is wrong, and it conflated two independent things.
+  `MMAOp::verify()`'s permissive branch governs only producers that emit
+  `tile.mma` with bare fragments, and those are enumerable: **5 creation sites
+  in 4 files** —
+
+  | site | note |
+  |---|---|
+  | `GenerateWMMAGemmKernel.cpp:465` | only when `via-tile=true` |
+  | `GenerateWMMALinearAttnKernel.cpp:143` | only when `via-tile=true` |
+  | `GenerateWMMAFlashAttnKernel.cpp:230` | only when `via-tile=true` |
+  | `TileIRLoweringPass.cpp:924`, `:997` | the Graph-IR (Lane B) path |
+
+  plus the Python emitters (step 4). That is exactly the "five construction
+  sites plus Python emitters" the W1.1 plan already scoped. An expander that
+  never emits `tile.mma` cannot block deleting a `tile.mma` verifier branch.
+
+  Keep the two costs separate:
+
+  | question | cost |
+  |---|---|
+  | close the Tile **fragment contract** (steps 3–5) | 5 C++ sites + Python emitters |
+  | make the ROCm backend **go through Tile IR** | 58 expanders — unpriced, §5 |
+
+  Only the second scales with the expander population. Merging them would defer
+  a closeable contract cleanup behind unrelated codegen.
 
 This does not make W1.1 wrong — a composable typed lowering is a precondition
 for any of that migration, and steps 0/3a removed two blockers that were
@@ -144,8 +187,11 @@ population, not with the number of remaining W1.1 steps.
 
 ## 5. What this implies for sequencing
 
-1. **Do not read "step 3 of 6" as "80% done".** Steps 1/2/0/3a built a contract;
-   step 3 is the first adoption, of 58 possible.
+1. **Distinguish closing the contract from adopting it.** Steps 3–5 close the
+   Tile fragment contract across 5 C++ creation sites plus the Python emitters,
+   and are finishable on that scope. Making the ROCm backend actually traverse
+   Tile IR is the separate 58-expander question below. "Step 3 of 6" measures
+   the first; it says nothing about the second.
 2. **Decide adoption policy before mass migration.** Three options, and the
    choice is a project-endpoint decision, not a refactor detail:
    - *(a) migrate all 58 expanders* — the largest option, and the only one that

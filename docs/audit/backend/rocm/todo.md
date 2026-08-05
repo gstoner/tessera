@@ -2384,8 +2384,10 @@ output for the composition, ragged-bounds, and RDNA4-int4 fixtures. Fixture:
 from a hand-built **Target-IR** directive and traverses no Graph IR, no
 Schedule IR, and no Tile IR; `lower-tile-to-rocm` is in its pipeline but is a
 verified no-op on the default path. So W1.1's typed contract affects no
-executing kernel until step 3 lands, and step 3 migrates **1 of 58**
-`generate-*` expanders. That reframes the remaining adoption cost.
+executing kernel until step 3 lands. Keep two costs apart: closing the Tile
+fragment contract (steps 3-5) is **5 C++ `tile.mma` creation sites + the Python
+emitters**, while making the backend traverse Tile IR is **58 expanders** and is
+unpriced. Only the second scales with the expander population.
 
 **Remaining:** the typed form still has NO PRODUCER — `GenerateWMMAGemmKernel`
 assembles fragments itself with its own lane math, so nothing emits

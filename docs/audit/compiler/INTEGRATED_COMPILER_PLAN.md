@@ -235,9 +235,11 @@ design before migration.
 > Schedule IR, no Tile IR. `lower-tile-to-rocm` runs but is a verified
 > no-op there. A Graph-IR lane exists and is compiled, but its only caller
 > in the tree is a benchmark. Consequences: W1.1 changes no executing
-> kernel until step 3; step 3 migrates 1 of **58** `generate-*` expanders;
-> and step 5 is behind the other 57. The 5w estimate covers building the
-> contract, not adopting it.
+> kernel until step 3. Two costs, kept apart: closing the Tile fragment
+> contract (steps 3-5) spans **5 C++ `tile.mma` creation sites + the Python
+> emitters** — step 5 is NOT behind the expander population; making the ROCm
+> backend traverse Tile IR is a separate, unpriced **58**-expander question.
+> The 5w estimate covers building the contract, not adopting it.
 >
 > **What is really open, in dependency order:**
 >

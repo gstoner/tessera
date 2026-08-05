@@ -719,6 +719,15 @@ by which backends consume the ops at all:
 
 Cross-backend synchronization key: `TILE-VIEW-LINEAR-BASE-2026-08-05`.
 
+**The first slice cannot be a 1x1 toy** (measured 2026-08-05).
+`select_rocm_gemm_schedule` returns macro tile **(2, 4)** for every shape tried
+— 64^3, 256^3, 2048^3 — so the hardware oracle below exercises `mt=2, nt=4`.
+A migration slice restricted to `mt = nt = 1` would compile and be gated by
+nothing. Either the first slice handles general `mt x nt`, or the test forces a
+1x1 schedule (`_build_compiled_gemm_hsaco` takes `mt`/`nt` explicitly, subject
+to its `(mt, nt) != schedule.macro_tile` consistency check). Decide that before
+writing code, not after.
+
 **The numeric gate already exists and is the right one.**
 `test_via_tile_matches_the_production_lane_on_hardware` routes the GEMM through
 `tile.mma` and demands bit-identical output against the production lane, with a

@@ -10,10 +10,22 @@ module {
         tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
         tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 16>
       } : (memref<256xf16>, index, index) -> !tile.tile
-      // B's physical storage contradicts the row/col WMMA descriptor.
+      // B lives in LDS, which this materializer cannot address: it emits
+      // global loads against a rank-1 gmem buffer.
+      //
+      // This fixture used to assert something else -- that a ROW-MAJOR B
+      // contradicted the descriptor's `b_layout = "col_major"` and was
+      // therefore rejected. That premise is gone as of the strided-K change,
+      // and deliberately: `b_layout` on `#tile.mma_desc` is the orientation the
+      // MMA OPERAND is read in, while `tile.memory`'s order is how the BUFFER
+      // is stored. Conflating them made storage order a correctness gate when
+      // it is only an addressing choice -- row-major B is now a legal
+      // stride-`ld` gather (`rocm_fragment_strided_k.mlir`). The non-gmem space
+      // keeps this file's actual job: role `b` still has source layouts the
+      // materializer must refuse by name rather than mis-lower.
       %b_tile = tile.view %b_mem, %zero, %zero {
         tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
-        tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 16>
+        tile.memory = #tile.memory_layout<space = "lds", order = "col_major", leading_dim = 16>
       } : (memref<256xf16>, index, index) -> !tile.tile
       %a = tile.fragment_pack %a_tile {
         role = "a",

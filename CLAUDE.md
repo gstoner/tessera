@@ -358,8 +358,26 @@ export PATH=/opt/homebrew/llvm-23.1.0-rc1/bin:$PATH
 lit tests/tessera-ir/ -v
 lit tests/tessera-ir/phase8/ -q                 # one phase
 
+# `lit tests/tessera-ir/` IS NOT THE WHOLE LIT GATE. There is a second suite —
+# `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`, run through
+# `tessera-rocm-opt`, not `tessera-opt` — and CI's "rocm compiler" lane runs it.
+# `check-tessera` does NOT include it (that target is IR + Python unit only, and
+# its unit half shells out to system python3, which has no pytest). A backend
+# change that passes tests/tessera-ir/ can still fail CI here.
+ninja -C build check-tessera-ir                  # == lit tests/tessera-ir/
+ninja -C build check-tessera-rocm                # the ROCm backend suite
+
+# The remaining lit targets — check-{clifford,ebm,spectral,tessera-collective,
+# tessera-performance} — report no tests unless their backends are configured
+# ON (see the EBM/Clifford toggles in the build section).
+
 bash scripts/validate.sh                         # CPU validation spine
 ```
+
+**Build all targets before pushing, not one.** `ninja -C build tessera-opt`
+links `MLIROptLib`'s broad dependency set and will hide a missing link library
+that the standalone `tessera-rocm-opt` — which CI builds — needs. Use
+`ninja -C build`.
 
 Heavy SuperBench / benchmark-contract tests are marked `slow` and excluded by default.
 

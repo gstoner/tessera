@@ -428,3 +428,25 @@ Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{a
 `ViewOp::verify` now defines the pointer-backed operand contract: exactly 3 `(base, rowOrigin, colOrigin)` or 5 with `(rowBound, colBound)`. It previously accepted any count >= 3, so a 4-operand view was legal and meaningless and the bounded form's validity was decided by whichever backend looked.
 
 **Outcome: not applicable — architecture-specific reason.** x86 carries `!tessera_x86.tile` and has no `tile.view`-backed fragment path.
+
+## Cross-backend sync `TILE-VIEW-LINEAR-BASE-2026-08-05` — should `tile.view` carry a precomputed linear base?
+
+Raised by ROCm W1.1 step 3 (`W1_1_TYPING_DESIGN.md` §4.7). `tile.fragment_pack`
+derives its address from `(base, rowOrigin, colOrigin)` **in isolation**: it
+cannot see sibling fragments and has no operand for an already-computed base.
+The hand-written ROCm GEMM generator, by contrast, computes a shared row offset
+once and reuses it across all `nt` B fragments, and hoists the A base out of the
+K loop. The open question is whether `tile.view` should be able to carry a
+precomputed linear base so that hoisting is expressible at Tile level, or
+whether the migration should rely on LICM/CSE to recover it.
+
+**How much it costs is not quantified** — the affected multiplies are largely
+loop-invariant. The decision is to be made from a measurement taken after ROCm's
+simplest configuration migrates, not from an estimate.
+
+**Outcome for x86: NOT APPLICABLE.** This backend consumes neither `tile.view`
+nor `tile.fragment_pack` (0 files). AMX/AVX-512 operands come from
+`tessera_x86.amx_tile_load` over the `!tessera_x86.tile` type (Decision #19),
+which addresses its own source directly; there is no `tile.view`-backed fragment
+path whose base could be hoisted. If a future x86 path adopts Tile fragments,
+re-open under this key.

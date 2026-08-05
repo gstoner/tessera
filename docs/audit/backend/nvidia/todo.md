@@ -2256,3 +2256,25 @@ Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{a
 **Explicitly not verified:** the NVIDIA dialect is off by default in this build, and neither `--tessera-lower-to-gpu` nor `--tessera-nvidia-pipeline-sm120` reached the materializer with a bounded view on this host — no diagnostic, no error. The code path is written and compiles; it has not been executed. Verifying it needs a build with `-DTESSERA_ENABLE_CUDA=ON` and, for the numeric half, an sm_120 host.
 
 Until this materializer grows masking, a portable producer must emit the 3-operand form; only ROCm can consume the bounded one.
+
+## Cross-backend sync `TILE-VIEW-LINEAR-BASE-2026-08-05` — should `tile.view` carry a precomputed linear base?
+
+Raised by ROCm W1.1 step 3 (`W1_1_TYPING_DESIGN.md` §4.7). `tile.fragment_pack`
+derives its address from `(base, rowOrigin, colOrigin)` **in isolation**: it
+cannot see sibling fragments and has no operand for an already-computed base.
+The hand-written ROCm GEMM generator, by contrast, computes a shared row offset
+once and reuses it across all `nt` B fragments, and hoists the A base out of the
+K loop. The open question is whether `tile.view` should be able to carry a
+precomputed linear base so that hoisting is expressible at Tile level, or
+whether the migration should rely on LICM/CSE to recover it.
+
+**How much it costs is not quantified** — the affected multiplies are largely
+loop-invariant. The decision is to be made from a measurement taken after ROCm's
+simplest configuration migrates, not from an estimate.
+
+**Outcome for NVIDIA: FOLLOW-UP REQUIRED.** This backend consumes `tile.view`
+and `tile.fragment_pack` (8 files each), so the same per-fragment address
+isolation applies here, and adding a base operand to `tile.view` would change
+this backend's lowering too. No exact-device evidence from an NVIDIA host is
+claimed; this is a plan-level record pending the ROCm measurement that decides
+the contract.

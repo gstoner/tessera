@@ -2388,16 +2388,24 @@ unblocked on the layout side, and scoped by measurement in
 * **Bit-identity is reachable** — the producer's B addressing `(k0+j)*N + col`
   and the strided gather's `(k0*N + col) + j*N` are the same integer, and the
   producer already assembles B as `memref.load` + `vector.insert`, the same
-  shape the gather emits. That was step 3's main risk.
-* **Address FORM differs structurally.** The producer hoists `arK[mi]` out of
-  the K loop and shares `(k0+j)*N` across all `nt` B fragments — 32 `arith.muli`
-  in the K-loop body at `mt=nt=16`, versus ~288 for per-fragment packs.
+  shape the gather emits. That was step 3's main risk, and it does not depend
+  on any instruction count.
+* **Address FORM differs structurally.** Read off the emitted IR: the producer
+  computes `(k0+j)*N` once per `j` and reuses that one SSA value across all `nt`
+  B fragments, and hoists `arK[mi]` out of the K loop entirely.
   `fragment_pack` derives its address from `(base, rowOrigin, colOrigin)` in
-  isolation and cannot see its siblings. **This is an unmeasured upper bound**:
-  most of those multiplies are loop-invariant and LICM/CSE may recover them.
+  isolation — it cannot see its siblings and has no operand for a precomputed
+  base. **How much this costs is NOT quantified**: the affected multiplies are
+  largely loop-invariant, so LICM/CSE may recover them, and the sharing that
+  does not survive scales with `nt`, which is 4 in production, not 16. An
+  earlier version of this entry carried a 32-vs-288 comparison — both numbers
+  were wrong (a truncated `awk` range and a config that is not the default);
+  see `W1_1_TYPING_DESIGN.md` §4.7.
 * **The open design question:** should `tile.view` carry a precomputed linear
   base so the hoisting is expressible at Tile level, or should the migration
-  rely on LICM? Decide by measurement.
+  rely on LICM? Decide by measurement taken after the simplest configuration
+  migrates. Cross-backend sync key `TILE-VIEW-LINEAR-BASE-2026-08-05`; NVIDIA
+  is follow-up required, x86 and Apple not applicable (§4.7 table).
 
 Gate: `test_via_tile_matches_the_production_lane_on_hardware` (bit-identical vs
 the production lane, with a control that must fail and a fallback-fatal guard),

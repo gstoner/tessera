@@ -32,6 +32,7 @@ from .native_artifact import (
     ShapeGuard,
     WorkspaceRequirement,
 )
+from .scheduled_matmul import ScheduledMatmulArtifact
 
 
 GFX1151_SOFTMAX_F16_ABI = "tessera.rocm.softmax.x_o_rows_k.f16.v1"
@@ -47,6 +48,7 @@ GFX1151_ATTN_BWD_PRE_ABI = "tessera.rocm.attention_backward.pre.v1"
 GFX1151_ATTN_BWD_DKDV_ABI = "tessera.rocm.attention_backward.dkdv_split.v1"
 GFX1151_ATTN_BWD_REDUCE_ABI = "tessera.rocm.attention_backward.dkdv_reduce.v1"
 GFX1151_ATTN_BWD_DQ_ABI = "tessera.rocm.attention_backward.dq.v1"
+GFX1151_MATMUL_F16_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.f16_f32.v1"
 
 
 @dataclass(frozen=True)
@@ -1168,6 +1170,7 @@ def _compile_native_tile_ir(
     directive: str,
     generator: str,
     semantic_pipeline: str = "",
+    generator_before_lowering: bool = False,
 ) -> tuple[
     str,
     str,
@@ -1185,7 +1188,10 @@ def _compile_native_tile_ir(
         f"{item.logical_name}:{item.content_digest}:{item.link_mode}" for item in device_libraries
     )
     key = hashlib.sha256(
-        (f"{tile_ir}|{directive}|{generator}|{semantic_pipeline}|{library_identity}").encode()
+        (
+            f"{tile_ir}|{directive}|{generator}|{semantic_pipeline}|"
+            f"{generator_before_lowering}|{library_identity}"
+        ).encode()
     ).hexdigest()
     cached = _cache.get(key)
     if cached is not None:
@@ -1201,20 +1207,25 @@ def _compile_native_tile_ir(
         )
 
     semantic_prefix = f"{semantic_pipeline}," if semantic_pipeline else ""
-    target_pipeline = (
-        "builtin.module("
-        f"{semantic_prefix}rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
-        "lower-tile-to-rocm{arch=gfx1151})"
-    )
+    if generator_before_lowering:
+        target_physical_pipeline = (
+            f"{semantic_prefix}{generator},lower-tile-to-rocm{{arch=gfx1151}}"
+        )
+        native_physical_pipeline = target_physical_pipeline
+    else:
+        target_physical_pipeline = (
+            f"{semantic_prefix}rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
+            "lower-tile-to-rocm{arch=gfx1151}"
+        )
+        native_physical_pipeline = (
+            f"{target_physical_pipeline},{generator}"
+        )
+    target_pipeline = f"builtin.module({target_physical_pipeline})"
     native_pipeline = (
-        f"builtin.module({semantic_prefix}"
-        "rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
-        f"lower-tile-to-rocm{{arch=gfx1151}},{generator},"
-        "lower-tessera-target-to-rocdl,"
+        f"builtin.module({native_physical_pipeline},lower-tessera-target-to-rocdl,"
         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
         "reconcile-unrealized-casts,rocm-materialize-dynamic-lds),"
-        "rocdl-attach-target{chip=gfx1151},"
-        "gpu-module-to-binary)"
+        "rocdl-attach-target{chip=gfx1151},gpu-module-to-binary)"
     )
     target_ir = _run_opt(tool, tile_ir, target_pipeline)
     if directive not in target_ir:
@@ -1308,6 +1319,103 @@ def _compile_attention_backward_graph_ir(graph_ir: str, *, tile_q: int, tile_kv:
         directive="tessera_rocm.flash_attn_bwd",
         generator=("generate-wmma-flash-attn-kernel,generate-wmma-flash-attn-bwd-kernel"),
         semantic_pipeline=(f"tessera-tile-ir-lowering{{tile-q={tile_q} tile-kv={tile_kv} sm=90}}"),
+    )
+
+
+def _compile_scheduled_matmul_tile_ir(tile_ir: str):
+    return _compile_native_tile_ir(
+        tile_ir,
+        directive="tessera_rocm.wmma",
+        generator="generate-wmma-gemm-kernel",
+        generator_before_lowering=True,
+    )
+
+
+def package_scheduled_matmul(
+    artifact: ScheduledMatmulArtifact,
+    *,
+    pipeline_name: str,
+) -> ROCMNativePackage:
+    """Package the exact Schedule-to-Tile artifact without re-entering Graph IR."""
+
+    artifact.validate()
+    if (
+        artifact.target != "rocm"
+        or artifact.architecture != "gfx1151"
+        or (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
+        != ("fp16", "fp16", "fp32")
+    ):
+        raise ValueError("ROCm scheduled matmul requires the gfx1151 f16/f32 contract")
+    (
+        target_ir,
+        backend_ir,
+        payload,
+        compiler_fp,
+        toolchain_fp,
+        device_libraries,
+        compile_state,
+    ) = _compile_scheduled_matmul_tile_ir(artifact.tile_ir)
+    entry = artifact.function_name
+    image = NativeImageArtifact(
+        target="rocm_gfx1151",
+        architecture="gfx1151",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="hsaco",
+        payload=payload,
+        entry_points=(NativeEntryPoint(entry, GFX1151_MATMUL_F16_F32_ABI),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=GFX1151_MATMUL_F16_F32_ABI,
+        buffers=(
+            BufferBinding(0, artifact.a_name, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(1, artifact.b_name, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(2, artifact.output_name, "output", "fp32", 2, "row_major", 4),
+        ),
+        scalars=(
+            ScalarArgument(3, "M", "int64"),
+            ScalarArgument(4, "N", "int64"),
+            ScalarArgument(5, "K", "int64"),
+        ),
+        shape_guards=(
+            ShapeGuard(artifact.a_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.a_name, 1, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 0, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 1, "eq", artifact.n),
+            ShapeGuard(artifact.output_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.output_name, 1, "eq", artifact.n),
+        ),
+        geometry=LaunchGeometry(policy="gfx1151_wmma_m16n16_grid"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="none",
+            synchronization=("completion",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-3",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "route": "canonical_scheduled_tile_consumer",
+            "shape": [artifact.m, artifact.n, artifact.k],
+            "a_storage": artifact.storage,
+            "b_storage": artifact.storage,
+            "output_storage": artifact.accum,
+            "accum": artifact.accum,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return ROCMNativePackage(
+        artifact.tile_ir,
+        target_ir,
+        backend_ir,
+        image,
+        descriptor,
     )
 
 
@@ -2217,6 +2325,7 @@ __all__ = [
     "GFX1151_ATTN_BWD_REDUCE_ABI",
     "GFX1151_ATTN_F16_ABI",
     "GFX1151_MOE_DISPATCH_F32_ABI",
+    "GFX1151_MATMUL_F16_F32_ABI",
     "GFX1151_PAGED_KV_F32_ABI",
     "GFX1151_REDUCE_BF16_ABI",
     "GFX1151_REDUCE_F16_ABI",
@@ -2235,6 +2344,7 @@ __all__ = [
     "emit_softmax_tile_ir",
     "package_moe_dispatch",
     "package_native",
+    "package_scheduled_matmul",
     "package_attention",
     "package_attention_backward",
     "package_reduction",

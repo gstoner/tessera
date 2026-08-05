@@ -2492,3 +2492,17 @@ physical follow-up required under E2E-REAL-3.** No HSACO or device execution is
 claimed here. Canonical packaging must next accept this exact Tile artifact,
 run `GenerateWMMAGemmKernel` then Tile→ROCM/LLVM, and repeat aligned/ragged
 gfx1151 numerical and performance gates without Graph re-entry.
+
+## Cross-backend sync `E2E-REAL-PHYSICAL-CONSUMERS-2026-08-05`
+
+The bounded f16/f32 matmul package now accepts `ScheduledMatmulArtifact` and
+consumes its exact launch-level Tile text. Production lowering runs
+`GenerateWMMAGemmKernel` before Tile→ROCm/ROCDL, produces a gfx1151 HSACO, and
+records adjacent Graph→Schedule→Tile→Target→backend digests; the runtime admits
+the new typed matmul ABI. **ROCm outcome: parity validated for E2E-REAL-3.**
+Host WSL exact-device descriptor launches agree numerically for aligned
+`32x32x32` and ragged `17x19x23` cases, and the physical lit fixture proves no
+Graph, Schedule, or launch-level matmul op survives. This does not promote the
+route: E2E-REAL-4 must still record device-event throughput against the 8.02
+TFLOP/s floor and same-run direct lane. NVIDIA and Apple schedules are not
+inferred from this gfx1151 evidence.

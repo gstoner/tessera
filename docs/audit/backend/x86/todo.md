@@ -482,3 +482,15 @@ claimed by this host-free conversion. Canonical x86 packaging must accept this
 exact Tile artifact, run TileToX86, and repeat the Zen 5 numerical/performance
 ratchet without reconstructing the launch contract from Graph IR. Intel AMX
 evidence remains separately access-gated.
+
+## Cross-backend sync `E2E-REAL-PHYSICAL-CONSUMERS-2026-08-05`
+
+The bounded f32 matmul package now accepts `ScheduledMatmulArtifact` and
+consumes its exact launch-level Tile text through TileToX86. The compile bundle
+records adjacent Graph→Schedule→Tile→Target→backend digests rather than a
+Graph-owned package fork. **x86 outcome: parity validated for E2E-REAL-3.**
+Exact Zen 5 descriptor execution agrees numerically on the established
+`1x1x1`, `5x17x9`, and `16x31x19` corpus, and the physical lit fixture proves
+no Graph, Schedule, or launch-level matmul op survives. E2E-REAL-4 still owns
+the AVX-512 performance ratchet and promotion decision. This is not Intel AMX
+evidence; that named-host packet remains access-gated.

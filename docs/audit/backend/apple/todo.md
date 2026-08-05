@@ -2722,3 +2722,14 @@ packages still enter from Graph IR. A later Apple-owned vertical slice must
 define its own numeric/schedule contract, consume the canonical Tile artifact,
 and be revalidated on the Mac; no MSL, metallib, Accelerate, or MPS claim is
 made here.
+
+## Cross-backend sync `E2E-REAL-PHYSICAL-CONSUMERS-2026-08-05`
+
+The shared package boundary is now concrete: a validated
+`ScheduledMatmulArtifact` carries exact Graph, Schedule, and launch-Tile text
+plus content identities into x86 and ROCm physical consumers. **Apple outcome:
+follow-up required on the owning Mac.** No Apple code, schedule, MSL,
+metallib, Accelerate, MPS, or selector changed. A later Apple slice must define
+its own bounded dtype/schedule instance, consume the same boundary, and produce
+Apple-host numerical and performance evidence; x86/ROCm evidence does not
+transfer.

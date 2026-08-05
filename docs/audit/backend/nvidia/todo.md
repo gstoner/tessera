@@ -2313,3 +2313,13 @@ another architecture's schedule. NVIDIA packaging still synthesizes its Tile
 program from Graph IR. Its later consumer must accept the canonical scheduled
 artifact only after the final two untyped `tile.mma` producers, accumulator
 threading, and dynamic/bounded view gates pass in a CUDA-enabled SM120 lane.
+
+## Cross-backend sync `E2E-REAL-PHYSICAL-CONSUMERS-2026-08-05`
+
+The shared package boundary is now concrete: a validated
+`ScheduledMatmulArtifact` carries exact Graph, Schedule, and launch-Tile text
+plus content identities into x86 and ROCm physical consumers. **NVIDIA outcome:
+follow-up required.** No CUDA code changed and no SM120 evidence is claimed.
+The NVIDIA consumer remains blocked on its two untyped `tile.mma` producers,
+accumulator threading, dynamic/bounded view support, and CUDA-enabled SM120
+validation before it can adopt this boundary without recreating Graph intent.

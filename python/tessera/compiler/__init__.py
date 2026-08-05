@@ -48,6 +48,7 @@ from .native_artifact import (
     ShapeGuard,
     WorkspaceRequirement,
 )
+from .scheduled_matmul import ScheduledMatmulArtifact, lower_scheduled_matmul
 from .nvidia_math_contract import (
     CUDA_MATH_CONTRACT_VERSION,
     CudaMathContract,
@@ -266,6 +267,8 @@ __all__ = [
     "LaunchGeometry",
     "NativeEntryPoint",
     "NativeImageArtifact",
+    "ScheduledMatmulArtifact",
+    "lower_scheduled_matmul",
     "OrderingSemantics",
     "ResourceRecord",
     "ScalarArgument",

@@ -22,6 +22,7 @@ from .native_artifact import (
     ScalarArgument,
     ShapeGuard,
 )
+from .scheduled_matmul import ScheduledMatmulArtifact
 
 
 X86_SOFTMAX_F32_ABI = "tessera.x86.softmax.x_o_rows_k.f32.v1"
@@ -1245,6 +1246,82 @@ def package_matmul(module: GraphIRModule, *, pipeline_name: str) -> X86NativePac
     return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
 
 
+def package_scheduled_matmul(
+    artifact: ScheduledMatmulArtifact,
+    *,
+    pipeline_name: str,
+) -> X86NativePackage:
+    """Package the exact Schedule-to-Tile artifact without re-entering Graph IR."""
+
+    artifact.validate()
+    if (
+        artifact.target != "x86"
+        or artifact.architecture != "zen5-avx512"
+        or (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
+        != ("fp32", "fp32", "fp32")
+    ):
+        raise ValueError("x86 scheduled matmul requires the f32 Zen 5 AVX-512 contract")
+    symbol = "tessera_x86_avx512_gemm_f32"
+    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    image = _image(
+        target_ir=target_ir,
+        payload=payload,
+        compiler=compiler,
+        toolchain=toolchain,
+        pipeline_name=pipeline_name,
+        symbol=symbol,
+        abi=X86_MATMUL_F32_ABI,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=symbol,
+        abi_id=X86_MATMUL_F32_ABI,
+        buffers=(
+            BufferBinding(0, artifact.a_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(1, artifact.b_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(2, artifact.output_name, "output", "fp32", 2, "row_major", 4),
+        ),
+        scalars=(
+            ScalarArgument(3, "M", "int64"),
+            ScalarArgument(4, "N", "int64"),
+            ScalarArgument(5, "K", "int64"),
+        ),
+        shape_guards=(
+            ShapeGuard(artifact.a_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.a_name, 1, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 0, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 1, "eq", artifact.n),
+            ShapeGuard(artifact.output_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.output_name, 1, "eq", artifact.n),
+        ),
+        geometry=LaunchGeometry(policy="x86_avx512_gemm_rows"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="all",
+            synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-3",
+            "route": "canonical_scheduled_tile_consumer",
+            "shape": [artifact.m, artifact.n, artifact.k],
+            "a_storage": artifact.storage,
+            "b_storage": artifact.storage,
+            "output_storage": artifact.accum,
+            "accum": artifact.accum,
+            "required_features": ["avx512f", "fma"],
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return X86NativePackage(
+        artifact.tile_ir,
+        target_ir,
+        target_ir,
+        image,
+        descriptor,
+    )
+
+
 def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
     contract = _attention_contract(module)
     if contract is None:
@@ -1409,7 +1486,7 @@ __all__ = [
     "X86_LOGICAL_KINDS", "X86_TRANSCENDENTAL_KINDS", "X86_WHERE_KINDS",
     "emit_attention_tile_ir", "emit_cohort2_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir", "emit_reduce_tile_ir",
     "emit_softmax_tile_ir", "native_package_kind", "package_attention", "package_matmul",
-    "package_native",
+    "package_native", "package_scheduled_matmul",
     "emit_attention_graph_ir", "package_attention_backward_semantics",
     "package_cohort2", "package_elementwise",
     "package_reduction", "package_softmax", "requests_attention",

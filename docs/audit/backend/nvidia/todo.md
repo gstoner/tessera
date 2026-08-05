@@ -2302,3 +2302,14 @@ fork and remains incomplete. This change does not migrate the two untyped
 `tile.mma` producers, accumulator threading, bounded/dynamic views, PTX, or a
 physical schedule; no SM120 evidence is claimed. Those remain NVIDIA-owned
 gates after the shared x86/ROCm vertical slice establishes the consumer API.
+
+## Cross-backend sync `E2E-REAL-SCHEDULED-MATMUL-2026-08-05`
+
+Shared Graph→Schedule→launch-Tile lowering is now real for the initial x86-f32
+and ROCm-f16/f32 matmul instances. **NVIDIA outcome: follow-up required, not
+validated by this slice.** SM120 is deliberately outside the first bounded
+dtype/descriptor selector and therefore fails closed rather than inheriting
+another architecture's schedule. NVIDIA packaging still synthesizes its Tile
+program from Graph IR. Its later consumer must accept the canonical scheduled
+artifact only after the final two untyped `tile.mma` producers, accumulator
+threading, and dynamic/bounded view gates pass in a CUDA-enabled SM120 lane.

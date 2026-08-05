@@ -5,6 +5,8 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 
 using namespace mlir;
 using namespace tessera::schedule;
@@ -42,6 +44,22 @@ LogicalResult MeshRegionOp::verify() {
     return emitOpError("requires a non-empty mesh axis");
   if (getBody().empty())
     return emitOpError("requires a non-empty body");
+  if (!llvm::hasSingleElement(getBody()))
+    return emitOpError("requires exactly one body block");
+  Operation *terminator = getBody().front().getTerminator();
+  if (!terminator || terminator->getName().getStringRef() != "schedule.yield")
+    return emitOpError("body must terminate with schedule.yield");
+  // Legacy marker-only regions may yield an informational value while exposing
+  // no SSA result. Preserve those until their owning passes migrate; once the
+  // region declares results, enforce the real value contract exactly.
+  if (getNumResults() == 0)
+    return success();
+  if (terminator->getNumOperands() != getNumResults())
+    return emitOpError("yield operand count must match region result count");
+  for (auto [yielded, result] :
+       llvm::zip_equal(terminator->getOperands(), getResults()))
+    if (yielded.getType() != result.getType())
+      return emitOpError("yield operand types must match region result types");
   return success();
 }
 
@@ -74,6 +92,33 @@ LogicalResult TileOp::verify() {
         value && value.getInt() <= 0)
       return emitOpError("optional tile dimensions must be positive");
   }
+  return success();
+}
+
+LogicalResult MatmulOp::verify() {
+  if (getSubject().getType() != getScheduled().getType())
+    return emitOpError("must preserve the scheduled Graph value type");
+  if (getArtifactHash().size() != 64 ||
+      !llvm::all_of(getArtifactHash(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }))
+    return emitOpError("requires a lowercase SHA-256 artifact_hash");
+  if (getArch().empty())
+    return emitOpError("requires a non-empty architecture");
+  if (getTileM() <= 0 || getTileN() <= 0 || getTileK() <= 0)
+    return emitOpError("tile dimensions must be positive");
+  if (getWarps() != 1 && getWarps() != 4)
+    return emitOpError("warps must be 1 or 4");
+  if (getPipelineDepth() <= 0)
+    return emitOpError("pipeline_depth must be positive");
+  if (getStorage().empty() || getAccum().empty())
+    return emitOpError("requires explicit storage and accumulation types");
+  if (getALayout() != "row_major" || getBLayout() != "col_major")
+    return emitOpError("initial matmul contract requires row/col layouts");
+  if (getRasterOrder() != "row_major")
+    return emitOpError("initial matmul contract requires row-major raster order");
+  if (getRasterGroup() <= 0)
+    return emitOpError("raster_group must be positive");
   return success();
 }
 

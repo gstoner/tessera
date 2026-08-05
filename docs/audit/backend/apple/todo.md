@@ -2711,3 +2711,14 @@ package-owned Tile artifacts record that Graph parent and remain
 lineage-incomplete. No MSL, AIR, metallib, descriptor ABI, or selector changed.
 Apple package consumption follows the x86/ROCm vertical proof and must be
 revalidated on the owning Mac.
+
+## Cross-backend sync `E2E-REAL-SCHEDULED-MATMUL-2026-08-05`
+
+Shared Graph→Schedule→launch-Tile lowering is now real for the initial x86-f32
+and ROCm-f16/f32 matmul instances. **Apple outcome: follow-up required, not
+applicable to a physical Apple package in this slice.** Apple target selection
+fails closed rather than borrowing either schedule, and existing CPU/GPU
+packages still enter from Graph IR. A later Apple-owned vertical slice must
+define its own numeric/schedule contract, consume the canonical Tile artifact,
+and be revalidated on the Mac; no MSL, metallib, Accelerate, or MPS claim is
+made here.

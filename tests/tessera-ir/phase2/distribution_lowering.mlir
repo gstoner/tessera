@@ -11,10 +11,9 @@
 // OPT:       schedule.mesh.define
 // OPT-SAME:  axis_names
 // OPT-SAME:  "dp"
-// OPT:       %[[R:.*]] = "schedule.mesh.region"
+// OPT:       %[[R:.*]] = "schedule.mesh.region"() <{axis = "dp"
 // OPT:         tessera.matmul
 // OPT:         schedule.yield
-// OPT:       axis = "dp"
 // OPT:       return %[[R]]
 
 // ── Test 2 (MULTI): two-axis distribution ──────────────────────────────────

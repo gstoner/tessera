@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **482** ops in `primitive_coverage` registry.
-- **4678** total Python-test references, **1150** total lit-fixture references.
+- **4678** total Python-test references, **1158** total lit-fixture references.
 - **83** ops have **zero** references in either test surface.
 - **119** ops have ≤1 reference ("thinly tested").
 - **159** ops have ≥10 references ("well tested").
@@ -17,7 +17,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  461 |  250 |  711 |  21 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  461 |  258 |  719 |  21 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  126 |   72 |  198 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `softmax` |  144 |   44 |  188 |  31 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |  119 |   32 |  151 |  10 | `bf16`, `f16`, `f32`, `f64` … |

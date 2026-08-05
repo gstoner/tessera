@@ -638,6 +638,105 @@ codegen.
 
 ---
 
+### 4.7 Step 3 scoped by measurement — bit-identity is reachable; the cost is NOT quantified
+
+Measured 2026-08-05 against `GenerateWMMAGemmKernel`'s own emitted IR, before
+writing any of the migration.
+
+**Corrected after #520 review — the first version of this section carried two
+wrong numbers, and they are worth naming because both looked measured.**
+
+1. It described the measurement as taken at *"the generator's default
+   `mt = nt = 16`"*. The generator defaults to `mt = nt = 1`
+   (`GenerateWMMAGemmKernel.cpp:99`, `:976`) and overrides only from explicit
+   attributes; 16×16 came from an int4 storage-pack fixture I had copied the
+   directive from. Production selects small macro tiles (the ladder's naive row
+   is MT=2, NT=4), not 16×16.
+2. It reported *"32 `arith.muli` in the K-loop body"* for the producer. That was
+   an `awk` range that stopped at the first inner `scf.yield` — a truncated
+   prefix, not the loop body. Whole-module `arith.muli` does scale with the
+   tiling: **84** at 1×1, **294** at 2×4, **4674** at 16×16.
+
+The "~288 for per-fragment packs" figure alongside them was an *estimate*
+presented in a table of apparently-measured values. **No multiply-count ratio
+from that version should be relied on.** The corrected position is below.
+
+**What is verified, and it is the load-bearing result: bit-identity is
+reachable.** For B element *j* the producer computes
+
+$$(k_0 + j)\cdot N + \mathrm{col}$$
+
+and `materializeFragmentPack`'s strided gather computes
+
+$$\underbrace{(k_0 \cdot N + \mathrm{col})}_{\text{linear}} + j \cdot N$$
+
+which is the same integer. Same addresses in the same order ⇒ same loads ⇒ same
+`wmma` inputs ⇒ bit-identical output. This does not depend on any count. The
+producer's B assembly is already `memref.load` + `vector.insert`, exactly the
+shape the gather emits, so it matches in structure as well as in value. **That
+was the main risk in step 3 and it is retired.**
+
+**What is also verified is a structural difference in address FORM.** Read
+directly off the emitted IR: the producer computes the B row offset
+`(k0 + j) * N` **once per *j* and reuses that one SSA value across the `nt` B
+fragments** — one `arith.muli` feeding several `arith.addi`, one per column
+base. A's base `arK[mi] = arM[mi] * K` is hoisted out of the K loop entirely,
+leaving a single `addi` inside.
+
+`fragment_pack` cannot do either. It derives its address from
+`(base, rowOrigin, colOrigin)` operands **in isolation**: it cannot see its
+sibling fragments, and it has no operand for an already-computed base. The
+per-fragment granularity that makes the contract composable (§4.6) is the same
+granularity that discards a cross-fragment CSE the hand-written producer gets by
+construction.
+
+**How much that costs is unknown and is deliberately not estimated here.** Two
+reasons it may cost nothing: most of the affected multiplies are
+loop-invariant (`j * ld` has both operands invariant; A's `row * ld` is
+invariant in the K loop), so LICM/CSE may recover them; and the sharing that
+does not survive scales with `nt`, which is small in production (4), not 16.
+Quantifying it requires emitting the migrated form and counting — i.e. it is a
+step-3 output, not a step-3 input.
+
+So step 3 carries a design question, recorded rather than silently decided:
+
+> Should `tile.view` be able to carry a **precomputed linear base**, so the
+> hoisting the producer does by hand is expressible at Tile level — or should
+> the migration rely on LICM/CSE to recover it?
+
+Answer it with a measurement taken *after* the simplest configuration migrates,
+not with a preference now.
+
+**Sibling-backend assessment** (AGENTS.md — shared Tile IR contract). Measured
+by which backends consume the ops at all:
+
+| backend | consumes `tile.view` / `fragment_pack` | outcome |
+|---|---|---|
+| ROCm | yes — this work | owning backend |
+| NVIDIA | yes, 8 files each | **follow-up required** — the same isolation applies to its fragment path, and a `tile.view` base operand would change its lowering too. Tracked under the sync key below. |
+| x86 | no (0 files) | **not applicable** — AMX operands come from `amx_tile_load` over the `!tessera_x86.tile` type (Decision #19); there is no `tile.view`-backed fragment path to hoist for. |
+| Apple | no (0 files) | **not applicable** — the MLIR lane lowers to `func.call` on runtime symbols and the MSL synthesizer is a separate Python path; neither consumes Tile fragment ops. |
+
+Cross-backend synchronization key: `TILE-VIEW-LINEAR-BASE-2026-08-05`.
+
+**The numeric gate already exists and is the right one.**
+`test_via_tile_matches_the_production_lane_on_hardware` routes the GEMM through
+`tile.mma` and demands bit-identical output against the production lane, with a
+bogus-option control that must fail and a fallback-fatal guard so the comparison
+cannot be satisfied by running the hand-written oracle twice. Step 3 extends
+what `via-tile` emits — from "same operands, different op name" to the full
+`tile.view` → `fragment_pack` → `tile.mma` → `fragment_unpack` → `tile.store`
+chain — and inherits that gate unchanged. Throughput is then read against
+`GEMM_PERF_LADDER.md`'s 8.02 TFLOP/s naive-register row, at the same
+`timer_source`.
+
+`via-tile` is also the right seam for *staging*: the default path stays
+untouched while the typed chain is built behind the option, so a partial
+migration is never a partial production lane. A partial migration **within one
+`tile.mma`** is not expressible — `MMAOp::verify` enforces all-or-nothing typing
+(`TILE_MMA_MIXED_FRAGMENT_FORMS`) — so the unit of migration is a whole MMA, not
+an operand.
+
 ## 5. Interaction with W1.3 (Decision #32)
 
 W1.3 landed the boundary verifier and, in doing so, fixed

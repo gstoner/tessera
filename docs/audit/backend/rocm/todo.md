@@ -2479,3 +2479,16 @@ shared Schedule artifact—as its parent and correctly reports
 `lineage_complete = false`. No HSACO, descriptor, selector, or gfx1151 schedule
 changed. The later ROCm consumer PR must accept the canonical launch-Tile
 artifact and rerun aligned/ragged exact-device gates.
+
+## Cross-backend sync `E2E-REAL-SCHEDULED-MATMUL-2026-08-05`
+
+The shared C++ spine now preserves a bounded static Graph matmul behind a
+content-addressed `schedule.matmul` SSA edge and lowers it exactly once to the
+portable A/B/D/M/N/K `tile.matmul_kernel` contract. The gfx1151 instance is
+f16 storage with f32 accumulation/output, m16n16k16 row/col WMMA, explicit
+pipeline/raster fields, and a retained schedule digest. Dynamic shapes and
+ROCm f32 storage fail closed. **ROCm outcome: structural parity validated;
+physical follow-up required under E2E-REAL-3.** No HSACO or device execution is
+claimed here. Canonical packaging must next accept this exact Tile artifact,
+run `GenerateWMMAGemmKernel` then Tile→ROCM/LLVM, and repeat aligned/ragged
+gfx1151 numerical and performance gates without Graph re-entry.

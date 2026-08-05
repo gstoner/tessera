@@ -469,3 +469,16 @@ Graph→package-Tile edge exposes the fork and `lineage_complete` remains false.
 No AVX-512 ABI, generated code, selector, or AMX gate changed. The consumer PR
 must accept the canonical launch-Tile artifact and rerun Zen 5 exact execution;
 this does not supply the separately access-gated Intel AMX packet.
+
+## Cross-backend sync `E2E-REAL-SCHEDULED-MATMUL-2026-08-05`
+
+The shared C++ spine now preserves a bounded static Graph matmul behind a
+content-addressed `schedule.matmul` SSA edge and lowers it exactly once to the
+portable A/B/D/M/N/K `tile.matmul_kernel` contract. The x86 instance is f32
+storage/accumulation/output with m16n16k16 row/col layout and explicit
+pipeline/raster fields. **x86 outcome: structural parity validated; physical
+follow-up required under E2E-REAL-3.** No AVX-512 execution or performance is
+claimed by this host-free conversion. Canonical x86 packaging must accept this
+exact Tile artifact, run TileToX86, and repeat the Zen 5 numerical/performance
+ratchet without reconstructing the launch contract from Graph IR. Intel AMX
+evidence remains separately access-gated.

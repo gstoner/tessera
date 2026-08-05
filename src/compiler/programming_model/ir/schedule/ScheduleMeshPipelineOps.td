@@ -61,6 +61,30 @@ def Schedule_TileOp : Op<ScheduleDialect, "tile"> {
   let hasVerifier = 1;
 }
 
+// Mixed-level E2E spine contract. The Graph op remains the semantic producer
+// while this SSA edge carries the selected schedule to Schedule->Tile. The
+// lowering must consume both this op and its defining Graph matmul atomically.
+def Schedule_MatmulOp : Op<ScheduleDialect, "matmul", [Pure]> {
+  let summary = "Scheduled Graph matmul value with content-addressed decisions";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$arch,
+                       I64Attr:$tile_m,
+                       I64Attr:$tile_n,
+                       I64Attr:$tile_k,
+                       I64Attr:$warps,
+                       I64Attr:$pipeline_depth,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       StrAttr:$a_layout,
+                       StrAttr:$b_layout,
+                       StrAttr:$raster_order,
+                       I64Attr:$raster_group);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
 def Schedule_ElementwiseOp : Op<ScheduleDialect, "elementwise"> {
   let summary = "Materialized elementwise or reduction schedule plan";
   let arguments = (ins StrAttr:$source,

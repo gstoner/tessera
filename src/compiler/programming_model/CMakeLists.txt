@@ -48,6 +48,11 @@ target_include_directories(TesseraPM
 
 target_link_libraries(TesseraPM
     PUBLIC
+        TesseraIR
+        MLIRArithDialect
+        MLIRBufferizationDialect
+        MLIRLLVMDialect
+        MLIRMemRefDialect
         MLIRIR
         MLIRPass
         MLIRFuncDialect

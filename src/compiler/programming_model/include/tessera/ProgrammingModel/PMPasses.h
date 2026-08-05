@@ -13,16 +13,15 @@
 //                                  ordering, pipeline micro-batch counts,
 //                                  async-copy stages, knob arity).
 //
-//   createGraphToSchedulePass()    ANNOTATION-ONLY SKELETON. Stamps a
-//                                  `schedule.artifact_hash` marker on three
-//                                  Graph IR op names. It performs NO lowering:
-//                                  no op is matched, replaced, or rewritten.
-//                                  The production Graph->Schedule lowering is
-//                                  the Python spine.
+//   createGraphToSchedulePass()    REAL FOR ONE BOUNDED SLICE. Creates a
+//                                  content-addressed schedule.matmul SSA edge
+//                                  for static rank-2 x86 f32 and ROCm f16/f32
+//                                  Graph matmul. Other contracts fail closed.
 //
-//   createScheduleToTilePass()     ANNOTATION-ONLY SKELETON. Stamps
-//                                  `tile.staged` on `schedule.async_copy`.
-//                                  Performs NO lowering.
+//   createScheduleToTilePass()     REAL FOR THE SAME SLICE. Atomically consumes
+//                                  schedule.matmul and its Graph producer,
+//                                  materializes A/B/D/M/N/K, and emits one
+//                                  typed launch-level tile.matmul_kernel.
 //
 // Decision #29 (a declaration must have a consumer) and Decision #31 (one
 // implementation per boundary) both bear on the two skeletons: they register
@@ -48,10 +47,10 @@ namespace tessera {
 /// Verifies all Programming Model v1.1 ops. This is a real verifier.
 std::unique_ptr<mlir::Pass> createPMV11VerifierPass();
 
-/// Annotation-only skeleton — stamps `schedule.artifact_hash`, lowers nothing.
+/// Build the bounded mixed-level static-matmul Schedule SSA contract.
 std::unique_ptr<mlir::Pass> createGraphToSchedulePass();
 
-/// Annotation-only skeleton — stamps `tile.staged`, lowers nothing.
+/// Consume that contract into the six-operand launch-level Tile matmul ABI.
 std::unique_ptr<mlir::Pass> createScheduleToTilePass();
 
 /// Registers PM v1.1 dialects for `tessera-opt` parsing.
@@ -60,8 +59,7 @@ void registerPMPipelinesV11(mlir::DialectRegistry &registry);
 /// Verify-only pipeline: verifier + CSE + canonicalize. No lowering.
 void buildPMV11VerifyPipeline(mlir::OpPassManager &pm);
 
-/// Verifier + the two annotation-only skeletons + canonicalize. Despite the
-/// name, this pipeline does not legalize Graph IR to Tile IR.
+/// Verifier + bounded Graph/Schedule-to-Tile static-matmul lowering.
 void buildPMV11LegalizePipeline(mlir::OpPassManager &pm);
 
 /// Registers the passes and pipelines with the global MLIR pass registry.

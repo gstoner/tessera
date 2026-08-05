@@ -169,6 +169,13 @@ def test_x86_contracts_reject_dtype_axis_and_result_drift() -> None:
 def test_canonical_x86_selector_defaults_to_descriptor(
     monkeypatch, module, abi,
 ) -> None:
+    # This legacy selector test isolates the retained Graph-owned packagers.
+    # The production scheduled-matmul route has dedicated exact-artifact and
+    # no-tool mocks in test_scheduled_matmul_consumers.py.
+    monkeypatch.setattr(
+        "tessera.compiler.scheduled_matmul.supports_scheduled_matmul",
+        lambda module, *, target: False,
+    )
     monkeypatch.setattr("tessera.compiler.x86_native._lower", _fake_lower)
     monkeypatch.setattr(
         "tessera.compiler.x86_native._lower_attention_semantics",

@@ -2700,3 +2700,14 @@ Shared `tile.view` / `tile.store` can now carry an SSA leading dimension when
 `#tile.memory_layout` states zero. **Outcome for Apple: NOT APPLICABLE.** Apple
 has no Tile-fragment or pointer-backed `tile.view` consumer; neither its MLIR
 runtime-call lane nor its MSL synthesizer changed.
+
+## Cross-backend sync `E2E-REAL-LINEAGE-SCHEDULE-2026-08-05`
+
+Shared compiler orchestration now records explicit artifact ancestry and
+production `tessera-opt` registers the generated Schedule dialect. **Apple
+outcome: follow-up required for compiler-spine parity, with no Apple-host claim
+in this slice.** Apple CPU/GPU packages still consume `GraphIRModule`, so their
+package-owned Tile artifacts record that Graph parent and remain
+lineage-incomplete. No MSL, AIR, metallib, descriptor ABI, or selector changed.
+Apple package consumption follows the x86/ROCm vertical proof and must be
+revalidated on the owning Mac.

@@ -32,6 +32,7 @@
 #include "mlir/Transforms/Passes.h"  // canonicalize / cse (per-op folders)
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"  // --tessera-build-info
+#include "tessera/ProgrammingModel/PMPasses.h"
 #include <string>
 
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
@@ -354,6 +355,7 @@ int main(int argc, char **argv) {
   llvm::InitializeAllAsmPrinters();
 #endif
 #ifdef TESSERA_OPT_LEAN_ARTIFACT_DRIVER
+  tessera::registerPMV11Passes();
   // Hardware-free target artifact builds intentionally keep tessera-opt lean:
   // only the dialects and passes needed by the target contract spine are
   // registered, avoiding a dependency on every upstream MLIR component.
@@ -372,6 +374,7 @@ int main(int argc, char **argv) {
 #endif
 
   mlir::DialectRegistry registry;
+  tessera::registerPMPipelinesV11(registry);
   registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
                   mlir::gpu::GPUDialect, mlir::memref::MemRefDialect,
                   mlir::LLVM::LLVMDialect, mlir::NVVM::NVVMDialect,
@@ -387,6 +390,7 @@ int main(int argc, char **argv) {
 
   return failed(mlir::MlirOptMain(argc, argv, tesseraOptBuildInfo(), registry));
 #else
+  tessera::registerPMV11Passes();
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraPasses();
   // Upstream canonicalize / cse so Tessera per-op folders + canonicalizers
@@ -474,6 +478,7 @@ int main(int argc, char **argv) {
   mlir::registerConvertGpuOpsToROCDLOpsPass();  // ROCDL twin of the NVVM lane
 
   mlir::DialectRegistry registry;
+  tessera::registerPMPipelinesV11(registry);
   registry.insert<mlir::arith::ArithDialect,
                   mlir::bufferization::BufferizationDialect,
                   mlir::func::FuncDialect,

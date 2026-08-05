@@ -2467,3 +2467,15 @@ chain. The default direct lane is unchanged.
 `ViewOp::verify` now defines the pointer-backed operand contract: exactly 3 `(base, rowOrigin, colOrigin)` or 5 with `(rowBound, colBound)`. It previously accepted any count >= 3, so a 4-operand view was legal and meaningless and the bounded form's validity was decided by whichever backend looked.
 
 **Outcome: parity validated — supports the bounded form.** `materializeFragmentPack` masks loads against the bounds with `vector.create_mask` + `maskedload` (PR #510). Fixture: `rocm_fragment_ragged_bounds.mlir`.
+
+## Cross-backend sync `E2E-REAL-LINEAGE-SCHEDULE-2026-08-05`
+
+Shared compiler orchestration now records producer, parent/output digests,
+representation, and contract version per artifact, and production
+`tessera-opt` registers the generated Schedule dialect. **ROCm outcome:
+follow-up required under E2E-REAL-3.** Existing gfx1151 packages still consume
+`GraphIRModule`; their rebuilt Tile artifact therefore records Graph—not the
+shared Schedule artifact—as its parent and correctly reports
+`lineage_complete = false`. No HSACO, descriptor, selector, or gfx1151 schedule
+changed. The later ROCm consumer PR must accept the canonical launch-Tile
+artifact and rerun aligned/ragged exact-device gates.

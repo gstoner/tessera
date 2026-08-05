@@ -2291,3 +2291,14 @@ Shared `tile.view` / `tile.store` can now carry an SSA leading dimension when
 The sm_120 fragment materializer fails closed on this valid shared form and
 still requires a static leading dimension. No CUDA-enabled build or sm_120
 device evidence is claimed from this ROCm/x86 host.
+
+## Cross-backend sync `E2E-REAL-LINEAGE-SCHEDULE-2026-08-05`
+
+Shared compiler orchestration now records explicit artifact ancestry and
+production `tessera-opt` registers the generated Schedule dialect. **NVIDIA
+outcome: follow-up required.** SM120 packaging still consumes `GraphIRModule`
+and synthesizes NVIDIA-owned Tile, so its lineage truthfully records the Graph
+fork and remains incomplete. This change does not migrate the two untyped
+`tile.mma` producers, accumulator threading, bounded/dynamic views, PTX, or a
+physical schedule; no SM120 evidence is claimed. Those remain NVIDIA-owned
+gates after the shared x86/ROCm vertical slice establishes the consumer API.

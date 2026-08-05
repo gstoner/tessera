@@ -279,7 +279,16 @@ design before migration.
 >    (0/0) as the reference shape. Independent of the producer chain, and it
 >    was omitted from an earlier version of this list — which is how still-
 >    required Target IR work disappears from the owning queue.
-> 6. **W1.1b** — hoist the 14 already-fail-closed `$kind` sets into ODS. A
+> 6. **W1.1b** — hoist the already-fail-closed `$kind` sets into ODS.
+>    **Re-measured 2026-08-05: 11 `StrAttr:$kind` sites across FIVE
+>    dialects** — Graph IR `TesseraOps.td` (6), Apple (2), NVIDIA (1),
+>    ROCm (1), Neighbors (1) — not one backend's ODS. That makes it a
+>    shared-contract change under AGENTS.md (same PR assesses every
+>    backend), and each site needs its legal set derived from its actual
+>    consumer dispatch. Deriving such a set from a partial read is how
+>    #499 shipped an optimizer enum missing `adafactor` and broke six
+>    tests including one that executes on gfx1151, so budget per-site
+>    derivation plus a run of the existing tests, not a bulk edit. A
 >    layering improvement, independent of everything above.
 >
 > Items 1–4 are one chain. Items 5 and 6 can proceed in parallel with it.

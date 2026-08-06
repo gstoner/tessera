@@ -802,16 +802,15 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "SmoothL1; one runtime-sized HIP launch writes both "
                             "input gradients",
     "rocm_fft_compiled": "AMD GPU RDNA spectral FFT (fft / ifft / rfft / irfft) "
-                            "the Tessera compiler GENERATES (generate-rocm-dft-"
-                            "kernel -> ROCDL -> hsaco; one thread per output bin, "
-                            "cos/sin twiddles), then HIP launches it. Direct DFT "
-                            "(any length) on gfx1151 + r2c/c2r pack-unpack + plan "
-                            "scale (radix-2/Bluestein perf is a follow-up). "
+                            "through the shipping gfx1151 mixed-radix Stockham/"
+                            "Bluestein package, with batched rows, r2c/c2r "
+                            "pack-unpack, and plan-owned normalization. The "
+                            "compiler-generated direct DFT is diagnostic only. "
                             "complex64/f32",
     "rocm_spectral_compiled": "AMD GPU RDNA spectral composites (dct / stft / "
-                            "istft / spectral_conv / spectral_filter) — compose "
-                            "the rocm_fft_compiled DFT lane (frame / window / "
-                            "overlap-add / pointwise complex-mul on host). f32",
+                            "istft / spectral_conv / spectral_filter) — "
+                            "content-addressed device package around persistent "
+                            "digest-bound child FFT plans. f32",
     "rocm_sparse_compiled": "AMD GPU RDNA sparse linear algebra (spmm_csr / "
                             "spmm_coo / sddmm / bsmm) — COMPILER-GENERATED gfx1151 "
                             "sparse kernels (generate-rocm-spmm/sddmm-kernel: row-"
@@ -1686,9 +1685,10 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_cpu", executable=True,
         executor_id="x86_spectral_compiled", runtime_status="success",
         reason="x86 spectral composites (dct / stft / istft / spectral_conv / "
-               "spectral_filter) compose the x86_fft_compiled FFT lane — "
-               "framing / windowing / overlap-add / pointwise complex-mul on "
-               "host, the transform on the AVX-512 radix-2 kernel. f32, "
+               "spectral_filter) consume one typed, content-addressed "
+               "Schedule-to-Tile artifact in the native AVX-512 package. "
+               "Framing, windowing, overlap-add, pointwise complex multiply, "
+               "and bounded digest-keyed workspace are package-owned. f32, "
                "matches np.fft.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_sparse_compiled"): ExecutionRow(
@@ -2727,20 +2727,22 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_fft_compiled", runtime_status="success",
         reason="ROCm FFT artifact runs fft / ifft / rfft / irfft over any axis "
-               "length on the COMPILER-GENERATED one-thread-per-bin DFT kernel "
-               "(generate-rocm-dft-kernel -> ROCDL, cos/sin twiddles) on gfx1151 "
-               "+ r2c/c2r pack-unpack + plan scale. Direct DFT (radix-2/Bluestein "
-               "perf is a follow-up). complex64/f32.",
+               "length on the shipping mixed-radix Stockham/Bluestein package "
+               "on gfx1151, with batched rows, r2c/c2r pack-unpack, and "
+               "plan-owned normalization. The O(N^2) compiler DFT is retained "
+               "only as an explicitly named diagnostic/oracle. complex64/f32.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_spectral_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_spectral_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_spectral_compiled", runtime_status="success",
         reason="ROCm spectral composites (dct / stft / istft / spectral_conv / "
-               "spectral_filter) compose the rocm_fft_compiled DFT lane — "
-               "framing / windowing / overlap-add / pointwise complex-mul on "
-               "host, the transform on the gfx1151 DFT kernel. f32, matches "
-               "np.fft.",
+               "spectral_filter) consume a content-addressed gfx1151 package. "
+               "Framing, windowing, overlap-add, and pointwise complex multiply "
+               "stay device-resident around persistent digest-bound child FFT "
+               "plans plus a persistent digest-bound composite workspace; "
+               "only the public host-pointer ABI stages inputs/output. "
+               "f32, matches np.fft.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_sparse_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_sparse_compiled",

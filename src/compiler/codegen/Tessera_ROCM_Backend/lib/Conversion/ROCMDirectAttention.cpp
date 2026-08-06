@@ -547,8 +547,13 @@ LogicalResult materializeROCMDirectAttentionBackward(
   Operation *op = kernel.getOperation();
   auto biasAttr = op->getAttrOfType<BoolAttr>("bias");
   bool hasBias = biasAttr && biasAttr.getValue();
+  auto lseCheckpoint = op->getAttrOfType<StringAttr>("lse_checkpoint");
+  bool hasSavedLse =
+      lseCheckpoint && lseCheckpoint.getValue() == "saved";
   unsigned biasPointer = 4;
   unsigned dqPointer = 4 + unsigned(hasBias);
+  unsigned savedLsePointer = dqPointer;
+  dqPointer += unsigned(hasSavedLse);
   unsigned dkPointer = dqPointer + 1;
   unsigned dvPointer = dqPointer + 2;
   unsigned dimStart = dqPointer + 3;
@@ -567,8 +572,11 @@ LogicalResult materializeROCMDirectAttentionBackward(
       workspace.getInt() > 0 && workspaceOwner &&
       workspaceOwner.getValue() == "program_launch" && splitCount &&
       splitCount.getInt() == 2;
-  if (!biasAttr ||
-      kernel.getInputs().size() != 14 + unsigned(hasBias) || !deterministic ||
+  if (!biasAttr || !lseCheckpoint ||
+      (lseCheckpoint.getValue() != "saved" &&
+       lseCheckpoint.getValue() != "recompute") ||
+      kernel.getInputs().size() !=
+          14 + unsigned(hasBias) + unsigned(hasSavedLse) || !deterministic ||
       !deterministic.getValue() || (!directReference && !splitReduced)) {
     op->emitError(
         "ROCm attention_backward_kernel requires the canonical deterministic "
@@ -631,6 +639,10 @@ LogicalResult materializeROCMDirectAttentionBackward(
         "dropout",
         builder.getBoolAttr(dropout.getValueAsDouble() > 0.0));
     state.addAttribute("attn_bias", builder.getBoolAttr(hasBias));
+    state.addAttribute("saved_lse", builder.getBoolAttr(hasSavedLse));
+    if (hasSavedLse)
+      state.addAttribute("saved_lse_operand",
+                         builder.getI64IntegerAttr(savedLsePointer));
     state.addAttribute("split_reduced", builder.getBoolAttr(true));
     state.addAttribute(
         "source", builder.getStringAttr("tile.attention_backward_kernel"));

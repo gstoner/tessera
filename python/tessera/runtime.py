@@ -33,6 +33,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from enum import IntEnum
@@ -3815,6 +3816,7 @@ def _submit_x86_native(
         X86_ARGREDUCE_F32_ABI,
         X86_ATTENTION_EXT_F32_ABI,
         X86_ATTENTION_F32_ABI,
+        X86_ATTENTION_BACKWARD_LSE_F32_ABI,
         X86_BINARY_F32_ABI,
         X86_BINARY_MATH_F32_ABI,
         X86_BITWISE_I32_ABI,
@@ -3849,6 +3851,7 @@ def _submit_x86_native(
         X86_MATMUL_F64_ABI,
         X86_ATTENTION_F32_ABI,
         X86_ATTENTION_EXT_F32_ABI,
+        X86_ATTENTION_BACKWARD_LSE_F32_ABI,
         X86_UNARY_F32_ABI,
         X86_BINARY_F32_ABI,
         X86_PREDICATE_F32_ABI,
@@ -4265,6 +4268,55 @@ def _submit_x86_native(
         return output
     if any(array.dtype != np.float32 for array in arrays):
         raise RuntimeError("x86 native descriptor requires f32 buffers")
+    if descriptor.abi_id == X86_ATTENTION_BACKWARD_LSE_F32_ABI:
+        has_bias = bool(descriptor.provenance["bias"])
+        expected = 9 if has_bias else 8
+        if len(arrays) != expected:
+            raise RuntimeError(f"x86 attention backward descriptor requires {expected} buffers")
+        do, q, key, value = (np.ascontiguousarray(array) for array in arrays[:4])
+        offset = 4
+        bias = np.ascontiguousarray(arrays[offset]) if has_bias else None
+        offset += int(has_bias)
+        row_lse = np.ascontiguousarray(arrays[offset])
+        dq, dk, dvalue = arrays[offset + 1 : offset + 4]
+        b, hq, hkv, sq, sk, d, dv = (
+            int(cast(int, scalars[name]))
+            for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
+        )
+        if (
+            tuple(do.shape) != (b, hq, sq, dv)
+            or tuple(q.shape) != (b, hq, sq, d)
+            or tuple(key.shape) != (b, hkv, sk, d)
+            or tuple(value.shape) != (b, hkv, sk, dv)
+            or tuple(row_lse.shape) != (b, hq, sq)
+            or tuple(dq.shape) != tuple(q.shape)
+            or tuple(dk.shape) != tuple(key.shape)
+            or tuple(dvalue.shape) != tuple(value.shape)
+            or (bias is not None and tuple(bias.shape) != (b, hq, sq, sk))
+            or any(not output.flags.c_contiguous for output in (dq, dk, dvalue))
+        ):
+            raise RuntimeError("x86 saved-LSE attention backward shapes disagree with descriptor")
+        function.argtypes = (
+            [pointer] * 6 + [ctypes.c_int64] * 7
+            + [ctypes.c_float, ctypes.c_int, ctypes.c_int64, ctypes.c_float]
+            + [pointer] * 3
+        )
+        function.restype = None
+        function(
+            do.ctypes.data_as(pointer), q.ctypes.data_as(pointer),
+            key.ctypes.data_as(pointer), value.ctypes.data_as(pointer),
+            bias.ctypes.data_as(pointer) if bias is not None else pointer(),
+            row_lse.ctypes.data_as(pointer), ctypes.c_int64(b),
+            ctypes.c_int64(hq), ctypes.c_int64(hkv), ctypes.c_int64(sq),
+            ctypes.c_int64(sk), ctypes.c_int64(d), ctypes.c_int64(dv),
+            ctypes.c_float(float(cast(Any, descriptor.provenance["scale"]))),
+            ctypes.c_int(1 if descriptor.provenance["causal"] else 0),
+            ctypes.c_int64(max(0, int(cast(Any, descriptor.provenance["window"])))),
+            ctypes.c_float(float(cast(Any, descriptor.provenance["softcap"]))),
+            dq.ctypes.data_as(pointer), dk.ctypes.data_as(pointer),
+            dvalue.ctypes.data_as(pointer),
+        )
+        return dq, dk, dvalue
     if descriptor.abi_id in {X86_ATTENTION_F32_ABI, X86_ATTENTION_EXT_F32_ABI}:
         expected = 5 if bool(descriptor.provenance["bias"]) else 4
         if len(arrays) != expected:
@@ -10312,6 +10364,21 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_avx512_policy_loss_f32": [c_f32, c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
         "tessera_x86_avx512_fpquant_f32": [c_f32, i64, ctypes.c_float, ctypes.c_int, ctypes.c_int, c_f32],
         "tessera_x86_fft_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
+        "tessera_x86_fft_mixed_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
+        "tessera_x86_fft_six_step_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
+        "tessera_x86_spectral_filter_f32": [
+            ctypes.c_char_p, c_f32, c_f32, c_f32, i64
+        ],
+        "tessera_x86_dct_f32": [ctypes.c_char_p, c_f32, c_f32, i64, i64],
+        "tessera_x86_spectral_conv_f32": [
+            ctypes.c_char_p, c_f32, i64, c_f32, i64, c_f32, i64, i64
+        ],
+        "tessera_x86_stft_f32": [
+            ctypes.c_char_p, c_f32, c_f32, c_f32, i64, i64, i64, i64, i64
+        ],
+        "tessera_x86_istft_f32": [
+            ctypes.c_char_p, c_f32, c_f32, c_f32, i64, i64, i64, i64
+        ],
         "tessera_x86_avx512_spmm_csr_f32": [c_i32, c_i32, c_f32, c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_sddmm_f32": [c_f32, c_f32, c_f32, i64, i64, i64, c_f32],
         "tessera_x86_avx512_selective_ssm_f32": [c_f32, c_f32, c_f32, c_f32, c_f32, i64, i64, i64, i64, c_f32, c_f32],
@@ -10373,10 +10440,25 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         if fn is not None:
             fn.argtypes = argtypes
             fn.restype = None
-    for sym in ("tessera_x86_kv_cache_append_f32", "tessera_x86_kv_cache_read_f32", "tessera_x86_kv_cache_prune_f32"):
+    for sym in (
+        "tessera_x86_fft_mixed_c2c_f32",
+        "tessera_x86_fft_six_step_c2c_f32",
+        "tessera_x86_spectral_filter_f32",
+        "tessera_x86_dct_f32",
+        "tessera_x86_spectral_conv_f32",
+        "tessera_x86_stft_f32",
+        "tessera_x86_istft_f32",
+        "tessera_x86_kv_cache_append_f32",
+        "tessera_x86_kv_cache_read_f32",
+        "tessera_x86_kv_cache_prune_f32",
+    ):
         fn = getattr(lib, sym, None)
         if fn is not None:
             fn.restype = ctypes.c_int
+    package_abi = getattr(lib, "tessera_x86_spectral_composite_package_abi", None)
+    if package_abi is not None:
+        package_abi.argtypes = []
+        package_abi.restype = ctypes.c_char_p
     _x86_elementwise_runtime = lib
     return lib
 
@@ -12476,7 +12558,11 @@ def _x86_fft_c2c_rows(xc: Any, inverse: bool, np: Any) -> Any:
         raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
     xc = np.ascontiguousarray(xc, np.complex64)
     batch, n = int(xc.shape[0]), int(xc.shape[1])
-    buf = np.ascontiguousarray(xc.view(np.float32).reshape(-1))
+    # The native ABI is in-place, while this helper's contract is out-of-place.
+    # np.ascontiguousarray may return the caller's existing allocation, so it
+    # is not a copy barrier.  An explicit copy prevents FFT execution from
+    # mutating user inputs and keeps repeated benchmark samples independent.
+    buf = xc.view(np.float32).reshape(-1).copy()
     cf = ctypes.POINTER(ctypes.c_float)
     lib.tessera_x86_fft_c2c_f32(
         buf.ctypes.data_as(cf), ctypes.c_int64(batch), ctypes.c_int64(n), ctypes.c_int(1 if inverse else 0)
@@ -12501,43 +12587,219 @@ def _x86_dft_rows(rows: Any, inverse: bool, np: Any) -> Any:
     return (rr + 1j * ri).astype(np.complex64)
 
 
+@functools.lru_cache(maxsize=32)
+def _x86_bluestein_plan(n: int, inverse: bool) -> tuple[int, Any, Any]:
+    """Immutable chirp and transformed convolution kernel for one direction."""
+    import numpy as np
+
+    from .compiler.spectral_plan import next_power_of_two
+
+    m = next_power_of_two(2 * n - 1)
+    sign = 1.0 if inverse else -1.0
+    j = np.arange(n, dtype=np.int64)
+    # Reduce j² modulo 2N before conversion to float.  The phase is periodic
+    # there, and this avoids the large-index precision drift fixed in the C++
+    # target hooks by fft_chirp_angle.
+    phase_index = (j * j) % (2 * n)
+    chirp = np.exp(sign * 1j * np.pi * phase_index.astype(np.float64) / n).astype(
+        np.complex64
+    )
+    kernel = np.zeros(m, np.complex64)
+    conjugate = np.conj(chirp)
+    kernel[:n] = conjugate
+    if n > 1:
+        kernel[m - n + 1 :] = conjugate[1:][::-1]
+    kernel_fft = _x86_fft_c2c_rows(kernel[None, :], False, np)[0]
+    chirp.setflags(write=False)
+    kernel_fft.setflags(write=False)
+    return m, chirp, kernel_fft
+
+
+_x86_fft_workspace_state = threading.local()
+
+
+def _x86_fft_workspace(key: tuple[Any, ...], shape: tuple[int, ...], np: Any) -> Any:
+    """Return a bounded per-thread mutable complex64 workspace."""
+    cache = getattr(_x86_fft_workspace_state, "buffers", None)
+    if cache is None:
+        cache = {}
+        _x86_fft_workspace_state.buffers = cache
+    buffer = cache.get(key)
+    if buffer is None or tuple(buffer.shape) != shape:
+        if len(cache) >= 8:
+            cache.pop(next(iter(cache)))
+        buffer = np.empty(shape, np.complex64)
+        cache[key] = buffer
+    return buffer
+
+
 def _x86_bluestein_rows(rows: Any, inverse: bool, np: Any) -> Any:
     """Unnormalized Bluestein (chirp-z) DFT of complex64 rows [batch, n] for an
     arbitrary n, as a power-of-two convolution on the radix-2 C2C kernel
     (Spectral PR3, strategy='bluestein'). m = next_pow2(2n-1)."""
-    from .compiler.spectral_plan import next_power_of_two
-
     n = int(rows.shape[1])
     batch = int(rows.shape[0])
-    m = next_power_of_two(2 * n - 1)
-    sign = 1.0 if inverse else -1.0
-    j = np.arange(n)
-    chirp = np.exp(sign * 1j * np.pi * (j.astype(np.float64) ** 2) / n).astype(np.complex64)
-    a = np.zeros((batch, m), np.complex64)
+    m, chirp, kernel_fft = _x86_bluestein_plan(n, inverse)
+    a = _x86_fft_workspace(("bluestein", batch, n, inverse), (batch, m), np)
+    a.fill(0)
     a[:, :n] = rows * chirp[None, :]
-    b = np.zeros(m, np.complex64)
-    bconj = np.conj(chirp)
-    b[:n] = bconj
-    if n > 1:
-        b[m - n + 1 :] = bconj[1:][::-1]  # circular filter == linear conv
     fa = _x86_fft_c2c_rows(a, False, np)
-    fb = _x86_fft_c2c_rows(b[None, :].copy(), False, np)[0]
-    c = _x86_fft_c2c_rows(fa * fb[None, :], True, np) / np.float32(m)
+    np.multiply(fa, kernel_fft[None, :], out=a)
+    c = _x86_fft_c2c_rows(a, True, np) / np.float32(m)
     return (c[:, :n] * chirp[None, :]).astype(np.complex64)
 
 
-def _x86_transform_rows(rows: Any, inverse: bool, np: Any) -> Any:
-    """Unnormalized DFT of complex64 rows [batch, n] for ANY n — dispatches the
-    plan's strategy: radix-2 (power-of-two), naive DFT (tiny), or Bluestein."""
-    from .compiler.spectral_plan import plan_fft
+def _x86_mixed_radix_rows(rows: Any, inverse: bool, np: Any) -> Any:
+    """Run the candidate native AVX-512 mixed-radix Stockham ABI."""
+    lib = _load_x86_elementwise()
+    if lib is None or not hasattr(lib, "tessera_x86_fft_mixed_c2c_f32"):
+        raise _RocmCompiledUnavailable("x86 mixed-radix FFT candidate is unavailable")
+    values = np.ascontiguousarray(rows, np.complex64)
+    if values.ndim != 2 or any(int(dim) <= 0 for dim in values.shape):
+        raise ValueError("x86 mixed-radix FFT requires a non-empty rank-2 array")
+    batch, n = (int(dim) for dim in values.shape)
+    buffer = values.view(np.float32).reshape(-1).copy()
+    status = lib.tessera_x86_fft_mixed_c2c_f32(
+        buffer.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int64(batch),
+        ctypes.c_int64(n),
+        ctypes.c_int(1 if inverse else 0),
+    )
+    if status != 0:
+        raise ValueError(f"x86 mixed-radix FFT candidate declined N={n} status={status}")
+    return buffer.view(np.complex64).reshape(batch, n)
 
-    n = int(rows.shape[1])
-    strat = plan_fft(n, inverse=inverse).strategy
-    if strat == "radix2":
+
+def _is_prime(value: int) -> bool:
+    if value < 2:
+        return False
+    divisor = 2
+    while divisor * divisor <= value:
+        if value % divisor == 0:
+            return False
+        divisor += 1 if divisor == 2 else 2
+    return True
+
+
+def _primitive_root_prime(prime: int) -> int:
+    order = prime - 1
+    factors: list[int] = []
+    rest = order
+    divisor = 2
+    while divisor * divisor <= rest:
+        if rest % divisor == 0:
+            factors.append(divisor)
+            while rest % divisor == 0:
+                rest //= divisor
+        divisor += 1
+    if rest > 1:
+        factors.append(rest)
+    for candidate in range(2, prime):
+        if all(pow(candidate, order // factor, prime) != 1 for factor in factors):
+            return candidate
+    raise ValueError(f"no primitive root found for prime {prime}")
+
+
+@functools.lru_cache(maxsize=32)
+def _x86_rader_plan(prime: int, inverse: bool) -> tuple[int, Any, Any, Any]:
+    """Build the immutable permutation and convolution kernel for Rader FFT."""
+    import numpy as np
+
+    from .compiler.spectral_plan import next_power_of_two
+
+    if not _is_prime(prime) or prime <= 2:
+        raise ValueError(f"Rader candidate requires an odd prime; got {prime}")
+    order = prime - 1
+    generator = _primitive_root_prime(prime)
+    powers = np.asarray([pow(generator, i, prime) for i in range(order)], np.int64)
+    reverse_indices = powers[np.asarray([(-i) % order for i in range(order)])]
+    sign = 1.0 if inverse else -1.0
+    kernel = np.exp(
+        sign * 2j * np.pi * powers.astype(np.float64) / prime
+    ).astype(np.complex64)
+    m = next_power_of_two(2 * order - 1)
+    padded = np.zeros(m, np.complex64)
+    padded[:order] = kernel
+    kernel_fft = _x86_fft_c2c_rows(padded[None, :], False, np)[0]
+    powers.setflags(write=False)
+    reverse_indices.setflags(write=False)
+    kernel_fft.setflags(write=False)
+    return m, powers, reverse_indices, kernel_fft
+
+
+def _x86_rader_rows(rows: Any, inverse: bool, np: Any) -> Any:
+    """Unnormalized prime-length Rader candidate using the native AVX-512 FFT."""
+    rows = np.ascontiguousarray(rows, np.complex64)
+    batch, prime = (int(dim) for dim in rows.shape)
+    m, powers, reverse_indices, kernel_fft = _x86_rader_plan(prime, inverse)
+    order = prime - 1
+    padded = _x86_fft_workspace(("rader", batch, prime, inverse), (batch, m), np)
+    padded.fill(0)
+    padded[:, :order] = rows[:, reverse_indices]
+    transformed = _x86_fft_c2c_rows(padded, False, np)
+    np.multiply(transformed, kernel_fft[None, :], out=padded)
+    linear = _x86_fft_c2c_rows(padded, True, np) / np.float32(m)
+    cyclic = linear[:, :order].copy()
+    cyclic[:, : order - 1] += linear[:, order : 2 * order - 1]
+    output = np.empty_like(rows)
+    output[:, 0] = np.sum(rows, axis=1, dtype=np.complex64)
+    output[:, powers] = rows[:, :1] + cyclic
+    return output
+
+
+@functools.lru_cache(maxsize=16)
+def _x86_six_step_plan(n: int, inverse: bool) -> tuple[int, int, Any]:
+    """Balanced Bailey factorization and immutable twiddle matrix."""
+    import numpy as np
+
+    if n <= 1 or n & (n - 1):
+        raise ValueError(f"six-step candidate requires a power of two; got {n}")
+    low_bits = (n.bit_length() - 1) // 2
+    n1 = 1 << low_bits
+    n2 = n // n1
+    sign = 1.0 if inverse else -1.0
+    j = np.arange(n2, dtype=np.float64)[:, None]
+    k1 = np.arange(n1, dtype=np.float64)[None, :]
+    twiddle = np.exp(sign * 2j * np.pi * j * k1 / n).astype(np.complex64)
+    twiddle.setflags(write=False)
+    return n1, n2, twiddle
+
+
+def _x86_six_step_rows(rows: Any, inverse: bool, np: Any) -> Any:
+    """Run the native fused-transpose Bailey six-step candidate."""
+    lib = _load_x86_elementwise()
+    if lib is None or not hasattr(lib, "tessera_x86_fft_six_step_c2c_f32"):
+        raise _RocmCompiledUnavailable("x86 Bailey FFT candidate is unavailable")
+    values = np.ascontiguousarray(rows, np.complex64)
+    if values.ndim != 2 or any(int(dim) <= 0 for dim in values.shape):
+        raise ValueError("x86 Bailey FFT requires a non-empty rank-2 array")
+    batch, n = (int(dim) for dim in values.shape)
+    buffer = values.view(np.float32).reshape(-1).copy()
+    status = lib.tessera_x86_fft_six_step_c2c_f32(
+        buffer.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        ctypes.c_int64(batch),
+        ctypes.c_int64(n),
+        ctypes.c_int(1 if inverse else 0),
+    )
+    if status != 0:
+        raise ValueError(f"x86 Bailey FFT candidate declined N={n} status={status}")
+    return buffer.view(np.complex64).reshape(batch, n)
+
+
+def _x86_transform_rows(
+    rows: Any, inverse: bool, strategy: str, np: Any
+) -> Any:
+    """Unnormalized DFT of complex64 rows [batch, n] for ANY n — dispatches the
+    plan's strategy: radix-2, mixed-radix, tiny DFT, or Bluestein."""
+    if strategy == "radix2":
         return _x86_fft_c2c_rows(rows, inverse, np)
-    if strat == "dft":
+    if strategy == "dft":
         return _x86_dft_rows(rows, inverse, np)
-    return _x86_bluestein_rows(rows, inverse, np)
+    if strategy == "mixed_radix":
+        return _x86_mixed_radix_rows(rows, inverse, np)
+    if strategy == "bluestein":
+        return _x86_bluestein_rows(rows, inverse, np)
+    raise ValueError(f"x86 FFT Tile package has unsupported strategy {strategy!r}")
 
 
 _X86_FFT_OPS = ("tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft")
@@ -12550,53 +12812,45 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     diagnostic (Spectral PR3)."""
     import numpy as np
 
-    from .compiler.spectral_plan import plan_fft
+    from .compiler.scheduled_fft import validate_scheduled_fft_metadata
 
     metadata = artifact.metadata or {}
-    arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
-    if len(ops) != 1 or op_name not in _X86_FFT_OPS:
+    contract = metadata.get("scheduled_fft")
+    if not isinstance(contract, dict):
+        raise ValueError("x86_fft_compiled executor requires a scheduled_fft Tile package")
+    op_name = str(contract.get("op_name", ""))
+    if op_name not in _X86_FFT_OPS:
         raise ValueError(
-            f"x86_fft_compiled executor handles one of {_X86_FFT_OPS}; got {[o.get('op_name') for o in ops]!r}"
+            f"x86_fft_compiled executor handles one of {_X86_FFT_OPS}; got {op_name!r}"
         )
-    op = ops[0]
-    operand_names = [str(n) for n in op.get("operands", [])]
-    if len(operand_names) < 1:
-        raise ValueError("fft requires one operand")
-    kwargs = op.get("kwargs") or {}
-    axis = int(kwargs.get("axis", -1))
+    input_name = str(contract.get("input_name", ""))
+    arg_names = list(metadata.get("arg_names") or [input_name])
     values = _bind_launch_args(args, arg_names)
-    x = _as_numpy(values[operand_names[0]])
+    x = _as_numpy(values[input_name])
+    validate_scheduled_fft_metadata(contract, target="x86", input_shape=x.shape)
     nd = x.ndim
     if nd < 1:
         raise ValueError("fft operand must have rank >= 1")
-    ax = axis if axis >= 0 else nd + axis
-
-    inverse = op_name == "tessera.ifft"
-    if op_name == "tessera.irfft":
-        m = int(x.shape[ax])
-        n = int(kwargs.get("n") or 2 * (m - 1))
-    else:
-        n = int(x.shape[ax])
-    mode = {"tessera.rfft": "r2c", "tessera.irfft": "c2r"}.get(op_name, "c2c")
-    plan = plan_fft(n, axis=ax, mode=mode, inverse=inverse or op_name == "tessera.irfft")
-    # strategy (radix-2 / dft / bluestein) is dispatched per-row by
-    # _x86_transform_rows; any positive length is supported (Spectral PR3).
+    ax = int(contract["axis"])
+    n = int(contract["length"])
+    m = int(x.shape[ax])
+    inverse = bool(contract["inverse"])
+    strategy = str(contract["strategy"])
+    scale = float(contract["scale"])
 
     xm = np.moveaxis(x, ax, -1)
     lead = xm.shape[:-1]
 
     if op_name in ("tessera.fft", "tessera.ifft"):
         rows = xm.reshape(-1, n).astype(np.complex64)
-        out = _x86_transform_rows(rows, plan.inverse, np)
-        if plan.scale != 1.0:
-            out = out * np.complex64(plan.scale)
+        out = _x86_transform_rows(rows, inverse, strategy, np)
+        if scale != 1.0:
+            out = out * np.complex64(scale)
         return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.complex64)
 
     if op_name == "tessera.rfft":
         rows = xm.reshape(-1, n).astype(np.complex64)  # im = 0
-        full = _x86_transform_rows(rows, False, np)
+        full = _x86_transform_rows(rows, False, strategy, np)
         half = full[:, : n // 2 + 1]
         return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax).astype(np.complex64)
 
@@ -12607,7 +12861,7 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     full[:, :m] = rows[:, :m]
     if n - m > 0:  # mirror conj tail
         full[:, m:n] = np.conj(rows[:, 1 : n - n // 2])[:, ::-1]
-    out = _x86_transform_rows(full, True, np).real * np.float32(1.0 / n)
+    out = _x86_transform_rows(full, True, strategy, np).real * np.float32(scale)
     return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
 
 
@@ -12684,36 +12938,105 @@ def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any
 
 
 def _x86_fftexec(sub_op: str, x: Any, sub_kwargs: dict) -> Any:
+    from .compiler.scheduled_fft import lower_scheduled_fft
+
+    contract = lower_scheduled_fft(
+        target="x86",
+        op_name=sub_op,
+        input_shape=tuple(int(dim) for dim in x.shape),
+        axis=int(sub_kwargs.get("axis", -1)),
+        n=sub_kwargs.get("n"),
+    ).to_metadata()
     art = RuntimeArtifact(
         metadata={
             "target": "x86",
             "compiler_path": "x86_fft_compiled",
             "arg_names": ["x"],
             "output_name": "o",
-            "ops": [{"op_name": sub_op, "result": "o", "operands": ["x"], "kwargs": sub_kwargs}],
+            "scheduled_fft": contract,
         }
     )
     return _execute_x86_compiled_fft(art, (x,))
 
 
 def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
-    """The ``target="x86"`` composite spectral lane: dct / stft / istft /
-    spectral_conv / spectral_filter, composing the x86 FFT lane."""
+    """Consume one exact compound Schedule→Tile artifact in the x86 package."""
     import numpy as np
+    from .compiler.scheduled_spectral import validate_scheduled_spectral_metadata
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
-    if len(ops) != 1 or op_name not in _SPECTRAL_COMPOSITE_OPS:
+    contract = metadata.get("scheduled_spectral")
+    if not isinstance(contract, dict):
         raise ValueError(
-            f"x86_spectral_compiled executor handles one of "
-            f"{_SPECTRAL_COMPOSITE_OPS}; got {[o.get('op_name') for o in ops]!r}"
+            "x86_spectral_compiled executor requires a scheduled_spectral Tile package"
         )
-    op = ops[0]
+    op_name = str(contract.get("op_name", ""))
+    if op_name not in _SPECTRAL_COMPOSITE_OPS:
+        raise ValueError(
+            f"x86_spectral_compiled executor handles one of {_SPECTRAL_COMPOSITE_OPS}; "
+            f"got {op_name!r}"
+        )
     values = _bind_launch_args(args, arg_names)
-    operands = [_as_numpy(values[str(n)]) for n in op.get("operands", [])]
-    return _spectral_composite(op_name, operands, op.get("kwargs") or {}, _x86_fftexec, np)
+    operands = [np.asarray(_as_numpy(values[name])) for name in arg_names]
+    validate_scheduled_spectral_metadata(
+        contract, input_shapes=[value.shape for value in operands]
+    )
+    lib = _load_x86_elementwise()
+    if lib is None or not hasattr(lib, "tessera_x86_spectral_composite_package_abi"):
+        raise RuntimeError("x86 compound spectral package is unavailable")
+    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v1":
+        raise RuntimeError("x86 compound spectral package ABI mismatch")
+    digest = str(contract["schedule_digest"]).encode("ascii")
+    output_shape = tuple(int(dim) for dim in contract["output_shape"])
+    pointer = ctypes.POINTER(ctypes.c_float)
+
+    def ptr(value: Any) -> Any:
+        return value.ctypes.data_as(pointer)
+
+    if op_name == "tessera.spectral_filter":
+        a = np.ascontiguousarray(operands[0], np.complex64)
+        b = np.ascontiguousarray(operands[1], np.complex64)
+        output = np.empty(output_shape, np.complex64)
+        rc = lib.tessera_x86_spectral_filter_f32(
+            digest, ptr(a), ptr(b), ptr(output), a.size
+        )
+    elif op_name == "tessera.dct":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        output = np.empty(output_shape, np.float32)
+        rc = lib.tessera_x86_dct_f32(
+            digest, ptr(x), ptr(output), int(np.prod(x.shape[:-1])), x.shape[-1]
+        )
+    elif op_name == "tessera.spectral_conv":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        kernel = np.ascontiguousarray(operands[1], np.float32)
+        output = np.empty(output_shape, np.float32)
+        fft_n = int(contract["child_ffts"][0]["length"])
+        rc = lib.tessera_x86_spectral_conv_f32(
+            digest, ptr(x), x.shape[-1], ptr(kernel), kernel.shape[-1],
+            ptr(output), int(np.prod(x.shape[:-1])), fft_n,
+        )
+    elif op_name == "tessera.stft":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        window = np.ascontiguousarray(operands[1], np.float32)
+        output = np.empty(output_shape, np.complex64)
+        rc = lib.tessera_x86_stft_f32(
+            digest, ptr(x), ptr(window), ptr(output),
+            int(np.prod(x.shape[:-1])), x.shape[-1], contract["window_length"],
+            contract["hop"], contract["frames"],
+        )
+    else:
+        x = np.ascontiguousarray(operands[0], np.complex64)
+        window = np.ascontiguousarray(operands[1], np.float32)
+        output = np.empty(output_shape, np.float32)
+        rc = lib.tessera_x86_istft_f32(
+            digest, ptr(x), ptr(window), ptr(output),
+            int(np.prod(x.shape[:-2])), contract["frames"],
+            contract["window_length"], contract["hop"],
+        )
+    if rc != 0:
+        raise RuntimeError(f"x86 compound spectral execution failed rc={rc}")
+    return output
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -13135,9 +13458,6 @@ def _execute_x86_compiled_lion_backward(
 
     metadata = artifact.metadata or {}
     names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.lion":
-        raise ValueError("x86_lion_bwd_compiled requires one tessera.lion op")
     values = _bind_launch_args(args, names)
     cotangent_names = list(
         metadata.get("out_cotangents") or ["dparam_out", "dmoment_out"]
@@ -13148,7 +13468,25 @@ def _execute_x86_compiled_lion_backward(
     dm = np.ascontiguousarray(_as_numpy(values[cotangent_names[1]]), np.float32)
     if dp.shape != dm.shape:
         raise ValueError("x86 Lion output cotangents must have matching shapes")
-    kwargs = ops[0].get("kwargs") or {}
+    from .compiler.stateful_training import (
+        validate_lion_vjp_state_contract,
+        validate_scheduled_lion_vjp_metadata,
+    )
+
+    if "state_contract" not in metadata:
+        raise ValueError("x86 Lion VJP requires explicit state/buffer lineage")
+    kwargs = dict(metadata["state_contract"].get("numeric") or {})
+    validate_lion_vjp_state_contract(
+        metadata["state_contract"], target="x86", shape=dp.shape, kwargs=kwargs
+    )
+    if "scheduled_training" not in metadata:
+        raise ValueError("x86 Lion VJP requires exact scheduled Tile lineage")
+    validate_scheduled_lion_vjp_metadata(
+        metadata["scheduled_training"],
+        target="x86",
+        shape=dp.shape,
+        state_contract=metadata["state_contract"],
+    )
     outputs = [np.empty_like(dp) for _ in range(3)]
     lib = _load_x86_elementwise()
     if lib is None:
@@ -13282,13 +13620,36 @@ def _execute_x86_compiled_adafactor_backward(
 
     metadata = artifact.metadata or {}
     names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.adafactor":
-        raise ValueError("x86_adafactor_bwd_compiled requires one tessera.adafactor op")
-    operand_names = [str(name) for name in ops[0].get("operands", [])]
     values = _bind_launch_args(args, names)
     cotangent_name = str(metadata.get("out_cotangent", "dy"))
-    kwargs = ops[0].get("kwargs") or {}
+    if "state_contract" not in metadata or "scheduled_training" not in metadata:
+        raise ValueError("x86 Adafactor VJP requires scheduled state lineage")
+    state_contract = metadata["state_contract"]
+    topology = str(metadata["scheduled_training"].get("topology", ""))
+    operand_names = names[:-1]
+    if len(operand_names) != (4 if topology == "factored" else 3):
+        raise ValueError("x86 Adafactor scheduled ABI disagrees with topology")
+    parameter_shape = np.asarray(values[operand_names[0]]).shape
+    kwargs = dict(state_contract.get("numeric") or {})
+    from .compiler.stateful_training import (
+        validate_adafactor_vjp_state_contract,
+        validate_scheduled_adafactor_vjp_metadata,
+    )
+
+    validate_adafactor_vjp_state_contract(
+        state_contract,
+        target="x86",
+        parameter_shape=parameter_shape,
+        topology=topology,
+        kwargs=kwargs,
+    )
+    validate_scheduled_adafactor_vjp_metadata(
+        metadata["scheduled_training"],
+        target="x86",
+        parameter_shape=parameter_shape,
+        topology=topology,
+        state_contract=state_contract,
+    )
     lr = float(kwargs.get("lr", 1e-3))
     beta2 = float(kwargs.get("beta2", 0.999))
     eps = float(kwargs.get("eps", 1e-30))
@@ -18631,14 +18992,26 @@ def _atan2_compute(y: Any, x: Any, atan_exec: Any, np: Any) -> Any:
     # First-quadrant magnitude in [0, pi/2]. Where |x|==0 the ratio is set to 0
     # and the angle forced to pi/2 (vertical) after the device call.
     safe = ax > 0
-    ratio = np.where(safe, ay / np.where(safe, ax, np.float32(1.0)), np.float32(0.0)).astype(np.float32)
+    denominator = np.where(safe, ax, np.float32(1.0))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        ratio = ay / denominator
+    # inf/inf is the diagonal direction, not NaN.
+    ratio = np.where(np.isinf(ax) & np.isinf(ay), np.float32(1.0), ratio)
+    ratio = np.where(safe, ratio, np.float32(0.0)).astype(np.float32)
     core = np.asarray(atan_exec(ratio), np.float32)
     core = np.where(safe, core, np.float32(np.pi / 2.0)).astype(np.float32)
     # Reflect across the y-axis for x<0, then across the x-axis for y<0.
-    res = np.where(x < 0, np.float32(np.pi) - core, core)
-    res = np.where(y < 0, -res, res).astype(np.float32)
-    # numpy convention: atan2(0, 0) == 0 (the |x|==0 path forced pi/2 above).
-    res = np.where((x == 0) & (y == 0), np.float32(0.0), res)
+    x_negative = np.signbit(x)
+    y_negative = np.signbit(y)
+    res = np.where(x_negative, np.float32(np.pi) - core, core)
+    res = np.where(y_negative, -res, res).astype(np.float32)
+    # Preserve all four IEEE signed-zero quadrants at the origin.
+    origin = (x == 0) & (y == 0)
+    signed_zero = np.copysign(np.float32(0.0), y)
+    signed_pi = np.where(y_negative, np.float32(-np.pi), np.float32(np.pi))
+    origin_value = np.where(x_negative, signed_pi, signed_zero)
+    res = np.where(origin, origin_value, res)
+    res = np.where(np.isnan(x) | np.isnan(y), np.float32(np.nan), res)
     return res.astype(np.float32)
 
 
@@ -19002,6 +19375,8 @@ _ROCM_REDUCE_OPS = {
     "tessera.min": "min",
     "tessera.amin": "min",
     "tessera.prod": "prod",
+    "tessera.var": "var",
+    "tessera.std": "std",
 }
 
 
@@ -22956,8 +23331,8 @@ _ROCM_STAT_REDUCE_OPS = ("tessera.var", "tessera.std", "tessera.count_nonzero")
 
 def _execute_rocm_compiled_stat_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` statistical-reduction lane: var / std /
-    count_nonzero over an axis, composed from the warp-shuffle reduce kernel.
-    var = mean(x²) − mean(x)²; std = sqrt(var); count_nonzero = sum(x != 0)."""
+    count_nonzero over an axis. Var/std use the compiler-generated parallel
+    Welford kernel; count_nonzero composes the sum reduction."""
     import numpy as np
 
     metadata = artifact.metadata or {}
@@ -22984,18 +23359,7 @@ def _execute_rocm_compiled_stat_reduce(artifact: RuntimeArtifact, args: Any) -> 
         out = _rocm_reduce(mask, "tessera.sum", axis, keepdims, np)
         return np.rint(out).astype(np.int64)
 
-    mean = _rocm_reduce(x, "tessera.mean", axis, True, np)
-    m2 = _rocm_reduce(x * x, "tessera.mean", axis, True, np)
-    var = np.maximum(m2 - mean * mean, np.float32(0.0))
-    if op_name == "tessera.std":
-        var = _rocm_unary_t(var, "sqrt", np)
-    if not keepdims:
-        if axis is None:
-            var = var.reshape(())
-        else:
-            axes = (axis,) if isinstance(axis, int) else tuple(axis)
-            var = np.squeeze(var, axis=tuple(a if a >= 0 else x.ndim + a for a in axes))
-    return var.astype(np.float32)
+    return _rocm_reduce(x, op_name, axis, keepdims, np).astype(np.float32)
 
 
 _ROCM_STABLE_REDUCE_OPS = ("tessera.logsumexp", "tessera.log_softmax", "tessera.softmax_safe", "tessera.sigmoid_safe")
@@ -23059,18 +23423,18 @@ def _execute_rocm_compiled_stable_reduce(artifact: RuntimeArtifact, args: Any) -
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ROCm spectral (FFT) lane — fft / ifft / rfft / irfft (Spectral PR4). The
-# COMPILER-GENERATED one-thread-per-bin DFT kernel (generate-rocm-dft-kernel)
-# does the transform for ANY length on gfx1151; r2c/c2r pack/unpack + the
-# SpectralPlan scale wrap it (radix-2/Bluestein perf is a follow-up — the plan
-# still records the strategy). complex64/f32. compiler_path="rocm_fft_compiled".
+# ROCm spectral (FFT) lane — fft / ifft / rfft / irfft.  The public compiled
+# package consumes the shipping mixed-radix Stockham/Bluestein target hook on
+# gfx1151.  The compiler-generated O(N^2) DFT below remains an explicit
+# diagnostic/oracle implementation; it is not the advertised runtime lane.
+# r2c/c2r pack/unpack and the SpectralPlan normalization wrap the transform.
+# complex64/f32. compiler_path="rocm_fft_compiled".
 # ─────────────────────────────────────────────────────────────────────────────
 _rocm_dft_hsaco_cache: dict[tuple[str, bool], bytes] = {}
 
 
 def _rocm_dft_rows(rows: Any, inverse: bool, np: Any) -> Any:
-    """Unnormalized DFT of complex64 rows [batch, n] on the gfx1151 DFT kernel.
-    Returns complex64 [batch, n]."""
+    """Diagnostic unnormalized O(N^2) DFT; not the public FFT runtime lane."""
     chip = _rocm_chip()
     directive = (
         "module {\n"
@@ -23130,58 +23494,84 @@ def _rocm_dft_rows(rows: Any, inverse: bool, np: Any) -> Any:
     return out.view(np.complex64).reshape(batch, n)
 
 
+def _rocm_fft_rows(
+    rows: Any, inverse: bool, strategy: str, artifact_digest: str, np: Any
+) -> Any:
+    """Canonical gfx1151 Stockham/Bluestein package over complex64 rows.
+
+    Unlike the candidate-arbiter exploration API, this path fails closed and
+    cannot silently substitute a host reference while reporting native GPU
+    execution.
+    """
+    from .compiler.emit.spectral_candidates import run_rocm_stockham_rows
+
+    if strategy not in {"mixed_radix", "bluestein"}:
+        raise ValueError(f"ROCm FFT Tile package has unsupported strategy {strategy!r}")
+
+    try:
+        return run_rocm_stockham_rows(
+            np.ascontiguousarray(rows, np.complex64),
+            inverse=bool(inverse),
+            artifact_digest=artifact_digest,
+        )
+    except (RuntimeError, ValueError) as exc:
+        raise _RocmCompiledUnavailable(str(exc)) from exc
+
+
 _ROCM_FFT_OPS = ("tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft")
 
 
 def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="rocm"`` spectral lane: fft / ifft / rfft / irfft over any
-    axis length, on the gfx1151 DFT kernel + r2c/c2r pack-unpack. The
-    SpectralPlan owns normalization. complex64/f32."""
+    axis length on the strict gfx1151 Stockham/Bluestein package plus r2c/c2r
+    pack-unpack. The SpectralPlan owns normalization. complex64/f32."""
     import numpy as np
 
-    from .compiler.spectral_plan import plan_fft
+    from .compiler.scheduled_fft import validate_scheduled_fft_metadata
 
     metadata = artifact.metadata or {}
-    arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
-    if len(ops) != 1 or op_name not in _ROCM_FFT_OPS:
+    contract = metadata.get("scheduled_fft")
+    if not isinstance(contract, dict):
+        raise ValueError("rocm_fft_compiled executor requires a scheduled_fft Tile package")
+    op_name = str(contract.get("op_name", ""))
+    if op_name not in _ROCM_FFT_OPS:
         raise ValueError(
-            f"rocm_fft_compiled executor handles one of {_ROCM_FFT_OPS}; got {[o.get('op_name') for o in ops]!r}"
+            f"rocm_fft_compiled executor handles one of {_ROCM_FFT_OPS}; got {op_name!r}"
         )
-    op = ops[0]
-    operand_names = [str(n) for n in op.get("operands", [])]
-    if len(operand_names) < 1:
-        raise ValueError("fft requires one operand")
-    kwargs = op.get("kwargs") or {}
-    axis = int(kwargs.get("axis", -1))
+    input_name = str(contract.get("input_name", ""))
+    arg_names = list(metadata.get("arg_names") or [input_name])
     values = _bind_launch_args(args, arg_names)
-    x = _as_numpy(values[operand_names[0]])
+    x = _as_numpy(values[input_name])
+    validate_scheduled_fft_metadata(contract, target="rocm", input_shape=x.shape)
     nd = x.ndim
     if nd < 1:
         raise ValueError("fft operand must have rank >= 1")
-    ax = axis if axis >= 0 else nd + axis
-
-    inverse = op_name == "tessera.ifft"
-    if op_name == "tessera.irfft":
-        m = int(x.shape[ax])
-        n = int(kwargs.get("n") or 2 * (m - 1))
-    else:
-        n = int(x.shape[ax])
-    mode = {"tessera.rfft": "r2c", "tessera.irfft": "c2r"}.get(op_name, "c2c")
-    plan = plan_fft(n, axis=ax, mode=mode, inverse=inverse or op_name == "tessera.irfft")
+    ax = int(contract["axis"])
+    n = int(contract["length"])
+    m = int(x.shape[ax])
+    inverse = bool(contract["inverse"])
+    strategy = str(contract["strategy"])
+    artifact_digest = str(contract["schedule_digest"])
+    scale = float(contract["scale"])
 
     xm = np.moveaxis(x, ax, -1)
     lead = xm.shape[:-1]
 
     if op_name in ("tessera.fft", "tessera.ifft"):
-        out = _rocm_dft_rows(xm.reshape(-1, n).astype(np.complex64), plan.inverse, np)
-        if plan.scale != 1.0:
-            out = out * np.complex64(plan.scale)
+        out = _rocm_fft_rows(
+            xm.reshape(-1, n), inverse, strategy, artifact_digest, np
+        )
+        # The shipping inverse driver already applies 1/N.  SpectralPlan.scale
+        # describes the scale relative to an unnormalised transform.
+        native_scale = scale * (n if inverse else 1.0)
+        if native_scale != 1.0:
+            out = out * np.complex64(native_scale)
         return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.complex64)
 
     if op_name == "tessera.rfft":
-        full = _rocm_dft_rows(xm.reshape(-1, n).astype(np.complex64), False, np)
+        full = _rocm_fft_rows(
+            xm.reshape(-1, n), False, strategy, artifact_digest, np
+        )
         half = full[:, : n // 2 + 1]
         return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax).astype(np.complex64)
 
@@ -23191,41 +23581,57 @@ def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     full[:, :m] = rows[:, :m]
     if n - m > 0:
         full[:, m:n] = np.conj(rows[:, 1 : n - n // 2])[:, ::-1]
-    out = _rocm_dft_rows(full, True, np).real * np.float32(1.0 / n)
+    out = _rocm_fft_rows(full, True, strategy, artifact_digest, np).real
     return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
 
 
 def _rocm_fftexec(sub_op: str, x: Any, sub_kwargs: dict) -> Any:
+    from .compiler.scheduled_fft import lower_scheduled_fft
+
+    contract = lower_scheduled_fft(
+        target="rocm",
+        op_name=sub_op,
+        input_shape=tuple(int(dim) for dim in x.shape),
+        axis=int(sub_kwargs.get("axis", -1)),
+        n=sub_kwargs.get("n"),
+    ).to_metadata()
     art = RuntimeArtifact(
         metadata={
             "target": "rocm",
             "compiler_path": "rocm_fft_compiled",
             "arg_names": ["x"],
             "output_name": "o",
-            "ops": [{"op_name": sub_op, "result": "o", "operands": ["x"], "kwargs": sub_kwargs}],
+            "scheduled_fft": contract,
         }
     )
     return _execute_rocm_compiled_fft(art, (x,))
 
 
 def _execute_rocm_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
-    """The ``target="rocm"`` composite spectral lane: dct / stft / istft /
-    spectral_conv / spectral_filter, composing the gfx1151 FFT (DFT) lane."""
-    import numpy as np
+    """Consume one content-addressed gfx1151 compound Schedule→Tile package."""
+    from .compiler.emit.spectral_candidates import run_rocm_spectral_composite
 
     metadata = artifact.metadata or {}
-    arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
-    if len(ops) != 1 or op_name not in _SPECTRAL_COMPOSITE_OPS:
+    contract = metadata.get("scheduled_spectral")
+    if not isinstance(contract, dict):
+        raise ValueError(
+            "rocm_spectral_compiled executor requires a scheduled_spectral package"
+        )
+    op_name = str(contract.get("op_name", ""))
+    if op_name not in _SPECTRAL_COMPOSITE_OPS:
         raise ValueError(
             f"rocm_spectral_compiled executor handles one of "
-            f"{_SPECTRAL_COMPOSITE_OPS}; got {[o.get('op_name') for o in ops]!r}"
+            f"{_SPECTRAL_COMPOSITE_OPS}; got {op_name!r}"
         )
-    op = ops[0]
+    arg_names = list(metadata.get("arg_names") or [])
+    if len(arg_names) != len(contract.get("input_shapes") or ()):
+        raise ValueError("ROCm spectral package argument lineage mismatch")
     values = _bind_launch_args(args, arg_names)
-    operands = [_as_numpy(values[str(n)]) for n in op.get("operands", [])]
-    return _spectral_composite(op_name, operands, op.get("kwargs") or {}, _rocm_fftexec, np)
+    operands = [_as_numpy(values[str(name)]) for name in arg_names]
+    try:
+        return run_rocm_spectral_composite(contract, operands)
+    except (RuntimeError, ValueError) as exc:
+        raise _RocmCompiledUnavailable(str(exc)) from exc
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -25069,26 +25475,44 @@ def _execute_rocm_compiled_adafactor_backward(
     artifact: RuntimeArtifact, args: Any
 ) -> Any:
     """Run the compiler-owned Adafactor adjoint package on gfx1151."""
+    import numpy as np
+
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.adafactor":
-        raise ValueError(
-            "rocm_adafactor_bwd_compiled requires one tessera.adafactor op"
-        )
-    names = [str(name) for name in ops[0].get("operands", [])]
-    if len(names) not in {3, 4}:
-        raise ValueError(
-            "ROCm Adafactor backward ABI is [parameter, gradient, moment] or "
-            "[parameter, gradient, row, col]"
-        )
     values = _bind_launch_args(args, arg_names)
     cotangent_name = str(metadata.get("out_cotangent", "dy"))
     if cotangent_name not in values:
         raise ValueError(
             f"ROCm Adafactor backward is missing cotangent {cotangent_name!r}"
         )
-    kwargs = ops[0].get("kwargs") or {}
+    if "state_contract" not in metadata or "scheduled_training" not in metadata:
+        raise ValueError("ROCm Adafactor VJP requires scheduled state lineage")
+    state_contract = metadata["state_contract"]
+    topology = str(metadata["scheduled_training"].get("topology", ""))
+    names = arg_names[:-1]
+    if len(names) != (4 if topology == "factored" else 3):
+        raise ValueError("ROCm Adafactor scheduled ABI disagrees with topology")
+    parameter_shape = np.asarray(_as_numpy(values[names[0]])).shape
+    kwargs = dict(state_contract.get("numeric") or {})
+    from .compiler.stateful_training import (
+        validate_adafactor_vjp_state_contract,
+        validate_scheduled_adafactor_vjp_metadata,
+    )
+
+    validate_adafactor_vjp_state_contract(
+        state_contract,
+        target="rocm_gfx1151",
+        parameter_shape=parameter_shape,
+        topology=topology,
+        kwargs=kwargs,
+    )
+    validate_scheduled_adafactor_vjp_metadata(
+        metadata["scheduled_training"],
+        target="rocm_gfx1151",
+        parameter_shape=parameter_shape,
+        topology=topology,
+        state_contract=state_contract,
+    )
     parameters = dict(
         lr=float(kwargs.get("lr", 1e-3)),
         beta2=float(kwargs.get("beta2", 0.999)),
@@ -25398,9 +25822,6 @@ def _execute_rocm_compiled_lion_backward(
 
     metadata = artifact.metadata or {}
     names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.lion":
-        raise ValueError("ROCm Lion backward requires one tessera.lion op")
     values = _bind_launch_args(args, names)
     cotangent_names = list(
         metadata.get("out_cotangents") or ["dparam_out", "dmoment_out"]
@@ -25415,10 +25836,31 @@ def _execute_rocm_compiled_lion_backward(
         raise ValueError("ROCm Lion output cotangents must have matching shapes")
     shape = cotangents[0].shape
     n = int(cotangents[0].size)
-    kwargs = ops[0].get("kwargs") or {}
+    if "state_contract" not in metadata:
+        raise ValueError("ROCm Lion VJP requires explicit state/buffer lineage")
+    kwargs = dict(metadata["state_contract"].get("numeric") or {})
     lr = float(kwargs.get("lr", 1.0e-4))
     beta2 = float(kwargs.get("beta2", 0.99))
     weight_decay = float(kwargs.get("weight_decay", 0.0))
+    from .compiler.stateful_training import (
+        validate_lion_vjp_state_contract,
+        validate_scheduled_lion_vjp_metadata,
+    )
+
+    validate_lion_vjp_state_contract(
+        metadata["state_contract"],
+        target="rocm_gfx1151",
+        shape=shape,
+        kwargs=kwargs,
+    )
+    if "scheduled_training" not in metadata:
+        raise ValueError("ROCm Lion VJP requires exact scheduled Tile lineage")
+    validate_scheduled_lion_vjp_metadata(
+        metadata["scheduled_training"],
+        target="rocm_gfx1151",
+        shape=shape,
+        state_contract=metadata["state_contract"],
+    )
     chip = _rocm_chip()
     directive = (
         'module {\n  "tessera_rocm.optimizer"() {name = "lion_bwd", '
@@ -26564,32 +27006,50 @@ def _execute_rocm_compiled_deltanet_backward(
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op = ops[0] if len(ops) == 1 else {}
-    op_name = str(op.get("op_name", ""))
-    if op_name not in {
-        "tessera.gated_deltanet",
-        "tessera.kimi_delta_attention",
-        "tessera.modified_delta_attention",
-    }:
+    contract = metadata.get("state_contract")
+    scheduled = metadata.get("scheduled_training")
+    if not isinstance(contract, dict) or not isinstance(scheduled, dict):
         raise ValueError(
-            "rocm_deltanet_bwd_compiled handles gated_deltanet, "
-            "kimi_delta_attention, and modified_delta_attention"
+            "ROCm DeltaNet backward requires typed state and Schedule/Tile lineage"
         )
-    kwargs = op.get("kwargs") or {}
-    if not bool(kwargs.get("causal", True)):
-        raise ValueError("rocm DeltaNet backward is causal-only")
-    modified = op_name == "tessera.modified_delta_attention"
-    erase = bool(kwargs.get("erase", False))
-    has_gate = bool(kwargs.get("has_gate", False))
-    has_beta = bool(kwargs.get("has_beta", False))
-    has_decay = bool(kwargs.get("has_decay", False))
-    chunk_size = int(kwargs.get("chunk_size", 64))
-    parallel_chunks = bool(kwargs.get("parallel_chunks", True))
+    family = str(contract.get("mixer_family", ""))
+    q_shape = tuple(scheduled.get("q_shape", ()))
+    v_shape = tuple(scheduled.get("v_shape", ()))
+    numeric = contract.get("numeric") or {}
+    from .compiler.stateful_training import (
+        validate_scheduled_sequence_mixer_backward_metadata,
+        validate_sequence_mixer_backward_state_contract,
+    )
+    validate_sequence_mixer_backward_state_contract(
+        contract,
+        target="rocm_gfx1151",
+        family=family,
+        q_shape=q_shape,
+        v_shape=v_shape,
+        erase=bool(numeric.get("erase")),
+        chunk_size=int(numeric.get("chunk_size", 0)),
+        parallel_chunks=bool(numeric.get("parallel_chunks")),
+    )
+    validate_scheduled_sequence_mixer_backward_metadata(
+        scheduled,
+        target="rocm_gfx1151",
+        family=family,
+        q_shape=q_shape,
+        v_shape=v_shape,
+        state_contract=contract,
+    )
+    modified = family == "modified_delta_attention"
+    erase = bool(numeric["erase"])
+    has_gate = has_beta = has_decay = True
+    chunk_size = int(numeric["chunk_size"])
+    parallel_chunks = bool(numeric["parallel_chunks"])
     if chunk_size < 1:
         raise ValueError("DeltaNet backward chunk_size must be positive")
     values = _bind_launch_args(args, arg_names)
-    operands = [_as_numpy(values[str(name)]) for name in op.get("operands", [])]
+    operands = [
+        _as_numpy(values[name])
+        for name in ("q", "k", "v", "gate", "beta", "decay", "dy")
+    ]
     need = 4 + has_gate + has_beta + has_decay
     if len(operands) != need:
         raise ValueError(
@@ -26966,25 +27426,50 @@ def _execute_x86_compiled_deltanet_backward(
         )
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op = ops[0] if len(ops) == 1 else {}
-    op_name = str(op.get("op_name", ""))
-    if op_name not in _X86_DELTANET_OPS:
-        raise ValueError("x86 DeltaNet backward requires a DeltaNet-family op")
-    kwargs = op.get("kwargs") or {}
-    if not bool(kwargs.get("causal", True)):
-        raise ValueError("x86 DeltaNet backward is causal-only")
-    erase = bool(kwargs.get("erase", False))
-    modified = _X86_DELTANET_OPS[op_name]
-    has_gate = bool(kwargs.get("has_gate", False))
-    has_beta = bool(kwargs.get("has_beta", False))
-    has_decay = bool(kwargs.get("has_decay", False))
-    chunk_size = int(kwargs.get("chunk_size", 64))
-    workers = int(kwargs.get("workers", os.cpu_count() or 1))
+    contract = metadata.get("state_contract")
+    scheduled = metadata.get("scheduled_training")
+    if not isinstance(contract, dict) or not isinstance(scheduled, dict):
+        raise ValueError(
+            "x86 DeltaNet backward requires typed state and Schedule/Tile lineage"
+        )
+    family = str(contract.get("mixer_family", ""))
+    q_shape = tuple(scheduled.get("q_shape", ()))
+    v_shape = tuple(scheduled.get("v_shape", ()))
+    numeric = contract.get("numeric") or {}
+    from .compiler.stateful_training import (
+        validate_scheduled_sequence_mixer_backward_metadata,
+        validate_sequence_mixer_backward_state_contract,
+    )
+    validate_sequence_mixer_backward_state_contract(
+        contract,
+        target="x86",
+        family=family,
+        q_shape=q_shape,
+        v_shape=v_shape,
+        erase=bool(numeric.get("erase")),
+        chunk_size=int(numeric.get("chunk_size", 0)),
+        parallel_chunks=bool(numeric.get("parallel_chunks")),
+    )
+    validate_scheduled_sequence_mixer_backward_metadata(
+        scheduled,
+        target="x86",
+        family=family,
+        q_shape=q_shape,
+        v_shape=v_shape,
+        state_contract=contract,
+    )
+    erase = bool(numeric["erase"])
+    modified = family == "modified_delta_attention"
+    has_gate = has_beta = has_decay = True
+    chunk_size = int(numeric["chunk_size"])
+    workers = int(metadata.get("workers", os.cpu_count() or 1))
     if chunk_size < 1 or workers < 1:
         raise ValueError("chunk_size and workers must be positive")
     values = _bind_launch_args(args, arg_names)
-    operands = [_as_numpy(values[str(name)]) for name in op.get("operands", [])]
+    operands = [
+        _as_numpy(values[name])
+        for name in ("q", "k", "v", "gate", "beta", "decay", "dy")
+    ]
     need = 4 + has_gate + has_beta + has_decay
     if len(operands) != need:
         raise ValueError(

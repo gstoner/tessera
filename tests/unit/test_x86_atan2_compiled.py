@@ -48,3 +48,17 @@ def test_atan2_axis_and_origin():
     x = np.array([0, 0, 1, -1, 1, -1, -1, 1, 0], np.float32)
     out = np.asarray(rt.launch(_art(rt), (y, x))["output"])
     np.testing.assert_allclose(out, np.arctan2(y, x).astype(np.float32), atol=2e-5)
+
+
+def test_atan2_signed_zero_infinity_and_nan_contract():
+    rt = _rt_or_skip()
+    y = np.array([0.0, -0.0, 0.0, -0.0, np.inf, -np.inf,
+                  np.inf, -np.inf, np.nan, 1.0], np.float32)
+    x = np.array([0.0, 0.0, -0.0, -0.0, np.inf, np.inf,
+                  -np.inf, -np.inf, 1.0, np.nan], np.float32)
+    result = rt.launch(_art(rt), (y, x))
+    assert result["ok"] is True, result.get("reason")
+    out = np.asarray(result["output"], np.float32)
+    expected = np.arctan2(y, x).astype(np.float32)
+    np.testing.assert_allclose(out, expected, atol=1e-6, rtol=0, equal_nan=True)
+    np.testing.assert_array_equal(np.signbit(out[:4]), np.signbit(expected[:4]))

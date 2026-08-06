@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import inspect
 import subprocess
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -37,6 +38,24 @@ from tessera import runtime as rt
 #: braces. Matching the *rendered* form (`{arch=`) is what the first version of
 #: this gate did, and it failed against its own target.
 _PASS_LITERAL = "lower-tile-to-rocm{{arch={chip}}}"
+_REPO = Path(__file__).resolve().parents[2]
+_TESSERA_OPT = _REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
+_GEMM_DIRECTIVE = (
+    'module { "tessera_rocm.wmma_gemm"() {name = "gemm", '
+    'm = 16 : i64, n = 16 : i64, k = 16 : i64, mt = 2 : i64, '
+    'nt = 4 : i64, dtype = "f16"} : () -> () }\n'
+)
+
+
+def _run_opt(pipeline: str, source: str = _GEMM_DIRECTIVE):
+    if not _TESSERA_OPT.is_file():
+        pytest.skip("tessera-opt not built")
+    return subprocess.run(
+        [str(_TESSERA_OPT), "-", f"--pass-pipeline={pipeline}"],
+        input=source,
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_every_wmma_gemm_pipeline_can_lower_tile_mma():
@@ -70,6 +89,65 @@ def test_the_tile_lowering_always_states_its_arch():
     src = inspect.getsource(rt)
     for bad in ('"lower-tile-to-rocm,"', '"lower-tile-to-rocm)"'):
         assert bad not in src, f"tile lowering used without arch=: {bad}"
+
+
+def test_gfx1151_typed_contract_materializes_the_direct_physical_body():
+    """The Tile artifact is real, then its target body has one owner."""
+    generated = _run_opt(
+        "builtin.module(generate-wmma-gemm-kernel{via-tile=true})"
+    )
+    assert generated.returncode == 0, generated.stderr
+    assert "tessera.rocm.typed_gfx11_gemm_contract" in generated.stdout
+    assert generated.stdout.count("tile.fragment_pack") == 24
+    assert generated.stdout.count("tile.mma ") == 32
+    assert generated.stdout.count("tile.fragment_unpack") == 16
+    assert generated.stdout.count("tile.store ") == 16
+
+    for dtype in ("f16", "bf16"):
+        source = _GEMM_DIRECTIVE.replace('dtype = "f16"', f'dtype = "{dtype}"')
+        direct = _run_opt(
+            "builtin.module(generate-wmma-gemm-kernel,"
+            "lower-tile-to-rocm{arch=gfx1151})",
+            source,
+        )
+        typed = _run_opt(
+            "builtin.module(generate-wmma-gemm-kernel{via-tile=true},"
+            "lower-tile-to-rocm{arch=gfx1151})",
+            source,
+        )
+        assert direct.returncode == typed.returncode == 0
+        assert typed.stdout == direct.stdout
+
+
+def test_gfx1151_typed_physical_contract_fails_closed_when_tampered():
+    generated = _run_opt(
+        "builtin.module(generate-wmma-gemm-kernel{via-tile=true})"
+    )
+    assert generated.returncode == 0, generated.stderr
+    tampered = generated.stdout.replace(
+        "tessera.rocm.physical_panel_mt = 2 : i64",
+        "tessera.rocm.physical_panel_mt = 3 : i64",
+        1,
+    )
+    assert tampered != generated.stdout
+    lowered = _run_opt(
+        "builtin.module(lower-tile-to-rocm{arch=gfx1151})", tampered
+    )
+    assert lowered.returncode != 0
+    assert "failed to materialize the shared gfx11 GEMM body" in lowered.stderr
+
+    # Counts and types still agree after swapping one same-typed A fragment;
+    # only exact body identity can detect this valid-looking semantic change.
+    operand_tampered = generated.stdout.replace(
+        "tile.mma %60, %67", "tile.mma %63, %67", 1
+    )
+    assert operand_tampered != generated.stdout
+    lowered = _run_opt(
+        "builtin.module(lower-tile-to-rocm{arch=gfx1151})",
+        operand_tampered,
+    )
+    assert lowered.returncode != 0
+    assert "Tile-body digest mismatch" in lowered.stderr
 
 
 @pytest.mark.skipif(

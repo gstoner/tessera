@@ -273,6 +273,14 @@ def test_adafactor_factored_backward_executes_on_gfx1151():
     row = rng.uniform(0.1, 0.3, size=SHAPE[:-1]).astype(np.float32)
     col = rng.uniform(0.1, 0.3, size=SHAPE[-1]).astype(np.float32)
     dy = rng.normal(size=SHAPE).astype(np.float32)
+    from tessera.compiler.stateful_training import lower_scheduled_adafactor_vjp
+
+    scheduled = lower_scheduled_adafactor_vjp(
+        target="rocm_gfx1151",
+        parameter_shape=SHAPE,
+        topology="factored",
+        kwargs={"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+    )
     artifact = rt.RuntimeArtifact(metadata={
         "target": "rocm",
         "compiler_path": "rocm_adafactor_bwd_compiled",
@@ -280,12 +288,8 @@ def test_adafactor_factored_backward_executes_on_gfx1151():
         "execution_kind": "native_gpu",
         "arg_names": ["p", "g", "row", "col", "dy"],
         "out_cotangent": "dy",
-        "ops": [{
-            "op_name": "tessera.adafactor",
-            "result": "o",
-            "operands": ["p", "g", "row", "col"],
-            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
-        }],
+        "state_contract": dict(scheduled.state_contract),
+        "scheduled_training": scheduled.metadata(),
     })
     result = rt.launch(artifact, (p, g, row, col, dy))
     assert result["ok"] is True, result.get("reason")
@@ -316,6 +320,14 @@ def test_adafactor_full_backward_executes_on_gfx1151():
     g = rng.normal(scale=0.2, size=p.shape).astype(np.float32)
     moment = rng.uniform(0.1, 0.3, size=p.shape).astype(np.float32)
     dy = rng.normal(size=p.shape).astype(np.float32)
+    from tessera.compiler.stateful_training import lower_scheduled_adafactor_vjp
+
+    scheduled = lower_scheduled_adafactor_vjp(
+        target="rocm_gfx1151",
+        parameter_shape=p.shape,
+        topology="full",
+        kwargs={"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+    )
     artifact = rt.RuntimeArtifact(metadata={
         "target": "rocm",
         "compiler_path": "rocm_adafactor_bwd_compiled",
@@ -323,12 +335,8 @@ def test_adafactor_full_backward_executes_on_gfx1151():
         "execution_kind": "native_gpu",
         "arg_names": ["p", "g", "moment", "dy"],
         "out_cotangent": "dy",
-        "ops": [{
-            "op_name": "tessera.adafactor",
-            "result": "o",
-            "operands": ["p", "g", "moment"],
-            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
-        }],
+        "state_contract": dict(scheduled.state_contract),
+        "scheduled_training": scheduled.metadata(),
     })
     result = rt.launch(artifact, (p, g, moment, dy))
     assert result["ok"] is True, result.get("reason")

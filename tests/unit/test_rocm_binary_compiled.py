@@ -50,6 +50,10 @@ def _s_div(rng, shp):  # divisor away from zero (both signs)
 def _s_pow(rng, shp):  # positive base, modest exponent
     return _POS(rng, shp), (_ANY(rng, shp) * 0.5)
 def _s_minmax(rng, shp):  return _ANY(rng, shp), _ANY(rng, shp)
+def _s_mod(rng, shp):
+    a = _ANY(rng, shp) * np.float32(3.0)
+    b = _POS(rng, shp) * rng.choice([-1.0, 1.0], size=shp).astype(np.float32)
+    return a, b
 
 
 _CASES = {
@@ -58,6 +62,8 @@ _CASES = {
     "tessera.pow": (lambda a, b: np.power(a, b), _s_pow),
     "tessera.maximum": (np.maximum, _s_minmax),
     "tessera.minimum": (np.minimum, _s_minmax),
+    "tessera.mod": (np.mod, _s_mod),
+    "tessera.floor_div": (np.floor_divide, _s_mod),
 }
 
 
@@ -97,6 +103,48 @@ def test_binary_max_min_nan_propagating():
         np.asarray(mn["output"]).astype(np.float32), np.minimum(a, b))
 
 
+@pytest.mark.parametrize("op_name,reference", [
+    ("tessera.pow", np.power),
+    ("tessera.mod", np.mod),
+    ("tessera.floor_div", np.floor_divide),
+])
+def test_binary_difficult_domain_contract(op_name, reference):
+    rt = _binary_or_skip()
+    if op_name == "tessera.pow":
+        a = np.array([-2, -2, -0.0, -0.0, 0.0, 2.0, np.inf, np.nan], np.float32)
+        b = np.array([0.5, 3.0, 3.0, -3.0, -1.0, np.inf, -1.0, 2.0], np.float32)
+    else:
+        a = np.array([-5, -5, 5, 5, -0.0, 0.0, np.inf, 1.0, np.nan], np.float32)
+        b = np.array([2, -2, 2, -2, 2, -2, 2, np.inf, 2], np.float32)
+    with np.errstate(all="ignore"):
+        expected = reference(a, b).astype(np.float32)
+    result = rt.launch(_artifact(rt, op_name), (a, b))
+    assert result["ok"] is True, result.get("reason")
+    out = np.asarray(result["output"], np.float32)
+    np.testing.assert_array_equal(np.isnan(out), np.isnan(expected))
+    np.testing.assert_array_equal(np.isposinf(out), np.isposinf(expected))
+    np.testing.assert_array_equal(np.isneginf(out), np.isneginf(expected))
+    finite = np.isfinite(expected)
+    np.testing.assert_allclose(out[finite], expected[finite], atol=2e-5, rtol=2e-5)
+    zeros = finite & (expected == 0)
+    np.testing.assert_array_equal(np.signbit(out[zeros]), np.signbit(expected[zeros]))
+
+
+@pytest.mark.parametrize("op_name,reference", [
+    ("tessera.maximum", np.maximum), ("tessera.minimum", np.minimum),
+])
+def test_binary_minmax_signed_zero_contract(op_name, reference):
+    rt = _binary_or_skip()
+    a = np.array([0.0, -0.0, 0.0, -0.0, np.nan, 1.0], np.float32)
+    b = np.array([-0.0, 0.0, 0.0, -0.0, 1.0, np.nan], np.float32)
+    result = rt.launch(_artifact(rt, op_name), (a, b))
+    assert result["ok"] is True, result.get("reason")
+    out = np.asarray(result["output"], np.float32)
+    expected = reference(a, b).astype(np.float32)
+    np.testing.assert_array_equal(np.isnan(out), np.isnan(expected))
+    np.testing.assert_array_equal(np.signbit(out[:4]), np.signbit(expected[:4]))
+
+
 def test_binary_shape_mismatch_rejected():
     from tessera import runtime as rt
     a = np.zeros((4, 8), np.float32)
@@ -115,7 +163,8 @@ def test_binary_unknown_op_rejected():
 
 # ── GPU-free codegen gate (needs only tessera-opt, not a GPU) ────────────────
 
-_KINDS = ["sub", "div", "pow", "maximum", "minimum"]
+_KINDS = ["sub", "div", "pow", "maximum", "minimum", "add", "mul", "mod",
+          "floor_div"]
 
 
 def _opt(directive, *passes):

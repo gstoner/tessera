@@ -550,6 +550,12 @@ def Tile_ViewOp : Tile_Op<"view", [Pure]> {
     Arity is checked by `ViewOp::verify`, not by each consumer -- a shared-IR
     op whose accepted shape is decided per backend makes the same valid Tile IR
     compile on one target and fail on another.
+
+    An optional `tile.linear_base` unit attribute inserts a precomputed linear
+    origin immediately after `base`. The logical row/column origins remain
+    present for bounds checks, while fragment materializers may reuse the
+    supplied address origin instead of reconstructing `row * leading_dim +
+    column` independently for every sibling fragment.
   }];
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs Tile_TileValueType:$result);
@@ -666,6 +672,30 @@ def Tile_ReduceKernelOp : Tile_Op<"reduce_kernel"> {
   let hasVerifier = 1;
 }
 
+// Launch-level spectral package. Inputs are source/destination pointers plus
+// i64 batch and transform length. The attributes bind the full architecture-
+// owned plan; a physical consumer must not refactor N or select another
+// algorithm after this boundary.
+def Tile_FFTKernelOp : Tile_Op<"fft_kernel"> {
+  let summary = "Launch-level typed FFT package with fixed physical plan";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level compound spectral package. The variadic operands are the
+// source pointers, destination pointer, and i64 workspace size. All framing,
+// padding, child-FFT identities, numeric policy, and mutation ownership are
+// fixed before this boundary.
+def Tile_SpectralProgramKernelOp : Tile_Op<"spectral_program_kernel"> {
+  let summary = "Launch-level compound spectral package with fixed child FFTs";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Launch-level flat elementwise envelope. Inputs are one or two source
 // pointers, destination, and the flattened element count. Family and kind are
 // semantic strings; storage/output_storage make mixed predicate output
@@ -774,6 +804,18 @@ def Tile_AttentionKernelOp : Tile_Op<"attention_kernel"> {
 // loops but do not redefine their ownership or ordering.
 def Tile_AttentionBackwardKernelOp : Tile_Op<"attention_backward_kernel"> {
   let summary = "Launch-level deterministic scaled dot-product attention VJP";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level stateful-training envelope. Lion VJP uses five input pointers
+// (p/g/m/dp_out/dm_out), three fresh output pointers, and an i64 element count.
+// The content hash binds the complete logical-buffer lineage; mutation and
+// aliasing are explicit rather than inferred from pointer equality.
+def Tile_TrainingKernelOp : Tile_Op<"training_kernel"> {
+  let summary = "Launch-level typed stateful training program";
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs);
   let assemblyFormat = "$inputs attr-dict `:` type($inputs)";

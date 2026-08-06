@@ -83,13 +83,23 @@ def _artifact(rt, op_name, operands, kwargs):
 
 
 def _backward_artifact(rt, op_name, operands, kwargs):
-    names = [f"x{i}" for i in range(len(operands))]
+    from tessera.compiler.stateful_training import (
+        lower_scheduled_sequence_mixer_backward,
+    )
+    family = op_name.removeprefix("tessera.")
+    scheduled = lower_scheduled_sequence_mixer_backward(
+        target="rocm_gfx1151", family=family,
+        q_shape=operands[0].shape, v_shape=operands[2].shape,
+        erase=bool(kwargs.get("erase", False)),
+        chunk_size=int(kwargs.get("chunk_size", 64)), parallel_chunks=True,
+    )
+    names = ["q", "k", "v", "gate", "beta", "decay", "dy"]
     return rt.RuntimeArtifact(metadata={
         "target": "rocm", "compiler_path": "rocm_deltanet_bwd_compiled",
         "executable": True, "execution_kind": "native_gpu",
         "arg_names": names, "output_name": "grads",
-        "ops": [{"op_name": op_name, "result": "grads",
-                 "operands": names, "kwargs": kwargs}],
+        "state_contract": dict(scheduled.state_contract),
+        "scheduled_training": scheduled.metadata(),
     }), tuple(operands)
 
 

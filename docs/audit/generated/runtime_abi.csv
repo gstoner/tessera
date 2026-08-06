@@ -757,6 +757,7 @@ x86,tessera_x86_base_softmax_f32,base_softmax,f32,src/compiler/codegen/tessera_x
 x86,tessera_x86_bitonic_sort_kv_f32,bitonic_sort_kv,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_sort_f32.cpp
 x86,tessera_x86_cholesky_f32,cholesky,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_linalg_f32.cpp
 x86,tessera_x86_clifford_bilinear_f32,clifford_bilinear,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_clifford_f32.cpp
+x86,tessera_x86_dct_f32,dct,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_deltanet_bwd_f32,deltanet_bwd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_deltanet_f32.cpp
 x86,tessera_x86_deltanet_f32,deltanet,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_deltanet_f32.cpp
 x86,tessera_x86_ebm_affine_langevin_f32,ebm_affine_langevin,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_ebm_langevin_f32.cpp
@@ -768,11 +769,14 @@ x86,tessera_x86_ebm_partition_exact_f32,ebm_partition_exact,f32,src/compiler/cod
 x86,tessera_x86_epilogue_bias_fp32,epilogue_bias_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_epilogue_bias_gelu_fp32,epilogue_bias_gelu_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_fft_c2c_f32,fft_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
+x86,tessera_x86_fft_mixed_c2c_f32,fft_mixed_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
+x86,tessera_x86_fft_six_step_c2c_f32,fft_six_step_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_flash_attn_bwd_f32,flash_attn_bwd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_flash_attn_f32.cpp
 x86,tessera_x86_flash_attn_ext_f32,flash_attn_ext,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_flash_attn_f32.cpp
 x86,tessera_x86_flash_attn_ext_lse_f32,flash_attn_ext_lse,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_flash_attn_f32.cpp
 x86,tessera_x86_flash_attn_f32,flash_attn,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_flash_attn_f32.cpp
 x86,tessera_x86_gather_f32,gather,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_gather_f32.cpp
+x86,tessera_x86_istft_f32,istft,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_kv_cache_append_f32,kv_cache_append,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
 x86,tessera_x86_kv_cache_prune_f32,kv_cache_prune,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
 x86,tessera_x86_kv_cache_read_f32,kv_cache_read,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/kv_cache_f32.cpp
@@ -802,5 +806,9 @@ x86,tessera_x86_reference_unary_f32,reference_unary,f32,src/compiler/codegen/tes
 x86,tessera_x86_reference_where_f32,reference_where,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_where_f32.cpp
 x86,tessera_x86_scatter_f32,scatter,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_scatter_f32.cpp
 x86,tessera_x86_selective_ssm_bwd_f32,selective_ssm_bwd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_ssm_bwd_f32.cpp
+x86,tessera_x86_spectral_composite_package_abi,spectral_composite_package_abi,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
+x86,tessera_x86_spectral_conv_f32,spectral_conv,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
+x86,tessera_x86_spectral_filter_f32,spectral_filter,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
+x86,tessera_x86_stft_f32,stft,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_svd_f32,svd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_svd_f32.cpp
 x86,tessera_x86_tri_solve_f32,tri_solve,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_linalg_f32.cpp

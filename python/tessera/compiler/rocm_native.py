@@ -16,7 +16,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from .attention_contract import plan_attention_backward_workspace
 from .graph_ir import GraphIRModule
@@ -36,6 +36,15 @@ from .scheduled_matmul import ScheduledMatmulArtifact
 from .scheduled_kernel import ScheduledKernelArtifact
 from .scheduled_attention import ScheduledAttentionArtifact
 
+if TYPE_CHECKING:  # noqa: SIM108 -- see below
+    # `scheduled_attention_backward` imports from THIS module, so importing
+    # it at runtime is a cycle. Under `from __future__ import annotations`
+    # the annotations below are strings, so mypy resolves the type without
+    # one. Typing these parameters `object` instead cost 36 spurious
+    # `attr-defined` errors and hid every real attribute typo behind them.
+    from .scheduled_attention_backward import (
+        ScheduledAttentionBackwardArtifact,
+    )
 
 GFX1151_SOFTMAX_F16_ABI = "tessera.rocm.softmax.x_o_rows_k.f16.v1"
 GFX1151_SOFTMAX_F32_ABI = "tessera.rocm.softmax.x_o_rows_k.f32.v1"
@@ -2138,7 +2147,7 @@ def package_attention_backward(
     module: GraphIRModule,
     *,
     pipeline_name: str,
-    _scheduled_artifact: object | None = None,
+    _scheduled_artifact: ScheduledAttentionBackwardArtifact | None = None,
 ) -> ROCMNativeProgram:
     """Package the gfx1151 forward-recompute + split/reduced VJP program."""
     contract = _attention_backward_contract(module)
@@ -2537,7 +2546,7 @@ def package_attention_backward(
 
 
 def package_scheduled_attention_backward(
-    artifact: object,
+    artifact: ScheduledAttentionBackwardArtifact,
     *,
     pipeline_name: str,
 ) -> ROCMNativeProgram:

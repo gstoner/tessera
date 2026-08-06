@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -445,5 +446,222 @@ extern "C" int tessera_x86_fft_six_step_c2c_f32(float* data, int64_t batch,
                         output[2 * destination + 1] = second[2 * source + 1];
                     }
     }
+    return 0;
+}
+
+namespace {
+
+std::vector<float>& spectral_workspace(const char* digest, const char* slot,
+                                       size_t floats) {
+    thread_local std::unordered_map<std::string, std::vector<float>> cache;
+    std::string key = std::string(digest ? digest : "") + ":" + slot;
+    if (cache.size() >= 32 && cache.find(key) == cache.end()) cache.erase(cache.begin());
+    std::vector<float>& value = cache[key];
+    if (value.size() < floats) value.resize(floats);
+    return value;
+}
+
+bool valid_digest(const char* digest) {
+    if (!digest || std::strlen(digest) != 64) return false;
+    for (const char* at = digest; *at; ++at)
+        if (!((*at >= '0' && *at <= '9') || (*at >= 'a' && *at <= 'f')))
+            return false;
+    return true;
+}
+
+void scale_complex(float* data, int64_t count, float scale) {
+    int64_t i = 0;
+    const __m512 factor = _mm512_set1_ps(scale);
+    for (; i + 16 <= 2 * count; i += 16)
+        _mm512_storeu_ps(data + i, _mm512_mul_ps(_mm512_loadu_ps(data + i), factor));
+    for (; i < 2 * count; ++i) data[i] *= scale;
+}
+
+int execute_any_fft(float* data, int64_t batch, int64_t n, bool inverse,
+                    const char* digest) {
+    if (batch <= 0 || n <= 0) return 1;
+    if (n == 1) return 0;
+    if ((n & (n - 1)) == 0) {
+        tessera_x86_fft_c2c_f32(data, batch, n, inverse ? 1 : 0);
+        if (inverse) scale_complex(data, batch * n, 1.0f / static_cast<float>(n));
+        return 0;
+    }
+    if (tessera_x86_fft_mixed_c2c_f32(data, batch, n, inverse ? 1 : 0) == 0) {
+        if (inverse) scale_complex(data, batch * n, 1.0f / static_cast<float>(n));
+        return 0;
+    }
+
+    int64_t m = 1;
+    while (m < 2 * n - 1) m <<= 1;
+    std::vector<float>& first = spectral_workspace(digest, "bluestein_a",
+                                                   static_cast<size_t>(2 * m));
+    std::vector<float>& second = spectral_workspace(digest, "bluestein_b",
+                                                    static_cast<size_t>(2 * m));
+    const double sign = inverse ? 1.0 : -1.0;
+    for (int64_t row = 0; row < batch; ++row) {
+        std::fill(first.begin(), first.begin() + 2 * m, 0.0f);
+        std::fill(second.begin(), second.begin() + 2 * m, 0.0f);
+        float* source = data + 2 * row * n;
+        for (int64_t k = 0; k < n; ++k) {
+            const double angle = sign * M_PI * static_cast<double>(k) * k / n;
+            const float cr = static_cast<float>(std::cos(angle));
+            const float ci = static_cast<float>(std::sin(angle));
+            const float xr = source[2 * k], xi = source[2 * k + 1];
+            first[2 * k] = xr * cr - xi * ci;
+            first[2 * k + 1] = xr * ci + xi * cr;
+            second[2 * k] = cr;
+            second[2 * k + 1] = -ci;
+            if (k) {
+                second[2 * (m - k)] = cr;
+                second[2 * (m - k) + 1] = -ci;
+            }
+        }
+        tessera_x86_fft_c2c_f32(first.data(), 1, m, 0);
+        tessera_x86_fft_c2c_f32(second.data(), 1, m, 0);
+        for (int64_t k = 0; k < m; ++k) {
+            const float ar = first[2 * k], ai = first[2 * k + 1];
+            const float br = second[2 * k], bi = second[2 * k + 1];
+            first[2 * k] = ar * br - ai * bi;
+            first[2 * k + 1] = ar * bi + ai * br;
+        }
+        tessera_x86_fft_c2c_f32(first.data(), 1, m, 1);
+        const float convolutionScale = 1.0f / static_cast<float>(m);
+        const float transformScale = inverse ? 1.0f / static_cast<float>(n) : 1.0f;
+        for (int64_t k = 0; k < n; ++k) {
+            const double angle = sign * M_PI * static_cast<double>(k) * k / n;
+            const float cr = static_cast<float>(std::cos(angle));
+            const float ci = static_cast<float>(std::sin(angle));
+            const float xr = first[2 * k] * convolutionScale;
+            const float xi = first[2 * k + 1] * convolutionScale;
+            source[2 * k] = (xr * cr - xi * ci) * transformScale;
+            source[2 * k + 1] = (xr * ci + xi * cr) * transformScale;
+        }
+    }
+    return 0;
+}
+
+}  // namespace
+
+extern "C" const char* tessera_x86_spectral_composite_package_abi() {
+    return "tessera.x86.spectral_composite.v1";
+}
+
+extern "C" int tessera_x86_spectral_filter_f32(
+    const char* digest, const float* a, const float* b, float* output,
+    int64_t elements) {
+    if (!valid_digest(digest) || !a || !b || !output || elements <= 0) return 1;
+    for (int64_t i = 0; i < elements; ++i) {
+        const float ar = a[2 * i], ai = a[2 * i + 1];
+        const float br = b[2 * i], bi = b[2 * i + 1];
+        output[2 * i] = ar * br - ai * bi;
+        output[2 * i + 1] = ar * bi + ai * br;
+    }
+    return 0;
+}
+
+extern "C" int tessera_x86_dct_f32(const char* digest, const float* input,
+                                    float* output, int64_t batch, int64_t n) {
+    if (!valid_digest(digest) || !input || !output || batch <= 0 || n <= 0) return 1;
+    std::vector<float>& mirrored = spectral_workspace(
+        digest, "dct", static_cast<size_t>(4 * batch * n));
+    for (int64_t row = 0; row < batch; ++row)
+        for (int64_t column = 0; column < 2 * n; ++column) {
+            const int64_t source = column < n ? column : 2 * n - 1 - column;
+            mirrored[2 * (row * 2 * n + column)] = input[row * n + source];
+            mirrored[2 * (row * 2 * n + column) + 1] = 0.0f;
+        }
+    int rc = execute_any_fft(mirrored.data(), batch, 2 * n, false, digest);
+    if (rc) return rc;
+    for (int64_t row = 0; row < batch; ++row)
+        for (int64_t column = 0; column < n; ++column)
+            output[row * n + column] = mirrored[2 * (row * 2 * n + column)];
+    return 0;
+}
+
+extern "C" int tessera_x86_spectral_conv_f32(
+    const char* digest, const float* input, int64_t input_n,
+    const float* kernel, int64_t kernel_n, float* output, int64_t batch,
+    int64_t fft_n) {
+    const int64_t output_n = input_n + kernel_n - 1;
+    if (!valid_digest(digest) || !input || !kernel || !output || batch <= 0 ||
+        input_n <= 0 || kernel_n <= 0 || fft_n < output_n) return 1;
+    const size_t floats = static_cast<size_t>(2 * batch * fft_n);
+    std::vector<float>& x = spectral_workspace(digest, "conv_x", floats);
+    std::vector<float>& w = spectral_workspace(digest, "conv_w", floats);
+    std::fill(x.begin(), x.begin() + floats, 0.0f);
+    std::fill(w.begin(), w.begin() + floats, 0.0f);
+    for (int64_t row = 0; row < batch; ++row) {
+        for (int64_t i = 0; i < input_n; ++i) x[2 * (row * fft_n + i)] = input[row * input_n + i];
+        for (int64_t i = 0; i < kernel_n; ++i) w[2 * (row * fft_n + i)] = kernel[row * kernel_n + i];
+    }
+    if (execute_any_fft(x.data(), batch, fft_n, false, digest) ||
+        execute_any_fft(w.data(), batch, fft_n, false, digest)) return 2;
+    for (int64_t i = 0; i < batch * fft_n; ++i) {
+        const float ar = x[2 * i], ai = x[2 * i + 1];
+        const float br = w[2 * i], bi = w[2 * i + 1];
+        x[2 * i] = ar * br - ai * bi;
+        x[2 * i + 1] = ar * bi + ai * br;
+    }
+    if (execute_any_fft(x.data(), batch, fft_n, true, digest)) return 3;
+    for (int64_t row = 0; row < batch; ++row)
+        for (int64_t i = 0; i < output_n; ++i)
+            output[row * output_n + i] = x[2 * (row * fft_n + i)];
+    return 0;
+}
+
+extern "C" int tessera_x86_stft_f32(
+    const char* digest, const float* input, const float* window, float* output,
+    int64_t batch, int64_t samples, int64_t win, int64_t hop, int64_t frames) {
+    if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
+        samples <= 0 || win <= 0 || hop <= 0 || frames <= 0) return 1;
+    const int64_t rows = batch * frames, bins = win / 2 + 1;
+    std::vector<float>& full = spectral_workspace(
+        digest, "stft", static_cast<size_t>(2 * rows * win));
+    for (int64_t row = 0; row < batch; ++row)
+        for (int64_t frame = 0; frame < frames; ++frame)
+            for (int64_t i = 0; i < win; ++i) {
+                const int64_t at = (row * frames + frame) * win + i;
+                full[2 * at] = input[row * samples + frame * hop + i] * window[i];
+                full[2 * at + 1] = 0.0f;
+            }
+    if (execute_any_fft(full.data(), rows, win, false, digest)) return 2;
+    for (int64_t row = 0; row < rows; ++row)
+        std::memcpy(output + 2 * row * bins, full.data() + 2 * row * win,
+                    static_cast<size_t>(2 * bins) * sizeof(float));
+    return 0;
+}
+
+extern "C" int tessera_x86_istft_f32(
+    const char* digest, const float* input, const float* window, float* output,
+    int64_t batch, int64_t frames, int64_t win, int64_t hop) {
+    if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
+        frames <= 0 || win <= 0 || hop <= 0) return 1;
+    const int64_t rows = batch * frames, bins = win / 2 + 1;
+    const int64_t samples = (frames - 1) * hop + win;
+    std::vector<float>& full = spectral_workspace(
+        digest, "istft", static_cast<size_t>(2 * rows * win));
+    for (int64_t row = 0; row < rows; ++row) {
+        for (int64_t i = 0; i < bins; ++i) {
+            full[2 * (row * win + i)] = input[2 * (row * bins + i)];
+            full[2 * (row * win + i) + 1] = input[2 * (row * bins + i) + 1];
+        }
+        for (int64_t i = bins; i < win; ++i) {
+            full[2 * (row * win + i)] = input[2 * (row * bins + win - i)];
+            full[2 * (row * win + i) + 1] = -input[2 * (row * bins + win - i) + 1];
+        }
+    }
+    if (execute_any_fft(full.data(), rows, win, true, digest)) return 2;
+    for (int64_t row = 0; row < batch; ++row)
+        for (int64_t sample = 0; sample < samples; ++sample) {
+            float sum = 0.0f, weight = 0.0f;
+            for (int64_t frame = 0; frame < frames; ++frame) {
+                const int64_t local = sample - frame * hop;
+                if (local < 0 || local >= win) continue;
+                const float w = window[local];
+                sum += full[2 * ((row * frames + frame) * win + local)] * w;
+                weight += w * w;
+            }
+            output[row * samples + sample] = sum / std::max(weight, 1.0e-12f);
+        }
     return 0;
 }

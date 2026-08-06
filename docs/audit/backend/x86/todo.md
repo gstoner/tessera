@@ -9,13 +9,17 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
-Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **ROCm-only physical
-package; x86 follow-up required at the shared compound-artifact boundary.**
-The new metadata schema binds child FFT digests and complete spectral program
-policy, but the native HIP helper ABI and device workspace do not transfer to
-AVX-512. x86 retains its host-composed composite route until it owns a matching
-prebuilt compound consumer and Zen 5 evidence. No x86 capability is promoted
-by gfx1151 results.
+Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared typed carrier and
+x86/Zen 5 physical consumer complete.** `tessera.scheduled_spectral.v2`
+materializes one verified `schedule.spectral_program` →
+`tile.spectral_program_kernel` edge and binds child FFT digests plus the full
+compound policy. The native AVX-512 package now owns DCT mirroring,
+padding/cropping, framing/windowing, half-spectrum expansion/compaction,
+complex multiplication, deterministic overlap-add, and a bounded thread-local
+digest-keyed workspace; runtime no longer reconstructs these programs with
+host NumPy. Exact Zen 5 aligned, ragged, and prime/Bluestein cases agree with
+NumPy. This is architecture-owned evidence and does not inherit gfx1151
+performance or scheduling choices.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **shared atan2 semantic
 fix applies; ROCm physical kernels are not applicable.** Shared quadrant logic

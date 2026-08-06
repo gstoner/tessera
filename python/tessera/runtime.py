@@ -10366,6 +10366,19 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_fft_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
         "tessera_x86_fft_mixed_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
         "tessera_x86_fft_six_step_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
+        "tessera_x86_spectral_filter_f32": [
+            ctypes.c_char_p, c_f32, c_f32, c_f32, i64
+        ],
+        "tessera_x86_dct_f32": [ctypes.c_char_p, c_f32, c_f32, i64, i64],
+        "tessera_x86_spectral_conv_f32": [
+            ctypes.c_char_p, c_f32, i64, c_f32, i64, c_f32, i64, i64
+        ],
+        "tessera_x86_stft_f32": [
+            ctypes.c_char_p, c_f32, c_f32, c_f32, i64, i64, i64, i64, i64
+        ],
+        "tessera_x86_istft_f32": [
+            ctypes.c_char_p, c_f32, c_f32, c_f32, i64, i64, i64, i64
+        ],
         "tessera_x86_avx512_spmm_csr_f32": [c_i32, c_i32, c_f32, c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_sddmm_f32": [c_f32, c_f32, c_f32, i64, i64, i64, c_f32],
         "tessera_x86_avx512_selective_ssm_f32": [c_f32, c_f32, c_f32, c_f32, c_f32, i64, i64, i64, i64, c_f32, c_f32],
@@ -10430,6 +10443,11 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
     for sym in (
         "tessera_x86_fft_mixed_c2c_f32",
         "tessera_x86_fft_six_step_c2c_f32",
+        "tessera_x86_spectral_filter_f32",
+        "tessera_x86_dct_f32",
+        "tessera_x86_spectral_conv_f32",
+        "tessera_x86_stft_f32",
+        "tessera_x86_istft_f32",
         "tessera_x86_kv_cache_append_f32",
         "tessera_x86_kv_cache_read_f32",
         "tessera_x86_kv_cache_prune_f32",
@@ -10437,6 +10455,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         fn = getattr(lib, sym, None)
         if fn is not None:
             fn.restype = ctypes.c_int
+    package_abi = getattr(lib, "tessera_x86_spectral_composite_package_abi", None)
+    if package_abi is not None:
+        package_abi.argtypes = []
+        package_abi.restype = ctypes.c_char_p
     _x86_elementwise_runtime = lib
     return lib
 
@@ -12938,23 +12960,83 @@ def _x86_fftexec(sub_op: str, x: Any, sub_kwargs: dict) -> Any:
 
 
 def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
-    """The ``target="x86"`` composite spectral lane: dct / stft / istft /
-    spectral_conv / spectral_filter, composing the x86 FFT lane."""
+    """Consume one exact compound Schedule→Tile artifact in the x86 package."""
     import numpy as np
+    from .compiler.scheduled_spectral import validate_scheduled_spectral_metadata
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
-    if len(ops) != 1 or op_name not in _SPECTRAL_COMPOSITE_OPS:
+    contract = metadata.get("scheduled_spectral")
+    if not isinstance(contract, dict):
         raise ValueError(
-            f"x86_spectral_compiled executor handles one of "
-            f"{_SPECTRAL_COMPOSITE_OPS}; got {[o.get('op_name') for o in ops]!r}"
+            "x86_spectral_compiled executor requires a scheduled_spectral Tile package"
         )
-    op = ops[0]
+    op_name = str(contract.get("op_name", ""))
+    if op_name not in _SPECTRAL_COMPOSITE_OPS:
+        raise ValueError(
+            f"x86_spectral_compiled executor handles one of {_SPECTRAL_COMPOSITE_OPS}; "
+            f"got {op_name!r}"
+        )
     values = _bind_launch_args(args, arg_names)
-    operands = [_as_numpy(values[str(n)]) for n in op.get("operands", [])]
-    return _spectral_composite(op_name, operands, op.get("kwargs") or {}, _x86_fftexec, np)
+    operands = [np.asarray(_as_numpy(values[name])) for name in arg_names]
+    validate_scheduled_spectral_metadata(
+        contract, input_shapes=[value.shape for value in operands]
+    )
+    lib = _load_x86_elementwise()
+    if lib is None or not hasattr(lib, "tessera_x86_spectral_composite_package_abi"):
+        raise RuntimeError("x86 compound spectral package is unavailable")
+    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v1":
+        raise RuntimeError("x86 compound spectral package ABI mismatch")
+    digest = str(contract["schedule_digest"]).encode("ascii")
+    output_shape = tuple(int(dim) for dim in contract["output_shape"])
+    pointer = ctypes.POINTER(ctypes.c_float)
+
+    def ptr(value: Any) -> Any:
+        return value.ctypes.data_as(pointer)
+
+    if op_name == "tessera.spectral_filter":
+        a = np.ascontiguousarray(operands[0], np.complex64)
+        b = np.ascontiguousarray(operands[1], np.complex64)
+        output = np.empty(output_shape, np.complex64)
+        rc = lib.tessera_x86_spectral_filter_f32(
+            digest, ptr(a), ptr(b), ptr(output), a.size
+        )
+    elif op_name == "tessera.dct":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        output = np.empty(output_shape, np.float32)
+        rc = lib.tessera_x86_dct_f32(
+            digest, ptr(x), ptr(output), int(np.prod(x.shape[:-1])), x.shape[-1]
+        )
+    elif op_name == "tessera.spectral_conv":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        kernel = np.ascontiguousarray(operands[1], np.float32)
+        output = np.empty(output_shape, np.float32)
+        fft_n = int(contract["child_ffts"][0]["length"])
+        rc = lib.tessera_x86_spectral_conv_f32(
+            digest, ptr(x), x.shape[-1], ptr(kernel), kernel.shape[-1],
+            ptr(output), int(np.prod(x.shape[:-1])), fft_n,
+        )
+    elif op_name == "tessera.stft":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        window = np.ascontiguousarray(operands[1], np.float32)
+        output = np.empty(output_shape, np.complex64)
+        rc = lib.tessera_x86_stft_f32(
+            digest, ptr(x), ptr(window), ptr(output),
+            int(np.prod(x.shape[:-1])), x.shape[-1], contract["window_length"],
+            contract["hop"], contract["frames"],
+        )
+    else:
+        x = np.ascontiguousarray(operands[0], np.complex64)
+        window = np.ascontiguousarray(operands[1], np.float32)
+        output = np.empty(output_shape, np.float32)
+        rc = lib.tessera_x86_istft_f32(
+            digest, ptr(x), ptr(window), ptr(output),
+            int(np.prod(x.shape[:-2])), contract["frames"],
+            contract["window_length"], contract["hop"],
+        )
+    if rc != 0:
+        raise RuntimeError(f"x86 compound spectral execution failed rc={rc}")
+    return output
 
 
 # ─────────────────────────────────────────────────────────────────────────────

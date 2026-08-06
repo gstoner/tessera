@@ -75,14 +75,22 @@ def build_lion_vjp_state_contract(
     normalized_shape = tuple(int(dim) for dim in shape)
     if not normalized_shape or any(dim <= 0 for dim in normalized_shape):
         raise ValueError("Lion VJP state lineage requires a positive static shape")
+    # Validate the coefficients as floats BEFORE mixing them into a dict that
+    # also carries a policy string. The previous form checked
+    # `list(numeric.values())[:3]`, which silently depended on dict insertion
+    # order to skip the string -- reorder the literal and it would call
+    # `isfinite` on a policy name.
+    lr = float(kwargs.get("lr", 1.0e-4))
+    beta2 = float(kwargs.get("beta2", 0.99))
+    weight_decay = float(kwargs.get("weight_decay", 0.0))
+    if not all(math.isfinite(value) for value in (lr, beta2, weight_decay)):
+        raise ValueError("Lion VJP state lineage requires finite coefficients")
     numeric = {
-        "lr": float(kwargs.get("lr", 1.0e-4)),
-        "beta2": float(kwargs.get("beta2", 0.99)),
-        "weight_decay": float(kwargs.get("weight_decay", 0.0)),
+        "lr": lr,
+        "beta2": beta2,
+        "weight_decay": weight_decay,
         "derivative_policy": "stop_gradient_through_sign",
     }
-    if not all(math.isfinite(value) for value in list(numeric.values())[:3]):
-        raise ValueError("Lion VJP state lineage requires finite coefficients")
 
     inputs = [
         _buffer(

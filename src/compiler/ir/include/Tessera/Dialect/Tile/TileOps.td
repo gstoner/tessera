@@ -684,6 +684,18 @@ def Tile_FFTKernelOp : Tile_Op<"fft_kernel"> {
   let hasVerifier = 1;
 }
 
+// Launch-level compound spectral package. The variadic operands are the
+// source pointers, destination pointer, and i64 workspace size. All framing,
+// padding, child-FFT identities, numeric policy, and mutation ownership are
+// fixed before this boundary.
+def Tile_SpectralProgramKernelOp : Tile_Op<"spectral_program_kernel"> {
+  let summary = "Launch-level compound spectral package with fixed child FFTs";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Launch-level flat elementwise envelope. Inputs are one or two source
 // pointers, destination, and the flattened element count. Family and kind are
 // semantic strings; storage/output_storage make mixed predicate output

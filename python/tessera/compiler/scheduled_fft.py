@@ -101,7 +101,7 @@ class ScheduledFFTArtifact:
         ):
             if not re.search(rf"{re.escape(name)} = {value} : i64", self.tile_ir):
                 raise ValueError(f"scheduled FFT Tile package has stale {name}")
-        for name, value in (
+        for attr_name, attr_value in (
             ("mode", self.mode),
             ("normalization", self.normalization),
             ("radix_policy", self.radix_policy),
@@ -112,8 +112,8 @@ class ScheduledFFTArtifact:
             ("twiddle_policy", self.twiddle_policy),
             ("kernel_family", self.kernel_family),
         ):
-            if f'{name} = "{value}"' not in self.tile_ir:
-                raise ValueError(f"scheduled FFT Tile package has stale {name}")
+            if f'{attr_name} = "{attr_value}"' not in self.tile_ir:
+                raise ValueError(f"scheduled FFT Tile package has stale {attr_name}")
         inverse = "true" if self.inverse else "false"
         if f"inverse = {inverse}" not in self.tile_ir:
             raise ValueError("scheduled FFT Tile package has stale direction")

@@ -104,13 +104,13 @@ class ScheduledAttentionBackwardArtifact:
                 raise ValueError(f"attention backward has stale {name}")
         if "reduction_order = array<i64: 0, 1>" not in self.tile_ir:
             raise ValueError("attention backward lost fixed reduction order")
-        for name, value in (
+        for attr_name, attr_value in (
             ("lse_checkpoint", self.lse_checkpoint_selection),
             ("tessera.lse_checkpoint_policy", self.lse_checkpoint_policy),
             ("tessera.attention_backward_recurrence", self.recurrence),
         ):
-            if f'{name} = "{value}"' not in self.tile_ir:
-                raise ValueError(f"attention backward has stale {name}")
+            if f'{attr_name} = "{attr_value}"' not in self.tile_ir:
+                raise ValueError(f"attention backward has stale {attr_name}")
 
 
 def supports_scheduled_attention_backward(
@@ -293,7 +293,13 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     else:
         selection = "saved" if requested == "auto" and max(sq, sk) >= 128 else "recompute" if requested == "auto" else requested
         policy = "gfx1151_auto_128"
-        architecture, storage = "gfx1151", {"fp16": "f16", "bf16": "bf16"}[dtype]
+        # `dtype` is `str | None` (a set pop); line ~255 already rejects
+        # anything but fp16/bf16 on this target, but that guard is compound
+        # so it does not narrow here. Fail by name rather than KeyError.
+        storage_by_dtype = {"fp16": "f16", "bf16": "bf16"}
+        if dtype is None or dtype not in storage_by_dtype:
+            raise ValueError("gfx1151 attention backward requires fp16 or bf16")
+        architecture, storage = "gfx1151", storage_by_dtype[dtype]
     return (
         "x86" if target == "x86" else "rocm", architecture, function.name,
         names, bias_name, result_names, dtype, storage,

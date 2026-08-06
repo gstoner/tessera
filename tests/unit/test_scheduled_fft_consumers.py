@@ -12,6 +12,13 @@ from tessera.compiler.scheduled_fft import (
 )
 from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
 
+# These lower through the production `tessera-opt`, which the CI unit lane does
+# not build. The library correctly RAISES rather than silently degrading, so
+# the tests must skip there rather than fail.
+_needs_opt = pytest.mark.skipif(
+    find_tessera_opt() is None, reason="tessera-opt not built"
+)
+
 
 @pytest.mark.parametrize(
     ("target", "op_name", "shape", "axis", "n", "strategy", "radices"),
@@ -26,6 +33,7 @@ from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
         ("rocm", "tessera.rfft", (4, 16, 3), 1, None, "mixed_radix", (4, 4)),
     ],
 )
+@_needs_opt
 def test_fft_lowers_to_one_content_addressed_tile_package(
     target, op_name, shape, axis, n, strategy, radices
 ):
@@ -60,6 +68,7 @@ def test_fft_lowers_to_one_content_addressed_tile_package(
         "batch",
     ],
 )
+@_needs_opt
 def test_fft_runtime_contract_rejects_tampering(field):
     artifact = lower_scheduled_fft(
         target="rocm", op_name="tessera.fft", input_shape=(3, 100)
@@ -78,6 +87,7 @@ def test_fft_runtime_contract_rejects_tampering(field):
         validate_scheduled_fft_metadata(metadata, target="rocm", input_shape=(3, 100))
 
 
+@_needs_opt
 def test_schedule_to_tile_rederives_and_rejects_stale_fft_policy():
     tool = find_tessera_opt()
     if tool is None:
@@ -94,6 +104,7 @@ def test_schedule_to_tile_rederives_and_rejects_stale_fft_policy():
         run_tessera_opt(tool, stale, "--tessera-schedule-to-tile")
 
 
+@_needs_opt
 def test_rocm_bluestein_artifact_describes_persistent_native_plan():
     artifact = lower_scheduled_fft(
         target="rocm", op_name="tessera.fft", input_shape=(2, 257)
@@ -106,6 +117,7 @@ def test_rocm_bluestein_artifact_describes_persistent_native_plan():
     assert artifact.kernel_family == "gfx1151_stockham_bluestein_v3"
 
 
+@_needs_opt
 @pytest.mark.parametrize("architecture", ["gfx1200", "gfx1250"])
 def test_unmeasured_rdna4_fft_profiles_fail_closed(architecture):
     tool = find_tessera_opt()

@@ -1210,6 +1210,38 @@ LogicalResult FFTKernelOp::verify() {
   return success();
 }
 
+LogicalResult SpectralProgramKernelOp::verify() {
+  auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+  auto inputCount = getOperation()->getAttrOfType<IntegerAttr>("input_count");
+  auto workspace = getOperation()->getAttrOfType<IntegerAttr>("workspace_bytes");
+  auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  if (!kind || !inputCount || inputCount.getInt() < 1 ||
+      inputCount.getInt() > 2 || !workspace || workspace.getInt() <= 0 ||
+      !hash || hash.getValue().size() != 64)
+    return emitOpError("requires kind, input count, workspace, and schedule identity");
+  if (getInputs().size() != static_cast<size_t>(inputCount.getInt() + 2))
+    return emitOpError("expects source pointers, destination pointer, and workspace bytes");
+  for (int64_t index = 0; index <= inputCount.getInt(); ++index)
+    if (!isa<LLVM::LLVMPointerType>(getInputs()[index].getType()))
+      return emitOpError("source and destination operands must be !llvm.ptr");
+  if (!getInputs().back().getType().isInteger(64))
+    return emitOpError("workspace size operand must be i64");
+  auto requiredString = [&](StringRef name) -> StringRef {
+    auto attr = getOperation()->getAttrOfType<StringAttr>(name);
+    return attr ? attr.getValue() : StringRef();
+  };
+  if (requiredString("target").empty() || requiredString("arch").empty() ||
+      requiredString("input_shapes").empty() ||
+      requiredString("normalization") != "backward" ||
+      requiredString("complex_layout") != "interleaved_f32x2" ||
+      requiredString("workspace_policy") != "persistent_artifact_workspace" ||
+      requiredString("mutation_lineage") !=
+          "inputs_immutable_output_fresh_v1" ||
+      requiredString("native_entry").empty())
+    return emitOpError("requires complete spectral package policy");
+  return success();
+}
+
 LogicalResult ElementwiseKernelOp::verify() {
   auto family = getOperation()->getAttrOfType<StringAttr>("family");
   auto kind = getOperation()->getAttrOfType<StringAttr>("kind");

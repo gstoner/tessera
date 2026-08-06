@@ -157,6 +157,35 @@ def Schedule_FFTOp : Op<ScheduleDialect, "fft", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Schedule_SpectralProgramOp : Op<ScheduleDialect, "spectral_program", [Pure]> {
+  let summary = "Content-addressed compound spectral program over child FFT artifacts";
+  let arguments = (ins Variadic<AnyType>:$subjects,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$target,
+                       StrAttr:$arch,
+                       StrAttr:$kind,
+                       StrAttr:$input_shapes,
+                       DenseI64ArrayAttr:$output_shape,
+                       I64Attr:$axis,
+                       DenseI64ArrayAttr:$padding,
+                       DenseI64ArrayAttr:$crop,
+                       I64Attr:$window_length,
+                       I64Attr:$hop,
+                       I64Attr:$frames,
+                       StrAttr:$normalization,
+                       StrAttr:$complex_layout,
+                       StrAttr:$accumulation,
+                       I64Attr:$workspace_bytes,
+                       StrAttr:$workspace_policy,
+                       StrAttr:$mutation_lineage,
+                       StrAttr:$native_entry,
+                       StrAttr:$child_fft_digests,
+                       I64Attr:$workgroup_size);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subjects attr-dict `:` type($subjects) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
 def Schedule_AttentionOp : Op<ScheduleDialect, "attention", [Pure]> {
   let summary = "Scheduled canonical rank-4 attention recurrence";
   let arguments = (ins AnyType:$subject,

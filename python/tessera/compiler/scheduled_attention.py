@@ -105,13 +105,13 @@ class ScheduledAttentionArtifact:
         ):
             if not re.search(rf"{re.escape(name)} = {value} : i64", self.tile_ir):
                 raise ValueError(f"scheduled attention has stale {name}")
-        for name, value in (
+        for attr_name, attr_value in (
             ("tessera.attention_recurrence", self.recurrence),
             ("tessera.backward_lse_policy", self.backward_lse_policy),
             ("tessera.backward_lse_selection", self.backward_lse_selection),
         ):
-            if f'{name} = "{value}"' not in self.tile_ir:
-                raise ValueError(f"scheduled attention has stale {name}")
+            if f'{attr_name} = "{attr_value}"' not in self.tile_ir:
+                raise ValueError(f"scheduled attention has stale {attr_name}")
         if self.schedule_ir_digest == self.tile_digest:
             raise ValueError("Schedule and Tile attention artifacts must be distinct")
 
@@ -202,12 +202,16 @@ def lower_scheduled_attention(
 
 def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     if target == "x86":
-        from .x86_native import _attention_contract
+        from .x86_native import _attention_contract as _x86_attention_contract
 
-        physical = _attention_contract(module)
-        if physical is None:
+        # Per-branch names: the two backends return DIFFERENT tuple shapes
+        # (x86 8, gfx1151 11) and are unpacked differently. Sharing one variable
+        # made the second assignment a type conflict and the 11-way unpack an
+        # error against the 8-tuple mypy had already bound.
+        x86_physical = _x86_attention_contract(module)
+        if x86_physical is None:
             raise ValueError("unsupported Zen 5 scheduled attention contract")
-        names, bias_name, output_name, dims, scale, causal, window, softcap = physical
+        names, bias_name, output_name, dims, scale, causal, window, softcap = x86_physical
         dtype, storage = "fp32", "f32"
         window_left = window_right = window
         dropout_p, dropout_seed = 0.0, 0
@@ -215,10 +219,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         workgroup_size = 1
         backward_lse_policy, backward_lse_selection = "save_lse", "saved"
     elif target == "rocm_gfx1151":
-        from .rocm_native import _attention_contract
+        from .rocm_native import _attention_contract as _rocm_attention_contract
 
-        physical = _attention_contract(module)
-        if physical is None:
+        rocm_physical = _rocm_attention_contract(module)
+        if rocm_physical is None:
             raise ValueError("unsupported gfx1151 scheduled attention contract")
         (
             names,
@@ -232,7 +236,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             softcap,
             dropout_p,
             dropout_seed,
-        ) = physical
+        ) = rocm_physical
         output_name = module.functions[0].body[0].result or "output"
         storage = {"fp16": "f16", "bf16": "bf16"}[dtype]
         compiler_target, architecture = "rocm", "gfx1151"

@@ -193,6 +193,46 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
             ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
             ctypes.c_int,
         ]
+        if hasattr(lib, "ts_spectral_composite_plan_create_amd"):
+            lib.ts_spectral_composite_plan_create_amd.restype = ctypes.c_int
+            lib.ts_spectral_composite_plan_create_amd.argtypes = [
+                ctypes.c_char_p, ctypes.c_longlong,
+                ctypes.POINTER(ctypes.c_void_p),
+            ]
+            lib.ts_spectral_composite_plan_destroy_amd.restype = None
+            lib.ts_spectral_composite_plan_destroy_amd.argtypes = [ctypes.c_void_p]
+            lib.ts_spectral_composite_plan_digest_amd.restype = ctypes.c_char_p
+            lib.ts_spectral_composite_plan_digest_amd.argtypes = [ctypes.c_void_p]
+            lib.ts_spectral_composite_plan_workspace_bytes_amd.restype = ctypes.c_longlong
+            lib.ts_spectral_composite_plan_workspace_bytes_amd.argtypes = [ctypes.c_void_p]
+            lib.ts_spectral_filter_plan_hostptr_amd.restype = ctypes.c_int
+            lib.ts_spectral_filter_plan_hostptr_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_longlong,
+            ]
+            lib.ts_dct_plan_hostptr_batch_amd.restype = ctypes.c_int
+            lib.ts_dct_plan_hostptr_batch_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+            ]
+            lib.ts_spectral_conv_plan_hostptr_batch_amd.restype = ctypes.c_int
+            lib.ts_spectral_conv_plan_hostptr_batch_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_int,
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+            ]
+            lib.ts_stft_plan_hostptr_batch_amd.restype = ctypes.c_int
+            lib.ts_stft_plan_hostptr_batch_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ]
+            lib.ts_istft_plan_hostptr_batch_amd.restype = ctypes.c_int
+            lib.ts_istft_plan_hostptr_batch_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int,
+            ]
     return lib
 
 
@@ -203,11 +243,11 @@ def _prebuilt_amd_paths() -> tuple[Path, ...]:
         paths.append(Path(configured).expanduser())
     paths.extend(
         [
-            _REPO_ROOT / "build" / "src" / "solvers" / "spectral"
+            _REPO_ROOT / "build-rocm-fft" / "src" / "solvers" / "spectral"
             / "libtessera_spectral_rocm.so",
             _REPO_ROOT / "build-rocm" / "src" / "solvers" / "spectral"
             / "libtessera_spectral_rocm.so",
-            _REPO_ROOT / "build-rocm-fft" / "src" / "solvers" / "spectral"
+            _REPO_ROOT / "build" / "src" / "solvers" / "spectral"
             / "libtessera_spectral_rocm.so",
             Path("/usr/local/lib/libtessera_spectral_rocm.so"),
             Path("/usr/lib/libtessera_spectral_rocm.so"),
@@ -270,14 +310,21 @@ _rocm_plan_lock = threading.Lock()
 _rocm_plan_cache: collections.OrderedDict[
     tuple[int, int, str], tuple[ctypes.CDLL, ctypes.c_void_p]
 ] = collections.OrderedDict()
+_rocm_composite_plan_cache: collections.OrderedDict[
+    str, tuple[ctypes.CDLL, ctypes.c_void_p]
+] = collections.OrderedDict()
 
 
 def _clear_rocm_plan_cache() -> None:
     with _rocm_plan_lock:
         plans = list(_rocm_plan_cache.values())
         _rocm_plan_cache.clear()
+        composite_plans = list(_rocm_composite_plan_cache.values())
+        _rocm_composite_plan_cache.clear()
     for lib, handle in plans:
         lib.ts_fft_plan_destroy_amd(handle)
+    for lib, handle in composite_plans:
+        lib.ts_spectral_composite_plan_destroy_amd(handle)
 
 
 atexit.register(_clear_rocm_plan_cache)
@@ -314,6 +361,37 @@ def _rocm_plan(
         value = (lib, handle)
         _rocm_plan_cache[key] = value
         return value
+
+
+def _rocm_composite_plan(
+    metadata: dict[str, Any], lib: ctypes.CDLL
+) -> ctypes.c_void_p:
+    digest = str(metadata["schedule_digest"])
+    workspace_bytes = int(metadata["workspace_bytes"])
+    with _rocm_plan_lock:
+        cached = _rocm_composite_plan_cache.get(digest)
+        if cached is not None:
+            _rocm_composite_plan_cache.move_to_end(digest)
+            cached_lib, handle = cached
+            if (
+                cached_lib.ts_spectral_composite_plan_digest_amd(handle)
+                != digest.encode("ascii")
+                or cached_lib.ts_spectral_composite_plan_workspace_bytes_amd(handle)
+                != workspace_bytes
+            ):
+                raise RuntimeError("ROCm composite plan identity drift")
+            return handle
+        handle = ctypes.c_void_p()
+        rc = lib.ts_spectral_composite_plan_create_amd(
+            digest.encode("ascii"), workspace_bytes, ctypes.byref(handle)
+        )
+        if rc != 0 or not handle.value:
+            raise RuntimeError(f"ROCm composite plan creation failed rc={rc}")
+        if len(_rocm_composite_plan_cache) >= 16:
+            _, evicted = _rocm_composite_plan_cache.popitem(last=False)
+            evicted[0].ts_spectral_composite_plan_destroy_amd(evicted[1])
+        _rocm_composite_plan_cache[digest] = (lib, handle)
+        return handle
 
 
 def _supported_length(n: int) -> bool:
@@ -395,18 +473,21 @@ def run_rocm_spectral_composite(
         != b"tessera.rocm.spectral_composite.v1"
     ):
         raise RuntimeError("ROCm spectral composite package ABI mismatch")
+    if not hasattr(lib, "ts_spectral_composite_plan_create_amd"):
+        raise RuntimeError("ROCm spectral composite image lacks persistent plans")
 
     op_name = str(contract["op_name"])
     output_shape = tuple(int(dim) for dim in contract["output_shape"])
     children = list(contract["child_ffts"])
+    composite_plan = _rocm_composite_plan(dict(contract), lib)
     rc = -1
 
     if op_name == "tessera.spectral_filter":
         a = np.ascontiguousarray(values[0], np.complex64)
         b = np.ascontiguousarray(values[1], np.complex64)
         out = np.empty(output_shape, np.complex64)
-        rc = lib.ts_spectral_filter_hostptr_amd(
-            _cptr(a), _cptr(b), _cptr(out), a.size
+        rc = lib.ts_spectral_filter_plan_hostptr_amd(
+            composite_plan, _cptr(a), _cptr(b), _cptr(out), a.size
         )
     elif op_name == "tessera.dct":
         x = np.ascontiguousarray(values[0], np.float32)
@@ -414,7 +495,9 @@ def run_rocm_spectral_composite(
         n = int(x.shape[-1])
         batch = int(np.prod(x.shape[:-1], dtype=np.int64))
         _, plan = _rocm_plan(2 * n, -1, str(children[0]["schedule_digest"]))
-        rc = lib.ts_dct_hostptr_batch_amd(plan, _cptr(x), _cptr(out), batch, n)
+        rc = lib.ts_dct_plan_hostptr_batch_amd(
+            composite_plan, plan, _cptr(x), _cptr(out), batch, n
+        )
     elif op_name == "tessera.spectral_conv":
         x = np.ascontiguousarray(values[0], np.float32)
         kernel = np.ascontiguousarray(values[1], np.float32)
@@ -428,9 +511,9 @@ def run_rocm_spectral_composite(
         _, inverse = _rocm_plan(
             fft_n, 1, str(children[1]["schedule_digest"])
         )
-        rc = lib.ts_spectral_conv_hostptr_batch_amd(
-            forward, inverse, _cptr(x), input_n, _cptr(kernel), kernel_n,
-            _cptr(out), batch, fft_n,
+        rc = lib.ts_spectral_conv_plan_hostptr_batch_amd(
+            composite_plan, forward, inverse, _cptr(x), input_n,
+            _cptr(kernel), kernel_n, _cptr(out), batch, fft_n,
         )
     elif op_name == "tessera.stft":
         x = np.ascontiguousarray(values[0], np.float32)
@@ -439,8 +522,8 @@ def run_rocm_spectral_composite(
         batch = int(np.prod(x.shape[:-1], dtype=np.int64))
         win = int(contract["window_length"])
         _, plan = _rocm_plan(win, -1, str(children[0]["schedule_digest"]))
-        rc = lib.ts_stft_hostptr_batch_amd(
-            plan, _cptr(x), _cptr(window), _cptr(out), batch,
+        rc = lib.ts_stft_plan_hostptr_batch_amd(
+            composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), batch,
             int(x.shape[-1]), win, int(contract["hop"]),
             int(contract["frames"]),
         )
@@ -451,8 +534,8 @@ def run_rocm_spectral_composite(
         batch = int(np.prod(x.shape[:-2], dtype=np.int64))
         win = int(contract["window_length"])
         _, plan = _rocm_plan(win, 1, str(children[0]["schedule_digest"]))
-        rc = lib.ts_istft_hostptr_batch_amd(
-            plan, _cptr(x), _cptr(window), _cptr(out), batch,
+        rc = lib.ts_istft_plan_hostptr_batch_amd(
+            composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), batch,
             int(contract["frames"]), win, int(contract["hop"]),
         )
     else:  # validate_scheduled_spectral_metadata already rejects this.

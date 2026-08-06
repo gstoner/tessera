@@ -8,6 +8,14 @@ from tessera.compiler.scheduled_spectral import (
     lower_scheduled_spectral,
     validate_scheduled_spectral_metadata,
 )
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+# These lower through the production `tessera-opt`, which the CI unit lane does
+# not build. The library correctly RAISES rather than silently degrading, so
+# the tests must skip there rather than fail.
+_needs_opt = pytest.mark.skipif(
+    find_tessera_opt() is None, reason="tessera-opt not built"
+)
 
 
 @pytest.mark.parametrize(
@@ -20,6 +28,7 @@ from tessera.compiler.scheduled_spectral import (
         ("tessera.istft", ((2, 5, 9), (17,)), 6, 1),
     ],
 )
+@_needs_opt
 def test_compound_contract_binds_physical_and_child_identity(
     op_name, shapes, hop, child_count
 ):
@@ -29,10 +38,10 @@ def test_compound_contract_binds_physical_and_child_identity(
     metadata = artifact.to_metadata()
     validate_scheduled_spectral_metadata(metadata, input_shapes=shapes)
 
-    assert metadata["schema"] == "tessera.scheduled_spectral.v1"
+    assert metadata["schema"] == "tessera.scheduled_spectral.v2"
     assert metadata["architecture"] == "gfx1151"
     assert metadata["complex_layout"] == "interleaved_f32x2"
-    assert metadata["workspace_policy"] == "call_workspace"
+    assert metadata["workspace_policy"] == "persistent_artifact_workspace"
     assert metadata["workspace_bytes"] > 0
     assert metadata["mutation_lineage"] == "inputs_immutable_output_fresh_v1"
     assert len(metadata["child_ffts"]) == child_count
@@ -41,6 +50,7 @@ def test_compound_contract_binds_physical_and_child_identity(
     ]
 
 
+@_needs_opt
 def test_compound_contract_rejects_tampering():
     artifact = lower_scheduled_spectral(
         target="rocm",

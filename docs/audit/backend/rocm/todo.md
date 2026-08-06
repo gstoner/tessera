@@ -7,23 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **bounded gfx1151 physical
-package complete; Graph/Schedule ODS adoption remains open.** The five TSOL
+Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **typed Schedule→Tile and
+bounded gfx1151 physical package complete.** The five TSOL
 composites now execute in the prebuilt `libtessera_spectral_rocm.so` image in
 the requested order: `spectral_filter`, `dct`, `spectral_conv`, `stft`, and
-`istft`. `tessera.scheduled_spectral.v1` content-addresses each compound
+`istft`. `tessera.scheduled_spectral.v2` materializes one verified
+`schedule.spectral_program` → `tile.spectral_program_kernel` edge and
+content-addresses each compound
 program's child FFT Schedule/Tile digests, interleaved-complex layout, axis,
-padding/crop, window/hop/frame policy, normalization, exact call-workspace
+padding/crop, window/hop/frame policy, normalization, exact persistent-workspace
 bytes, f32 accumulation, native entry, and immutable-input/fresh-output
 lineage. Framing, padding, complex multiply, half-spectrum packing, and
 deterministic ascending-frame overlap-add remain on device; the public
 host-pointer ABI stages only inputs and the final output. Runtime consumption
 requires that artifact and no longer re-enters Graph metadata or host NumPy
-composition. Exact WSL-visible gfx1151 tests pass for aligned, batched, ragged,
-and prime-length Bluestein children. `gfx1200`/`gfx1250` fail closed. The next
-shared step is an ODS `schedule.spectral_program`/launch Tile carrier; this
-bounded package must not be mislabeled full Graph→Schedule→Tile E2E before it
-lands.
+composition. A bounded digest-keyed composite-plan cache owns one persistent
+device allocation partitioned according to the artifact workspace contract;
+child FFT plans remain independently digest-bound. Exact WSL-visible gfx1151
+tests pass for aligned, batched, ragged, and prime-length Bluestein children.
+`gfx1200`/`gfx1250` fail closed. Apple/NVIDIA physical adoption remains a
+sibling-owned follow-up and inherits no gfx1151 result.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **correctness defects
 fixed and boundary envelope expanded on gfx1151.** Var/std now use one

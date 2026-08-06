@@ -86,6 +86,31 @@ def test_spectral_filter():
                                (Xf * Hf).astype(np.complex64), atol=1e-4)
 
 
+def test_composite_workspace_plan_is_reused_by_artifact_digest():
+    rt = _rocm_or_skip()
+    from tessera.compiler.emit import spectral_candidates as candidates
+
+    a = np.ones((2, 5), dtype=np.complex64)
+    b = np.full((2, 5), 2 + 1j, dtype=np.complex64)
+    artifact = _art(rt, "tessera.spectral_filter", (a, b), {})
+    contract = artifact.metadata["scheduled_spectral"]
+    lib = candidates._amd_lib()
+    assert lib is not None
+
+    first = candidates._rocm_composite_plan(contract, lib)
+    result = rt.launch(artifact, (a, b))
+    second = candidates._rocm_composite_plan(contract, lib)
+
+    assert result["ok"] is True, result.get("reason")
+    assert first.value == second.value
+    assert lib.ts_spectral_composite_plan_digest_amd(first) == contract[
+        "schedule_digest"
+    ].encode("ascii")
+    assert lib.ts_spectral_composite_plan_workspace_bytes_amd(first) == contract[
+        "workspace_bytes"
+    ]
+
+
 def test_stft_istft():
     rt = _rocm_or_skip()
     rng = np.random.default_rng(4)

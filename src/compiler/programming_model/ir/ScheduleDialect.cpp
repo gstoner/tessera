@@ -221,6 +221,48 @@ LogicalResult FFTOp::verify() {
   return success();
 }
 
+LogicalResult SpectralProgramOp::verify() {
+  if (getSubjects().empty() || getSubjects().size() > 2)
+    return emitOpError("requires one or two input subjects");
+  if (getSubjects().front().getType() != getScheduled().getType() &&
+      getKind() == "tessera.spectral_filter")
+    return emitOpError("spectral_filter must preserve its complex tensor type");
+  if (getArtifactHash().size() != 64 ||
+      !llvm::all_of(getArtifactHash(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }))
+    return emitOpError("requires a lowercase SHA-256 artifact_hash");
+  if (getTarget() != "x86" && getTarget() != "rocm")
+    return emitOpError("target must be x86 or rocm");
+  if ((getTarget() == "x86" && getArch() != "zen5-avx512") ||
+      (getTarget() == "rocm" && getArch() != "gfx1151"))
+    return emitOpError("architecture must match the exact target profile");
+  if (getKind() != "tessera.spectral_filter" && getKind() != "tessera.dct" &&
+      getKind() != "tessera.spectral_conv" && getKind() != "tessera.stft" &&
+      getKind() != "tessera.istft")
+    return emitOpError("requires a known compound spectral kind");
+  unsigned expectedInputs =
+      (getKind() == "tessera.dct") ? 1u : 2u;
+  if (getSubjects().size() != expectedInputs)
+    return emitOpError("input count does not match the spectral kind");
+  if (getOutputShape().empty() ||
+      llvm::any_of(getOutputShape(), [](int64_t dim) { return dim <= 0; }) ||
+      getAxisAttr().getInt() < 0 || getPadding().size() != 2 ||
+      getCrop().size() != 2 || getWindowLengthAttr().getInt() < 0 ||
+      getHopAttr().getInt() < 0 || getFramesAttr().getInt() < 0 ||
+      getWorkspaceBytesAttr().getInt() <= 0 || getWorkgroupSize() <= 0)
+    return emitOpError("requires complete positive shape, launch, and workspace policy");
+  if (getNormalization() != "backward" ||
+      getComplexLayout() != "interleaved_f32x2" ||
+      getWorkspacePolicy() != "persistent_artifact_workspace" ||
+      getMutationLineage() != "inputs_immutable_output_fresh_v1" ||
+      getNativeEntry().empty() || getInputShapes().empty())
+    return emitOpError("requires the canonical spectral numeric/workspace/lineage policy");
+  if (getKind() != "tessera.spectral_filter" && getChildFftDigests().empty())
+    return emitOpError("FFT-based spectral programs require child digests");
+  return success();
+}
+
 LogicalResult AttentionOp::verify() {
   if (failed(verifyContentAddressedKernel(
           *this, getSubject(), getScheduled(), getArtifactHash(), getArch(),

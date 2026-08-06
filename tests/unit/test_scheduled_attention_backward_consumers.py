@@ -22,6 +22,14 @@ from tessera.runtime import (
     _submit_rocm_gfx1151_attention_backward_program,
     _submit_x86_native,
 )
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+# These lower through the production `tessera-opt`, which the CI unit lane does
+# not build. The library correctly RAISES rather than silently degrading, so
+# the tests must skip there rather than fail.
+_needs_opt = pytest.mark.skipif(
+    find_tessera_opt() is None, reason="tessera-opt not built"
+)
 
 
 def _x86_module(hq: int, hkv: int, sq: int, sk: int, *, d: int = 16):
@@ -66,6 +74,7 @@ def _x86_reference(do, q, key, value, bias, *, scale, window, softcap):
     return (dq, dk, dv), row_lse
 
 
+@_needs_opt
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
 def test_attention_backward_schedule_is_one_content_addressed_three_result_program(target: str) -> None:
     module = _x86_module(4, 2, 17, 19) if target == "x86" else _module(1, 4, 2, 17, 19, 16)
@@ -87,6 +96,7 @@ def test_attention_backward_fails_closed_for_unmeasured_rdna4_profiles() -> None
         lower_scheduled_attention_backward(module, target="rocm_gfx1200")
 
 
+@_needs_opt
 def test_attention_backward_rejects_stale_multi_output_identity() -> None:
     artifact = lower_scheduled_attention_backward(_x86_module(2, 2, 16, 16), target="x86")
     with pytest.raises(ValueError, match="content identity"):
@@ -97,6 +107,7 @@ def test_attention_backward_rejects_stale_multi_output_identity() -> None:
     ("hq", "hkv", "sq", "sk"),
     [(2, 2, 16, 16), (4, 2, 17, 19), (4, 1, 15, 21)],
 )
+@_needs_opt
 def test_zen5_scheduled_attention_backward_exact_mha_gqa_mqa(
     hq: int, hkv: int, sq: int, sk: int
 ) -> None:
@@ -126,6 +137,7 @@ def test_zen5_scheduled_attention_backward_exact_mha_gqa_mqa(
         np.testing.assert_allclose(observed, reference, rtol=2e-4, atol=3e-5)
 
 
+@_needs_opt
 @pytest.mark.compiler_rocm
 def test_gfx1151_scheduled_attention_backward_packages_exact_tile_program() -> None:
     artifact = lower_scheduled_attention_backward(
@@ -143,6 +155,7 @@ def test_gfx1151_scheduled_attention_backward_packages_exact_tile_program() -> N
     ("hq", "hkv", "sq", "sk"),
     [(2, 2, 16, 16), (4, 2, 17, 19), (4, 1, 15, 21)],
 )
+@_needs_opt
 def test_gfx1151_scheduled_attention_backward_exact_mha_gqa_mqa(
     hq: int, hkv: int, sq: int, sk: int
 ) -> None:

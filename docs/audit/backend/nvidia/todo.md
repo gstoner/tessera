@@ -8,13 +8,13 @@ last_updated: 2026-08-06
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **not applicable to CUDA
-execution; compound-artifact parity remains follow-up.** The five new physical
-helpers and opaque child plans are HIP/gfx1151-owned. NVIDIA still lacks a
-promoted canonical FFT package, so it cannot consume the compound spectral
-schema or inherit ROCm evidence. A future CUDA implementation must first close
-its FFT package gap, then bind its own workspace/residency policy and SM120
-device evidence.
+Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared ODS vocabulary
+adopted; CUDA physical execution remains follow-up.** The target-neutral
+`schedule.spectral_program` and `tile.spectral_program_kernel` contract is
+registered in production. NVIDIA still lacks a promoted canonical FFT package,
+so it cannot consume the compound artifact or inherit ROCm/x86 evidence. A
+future CUDA implementation must first close its FFT package gap, then bind its
+own workspace/residency policy and SM120 device evidence.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **not applicable to
 NVIDIA codegen.** Centered Welford and the scalar boundary fixes alter ROCm C++

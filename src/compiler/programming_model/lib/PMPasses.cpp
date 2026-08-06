@@ -649,6 +649,60 @@ static std::string fftScheduleDigest(const FFTSchedule &schedule) {
                      /*LowerCase=*/true);
 }
 
+static FailureOr<std::string> spectralProgramDigest(Operation *op) {
+  auto stringAttr = [&](StringRef name) -> StringAttr {
+    return op->getAttrOfType<StringAttr>(name);
+  };
+  auto intAttr = [&](StringRef name) -> IntegerAttr {
+    return op->getAttrOfType<IntegerAttr>(name);
+  };
+  auto output = op->getAttrOfType<DenseI64ArrayAttr>("output_shape");
+  auto padding = op->getAttrOfType<DenseI64ArrayAttr>("padding");
+  auto crop = op->getAttrOfType<DenseI64ArrayAttr>("crop");
+  for (StringRef name : {"target", "arch", "kind", "input_shapes",
+                         "normalization", "complex_layout", "accumulation",
+                         "workspace_policy", "mutation_lineage",
+                         "native_entry", "child_fft_digests"})
+    if (!stringAttr(name)) return failure();
+  for (StringRef name : {"axis", "window_length", "hop", "frames",
+                         "workspace_bytes", "workgroup_size"})
+    if (!intAttr(name)) return failure();
+  if (!output || !padding || !crop) return failure();
+  auto arrayText = [](ArrayRef<int64_t> values, StringRef separator) {
+    std::string result;
+    for (int64_t value : values) {
+      if (!result.empty()) result += separator;
+      result += Twine(value).str();
+    }
+    return result;
+  };
+  std::string contract =
+      (Twine("schema=tessera.scheduled_spectral.v2;op=") +
+       stringAttr("kind").getValue() + ";target=" +
+       stringAttr("target").getValue() + ";arch=" +
+       stringAttr("arch").getValue() + ";inputs=" +
+       stringAttr("input_shapes").getValue() + ";output=" +
+       arrayText(output.asArrayRef(), "x") + ";axis=" +
+       Twine(intAttr("axis").getInt()) + ";padding=" +
+       arrayText(padding.asArrayRef(), ",") + ";crop=" +
+       arrayText(crop.asArrayRef(), ",") + ";window=" +
+       Twine(intAttr("window_length").getInt()) + ";hop=" +
+       Twine(intAttr("hop").getInt()) + ";frames=" +
+       Twine(intAttr("frames").getInt()) + ";normalization=" +
+       stringAttr("normalization").getValue() + ";complex_layout=" +
+       stringAttr("complex_layout").getValue() + ";accumulation=" +
+       stringAttr("accumulation").getValue() + ";workspace_bytes=" +
+       Twine(intAttr("workspace_bytes").getInt()) + ";workspace_policy=" +
+       stringAttr("workspace_policy").getValue() + ";mutation_lineage=" +
+       stringAttr("mutation_lineage").getValue() + ";native_entry=" +
+       stringAttr("native_entry").getValue() + ";child_fft_digests=" +
+       stringAttr("child_fft_digests").getValue() + ";workgroup=" +
+       Twine(intAttr("workgroup_size").getInt()))
+          .str();
+  return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
+                     /*LowerCase=*/true);
+}
+
 struct AttentionSchedule {
   StringRef target;
   StringRef arch;
@@ -1755,6 +1809,94 @@ struct ScheduleToTilePass
       scheduled->getResult(0).replaceAllUsesWith(result);
       scheduled->erase();
       if (graph->use_empty()) graph->erase();
+      for (schedule::ArtifactOp artifact : matchingArtifacts) artifact.erase();
+    }
+
+    SmallVector<Operation *> scheduledSpectralPrograms;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "schedule.spectral_program")
+        scheduledSpectralPrograms.push_back(op);
+    });
+    for (Operation *scheduled : scheduledSpectralPrograms) {
+      auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
+      FailureOr<std::string> derived = spectralProgramDigest(scheduled);
+      if (failed(derived) || !hash || *derived != hash.getValue()) {
+        scheduled->emitError(
+            "scheduled spectral program policy was altered after hashing");
+        return signalPassFailure();
+      }
+      SmallVector<schedule::ArtifactOp> matchingArtifacts;
+      mod.walk([&](schedule::ArtifactOp artifact) {
+        if (artifact.getHash() == hash.getValue())
+          matchingArtifacts.push_back(artifact);
+      });
+      if (matchingArtifacts.size() != 1) {
+        scheduled->emitError(
+            "requires exactly one matching schedule.artifact");
+        return signalPassFailure();
+      }
+      auto outputType = dyn_cast<RankedTensorType>(scheduled->getResult(0).getType());
+      if (!outputType || !outputType.hasStaticShape()) {
+        scheduled->emitError("requires a static ranked output tensor");
+        return signalPassFailure();
+      }
+
+      Location loc = scheduled->getLoc();
+      builder.setInsertionPoint(scheduled);
+      auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      SmallVector<Value> launchOperands;
+      for (Value subject : scheduled->getOperands()) {
+        auto inputType = dyn_cast<RankedTensorType>(subject.getType());
+        if (!inputType || !inputType.hasStaticShape()) {
+          scheduled->emitError("requires static ranked input tensors");
+          return signalPassFailure();
+        }
+        auto memref = MemRefType::get(inputType.getShape(), inputType.getElementType());
+        Value buffer = builder.create<bufferization::ToBufferOp>(loc, memref, subject);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer =
+            builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), index);
+        launchOperands.push_back(
+            builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer));
+      }
+      auto outputMemref =
+          MemRefType::get(outputType.getShape(), outputType.getElementType());
+      Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      Value outputIndex =
+          builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      Value outputInteger = builder.create<arith::IndexCastOp>(
+          loc, builder.getI64Type(), outputIndex);
+      launchOperands.push_back(
+          builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger));
+      auto workspace = scheduled->getAttrOfType<IntegerAttr>("workspace_bytes");
+      launchOperands.push_back(builder.create<arith::ConstantIntOp>(
+          loc, workspace.getInt(), 64));
+
+      OperationState kernelState(loc, "tile.spectral_program_kernel");
+      kernelState.addOperands(launchOperands);
+      kernelState.addAttribute(
+          "input_count",
+          builder.getI64IntegerAttr(scheduled->getNumOperands()));
+      for (StringRef name :
+           {"target", "arch", "kind", "input_shapes", "normalization",
+            "complex_layout", "accumulation", "workspace_policy",
+            "mutation_lineage", "native_entry", "child_fft_digests"})
+        kernelState.addAttribute(name, scheduled->getAttr(name));
+      for (StringRef name : {"output_shape", "axis", "padding", "crop",
+                             "window_length", "hop", "frames",
+                             "workspace_bytes"})
+        kernelState.addAttribute(name, scheduled->getAttr(name));
+      kernelState.addAttribute(
+          "tessera.workgroup_size",
+          scheduled->getAttr("workgroup_size"));
+      kernelState.addAttribute("tessera.schedule_hash", hash);
+      builder.create(kernelState);
+
+      Value result = builder.create<bufferization::ToTensorOp>(
+          loc, outputType, outputBuffer);
+      scheduled->getResult(0).replaceAllUsesWith(result);
+      scheduled->erase();
       for (schedule::ArtifactOp artifact : matchingArtifacts) artifact.erase();
     }
 

@@ -8,11 +8,13 @@ last_updated: 2026-08-06
 
 # Apple compiler, exact-device, and performance plan
 
-Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **not applicable until Apple
-owns a physical FFT package.** The compound artifact vocabulary is relevant,
-but HIP helpers, persistent AMD plans, and gfx1151 evidence transfer no Metal
-schedule or support claim. Apple must first close its architecture-owned FFT
-gap, then derive compound workspace/residency policy on a Mac.
+Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared ODS vocabulary
+adopted; physical execution not applicable until Apple owns an FFT package.**
+The target-neutral `schedule.spectral_program` and
+`tile.spectral_program_kernel` contract is registered in production, but HIP
+and AVX-512 helpers and their exact-device evidence transfer no Metal schedule
+or support claim. Apple must first close its architecture-owned FFT gap, then
+derive compound workspace/residency policy on a Mac.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **not applicable to Apple
 physical code.** ROCm's centered Welford and scalar boundary corrections do

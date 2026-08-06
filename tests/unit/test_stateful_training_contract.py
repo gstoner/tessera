@@ -17,6 +17,14 @@ from tessera.compiler.stateful_training import (
     validate_lion_vjp_state_contract,
     validate_scheduled_lion_vjp_metadata,
 )
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+# These lower through the production `tessera-opt`, which the CI unit lane does
+# not build. The library correctly RAISES rather than silently degrading, so
+# the tests must skip there rather than fail.
+_needs_opt = pytest.mark.skipif(
+    find_tessera_opt() is None, reason="tessera-opt not built"
+)
 
 
 _KWARGS = {"lr": 1.0e-4, "beta2": 0.99, "weight_decay": 0.01}
@@ -64,6 +72,7 @@ def test_lion_vjp_contract_rejects_lineage_and_numeric_tampering() -> None:
             )
 
 
+@_needs_opt
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
 def test_lion_vjp_lowers_to_one_exact_launch_tile(target: str) -> None:
     artifact = lower_scheduled_lion_vjp(
@@ -77,6 +86,7 @@ def test_lion_vjp_lowers_to_one_exact_launch_tile(target: str) -> None:
     assert "arith.constant 95 : i64" in artifact.tile_ir
 
 
+@_needs_opt
 def test_scheduled_lion_vjp_rejects_tile_policy_tampering() -> None:
     artifact = lower_scheduled_lion_vjp(
         target="rocm_gfx1151", shape=(7,), kwargs=_KWARGS
@@ -100,6 +110,7 @@ def test_scheduled_lion_vjp_rejects_tile_policy_tampering() -> None:
     ("topology", "shape", "state_count"),
     [("factored", (5, 19), 2), ("full", (19,), 1)],
 )
+@_needs_opt
 def test_adafactor_vjp_contract_and_tile_artifact(
     target: str, topology: str, shape: tuple[int, ...], state_count: int
 ) -> None:
@@ -128,6 +139,7 @@ def test_adafactor_vjp_contract_and_tile_artifact(
     assert "schedule." not in artifact.tile_ir
 
 
+@_needs_opt
 def test_adafactor_vjp_contract_rejects_alias_tampering() -> None:
     kwargs = {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6}
     artifact = lower_scheduled_adafactor_vjp(
@@ -161,6 +173,7 @@ def test_adafactor_vjp_contract_rejects_alias_tampering() -> None:
         "modified_delta_attention",
     ]
 )
+@_needs_opt
 def test_sequence_mixer_backward_contract_lowers_to_one_tile(
     target: str, family: str
 ) -> None:

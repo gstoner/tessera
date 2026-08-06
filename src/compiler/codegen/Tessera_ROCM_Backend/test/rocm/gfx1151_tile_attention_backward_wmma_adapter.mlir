@@ -15,6 +15,7 @@ module {
       dropout_p = 0.0 : f32, dropout_seed = 0 : i64,
       head_dim = 64 : i64, value_dim = 64 : i64, gqa = true,
       route = "deterministic_direct", deterministic = true,
+      lse_checkpoint = "recompute",
       workspace_bytes = 0 : i64, workspace_owner = "output_element"
     } : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr,
         !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, i64, i64, i64, i64

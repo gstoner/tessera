@@ -1685,9 +1685,10 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_cpu", executable=True,
         executor_id="x86_spectral_compiled", runtime_status="success",
         reason="x86 spectral composites (dct / stft / istft / spectral_conv / "
-               "spectral_filter) compose the x86_fft_compiled FFT lane — "
-               "framing / windowing / overlap-add / pointwise complex-mul on "
-               "host, the transform on the AVX-512 radix-2 kernel. f32, "
+               "spectral_filter) consume one typed, content-addressed "
+               "Schedule-to-Tile artifact in the native AVX-512 package. "
+               "Framing, windowing, overlap-add, pointwise complex multiply, "
+               "and bounded digest-keyed workspace are package-owned. f32, "
                "matches np.fft.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_sparse_compiled"): ExecutionRow(
@@ -2739,7 +2740,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "spectral_filter) consume a content-addressed gfx1151 package. "
                "Framing, windowing, overlap-add, and pointwise complex multiply "
                "stay device-resident around persistent digest-bound child FFT "
-               "plans; only the public host-pointer ABI stages inputs/output. "
+               "plans plus a persistent digest-bound composite workspace; "
+               "only the public host-pointer ABI stages inputs/output. "
                "f32, matches np.fft.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_sparse_compiled"): ExecutionRow(

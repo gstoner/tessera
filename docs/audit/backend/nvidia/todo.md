@@ -8,6 +8,24 @@ last_updated: 2026-08-06
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **shared dtype contract
+assessed; CUDA follow-up required.** Physical binary math packages now require
+matching input storage dtypes. The Zen 5 scan selector and gfx1151 HIP module
+cache are architecture-owned and transfer no PTX schedule, dtype, or
+performance claim. NVIDIA must run the reduced-storage and difficult-domain
+corpus on its canonical CUDA math packages before claiming parity.
+
+Cross-backend sync `TSOL-CONTRACT-GENERALIZE-2026-08-06` — **shared semantic
+contract adopted; physical consumer remains follow-up.** Bounded dynamic
+dimensions, arbitrary axes, storage policy, and normalization are now explicit
+before an exact TSOL specialization is emitted. Zen 5 and gfx1151 now consume
+that wider contract, but their ABI and evidence do not transfer. NVIDIA still lacks the
+prerequisite promoted FFT package, so Schedule→Tile lowering rejects CUDA
+physical consumption and records no dtype, numerical, or performance claim.
+The architecture-owned sequence remains: close canonical CUDA FFT, define an
+SM120 workspace/residency ABI, implement the compound package, then gather
+exact-device evidence.
+
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared ODS vocabulary
 adopted; CUDA physical execution remains follow-up.** The target-neutral
 `schedule.spectral_program` and `tile.spectral_program_kernel` contract is

@@ -660,7 +660,10 @@ static FailureOr<std::string> spectralProgramDigest(Operation *op) {
   auto padding = op->getAttrOfType<DenseI64ArrayAttr>("padding");
   auto crop = op->getAttrOfType<DenseI64ArrayAttr>("crop");
   for (StringRef name : {"target", "arch", "kind", "input_shapes",
-                         "normalization", "complex_layout", "accumulation",
+                         "input_signature", "shape_bounds", "template_digest",
+                         "shape_policy", "storage", "abi_storage",
+                         "storage_conversion", "axis_packing", "normalization",
+                         "complex_layout", "accumulation",
                          "workspace_policy", "mutation_lineage",
                          "native_entry", "child_fft_digests"})
     if (!stringAttr(name)) return failure();
@@ -677,13 +680,21 @@ static FailureOr<std::string> spectralProgramDigest(Operation *op) {
     return result;
   };
   std::string contract =
-      (Twine("schema=tessera.scheduled_spectral.v2;op=") +
+      (Twine("schema=tessera.scheduled_spectral.v3;op=") +
        stringAttr("kind").getValue() + ";target=" +
        stringAttr("target").getValue() + ";arch=" +
        stringAttr("arch").getValue() + ";inputs=" +
        stringAttr("input_shapes").getValue() + ";output=" +
        arrayText(output.asArrayRef(), "x") + ";axis=" +
-       Twine(intAttr("axis").getInt()) + ";padding=" +
+       Twine(intAttr("axis").getInt()) + ";shape_policy=" +
+       stringAttr("shape_policy").getValue() + ";storage=" +
+       stringAttr("storage").getValue() + ";abi_storage=" +
+       stringAttr("abi_storage").getValue() + ";storage_conversion=" +
+       stringAttr("storage_conversion").getValue() + ";axis_packing=" +
+       stringAttr("axis_packing").getValue() + ";input_signature=" +
+       stringAttr("input_signature").getValue() + ";shape_bounds=" +
+       stringAttr("shape_bounds").getValue() + ";template_digest=" +
+       stringAttr("template_digest").getValue() + ";padding=" +
        arrayText(padding.asArrayRef(), ",") + ";crop=" +
        arrayText(crop.asArrayRef(), ",") + ";window=" +
        Twine(intAttr("window_length").getInt()) + ";hop=" +
@@ -1879,7 +1890,10 @@ struct ScheduleToTilePass
           "input_count",
           builder.getI64IntegerAttr(scheduled->getNumOperands()));
       for (StringRef name :
-           {"target", "arch", "kind", "input_shapes", "normalization",
+           {"target", "arch", "kind", "input_shapes", "input_signature",
+            "shape_bounds", "template_digest", "shape_policy",
+            "storage", "abi_storage", "storage_conversion", "axis_packing",
+            "normalization",
             "complex_layout", "accumulation", "workspace_policy",
             "mutation_lineage", "native_entry", "child_fft_digests"})
         kernelState.addAttribute(name, scheduled->getAttr(name));

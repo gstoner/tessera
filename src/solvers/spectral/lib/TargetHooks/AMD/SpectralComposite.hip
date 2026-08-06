@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <vector>
 
 extern "C" int ts_fft_plan_execute_device_batch_amd(
     void *, const float2 *, float2 *, int, hipStream_t);
@@ -77,13 +78,13 @@ __global__ void mirrorRealForDCT(const float *input, float2 *padded, int batch,
 }
 
 __global__ void realPrefix(const float2 *input, float *output, int batch,
-                           int inputStride, int outputLength) {
+                           int inputStride, int outputLength, float scale) {
   size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   size_t total = size_t(batch) * outputLength;
   if (i >= total) return;
   int row = int(i / size_t(outputLength));
   int column = int(i % size_t(outputLength));
-  output[i] = input[size_t(row) * inputStride + column].x;
+  output[i] = input[size_t(row) * inputStride + column].x * scale;
 }
 
 __global__ void padReal(const float *input, float2 *padded, int batch,
@@ -117,14 +118,15 @@ __global__ void frameWindow(const float *input, const float *window,
 }
 
 __global__ void compactHalfSpectrum(const float2 *full, float2 *half, int rows,
-                                    int n) {
+                                    int n, float scale) {
   int bins = n / 2 + 1;
   size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   size_t total = size_t(rows) * bins;
   if (i >= total) return;
   int row = int(i / size_t(bins));
   int column = int(i % size_t(bins));
-  half[i] = full[size_t(row) * n + column];
+  float2 value = full[size_t(row) * n + column];
+  half[i] = make_float2(value.x * scale, value.y * scale);
 }
 
 __global__ void expandHalfSpectrum(const float2 *half, float2 *full, int rows,
@@ -147,7 +149,7 @@ __global__ void expandHalfSpectrum(const float2 *half, float2 *full, int rows,
 // order. This avoids atomic-order drift and makes overlap-add deterministic.
 __global__ void overlapAdd(const float2 *framesIn, const float *window,
                            float *output, int batch, int frames, int win,
-                           int hop, int samples) {
+                           int hop, int samples, float scale) {
   size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   size_t total = size_t(batch) * samples;
   if (i >= total) return;
@@ -161,7 +163,7 @@ __global__ void overlapAdd(const float2 *framesIn, const float *window,
     sum += framesIn[(size_t(batchIndex) * frames + frame) * win + local].x * w;
     weight += w * w;
   }
-  output[i] = sum / (weight > 1.0e-12f ? weight : 1.0e-12f);
+  output[i] = (sum / (weight > 1.0e-12f ? weight : 1.0e-12f)) * scale;
 }
 
 template <typename T> bool allocate(T **pointer, size_t elements) {
@@ -182,7 +184,15 @@ int syncAndCopy(void *host, const void *device, size_t bytes) {
 } // namespace
 
 extern "C" const char *ts_spectral_composite_package_abi_amd() {
-  return "tessera.rocm.spectral_composite.v1";
+  return "tessera.rocm.spectral_composite.v4";
+}
+
+#ifndef TESSERA_ROCM_SPECTRAL_ARCH
+#define TESSERA_ROCM_SPECTRAL_ARCH "unknown"
+#endif
+
+extern "C" const char *ts_spectral_composite_arch_amd() {
+  return TESSERA_ROCM_SPECTRAL_ARCH;
 }
 
 extern "C" int ts_spectral_filter_hostptr_amd(
@@ -212,7 +222,8 @@ extern "C" int ts_spectral_filter_hostptr_amd(
 
 extern "C" int ts_dct_hostptr_batch_amd(void *forwardPlan,
                                           const float *inputHost,
-                                          float *outputHost, int batch, int n) {
+                                          float *outputHost, int batch, int n,
+                                          float outputScale) {
   if (!forwardPlan || !inputHost || !outputHost || batch <= 0 || n <= 0 ||
       ts_fft_plan_length_amd(forwardPlan) != 2 * n)
     return 20;
@@ -238,7 +249,7 @@ extern "C" int ts_dct_hostptr_batch_amd(void *forwardPlan,
   if (!rc) {
     hipLaunchKernelGGL(realPrefix, dim3((inCount + kThreads - 1) / kThreads),
                        dim3(kThreads), 0, 0, transformed, output, batch, 2 * n,
-                       n);
+                       n, outputScale);
     rc = syncAndCopy(outputHost, output, inCount * sizeof(float));
   }
   release(input, output, padded, transformed);
@@ -298,7 +309,7 @@ extern "C" int ts_spectral_conv_hostptr_batch_amd(
     hipLaunchKernelGGL(realPrefix,
                        dim3((outputCount + kThreads - 1) / kThreads),
                        dim3(kThreads), 0, 0, inverse, output, batch, fftN,
-                       outputN);
+                       outputN, 1.0f);
     rc = syncAndCopy(outputHost, output, outputCount * sizeof(float));
   }
   release(input, kernel, output, xPad, wPad, xFFT, wFFT, product, inverse);
@@ -307,7 +318,8 @@ extern "C" int ts_spectral_conv_hostptr_batch_amd(
 
 extern "C" int ts_stft_hostptr_batch_amd(
     void *forwardPlan, const float *inputHost, const float *windowHost,
-    float2 *outputHost, int batch, int samples, int win, int hop, int frames) {
+    float2 *outputHost, int batch, int samples, int win, int hop, int frames,
+    float outputScale) {
   if (!forwardPlan || !inputHost || !windowHost || !outputHost || batch <= 0 ||
       samples <= 0 || win <= 0 || hop <= 0 || frames <= 0 ||
       ts_fft_plan_length_amd(forwardPlan) != win)
@@ -341,7 +353,7 @@ extern "C" int ts_stft_hostptr_batch_amd(
   if (!rc) {
     hipLaunchKernelGGL(compactHalfSpectrum,
                        dim3((halfCount + kThreads - 1) / kThreads),
-                       dim3(kThreads), 0, 0, full, half, rows, win);
+                       dim3(kThreads), 0, 0, full, half, rows, win, outputScale);
     rc = syncAndCopy(outputHost, half, halfCount * sizeof(float2));
   }
   release(input, window, framed, full, half);
@@ -350,7 +362,8 @@ extern "C" int ts_stft_hostptr_batch_amd(
 
 extern "C" int ts_istft_hostptr_batch_amd(
     void *inversePlan, const float2 *inputHost, const float *windowHost,
-    float *outputHost, int batch, int frames, int win, int hop) {
+    float *outputHost, int batch, int frames, int win, int hop,
+    float outputScale) {
   if (!inversePlan || !inputHost || !windowHost || !outputHost || batch <= 0 ||
       frames <= 0 || win <= 0 || hop <= 0 ||
       ts_fft_plan_length_amd(inversePlan) != win)
@@ -385,7 +398,7 @@ extern "C" int ts_istft_hostptr_batch_amd(
     hipLaunchKernelGGL(overlapAdd,
                        dim3((outputCount + kThreads - 1) / kThreads),
                        dim3(kThreads), 0, 0, transformed, window, output, batch,
-                       frames, win, hop, samples);
+                       frames, win, hop, samples, outputScale);
     rc = syncAndCopy(outputHost, output, outputCount * sizeof(float));
   }
   release(window, output, half, full, transformed);
@@ -447,7 +460,7 @@ extern "C" int ts_spectral_filter_plan_hostptr_amd(
 
 extern "C" int ts_dct_plan_hostptr_batch_amd(
     void *opaque, void *forwardPlan, const float *inputHost,
-    float *outputHost, int batch, int n) {
+    float *outputHost, int batch, int n, float outputScale) {
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !forwardPlan || !inputHost || !outputHost || batch <= 0 ||
       n <= 0 || ts_fft_plan_length_amd(forwardPlan) != 2 * n)
@@ -470,7 +483,8 @@ extern "C" int ts_dct_plan_hostptr_batch_amd(
   if (rc) return rc;
   hipLaunchKernelGGL(realPrefix,
                      dim3((inputCount + kThreads - 1) / kThreads),
-                     dim3(kThreads), 0, 0, transformed, output, batch, 2 * n, n);
+                     dim3(kThreads), 0, 0, transformed, output, batch, 2 * n, n,
+                     outputScale);
   return syncAndCopy(outputHost, output, inputCount * sizeof(float));
 }
 
@@ -523,14 +537,15 @@ extern "C" int ts_spectral_conv_plan_hostptr_batch_amd(
   if (rc) return rc;
   hipLaunchKernelGGL(realPrefix,
                      dim3((outputCount + kThreads - 1) / kThreads),
-                     dim3(kThreads), 0, 0, inverse, output, batch, fftN, outputN);
+                     dim3(kThreads), 0, 0, inverse, output, batch, fftN, outputN,
+                     1.0f);
   return syncAndCopy(outputHost, output, outputCount * sizeof(float));
 }
 
 extern "C" int ts_stft_plan_hostptr_batch_amd(
     void *opaque, void *forwardPlan, const float *inputHost,
     const float *windowHost, float2 *outputHost, int batch, int samples,
-    int win, int hop, int frames) {
+    int win, int hop, int frames, float outputScale) {
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !forwardPlan || !inputHost || !windowHost || !outputHost ||
       batch <= 0 || samples <= 0 || win <= 0 || hop <= 0 || frames <= 0 ||
@@ -560,14 +575,14 @@ extern "C" int ts_stft_plan_hostptr_batch_amd(
   if (rc) return rc;
   hipLaunchKernelGGL(compactHalfSpectrum,
                      dim3((halfCount + kThreads - 1) / kThreads),
-                     dim3(kThreads), 0, 0, full, half, rows, win);
+                     dim3(kThreads), 0, 0, full, half, rows, win, outputScale);
   return syncAndCopy(outputHost, half, halfCount * sizeof(float2));
 }
 
 extern "C" int ts_istft_plan_hostptr_batch_amd(
     void *opaque, void *inversePlan, const float2 *inputHost,
     const float *windowHost, float *outputHost, int batch, int frames,
-    int win, int hop) {
+    int win, int hop, float outputScale) {
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !inversePlan || !inputHost || !windowHost || !outputHost ||
       batch <= 0 || frames <= 0 || win <= 0 || hop <= 0 ||
@@ -599,6 +614,242 @@ extern "C" int ts_istft_plan_hostptr_batch_amd(
   hipLaunchKernelGGL(overlapAdd,
                      dim3((outputCount + kThreads - 1) / kThreads),
                      dim3(kThreads), 0, 0, transformed, window, output, batch,
-                     frames, win, hop, samples);
+                     frames, win, hop, samples, outputScale);
   return syncAndCopy(outputHost, output, outputCount * sizeof(float));
+}
+
+namespace {
+
+bool validStorage(int storage) { return storage >= 0 && storage <= 2; }
+
+float loadStorage(const void *input, size_t index, int storage) {
+  if (storage == 0) return static_cast<const float *>(input)[index];
+  uint16_t bits = static_cast<const uint16_t *>(input)[index];
+  if (storage == 1) {
+    _Float16 half;
+    std::memcpy(&half, &bits, sizeof(bits));
+    return static_cast<float>(half);
+  }
+  uint32_t wide = uint32_t(bits) << 16;
+  float value;
+  std::memcpy(&value, &wide, sizeof(value));
+  return value;
+}
+
+void storeStorage(void *output, size_t index, int storage, float value) {
+  if (storage == 0) {
+    static_cast<float *>(output)[index] = value;
+    return;
+  }
+  if (storage == 1) {
+    _Float16 half = static_cast<_Float16>(value);
+    std::memcpy(static_cast<uint16_t *>(output) + index, &half, sizeof(half));
+    return;
+  }
+  uint32_t bits;
+  std::memcpy(&bits, &value, sizeof(bits));
+  uint32_t rounding = 0x7fff + ((bits >> 16) & 1);
+  static_cast<uint16_t *>(output)[index] = uint16_t((bits + rounding) >> 16);
+}
+
+std::vector<float> unpackStorage(const void *input, size_t elements,
+                                 int storage) {
+  std::vector<float> result(elements);
+  for (size_t i = 0; i < elements; ++i)
+    result[i] = loadStorage(input, i, storage);
+  return result;
+}
+
+void packStorage(const std::vector<float> &input, void *output, int storage) {
+  for (size_t i = 0; i < input.size(); ++i)
+    storeStorage(output, i, storage, input[i]);
+}
+
+} // namespace
+
+extern "C" int ts_dct_plan_hostptr_batch_storage_amd(
+    void *opaque, void *forwardPlan, const void *inputHost, void *outputHost,
+    int batch, int n, int storage, float outputScale) {
+  if (!validStorage(storage) || !inputHost || !outputHost) return 120;
+  if (storage == 0)
+    return ts_dct_plan_hostptr_batch_amd(
+        opaque, forwardPlan, static_cast<const float *>(inputHost),
+        static_cast<float *>(outputHost), batch, n, outputScale);
+  size_t elements = size_t(batch) * n;
+  std::vector<float> input = unpackStorage(inputHost, elements, storage);
+  std::vector<float> output(elements);
+  int rc = ts_dct_plan_hostptr_batch_amd(
+      opaque, forwardPlan, input.data(), output.data(), batch, n, outputScale);
+  if (!rc) packStorage(output, outputHost, storage);
+  return rc;
+}
+
+extern "C" int ts_spectral_conv_plan_hostptr_batch_storage_amd(
+    void *opaque, void *forwardPlan, void *inversePlan, const void *inputHost,
+    int inputN, const void *kernelHost, int kernelN, void *outputHost,
+    int batch, int fftN, int storage) {
+  if (!validStorage(storage) || !inputHost || !kernelHost || !outputHost)
+    return 130;
+  if (storage == 0)
+    return ts_spectral_conv_plan_hostptr_batch_amd(
+        opaque, forwardPlan, inversePlan,
+        static_cast<const float *>(inputHost), inputN,
+        static_cast<const float *>(kernelHost), kernelN,
+        static_cast<float *>(outputHost), batch, fftN);
+  size_t inputElements = size_t(batch) * inputN;
+  size_t kernelElements = size_t(batch) * kernelN;
+  size_t outputElements = size_t(batch) * (inputN + kernelN - 1);
+  std::vector<float> input = unpackStorage(inputHost, inputElements, storage);
+  std::vector<float> kernel = unpackStorage(kernelHost, kernelElements, storage);
+  std::vector<float> output(outputElements);
+  int rc = ts_spectral_conv_plan_hostptr_batch_amd(
+      opaque, forwardPlan, inversePlan, input.data(), inputN, kernel.data(),
+      kernelN, output.data(), batch, fftN);
+  if (!rc) packStorage(output, outputHost, storage);
+  return rc;
+}
+
+extern "C" int ts_stft_plan_hostptr_batch_storage_amd(
+    void *opaque, void *forwardPlan, const void *inputHost,
+    const void *windowHost, float2 *outputHost, int batch, int samples,
+    int win, int hop, int frames, int storage, float outputScale) {
+  if (!validStorage(storage) || !inputHost || !windowHost || !outputHost)
+    return 140;
+  if (storage == 0)
+    return ts_stft_plan_hostptr_batch_amd(
+        opaque, forwardPlan, static_cast<const float *>(inputHost),
+        static_cast<const float *>(windowHost), outputHost, batch, samples,
+        win, hop, frames, outputScale);
+  std::vector<float> input = unpackStorage(
+      inputHost, size_t(batch) * samples, storage);
+  std::vector<float> window = unpackStorage(windowHost, size_t(win), storage);
+  return ts_stft_plan_hostptr_batch_amd(
+      opaque, forwardPlan, input.data(), window.data(), outputHost, batch,
+      samples, win, hop, frames, outputScale);
+}
+
+extern "C" int ts_istft_plan_hostptr_batch_storage_amd(
+    void *opaque, void *inversePlan, const float2 *inputHost,
+    const void *windowHost, void *outputHost, int batch, int frames,
+    int win, int hop, int storage, float outputScale) {
+  if (!validStorage(storage) || !inputHost || !windowHost || !outputHost)
+    return 150;
+  if (storage == 0)
+    return ts_istft_plan_hostptr_batch_amd(
+        opaque, inversePlan, inputHost,
+        static_cast<const float *>(windowHost), static_cast<float *>(outputHost),
+        batch, frames, win, hop, outputScale);
+  int samples = (frames - 1) * hop + win;
+  std::vector<float> window = unpackStorage(windowHost, size_t(win), storage);
+  std::vector<float> output(size_t(batch) * samples);
+  int rc = ts_istft_plan_hostptr_batch_amd(
+      opaque, inversePlan, inputHost, window.data(), output.data(), batch,
+      frames, win, hop, outputScale);
+  if (!rc) packStorage(output, outputHost, storage);
+  return rc;
+}
+
+namespace {
+
+size_t storageBytes(int storage) { return storage == 0 ? 4 : 2; }
+
+void packAxis(const void *input, void *output, int64_t outer,
+              int64_t axisExtent, int64_t inner, size_t bytes) {
+  const auto *source = static_cast<const unsigned char *>(input);
+  auto *destination = static_cast<unsigned char *>(output);
+  for (int64_t o = 0; o < outer; ++o)
+    for (int64_t j = 0; j < inner; ++j)
+      for (int64_t i = 0; i < axisExtent; ++i) {
+        int64_t sourceIndex = (o * axisExtent + i) * inner + j;
+        int64_t destinationIndex = (o * inner + j) * axisExtent + i;
+        std::memcpy(destination + destinationIndex * bytes,
+                    source + sourceIndex * bytes, bytes);
+      }
+}
+
+void unpackAxis(const void *input, void *output, int64_t outer,
+                int64_t axisExtent, int64_t inner, size_t bytes) {
+  packAxis(input, output, outer, inner, axisExtent, bytes);
+}
+
+} // namespace
+
+extern "C" int ts_dct_plan_hostptr_strided_storage_amd(
+    void *opaque, void *forwardPlan, const void *inputHost, void *outputHost,
+    int64_t outer, int64_t n, int64_t inner, int storage, float outputScale) {
+  if (!validStorage(storage) || outer <= 0 || inner <= 0) return 160;
+  size_t bytes = storageBytes(storage);
+  size_t total = size_t(outer * n * inner) * bytes;
+  std::vector<unsigned char> input(total), output(total);
+  packAxis(inputHost, input.data(), outer, n, inner, bytes);
+  int rc = ts_dct_plan_hostptr_batch_storage_amd(
+      opaque, forwardPlan, input.data(), output.data(), int(outer * inner),
+      int(n), storage, outputScale);
+  if (!rc) unpackAxis(output.data(), outputHost, outer, n, inner, bytes);
+  return rc;
+}
+
+extern "C" int ts_spectral_conv_plan_hostptr_strided_storage_amd(
+    void *opaque, void *forwardPlan, void *inversePlan, const void *inputHost,
+    int inputN, const void *kernelHost, int kernelN, void *outputHost,
+    int64_t outer, int64_t inner, int fftN, int storage) {
+  if (!validStorage(storage) || outer <= 0 || inner <= 0) return 170;
+  int outputN = inputN + kernelN - 1;
+  int64_t batch = outer * inner;
+  size_t bytes = storageBytes(storage);
+  std::vector<unsigned char> input(size_t(batch * inputN) * bytes);
+  std::vector<unsigned char> kernel(size_t(batch * kernelN) * bytes);
+  std::vector<unsigned char> output(size_t(batch * outputN) * bytes);
+  packAxis(inputHost, input.data(), outer, inputN, inner, bytes);
+  packAxis(kernelHost, kernel.data(), outer, kernelN, inner, bytes);
+  int rc = ts_spectral_conv_plan_hostptr_batch_storage_amd(
+      opaque, forwardPlan, inversePlan, input.data(), inputN, kernel.data(),
+      kernelN, output.data(), int(batch), fftN, storage);
+  if (!rc)
+    unpackAxis(output.data(), outputHost, outer, outputN, inner, bytes);
+  return rc;
+}
+
+extern "C" int ts_stft_plan_hostptr_strided_storage_amd(
+    void *opaque, void *forwardPlan, const void *inputHost,
+    const void *windowHost, float2 *outputHost, int64_t outer, int samples,
+    int64_t inner, int win, int hop, int frames, int storage,
+    float outputScale) {
+  if (!validStorage(storage) || outer <= 0 || inner <= 0) return 180;
+  int64_t batch = outer * inner;
+  int bins = win / 2 + 1;
+  size_t bytes = storageBytes(storage);
+  std::vector<unsigned char> input(size_t(batch * samples) * bytes);
+  std::vector<float2> output(size_t(batch * frames * bins));
+  packAxis(inputHost, input.data(), outer, samples, inner, bytes);
+  int rc = ts_stft_plan_hostptr_batch_storage_amd(
+      opaque, forwardPlan, input.data(), windowHost, output.data(), int(batch),
+      samples, win, hop, frames, storage, outputScale);
+  if (!rc)
+    unpackAxis(output.data(), outputHost, outer, int64_t(frames) * bins, inner,
+               sizeof(float2));
+  return rc;
+}
+
+extern "C" int ts_istft_plan_hostptr_strided_storage_amd(
+    void *opaque, void *inversePlan, const float2 *inputHost,
+    const void *windowHost, void *outputHost, int64_t outer, int frames,
+    int bins, int64_t inner, int win, int hop, int storage,
+    float outputScale) {
+  if (!validStorage(storage) || outer <= 0 || inner <= 0 ||
+      bins != win / 2 + 1)
+    return 190;
+  int64_t batch = outer * inner;
+  int samples = (frames - 1) * hop + win;
+  size_t bytes = storageBytes(storage);
+  std::vector<float2> input(size_t(batch * frames * bins));
+  std::vector<unsigned char> output(size_t(batch * samples) * bytes);
+  packAxis(inputHost, input.data(), outer, int64_t(frames) * bins, inner,
+           sizeof(float2));
+  int rc = ts_istft_plan_hostptr_batch_storage_amd(
+      opaque, inversePlan, input.data(), windowHost, output.data(), int(batch),
+      frames, win, hop, storage, outputScale);
+  if (!rc)
+    unpackAxis(output.data(), outputHost, outer, samples, inner, bytes);
+  return rc;
 }

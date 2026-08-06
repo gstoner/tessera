@@ -12,11 +12,11 @@
 // Horizontal reduce via the AVX-512 `_mm512_reduce_{add,max}_ps` intrinsics.
 
 #include <immintrin.h>
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 
 namespace {
-constexpr int kSum = 0;
 constexpr int kMax = 1;
 constexpr int kMean = 2;
 constexpr int kMin = 3;
@@ -26,6 +26,37 @@ constexpr int kProd = 4;
 // it. We track NaN explicitly (the f32 self-inequality test) and force NaN out.
 inline bool is_nan_f32(float v) { return v != v; }
 const float kQNaN = std::numeric_limits<float>::quiet_NaN();
+
+struct WelfordState {
+    int64_t count = 0;
+    double mean = 0.0;
+    double m2 = 0.0;
+};
+
+inline void welford_update(WelfordState& state, float value) {
+    ++state.count;
+    const double sample = static_cast<double>(value);
+    const double delta = sample - state.mean;
+    state.mean += delta / static_cast<double>(state.count);
+    state.m2 += delta * (sample - state.mean);
+}
+
+inline void welford_merge(WelfordState& dst, const WelfordState& src) {
+    if (src.count == 0) return;
+    if (dst.count == 0) {
+        dst = src;
+        return;
+    }
+    const double delta = src.mean - dst.mean;
+    const int64_t count = dst.count + src.count;
+    dst.m2 += src.m2 + delta * delta *
+                           (static_cast<double>(dst.count) *
+                            static_cast<double>(src.count) /
+                            static_cast<double>(count));
+    dst.mean += delta * (static_cast<double>(src.count) /
+                         static_cast<double>(count));
+    dst.count = count;
+}
 }  // namespace
 
 extern "C" void tessera_x86_reference_reduce_f32(const float* X, int64_t rows,
@@ -99,5 +130,35 @@ extern "C" void tessera_x86_avx512_reduce_f32(const float* X, int64_t rows,
             for (; c < cols; ++c) acc += row[c];
             out[r] = (kind == kMean && cols > 0) ? acc / (float)cols : acc;
         }
+    }
+}
+
+// Population variance over each row using mergeable Welford states. Full
+// vectors are loaded with AVX-512, then accumulated into one independent state
+// per SIMD lane. Merging those states avoids the cancellation in E[x*x]-E[x]^2
+// while retaining the native [rows, cols] package ABI and arbitrary-axis fold
+// performed by the runtime.
+extern "C" void tessera_x86_avx512_welford_f32(const float* X, int64_t rows,
+                                               int64_t cols, float* out) {
+    constexpr int64_t kLanes = 16;
+    alignas(64) float values[kLanes];
+    for (int64_t r = 0; r < rows; ++r) {
+        const float* row = X + r * cols;
+        WelfordState lanes[kLanes];
+        int64_t c = 0;
+        for (; c + kLanes <= cols; c += kLanes) {
+            _mm512_store_ps(values, _mm512_loadu_ps(row + c));
+            for (int64_t lane = 0; lane < kLanes; ++lane)
+                welford_update(lanes[lane], values[lane]);
+        }
+        for (; c < cols; ++c)
+            welford_update(lanes[c % kLanes], row[c]);
+
+        WelfordState total;
+        for (const WelfordState& lane : lanes) welford_merge(total, lane);
+        out[r] = total.count > 0
+                     ? static_cast<float>(std::max(
+                           total.m2 / static_cast<double>(total.count), 0.0))
+                     : kQNaN;
     }
 }

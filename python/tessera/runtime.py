@@ -10241,6 +10241,7 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
     i64 = ctypes.c_int64
     sigs = {
         "tessera_x86_avx512_reduce_f32": [c_f32, i64, i64, c_f32, ctypes.c_int],
+        "tessera_x86_avx512_welford_f32": [c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_unary_f32": [c_f32, i64, c_f32, ctypes.c_int],
         "tessera_x86_avx512_binary_f32": [c_f32, c_f32, i64, c_f32, ctypes.c_int],
         "tessera_x86_avx512_compare_f32": [c_i8, c_i8, i64, c_i8, ctypes.c_int],
@@ -10369,15 +10370,49 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_spectral_filter_f32": [
             ctypes.c_char_p, c_f32, c_f32, c_f32, i64
         ],
-        "tessera_x86_dct_f32": [ctypes.c_char_p, c_f32, c_f32, i64, i64],
+        "tessera_x86_dct_f32": [ctypes.c_char_p, c_f32, c_f32, i64, i64, ctypes.c_float],
         "tessera_x86_spectral_conv_f32": [
             ctypes.c_char_p, c_f32, i64, c_f32, i64, c_f32, i64, i64
         ],
         "tessera_x86_stft_f32": [
-            ctypes.c_char_p, c_f32, c_f32, c_f32, i64, i64, i64, i64, i64
+            ctypes.c_char_p, c_f32, c_f32, c_f32, i64, i64, i64, i64, i64,
+            ctypes.c_float,
         ],
         "tessera_x86_istft_f32": [
-            ctypes.c_char_p, c_f32, c_f32, c_f32, i64, i64, i64, i64
+            ctypes.c_char_p, c_f32, c_f32, c_f32, i64, i64, i64, i64,
+            ctypes.c_float,
+        ],
+        "tessera_x86_dct_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, i64, i64,
+            ctypes.c_int, ctypes.c_float,
+        ],
+        "tessera_x86_spectral_conv_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, i64, ctypes.c_void_p, i64,
+            ctypes.c_void_p, i64, i64, ctypes.c_int,
+        ],
+        "tessera_x86_stft_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, c_f32, i64, i64,
+            i64, i64, i64, ctypes.c_int, ctypes.c_float,
+        ],
+        "tessera_x86_istft_storage": [
+            ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p, i64, i64,
+            i64, i64, ctypes.c_int, ctypes.c_float,
+        ],
+        "tessera_x86_dct_strided_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, i64, i64, i64,
+            ctypes.c_int, ctypes.c_float,
+        ],
+        "tessera_x86_spectral_conv_strided_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, i64, ctypes.c_void_p, i64,
+            ctypes.c_void_p, i64, i64, i64, ctypes.c_int,
+        ],
+        "tessera_x86_stft_strided_storage": [
+            ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, c_f32, i64, i64,
+            i64, i64, i64, i64, ctypes.c_int, ctypes.c_float,
+        ],
+        "tessera_x86_istft_strided_storage": [
+            ctypes.c_char_p, c_f32, ctypes.c_void_p, ctypes.c_void_p, i64, i64,
+            i64, i64, i64, i64, ctypes.c_int, ctypes.c_float,
         ],
         "tessera_x86_avx512_spmm_csr_f32": [c_i32, c_i32, c_f32, c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_sddmm_f32": [c_f32, c_f32, c_f32, i64, i64, i64, c_f32],
@@ -10448,6 +10483,14 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_spectral_conv_f32",
         "tessera_x86_stft_f32",
         "tessera_x86_istft_f32",
+        "tessera_x86_dct_storage",
+        "tessera_x86_spectral_conv_storage",
+        "tessera_x86_stft_storage",
+        "tessera_x86_istft_storage",
+        "tessera_x86_dct_strided_storage",
+        "tessera_x86_spectral_conv_strided_storage",
+        "tessera_x86_stft_strided_storage",
+        "tessera_x86_istft_strided_storage",
         "tessera_x86_kv_cache_append_f32",
         "tessera_x86_kv_cache_read_f32",
         "tessera_x86_kv_cache_prune_f32",
@@ -10876,6 +10919,10 @@ def _execute_x86_compiled_binary_math(artifact: RuntimeArtifact, args: Any) -> A
     b = _as_numpy(values[operand_names[1]])
     if a.shape != b.shape:
         raise ValueError(f"x86 binary-math lane requires matching operand shapes; got a{a.shape} b{b.shape}")
+    if a.dtype != b.dtype:
+        raise ValueError(
+            f"x86 binary-math lane requires matching operand dtypes; got {a.dtype} and {b.dtype}"
+        )
     if a.dtype != np.float32:
         raise ValueError(f"x86 binary-math lane handles f32 only; got {a.dtype}")
     n = int(np.prod(a.shape)) if a.ndim else 1
@@ -12444,8 +12491,10 @@ _X86_STAT_REDUCE_OPS = ("tessera.var", "tessera.std", "tessera.count_nonzero")
 
 def _execute_x86_compiled_stat_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="x86"`` statistical-reduction lane: var / std /
-    count_nonzero over an axis, composed from the AVX-512 reduce kernel."""
+    count_nonzero over an axis. var/std use the native mergeable-Welford ABI;
+    count_nonzero composes the AVX-512 sum reduction."""
     import numpy as np
+    from .compiler.emit.executable_layout import DynamicShapeGuardError
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
@@ -12470,17 +12519,50 @@ def _execute_x86_compiled_stat_reduce(artifact: RuntimeArtifact, args: Any) -> A
         out = _x86_reduce((x != 0.0).astype(np.float32), "tessera.sum", axis, keepdims, np)
         return np.rint(out).astype(np.int64)
 
-    mean = _x86_reduce(x, "tessera.mean", axis, True, np)
-    m2 = _x86_reduce(x * x, "tessera.mean", axis, True, np)
-    var = np.maximum(m2 - mean * mean, np.float32(0.0))
+    n = x.ndim
+    if axis is None:
+        axes = tuple(range(n))
+    elif isinstance(axis, int) and not isinstance(axis, bool):
+        axes = (axis if axis >= 0 else n + axis,)
+    else:
+        try:
+            axes = tuple(a if a >= 0 else n + a for a in axis)
+        except TypeError as exc:
+            raise DynamicShapeGuardError("x86 Welford axes must be integers") from exc
+    if (not axes and n > 0) or any(
+        not isinstance(a, int) or isinstance(a, bool) or a < 0 or a >= n
+        for a in axes
+    ):
+        raise DynamicShapeGuardError(
+            f"x86 Welford axes {axes!r} are invalid for rank {n}"
+        )
+    if len(set(axes)) != len(axes):
+        raise DynamicShapeGuardError("x86 Welford axes must be unique")
+
+    kept = [i for i in range(n) if i not in axes]
+    xt = np.ascontiguousarray(np.transpose(x, kept + list(axes)), dtype=np.float32)
+    inner = 1
+    for a in axes:
+        inner *= int(x.shape[a])
+    if inner <= 0:
+        raise ValueError("x86 Welford: empty reduction axis")
+    outer = int(xt.size // inner)
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    xc = xt.reshape(-1)
+    var = np.zeros(outer, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_welford_f32(
+        xc.ctypes.data_as(cf), ctypes.c_int64(outer), ctypes.c_int64(inner),
+        var.ctypes.data_as(cf),
+    )
+    kept_shape = tuple(int(x.shape[i]) for i in kept)
+    var = var.reshape(kept_shape) if kept_shape else var.reshape(())
     if op_name == "tessera.std":
         var = np.sqrt(var).astype(np.float32)
-    if not keepdims:
-        if axis is None:
-            var = var.reshape(())
-        else:
-            axes = (axis,) if isinstance(axis, int) else tuple(axis)
-            var = np.squeeze(var, axis=tuple(a if a >= 0 else x.ndim + a for a in axes))
+    if keepdims:
+        var = var.reshape([1 if i in axes else int(x.shape[i]) for i in range(n)])
     return var.astype(np.float32)
 
 
@@ -12962,7 +13044,10 @@ def _x86_fftexec(sub_op: str, x: Any, sub_kwargs: dict) -> Any:
 def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
     """Consume one exact compound Schedule→Tile artifact in the x86 package."""
     import numpy as np
-    from .compiler.scheduled_spectral import validate_scheduled_spectral_metadata
+    from .compiler.scheduled_spectral import (
+        spectral_output_scale,
+        validate_scheduled_spectral_metadata,
+    )
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
@@ -12979,20 +13064,47 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
         )
     values = _bind_launch_args(args, arg_names)
     operands = [np.asarray(_as_numpy(values[name])) for name in arg_names]
-    validate_scheduled_spectral_metadata(
+    contract = validate_scheduled_spectral_metadata(
         contract, input_shapes=[value.shape for value in operands]
     )
     lib = _load_x86_elementwise()
     if lib is None or not hasattr(lib, "tessera_x86_spectral_composite_package_abi"):
         raise RuntimeError("x86 compound spectral package is unavailable")
-    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v1":
+    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v4":
         raise RuntimeError("x86 compound spectral package ABI mismatch")
     digest = str(contract["schedule_digest"]).encode("ascii")
     output_shape = tuple(int(dim) for dim in contract["output_shape"])
+    axis = int(contract["axis"])
+    storage = str(contract["storage"])
+    normalization = str(contract["normalization"])
+    expected_real_dtype = {"f32": "float32", "f16": "float16", "bf16": "bfloat16"}[storage]
+    real_indices = (
+        () if op_name == "tessera.spectral_filter"
+        else (1,) if op_name == "tessera.istft"
+        else tuple(range(len(operands)))
+    )
+    for index in real_indices:
+        if str(operands[index].dtype) != expected_real_dtype:
+            raise ValueError(
+                f"x86 TSOL artifact requires {storage} storage for operand {index}; "
+                f"got {operands[index].dtype}"
+            )
     pointer = ctypes.POINTER(ctypes.c_float)
 
     def ptr(value: Any) -> Any:
         return value.ctypes.data_as(pointer)
+
+    def vptr(value: Any) -> Any:
+        return value.ctypes.data_as(ctypes.c_void_p)
+
+    storage_code = {"f32": 0, "f16": 1, "bf16": 2}[storage]
+
+    def folded_axis(shape: tuple[int, ...], at: int) -> tuple[int, int, int]:
+        return (
+            int(np.prod(shape[:at], dtype=np.int64)),
+            int(shape[at]),
+            int(np.prod(shape[at + 1 :], dtype=np.int64)),
+        )
 
     if op_name == "tessera.spectral_filter":
         a = np.ascontiguousarray(operands[0], np.complex64)
@@ -13002,40 +13114,54 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
             digest, ptr(a), ptr(b), ptr(output), a.size
         )
     elif op_name == "tessera.dct":
-        x = np.ascontiguousarray(operands[0], np.float32)
-        output = np.empty(output_shape, np.float32)
-        rc = lib.tessera_x86_dct_f32(
-            digest, ptr(x), ptr(output), int(np.prod(x.shape[:-1])), x.shape[-1]
+        x = np.ascontiguousarray(operands[0])
+        output = np.empty(output_shape, operands[0].dtype)
+        outer, n, inner = folded_axis(tuple(x.shape), axis)
+        rc = lib.tessera_x86_dct_strided_storage(
+            digest, vptr(x), vptr(output), outer, n, inner, storage_code,
+            spectral_output_scale(op_name, normalization, 2 * n),
         )
     elif op_name == "tessera.spectral_conv":
-        x = np.ascontiguousarray(operands[0], np.float32)
-        kernel = np.ascontiguousarray(operands[1], np.float32)
-        output = np.empty(output_shape, np.float32)
+        x = np.ascontiguousarray(operands[0])
+        kernel = np.ascontiguousarray(operands[1])
+        output = np.empty(output_shape, operands[0].dtype)
+        outer, input_n, inner = folded_axis(tuple(x.shape), axis)
+        _, kernel_n, _ = folded_axis(tuple(kernel.shape), axis)
         fft_n = int(contract["child_ffts"][0]["length"])
-        rc = lib.tessera_x86_spectral_conv_f32(
-            digest, ptr(x), x.shape[-1], ptr(kernel), kernel.shape[-1],
-            ptr(output), int(np.prod(x.shape[:-1])), fft_n,
+        rc = lib.tessera_x86_spectral_conv_strided_storage(
+            digest, vptr(x), input_n, vptr(kernel), kernel_n, vptr(output),
+            outer, inner, fft_n, storage_code,
         )
     elif op_name == "tessera.stft":
-        x = np.ascontiguousarray(operands[0], np.float32)
-        window = np.ascontiguousarray(operands[1], np.float32)
+        x = np.ascontiguousarray(operands[0])
+        window = np.ascontiguousarray(operands[1])
         output = np.empty(output_shape, np.complex64)
-        rc = lib.tessera_x86_stft_f32(
-            digest, ptr(x), ptr(window), ptr(output),
-            int(np.prod(x.shape[:-1])), x.shape[-1], contract["window_length"],
-            contract["hop"], contract["frames"],
+        outer, samples, inner = folded_axis(tuple(x.shape), axis)
+        rc = lib.tessera_x86_stft_strided_storage(
+            digest, vptr(x), vptr(window), ptr(output),
+            outer, samples, inner, contract["window_length"], contract["hop"],
+            contract["frames"], storage_code,
+            spectral_output_scale(op_name, normalization, int(contract["window_length"])),
         )
     else:
+        frame_axis = axis - 1
         x = np.ascontiguousarray(operands[0], np.complex64)
-        window = np.ascontiguousarray(operands[1], np.float32)
-        output = np.empty(output_shape, np.float32)
-        rc = lib.tessera_x86_istft_f32(
-            digest, ptr(x), ptr(window), ptr(output),
-            int(np.prod(x.shape[:-2])), contract["frames"],
-            contract["window_length"], contract["hop"],
+        window = np.ascontiguousarray(operands[1])
+        output = np.empty(output_shape, operands[1].dtype)
+        outer = int(np.prod(x.shape[:frame_axis], dtype=np.int64))
+        inner = int(np.prod(x.shape[axis + 1 :], dtype=np.int64))
+        rc = lib.tessera_x86_istft_strided_storage(
+            digest, ptr(x), vptr(window), vptr(output),
+            outer, contract["frames"], x.shape[axis], inner,
+            contract["window_length"], contract["hop"], storage_code,
+            spectral_output_scale(op_name, normalization, int(contract["window_length"])),
         )
     if rc != 0:
         raise RuntimeError(f"x86 compound spectral execution failed rc={rc}")
+    if tuple(output.shape) != output_shape:
+        raise RuntimeError(
+            f"x86 spectral package produced shape {output.shape}, expected {output_shape}"
+        )
     return output
 
 
@@ -15977,6 +16103,10 @@ def _execute_x86_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
     b = _as_numpy(values[operand_names[1]])
     if a.shape != b.shape:
         raise ValueError(f"x86 binary lane requires matching operand shapes; got a{a.shape} b{b.shape}")
+    if a.dtype != b.dtype:
+        raise ValueError(
+            f"x86 binary lane requires matching operand dtypes; got {a.dtype} and {b.dtype}"
+        )
     if a.dtype != np.float32:
         raise ValueError(f"x86 binary lane handles f32 only; got {a.dtype}")
     n = int(np.prod(a.shape)) if a.ndim else 1
@@ -19365,6 +19495,36 @@ def _execute_x86_compiled_bitwise(artifact: RuntimeArtifact, args: Any) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 _REDUCE_BLOCKDIM = 256  # must match BD in GenerateROCMReduceKernel.cpp
 _rocm_reduce_hsaco_cache: dict[tuple[str, str], bytes] = {}
+_rocm_math_module_cache: dict[
+    tuple[str, str, str, str], tuple[ctypes.c_void_p, ctypes.c_void_p]
+] = {}
+
+
+def _rocm_math_cached_function(
+    hip: Any,
+    hsaco: bytes,
+    symbol: bytes,
+    key: tuple[str, str, str, str],
+) -> tuple[ctypes.c_void_p, ctypes.c_void_p]:
+    """Retain one generated math module/function per exact physical contract."""
+    cached = _rocm_math_module_cache.get(key)
+    if cached is not None:
+        return cached
+    module = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(module), hsaco) != 0:
+        raise _RocmCompiledUnavailable(
+            f"rocm math: no usable AMD GPU for cached module {key!r}"
+        )
+    function = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(function), module, symbol) != 0:
+        unload = getattr(hip, "hipModuleUnload", None)
+        if unload is not None and module.value:
+            unload(module)
+        raise RuntimeError(
+            f"rocm math: kernel symbol {symbol.decode(errors='replace')!r} not found"
+        )
+    _rocm_math_module_cache[key] = (module, function)
+    return module, function
 
 #: op_name -> reduce kind.
 _ROCM_REDUCE_OPS = {
@@ -19471,12 +19631,9 @@ def _execute_rocm_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm reduce: hipInit failed")
-    mod = ctypes.c_void_p()
-    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
-        raise _RocmCompiledUnavailable("rocm reduce: no usable AMD GPU")
-    fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"rd") != 0:
-        raise RuntimeError("rocm reduce: kernel symbol 'rd' not found")
+    _, fn = _rocm_math_cached_function(
+        hip, hsaco, b"rd", ("reduce", _rocm_chip(), kind, dtype_tag)
+    )
 
     xc = xt.reshape(-1)
     o = np.zeros(max(outer, 1), dtype=store)
@@ -19510,10 +19667,6 @@ def _execute_rocm_compiled_reduce(artifact: RuntimeArtifact, args: Any) -> Any:
     hip.hipMemcpy(o.ctypes.data_as(ctypes.c_void_p), do, esz * max(outer, 1), 2)
     for dev in (dx, do):
         hip.hipFree(dev)
-    unload = getattr(hip, "hipModuleUnload", None)
-    if unload is not None and mod.value:
-        unload(mod)
-
     res = o.reshape(kept_shape)
     if keepdims:
         full = [1 if i in axes else int(x.shape[i]) for i in range(n)]
@@ -19732,12 +19885,9 @@ def _execute_rocm_compiled_scan(artifact: RuntimeArtifact, args: Any) -> Any:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm scan: hipInit failed")
-    mod = ctypes.c_void_p()
-    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
-        raise _RocmCompiledUnavailable("rocm scan: no usable AMD GPU")
-    fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"sc") != 0:
-        raise RuntimeError("rocm scan: kernel symbol 'sc' not found")
+    _, fn = _rocm_math_cached_function(
+        hip, hsaco, b"sc", ("scan", _rocm_chip(), kind, dtype_tag)
+    )
 
     xc = np.ascontiguousarray(flat, dtype=store).reshape(-1)
     o = np.zeros(outer * inner, dtype=store)
@@ -20019,12 +20169,9 @@ def _execute_rocm_compiled_unary(artifact: RuntimeArtifact, args: Any) -> Any:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm unary: hipInit failed")
-    mod = ctypes.c_void_p()
-    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
-        raise _RocmCompiledUnavailable("rocm unary: no usable AMD GPU")
-    fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"u") != 0:
-        raise RuntimeError("rocm unary: kernel symbol 'u' not found")
+    _, fn = _rocm_math_cached_function(
+        hip, hsaco, b"u", ("unary", _rocm_chip(), kind, dtype_tag)
+    )
 
     xc = np.ascontiguousarray(x, dtype=store).reshape(-1)
     o = np.zeros(n, dtype=store)
@@ -20124,6 +20271,10 @@ def _execute_rocm_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
     b = _as_numpy(values[operand_names[1]])
     if a.shape != b.shape:
         raise ValueError(f"rocm binary lane requires matching operand shapes; got a{a.shape} b{b.shape}")
+    if a.dtype != b.dtype:
+        raise ValueError(
+            f"rocm binary lane requires matching operand dtypes; got {a.dtype} and {b.dtype}"
+        )
     n = int(np.prod(a.shape)) if a.ndim else 1
     if n <= 0:
         return np.array(a, copy=True)
@@ -20146,12 +20297,9 @@ def _execute_rocm_compiled_binary(artifact: RuntimeArtifact, args: Any) -> Any:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
     if hip.hipInit(0) != 0:
         raise _RocmCompiledUnavailable("rocm binary: hipInit failed")
-    mod = ctypes.c_void_p()
-    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
-        raise _RocmCompiledUnavailable("rocm binary: no usable AMD GPU")
-    fn = ctypes.c_void_p()
-    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"b") != 0:
-        raise RuntimeError("rocm binary: kernel symbol 'b' not found")
+    _, fn = _rocm_math_cached_function(
+        hip, hsaco, b"b", ("binary", _rocm_chip(), kind, dtype_tag)
+    )
 
     ac = np.ascontiguousarray(a, dtype=store).reshape(-1)
     bc = np.ascontiguousarray(b, dtype=store).reshape(-1)

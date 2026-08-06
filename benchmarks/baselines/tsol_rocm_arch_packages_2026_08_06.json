@@ -1,0 +1,28 @@
+{
+  "schema": "tessera.tsol_rocm_arch_package_evidence.v1",
+  "tested_parent": "76191083b2f3b7585fb9fb7c03c64b284c2e1f92",
+  "toolchain": "ROCm LLVM 23.0.0git 46fcb339fb61119b337f973c7ca9e710a319fdd0",
+  "package_abi": "tessera.rocm.spectral_composite.v4",
+  "package_policy": "one_architecture_per_shared_image",
+  "rows": [
+    {
+      "architecture": "gfx1200",
+      "sha256": "a030e182eb7c2191115112d7883c83fcbeeb41c982acd9ac604871e62efcc0b1",
+      "image_bytes": 432896,
+      "cross_build": "pass",
+      "package_status": "build_only",
+      "execution_admitted": false,
+      "missing_evidence": "architecture-owned schedule plus exact-device correctness and performance packet"
+    },
+    {
+      "architecture": "gfx1250",
+      "sha256": "62757cf60657d180137592eb7dddfaeada4c7d4966b1adfe60a1aa258e4cb608",
+      "image_bytes": 395248,
+      "cross_build": "pass",
+      "package_status": "build_only",
+      "execution_admitted": false,
+      "missing_evidence": "architecture-owned schedule plus exact-device correctness and performance packet"
+    }
+  ],
+  "verdict": "retain compiler-only packages; keep both execution profiles fail-closed"
+}

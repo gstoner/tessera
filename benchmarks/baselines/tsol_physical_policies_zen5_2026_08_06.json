@@ -1,0 +1,1123 @@
+{
+  "architecture": "zen5-avx512",
+  "device_event_follow_up": null,
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "iterations": 10,
+  "package_abi": "tessera.x86.spectral_composite.v4",
+  "processor": "x86_64",
+  "python": "3.12.3",
+  "rows": [
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_filter",
+      "cold_ms": 39.464942,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "ed7dde55072d43d50d34375546e9a1a412b986573af4d736d40609c6d8f54703",
+      "initial_schedule_digest": "ed7dde55072d43d50d34375546e9a1a412b986573af4d736d40609c6d8f54703",
+      "input_shapes": [
+        [
+          8,
+          17
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 2.4575624024691933e-7,
+      "native_entry": "tessera_x86_spectral_filter_f32",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_filter",
+      "output_melems_per_s": 2.3192755674551067,
+      "output_shape": [
+        8,
+        17
+      ],
+      "rms_error": 5.125356342524088e-8,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "a222e3df93d4b6dab2543881c7cf768c91bcaa03101b4f7065f7088c7989b28a",
+      "tile_digest": "37fc2762027aec6812748589c3f1cbcd55458c15b431c1234daf8b05efbb06c5",
+      "warm_mad_ms": 0.008614,
+      "warm_median_ms": 0.058639
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_dct",
+      "cold_ms": 0.684394,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "c770f558e2493daa9dfbd4e3f1f04f8c688c91110e5f2cc983c61f94c8a72e68",
+      "initial_schedule_digest": "c770f558e2493daa9dfbd4e3f1f04f8c688c91110e5f2cc983c61f94c8a72e68",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 0.0000019073486328125,
+      "native_entry": "tessera_x86_dct_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 5.911352799233372,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 7.296039355879236e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "953ea858b1a9f6f4c5e381ea69b4241c34f3a37b5b1e39496c46b35e2f440b11",
+      "tile_digest": "090918942e617b474afe15c11c451b70b8dc2795738380fc129e2d4965404184",
+      "warm_mad_ms": 0.0096855,
+      "warm_median_ms": 0.086613
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_conv",
+      "cold_ms": 0.645331,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "bc4ba25210e4c58d64574cc00d2bd1f74ff1ac17b916fcc7ac3ba72ba831ae06",
+      "initial_schedule_digest": "bc4ba25210e4c58d64574cc00d2bd1f74ff1ac17b916fcc7ac3ba72ba831ae06",
+      "input_shapes": [
+        [
+          8,
+          64
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 0.0000019073486328125,
+      "native_entry": "tessera_x86_spectral_conv_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 4.153093405666377,
+      "output_shape": [
+        8,
+        80
+      ],
+      "rms_error": 4.836940611458991e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "5a96ab00146cbc5ddc4184fdf2d35d9e4521a4c56349771c540f58061273b1fd",
+      "tile_digest": "6e4962eb2236b991fa198d3680ab7e2762a60d81cb27ec2a85a11e395ec76433",
+      "warm_mad_ms": 0.0222375,
+      "warm_median_ms": 0.154102
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_stft",
+      "cold_ms": 0.597708,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "74836723859a8c780a68e50fbb6d1fb8f43fa589885bf9f9de30993596e8eff8",
+      "initial_schedule_digest": "74836723859a8c780a68e50fbb6d1fb8f43fa589885bf9f9de30993596e8eff8",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0000011920928955078125,
+      "native_entry": "tessera_x86_stft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 8.778198348555332,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 2.60810725752268e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "cf06e0360767a93bf0453d14848ae8554755752d98476939c9533e1e16dbb4de",
+      "tile_digest": "84df785f3850041806e7ad5b74e0056ac614d211e6b26815a18689e32fbcbf0a",
+      "warm_mad_ms": 0.01198,
+      "warm_median_ms": 0.1084505
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_istft",
+      "cold_ms": 0.815543,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "563bae013ea2c9be770ee6db2f83abd54d31e92798ef150889a285af8b210b44",
+      "initial_schedule_digest": "563bae013ea2c9be770ee6db2f83abd54d31e92798ef150889a285af8b210b44",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0000029206275939941406,
+      "native_entry": "tessera_x86_istft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 8.053416803642913,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 2.4597796477804e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "13069b457a3eebece1f0edfcb381d4304f3206b4ff3ddf9c5961e1397e132b54",
+      "tile_digest": "b81d8ba1168d43eb8ae2f7beeeb516df11de228d27a7f1dfb2014ee896878842",
+      "warm_mad_ms": 0.0218805,
+      "warm_median_ms": 0.127151
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_filter",
+      "cold_ms": 0.745293,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "18876387f4fbb77aa522303823e54a7a1bb000ecf107e0b0b12f21faa7721d77",
+      "initial_schedule_digest": "291c0db03067ac29d120249fb25761c8b1ca3d64e8f31265c8d9191797250b41",
+      "input_shapes": [
+        [
+          8,
+          17
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 2.4575624024691933e-7,
+      "native_entry": "tessera_x86_spectral_filter_f32",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_filter",
+      "output_melems_per_s": 2.3487962419260127,
+      "output_shape": [
+        8,
+        17
+      ],
+      "rms_error": 5.125356342524088e-8,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "79c01ececd5a5fd2df230b7552354490074fba56f0f6a7c4c9b8896159930b0d",
+      "tile_digest": "62386c088299a44833c2bb683356a1dd66774a61d4274ae3f519b48d0b1362c2",
+      "warm_mad_ms": 0.005044,
+      "warm_median_ms": 0.057902
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_dct",
+      "cold_ms": 0.704283,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "9968ab22e033d001eb7632939b4c45dd3c1e4e4ef4b1f0e5b6bd8f3b02e26ffb",
+      "initial_schedule_digest": "031fcddf1dbb36e59e83df6416b8bd3356276e0814207a22c8415f877920bb71",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 0.0000019073486328125,
+      "native_entry": "tessera_x86_dct_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 5.097215446952124,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 7.296039355879236e-7,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "2ee3c0bc9398decfbe94390cb7fcbc7a7003b9545649e6212a86b3736bb94104",
+      "tile_digest": "c70f650431102cfef7d81c04e03df8618475e45d61ece98e5b272f261da89847",
+      "warm_mad_ms": 0.0191525,
+      "warm_median_ms": 0.100447
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_conv",
+      "cold_ms": 0.749671,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "a385f8a8050c7aa1e77ddbaeb27493b4e560f06212558d7501e47a82e0ee4e85",
+      "initial_schedule_digest": "b45807cdc6f34342ccfcbe46e38373f51c981028b4166da33cff82e69a9efcbe",
+      "input_shapes": [
+        [
+          8,
+          64
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 0.0000019073486328125,
+      "native_entry": "tessera_x86_spectral_conv_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 3.9157621663954183,
+      "output_shape": [
+        8,
+        80
+      ],
+      "rms_error": 4.836940611458991e-7,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "449827052fdab1405629d1d937114ad6a8fd6b0af88b730b8d1e61b2fa4a8119",
+      "tile_digest": "4b509a4f7b03bd08f18f67888835af9f7cf0c464015f138dca8609dc13a8f35d",
+      "warm_mad_ms": 0.0289375,
+      "warm_median_ms": 0.163442
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_stft",
+      "cold_ms": 0.895023,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "aa55fec10beab03f6b830970ca5f0f6f1f6a2f86a5d9d0d951909ccb09db8076",
+      "initial_schedule_digest": "d482482c2e78fffff7f06ee7c646da217278555ddd0d496dc3ba940717ac91ff",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0000011920928955078125,
+      "native_entry": "tessera_x86_stft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 5.996019449273172,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 2.60810725752268e-7,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "1869b972cb6225abcff2a85b24392f0f8c808871970bb291eb4f0b64b47b943a",
+      "tile_digest": "0a11db545538a69523ddb9081cc97a3287cf82fa5bb34f31bcc6330e9daa1887",
+      "warm_mad_ms": 0.038177,
+      "warm_median_ms": 0.158772
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_istft",
+      "cold_ms": 0.590877,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "eedf7175649311a561a0f277c78cd0c6738ecbb99dc66d23ce77b37af8d2d6e3",
+      "initial_schedule_digest": "c712a73d2f41b890e6c6bf283069958e1ad3305125bd325c64d8f109e00bba01",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0000029206275939941406,
+      "native_entry": "tessera_x86_istft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 6.71708856192644,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 2.4597796477804e-7,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "fac82b4adcdcb5f72dde664015bf41a394136499c3fbbfaf526111fbc03ff821",
+      "tile_digest": "a1ee385ea126c0556d4db344160f59a3ecf13ba54f3a6c1e6b53a150a5a04133",
+      "warm_mad_ms": 0.023162,
+      "warm_median_ms": 0.152447
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "axis0_dct",
+      "cold_ms": 0.736261,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "e7405243ad86e3ef3061bc948a79d8f770bf3b238d25e6c258c699c3892a52ff",
+      "initial_schedule_digest": "e7405243ad86e3ef3061bc948a79d8f770bf3b238d25e6c258c699c3892a52ff",
+      "input_shapes": [
+        [
+          64,
+          8
+        ]
+      ],
+      "max_abs_error": 0.000003814697265625,
+      "native_entry": "tessera_x86_dct_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 2.890401833598663,
+      "output_shape": [
+        64,
+        8
+      ],
+      "rms_error": 8.256770221483753e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "feea2bac4d883d866840ea25e1e354f9d41bb00c9c4b9fe2ab09d7c9d9956a0f",
+      "tile_digest": "813ee8e31f3cc36fd2b278597232e31b10ae8a814799a6bee4e246218cc1db8a",
+      "warm_mad_ms": 0.0438155,
+      "warm_median_ms": 0.177138
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "axis0_conv",
+      "cold_ms": 0.612911,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "07381f3238816ed274c58ef525dfdfbe6cd9cb563bccec4b8dd0c9dbf6947ea5",
+      "initial_schedule_digest": "07381f3238816ed274c58ef525dfdfbe6cd9cb563bccec4b8dd0c9dbf6947ea5",
+      "input_shapes": [
+        [
+          64,
+          8
+        ],
+        [
+          17,
+          8
+        ]
+      ],
+      "max_abs_error": 0.000002384185791015625,
+      "native_entry": "tessera_x86_spectral_conv_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 4.402786138103018,
+      "output_shape": [
+        80,
+        8
+      ],
+      "rms_error": 5.668695865558968e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "740fb3796093a2287621a533fea2efef5fe0fae9468c49322f46e103ca1c55b7",
+      "tile_digest": "a011fad05071f698284f936af96d7f5772c5182209a43298bb132ab5dd81d490",
+      "warm_mad_ms": 0.021638,
+      "warm_median_ms": 0.1453625
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "axis0_stft",
+      "cold_ms": 0.784191,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "33d76466af7b4821261d6e12f0808fbd4ff3a512ef067ee1f5dfd69dabdbd263",
+      "initial_schedule_digest": "33d76466af7b4821261d6e12f0808fbd4ff3a512ef067ee1f5dfd69dabdbd263",
+      "input_shapes": [
+        [
+          128,
+          8
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 9.830249609876773e-7,
+      "native_entry": "tessera_x86_stft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 8.80189721566035,
+      "output_shape": [
+        7,
+        17,
+        8
+      ],
+      "rms_error": 2.5049823645168284e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "4b1d17cb0f93fc2e4153ca768a4db388a3e395a938554d9060ef16e21c38319b",
+      "tile_digest": "4bec37b97c02202335c40bbb170f03e9eca84e0b92a8248889e722e0b718c296",
+      "warm_mad_ms": 0.012024,
+      "warm_median_ms": 0.1081585
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 1,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "axis1_istft",
+      "cold_ms": 0.763895,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "46236af9eb04ac16a4ec6a8e096e6551462b128faeb884e2a8419bd8654cffd0",
+      "initial_schedule_digest": "46236af9eb04ac16a4ec6a8e096e6551462b128faeb884e2a8419bd8654cffd0",
+      "input_shapes": [
+        [
+          7,
+          17,
+          8
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.000005841255187988281,
+      "native_entry": "tessera_x86_istft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 8.58049027781851,
+      "output_shape": [
+        128,
+        8
+      ],
+      "rms_error": 2.751948069977641e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "42747345c8de9fbf471e562cd1f9d259dd0e0a793acf769a54c6bb9f78b1ec41",
+      "tile_digest": "012ee1e353ba615b02aa0a3e11041c20df8cf0a408042df490d2ec8a9f77950f",
+      "warm_mad_ms": 0.007711,
+      "warm_median_ms": 0.1193405
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_f16_dct",
+      "cold_ms": 0.522354,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "fa7cb8012d70395928d771ded3a782dd35f9b0832c557407df99b8e22bc39fb9",
+      "initial_schedule_digest": "fa7cb8012d70395928d771ded3a782dd35f9b0832c557407df99b8e22bc39fb9",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 0.0101318359375,
+      "native_entry": "tessera_x86_dct_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 6.138610300156463,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 0.0017633369062341328,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "241d2c9306be529a59819871a04410af8b3056a6bc9c82f5ccfeb65f73749687",
+      "tile_digest": "38517687813ead01fee6605e3ef72401d08c7eadf3ebdd6a288069a8224ec900",
+      "warm_mad_ms": 0.008168,
+      "warm_median_ms": 0.0834065
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_f16_spectral_conv",
+      "cold_ms": 0.619501,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "d998d202b5b1b4b44f49ba674c02b896da6633a4abd4079ffb32127c891fd50b",
+      "initial_schedule_digest": "d998d202b5b1b4b44f49ba674c02b896da6633a4abd4079ffb32127c891fd50b",
+      "input_shapes": [
+        [
+          8,
+          64
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 0.0036420822143554688,
+      "native_entry": "tessera_x86_spectral_conv_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 4.6204548982236515,
+      "output_shape": [
+        8,
+        80
+      ],
+      "rms_error": 0.0007553465867830189,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "13ada03528f2b42c3873e006f33dc7a3c40c2d853274b52ed3c5022a72fbea84",
+      "tile_digest": "63b4b24eff5259c04ab4ff61c58c2b63b1cfe9f5f7ccbbfdf3d17189952b5e21",
+      "warm_mad_ms": 0.0079315,
+      "warm_median_ms": 0.1385145
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_f16_stft",
+      "cold_ms": 0.688155,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "34191abaddd68b511030f477404b3bf343d8e1a248afc8c734ccb5ff5a8c75bf",
+      "initial_schedule_digest": "34191abaddd68b511030f477404b3bf343d8e1a248afc8c734ccb5ff5a8c75bf",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0000010662403155947686,
+      "native_entry": "tessera_x86_stft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 7.567717959418907,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 2.4723503183390786e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "8467aef17195b44ddd6e39a61c9c7c8d3a9e701a8afd1c7f5c57799c5f674f9c",
+      "tile_digest": "b158a454a6e0c50386e1c167cb5414ce9a018cdb846c2dce2c5e9ecda5dd716b",
+      "warm_mad_ms": 0.018371,
+      "warm_median_ms": 0.1257975
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "storage_f16_istft",
+      "cold_ms": 0.534642,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "15c3abd3576fc2a179bc7b04d048db596313aef740d4fb5c1ee2ff2ab496eb73",
+      "initial_schedule_digest": "15c3abd3576fc2a179bc7b04d048db596313aef740d4fb5c1ee2ff2ab496eb73",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0009524822235107422,
+      "native_entry": "tessera_x86_istft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 7.639995075784424,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 0.00019865668996178198,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "9947b20bbbee22792200c8cd09b3195c7e4f5ba8b0d280410d2ba1e96c0031c2",
+      "tile_digest": "11452dc38d33c47375bdd5c2dcb7a9a771da6a71aa0dd0173452810cd134c6ab",
+      "warm_mad_ms": 0.023409,
+      "warm_median_ms": 0.1340315
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_bf16_dct",
+      "cold_ms": 0.646111,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "ec26dff9e2ba5381faeba5c9414e98c737ff63c34990b47629479ea767ec6aca",
+      "initial_schedule_digest": "ec26dff9e2ba5381faeba5c9414e98c737ff63c34990b47629479ea767ec6aca",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 0.0869140625,
+      "native_entry": "tessera_x86_dct_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 6.038269894153374,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 0.014766723408575225,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "46c83e8265c8b7b37f3aa33b19e6170a9bcc7c893e600c0902e8f687d3fee49b",
+      "tile_digest": "f045642045fb7e12011f59626b83ea20adaa72be1515dd2ae1eb3a88df10c391",
+      "warm_mad_ms": 0.012518,
+      "warm_median_ms": 0.0847925
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_bf16_spectral_conv",
+      "cold_ms": 1.244051,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "71807f451558b6a16425e56b5ff61976ac18f8cebdd9460896e65b0b253c5bed",
+      "initial_schedule_digest": "71807f451558b6a16425e56b5ff61976ac18f8cebdd9460896e65b0b253c5bed",
+      "input_shapes": [
+        [
+          8,
+          64
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 0.030612945556640625,
+      "native_entry": "tessera_x86_spectral_conv_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 5.123381431744951,
+      "output_shape": [
+        8,
+        80
+      ],
+      "rms_error": 0.005640829370893246,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "80c6a8f0cb1429579af95797879d761c21a02839c162479ac9614562be1d4aee",
+      "tile_digest": "dec8f6439590fb26853fc68ba2e6716c1912153ec05f2fa08fe98ca7228f5f1f",
+      "warm_mad_ms": 0.003564,
+      "warm_median_ms": 0.1249175
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_bf16_stft",
+      "cold_ms": 0.54276,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "03de4be12d89fa7abc5dc20df6ca7b94145bebe43f506771f222afea165f42ee",
+      "initial_schedule_digest": "03de4be12d89fa7abc5dc20df6ca7b94145bebe43f506771f222afea165f42ee",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0000010662403155947686,
+      "native_entry": "tessera_x86_stft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 9.406045755670057,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 2.2500704905827144e-7,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "034071fc10088ad7282e13195bf60cd1c55f21003bbdb240ab0be3420eec75e5",
+      "tile_digest": "9d8dbf9063247a1caf18c1a4578fdf2bffee2a471e5698a7bec26a7eda2c161a",
+      "warm_mad_ms": 0.003493,
+      "warm_median_ms": 0.1012115
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "storage_bf16_istft",
+      "cold_ms": 0.653547,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "1ba9b7b3dcb6838af811d52d5112d033dd0d7fd88a24676fa4f8489cc60661ab",
+      "initial_schedule_digest": "1ba9b7b3dcb6838af811d52d5112d033dd0d7fd88a24676fa4f8489cc60661ab",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0077228546142578125,
+      "native_entry": "tessera_x86_istft_strided_storage",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 7.689852623674083,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 0.0016184439508614625,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "6d353531917271f2c3d34b633ca45308d39541bc99b258b4b6fffb9f9db2c7b9",
+      "tile_digest": "a2f1b2bed9ca5cd02e444beb31da783387d600d7304099f7ddf45851243b4a0a",
+      "warm_mad_ms": 0.022903,
+      "warm_median_ms": 0.1331625
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_forward_dct",
+      "cold_ms": 0.484336,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "9de13e1b6eec76ee3d82c27463b20e6254f6b4c5de0328d191f62694da70ba02",
+      "initial_schedule_digest": "9de13e1b6eec76ee3d82c27463b20e6254f6b4c5de0328d191f62694da70ba02",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 1.4901161193847656e-8,
+      "native_entry": "tessera_x86_dct_strided_storage",
+      "normalization": "forward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 6.544678294548871,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 5.700030746780653e-9,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "ad3fb7f583caf998c87be465c3347aed19ef0dcb1db48886524990b381de23f5",
+      "tile_digest": "b4ebc2235060b020433862400d814d8d0745d70dfcaab12d1e5819f50a4daee9",
+      "warm_mad_ms": 0.0042025,
+      "warm_median_ms": 0.0782315
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_forward_stft",
+      "cold_ms": 1.006349,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "4bc2da4479bf8ccf736d376cc635bbf3c57366e7d2dfd21b29cae3ec20356061",
+      "initial_schedule_digest": "4bc2da4479bf8ccf736d376cc635bbf3c57366e7d2dfd21b29cae3ec20356061",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 3.725290298461914e-8,
+      "native_entry": "tessera_x86_stft_strided_storage",
+      "normalization": "forward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 7.681879801174876,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 8.150335179758375e-9,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "8ab475f5a2c0ced0033135a04cd0f681a6173c470e76840fed154fce2b4cca4c",
+      "tile_digest": "4c67470ef248be9da2af5be6f2311d7402f994b09adb3c83b263eff2701be9de",
+      "warm_mad_ms": 0.026886,
+      "warm_median_ms": 0.123928
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_forward_istft",
+      "cold_ms": 0.581857,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "afef56999940d1f3f3d87ae87d430ab78e9f0e0e82037521d9ff946696811faa",
+      "initial_schedule_digest": "afef56999940d1f3f3d87ae87d430ab78e9f0e0e82037521d9ff946696811faa",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0000934600830078125,
+      "native_entry": "tessera_x86_istft_strided_storage",
+      "normalization": "forward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 8.42250717640382,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 0.00000787129487289728,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "e5610920455107d0b492992aa0239fa8e19aaa156a53463c47c444ca36758c2e",
+      "tile_digest": "6a3ef358ead598736710db51a66031c39c2fc0ae6eda59b68a5e3a6ad7779e1e",
+      "warm_mad_ms": 0.0154615,
+      "warm_median_ms": 0.121579
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_ortho_dct",
+      "cold_ms": 0.536248,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "6d5ea6da2d7d5518c3cbc4df871f1de5d6a0f106ccfa3facde9644517e208f7e",
+      "initial_schedule_digest": "6d5ea6da2d7d5518c3cbc4df871f1de5d6a0f106ccfa3facde9644517e208f7e",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 2.384185791015625e-7,
+      "native_entry": "tessera_x86_dct_strided_storage",
+      "normalization": "ortho",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 6.679538694358921,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 7.613229288918067e-8,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "0a503d027ce4198f0bf9af3cedf6b8ee12e61502ca62e37c134f3374ee99d8ae",
+      "tile_digest": "03cdfca52546c462b5327975f7b6c4c207362eb844637b0b7c0f7d6fb3079401",
+      "warm_mad_ms": 0.0027165,
+      "warm_median_ms": 0.076652
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_ortho_stft",
+      "cold_ms": 0.820977,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "88303f58de7b3a6e05bf9c97f015f87eda4826d1c6ed1c2e9443f25280619b43",
+      "initial_schedule_digest": "88303f58de7b3a6e05bf9c97f015f87eda4826d1c6ed1c2e9443f25280619b43",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 2.528810796320613e-7,
+      "native_entry": "tessera_x86_stft_strided_storage",
+      "normalization": "ortho",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 6.07854217148257,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 5.449158933799496e-8,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "d1441b25a308aecad7ec35fea7f5931e7e7a510241c0dcabb876abe49b8fabd7",
+      "tile_digest": "ba37ee5d1c74b4f895697bfa87eaa83bee77068c4200e31643f93a1d360fcebd",
+      "warm_mad_ms": 0.0515875,
+      "warm_median_ms": 0.1566165
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_ortho_istft",
+      "cold_ms": 0.58816,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "f758efd541f8536d4072b7a4ee0b9a1f79ed706fd7ffa33443bec2e1e61e647c",
+      "initial_schedule_digest": "f758efd541f8536d4072b7a4ee0b9a1f79ed706fd7ffa33443bec2e1e61e647c",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0000171661376953125,
+      "native_entry": "tessera_x86_istft_strided_storage",
+      "normalization": "ortho",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 7.244018732579691,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 0.0000014204538729959479,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "4a46e531ba044417288d236e40c4b612cb0d5df752600eca9c8f643497732fe4",
+      "tile_digest": "98c1a681624cd38cd22ad892f00e27d2547310de9a5ecf56e5a0d1c8898525dc",
+      "warm_mad_ms": 0.0189435,
+      "warm_median_ms": 0.141358
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "combined_dynamic_axis_ortho_f16_dct",
+      "cold_ms": 0.570426,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "f42f0de0ae78d9cac60a438714f1685d4d553776ac4508bde98e89e9700e4c8d",
+      "initial_schedule_digest": "ac0bc1b3e7009ae344876a06050e50c9044bd86297e27fa3b83459d73f060d2c",
+      "input_shapes": [
+        [
+          64,
+          6
+        ]
+      ],
+      "max_abs_error": 0.0007071495056152344,
+      "native_entry": "tessera_x86_dct_strided_storage",
+      "normalization": "ortho",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 4.707930533504159,
+      "output_shape": [
+        64,
+        6
+      ],
+      "rms_error": 0.00014161367802666093,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "75b2738ef23b3d9b6b6b94a0cba6d36611e8dc4ee112f3b9587539e56ae67c4a",
+      "tile_digest": "c6b4f0b76e1034a543981f2236664216796897eaaae313ed60a34641f9e10a9f",
+      "warm_mad_ms": 0.004582,
+      "warm_median_ms": 0.0815645
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "combined_dynamic_axis_ortho_bf16_dct",
+      "cold_ms": 0.541539,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "f58ee07f0d8b2fed2e834dd411867a568b9051f05de952afe23aa9ef420546d1",
+      "initial_schedule_digest": "b4e3209b155378a6cea253173d72e4d82d279d0a7b36b8c45ec804e6575398fb",
+      "input_shapes": [
+        [
+          64,
+          6
+        ]
+      ],
+      "max_abs_error": 0.005974292755126953,
+      "native_entry": "tessera_x86_dct_strided_storage",
+      "normalization": "ortho",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 4.6434855163156845,
+      "output_shape": [
+        64,
+        6
+      ],
+      "rms_error": 0.0011677191037998344,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "1c08d329d746dc66e1749713e01b9ce3245d3920f7ca84c11c09bb5a8791f4e6",
+      "tile_digest": "ea972b97ec279863ed9cc09c58faab46df569fade50660ef918a510cff8b704d",
+      "warm_mad_ms": 0.007749,
+      "warm_median_ms": 0.0826965
+    }
+  ],
+  "schema": "tessera.tsol_physical_policy_evidence.v2",
+  "selector_eligible": true,
+  "target": "x86",
+  "timing_domain": "synchronized_host_wall",
+  "tested_parent": "76191083b2f3b7585fb9fb7c03c64b284c2e1f92",
+  "device": "AMD Ryzen AI Max+ 395",
+  "toolchain": "LLVM/MLIR 23",
+  "verdict": "retain all 30 physical-policy rows; exact bounded specializations, package-owned axis packing and reduced-storage conversion, and forward/ortho scaling meet correctness limits with selector-eligible host timing"
+}

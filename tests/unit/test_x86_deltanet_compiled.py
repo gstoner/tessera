@@ -53,19 +53,20 @@ def _artifact(rt, op_name, names, erase, has_gate, has_beta, has_decay):
 
 
 def _backward_artifact(rt, op_name, names, erase):
+    from tessera.compiler.stateful_training import (
+        lower_scheduled_sequence_mixer_backward,
+    )
+    scheduled = lower_scheduled_sequence_mixer_backward(
+        target="x86", family=op_name, q_shape=(2, 2, 5, 3),
+        v_shape=(2, 2, 5, 3), erase=erase, chunk_size=2,
+        parallel_chunks=True,
+    )
     return rt.RuntimeArtifact(metadata={
         "target": "x86", "compiler_path": "x86_deltanet_bwd_compiled",
         "executable": True, "execution_kind": "native_cpu",
-        "arg_names": names, "output_name": "grads",
-        "ops": [{
-            "op_name": f"tessera.{op_name}", "result": "grads",
-            "operands": names,
-            "kwargs": {
-                "causal": True, "erase": erase, "has_gate": True,
-                "has_beta": True, "has_decay": True,
-                "chunk_size": 2, "workers": 2,
-            },
-        }],
+        "arg_names": names, "output_name": "grads", "workers": 2,
+        "state_contract": dict(scheduled.state_contract),
+        "scheduled_training": scheduled.metadata(),
     })
 
 

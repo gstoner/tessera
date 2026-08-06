@@ -29,11 +29,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <hip/hip_runtime.h>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <cstdint>
 #include <cstdio>
 #include <random>
+#include <string>
 #include <vector>
 
 using cf64 = std::complex<double>;
@@ -43,6 +45,21 @@ static const double kPi = 3.14159265358979323846;
 extern "C" void ts_fft_stockham_amd(const float2 *d_in, float2 *d_out,
                                     float2 *d_scratch, int N, int sign,
                                     hipStream_t stream);
+extern "C" int ts_fft_stockham_fused_lds_launch_amd(
+    const float2 *d_in, float2 *d_out, int N, int sign, hipStream_t stream);
+
+static bool g_fused_lds = false;
+static void launch_fft(const float2 *in, float2 *out, float2 *scratch, int N,
+                       int sign) {
+  if (g_fused_lds) {
+    if (ts_fft_stockham_fused_lds_launch_amd(in, out, N, sign, 0) != 0) {
+      printf("verdict=fail reason=fused_lds_envelope size=%d\n", N);
+      std::exit(4);
+    }
+  } else {
+    ts_fft_stockham_amd(in, out, scratch, N, sign, 0);
+  }
+}
 
 #define HIP_CHECK(x)                                                            \
   do {                                                                          \
@@ -119,7 +136,8 @@ static std::vector<cf64> cpu_stockham(std::vector<cf64> x, int sign) {
 
 struct Result {
   int N;
-  double fwd_max_err, roundtrip_err, time_ms, gflops, gbs;
+  double fwd_max_err, roundtrip_err, time_ms, raw_event_total_ms, gflops, gbs;
+  const char *timing_domain;
   bool pass;
 };
 
@@ -140,7 +158,7 @@ static Result run_size(int N, uint32_t seed, int repeats, int warmup,
                       hipMemcpyHostToDevice));
 
   // Forward transform + correctness.
-  ts_fft_stockham_amd(d_in, d_out, d_scr, N, -1, 0);
+  launch_fft(d_in, d_out, d_scr, N, -1);
   HIP_CHECK(hipDeviceSynchronize());
   std::vector<float2> h_out(N);
   HIP_CHECK(hipMemcpy(h_out.data(), d_out, N * sizeof(float2),
@@ -152,7 +170,7 @@ static Result run_size(int N, uint32_t seed, int repeats, int warmup,
   }
 
   // Round-trip: inverse of the forward result back to the input.
-  ts_fft_stockham_amd(d_out, d_in, d_scr, N, +1, 0);
+  launch_fft(d_out, d_in, d_scr, N, +1);
   HIP_CHECK(hipDeviceSynchronize());
   std::vector<float2> h_rt(N);
   HIP_CHECK(hipMemcpy(h_rt.data(), d_in, N * sizeof(float2),
@@ -167,19 +185,33 @@ static Result run_size(int N, uint32_t seed, int repeats, int warmup,
   HIP_CHECK(hipMemcpy(d_in, h_in.data(), N * sizeof(float2),
                       hipMemcpyHostToDevice));
   for (int i = 0; i < warmup; ++i)
-    ts_fft_stockham_amd(d_in, d_out, d_scr, N, -1, 0);
+    launch_fft(d_in, d_out, d_scr, N, -1);
   HIP_CHECK(hipDeviceSynchronize());
   hipEvent_t t0, t1;
   HIP_CHECK(hipEventCreate(&t0));
   HIP_CHECK(hipEventCreate(&t1));
+  auto wall_t0 = std::chrono::steady_clock::now();
   HIP_CHECK(hipEventRecord(t0, 0));
   for (int i = 0; i < repeats; ++i)
-    ts_fft_stockham_amd(d_in, d_out, d_scr, N, -1, 0);
+    launch_fft(d_in, d_out, d_scr, N, -1);
   HIP_CHECK(hipEventRecord(t1, 0));
   HIP_CHECK(hipEventSynchronize(t1));
+  auto wall_t1 = std::chrono::steady_clock::now();
   float ms_total = 0;
   HIP_CHECK(hipEventElapsedTime(&ms_total, t0, t1));
+  const double raw_event_total_ms = static_cast<double>(ms_total);
   double ms = ms_total / repeats;
+  const char *timing_domain = "hip_event";
+  // The WSL DXG HIP shim can report zero or a large negative elapsed-event
+  // value even after a successful event synchronisation.  Such a number is
+  // not device evidence.  Fall back to a synchronized steady-clock interval
+  // and label the timing domain so downstream evidence cannot mistake it for
+  // a device-event sample.
+  if (!(ms > 0.0) || !std::isfinite(ms)) {
+    ms = std::chrono::duration<double, std::milli>(wall_t1 - wall_t0).count() /
+         repeats;
+    timing_domain = "host_wall_synchronized";
+  }
 
   double flops = 5.0 * N * std::log2((double)N);
   int nstages = 0;
@@ -189,17 +221,19 @@ static Result run_size(int N, uint32_t seed, int repeats, int warmup,
   double gflops = flops / (ms * 1e6);
   double gbs = bytes / (ms * 1e6);
 
-  hipFree(d_in); hipFree(d_out); hipFree(d_scr);
-  hipEventDestroy(t0); hipEventDestroy(t1);
+  (void)hipFree(d_in); (void)hipFree(d_out); (void)hipFree(d_scr);
+  (void)hipEventDestroy(t0); (void)hipEventDestroy(t1);
 
   bool pass = (fwd_max <= tol) && (rt_max <= tol);
-  return {N, fwd_max, rt_max, ms, gflops, gbs, pass};
+  return {N, fwd_max, rt_max, ms, raw_event_total_ms, gflops, gbs,
+          timing_domain, pass};
 }
 
 int main(int argc, char **argv) {
   int repeats = 100, warmup = 20;
   double tol = 1e-2; // fp32 GPU vs fp64 ref; loosens with N (see spectral tol)
-  (void)argc; (void)argv;
+  if (argc == 2 && std::string(argv[1]) == "--fused-lds")
+    g_fused_lds = true;
 
   int dev = 0;
   hipDeviceProp_t prop;
@@ -211,18 +245,25 @@ int main(int argc, char **argv) {
   printf("backend=amd\n");
   printf("device=%s\n", prop.name);
   printf("arch=%s\n", prop.gcnArchName);
-  printf("fast_kernel=ts_fft_stockham_amd\n");
+  printf("fast_kernel=%s\n", g_fused_lds
+                                  ? "ts_fft_stockham_fused_lds_amd"
+                                  : "ts_fft_stockham_amd");
   printf("dtype=complex64\n");
   printf("abs_tol=%g\n", tol);
 
-  int sizes[] = {64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 65536,
-                 262144, 1048576};
+  std::vector<int> sizes = g_fused_lds
+                               ? std::vector<int>{64, 128, 256, 512, 1024}
+                               : std::vector<int>{17, 68, 289, 64, 128, 256, 512,
+                                                  1024, 2048, 4096, 8192, 16384,
+                                                  65536, 262144, 1048576};
   bool all = true;
   for (int N : sizes) {
     Result r = run_size(N, 0xDEADBEEFu, repeats, warmup, tol);
     printf("size=%d fwd_max_err=%.3e roundtrip_err=%.3e time_ms=%.4f "
-           "gflops=%.2f gbs=%.2f pass=%d\n",
-           r.N, r.fwd_max_err, r.roundtrip_err, r.time_ms, r.gflops, r.gbs,
+           "raw_event_total_ms=%.9g timing_domain=%s gflops=%.2f gbs=%.2f "
+           "pass=%d\n",
+           r.N, r.fwd_max_err, r.roundtrip_err, r.time_ms,
+           r.raw_event_total_ms, r.timing_domain, r.gflops, r.gbs,
            r.pass ? 1 : 0);
     all &= r.pass;
   }

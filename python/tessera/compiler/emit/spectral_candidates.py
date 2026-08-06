@@ -16,21 +16,24 @@ Two lanes, both running the *real shipped kernel* via ctypes:
   ``TargetHooks/CPU/StockhamRadix4.cpp`` and calls ``ts_fft_stockham_cpu``.
   Host-portable: it runs anywhere a C++ compiler is present, so the shipped
   kernel is F4-proven through the arbiter on any host.
-* **ROCm Stockham** (Tier 3, ``target="rocm"``) — compiles the shipped
-  ``TargetHooks/AMD/StockhamRadix4.hip`` (host-pointer wrapper) with ``hipcc``
-  and runs it on a live gfx device; declines to the reference off-silicon so
-  authoring/tests stay host-free.
+* **ROCm Stockham** (Tier 3, ``target="rocm"``) — the canonical runtime loads
+  the prebuilt ``libtessera_spectral_rocm.so`` package and reuses persistent
+  device plans. The arbiter alone may compile the source hook as a development
+  candidate; it declines to the reference off-silicon.
 
 Anywhere a lane cannot build/run it declines to ``region.reference`` and simply
 drops out of arbitration — never a mislabeled kernel (Decision #21).
 """
 from __future__ import annotations
 
+import atexit
+import collections
 import ctypes
 import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -123,25 +126,194 @@ def _cpu_lib() -> ctypes.CDLL | None:
     return lib
 
 
-def _amd_lib() -> ctypes.CDLL | None:
-    if not shutil.which("hipcc") or not _AMD_SRC.exists():
-        _libs["amd"] = _libs.get("amd")
-        return _libs.get("amd")
-    arch = os.environ.get("TESSERA_ROCM_ARCH", "gfx1151")
-    d = tempfile.mkdtemp(prefix="tessera_spectral_amd_")
-    so = os.path.join(d, "libspectral_amd.so")
-    lib = _compile("amd", ["hipcc", f"--offload-arch={arch}", "-O3",
-                          "-std=c++17", "-shared", "-fPIC", str(_AMD_SRC),
-                          "-o", so], so)
-    if lib is not None and hasattr(lib, "ts_fft_stockham_amd_hostptr"):
+def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
+    if hasattr(lib, "ts_fft_stockham_amd_hostptr"):
         lib.ts_fft_stockham_amd_hostptr.restype = ctypes.c_int
         lib.ts_fft_stockham_amd_hostptr.argtypes = [
             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+    if hasattr(lib, "ts_fft_stockham_amd_hostptr_batch"):
+        lib.ts_fft_stockham_amd_hostptr_batch.restype = ctypes.c_int
+        lib.ts_fft_stockham_amd_hostptr_batch.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int]
+    if hasattr(lib, "ts_fft_plan_create_amd"):
+        lib.ts_fft_plan_create_amd.restype = ctypes.c_int
+        lib.ts_fft_plan_create_amd.argtypes = [
+            ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
+        lib.ts_fft_plan_execute_hostptr_batch_amd.restype = ctypes.c_int
+        lib.ts_fft_plan_execute_hostptr_batch_amd.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+        lib.ts_fft_plan_workspace_elems_amd.restype = ctypes.c_longlong
+        lib.ts_fft_plan_workspace_elems_amd.argtypes = [ctypes.c_void_p]
+        lib.ts_fft_plan_destroy_amd.restype = None
+        lib.ts_fft_plan_destroy_amd.argtypes = [ctypes.c_void_p]
+        if hasattr(lib, "ts_fft_plan_length_amd"):
+            lib.ts_fft_plan_length_amd.restype = ctypes.c_int
+            lib.ts_fft_plan_length_amd.argtypes = [ctypes.c_void_p]
+    if hasattr(lib, "ts_fft_plan_create_for_artifact_amd"):
+        lib.ts_fft_plan_create_for_artifact_amd.restype = ctypes.c_int
+        lib.ts_fft_plan_create_for_artifact_amd.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
+        lib.ts_fft_plan_artifact_digest_amd.restype = ctypes.c_char_p
+        lib.ts_fft_plan_artifact_digest_amd.argtypes = [ctypes.c_void_p]
+        lib.ts_fft_package_abi_amd.restype = ctypes.c_char_p
+        lib.ts_fft_package_abi_amd.argtypes = []
+    if hasattr(lib, "ts_spectral_composite_package_abi_amd"):
+        lib.ts_spectral_composite_package_abi_amd.restype = ctypes.c_char_p
+        lib.ts_spectral_composite_package_abi_amd.argtypes = []
+        lib.ts_spectral_filter_hostptr_amd.restype = ctypes.c_int
+        lib.ts_spectral_filter_hostptr_amd.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_longlong,
+        ]
+        lib.ts_dct_hostptr_batch_amd.restype = ctypes.c_int
+        lib.ts_dct_hostptr_batch_amd.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_int, ctypes.c_int,
+        ]
+        lib.ts_spectral_conv_hostptr_batch_amd.restype = ctypes.c_int
+        lib.ts_spectral_conv_hostptr_batch_amd.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_int,
+            ctypes.c_int,
+        ]
+        lib.ts_stft_hostptr_batch_amd.restype = ctypes.c_int
+        lib.ts_stft_hostptr_batch_amd.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int,
+        ]
+        lib.ts_istft_hostptr_batch_amd.restype = ctypes.c_int
+        lib.ts_istft_hostptr_batch_amd.argtypes = [
+            ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int,
+        ]
     return lib
+
+
+def _prebuilt_amd_paths() -> tuple[Path, ...]:
+    configured = os.environ.get("TESSERA_ROCM_SPECTRAL_LIB")
+    paths = []
+    if configured:
+        paths.append(Path(configured).expanduser())
+    paths.extend(
+        [
+            _REPO_ROOT / "build" / "src" / "solvers" / "spectral"
+            / "libtessera_spectral_rocm.so",
+            _REPO_ROOT / "build-rocm" / "src" / "solvers" / "spectral"
+            / "libtessera_spectral_rocm.so",
+            _REPO_ROOT / "build-rocm-fft" / "src" / "solvers" / "spectral"
+            / "libtessera_spectral_rocm.so",
+            Path("/usr/local/lib/libtessera_spectral_rocm.so"),
+            Path("/usr/lib/libtessera_spectral_rocm.so"),
+        ]
+    )
+    return tuple(paths)
+
+
+def _amd_lib() -> ctypes.CDLL | None:
+    """Load the canonical prebuilt ROCm spectral image; never invoke hipcc."""
+    cached = _libs.get("amd_prebuilt")
+    if cached is not None:
+        return cached
+    for path in _prebuilt_amd_paths():
+        if not path.is_file():
+            continue
+        try:
+            lib = _configure_amd_lib(ctypes.CDLL(str(path)))
+        except OSError:
+            continue
+        required = (
+            "ts_fft_plan_create_for_artifact_amd",
+            "ts_fft_plan_artifact_digest_amd",
+            "ts_fft_plan_execute_hostptr_batch_amd",
+            "ts_fft_plan_workspace_elems_amd",
+            "ts_fft_plan_destroy_amd",
+            "ts_fft_package_abi_amd",
+        )
+        if (
+            all(hasattr(lib, symbol) for symbol in required)
+            and lib.ts_fft_package_abi_amd() == b"tessera.rocm.fft.plan.v1"
+        ):
+            _libs["amd_prebuilt"] = lib
+            return lib
+    return None
+
+
+def _amd_source_lib() -> ctypes.CDLL | None:
+    """Development candidate: compile the source hook, never canonical runtime."""
+    if not shutil.which("hipcc") or not _AMD_SRC.exists():
+        return _libs.get("amd_source")
+    arch = os.environ.get("TESSERA_ROCM_ARCH", "gfx1151")
+    d = tempfile.mkdtemp(prefix="tessera_spectral_amd_")
+    so = os.path.join(d, "libspectral_amd.so")
+    lib = _compile("amd_source", ["hipcc", f"--offload-arch={arch}", "-O3",
+                                   "-std=c++17", "-shared", "-fPIC",
+                                   str(_AMD_SRC), "-o", so], so)
+    return _configure_amd_lib(lib) if lib is not None else None
+
+
+def _amd_candidate_lib() -> ctypes.CDLL | None:
+    return _amd_lib() or _amd_source_lib()
 
 
 def _cptr(a: np.ndarray) -> ctypes.c_void_p:
     return a.ctypes.data_as(ctypes.c_void_p)
+
+
+_rocm_plan_lock = threading.Lock()
+_rocm_plan_cache: collections.OrderedDict[
+    tuple[int, int, str], tuple[ctypes.CDLL, ctypes.c_void_p]
+] = collections.OrderedDict()
+
+
+def _clear_rocm_plan_cache() -> None:
+    with _rocm_plan_lock:
+        plans = list(_rocm_plan_cache.values())
+        _rocm_plan_cache.clear()
+    for lib, handle in plans:
+        lib.ts_fft_plan_destroy_amd(handle)
+
+
+atexit.register(_clear_rocm_plan_cache)
+
+
+def _rocm_plan(
+    n: int, sign: int, artifact_digest: str
+) -> tuple[ctypes.CDLL, ctypes.c_void_p]:
+    if len(artifact_digest) != 64 or any(
+        char not in "0123456789abcdef" for char in artifact_digest
+    ):
+        raise ValueError("ROCm FFT requires a lowercase SHA-256 artifact digest")
+    key = (int(n), int(sign), artifact_digest)
+    with _rocm_plan_lock:
+        cached = _rocm_plan_cache.get(key)
+        if cached is not None:
+            _rocm_plan_cache.move_to_end(key)
+            return cached
+        lib = _amd_lib()
+        if lib is None:
+            raise RuntimeError(
+                "prebuilt ROCm spectral image libtessera_spectral_rocm.so "
+                "is unavailable"
+            )
+        handle = ctypes.c_void_p()
+        rc = lib.ts_fft_plan_create_for_artifact_amd(
+            n, sign, artifact_digest.encode("ascii"), ctypes.byref(handle)
+        )
+        if rc != 0 or not handle.value:
+            raise RuntimeError(f"ROCm FFT plan creation failed rc={rc}")
+        if len(_rocm_plan_cache) >= 16:
+            _, evicted = _rocm_plan_cache.popitem(last=False)
+            evicted[0].ts_fft_plan_destroy_amd(evicted[1])
+        value = (lib, handle)
+        _rocm_plan_cache[key] = value
+        return value
 
 
 def _supported_length(n: int) -> bool:
@@ -167,6 +339,128 @@ def _supported_length(n: int) -> bool:
     (the NVIDIA hook has no Bluestein yet) needs somewhere to say so.
     """
     return n > 0
+
+
+def run_rocm_stockham_rows(
+    rows: np.ndarray, *, inverse: bool, artifact_digest: str
+) -> np.ndarray:
+    """Run the shipping gfx1151 Stockham/Bluestein package over complex rows.
+
+    This is deliberately strict: a compiler runtime must never relabel a
+    NumPy/reference fallback as native ROCm execution.  The candidate arbiter
+    may decline to a reference for exploration; this package boundary raises
+    when the native image or exact-device entry point is unavailable.
+
+    The inverse follows NumPy's convention and includes the driver's ``1/N``
+    scale.  Callers implementing another normalization policy must compensate
+    from that known contract.
+    """
+
+    values = np.ascontiguousarray(rows, np.complex64)
+    if values.ndim != 2 or values.shape[0] <= 0 or values.shape[1] <= 0:
+        raise ValueError("ROCm Stockham rows require a non-empty rank-2 array")
+    out = np.empty_like(values)
+    batch, n = (int(dim) for dim in values.shape)
+    lib, plan = _rocm_plan(n, 1 if inverse else -1, artifact_digest)
+    rc = lib.ts_fft_plan_execute_hostptr_batch_amd(
+        plan, _cptr(values), _cptr(out), batch
+    )
+    if rc != 0:
+        raise RuntimeError(f"ROCm Stockham batch execution failed rc={rc}")
+    return out
+
+
+def run_rocm_spectral_composite(
+    metadata: dict[str, Any], operands: list[np.ndarray]
+) -> np.ndarray:
+    """Execute a validated compound TSOL artifact in the prebuilt gfx1151 image.
+
+    Child FFT plans are keyed by the digests embedded in ``metadata``. All
+    framing, packing, pointwise work, and overlap-add stays device-resident;
+    only the public host-pointer ABI stages inputs and the final result.
+    """
+    from tessera.compiler.scheduled_spectral import (
+        validate_scheduled_spectral_metadata,
+    )
+
+    values = [np.asarray(value) for value in operands]
+    contract = validate_scheduled_spectral_metadata(
+        metadata, input_shapes=[value.shape for value in values]
+    )
+    lib = _amd_lib()
+    if lib is None or not hasattr(lib, "ts_spectral_composite_package_abi_amd"):
+        raise RuntimeError("prebuilt ROCm spectral composite image is unavailable")
+    if (
+        lib.ts_spectral_composite_package_abi_amd()
+        != b"tessera.rocm.spectral_composite.v1"
+    ):
+        raise RuntimeError("ROCm spectral composite package ABI mismatch")
+
+    op_name = str(contract["op_name"])
+    output_shape = tuple(int(dim) for dim in contract["output_shape"])
+    children = list(contract["child_ffts"])
+    rc = -1
+
+    if op_name == "tessera.spectral_filter":
+        a = np.ascontiguousarray(values[0], np.complex64)
+        b = np.ascontiguousarray(values[1], np.complex64)
+        out = np.empty(output_shape, np.complex64)
+        rc = lib.ts_spectral_filter_hostptr_amd(
+            _cptr(a), _cptr(b), _cptr(out), a.size
+        )
+    elif op_name == "tessera.dct":
+        x = np.ascontiguousarray(values[0], np.float32)
+        out = np.empty(output_shape, np.float32)
+        n = int(x.shape[-1])
+        batch = int(np.prod(x.shape[:-1], dtype=np.int64))
+        _, plan = _rocm_plan(2 * n, -1, str(children[0]["schedule_digest"]))
+        rc = lib.ts_dct_hostptr_batch_amd(plan, _cptr(x), _cptr(out), batch, n)
+    elif op_name == "tessera.spectral_conv":
+        x = np.ascontiguousarray(values[0], np.float32)
+        kernel = np.ascontiguousarray(values[1], np.float32)
+        out = np.empty(output_shape, np.float32)
+        input_n, kernel_n = int(x.shape[-1]), int(kernel.shape[-1])
+        fft_n = int(children[0]["length"])
+        batch = int(np.prod(x.shape[:-1], dtype=np.int64))
+        _, forward = _rocm_plan(
+            fft_n, -1, str(children[0]["schedule_digest"])
+        )
+        _, inverse = _rocm_plan(
+            fft_n, 1, str(children[1]["schedule_digest"])
+        )
+        rc = lib.ts_spectral_conv_hostptr_batch_amd(
+            forward, inverse, _cptr(x), input_n, _cptr(kernel), kernel_n,
+            _cptr(out), batch, fft_n,
+        )
+    elif op_name == "tessera.stft":
+        x = np.ascontiguousarray(values[0], np.float32)
+        window = np.ascontiguousarray(values[1], np.float32)
+        out = np.empty(output_shape, np.complex64)
+        batch = int(np.prod(x.shape[:-1], dtype=np.int64))
+        win = int(contract["window_length"])
+        _, plan = _rocm_plan(win, -1, str(children[0]["schedule_digest"]))
+        rc = lib.ts_stft_hostptr_batch_amd(
+            plan, _cptr(x), _cptr(window), _cptr(out), batch,
+            int(x.shape[-1]), win, int(contract["hop"]),
+            int(contract["frames"]),
+        )
+    elif op_name == "tessera.istft":
+        x = np.ascontiguousarray(values[0], np.complex64)
+        window = np.ascontiguousarray(values[1], np.float32)
+        out = np.empty(output_shape, np.float32)
+        batch = int(np.prod(x.shape[:-2], dtype=np.int64))
+        win = int(contract["window_length"])
+        _, plan = _rocm_plan(win, 1, str(children[0]["schedule_digest"]))
+        rc = lib.ts_istft_hostptr_batch_amd(
+            plan, _cptr(x), _cptr(window), _cptr(out), batch,
+            int(contract["frames"]), win, int(contract["hop"]),
+        )
+    else:  # validate_scheduled_spectral_metadata already rejects this.
+        raise ValueError(f"unsupported ROCm spectral composite {op_name!r}")
+
+    if rc != 0:
+        raise RuntimeError(f"ROCm spectral composite execution failed rc={rc}")
+    return out
 
 
 # --- candidates --------------------------------------------------------------
@@ -215,7 +509,7 @@ class RocmStockhamFFTCandidate(Candidate):
     def available(self) -> bool:
         # Needs hipcc AND a usable device; the host-pointer wrapper returns 0 on
         # success.  Probe cheaply: compile ok + a tiny transform round-trips.
-        lib = _amd_lib()
+        lib = _amd_candidate_lib()
         if lib is None or not hasattr(lib, "ts_fft_stockham_amd_hostptr"):
             return False
         try:
@@ -228,7 +522,7 @@ class RocmStockhamFFTCandidate(Candidate):
 
     def run(self, region: SpectralFFTRegion, x: np.ndarray, *a: Any,
             **k: Any) -> tuple[Any, str]:
-        lib = _amd_lib()
+        lib = _amd_candidate_lib()
         if lib is None or not _supported_length(region.n):
             return region.reference(x), "reference"
         try:

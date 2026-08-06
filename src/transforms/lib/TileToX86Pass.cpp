@@ -402,6 +402,7 @@ struct TileToX86PassImpl
       StringRef name = op->getName().getStringRef();
       if (name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
           name == "tile.reduce_kernel" || name == "tile.attention_kernel" ||
+          name == "tile.attention_backward_kernel" ||
           name == "tile.elementwise_kernel" ||
           name == "tile.argreduce_kernel" || name == "tile.scan_kernel" ||
           name == "tile.norm_kernel" || name == "tile.rope_kernel" ||
@@ -795,6 +796,86 @@ struct TileToX86PassImpl
                          causalValue, window, softcapValue,
                          op->getOperand(pointerCount - 1)});
         }
+        op->erase();
+        continue;
+      }
+
+      if (opName == "tile.attention_backward_kernel") {
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto scale = op->getAttrOfType<FloatAttr>("scale");
+        auto causal = op->getAttrOfType<BoolAttr>("causal");
+        auto bias = op->getAttrOfType<BoolAttr>("bias");
+        auto left = op->getAttrOfType<IntegerAttr>("window_left");
+        auto right = op->getAttrOfType<IntegerAttr>("window_right");
+        auto softcap = op->getAttrOfType<FloatAttr>("softcap");
+        auto dropout = op->getAttrOfType<FloatAttr>("dropout_p");
+        auto checkpoint = op->getAttrOfType<StringAttr>("lse_checkpoint");
+        auto splitCount = op->getAttrOfType<IntegerAttr>("split_count");
+        auto reductionOrder =
+            op->getAttrOfType<DenseI64ArrayAttr>("reduction_order");
+        bool hasBias = bias && bias.getValue();
+        bool hasSavedLse =
+            checkpoint && checkpoint.getValue() == "saved";
+        unsigned dqIndex = 4 + unsigned(hasBias) + unsigned(hasSavedLse);
+        unsigned dimStart = dqIndex + 3;
+        if (!storage || storage.getValue() != "f32" || !accum ||
+            accum.getValue() != "f32" || !scale || !causal || !bias ||
+            !left || !right || left.getInt() != right.getInt() || !softcap ||
+            !dropout || dropout.getValueAsDouble() != 0.0 || !checkpoint ||
+            (checkpoint.getValue() != "saved" &&
+             checkpoint.getValue() != "recompute") ||
+            !splitCount || splitCount.getInt() != 2 || !reductionOrder ||
+            reductionOrder.size() != 2 || reductionOrder[0] != 0 ||
+            reductionOrder[1] != 1 ||
+            op->getNumOperands() !=
+                14 + unsigned(hasBias) + unsigned(hasSavedLse)) {
+          op->emitError(
+              "E2E-REAL-5B x86 attention backward requires f32, symmetric "
+              "windows, dropout_p=0, explicit LSE identity, and fixed [0,1] "
+              "reduction order");
+          return signalPassFailure();
+        }
+        Value biasPointer =
+            hasBias ? op->getOperand(4)
+                    : builder.create<LLVM::ZeroOp>(loc, ptrTy).getResult();
+        Value savedLsePointer =
+            hasSavedLse
+                ? op->getOperand(4 + unsigned(hasBias))
+                : builder.create<LLVM::ZeroOp>(loc, ptrTy).getResult();
+        Value scaleValue = builder.create<arith::ConstantFloatOp>(
+            loc, cast<FloatType>(f32Ty),
+            APFloat(float(scale.getValueAsDouble())));
+        Value causalValue = builder.create<arith::ConstantIntOp>(
+            loc, causal.getValue() ? 1 : 0, 32);
+        Value window = builder.create<arith::ConstantIntOp>(
+            loc, left.getInt() < 0 ? 0 : left.getInt(), 64);
+        Value softcapValue = builder.create<arith::ConstantFloatOp>(
+            loc, cast<FloatType>(f32Ty),
+            APFloat(float(softcap.getValueAsDouble())));
+        StringRef symbol = "tessera_x86_flash_attn_bwd_f32";
+        ensureExternalDecl(
+            module, symbol,
+            FunctionType::get(
+                ctx,
+                {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy, ptrTy, i64Ty, i64Ty,
+                 i64Ty, i64Ty, i64Ty, i64Ty, i64Ty, f32Ty, i32Ty, i64Ty,
+                 f32Ty, ptrTy, ptrTy, ptrTy},
+                {}));
+        builder.create<func::CallOp>(
+            loc, symbol, TypeRange{},
+            ValueRange{op->getOperand(0), op->getOperand(1),
+                       op->getOperand(2), op->getOperand(3), biasPointer,
+                       savedLsePointer, op->getOperand(dimStart),
+                       op->getOperand(dimStart + 1),
+                       op->getOperand(dimStart + 2),
+                       op->getOperand(dimStart + 3),
+                       op->getOperand(dimStart + 4),
+                       op->getOperand(dimStart + 5),
+                       op->getOperand(dimStart + 6), scaleValue, causalValue,
+                       window, softcapValue, op->getOperand(dqIndex),
+                       op->getOperand(dqIndex + 1),
+                       op->getOperand(dqIndex + 2)});
         op->erase();
         continue;
       }

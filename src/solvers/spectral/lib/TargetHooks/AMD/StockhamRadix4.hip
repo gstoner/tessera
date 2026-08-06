@@ -33,6 +33,10 @@
 
 #include <hip/hip_runtime.h>
 
+#include <cstring>
+#include <mutex>
+#include <new>
+
 __device__ __forceinline__ float2 cmul(float2 a, float2 b) {
   return make_float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
 }
@@ -109,7 +113,7 @@ extern "C" __global__ void ts_fft_scale_amd(float2 *__restrict__ x, int N,
   x[t].y *= inv;
 }
 
-// One generic radix-r Stockham stage for the odd small primes (3..13).
+// One generic radix-r Stockham stage for the odd small primes (3..17).
 // Thread t owns one butterfly.  The r-point DFT is evaluated inline; at these
 // radices the O(r^2) inner loop is cheaper than the extra global traffic a
 // table would cost, which is the opposite of the CPU trade-off and the reason
@@ -126,7 +130,7 @@ extern "C" __global__ void ts_stockham_rn_amd(const float2 *__restrict__ in,
   int i = k * L + j;
   int o = k * (r * L) + j;
 
-  float2 c[16];  // kMaxRadix is 13; 16 keeps the array a power of two
+  float2 c[32];  // kMaxRadix is 17; retain a power-of-two private array
   for (int q = 0; q < r; ++q) {
     float ang = sign * 2.0f * float(M_PI) * float(j) * float(q) /
                 (float(r) * float(L));
@@ -148,6 +152,92 @@ extern "C" __global__ void ts_stockham_rn_amd(const float2 *__restrict__ in,
     }
     out[o + (size_t)p * L] = acc;
   }
+}
+
+// Experimental single-workgroup envelope for small power-of-two transforms.
+// All stages ping-pong between two LDS slabs and touch global memory only at
+// entry/exit.  It is a separate symbol until same-device evidence promotes the
+// residency policy into the content-addressed FFT artifact.
+extern "C" __global__ void
+ts_fft_stockham_fused_lds_amd(const float2 *__restrict__ in,
+                             float2 *__restrict__ out, int N, int sign) {
+  extern __shared__ float2 storage[];
+  float2 *cur = storage;
+  float2 *other = storage + N;
+  for (int i = threadIdx.x; i < N; i += blockDim.x)
+    cur[i] = in[i];
+  __syncthreads();
+
+  int L = 1;
+  int rest = N;
+  while (rest % 4 == 0) {
+    const int m = N / (4 * L);
+    for (int t = threadIdx.x; t < N / 4; t += blockDim.x) {
+      const int j = t / m;
+      const int k = t % m;
+      const float ang = sign * 2.0f * float(M_PI) * float(j) /
+                        (4.0f * float(L));
+      float s, c;
+      __sincosf(ang, &s, &c);
+      const float2 w1 = make_float2(c, s);
+      const float2 w2 = cmul(w1, w1);
+      const float2 w3 = cmul(w2, w1);
+      const int i = k * L + j;
+      const float2 c0 = cur[i];
+      const float2 c1 = cmul(cur[i + L * m], w1);
+      const float2 c2 = cmul(cur[i + 2 * L * m], w2);
+      const float2 c3 = cmul(cur[i + 3 * L * m], w3);
+      const float2 t0 = make_float2(c0.x + c2.x, c0.y + c2.y);
+      const float2 t1 = make_float2(c0.x - c2.x, c0.y - c2.y);
+      const float2 t2 = make_float2(c1.x + c3.x, c1.y + c3.y);
+      const float2 t3 = crot(make_float2(c1.x - c3.x, c1.y - c3.y), sign);
+      const int o = k * (4 * L) + j;
+      other[o] = make_float2(t0.x + t2.x, t0.y + t2.y);
+      other[o + L] = make_float2(t1.x + t3.x, t1.y + t3.y);
+      other[o + 2 * L] = make_float2(t0.x - t2.x, t0.y - t2.y);
+      other[o + 3 * L] = make_float2(t1.x - t3.x, t1.y - t3.y);
+    }
+    __syncthreads();
+    float2 *tmp = cur; cur = other; other = tmp;
+    L *= 4;
+    rest /= 4;
+  }
+  while (rest % 2 == 0) {
+    const int m = N / (2 * L);
+    for (int t = threadIdx.x; t < N / 2; t += blockDim.x) {
+      const int j = t / m;
+      const int k = t % m;
+      const float ang = sign * 2.0f * float(M_PI) * float(j) /
+                        (2.0f * float(L));
+      float s, c;
+      __sincosf(ang, &s, &c);
+      const float2 w = make_float2(c, s);
+      const int i = k * L + j;
+      const float2 c0 = cur[i];
+      const float2 c1 = cmul(cur[i + L * m], w);
+      const int o = k * (2 * L) + j;
+      other[o] = make_float2(c0.x + c1.x, c0.y + c1.y);
+      other[o + L] = make_float2(c0.x - c1.x, c0.y - c1.y);
+    }
+    __syncthreads();
+    float2 *tmp = cur; cur = other; other = tmp;
+    L *= 2;
+    rest /= 2;
+  }
+
+  const float scale = sign > 0 ? 1.0f / float(N) : 1.0f;
+  for (int i = threadIdx.x; i < N; i += blockDim.x)
+    out[i] = make_float2(cur[i].x * scale, cur[i].y * scale);
+}
+
+extern "C" int ts_fft_stockham_fused_lds_launch_amd(
+    const float2 *d_in, float2 *d_out, int N, int sign, hipStream_t stream) {
+  if (N < 2 || N > 1024 || (N & (N - 1)) != 0)
+    return 7;
+  hipLaunchKernelGGL(ts_fft_stockham_fused_lds_amd, dim3(1), dim3(256),
+                     size_t(2 * N) * sizeof(float2), stream, d_in, d_out, N,
+                     sign);
+  return hipGetLastError() == hipSuccess ? 0 : 8;
 }
 
 // Bluestein helpers.  `chirp[j] = exp(-sign*pi*i*j^2/N)`; the (j*j) mod 2N
@@ -173,6 +263,35 @@ extern "C" __global__ void ts_bluestein_pre_amd(const float2 *__restrict__ x,
   } else {
     b[j] = make_float2(0.f, 0.f);
   }
+}
+
+// Persistent-plan variants split the input chirp from the immutable
+// convolution kernel.  The kernel FFT is built once at plan creation; warm
+// execution only prepares `a`.
+extern "C" __global__ void
+ts_bluestein_input_amd(const float2 *__restrict__ x, float2 *__restrict__ a,
+                       int N, int M, int sign) {
+  int j = blockIdx.x * blockDim.x + threadIdx.x;
+  if (j >= M) return;
+  if (j >= N) {
+    a[j] = make_float2(0.f, 0.f);
+    return;
+  }
+  long long jj = ((long long)j * (long long)j) % (2LL * (long long)N);
+  double ang = -(double)sign * 3.14159265358979323846 * (double)jj / (double)N;
+  float2 chirp = make_float2((float)cos(ang), (float)sin(ang));
+  a[j] = cmul(x[j], make_float2(chirp.x, -chirp.y));
+}
+
+extern "C" __global__ void ts_bluestein_kernel_amd(float2 *__restrict__ b,
+                                                    int N, int M, int sign) {
+  int j = blockIdx.x * blockDim.x + threadIdx.x;
+  if (j >= N) return;
+  long long jj = ((long long)j * (long long)j) % (2LL * (long long)N);
+  double ang = -(double)sign * 3.14159265358979323846 * (double)jj / (double)N;
+  float2 chirp = make_float2((float)cos(ang), (float)sin(ang));
+  b[j] = chirp;
+  if (j) b[M - j] = chirp;
 }
 
 extern "C" __global__ void ts_bluestein_post_amd(const float2 *__restrict__ conv,
@@ -342,6 +461,236 @@ extern "C" void ts_fft_stockham_amd(const float2 *d_in, float2 *d_out,
   }
 }
 
+namespace {
+
+struct TSFFTPlanAMD {
+  int n = 0;
+  int sign = -1;
+  int bluesteinM = 0;
+  tessera::spectral::FFTPlan arithmetic{};
+  size_t batchCapacity = 0;
+  float2 *input = nullptr;
+  float2 *output = nullptr;
+  float2 *nScratch = nullptr;
+  // Bluestein: four persistent M-sized buffers. `kernelFFT` is immutable after
+  // creation; a/fa/mScratch are serialized mutable execution workspace.
+  float2 *a = nullptr;
+  float2 *fa = nullptr;
+  float2 *kernelFFT = nullptr;
+  float2 *mScratch = nullptr;
+  // Empty only for the legacy diagnostic entry point.  Canonical runtime
+  // plans carry the exact Schedule -> Tile content identity that selected
+  // this native package.
+  char artifactDigest[65] = {};
+  std::mutex mutex;
+};
+
+void destroy_plan_storage(TSFFTPlanAMD *plan) {
+  if (!plan) return;
+  if (plan->input) (void)hipFree(plan->input);
+  if (plan->output) (void)hipFree(plan->output);
+  if (plan->nScratch) (void)hipFree(plan->nScratch);
+  if (plan->a) (void)hipFree(plan->a);
+  if (plan->fa) (void)hipFree(plan->fa);
+  if (plan->kernelFFT) (void)hipFree(plan->kernelFFT);
+  if (plan->mScratch) (void)hipFree(plan->mScratch);
+}
+
+int ensure_batch_capacity(TSFFTPlanAMD *plan, size_t batch) {
+  if (batch <= plan->batchCapacity) return 0;
+  float2 *newInput = nullptr, *newOutput = nullptr;
+  const size_t bytes = batch * size_t(plan->n) * sizeof(float2);
+  if (hipMalloc(&newInput, bytes) != hipSuccess ||
+      hipMalloc(&newOutput, bytes) != hipSuccess) {
+    if (newInput) (void)hipFree(newInput);
+    if (newOutput) (void)hipFree(newOutput);
+    return 1;
+  }
+  if (plan->input) (void)hipFree(plan->input);
+  if (plan->output) (void)hipFree(plan->output);
+  plan->input = newInput;
+  plan->output = newOutput;
+  plan->batchCapacity = batch;
+  return 0;
+}
+
+void execute_cached_bluestein(TSFFTPlanAMD *plan, const float2 *input,
+                              float2 *output, hipStream_t stream) {
+  constexpr int threads = 256;
+  const int mBlocks = (plan->bluesteinM + threads - 1) / threads;
+  const int nBlocks = (plan->n + threads - 1) / threads;
+  hipLaunchKernelGGL(ts_bluestein_input_amd, dim3(mBlocks), dim3(threads), 0,
+                     stream, input, plan->a, plan->n, plan->bluesteinM,
+                     plan->sign);
+  ts_fft_stockham_amd(plan->a, plan->fa, plan->mScratch, plan->bluesteinM,
+                      -1, stream);
+  hipLaunchKernelGGL(ts_cmul_inplace_amd, dim3(mBlocks), dim3(threads), 0,
+                     stream, plan->fa, plan->kernelFFT, plan->bluesteinM);
+  hipLaunchKernelGGL(ts_conj_scale_amd, dim3(mBlocks), dim3(threads), 0, stream,
+                     plan->fa, plan->bluesteinM, 1.0f);
+  // Reuse `a` as the convolution output, preserving immutable kernelFFT.
+  ts_fft_stockham_amd(plan->fa, plan->a, plan->mScratch, plan->bluesteinM,
+                      -1, stream);
+  hipLaunchKernelGGL(ts_conj_scale_amd, dim3(mBlocks), dim3(threads), 0, stream,
+                     plan->a, plan->bluesteinM,
+                     1.0f / float(plan->bluesteinM));
+  hipLaunchKernelGGL(ts_bluestein_post_amd, dim3(nBlocks), dim3(threads), 0,
+                     stream, plan->a, output, plan->n, plan->sign);
+  if (plan->sign > 0)
+    hipLaunchKernelGGL(ts_fft_scale_amd, dim3(nBlocks), dim3(threads), 0, stream,
+                       output, plan->n, 1.0f / float(plan->n));
+}
+
+} // namespace
+
+// Opaque persistent-plan ABI used by the prebuilt ROCm spectral image.
+static int create_fft_plan_amd(int N, int sign, const char *artifactDigest,
+                               void **handle) {
+  if (!handle || N <= 0 || (sign != -1 && sign != 1)) return 10;
+  *handle = nullptr;
+  TSFFTPlanAMD *plan = new (std::nothrow) TSFFTPlanAMD();
+  if (!plan) return 11;
+  plan->n = N;
+  plan->sign = sign;
+  if (artifactDigest)
+    std::memcpy(plan->artifactDigest, artifactDigest, 65);
+  plan->arithmetic = tessera::spectral::fft_plan(N);
+  if (plan->arithmetic.kind == tessera::spectral::kFFTBluestein) {
+    plan->bluesteinM = plan->arithmetic.bluestein_m;
+    const size_t bytes = size_t(plan->bluesteinM) * sizeof(float2);
+    float2 *kernel = nullptr;
+    if (hipMalloc(&plan->a, bytes) != hipSuccess ||
+        hipMalloc(&plan->fa, bytes) != hipSuccess ||
+        hipMalloc(&plan->kernelFFT, bytes) != hipSuccess ||
+        hipMalloc(&plan->mScratch, bytes) != hipSuccess ||
+        hipMalloc(&kernel, bytes) != hipSuccess) {
+      if (kernel) (void)hipFree(kernel);
+      destroy_plan_storage(plan);
+      delete plan;
+      return 13;
+    }
+    (void)hipMemset(kernel, 0, bytes);
+    constexpr int threads = 256;
+    const int blocks = (N + threads - 1) / threads;
+    hipLaunchKernelGGL(ts_bluestein_kernel_amd, dim3(blocks), dim3(threads), 0,
+                       0, kernel, N, plan->bluesteinM, sign);
+    ts_fft_stockham_amd(kernel, plan->kernelFFT, plan->mScratch,
+                        plan->bluesteinM, -1, 0);
+    hipError_t sync = hipDeviceSynchronize();
+    (void)hipFree(kernel);
+    if (sync != hipSuccess) {
+      destroy_plan_storage(plan);
+      delete plan;
+      return 14;
+    }
+  } else if (hipMalloc(&plan->nScratch, size_t(N) * sizeof(float2)) !=
+             hipSuccess) {
+    destroy_plan_storage(plan);
+    delete plan;
+    return 12;
+  }
+  *handle = plan;
+  return 0;
+}
+
+extern "C" int ts_fft_plan_create_amd(int N, int sign, void **handle) {
+  return create_fft_plan_amd(N, sign, nullptr, handle);
+}
+
+extern "C" int ts_fft_plan_create_for_artifact_amd(
+    int N, int sign, const char *artifactDigest, void **handle) {
+  if (!artifactDigest || std::strlen(artifactDigest) != 64) return 15;
+  for (int i = 0; i < 64; ++i) {
+    const char c = artifactDigest[i];
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return 15;
+  }
+  return create_fft_plan_amd(N, sign, artifactDigest, handle);
+}
+
+extern "C" const char *ts_fft_plan_artifact_digest_amd(void *handle) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  return plan ? plan->artifactDigest : nullptr;
+}
+
+extern "C" const char *ts_fft_package_abi_amd() {
+  return "tessera.rocm.fft.plan.v1";
+}
+
+static int execute_device_batch_locked(TSFFTPlanAMD *plan,
+                                       const float2 *inputDevice,
+                                       float2 *outputDevice, int batch,
+                                       hipStream_t stream) {
+  ts_fft_clear_error_amd();
+  for (int row = 0; row < batch; ++row) {
+    const size_t offset = size_t(row) * size_t(plan->n);
+    if (plan->arithmetic.kind == tessera::spectral::kFFTBluestein)
+      execute_cached_bluestein(plan, inputDevice + offset,
+                               outputDevice + offset, stream);
+    else
+      ts_fft_stockham_amd(inputDevice + offset, outputDevice + offset,
+                          plan->nScratch, plan->n, plan->sign, stream);
+    if (ts_fft_last_error_amd() != 0) return 23;
+  }
+  return 0;
+}
+
+// Device-resident entry used by compound TSOL packages. The opaque plan owns
+// its mutable FFT workspace and serializes callers; input/output storage stays
+// owned by the compound package, avoiding intermediate host round trips.
+extern "C" int ts_fft_plan_execute_device_batch_amd(
+    void *handle, const float2 *inputDevice, float2 *outputDevice, int batch,
+    hipStream_t stream) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  if (!plan || !inputDevice || !outputDevice || batch <= 0) return 20;
+  std::lock_guard<std::mutex> guard(plan->mutex);
+  return execute_device_batch_locked(plan, inputDevice, outputDevice, batch,
+                                     stream);
+}
+
+extern "C" int ts_fft_plan_execute_hostptr_batch_amd(
+    void *handle, const float2 *inputHost, float2 *outputHost, int batch) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  if (!plan || !inputHost || !outputHost || batch <= 0) return 20;
+  std::lock_guard<std::mutex> guard(plan->mutex);
+  if (ensure_batch_capacity(plan, static_cast<size_t>(batch)) != 0) return 21;
+  const size_t elements = size_t(batch) * size_t(plan->n);
+  const size_t bytes = elements * sizeof(float2);
+  if (hipMemcpy(plan->input, inputHost, bytes, hipMemcpyHostToDevice) !=
+      hipSuccess)
+    return 22;
+  int execute = execute_device_batch_locked(plan, plan->input, plan->output,
+                                             batch, 0);
+  if (execute != 0) return execute;
+  if (hipDeviceSynchronize() != hipSuccess) return 24;
+  if (hipMemcpy(outputHost, plan->output, bytes, hipMemcpyDeviceToHost) !=
+      hipSuccess)
+    return 25;
+  return 0;
+}
+
+extern "C" long long ts_fft_plan_workspace_elems_amd(void *handle) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  if (!plan) return -1;
+  return plan->arithmetic.kind == tessera::spectral::kFFTBluestein
+             ? 4LL * plan->bluesteinM
+             : plan->n;
+}
+
+extern "C" int ts_fft_plan_length_amd(void *handle) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  return plan ? plan->n : -1;
+}
+
+extern "C" void ts_fft_plan_destroy_amd(void *handle) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  if (!plan) return;
+  std::unique_lock<std::mutex> guard(plan->mutex);
+  (void)hipDeviceSynchronize();
+  destroy_plan_storage(plan);
+  guard.unlock();
+  delete plan;
+}
+
 // Host-pointer convenience entry for the runtime / D1 arbiter: allocates the
 // device buffers, copies host<->device, runs the transform, and returns 0 on
 // success (non-zero on any HIP error).  Lets a ctypes caller run the real GPU
@@ -368,6 +717,53 @@ extern "C" int ts_fft_stockham_amd_hostptr(const float2 *in_host,
     // must NOT be copied back as a result.
     rc = ts_fft_last_error_amd();
     goto cleanup;
+  }
+  if (hipDeviceSynchronize() != hipSuccess) {
+    rc = 3;
+    goto cleanup;
+  }
+  if (hipMemcpy(out_host, d_out, bytes, hipMemcpyDeviceToHost) != hipSuccess)
+    rc = 4;
+cleanup:
+  if (d_in) (void)hipFree(d_in);
+  if (d_out) (void)hipFree(d_out);
+  if (d_scr) (void)hipFree(d_scr);
+  return rc;
+}
+
+// Batched host-pointer entry used by the canonical ROCm FFT runtime package.
+// Allocate and transfer the full [batch, N] slab once, then apply the exact
+// same shipping driver to each row.  This removes the per-row hipMalloc/free
+// overhead without inventing a second butterfly implementation.  Rows remain
+// independent and execute in a deterministic order on the default stream.
+extern "C" int ts_fft_stockham_amd_hostptr_batch(const float2 *in_host,
+                                                 float2 *out_host, int batch,
+                                                 int N, int sign) {
+  if (batch <= 0 || N <= 0)
+    return 6;
+  float2 *d_in = nullptr, *d_out = nullptr, *d_scr = nullptr;
+  int rc = 0;
+  const size_t elems = size_t(batch) * size_t(N);
+  const size_t bytes = elems * sizeof(float2);
+  ts_fft_clear_error_amd();
+  if (hipMalloc(&d_in, bytes) != hipSuccess ||
+      hipMalloc(&d_out, bytes) != hipSuccess ||
+      hipMalloc(&d_scr, size_t(N) * sizeof(float2)) != hipSuccess) {
+    rc = 1;
+    goto cleanup;
+  }
+  if (hipMemcpy(d_in, in_host, bytes, hipMemcpyHostToDevice) != hipSuccess) {
+    rc = 2;
+    goto cleanup;
+  }
+  for (int row = 0; row < batch; ++row) {
+    const size_t offset = size_t(row) * size_t(N);
+    ts_fft_stockham_amd(d_in + offset, d_out + offset, d_scr, N, sign,
+                        /*stream=*/0);
+    if (ts_fft_last_error_amd() != 0) {
+      rc = ts_fft_last_error_amd();
+      goto cleanup;
+    }
   }
   if (hipDeviceSynchronize() != hipSuccess) {
     rc = 3;

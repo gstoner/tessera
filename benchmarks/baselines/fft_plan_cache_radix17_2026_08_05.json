@@ -1,0 +1,157 @@
+{
+  "schema": "tessera.fft_optimization_evidence.v1",
+  "date": "2026-08-05",
+  "source_revision": "0255b6b7b90a+dirty",
+  "host": {
+    "cpu": "AMD Ryzen AI MAX+ 395",
+    "gpu": "AMD Radeon 8060S",
+    "gpu_arch": "gfx1151",
+    "environment": "Ubuntu WSL",
+    "hip": "7.14.60850"
+  },
+  "timing_limit": "GPU HIP events were invalid; synchronized host-wall measurements are diagnostic, not selector-promotion evidence.",
+  "radix17": {
+    "baseline": "Bluestein with kMaxRadix=13",
+    "candidate": "direct generic Stockham radix 17",
+    "rows": [
+      {
+        "n": 17,
+        "baseline_ms": 0.1348,
+        "candidate_ms": 0.0238,
+        "speedup": 5.6639,
+        "baseline_forward_max_error": 1.057e-06,
+        "candidate_forward_max_error": 8.561e-07,
+        "candidate_roundtrip_error": 2.725e-07
+      },
+      {
+        "n": 68,
+        "baseline_ms": 0.1428,
+        "candidate_ms": 0.0258,
+        "speedup": 5.5349,
+        "baseline_forward_max_error": 4.165e-06,
+        "candidate_forward_max_error": 3.617e-06,
+        "candidate_roundtrip_error": 5.639e-07
+      },
+      {
+        "n": 289,
+        "baseline_ms": 0.1529,
+        "candidate_ms": 0.0492,
+        "speedup": 3.1077,
+        "baseline_forward_max_error": 1.48e-05,
+        "candidate_forward_max_error": 1.051e-05,
+        "candidate_roundtrip_error": 8.343e-07
+      }
+    ],
+    "verdict": "retain direct radix 17 for the gfx1151 mixed-radix plan"
+  },
+  "x86_plan_cache": {
+    "candidate": "bounded thread-local cached permutation and per-stage twiddle plan",
+    "baseline_source": "pre-change same-host review sweep",
+    "rows": [
+      {
+        "n": 1024,
+        "previous_latency_ratio_vs_scipy": 8.626,
+        "candidate_latency_ratio_vs_scipy": 3.4587,
+        "candidate_ms": 0.026489,
+        "max_abs_error": 1.7507e-05
+      },
+      {
+        "n": 8192,
+        "previous_latency_ratio_vs_scipy": 22.75,
+        "candidate_latency_ratio_vs_scipy": 3.8479,
+        "candidate_ms": 0.20467,
+        "max_abs_error": 8.6317e-05
+      },
+      {
+        "n": 65536,
+        "previous_latency_ratio_vs_scipy": 17.202,
+        "candidate_latency_ratio_vs_scipy": 3.1043,
+        "candidate_ms": 1.816334,
+        "max_abs_error": 0.00027296
+      }
+    ],
+    "verdict": "retain cache; autosort or generated mixed-radix SIMD remains required for parity"
+  },
+  "x86_generated_permutation": {
+    "candidate": "cached AVX-512 gather permutation into reusable thread-local workspace",
+    "baseline": "cached plan with scalar random-swap bit reversal",
+    "rows": [
+      {"n": 1024, "baseline_ms": 0.026489, "candidate_ms": 0.022534, "baseline_latency_ratio_vs_scipy": 3.4587, "candidate_latency_ratio_vs_scipy": 2.9235, "max_abs_error": 1.7507e-05},
+      {"n": 8192, "baseline_ms": 0.204670, "candidate_ms": 0.176613, "baseline_latency_ratio_vs_scipy": 3.8479, "candidate_latency_ratio_vs_scipy": 1.8571, "max_abs_error": 8.6317e-05},
+      {"n": 65536, "baseline_ms": 1.816334, "candidate_ms": 1.617807, "baseline_latency_ratio_vs_scipy": 3.1043, "candidate_latency_ratio_vs_scipy": 2.7346, "max_abs_error": 0.00027296}
+    ],
+    "verdict": "retain generated permutation; mixed-radix SIMD codelets remain open"
+  },
+  "x86_bluestein_cache": {
+    "candidate": "bounded immutable chirp and transformed-kernel cache plus reusable thread-local padded workspace",
+    "rows": [
+      {"n": 127, "uncached_ms": 0.033090, "cached_ms": 0.018789, "speedup": 1.7611},
+      {"n": 257, "uncached_ms": 0.081867, "cached_ms": 0.052286, "speedup": 1.5657},
+      {"n": 509, "uncached_ms": 0.086828, "cached_ms": 0.052902, "speedup": 1.6413},
+      {"n": 1009, "uncached_ms": 0.163656, "cached_ms": 0.100909, "speedup": 1.6218}
+    ],
+    "verdict": "retain cached production Bluestein"
+  },
+  "x86_rader_comparison": {
+    "candidate": "prime permutation plus padded linear convolution on the production AVX-512 radix-2 ABI",
+    "rows": [
+      {"n": 127, "bluestein_ms": 0.018789, "rader_ms": 0.022892, "rader_over_bluestein": 1.2184, "workspace_ratio": 1.0},
+      {"n": 257, "bluestein_ms": 0.052286, "rader_ms": 0.034718, "rader_over_bluestein": 0.6640, "workspace_ratio": 0.5},
+      {"n": 509, "bluestein_ms": 0.052902, "rader_ms": 0.057941, "rader_over_bluestein": 1.0953, "workspace_ratio": 1.0},
+      {"n": 1009, "bluestein_ms": 0.100909, "rader_ms": 0.106915, "rader_over_bluestein": 1.0595, "workspace_ratio": 1.0}
+    ],
+    "verdict": "retain as a candidate only when it halves convolution length; N=257 wins, but the corpus is insufficient for selector promotion"
+  },
+  "x86_mixed_radix_avx512": {
+    "candidate": "native Stockham stages with cached matrices/twiddles and 16-lane AVX-512 codelets",
+    "selector_rule": "5*N*sum(radices) <= 2*3*M*log2(M), where M=next_pow2(2N-1)",
+    "representative_rows": [
+      {"n": 12, "bluestein_ms": 0.010208, "mixed_ms": 0.003905, "speedup": 2.6141},
+      {"n": 68, "bluestein_ms": 0.019911, "mixed_ms": 0.010440, "speedup": 1.9072},
+      {"n": 255, "bluestein_ms": 0.031242, "mixed_ms": 0.036391, "speedup": 0.8585},
+      {"n": 289, "bluestein_ms": 0.121546, "mixed_ms": 0.032397, "speedup": 3.7518},
+      {"n": 768, "bluestein_ms": 0.231046, "mixed_ms": 0.048150, "speedup": 4.7985},
+      {"n": 3072, "bluestein_ms": 0.965229, "mixed_ms": 0.196813, "speedup": 4.9043},
+      {"n": 5120, "bluestein_ms": 0.967715, "mixed_ms": 0.342703, "speedup": 2.8244}
+    ],
+    "verdict": "promote the work-gated direct mixed-radix route; retain Bluestein for N=255 and any rejected estimate"
+  },
+  "x86_bailey_six_step": {
+    "candidate": "native blocked three-transpose Bailey decomposition with middle transpose fused with twiddle multiplication",
+    "rows": [
+      {"n": 65536, "production_ms": 1.655123, "candidate_ms": 3.689349, "candidate_over_production": 2.2287},
+      {"n": 262144, "production_ms": 7.964448, "candidate_ms": 16.388350, "candidate_over_production": 2.0577},
+      {"n": 1048576, "production_ms": 41.439556, "candidate_ms": 68.601013, "candidate_over_production": 1.6554}
+    ],
+    "verdict": "reject on Zen 5; do not select or coefficient-tune"
+  },
+  "gfx1151_fused_lds": {
+    "candidate": "single-workgroup radix-4/radix-2 Stockham with two LDS slabs and one global read/write",
+    "production_baseline": "shipping global ping-pong Stockham from the same session",
+    "rows": [
+      {"n": 64, "baseline_ms": 0.0072, "candidate_ms": 0.0039, "speedup": 1.8462, "forward_max_error": 3.037e-06, "roundtrip_error": 3.403e-07},
+      {"n": 128, "baseline_ms": 0.0100, "candidate_ms": 0.0040, "speedup": 2.5000, "forward_max_error": 3.373e-06, "roundtrip_error": 3.416e-07},
+      {"n": 256, "baseline_ms": 0.0116, "candidate_ms": 0.0042, "speedup": 2.7619, "forward_max_error": 8.323e-06, "roundtrip_error": 5.390e-07},
+      {"n": 512, "baseline_ms": 0.0115, "candidate_ms": 0.0053, "speedup": 2.1698, "forward_max_error": 9.768e-06, "roundtrip_error": 8.044e-07},
+      {"n": 1024, "baseline_ms": 0.0125, "candidate_ms": 0.0068, "speedup": 1.8382, "forward_max_error": 1.810e-05, "roundtrip_error": 8.001e-07}
+    ],
+    "timing_domain": "host_wall_synchronized",
+    "verdict": "retain as an experimental candidate; require valid device-event timing before selector or artifact promotion"
+  },
+  "gfx1151_selector_timing_probe": {
+    "hip_event_total_ms": [0.0, 0.0, 0.0, 0.0, 0.0],
+    "sizes": [64, 128, 256, 512, 1024],
+    "rocprofv3": "kernel trace initialized but emitted no trace directory, dispatch records, or timestamps",
+    "verdict": "blocked in WSL DXG; selector-grade confirmation requires bare-metal gfx1151"
+  },
+  "rocfft_benchmark_smoke": {
+    "n": 65536,
+    "batch": 1,
+    "plan_ms": 765.174751,
+    "average_ms": 0.0186114,
+    "gflops": 281.7026,
+    "workspace_bytes": 524288,
+    "max_roundtrip_error": 9.536743164e-07,
+    "timing_domain": "host_wall_synchronized"
+  }
+}

@@ -102,6 +102,34 @@ def test_launch_norm_matches_numpy(op_name, default_eps, dtype, tol, shape):
     np.testing.assert_allclose(out, ref, atol=tol, rtol=0)
 
 
+@pytest.mark.parametrize("op_name", ["tessera.rmsnorm", "tessera.rmsnorm_safe"])
+@pytest.mark.parametrize("dtype,tol", [(np.float16, 4e-3), ("bf16", 3e-2)])
+def test_reduced_precision_norm_matches_corrected_f32_compute_reference(
+        op_name, dtype, tol):
+    """Close REDUCED-PRECISION-COMPUTE-2026-08-03 on real gfx1151.
+
+    Squaring 1e4 in fp16 overflows.  Both the public reference and the ROCm
+    kernel must instead widen the computation to f32 and narrow only the
+    result; a finite-only assertion would miss the historical all-zero output.
+    bf16 shares the storage-width path and independently proves its conversion.
+    """
+    from tessera import ops
+
+    rt = _norm_or_skip()
+    if dtype == "bf16":
+        dtype = pytest.importorskip("ml_dtypes").bfloat16
+    x = np.full((3, 257), 1.0e4, dtype=dtype)
+    got = np.asarray(
+        rt.launch(_artifact(rt, op_name), (x,))["output"], dtype=np.float32
+    )
+    reference = np.asarray(
+        getattr(ops, op_name.removeprefix("tessera."))(x), dtype=np.float32
+    )
+    assert np.all(np.isfinite(got))
+    assert not np.all(got == 0.0)
+    np.testing.assert_allclose(got, reference, atol=tol, rtol=0)
+
+
 def test_explicit_eps_is_honored():
     rt = _norm_or_skip()
     rng = np.random.default_rng(5)

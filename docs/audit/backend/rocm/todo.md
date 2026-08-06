@@ -1,11 +1,115 @@
 ---
-last_updated: 2026-08-03
+last_updated: 2026-08-06
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **bounded gfx1151 physical
+package complete; Graph/Schedule ODS adoption remains open.** The five TSOL
+composites now execute in the prebuilt `libtessera_spectral_rocm.so` image in
+the requested order: `spectral_filter`, `dct`, `spectral_conv`, `stft`, and
+`istft`. `tessera.scheduled_spectral.v1` content-addresses each compound
+program's child FFT Schedule/Tile digests, interleaved-complex layout, axis,
+padding/crop, window/hop/frame policy, normalization, exact call-workspace
+bytes, f32 accumulation, native entry, and immutable-input/fresh-output
+lineage. Framing, padding, complex multiply, half-spectrum packing, and
+deterministic ascending-frame overlap-add remain on device; the public
+host-pointer ABI stages only inputs and the final output. Runtime consumption
+requires that artifact and no longer re-enters Graph metadata or host NumPy
+composition. Exact WSL-visible gfx1151 tests pass for aligned, batched, ragged,
+and prime-length Bluestein children. `gfx1200`/`gfx1250` fail closed. The next
+shared step is an ODS `schedule.spectral_program`/launch Tile carrier; this
+bounded package must not be mislabeled full Graph→Schedule→Tile E2E before it
+lands.
+
+Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **correctness defects
+fixed and boundary envelope expanded on gfx1151.** Var/std now use one
+compiler-generated, centered parallel Welford reduction instead of
+`mean(x²)-mean(x)²`; exact-device tests cover large-offset/low-variance data,
+arbitrary axes, ragged extents, and fp16/bf16 storage. Boundary probes also
+fixed `expm1(-0)`, NumPy-ordered signed-zero `maximum`/`minimum`, infinity and
+signed-zero `mod`/`floor_div`, and all signed-zero/infinity/NaN `atan2`
+quadrants. Trig large arguments, log/exp boundary domains, lgamma/digamma pole
+neighborhoods, 4097-element scans, and reduced-precision scans now have
+exact-device evidence. This changes no physical selector or performance claim.
+
+Cross-backend sync `ROCM-FFT-PREBUILT-2026-08-05` — **prebuilt package and
+persistent Bluestein plan boundary complete on gfx1151.** CMake now produces
+and installs `libtessera_spectral_rocm.so`; canonical runtime loading never
+invokes `hipcc`. Its versioned opaque ABI owns bounded reusable device plans:
+N scratch for mixed radix, or four M buffers for Bluestein (three mutable plus
+an immutable pretransformed chirp). Plans are keyed by N, direction, and the
+validated Schedule→Tile SHA-256 digest, which the native image exposes.
+
+The v3 Tile contract records `persistent_device_plan`,
+`persistent_plan_n`/`persistent_plan_4m`, and
+`persistent_device_chirp_fft`. Repeated N=257 execution retained one plan,
+reported 4096 complex workspace elements, preserved its content digest, and
+matched NumPy. Against per-call allocation, synchronized host-wall medians
+improved 1.24x/1.45x/1.31x at N=257/509/1009 with identical error. Evidence:
+`benchmarks/baselines/rocm_fft_plan_cache_gfx1151_2026_08_05.json`. Verdict:
+retain. WSL timing remains selector-ineligible and does not promote fused LDS.
+
+Cross-backend sync `FFT-PERF-2-2026-08-05` — **x86 parity assessed; gfx1151
+promotion remains hardware-blocked.** The x86 cache, Rader, mixed-radix, and
+Bailey decisions do not transfer physical schedules to RDNA. The fused-LDS
+gfx1151 harness now records the raw HIP interval: all five N=64--1024 samples
+returned exactly zero event milliseconds. `rocprofv3 --kernel-trace` also
+initialized but emitted no trace files or dispatch timestamps under WSL DXG.
+Correctness still passes, but selector-grade confirmation requires bare-metal
+gfx1151. Production still executes global-memory ping-pong inside its
+persistent device plan; it does not select the experimental LDS residency.
+
+Cross-backend sync `FFT-PERF-FOUNDATION-2026-08-05` — **radix-17 retained and
+the first fused-LDS envelope validated on gfx1151.** The optional C++ benchmark now runs
+real rocFFT and verifies a round trip rather than timing a synthetic loop. A
+same-host radix-17 comparison retained the direct generic stage over Bluestein:
+5.66x/5.53x/3.11x faster at N=17/68/289 with lower forward and round-trip
+error. Timing is synchronized host wall because WSL HIP events are invalid, so
+the result selects arithmetic routing but does not promote a performance
+selector. Evidence is in
+`benchmarks/baselines/fft_plan_cache_radix17_2026_08_05.json`.
+
+The content-addressed FFT contract continues to state the production truth:
+`stockham_autosort`, a persistent device plan, N scratch or four-M Bluestein
+workspace, a cached chirp FFT for Bluestein, complex64/f32, and the radix
+sequence. A separate single-workgroup candidate now keeps every radix-4
+and radix-2 stage in two LDS slabs for N=64--1024. It passed forward and
+round-trip comparison on the WSL-visible gfx1151 and measured 1.84x--2.76x
+faster than the shipping global-ping-pong lane in the same synchronized
+host-wall domain. It remains experimental until valid device-event evidence
+can promote `lds_ping_pong` residency; gfx1200/gfx1250 remain fail-closed.
+
+Cross-backend sync `E2E-REAL-FFT-2026-08-05` — **gfx1151 typed
+Schedule→Tile consumption and prebuilt packaging implemented.**
+The public `rocm_fft_compiled` package had been disconnected from the proven
+Stockham implementation: it executed `generate-rocm-dft-kernel`, an O(N²)
+one-thread-per-bin diagnostic DFT, while the mixed-radix/Bluestein target hook
+below existed only as an arbiter candidate. Same-session gfx1151 evidence made
+the consequence concrete: at batch=1/N=16384, direct DFT was 6.49 ms with
+1.255 max absolute error; batched Stockham was 1.03 ms with 2.73e-4 error
+(host-wall synchronized timing in WSL). The runtime now fails closed onto the
+shipping Stockham package, batches rows through one allocation, and records
+the target hook's actual mixed-radix plan. The direct DFT remains buildable only
+as a named diagnostic/oracle. Exact-device FFT/candidate gates pass (121 tests).
+
+The production Graph→Schedule pass now emits one content-addressed
+`schedule.fft` plus one durable artifact, and Schedule→Tile re-derives every
+decision before emitting one verified `tile.fft_kernel`. The public runtime
+validates and consumes that exact Tile digest, mixed-radix/Bluestein strategy,
+shape, direction, and normalization without Graph metadata or a second Python
+planner decision. Exact gfx1151 fft/ifft/rfft/irfft tests pass for mixed-radix,
+Bluestein, aligned, batched, and inner-axis cases. `gfx1200` and `gfx1250` fail
+closed until they own profiles and evidence.
+
+The selected target hook is now a prebuilt native package; public execution no
+longer invokes `hipcc`, and the exact Tile digest keys the opaque device plan.
+The WSL HIP event clock returned zero/negative
+values, so the harness now labels its synchronized host-wall fallback; a
+bare-metal device-event performance packet is still required for promotion.
 
 Cross-backend sync `FFT-MIXED-RADIX-BLUESTEIN-2026-08-03` — **parity validated on device; one follow-up.**
 Tessera's own FFT (Stockham, `TargetHooks/`) extends from powers of two to
@@ -45,7 +149,7 @@ evidence exists for the failure path itself (it needs induced allocation
 pressure); the success paths are covered.
 
 
-Cross-backend sync `SHAPE-RULE-REGISTRY-2026-08-03` — **follow-up required - closest to a complex FFT lane, and still rejected.**
+Cross-backend sync `SHAPE-RULE-REGISTRY-2026-08-03` — **ROCm FFT follow-up complete on gfx1151.**
 PR #493 closed the Graph IR shape-rule registry: **303 declared / 6 deliberately
 undeclared / 0 unexamined**, with the `MAX_UNCLASSIFIED` ratchet dropped 106 -> 0.
 Shared contracts changed; all four backends are affected equally at the
@@ -68,12 +172,14 @@ reference level:
   drift gate's scanner did not know the prefix, so it reported green while the
   family accumulated unregistered.
 
-**This is the Python reference lane, not generated device code.** Complex FFT is currently REJECTED on `rocm_gfx1151` because no ROCm target
-declares an `fft` capability entry. ROCm is nonetheless the backend nearest to
-having the lane: `TesseraROCMOps.td` already declares an FFT op over "a batch of
-interleaved-complex rows" (`OUT[b,k]=sum_j IN[b,j]*exp(sign*2*pi*i*kj/n)`), which
-is exactly the real-pair model the shared dtype work adopted. Closing this is a
-capability-registration plus lowering task, not a type-system one.
+The capability table now matches the implementation and backend manifest:
+`fft`, `ifft`, `rfft`, and `irfft` are `ready` on `rocm_gfx1151` for logical
+complex64 carried as interleaved fp32 pairs. They execute through the
+strict mixed-radix Stockham/Bluestein `rocm_fft_compiled` package, not the
+Python numerical fallback or the diagnostic direct DFT. Exact gfx1151
+transform, round-trip, inner-axis, r2c/c2r, and codegen tests pass. This does
+not add complex to the target storage-dtype tuple and does not create an FFT
+claim on NVIDIA.
 
 No ROCm-specific regression: the `tile.mma` data-operand rule this registry work
 builds on was already ROCm's own - a file-local `static` in `TileToROCM.cpp`
@@ -88,14 +194,15 @@ having no FP8 WMMA (RDNA 4 / CDNA 4 add it). That contract is doing its job —
 it is why declaring a real fp8 lowering here would be wrong rather than merely
 unimplemented. Re-assess for gfx950 / gfx1201, which are MASTER_AUDIT P2.
 
-Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **follow-up required, reference-level only.**
+Cross-backend sync `REDUCED-PRECISION-COMPUTE-2026-08-03` — **parity validated on gfx1151.**
 Same shared policy change as NVIDIA. The reference lane now computes at f32 and
 stores narrow, which fixed `rmsnorm` / `rmsnorm_safe` (the latter returned 0.0
 instead of ~1.0 at fp16: sum(x**2) overflowed to inf, then x/inf underflowed).
-The ROCm `generate-rocm-norm-kernel` lane already documents f32 reductions
-regardless of storage dtype, so the contracts agree on paper — but that was not
-re-verified on gfx1151 in this change. ROCm owns an execute-and-compare at
-fp16/bf16 against the corrected reference.
+The ROCm `generate-rocm-norm-kernel` lane performs f32 reductions regardless of
+storage dtype. Exact gfx1151 fp16 and bf16 tests now compare `rmsnorm` and
+`rmsnorm_safe` at magnitude 1e4 against the corrected public f32-compute,
+narrow-store reference. All four cases are finite, nonzero, and within the
+storage tolerance, closing the historical fp16 all-zero regression.
 
 Cross-backend sync `TILE-MMA-DATA-OPERANDS-2026-08-03` — **parity validated, no ROCm behavior change.**
 The `dataOperands` / `isTileControlType` rule ROCm already applied privately in
@@ -2419,18 +2526,19 @@ The migration is scoped by measurement in
   earlier version of this entry carried a 32-vs-288 comparison — both numbers
   were wrong (a truncated `awk` range and a config that is not the default);
   see `W1_1_TYPING_DESIGN.md` §4.7.
-* **The open design question:** should `tile.view` carry a precomputed linear
-  base so the hoisting is expressible at Tile level, or should the migration
-  rely on LICM? Decide by measurement taken after the simplest configuration
-  migrates. Cross-backend sync key `TILE-VIEW-LINEAR-BASE-2026-08-05`; NVIDIA
-  is follow-up required, x86 and Apple not applicable (§4.7 table).
+* **Resolved design question:** measurement selected an optional precomputed
+  `linear_base` on `tile.view`; logical origins remain for bounds. This exposes
+  the direct lane's A-base hoisting and sibling-B sharing, although the result
+  below shows that address form was not the dominant remaining cost.
+  Cross-backend sync key `TILE-VIEW-LINEAR-BASE-2026-08-05`; NVIDIA is
+  follow-up required, x86 and Apple not applicable (§4.7 table).
 
 Gate: `test_via_tile_matches_the_production_lane_on_hardware` (bit-identical vs
 the production lane, with a control that must fail and a fallback-fatal guard),
 then throughput against `GEMM_PERF_LADDER.md`'s 8.02 TFLOP/s row at the same
 `timer_source`.
 
-**Exact gfx1151 outcome, 2026-08-04.** The hardware test passes with
+**Exact gfx1151 outcome, updated 2026-08-05.** The hardware test passes with
 zero-difference output at both aligned `64x64x64` and ragged `65x67x31`; the
 second case makes the M/N edge masks, K-tail masks, dynamic K/N leading
 dimensions, and bounded stores live. The corrected, order-balanced 2048^3
@@ -2442,6 +2550,78 @@ so typed/direct is only **0.685x**. Verdict: **retain the typed lane as an
 experimental correctness path, do not promote it**; pursue the precomputed-base
 or equivalent address-hoisting work under
 `TILE-VIEW-LINEAR-BASE-2026-08-05` before another promotion measurement.
+
+That follow-up is now implemented: `tile.view` accepts an optional
+`linear_base` SSA operand while retaining logical row/column origins for bounds,
+and the 2x4 producer supplies the hoisted A and shared B bases. The exact
+aligned/ragged bit-identity gate remains green. A fresh 2048^3, 100-launch x 3
+interleaved host-wall packet measures **15.45 TFLOP/s typed versus 21.74 direct
+(0.711x)**. This is a modest improvement over 0.685x, not performance recovery.
+The typed image uses 161 VGPR/90 SGPR with no spills, but contains 281 waits
+versus 85 and more fragmented scalar half-loads than the direct lane. An
+experimental sibling-fragment load-grouping contract measured only 0.709x and
+was removed. Verdict remains **retain experimental, reject promotion**; the
+next performance design must reduce fragment-load scheduling/wait overhead,
+not retune coefficients or hide the gap.
+
+Binary decomposition narrows that next design further. In the aligned 2x4
+steady-state K loop, both images select exactly 64 scalar B half-loads, four
+128-bit A loads, eight `v_wmma_f32_16x16x16_f16` instructions, and progressive
+`vmcnt(3/2/1/0)` waits. The typed loop is 134 instructions versus 142 direct,
+uses 161 VGPR/82 SGPR with no spills, and therefore is not losing to extra
+arithmetic or occupancy. The material difference is cross-fragment VMEM
+scheduling: typed forms two 32-load B clauses (all low halves, then all high
+halves), while direct interleaves address generation with shorter clauses and
+adjacent K-row halves. A size sweep supports a cache-latency diagnosis:
+`1024^3` is 10.35/10.47 TFLOP/s (0.988x), `2048^3` is approximately 0.71x, and
+`4096^3` is 14.86/19.66 TFLOP/s (0.756x). Forced scheduler barriers, encoded
+clause-break spans, adjacent-pair IR construction, and LLVM's small-GEMM IGLP
+hint were all measured and rejected; the first two regressed to 0.622x and
+0.596x, while the latter two produced no useful ISA or throughput change.
+LLVM's variant-0 small-GEMM strategy is intrinsically a repeated
+`DS(2) -> WMMA(1)` pipeline, so it cannot classify this register-owned kernel's
+VMEM gathers. A Tessera-specific `VMEM_READ(8) -> VALU(4)` IGroupLP experiment
+did shorten the hot loop from two 32-load clauses to twelve direct-like clauses,
+but still measured only 15.15/21.26 TFLOP/s (0.712x). Clause shape alone is
+therefore not the missing contract: the scheduler must retain which loads form
+one sibling fragment and adjacent K-row register pair.
+The whole-sibling hypothesis was then implemented rather than left as a plan:
+TileToROCM materialized all four B packs K-major, fenced adjacent K-row pairs,
+and retained the same progressive waits. It passed the aligned/ragged
+bit-identity gate and produced the intended direct-like load order, but measured
+only **14.79/21.05 TFLOP/s (0.703x)**. Combining it with an explicit
+latency-oriented two-waves/EU request measured **14.89/21.12 (0.705x)**. Both
+experiments were removed. The retained evidence now rejects instruction count,
+occupancy, clause length, and fragment/K-pair order as isolated explanations.
+The next credible implementation is to factor the direct lane's complete
+physical panel emitter (address evolution, fragment construction, WMMA issue,
+and resource policy) behind a target-owned interface and make both the direct
+and typed Tile consumers call that same implementation. This preserves the
+typed artifact boundary while eliminating another approximate reconstruction.
+
+**Closed on gfx1151, 2026-08-05.** The target-owned physical-panel emitter now
+backs the direct generator and the atomic typed-panel fallback. More
+importantly, the production 2x4 f16/bf16 typed contract stamps a SHA-256 over
+the ordered semantic Tile body (views, packs, accumulator-threaded MMAs,
+unpacks, stores, types, physical layouts, and producer relationships).
+`lower-tile-to-rocm{arch=gfx1151}` verifies that identity and the exact
+24-view/24-pack/32-MMA/16-unpack/16-store topology before the shared target
+emitter materializes the complete physical function. It does not re-enter
+Graph IR, and valid scheduler annotations between the two passes do not alter
+the semantic digest. Same-typed operand substitution and panel-attribute
+tampering both fail closed.
+
+The resulting direct and typed Target IR is text-identical and the serialized
+HSACO is byte-identical (SHA-256
+`bfb1d40b7c9938f4a6c9ccc19b365611d9d0c2b7d97eb9c54ad97752c67f1a97`),
+including 256 VGPR, 107 SGPR, and the same cold-path spill record. Exact-device
+aligned/ragged output remains bit-identical. Interleaved 100-launch host-wall
+packets measure typed/direct **10.68/10.67 TFLOP/s (1.001x) at 1024^3**,
+**21.27/21.42 (0.993x) at 2048^3**, and **20.54/20.58 (0.998x) at 4096^3**.
+The former 0.711x typed performance gap is closed. The canonical scheduled
+gfx1151 package now selects `via-tile=true`; the generic direct generator stays
+as the byte-identity oracle/candidate until duplicate-authority deletion.
+gfx1200/gfx1250 remain fail-closed and receive no transferred schedule claim.
 
 The pre-existing WSL teardown abort is resolved rather than waived. ROCm
 runtime and benchmark loaders no longer preload HIP/HIPRTC or promote their
@@ -2541,3 +2721,43 @@ performance promotion.** Existing f16/bf16→f32 reductions, f16 softmax, and
 canonical `tessera.reduce` op currently requires same-element-type,
 rank-reduced output. gfx1200/gfx1250 remain fail-closed and require their own
 Schedule policy and exact-device evidence.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-2026-08-05`
+
+`schedule.attention` now binds the shared static rank-4 online-softmax
+recurrence, modifiers, launch contract, and architecture-owned backward-LSE
+policy into one SHA-256 identity. The gfx1151 package consumes the exact
+emitted `tile.attention_kernel` through TileToROCm/ROCDL/HSACO without Graph
+re-entry and preserves `gfx1151_auto_128` with the per-shape saved/recompute
+selection. **ROCm outcome: parity validated for E2E-REAL-5A.** On the exact
+WSL-visible Radeon 8060S/gfx1151, the scheduled f16→f32 descriptor loads and
+launches, and GQA plus causal-window ragged `Sq=17/Sk=19` output agrees with the
+shared streaming-attention oracle. gfx1200/gfx1250 explicitly fail closed;
+they require architecture-owned profiles and exact-device packets. Canonical
+attention backward was the next shared family boundary.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-BACKWARD-2026-08-05`
+
+`schedule.attention_backward` now binds dQ/dK/dV identity, the canonical
+tensor loops, fixed two-split dK/dV reduction, launch workspace, modifiers, and
+the gfx1151 LSE selection into one SHA-256 artifact. The gfx1151 consumer
+compiles that exact Schedule→Tile program into the existing ordered five-entry
+HSACO package without Graph re-entry. **ROCm outcome: parity validated for
+E2E-REAL-5B.** On the WSL-visible Radeon 8060S/gfx1151, exact tests pass for
+MHA/GQA/MQA, aligned and ragged shapes, causal window, bias, softcap, and all
+three gradients. Saved-LSE operand indexing is now explicit in the direct Tile
+materializer. gfx1200/gfx1250 remain fail-closed pending their own profiles and
+device evidence; no schedule transfers from gfx1151.
+
+## Cross-backend sync `E2E-REAL-5C-STATE-LINEAGE-2026-08-05`
+
+The gfx1151 Lion VJP, factored/full Adafactor VJP, and sequence-mixer backward
+launchers now enforce shared content-addressed logical-buffer lineage and
+consume exact typed Schedule→Tile artifacts before HIP compilation. Lion and
+Adafactor declare functional/no-alias versioned state transitions;
+`schedule.sequence_mixer_backward` binds the checkpoint, chunk summary/prefix/
+fill, reverse phases, workspace, and six fresh gradient outputs. Runtime
+consumers no longer retain or reconstruct Graph-op metadata. **ROCm outcome:
+parity validated for the bounded E2E-REAL-5C slice.** Exact gfx1151 Lion,
+factored/full Adafactor, and gated/modified DeltaNet backward tests pass.
+gfx1200/gfx1250 stay fail-closed pending profiles and exact-device evidence.

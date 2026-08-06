@@ -97,3 +97,20 @@ def test_reference_fallback_when_no_candidate():
     out, tag = C.run_arbitrated(reg, OP_SPECTRAL_FFT, "no_such_target", x)
     assert tag == "reference"
     assert np.allclose(out, reg.reference(x))
+
+
+def test_canonical_rocm_loader_never_falls_back_to_source_compile(monkeypatch):
+    saved = SC._libs.pop("amd_prebuilt", None)
+    monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: ())
+    monkeypatch.setattr(
+        SC,
+        "_amd_source_lib",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("canonical ROCm FFT attempted a source build")
+        ),
+    )
+    try:
+        assert SC._amd_lib() is None
+    finally:
+        if saved is not None:
+            SC._libs["amd_prebuilt"] = saved

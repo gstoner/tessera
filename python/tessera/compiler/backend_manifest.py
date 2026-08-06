@@ -1671,7 +1671,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "via runtime.launch() (rocm_nvfp4_compiled).",
     } for op in ("quantize_nvfp4", "dequantize_nvfp4")},
     # S2 reduction foundation — prod via the warp-shuffle reduce kernel (new
-    # combine); var/std/count_nonzero composed from it. rocm_reduce_compiled /
+    # combine); var/std use centered parallel Welford; count_nonzero composes sum.
     # rocm_stat_reduce_compiled.
     "prod": {
         "dtypes": ("fp32", "fp16", "bf16"),
@@ -1683,8 +1683,8 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
     **{op: {
         "dtypes": ("fp32",),
         "feature_flags": ("reduction",),
-        "notes": f"Statistical reduction {op} — composed from the warp-shuffle "
-                 "reduce kernel (var=mean(x^2)-mean(x)^2). Executes via "
+        "notes": f"Statistical reduction {op} — compiler-generated centered "
+                 "parallel Welford for var/std; sum composition for count_nonzero. Executes via "
                  "runtime.launch() (rocm_stat_reduce_compiled).",
     } for op in ("var", "std", "count_nonzero")},
     # S2 stable-reduction foundation — logsumexp/log_softmax (max-shifted reduce
@@ -1696,22 +1696,23 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "unary exp/log lane. Executes via runtime.launch() "
                  "(rocm_stable_reduce_compiled).",
     } for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")},
-    # Spectral FFT (PR4) — fft/ifft/rfft/irfft on the COMPILER-GENERATED DFT
-    # kernel (generate-rocm-dft-kernel) on gfx1151 (rocm_fft_compiled).
+    # Spectral FFT — fft/ifft/rfft/irfft on the shipping mixed-radix
+    # Stockham/Bluestein target hook on gfx1151 (rocm_fft_compiled).
     **{op: {
         "dtypes": ("fp32",),
         "feature_flags": ("spectral",),
-        "notes": f"Spectral {op} — direct DFT kernel (generate-rocm-dft-kernel, "
-                 "cos/sin via math->rocdl) any length + r2c/c2r + plan scale. "
+        "notes": f"Spectral {op} — strict gfx1151 Stockham/Bluestein package "
+                 "with batched rows, r2c/c2r, and plan-owned scale. "
                  "Executes via runtime.launch() (rocm_fft_compiled).",
     } for op in ("fft", "ifft", "rfft", "irfft")},
-    # Spectral composites (PR5) — dct/stft/istft/spectral_conv/spectral_filter
-    # composed on the gfx1151 FFT (DFT) lane (rocm_spectral_compiled).
+    # Content-addressed TSOL composites with device-resident helpers around
+    # persistent digest-bound child FFT plans (rocm_spectral_compiled).
     **{op: {
         "dtypes": ("fp32",),
         "feature_flags": ("spectral",),
-        "notes": f"Spectral {op} — composes the rocm_fft_compiled DFT lane "
-                 "(frame/window/overlap-add/pointwise on host). Executes via "
+        "notes": f"Spectral {op} — content-addressed gfx1151 package with "
+                 "device framing/window/overlap-add/pointwise work around "
+                 "persistent digest-bound child FFT plans. Executes via "
                  "runtime.launch() (rocm_spectral_compiled).",
     } for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
     # Sparse (PR) — COMPILER-GENERATED gfx1151 sparse kernels (spmm CSR row-wise,

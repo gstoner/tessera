@@ -95,7 +95,7 @@ extern "C" __global__ void ts_fft_scale_nvidia(float2 *__restrict__ x, int N,
   x[t].y *= inv;
 }
 
-// One generic radix-r Stockham stage for the odd small primes (3..13).
+// One generic radix-r Stockham stage for the odd small primes (3..17).
 // Mechanical mirror of ts_stockham_rn_amd, which is verified on gfx1151.
 extern "C" __global__ void ts_stockham_rn_nvidia(const float2 *__restrict__ in,
                                                  float2 *__restrict__ out,
@@ -110,7 +110,7 @@ extern "C" __global__ void ts_stockham_rn_nvidia(const float2 *__restrict__ in,
   int i = k * L + j;
   int o = k * (r * L) + j;
 
-  float2 c[16];  // kMaxRadix is 13
+  float2 c[32];  // kMaxRadix is 17
   for (int q = 0; q < r; ++q) {
     float ang = sign * 2.0f * float(M_PI) * float(j) * float(q) /
                 (float(r) * float(L));

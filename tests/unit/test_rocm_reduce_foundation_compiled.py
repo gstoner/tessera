@@ -1,6 +1,5 @@
-"""Compiler-generated reduce / stable-reduce foundation on gfx1151 — prod (new
-warp-shuffle reduce combine), var/std/count_nonzero (composed from the reduce
-kernel), and logsumexp/log_softmax/softmax_safe/sigmoid_safe (max-shifted reduce
+"""Compiler-generated reduce / stable-reduce foundation on gfx1151 — prod,
+parallel centered-Welford var/std, count_nonzero, and stable max-shifted reduce
 + unary exp/log).
 
 Reachable via `compiler_path` rocm_reduce_compiled (prod) /
@@ -60,6 +59,36 @@ def test_var_std(op, ref, axis):
     np.testing.assert_allclose(np.asarray(res["output"]).astype(np.float32),
                                ref(x, axis=axis).astype(np.float32),
                                atol=2e-4, rtol=2e-4)
+
+
+@pytest.mark.parametrize("op,ref", [("tessera.var", np.var), ("tessera.std", np.std)])
+@pytest.mark.parametrize("axis", [(0, 2), None])
+def test_var_std_arbitrary_axes_and_ragged_extent(op, ref, axis):
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(71)
+    x = (np.float32(1.0e6) + rng.integers(-16, 17, size=(3, 7, 263))).astype(np.float32)
+    result = rt.launch(
+        _art(rt, op, "rocm_stat_reduce_compiled", {"axis": axis, "keepdims": True}),
+        (x,),
+    )
+    assert result["ok"] is True, result.get("reason")
+    expected = ref(x.astype(np.float64), axis=axis, keepdims=True).astype(np.float32)
+    np.testing.assert_allclose(result["output"], expected, rtol=2e-3, atol=2e-3)
+
+
+@pytest.mark.parametrize("dtype", [np.float16, "bf16"])
+def test_welford_reduced_precision_storage(dtype):
+    rt = _rocm_or_skip()
+    if dtype == "bf16":
+        dtype = pytest.importorskip("ml_dtypes").bfloat16
+    x = (np.float32(512.0) + (np.arange(1027) % 11 - 5)).astype(dtype).reshape(1, -1)
+    result = rt.launch(
+        _art(rt, "tessera.var", "rocm_stat_reduce_compiled", {"axis": -1}),
+        (x,),
+    )
+    assert result["ok"] is True, result.get("reason")
+    expected = np.var(x.astype(np.float64), axis=-1).astype(np.float32)
+    np.testing.assert_allclose(result["output"], expected, rtol=3e-3, atol=3e-3)
 
 
 def test_count_nonzero():

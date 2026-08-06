@@ -42,6 +42,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "TesseraROCM/Passes.h"
+#include "ROCMPhysicalWMMAPanel.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Dialect/Tile/TileEpilogue.h"
 #include "TesseraROCMDialect.h.inc"
@@ -386,16 +387,19 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       ctx, 16, 16, 16, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
 
   auto makeTileView = [&](OpBuilder &bb, Location l, Value base, Value row,
-                          Value col, Value rowBound, Value colBound,
-                          Value leadingDim, bool bounded) -> Value {
+                          Value col, Value linearBase, Value rowBound,
+                          Value colBound, Value leadingDim,
+                          bool bounded) -> Value {
     OperationState state(l, "tile.view");
     if (bounded)
-      state.addOperands({base, row, col, rowBound, colBound, leadingDim});
+      state.addOperands(
+          {base, linearBase, row, col, rowBound, colBound, leadingDim});
     else
-      state.addOperands({base, row, col, leadingDim});
+      state.addOperands({base, linearBase, row, col, leadingDim});
     state.addTypes(tileValueTy);
     state.addAttribute("tile.layout", tileLayout);
     state.addAttribute("tile.memory", dynamicRowMajor);
+    state.addAttribute("tile.linear_base", bb.getUnitAttr());
     return bb.create(state)->getResult(0);
   };
   auto packFragment = [&](OpBuilder &bb, Location l, Value tile,
@@ -519,13 +523,19 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                           ValueRange acc, bool bounded) {
     SmallVector<Value> af(mt), bf(nt);
     for (int64_t mi = 0; mi < mt; ++mi) {
+      Value linearBase = bb.create<arith::AddIOp>(l, arK[mi], k0);
       Value view =
-          makeTileView(bb, l, A, rowOrigin[mi], k0, M, K, K, bounded);
+          makeTileView(bb, l, A, rowOrigin[mi], k0, linearBase, M, K, K,
+                       bounded);
       af[mi] = packFragment(bb, l, view, aFragmentTy);
     }
+    Value bRowBase = bb.create<arith::MulIOp>(l, k0, N);
     for (int64_t ni = 0; ni < nt; ++ni) {
+      Value linearBase =
+          bb.create<arith::AddIOp>(l, bRowBase, colN[ni]);
       Value view =
-          makeTileView(bb, l, B, k0, colOrigin[ni], K, N, N, bounded);
+          makeTileView(bb, l, B, k0, colOrigin[ni], linearBase, K, N, N,
+                       bounded);
       bf[ni] = packFragment(bb, l, view, bFragmentTy);
     }
     SmallVector<Value> next(mt * nt);
@@ -543,6 +553,10 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto fastPanel = [&](OpBuilder &bb, Location l, Value k0, ValueRange acc) {
     if (viaTile)
       return typedWmmaAll(bb, l, k0, acc, /*bounded=*/false);
+    if (T.pack == 0)
+      return tessera_rocm::emitGfx11WmmaPhysicalPanel(
+          bb, l, A, B, N, k0, arK, colN, acc, loadZero,
+          cast<VectorType>(loadTy), cast<VectorType>(accTy));
     SmallVector<Value> aFrag(mt), bFrag(nt, loadZero);
     for (int64_t mi = 0; mi < mt; ++mi) {
       Value base = bb.create<arith::AddIOp>(l, arK[mi], k0);
@@ -1352,6 +1366,15 @@ struct GenerateWMMAGemmKernelPass
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
+      if (viaTile && mt == 2 && nt == 4 && T.pack == 0 && !hasBias &&
+          activation == "none" && outputTy == T.accElem) {
+        gpuFunc->setAttr("tessera.rocm.typed_gfx11_gemm_contract",
+                         b.getUnitAttr());
+        gpuFunc->setAttr("tessera.rocm.physical_panel_mt",
+                         b.getI64IntegerAttr(mt));
+        gpuFunc->setAttr("tessera.rocm.physical_panel_nt",
+                         b.getI64IntegerAttr(nt));
+      }
       for (StringRef attrName : {"schedule_arch", "schedule_pipeline_stages",
                                  "schedule_lds_layout", "schedule_ownership",
                                  "schedule_vgpr_estimate", "schedule_source",
@@ -1409,6 +1432,11 @@ struct GenerateWMMAGemmKernelPass
                         packDesc && dt == "int4", request.rasterOrder,
                         request.rasterGroup);
       }
+      if (gpuFunc->hasAttr("tessera.rocm.typed_gfx11_gemm_contract"))
+        gpuFunc->setAttr(
+            "tessera.rocm.typed_contract_digest",
+            b.getStringAttr(
+                tessera_rocm::gfx11WmmaGemmTileBodyDigest(gpuFunc)));
 
       if (!llvm::is_contained(generatedOwners, request.eraseOwner))
         generatedOwners.push_back(request.eraseOwner);
@@ -1419,6 +1447,53 @@ struct GenerateWMMAGemmKernelPass
 };
 
 } // namespace
+
+LogicalResult mlir::tessera_rocm::materializeGfx11WmmaGemmPhysicalBody(
+    gpu::GPUFuncOp function, int64_t mt, int64_t nt) {
+  if (mt != 2 || nt != 4 || function.getNumArguments() != 6)
+    return failure();
+  auto inputMemref = dyn_cast<MemRefType>(function.getArgument(0).getType());
+  auto outputMemref = dyn_cast<MemRefType>(function.getArgument(2).getType());
+  if (!inputMemref || !outputMemref ||
+      (!inputMemref.getElementType().isF16() &&
+       !inputMemref.getElementType().isBF16()) ||
+      !outputMemref.getElementType().isF32())
+    return failure();
+
+  MLIRContext *context = function.getContext();
+  WmmaTypes types;
+  types.store = inputMemref.getElementType();
+  types.load = VectorType::get({16}, types.store);
+  types.frag = types.load;
+  types.accElem = Float32Type::get(context);
+  types.acc = VectorType::get({8}, types.accElem);
+  types.isInt = false;
+  types.pack = 0;
+  types.packFactor = 1;
+
+  StringRef rasterOrder = "row_major";
+  int64_t rasterGroup = 1;
+  if (auto attr = function->getAttrOfType<StringAttr>(
+          "tessera.rocm.schedule_raster_order"))
+    rasterOrder = attr.getValue();
+  if (auto attr = function->getAttrOfType<IntegerAttr>(
+          "tessera.rocm.schedule_raster_group"))
+    rasterGroup = attr.getInt();
+
+  Block &body = function.getBody().front();
+  while (!body.empty())
+    body.back().erase();
+  OpBuilder builder(context);
+  emitGeneralBody(builder, function.getLoc(), function, mt, nt, types,
+                  outputMemref.getElementType(), /*portableABI=*/false,
+                  /*viaTile=*/false, /*hasBias=*/false, "none",
+                  /*packedInt4Memory=*/false, rasterOrder, rasterGroup);
+  function->removeAttr("tessera.rocm.typed_gfx11_gemm_contract");
+  function->removeAttr("tessera.rocm.typed_contract_digest");
+  function->removeAttr("tessera.rocm.physical_panel_mt");
+  function->removeAttr("tessera.rocm.physical_panel_nt");
+  return success();
+}
 
 std::unique_ptr<mlir::Pass>
 mlir::tessera_rocm::createGenerateWMMAGemmKernelPass() {

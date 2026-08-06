@@ -122,7 +122,11 @@ void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     y = b.create<math::Log1pOp>(loc, x);
     break;
   case Un::Expm1:
-    y = b.create<math::ExpM1Op>(loc, x);
+    // Preserve the IEEE sign of zero. The ROCm ExpM1 lowering canonicalizes
+    // -0 to +0 even though expm1 is required to return its zero input exactly.
+    y = b.create<arith::SelectOp>(
+        loc, b.create<arith::CmpFOp>(loc, oeq, x, zero), x,
+        b.create<math::ExpM1Op>(loc, x));
     break;
   case Un::Softplus: {
     // Stable: log1p(exp(-|x|)) + max(x, 0)

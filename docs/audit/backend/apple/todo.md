@@ -3,10 +3,46 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-03
+last_updated: 2026-08-06
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **not applicable until Apple
+owns a physical FFT package.** The compound artifact vocabulary is relevant,
+but HIP helpers, persistent AMD plans, and gfx1151 evidence transfer no Metal
+schedule or support claim. Apple must first close its architecture-owned FFT
+gap, then derive compound workspace/residency policy on a Mac.
+
+Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **not applicable to Apple
+physical code.** ROCm's centered Welford and scalar boundary corrections do
+not change MPSGraph/MSL kernels or Apple selectors. The boundary corpus is a
+useful sibling checklist, but Apple requires Mac evidence before recording
+parity.
+
+Cross-backend sync `ROCM-FFT-PREBUILT-2026-08-05` — **not applicable; Apple
+still has no physical spectral package.** The ROCm HIP image and persistent
+device-plan policy do not alter Apple's open architecture-owned FFT work.
+
+Cross-backend sync `FFT-PERF-2-2026-08-05` — **not applicable to Apple
+execution.** Zen 5 gained an evidence-gated mixed-radix Stockham selection and
+candidate Rader/Bailey implementations; gfx1151 received a timing-domain probe.
+No Apple package, selector, schedule, dtype, or performance claim changes.
+Apple must derive its own algorithm and residency choices from Mac evidence.
+
+Cross-backend sync `FFT-PERF-FOUNDATION-2026-08-05` — **not applicable to
+execution; shared artifact parity recorded.** The FFT artifact now hashes the
+selected algorithm, radix sequence, storage/accumulation policy, workspace
+policy, residency, and twiddle policy. Apple owns no GPU spectral package, so
+it receives no kernel or performance claim and must define all of those fields
+from Mac evidence when a lane is introduced.
+
+Cross-backend sync `E2E-REAL-FFT-2026-08-05` — **not applicable until Apple owns a spectral package.**
+The now-implemented `schedule.fft`→`tile.fft_kernel` contract separates shared
+artifact lineage from physical radix selection and accepts only Zen 5/gfx1151.
+Apple still has no GPU FFT target hook, so it receives no
+support claim; when one lands, it must supply an Apple-owned schedule and Mac
+device evidence rather than inherit ROCm's Stockham policy.
 
 Cross-backend sync `FFT-MIXED-RADIX-BLUESTEIN-2026-08-03` — **not applicable today; inherits when a lane lands.**
 Tessera's own FFT (Stockham, `TargetHooks/`) extends from powers of two to
@@ -2674,18 +2710,14 @@ Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{a
 
 ## Cross-backend sync `TILE-VIEW-LINEAR-BASE-2026-08-05` — should `tile.view` carry a precomputed linear base?
 
-Raised by ROCm W1.1 step 3 (`W1_1_TYPING_DESIGN.md` §4.7). `tile.fragment_pack`
-derives its address from `(base, rowOrigin, colOrigin)` **in isolation**: it
-cannot see sibling fragments and has no operand for an already-computed base.
-The hand-written ROCm GEMM generator, by contrast, computes a shared row offset
-once and reuses it across all `nt` B fragments, and hoists the A base out of the
-K loop. The open question is whether `tile.view` should be able to carry a
-precomputed linear base so that hoisting is expressible at Tile level, or
-whether the migration should rely on LICM/CSE to recover it.
+ROCm W1.1 step 3 (`W1_1_TYPING_DESIGN.md` §4.7) established that isolated
+fragment address derivation could not express the direct lane's shared row
+offset. Measurement selected an optional precomputed `linear_base` operand on
+`tile.view`; logical row/column origins remain present for bounds.
 
-ROCm has now measured the migrated lane: 12.53 TFLOP/s clears the committed
-8.02 baseline but reaches only 0.685x of its same-run direct compiler lane.
-That selects explicit address sharing as follow-up for Tile-fragment backends.
+ROCm implemented explicit `tile.view` linear-base sharing. Its new same-run
+final rebuilt measurement improves typed/direct from 0.685x to 0.711x, but does not close the
+gap; load scheduling/wait overhead remains the ROCm-owned follow-up.
 
 **Outcome for Apple: NOT APPLICABLE.** This backend consumes neither
 `tile.view` nor `tile.fragment_pack` (0 files). The MLIR lane lowers to
@@ -2757,3 +2789,33 @@ lineage-complete evidence. The x86/gfx1151 workgroup choices and device results
 do not transfer. Canonical Graph reduction currently excludes mixed-output and
 keepdims forms, so those need a shared Graph-contract extension before any
 backend can claim them through this spine.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-2026-08-05`
+
+The shared spine now defines a content-addressed `schedule.attention` edge and
+one launch-level Tile artifact for the bounded x86/gfx1151 instances. **Apple
+outcome: follow-up required on the owning Mac.** Apple still lacks the shared
+rank-4 forward consumer and retains its evidence-driven recompute policy; no
+MSL, metallib, MPSGraph, LSE policy, selector, or device claim changes here.
+Apple must define an architecture-owned schedule instance, consume the exact
+artifact, and validate modifiers and numerical/performance behavior on Apple
+hardware. x86 and gfx1151 schedules and evidence do not transfer.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-BACKWARD-2026-08-05`
+
+The shared spine now defines a content-addressed three-result
+`schedule.attention_backward` program carrying dQ, split-dK/dV, fixed reduction,
+workspace, and LSE checkpoint identity. **Apple outcome: follow-up required on
+the owning Mac.** No Apple backward-loop consumer, MSL/metallib package, or LSE
+policy changed. Apple must select its own saved/recompute identity, consume the
+exact program artifact, and validate MHA/GQA/MQA plus the modifier/ragged
+envelope on Apple hardware; Zen 5 and gfx1151 evidence does not transfer.
+
+## Cross-backend sync `E2E-REAL-5C-STATE-LINEAGE-2026-08-05`
+
+The shared training spine now defines content-addressed logical-buffer lineage,
+mutation identity, and typed Schedule→Tile contracts for Lion VJP,
+factored/full Adafactor VJP, and sequence-mixer backward. **Apple outcome:
+follow-up required.** This changes no Metal package. Apple must bind its own
+buffers to those exact artifacts and validate on the owning Mac; x86 and
+gfx1151 evidence does not transfer.

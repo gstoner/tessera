@@ -39,7 +39,8 @@ TINY_DFT_MAX = 8
 
 _VALID_MODES = ("c2c", "r2c", "c2r")
 _VALID_NORMS = ("backward", "ortho", "forward")
-_VALID_STRATEGIES = ("radix2", "bluestein", "dft")
+_VALID_STRATEGIES = ("radix2", "mixed_radix", "bluestein", "dft")
+_VALID_RADIX_POLICIES = ("radix2", "mixed_radix")
 
 
 def is_power_of_two(n: int) -> bool:
@@ -57,6 +58,31 @@ def radix2_sequence(n: int) -> tuple:
     if not is_power_of_two(n):
         raise ValueError(f"radix2_sequence requires a power of two; got {n}")
     return (2,) * (n.bit_length() - 1)
+
+
+def mixed_radix_sequence(n: int, *, max_radix: int = 17) -> tuple[int, ...] | None:
+    """Mirror ``TargetHooks/Common/FFTPlan.h`` exactly.
+
+    ``None`` means that the shipping stage set cannot fully factor ``n`` and
+    the plan must use Bluestein.  Making the radix policy explicit prevents a
+    gfx1151 package from recording ``bluestein`` while it actually executes a
+    mixed-radix sequence.
+    """
+    if n <= 0:
+        raise ValueError(f"mixed_radix_sequence requires n > 0; got {n}")
+    rest = n
+    stages: list[int] = []
+    while rest % 4 == 0:
+        stages.append(4)
+        rest //= 4
+    while rest % 2 == 0:
+        stages.append(2)
+        rest //= 2
+    for radix in range(3, max_radix + 1, 2):
+        while rest % radix == 0:
+            stages.append(radix)
+            rest //= radix
+    return tuple(stages) if rest == 1 else None
 
 
 def _norm_scale(n: int, inverse: bool, norm: str) -> float:
@@ -106,7 +132,8 @@ class SpectralPlan:
 
 def plan_fft(n: int, *, axis: int = -1, mode: str = "c2c",
              inverse: bool = False, norm: str = "backward",
-             dtype: str = "complex64", deterministic: bool = True
+             dtype: str = "complex64", deterministic: bool = True,
+             radix_policy: str = "radix2",
              ) -> SpectralPlan:
     """Build the :class:`SpectralPlan` for a length-``n`` 1-D FFT.
 
@@ -121,8 +148,15 @@ def plan_fft(n: int, *, axis: int = -1, mode: str = "c2c",
         raise ValueError(f"mode must be one of {_VALID_MODES}; got {mode!r}")
     if norm not in _VALID_NORMS:
         raise ValueError(f"norm must be one of {_VALID_NORMS}; got {norm!r}")
+    if radix_policy not in _VALID_RADIX_POLICIES:
+        raise ValueError(
+            f"radix_policy must be one of {_VALID_RADIX_POLICIES}; got {radix_policy!r}"
+        )
 
-    if is_power_of_two(n):
+    mixed = mixed_radix_sequence(n) if radix_policy == "mixed_radix" else None
+    if radix_policy == "mixed_radix" and mixed is not None:
+        strategy, radix, bm, ws = "mixed_radix", mixed, 0, n
+    elif is_power_of_two(n):
         strategy, radix, bm, ws = "radix2", radix2_sequence(n), 0, 0
     elif n <= TINY_DFT_MAX:
         strategy, radix, bm, ws = "dft", (), 0, 0

@@ -1,4 +1,4 @@
-//===- GenerateROCMReduceKernel.cpp - row reduction (sum/mean/max/min) ----===//
+//===- GenerateROCMReduceKernel.cpp - row and stable-stat reductions -------===//
 //
 // Expands a `tessera_rocm.reduce` directive into a row-reduction gpu kernel —
 // the ROCm analog of the x86 AVX-512 reduction lane. Reduces each row of a
@@ -27,6 +27,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -43,7 +44,151 @@ static constexpr int64_t BD = 256;
 static constexpr int64_t SG = 32;          // shuffle subgroup width
 static constexpr int64_t NGROUPS = BD / SG; // per-subgroup partials (= 8)
 
-enum class Red { Sum, Mean, Max, Min, Prod };
+enum class Red { Sum, Mean, Max, Min, Prod, Var, Std };
+
+// Parallel Welford reduction. Each lane builds an online (count, mean, M2)
+// state, shuffle-combines the state within its wave, and thread 0 merges the
+// eight wave partials from LDS. This avoids the catastrophic cancellation of
+// E[x*x] - E[x]^2 while retaining one workgroup per logical row.
+void emitWelfordBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f,
+                     Type inputTy, Type outputTy, bool takeSqrt) {
+  MLIRContext *ctx = b.getContext();
+  Type f32 = b.getF32Type();
+  bool inputIsF32 = inputTy.isF32();
+  bool outputIsF32 = outputTy.isF32();
+  auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
+  auto ldsT = MemRefType::get({NGROUPS}, f32, MemRefLayoutAttrInterface(), ws);
+  Value countBuf = f.addWorkgroupAttribution(ldsT, loc);
+  Value meanBuf = f.addWorkgroupAttribution(ldsT, loc);
+  Value m2Buf = f.addWorkgroupAttribution(ldsT, loc);
+
+  b.setInsertionPointToStart(&f.getBody().front());
+  Value X = f.getArgument(0), O = f.getArgument(1);
+  Value M = f.getArgument(2), K = f.getArgument(3);
+  auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  auto cf = [&](float v) {
+    return b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(v));
+  };
+  Value c0 = ci(0), cBD = ci(BD), zero = cf(0.0f), one = cf(1.0f);
+  Value m = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+  Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+  Value rowInb = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, m, M);
+  auto rowIf = b.create<scf::IfOp>(loc, rowInb, /*withElse=*/false);
+  b.setInsertionPointToStart(rowIf.thenBlock());
+  Value base = b.create<arith::MulIOp>(loc, m, K);
+
+  auto loadF32 = [&](Value idx) -> Value {
+    Value v = b.create<memref::LoadOp>(loc, X, ValueRange{idx});
+    return inputIsF32 ? v : b.create<arith::ExtFOp>(loc, f32, v);
+  };
+  // Translation does not change variance. Centering on the first element
+  // keeps Welford's f32 mean/delta state near zero for large-offset inputs,
+  // materially tightening the error envelope without a second memory pass.
+  Value anchor = loadF32(base);
+  auto merge = [&](Value na, Value ma, Value m2a, Value nb, Value mb,
+                   Value m2b) -> SmallVector<Value, 3> {
+    Value n = b.create<arith::AddFOp>(loc, na, nb);
+    Value delta = b.create<arith::SubFOp>(loc, mb, ma);
+    Value positive = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OGT, n, zero);
+    Value safeN = b.create<arith::SelectOp>(loc, positive, n, one);
+    Value mean = b.create<arith::AddFOp>(
+        loc, ma,
+        b.create<arith::DivFOp>(
+            loc, b.create<arith::MulFOp>(loc, delta, nb), safeN));
+    Value cross = b.create<arith::DivFOp>(
+        loc,
+        b.create<arith::MulFOp>(
+            loc, b.create<arith::MulFOp>(loc, delta, delta),
+            b.create<arith::MulFOp>(loc, na, nb)),
+        safeN);
+    Value m2 = b.create<arith::AddFOp>(
+        loc, b.create<arith::AddFOp>(loc, m2a, m2b), cross);
+    return {n, mean, m2};
+  };
+
+  auto lp = b.create<scf::ForOp>(loc, tid, K, cBD,
+                                 ValueRange{zero, zero, zero});
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(lp.getBody());
+    Value k = lp.getInductionVar();
+    Value count = lp.getRegionIterArgs()[0];
+    Value mean = lp.getRegionIterArgs()[1];
+    Value m2 = lp.getRegionIterArgs()[2];
+    Value v = b.create<arith::SubFOp>(
+        loc, loadF32(b.create<arith::AddIOp>(loc, base, k)), anchor);
+    Value nextCount = b.create<arith::AddFOp>(loc, count, one);
+    Value delta = b.create<arith::SubFOp>(loc, v, mean);
+    Value nextMean = b.create<arith::AddFOp>(
+        loc, mean, b.create<arith::DivFOp>(loc, delta, nextCount));
+    Value delta2 = b.create<arith::SubFOp>(loc, v, nextMean);
+    Value nextM2 = b.create<arith::AddFOp>(
+        loc, m2, b.create<arith::MulFOp>(loc, delta, delta2));
+    b.create<scf::YieldOp>(loc,
+                           ValueRange{nextCount, nextMean, nextM2});
+  }
+
+  Type i32 = b.getI32Type();
+  Value wSG = b.create<arith::ConstantIntOp>(loc, i32, SG);
+  Value count = lp.getResult(0), mean = lp.getResult(1), m2 = lp.getResult(2);
+  for (int64_t off = SG / 2; off > 0; off >>= 1) {
+    Value offC = b.create<arith::ConstantIntOp>(loc, i32, off);
+    auto cn = b.create<gpu::ShuffleOp>(loc, count, offC, wSG,
+                                       gpu::ShuffleMode::XOR);
+    auto mn = b.create<gpu::ShuffleOp>(loc, mean, offC, wSG,
+                                       gpu::ShuffleMode::XOR);
+    auto m2n = b.create<gpu::ShuffleOp>(loc, m2, offC, wSG,
+                                        gpu::ShuffleMode::XOR);
+    auto merged = merge(count, mean, m2, cn.getShuffleResult(),
+                        mn.getShuffleResult(), m2n.getShuffleResult());
+    count = merged[0]; mean = merged[1]; m2 = merged[2];
+  }
+
+  Value cSG = ci(SG);
+  Value group = b.create<arith::DivUIOp>(loc, tid, cSG);
+  Value lane = b.create<arith::RemUIOp>(loc, tid, cSG);
+  Value leader = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::eq, lane, c0);
+  auto leaderIf = b.create<scf::IfOp>(loc, leader, false);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(leaderIf.thenBlock());
+    b.create<memref::StoreOp>(loc, count, countBuf, ValueRange{group});
+    b.create<memref::StoreOp>(loc, mean, meanBuf, ValueRange{group});
+    b.create<memref::StoreOp>(loc, m2, m2Buf, ValueRange{group});
+  }
+  b.create<gpu::BarrierOp>(loc);
+
+  Value isT0 = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::eq, tid, c0);
+  auto t0if = b.create<scf::IfOp>(loc, isT0, false);
+  {
+    OpBuilder::InsertionGuard g(b);
+    b.setInsertionPointToStart(t0if.thenBlock());
+    Value totalN = b.create<memref::LoadOp>(loc, countBuf, ValueRange{c0});
+    Value totalMean = b.create<memref::LoadOp>(loc, meanBuf, ValueRange{c0});
+    Value totalM2 = b.create<memref::LoadOp>(loc, m2Buf, ValueRange{c0});
+    for (int64_t gi = 1; gi < NGROUPS; ++gi) {
+      auto merged = merge(
+          totalN, totalMean, totalM2,
+          b.create<memref::LoadOp>(loc, countBuf, ValueRange{ci(gi)}),
+          b.create<memref::LoadOp>(loc, meanBuf, ValueRange{ci(gi)}),
+          b.create<memref::LoadOp>(loc, m2Buf, ValueRange{ci(gi)}));
+      totalN = merged[0]; totalMean = merged[1]; totalM2 = merged[2];
+    }
+    Value variance = b.create<arith::DivFOp>(loc, totalM2, totalN);
+    Value result = variance;
+    if (takeSqrt)
+      result = b.create<math::SqrtOp>(loc, variance);
+    Value stored = outputIsF32
+                       ? result
+                       : b.create<arith::TruncFOp>(loc, outputTy, result);
+    b.create<memref::StoreOp>(loc, stored, O, ValueRange{m});
+  }
+  b.setInsertionPointToEnd(&f.getBody().front());
+  b.create<gpu::ReturnOp>(loc);
+}
 
 void emitReduceBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type inputTy,
                     Type outputTy, Red red, bool outerAxisInner,
@@ -180,12 +325,12 @@ struct GenerateROCMReduceKernelPass
 
   StringRef getArgument() const final { return "generate-rocm-reduce-kernel"; }
   StringRef getDescription() const final {
-    return "Expand a tessera_rocm.reduce directive into a row-reduction "
-           "(sum/mean/max/min) gpu kernel (compiler-generated)";
+    return "Expand a tessera_rocm.reduce directive into a row or stable "
+           "Welford statistical gpu kernel (compiler-generated)";
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, arith::ArithDialect,
-                    memref::MemRefDialect>();
+                    memref::MemRefDialect, math::MathDialect>();
   }
 
   void runOnOperation() override {
@@ -209,9 +354,11 @@ struct GenerateROCMReduceKernelPass
       else if (kindStr == "max") red = Red::Max;
       else if (kindStr == "min") red = Red::Min;
       else if (kindStr == "prod") red = Red::Prod;
+      else if (kindStr == "var") red = Red::Var;
+      else if (kindStr == "std") red = Red::Std;
       else {
         op->emitError("generate-rocm-reduce-kernel: kind must be sum, mean, "
-                      "max, min, or prod (got '") << kindStr << "')";
+                      "max, min, prod, var, or std (got '") << kindStr << "')";
         return signalPassFailure();
       }
       OpBuilder b(module.getBodyRegion());
@@ -264,8 +411,18 @@ struct GenerateROCMReduceKernelPass
       gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(),
                        b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitReduceBody(body, loc, gpuFunc, inputTy, outputTy, red,
-                     outerAxisInner, innerIsOne);
+      if (red == Red::Var || red == Red::Std) {
+        if (outerAxisInner) {
+          op->emitError("generate-rocm-reduce-kernel: var/std currently require "
+                        "the canonical contiguous [outer, axis] carrier");
+          return signalPassFailure();
+        }
+        emitWelfordBody(body, loc, gpuFunc, inputTy, outputTy,
+                        red == Red::Std);
+      } else {
+        emitReduceBody(body, loc, gpuFunc, inputTy, outputTy, red,
+                       outerAxisInner, innerIsOne);
+      }
       op->erase();
     }
   }

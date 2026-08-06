@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-03
+last_updated: 2026-08-06
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,74 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **ROCm-only physical
+package; x86 follow-up required at the shared compound-artifact boundary.**
+The new metadata schema binds child FFT digests and complete spectral program
+policy, but the native HIP helper ABI and device workspace do not transfer to
+AVX-512. x86 retains its host-composed composite route until it owns a matching
+prebuilt compound consumer and Zen 5 evidence. No x86 capability is promoted
+by gfx1151 results.
+
+Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **shared atan2 semantic
+fix applies; ROCm physical kernels are not applicable.** Shared quadrant logic
+now preserves signed-zero origins, infinity diagonals, and NaN propagation.
+The x86 atan kernel remains the magnitude consumer and requires its existing
+Zen 5 differential gate. Centered Welford and the unary/binary fixes are
+ROCm-owned codegen; x86's still-cancellation-prone statistical path remains an
+explicit parity follow-up rather than inheriting the gfx1151 result.
+
+Cross-backend sync `ROCM-FFT-PREBUILT-2026-08-05` — **not applicable; x86
+parity assessed.** The opaque device-plan ABI, persistent HIP allocations, and
+prebuilt ROCm shared image are architecture-owned. x86 retains its existing
+content-addressed native package and thread-local cached Bluestein plan; no x86
+schedule or numerical policy changed.
+
+Cross-backend sync `FFT-PERF-2-2026-08-05` — **Bluestein cache and work-gated
+mixed-radix Stockham promoted; Rader conditional; Bailey rejected.** Immutable
+chirp/kernel FFT plans plus thread-local padded workspaces improve warm
+Bluestein by 1.57x--1.76x at N=127--1009. The native mixed-radix ABI caches
+stage matrices/twiddles and executes 16 contiguous butterflies per AVX-512
+codelet. It beat Bluestein on 12/13 measured composite shapes; representative
+speedups are 1.91x at N=68, 3.75x at N=289, and 2.82x--4.90x at
+N=768--5120. A factor-work gate promotes those wins through the exact
+Schedule→Tile artifact while rejecting N=255 to cached Bluestein.
+
+Rader is retained as a named candidate only: it wins at N=257 because its
+convolution and workspace are half Bluestein's, but loses at N=127/509/1009.
+The native Bailey candidate fuses its middle transpose with twiddle
+multiplication yet remains 1.66x--2.23x slower at N=64K--1M, so it is rejected
+without coefficient tuning. The sweep also fixed a correctness defect where
+the out-of-place runtime helper mutated contiguous caller inputs.
+
+Cross-backend sync `FFT-PERF-FOUNDATION-2026-08-05` — **AVX-512 plan/twiddle
+cache and generated permutation retained; mixed-radix SIMD remains open.** The production C2C ABI now keeps a
+bounded thread-local immutable plan containing gather offsets and all
+per-stage twiddles, removing allocation and transcendental work from warm
+execution. Same-host ratios against `scipy.fft(workers=1)` improved from
+8.63x/22.75x/17.20x to 3.46x/3.85x/3.10x at N=1024/8192/65536, with the
+existing numerical gates passing. The former scalar random-swap bit reversal
+is now a cached AVX-512 gather into reusable thread-local workspace; the gap
+improved again to 2.92x/1.86x/2.73x with the C++ correctness corpus passing.
+This is a retain, not parity; radix-2-only execution and the absence of
+mixed-radix SIMD codelets remain the next x86 FFT work.
+
+The v2 content-addressed artifact records `cooley_tukey_dit`, host-inplace
+residency, cached-f32 twiddles, workspace policy, radix sequence, and the
+complex64/f32 numeric policy. Evidence is in
+`benchmarks/baselines/fft_plan_cache_radix17_2026_08_05.json`.
+
+Cross-backend sync `E2E-REAL-FFT-2026-08-05` — **typed artifact consumption
+implemented; physical package parity validated on Zen 5.**
+ROCm's public runtime now consumes its proven Stockham/Bluestein package rather
+than a duplicate O(N²) DFT. x86 keeps its existing AVX-512 radix-2/Bluestein
+package unchanged and remains numerically covered. It now consumes the exact
+content-addressed `schedule.fft`→`tile.fft_kernel` identity without Graph
+metadata or a second planner decision. The contract preserves x86's radix-2,
+tiny-DFT, and Bluestein choices rather than transferring gfx1151's physical
+stage sequence. Focused Schedule/Tile tamper tests and exact Zen 5 FFT tests
+pass. The remaining shared packaging action is ROCm-specific runtime-`hipcc`
+removal; x86 keeps its existing prebuilt native ABI.
 
 Cross-backend sync `FFT-MIXED-RADIX-BLUESTEIN-2026-08-03` — **parity validated on host; the reference lane for the family.**
 Tessera's own FFT (Stockham, `TargetHooks/`) extends from powers of two to
@@ -431,18 +499,14 @@ Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{a
 
 ## Cross-backend sync `TILE-VIEW-LINEAR-BASE-2026-08-05` — should `tile.view` carry a precomputed linear base?
 
-Raised by ROCm W1.1 step 3 (`W1_1_TYPING_DESIGN.md` §4.7). `tile.fragment_pack`
-derives its address from `(base, rowOrigin, colOrigin)` **in isolation**: it
-cannot see sibling fragments and has no operand for an already-computed base.
-The hand-written ROCm GEMM generator, by contrast, computes a shared row offset
-once and reuses it across all `nt` B fragments, and hoists the A base out of the
-K loop. The open question is whether `tile.view` should be able to carry a
-precomputed linear base so that hoisting is expressible at Tile level, or
-whether the migration should rely on LICM/CSE to recover it.
+ROCm W1.1 step 3 (`W1_1_TYPING_DESIGN.md` §4.7) established that isolated
+fragment address derivation could not express the direct lane's shared row
+offset. Measurement selected an optional precomputed `linear_base` operand on
+`tile.view`; logical row/column origins remain present for bounds.
 
-ROCm has now measured the migrated lane: 12.53 TFLOP/s clears the committed
-8.02 baseline but reaches only 0.685x of its same-run direct compiler lane.
-That selects explicit address sharing as follow-up for Tile-fragment backends.
+ROCm implemented explicit `tile.view` linear-base sharing. Its new same-run
+final rebuilt measurement improves typed/direct from 0.685x to 0.711x, but does not close the
+gap; load scheduling/wait overhead remains the ROCm-owned follow-up.
 
 **Outcome for x86: NOT APPLICABLE.** This backend consumes neither `tile.view`
 nor `tile.fragment_pack` (0 files). AMX/AVX-512 operands come from
@@ -522,3 +586,38 @@ selector or performance promotion.** `keepdims=true` remains on the explicit
 Graph-owned descriptor route because canonical `tessera.reduce` is presently
 rank-reducing. This is AVX-512 evidence only; the named Intel AMX lane remains
 access-gated and unchanged.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-2026-08-05`
+
+`schedule.attention` now binds the shared static rank-4 online-softmax
+recurrence, modifiers, launch contract, and architecture-owned backward-LSE
+policy into one SHA-256 identity. The x86 package consumes the exact emitted
+`tile.attention_kernel` through TileToX86 without returning to Graph IR and
+preserves `save_lse/saved`. **x86 outcome: parity validated for E2E-REAL-5A.**
+On the exact Ryzen AI MAX+ 395 Zen 5 host, the scheduled AVX-512 descriptor
+launch agrees with the NumPy oracle for ragged `Sq=5/Sk=7` f32 attention.
+This changes no selector and supplies no Intel AMX evidence. Canonical
+attention backward was the next x86 family boundary.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-BACKWARD-2026-08-05`
+
+`schedule.attention_backward` now carries the canonical tensor-valued dQ,
+split-dK/dV, and ascending-reduction loops as one content-addressed three-result
+program artifact. The exact Tile program lowers to
+`tessera_x86_flash_attn_bwd_f32`; its descriptor requires the forward-owned
+`row_lse` buffer, so `save_lse/saved` is explicit data identity rather than an
+untracked policy string. **x86 outcome: parity validated for E2E-REAL-5B.**
+Exact Zen 5 tests pass for MHA, GQA, and MQA; aligned and ragged shapes; and the
+combined causal, symmetric-window, bias, and softcap envelope while preserving
+the established AVX-512 modifier contract. No AMX evidence or selector
+promotion is inferred.
+
+## Cross-backend sync `E2E-REAL-5C-STATE-LINEAGE-2026-08-05`
+
+The Zen 5 Lion VJP, factored/full Adafactor VJP, and sequence-mixer backward
+launchers now enforce the shared content-addressed logical-buffer lineage and
+consume exact typed Schedule→Tile artifacts before native launch. Runtime
+consumers no longer retain or reconstruct Graph-op metadata. **x86 outcome:
+parity validated for the bounded E2E-REAL-5C slice.** Exact Zen 5 Lion,
+factored/full Adafactor, and gated/modified DeltaNet backward tests pass. No AMX
+evidence is inferred.

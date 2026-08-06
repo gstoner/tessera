@@ -40,9 +40,9 @@ namespace spectral {
 ///
 /// Above this, an r-point DFT inside each butterfly costs O(r^2) and Bluestein
 /// -- O(M log M) on a power-of-two M >= 2N-1 -- wins.  13 keeps the common
-/// audio/scientific sizes (multiples of 3, 5, 7, 11, 13) on the direct path
+/// audio/scientific sizes (multiples of 3, 5, 7, 11, 13, 17) on the direct path
 /// while sending genuine large primes to the algorithm meant for them.
-constexpr int kMaxRadix = 13;
+constexpr int kMaxRadix = 17;
 
 /// Upper bound on stages.  N < 2^31 has at most 31 factors (all 2s), so 32 is
 /// sufficient for any int N and the plan can live on the stack.

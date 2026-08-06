@@ -144,15 +144,19 @@ def test_lion_backward_stop_sign_vjp():
     rng = np.random.default_rng(8)
     dp = rng.standard_normal(SHAPE).astype(np.float32)
     dm = rng.standard_normal(SHAPE).astype(np.float32)
+    from tessera.compiler.stateful_training import lower_scheduled_lion_vjp
+
+    lion_kwargs = {"lr": 1e-4, "beta2": 0.99, "weight_decay": 0.01}
+    scheduled_lion = lower_scheduled_lion_vjp(
+        target="x86", shape=SHAPE, kwargs=lion_kwargs
+    )
     artifact = rt.RuntimeArtifact(metadata={
         "target": "x86", "compiler_path": "x86_lion_bwd_compiled",
         "executable": True, "execution_kind": "native_cpu",
         "arg_names": ["p", "g", "m", "dp", "dm"],
         "out_cotangents": ["dp", "dm"],
-        "ops": [{
-            "op_name": "tessera.lion", "operands": ["p", "g", "m"],
-            "kwargs": {"lr": 1e-4, "beta2": 0.99, "weight_decay": 0.01},
-        }],
+        "state_contract": dict(scheduled_lion.state_contract),
+        "scheduled_training": scheduled_lion.metadata(),
     })
     zeros = np.zeros(SHAPE, np.float32)
     result = rt.launch(artifact, (zeros, zeros, zeros, dp, dm))
@@ -163,10 +167,10 @@ def test_lion_backward_stop_sign_vjp():
     np.testing.assert_allclose(got[2], 0.99 * dm, atol=1e-6)
 
 
-def _adafactor_artifact(rt, *, backward: bool, factored: bool):
+def _adafactor_artifact(rt, *, backward: bool, factored: bool, shape):
     operands = ["p", "g", "row", "col"] if factored else ["p", "g", "moment"]
     names = operands + (["dy"] if backward else [])
-    return rt.RuntimeArtifact(metadata={
+    metadata = {
         "target": "x86",
         "compiler_path": (
             "x86_adafactor_bwd_compiled" if backward
@@ -178,7 +182,20 @@ def _adafactor_artifact(rt, *, backward: bool, factored: bool):
             "op_name": "tessera.adafactor", "operands": operands,
             "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
         }],
-    })
+    }
+    if backward:
+        from tessera.compiler.stateful_training import lower_scheduled_adafactor_vjp
+
+        scheduled = lower_scheduled_adafactor_vjp(
+            target="x86",
+            parameter_shape=shape,
+            topology="factored" if factored else "full",
+            kwargs={"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+        )
+        metadata["state_contract"] = dict(scheduled.state_contract)
+        metadata["scheduled_training"] = scheduled.metadata()
+        metadata.pop("ops")
+    return rt.RuntimeArtifact(metadata=metadata)
 
 
 def test_adafactor_factored_forward_and_backward():
@@ -190,7 +207,7 @@ def test_adafactor_factored_forward_and_backward():
     col = rng.uniform(0.1, 0.3, SHAPE[-1]).astype(np.float32)
     dy = rng.standard_normal(SHAPE).astype(np.float32)
     forward = rt.launch(
-        _adafactor_artifact(rt, backward=False, factored=True),
+        _adafactor_artifact(rt, backward=False, factored=True, shape=SHAPE),
         (p, g, row, col),
     )
     assert forward["ok"] is True, forward.get("reason")
@@ -206,7 +223,7 @@ def test_adafactor_factored_forward_and_backward():
     np.testing.assert_allclose(actual_col, expected_state["v"]["col"], atol=1e-6)
 
     backward = rt.launch(
-        _adafactor_artifact(rt, backward=True, factored=True),
+        _adafactor_artifact(rt, backward=True, factored=True, shape=SHAPE),
         (p, g, row, col, dy),
     )
     assert backward["ok"] is True, backward.get("reason")
@@ -229,7 +246,7 @@ def test_adafactor_full_forward_and_backward():
     moment = rng.uniform(0.1, 0.3, 19).astype(np.float32)
     dy = rng.standard_normal(19).astype(np.float32)
     forward = rt.launch(
-        _adafactor_artifact(rt, backward=False, factored=False),
+        _adafactor_artifact(rt, backward=False, factored=False, shape=p.shape),
         (p, g, moment),
     )
     assert forward["ok"] is True, forward.get("reason")
@@ -241,7 +258,7 @@ def test_adafactor_full_forward_and_backward():
     np.testing.assert_allclose(actual_p, expected_forward, rtol=2e-5, atol=2e-5)
     np.testing.assert_allclose(actual_moment, expected_state["v"]["v"], atol=1e-6)
     backward = rt.launch(
-        _adafactor_artifact(rt, backward=True, factored=False),
+        _adafactor_artifact(rt, backward=True, factored=False, shape=p.shape),
         (p, g, moment, dy),
     )
     assert backward["ok"] is True, backward.get("reason")

@@ -125,6 +125,166 @@ def Schedule_ReduceOp : Op<ScheduleDialect, "reduce", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Schedule_FFTOp : Op<ScheduleDialect, "fft", [Pure]> {
+  let summary = "Content-addressed one-dimensional spectral transform plan";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$arch,
+                       StrAttr:$mode,
+                       I64Attr:$axis,
+                       I64Attr:$length,
+                       I64Attr:$batch,
+                       BoolAttr:$inverse,
+                       StrAttr:$normalization,
+                       F32Attr:$scale,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       StrAttr:$radix_policy,
+                       StrAttr:$strategy,
+                       StrAttr:$algorithm,
+                       DenseI64ArrayAttr:$radix_sequence,
+                       I64Attr:$bluestein_m,
+                       I64Attr:$workspace_elems,
+                       StrAttr:$workspace_policy,
+                       StrAttr:$residency,
+                       StrAttr:$twiddle_layout,
+                       StrAttr:$twiddle_policy,
+                       BoolAttr:$deterministic,
+                       StrAttr:$kernel_family,
+                       I64Attr:$workgroup_size);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
+def Schedule_AttentionOp : Op<ScheduleDialect, "attention", [Pure]> {
+  let summary = "Scheduled canonical rank-4 attention recurrence";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$arch,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       F32Attr:$scale,
+                       BoolAttr:$causal,
+                       BoolAttr:$bias,
+                       I64Attr:$window_left,
+                       I64Attr:$window_right,
+                       F32Attr:$softcap,
+                       F32Attr:$dropout_p,
+                       I64Attr:$dropout_seed,
+                       I64Attr:$tile_q,
+                       I64Attr:$tile_kv,
+                       I64Attr:$workgroup_size,
+                       StrAttr:$recurrence,
+                       StrAttr:$backward_lse_policy,
+                       StrAttr:$backward_lse_selection);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
+def Schedule_AttentionBackwardOp : Op<ScheduleDialect, "attention_backward", [Pure]> {
+  let summary = "Scheduled canonical tensor-valued attention VJP";
+  let arguments = (ins AnyType:$dq_subject,
+                       AnyType:$dk_subject,
+                       AnyType:$dv_subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$arch,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       F32Attr:$scale,
+                       BoolAttr:$causal,
+                       BoolAttr:$bias,
+                       I64Attr:$window_left,
+                       I64Attr:$window_right,
+                       F32Attr:$softcap,
+                       F32Attr:$dropout_p,
+                       I64Attr:$dropout_seed,
+                       I64Attr:$query_block,
+                       I64Attr:$key_block,
+                       I64Attr:$split_count,
+                       DenseI64ArrayAttr:$reduction_order,
+                       I64Attr:$workspace_bytes,
+                       I64Attr:$workgroup_size,
+                       StrAttr:$recurrence,
+                       StrAttr:$lse_checkpoint_policy,
+                       StrAttr:$lse_checkpoint_selection);
+  let results = (outs AnyType:$dq_scheduled,
+                      AnyType:$dk_scheduled,
+                      AnyType:$dv_scheduled);
+  let assemblyFormat = "$dq_subject `,` $dk_subject `,` $dv_subject attr-dict `:` type($dq_subject) `,` type($dk_subject) `,` type($dv_subject) `->` type($dq_scheduled) `,` type($dk_scheduled) `,` type($dv_scheduled)";
+  let hasVerifier = 1;
+}
+
+def Schedule_LionVJPOp : Op<ScheduleDialect, "lion_vjp", [Pure]> {
+  let summary = "Content-addressed Lion stop-sign VJP with buffer lineage";
+  let arguments = (ins AnyType:$parameter,
+                       AnyType:$gradient,
+                       AnyType:$moment,
+                       AnyType:$dparameter,
+                       AnyType:$dmoment,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$lineage_payload,
+                       StrAttr:$arch,
+                       F32Attr:$learning_rate,
+                       F32Attr:$beta2,
+                       F32Attr:$weight_decay,
+                       StrAttr:$derivative_policy,
+                       StrAttr:$mutation_mode,
+                       StrAttr:$alias_policy,
+                       StrAttr:$state_transition,
+                       DenseI64ArrayAttr:$ordered_writes,
+                       I64Attr:$workgroup_size);
+  let results = (outs AnyType:$dparameter_scheduled,
+                      AnyType:$dgradient_scheduled,
+                      AnyType:$dmoment_scheduled);
+  let assemblyFormat = "$parameter `,` $gradient `,` $moment `,` $dparameter `,` $dmoment attr-dict `:` type($parameter) `,` type($gradient) `,` type($moment) `,` type($dparameter) `,` type($dmoment) `->` type($dparameter_scheduled) `,` type($dgradient_scheduled) `,` type($dmoment_scheduled)";
+  let hasVerifier = 1;
+}
+
+def Schedule_AdafactorVJPOp : Op<ScheduleDialect, "adafactor_vjp", [Pure]> {
+  let summary = "Content-addressed full or factored Adafactor VJP";
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$lineage_payload,
+                       StrAttr:$arch,
+                       StrAttr:$topology,
+                       F32Attr:$learning_rate,
+                       F32Attr:$beta2,
+                       F32Attr:$epsilon,
+                       StrAttr:$mutation_mode,
+                       StrAttr:$alias_policy,
+                       StrAttr:$state_transition,
+                       DenseI64ArrayAttr:$ordered_writes,
+                       I64Attr:$workgroup_size);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs) `->` type($results)";
+  let hasVerifier = 1;
+}
+
+def Schedule_SequenceMixerBackwardOp : Op<ScheduleDialect, "sequence_mixer_backward", [Pure]> {
+  let summary = "Content-addressed checkpoint and reverse sequence-mixer program";
+  let arguments = (ins AnyType:$q, AnyType:$k, AnyType:$v,
+                       AnyType:$gate, AnyType:$beta, AnyType:$decay,
+                       AnyType:$dy,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$lineage_payload,
+                       StrAttr:$arch,
+                       StrAttr:$family,
+                       BoolAttr:$erase,
+                       I64Attr:$chunk_size,
+                       BoolAttr:$parallel_chunks,
+                       StrAttr:$mutation_mode,
+                       StrAttr:$alias_policy,
+                       StrAttr:$workspace_owner,
+                       ArrayAttr:$phase_order,
+                       I64Attr:$workgroup_size);
+  let results = (outs AnyType:$dq, AnyType:$dk, AnyType:$dv,
+                      AnyType:$dgate, AnyType:$dbeta, AnyType:$ddecay);
+  let assemblyFormat = "$q `,` $k `,` $v `,` $gate `,` $beta `,` $decay `,` $dy attr-dict `:` type($q) `,` type($k) `,` type($v) `,` type($gate) `,` type($beta) `,` type($decay) `,` type($dy) `->` type($dq) `,` type($dk) `,` type($dv) `,` type($dgate) `,` type($dbeta) `,` type($ddecay)";
+  let hasVerifier = 1;
+}
+
 def Schedule_ElementwiseOp : Op<ScheduleDialect, "elementwise"> {
   let summary = "Materialized elementwise or reduction schedule plan";
   let arguments = (ins StrAttr:$source,

@@ -354,6 +354,36 @@ def _amd_lib() -> ctypes.CDLL | None:
     return fallback
 
 
+def _is_gfx1151_composite_lib(lib: ctypes.CDLL | None) -> bool:
+    """Return whether ``lib`` is the exact promoted gfx1151 composite image."""
+    return bool(
+        lib is not None
+        and hasattr(lib, "ts_spectral_composite_package_abi_amd")
+        and lib.ts_spectral_composite_package_abi_amd()
+        == b"tessera.rocm.spectral_composite.v4"
+        and hasattr(lib, "ts_spectral_composite_arch_amd")
+        and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
+    )
+
+
+def _amd_composite_lib() -> ctypes.CDLL | None:
+    """Select only the promoted gfx1151 composite package.
+
+    ``_amd_lib`` deliberately retains an FFT-v1 fallback because the portable
+    FFT plan ABI is architecture-neutral. Compound TSOL entry points are not:
+    their schedules and evidence are owned by gfx1151, so a mismatched v4
+    package must never inherit that FFT fallback.
+    """
+    cached = _libs.get("amd_composite_prebuilt")
+    if cached is not None:
+        return cached if _is_gfx1151_composite_lib(cached) else None
+    lib = _amd_lib()
+    if not _is_gfx1151_composite_lib(lib):
+        return None
+    _libs["amd_composite_prebuilt"] = lib
+    return lib
+
+
 def _amd_source_lib() -> ctypes.CDLL | None:
     """Development candidate: compile the source hook, never canonical runtime."""
     if not shutil.which("hipcc") or not _AMD_SRC.exists():
@@ -535,14 +565,19 @@ def run_rocm_spectral_composite(
     contract = validate_scheduled_spectral_metadata(
         metadata, input_shapes=[value.shape for value in values]
     )
-    lib = _amd_lib()
-    if lib is None or not hasattr(lib, "ts_spectral_composite_package_abi_amd"):
+    lib = _amd_composite_lib()
+    if lib is None:
         raise RuntimeError("prebuilt ROCm spectral composite image is unavailable")
     if (
         lib.ts_spectral_composite_package_abi_amd()
         != b"tessera.rocm.spectral_composite.v4"
     ):
         raise RuntimeError("ROCm spectral composite package ABI mismatch")
+    if (
+        not hasattr(lib, "ts_spectral_composite_arch_amd")
+        or lib.ts_spectral_composite_arch_amd() != b"gfx1151"
+    ):
+        raise RuntimeError("ROCm spectral composite architecture mismatch")
     if not hasattr(lib, "ts_spectral_composite_plan_create_amd"):
         raise RuntimeError("ROCm spectral composite image lacks persistent plans")
 

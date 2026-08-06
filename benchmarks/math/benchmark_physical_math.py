@@ -124,9 +124,8 @@ def _x86_scan_selector_evidence(rt: Any, iterations: int) -> list[dict[str, Any]
     return result
 
 
-def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
-    from tessera import runtime as rt
-
+def _measure_dtype(rt: Any, target: str, dtype_name: str,
+                   iterations: int) -> list[dict[str, Any]]:
     result_rows = []
     for family, op_name, operands, kwargs, reference_fn in _cases(target, dtype_name):
         artifact = _artifact(rt, target, family, op_name, operands, kwargs)
@@ -174,32 +173,121 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
             "error_limit": error_limit,
             "rms_error": float(np.sqrt(np.mean(np.square(error, dtype=np.float64)))),
         })
-    packet = {
+    return result_rows
+
+
+def _clear_rocm_math_modules(rt: Any) -> None:
+    """Unload generated math modules without discarding compiled HSACO bytes."""
+    modules = list(rt._rocm_math_module_cache.values())
+    rt._rocm_math_module_cache.clear()
+    hip = rt._load_hip_for_launch()
+    if hip is None:
+        return
+    unload = getattr(hip, "hipModuleUnload", None)
+    if unload is None:
+        return
+    for module, _function in modules:
+        if getattr(module, "value", None):
+            unload(module)
+
+
+def _rocm_cache_comparison(rt: Any, cached_rows: list[dict[str, Any]],
+                           iterations: int) -> list[dict[str, Any]]:
+    """Measure the old per-call module policy against the retained cache."""
+    cached = {
+        (row["family"], row["op_name"]): float(row["warm_median_ms"])
+        for row in cached_rows
+    }
+    result = []
+    for family, op_name, operands, kwargs, _reference_fn in _cases("rocm", "f32"):
+        artifact = _artifact(rt, "rocm", family, op_name, operands, kwargs)
+        samples = []
+        for _ in range(iterations):
+            # Include module load in the timed region but charge teardown to
+            # neither the superseded per-call policy nor the retained cache.
+            _clear_rocm_math_modules(rt)
+            start = time.perf_counter_ns()
+            launched = rt.launch(artifact, operands)
+            samples.append(time.perf_counter_ns() - start)
+            if not launched.get("ok"):
+                raise RuntimeError(launched.get("reason", f"{family}/{op_name} failed"))
+        _clear_rocm_math_modules(rt)
+        per_call_ms = statistics.median(samples) / 1.0e6
+        cached_ms = cached[(family, op_name)]
+        result.append({
+            "family": family,
+            "op_name": op_name,
+            "per_call_module_ms": per_call_ms,
+            "cached_module_ms": cached_ms,
+            "speedup": per_call_ms / cached_ms,
+        })
+    return result
+
+
+def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
+    """Produce a complete, directly committable evidence packet."""
+    from tessera import runtime as rt
+
+    common = {
         "schema": "tessera.physical_math_evidence.v1",
         "target": target,
         "architecture": "zen5-avx512" if target == "x86" else "gfx1151",
-        "dtype": dtype_name,
         "host": platform.platform(),
         "processor": platform.processor(),
         "timing_domain": "synchronized_host_wall",
         "iterations": iterations,
-        "rows": result_rows,
+        "workload_shape": [256, 1024],
     }
     if target == "x86":
-        packet["scan_selector_evidence"] = _x86_scan_selector_evidence(
-            rt, max(iterations, 20)
+        if dtype_name not in {"all", "f32"}:
+            raise ValueError("the current x86 math ABI admits f32 only")
+        return {
+            **common,
+            "selector_eligible": True,
+            "storage_dtypes": ["f32"],
+            "rows": _measure_dtype(rt, target, "f32", iterations),
+            "scan_selector_evidence": _x86_scan_selector_evidence(
+                rt, max(iterations, 20)
+            ),
+        }
+
+    if dtype_name != "all":
+        raise ValueError(
+            "the ROCm evidence packet must aggregate f32, f16, and bf16; "
+            "use --dtype all"
         )
-    return packet
+    dtype_rows = []
+    rows_by_dtype = {}
+    for storage in ("f32", "f16", "bf16"):
+        rows = _measure_dtype(rt, target, storage, iterations)
+        rows_by_dtype[storage] = rows
+        dtype_rows.extend(rows)
+    return {
+        **common,
+        "device": rt._rocm_device_name() or "unknown",
+        "selector_eligible": False,
+        "device_event_follow_up": "bare_metal_required",
+        "storage_dtypes": ["f32", "f16", "bf16"],
+        "module_policy": "process_lifetime_cache_by_family_chip_kind_dtype",
+        "dtype_rows": dtype_rows,
+        "f32_cache_comparison": _rocm_cache_comparison(
+            rt, rows_by_dtype["f32"], iterations
+        ),
+    }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", choices=("x86", "rocm"), required=True)
-    parser.add_argument("--dtype", choices=("f32", "f16", "bf16"), default="f32")
+    parser.add_argument("--dtype", choices=("all", "f32", "f16", "bf16"),
+                        default="all")
     parser.add_argument("--iterations", type=int, default=10)
     args = parser.parse_args()
-    if args.target == "x86" and args.dtype != "f32":
+    if args.target == "x86" and args.dtype not in {"all", "f32"}:
         parser.error("the current x86 math ABI admits f32 only")
+    if args.target == "rocm" and args.dtype != "all":
+        parser.error("the ROCm evidence packet requires all storage dtypes; "
+                     "use --dtype all")
     print(json.dumps(_run(args.target, args.dtype, args.iterations), indent=2, sort_keys=True))
 
 

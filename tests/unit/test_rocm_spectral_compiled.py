@@ -98,7 +98,7 @@ def test_composite_workspace_plan_is_reused_by_artifact_digest():
     b = np.full((2, 5), 2 + 1j, dtype=np.complex64)
     artifact = _art(rt, "tessera.spectral_filter", (a, b), {})
     contract = artifact.metadata["scheduled_spectral"]
-    lib = candidates._amd_lib()
+    lib = candidates._amd_composite_lib()
     assert lib is not None
     assert lib.ts_spectral_composite_package_abi_amd() == b"tessera.rocm.spectral_composite.v4"
     assert lib.ts_spectral_composite_arch_amd() == b"gfx1151"

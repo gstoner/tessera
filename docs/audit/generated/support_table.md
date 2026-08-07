@@ -225,16 +225,16 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `moe` | moe | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `moe_combine` | moe_transport | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `moe_dispatch` | moe_transport | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `entmax15` | normalization | public | public | registered | complete | partial | reference | ready | none |
+| `entmax15` | normalization | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `group_norm` | normalization | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `gumbel_softmax` | normalization | public | public | registered | complete | partial | reference | ready | none |
+| `gumbel_softmax` | normalization | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `instance_norm` | normalization | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `layer_norm` | normalization | public | public | registered | complete | fused | device_verified_abi | ready | benchmarked |
-| `perturbed_argmax` | normalization | public | public | registered | complete | partial | reference | ready | none |
+| `perturbed_argmax` | normalization | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `rmsnorm` | normalization | public | public | registered | complete | fused | device_verified_abi | ready | benchmarked |
 | `rmsnorm_safe` | normalization | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `soft_top_k` | normalization | public | public | registered | complete | partial | reference | ready | none |
-| `sparsemax` | normalization | public | public | registered | complete | partial | reference | ready | none |
+| `soft_top_k` | normalization | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `sparsemax` | normalization | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `weight_norm` | normalization | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `abs` | numeric_helper | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `absolute` | numeric_helper | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -364,7 +364,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | model_layer | 1 | PPGCFCN· |
 | moe | 1 | PPGCFCN· |
 | moe_transport | 2 | PPGCFCN· PPGCFCN· |
-| normalization | 11 | PPGCpRN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCFHNB PPGCpRN· PPGCFHNB PPGCFCN· PPGCpRN· PPGCpRN· PPGCFCN· |
+| normalization | 11 | PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCFHNB PPGCnnN· PPGCFHNB PPGCFCN· PPGCnnN· PPGCnnN· PPGCFCN· |
 | numeric_helper | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | optimizer | 2 | PPGCFCN· PPGCFCN· |
 | position_encoding | 2 | PPGCFCN· PPGCFHN· |

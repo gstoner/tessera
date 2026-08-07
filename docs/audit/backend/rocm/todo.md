@@ -1,11 +1,18 @@
 ---
-last_updated: 2026-08-06
+last_updated: 2026-08-07
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
+Python-reference contract; ROCm physical follow-up required.** `sparsemax`,
+`entmax15`, `soft_top_k`, `gumbel_softmax`, and `perturbed_argmax` now have
+storage-preserving reference semantics and autodiff rules, but no HIP lowering
+or gfx1151 evidence. They remain explicitly reference-only until a ROCm-owned
+physical package is selected and proven.
 
 Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **gfx1151 module reuse and
 reduced-storage coverage retained.** Compiler-generated unary, binary,

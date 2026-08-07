@@ -1408,6 +1408,11 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `weight_norm(weight, axis=0, eps=1e-12)` | `(array) → array` | `pure` | WeightNorm; Graph IR op `tessera.weight_norm`; apple_gpu uses the GPU sum-reduce lane for ‖w‖ |
 | `softmax(x, axis=-1)` | `(array) → array` | `pure` | NumPy softmax |
 | `softmax_safe(x, axis=-1)` | `(array) → array` | `pure` | Stable NumPy softmax alias |
+| `sparsemax(x, axis=-1)` | `(array) → array` | `pure` | Sparse simplex projection with a support-set VJP. Python-reference execution; no physical backend lowering is claimed. |
+| `entmax15(x, axis=-1, n_iter=30)` | `(array) → array` | `pure` | 1.5-entmax relaxation with a support-aware VJP. Python-reference execution; no physical backend lowering is claimed. |
+| `soft_top_k(x, k, tau=1.0, axis=-1)` | `(array) → array` | `pure` | Exact-mass sigmoid top-k relaxation with an implicit-threshold VJP. Python-reference execution; no physical backend lowering is claimed. |
+| `gumbel_softmax(logits, tau=1.0, axis=-1, noise=None)` | `(array) → array` | `pure` | Tempered Gumbel-softmax relaxation; explicit `noise` makes sampling dataflow-visible. Python-reference execution; no physical backend lowering is claimed. |
+| `perturbed_argmax(x, sigma=1.0, n_samples=500, seed=0, axis=-1)` | `(array) → array` | `pure` | Seeded Monte-Carlo perturbed-optimizer relaxation and score-function VJP. Python-reference execution; no physical backend lowering is claimed. |
 | `reduce(x, op="sum", axis=None, keepdims=False)` | `(array) → array` | `pure` | NumPy sum reduction; non-sum reductions planned |
 | `sum(x, axis=None, keepdims=False)` | `(array) → array` | `pure` | Alias for `reduce(..., op="sum")` |
 | `count_nonzero(x, axis=None, keepdims=False)` | `(array) → array` | `pure` | LDT candidate-cardinality reduction (`(x != 0).sum`); Graph IR op `tessera.count_nonzero` |

@@ -48,6 +48,22 @@ def _sigmoid(x: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
 
+def _relaxation_output(value: np.ndarray, input_value: np.ndarray) -> np.ndarray:
+    """Restore floating input storage after the fp64 reference computation.
+
+    The reference deliberately computes thresholds and Monte-Carlo averages in
+    fp64, but these elementwise-shaped ops have a storage-preserving Graph IR
+    contract.  Letting NumPy's scalar promotion leak fp64 through the public
+    API would disagree with that contract and silently double activation
+    storage for fp32 inputs.
+    """
+    # `ml_dtypes` storage dtypes (bf16/fp8/fp4) deliberately do not advertise
+    # themselves as `np.floating` (their dtype kind is ``"V"``), so preserve
+    # the caller's concrete dtype instead of trying to infer float-ness from
+    # NumPy's type hierarchy.
+    return np.asarray(value).astype(np.asarray(input_value).dtype, copy=False)
+
+
 # ── sparsemax (Martins & Astudillo 2016) ─────────────────────────────────────
 def _sparsemax_forward(z: np.ndarray, *, axis: int = -1) -> np.ndarray:
     x, axis = _move_axis_last(z, axis)
@@ -59,7 +75,7 @@ def _sparsemax_forward(z: np.ndarray, *, axis: int = -1) -> np.ndarray:
     k_z = np.sum(support, axis=-1, keepdims=True)  # size of support
     tau = (np.take_along_axis(cumsum, k_z - 1, axis=-1) - 1) / k_z
     p = np.clip(x - tau, 0.0, None)
-    return np.moveaxis(p, -1, axis)
+    return _relaxation_output(np.moveaxis(p, -1, axis), z)
 
 
 def _sparsemax_vjp(dout, z, *, axis: int = -1, **_kw):
@@ -92,7 +108,7 @@ def _entmax15_forward(z: np.ndarray, *, axis: int = -1, n_iter: int = 30) -> np.
     tau = (lo + hi) / 2.0
     p = np.clip(x - tau, 0.0, None) ** 2
     p = p / np.sum(p, axis=-1, keepdims=True)
-    return np.moveaxis(p, -1, axis)
+    return _relaxation_output(np.moveaxis(p, -1, axis), z)
 
 
 def _entmax15_vjp(dout, z, *, axis: int = -1, n_iter: int = 30, **_kw):
@@ -139,7 +155,7 @@ def _soft_top_k_forward(z: np.ndarray, *, k: int, tau: float = 1.0, axis: int = 
     # converge to k-0.5 selected elements as tau approaches zero.
     threshold = _soft_top_k_threshold(x, k, tau)
     gate = _sigmoid((x - threshold) / tau)
-    return np.moveaxis(gate, -1, axis)
+    return _relaxation_output(np.moveaxis(gate, -1, axis), z)
 
 
 def _soft_top_k_vjp(dout, z, *, k: int, tau: float = 1.0, axis: int = -1, **_kw):
@@ -176,7 +192,7 @@ def _gumbel_softmax_forward(
     y = y - np.max(y, axis=-1, keepdims=True)
     e = np.exp(y)
     p = e / np.sum(e, axis=-1, keepdims=True)
-    return np.moveaxis(p, -1, axis)
+    return _relaxation_output(np.moveaxis(p, -1, axis), logits)
 
 
 def _gumbel_softmax_vjp(dout, logits, *, tau: float = 1.0, axis: int = -1, noise=None, **_kw):
@@ -208,7 +224,7 @@ def _perturbed_argmax_forward(
         onehot = np.eye(n)[idx]
         acc = acc + onehot
     p = acc / n_samples
-    return np.moveaxis(p, -1, axis)
+    return _relaxation_output(np.moveaxis(p, -1, axis), z)
 
 
 def _perturbed_argmax_vjp(dout, z, *, sigma: float = 1.0, n_samples: int = 500, seed: int = 0, axis: int = -1, **_kw):

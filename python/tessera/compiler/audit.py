@@ -273,6 +273,15 @@ _SINGLE_GPU_TILE_TARGET_TERMINAL: dict[str, str] = {
     "is_concyclic": "visual-complex reference/domain composition",
     "laplacian_2d": "visual-complex finite-difference reference stencil",
     "mobius_from_three_points": "visual-complex reference/domain composition",
+    # Differentiable selection relaxations are Python-reference primitives with
+    # no physical backend lowering. Their portable semantics and autodiff are
+    # complete, but Tile/Target IR are intentionally not applicable until a
+    # backend chooses and proves a native implementation.
+    "sparsemax": "reference relaxation; no physical backend lowering",
+    "entmax15": "reference relaxation; no physical backend lowering",
+    "soft_top_k": "reference relaxation; no physical backend lowering",
+    "gumbel_softmax": "reference relaxation; no physical backend lowering",
+    "perturbed_argmax": "reference relaxation; no physical backend lowering",
 }
 
 

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-06
+last_updated: 2026-08-07
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,13 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
+Python-reference contract; x86 physical follow-up required.** `sparsemax`,
+`entmax15`, `soft_top_k`, `gumbel_softmax`, and `perturbed_argmax` now have
+storage-preserving reference semantics and autodiff rules, but no AVX-512
+lowering or exact Zen 5 evidence. They remain explicitly reference-only until
+an x86-owned physical package is selected and proven.
 
 Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **Zen 5 scan selector and
 dtype boundary retained.** The f32 scan ABI now selects a 16-lane AVX-512

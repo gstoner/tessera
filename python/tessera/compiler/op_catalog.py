@@ -63,11 +63,11 @@ _SPECS = [
     # Differentiable discrete-choice relaxations. These are Graph-IR-visible
     # Python-reference operations; target execution remains explicitly
     # unsupported until a backend registers a physical lowering.
-    OpSpec("sparsemax", "tessera.sparsemax", 1, 1, lowering="normalization"),
-    OpSpec("entmax15", "tessera.entmax15", 1, 1, lowering="normalization"),
-    OpSpec("soft_top_k", "tessera.soft_top_k", 1, 1, lowering="normalization"),
-    OpSpec("gumbel_softmax", "tessera.gumbel_softmax", 1, 1, lowering="normalization"),
-    OpSpec("perturbed_argmax", "tessera.perturbed_argmax", 1, 1, lowering="normalization"),
+    OpSpec("sparsemax", "tessera.sparsemax", 1, 1, lowering="normalization", shape_rule="same_as_first"),
+    OpSpec("entmax15", "tessera.entmax15", 1, 1, lowering="normalization", shape_rule="same_as_first"),
+    OpSpec("soft_top_k", "tessera.soft_top_k", 1, 1, lowering="normalization", shape_rule="same_as_first"),
+    OpSpec("gumbel_softmax", "tessera.gumbel_softmax", 1, 1, lowering="normalization", shape_rule="same_as_first"),
+    OpSpec("perturbed_argmax", "tessera.perturbed_argmax", 1, 1, lowering="normalization", shape_rule="same_as_first"),
     OpSpec("reduce", "tessera.reduce", 1, 1, lowering="stable_reduction"),
     OpSpec("sum", "tessera.reduce", 1, 1, lowering="stable_reduction"),
     OpSpec("gelu", "tessera.gelu", 1, 1),

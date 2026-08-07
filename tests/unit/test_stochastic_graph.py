@@ -10,6 +10,7 @@ this structural analysis.
 from __future__ import annotations
 
 import pytest
+import numpy as np
 
 from tessera.compiler.stochastic_graph import (
     analyze_stochastic_graph,
@@ -40,9 +41,21 @@ def test_distribution_node_makes_downstream_random():
         ("%y", "tessera.mul", ("%z", "%w")),           # function node, random parent
     ]
     a = analyze_stochastic_graph(body, ["%y"])
-    assert "%z" in a.random_values and "%y" in a.random_values
+    assert "z" in a.random_values and "y" in a.random_values
     assert not a.is_deterministic
-    assert "%z" in a.distribution_nodes
+    assert "z" in a.distribution_nodes
+
+
+def test_real_trace_ssa_prefixes_propagate_randomness():
+    # TraceBuilder stores results as ``v0`` but operands/returns as ``%v0``.
+    # The stochastic analysis must use one SSA identity space for both forms.
+    body = [
+        ("v0", "tessera.normal", ("%mu", "%sigma")),
+        ("v1", "tessera.add", ("%v0", "%x")),
+    ]
+    a = analyze_stochastic_graph(body, ["%v1"])
+    assert not a.is_deterministic
+    assert a.estimator == "pathwise"
 
 
 def test_random_draw_outside_output_cone_stays_deterministic():
@@ -54,7 +67,7 @@ def test_random_draw_outside_output_cone_stays_deterministic():
     ]
     a = analyze_stochastic_graph(body, ["%1"])
     assert a.is_deterministic
-    assert "%unused" in a.random_values  # still typed random...
+    assert "unused" in a.random_values  # still typed random...
     assert a.estimator == "none"          # ...but not on the output path
 
 
@@ -129,3 +142,17 @@ def test_certificate_true_only_when_pure():
     rng = [("%1", "tessera.dropout", ("%x",))]
     det2, _ = certify_deterministic(rng, ["%1"])
     assert det2 is False
+
+
+def test_jit_deterministic_gate_rejects_aliased_rng_from_trace():
+    import tessera as ts
+    from tessera.compiler.effects import TesseraEffectError
+
+    sampler = ts.ops.dropout
+
+    @ts.jit(deterministic=True)
+    def aliased_rng(x):
+        return sampler(x)
+
+    with pytest.raises(TesseraEffectError, match="random traced dependency"):
+        aliased_rng(np.ones((2, 2)))

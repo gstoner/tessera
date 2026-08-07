@@ -95,13 +95,13 @@ def _entmax15_forward(z: np.ndarray, *, axis: int = -1, n_iter: int = 30) -> np.
     return np.moveaxis(p, -1, axis)
 
 
-def _entmax15_vjp(dout, z, *, axis: int = -1, **_kw):
+def _entmax15_vjp(dout, z, *, axis: int = -1, n_iter: int = 30, **_kw):
     # α=1.5 entmax backward (Peters et al. 2019): with sᵢ = pᵢ^(2-α) = sqrt(pᵢ)
     # on the support, the Jacobian w.r.t. the logits is
     # J dout = s ⊙ (dout - ⟨s, dout⟩ / ⟨s, 1⟩), denominator Σ s (not Σ s²). The
     # (α-1)=½ factor is already absorbed by the s = p^(2-α) substitution, so
     # there is no extra scaling.
-    p = _entmax15_forward(z, axis=axis)
+    p = _entmax15_forward(z, axis=axis, n_iter=n_iter)
     pm, axis_n = _move_axis_last(p, axis)
     dom, _dax = _move_axis_last(dout, axis)
     s = np.sqrt(pm)
@@ -143,13 +143,17 @@ def _soft_top_k_forward(z: np.ndarray, *, k: int, tau: float = 1.0, axis: int = 
 
 
 def _soft_top_k_vjp(dout, z, *, k: int, tau: float = 1.0, axis: int = -1, **_kw):
-    # Treat the k-th-value threshold as a stop-gradient constant (its own
-    # derivative is the discrete part); differentiate the sigmoid gate.
+    # The threshold is an implicit function of every score through
+    # sum(sigmoid((x-threshold)/tau)) == k.  Differentiate that constraint:
+    # d threshold/d x_j = a_j / sum(a), a = gate*(1-gate)/tau.
     x, axis_n = _move_axis_last(z, axis)
     dom, _dax = _move_axis_last(dout, axis)
     threshold = _soft_top_k_threshold(x, k, tau)
     g = _sigmoid((x - threshold) / tau)
-    dz = dom * g * (1.0 - g) / tau
+    a = g * (1.0 - g) / tau
+    denom = np.sum(a, axis=-1, keepdims=True)
+    correction = np.sum(a * dom, axis=-1, keepdims=True) / denom
+    dz = a * (dom - correction)
     return (np.moveaxis(dz, -1, axis_n),)
 
 

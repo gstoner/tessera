@@ -105,22 +105,26 @@ def test_soft_top_k_gate_selects_k_at_low_tau():
 
 
 def test_soft_top_k_vjp_matches_fd():
-    # The VJP treats the k-th-value threshold as a stop-gradient constant (its
-    # own movement is the discrete part of the selection — the same design
-    # choice as the C2 nonsmooth policy). The honest FD therefore freezes the
-    # threshold at the base point too.
+    # The threshold is implicitly determined by the exact-k mass constraint, so
+    # finite differences differentiate both the scores and the moving threshold.
     z = np.array([1.0, 2.0, 0.5, 3.0, -0.5])
     dout = np.array([0.1, 0.2, -0.3, 0.4, 0.05])
     tau = 0.7
-    from tessera.relaxation import _soft_top_k_threshold
-    kth0 = _soft_top_k_threshold(z[None, :], 2, tau)[0, 0]
-
-    def gate_fixed_threshold(a):
-        return 1.0 / (1.0 + np.exp(-(a - kth0) / tau))
-
     (g,) = _soft_top_k_vjp(dout, z, k=2, tau=tau)
     np.testing.assert_allclose(
-        g, _fd_vjp(gate_fixed_threshold, z, dout), atol=1e-4
+        g, _fd_vjp(_soft_top_k_forward, z, dout, k=2, tau=tau), atol=1e-4
+    )
+
+
+def test_entmax15_vjp_honors_forward_iteration_count():
+    z = np.array([1.2, 0.4, -0.6, 0.9, 0.1])
+    dout = np.array([0.3, -0.2, 0.5, -0.4, 0.1])
+    (g,) = _entmax15_vjp(dout, z, n_iter=2)
+    p = _entmax15_forward(z, n_iter=2)
+    s = np.sqrt(p)
+    expected = s * (dout - np.sum(s * dout) / np.sum(s))
+    np.testing.assert_allclose(
+        g, expected, atol=1e-12
     )
 
 

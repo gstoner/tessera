@@ -70,6 +70,11 @@ def _base_name(op_name: str) -> str:
     return op_name.rsplit(".", 1)[-1]
 
 
+def _ssa_name(value: str) -> str:
+    """Canonicalize Graph IR's optional SSA ``%`` prefix."""
+    return value[1:] if value.startswith("%") else value
+
+
 def is_distribution_op(op_name: str) -> bool:
     return _base_name(op_name) in DISTRIBUTION_OPS
 
@@ -130,11 +135,13 @@ def analyze_stochastic_graph(
     outputs' dependency cone only — a discarded random draw does not make the
     function non-deterministic in its outputs.
     """
-    random_values: set[str] = set(random_inputs)
+    random_values: set[str] = {_ssa_name(v) for v in random_inputs}
     distribution_nodes: list[str] = []
     producer: dict[str, tuple[str, tuple[str, ...]]] = {}
 
     for result, op_name, operands in _iter_nodes(body):
+        result = _ssa_name(result) if result is not None else None
+        operands = tuple(_ssa_name(op) for op in operands)
         if result is not None:
             producer[result] = (op_name, operands)
         is_dist = is_distribution_op(op_name)
@@ -146,7 +153,7 @@ def analyze_stochastic_graph(
 
     # Dependency cone of the outputs (backward reachability).
     cone: set[str] = set()
-    stack = list(outputs)
+    stack = [_ssa_name(output) for output in outputs]
     while stack:
         v = stack.pop()
         if v in cone:
@@ -157,7 +164,7 @@ def analyze_stochastic_graph(
             stack.extend(ops)
 
     cone_random = [v for v in cone if v in random_values]
-    is_deterministic = not any(o in random_values for o in outputs) and not cone_random
+    is_deterministic = not any(_ssa_name(o) in random_values for o in outputs) and not cone_random
 
     # Estimator classification over the distribution nodes inside the cone.
     cone_dist_ops = [

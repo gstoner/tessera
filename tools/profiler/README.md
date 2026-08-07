@@ -28,6 +28,19 @@ Features:
 - `tprof-rocm-native-smoke` and `tprof-nvidia-cupti-smoke` for optional native
   proof snapshots that degrade to diagnostics on hosts without AMD/NVIDIA
   hardware.
+- `tprof x86 timing-status` and `tprof_x86_native_smoke.py` for optional
+  AVX-512/raw-clock/RDTSCP/perf-event proof snapshots. Permission denial and
+  PMU multiplexing remain explicit diagnostics.
+- `tprof_timing.py` for strict canonical validation of independent ROCm and x86
+  timing domains; it rejects host-wall substitution into device/perf slots.
+- `tprof_x86_sample.py` for ASLR-safe perf/IBS correlation against the exact
+  image build ID, DSO, linkage symbol, and static ELF range.
+- `TPROF_WITH_HIP=ON` builds `tprof_rocm_timing`, an exact-gfx1151 native probe
+  for synchronized host wall, HIP events, `wall_clock64()`, queried wall-clock
+  rate, empty-launch overhead, and clock agreement. `tprof_rocm_timing.py`
+  normalizes it into `tessera.profiler_timing.v1`.
+- `record_x86_zen5_profiler_packet.py` binds the canonical aligned/ragged
+  AVX-512 benchmark to timing, sampling, source, and environment provenance.
 - Report summary JSON export for machine-readable hot-op, roofline,
   provider-status, context, and dropped-record summaries.
 
@@ -48,6 +61,13 @@ provider is `available`, `planned`, or `unsupported`.
 | Apple GPU / Metal | Tessera Metal/MPS runtime wrappers | Metal System Trace correlation | Metal counter sample buffers | compiler-inserted Target IR probes plus Metal counters | Tessera plan JSON over native Apple telemetry |
 | CPU | Tessera C ABI wrappers | host/runtime spans | tprof counters | planned tile probes | Tessera config sweeps |
 
+The CPU row proves portable runtime spans and `steady_clock` timing.
+`TPROF-X86-TIME-1` now adds independent host/raw/TSC/perf clocks plus a
+permission- and multiplex-aware `perf_event_open` provider. Symbol-correlated
+perf/IBS sampling and exact Zen 5 evidence remain open. CPU `native_available`
+must not be read as proof that those x86-specific capabilities executed; the
+separate `x86` provider snapshot owns that claim.
+
 Design anchors:
 
 - Triton Proton: Python context, user annotations, launch metadata, GPU metrics,
@@ -56,6 +76,13 @@ Design anchors:
   query/sampling, include/exclude filters, and paused/resumed collection.
 - ROCprofiler-SDK: the ROCm path for HIP/HSA/marker/memory tracing, counters,
   PC sampling, and thread trace.
+- ROCm multi-clock timing independently preserves synchronized host wall, HIP
+  event, instrumented `wall_clock64()`, and profiler dispatch intervals with
+  provenance and validity. A missing source is explicit and never populated
+  from a different clock domain.
+- `rtg_tracer` is an optional HSA/AQL dispatch-timestamp experiment for WSL and
+  compatibility diagnosis. It is intrusive, separately identified as
+  `rtg_hsa_dispatch`, and cannot replace ROCprofiler counters or PC sampling.
 - NVIDIA system context: NVML/DCGM for utilization, memory residency, clocks,
   power, thermals, PCIe/NVLink, and reliability state. This complements CUPTI;
   it does not replace CUPTI activity/profiler records.
@@ -70,6 +97,18 @@ Design anchors:
 
 Apple GPU validation on this host needs native, out-of-sandbox execution before
 turning any `planned` row into `available`.
+
+Build the optional gfx1151 clock probe with ROCm's HIP clang and an explicit
+architecture; the target intentionally does not inherit the host GPU:
+
+```bash
+cmake -S tools/profiler -B build/profiler-hip \
+  -DTPROF_WITH_HIP=ON \
+  -DCMAKE_HIP_COMPILER=/opt/rocm/core/lib/llvm/bin/clang-23 \
+  -DCMAKE_HIP_COMPILER_ROCM_ROOT=/opt/rocm \
+  -DCMAKE_HIP_ARCHITECTURES=gfx1151
+cmake --build build/profiler-hip --target tprof_rocm_timing
+```
 
 Apple provider status remains `compiled_shell` on macOS until a fresh process
 successfully calls `MTLCreateSystemDefaultDevice`. Use the smoke helper outside

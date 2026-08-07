@@ -172,6 +172,35 @@ class TestWorkflowStructure:
                 f"FileCheck); current `run:` steps:\n{run_text}"
             )
 
+    def test_lit_lane_runs_scheduled_attention_proofs(self) -> None:
+        """Compiler-backed attention proofs must execute with ``tessera-opt``.
+
+        The ordinary unit lane deliberately does not build LLVM/MLIR tools.
+        Keep these exact-artifact tests in the lane that owns the tool instead
+        of allowing them to become permanent unit-lane skips.
+        """
+
+        wf = _load_workflow()
+        lit = wf["jobs"]["lit"]
+        steps = lit.get("steps", [])
+        proof_step = next(
+            (step for step in steps if step.get("name") == "Run MLIR tool proof tests"),
+            None,
+        )
+        assert proof_step is not None, "lit lane is missing its MLIR proof step"
+        assert "TESSERA_OPT" in proof_step.get("env", {}), (
+            "scheduled-attention proofs require an explicit tessera-opt path"
+        )
+        run_text = proof_step.get("run", "")
+        for test_name in (
+            "test_attention_lowers_through_one_content_addressed_tile_artifact",
+            "test_attention_modifiers_survive_the_shared_recurrence",
+            "test_attention_schedule_policy_tampering_fails_closed",
+        ):
+            assert test_name in run_text, (
+                f"lit lane must execute {test_name}; current proof step:\n{run_text}"
+            )
+
     def test_rocm_markdown_bypass_preserves_required_job_success(self) -> None:
         """Markdown-only PRs bypass heavy steps inside the required job.
 

@@ -2,7 +2,7 @@
 status: Draft
 classification: Engineering Specification
 authority: CITL trace/profiler prototype for ROCm systems
-last_updated: 2026-05-01
+last_updated: 2026-08-06
 ---
 
 # CITL ROCm Trace and Profiler Specification
@@ -45,6 +45,10 @@ Required:
 
 - rocprofiler-sdk activity tracing for HIP/HSA calls, kernel dispatch records,
   memory copies, correlation IDs, counters, and optional PC sampling.
+- A multi-clock timing envelope that records synchronized host wall time, HIP
+  events, an optional instrumented device wall clock, and profiler activity
+  timestamps independently. Missing or invalid clocks remain explicit records;
+  no provider may copy one clock into another clock's field.
 - HIP/ROCr runtime metadata hooks that attach CITL external correlation IDs and
   compiler fingerprints to dispatches.
 - AMD SMI sampling for power, energy, temperatures, clocks, voltages, throttle
@@ -53,6 +57,9 @@ Required:
 
 Optional:
 
+- An `rtg_tracer`-style HSA/AQL activity provider for controlled WSL and
+  compatibility experiments. It is a separate, intrusive provider, not a
+  substitute name for rocprofiler-sdk and not a required runtime dependency.
 - eBPF consumers for existing KFD/amdgpu tracepoints where available.
 - New KFD/amdgpu tracepoints for queue lifecycle, eviction, restore, reset, VM
   fault, and power-management transitions if the deployed kernel lacks them.
@@ -90,6 +97,101 @@ KFD/eBPF context events ----+
 The profiler stores one trace record per dispatch plus sampled platform records
 around the dispatch window. A dispatch can have many platform samples, and a
 platform sample can overlap many dispatches.
+
+### 3.1 TPROF-ROCM-TIME-1: multi-clock benchmark samples
+
+Every benchmark sample records all four clock slots below, even when a source
+is unavailable. `value_ns: null` plus a stable reason is evidence; deleting the
+slot or substituting another clock is not.
+
+| Clock | Measurement | Intended use |
+|---|---|---|
+| `host_wall_ns` | `steady_clock` around an asynchronously submitted batch followed by exactly one synchronization | WSL regression ranking, end-to-end submission context, and launch-overhead characterization |
+| `hip_event_ns` | Raw elapsed interval from HIP events on the measured stream | Device-event evidence only after positive, finite, monotonic validation |
+| `device_wall_clock_ns` | Grid envelope derived from instrumented `wall_clock64()` entry/exit ticks and the queried per-device wall-clock rate | Independent device-side cross-check; instrumented and never silently treated as the uninstrumented duration |
+| `profiler_activity_ns` | Correlated dispatch start/end timestamps from rocprofiler-sdk or a separately identified HSA activity provider | Bare-metal promotion calibration and queue/dispatch attribution when the provider has native proof |
+
+The canonical clock record is:
+
+```json
+{
+  "value_ns": null,
+  "source": "hip_event",
+  "valid": false,
+  "reason": "zero_interval",
+  "provenance": {
+    "provider": "hip_runtime",
+    "device": "gfx1151",
+    "stream_or_queue": "stream:0"
+  },
+  "instrumented": false,
+  "calibrated_against": [],
+  "eligible_for_regression": false,
+  "eligible_for_promotion": false
+}
+```
+
+Every sample also binds the graph, Schedule, Tile, target, image, and launch
+digests; batch size; warm/cold state; stream or queue identity; synchronization
+operation; raw resource record; and provider status snapshot. A duration is
+valid only when it is finite, positive, ordered, from the named source, and
+correlated to the exact launch artifact.
+
+Host timing reports raw batch duration, raw per-launch duration, empty-launch
+calibration, and amortized launch overhead separately. Empty-launch time is not
+blindly subtracted from kernel duration because launch and execution overheads
+are not perfectly separable.
+
+HIP event timing never accepts zero, negative, non-finite, or wrapped values.
+Agreement checks compare distributions from the same warmed batch and report
+their ratio and absolute delta; they do not require host wall time, which
+includes submission and synchronization, to equal a dispatch interval.
+
+The device-wall-clock kernel uses `wall_clock64()` and a reset timestamp buffer
+initialized to `(UINT64_MAX, 0)`. Workgroups atomically reduce entry minimum and
+exit maximum to form an observed grid envelope. The host queries
+`hipDeviceAttributeWallClockRate`, records its kilohertz value, and converts
+with `ns = ticks * 1,000,000 / rate_khz`. The rate must be positive and the end
+tick must not precede the start tick.
+
+The instrumented and uninstrumented artifacts are both retained. Reports
+compare code-object digest, ISA, VGPRs, SGPRs, LDS, scratch/spills, and timing
+so atomic timestamp overhead and schedule perturbation remain visible.
+
+#### gfx1151 timer qualification
+
+`gfx1151` is RDNA 3.5 / GFXIP 11.5. The HIP documentation warning that
+`clock()` and `clock64()` do not work properly on RDNA 3 / GFX11 does not state
+an exact `gfx115x` scope, so this plan does not inherit a categorical ban from
+`gfx110x`. `wall_clock64()` remains the default because it has a documented
+constant per-device frequency and supports a cross-workgroup envelope.
+
+`clock()` and `clock64()` are optional diagnostic candidates on gfx1151. Before
+either can contribute evidence, an exact-device probe must establish
+monotonicity, wrap behavior, effective rate, and synchronization semantics
+across CUs/WGPs. A functioning per-CU counter still cannot form a grid envelope
+unless cross-CU comparability is proven.
+
+### 3.2 TPROF-ROCM-RTG-1: experimental HSA dispatch provider
+
+An `rtg_tracer`-style provider may be used to test whether ROCr dispatch
+timestamps remain available when rocprofiler-sdk device-activity tables are
+empty under WSL. It must report provider identity `rtg_hsa_dispatch`; calling
+its records `rocprofiler` would falsify provenance.
+
+This provider is intrusive: it intercepts AQL queues, changes completion-signal
+handling, and may submit auxiliary synchronization packets. Therefore it runs
+only in a fresh subprocess with a timeout and records traced-versus-untraced
+overhead, callback completion counts, process exit status, and teardown state.
+It may emit HIP/API, host-submission, dispatch, barrier, and asynchronous-copy
+records. It cannot manufacture PMCs, PC samples, cache counters, or stall
+reasons absent from the driver.
+
+The provider becomes regression-eligible only after a smoke packet proves
+nonzero ordered dispatch timestamps, artifact/correlation identity, bounded
+overhead, and clean completion. It is never promotion-eligible by itself;
+promotion still requires calibration against valid HIP events or native
+rocprofiler-sdk dispatch activity on a supported bare-metal gfx1151 host.
 
 ## 4. HIP and ROCr Runtime Changes
 
@@ -131,6 +233,11 @@ signals created with profiling enabled. This is useful for microbenchmarks and
 calibration runs. It should not be required for production tracing because it
 may require different signal handling and could add overhead.
 
+The native rocprofiler-sdk provider is preferred. The optional
+`rtg_hsa_dispatch` provider described in Section 3.2 exercises the same lower
+ROCr timing capability through queue interception and is deliberately tracked
+as a separate provenance and perturbation domain.
+
 ### 4.3 HIP Stream Memory Markers
 
 HIP stream memory operations such as `hipStreamWriteValue32/64` and
@@ -145,6 +252,22 @@ are useful for controlled timestamp-calibration experiments:
 They should not be used as the default power sampling mechanism. They are beta
 APIs, add synchronization/ordering complexity, and do not directly capture SMU
 power state.
+
+### 4.4 Implemented native clock probe
+
+`TPROF_WITH_HIP=ON` builds `tprof_rocm_timing`. The probe fails closed unless
+HIP reports exact `gfx1151`, queries `hipDeviceAttributeWallClockRate`, records
+one synchronized host interval and HIP-event interval over an asynchronous
+batch, and uses atomic minimum entry/maximum exit `wall_clock64()` timestamps
+to capture the grid envelope. A separate empty-kernel batch records launch
+overhead. The Python normalizer preserves invalid event values as unavailable
+records and never substitutes host time.
+
+The first WSL packet confirms the intended diagnostic split: host wall and the
+instrumented device envelope are valid, while HIP events return zero. The
+packet is useful for same-host regression ranking but cannot promote a selector
+until a bare-metal event/activity calibration agrees and the instrumented and
+uninstrumented application artifacts have an ISA/resource comparison.
 
 ## 5. rocprofiler-sdk Requirements
 
@@ -368,7 +491,29 @@ afterward:
 The trace joiner should expose skew estimates and join confidence in the final
 report.
 
-### 8.4 Permissions Model
+Benchmark evidence additionally follows the TPROF-ROCM-TIME-1 clock records in
+Section 3.1. Clock calibration never changes the recorded source: for example,
+a wall-clock measurement calibrated against a dispatch interval remains
+`host_wall`, and a missing HIP event remains unavailable.
+
+### 8.4 Evidence and verdict policy
+
+- WSL synchronized host timing plus a qualified device-wall-clock envelope is
+  eligible for regression ranking and retain/reject decisions on the same
+  exact host.
+- Promotion requires the instrumented device clock to agree with a valid HIP
+  event or native profiler activity interval on bare-metal gfx1151.
+- Any decision requiring PMCs, PC sampling, MALL/GL2 behavior, or stall reasons
+  remains bare-metal-only until the exact driver advertises and records those
+  capabilities.
+- PC sampling and thread trace are capability-probed. Architecture-family names
+  do not imply availability, and WSL must not claim genuine PC/stall sampling
+  from host/API timelines.
+- A provider failure invalidates only that clock slot unless it corrupts launch
+  identity, process completion, or the measured program. Teardown failure makes
+  the entire sample invalid.
+
+### 8.5 Permissions Model
 
 Modes:
 
@@ -381,16 +526,24 @@ The default mode should be `user`.
 
 ## 9. Prototype Work Items
 
-1. Add the CITL metadata shim and HIP launch wrapper.
-2. Emit ROCTx ranges and rocprofiler external correlation IDs.
-3. Build an AMD SMI sampler that records power, energy, clocks, temperatures,
+1. **TPROF-ROCM-TIME-1:** add the four-clock sample schema, host batch/empty
+   launch calibration, HIP-event validation, gfx1151 `wall_clock64()` grid
+   envelope, artifact/resource comparison, and fail-closed verdict logic.
+2. **TPROF-ROCM-RTG-1:** add an optional fresh-process `rtg_hsa_dispatch`
+   smoke/provider and normalize its activity records without implying counters
+   or PC sampling.
+3. Add the CITL metadata shim and HIP launch wrapper.
+4. Emit ROCTx ranges and rocprofiler external correlation IDs.
+5. Build an AMD SMI sampler that records power, energy, clocks, temperatures,
    throttle status, voltage, ECC, and firmware timestamp.
-4. Build a trace joiner that merges compiler metadata, rocprofiler records, AMD
+6. Build a native rocprofiler-sdk activity provider and trace joiner that merges
+   compiler metadata, profiler records, AMD
    SMI samples, and optional eBPF records.
-5. Export Perfetto/Chrome trace events using Tessera profiler conventions.
-6. Add optional eBPF collection for KFD/amdgpu lifecycle events.
-7. Add lab-only stream marker calibration using HIP stream write/wait values.
-8. Define the first report: per-kernel duration, energy-window estimate,
+7. Export Perfetto/Chrome trace events using Tessera profiler conventions and
+   add the unitrace-style CLI/reporting layer over independently valid sources.
+8. Add optional eBPF collection for KFD/amdgpu lifecycle events.
+9. Add lab-only stream marker calibration using HIP stream write/wait values.
+10. Define the first report: per-kernel duration, energy-window estimate,
    overlapping power/thermal/clock samples, throttle flags, and queue/reset/fault
    context.
 
@@ -405,6 +558,13 @@ The default mode should be `user`.
 - The profiler can run without eBPF or driver changes.
 - The report distinguishes measured values, sampled context, derived estimates,
   and unverified correlations.
+- Every benchmark sample contains four independently validated clock slots with
+  explicit provenance, validity, calibration, instrumentation, and verdict
+  eligibility; unavailable sources are never silently substituted.
+- A gfx1151 timer-qualification packet resolves `clock()`/`clock64()` behavior
+  from exact-device evidence rather than inheriting the gfx110x warning.
+- An `rtg_hsa_dispatch` smoke failure or abnormal teardown remains a diagnostic
+  and cannot promote provider availability or benchmark evidence.
 - The trace opens in Perfetto or Chrome trace viewers.
 
 ## 11. References
@@ -423,6 +583,10 @@ The default mode should be `user`.
   <https://rocm.docs.amd.com/projects/ROCR-Runtime/en/develop/api-reference/api.html>
 - HIP stream memory operations:
   <https://rocm.docs.amd.com/projects/HIP/en/latest/doxygen/html/group___stream_m.html>
+- HIP timer functions and `hipDeviceAttributeWallClockRate`:
+  <https://rocm.docs.amd.com/projects/HIP/en/docs-7.0.2/how-to/hip_cpp_language_extensions.html>
+- Optional HSA/AQL activity-provider design reference:
+  <https://github.com/ROCm/rtg_tracer>
 - AMD SMI CLI metrics:
   <https://rocmdocs.amd.com/projects/amdsmi/en/latest/how-to/amdsmi-cli-tool.html>
 - AMD SMI Python API metrics, clocks, temperature, voltage, and throttle fields:

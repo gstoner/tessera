@@ -8,6 +8,7 @@ option(TPROF_WITH_ROCPROFILER "Enable ROCprofiler-SDK shell compile guards" OFF)
 option(TPROF_WITH_APPLE_SYSTEM_CONTEXT "Enable Apple IOReport/SMC/HID system-context shell guards" OFF)
 option(TPROF_WITH_METAL "Enable Apple Metal counter shell compile guards" OFF)
 option(TPROF_WITH_MLIR "Build MLIR pass (stub)" OFF)
+option(TPROF_WITH_HIP "Build native ROCm multi-clock timing probe" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -60,6 +61,7 @@ endif()
 
 set(TPROF_RUNTIME_SOURCES
   src/runtime/tprof_runtime.cpp
+  src/runtime/x86_timing_provider.cpp
   src/runtime/tessera_runtime_adapter.cpp
   src/runtime/provider_shells.cpp
   src/runtime/rocprofiler_adapter.cpp
@@ -102,6 +104,17 @@ target_include_directories(tprof_device INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/in
 
 add_executable(tprof cli/tprof.cpp)
 target_link_libraries(tprof PRIVATE tprof_runtime)
+
+if (TPROF_WITH_HIP)
+  enable_language(HIP)
+  add_executable(tprof_rocm_timing
+    cli/tprof_rocm_timing.hip
+    src/runtime/rocm_timing_provider.hip
+  )
+  target_include_directories(tprof_rocm_timing PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(tprof_rocm_timing PRIVATE stdc++)
+  set_target_properties(tprof_rocm_timing PROPERTIES HIP_STANDARD 17 HIP_STANDARD_REQUIRED ON)
+endif()
 
 if (TPROF_WITH_MLIR)
   add_library(tprof_mlir STATIC passes/tprof_markers_stub.cpp)

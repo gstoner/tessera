@@ -21,7 +21,11 @@ def main(argv: list[str] | None = None) -> int:
         prog="tprof-provider-status",
         description="Report Tessera profiler provider readiness.",
     )
-    parser.add_argument("--provider", choices=("apple", "rocm", "nvidia", "cpu"), required=True)
+    parser.add_argument(
+        "--provider",
+        choices=("apple", "rocm", "nvidia", "x86", "cpu"),
+        required=True,
+    )
     parser.add_argument("--format", choices=("json",), default="json")
     args = parser.parse_args(argv)
 

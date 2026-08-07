@@ -215,6 +215,31 @@ _ACTIVE_TAPE: contextvars.ContextVar[Tape | None] = contextvars.ContextVar(
     "_tessera_autodiff_tape", default=None
 )
 
+# Opt-in primitive-execution counter (R1 / Baur–Strassen oracle). When a box is
+# bound, every actual `tessera.ops.<name>` *execution* (not a tracer record)
+# bumps it. Used to measure the cost ratio between a plain forward and a full
+# gradient/Jacobian — a ratio far above the Baur–Strassen constant flags an
+# implementation that re-runs the forward pass (the jacrev/jacfwd defect B1/B2).
+_EXEC_COUNT: contextvars.ContextVar[list | None] = contextvars.ContextVar(
+    "_tessera_exec_count", default=None
+)
+
+
+@contextmanager
+def count_primitive_executions():
+    """Count primitive op *executions* inside the block.
+
+    Yields a single-element ``[count]`` box; read ``box[0]`` after the block.
+    Only counts ops that actually run (eager or taped); tracer records do not
+    execute a primitive and are not counted.
+    """
+    box = [0]
+    token = _EXEC_COUNT.set(box)
+    try:
+        yield box
+    finally:
+        _EXEC_COUNT.reset(token)
+
 
 @contextmanager
 def tape():
@@ -348,6 +373,11 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
         _tracer = active_tracer()
         if _tracer is not None:
             return _tracer.record_op(name, original, args, kwargs)
+
+        # R1 cost oracle: count this primitive execution if a counter is bound.
+        _exec_box = _EXEC_COUNT.get()
+        if _exec_box is not None:
+            _exec_box[0] += 1
 
         active = _ACTIVE_TAPE.get()
         if active is None:

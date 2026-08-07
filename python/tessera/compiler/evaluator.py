@@ -766,3 +766,117 @@ def metamorphic_equivalence(
     tol = atol + rtol * ref_scale
     relation, detail = _horizontal_relation(na, nb, max_abs_err, tol=tol)
     return HorizontalVerdict(target, relation, max_abs_err, detail)
+
+
+# ── R1: Baur–Strassen cost-ratio oracle ──────────────────────────────────────
+#
+# The Baur–Strassen theorem (Blondel & Roulet §4.4.3; Baur & Strassen 1983)
+# bounds the cost of the gradient by a small constant times the cost of the
+# function: for arithmetic circuits ``S(∇f) ≤ 5·S(f)``. Reverse mode realizes
+# this by executing the forward primitives *once* and then a backward sweep.
+#
+# What this oracle measures. It counts forward-primitive *executions* (the
+# ``tessera.ops.*`` calls the autodiff wrapper sees) for a single forward pass
+# versus a full gradient/Jacobian. Backward VJPs are raw numpy and are not
+# ``ops.*`` calls, so the counted quantity is specifically **forward-pass
+# re-execution**: a compliant reverse-mode gradient runs the forward once, so
+# the ratio is ≈1; an implementation that re-runs the whole forward pass per
+# output element (the classic ``jacrev``/``jacfwd`` defect, review findings
+# B1/B2) scales the ratio with the output size. That is the exact signature the
+# vertical/horizontal numerical oracles cannot see — they check *values*, and a
+# redundant-recompute Jacobian returns the *right* values, expensively.
+#
+# Status note. The in-tree ``jacrev`` was corrected in W0.4 to record one
+# forward pass and reuse the tape, so it already passes this oracle (ratio ≈1).
+# R1 is therefore a *regression guard* that the fix stays, plus a general
+# detector for any primitive whose gradient path recomputes the forward.
+
+
+@dataclass(frozen=True)
+class CostRatioVerdict:
+    """Verdict of the Baur–Strassen cost-ratio oracle.
+
+    ``ratio`` is ``backward_cost / forward_cost`` (primitive-execution counts by
+    default). ``within_bound`` is ``ratio <= bound``. ``inconclusive`` is set
+    when the forward cost could not be measured (0 executions).
+    """
+
+    forward_cost: float
+    backward_cost: float
+    ratio: float | None
+    bound: float
+    within_bound: bool
+    inconclusive: bool
+    detail: str
+
+
+def baur_strassen_ratio(
+    forward_cost: float,
+    backward_cost: float,
+    *,
+    bound: float = 5.0,
+) -> CostRatioVerdict:
+    """Pure classifier: is ``backward_cost`` within ``bound`` × ``forward_cost``?
+
+    ``bound`` defaults to the arithmetic-circuit constant ``5``. General
+    computation graphs carry a larger constant (more primitive kinds than
+    ``{+, ×}``); pass a looser ``bound`` when comparing whole-program costs.
+    Both costs may be op counts, FLOPs, or wall-clock — any additive cost model.
+    """
+    if forward_cost <= 0:
+        return CostRatioVerdict(
+            forward_cost=float(forward_cost),
+            backward_cost=float(backward_cost),
+            ratio=None,
+            bound=float(bound),
+            within_bound=False,
+            inconclusive=True,
+            detail="forward cost is zero; cannot form a ratio",
+        )
+    ratio = float(backward_cost) / float(forward_cost)
+    within = ratio <= bound
+    detail = (
+        f"ratio={ratio:.2f} {'≤' if within else '>'} bound={bound:.2f} "
+        f"(forward={forward_cost:g}, total-with-grad={backward_cost:g})"
+    )
+    return CostRatioVerdict(
+        forward_cost=float(forward_cost),
+        backward_cost=float(backward_cost),
+        ratio=ratio,
+        bound=float(bound),
+        within_bound=within,
+        inconclusive=False,
+        detail=detail,
+    )
+
+
+def grad_cost_ratio(
+    fn: Callable[..., Any],
+    *primals: Any,
+    grad_fn: Callable[..., Any] | None = None,
+    bound: float = 5.0,
+) -> CostRatioVerdict:
+    """Measure the Baur–Strassen ratio for differentiating ``fn`` at ``primals``.
+
+    Counts primitive-op *executions* (via the autodiff execution counter) for a
+    single forward pass, then for the full gradient computation ``grad_fn`` (by
+    default ``tessera.autodiff.grad(fn)``). The verdict compares
+    total-with-grad / forward against ``bound``.
+
+    A correct reverse-mode scalar gradient stays near ``2×`` (one forward, one
+    backward of similar size). A Jacobian that re-runs the forward pass per
+    output element scales with the output dimension and is flagged.
+    """
+    from tessera.autodiff import grad as _grad
+    from tessera.autodiff.tape import count_primitive_executions
+
+    with count_primitive_executions() as fbox:
+        fn(*primals)
+    forward_cost = float(fbox[0])
+
+    gfn = grad_fn if grad_fn is not None else _grad(fn)
+    with count_primitive_executions() as gbox:
+        gfn(*primals)
+    total_cost = float(gbox[0])
+
+    return baur_strassen_ratio(forward_cost, total_cost, bound=bound)

@@ -25,6 +25,7 @@ from .tape import (
     TesseraAutodiffError,
     tape,
     install_op_wrappers,
+    count_primitive_executions,
 )
 from .vjp import register_vjp, get_vjp, _VJPS
 from .mixed_precision import autocast, autocast_dtype, GradScaler

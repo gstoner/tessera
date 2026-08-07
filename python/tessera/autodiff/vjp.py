@@ -15,6 +15,13 @@ from typing import Any, Callable
 
 import numpy as np
 
+from .nonsmooth import (
+    gate_mask as _gate_mask,
+    heaviside_subgrad as _heaviside_subgrad,
+    sign_subgrad as _sign_subgrad,
+    tie_split_mask as _tie_split_mask,
+)
+
 
 # Global VJP registry. `tape.py` reads from this on import to wrap
 # `tessera.ops.<name>`. Use `register_vjp(name, fn)` (or the `custom_rule`
@@ -478,7 +485,8 @@ def vjp_scatter_reduce(dout, x, indices, updates, *, axis=0, reduce="sum", **_):
 
 @_vjp("relu")
 def vjp_relu(dout, x, **_):
-    return (dout * (x > 0).astype(x.dtype),)
+    # SUBGRAD_ZERO: relu'(0) = 0 (see autodiff/nonsmooth.py).
+    return (dout * _heaviside_subgrad(x),)
 
 
 @_vjp("sigmoid")
@@ -572,12 +580,8 @@ def vjp_clip(dout, x, *, min_val=None, max_val=None, min=None, max=None, **_):
         min_val = min
     if max_val is None:
         max_val = max
-    mask = np.ones_like(x, dtype=x.dtype)
-    if min_val is not None:
-        mask = mask * (x > min_val).astype(x.dtype)
-    if max_val is not None:
-        mask = mask * (x < max_val).astype(x.dtype)
-    return (dout * mask,)
+    # SUBGRAD_ZERO: grad 0 at either bound (strict). Shared with `clamp`.
+    return (dout * _gate_mask(x, lo=min_val, hi=max_val),)
 
 
 @_vjp("moe")
@@ -2319,16 +2323,13 @@ def vjp_prod(dout, x, *, axis=None, keepdims=False, **_):
 
 @_vjp("amax")
 def vjp_amax(dout, x, *, axis=None, keepdims=False, **_):
-    a = np.asarray(x)
-    m = np.max(a, axis=axis, keepdims=True)
-    mask = (a == m).astype(a.dtype)
-    # Distribute grad equally across all argmax ties.
-    counts = mask.sum(axis=axis, keepdims=True)
+    # SUBGRAD_SPLIT: divide grad equally across tied maxima (mass-conserving).
+    mask = _tie_split_mask(x, axis=axis, kind="max")
     if not keepdims and axis is not None:
         dout_b = np.expand_dims(np.asarray(dout), axis=axis)
     else:
         dout_b = np.asarray(dout)
-    return (mask * dout_b / counts,)
+    return (mask * dout_b,)
 
 
 @_vjp("max")
@@ -2338,15 +2339,13 @@ def vjp_max(dout, x, *, axis=None, keepdims=False, **kwargs):
 
 @_vjp("amin")
 def vjp_amin(dout, x, *, axis=None, keepdims=False, **_):
-    a = np.asarray(x)
-    m = np.min(a, axis=axis, keepdims=True)
-    mask = (a == m).astype(a.dtype)
-    counts = mask.sum(axis=axis, keepdims=True)
+    # SUBGRAD_SPLIT: divide grad equally across tied minima (mass-conserving).
+    mask = _tie_split_mask(x, axis=axis, kind="min")
     if not keepdims and axis is not None:
         dout_b = np.expand_dims(np.asarray(dout), axis=axis)
     else:
         dout_b = np.asarray(dout)
-    return (mask * dout_b / counts,)
+    return (mask * dout_b,)
 
 
 @_vjp("min")
@@ -2645,13 +2644,10 @@ def vjp_reciprocal(dout, x, **_):
 
 @_vjp("clamp")
 def vjp_clamp(dout, x, *, min=None, max=None, **_):
-    a = np.asarray(x)
-    in_range = np.ones_like(a, dtype=a.dtype)
-    if min is not None:
-        in_range = in_range * (a >= min).astype(a.dtype)
-    if max is not None:
-        in_range = in_range * (a <= max).astype(a.dtype)
-    return (np.asarray(dout) * in_range,)
+    # SUBGRAD_ZERO, identical to `clip` (same operation, one declared policy).
+    # Previously used inclusive >=/<= (grad 1 at a bound), disagreeing with
+    # `clip`'s strict convention at exactly the kink; unified here.
+    return (np.asarray(dout) * _gate_mask(x, lo=min, hi=max),)
 
 
 @_vjp("where")
@@ -2664,13 +2660,14 @@ def vjp_where(dout, cond, x, y, **_):
 
 @_vjp("absolute")
 def vjp_absolute(dout, x, **_):
-    return (np.asarray(dout) * np.sign(np.asarray(x)),)
+    # SUBGRAD_ZERO: |x|' = sign(x), 0 at x==0. Shared with `abs`.
+    return (np.asarray(dout) * _sign_subgrad(x),)
 
 
 @_vjp("minimum")
 def vjp_minimum(dout, x, y, **_):
+    # SUBGRAD_SPLIT: even tie split (0.5 / 0.5) so total mass is conserved.
     a, b, do = np.asarray(x), np.asarray(y), np.asarray(dout)
-    # Equal-tie convention: split grad evenly.
     lt = (a < b).astype(a.dtype)
     eq = (a == b).astype(a.dtype) * 0.5
     return (do * (lt + eq), do * ((1.0 - lt) - eq))
@@ -2678,6 +2675,7 @@ def vjp_minimum(dout, x, y, **_):
 
 @_vjp("maximum")
 def vjp_maximum(dout, x, y, **_):
+    # SUBGRAD_SPLIT: even tie split (0.5 / 0.5) so total mass is conserved.
     a, b, do = np.asarray(x), np.asarray(y), np.asarray(dout)
     gt = (a > b).astype(a.dtype)
     eq = (a == b).astype(a.dtype) * 0.5
@@ -5087,9 +5085,9 @@ def vjp_sin(dout, x, **_):
 
 @_vjp("abs")
 def vjp_abs(dout, x, **_):
-    x_arr = np.asarray(x, dtype=np.float64)
-    sign = np.where(x_arr > 0, 1.0, np.where(x_arr < 0, -1.0, 0.0))
-    return (np.asarray(dout, dtype=np.float64) * sign,)
+    # SUBGRAD_ZERO, identical convention and dtype policy to `absolute`
+    # (previously `abs` forced float64 while `absolute` kept the input dtype).
+    return (np.asarray(dout) * _sign_subgrad(x),)
 
 
 @_vjp("sign")

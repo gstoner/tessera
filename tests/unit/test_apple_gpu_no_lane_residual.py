@@ -69,6 +69,10 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         "all_gather", "all_reduce", "all_to_all", "reduce_scatter",
         # RNG / stochastic.
         "dropout", "rng_normal", "rng_uniform",
+        # Differentiable selection relaxations are reference-only until an
+        # Apple-specific physical lowering and exact-device proof land.
+        "sparsemax", "entmax15", "soft_top_k", "gumbel_softmax",
+        "perturbed_argmax",
         # Low-precision quantize/dequantize + pack/unpack (macOS-27.0 MTLTensor
         # gated; see microscaling.py).
         "dequant_grouped_gemm", "dequant_matmul", "dequantize_fp4",

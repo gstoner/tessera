@@ -25,6 +25,7 @@ from .tape import (
     TesseraAutodiffError,
     tape,
     install_op_wrappers,
+    count_primitive_executions,
 )
 from .vjp import register_vjp, get_vjp, _VJPS
 from .mixed_precision import autocast, autocast_dtype, GradScaler
@@ -32,6 +33,20 @@ from .rematerialize import rematerialize, checkpoint
 from .grad import grad, hvp, elementwise_grad
 from .jvp import register_jvp, get_jvp, jvp
 from .transforms import vmap, jacrev, jacfwd
+from .linear import (
+    make_linear_jvp,
+    register_derived_linear_jvps,
+    MULTILINEAR_PRIMITIVES,
+)
+from .implicit import (
+    TesseraImplicitDiffError,
+    cg_solve,
+    ihvp,
+    root_vjp,
+    root_jvp,
+    custom_root,
+    adjoint_state_grad,
+)
 
 
 # Wrap every op in `_VJPS` so it's tape-aware.

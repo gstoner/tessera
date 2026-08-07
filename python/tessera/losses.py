@@ -507,9 +507,128 @@ def ctc_loss(log_probs, targets, input_lengths, target_lengths, blank: int = 0, 
     return _reduce(np.asarray(losses), reduction)
 
 
+# ── Fenchel-Young losses (T2) ────────────────────────────────────────────────
+#
+# A Fenchel-Young loss (Blondel, Martins & Niculae 2020; book Ch. 15 §4) is
+# generated from a prediction map ŷ(θ) = ∇Ω*(θ) and a regularizer Ω on the
+# simplex:
+#
+#     L_Ω(θ, y) = Ω*(θ) + Ω(y) - ⟨θ, y⟩ = ⟨θ, ŷ - y⟩ - Ω(ŷ) + Ω(y),
+#
+# using Ω*(θ) = ⟨θ, ŷ⟩ - Ω(ŷ). The template's payoff: the gradient in θ is
+# *exactly* ``ŷ(θ) - y`` — no hand-derived VJP, no autodiff — and the loss is a
+# Bregman divergence, so L ≥ 0 with equality iff ŷ(θ) = y. One template yields:
+#
+#   * Ω = negative entropy → ŷ = softmax → cross-entropy (for one-hot y);
+#   * Ω = ½‖·‖²          → ŷ = sparsemax → the sparsemax loss.
+#
+# This collapses several bespoke losses into one construction, each with an
+# exact gradient rather than a separately-maintained backward.
+
+
+def _negentropy(p: np.ndarray, axis: int) -> np.ndarray:
+    # Ω(p) = Σ p log p, with the convention 0·log0 = 0.
+    q = np.where(p > 0, p, 1.0)
+    return np.sum(p * np.log(q), axis=axis)
+
+
+def _fy_prediction(theta: np.ndarray, omega: str, axis: int) -> np.ndarray:
+    if omega == "entropy":
+        m = np.max(theta, axis=axis, keepdims=True)
+        e = np.exp(theta - m)
+        return e / np.sum(e, axis=axis, keepdims=True)
+    if omega == "l2":
+        from .relaxation import _sparsemax_forward
+        return _sparsemax_forward(theta, axis=axis)
+    raise ValueError(f"unknown Fenchel-Young regularizer {omega!r}; "
+                     f"expected 'entropy' or 'l2'")
+
+
+def _fy_omega(p: np.ndarray, omega: str, axis: int) -> np.ndarray:
+    if omega == "entropy":
+        return _negentropy(p, axis)
+    if omega == "l2":
+        return 0.5 * np.sum(p * p, axis=axis)
+    raise ValueError(f"unknown Fenchel-Young regularizer {omega!r}")
+
+
+def fenchel_young_loss(
+    theta,
+    y,
+    *,
+    omega: str = "entropy",
+    axis: int = -1,
+    reduction: str = "mean",
+):
+    """Fenchel-Young loss ``L_Ω(θ, y)`` for regularizer ``omega``.
+
+    ``theta`` are scores/logits, ``y`` a target *distribution* on the simplex
+    (a one-hot vector is the hard-label case). ``omega='entropy'`` gives the
+    (softmax) cross-entropy family; ``omega='l2'`` gives the sparsemax loss.
+    Non-negative, zero iff the induced prediction equals ``y``.
+    """
+    theta = _asarray(theta).astype(np.float64, copy=False)
+    y = _asarray(y).astype(np.float64, copy=False)
+    if y.shape != theta.shape:
+        raise ValueError(
+            "Fenchel-Young loss expects a target distribution matching theta's "
+            "shape (use a one-hot encoding for hard labels)"
+        )
+    yhat = _fy_prediction(theta, omega, axis)
+    loss = (
+        np.sum(theta * (yhat - y), axis=axis)
+        - _fy_omega(yhat, omega, axis)
+        + _fy_omega(y, omega, axis)
+    )
+    # Numerical floor: the loss is provably ≥ 0; clip tiny negatives from
+    # finite-precision cancellation rather than surface them.
+    loss = np.maximum(loss, 0.0)
+    return _reduce(loss, reduction)
+
+
+def fy_loss_and_grad(
+    theta,
+    y,
+    *,
+    omega: str = "entropy",
+    axis: int = -1,
+    reduction: str = "mean",
+):
+    """Return ``(loss, grad_theta)`` where ``grad_theta = ŷ(θ) - y`` exactly.
+
+    The exact gradient is the point of the construction — a training loop can
+    use it directly without an autodiff backward. ``grad_theta`` matches the
+    reduction: for ``'mean'`` it is scaled by the number of reduced examples.
+    """
+    theta = _asarray(theta).astype(np.float64, copy=False)
+    y = _asarray(y).astype(np.float64, copy=False)
+    yhat = _fy_prediction(theta, omega, axis)
+    grad = yhat - y
+    loss = fenchel_young_loss(theta, y, omega=omega, axis=axis, reduction=reduction)
+    if reduction == "mean":
+        # loss averaged over the leading (example) axes → scale grad likewise.
+        n = int(theta.size // theta.shape[axis]) if theta.ndim > 1 else 1
+        grad = grad / max(n, 1)
+    return loss, grad
+
+
+def sparsemax_loss(theta, y, *, axis: int = -1, reduction: str = "mean"):
+    """Sparsemax loss — the Fenchel-Young loss with Ω = ½‖·‖² (l2)."""
+    return fenchel_young_loss(theta, y, omega="l2", axis=axis, reduction=reduction)
+
+
+def softmax_fy_loss(theta, y, *, axis: int = -1, reduction: str = "mean"):
+    """Softmax Fenchel-Young loss — equals cross-entropy for one-hot ``y``."""
+    return fenchel_young_loss(theta, y, omega="entropy", axis=axis, reduction=reduction)
+
+
 __all__ = [
     "asymmetric_bce",
     "binary_cross_entropy_loss",
+    "fenchel_young_loss",
+    "fy_loss_and_grad",
+    "sparsemax_loss",
+    "softmax_fy_loss",
     "contrastive_loss",
     "load_balance_loss",
     "z_loss",

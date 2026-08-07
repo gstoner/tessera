@@ -15,8 +15,8 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 
 ## Summary
 
-- Differentiable families tracked: **287**
-- `python_reference` (Python VJP/JVP): **287**
+- Differentiable families tracked: **292**
+- `python_reference` (Python VJP/JVP): **292**
 - `ir_adjoint = native`: **32** (adam, adam_w, add, all_gather, all_reduce, binary_cross_entropy_loss, broadcast, cross_entropy_loss, gelu, huber_loss, j_s_divergence_loss, k_l_divergence_loss, layer_norm, mae_loss, matmul, momentum, mse_loss, mul, nesterov, reduce, reduce_scatter, relu, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, tanh)
 - `ir_adjoint = placeholder` (Python round-trip, not native): **3** (log_softmax, sin, softplus)
 - `ir_adjoint = mixed` (kind-aware native + placeholder): **0**
@@ -159,6 +159,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `ebm_refinement` | ebm | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `ebm_self_verify` | ebm | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `einsum` | contraction | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `entmax15` | normalization | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `erf` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `erfc` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `exp` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
@@ -185,6 +186,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `grouped_gemm` | loop_nest | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `grpo_policy_loss` | rl_loss | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `gru_cell` | recurrent | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `gumbel_softmax` | normalization | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `huber_loss` | loss | yes | native | cpu | nvidia_sm120,rocm_gfx1151 | nvidia_sm120,rocm_gfx1151,x86_avx512 | nvidia_sm120,rocm_gfx1151,x86_avx512 | nvidia_sm120,rocm_gfx1151 | x86_avx512 | nvidia_sm120=save_inputs; rocm_gfx1151=save_inputs; x86_avx512=save_inputs | nvidia_sm120=dedicated; rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core; device[nvidia_sm120=cuda13.3+llvm23+sm120]; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151]; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native compiler adjoint; native backward executes on nvidia_sm120, rocm_gfx1151, x86_avx512 (Phase 4) |
 | `hybrid_attention` | attention | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `ifft` | spectral | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
@@ -265,6 +267,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `perceiver_resampler` | attention | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `permute` | tensor_algebra | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `persistent_cd_loss` | loss | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `perturbed_argmax` | normalization | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `pixel_shuffle` | layout_transform | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `pixel_unshuffle` | layout_transform | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `pmax` | collective | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
@@ -319,10 +322,12 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `sinh` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `slice` | tensor_algebra | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `smooth_l1_loss` | loss | yes | native | cpu | nvidia_sm120,rocm_gfx1151 | nvidia_sm120,rocm_gfx1151,x86_avx512 | nvidia_sm120,rocm_gfx1151,x86_avx512 | nvidia_sm120,rocm_gfx1151 | x86_avx512 | nvidia_sm120=save_inputs; rocm_gfx1151=save_inputs; x86_avx512=save_inputs | nvidia_sm120=dedicated; rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core; device[nvidia_sm120=cuda13.3+llvm23+sm120]; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151]; device[x86_avx512=LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512] | native compiler adjoint; native backward executes on nvidia_sm120, rocm_gfx1151, x86_avx512 (Phase 4) |
+| `soft_top_k` | normalization | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `softcap` | elementwise | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `softmax` | stable_reduction | yes | native | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `softmax_safe` | stable_reduction | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `softplus` | elementwise | yes | placeholder | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | custom_adjoint_call → Python VJP (not native IR) |
+| `sparsemax` | normalization | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `spectral_conv` | spectral | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `spectral_filter` | spectral | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `spectral_norm` | normalization | yes | none | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |

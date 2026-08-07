@@ -3,10 +3,17 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-06
+last_updated: 2026-08-07
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
+Python-reference contract; Apple physical follow-up required.** `sparsemax`,
+`entmax15`, `soft_top_k`, `gumbel_softmax`, and `perturbed_argmax` now have
+storage-preserving reference semantics and autodiff rules, but no Metal
+lowering or Mac evidence. They remain explicitly reference-only until an
+Apple-owned physical package is selected and proven.
 
 Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **shared dtype contract
 assessed; Metal follow-up required.** Physical binary math packages now require

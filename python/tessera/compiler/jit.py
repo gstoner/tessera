@@ -653,6 +653,7 @@ class JitFn:
         the active sink (no-op when no sink is active).
         """
         self._enforce_call_time_constraints(args, kwargs)
+        self._enforce_call_time_stochastic_certificate(args, kwargs)
         if self.differentiation_request is not None:
             self._specialized_autodiff_module(args, kwargs)
         try:
@@ -709,6 +710,39 @@ class JitFn:
             from . import compile_report as _cr
             if _cr.active_sink_is_capturing():
                 _cr.emit_compile_report(self.compile_report())
+
+    def _enforce_call_time_stochastic_certificate(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> None:
+        """Close AST aliasing holes with the canonical traced-op graph.
+
+        The source effect walker remains useful at decoration time, but aliases
+        and dispatch obscure the callee spelling.  A concrete trace observes the
+        canonical op names, so an unseeded deterministic request must reject any
+        random dependency it finds before the eager fallback can execute it.
+        Seeded RNG remains permitted by the established deterministic contract.
+        """
+        if not self.deterministic or self.seed is not None:
+            return
+        import numpy as np
+        from .effects import TesseraEffectError
+        from .stochastic_graph import certify_deterministic
+        from .trace import TesseraTraceError, trace
+
+        if kwargs or not all(isinstance(arg, np.ndarray) for arg in args):
+            return  # Existing AST gate remains the diagnostic for non-traceable calls.
+        try:
+            traced = trace(self._fn, *args)
+        except TesseraTraceError:
+            return  # A tracing limitation must not reject an otherwise valid JIT call.
+        deterministic, reason = certify_deterministic(traced.body, traced.outputs)
+        if not deterministic:
+            raise TesseraEffectError(
+                self._fn.__name__, Effect.pure, Effect.random,
+                message=(f"@jit(deterministic=True) function {self._fn.__name__!r} "
+                         f"has a random traced dependency: {reason}. Add seed=... "
+                         "or remove the RNG call."),
+            )
 
     def _enforce_call_time_constraints(
         self, args: Tuple[Any, ...], kwargs: Dict[str, Any]

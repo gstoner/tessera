@@ -3,10 +3,17 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-06
+last_updated: 2026-08-07
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
+Python-reference contract; CUDA physical follow-up required.** `sparsemax`,
+`entmax15`, `soft_top_k`, `gumbel_softmax`, and `perturbed_argmax` now have
+storage-preserving reference semantics and autodiff rules, but no CUDA lowering
+or SM120 evidence. They remain explicitly reference-only until a CUDA-owned
+physical package is selected and proven.
 
 Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **shared dtype contract
 assessed; CUDA follow-up required.** Physical binary math packages now require

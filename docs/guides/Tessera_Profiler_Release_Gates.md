@@ -40,8 +40,9 @@ Native availability requires a fresh hardware proof from the target machine:
 
 - Apple: fresh-process, out-of-sandbox `tprof-apple-metal-smoke` proof with
   Metal device visibility and command-buffer or counter discovery evidence.
-- ROCm: AMD GPU plus ROCprofiler-SDK context/tool registration, HIP/HSA callback
-  records, and dispatch/activity correlation.
+- ROCm: AMD GPU plus a fresh `rocprofv3`/ROCprofiler-SDK context, HIP/HSA
+  callback records, dispatch/activity correlation, and any requested counter
+  and PC-sampling records.
 - NVIDIA: NVIDIA GPU plus CUPTI subscriber callback records, activity-buffer
   records, and kernel/memcpy/memset correlation.
 - x86/AVX-512: exact CPU identity plus stable affinity, independent host/raw/TSC
@@ -83,7 +84,15 @@ clock domain.
   capability discovery and native records; an architecture name or metric
   catalog is not proof.
 - Instrumented and uninstrumented artifacts must both be retained with ISA and
-  resource deltas.
+  resource deltas. Promotion also requires the application-kernel duration
+  ratio to stay within the packet's declared overhead limit.
+
+`tprof_rocm_native_capture.py` is the native boundary. It invokes `rocprofv3`
+around the real application, preserves the exact command and output digests,
+normalizes only records that were actually emitted, and never substitutes a
+catalog lookup for dispatch, counter, or PC-sampling evidence. On WSL without
+`/dev/kfd` it stops before invoking the known-aborting profiler and emits the
+explicit `ROCPROFILER_DEVICE_INTERFACE_UNAVAILABLE` blocker.
 
 An optional `rtg_hsa_dispatch` proof is a separate experimental provider. It
 must run in a fresh process, report queue-interception overhead and teardown
@@ -115,6 +124,9 @@ workflow.
   are unavailable, not zero.
 - Model-specific counters and sampling require exact vendor/family/model,
   microcode, kernel, event-map digest, and symbol/image correlation.
+- `tprof_x86_event_map.py` digests the exact sysfs PMU encodings and `perf`
+  catalog. `tprof_x86_sample.py` must embed that artifact and pin the sampled
+  command to one logical CPU before a packet can be promotion-eligible.
 - WSL timing can rank regressions on the same host. Counter- or sampling-based
   promotion requires a non-virtualized exact machine unless a future proof
   establishes equivalent PMU semantics through the virtualization layer.

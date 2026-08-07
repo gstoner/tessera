@@ -79,7 +79,16 @@ jobs:
         env:
           PYTHONPATH: python
         run: |
+          python tools/profiler/scripts/tprof_rocm_native_capture.py \
+            --provider rocprofiler \
+            --output-directory profiler-rocm-native \
+            --output profiler-native-capture-rocm.json \
+            --counter SQ_WAVES \
+            --pc-sampling \
+            --allow-unavailable \
+            -- /bin/true
           python tools/profiler/scripts/tprof_rocm_native_smoke.py \
+            --capture profiler-native-capture-rocm.json \
             --allow-unavailable \
             --out profiler-provider-status-rocm.json
 
@@ -87,7 +96,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: profiler-provider-status-rocm
-          path: profiler-provider-status-rocm.json
+          path: |
+            profiler-provider-status-rocm.json
+            profiler-native-capture-rocm.json
           if-no-files-found: error
 
   nvidia-cupti-proof:
@@ -151,8 +162,12 @@ jobs:
         env:
           PYTHONPATH: python
         run: |
+          python tools/profiler/scripts/tprof_x86_event_map.py \
+            --allow-unavailable \
+            --output profiler-event-map-x86.json
           python tools/profiler/scripts/tprof_x86_native_smoke.py \
             --tprof build/profiler-x86/tprof \
+            --event-map profiler-event-map-x86.json \
             --allow-unavailable \
             --out profiler-provider-status-x86.json
 
@@ -160,5 +175,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: profiler-provider-status-x86
-          path: profiler-provider-status-x86.json
+          path: |
+            profiler-provider-status-x86.json
+            profiler-event-map-x86.json
           if-no-files-found: error

@@ -161,6 +161,8 @@ def build_symbol_sampling_artifact(
     perf_version: str,
     perf_record_command: Iterable[str],
     perf_returncode: int,
+    event_map: Mapping[str, Any] | None = None,
+    affinity: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     resolved = binary.resolve()
     sample_rows = list(samples)
@@ -196,6 +198,8 @@ def build_symbol_sampling_artifact(
             "record_command": list(perf_record_command),
             "returncode": perf_returncode,
         },
+        "event_map": dict(event_map) if event_map is not None else None,
+        "affinity": dict(affinity or {}),
         "eligible_for_regression": perf_returncode == 0 and bool(correlated),
         "eligible_for_promotion": False,
     }
@@ -232,6 +236,13 @@ def validate_symbol_sampling_artifact(payload: Mapping[str, Any]) -> None:
         raise SymbolSamplingError("regression-eligible sampling needs correlated samples")
     if payload.get("eligible_for_promotion"):
         raise SymbolSamplingError("sampling artifact alone is never promotion-eligible")
+    event_map = payload.get("event_map")
+    if event_map is not None:
+        from .profiler_x86_event_map import validate_x86_event_map
+
+        if not isinstance(event_map, Mapping):
+            raise SymbolSamplingError("symbol-sampling event_map must be an object")
+        validate_x86_event_map(event_map)
 
 
 __all__ = [

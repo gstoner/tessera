@@ -226,6 +226,24 @@ from .profiler_provider_status import (
     provider_status_artifact,
     validate_provider_status_artifact,
 )
+from .profiler_rocm_evidence import (
+    ROCM_PROFILER_PACKET_SCHEMA_VERSION,
+    ROCmProfilerPacketError,
+    build_rocm_profiler_packet,
+    validate_rocm_profiler_packet,
+)
+from .profiler_rocm_native import (
+    ROCM_NATIVE_CAPTURE_SCHEMA_VERSION,
+    ROCmCaptureRequest,
+    ROCmNativeCaptureError,
+    build_rocprofv3_command,
+    collect_rocprofv3,
+    collect_rtg_tracer,
+    normalize_rocprofv3_json,
+    profiler_activity_interval_ns,
+    probe_rocm_native_capabilities,
+    validate_rocm_native_capture,
+)
 from .profiler_timing import (
     ClockRecord,
     PROFILER_TIMING_SCHEMA_VERSION,
@@ -258,6 +276,12 @@ from .profiler_x86_evidence import (
     build_x86_profiler_packet,
     exact_zen5_cpu,
     validate_x86_profiler_packet,
+)
+from .profiler_x86_event_map import (
+    X86_EVENT_MAP_SCHEMA_VERSION,
+    X86EventMapError,
+    build_x86_event_map,
+    validate_x86_event_map,
 )
 from .profiler_trace_merge import (
     MERGED_PROFILER_TRACE_SCHEMA_VERSION,
@@ -478,6 +502,20 @@ __all__ = [
     "collect_provider_status",
     "provider_status_artifact",
     "validate_provider_status_artifact",
+    "ROCM_NATIVE_CAPTURE_SCHEMA_VERSION",
+    "ROCmCaptureRequest",
+    "ROCmNativeCaptureError",
+    "build_rocprofv3_command",
+    "collect_rocprofv3",
+    "collect_rtg_tracer",
+    "normalize_rocprofv3_json",
+    "profiler_activity_interval_ns",
+    "probe_rocm_native_capabilities",
+    "validate_rocm_native_capture",
+    "ROCM_PROFILER_PACKET_SCHEMA_VERSION",
+    "ROCmProfilerPacketError",
+    "build_rocm_profiler_packet",
+    "validate_rocm_profiler_packet",
     "ClockRecord",
     "PROFILER_TIMING_SCHEMA_VERSION",
     "ProfilerTimingError",
@@ -505,6 +543,10 @@ __all__ = [
     "build_x86_profiler_packet",
     "exact_zen5_cpu",
     "validate_x86_profiler_packet",
+    "X86_EVENT_MAP_SCHEMA_VERSION",
+    "X86EventMapError",
+    "build_x86_event_map",
+    "validate_x86_event_map",
     "MERGED_PROFILER_TRACE_SCHEMA_VERSION",
     "merge_profiler_traces",
     "validate_merged_profiler_trace",

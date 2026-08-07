@@ -33,6 +33,11 @@ wall, CUDA events, an architecture-qualified device clock, and CUPTI activity.
 HIP `wall_clock64()`, `rtg_hsa_dispatch`, ROCprofiler, and gfx1151 evidence do
 not transfer to SM120. CUDA clock choice and CUPTI/SM120 promotion remain
 architecture-owned exact-device work.
+The native-evidence extension adds content-digested provider captures,
+clean-versus-instrumented image/resource comparisons, and exact-machine event
+maps. These are shared evidence concepts only: ROCprofiler, RTG, Linux perf,
+IBS, gfx1151, and Zen 5 records transfer no CUDA result. NVIDIA must populate
+the corresponding fields from CUPTI activity/metrics/PC sampling on SM120.
 
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared ODS vocabulary
 adopted; CUDA physical execution remains follow-up.** The target-neutral

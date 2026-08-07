@@ -97,12 +97,17 @@ Execution order:
 3. **Complete:** add the `perf_event_open` provider, permission diagnostics,
    scaling, portable PMU group, `tprof x86 timing-status`, and optional native
    proof snapshot workflow.
-4. **Landing:** `tprof_x86_sample.py` now records perf samples against an image
+4. **Landing:** `tprof_x86_event_map.py` now digests the exact CPU identity,
+   microcode, sysfs PMU encodings, and `perf` catalog. `tprof_x86_sample.py`
+   embeds that map, pins the command with `taskset`, and records perf samples against an image
    build ID, DSO-aware symbolization, and the matching static ELF symbol range,
    avoiding invalid ASLR-relative comparisons. AMD IBS is admitted only for
    family 26 with AVX-512 and an advertised `ibs_op`/`ibs_fetch` event. Exact
-   perf/IBS samples and Zen 5 raw-event maps remain open because this WSL host
-   has no `perf` executable and denies `perf_event_open`.
+   perf/IBS samples remain open because this WSL host has no `perf` executable
+   and denies `perf_event_open`. The truthful host packet
+   [`../../../../benchmarks/baselines/x86_zen5_event_map_2026_08_07.json`](../../../../benchmarks/baselines/x86_zen5_event_map_2026_08_07.json)
+   identifies AMD family 26/model 112 and captures the visible sysfs event
+   sources, but marks the catalog and promotion gates unavailable under WSL.
 5. **Landing:** the exact-host runner now binds the existing aligned/ragged
    E2E-REAL-4 comparison to clock, sampling, source-commit, dirty-worktree, and
    artifact provenance. The current packet is
@@ -111,6 +116,12 @@ Execution order:
    parity. Verdict `retain`; WSL clocks, denied PMU access, unavailable symbol
    samples, and the development worktree block promotion. A clean bare-metal
    rerun with real samples remains open; AMX stays access-gated.
+
+The next exact-host action is one clean bare-metal Zen 5 run with a fixed CPU,
+stable governor/NUMA placement, working `perf_event_open`, the model-specific
+event-map digest, and symbol-correlated cycles plus advertised IBS samples.
+That packet must be regenerated from the same commit as the aligned/ragged
+benchmark; WSL timing and the event-source inventory cannot satisfy it.
 
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared typed carrier and
 x86/Zen 5 physical consumer complete.** `tessera.scheduled_spectral.v3`

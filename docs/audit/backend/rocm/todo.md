@@ -83,12 +83,26 @@ Execution order:
    exactly zero. It is regression-eligible and promotion-ineligible. Paired
    application-kernel ISA/resource overhead and the diagnostic
    `clock()`/`clock64()` qualification probe remain open.
-4. **Open:** add the fresh-process `rtg_hsa_dispatch` smoke and normalization
-   path.
-5. **Open:** wire native ROCprofiler dispatch activity, then expose all sources through
-   the unitrace-style CLI/report.
+4. **Landing:** the fresh-process `rtg_hsa_dispatch` runner now sets the
+   official child-only environment, records process/teardown state and output
+   digests, and admits no counter or PC-sampling claim. Building the official
+   tracer on this WSL host is blocked by the absent `libunwind` development
+   headers; no RTG runtime evidence is claimed.
+5. **Landing:** `tprof_rocm_native_capture.py` now invokes `rocprofv3` around
+   the application, requests runtime/kernel/memory activity, PMCs, and PC
+   samples, normalizes actual output into the provider trace, and feeds the
+   dispatch envelope into the multi-clock artifact. The packet builder pairs
+   clean/instrumented application images and rejects excessive timing or
+   resource overhead. The checked-in WSL capability packet
+   [`../../../../benchmarks/baselines/rocm_gfx1151_native_capture_2026_08_07.json`](../../../../benchmarks/baselines/rocm_gfx1151_native_capture_2026_08_07.json)
+   records `/dev/dxg`, no `/dev/kfd`, and no activity, counters, or PC samples;
+   paired with the existing zero-HIP-event multi-clock packet, it is
+   promotion-ineligible. It deliberately stops
+   before the WSL-incompatible profiler can abort.
 6. **Open:** record a bare-metal gfx1151 calibration packet before promoting any timing
-   or counter-dependent selector.
+   or counter-dependent selector. The exact-host packet must include valid HIP
+   event or ROCprofiler activity calibration, requested PMC/PC records, and a
+   clean-versus-instrumented application-kernel ISA/resource/timing comparison.
 
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **typed Schedule→Tile and
 bounded gfx1151 physical package complete.** The five TSOL

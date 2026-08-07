@@ -3,8 +3,8 @@
 
 This script is safe on non-ROCm hosts: it emits a provider-status artifact with
 diagnostics instead of failing the whole profiler path. A hardware proof job can
-wire real ROCprofiler-SDK callbacks later and set the proof booleans true only
-after observing HIP/HSA callbacks and dispatch/activity records.
+attach a native-capture artifact and sets proof booleans only after observing
+HIP/HSA callbacks and dispatch/activity records from the profiled workload.
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def _amdsmi_probe() -> dict[str, Any]:
     return proof
 
 
-def _collect_proof() -> dict[str, Any]:
+def _collect_proof(capture: dict[str, Any] | None = None) -> dict[str, Any]:
     rocprofiler_path, rocprofiler_error = _find_library((
         "rocprofiler-sdk",
         "rocprofiler64",
@@ -99,6 +99,19 @@ def _collect_proof() -> dict[str, Any]:
     }
     if rocprofiler_error:
         proof["rocprofiler_sdk_error"] = rocprofiler_error
+    if capture is not None:
+        native = capture.get("proof", {})
+        proof.update({
+            "context_created": capture.get("status") == "collected",
+            "tool_registered": capture.get("status") == "collected",
+            "hip_callback_seen": bool(native.get("hip_callback_seen")),
+            "hsa_callback_seen": bool(native.get("hsa_callback_seen")),
+            "dispatch_activity_seen": bool(native.get("dispatch_activity_seen")),
+            "counter_discovery_seen": bool(native.get("counter_records_seen")),
+            "pc_samples_seen": bool(native.get("pc_samples_seen")),
+            "native_capture_status": capture.get("status"),
+            "native_capture_reason": capture.get("reason"),
+        })
     return proof
 
 
@@ -112,13 +125,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--out", help="Write provider status JSON to this path.")
     parser.add_argument(
+        "--capture", type=Path,
+        help="A tessera.profiler_rocm_native_capture.v1 artifact from a real workload.",
+    )
+    parser.add_argument(
         "--allow-unavailable",
         action="store_true",
         help="Return success when ROCm hardware/SDK proof is unavailable.",
     )
     args = parser.parse_args(argv)
 
-    proof = _collect_proof()
+    capture = None
+    if args.capture is not None:
+        from tessera.compiler.profiler_rocm_native import validate_rocm_native_capture
+
+        capture = json.loads(args.capture.read_text(encoding="utf-8"))
+        validate_rocm_native_capture(capture)
+    proof = _collect_proof(capture)
     status = collect_provider_status("rocm", native_proof=proof)
     status["diagnostics"]["smoke_script"] = "tprof-rocm-native-smoke"
     status["diagnostics"]["collection_blocked"] = status["status"] != "native_available"

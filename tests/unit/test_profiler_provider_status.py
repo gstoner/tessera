@@ -141,6 +141,7 @@ def test_x86_requires_multiclock_and_perf_proof() -> None:
             "clock_agreement_valid": True,
             "perf_event_open": True,
             "timing_sample_valid": True,
+            "event_map_valid": True,
         },
     )
     assert passed["status"] == "native_available"

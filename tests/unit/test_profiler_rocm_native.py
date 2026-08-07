@@ -1,0 +1,182 @@
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+from tessera.compiler.profiler_rocm_native import (
+    ROCmCaptureRequest,
+    build_rocprofv3_command,
+    collect_rocprofv3,
+    collect_rtg_tracer,
+    normalize_rocprofv3_json,
+    profiler_activity_interval_ns,
+    validate_rocm_native_capture,
+)
+
+
+def _official_like_payload() -> dict:
+    return {
+        "rocprofiler-sdk-tool": [{
+            "callback_records": {
+                "hip_api": [{
+                    "name": "hipLaunchKernel",
+                    "start_timestamp": 1_000,
+                    "end_timestamp": 2_000,
+                    "correlation_id": 7,
+                }],
+            },
+            "buffer_records": {
+                "kernel_dispatch": [{
+                    "kernel_name": "tessera_gemm",
+                    "start_timestamp": 3_000,
+                    "end_timestamp": 13_000,
+                    "correlation_id": 7,
+                    "dispatch_id": 11,
+                    "queue_id": 2,
+                }],
+                "counter_collection": [{
+                    "Counter_Name": "SQ_WAVES",
+                    "Counter_Value": 64,
+                    "Start_Timestamp": 3_000,
+                    "Dispatch_Id": 11,
+                }],
+                "pc_sampling_host_trap": [{
+                    "sample_timestamp": 8_000,
+                    "dispatch_id": 11,
+                    "exec_mask": 0xFFFF,
+                    "instruction": "v_fma_f32",
+                }],
+            },
+        }],
+    }
+
+
+def test_rocprofv3_json_normalizes_activity_counters_and_pc_samples() -> None:
+    rows = normalize_rocprofv3_json(_official_like_payload())
+    kinds = {row.get("record_type", row.get("kind")) for row in rows}
+    assert {"api", "dispatch", "counter", "intra_kernel"} <= kinds
+    dispatch = next(row for row in rows if row.get("record_type") == "dispatch")
+    assert dispatch["kernel_name"] == "tessera_gemm"
+    assert dispatch["end_ns"] - dispatch["begin_ns"] == 10_000
+
+
+def test_rocprofv3_command_owns_trace_counter_and_pc_options(tmp_path: Path) -> None:
+    request = ROCmCaptureRequest(
+        application=("./kernel", "--shape", "256"),
+        output_directory=tmp_path,
+        counters=("SQ_WAVES", "TCC_MISS"),
+        pc_sampling=True,
+        kernel_include_regex="tessera.*",
+    )
+    command = build_rocprofv3_command(request)
+    assert command[:2] == ["rocprofv3", "--runtime-trace"]
+    assert "--kernel-trace" in command and "--pmc" in command
+    assert "--pc-sampling-beta-enabled" in command
+    assert command[-3:] == ["./kernel", "--shape", "256"]
+
+
+def test_wsl_or_missing_kfd_capture_fails_closed_without_fabricating_records(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "tessera.compiler.profiler_rocm_native.probe_rocm_native_capabilities",
+        lambda **_: {
+            "rocprofiler_native_interface": False,
+            "wsl": True,
+            "dev_kfd": False,
+            "dev_dxg": True,
+            "rocprofv3": "rocprofv3",
+        },
+    )
+    artifact = collect_rocprofv3(ROCmCaptureRequest(
+        application=("./kernel",), output_directory=tmp_path,
+    ))
+    assert artifact["status"] == "blocked"
+    assert artifact["reason"] == "ROCPROFILER_DEVICE_INTERFACE_UNAVAILABLE"
+    assert artifact["process"]["returncode"] is None
+    assert artifact["provider_trace"]["record_count"] == 0
+    validate_rocm_native_capture(artifact)
+
+
+def test_rocprofiler_timeout_normalizes_byte_output(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "tessera.compiler.profiler_rocm_native.probe_rocm_native_capabilities",
+        lambda **_: {"rocprofiler_native_interface": True},
+    )
+
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], 1, output=b"partial out", stderr=b"partial err")
+
+    monkeypatch.setattr("tessera.compiler.profiler_rocm_native.subprocess.run", timeout)
+    artifact = collect_rocprofv3(ROCmCaptureRequest(
+        application=("./kernel",), output_directory=tmp_path,
+    ))
+    assert artifact["status"] == "blocked"
+    assert artifact["process"]["timed_out"] is True
+    assert artifact["process"]["stdout"] == "partial out"
+    assert artifact["process"]["stderr"] == "partial err"
+
+
+def test_activity_interval_uses_only_native_dispatch_records() -> None:
+    rows = normalize_rocprofv3_json(_official_like_payload())
+    from tessera.compiler.profiler_provider_trace import build_provider_trace_artifact, records_from_raw
+
+    trace = build_provider_trace_artifact(
+        provider="rocprofiler", records=records_from_raw("rocprofiler", rows),
+        source_status="native",
+    )
+    capture = {
+        "schema": "tessera.profiler_rocm_native_capture.v1",
+        "provider": "rocprofiler",
+        "status": "collected",
+        "reason": None,
+        "fresh_process": True,
+        "process": {"clean_exit": True},
+        "provider_trace": trace,
+        "eligible_for_promotion": False,
+    }
+    assert profiler_activity_interval_ns(capture) == 10_000
+
+
+def test_rtg_missing_library_is_a_structured_fresh_process_block(tmp_path: Path) -> None:
+    artifact = collect_rtg_tracer(
+        application=("/bin/true",), output_directory=tmp_path,
+        rtg_library=tmp_path / "missing.so",
+    )
+    assert artifact["status"] == "blocked"
+    assert artifact["reason"] == "RTG_LIBRARY_UNAVAILABLE"
+    assert artifact["fresh_process"] is True
+    assert artifact["environment"]["RTG_HSA_HOST_DISPATCH"] == "1"
+    assert artifact["environment"]["RTG_HIP_API_FILTER"] == "all"
+    assert artifact["eligible_for_promotion"] is False
+    validate_rocm_native_capture(artifact)
+
+
+def test_rtg_fresh_process_requires_ordered_raw_dispatch_record(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    library = tmp_path / "rtg_tracer.so"
+    library.write_bytes(b"test")
+
+    def run(command, **kwargs):
+        environment = kwargs["env"]
+        trace = Path(environment["RTG_FILE_PREFIX"].replace("%p", "123"))
+        trace.parent.mkdir(parents=True, exist_ok=True)
+        trace.write_text(
+            "HSA: pid:123 tid:7 dispatch queue:0xabc agent:1 signal:9 "
+            "name:'tessera_gemm' start:1000 stop:9000 id:4\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr("tessera.compiler.profiler_rocm_native.subprocess.run", run)
+    artifact = collect_rtg_tracer(
+        application=("./application",), output_directory=tmp_path / "trace",
+        rtg_library=library,
+    )
+    assert artifact["status"] == "collected"
+    assert artifact["proof"]["dispatch_activity_seen"] is True
+    assert artifact["dispatch_records"][0]["duration_ns"] == 8000
+    assert artifact["process"]["teardown_complete"] is True
+    assert artifact["eligible_for_promotion"] is False

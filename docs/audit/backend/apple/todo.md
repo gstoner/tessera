@@ -8,6 +8,23 @@ last_updated: 2026-08-06
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **shared dtype contract
+assessed; Metal follow-up required.** Physical binary math packages now require
+matching input storage dtypes, but the AVX-512 scan selector and gfx1151 HIP
+module cache are architecture-owned and transfer no Apple performance claim.
+Apple must validate its math catalog, reduced-storage accumulation policy, and
+the same difficult-domain corpus on a Mac before recording parity.
+
+Cross-backend sync `TSOL-CONTRACT-GENERALIZE-2026-08-06` — **shared semantic
+contract adopted; Metal consumer remains follow-up.** The shared TSOL layer now
+validates bounded dynamic dimensions, arbitrary axes, storage policy, and
+normalization before exact specialization. Zen 5 and gfx1151 now consume that
+wider contract, but their native ABI and evidence do not transfer. Apple still
+has no GPU FFT package,
+so it cannot physically consume the compound artifact and inherits no AVX-512
+or gfx1151 support claim. A Mac-owned FFT package, workspace/residency ABI,
+compound consumer, and exact-device evidence remain prerequisite in that order.
+
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared ODS vocabulary
 adopted; physical execution not applicable until Apple owns an FFT package.**
 The target-neutral `schedule.spectral_program` and

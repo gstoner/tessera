@@ -12,6 +12,8 @@ Validated vs numpy. Skip-clean: tessera-opt not built, or no usable AMD GPU.
 
 from __future__ import annotations
 
+import ctypes
+
 import numpy as np
 import pytest
 
@@ -34,6 +36,36 @@ def _artifact(rt, op_name):
         "arg_names": ["x"], "output_name": "o",
         "ops": [{"op_name": op_name, "result": "o", "operands": ["x"]}],
     })
+
+
+def test_math_module_cache_loads_each_physical_contract_once():
+    from tessera import runtime as rt
+
+    class FakeHip:
+        def __init__(self):
+            self.loads = 0
+            self.lookups = 0
+
+        def hipModuleLoadData(self, output, _image):
+            self.loads += 1
+            ctypes.cast(output, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(11)
+            return 0
+
+        def hipModuleGetFunction(self, output, _module, _symbol):
+            self.lookups += 1
+            ctypes.cast(output, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(17)
+            return 0
+
+    hip = FakeHip()
+    key = ("unary", "gfx1151", "sqrt", "f32")
+    rt._rocm_math_module_cache.pop(key, None)
+    first = rt._rocm_math_cached_function(hip, b"image", b"u", key)
+    second = rt._rocm_math_cached_function(hip, b"different-image", b"u", key)
+
+    assert first == second
+    assert hip.loads == 1
+    assert hip.lookups == 1
+    rt._rocm_math_module_cache.pop(key, None)
 
 
 def _np_softplus(x):

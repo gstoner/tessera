@@ -9,8 +9,46 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **Zen 5 scan selector and
+dtype boundary retained.** The f32 scan ABI now selects a 16-lane AVX-512
+Hillis--Steele prefix for `cumsum` and `cumprod`; paired interleaved measurement
+against the scalar reference records 1.48x and 1.47x speedups on Ryzen AI Max+
+395. The same implementation regressed extrema, so `cummax` and `cummin`
+deliberately retain the scalar recurrence. NaN propagation and signed-zero
+behavior are exact-tested. The complete x86 physical math cohort passes 167
+tests, and the benchmark packet covers unary, transcendental, binary,
+reduction, and scan families. General x86 math remains an explicit f32 ABI;
+target-wide bf16 capability does not imply bf16 support for these packages.
+Binary packages now reject mixed input dtypes. Evidence:
+`benchmarks/baselines/math_physical_zen5_2026_08_06.json`.
+
+Cross-backend sync `TSOL-CONTRACT-GENERALIZE-2026-08-06` — **Zen 5 physical
+policy expansion implemented and retained.** The v3 contract specializes
+bounded dynamic shapes into exact content-addressed packages, packs arbitrary
+axes inside the native AVX-512 package, admits fp32/fp16/bf16 real storage with f32
+accumulation, and carries backward/forward/ortho scaling into the native
+package. ABI v4 and 36 focused contract/package/evidence tests pass on AMD Ryzen AI
+Max+ 395. The policy
+packet `benchmarks/baselines/tsol_physical_policies_zen5_2026_08_06.json`
+now contains 30 numerical-and-performance rows across all five compound
+operations, including seven digest-changing bounded specializations and
+combined dynamic-axis-reduced-storage-ortho cases. Warm medians span
+0.058--0.177 ms; every row meets its recorded error limit. Reduced storage
+conversion and arbitrary-axis pack/unpack are package-owned host-side work
+around f32 native FFT accumulation, not claims of reduced-arithmetic FFT
+instructions or device-side packing.
+
+Cross-backend sync `X86-WELFORD-PARITY-2026-08-06` — **native implementation
+and exact Zen 5 validation complete.** `var`/`std` now call a dedicated
+`tessera_x86_avx512_welford_f32` ABI. It accumulates independent SIMD-lane
+f64 Welford states and merges them deterministically after the existing
+arbitrary-axis fold, replacing the cancellation-prone `mean(x²)-mean(x)²`
+composition. On the AMD Ryzen AI Max+ 395 Zen 5 host, the native image rebuilt
+with LLVM/MLIR 23 and all 17 focused tests passed, including
+large-offset/low-variance data, ragged extents, multiple axes, and tuple axes.
+
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared typed carrier and
-x86/Zen 5 physical consumer complete.** `tessera.scheduled_spectral.v2`
+x86/Zen 5 physical consumer complete.** `tessera.scheduled_spectral.v3`
 materializes one verified `schedule.spectral_program` →
 `tile.spectral_program_kernel` edge and binds child FFT digests plus the full
 compound policy. The native AVX-512 package now owns DCT mirroring,
@@ -22,12 +60,12 @@ NumPy. This is architecture-owned evidence and does not inherit gfx1151
 performance or scheduling choices.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **shared atan2 semantic
-fix applies; ROCm physical kernels are not applicable.** Shared quadrant logic
+fix and x86 Welford parity apply; ROCm physical kernels are not applicable.** Shared quadrant logic
 now preserves signed-zero origins, infinity diagonals, and NaN propagation.
 The x86 atan kernel remains the magnitude consumer and requires its existing
-Zen 5 differential gate. Centered Welford and the unary/binary fixes are
-ROCm-owned codegen; x86's still-cancellation-prone statistical path remains an
-explicit parity follow-up rather than inheriting the gfx1151 result.
+Zen 5 differential gate. The x86 statistical path now has an independently
+implemented and Zen 5-tested native Welford ABI under
+`X86-WELFORD-PARITY-2026-08-06`; it does not inherit gfx1151 evidence.
 
 Cross-backend sync `ROCM-FFT-PREBUILT-2026-08-05` — **not applicable; x86
 parity assessed.** The opaque device-plan ABI, persistent HIP allocations, and

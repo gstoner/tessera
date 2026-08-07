@@ -1,5 +1,5 @@
 """x86 reduce / stable-reduce foundation — prod (new AVX-512 reduce kind),
-var/std/count_nonzero (composed from the reduce kernel), and logsumexp/
+var/std (native mergeable Welford), count_nonzero, and logsumexp/
 log_softmax/softmax_safe/sigmoid_safe (max-shifted reduce + exp/log lane). The
 x86 mirror of the ROCm reduce-foundation lane.
 
@@ -56,6 +56,19 @@ def test_var_std(op, ref, axis):
     np.testing.assert_allclose(np.asarray(res["output"]).astype(np.float32),
                                ref(x, axis=axis).astype(np.float32),
                                atol=2e-4, rtol=2e-4)
+
+
+@pytest.mark.parametrize("op,ref", [("tessera.var", np.var), ("tessera.std", np.std)])
+@pytest.mark.parametrize("axis", [-1, 0, (0, 2)])
+def test_var_std_welford_preserves_low_variance_at_large_offset(op, ref, axis):
+    rt = _x86_or_skip()
+    offsets = (np.arange(3 * 17 * 19, dtype=np.float32) % 9 - 4.0) * np.float32(8.0)
+    x = (np.float32(1.0e7) + offsets).reshape(3, 17, 19)
+    res = rt.launch(_art(rt, op, "x86_stat_reduce_compiled", {"axis": axis}), (x,))
+    assert res["ok"] is True, res.get("reason")
+    expected = ref(x.astype(np.float64), axis=axis).astype(np.float32)
+    np.testing.assert_allclose(np.asarray(res["output"], dtype=np.float32), expected,
+                               atol=2e-3, rtol=2e-3)
 
 
 def test_count_nonzero():

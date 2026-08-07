@@ -78,3 +78,12 @@ def test_x86_binary_math_shape_mismatch_rejected():
     with pytest.raises(ValueError, match="matching operand shapes"):
         rt._execute_x86_compiled_binary_math(
             _artifact(rt, "tessera.pow"), (a, b))
+
+
+def test_x86_binary_math_mixed_dtype_rejected():
+    rt = _x86_or_skip()
+    a = np.ones((4, 8), np.float32)
+    b = np.ones((4, 8), np.float16)
+    with pytest.raises(ValueError, match="matching operand dtypes"):
+        rt._execute_x86_compiled_binary_math(
+            _artifact(rt, "tessera.pow"), (a, b))

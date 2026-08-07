@@ -7,11 +7,49 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **gfx1151 module reuse and
+reduced-storage coverage retained.** Compiler-generated unary, binary,
+reduction, and scan images now load each `(family, chip, operation, dtype)` HIP
+module once per process instead of once per launch. On Radeon 8060S/gfx1151,
+the seven-operation f32 packet improves synchronized WSL host-wall medians by
+1.46x--3.58x, with identical numerical results. The same packet records 21
+physical rows across fp32/fp16/bf16 storage; elementwise errors stay within
+0.05, while length-1024 fp16/bf16 reductions and scans use explicit
+storage-quantization limits of 0.6/5.0. The exact-device math suite passes 579
+tests against the branch-built LLVM/MLIR 23 compiler. `lgamma` and `digamma`
+are promoted to fp16/bf16 storage with f32 compute, matching their existing
+exact-device tests. Binary packages now reject mixed input dtypes rather than
+silently converting the second operand. Evidence:
+`benchmarks/baselines/math_physical_gfx1151_2026_08_06.json`. WSL host-wall
+timing is selector-ineligible; no kernel schedule is promoted from this packet.
+
+Cross-backend sync `TSOL-CONTRACT-GENERALIZE-2026-08-06` — **gfx1151 physical
+policy expansion implemented; selector timing remains gated.** The v3 contract
+specializes bounded dynamic shapes into exact content-addressed packages,
+packs arbitrary axes inside the native package, admits fp32/fp16/bf16 real
+storage with f32 accumulation, and carries backward/forward/ortho scaling into
+native HIP kernels. ABI v4
+embeds the compiled architecture, so a stale image for another GPU fails
+closed. Fifteen exact-device tests pass on Radeon 8060S/gfx1151. The packet
+`benchmarks/baselines/tsol_physical_policies_gfx1151_2026_08_06.json` records
+30 numerical-and-performance rows across all five operations, including seven
+digest-changing bounded specializations and combined policy cases. Warm
+medians span 0.462--6.129 ms in synchronized WSL host-wall time, and every row
+meets its recorded error limit, but the packet is selector-ineligible until
+bare-metal HIP device-event evidence exists. Reduced storage is an explicit
+native-package host conversion into f32 device arithmetic; arbitrary-axis
+pack/unpack is likewise package-owned host work. Separately stamped gfx1200 and
+gfx1250 ABI-v4 images now cross-build with LLVM/ROCm 23 and have distinct image
+digests recorded in
+`benchmarks/baselines/tsol_rocm_arch_packages_2026_08_06.json`, but their
+profiles are `build_only` and execution remains fail-closed until each target
+owns an architecture schedule and exact-device packet.
+
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **typed Schedule→Tile and
 bounded gfx1151 physical package complete.** The five TSOL
 composites now execute in the prebuilt `libtessera_spectral_rocm.so` image in
 the requested order: `spectral_filter`, `dct`, `spectral_conv`, `stft`, and
-`istft`. `tessera.scheduled_spectral.v2` materializes one verified
+`istft`. `tessera.scheduled_spectral.v3` materializes one verified
 `schedule.spectral_program` → `tile.spectral_program_kernel` edge and
 content-addresses each compound
 program's child FFT Schedule/Tile digests, interleaved-complex layout, axis,
@@ -38,6 +76,9 @@ signed-zero `mod`/`floor_div`, and all signed-zero/infinity/NaN `atan2`
 quadrants. Trig large arguments, log/exp boundary domains, lgamma/digamma pole
 neighborhoods, 4097-element scans, and reduced-precision scans now have
 exact-device evidence. This changes no physical selector or performance claim.
+The backend capability manifest now advertises `fp16`/`bf16`/`fp32` storage for
+`var`/`std`, with f32 accumulation, matching that tested ABI. `count_nonzero`
+remains a separate fp32 sum-composition claim.
 
 Cross-backend sync `ROCM-FFT-PREBUILT-2026-08-05` — **prebuilt package and
 persistent Bluestein plan boundary complete on gfx1151.** CMake now produces

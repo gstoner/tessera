@@ -69,3 +69,32 @@ def test_x86_scan_rejects_non_f32():
     x = np.zeros((4, 8), np.float64)
     with pytest.raises(ValueError, match="f32 only"):
         rt._execute_x86_compiled_scan(_artifact(rt, "tessera.cumsum", -1), (x,))
+
+
+@pytest.mark.parametrize(
+    ("op_name", "reference"),
+    [
+        ("tessera.cummax", np.maximum.accumulate),
+        ("tessera.cummin", np.minimum.accumulate),
+    ],
+)
+def test_x86_extrema_scan_propagates_nan_and_preserves_zero_sign(
+    op_name, reference
+):
+    rt = _x86_or_skip()
+    x = np.asarray(
+        [
+            [-0.0, 0.0, -0.0, 1.0, np.nan, -2.0],
+            [0.0, -0.0, 0.0, -1.0, 2.0, np.nan],
+        ],
+        dtype=np.float32,
+    )
+    result = rt.launch(_artifact(rt, op_name, -1), (x,))
+    assert result["ok"] is True, result.get("reason")
+    output = np.asarray(result["output"], dtype=np.float32)
+    expected = reference(x, axis=-1)
+    np.testing.assert_array_equal(np.isnan(output), np.isnan(expected))
+    finite = ~np.isnan(expected)
+    np.testing.assert_array_equal(output[finite], expected[finite])
+    zeros = finite & (expected == 0.0)
+    np.testing.assert_array_equal(np.signbit(output[zeros]), np.signbit(expected[zeros]))

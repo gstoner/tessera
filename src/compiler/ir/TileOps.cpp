@@ -1232,7 +1232,23 @@ LogicalResult SpectralProgramKernelOp::verify() {
   };
   if (requiredString("target").empty() || requiredString("arch").empty() ||
       requiredString("input_shapes").empty() ||
-      requiredString("normalization") != "backward" ||
+      requiredString("input_signature").empty() ||
+      requiredString("shape_bounds").empty() ||
+      requiredString("template_digest").size() != 64 ||
+      (requiredString("shape_policy") != "exact_runtime_specialization_v1" &&
+       requiredString("shape_policy") != "bounded_runtime_specialization_v1") ||
+      (requiredString("storage") != "f32" &&
+       requiredString("storage") != "f16" &&
+       requiredString("storage") != "bf16") ||
+      requiredString("abi_storage") != "f32" ||
+      (requiredString("storage_conversion") != "native_f32" &&
+       requiredString("storage_conversion") !=
+           "native_package_cast_f32_accumulate_cast_output_v1") ||
+      (requiredString("axis_packing") != "none_contiguous" &&
+       requiredString("axis_packing") != "native_package_host_pack_v1") ||
+      (requiredString("normalization") != "backward" &&
+       requiredString("normalization") != "forward" &&
+       requiredString("normalization") != "ortho") ||
       requiredString("complex_layout") != "interleaved_f32x2" ||
       requiredString("workspace_policy") != "persistent_artifact_workspace" ||
       requiredString("mutation_lineage") !=

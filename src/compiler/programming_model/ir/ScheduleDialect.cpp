@@ -252,11 +252,24 @@ LogicalResult SpectralProgramOp::verify() {
       getHopAttr().getInt() < 0 || getFramesAttr().getInt() < 0 ||
       getWorkspaceBytesAttr().getInt() <= 0 || getWorkgroupSize() <= 0)
     return emitOpError("requires complete positive shape, launch, and workspace policy");
-  if (getNormalization() != "backward" ||
+  if ((getNormalization() != "backward" && getNormalization() != "forward" &&
+       getNormalization() != "ortho") ||
       getComplexLayout() != "interleaved_f32x2" ||
+      (getShapePolicy() != "exact_runtime_specialization_v1" &&
+       getShapePolicy() != "bounded_runtime_specialization_v1") ||
+      (getStorage() != "f32" && getStorage() != "f16" &&
+       getStorage() != "bf16") ||
+      getAbiStorage() != "f32" ||
+      (getStorageConversion() != "native_f32" &&
+       getStorageConversion() !=
+           "native_package_cast_f32_accumulate_cast_output_v1") ||
+      (getAxisPacking() != "none_contiguous" &&
+       getAxisPacking() != "native_package_host_pack_v1") ||
       getWorkspacePolicy() != "persistent_artifact_workspace" ||
       getMutationLineage() != "inputs_immutable_output_fresh_v1" ||
-      getNativeEntry().empty() || getInputShapes().empty())
+      getNativeEntry().empty() || getInputShapes().empty() ||
+      getInputSignature().empty() || getShapeBounds().empty() ||
+      getTemplateDigest().size() != 64)
     return emitOpError("requires the canonical spectral numeric/workspace/lineage policy");
   if (getKind() != "tessera.spectral_filter" && getChildFftDigests().empty())
     return emitOpError("FFT-based spectral programs require child digests");

@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -451,13 +452,14 @@ extern "C" int tessera_x86_fft_six_step_c2c_f32(float* data, int64_t batch,
 
 namespace {
 
-std::vector<float>& spectral_workspace(const char* digest, const char* slot,
-                                       size_t floats) {
-    thread_local std::unordered_map<std::string, std::vector<float>> cache;
+std::shared_ptr<std::vector<float>> spectral_workspace(
+    const char* digest, const char* slot, size_t floats) {
+    thread_local std::map<std::string, std::shared_ptr<std::vector<float>>> cache;
     std::string key = std::string(digest ? digest : "") + ":" + slot;
     if (cache.size() >= 32 && cache.find(key) == cache.end()) cache.erase(cache.begin());
-    std::vector<float>& value = cache[key];
-    if (value.size() < floats) value.resize(floats);
+    std::shared_ptr<std::vector<float>>& value = cache[key];
+    if (!value) value = std::make_shared<std::vector<float>>();
+    if (value->size() < floats) value->resize(floats);
     return value;
 }
 
@@ -493,10 +495,12 @@ int execute_any_fft(float* data, int64_t batch, int64_t n, bool inverse,
 
     int64_t m = 1;
     while (m < 2 * n - 1) m <<= 1;
-    std::vector<float>& first = spectral_workspace(digest, "bluestein_a",
-                                                   static_cast<size_t>(2 * m));
-    std::vector<float>& second = spectral_workspace(digest, "bluestein_b",
-                                                    static_cast<size_t>(2 * m));
+    auto firstOwner = spectral_workspace(digest, "bluestein_a",
+                                         static_cast<size_t>(2 * m));
+    auto secondOwner = spectral_workspace(digest, "bluestein_b",
+                                          static_cast<size_t>(2 * m));
+    std::vector<float>& first = *firstOwner;
+    std::vector<float>& second = *secondOwner;
     const double sign = inverse ? 1.0 : -1.0;
     for (int64_t row = 0; row < batch; ++row) {
         std::fill(first.begin(), first.begin() + 2 * m, 0.0f);
@@ -543,7 +547,7 @@ int execute_any_fft(float* data, int64_t batch, int64_t n, bool inverse,
 }  // namespace
 
 extern "C" const char* tessera_x86_spectral_composite_package_abi() {
-    return "tessera.x86.spectral_composite.v1";
+    return "tessera.x86.spectral_composite.v4";
 }
 
 extern "C" int tessera_x86_spectral_filter_f32(
@@ -560,10 +564,12 @@ extern "C" int tessera_x86_spectral_filter_f32(
 }
 
 extern "C" int tessera_x86_dct_f32(const char* digest, const float* input,
-                                    float* output, int64_t batch, int64_t n) {
+                                    float* output, int64_t batch, int64_t n,
+                                    float output_scale) {
     if (!valid_digest(digest) || !input || !output || batch <= 0 || n <= 0) return 1;
-    std::vector<float>& mirrored = spectral_workspace(
+    auto mirroredOwner = spectral_workspace(
         digest, "dct", static_cast<size_t>(4 * batch * n));
+    std::vector<float>& mirrored = *mirroredOwner;
     for (int64_t row = 0; row < batch; ++row)
         for (int64_t column = 0; column < 2 * n; ++column) {
             const int64_t source = column < n ? column : 2 * n - 1 - column;
@@ -574,7 +580,8 @@ extern "C" int tessera_x86_dct_f32(const char* digest, const float* input,
     if (rc) return rc;
     for (int64_t row = 0; row < batch; ++row)
         for (int64_t column = 0; column < n; ++column)
-            output[row * n + column] = mirrored[2 * (row * 2 * n + column)];
+            output[row * n + column] =
+                mirrored[2 * (row * 2 * n + column)] * output_scale;
     return 0;
 }
 
@@ -586,8 +593,10 @@ extern "C" int tessera_x86_spectral_conv_f32(
     if (!valid_digest(digest) || !input || !kernel || !output || batch <= 0 ||
         input_n <= 0 || kernel_n <= 0 || fft_n < output_n) return 1;
     const size_t floats = static_cast<size_t>(2 * batch * fft_n);
-    std::vector<float>& x = spectral_workspace(digest, "conv_x", floats);
-    std::vector<float>& w = spectral_workspace(digest, "conv_w", floats);
+    auto xOwner = spectral_workspace(digest, "conv_x", floats);
+    auto wOwner = spectral_workspace(digest, "conv_w", floats);
+    std::vector<float>& x = *xOwner;
+    std::vector<float>& w = *wOwner;
     std::fill(x.begin(), x.begin() + floats, 0.0f);
     std::fill(w.begin(), w.begin() + floats, 0.0f);
     for (int64_t row = 0; row < batch; ++row) {
@@ -611,12 +620,14 @@ extern "C" int tessera_x86_spectral_conv_f32(
 
 extern "C" int tessera_x86_stft_f32(
     const char* digest, const float* input, const float* window, float* output,
-    int64_t batch, int64_t samples, int64_t win, int64_t hop, int64_t frames) {
+    int64_t batch, int64_t samples, int64_t win, int64_t hop, int64_t frames,
+    float output_scale) {
     if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
         samples <= 0 || win <= 0 || hop <= 0 || frames <= 0) return 1;
     const int64_t rows = batch * frames, bins = win / 2 + 1;
-    std::vector<float>& full = spectral_workspace(
+    auto fullOwner = spectral_workspace(
         digest, "stft", static_cast<size_t>(2 * rows * win));
+    std::vector<float>& full = *fullOwner;
     for (int64_t row = 0; row < batch; ++row)
         for (int64_t frame = 0; frame < frames; ++frame)
             for (int64_t i = 0; i < win; ++i) {
@@ -626,20 +637,22 @@ extern "C" int tessera_x86_stft_f32(
             }
     if (execute_any_fft(full.data(), rows, win, false, digest)) return 2;
     for (int64_t row = 0; row < rows; ++row)
-        std::memcpy(output + 2 * row * bins, full.data() + 2 * row * win,
-                    static_cast<size_t>(2 * bins) * sizeof(float));
+        for (int64_t i = 0; i < 2 * bins; ++i)
+            output[2 * row * bins + i] = full[2 * row * win + i] * output_scale;
     return 0;
 }
 
 extern "C" int tessera_x86_istft_f32(
     const char* digest, const float* input, const float* window, float* output,
-    int64_t batch, int64_t frames, int64_t win, int64_t hop) {
+    int64_t batch, int64_t frames, int64_t win, int64_t hop,
+    float output_scale) {
     if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
         frames <= 0 || win <= 0 || hop <= 0) return 1;
     const int64_t rows = batch * frames, bins = win / 2 + 1;
     const int64_t samples = (frames - 1) * hop + win;
-    std::vector<float>& full = spectral_workspace(
+    auto fullOwner = spectral_workspace(
         digest, "istft", static_cast<size_t>(2 * rows * win));
+    std::vector<float>& full = *fullOwner;
     for (int64_t row = 0; row < rows; ++row) {
         for (int64_t i = 0; i < bins; ++i) {
             full[2 * (row * win + i)] = input[2 * (row * bins + i)];
@@ -661,7 +674,265 @@ extern "C" int tessera_x86_istft_f32(
                 sum += full[2 * ((row * frames + frame) * win + local)] * w;
                 weight += w * w;
             }
-            output[row * samples + sample] = sum / std::max(weight, 1.0e-12f);
+            output[row * samples + sample] =
+                (sum / std::max(weight, 1.0e-12f)) * output_scale;
         }
     return 0;
+}
+
+namespace {
+
+float load_spectral_storage(const void* input, int64_t index, int storage) {
+    if (storage == 0) return static_cast<const float*>(input)[index];
+    const uint16_t bits = static_cast<const uint16_t*>(input)[index];
+    if (storage == 1) return _cvtsh_ss(bits);
+    uint32_t wide = uint32_t(bits) << 16;
+    float value;
+    std::memcpy(&value, &wide, sizeof(value));
+    return value;
+}
+
+void store_spectral_storage(void* output, int64_t index, int storage,
+                            float value) {
+    if (storage == 0) {
+        static_cast<float*>(output)[index] = value;
+        return;
+    }
+    if (storage == 1) {
+        static_cast<uint16_t*>(output)[index] = _cvtss_sh(
+            value, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+        return;
+    }
+    uint32_t bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    const uint32_t rounding = 0x7fff + ((bits >> 16) & 1);
+    static_cast<uint16_t*>(output)[index] = uint16_t((bits + rounding) >> 16);
+}
+
+bool valid_spectral_storage(int storage) {
+    return storage >= 0 && storage <= 2;
+}
+
+void unpack_spectral_storage(const void* input, float* output, int64_t elements,
+                             int storage) {
+    for (int64_t i = 0; i < elements; ++i)
+        output[i] = load_spectral_storage(input, i, storage);
+}
+
+void pack_spectral_storage(const float* input, void* output, int64_t elements,
+                           int storage) {
+    for (int64_t i = 0; i < elements; ++i)
+        store_spectral_storage(output, i, storage, input[i]);
+}
+
+}  // namespace
+
+extern "C" int tessera_x86_dct_storage(
+    const char* digest, const void* input, void* output, int64_t batch,
+    int64_t n, int storage, float output_scale) {
+    if (!valid_spectral_storage(storage) || !input || !output) return 10;
+    if (storage == 0)
+        return tessera_x86_dct_f32(digest, static_cast<const float*>(input),
+                                   static_cast<float*>(output), batch, n,
+                                   output_scale);
+    const int64_t elements = batch * n;
+    auto unpackedOwner = spectral_workspace(
+        digest, "dct_storage_input", static_cast<size_t>(elements));
+    auto packedOwner = spectral_workspace(
+        digest, "dct_storage_output", static_cast<size_t>(elements));
+    std::vector<float>& unpacked = *unpackedOwner;
+    std::vector<float>& packed = *packedOwner;
+    unpack_spectral_storage(input, unpacked.data(), elements, storage);
+    int rc = tessera_x86_dct_f32(digest, unpacked.data(), packed.data(), batch,
+                                  n, output_scale);
+    if (!rc) pack_spectral_storage(packed.data(), output, elements, storage);
+    return rc;
+}
+
+extern "C" int tessera_x86_spectral_conv_storage(
+    const char* digest, const void* input, int64_t input_n,
+    const void* kernel, int64_t kernel_n, void* output, int64_t batch,
+    int64_t fft_n, int storage) {
+    if (!valid_spectral_storage(storage) || !input || !kernel || !output)
+        return 10;
+    if (storage == 0)
+        return tessera_x86_spectral_conv_f32(
+            digest, static_cast<const float*>(input), input_n,
+            static_cast<const float*>(kernel), kernel_n,
+            static_cast<float*>(output), batch, fft_n);
+    const int64_t input_elements = batch * input_n;
+    const int64_t kernel_elements = batch * kernel_n;
+    const int64_t output_elements = batch * (input_n + kernel_n - 1);
+    auto xOwner = spectral_workspace(
+        digest, "conv_storage_input", static_cast<size_t>(input_elements));
+    auto wOwner = spectral_workspace(
+        digest, "conv_storage_kernel", static_cast<size_t>(kernel_elements));
+    auto yOwner = spectral_workspace(
+        digest, "conv_storage_output", static_cast<size_t>(output_elements));
+    std::vector<float>& x = *xOwner;
+    std::vector<float>& w = *wOwner;
+    std::vector<float>& y = *yOwner;
+    unpack_spectral_storage(input, x.data(), input_elements, storage);
+    unpack_spectral_storage(kernel, w.data(), kernel_elements, storage);
+    int rc = tessera_x86_spectral_conv_f32(
+        digest, x.data(), input_n, w.data(), kernel_n, y.data(), batch, fft_n);
+    if (!rc) pack_spectral_storage(y.data(), output, output_elements, storage);
+    return rc;
+}
+
+extern "C" int tessera_x86_stft_storage(
+    const char* digest, const void* input, const void* window, float* output,
+    int64_t batch, int64_t samples, int64_t win, int64_t hop, int64_t frames,
+    int storage, float output_scale) {
+    if (!valid_spectral_storage(storage) || !input || !window || !output)
+        return 10;
+    if (storage == 0)
+        return tessera_x86_stft_f32(
+            digest, static_cast<const float*>(input),
+            static_cast<const float*>(window), output, batch, samples, win, hop,
+            frames, output_scale);
+    auto xOwner = spectral_workspace(
+        digest, "stft_storage_input", static_cast<size_t>(batch * samples));
+    auto wOwner = spectral_workspace(
+        digest, "stft_storage_window", static_cast<size_t>(win));
+    std::vector<float>& x = *xOwner;
+    std::vector<float>& w = *wOwner;
+    unpack_spectral_storage(input, x.data(), batch * samples, storage);
+    unpack_spectral_storage(window, w.data(), win, storage);
+    return tessera_x86_stft_f32(digest, x.data(), w.data(), output, batch,
+                                 samples, win, hop, frames, output_scale);
+}
+
+extern "C" int tessera_x86_istft_storage(
+    const char* digest, const float* input, const void* window, void* output,
+    int64_t batch, int64_t frames, int64_t win, int64_t hop, int storage,
+    float output_scale) {
+    if (!valid_spectral_storage(storage) || !input || !window || !output)
+        return 10;
+    if (storage == 0)
+        return tessera_x86_istft_f32(
+            digest, input, static_cast<const float*>(window),
+            static_cast<float*>(output), batch, frames, win, hop,
+            output_scale);
+    const int64_t samples = (frames - 1) * hop + win;
+    auto wOwner = spectral_workspace(
+        digest, "istft_storage_window", static_cast<size_t>(win));
+    auto yOwner = spectral_workspace(
+        digest, "istft_storage_output", static_cast<size_t>(batch * samples));
+    std::vector<float>& w = *wOwner;
+    std::vector<float>& y = *yOwner;
+    unpack_spectral_storage(window, w.data(), win, storage);
+    int rc = tessera_x86_istft_f32(digest, input, w.data(), y.data(), batch,
+                                    frames, win, hop, output_scale);
+    if (!rc) pack_spectral_storage(y.data(), output, batch * samples, storage);
+    return rc;
+}
+
+namespace {
+
+size_t spectral_storage_bytes(int storage) { return storage == 0 ? 4 : 2; }
+
+void pack_axis_storage(const void* input, void* output, int64_t outer,
+                       int64_t axis_extent, int64_t inner, size_t bytes) {
+    const auto* source = static_cast<const unsigned char*>(input);
+    auto* destination = static_cast<unsigned char*>(output);
+    for (int64_t o = 0; o < outer; ++o)
+        for (int64_t j = 0; j < inner; ++j)
+            for (int64_t i = 0; i < axis_extent; ++i) {
+                int64_t source_index = (o * axis_extent + i) * inner + j;
+                int64_t destination_index = (o * inner + j) * axis_extent + i;
+                std::memcpy(destination + destination_index * bytes,
+                            source + source_index * bytes, bytes);
+            }
+}
+
+void unpack_axis_storage(const void* input, void* output, int64_t outer,
+                         int64_t axis_extent, int64_t inner, size_t bytes) {
+    pack_axis_storage(input, output, outer, inner, axis_extent, bytes);
+}
+
+}  // namespace
+
+extern "C" int tessera_x86_dct_strided_storage(
+    const char* digest, const void* input, void* output, int64_t outer,
+    int64_t n, int64_t inner, int storage, float output_scale) {
+    if (!valid_spectral_storage(storage) || outer <= 0 || inner <= 0)
+        return 20;
+    size_t bytes = spectral_storage_bytes(storage);
+    size_t total = size_t(outer * n * inner) * bytes;
+    std::vector<unsigned char> packed_input(total), packed_output(total);
+    pack_axis_storage(input, packed_input.data(), outer, n, inner, bytes);
+    int rc = tessera_x86_dct_storage(
+        digest, packed_input.data(), packed_output.data(), outer * inner, n,
+        storage, output_scale);
+    if (!rc)
+        unpack_axis_storage(packed_output.data(), output, outer, n, inner, bytes);
+    return rc;
+}
+
+extern "C" int tessera_x86_spectral_conv_strided_storage(
+    const char* digest, const void* input, int64_t input_n,
+    const void* kernel, int64_t kernel_n, void* output, int64_t outer,
+    int64_t inner, int64_t fft_n, int storage) {
+    if (!valid_spectral_storage(storage) || outer <= 0 || inner <= 0)
+        return 20;
+    int64_t output_n = input_n + kernel_n - 1;
+    int64_t batch = outer * inner;
+    size_t bytes = spectral_storage_bytes(storage);
+    std::vector<unsigned char> packed_input(size_t(batch * input_n) * bytes);
+    std::vector<unsigned char> packed_kernel(size_t(batch * kernel_n) * bytes);
+    std::vector<unsigned char> packed_output(size_t(batch * output_n) * bytes);
+    pack_axis_storage(input, packed_input.data(), outer, input_n, inner, bytes);
+    pack_axis_storage(kernel, packed_kernel.data(), outer, kernel_n, inner, bytes);
+    int rc = tessera_x86_spectral_conv_storage(
+        digest, packed_input.data(), input_n, packed_kernel.data(), kernel_n,
+        packed_output.data(), batch, fft_n, storage);
+    if (!rc)
+        unpack_axis_storage(packed_output.data(), output, outer, output_n, inner,
+                            bytes);
+    return rc;
+}
+
+extern "C" int tessera_x86_stft_strided_storage(
+    const char* digest, const void* input, const void* window, float* output,
+    int64_t outer, int64_t samples, int64_t inner, int64_t win, int64_t hop,
+    int64_t frames, int storage, float output_scale) {
+    if (!valid_spectral_storage(storage) || outer <= 0 || inner <= 0)
+        return 20;
+    int64_t batch = outer * inner;
+    int64_t bins = win / 2 + 1;
+    size_t bytes = spectral_storage_bytes(storage);
+    std::vector<unsigned char> packed_input(size_t(batch * samples) * bytes);
+    std::vector<float> packed_output(size_t(2 * batch * frames * bins));
+    pack_axis_storage(input, packed_input.data(), outer, samples, inner, bytes);
+    int rc = tessera_x86_stft_storage(
+        digest, packed_input.data(), window, packed_output.data(), batch,
+        samples, win, hop, frames, storage, output_scale);
+    if (!rc)
+        unpack_axis_storage(packed_output.data(), output, outer, frames * bins,
+                            inner, sizeof(float) * 2);
+    return rc;
+}
+
+extern "C" int tessera_x86_istft_strided_storage(
+    const char* digest, const float* input, const void* window, void* output,
+    int64_t outer, int64_t frames, int64_t bins, int64_t inner, int64_t win,
+    int64_t hop, int storage, float output_scale) {
+    if (!valid_spectral_storage(storage) || outer <= 0 || inner <= 0 ||
+        bins != win / 2 + 1)
+        return 20;
+    int64_t batch = outer * inner;
+    int64_t samples = (frames - 1) * hop + win;
+    size_t bytes = spectral_storage_bytes(storage);
+    std::vector<float> packed_input(size_t(2 * batch * frames * bins));
+    std::vector<unsigned char> packed_output(size_t(batch * samples) * bytes);
+    pack_axis_storage(input, packed_input.data(), outer, frames * bins, inner,
+                      sizeof(float) * 2);
+    int rc = tessera_x86_istft_storage(
+        digest, packed_input.data(), window, packed_output.data(), batch,
+        frames, win, hop, storage, output_scale);
+    if (!rc)
+        unpack_axis_storage(packed_output.data(), output, outer, samples, inner,
+                            bytes);
+    return rc;
 }

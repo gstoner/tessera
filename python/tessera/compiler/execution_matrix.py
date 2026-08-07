@@ -485,16 +485,20 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "kernel -> ROCDL -> hsaco, in-process via tessera-"
                             "opt), then HIP loads + launches it — the S2 scalar-"
                             "math / stability family (exp/log/sqrt/rsqrt/"
-                            "reciprocal/abs/sign/erf/tanh/sigmoid/log1p/expm1/"
-                            "softplus), one thread per element, dispatched by op "
-                            "name; f32/f16/bf16 storage, f32 compute",
+                            "reciprocal/abs/sign/erf/erfc/trig/inverse-trig/"
+                            "hyperbolic/lgamma/digamma/tanh/sigmoid/log1p/expm1/"
+                            "softplus/rounding), one thread per element, "
+                            "dispatched by op name; process-cached HIP modules; "
+                            "f32/f16/bf16 storage, f32 compute",
     "rocm_binary_compiled": "AMD GPU RDNA flat 2-operand elementwise binary-"
                             "arithmetic kernel the Tessera compiler GENERATES "
                             "(generate-rocm-binary-kernel -> ROCDL -> hsaco, in-"
                             "process via tessera-opt), then HIP loads + launches "
-                            "it — the S2 binary-arithmetic family (sub/div/pow/"
-                            "maximum/minimum), one thread per element, dispatched "
-                            "by op name; f32/f16/bf16 storage, f32 compute",
+                            "it — the S2 binary-arithmetic family (add/sub/mul/"
+                            "div/pow/mod/floor_div/maximum/minimum), one thread "
+                            "per element, dispatched by op name; matching input "
+                            "storage required; process-cached HIP modules; "
+                            "f32/f16/bf16 storage, f32 compute",
     "rocm_predicate_compiled": "AMD GPU RDNA unary predicate (isnan / isinf / "
                             "isfinite) kernel the Tessera compiler GENERATES "
                             "(generate-rocm-predicate-kernel, kind StrAttr → ROCDL "
@@ -641,9 +645,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "radix-2 kernel. SpectralPlan owns strategy + "
                             "normalization. complex64/f32",
     "x86_spectral_compiled": "x86 CPU spectral composites (dct / stft / istft / "
-                            "spectral_conv / spectral_filter) — compose the "
-                            "x86_fft_compiled FFT lane (frame / window / "
-                            "overlap-add / pointwise complex-mul on host). f32",
+                            "spectral_conv / spectral_filter) — one typed, "
+                            "content-addressed Schedule-to-Tile artifact consumed "
+                            "by the native AVX-512 package; framing, windowing, "
+                            "overlap-add, complex multiply, and bounded workspace "
+                            "are package-owned, as are arbitrary-axis packing "
+                            "and f16/bf16 conversion around f32 accumulation.",
     "x86_sparse_compiled": "x86 CPU sparse linear algebra (spmm_csr / spmm_coo / "
                             "sddmm / bsmm) — GENUINELY sparse AVX-512 kernels "
                             "(spmm = row-wise AXPY over CSR nonzeros, sddmm = "
@@ -707,10 +714,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "pivot LU, Householder QR, one-sided Jacobi SVD "
                             "(vectorized rank-1/reflector/rotation updates); "
                             "cholesky_solve = two triangular solves. Batched. f32",
-    "x86_stat_reduce_compiled": "x86 CPU statistical reduction (var / std / "
-                            "count_nonzero) composed from the AVX-512 reduce "
-                            "kernel: var=mean(x^2)-mean(x)^2, std=sqrt(var), "
-                            "count_nonzero=sum(x!=0) over an axis. f32",
+    "x86_stat_reduce_compiled": "x86 CPU statistical reduction over an axis: "
+                            "var/std use the native mergeable-f64-Welford ABI; "
+                            "count_nonzero composes the AVX-512 sum kernel. f32",
     "x86_stable_reduce_compiled": "x86 CPU stable reduction (logsumexp / "
                             "log_softmax / softmax_safe / sigmoid_safe) — "
                             "max-shifted, composed from the AVX-512 reduce "
@@ -893,11 +899,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "cholesky / tri-solve / lu / qr / svd-kernel, one "
                             "thread per matrix or matrix/RHS-column) HIP-launched; "
                             "cholesky_solve = two triangular solves. f32",
-    "rocm_stat_reduce_compiled": "AMD GPU RDNA statistical reduction (var / std "
-                            "/ count_nonzero) composed from the warp-shuffle "
-                            "reduce kernel: var=mean(x^2)-mean(x)^2, "
-                            "std=sqrt(var), count_nonzero=sum(x!=0) over an axis. "
-                            "f32",
+    "rocm_stat_reduce_compiled": "AMD GPU RDNA statistical reduction over an "
+                            "axis: var/std use compiler-generated parallel "
+                            "Welford with f16/bf16/f32 storage and f32 "
+                            "accumulation; count_nonzero composes sum.",
     "rocm_stable_reduce_compiled": "AMD GPU RDNA stable reduction (logsumexp / "
                             "log_softmax / softmax_safe / sigmoid_safe) — "
                             "max-shifted, composed from the warp-shuffle reduce "
@@ -1492,8 +1497,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="x86 scan artifact runs the inclusive prefix scan (cumsum/cumprod/"
                "cummax/cummin) from libtessera_x86_elementwise.so "
                "(tessera_x86_avx512_scan_f32) along one axis; same-shape output. "
-               "The CPU analog of the ROCm block-scan lane (scalar row "
-               "recurrence, rows parallel; SIMD prefix is a perf follow-up). "
+               "The CPU analog of the ROCm block-scan lane: cumsum/cumprod use "
+               "a 16-lane AVX-512 Hillis-Steele prefix, while measured-slower "
+               "cummax/cummin retain the scalar row recurrence. "
                "f32 only.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_argreduce_compiled"): ExecutionRow(
@@ -1864,9 +1870,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_cpu", executable=True,
         executor_id="x86_stat_reduce_compiled", runtime_status="success",
         reason="x86 stat-reduce artifact runs var / std / count_nonzero over an "
-               "axis, composed from the AVX-512 reduce kernel "
-               "(var=mean(x^2)-mean(x)^2, std=sqrt(var), count_nonzero=sum(x!=0))"
-               ". f32.",
+               "axis. var/std use tessera_x86_avx512_welford_f32 with f64 state; "
+               "count_nonzero composes the AVX-512 sum kernel. f32.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_stable_reduce_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_stable_reduce_compiled",
@@ -2548,22 +2553,24 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_unary_compiled", runtime_status="success",
         reason="ROCm unary artifact runs the COMPILER-GENERATED flat elementwise "
-               "unary-math kernel (S2 scalar-math/stability: exp/log/sqrt/rsqrt/"
-               "reciprocal/abs/sign/erf/tanh/sigmoid/log1p/expm1/softplus, one "
+               "unary-math kernel (algebraic, transcendental, trig, inverse-"
+               "trig, hyperbolic, lgamma/digamma, stability, and rounding; one "
                "thread per element): tessera-opt generates + serializes the "
-               "kernel to hsaco in-process, then HIP loads + launches it. "
-               "Dispatched by op name.",
+               "kernel to hsaco in-process, then HIP reuses a process-cached "
+               "module and launches it. Dispatched by op name; f32/f16/bf16 "
+               "storage with f32 compute.",
         execution_mode="hip_runtime"),
-    # Binary arithmetic sub/div/pow/maximum/minimum — flat 2-operand elementwise.
+    # Binary arithmetic — flat 2-operand elementwise.
     ("rocm", "rocm_binary_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_binary_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_binary_compiled", runtime_status="success",
         reason="ROCm binary artifact runs the COMPILER-GENERATED flat 2-operand "
-               "elementwise binary-arithmetic kernel (sub/div/pow/maximum/minimum, "
-               "one thread per element): tessera-opt generates + serializes the "
-               "kernel to hsaco in-process, then HIP loads + launches it. "
-               "Dispatched by op name.",
+               "elementwise binary-arithmetic kernel (add/sub/mul/div/pow/mod/"
+               "floor_div/maximum/minimum, one thread per element): tessera-opt "
+               "generates + serializes the kernel to hsaco in-process, then HIP "
+               "reuses a process-cached module and launches it. Inputs must have "
+               "matching storage dtype; f32/f16/bf16 compute in f32.",
         execution_mode="hip_runtime"),
     # Comparison eq/ne/lt/le/gt/ge — flat 2-operand elementwise, bool output.
     ("rocm", "rocm_clamp_compiled"): ExecutionRow(
@@ -2741,8 +2748,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "Framing, windowing, overlap-add, and pointwise complex multiply "
                "stay device-resident around persistent digest-bound child FFT "
                "plans plus a persistent digest-bound composite workspace; "
-               "only the public host-pointer ABI stages inputs/output. "
-               "f32, matches np.fft.",
+               "the package also owns arbitrary-axis host packing and f16/bf16 "
+               "conversion around f32 device accumulation. The public "
+               "host-pointer ABI stages inputs/output. Matches np.fft.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_sparse_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_sparse_compiled",
@@ -2980,9 +2988,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_stat_reduce_compiled", runtime_status="success",
         reason="ROCm stat-reduce artifact runs var / std / count_nonzero over an "
-               "axis, composed from the warp-shuffle reduce kernel "
-               "(var=mean(x^2)-mean(x)^2, std=sqrt(var), count_nonzero=sum(x!=0))"
-               ". f32.",
+               "axis. var/std use compiler-generated parallel Welford with "
+               "f16/bf16/f32 storage and f32 accumulation; count_nonzero "
+               "composes sum.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_stable_reduce_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_stable_reduce_compiled",

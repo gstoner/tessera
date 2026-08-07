@@ -165,6 +165,9 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
     if hasattr(lib, "ts_spectral_composite_package_abi_amd"):
         lib.ts_spectral_composite_package_abi_amd.restype = ctypes.c_char_p
         lib.ts_spectral_composite_package_abi_amd.argtypes = []
+        if hasattr(lib, "ts_spectral_composite_arch_amd"):
+            lib.ts_spectral_composite_arch_amd.restype = ctypes.c_char_p
+            lib.ts_spectral_composite_arch_amd.argtypes = []
         lib.ts_spectral_filter_hostptr_amd.restype = ctypes.c_int
         lib.ts_spectral_filter_hostptr_amd.argtypes = [
             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
@@ -173,7 +176,7 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
         lib.ts_dct_hostptr_batch_amd.restype = ctypes.c_int
         lib.ts_dct_hostptr_batch_amd.argtypes = [
             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-            ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int, ctypes.c_float,
         ]
         lib.ts_spectral_conv_hostptr_batch_amd.restype = ctypes.c_int
         lib.ts_spectral_conv_hostptr_batch_amd.argtypes = [
@@ -185,13 +188,13 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
         lib.ts_stft_hostptr_batch_amd.argtypes = [
             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
             ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-            ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int, ctypes.c_float,
         ]
         lib.ts_istft_hostptr_batch_amd.restype = ctypes.c_int
         lib.ts_istft_hostptr_batch_amd.argtypes = [
             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
             ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-            ctypes.c_int,
+            ctypes.c_int, ctypes.c_float,
         ]
         if hasattr(lib, "ts_spectral_composite_plan_create_amd"):
             lib.ts_spectral_composite_plan_create_amd.restype = ctypes.c_int
@@ -213,7 +216,7 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
             lib.ts_dct_plan_hostptr_batch_amd.restype = ctypes.c_int
             lib.ts_dct_plan_hostptr_batch_amd.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_float,
             ]
             lib.ts_spectral_conv_plan_hostptr_batch_amd.restype = ctypes.c_int
             lib.ts_spectral_conv_plan_hostptr_batch_amd.argtypes = [
@@ -225,13 +228,67 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
             lib.ts_stft_plan_hostptr_batch_amd.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
-                ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
             ]
             lib.ts_istft_plan_hostptr_batch_amd.restype = ctypes.c_int
             lib.ts_istft_plan_hostptr_batch_amd.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_float,
+            ]
+            if not hasattr(lib, "ts_dct_plan_hostptr_batch_storage_amd"):
+                return lib
+            lib.ts_dct_plan_hostptr_batch_storage_amd.restype = ctypes.c_int
+            lib.ts_dct_plan_hostptr_batch_storage_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                ctypes.c_float,
+            ]
+            lib.ts_spectral_conv_plan_hostptr_batch_storage_amd.restype = ctypes.c_int
+            lib.ts_spectral_conv_plan_hostptr_batch_storage_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_int,
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ]
+            lib.ts_stft_plan_hostptr_batch_storage_amd.restype = ctypes.c_int
+            lib.ts_stft_plan_hostptr_batch_storage_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                ctypes.c_float,
+            ]
+            lib.ts_istft_plan_hostptr_batch_storage_amd.restype = ctypes.c_int
+            lib.ts_istft_plan_hostptr_batch_storage_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+            ]
+            lib.ts_dct_plan_hostptr_strided_storage_amd.restype = ctypes.c_int
+            lib.ts_dct_plan_hostptr_strided_storage_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_longlong, ctypes.c_longlong,
+                ctypes.c_longlong, ctypes.c_int, ctypes.c_float,
+            ]
+            lib.ts_spectral_conv_plan_hostptr_strided_storage_amd.restype = ctypes.c_int
+            lib.ts_spectral_conv_plan_hostptr_strided_storage_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_int,
+                ctypes.c_void_p, ctypes.c_longlong, ctypes.c_longlong,
                 ctypes.c_int, ctypes.c_int,
+            ]
+            lib.ts_stft_plan_hostptr_strided_storage_amd.restype = ctypes.c_int
+            lib.ts_stft_plan_hostptr_strided_storage_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_longlong,
+                ctypes.c_int, ctypes.c_longlong, ctypes.c_int, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_float,
+            ]
+            lib.ts_istft_plan_hostptr_strided_storage_amd.restype = ctypes.c_int
+            lib.ts_istft_plan_hostptr_strided_storage_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_longlong,
+                ctypes.c_int, ctypes.c_int, ctypes.c_longlong, ctypes.c_int,
+                ctypes.c_int, ctypes.c_int, ctypes.c_float,
             ]
     return lib
 
@@ -261,6 +318,7 @@ def _amd_lib() -> ctypes.CDLL | None:
     cached = _libs.get("amd_prebuilt")
     if cached is not None:
         return cached
+    fallback = None
     for path in _prebuilt_amd_paths():
         if not path.is_file():
             continue
@@ -276,13 +334,54 @@ def _amd_lib() -> ctypes.CDLL | None:
             "ts_fft_plan_destroy_amd",
             "ts_fft_package_abi_amd",
         )
+        if not all(hasattr(lib, symbol) for symbol in required):
+            continue
+        if lib.ts_fft_package_abi_amd() != b"tessera.rocm.fft.plan.v1":
+            continue
+        if fallback is None:
+            fallback = lib
         if (
-            all(hasattr(lib, symbol) for symbol in required)
-            and lib.ts_fft_package_abi_amd() == b"tessera.rocm.fft.plan.v1"
+            hasattr(lib, "ts_spectral_composite_package_abi_amd")
+            and lib.ts_spectral_composite_package_abi_amd()
+            == b"tessera.rocm.spectral_composite.v4"
+            and hasattr(lib, "ts_spectral_composite_arch_amd")
+            and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
         ):
             _libs["amd_prebuilt"] = lib
             return lib
-    return None
+    if fallback is not None:
+        _libs["amd_prebuilt"] = fallback
+    return fallback
+
+
+def _is_gfx1151_composite_lib(lib: ctypes.CDLL | None) -> bool:
+    """Return whether ``lib`` is the exact promoted gfx1151 composite image."""
+    return bool(
+        lib is not None
+        and hasattr(lib, "ts_spectral_composite_package_abi_amd")
+        and lib.ts_spectral_composite_package_abi_amd()
+        == b"tessera.rocm.spectral_composite.v4"
+        and hasattr(lib, "ts_spectral_composite_arch_amd")
+        and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
+    )
+
+
+def _amd_composite_lib() -> ctypes.CDLL | None:
+    """Select only the promoted gfx1151 composite package.
+
+    ``_amd_lib`` deliberately retains an FFT-v1 fallback because the portable
+    FFT plan ABI is architecture-neutral. Compound TSOL entry points are not:
+    their schedules and evidence are owned by gfx1151, so a mismatched v4
+    package must never inherit that FFT fallback.
+    """
+    cached = _libs.get("amd_composite_prebuilt")
+    if cached is not None:
+        return cached if _is_gfx1151_composite_lib(cached) else None
+    lib = _amd_lib()
+    if not _is_gfx1151_composite_lib(lib):
+        return None
+    _libs["amd_composite_prebuilt"] = lib
+    return lib
 
 
 def _amd_source_lib() -> ctypes.CDLL | None:
@@ -458,6 +557,7 @@ def run_rocm_spectral_composite(
     only the public host-pointer ABI stages inputs and the final result.
     """
     from tessera.compiler.scheduled_spectral import (
+        spectral_output_scale,
         validate_scheduled_spectral_metadata,
     )
 
@@ -465,19 +565,47 @@ def run_rocm_spectral_composite(
     contract = validate_scheduled_spectral_metadata(
         metadata, input_shapes=[value.shape for value in values]
     )
-    lib = _amd_lib()
-    if lib is None or not hasattr(lib, "ts_spectral_composite_package_abi_amd"):
+    lib = _amd_composite_lib()
+    if lib is None:
         raise RuntimeError("prebuilt ROCm spectral composite image is unavailable")
     if (
         lib.ts_spectral_composite_package_abi_amd()
-        != b"tessera.rocm.spectral_composite.v1"
+        != b"tessera.rocm.spectral_composite.v4"
     ):
         raise RuntimeError("ROCm spectral composite package ABI mismatch")
+    if (
+        not hasattr(lib, "ts_spectral_composite_arch_amd")
+        or lib.ts_spectral_composite_arch_amd() != b"gfx1151"
+    ):
+        raise RuntimeError("ROCm spectral composite architecture mismatch")
     if not hasattr(lib, "ts_spectral_composite_plan_create_amd"):
         raise RuntimeError("ROCm spectral composite image lacks persistent plans")
 
     op_name = str(contract["op_name"])
     output_shape = tuple(int(dim) for dim in contract["output_shape"])
+    axis = int(contract["axis"])
+    storage = str(contract["storage"])
+    normalization = str(contract["normalization"])
+    storage_code = {"f32": 0, "f16": 1, "bf16": 2}[storage]
+
+    def folded_axis(shape: tuple[int, ...], at: int) -> tuple[int, int, int]:
+        return (
+            int(np.prod(shape[:at], dtype=np.int64)),
+            int(shape[at]),
+            int(np.prod(shape[at + 1 :], dtype=np.int64)),
+        )
+    expected_real_dtype = {"f32": "float32", "f16": "float16", "bf16": "bfloat16"}[storage]
+    real_indices = (
+        () if op_name == "tessera.spectral_filter"
+        else (1,) if op_name == "tessera.istft"
+        else tuple(range(len(values)))
+    )
+    for index in real_indices:
+        if str(values[index].dtype) != expected_real_dtype:
+            raise ValueError(
+                f"ROCm TSOL artifact requires {storage} storage for operand {index}; "
+                f"got {values[index].dtype}"
+            )
     children = list(contract["child_ffts"])
     composite_plan = _rocm_composite_plan(dict(contract), lib)
     rc = -1
@@ -490,59 +618,71 @@ def run_rocm_spectral_composite(
             composite_plan, _cptr(a), _cptr(b), _cptr(out), a.size
         )
     elif op_name == "tessera.dct":
-        x = np.ascontiguousarray(values[0], np.float32)
-        out = np.empty(output_shape, np.float32)
-        n = int(x.shape[-1])
-        batch = int(np.prod(x.shape[:-1], dtype=np.int64))
+        x = np.ascontiguousarray(values[0])
+        out = np.empty(output_shape, values[0].dtype)
+        outer, n, inner = folded_axis(tuple(x.shape), axis)
         _, plan = _rocm_plan(2 * n, -1, str(children[0]["schedule_digest"]))
-        rc = lib.ts_dct_plan_hostptr_batch_amd(
-            composite_plan, plan, _cptr(x), _cptr(out), batch, n
+        rc = lib.ts_dct_plan_hostptr_strided_storage_amd(
+            composite_plan, plan, _cptr(x), _cptr(out), outer, n, inner,
+            storage_code,
+            spectral_output_scale(op_name, normalization, 2 * n),
         )
     elif op_name == "tessera.spectral_conv":
-        x = np.ascontiguousarray(values[0], np.float32)
-        kernel = np.ascontiguousarray(values[1], np.float32)
-        out = np.empty(output_shape, np.float32)
-        input_n, kernel_n = int(x.shape[-1]), int(kernel.shape[-1])
+        x = np.ascontiguousarray(values[0])
+        kernel = np.ascontiguousarray(values[1])
+        out = np.empty(output_shape, values[0].dtype)
+        outer, input_n, inner = folded_axis(tuple(x.shape), axis)
+        _, kernel_n, _ = folded_axis(tuple(kernel.shape), axis)
         fft_n = int(children[0]["length"])
-        batch = int(np.prod(x.shape[:-1], dtype=np.int64))
         _, forward = _rocm_plan(
             fft_n, -1, str(children[0]["schedule_digest"])
         )
         _, inverse = _rocm_plan(
             fft_n, 1, str(children[1]["schedule_digest"])
         )
-        rc = lib.ts_spectral_conv_plan_hostptr_batch_amd(
+        rc = lib.ts_spectral_conv_plan_hostptr_strided_storage_amd(
             composite_plan, forward, inverse, _cptr(x), input_n,
-            _cptr(kernel), kernel_n, _cptr(out), batch, fft_n,
+            _cptr(kernel), kernel_n, _cptr(out), outer, inner, fft_n,
+            storage_code,
         )
     elif op_name == "tessera.stft":
-        x = np.ascontiguousarray(values[0], np.float32)
-        window = np.ascontiguousarray(values[1], np.float32)
+        x = np.ascontiguousarray(values[0])
+        window = np.ascontiguousarray(values[1])
         out = np.empty(output_shape, np.complex64)
-        batch = int(np.prod(x.shape[:-1], dtype=np.int64))
+        outer, samples, inner = folded_axis(tuple(x.shape), axis)
         win = int(contract["window_length"])
         _, plan = _rocm_plan(win, -1, str(children[0]["schedule_digest"]))
-        rc = lib.ts_stft_plan_hostptr_batch_amd(
-            composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), batch,
-            int(x.shape[-1]), win, int(contract["hop"]),
-            int(contract["frames"]),
+        rc = lib.ts_stft_plan_hostptr_strided_storage_amd(
+            composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), outer,
+            samples, inner, win, int(contract["hop"]),
+            int(contract["frames"]), storage_code,
+            spectral_output_scale(op_name, normalization, win),
         )
     elif op_name == "tessera.istft":
+        frame_axis = axis - 1
         x = np.ascontiguousarray(values[0], np.complex64)
-        window = np.ascontiguousarray(values[1], np.float32)
-        out = np.empty(output_shape, np.float32)
-        batch = int(np.prod(x.shape[:-2], dtype=np.int64))
+        window = np.ascontiguousarray(values[1])
+        out = np.empty(output_shape, values[1].dtype)
+        outer = int(np.prod(x.shape[:frame_axis], dtype=np.int64))
+        inner = int(np.prod(x.shape[axis + 1 :], dtype=np.int64))
         win = int(contract["window_length"])
         _, plan = _rocm_plan(win, 1, str(children[0]["schedule_digest"]))
-        rc = lib.ts_istft_plan_hostptr_batch_amd(
-            composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), batch,
-            int(contract["frames"]), win, int(contract["hop"]),
+        rc = lib.ts_istft_plan_hostptr_strided_storage_amd(
+            composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), outer,
+            int(contract["frames"]), int(x.shape[axis]), inner, win,
+            int(contract["hop"]),
+            storage_code,
+            spectral_output_scale(op_name, normalization, win),
         )
     else:  # validate_scheduled_spectral_metadata already rejects this.
         raise ValueError(f"unsupported ROCm spectral composite {op_name!r}")
 
     if rc != 0:
         raise RuntimeError(f"ROCm spectral composite execution failed rc={rc}")
+    if tuple(out.shape) != output_shape:
+        raise RuntimeError(
+            f"ROCm spectral package produced shape {out.shape}, expected {output_shape}"
+        )
     return out
 
 

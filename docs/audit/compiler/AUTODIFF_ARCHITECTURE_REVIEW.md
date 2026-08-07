@@ -2,7 +2,7 @@
 last_updated: 2026-08-02
 audit_role: reference
 scope: python/tessera/autodiff, src/compiler/ir/AdjointInterface.*, src/transforms/lib/Autodiff*.cpp, ActivationRematerializationPass, AdjointCollectiveInsertionPass, solvers/core NewtonAutodiff
-companions: AUTODIFF_UNIFICATION_PLAN.md (sequencing) · ../../spec/AUTODIFF_SPEC.md (normative surface) · RIEMANNIAN_OT_PLAN.md · ../domain/GA_EBM_ARCHITECTURE_REVIEW.md
+companions: AUTODIFF_UNIFICATION_PLAN.md (sequencing) · ../../spec/AUTODIFF_SPEC.md (normative surface) · RIEMANNIAN_OT_PLAN.md · ../domain/GA_EBM_ARCHITECTURE_REVIEW.md · DIFFERENTIABLE_PROGRAMMING_REVIEW.md (book delta)
 ---
 
 # Autodiff Architecture and Algorithm Review
@@ -20,6 +20,16 @@ where can Tessera be better than everyone else?"*
 quoted below are read from
 [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md),
 not asserted here.
+
+**Companion delta review.**
+[`DIFFERENTIABLE_PROGRAMMING_REVIEW.md`](DIFFERENTIABLE_PROGRAMMING_REVIEW.md)
+reads Blondel & Roulet's *Elements of Differentiable Programming* against the
+same surface. It confirms A3/A4/A5/B1/B2/B4/B6/B8 independently and adds the
+findings this review does not cover: automatic linear transposition (one
+registry, not two), nonsmooth/Clarke selection as an undeclared semantic key,
+stochastic-computation-graph typing for the effect lattice, semirings, implicit
+differentiation (`custom_root`/IHVP/adjoint-state), Fenchel-Young losses, the
+smoothing/relaxation operator family, and a Baur–Strassen cost-ratio oracle.
 
 ---
 

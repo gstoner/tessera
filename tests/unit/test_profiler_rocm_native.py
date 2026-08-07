@@ -99,6 +99,25 @@ def test_wsl_or_missing_kfd_capture_fails_closed_without_fabricating_records(
     validate_rocm_native_capture(artifact)
 
 
+def test_rocprofiler_timeout_normalizes_byte_output(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "tessera.compiler.profiler_rocm_native.probe_rocm_native_capabilities",
+        lambda **_: {"rocprofiler_native_interface": True},
+    )
+
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], 1, output=b"partial out", stderr=b"partial err")
+
+    monkeypatch.setattr("tessera.compiler.profiler_rocm_native.subprocess.run", timeout)
+    artifact = collect_rocprofv3(ROCmCaptureRequest(
+        application=("./kernel",), output_directory=tmp_path,
+    ))
+    assert artifact["status"] == "blocked"
+    assert artifact["process"]["timed_out"] is True
+    assert artifact["process"]["stdout"] == "partial out"
+    assert artifact["process"]["stderr"] == "partial err"
+
+
 def test_activity_interval_uses_only_native_dispatch_records() -> None:
     rows = normalize_rocprofv3_json(_official_like_payload())
     from tessera.compiler.profiler_provider_trace import build_provider_trace_artifact, records_from_raw

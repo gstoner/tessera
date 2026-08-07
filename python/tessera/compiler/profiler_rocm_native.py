@@ -62,6 +62,12 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _subprocess_output_text(value: bytes | str | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
 def probe_rocm_native_capabilities(
     *, rocprofv3: str | None = None, rtg_library: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -354,8 +360,8 @@ def collect_rocprofv3(request: ROCmCaptureRequest) -> dict[str, Any]:
             stderr = completed.stderr
         except subprocess.TimeoutExpired as exc:
             timed_out = True
-            stdout = exc.stdout or ""
-            stderr = exc.stderr or ""
+            stdout = _subprocess_output_text(exc.stdout)
+            stderr = _subprocess_output_text(exc.stderr)
         except OSError as exc:
             stderr = str(exc)
             blocked_reason = "ROCPROFILER_EXEC_FAILED"
@@ -449,8 +455,8 @@ def collect_rtg_tracer(
             stderr = completed.stderr
         except subprocess.TimeoutExpired as exc:
             timed_out = True
-            stdout = exc.stdout or ""
-            stderr = exc.stderr or ""
+            stdout = _subprocess_output_text(exc.stdout)
+            stderr = _subprocess_output_text(exc.stderr)
         except OSError as exc:
             stderr = str(exc)
             reason = "RTG_EXEC_FAILED"

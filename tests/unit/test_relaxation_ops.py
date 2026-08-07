@@ -97,9 +97,11 @@ def test_entmax15_vjp_matches_fd():
 def test_soft_top_k_gate_selects_k_at_low_tau():
     z = np.array([5.0, 4.0, 1.0, 0.0, -2.0])
     gate = _soft_top_k_forward(z, k=2, tau=0.05)
-    # the two largest gate → ~1 (top-k boundary is 0.5 by construction), rest → 0
-    assert gate[0] > 0.9 and gate[1] >= 0.49
+    # The two largest gates approach one, all others approach zero, and the
+    # continuous relaxation retains exactly k units of selection mass.
+    assert gate[0] > 0.9 and gate[1] > 0.9
     assert gate[3] < 0.1 and gate[4] < 0.1
+    np.testing.assert_allclose(gate.sum(), 2.0, atol=1e-8)
 
 
 def test_soft_top_k_vjp_matches_fd():
@@ -110,7 +112,8 @@ def test_soft_top_k_vjp_matches_fd():
     z = np.array([1.0, 2.0, 0.5, 3.0, -0.5])
     dout = np.array([0.1, 0.2, -0.3, 0.4, 0.05])
     tau = 0.7
-    kth0 = np.sort(z)[::-1][1]  # k=2 threshold, frozen
+    from tessera.relaxation import _soft_top_k_threshold
+    kth0 = _soft_top_k_threshold(z[None, :], 2, tau)[0, 0]
 
     def gate_fixed_threshold(a):
         return 1.0 / (1.0 + np.exp(-(a - kth0) / tau))
@@ -119,6 +122,11 @@ def test_soft_top_k_vjp_matches_fd():
     np.testing.assert_allclose(
         g, _fd_vjp(gate_fixed_threshold, z, dout), atol=1e-4
     )
+
+
+def test_soft_top_k_rejects_nonpositive_temperature():
+    with pytest.raises(ValueError, match="tau > 0"):
+        _soft_top_k_forward(np.array([1.0, 0.0]), k=1, tau=0.0)
 
 
 # ── gumbel_softmax ───────────────────────────────────────────────────────────

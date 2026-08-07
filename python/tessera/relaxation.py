@@ -42,6 +42,12 @@ def _move_axis_last(x: np.ndarray, axis: int) -> tuple[np.ndarray, int]:
     return np.moveaxis(x, axis, -1), axis
 
 
+def _sigmoid(x: np.ndarray) -> np.ndarray:
+    """Numerically stable logistic function for relaxed selection gates."""
+    x = np.clip(x, -709.0, 709.0)
+    return 1.0 / (1.0 + np.exp(-x))
+
+
 # ── sparsemax (Martins & Astudillo 2016) ─────────────────────────────────────
 def _sparsemax_forward(z: np.ndarray, *, axis: int = -1) -> np.ndarray:
     x, axis = _move_axis_last(z, axis)
@@ -108,14 +114,31 @@ def _entmax15_vjp(dout, z, *, axis: int = -1, **_kw):
 
 
 # ── soft top-k (temperature-relaxed selection gate) ──────────────────────────
+def _soft_top_k_threshold(x: np.ndarray, k: int, tau: float) -> np.ndarray:
+    """Find λ such that ``sum(sigmoid((x - λ) / tau)) == k`` per row."""
+    if tau <= 0.0:
+        raise ValueError(f"soft_top_k requires tau > 0, got {tau}")
+    lo = np.min(x, axis=-1, keepdims=True) - 40.0 * tau
+    hi = np.max(x, axis=-1, keepdims=True) + 40.0 * tau
+    for _ in range(64):
+        mid = (lo + hi) / 2.0
+        mass = np.sum(_sigmoid((x - mid) / tau), axis=-1, keepdims=True)
+        # Mass decreases monotonically as the threshold rises.
+        lo = np.where(mass > k, mid, lo)
+        hi = np.where(mass > k, hi, mid)
+    return (lo + hi) / 2.0
+
+
 def _soft_top_k_forward(z: np.ndarray, *, k: int, tau: float = 1.0, axis: int = -1) -> np.ndarray:
     x, axis = _move_axis_last(z, axis)
     n = x.shape[-1]
     if not (1 <= k <= n):
         raise ValueError(f"soft_top_k requires 1<=k<={n}, got k={k}")
-    # threshold at the k-th largest; sigmoid gate around it (soft indicator).
-    kth = np.sort(x, axis=-1)[..., ::-1][..., k - 1:k]
-    gate = 1.0 / (1.0 + np.exp(-(x - kth) / tau))
+    # Solve the threshold so the relaxed gate has exactly k units of mass.
+    # Centering on the k-th value would always give that item weight 0.5 and
+    # converge to k-0.5 selected elements as tau approaches zero.
+    threshold = _soft_top_k_threshold(x, k, tau)
+    gate = _sigmoid((x - threshold) / tau)
     return np.moveaxis(gate, -1, axis)
 
 
@@ -124,8 +147,8 @@ def _soft_top_k_vjp(dout, z, *, k: int, tau: float = 1.0, axis: int = -1, **_kw)
     # derivative is the discrete part); differentiate the sigmoid gate.
     x, axis_n = _move_axis_last(z, axis)
     dom, _dax = _move_axis_last(dout, axis)
-    kth = np.sort(x, axis=-1)[..., ::-1][..., k - 1:k]
-    g = 1.0 / (1.0 + np.exp(-(x - kth) / tau))
+    threshold = _soft_top_k_threshold(x, k, tau)
+    g = _sigmoid((x - threshold) / tau)
     dz = dom * g * (1.0 - g) / tau
     return (np.moveaxis(dz, -1, axis_n),)
 

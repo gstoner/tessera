@@ -32,7 +32,7 @@ dataflow-effects work can wire into the real ``deterministic=True`` gate.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Sequence
 
 from .effects import Effect, _OP_EFFECTS
 

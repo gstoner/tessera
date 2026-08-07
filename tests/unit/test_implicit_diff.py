@@ -99,6 +99,31 @@ def test_custom_root_decorator_linear_system():
     g = solve.vjp(xs, (theta,), u)
     np.testing.assert_allclose(g, np.linalg.solve(A.T, u), atol=1e-6)
 
+    # The decorated solver must be a tape operation, not merely expose a
+    # manual helper: it composes with the public reverse-mode transform.
+    from tessera import ops
+    from tessera.autodiff import grad
+
+    transform_grad = grad(lambda th: ops.reduce(solve(th)))(theta)
+    np.testing.assert_allclose(transform_grad, np.linalg.solve(A.T, np.ones_like(theta)), atol=1e-6)
+
+
+def test_custom_root_transform_selects_each_declared_parameter():
+    # F(x, a, b) = x - a - 2b: the decorated root has two tape inputs, so its
+    # VJP must return None/grad in the same arity and order as the declaration.
+    @custom_root(lambda x, a, b: x - a - 2.0 * b, argnums=(0, 1))
+    def solve(a, b):
+        return a + 2.0 * b
+
+    from tessera import ops
+    from tessera.autodiff import grad
+
+    a = np.array([1.0, 3.0])
+    b = np.array([2.0, -1.0])
+    da, db = grad(lambda aa, bb: ops.reduce(solve(aa, bb)), argnums=(0, 1))(a, b)
+    np.testing.assert_allclose(da, np.ones_like(a), atol=1e-6)
+    np.testing.assert_allclose(db, 2.0 * np.ones_like(b), atol=1e-6)
+
 
 def test_root_vjp_reports_singular_jacobian():
     # F(x,θ) = 0·x - θ has singular ∂_xF -> IFT does not apply; must raise.

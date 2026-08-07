@@ -29,6 +29,7 @@ fixed point before.
 
 from __future__ import annotations
 
+import functools
 from typing import Any, Callable, Sequence
 
 import numpy as np
@@ -301,6 +302,9 @@ def custom_root(
     """
 
     def wrap(solver: Callable[..., np.ndarray]) -> Callable[..., np.ndarray]:
+        op_name = f"custom_root:{solver.__module__}.{solver.__qualname__}"
+        selected_argnums = (argnums,) if isinstance(argnums, int) else tuple(argnums)
+
         def vjp(solution, params, cotangent):
             return root_vjp(
                 optimality, solution, params, cotangent, argnums=argnums, eps=eps
@@ -309,10 +313,48 @@ def custom_root(
         def jvp(solution, params, tangents):
             return root_jvp(optimality, solution, params, tangents, eps=eps)
 
-        solver.vjp = vjp  # type: ignore[attr-defined]
-        solver.jvp = jvp  # type: ignore[attr-defined]
-        solver.optimality = optimality  # type: ignore[attr-defined]
-        return solver
+        @functools.wraps(solver)
+        def wrapped(*params, **kwargs):
+            # The residual is differentiated at this invocation's solution, so
+            # bind it in the VJP closure stored on the tape entry.  Each call
+            # gets its own closure and therefore composes correctly when the
+            # same custom root appears more than once in one tape.
+            solution_box: dict[str, np.ndarray] = {}
+
+            def forward(*forward_params):
+                solution = np.asarray(solver(*forward_params, **kwargs))
+                solution_box["value"] = solution
+                return solution
+
+            def implicit_vjp(dout, *forward_params, **_unused):
+                selected_grads = root_vjp(
+                    optimality,
+                    solution_box["value"],
+                    forward_params,
+                    dout,
+                    # Always request a tuple, even for one selected argument:
+                    # Tape VJPs must return one cotangent for *every* recorded
+                    # positional input, with None for intentionally excluded
+                    # parameters.
+                    argnums=selected_argnums,
+                    eps=eps,
+                )
+                return tuple(
+                    selected_grads[selected_argnums.index(i)]
+                    if i in selected_argnums else None
+                    for i in range(len(forward_params))
+                )
+
+            from .tape import record_custom_vjp_call
+
+            return record_custom_vjp_call(
+                op_name, forward, implicit_vjp, *params
+            )
+
+        wrapped.vjp = vjp  # type: ignore[attr-defined]
+        wrapped.jvp = jvp  # type: ignore[attr-defined]
+        wrapped.optimality = optimality  # type: ignore[attr-defined]
+        return wrapped
 
     return wrap
 

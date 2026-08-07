@@ -256,6 +256,49 @@ def tape():
         _ACTIVE_TAPE.reset(token)
 
 
+def record_custom_vjp_call(
+    name: str,
+    forward: Callable[..., Any],
+    vjp_fn: Callable[..., Any],
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """Execute and, when a tape is active, record a Python custom-VJP call.
+
+    This is the narrow reference-lane bridge for operations whose forward is a
+    Python callable rather than an entry in ``tessera.ops``.  It deliberately
+    shares the tape's input-description and recording rules with ordinary ops,
+    so a custom VJP composes with ``grad`` instead of merely exposing a manual
+    callback on the decorated function.
+
+    ``vjp_fn`` follows the normal convention ``(dout, *array_inputs, **kwargs)
+    -> tuple[cotangent, ...]``.  Non-array positional arguments are passed to
+    ``forward`` but are not recorded as differentiable inputs.
+    """
+    active = _ACTIVE_TAPE.get()
+    if active is None:
+        return forward(*(_to_forward_arg(a) for a in args), **kwargs)
+
+    descs_full = tuple(_describe(a) for a in args)
+    forward_args: list[Any] = []
+    array_descs: list[InputDesc] = []
+    for arg, desc in zip(args, descs_full):
+        if desc is _NON_ARRAY:
+            forward_args.append(arg)
+        else:
+            forward_args.append(desc.array)
+            array_descs.append(desc)
+
+    out = forward(*forward_args, **kwargs)
+    if not isinstance(out, (np.ndarray, np.generic)):
+        raise TesseraAutodiffError(
+            f"custom VJP call {name!r} must return an ndarray or numpy scalar; "
+            f"got {type(out).__name__}"
+        )
+    active.record(name, tuple(array_descs), dict(kwargs), out, vjp_fn)
+    return out
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Parameter integration — local import to avoid cycle
 # ─────────────────────────────────────────────────────────────────────────────

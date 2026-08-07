@@ -59,6 +59,36 @@ labelled as such; they are evidence for *gaps*, not status claims.
 
 ---
 
+## Implementation status (built 2026-08-07)
+
+Seven of the eleven findings are **implemented, tested, and landed** on this
+branch (numpy-reference lane, consistent with the rest of `autodiff/`). Each
+row below is code + a passing test file; counts and details live in the tests,
+not here.
+
+| ID | Status | Modules | Tests |
+|---|---|---|---|
+| **C2** | ✅ landed | `autodiff/nonsmooth.py`; refactored `autodiff/vjp.py` | `test_nonsmooth_selection.py` |
+| **R1** | ✅ landed | `autodiff/tape.py` (`count_primitive_executions`), `compiler/evaluator.py` | `test_baur_strassen_oracle.py` |
+| **C1** | ✅ landed | `autodiff/linear.py`; `custom.py` (`transpose_rule` consumer) | `test_linear_transposition.py` |
+| **T3** | ✅ landed | `autodiff/implicit.py` (`cg_solve`/`ihvp`/`custom_root`/`adjoint_state_grad`) | `test_implicit_diff.py` |
+| **T1** | ✅ landed | `relaxation.py` (sparsemax/entmax15/soft_top_k/gumbel_softmax/perturbed_argmax); `rng.py` (`gumbel`) | `test_relaxation_ops.py` |
+| **T2** | ✅ landed | `losses.py` (`fenchel_young_loss`/`fy_loss_and_grad`/`sparsemax_loss`/`softmax_fy_loss`) | `test_fenchel_young_losses.py` |
+| **C3** | ✅ landed | `compiler/stochastic_graph.py` (analysis + `certify_deterministic`) | `test_stochastic_graph.py` |
+| **C4** | ⏳ open | semirings — larger, rides the sequence-mixer track | — |
+| **C5** | ⏳ open | cost-weighted treeverse — folds into the planned D5 | — |
+| **C6** | ⏳ open | GGN/Fisher/IHVP-optimizer/Hessian-diagonal — IHVP primitive landed in T3; the second-order *estimators* remain | — |
+| **R2** | ⏳ open | randomized forward-mode — folds into the planned D2 | — |
+
+**Scope of what landed.** These are correctness- and surface-level slices in the
+numpy reference lane: a declared nonsmooth policy, a cost oracle, a JVP-derivation
+consumer for `transpose_rule`, an implicit-diff surface, the relaxation operator
+family, the Fenchel-Young loss template, and a fail-closed stochastic-graph
+analysis. They do **not** by themselves rewire the C++ MLIR passes (the effect
+lattice, `AutodiffPass`), which is the W2 work C3's analysis is a substrate for.
+
+---
+
 ## Compiler
 
 ### C1. Automatic linear transposition — one derivative registry, not two (§4.5.4)
@@ -265,7 +295,17 @@ DESIL) in [`evaluator.py`](../../../python/tessera/compiler/evaluator.py) as a
 cost-ratio check. A row where backward is 40× forward is not a numerical bug —
 it is a missing activity analysis (D3) or a `jacrev` re-running the forward pass
 (B1). Nothing in the evaluator would notice today. Cheapest item on the list,
-and the one that would have caught the B1/B2 class automatically.
+and the one that catches the B1/B2 class automatically.
+
+> **Correction learned while building this (2026-08-07).** The in-tree `jacrev`
+> is **already fixed** — W0.4 rewrote it to record one forward pass and reuse
+> the tape (`retain_graph=True`), so it passes the oracle at ratio ≈1. R1 is
+> therefore a **regression guard** that the fix stays, plus a general detector
+> for any primitive whose gradient path recomputes the forward — not a catch of
+> a live B1 bug. The implemented counter measures forward-primitive
+> *re-execution* specifically (backward VJPs are raw numpy, not `ops.*` calls),
+> which is exactly the B1/B2 signature: a redundant-recompute Jacobian returns
+> the *right* values expensively, so the numerical oracles stay green.
 
 ### R2. Randomized forward-mode gradient — a memory-free lane (§4.8)
 

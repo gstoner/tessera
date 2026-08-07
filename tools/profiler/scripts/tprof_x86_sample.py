@@ -74,6 +74,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--event", default="cycles:u")
     parser.add_argument("--frequency", type=int, default=997)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--event-map", type=Path)
+    parser.add_argument("--cpu", type=int, help="Pin the sampled command to one logical CPU.")
+    parser.add_argument("--call-graph", choices=("none", "fp", "dwarf", "lbr"), default="fp")
     parser.add_argument("--allow-unavailable", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
@@ -89,6 +92,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"binary does not exist: {binary}")
 
     cpu = _cpu_identity()
+    event_map = None
+    if args.event_map is not None:
+        from tessera.compiler.profiler_x86_event_map import validate_x86_event_map
+
+        event_map = json.loads(args.event_map.read_text(encoding="utf-8"))
+        validate_x86_event_map(event_map)
     perf = shutil.which("perf")
     perf_list = _run([perf, "list"]).stdout if perf is not None else ""
     ibs = ibs_capability(cpu=cpu, perf_list_text=perf_list)
@@ -113,9 +122,21 @@ def main(argv: list[str] | None = None) -> int:
                 str(args.frequency),
                 "-o",
                 str(data),
-                "--",
-                *command,
             ]
+            if args.call_graph != "none":
+                perf_command.extend(["--call-graph", args.call_graph])
+            sampled_command = command
+            if args.cpu is not None:
+                if args.cpu < 0:
+                    parser.error("--cpu must be non-negative")
+                taskset = shutil.which("taskset")
+                if taskset is None:
+                    parser.error("--cpu requires taskset")
+                sampled_command = [taskset, "-c", str(args.cpu), *command]
+            perf_command.extend([
+                "--",
+                *sampled_command,
+            ])
             recorded = _run(perf_command)
             perf_returncode = recorded.returncode
             stderr = recorded.stderr.strip()
@@ -148,6 +169,12 @@ def main(argv: list[str] | None = None) -> int:
         perf_version=perf_version,
         perf_record_command=perf_command,
         perf_returncode=perf_returncode,
+        event_map=event_map,
+        affinity={
+            "requested_logical_cpu": args.cpu,
+            "pinned": args.cpu is not None,
+            "mechanism": "taskset" if args.cpu is not None else "inherited",
+        },
     )
     artifact["perf"]["stderr"] = stderr
     args.output.parent.mkdir(parents=True, exist_ok=True)

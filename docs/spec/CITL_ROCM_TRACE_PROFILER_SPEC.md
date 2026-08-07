@@ -193,6 +193,17 @@ overhead, and clean completion. It is never promotion-eligible by itself;
 promotion still requires calibration against valid HIP events or native
 rocprofiler-sdk dispatch activity on a supported bare-metal gfx1151 host.
 
+The executable boundary is `tprof_rocm_native_capture.py`. For ROCprofiler it
+starts `rocprofv3` around the application with runtime, kernel, and memory-copy
+tracing plus explicitly requested PMCs and PC sampling. It hashes every JSON
+output, preserves the exact command and process result, and normalizes only
+records present in those outputs. On WSL without `/dev/kfd` it returns the
+stable `ROCPROFILER_DEVICE_INTERFACE_UNAVAILABLE` blocker before invoking the
+known-aborting tool. For RTG it launches the application directly with
+`HSA_TOOLS_LIB`, `RTG_FILE_PREFIX`, `RTG_HIP_API_FILTER=all`, and
+`RTG_HSA_HOST_DISPATCH=1` confined to that child, then records exit, timeout,
+signal, output, and teardown evidence.
+
 ## 4. HIP and ROCr Runtime Changes
 
 ### 4.1 Required HIP Wrapper
@@ -526,21 +537,23 @@ The default mode should be `user`.
 
 ## 9. Prototype Work Items
 
-1. **TPROF-ROCM-TIME-1:** add the four-clock sample schema, host batch/empty
+1. **Implemented; exact-host calibration open — TPROF-ROCM-TIME-1:** add the four-clock sample schema, host batch/empty
    launch calibration, HIP-event validation, gfx1151 `wall_clock64()` grid
    envelope, artifact/resource comparison, and fail-closed verdict logic.
-2. **TPROF-ROCM-RTG-1:** add an optional fresh-process `rtg_hsa_dispatch`
+2. **Implemented; runtime proof open — TPROF-ROCM-RTG-1:** add an optional fresh-process `rtg_hsa_dispatch`
    smoke/provider and normalize its activity records without implying counters
    or PC sampling.
 3. Add the CITL metadata shim and HIP launch wrapper.
 4. Emit ROCTx ranges and rocprofiler external correlation IDs.
 5. Build an AMD SMI sampler that records power, energy, clocks, temperatures,
    throttle status, voltage, ECC, and firmware timestamp.
-6. Build a native rocprofiler-sdk activity provider and trace joiner that merges
-   compiler metadata, profiler records, AMD
-   SMI samples, and optional eBPF records.
-7. Export Perfetto/Chrome trace events using Tessera profiler conventions and
-   add the unitrace-style CLI/reporting layer over independently valid sources.
+6. **Native application wrapper implemented; exact-device proof open:** invoke
+   rocprofv3 for activity/counters/PC samples and normalize its output into the
+   provider trace. External correlation metadata, AMD SMI joining, and optional
+   eBPF joining remain open.
+7. **Provider export implemented; full session report open:** export normalized
+   ROCprofiler records as Perfetto/Chrome events and expose the fresh-process
+   capture and packet CLIs. Cross-provider session joining remains open.
 8. Add optional eBPF collection for KFD/amdgpu lifecycle events.
 9. Add lab-only stream marker calibration using HIP stream write/wait values.
 10. Define the first report: per-kernel duration, energy-window estimate,
@@ -565,6 +578,9 @@ The default mode should be `user`.
   from exact-device evidence rather than inheriting the gfx110x warning.
 - An `rtg_hsa_dispatch` smoke failure or abnormal teardown remains a diagnostic
   and cannot promote provider availability or benchmark evidence.
+- A promotion packet contains a real native dispatch interval, every requested
+  counter/PC-sampling class, and paired uninstrumented/instrumented application
+  image, ISA, resource, and timing records from one clean commit.
 - The trace opens in Perfetto or Chrome trace viewers.
 
 ## 11. References

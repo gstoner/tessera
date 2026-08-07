@@ -33,6 +33,12 @@ to Metal. Apple should adopt the same no-substitution/provenance/validity shape
 for its host wall and command-buffer timestamps when the shared schema is
 implemented, while retaining its existing Mac exact-device gates and
 architecture-owned counter policy.
+The native-evidence extension adds content-digested provider captures,
+clean-versus-instrumented image/resource comparisons, and exact-machine event
+maps. These contracts are shared vocabulary only: ROCprofiler, RTG, Linux perf,
+IBS, gfx1151, and Zen 5 collectors are not applicable to Metal. Apple must bind
+equivalent data to its own command-buffer/counter collector on a Mac before
+claiming parity.
 
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared ODS vocabulary
 adopted; physical execution not applicable until Apple owns an FFT package.**

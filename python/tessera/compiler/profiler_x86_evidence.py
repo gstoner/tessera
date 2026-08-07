@@ -73,6 +73,14 @@ def build_x86_profiler_packet(
             reasons.append("SYMBOL_SAMPLING_INVALID")
         if not sampling.get("build_id") or sampling.get("build_id") == "not-present":
             reasons.append("IMAGE_BUILD_ID_MISSING")
+        event_map = sampling.get("event_map")
+        if not isinstance(event_map, Mapping):
+            reasons.append("EVENT_MAP_MISSING")
+        elif not event_map.get("eligible_for_promotion"):
+            reasons.append("EVENT_MAP_NOT_PROMOTABLE")
+        affinity = sampling.get("affinity")
+        if not isinstance(affinity, Mapping) or affinity.get("pinned") is not True:
+            reasons.append("SAMPLING_AFFINITY_NOT_PINNED")
     rows = benchmark.get("rows")
     if not isinstance(rows, list) or not rows:
         raise X86ProfilerPacketError("Zen 5 packet requires benchmark rows")

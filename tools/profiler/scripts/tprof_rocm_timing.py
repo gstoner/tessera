@@ -48,6 +48,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repetitions", type=int, default=100)
     parser.add_argument("--spin-iterations", type=int, default=4096)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--native-capture",
+        type=Path,
+        help="Optional tessera.profiler_rocm_native_capture.v1 activity proof.",
+    )
     parser.add_argument("--allow-unavailable", action="store_true")
     args = parser.parse_args(argv)
 
@@ -69,7 +74,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"native ROCm probe did not emit JSON: {exc}")
     if raw.get("schema") != "tessera.rocm_clock_probe.v1":
         parser.error("native ROCm probe emitted an unsupported schema")
+    if raw.get("architecture") != "gfx1151" or raw.get("exact_gfx1151") is not True:
+        parser.error("native ROCm probe did not prove exact gfx1151")
     source_state = _source_state()
+    capture = None
+    activity_ns = None
+    if args.native_capture is not None:
+        from tessera.compiler.profiler_rocm_native import (
+            profiler_activity_interval_ns,
+            validate_rocm_native_capture,
+        )
+
+        capture = json.loads(args.native_capture.read_text(encoding="utf-8"))
+        validate_rocm_native_capture(capture)
+        activity_ns = profiler_activity_interval_ns(capture)
 
     host_provenance = {
         "batch_size": raw.get("repetitions"),
@@ -123,7 +141,16 @@ def main(argv: list[str] | None = None) -> int:
         "block_threads": raw.get("threads"),
         "architecture": raw.get("architecture"),
     }
-    promotion = bool(raw.get("eligible_for_promotion")) and not source_state["worktree_dirty"]
+    calibrated_against = []
+    if raw.get("hip_event_valid"):
+        calibrated_against.append("hip_event_ns")
+    if activity_ns is not None:
+        calibrated_against.append("profiler_activity_ns")
+    promotion = bool(
+        not raw.get("wsl")
+        and calibrated_against
+        and not source_state["worktree_dirty"]
+    )
     device_clock = (
         measured_clock(
             "device_wall_clock_ns",
@@ -131,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
             value=raw["device_wall_clock_ns"],
             provenance=device_provenance,
             instrumented=True,
-            calibrated_against=("hip_event_ns",) if raw.get("hip_event_valid") else (),
+            calibrated_against=calibrated_against,
             eligible_for_regression=True,
             eligible_for_promotion=promotion,
         )
@@ -144,11 +171,29 @@ def main(argv: list[str] | None = None) -> int:
             raw_value=raw.get("device_wall_clock_ticks"),
         )
     )
-    profiler_activity = unavailable_clock(
-        "profiler_activity_ns",
-        source="rocprofiler_activity",
-        reason="ROCPROFILER_ACTIVITY_NOT_COLLECTED",
-        provenance={"provider": "native_clock_probe"},
+    profiler_activity = (
+        measured_clock(
+            "profiler_activity_ns",
+            source="rocprofiler_activity",
+            value=activity_ns,
+            provenance={
+                "provider": "rocprofiler",
+                "capture_sha256": __import__("hashlib").sha256(
+                    args.native_capture.read_bytes()
+                ).hexdigest(),
+                "dispatch_activity_seen": capture["proof"]["dispatch_activity_seen"],
+            },
+            eligible_for_regression=True,
+            eligible_for_promotion=promotion,
+            calibrated_against=("device_wall_clock_ns",),
+        )
+        if activity_ns is not None
+        else unavailable_clock(
+            "profiler_activity_ns",
+            source="rocprofiler_activity",
+            reason="ROCPROFILER_ACTIVITY_NOT_COLLECTED",
+            provenance={"provider": "native_clock_probe"},
+        )
     )
     sample = build_timing_sample(
         sample_id=args.sample_id,
@@ -175,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
             "clock_agreement_valid": raw.get("clock_agreement_valid"),
             "probe_returncode": completed.returncode,
             "probe_error": raw.get("error"),
+            "native_capture": str(args.native_capture) if args.native_capture else None,
             **source_state,
         },
     )

@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -24,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tprof-x86-native-smoke")
     parser.add_argument("--tprof", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--event-map", type=Path)
     parser.add_argument("--allow-unavailable", action="store_true")
     args = parser.parse_args(argv)
 
@@ -44,8 +46,21 @@ def main(argv: list[str] | None = None) -> int:
             and proof.get("perf_sample_valid")
             and float(proof.get("calibrated_tsc_hz", 0)) > 0
         )
-    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
-        proof = {"probe_error": str(exc), "timing_sample_valid": False}
+        proof["event_map_valid"] = False
+        if args.event_map is not None:
+            sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "python"))
+            from tessera.compiler.profiler_x86_event_map import validate_x86_event_map
+
+            event_map = json.loads(args.event_map.read_text(encoding="utf-8"))
+            validate_x86_event_map(event_map)
+            proof["event_map_valid"] = bool(event_map.get("eligible_for_promotion"))
+            proof["event_map_sha256"] = event_map.get("event_map_sha256")
+    except (OSError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        proof = {
+            "probe_error": str(exc),
+            "timing_sample_valid": False,
+            "event_map_valid": False,
+        }
 
     payload = _collect_provider_status(proof)
     args.out.parent.mkdir(parents=True, exist_ok=True)

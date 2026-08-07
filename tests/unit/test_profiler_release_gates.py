@@ -19,8 +19,10 @@ def test_profiler_release_gates_document_native_availability_rules() -> None:
         "provider availability snapshot artifact",
         "profiler-native-proofs.yml",
         "tprof_rocm_native_smoke.py",
+        "tprof_rocm_native_capture.py",
         "tprof_nvidia_cupti_smoke.py",
         "tprof_x86_native_smoke.py",
+        "tprof_x86_event_map.py",
         "Mock, file, replay, and compile-only fixtures can demonstrate schema compatibility",
     ):
         assert phrase in doc
@@ -34,7 +36,9 @@ def test_profiler_native_proof_workflow_is_optional_and_uploads_snapshots() -> N
         "profiler-native-proof",
         "tprof_apple_metal_smoke.py",
         "tprof_rocm_native_smoke.py",
+        "tprof_rocm_native_capture.py",
         "tprof_nvidia_cupti_smoke.py",
+        "tprof_x86_event_map.py",
         "profiler-provider-status-apple",
         "profiler-provider-status-rocm",
         "profiler-provider-status-nvidia",

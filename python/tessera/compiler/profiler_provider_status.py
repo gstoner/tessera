@@ -201,6 +201,7 @@ def _x86_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str, A
         and proof.get("clock_agreement_valid")
         and proof.get("perf_event_open")
         and proof.get("timing_sample_valid")
+        and proof.get("event_map_valid")
     )
     status: ProviderStatus
     if proof_passed:
@@ -211,9 +212,9 @@ def _x86_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str, A
         status = "planned"
     diagnostics: dict[str, Any] = {
         "platform": platform.platform(),
-        "native_provider": "CLOCK_MONOTONIC_RAW + fenced RDTSCP + perf_event_open",
+        "native_provider": "CLOCK_MONOTONIC_RAW + fenced RDTSCP + perf_event_open + exact event-map digest",
         "native_proof_required": (
-            "exact x86/AVX-512 host, stable CPU affinity, clock agreement, and readable perf task-clock sample"
+            "exact x86/AVX-512 host, stable CPU affinity, clock agreement, readable perf task-clock sample, and event-map digest"
         ),
         "availability_rule": (
             "x86 remains planned/native_failed until the multi-clock timing artifact and perf-event proof pass"

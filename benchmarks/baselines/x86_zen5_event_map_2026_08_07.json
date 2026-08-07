@@ -1,0 +1,212 @@
+{
+  "cpu": {
+    "cpu_family": 26,
+    "flags": [
+      "3dnowprefetch",
+      "abm",
+      "adx",
+      "aes",
+      "apic",
+      "arat",
+      "avx",
+      "avx2",
+      "avx512_bf16",
+      "avx512_bitalg",
+      "avx512_vbmi2",
+      "avx512_vnni",
+      "avx512_vp2intersect",
+      "avx512_vpopcntdq",
+      "avx512bw",
+      "avx512cd",
+      "avx512dq",
+      "avx512f",
+      "avx512ifma",
+      "avx512vbmi",
+      "avx512vl",
+      "avx_vnni",
+      "bmi1",
+      "bmi2",
+      "clflush",
+      "clflushopt",
+      "clwb",
+      "clzero",
+      "cmov",
+      "cmp_legacy",
+      "constant_tsc",
+      "cpuid",
+      "cr8_legacy",
+      "cx16",
+      "cx8",
+      "de",
+      "decodeassists",
+      "erms",
+      "extd_apicid",
+      "f16c",
+      "flushbyasid",
+      "fma",
+      "fpu",
+      "fsgsbase",
+      "fsrm",
+      "fxsr",
+      "fxsr_opt",
+      "gfni",
+      "ht",
+      "hypervisor",
+      "ibpb",
+      "ibrs",
+      "invpcid",
+      "lahf_lm",
+      "lm",
+      "mca",
+      "mce",
+      "misalignsse",
+      "mmx",
+      "mmxext",
+      "movbe",
+      "msr",
+      "mtrr",
+      "nonstop_tsc",
+      "nopl",
+      "npt",
+      "nrip_save",
+      "nx",
+      "osvw",
+      "pae",
+      "pat",
+      "pausefilter",
+      "pclmulqdq",
+      "pdpe1gb",
+      "perfctr_core",
+      "pfthreshold",
+      "pge",
+      "pni",
+      "popcnt",
+      "pse",
+      "pse36",
+      "rdpid",
+      "rdrand",
+      "rdseed",
+      "rdtscp",
+      "rep_good",
+      "sep",
+      "sha_ni",
+      "smap",
+      "smep",
+      "ssbd",
+      "sse",
+      "sse2",
+      "sse4_1",
+      "sse4_2",
+      "sse4a",
+      "ssse3",
+      "stibp",
+      "svm",
+      "syscall",
+      "topoext",
+      "tsc",
+      "tsc_known_freq",
+      "tsc_reliable",
+      "tsc_scale",
+      "umip",
+      "v_vmsave_vmload",
+      "vaes",
+      "vmcb_clean",
+      "vme",
+      "vmmcall",
+      "vpclmulqdq",
+      "xgetbv1",
+      "xsave",
+      "xsavec",
+      "xsaveerptr",
+      "xsaveopt",
+      "xsaves",
+      "xtopology"
+    ],
+    "microcode": "0xffffffff",
+    "model": 112,
+    "model_name": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+    "stepping": 0,
+    "vendor_id": "AuthenticAMD"
+  },
+  "eligible_for_collection": false,
+  "eligible_for_promotion": false,
+  "environment": {
+    "kernel": "6.18.33.1-microsoft-standard-WSL2",
+    "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "virtualized": true,
+    "wsl": true
+  },
+  "event_map_sha256": "d3cb75cbd8ab4b261953a35ba70e22b3e006ac299205defe7f5ca8e32377fa22",
+  "event_sources": {
+    "breakpoint": {
+      "type": "5"
+    },
+    "cpu": {
+      "caps": {
+        "max_precise": "0"
+      },
+      "events": {
+        "branch-instructions": "event=0xc2",
+        "branch-misses": "event=0xc3",
+        "cache-misses": "event=0x64,umask=0x09",
+        "cache-references": "event=0x60,umask=0xff",
+        "cpu-cycles": "event=0x76",
+        "instructions": "event=0xc0",
+        "ref-cycles": "event=0x120,umask=0x01",
+        "stalled-cycles-frontend": "event=0xa9"
+      },
+      "format": {
+        "cmask": "config:24-31",
+        "edge": "config:18",
+        "event": "config:0-7,32-35",
+        "inv": "config:23",
+        "umask": "config:8-15"
+      },
+      "type": "4"
+    },
+    "kprobe": {
+      "format": {
+        "retprobe": "config:0"
+      },
+      "type": "8"
+    },
+    "msr": {
+      "events": {
+        "tsc": "event=0x00"
+      },
+      "format": {
+        "event": "config:0-63"
+      },
+      "type": "10"
+    },
+    "software": {
+      "type": "1"
+    },
+    "tracepoint": {
+      "type": "2"
+    },
+    "uprobe": {
+      "format": {
+        "ref_ctr_offset": "config:32-63",
+        "retprobe": "config:0"
+      },
+      "type": "9"
+    }
+  },
+  "exact_zen5_family": true,
+  "ineligibility_reasons": [
+    "VIRTUALIZED_HOST",
+    "PERF_EVENT_CATALOG_UNAVAILABLE"
+  ],
+  "perf": {
+    "available": false,
+    "catalog_format": null,
+    "catalog_text": null,
+    "list_returncode": null,
+    "list_stderr": "perf executable not found",
+    "path": null,
+    "version": null,
+    "version_returncode": null
+  },
+  "schema": "tessera.profiler_x86_event_map.v1"
+}

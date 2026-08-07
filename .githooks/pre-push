@@ -5,10 +5,12 @@
 # fails on `runtime_abi` (or another dashboard) being stale. Catch it locally,
 # before the push, instead of after.
 #
-# Zero-dependency: just bash + the repo's python3 (the script bootstraps its own
-# PYTHONPATH). Activated via `scripts/install-git-hooks.sh` (sets
-# core.hooksPath=.githooks). The drift check takes ~30s, so it runs at PUSH time
-# (not per-commit). Emergency bypass: `TESSERA_SKIP_DOC_DRIFT=1 git push`.
+# Zero-dependency: just bash + a python3 that can import numpy (the gate scripts
+# bootstrap their own PYTHONPATH). The interpreter is resolved by capability, not
+# by PATH order — see scripts/_python_env.sh; override with $TESSERA_PYTHON.
+# Activated via `scripts/install-git-hooks.sh` (sets core.hooksPath=.githooks).
+# The drift check takes ~30s, so it runs at PUSH time (not per-commit).
+# Emergency bypass: `TESSERA_SKIP_DOC_DRIFT=1 git push`.
 set -uo pipefail
 
 if [ "${TESSERA_SKIP_DOC_DRIFT:-}" = "1" ]; then
@@ -18,12 +20,19 @@ fi
 
 repo_root="$(git rev-parse --show-toplevel)"
 
+# Resolve an interpreter that can actually run the gates. Without this, a
+# python3 lacking numpy makes a PASSING gate report as drift — which is exactly
+# the situation that tempts people into the bypass above. Fails closed with a
+# fix-it message if no candidate qualifies.
+# shellcheck source=scripts/_python_env.sh
+. "${repo_root}/scripts/_python_env.sh" || exit 1
+
 # Gate 1 — structural spec/registry sync (fast, <1s). These are full-pytest-only
 # invariants that otherwise surface ~10 min into CI: a new op-catalog entry not
 # documented in PYTHON_API_SPEC.md, or a generated *.md dropped into
 # docs/audit/generated/ without a registry entry.
 echo "[pre-push] checking op-catalog/spec + generated-markdown registry sync…"
-if ! python3 "${repo_root}/scripts/check_spec_sync.py"; then
+if ! "${TESSERA_PY}" "${repo_root}/scripts/check_spec_sync.py"; then
   cat >&2 <<'MSG'
 
 [pre-push] BLOCKED: structural spec/registry sync failed (see above).

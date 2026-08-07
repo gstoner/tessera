@@ -24,6 +24,15 @@ has no GPU FFT package,
 so it cannot physically consume the compound artifact and inherits no AVX-512
 or gfx1151 support claim. A Mac-owned FFT package, workspace/residency ABI,
 compound consumer, and exact-device evidence remain prerequisite in that order.
+Cross-backend sync `TPROF-MULTICLOCK-2026-08-06` — **shared evidence schema is
+executable on ROCm/x86; Apple adoption remains follow-up.** ROCm now owns independent host-wall,
+HIP-event, instrumented device-wall-clock, and profiler-activity records plus an
+optional intrusive HSA/AQL provider. No HIP clock, `wall_clock64()` kernel,
+`rtg_tracer` queue interception, ROCprofiler status, or gfx1151 evidence applies
+to Metal. Apple should adopt the same no-substitution/provenance/validity shape
+for its host wall and command-buffer timestamps when the shared schema is
+implemented, while retaining its existing Mac exact-device gates and
+architecture-owned counter policy.
 
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared ODS vocabulary
 adopted; physical execution not applicable until Apple owns an FFT package.**

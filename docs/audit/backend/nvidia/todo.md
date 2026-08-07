@@ -25,6 +25,14 @@ physical consumption and records no dtype, numerical, or performance claim.
 The architecture-owned sequence remains: close canonical CUDA FFT, define an
 SM120 workspace/residency ABI, implement the compound package, then gather
 exact-device evidence.
+Cross-backend sync `TPROF-MULTICLOCK-2026-08-06` — **shared evidence schema is
+executable on ROCm/x86; CUDA adoption remains follow-up.** The ROCm plan now records each
+clock independently and forbids fallback relabeling. CUDA should adopt the same
+provenance, validity, calibration, instrumentation, and verdict fields for host
+wall, CUDA events, an architecture-qualified device clock, and CUPTI activity.
+HIP `wall_clock64()`, `rtg_hsa_dispatch`, ROCprofiler, and gfx1151 evidence do
+not transfer to SM120. CUDA clock choice and CUPTI/SM120 promotion remain
+architecture-owned exact-device work.
 
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared ODS vocabulary
 adopted; CUDA physical execution remains follow-up.** The target-neutral

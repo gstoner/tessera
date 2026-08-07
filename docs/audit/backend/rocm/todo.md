@@ -44,6 +44,51 @@ digests recorded in
 `benchmarks/baselines/tsol_rocm_arch_packages_2026_08_06.json`, but their
 profiles are `build_only` and execution remains fail-closed until each target
 owns an architecture schedule and exact-device packet.
+Cross-backend sync `TPROF-MULTICLOCK-2026-08-06` — **ROCm owner; native
+gfx1151 clock collector landed, bare-metal calibration open.**
+`TPROF-ROCM-TIME-1` requires every benchmark sample to
+preserve independent synchronized host-wall, HIP-event, instrumented
+`wall_clock64()`, and profiler-activity records with source, validity,
+calibration, instrumentation, and verdict eligibility. Missing clocks remain
+explicit and no wall measurement may be relabeled as device time. The owning
+spec is [`../../../spec/CITL_ROCM_TRACE_PROFILER_SPEC.md`](../../../spec/CITL_ROCM_TRACE_PROFILER_SPEC.md).
+
+The gfx1151 rule is exact: it is RDNA 3.5 / GFXIP 11.5, so the HIP warning for
+RDNA 3 / GFX11 does not justify a categorical `clock()`/`clock64()` ban on this
+target. `wall_clock64()` is the default constant-frequency grid clock;
+`clock()`/`clock64()` remain diagnostic candidates until an exact-device probe
+establishes monotonicity, effective rate, wrap behavior, and cross-CU/WGP
+comparability.
+
+`TPROF-ROCM-RTG-1` adds an optional `rtg_hsa_dispatch` experiment after the
+multi-clock contract. It may recover HSA dispatch timestamps when WSL
+ROCprofiler device-activity tables are empty, but it intercepts AQL queues and
+completion signals, must run in a fresh subprocess, and must record overhead,
+callback completion, exit, and teardown state. It supplies no PMC, PC-sampling,
+cache-counter, or stall claim. WSL evidence may rank and retain/reject on the
+same host; promotion and counter-dependent decisions remain bare-metal-only.
+
+Execution order:
+
+1. **Complete:** implement the four-clock evidence schema and fail-closed
+   validator.
+2. **Complete:** add synchronized host batch/empty-launch calibration and
+   HIP-event validation.
+3. **Landing:** the optional `TPROF_WITH_HIP` provider now queries
+   `hipDeviceAttributeWallClockRate`, instruments a multi-workgroup batch with
+   `wall_clock64()`, records empty-launch overhead, and rejects every target
+   except exact gfx1151. The WSL packet at
+   [`../../../../benchmarks/baselines/rocm_gfx1151_multiclock_probe_2026_08_06.json`](../../../../benchmarks/baselines/rocm_gfx1151_multiclock_probe_2026_08_06.json)
+   measured a valid device envelope while both HIP event intervals remained
+   exactly zero. It is regression-eligible and promotion-ineligible. Paired
+   application-kernel ISA/resource overhead and the diagnostic
+   `clock()`/`clock64()` qualification probe remain open.
+4. **Open:** add the fresh-process `rtg_hsa_dispatch` smoke and normalization
+   path.
+5. **Open:** wire native ROCprofiler dispatch activity, then expose all sources through
+   the unitrace-style CLI/report.
+6. **Open:** record a bare-metal gfx1151 calibration packet before promoting any timing
+   or counter-dependent selector.
 
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **typed Schedule→Tile and
 bounded gfx1151 physical package complete.** The five TSOL

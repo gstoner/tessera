@@ -177,6 +177,10 @@ def test_canonical_x86_selector_defaults_to_descriptor(
         lambda module, *, target: False,
     )
     monkeypatch.setattr(
+        "tessera.compiler.scheduled_attention.supports_scheduled_attention",
+        lambda module, *, target: False,
+    )
+    monkeypatch.setattr(
         "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",
         lambda module, *, target: False,
     )

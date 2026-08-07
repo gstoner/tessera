@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-16
+last_updated: 2026-08-06
 audit_role: sub_audit
 ---
 
@@ -66,6 +66,8 @@ are maintained in [`todo.md`](todo.md).
 | ROCM-5 | P1 | Finish architecture-specific MMA enablement instead of reusing gfx1151 layouts. | Separate RDNA 4, Wave32 WMMA v2, and CDNA MFMA fragment/layout guards pass assemble-and-compare fixtures on their matching devices. |
 | ROCM-6 | P1 | Revalidate the three redesign experiments under LLVM/MLIR 23 + ROCm 7.14. Correctness is green, but WSL HIP event timing returns invalid zero durations. | A candidate may retain or change production status only when its aligned/ragged correctness and resource gates pass with valid paired device and E2E timing. Zero/non-finite timing is a blocker, not evidence. |
 | ROCM-8 | P2 | Re-evaluate copy versus zero-copy on bare-metal ROCm. | Device and end-to-end measurements identify a stable crossover outside WSL before any automatic selection policy lands. |
+| TPROF-ROCM-TIME-1 | P0 | Implement independent host-wall, HIP-event, instrumented device-wall-clock, and profiler-activity records for gfx1151 benchmarks. | Every sample preserves explicit source/validity/calibration fields; exact-device timer qualification and paired instrumented/uninstrumented artifacts pass; WSL evidence remains non-promotional. |
+| TPROF-ROCM-RTG-1 | P1 | Evaluate an optional fresh-process `rtg_hsa_dispatch` provider after the multi-clock contract lands. | Nonzero ordered HSA dispatch timestamps correlate to exact launches with bounded measured overhead and clean teardown; failure remains diagnostic and supplies no counter or PC-sampling claim. |
 
 ### ROCM-6 redesign experiments and ratchets
 

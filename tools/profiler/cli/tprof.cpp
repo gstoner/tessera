@@ -1,4 +1,5 @@
 #include "tprof/tprof_runtime.h"
+#include "tprof/x86_timing_provider.h"
 
 #include <algorithm>
 #include <chrono>
@@ -6,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <string>
@@ -19,7 +21,8 @@ using peaks_t = std::map<std::string, std::pair<double, double>>;
 void usage() {
   std::cout << "tprof [--demo-out chrome.json] [--perfetto-out file.json] "
                "[--report-out file.html] [--peaks peaks.yaml] [--arch sm90]\n"
-               "tprof peaks print --peaks peaks.yaml [--arch sm90]\n";
+               "tprof peaks print --peaks peaks.yaml [--arch sm90]\n"
+               "tprof x86 timing-status\n";
 }
 
 void trim(std::string& value) {
@@ -131,6 +134,74 @@ std::string shell_quote(const std::string& value) {
 } // namespace
 
 int main(int argc, char** argv) {
+  if (argc >= 3 && std::strcmp(argv[1], "x86") == 0 &&
+      std::strcmp(argv[2], "timing-status") == 0) {
+    const auto caps = tprof::x86_timing_capabilities();
+    tprof::x86_perf_group_t perf;
+    const bool perf_open = perf.open();
+    const bool perf_started = perf_open && perf.start();
+    const auto start = tprof::x86_clock_snapshot();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    const auto end = tprof::x86_clock_snapshot();
+    const auto counters = perf_started ? perf.stop() : tprof::x86_perf_snapshot_t{};
+    const bool affinity_stable = start.tsc_valid && end.tsc_valid &&
+                                 start.logical_cpu == end.logical_cpu;
+    const uint64_t raw_delta =
+        end.monotonic_raw_ns >= start.monotonic_raw_ns
+            ? end.monotonic_raw_ns - start.monotonic_raw_ns
+            : 0;
+    const uint64_t steady_delta = end.steady_ns >= start.steady_ns
+                                      ? end.steady_ns - start.steady_ns
+                                      : 0;
+    const uint64_t tsc_delta = end.tsc_cycles >= start.tsc_cycles
+                                   ? end.tsc_cycles - start.tsc_cycles
+                                   : 0;
+    const double tsc_hz = raw_delta > 0
+                              ? static_cast<double>(tsc_delta) * 1.0e9 /
+                                    static_cast<double>(raw_delta)
+                              : 0.0;
+    const uint64_t clock_difference = steady_delta > raw_delta
+                                          ? steady_delta - raw_delta
+                                          : raw_delta - steady_delta;
+    const bool clock_agreement =
+        raw_delta > 0 && steady_delta > 0 &&
+        static_cast<double>(clock_difference) /
+                static_cast<double>(raw_delta) <=
+            0.05;
+    std::cout << std::boolalpha << std::setprecision(17)
+              << "{\n"
+              << "  \"schema\": \"tessera.x86_timing_status.v1\",\n"
+              << "  \"x86_64\": " << caps.x86_64 << ",\n"
+              << "  \"avx512_visible\": " << caps.avx512f << ",\n"
+              << "  \"monotonic_raw_valid\": "
+              << (start.monotonic_raw_valid && end.monotonic_raw_valid) << ",\n"
+              << "  \"rdtscp_valid\": "
+              << (start.tsc_valid && end.tsc_valid) << ",\n"
+              << "  \"invariant_tsc\": " << caps.invariant_tsc << ",\n"
+              << "  \"affinity_stable\": " << affinity_stable << ",\n"
+              << "  \"clock_agreement_valid\": " << clock_agreement << ",\n"
+              << "  \"perf_event_open\": " << perf_open << ",\n"
+              << "  \"perf_sample_valid\": " << counters.valid << ",\n"
+              << "  \"perf_event_paranoid\": " << caps.perf_event_paranoid << ",\n"
+              << "  \"perf_error\": "
+              << (perf_open ? counters.error_code : perf.error_code()) << ",\n"
+              << "  \"raw_interval_ns\": " << raw_delta << ",\n"
+              << "  \"steady_interval_ns\": " << steady_delta << ",\n"
+              << "  \"tsc_interval_cycles\": " << tsc_delta << ",\n"
+              << "  \"calibrated_tsc_hz\": " << tsc_hz << ",\n"
+              << "  \"perf_task_clock_ns\": " << counters.task_clock_ns << ",\n"
+              << "  \"perf_time_enabled_ns\": " << counters.time_enabled_ns << ",\n"
+              << "  \"perf_time_running_ns\": " << counters.time_running_ns << ",\n"
+              << "  \"perf_multiplex_scale\": " << counters.multiplex_scale
+              << ",\n"
+              << "  \"perf_available_events_mask\": "
+              << counters.available_events_mask << ",\n"
+              << "  \"perf_unavailable_events_mask\": "
+              << counters.unavailable_events_mask
+              << "\n}\n";
+    return 0;
+  }
+
   if (argc >= 3 && std::strcmp(argv[1], "peaks") == 0 &&
       std::strcmp(argv[2], "print") == 0) {
     const char* peaks = nullptr;

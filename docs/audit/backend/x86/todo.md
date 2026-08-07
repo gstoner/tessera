@@ -46,6 +46,71 @@ arbitrary-axis fold, replacing the cancellation-prone `mean(x²)-mean(x)²`
 composition. On the AMD Ryzen AI Max+ 395 Zen 5 host, the native image rebuilt
 with LLVM/MLIR 23 and all 17 focused tests passed, including
 large-offset/low-variance data, ragged extents, multiple axes, and tuple axes.
+Cross-backend sync `TPROF-MULTICLOCK-2026-08-06` — **shared schema and native
+`TPROF-X86-TIME-1` timing provider landed; exact-host evidence open.** The ROCm
+work establishes the shared
+rule that every applicable clock is an independent provenance/validity record;
+it does not require HIP-specific slots in x86 packets. The existing `cpu`
+provider already exposes runtime callback spans and `steady_clock` timestamps,
+but that is not yet an AVX-512 PMU or sampling profiler.
+
+`TPROF-X86-TIME-1` now extends the same tprof artifact/CLI with four independently
+validated x86 records:
+
+1. `host_wall_ns`: raw `steady_clock` batch time with one terminal
+   synchronization plus separate empty-call/dispatch calibration.
+2. `monotonic_raw_ns`: Linux `CLOCK_MONOTONIC_RAW` for OS-adjustment and clock-
+   agreement checks where available.
+3. `tsc_cycles`: fenced `RDTSCP` entry/exit with invariant-TSC capability,
+   calibrated frequency, start/end logical CPU, and migration invalidation.
+4. `perf_task_clock_ns`: `perf_event_open` task-clock timing with explicit
+   permission, multiplexing, enabled-time, and running-time fields.
+
+The first portable PMU group is cycles, reference cycles, instructions,
+branches, branch misses, cache references, and cache misses. Model-specific Zen
+5 events, IBS samples, PEBS, raw event encodings, and derived cache-level claims
+remain capability-gated by vendor/family/model, kernel support, and an exact-
+machine event-map digest. Unsupported or permission-denied events are explicit
+unavailable records, never zero counters.
+
+The x86 provider runs the canonical typed AVX-512 package in a fresh subprocess
+with recorded affinity, NUMA node, SMT state, governor/frequency context,
+microcode, kernel, compiler, image/artifact digests, warm/cold state, and sample
+distribution. Sampling uses Linux perf IP/callchain/branch-stack or AMD IBS only
+when advertised; it must correlate samples to the package image and symbol
+range. Instrumented and uninstrumented images stay paired so probe overhead is
+visible.
+
+WSL host timing may support same-host regression and retain/reject decisions.
+PMU- or sampling-dependent promotion requires a non-virtualized exact Zen 5
+host, non-multiplexed or correctly scaled counters, stable affinity, and an
+independent clock-agreement packet. Intel AMX remains a separate named-host
+evidence obligation. HIP `wall_clock64()`, `rtg_hsa_dispatch`, ROCprofiler, and
+gfx1151 evidence do not transfer to x86.
+
+Execution order:
+
+1. **Complete:** generalize the TPROF clock-record validator and CLI away from
+   GPU-only names.
+2. **Complete:** add x86 host/raw/TSC timing with migration and invariant-TSC
+   checks.
+3. **Complete:** add the `perf_event_open` provider, permission diagnostics,
+   scaling, portable PMU group, `tprof x86 timing-status`, and optional native
+   proof snapshot workflow.
+4. **Landing:** `tprof_x86_sample.py` now records perf samples against an image
+   build ID, DSO-aware symbolization, and the matching static ELF symbol range,
+   avoiding invalid ASLR-relative comparisons. AMD IBS is admitted only for
+   family 26 with AVX-512 and an advertised `ibs_op`/`ibs_fetch` event. Exact
+   perf/IBS samples and Zen 5 raw-event maps remain open because this WSL host
+   has no `perf` executable and denies `perf_event_open`.
+5. **Landing:** the exact-host runner now binds the existing aligned/ragged
+   E2E-REAL-4 comparison to clock, sampling, source-commit, dirty-worktree, and
+   artifact provenance. The current packet is
+   [`../../../../benchmarks/baselines/x86_zen5_profiler_packet_2026_08_06.json`](../../../../benchmarks/baselines/x86_zen5_profiler_packet_2026_08_06.json):
+   scheduled/production is 1.018x aligned and 1.008x ragged with exact route
+   parity. Verdict `retain`; WSL clocks, denied PMU access, unavailable symbol
+   samples, and the development worktree block promotion. A clean bare-metal
+   rerun with real samples remains open; AMX stays access-gated.
 
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared typed carrier and
 x86/Zen 5 physical consumer complete.** `tessera.scheduled_spectral.v3`

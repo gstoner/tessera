@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 0 | 482 |
-| `transpose_rule` | 0 | 482 |
-| `sharding_rule` | 43 | 439 |
-| `lowering_rule` | 0 | 482 |
-| `backend_kernel` | 383 | 99 |
+| `batching_rule` | 0 | 487 |
+| `transpose_rule` | 0 | 487 |
+| `sharding_rule` | 43 | 444 |
+| `lowering_rule` | 0 | 487 |
+| `backend_kernel` | 388 | 99 |
 
 ## Backend Proof By Target
 
@@ -26,15 +26,15 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 | Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |
 |---|---:|---:|---:|---:|---:|
-| `cpu` | 333 | 0 | 333 | 0 | 149 |
-| `x86` | 337 | 335 | 2 | 0 | 145 |
-| `apple_cpu` | 365 | 4 | 361 | 0 | 117 |
-| `apple_gpu` | 207 | 199 | 4 | 4 | 275 |
-| `rocm` | 345 | 343 | 2 | 0 | 137 |
-| `nvidia_sm80` | 68 | 0 | 0 | 68 | 414 |
-| `nvidia_sm90` | 100 | 0 | 2 | 98 | 382 |
-| `nvidia_sm100` | 68 | 0 | 0 | 68 | 414 |
-| `nvidia_sm120` | 92 | 31 | 0 | 61 | 390 |
+| `cpu` | 338 | 0 | 338 | 0 | 149 |
+| `x86` | 337 | 335 | 2 | 0 | 150 |
+| `apple_cpu` | 370 | 4 | 366 | 0 | 117 |
+| `apple_gpu` | 207 | 199 | 4 | 4 | 280 |
+| `rocm` | 345 | 343 | 2 | 0 | 142 |
+| `nvidia_sm80` | 68 | 0 | 0 | 68 | 419 |
+| `nvidia_sm90` | 100 | 0 | 2 | 98 | 387 |
+| `nvidia_sm100` | 68 | 0 | 0 | 68 | 419 |
+| `nvidia_sm120` | 92 | 31 | 0 | 61 | 395 |
 
 ## Per-category breakdown
 
@@ -47,7 +47,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S5 | `control_flow` | 7 | — | — | — | — | — |
 | S7 | `attention` | 28 | — | — | 14 | — | 28 |
 | S7 | `position_encoding` | 3 | — | — | — | — | 3 |
-| S7 | `normalization` | 7 | — | — | — | — | 7 |
+| S7 | `normalization` | 12 | — | — | — | — | 12 |
 | S7 | `memory` | 3 | — | — | — | — | 1 |
 | S7 | `geometric_algebra` | 17 | — | — | — | — | 17 |
 | S10 | `optimizer` | 4 | — | — | — | — | 4 |
@@ -108,7 +108,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 |---|---:|---:|---:|---:|---:|
 | S2 | 56 | 0 | 0 | 0 | 49 |
 | S5 | 7 | 0 | 0 | 0 | 0 |
-| S7 | 58 | 0 | 0 | 14 | 56 |
+| S7 | 63 | 0 | 0 | 14 | 61 |
 | S10 | 19 | 0 | 0 | 0 | 4 |
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 0 |

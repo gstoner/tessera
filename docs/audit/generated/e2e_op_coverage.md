@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 286 |
-| ``runnable_reference`` | 4 |
+| ``runnable_reference`` | 9 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 29 |
 | ``planned`` | 0 |
-| **total** | **319** |
+| **total** | **324** |
 
 ## complete (286)
 
@@ -322,7 +322,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (4)
+## runnable_reference (9)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -330,6 +330,11 @@ each row into a single E2E tier.
 | ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
+| ``entmax15`` | normalization | public | public | registered | partial | reference | ready | none |
+| ``gumbel_softmax`` | normalization | public | public | registered | partial | reference | ready | none |
+| ``perturbed_argmax`` | normalization | public | public | registered | partial | reference | ready | none |
+| ``soft_top_k`` | normalization | public | public | registered | partial | reference | ready | none |
+| ``sparsemax`` | normalization | public | public | registered | partial | reference | ready | none |
 
 ## partial (29)
 

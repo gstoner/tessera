@@ -13,11 +13,11 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 383 | backend_pathway_owned=368, multi_gpu_deferred=15 | backend_codegen=368, distributed_validation=15 |
+| `backend_kernel` | 388 | backend_pathway_owned=373, multi_gpu_deferred=15 | backend_codegen=373, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
-| `target_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
-| `tile_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
+| `target_ir` | 9 | multi_gpu_deferred=4, single_gpu_promote=5 | backend_codegen=5, distributed_validation=4 |
+| `tile_ir` | 9 | multi_gpu_deferred=4, single_gpu_closeable=5 | compiler_middle_end=5, distributed_validation=4 |
 
 ## Rows
 
@@ -255,11 +255,16 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `moe` | moe | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `moe_combine` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Backend kernel proof needs distributed or collective execution ownership. |
 | `backend_kernel` | `moe_dispatch` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Backend kernel proof needs distributed or collective execution ownership. |
+| `backend_kernel` | `entmax15` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `group_norm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `gumbel_softmax` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `instance_norm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `layer_norm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `perturbed_argmax` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rmsnorm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rmsnorm_safe` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `soft_top_k` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `sparsemax` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `spectral_norm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `weight_norm` | normalization | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `abs` | numeric_helper | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -454,7 +459,17 @@ test, ABI, and surface dashboards.
 | `target_ir` | `all_reduce` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `all_to_all` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `reduce_scatter` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
+| `target_ir` | `entmax15` | normalization | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
+| `target_ir` | `gumbel_softmax` | normalization | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
+| `target_ir` | `perturbed_argmax` | normalization | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
+| `target_ir` | `soft_top_k` | normalization | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
+| `target_ir` | `sparsemax` | normalization | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `tile_ir` | `all_gather` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `all_reduce` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `all_to_all` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
 | `tile_ir` | `reduce_scatter` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
+| `tile_ir` | `entmax15` | normalization | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
+| `tile_ir` | `gumbel_softmax` | normalization | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
+| `tile_ir` | `perturbed_argmax` | normalization | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
+| `tile_ir` | `soft_top_k` | normalization | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
+| `tile_ir` | `sparsemax` | normalization | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |

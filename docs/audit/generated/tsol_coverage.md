@@ -11,7 +11,7 @@ Spec: `docs/operations/Tessera_Standard_Operations.md`.  Full primitive registry
 
 ## Per-axis status counts (TSOL slice only)
 
-Counts below are restricted to the 47 TSOL canonical names.  The full 482-primitive registry is summarised in `docs/audit/standalone_primitive_coverage.md`.
+Counts below are restricted to the 47 TSOL canonical names.  The full 487-primitive registry is summarised in `docs/audit/standalone_primitive_coverage.md`.
 
 | Axis | complete | partial | planned | by-design | other |
 |------|----------|---------|---------|-----|-------|

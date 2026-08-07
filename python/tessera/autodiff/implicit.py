@@ -68,9 +68,11 @@ def cg_solve(
     n = b.size
     shape = b.shape
     x = np.zeros_like(b) if x0 is None else np.asarray(x0, dtype=np.float64).copy()
-    r = b - np.asarray(matvec(x), dtype=np.float64)
-    p = r.copy()
-    rs_old = float(np.vdot(r, r).real)
+    r: np.ndarray = np.asarray(
+        b - np.asarray(matvec(x), dtype=np.float64), dtype=np.float64
+    )
+    p: np.ndarray = np.array(r, dtype=np.float64, copy=True)
+    rs_old: float = float(np.sum(r * r))
     if rs_old <= tol * tol:
         return x
     limit = maxiter if maxiter is not None else 10 * max(n, 1)

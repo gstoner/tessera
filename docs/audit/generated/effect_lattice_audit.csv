@@ -107,6 +107,7 @@ ebm_langevin_step,pure,,1,1,0
 ebm_refinement,pure,,1,1,0
 ebm_self_verify,pure,,1,1,0
 einsum,pure,,1,1,0
+entmax15,pure,,1,1,0
 eq,pure,,1,1,0
 erf,pure,,1,1,0
 erfc,pure,,1,1,0
@@ -132,6 +133,7 @@ group_norm,pure,,1,1,0
 grouped_gemm,pure,,1,1,0
 grpo_policy_loss,pure,,1,1,0
 gt,pure,,1,1,0
+gumbel_softmax,pure,,1,1,0
 huber_loss,pure,,1,1,0
 hybrid_attention,state,,1,1,1
 ifft,pure,pure,1,1,0
@@ -219,6 +221,7 @@ pack,movement,,1,1,0
 pad,pure,,1,1,0
 permute,pure,,1,1,0
 persistent_cd_loss,pure,,1,1,0
+perturbed_argmax,pure,,1,1,0
 popcount,pure,,1,1,0
 pow,pure,,1,1,0
 power_attn,state,,1,1,0
@@ -269,11 +272,13 @@ sin,pure,,1,1,0
 sinh,pure,,1,1,0
 slice,pure,,1,1,0
 smooth_l1_loss,pure,,1,1,0
+soft_top_k,pure,,1,1,0
 softcap,pure,,1,1,0
 softmax,pure,pure,1,1,1
 softmax_safe,pure,,1,1,1
 softplus,pure,,1,1,0
 sort,pure,,1,1,0
+sparsemax,pure,,1,1,0
 spec_accept,pure,,1,1,0
 spec_accept_sample,pure,,1,1,0
 spec_accept_tree_sample,pure,,1,1,0

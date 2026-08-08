@@ -163,6 +163,13 @@ def test_native_ebm_ops_show_fused_at_target_ir_and_tile_ir() -> None:
         assert row.cells["bench"].status == "benchmarked", name
 
 
+def test_adafactor_native_packages_are_not_hidden_by_terminal_override() -> None:
+    row = audit.support_row_for("adafactor")
+    assert row.cells["tile_ir"].status == "fused"
+    assert row.cells["target_ir"].status == "device_verified_jit"
+    assert row.cells["bench"].status == "benchmarked"
+
+
 def test_native_ga_ops_show_fused_at_target_ir() -> None:
     """All 17 GA primitives surface as fused at target_ir.
 

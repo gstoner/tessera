@@ -290,7 +290,11 @@ LogicalResult SpectralProgramOp::verify() {
       getInputSignature().empty() || getShapeBounds().empty() ||
       getTemplateDigest().size() != 64)
     return emitOpError("requires the canonical spectral numeric/workspace/lineage policy");
-  if (getKind() != "tessera.spectral_filter" && getChildFftDigests().empty())
+  auto dctType = (*this)->getAttrOfType<IntegerAttr>("dct_type");
+  const bool directDct = getKind() == "tessera.dct" && dctType &&
+                         dctType.getInt() != 2;
+  if (getKind() != "tessera.spectral_filter" && !directDct &&
+      getChildFftDigests().empty())
     return emitOpError("FFT-based spectral programs require child digests");
   return success();
 }

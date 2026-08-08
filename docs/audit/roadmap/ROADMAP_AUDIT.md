@@ -84,7 +84,7 @@ Mamba, Hyena, Linformer, cosFormer, Griffin, Megalodon, JEPA, and Titans/Atlas.
 |---|---|---|
 | S-series native execution and structural gaps | [`S_SERIES_GAP_CLOSURE_PLAN.md`](S_SERIES_GAP_CLOSURE_PLAN.md) | [`s_series_status.md`](../generated/s_series_status.md) and [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) |
 | One-device compiler closeout, promotion evidence, and audited surfaces | [`SINGLE_GPU_CLOSEOUT_PLAN.md`](SINGLE_GPU_CLOSEOUT_PLAN.md) | its generated single-GPU queue plus the generated dashboards it names |
-| Shared lowering, backend plugins, arbitration, and measured promotion | [`../compiler/COMPILER_REFACTOR_PLAN.md`](../compiler/COMPILER_REFACTOR_PLAN.md) and [`../compiler/WORKSTREAM_C_HANDOFF.md`](../compiler/WORKSTREAM_C_HANDOFF.md) | [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) and evaluator verdicts |
+| Shared lowering, backend plugins, arbitration, and measured promotion | [`../compiler/COMPILER_REFACTOR_PLAN.md`](../compiler/COMPILER_REFACTOR_PLAN.md) plus the applicable backend plan | [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) and evaluator verdicts |
 | Cross-surface counts and current open work | generated dashboards and [`../MASTER_AUDIT.md`](../MASTER_AUDIT.md) | generated files only |
 
 Keep this document as a routing and decision-provenance hub. Archive a roadmap

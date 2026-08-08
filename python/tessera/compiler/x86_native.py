@@ -138,6 +138,12 @@ def _tessera_opt() -> Path | None:
         path = Path(configured).expanduser()
         return path if path.is_file() else None
     root = _repo_root()
+    if selected_build := os.environ.get("TESSERA_BUILD_DIR"):
+        build = Path(selected_build).expanduser()
+        if not build.is_absolute():
+            build = root / build
+        path = build / "tools/tessera-opt/tessera-opt"
+        return path if path.is_file() else None
     for path in (
         root / "build/tools/tessera-opt/tessera-opt",
         root / "build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt",
@@ -165,6 +171,12 @@ def _library_path(architecture: str = X86_AVX512_ARCHITECTURE) -> Path | None:
         path = Path(configured).expanduser()
         return path if path.is_file() else None
     root = _repo_root()
+    if selected_build := os.environ.get("TESSERA_BUILD_DIR"):
+        build = Path(selected_build).expanduser()
+        if not build.is_absolute():
+            build = root / build
+        path = build / "src/compiler/codegen/tessera_x86_backend" / library_name
+        return path if path.is_file() else None
     for path in (
         root / "build/src/compiler/codegen/tessera_x86_backend" / library_name,
         root / "build-rocm-7.14-llvm23-clean/src/compiler/codegen/tessera_x86_backend" / library_name,

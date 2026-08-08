@@ -86,11 +86,15 @@ DASHBOARD_AXES: tuple[str, ...] = (
 # axis, which we surface as a separate column for honesty.
 OPEN_STATUSES: frozenset[str] = frozenset({"partial", "planned"})
 
-# Per-target native proof statuses.  These mean "this architecture has a real
-# backend path", not "every declared backend for the primitive is complete".
-NATIVE_BACKEND_STATUSES: frozenset[str] = frozenset({
+# Per-target proof levels.  Device verification is execution proof.  Fused and
+# packaged entries prove an implementation/artifact exists, but do not prove
+# that the declared target executed it correctly.
+EXACT_BACKEND_STATUSES: frozenset[str] = frozenset({
     "device_verified_abi",
     "device_verified_jit",
+})
+
+IMPLEMENTATION_BACKEND_STATUSES: frozenset[str] = frozenset({
     "fused",
     "packaged",
 })
@@ -181,11 +185,18 @@ def tally_backend_by_target(
         seen: set[str] = set()
         for entry in _backend_manifest.manifest_for(op_name):
             target = entry.target
+            if target in seen:
+                raise AssertionError(
+                    f"duplicate BackendKernelEntry grain for {op_name!r} on "
+                    f"target {target!r}"
+                )
             seen.add(target)
             row = targets[target]
             row["declared"] += 1
-            if entry.status in NATIVE_BACKEND_STATUSES:
-                row["native_proven"] += 1
+            if entry.status in EXACT_BACKEND_STATUSES:
+                row["exact_verified"] += 1
+            elif entry.status in IMPLEMENTATION_BACKEND_STATUSES:
+                row["implementation_present"] += 1
             elif entry.status == "reference":
                 row["reference"] += 1
             elif entry.status in OPEN_BACKEND_STATUSES:
@@ -201,7 +212,8 @@ def tally_backend_by_target(
         rows.append({
             "target": target,
             "declared": declared,
-            "native_proven": counts.get("native_proven", 0),
+            "exact_verified": counts.get("exact_verified", 0),
+            "implementation_present": counts.get("implementation_present", 0),
             "reference": counts.get("reference", 0),
             "open": counts.get("open", 0),
             "other": counts.get("other", 0),
@@ -270,19 +282,22 @@ def render_markdown(
     lines.append(
         "The registry-level `backend_kernel` axis is deliberately conservative "
         "and should not be read as an all-up veto.  Per-architecture completion "
-        "comes from `BackendKernelEntry` rows: `device_verified_abi`, `device_verified_jit`, "
-        "`fused`, and `packaged` count as native proof for that target; "
+        "comes from one `BackendKernelEntry` per op×target.  Only "
+        "`device_verified_abi` and `device_verified_jit` count as exact-device "
+        "execution proof.  `fused` and `packaged` mean an implementation is "
+        "present but still lacks exact-device proof; "
         "`reference` is correct execution without a native kernel; "
         "`artifact_only` / `compileable` / `planned` remain open for that target."
     )
     lines.append("")
-    lines.append("| Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |")
-    lines.append("|---|---:|---:|---:|---:|---:|")
+    lines.append("| Target | Declared | Exact-device verified | Implementation present | Reference | Open artifact/planned | Other | Missing target row |")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
     for row in target_rows:
         lines.append(
             f"| `{row['target']}` | {row['declared']} | "
-            f"{row['native_proven']} | {row['reference']} | "
-            f"{row['open']} | {row['missing']} |"
+            f"{row['exact_verified']} | {row['implementation_present']} | "
+            f"{row['reference']} | {row['open']} | {row['other']} | "
+            f"{row['missing']} |"
         )
     lines.append("")
 

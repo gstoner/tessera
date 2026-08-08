@@ -4840,17 +4840,35 @@ def vjp_dequantize_int4(dout, q, scale, zero_point=0, **_):
 
 @_vjp("dct")
 def vjp_dct(dout, x, *, axis=-1, type=2, **_):
-    """DCT-II (orthonormal) — transpose is the matching DCT-III (IDCT)."""
-    if int(type) != 2:
-        raise ValueError("dct VJP currently supports only type=2")
+    """Apply the exact transpose of the selected unnormalised DCT basis."""
+    dct_type = int(type)
+    if dct_type not in {1, 2, 3, 4}:
+        raise ValueError("dct VJP requires type in {1, 2, 3, 4}")
     do = np.asarray(dout, dtype=np.float64)
     axis_idx = axis if axis >= 0 else do.ndim + axis
     do_moved = np.moveaxis(do, axis_idx, -1)
     N = do_moved.shape[-1]
-    k = np.arange(N)
-    n_idx = np.arange(N).reshape(-1, 1)
-    basis = np.cos(np.pi * (2 * n_idx + 1) * k / (2.0 * N)) * np.sqrt(2.0 / N)
-    basis[:, 0] *= 1.0 / np.sqrt(2.0)
+    if dct_type == 1 and N < 2:
+        raise ValueError("DCT-I requires a transform length greater than one")
+    source = np.arange(N, dtype=np.float64)
+    frequency = np.arange(N, dtype=np.float64)
+    if dct_type == 1:
+        basis = 2.0 * np.cos(np.pi * np.outer(source, frequency) / (N - 1))
+        basis[0, :] = 1.0
+        basis[-1, :] = (-1.0) ** frequency
+    elif dct_type == 2:
+        basis = 2.0 * np.cos(
+            np.pi * np.outer(2 * source + 1, frequency) / (2 * N)
+        )
+    elif dct_type == 3:
+        basis = 2.0 * np.cos(
+            np.pi * np.outer(source, 2 * frequency + 1) / (2 * N)
+        )
+        basis[0, :] = 1.0
+    else:
+        basis = 2.0 * np.cos(
+            np.pi * np.outer(2 * source + 1, 2 * frequency + 1) / (4 * N)
+        )
     grad_moved = do_moved @ basis.T
     return (np.moveaxis(grad_moved, -1, axis_idx),)
 

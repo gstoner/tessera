@@ -9,6 +9,30 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` — **portable
+CPU and native AVX-512 proof separated; no x86 physical change.** The x86 row
+now uses the `x86` manifest grain instead of accidentally reporting only five
+portable-CPU runtime rows. Implementation-present entries remain distinct
+from exact Zen 5 proof; AMX access state and selectors are unchanged.
+
+Cross-backend sync `X86-BUILD-ARTIFACT-DISCOVERY-2026-08-08` — **runtime and
+packager discovery closed.** Both x86 entry points now honor the explicit
+library override, then the common fail-closed `TESSERA_BUILD_DIR`, before
+canonical defaults. The current clean LLVM/MLIR 23 tree loads the production
+AVX-512 image and compiler together: the exact-host FFT suite passes 41/41.
+The repaired comparison runner measures both normalized forward and inverse
+C2C paths; a 64/256/1024, batch-4 smoke passes numerically. Its short WSL
+host-wall samples are validation only, not a new performance promotion packet.
+
+Cross-backend sync `STANDALONE-COVERAGE-TRUTH-2026-08-08` — **Zen 5 package
+evidence is now represented without changing a selector.** The standalone
+dashboard generates its registry and compiler-layer counts, exact-target
+manifest summary, and open queues. The audit no longer hides the verified
+Adafactor Schedule→Tile/native package behind a single-GPU terminal override,
+and the benchmark inventory now names the physical TSOL and Adafactor
+harnesses. This is an audit correction only; AMX and clean bare-metal timing
+gates remain unchanged.
+
 Cross-backend sync `TSOL-NATIVE-REAL-FFT-2026-08-08` — **Zen 5 packed-real
 lane retained.** The v3 FFT artifact distinguishes logical and physical
 lengths and hashes its Hermitian policy. Supported even RFFT/IRFFT shapes now
@@ -166,12 +190,17 @@ its independently selected AVX-512 FFT/package policy. The HIP image build
 dependency, LDS schedule, and WSL timings do not transfer to x86; no x86
 correctness or performance claim changes.
 
-Cross-backend sync `TSOL-DCT-CONTRACT-2026-08-08` — **shared correctness hole
-closed; Zen 5 type-II identity retained.** DCT types I/III/IV now fail closed
-across the API, Graph verifier, autodiff, and the v4 Schedule→Tile artifact;
-the existing AVX-512 package remains explicitly type II. DCT and spectral
-convolution join the canonical TSOL inventory. This transfers no new numerical
-or performance evidence to unsupported DCT types.
+Cross-backend sync `TSOL-SPECTRAL-POLICY-2026-08-08` — **DCT physical coverage
+expanded on Zen 5; clean-host promotion remains open.** DCT-I/II/III/IV now
+carry distinct public, autodiff, Graph, Schedule, and Tile identities.
+`tessera.x86.spectral_composite.v6` phase-corrects the FFT-backed type-II path
+and provides separately hashed direct cosine kernels for types I/III/IV; exact
+Zen 5 correctness coverage passes. The causal chunked-STFT state now binds its
+policy digest and overlap lineage; centred streaming fails closed pending
+explicit lookahead. The new DCT direct paths have no performance promotion.
+The same boundary audit preserves scalar convolution and one-sample
+STFT/ISTFT through explicit scalar and odd full-complex paths; native AVX-512
+regressions pass on the Zen 5 host.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **shared atan2 semantic
 fix and x86 Welford parity apply; ROCm physical kernels are not applicable.** Shared quadrant logic
@@ -811,3 +840,16 @@ baseline f32 maximum errors are `2.87e-6`, `9.71e-7`, and `8.77e-6` for
 convolution/STFT/ISTFT. This changes no AMX claim. A same-run comparison with
 the retired full-complex composite is still required before calling the v5
 package a performance promotion rather than a correctness/workspace win.
+
+That same-process comparison is now runnable through the comparison-only
+full-complex symbols in the v6 native image; production artifacts cannot select
+them. A pinned WSL Zen 5 20-sample run at batch 32 measured packed speedups of
+1.470x, 1.525x, and 1.557x for `(input,kernel)` lengths `(256,65)`,
+`(1024,257)`, and `(4096,513)`; maximum packed error was 3.05e-5. The runner
+records cold and warm samples,
+Schedule/Tile/child digests, CPU identity, affinity, governor visibility,
+worktree state, and timing provenance. **Retain, not promote:** this checkout
+was dirty, the prior model-specific event map remains promotion-ineligible,
+and WSL exposes neither a frequency governor nor valid PMU provenance. A clean
+pinned bare-metal Zen 5 `tprof` timing/symbol packet is
+still required; the historical v5 selector packet is not relabeled as v6.

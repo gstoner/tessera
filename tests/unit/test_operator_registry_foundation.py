@@ -168,9 +168,17 @@ def test_graph_ir_recognizes_new_operator_names():
 
 
 @pytest.mark.parametrize("dct_type", [1, 3, 4])
-def test_reference_dct_rejects_unimplemented_types(dct_type):
-    with pytest.raises(ValueError, match="only type=2"):
-        tessera.ops.dct(np.arange(8, dtype=np.float32), type=dct_type)
+def test_reference_dct_supports_standard_types(dct_type):
+    result = tessera.ops.dct(np.arange(8, dtype=np.float32), type=dct_type)
+    assert result.shape == (8,)
+    assert np.isfinite(result).all()
+
+
+def test_reference_dct_ii_iii_inverse_identity():
+    x = np.linspace(-1.0, 1.0, 8, dtype=np.float32)
+    y = tessera.ops.dct(x, type=2)
+    restored = tessera.ops.dct(y, type=3) / (2 * x.size)
+    np.testing.assert_allclose(restored, x, atol=2e-5, rtol=2e-5)
 
 
 def test_graph_ir_recognizes_small_tsol_completion_slice():

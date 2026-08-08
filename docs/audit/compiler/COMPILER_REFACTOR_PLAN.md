@@ -1,11 +1,15 @@
 ---
-last_updated: 2026-07-22
+last_updated: 2026-08-08
 audit_role: plan
 plan_state: landing
 ---
 
 # Tessera Compiler — Refactor + Enhancement Plan
 
+> **Routing:** start at [`README.md`](README.md). This document owns shared-spine
+> and backend-plugin acceptance details; global ordering lives only in
+> [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
+>
 > **Paired with** [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md)
 > (the conceptual model — read it first). This document is the *execution plan*:
 > workstreams, sequencing, and the three-system coordination.
@@ -14,7 +18,8 @@ plan_state: landing
 > [`OPTIMIZING_COMPILER_PLAN.md`](OPTIMIZING_COMPILER_PLAN.md) (F0–F6 middle-end
 > synthesis — this plan generalizes its keystone across backends),
 > [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md) (scoring/promotion gate),
-> [`STAGE_A_EMIT_PLAN.md`](STAGE_A_EMIT_PLAN.md) (cross-vendor emit ladder), and
+> the archived [`STAGE_A_EMIT_PLAN.md`](archive/STAGE_A_EMIT_PLAN.md)
+> (cross-vendor emit-ladder provenance), and
 > [`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) (current state / Still Open).
 
 ---
@@ -248,11 +253,11 @@ chains, small attention). Crown-jewel GEMM stays Tier 2/3.
 
 ### Workstream C — Per-arch codegen plugin interface + the missing lead lanes
 
-> **Picking this up on the Strix Halo / NR2 Pro box?** Start at
-> [`WORKSTREAM_C_HANDOFF.md`](WORKSTREAM_C_HANDOFF.md) — the build recipe for the
-> three plugin seams (emitter / compile_fn / runner) the merged Workstream B
-> framework calls into, with a copy-paste skeleton, the F4-verification recipe,
-> and the per-backend task cards (C1 x86 · C2 NVIDIA · C3 ROCm).
+> **Current implementation contract:** the three registered seams below
+> (emitter / `compile_fn` / runner) are authoritative. Use the applicable
+> backend `todo.md` for current toolchain, exact-device, and promotion gates.
+> The original machine handoff is retained only as
+> [historical provenance](archive/WORKSTREAM_C_HANDOFF.md).
 
 - **C1 · Per-arch plugin = three registered seams (NOT one `TargetPlugin`
   struct)** `[MAC]` author → `[AMD]` execute on Zen 5. **Interface reconciled

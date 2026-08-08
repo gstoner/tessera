@@ -2516,19 +2516,37 @@ def jvp_istft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
 
 @_jvp("dct")
 def jvp_dct(primals, tangents, *, axis=-1, type=2, **_):
-    """DCT is orthonormal linear — JVP is DCT applied to the tangent."""
-    if int(type) != 2:
-        raise ValueError("dct JVP currently supports only type=2")
+    """The selected DCT is linear, so its JVP uses the same basis."""
+    dct_type = int(type)
+    if dct_type not in {1, 2, 3, 4}:
+        raise ValueError("dct JVP requires type in {1, 2, 3, 4}")
     x = np.asarray(primals[0], dtype=np.float64)
     dx = np.asarray(tangents[0], dtype=np.float64)
     axis_idx = axis if axis >= 0 else x.ndim + axis
     x_moved = np.moveaxis(x, axis_idx, -1)
     dx_moved = np.moveaxis(dx, axis_idx, -1)
     N = x_moved.shape[-1]
-    k = np.arange(N)
-    n_idx = np.arange(N).reshape(-1, 1)
-    basis = np.cos(np.pi * (2 * n_idx + 1) * k / (2.0 * N)) * np.sqrt(2.0 / N)
-    basis[:, 0] *= 1.0 / np.sqrt(2.0)
+    if dct_type == 1 and N < 2:
+        raise ValueError("DCT-I requires a transform length greater than one")
+    source = np.arange(N, dtype=np.float64)
+    frequency = np.arange(N, dtype=np.float64)
+    if dct_type == 1:
+        basis = 2.0 * np.cos(np.pi * np.outer(source, frequency) / (N - 1))
+        basis[0, :] = 1.0
+        basis[-1, :] = (-1.0) ** frequency
+    elif dct_type == 2:
+        basis = 2.0 * np.cos(
+            np.pi * np.outer(2 * source + 1, frequency) / (2 * N)
+        )
+    elif dct_type == 3:
+        basis = 2.0 * np.cos(
+            np.pi * np.outer(source, 2 * frequency + 1) / (2 * N)
+        )
+        basis[0, :] = 1.0
+    else:
+        basis = 2.0 * np.cos(
+            np.pi * np.outer(2 * source + 1, 2 * frequency + 1) / (4 * N)
+        )
     out = x_moved @ basis
     dout = dx_moved @ basis
     return np.moveaxis(out, -1, axis_idx), np.moveaxis(dout, -1, axis_idx)

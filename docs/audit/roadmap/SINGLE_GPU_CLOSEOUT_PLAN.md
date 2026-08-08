@@ -49,19 +49,20 @@ Single-GPU closeout excludes:
 
 ## Current Open Queue
 
-Snapshot from the generated dashboards on 2026-06-30:
+Snapshot from the generated dashboards on 2026-08-08. Values are
+ready/total; the Open column is the remaining count:
 
-| Area | Open | Single-GPU action |
-|---|---:|---|
-| Tile IR | 276 / 315 | Reclassify every partial row as `tile_lowered`, `fused`, `not_applicable`, or `multi_gpu_deferred`. |
-| Target IR native/fused codegen | 83 / 315 | Promote high-use reference rows, or mark intentional reference-only lanes. |
-| Backend kernel axis | 473 / 480 | Close only by backend/pathway; do not use this as an all-up compiler veto. |
-| Benchmark evidence | 276 / 315 | Attach benchmark rows to promoted native/fused paths first. |
-| Verifier coverage | 49 / 174 | Add real verifiers for promoted IR lanes before codegen promotion. |
-| Direct test evidence | 133 / 480 | Convert structural-only rows that are single-GPU-visible into direct compare fixtures. |
-| Runtime ABI symbols | 253 / 640 | Reduce stub-only symbols where a backend claims native execution. |
-| Audited repo surfaces | 27 / 58 | Graduate compile-only/scaffold surfaces that exercise this pipeline; archive dead surfaces. |
-| Sharding rules | 43 / 480 | Split one-device identity rules from multi-device-deferred rules. |
+| Area | Ready / total | Open | Single-GPU action |
+|---|---:|---:|---|
+| Tile IR | 320 / 324 | 4 | Close the four partial rows; explicit terminal rows are already closed. |
+| Target IR native/fused codegen | 320 / 324 | 4 | Close the four partial rows without treating implementation presence as device proof. |
+| Backend kernel axis | 99 / 487 | 388 | Close only by backend/pathway; do not use this as an all-up compiler veto. |
+| Benchmark evidence | 99 / 324 | 225 | Attach benchmark rows to promoted native/fused paths first. |
+| Verifier coverage | 216 / 216 | 0 | Preserve the totality gate; no closeout action remains. |
+| Direct test evidence | 363 / 487 | 124 | Convert structural-only and seven `needs_direct_test` rows into direct compare fixtures. |
+| Runtime ABI symbols | 519 / 827 | 308 | Reduce stub-only symbols where a backend claims native execution. |
+| Audited repo surfaces | 31 / 58 | 27 | Graduate compile-only/scaffold surfaces that exercise this pipeline; archive dead surfaces. |
+| Sharding rules | 444 / 487 | 43 | Split one-device identity rules from multi-device-deferred rules. |
 
 The highest-volume Tile IR partial families are `elementwise`, `attention`,
 `layout_transform`, `loss`, `indexing`, `visual_complex`, `numeric_helper`,
@@ -98,7 +99,7 @@ is:
 
 ### 1. Tile IR Closeout
 
-Goal: reduce `Tile IR partial=276` to zero terminal partials.
+Goal: reduce the four remaining `Tile IR partial` rows to zero.
 
 Work order:
 

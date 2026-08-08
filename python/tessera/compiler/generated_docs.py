@@ -440,6 +440,7 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
         _GEN / "compiler_progress.md", _r_compiler_progress,
         csv_path=_GEN / "compiler_progress.csv",
         render_csv=_r_compiler_progress_csv,
+        also_gate_md=True,
     ),
     # ── Op / primitive coverage ──
     GeneratedDoc(

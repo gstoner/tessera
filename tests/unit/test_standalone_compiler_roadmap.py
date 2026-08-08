@@ -10,6 +10,7 @@ from tessera.compiler.primitive_coverage import (
     primitives_for_model_family,
     render_markdown,
 )
+from tessera.compiler import standalone_dashboard
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -451,3 +452,10 @@ def test_standalone_primitive_dashboard_contains_checked_generated_snapshot():
 
     assert "<!-- BEGIN GENERATED PRIMITIVE COVERAGE SNAPSHOT -->" in text
     assert generated_table in text
+
+
+def test_standalone_dashboard_generated_summaries_match_live_registries():
+    text = DASHBOARD.read_text(encoding="utf-8")
+    assert standalone_dashboard.render_registry_summary() in text
+    assert standalone_dashboard.render_compiler_summary() in text
+    assert standalone_dashboard.render_document(text) == text

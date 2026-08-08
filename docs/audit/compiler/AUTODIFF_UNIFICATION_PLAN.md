@@ -1,11 +1,15 @@
 ---
-last_updated: 2026-07-14
+last_updated: 2026-08-08
 audit_role: plan
-plan_state: open
+plan_state: landing
 ---
 
 # Front-End / IR / Autodiff Unification Plan
 
+> **Routing:** start at [`README.md`](README.md). This document owns autodiff
+> contracts and acceptance criteria; global ordering lives only in
+> [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
+>
 > **Status truth lives in the generated dashboards, not this doc** (Decision
 > #26). This is *direction + sequencing*. Live counts/states come from
 > [`generated/compiler_progress.md`](../generated/compiler_progress.md),

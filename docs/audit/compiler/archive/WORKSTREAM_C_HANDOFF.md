@@ -1,16 +1,24 @@
 ---
-last_updated: 2026-07-06
-audit_role: reference
+last_updated: 2026-08-08
+audit_role: historical_design
+plan_state: superseded_for_active_execution_work
 ---
 
 # Backend Plugin Handoff — pick up Workstream C on your box
 
+> **Archived 2026-08-08.** This was the machine-to-machine implementation
+> handoff used to establish the first x86, ROCm, and NVIDIA plugin lanes. Do not
+> use its environment pins or commands as current setup guidance. The durable
+> emitter/compiler/runner contract now lives in
+> [`COMPILER_REFACTOR_PLAN.md`](../COMPILER_REFACTOR_PLAN.md); current execution
+> and device evidence live in generated dashboards and backend plans.
+>
 > **Who this is for:** a Claude (or human) working on the **Strix Halo**
 > (ROCm gfx1151 + x86 Zen 5) or **NR2 Pro** (NVIDIA sm_120) box, picking up
 > Workstream **C** — the per-arch codegen plugins — against the target-agnostic
 > synthesizer that Workstream **B** already built and merged on the Mac.
 >
-> **Read first:** [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) §3
+> **Read first:** [`COMPILER_REFACTOR_PLAN.md`](../COMPILER_REFACTOR_PLAN.md) §3
 > (workstreams), §5 (definition of done), §7 (three-system coordination + setup
 > pins). This doc is the *build recipe* those sections point at.
 
@@ -252,8 +260,8 @@ the floor and must **never cap their ceiling** (Theory §1, Decision #28):
 
 ## 7. Get your box ready
 
-Setup pins are in [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) §7.4
-and [`../../GETTING_STARTED.md`](../../GETTING_STARTED.md):
+Setup pins were in [`COMPILER_REFACTOR_PLAN.md`](../COMPILER_REFACTOR_PLAN.md) §7.4
+and [`GETTING_STARTED.md`](../../../GETTING_STARTED.md) when this handoff was active:
 
 - **Strix Halo:** Ubuntu 24.04 → `bash scripts/setup_ubuntu.sh` (LLVM/MLIR 23 from
   apt.llvm.org — ROCm's bundled LLVM has no MLIR); ROCm 7.2.4 at `/opt/rocm`;

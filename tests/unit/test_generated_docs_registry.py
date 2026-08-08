@@ -59,6 +59,12 @@ def test_csv_docs_have_csv_path() -> None:
         )
 
 
+def test_compiler_progress_gates_both_csv_and_markdown() -> None:
+    doc = gd.get("compiler_progress")
+    assert doc.csv_path is not None
+    assert doc.also_gate_md
+
+
 def test_no_unregistered_generated_markdown() -> None:
     """Every fully-generated Markdown under docs/audit/generated/ must be
     in the registry.  Exceptions: CSV companions, and docs gated by their

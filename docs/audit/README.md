@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-28
+last_updated: 2026-08-08
 audit_role: index
 ---
 
@@ -26,10 +26,9 @@ with [MASTER_AUDIT.md](MASTER_AUDIT.md).
   architecture walkthrough.
 - Root-level hand-written redirect stubs are not used. Old source docs live in
   theme-local archives and are summarized by the theme audit.
-- Each theme folder's single entry point is its `*_AUDIT.md` — there are no
-  per-theme `README.md` redirect stubs (they only restated "start with the
-  audit" + the archive map carried in this file's Archive Map below). The
-  Themes table above links straight to each audit.
+- Theme audits own status. A theme may also carry a non-redirect `README.md`
+  when its live plan/reference set needs an authority and routing map; the
+  compiler map is the canonical example.
 
 ## Authored-doc contract
 
@@ -82,19 +81,19 @@ and gates and are excluded from this contract.
 | [generated/compiler_progress.md](generated/compiler_progress.md) | Generated all-up compiler-progress dashboard: phase/IR state, primitives, integration, backend/codegen pathways, and open work. |
 | [generated/](generated/) | Script/test-owned generated dashboards. |
 
-## Forward Plans — the compiler north star
+## Compiler direction
 
-The go-forward direction for compiler development (the **new north star**) is a
-paired plan + theory set under `compiler/`. Read these before starting backend or
-middle-end work; they supersede the pre-2026-07 "op-library" framing.
+Start with the compiler map before choosing a plan. It separates generated
+status, global sequence, scoped acceptance plans, references, and history.
 
 | Doc | Role |
 |---|---|
-| [compiler/COMPILER_THEORY_OF_OPERATION.md](compiler/COMPILER_THEORY_OF_OPERATION.md) | **Read first.** Durable conceptual model — three-tier kernel model (generic framework / per-arch plugin / hand-tuned library), the accuracy-budgeted measured arbiter, the three-system fleet, and the W1–W8 world-class scope register. |
+| [compiler/README.md](compiler/README.md) | **Read first.** Authority chain, current execution route, and complete live-document catalog. |
+| [compiler/INTEGRATED_COMPILER_PLAN.md](compiler/INTEGRATED_COMPILER_PLAN.md) | Sole cross-domain compiler sequencing authority. |
+| [compiler/COMPILER_THEORY_OF_OPERATION.md](compiler/COMPILER_THEORY_OF_OPERATION.md) | Durable conceptual model — three-tier kernel model, measured arbiter, and architecture invariants; not a work queue. |
 | [compiler/COMPILER_REFACTOR_PLAN.md](compiler/COMPILER_REFACTOR_PLAN.md) | Execution plan — Workstreams A–E (kernel spine) + F–K (world-class dimensions), sequencing, and the Mac/Strix-Halo/NR2-Pro coordination + routing matrix. |
 | [compiler/OPTIMIZING_COMPILER_PLAN.md](compiler/OPTIMIZING_COMPILER_PLAN.md) | Middle-end synthesis (F0–F5 landed on Apple); **F6 = the backend-build seam** (reassessed 2026-07-02). |
 | [compiler/EVALUATOR_PLAN.md](compiler/EVALUATOR_PLAN.md) | The scoring engine that gates every promotion in the plans above. |
-| [compiler/STAGE_A_EMIT_PLAN.md](compiler/STAGE_A_EMIT_PLAN.md) | Cross-vendor emit-ladder grounding. |
 | [compiler/AUTODIFF_UNIFICATION_PLAN.md](compiler/AUTODIFF_UNIFICATION_PLAN.md) | Front-end / IR / autodiff unification — make differentiation a compiler request with a native fwd+bwd execution path and a per-family × per-target proof ledger, replacing implicit-tape-reported-as-compiled. |
 | [compiler/TILESIGHT_ASSESSMENT.md](compiler/TILESIGHT_ASSESSMENT.md) | External assessment (analytical tile-centric cost modelling, arXiv:2607.22432) + the audit finding it surfaced: the hardware-free analytical cost model the arbiter falls back to was a mock. Records what to take, what to skip, the per-backend read, and a ranked reference list. `reference` role — not a status surface. |
 
@@ -128,6 +127,8 @@ criteria behind a current item.
 
 | Former root doc | Current audit | Archived source |
 |---|---|---|
+| `compiler/STAGE_A_EMIT_PLAN.md` | [compiler/COMPILER_REFACTOR_PLAN.md](compiler/COMPILER_REFACTOR_PLAN.md) | `compiler/archive/STAGE_A_EMIT_PLAN.md` |
+| `compiler/WORKSTREAM_C_HANDOFF.md` | [compiler/COMPILER_REFACTOR_PLAN.md](compiler/COMPILER_REFACTOR_PLAN.md) | `compiler/archive/WORKSTREAM_C_HANDOFF.md` |
 | `compiler_apple_backend_end_to_end_audit_2026_06_02.md` | [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md), [backend/apple/APPLE_AUDIT.md](backend/apple/APPLE_AUDIT.md) | `compiler/archive/` |
 | `compiler_correctness_testing_audit.md` | [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) | `compiler/archive/` |
 | `compiler_improvement_milestone_plan_2026_05_18.md` | [compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) | `compiler/archive/` |

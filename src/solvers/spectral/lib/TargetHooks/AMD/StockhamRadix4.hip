@@ -193,22 +193,10 @@ extern "C" __global__ void ts_stockham_rn_amd(const float2 *__restrict__ in,
   }
 }
 
-// Small power-of-two residency selected by the content-addressed gfx1151 v4
-// FFT contract. All stages ping-pong between two LDS slabs and touch global
-// memory only at entry/exit; one workgroup owns each transform in the batch.
-extern "C" __global__ void
-ts_fft_stockham_fused_lds_amd(const float2 *__restrict__ in,
-                             float2 *__restrict__ out, int N, int sign) {
-  extern __shared__ float2 storage[];
-  float2 *cur = storage;
-  float2 *other = storage + N;
-  const size_t rowOffset = size_t(blockIdx.x) * size_t(N);
-  const float2 *rowIn = in + rowOffset;
-  float2 *rowOut = out + rowOffset;
-  for (int i = threadIdx.x; i < N; i += blockDim.x)
-    cur[i] = rowIn[i];
-  __syncthreads();
-
+// Execute all power-of-two Stockham stages in two caller-owned LDS slabs.
+// Every work-item must enter this helper: it contains workgroup barriers.
+__device__ __forceinline__ float2 *stockham_fused_lds_stages(
+    float2 *cur, float2 *other, int N, int sign) {
   int L = 1;
   int rest = N;
   while (rest % 4 == 0) {
@@ -265,10 +253,91 @@ ts_fft_stockham_fused_lds_amd(const float2 *__restrict__ in,
     L *= 2;
     rest /= 2;
   }
+  return cur;
+}
+
+// Small power-of-two residency selected by the content-addressed gfx1151 FFT
+// contract. All stages ping-pong between two LDS slabs and touch global memory
+// only at entry/exit; one workgroup owns each transform in the batch.
+extern "C" __global__ void
+ts_fft_stockham_fused_lds_amd(const float2 *__restrict__ in,
+                             float2 *__restrict__ out, int N, int sign) {
+  extern __shared__ float2 storage[];
+  float2 *cur = storage;
+  float2 *other = storage + N;
+  const size_t rowOffset = size_t(blockIdx.x) * size_t(N);
+  const float2 *rowIn = in + rowOffset;
+  float2 *rowOut = out + rowOffset;
+  for (int i = threadIdx.x; i < N; i += blockDim.x)
+    cur[i] = rowIn[i];
+  __syncthreads();
+
+  cur = stockham_fused_lds_stages(cur, other, N, sign);
 
   const float scale = sign > 0 ? 1.0f / float(N) : 1.0f;
   for (int i = threadIdx.x; i < N; i += blockDim.x)
     rowOut[i] = make_float2(cur[i].x * scale, cur[i].y * scale);
+}
+
+// Even-length real transforms use a complex FFT of M=N/2 packed samples.
+// These kernels fold the Hermitian pre/post-processing into that same LDS
+// residency, removing the extra preprocessing/postprocessing dispatch and,
+// for C2R, the device-to-device copy of interleaved real output.
+extern "C" __global__ void ts_rfft_stockham_fused_lds_amd(
+    const float *__restrict__ in, float2 *__restrict__ spectrum, int M,
+    int N) {
+  extern __shared__ float2 storage[];
+  float2 *cur = storage;
+  float2 *other = storage + M;
+  const float *rowIn = in + size_t(blockIdx.x) * size_t(N);
+  float2 *rowOut = spectrum + size_t(blockIdx.x) * size_t(M + 1);
+  for (int i = threadIdx.x; i < M; i += blockDim.x)
+    cur[i] = make_float2(rowIn[2 * i], rowIn[2 * i + 1]);
+  __syncthreads();
+
+  cur = stockham_fused_lds_stages(cur, other, M, -1);
+  for (int k = threadIdx.x; k <= M; k += blockDim.x) {
+    const int ai = k == M ? 0 : k;
+    const int bi = (M - k) % M;
+    const float2 a = cur[ai];
+    const float2 b = make_float2(cur[bi].x, -cur[bi].y);
+    const float2 diff = make_float2(a.x - b.x, a.y - b.y);
+    float s, c;
+    __sincosf(-2.0f * float(M_PI) * float(k) / float(N), &s, &c);
+    const float2 q = cmul(make_float2(c, s), diff);
+    rowOut[k] = make_float2(0.5f * (a.x + b.x + q.y),
+                            (k == 0 || k == M)
+                                ? 0.0f
+                                : 0.5f * (a.y + b.y - q.x));
+  }
+}
+
+extern "C" __global__ void ts_irfft_stockham_fused_lds_amd(
+    const float2 *__restrict__ spectrum, float *__restrict__ out, int M,
+    int N) {
+  extern __shared__ float2 storage[];
+  float2 *cur = storage;
+  float2 *other = storage + M;
+  const float2 *rowIn = spectrum + size_t(blockIdx.x) * size_t(M + 1);
+  float *rowOut = out + size_t(blockIdx.x) * size_t(N);
+  for (int k = threadIdx.x; k < M; k += blockDim.x) {
+    const float2 a = rowIn[k];
+    const float2 b = make_float2(rowIn[M - k].x, -rowIn[M - k].y);
+    const float2 diff = make_float2(a.x - b.x, a.y - b.y);
+    float s, c;
+    __sincosf(2.0f * float(M_PI) * float(k) / float(N), &s, &c);
+    const float2 q = cmul(make_float2(c, s), diff);
+    cur[k] = make_float2(0.5f * (a.x + b.x - q.y),
+                         0.5f * (a.y + b.y + q.x));
+  }
+  __syncthreads();
+
+  cur = stockham_fused_lds_stages(cur, other, M, 1);
+  const float scale = 1.0f / float(M);
+  for (int i = threadIdx.x; i < M; i += blockDim.x) {
+    rowOut[2 * i] = cur[i].x * scale;
+    rowOut[2 * i + 1] = cur[i].y * scale;
+  }
 }
 
 extern "C" int ts_fft_stockham_fused_lds_launch_amd(
@@ -288,6 +357,30 @@ static int launch_fused_lds_batch(const float2 *d_in, float2 *d_out, int batch,
   hipLaunchKernelGGL(ts_fft_stockham_fused_lds_amd, dim3(batch), dim3(256),
                      size_t(2 * N) * sizeof(float2), stream, d_in, d_out, N,
                      sign);
+  return hipGetLastError() == hipSuccess ? 0 : 8;
+}
+
+static int launch_rfft_fused_lds_batch(const float *d_in, float2 *d_out,
+                                       int batch, int logicalN,
+                                       hipStream_t stream) {
+  const int m = logicalN / 2;
+  if (batch <= 0 || m < 2 || m > 1024 || (m & (m - 1)) != 0)
+    return 7;
+  hipLaunchKernelGGL(ts_rfft_stockham_fused_lds_amd, dim3(batch), dim3(256),
+                     size_t(2 * m) * sizeof(float2), stream, d_in, d_out, m,
+                     logicalN);
+  return hipGetLastError() == hipSuccess ? 0 : 8;
+}
+
+static int launch_irfft_fused_lds_batch(const float2 *d_in, float *d_out,
+                                        int batch, int logicalN,
+                                        hipStream_t stream) {
+  const int m = logicalN / 2;
+  if (batch <= 0 || m < 2 || m > 1024 || (m & (m - 1)) != 0)
+    return 7;
+  hipLaunchKernelGGL(ts_irfft_stockham_fused_lds_amd, dim3(batch), dim3(256),
+                     size_t(2 * m) * sizeof(float2), stream, d_in, d_out, m,
+                     logicalN);
   return hipGetLastError() == hipSuccess ? 0 : 8;
 }
 
@@ -732,6 +825,9 @@ extern "C" int ts_fft_plan_execute_r2c_packed_device_batch_amd(
     return 30;
   const int m = logicalN / 2;
   std::lock_guard<std::mutex> guard(plan->mutex);
+  if (m >= 2 && m <= 1024 && (m & (m - 1)) == 0)
+    return launch_rfft_fused_lds_batch(inputDevice, outputDevice, batch,
+                                       logicalN, stream);
   if (ensure_batch_capacity(plan, static_cast<size_t>(batch)) != 0) return 21;
   int rc = execute_device_batch_locked(
       plan, reinterpret_cast<const float2 *>(inputDevice), plan->output, batch,
@@ -754,6 +850,9 @@ extern "C" int ts_fft_plan_execute_c2r_packed_device_batch_amd(
     return 30;
   const int m = logicalN / 2;
   std::lock_guard<std::mutex> guard(plan->mutex);
+  if (m >= 2 && m <= 1024 && (m & (m - 1)) == 0)
+    return launch_irfft_fused_lds_batch(inputDevice, outputDevice, batch,
+                                        logicalN, stream);
   if (ensure_batch_capacity(plan, static_cast<size_t>(batch)) != 0) return 21;
   constexpr int threads = 256;
   int total = batch * m;
@@ -811,6 +910,18 @@ extern "C" int ts_fft_plan_execute_r2c_packed_hostptr_amd(
                 size_t(batch) * logicalN * sizeof(float),
                 hipMemcpyHostToDevice) != hipSuccess)
     return 22;
+  if (m >= 2 && m <= 1024 && (m & (m - 1)) == 0) {
+    int rc = launch_rfft_fused_lds_batch(
+        reinterpret_cast<const float *>(plan->input), plan->realSpectrum,
+        batch, logicalN, 0);
+    if (rc != 0) return rc;
+    if (hipDeviceSynchronize() != hipSuccess) return 24;
+    if (hipMemcpy(outputHost, plan->realSpectrum,
+                  size_t(batch) * size_t(m + 1) * sizeof(float2),
+                  hipMemcpyDeviceToHost) != hipSuccess)
+      return 25;
+    return 0;
+  }
   int rc = execute_device_batch_locked(plan, plan->input, plan->output, batch, 0);
   if (rc != 0) return rc;
   constexpr int threads = 256;
@@ -843,6 +954,18 @@ extern "C" int ts_fft_plan_execute_c2r_packed_hostptr_amd(
                 size_t(totalSpectrum) * sizeof(float2),
                 hipMemcpyHostToDevice) != hipSuccess)
     return 22;
+  if (m >= 2 && m <= 1024 && (m & (m - 1)) == 0) {
+    int rc = launch_irfft_fused_lds_batch(
+        plan->realSpectrum, reinterpret_cast<float *>(plan->output), batch,
+        logicalN, 0);
+    if (rc != 0) return rc;
+    if (hipDeviceSynchronize() != hipSuccess) return 24;
+    if (hipMemcpy(outputHost, plan->output,
+                  size_t(batch) * logicalN * sizeof(float),
+                  hipMemcpyDeviceToHost) != hipSuccess)
+      return 25;
+    return 0;
+  }
   constexpr int threads = 256;
   int totalPacked = batch * m;
   hipLaunchKernelGGL(ts_irfft_pre_amd,

@@ -32,8 +32,10 @@ consumption remains architecture-owned follow-up work.
 - Compound real-storage policy: `fp16 | bf16 | fp32`, with f32 arithmetic.
 - Normalization: `backward | forward | ortho` for compound physical packages;
   the core FFT artifact currently uses backward normalization.
-- DCT: type II only. Types I, III, and IV fail closed until their identities,
-  adjoints, and native packages are implemented.
+- DCT: types I/II/III/IV have distinct identities and adjoints. Zen 5 and
+  gfx1151 physically consume all four; type II uses a phase-corrected FFT
+  child while I/III/IV use separately hashed direct cosine kernels pending
+  architecture-owned performance specialization.
 
 ## Examples
 - **FFT‑based convolution**: see `examples/fft_conv_example.mlir`
@@ -47,8 +49,12 @@ architecture-owned Hermitian pre/post processing on x86 and gfx1151.
 artifact for RFFT→multiply→IRFFT spectral convolution, framed/windowed RFFT
 STFT, and packed IRFFT→deterministic overlap-add ISTFT. Intermediate real and
 Hermitian slabs remain in native package workspace. Odd lengths retain an
-explicitly hashed full-complex fallback. The next physical work is folding the
-gfx1151 Hermitian step into its fused-LDS launch, production STFT/ISTFT padding
-and streaming policies, and measured multidimensional/distributed transforms.
+explicitly hashed full-complex fallback. The gfx1151 v6 path folds Hermitian
+pre/post processing into the fused-LDS launch. Eager STFT/ISTFT now define
+arbitrary-axis, `n_fft`, centred padding, one-sided/full-spectrum, and
+output-length semantics. The content-addressed causal streaming policy carries
+overlap state and fails closed for centred streaming until lookahead lineage is
+explicit. Physical adoption of those new policies and measured
+multidimensional/distributed transforms remain.
 Reduced-arithmetic FP16/BF16, FP8/FP4, sFFT, and NTT remain research or planned
 work rather than shipped capabilities.

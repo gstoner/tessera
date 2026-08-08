@@ -53,6 +53,17 @@ def _stft_ref(x, win, hop):
 _TOL = dict(atol=1e-2, rtol=1e-2)
 
 
+def _dct2_ref(x, axis=-1, scale=1.0):
+    moved = np.moveaxis(np.asarray(x, np.float64), axis, -1)
+    n = moved.shape[-1]
+    source = np.arange(n, dtype=np.float64)
+    frequency = np.arange(n, dtype=np.float64)
+    basis = 2.0 * np.cos(
+        np.pi * np.outer(2.0 * source + 1.0, frequency) / float(2 * n)
+    )
+    return np.moveaxis(moved @ basis, -1, axis) * scale
+
+
 def test_dct():
     rt = _rocm_or_skip()
     rng = np.random.default_rng(1)
@@ -60,9 +71,22 @@ def test_dct():
     res = rt.launch(_art(rt, "tessera.dct", (x,), {"axis": -1}), (x,))
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "rocm_spectral_compiled"
-    y = np.concatenate([x, np.flip(x, -1)], -1).astype(np.complex64)
-    ref = np.real(np.fft.fft(y, axis=-1)[..., :8]).astype(np.float32)
+    ref = _dct2_ref(x).astype(np.float32)
     np.testing.assert_allclose(np.asarray(res["output"]), ref, **_TOL)
+
+
+@pytest.mark.parametrize("dct_type", [1, 3, 4])
+def test_extended_dct_types_use_distinct_physical_contracts(dct_type):
+    import tessera
+
+    rt = _rocm_or_skip()
+    x = np.linspace(-1.0, 1.0, 16, dtype=np.float32).reshape(2, 8)
+    result = rt.launch(
+        _art(rt, "tessera.dct", (x,), {"type": dct_type}), (x,)
+    )
+    assert result["ok"] is True, result.get("reason")
+    reference = tessera.ops.dct(x, type=dct_type)
+    np.testing.assert_allclose(np.asarray(result["output"]), reference, **_TOL)
 
 
 def test_spectral_conv():
@@ -76,6 +100,41 @@ def test_spectral_conv():
     nfft = 1 << int(np.ceil(np.log2(n)))
     ref = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)[..., :n]
     np.testing.assert_allclose(np.asarray(res["output"]), ref, **_TOL)
+
+
+def test_scalar_convolution_preserves_length_one_contract():
+    rt = _rocm_or_skip()
+    x = np.array([[2.0], [-3.0], [0.5]], dtype=np.float32)
+    w = np.array([[4.0], [2.0], [-8.0]], dtype=np.float32)
+    result = rt.launch(
+        _art(rt, "tessera.spectral_conv", (x, w), {}), (x, w)
+    )
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_array_equal(np.asarray(result["output"]), x * w)
+
+
+def test_standalone_convolution_export_uses_packed_plans():
+    _rocm_or_skip()
+    from tessera.compiler.emit import spectral_candidates as candidates
+
+    lib = candidates._amd_composite_lib()
+    assert lib is not None
+    fft_n = 8
+    _, forward = candidates._rocm_plan(fft_n // 2, -1, "a" * 64)
+    _, inverse = candidates._rocm_plan(fft_n // 2, 1, "b" * 64)
+    x = np.array([[1.0, -2.0, 3.0, 0.5, 4.0],
+                  [-1.0, 0.25, 2.0, -3.0, 1.5]], dtype=np.float32)
+    w = np.array([[2.0, -1.0, 0.5],
+                  [0.5, 1.0, -2.0]], dtype=np.float32)
+    output = np.empty((2, 7), dtype=np.float32)
+    rc = lib.ts_spectral_conv_hostptr_batch_amd(
+        forward, inverse, candidates._cptr(x), x.shape[1],
+        candidates._cptr(w), w.shape[1], candidates._cptr(output),
+        x.shape[0], fft_n,
+    )
+    assert rc == 0
+    reference = np.stack([np.convolve(x[row], w[row]) for row in range(2)])
+    np.testing.assert_allclose(output, reference, **_TOL)
 
 
 def test_spectral_filter():
@@ -101,7 +160,7 @@ def test_composite_workspace_plan_is_reused_by_artifact_digest():
     contract = artifact.metadata["scheduled_spectral"]
     lib = candidates._amd_composite_lib()
     assert lib is not None
-    assert lib.ts_spectral_composite_package_abi_amd() == b"tessera.rocm.spectral_composite.v5"
+    assert lib.ts_spectral_composite_package_abi_amd() == b"tessera.rocm.spectral_composite.v6"
     assert lib.ts_spectral_composite_arch_amd() == b"gfx1151"
 
     first = candidates._rocm_composite_plan(contract, lib)
@@ -136,6 +195,26 @@ def test_stft_istft():
     assert rec.shape[-1] == (sref.shape[-2] - 1) * 4 + 8
 
 
+def test_unit_window_stft_istft_uses_odd_fallback():
+    rt = _rocm_or_skip()
+    signal = np.array([1.0, -2.0, 3.5, 0.25], dtype=np.float32)
+    window = np.ones((1,), dtype=np.float32)
+    stft = rt.launch(
+        _art(rt, "tessera.stft", (signal, window), {"hop": 1}),
+        (signal, window),
+    )
+    assert stft["ok"] is True, stft.get("reason")
+    spectrum = np.asarray(stft["output"])
+    np.testing.assert_array_equal(spectrum[:, 0].real, signal)
+    np.testing.assert_array_equal(spectrum[:, 0].imag, 0.0)
+    istft = rt.launch(
+        _art(rt, "tessera.istft", (spectrum, window), {"hop": 1}),
+        (spectrum, window),
+    )
+    assert istft["ok"] is True, istft.get("reason")
+    np.testing.assert_array_equal(np.asarray(istft["output"]), signal)
+
+
 def test_ragged_batched_bluestein_composites():
     """Prime transform lengths exercise child Bluestein plans, not radix-only fixtures."""
     rt = _rocm_or_skip()
@@ -144,8 +223,7 @@ def test_ragged_batched_bluestein_composites():
     x = rng.standard_normal((2, 17)).astype(np.float32)
     d = rt.launch(_art(rt, "tessera.dct", (x,), {}), (x,))
     assert d["ok"] is True, d.get("reason")
-    mirrored = np.concatenate([x, np.flip(x, -1)], -1).astype(np.complex64)
-    dref = np.fft.fft(mirrored, axis=-1)[..., :17].real.astype(np.float32)
+    dref = _dct2_ref(x).astype(np.float32)
     np.testing.assert_allclose(np.asarray(d["output"]), dref, **_TOL)
 
     signal = rng.standard_normal((2, 43)).astype(np.float32)
@@ -182,8 +260,7 @@ def test_bounded_dynamic_and_arbitrary_axis_dct():
     x = np.arange(24, dtype=np.float32).reshape(8, 3)
     result = rt.launch(artifact, (x,))
     assert result["ok"] is True, result.get("reason")
-    mirrored = np.concatenate([x, np.flip(x, 0)], axis=0).astype(np.complex64)
-    reference = np.fft.fft(mirrored, axis=0)[:8].real.astype(np.float32)
+    reference = _dct2_ref(x, axis=0).astype(np.float32)
     np.testing.assert_allclose(np.asarray(result["output"]), reference, **_TOL)
 
 
@@ -198,8 +275,7 @@ def test_reduced_storage_dct_uses_f32_accumulation(storage):
     assert result["ok"] is True, result.get("reason")
     assert str(np.asarray(result["output"]).dtype) == str(np.dtype(dtype))
     source = x.astype(np.float32)
-    mirrored = np.concatenate([source, np.flip(source, -1)], -1).astype(np.complex64)
-    reference = np.fft.fft(mirrored, axis=-1)[..., :8].real.astype(np.float32)
+    reference = _dct2_ref(source).astype(np.float32)
     np.testing.assert_allclose(
         np.asarray(result["output"]).astype(np.float32), reference,
         atol=4e-2, rtol=4e-2,
@@ -259,9 +335,8 @@ def test_native_forward_and_ortho_normalization(normalization):
         _art(rt, "tessera.dct", (x,), {"normalization": normalization}), (x,)
     )
     assert dct["ok"] is True, dct.get("reason")
-    mirrored = np.concatenate([x, np.flip(x, -1)], -1).astype(np.complex64)
     scale = 1.0 / (16.0 if normalization == "forward" else np.sqrt(16.0))
-    reference = np.fft.fft(mirrored, axis=-1)[..., :8].real * scale
+    reference = _dct2_ref(x, scale=scale)
     np.testing.assert_allclose(np.asarray(dct["output"]), reference, **_TOL)
 
     signal = rng.standard_normal((24,)).astype(np.float32)
@@ -318,8 +393,7 @@ def test_combined_dynamic_axis_reduced_storage_ortho_policy(storage):
     result = rt.launch(artifact, (x,))
     assert result["ok"] is True, result.get("reason")
     source = x.astype(np.float32)
-    mirrored = np.concatenate([source, np.flip(source, 0)], axis=0).astype(np.complex64)
-    reference = np.fft.fft(mirrored, axis=0)[:64].real / np.sqrt(128.0)
+    reference = _dct2_ref(source, axis=0, scale=1.0 / np.sqrt(128.0))
     np.testing.assert_allclose(
         np.asarray(result["output"]).astype(np.float32), reference,
         atol=0.15 if storage == "bf16" else 5e-2, rtol=5e-2,

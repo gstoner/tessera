@@ -4571,8 +4571,9 @@ LogicalResult IRFFTOp::verify() {
   return verifySpectralAxis(getOperation(), getX(), getAxis(), "irfft");
 }
 LogicalResult DCTOp::verify() {
-  if (IntegerAttr type = getTypeAttr(); type && type.getInt() != 2)
-    return emitOpError("currently supports only type = 2");
+  if (IntegerAttr type = getTypeAttr();
+      type && (type.getInt() < 1 || type.getInt() > 4))
+    return emitOpError("requires type in [1, 4]");
   return verifySpectralAxis(getOperation(), getX(), getAxis(), "dct");
 }
 

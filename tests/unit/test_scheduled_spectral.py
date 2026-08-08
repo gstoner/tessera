@@ -131,7 +131,7 @@ def test_odd_window_fallback_is_explicit_and_hashed():
 def test_compound_contract_fails_closed_without_architecture_evidence(target):
     profile = spectral_architecture_profile(target)
     assert profile.execution_status == "fail_closed"
-    assert profile.native_package_abi == "tessera.rocm.spectral_composite.v5"
+    assert profile.native_package_abi == "tessera.rocm.spectral_composite.v6"
     assert profile.package_status == "build_only"
     with pytest.raises(ValueError, match="fails closed"):
         lower_scheduled_spectral(
@@ -161,17 +161,17 @@ def test_target_neutral_contract_supports_bounded_dynamic_shapes_and_axis():
 
 
 @pytest.mark.parametrize("dct_type", [1, 3, 4])
-def test_dct_contract_rejects_unimplemented_types(dct_type):
-    with pytest.raises(ValueError, match="only dct_type=2"):
-        define_spectral_program_contract(
-            op_name="tessera.dct",
-            input_signature=((8,),),
-            dct_type=dct_type,
-        )
+def test_dct_contract_carries_all_standard_types(dct_type):
+    contract = define_spectral_program_contract(
+        op_name="tessera.dct",
+        input_signature=((8,),),
+        dct_type=dct_type,
+    )
+    assert contract.dct_type == dct_type
 
 
 @_needs_opt
-def test_graph_dct_verifier_rejects_silent_type_aliasing():
+def test_graph_dct_preserves_nondefault_type_identity():
     source = '''module {
   func.func @bad_dct(%x: tensor<8xf32>) -> tensor<8xf32> {
     %0 = "tessera.dct"(%x) {axis = -1 : i64, type = 3 : i64} :
@@ -180,8 +180,10 @@ def test_graph_dct_verifier_rejects_silent_type_aliasing():
   }
 }
 '''
-    with pytest.raises(RuntimeError, match="currently supports only type = 2"):
-        run_tessera_opt(find_tessera_opt(), source, "--tessera-graph-to-schedule")
+    schedule = run_tessera_opt(
+        find_tessera_opt(), source, "--tessera-graph-to-schedule"
+    )
+    assert "type = 3 : i64" in schedule
 
 
 @_needs_opt
@@ -285,6 +287,8 @@ def test_full_family_physical_policy_packet_is_complete(
 
     assert packet["schema"] == "tessera.tsol_physical_policy_evidence.v2"
     assert packet["target"] == target
+    # Historical packets retain the ABI they measured; v6 requires fresh
+    # clean-host performance evidence rather than relabeling v5 samples.
     assert packet["package_abi"].endswith("spectral_composite.v5")
     assert packet["selector_eligible"] is selector_eligible
     assert len(rows) == 30

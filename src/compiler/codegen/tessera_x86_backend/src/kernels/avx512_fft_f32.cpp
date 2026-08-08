@@ -658,8 +658,59 @@ extern "C" int tessera_x86_fft_c2r_packed_f32(
     return 0;
 }
 
+// Measurement-only retired lane.  Keep this callable so packed-real
+// promotion packets compare both policies inside the same native package and
+// process; production artifacts never select these symbols.
+extern "C" int tessera_x86_fft_r2c_full_complex_f32(
+    const char* digest, const float* input, float* output, int64_t batch,
+    int64_t n) {
+    if (!valid_digest(digest) || !input || !output || batch <= 0 || n < 2)
+        return 1;
+    const int64_t bins = n / 2 + 1;
+    auto fullOwner = spectral_workspace(
+        digest, "r2c_full_comparison", static_cast<size_t>(2 * batch * n));
+    float* full = fullOwner->data();
+    for (int64_t i = 0; i < batch * n; ++i) {
+        full[2 * i] = input[i];
+        full[2 * i + 1] = 0.0f;
+    }
+    if (execute_any_fft(full, batch, n, false, digest)) return 2;
+    for (int64_t row = 0; row < batch; ++row)
+        std::memcpy(output + 2 * row * bins, full + 2 * row * n,
+                    static_cast<size_t>(2 * bins) * sizeof(float));
+    return 0;
+}
+
+extern "C" int tessera_x86_fft_c2r_full_complex_f32(
+    const char* digest, const float* input, float* output, int64_t batch,
+    int64_t n) {
+    if (!valid_digest(digest) || !input || !output || batch <= 0 || n < 2)
+        return 1;
+    const int64_t bins = n / 2 + 1;
+    auto fullOwner = spectral_workspace(
+        digest, "c2r_full_comparison", static_cast<size_t>(2 * batch * n));
+    float* full = fullOwner->data();
+    for (int64_t row = 0; row < batch; ++row) {
+        for (int64_t k = 0; k < bins; ++k) {
+            full[2 * (row * n + k)] = input[2 * (row * bins + k)];
+            full[2 * (row * n + k) + 1] = input[2 * (row * bins + k) + 1];
+        }
+        for (int64_t k = bins; k < n; ++k) {
+            const int64_t mirror = n - k;
+            full[2 * (row * n + k)] = input[2 * (row * bins + mirror)];
+            full[2 * (row * n + k) + 1] =
+                -input[2 * (row * bins + mirror) + 1];
+        }
+    }
+    if (execute_any_fft(full, batch, n, true, digest)) return 2;
+    for (int64_t row = 0; row < batch; ++row)
+        for (int64_t k = 0; k < n; ++k)
+            output[row * n + k] = full[2 * (row * n + k)];
+    return 0;
+}
+
 extern "C" const char* tessera_x86_spectral_composite_package_abi() {
-    return "tessera.x86.spectral_composite.v5";
+    return "tessera.x86.spectral_composite.v6";
 }
 
 extern "C" int tessera_x86_spectral_filter_f32(
@@ -677,8 +728,36 @@ extern "C" int tessera_x86_spectral_filter_f32(
 
 extern "C" int tessera_x86_dct_f32(const char* digest, const float* input,
                                     float* output, int64_t batch, int64_t n,
-                                    float output_scale) {
-    if (!valid_digest(digest) || !input || !output || batch <= 0 || n <= 0) return 1;
+                                    int dct_type, float output_scale) {
+    if (!valid_digest(digest) || !input || !output || batch <= 0 || n <= 0 ||
+        dct_type < 1 || dct_type > 4 || (dct_type == 1 && n < 2))
+        return 1;
+    if (dct_type != 2) {
+        for (int64_t row = 0; row < batch; ++row)
+            for (int64_t k = 0; k < n; ++k) {
+                double value = 0.0;
+                if (dct_type == 1) {
+                    value = input[row * n] +
+                            ((k & 1) ? -1.0 : 1.0) * input[row * n + n - 1];
+                    for (int64_t j = 1; j + 1 < n; ++j)
+                        value += 2.0 * input[row * n + j] *
+                                 std::cos(M_PI * double(j * k) / double(n - 1));
+                } else if (dct_type == 3) {
+                    value = input[row * n];
+                    for (int64_t j = 1; j < n; ++j)
+                        value += 2.0 * input[row * n + j] *
+                                 std::cos(M_PI * double((2 * k + 1) * j) /
+                                          double(2 * n));
+                } else {
+                    for (int64_t j = 0; j < n; ++j)
+                        value += 2.0 * input[row * n + j] *
+                                 std::cos(M_PI * double((2 * k + 1) * (2 * j + 1)) /
+                                          double(4 * n));
+                }
+                output[row * n + k] = static_cast<float>(value * output_scale);
+            }
+        return 0;
+    }
     auto mirroredOwner = spectral_workspace(
         digest, "dct", static_cast<size_t>(4 * batch * n));
     std::vector<float>& mirrored = *mirroredOwner;
@@ -691,9 +770,13 @@ extern "C" int tessera_x86_dct_f32(const char* digest, const float* input,
     int rc = execute_any_fft(mirrored.data(), batch, 2 * n, false, digest);
     if (rc) return rc;
     for (int64_t row = 0; row < batch; ++row)
-        for (int64_t column = 0; column < n; ++column)
-            output[row * n + column] =
-                mirrored[2 * (row * 2 * n + column)] * output_scale;
+        for (int64_t column = 0; column < n; ++column) {
+            const float real = mirrored[2 * (row * 2 * n + column)];
+            const float imag = mirrored[2 * (row * 2 * n + column) + 1];
+            const double angle = -M_PI * double(column) / double(2 * n);
+            output[row * n + column] = static_cast<float>(
+                (real * std::cos(angle) - imag * std::sin(angle)) * output_scale);
+        }
     return 0;
 }
 
@@ -703,8 +786,13 @@ extern "C" int tessera_x86_spectral_conv_f32(
     int64_t fft_n) {
     const int64_t output_n = input_n + kernel_n - 1;
     if (!valid_digest(digest) || !input || !kernel || !output || batch <= 0 ||
-        input_n <= 0 || kernel_n <= 0 || fft_n < output_n || fft_n < 2 ||
-        (fft_n & 1)) return 1;
+        input_n <= 0 || kernel_n <= 0 || fft_n < output_n ||
+        (fft_n != 1 && (fft_n < 2 || (fft_n & 1)))) return 1;
+    if (fft_n == 1) {
+        for (int64_t row = 0; row < batch; ++row)
+            output[row] = input[row] * kernel[row];
+        return 0;
+    }
     const int64_t bins = fft_n / 2 + 1;
     const size_t realFloats = static_cast<size_t>(batch * fft_n);
     const size_t spectrumFloats = static_cast<size_t>(2 * batch * bins);
@@ -747,12 +835,69 @@ extern "C" int tessera_x86_spectral_conv_f32(
     return 0;
 }
 
+extern "C" int tessera_x86_spectral_conv_full_complex_comparison_f32(
+    const char* digest, const float* input, int64_t input_n,
+    const float* kernel, int64_t kernel_n, float* output, int64_t batch,
+    int64_t fft_n) {
+    const int64_t output_n = input_n + kernel_n - 1;
+    if (!valid_digest(digest) || !input || !kernel || !output || batch <= 0 ||
+        input_n <= 0 || kernel_n <= 0 || fft_n < output_n)
+        return 1;
+    if (fft_n == 1) {
+        for (int64_t row = 0; row < batch; ++row)
+            output[row] = input[row] * kernel[row];
+        return 0;
+    }
+    const int64_t bins = fft_n / 2 + 1;
+    const size_t realFloats = static_cast<size_t>(batch * fft_n);
+    const size_t spectrumFloats = static_cast<size_t>(2 * batch * bins);
+    auto xOwner = spectral_workspace(digest, "conv_full_x_real", realFloats);
+    auto wOwner = spectral_workspace(digest, "conv_full_w_real", realFloats);
+    auto xSpectrumOwner = spectral_workspace(
+        digest, "conv_full_x_spectrum", spectrumFloats);
+    auto wSpectrumOwner = spectral_workspace(
+        digest, "conv_full_w_spectrum", spectrumFloats);
+    auto inverseOwner = spectral_workspace(
+        digest, "conv_full_inverse_real", realFloats);
+    std::vector<float>& x = *xOwner;
+    std::vector<float>& w = *wOwner;
+    std::vector<float>& xSpectrum = *xSpectrumOwner;
+    std::vector<float>& wSpectrum = *wSpectrumOwner;
+    std::vector<float>& inverse = *inverseOwner;
+    std::fill(x.begin(), x.begin() + realFloats, 0.0f);
+    std::fill(w.begin(), w.begin() + realFloats, 0.0f);
+    for (int64_t row = 0; row < batch; ++row) {
+        std::memcpy(x.data() + row * fft_n, input + row * input_n,
+                    static_cast<size_t>(input_n) * sizeof(float));
+        std::memcpy(w.data() + row * fft_n, kernel + row * kernel_n,
+                    static_cast<size_t>(kernel_n) * sizeof(float));
+    }
+    if (tessera_x86_fft_r2c_full_complex_f32(
+            digest, x.data(), xSpectrum.data(), batch, fft_n) ||
+        tessera_x86_fft_r2c_full_complex_f32(
+            digest, w.data(), wSpectrum.data(), batch, fft_n))
+        return 2;
+    for (int64_t i = 0; i < batch * bins; ++i) {
+        const float ar = xSpectrum[2 * i], ai = xSpectrum[2 * i + 1];
+        const float br = wSpectrum[2 * i], bi = wSpectrum[2 * i + 1];
+        xSpectrum[2 * i] = ar * br - ai * bi;
+        xSpectrum[2 * i + 1] = ar * bi + ai * br;
+    }
+    if (tessera_x86_fft_c2r_full_complex_f32(
+            digest, xSpectrum.data(), inverse.data(), batch, fft_n))
+        return 3;
+    for (int64_t row = 0; row < batch; ++row)
+        std::memcpy(output + row * output_n, inverse.data() + row * fft_n,
+                    static_cast<size_t>(output_n) * sizeof(float));
+    return 0;
+}
+
 extern "C" int tessera_x86_stft_f32(
     const char* digest, const float* input, const float* window, float* output,
     int64_t batch, int64_t samples, int64_t win, int64_t hop, int64_t frames,
     float output_scale) {
     if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
-        samples <= 0 || win < 2 || hop <= 0 || frames <= 0) return 1;
+        samples <= 0 || win <= 0 || hop <= 0 || frames <= 0) return 1;
     const int64_t rows = batch * frames, bins = win / 2 + 1;
     if (win & 1) {
         auto fullOwner = spectral_workspace(
@@ -793,7 +938,7 @@ extern "C" int tessera_x86_istft_f32(
     int64_t batch, int64_t frames, int64_t win, int64_t hop,
     float output_scale) {
     if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
-        frames <= 0 || win < 2 || hop <= 0) return 1;
+        frames <= 0 || win <= 0 || hop <= 0) return 1;
     const int64_t rows = batch * frames, bins = win / 2 + 1;
     const int64_t samples = (frames - 1) * hop + win;
     if (win & 1) {
@@ -899,11 +1044,11 @@ void pack_spectral_storage(const float* input, void* output, int64_t elements,
 
 extern "C" int tessera_x86_dct_storage(
     const char* digest, const void* input, void* output, int64_t batch,
-    int64_t n, int storage, float output_scale) {
+    int64_t n, int dct_type, int storage, float output_scale) {
     if (!valid_spectral_storage(storage) || !input || !output) return 10;
     if (storage == 0)
         return tessera_x86_dct_f32(digest, static_cast<const float*>(input),
-                                   static_cast<float*>(output), batch, n,
+                                   static_cast<float*>(output), batch, n, dct_type,
                                    output_scale);
     const int64_t elements = batch * n;
     auto unpackedOwner = spectral_workspace(
@@ -914,7 +1059,7 @@ extern "C" int tessera_x86_dct_storage(
     std::vector<float>& packed = *packedOwner;
     unpack_spectral_storage(input, unpacked.data(), elements, storage);
     int rc = tessera_x86_dct_f32(digest, unpacked.data(), packed.data(), batch,
-                                  n, output_scale);
+                                  n, dct_type, output_scale);
     if (!rc) pack_spectral_storage(packed.data(), output, elements, storage);
     return rc;
 }
@@ -1025,7 +1170,7 @@ void unpack_axis_storage(const void* input, void* output, int64_t outer,
 
 extern "C" int tessera_x86_dct_strided_storage(
     const char* digest, const void* input, void* output, int64_t outer,
-    int64_t n, int64_t inner, int storage, float output_scale) {
+    int64_t n, int64_t inner, int dct_type, int storage, float output_scale) {
     if (!valid_spectral_storage(storage) || outer <= 0 || inner <= 0)
         return 20;
     size_t bytes = spectral_storage_bytes(storage);
@@ -1034,7 +1179,7 @@ extern "C" int tessera_x86_dct_strided_storage(
     pack_axis_storage(input, packed_input.data(), outer, n, inner, bytes);
     int rc = tessera_x86_dct_storage(
         digest, packed_input.data(), packed_output.data(), outer * inner, n,
-        storage, output_scale);
+        dct_type, storage, output_scale);
     if (!rc)
         unpack_axis_storage(packed_output.data(), output, outer, n, inner, bytes);
     return rc;

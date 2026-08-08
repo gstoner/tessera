@@ -98,7 +98,7 @@ def test_schedule_to_tile_rederives_and_rejects_stale_fft_policy():
         target="rocm", op_name="tessera.fft", input_shape=(3, 100)
     )
     stale = artifact.schedule_ir.replace(
-        'kernel_family = "gfx1151_stockham_bluestein_v5"',
+        'kernel_family = "gfx1151_stockham_bluestein_v6"',
         'kernel_family = "stale_kernel"',
     )
 
@@ -116,7 +116,7 @@ def test_rocm_bluestein_artifact_describes_persistent_native_plan():
     assert artifact.workspace_policy == "persistent_plan_4m"
     assert artifact.residency == "persistent_device_plan"
     assert artifact.twiddle_policy == "persistent_device_chirp_fft"
-    assert artifact.kernel_family == "gfx1151_stockham_bluestein_v5"
+    assert artifact.kernel_family == "gfx1151_stockham_bluestein_v6"
 
 
 @_needs_opt
@@ -127,7 +127,7 @@ def test_rocm_small_power_of_two_artifact_selects_batched_fused_lds():
 
     assert artifact.batch == 56
     assert artifact.residency == "persistent_device_plan_fused_lds_batch"
-    assert artifact.kernel_family == "gfx1151_stockham_bluestein_v5"
+    assert artifact.kernel_family == "gfx1151_stockham_bluestein_v6"
     assert 'residency = "persistent_device_plan_fused_lds_batch"' in artifact.tile_ir
 
 
@@ -143,6 +143,12 @@ def test_even_real_fft_artifact_names_half_length_physical_transform(target):
     assert artifact.real_transform_policy == "packed_even_n2_hermitian_v1"
     assert artifact.hermitian_layout == "half_spectrum_nyquist_explicit"
     assert "physical_length = 128 : i64" in artifact.tile_ir
+    if target == "rocm":
+        assert artifact.residency == "persistent_device_plan_fused_lds_hermitian_batch"
+        assert (
+            'residency = "persistent_device_plan_fused_lds_hermitian_batch"'
+            in artifact.tile_ir
+        )
 
 
 @_needs_opt

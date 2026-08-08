@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-02
+last_updated: 2026-08-08
 audit_role: plan
 plan_state: open
 status: proposal — not started, no code landed
@@ -8,6 +8,11 @@ source: arXiv:2602.03566v1 "Riemannian Neural Optimal Transport" (Micheli, Cao, 
 
 # Riemannian Optimal Transport — Paper Review and Operator Plan
 
+> **Routing:** start at [`README.md`](README.md). This document owns the
+> geometry/implicit-differentiation consumer and its acceptance workload;
+> global ordering lives only in
+> [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
+>
 **Status vocabulary warning (Decision #25/#26):** everything below is *direction*.
 No row here is proof of anything. `docs/audit/MASTER_AUDIT.md` and
 `docs/audit/generated/` stay status truth.
@@ -102,9 +107,11 @@ Three independent reasons, in decreasing order of durability:
    A general `stop_gradient` primitive and an implicit-function-theorem
    differentiation seam (`custom_root`) are prerequisites for deep equilibrium
    models, bilevel/meta-learning, proximal and ADMM layers, differentiable
-   physics, and differentiable convex solvers. Today Tessera has neither: the
-   only stop-gradient in the tree is `jepa_stop_gradient`, a model-specific op in
-   `models/jepa.py`, and there is no root-find/argmin differentiation rule.
+   physics, and differentiable convex solvers. The Python reference lane now
+   has `custom_root`, IHVP, and adjoint-state helpers, but the compiler has
+   neither seam: the only stop-gradient in the tree is `jepa_stop_gradient`, a
+   model-specific op in `models/jepa.py`, and `NewtonAutodiff.cpp` remains an
+   annotation-only scaffold rather than a value-producing implicit-root rule.
 
 2. **It makes *geometry* a first-class IR object, which is our own thesis
    applied one axis further.** Tessera already treats tiles, memory spaces,

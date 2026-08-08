@@ -8,6 +8,26 @@ last_updated: 2026-08-08
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` — **SM90 and
+SM120 proof separated; no CUDA physical change.** SM90 compile/artifact rows
+are no longer added to SM120 runtime counts, and only exact-device statuses
+close a hardware op×target grain. No package, selector, or device evidence is
+changed.
+
+Cross-backend sync `X86-BUILD-ARTIFACT-DISCOVERY-2026-08-08` — **shared
+fail-closed selection assessed; no CUDA package changes.** The x86 runtime and
+native packager now honor `TESSERA_BUILD_DIR` and reject a missing selected
+tree rather than loading a stale default image. NVIDIA keeps its own CUDA tool
+and image discovery, and inherits no AVX-512 implementation or timing result.
+
+Cross-backend sync `STANDALONE-COVERAGE-TRUTH-2026-08-08` — **registry truth
+adopted; no CUDA execution claim changes.** The standalone dashboard now
+generates its counts, compiler-layer rollup, exact-target manifest summary,
+and open queues from the live registries. It explicitly separates aggregate
+best-available evidence from per-target support. SM120 still owns every CUDA
+physical and benchmark follow-up in its manifest; x86 and gfx1151 TSOL or
+Adafactor evidence does not transfer.
+
 Cross-backend sync `TSOL-NATIVE-REAL-FFT-2026-08-08` — **shared artifact
 follow-up required; no CUDA schedule transfers.** The target-neutral FFT
 contract now binds logical/physical length, Hermitian layout, and packed-real
@@ -74,12 +94,15 @@ batched fused-LDS residency explicitly, but the HIP image dependency, AMD LDS
 kernel, and WSL timing evidence establish no CUDA package or SM120 selector.
 NVIDIA's architecture-owned FFT/TSOL follow-up is unchanged.
 
-Cross-backend sync `TSOL-DCT-CONTRACT-2026-08-08` — **shared fail-closed
-semantics adopted; CUDA physical follow-up unchanged.** DCT type II is now
-explicitly content-addressed and other types are rejected rather than aliased.
-DCT and spectral convolution join the canonical TSOL inventory, but NVIDIA
-still lacks the prerequisite promoted FFT/compound package and inherits no
-x86/gfx1151 execution evidence.
+Cross-backend sync `TSOL-SPECTRAL-POLICY-2026-08-08` — **shared DCT and
+streaming policy adopted; CUDA physical follow-up unchanged.** DCT-I/II/III/IV
+now carry distinct API, autodiff, Graph, Schedule, and Tile identities. The
+target-neutral causal chunked-STFT state binds its policy digest and overlap
+lineage, while centred streaming fails closed pending explicit lookahead.
+NVIDIA still lacks the prerequisite CUDA FFT/compound package and inherits no
+x86/gfx1151 physical or performance evidence. The length-one convolution and
+one-sample STFT/ISTFT physical boundary repairs transfer no CUDA implementation
+claim.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **not applicable to
 NVIDIA codegen.** Centered Welford and the scalar boundary fixes alter ROCm C++

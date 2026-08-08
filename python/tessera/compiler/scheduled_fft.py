@@ -262,6 +262,11 @@ def lower_scheduled_fft(
         if compiler_target == "x86" and plan.strategy == "mixed_radix"
         else "host_inplace"
         if compiler_target == "x86"
+        else "persistent_device_plan_fused_lds_hermitian_batch"
+        if real_transform_policy == "packed_even_n2_hermitian_v1"
+        and plan.strategy != "bluestein"
+        and physical_length <= 1024
+        and physical_length & (physical_length - 1) == 0
         else "persistent_device_plan_fused_lds_batch"
         if plan.strategy != "bluestein"
         and physical_length <= 1024
@@ -295,7 +300,7 @@ def lower_scheduled_fft(
     kernel_family = (
         "zen5_avx512_fft_v4"
         if compiler_target == "x86"
-        else "gfx1151_stockham_bluestein_v5"
+        else "gfx1151_stockham_bluestein_v6"
     )
     input_element = "f32" if op_name == "tessera.rfft" else "complex<f32>"
     output_element = "f32" if op_name == "tessera.irfft" else "complex<f32>"

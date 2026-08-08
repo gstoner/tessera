@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-02
+last_updated: 2026-08-08
 audit_role: reference
 scope: python/tessera/autodiff, src/compiler/ir/AdjointInterface.*, src/transforms/lib/Autodiff*.cpp, ActivationRematerializationPass, AdjointCollectiveInsertionPass, solvers/core NewtonAutodiff
 companions: AUTODIFF_UNIFICATION_PLAN.md (sequencing) · ../../spec/AUTODIFF_SPEC.md (normative surface) · RIEMANNIAN_OT_PLAN.md · ../domain/GA_EBM_ARCHITECTURE_REVIEW.md · DIFFERENTIABLE_PROGRAMMING_REVIEW.md (book delta)
@@ -7,6 +7,10 @@ companions: AUTODIFF_UNIFICATION_PLAN.md (sequencing) · ../../spec/AUTODIFF_SPE
 
 # Autodiff Architecture and Algorithm Review
 
+> **Routing:** start at [`README.md`](README.md). Findings here feed the scoped
+> [`AUTODIFF_UNIFICATION_PLAN.md`](AUTODIFF_UNIFICATION_PLAN.md); global order
+> is owned by [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
+>
 A capability review of Tessera's differentiation surface against (a) the
 MLIR/LLVM spine the compiler is now committed to, and (b) the published state of
 the art. It **complements** [`AUTODIFF_UNIFICATION_PLAN.md`](AUTODIFF_UNIFICATION_PLAN.md),
@@ -44,11 +48,12 @@ smoothing/relaxation operator family, and a Baur–Strassen cost-ratio oracle.
 | Distributed adjoints | `AdjointCollectiveInsertionPass.cpp` | 269 |
 | Implicit-op derivatives | `solvers/core/passes/NewtonAutodiff.cpp` | 87 (annotation-only) |
 
-From the generated ledger: **287** differentiable families tracked, **287** with
-a Python VJP/JVP reference, **32** with `ir_adjoint = native`, **3**
-`placeholder` (runtime round-trip into Python), **23** with backward IR
-oracle-verified on CPU, **29** with a backward `device_verified_jit` lane on some
-exact target.
+The generated ledger reports a broad Python VJP/JVP reference surface, a much
+smaller native Graph-IR adjoint set, three placeholder families that round-trip
+into Python, a bounded CPU backward-IR oracle set, and a separate set of exact
+target backward packages. Read the live summary in
+[`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md)
+for the current counts; this review deliberately does not duplicate them.
 
 Read those five numbers together and the shape is clear: the Python reference is
 broad; the compiler differentiates a small, deliberately-chosen core; and most
@@ -445,7 +450,7 @@ Today there is one `AdjointInterface` and one reverse pass. The capabilities in
 
 This is EnzymeMLIR's own design point — "operations and types implement or
 inherit general interfaces to specify their differentiable behavior" — and it is
-how MLIR scales a cross-cutting concern across 287 op families without one pass
+how MLIR scales a cross-cutting concern across the registered op families without one pass
 growing to know all of them. It also fits Decision #24 cleanly: each interface is
 a new axis in `primitive_coverage.py`, auto-flipping the same way `vjp`/`jvp`
 already do.

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-06
+last_updated: 2026-08-08
 audit_role: reference
 scope: python/tessera/autodiff, python/tessera/losses.py, python/tessera/rng.py, python/tessera/arch.py, python/tessera/custom.py, python/tessera/compiler/{primitive_coverage,op_catalog,evaluator,rematerialization_cost}.py, src/transforms/lib/{EffectAnnotationPass,ActivationRematerializationPass}.cpp
 companions: AUTODIFF_ARCHITECTURE_REVIEW.md (the primary autodiff review this extends) · SEQUENCE_MIXER_ENGINEERING_PLAN.md · RIEMANNIAN_OT_PLAN.md · ../../spec/AUTODIFF_SPEC.md
@@ -8,6 +8,10 @@ source_text: Blondel & Roulet, "The Elements of Differentiable Programming" (arX
 
 # Differentiable Programming — Book Review Against the Tessera Surface
 
+> **Routing:** start at [`README.md`](README.md). This is a delta/reference
+> review. Its Python implementations are semantic oracles; compiler work is
+> ordered only by [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
+>
 A capability review of Tessera's differentiation surface, TSOL operator set,
 IR passes, and helper libraries against **Blondel & Roulet, "The Elements of
 Differentiable Programming"** (arXiv:2403.14606v4). The book is a
@@ -53,7 +57,7 @@ labelled as such; they are evidence for *gaps*, not status claims.
 | **C6** | GGN / Fisher / IHVP / Hessian-diagonal — a 13th contract axis | Ch. 8 | folds into D6 | — |
 | **T1** | Smoothing/relaxation family absent (sparsemax, gumbel, soft-topk, perturbed) | Ch. 4, 12, 13 | ~3 wk | PB-3 shape |
 | **T2** | Fenchel-Young losses collapse a chunk of `losses.py` | Ch. 15 §4 | ~2 wk | — |
-| **T3** | `custom_root` / adjoint-state / IHVP missing though CG/GMRES exist | Ch. 10 | ~3 wk | — |
+| **T3** | Python `custom_root`/IHVP oracle landed; compiled implicit differentiation remains missing | Ch. 10 | ~3 wk | — |
 | **R1** | Baur–Strassen cost-ratio oracle | §4.4.3 | days | catches B1/B2 |
 | **R2** | Randomized forward-mode gradient (memory-free lane) | §4.8 | folds into D2 | #28 |
 
@@ -61,20 +65,20 @@ labelled as such; they are evidence for *gaps*, not status claims.
 
 ## Implementation status (built 2026-08-07)
 
-Seven of the eleven findings are **implemented, tested, and landed** on this
-branch (numpy-reference lane, consistent with the rest of `autodiff/`). Each
+Seven of the eleven findings are **implemented and tested in the Python
+reference lane**. This is not native Graph/Schedule/Tile support. Each
 row below is code + a passing test file; counts and details live in the tests,
 not here.
 
 | ID | Status | Modules | Tests |
 |---|---|---|---|
-| **C2** | ✅ landed | `autodiff/nonsmooth.py`; refactored `autodiff/vjp.py` | `test_nonsmooth_selection.py` |
-| **R1** | ✅ landed | `autodiff/tape.py` (`count_primitive_executions`), `compiler/evaluator.py` | `test_baur_strassen_oracle.py` |
-| **C1** | ✅ landed | `autodiff/linear.py`; `custom.py` (`transpose_rule` consumer) | `test_linear_transposition.py` |
-| **T3** | ✅ landed | `autodiff/implicit.py` (`cg_solve`/`ihvp`/`custom_root`/`adjoint_state_grad`) | `test_implicit_diff.py` |
-| **T1** | ✅ landed | `relaxation.py` (sparsemax/entmax15/soft_top_k/gumbel_softmax/perturbed_argmax); `rng.py` (`gumbel`) | `test_relaxation_ops.py` |
-| **T2** | ✅ landed | `losses.py` (`fenchel_young_loss`/`fy_loss_and_grad`/`sparsemax_loss`/`softmax_fy_loss`) | `test_fenchel_young_losses.py` |
-| **C3** | ✅ landed | `compiler/stochastic_graph.py` (analysis + `certify_deterministic`) | `test_stochastic_graph.py` |
+| **C2** | ✅ Python oracle | `autodiff/nonsmooth.py`; refactored `autodiff/vjp.py` | `test_nonsmooth_selection.py` |
+| **R1** | ✅ forward-reexecution guard | `autodiff/tape.py` (`count_primitive_executions`), `compiler/evaluator.py` | `test_baur_strassen_oracle.py` |
+| **C1** | ✅ Python oracle | `autodiff/linear.py`; `custom.py` (`transpose_rule` consumer) | `test_linear_transposition.py` |
+| **T3** | ✅ Python oracle | `autodiff/implicit.py` (`cg_solve`/`ihvp`/`custom_root`/`adjoint_state_grad`) | `test_implicit_diff.py` |
+| **T1** | ✅ Python/reference catalog | `relaxation.py` (sparsemax/entmax15/soft_top_k/gumbel_softmax/perturbed_argmax); `rng.py` (`gumbel`) | `test_relaxation_ops.py` |
+| **T2** | ✅ Python helper | `losses.py` (`fenchel_young_loss`/`fy_loss_and_grad`/`sparsemax_loss`/`softmax_fy_loss`) | `test_fenchel_young_losses.py` |
+| **C3** | ✅ Python trace analysis | `compiler/stochastic_graph.py` (analysis + `certify_deterministic`) | `test_stochastic_graph.py` |
 | **C4** | ⏳ open | semirings — larger, rides the sequence-mixer track | — |
 | **C5** | ⏳ open | cost-weighted treeverse — folds into the planned D5 | — |
 | **C6** | ⏳ open | GGN/Fisher/IHVP-optimizer/Hessian-diagonal — IHVP primitive landed in T3; the second-order *estimators* remain | — |
@@ -259,12 +263,15 @@ from one template, each with a closed-form *exact* gradient rather than a
 hand-derived VJP. Fewer rules to maintain, and fewer to get wrong at the kink
 (see C2).
 
-### T3. Implicit differentiation — `custom_vjp` exists, `custom_root` does not (Ch. 10)
+### T3. Implicit differentiation — reference surface exists; compiler lowering does not (Ch. 10)
 
-**Observed:** `custom_vjp` is exported from
-[`custom.py:143`](../../../python/tessera/custom.py); there is no `custom_root`,
-no fixed-point rule, no adjoint-state surface. The book's §10.4 gives the whole
-recipe: the JVP solves `A t = B v`, the VJP solves `A* r = u` then `B* r`, where
+**Current split:** `custom_vjp` is exported from
+[`custom.py`](../../../python/tessera/custom.py), and the Python reference lane
+now provides `custom_root`, IHVP, and adjoint-state helpers in
+[`implicit.py`](../../../python/tessera/autodiff/implicit.py). The compiler still
+has no value-producing fixed-point/implicit-root lowering; `NewtonAutodiff.cpp`
+remains annotation-only. The book's §10.4 gives the whole recipe: the JVP solves
+`A t = B v`, the VJP solves `A* r = u` then `B* r`, where
 `A` / `B` are the JVPs of the residual `F` and `A*` / `B*` its VJPs — built
 entirely from machinery already present, plus a matrix-free solver.
 `solver_config.py` already names CG and GMRES, so the solver half exists; it is
@@ -286,16 +293,13 @@ paying for implicit diff they do not need.
 
 ## Runtime / evaluator
 
-### R1. Baur–Strassen as a cost-ratio oracle (§4.4.3)
+### R1. Forward-reexecution guard; full Baur–Strassen accounting remains open (§4.4.3)
 
-The theorem bounds `S(∇f) ≤ 5·S(f)` — the gradient of a program costs a small
-constant times the program. That is a **measurable conformance property** and
-slots into the existing oracle family (vertical / horizontal / metamorphic /
-DESIL) in [`evaluator.py`](../../../python/tessera/compiler/evaluator.py) as a
-cost-ratio check. A row where backward is 40× forward is not a numerical bug —
-it is a missing activity analysis (D3) or a `jacrev` re-running the forward pass
-(B1). Nothing in the evaluator would notice today. Cheapest item on the list,
-and the one that catches the B1/B2 class automatically.
+The theorem bounds `S(∇f) ≤ 5·S(f)`. The current guard counts forward
+`tessera.ops` re-execution and catches the B1/B2 redundant-forward class. It
+does **not** count raw-NumPy work performed inside backward VJPs, so it is not a
+complete gradient-cost or Baur–Strassen conformance measurement. That complete
+accounting belongs to AD-RESIDUAL-EVAL-1.
 
 > **Correction learned while building this (2026-08-07).** The in-tree `jacrev`
 > is **already fixed** — W0.4 rewrote it to record one forward pass and reuse
@@ -317,21 +321,20 @@ variance/dimension trade-off, so budget it as an arbiter candidate (Decision
 
 ---
 
-## Suggested ordering
+## Current route
 
-| # | Item | Cost | Why here |
+| # | Item | State | Next compiler boundary |
 |---|---|---|---|
-| 1 | **C2** nonsmooth selection policy | days | Pure correctness; closes a live oracle-vs-kernel divergence |
-| 2 | **R1** Baur–Strassen cost oracle | days | Cheapest; retroactively catches the B1/B2 class |
-| 3 | **C1** linear transposition | ~2 wk | Gives `transpose_rule` a consumer (#29); *reduces* D2 |
-| 4 | **C3** stochastic-graph typing | ~2 wk | Fixes the Decision #5 fail-open; feeds PA W2 |
-| 5 | **T3** `custom_root` + IHVP | ~3 wk | Unblocks EBM, OT, Newton; reuses existing CG/GMRES |
-| 6 | **T1/T2** relaxation + FY losses | ~3 wk | TSOL breadth; the arch-dialect island already half-exists |
-| 7 | **C4** semirings | ~4 wk | Rides the sequence-mixer track rather than competing |
-| 8 | **C5/C6** cost-weighted Revolve, GGN/Fisher | folds into D5/D6 | Refinements to already-planned work |
+| 1 | **C1** linear transposition | Python oracle landed | AD-CORE-LINEAR-1: compiler Graph-IR interface and paired proof |
+| 2 | TSOL spectral adjoints | open | AD-TSOL-SPECTRAL-1: FFT/IFFT first, then packed/compound transforms |
+| 3 | **C3** stochastic/effect typing plus `stop_gradient` | Python analysis only | AD-CORE-EFFECT-CONTROL-1: C++ effects, activity, region adjoints |
+| 4 | **T3** implicit differentiation | Python oracle landed | AD-SOLVER-IFT-1: finish value-producing Newton/implicit-root lowering |
+| 5 | **R1/C5** cost and residual policy | partial guard only | AD-RESIDUAL-EVAL-1: complete backward work/memory measurement and treeverse candidates |
+| 6 | **C4/C6/R2/T1/T2** breadth | reference or open | Bind separate integrated IDs only after the spine above is executable |
 
-Items 1–4 are Decision #29 / #30 / #21a work and land **inside** the PA program
-rather than alongside it.
+The global order and stop-the-line gates live in
+[`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md); this table maps the
+book findings onto that route and does not create another queue.
 
 ---
 

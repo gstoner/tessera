@@ -215,6 +215,41 @@ def test_plan_docs_declare_a_valid_plan_state() -> None:
     assert not offenders, "\n  ".join(["plan_state violations:"] + offenders)
 
 
+def test_compiler_index_routes_every_live_document() -> None:
+    """The dense compiler audit subtree has one durable discovery surface."""
+    compiler = _AUDIT / "compiler"
+    index = compiler / "README.md"
+    text = index.read_text(encoding="utf-8")
+    expected = {
+        path.name
+        for path in compiler.glob("*.md")
+        if path.name != index.name
+    }
+    missing = sorted(name for name in expected if f"`{name}`" not in text)
+    assert not missing, (
+        "docs/audit/compiler/README.md must route every live compiler doc; "
+        f"missing: {missing}"
+    )
+
+
+def test_scoped_compiler_plans_defer_global_order_to_integrated_plan() -> None:
+    """Scoped acceptance plans must not silently become competing queues."""
+    compiler = _AUDIT / "compiler"
+    offenders: list[str] = []
+    for path in sorted(compiler.glob("*.md")):
+        if path.name == "INTEGRATED_COMPILER_PLAN.md":
+            continue
+        if _frontmatter(path).get("audit_role") != "plan":
+            continue
+        text = path.read_text(encoding="utf-8")
+        if "INTEGRATED_COMPILER_PLAN.md" not in text or "README.md" not in text:
+            offenders.append(path.name)
+    assert not offenders, (
+        "Every scoped compiler plan must link the compiler map and global "
+        f"sequencing authority; offenders: {offenders}"
+    )
+
+
 # ── lifecycle enforcement ──────────────────────────────────────────────────
 
 

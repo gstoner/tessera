@@ -187,7 +187,7 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
         lib.ts_dct_hostptr_batch_amd.restype = ctypes.c_int
         lib.ts_dct_hostptr_batch_amd.argtypes = [
             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-            ctypes.c_int, ctypes.c_int, ctypes.c_float,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
         ]
         lib.ts_spectral_conv_hostptr_batch_amd.restype = ctypes.c_int
         lib.ts_spectral_conv_hostptr_batch_amd.argtypes = [
@@ -227,7 +227,8 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
             lib.ts_dct_plan_hostptr_batch_amd.restype = ctypes.c_int
             lib.ts_dct_plan_hostptr_batch_amd.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
-                ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                ctypes.c_float,
             ]
             lib.ts_spectral_conv_plan_hostptr_batch_amd.restype = ctypes.c_int
             lib.ts_spectral_conv_plan_hostptr_batch_amd.argtypes = [
@@ -253,7 +254,7 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
             lib.ts_dct_plan_hostptr_batch_storage_amd.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                 ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-                ctypes.c_float,
+                ctypes.c_int, ctypes.c_float,
             ]
             lib.ts_spectral_conv_plan_hostptr_batch_storage_amd.restype = ctypes.c_int
             lib.ts_spectral_conv_plan_hostptr_batch_storage_amd.argtypes = [
@@ -278,7 +279,7 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
             lib.ts_dct_plan_hostptr_strided_storage_amd.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
                 ctypes.c_void_p, ctypes.c_longlong, ctypes.c_longlong,
-                ctypes.c_longlong, ctypes.c_int, ctypes.c_float,
+                ctypes.c_longlong, ctypes.c_int, ctypes.c_int, ctypes.c_float,
             ]
             lib.ts_spectral_conv_plan_hostptr_strided_storage_amd.restype = ctypes.c_int
             lib.ts_spectral_conv_plan_hostptr_strided_storage_amd.argtypes = [
@@ -361,7 +362,7 @@ def _amd_lib() -> ctypes.CDLL | None:
         if (
             hasattr(lib, "ts_spectral_composite_package_abi_amd")
             and lib.ts_spectral_composite_package_abi_amd()
-            == b"tessera.rocm.spectral_composite.v5"
+            == b"tessera.rocm.spectral_composite.v6"
             and hasattr(lib, "ts_spectral_composite_arch_amd")
             and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
         ):
@@ -378,7 +379,7 @@ def _is_gfx1151_composite_lib(lib: ctypes.CDLL | None) -> bool:
         lib is not None
         and hasattr(lib, "ts_spectral_composite_package_abi_amd")
         and lib.ts_spectral_composite_package_abi_amd()
-        == b"tessera.rocm.spectral_composite.v5"
+        == b"tessera.rocm.spectral_composite.v6"
         and hasattr(lib, "ts_spectral_composite_arch_amd")
         and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
     )
@@ -621,7 +622,7 @@ def run_rocm_spectral_composite(
         raise RuntimeError("prebuilt ROCm spectral composite image is unavailable")
     if (
         lib.ts_spectral_composite_package_abi_amd()
-        != b"tessera.rocm.spectral_composite.v5"
+        != b"tessera.rocm.spectral_composite.v6"
     ):
         raise RuntimeError("ROCm spectral composite package ABI mismatch")
     if (
@@ -672,11 +673,17 @@ def run_rocm_spectral_composite(
         x = np.ascontiguousarray(values[0])
         out = np.empty(output_shape, values[0].dtype)
         outer, n, inner = folded_axis(tuple(x.shape), axis)
-        _, plan = _rocm_plan(2 * n, -1, str(children[0]["schedule_digest"]))
+        dct_type = int(contract["dct_type"])
+        plan = None
+        if dct_type == 2:
+            _, plan = _rocm_plan(2 * n, -1, str(children[0]["schedule_digest"]))
         rc = lib.ts_dct_plan_hostptr_strided_storage_amd(
             composite_plan, plan, _cptr(x), _cptr(out), outer, n, inner,
-            storage_code,
-            spectral_output_scale(op_name, normalization, 2 * n),
+            dct_type, storage_code,
+            spectral_output_scale(
+                op_name, normalization,
+                2 * (n - 1) if dct_type == 1 else 2 * n,
+            ),
         )
     elif op_name == "tessera.spectral_conv":
         x = np.ascontiguousarray(values[0])

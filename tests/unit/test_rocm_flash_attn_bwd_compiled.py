@@ -24,14 +24,12 @@ from __future__ import annotations
 import ctypes
 import os
 import subprocess
-from pathlib import Path
 
 import pytest
 
 np = pytest.importorskip("numpy")
+from tests._support.compiler_tool import tessera_opt_path
 
-REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 
@@ -77,9 +75,10 @@ def _extract_hsaco(text: str) -> bytes:
 
 
 def _build_hsaco(head_dim: int) -> bytes:
-    if not TESSERA_OPT.is_file():
+    tool = tessera_opt_path()
+    if tool is None:
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
-    r = subprocess.run([str(TESSERA_OPT), "-", f"--pass-pipeline={_pipeline()}"],
+    r = subprocess.run([str(tool), "-", f"--pass-pipeline={_pipeline()}"],
                        input=_directive(head_dim), capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
         pytest.skip(f"flash_attn_bwd serialize unavailable (rc={r.returncode}): "
@@ -244,7 +243,7 @@ def test_compiled_flash_attn_bwd_matches_numpy(D, B, H, Sq, Sk, causal):
 def test_g6c_split_reduced_candidate_matches_one_wave(causal, kv_heads):
     from tessera import runtime as rt
 
-    if not TESSERA_OPT.is_file() or _hip() is None:
+    if tessera_opt_path() is None or _hip() is None:
         pytest.skip("ROCm compiler/device unavailable")
     rng = np.random.default_rng(606 + causal)
     shape = (1, 2, 33, 64)

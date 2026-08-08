@@ -1,4 +1,5 @@
-// RUN: %trop --lower-tessera-target-to-rocdl %s | FileCheck %s
+// RUN: %trop %s | FileCheck %s --check-prefix=TARGET
+// RUN: not %trop --lower-tessera-target-to-rocdl %s 2>&1 | FileCheck %s --check-prefix=STRICT
 
 module {
   func.func @k(%A: memref<*xf32>, %B: memref<*xf32>) {
@@ -9,12 +10,11 @@ module {
     %b = arith.constant 2.0 : f32
     %c = arith.constant 0.0 : f32
     %r = "tessera_rocm.mfma"(%a,%b,%c) {gelu} : (f32,f32,f32) -> f32
-    // All three marker calls are emitted; CHECK-DAG is order-robust (the
-    // emission order follows source order: copy, barrier, then mfma).
-    // CHECK-DAG: llvm.call @llvm.amdgcn.mfma.contract
-    // CHECK-DAG: llvm.call @llvm.amdgcn.raw.buffer.copy.contract
-    // CHECK-DAG: llvm.call @llvm.amdgcn.s.barrier.contract
-    // CHECK-NOT: tessera_rocm.
+    // TARGET: tessera_rocm.async_copy
+    // TARGET: tessera_rocm.wait
+    // TARGET: tessera_rocm.mfma
+    // TARGET-NOT: .contract
+    // STRICT: executable ROCm async operations must pass through lower-rocm-async-copy
     return
   }
 }

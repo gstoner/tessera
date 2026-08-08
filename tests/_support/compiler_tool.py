@@ -41,6 +41,8 @@ from typing import Iterable
 
 import pytest
 
+from tests._support.build_artifacts import built_artifact
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -80,6 +82,9 @@ def tessera_opt_candidates() -> tuple[Path, ...]:
         if configured:
             path = Path(configured).expanduser()
             return (path,) if path.is_file() else ()
+    if os.environ.get("TESSERA_BUILD_DIR"):
+        selected = built_artifact("tools/tessera-opt/tessera-opt")
+        return (selected,) if selected is not None else ()
     found = [path for path in _DEFAULT_CANDIDATES if path.is_file()]
     on_path = shutil.which("tessera-opt")
     if on_path:

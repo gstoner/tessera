@@ -181,8 +181,15 @@ LogicalResult FFTOp::verify() {
     return failure();
   if (getMode() != "c2c" && getMode() != "r2c" && getMode() != "c2r")
     return emitOpError("mode must be c2c, r2c, or c2r");
+  auto physicalLength =
+      getOperation()->getAttrOfType<IntegerAttr>("physical_length");
+  auto realPolicy =
+      getOperation()->getAttrOfType<StringAttr>("real_transform_policy");
+  auto hermitianLayout =
+      getOperation()->getAttrOfType<StringAttr>("hermitian_layout");
   if (getAxisAttr().getInt() < 0 || getLengthAttr().getInt() <= 0 ||
-      getBatchAttr().getInt() <= 0)
+      getBatchAttr().getInt() <= 0 || !physicalLength ||
+      physicalLength.getInt() <= 0 || !realPolicy || !hermitianLayout)
     return emitOpError("requires normalized axis and positive length/batch");
   if (getNormalization() != "backward")
     return emitOpError("initial FFT contract requires backward normalization");
@@ -196,7 +203,7 @@ LogicalResult FFTOp::verify() {
       getStrategy() != "dft" && getStrategy() != "bluestein")
     return emitOpError("requires a known FFT strategy");
   if ((getStrategy() == "radix2" || getStrategy() == "mixed_radix") &&
-      getLength() > 1 && getRadixSequence().empty())
+      physicalLength.getInt() > 1 && getRadixSequence().empty())
     return emitOpError("staged FFT strategy requires a radix sequence");
   int64_t product = 1;
   for (int64_t radix : getRadixSequence()) {
@@ -205,12 +212,23 @@ LogicalResult FFTOp::verify() {
     product *= radix;
   }
   if (!getRadixSequence().empty() &&
-      product != static_cast<int64_t>(getLength()))
-    return emitOpError("radix sequence product must equal transform length");
+      product != physicalLength.getInt())
+    return emitOpError("radix sequence product must equal physical transform length");
   bool bluestein = getStrategy() == "bluestein";
+  const int64_t logicalLength = static_cast<int64_t>(getLength());
   if (bluestein != (getBluesteinM() > 0) ||
-      (bluestein && getBluesteinM() < 2 * getLength() - 1))
+      (bluestein && static_cast<int64_t>(getBluesteinM()) <
+                        2 * physicalLength.getInt() - 1))
     return emitOpError("Bluestein strategy requires a sufficient padded length");
+  const bool realMode = getMode() == "r2c" || getMode() == "c2r";
+  if (realPolicy.getValue() == "packed_even_n2_hermitian_v1" &&
+      (!realMode || logicalLength % 2 != 0 ||
+       physicalLength.getInt() != logicalLength / 2))
+    return emitOpError("packed-real policy requires an even N/2 physical transform");
+  if ((realMode && hermitianLayout.getValue() !=
+                       "half_spectrum_nyquist_explicit") ||
+      (!realMode && hermitianLayout.getValue() != "full_complex"))
+    return emitOpError("Hermitian layout does not match FFT mode");
   if ((getAlgorithm() != "stockham_autosort" &&
        getAlgorithm() != "cooley_tukey_dit") ||
       getWorkspacePolicy().empty() || getResidency().empty() ||
@@ -266,6 +284,7 @@ LogicalResult SpectralProgramOp::verify() {
       (getAxisPacking() != "none_contiguous" &&
        getAxisPacking() != "native_package_host_pack_v1") ||
       getWorkspacePolicy() != "persistent_artifact_workspace" ||
+      getFusionTopology().empty() ||
       getMutationLineage() != "inputs_immutable_output_fresh_v1" ||
       getNativeEntry().empty() || getInputShapes().empty() ||
       getInputSignature().empty() || getShapeBounds().empty() ||

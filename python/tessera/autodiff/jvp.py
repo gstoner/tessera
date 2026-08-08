@@ -2515,8 +2515,10 @@ def jvp_istft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
 
 
 @_jvp("dct")
-def jvp_dct(primals, tangents, *, axis=-1, **_):
+def jvp_dct(primals, tangents, *, axis=-1, type=2, **_):
     """DCT is orthonormal linear — JVP is DCT applied to the tangent."""
+    if int(type) != 2:
+        raise ValueError("dct JVP currently supports only type=2")
     x = np.asarray(primals[0], dtype=np.float64)
     dx = np.asarray(tangents[0], dtype=np.float64)
     axis_idx = axis if axis >= 0 else x.ndim + axis

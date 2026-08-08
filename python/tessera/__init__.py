@@ -2528,6 +2528,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return out.astype(want, copy=False)
 
     def dct(x, type: int = 2, axis: int = -1):
+        if int(type) != 2:
+            raise ValueError("tessera.ops.dct currently supports only type=2")
         if hasattr(x, "_data"):
             x = x._data
         n = x.shape[axis]

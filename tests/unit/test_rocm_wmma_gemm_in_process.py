@@ -29,17 +29,13 @@ from __future__ import annotations
 import ctypes
 import os
 import subprocess
-from pathlib import Path
 
 import pytest
 
 np = pytest.importorskip("numpy")
+from tests._support.compiler_tool import tessera_opt_path
+from tests._support.rocm_build import rocm_gemm_lib_path
 
-REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
-ORACLE_LIB = (REPO / "build" / "src" / "compiler" / "codegen"
-              / "Tessera_ROCM_Backend" / "runtime" / "hip"
-              / "libtessera_rocm_gemm.so")
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 
@@ -102,9 +98,10 @@ def _hip():
 
 def _build_hsaco_in_process(mt=1, nt=1) -> bytes:
     """The WHOLE chain in ONE tessera-opt call — mlir-opt is never invoked."""
-    if not TESSERA_OPT.is_file():
+    tool = tessera_opt_path()
+    if tool is None:
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
-    r = subprocess.run([str(TESSERA_OPT), "-", f"--pass-pipeline={_pipeline()}"],
+    r = subprocess.run([str(tool), "-", f"--pass-pipeline={_pipeline()}"],
                        input=_directive(mt, nt), capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
         # tessera-opt built without the L3 in-process serialization spine
@@ -149,9 +146,10 @@ def _launch(hip, fn, A, B, M, N, K, mt, nt):
 
 
 def _oracle(A, B, M, N, K):
-    if not ORACLE_LIB.is_file():
+    oracle_lib = rocm_gemm_lib_path()
+    if oracle_lib is None:
         pytest.skip("oracle lib not built: ninja -C build tessera_rocm_gemm")
-    lib = ctypes.CDLL(str(ORACLE_LIB), mode=ctypes.RTLD_LOCAL)
+    lib = ctypes.CDLL(str(oracle_lib), mode=ctypes.RTLD_LOCAL)
     ofn = lib.tessera_rocm_wmma_gemm_f16
     ofn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3
     ofn.restype = ctypes.c_int

@@ -148,7 +148,7 @@ def test_rocm_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
     assert package.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
 
 
-def test_rocm_generator_order_changes_only_for_scheduled_matmul(monkeypatch) -> None:
+def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch) -> None:
     pipelines: list[str] = []
     monkeypatch.setattr(rocm_native, "_tessera_opt", lambda: Path("/fake/tessera-opt"))
     monkeypatch.setattr(rocm_native, "_driver_selected_device_libraries", lambda: ())
@@ -164,23 +164,25 @@ def test_rocm_generator_order_changes_only_for_scheduled_matmul(monkeypatch) -> 
     rocm_native._compile_native_tile_ir(
         "legacy-tile",
         directive="tessera_rocm.test",
-        generator="legacy-generator",
+        family="softmax",
     )
-    legacy_target, legacy_native = pipelines
-    assert "legacy-generator" not in legacy_target
-    assert legacy_native.index("lower-tile-to-rocm") < legacy_native.index("legacy-generator")
+    softmax_target, softmax_native = pipelines
+    assert "tessera-rocm-executable{" in softmax_target
+    assert "family=softmax" in softmax_target
+    assert "output=target" in softmax_target
+    assert "output=binary" in softmax_native
 
     pipelines.clear()
     rocm_native._compile_native_tile_ir(
         "scheduled-matmul-tile",
         directive="tessera_rocm.test",
-        generator="generate-wmma-gemm-kernel",
-        generator_before_lowering=True,
+        family="matmul",
     )
     for pipeline in pipelines:
-        assert pipeline.index("generate-wmma-gemm-kernel") < pipeline.index(
-            "lower-tile-to-rocm"
-        )
+        assert "family=matmul" in pipeline
+        assert "input=tile" in pipeline
+        assert "generate-wmma-gemm-kernel" not in pipeline
+        assert "lower-tile-to-rocm" not in pipeline
 
 
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])

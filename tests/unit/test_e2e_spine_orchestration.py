@@ -160,7 +160,7 @@ def test_bundle_rejects_image_provenance_drift() -> None:
     "target,architecture,pipeline_name,binary_format",
     [
         ("nvidia_sm120", "sm_120a", "tessera-lower-to-nvidia-sm120", "ptx"),
-        ("rocm_gfx1151", "gfx1151", "tessera-lower-to-rocm", "hsaco"),
+        ("rocm_gfx1151", "gfx1151", "tessera-rocm-executable", "hsaco"),
     ],
 )
 def test_bundle_accepts_target_registry_declared_producer(

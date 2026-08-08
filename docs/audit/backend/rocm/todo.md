@@ -1,11 +1,37 @@
 ---
-last_updated: 2026-08-07
+last_updated: 2026-08-08
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `TSOL-NATIVE-REAL-FFT-2026-08-08` — **gfx1151 correctness
+retained; performance promotion remains open.** The v3 FFT artifact now binds
+logical length separately from physical length, an explicit Hermitian layout,
+and either `packed_even_n2_hermitian_v1` or a named full-complex fallback.
+Even RFFT/IRFFT use a persistent N/2 complex plan plus gfx1151 device kernels
+for Hermitian pre/post processing; odd lengths remain full-complex. The focused
+gfx1151 corpus passes 42 tests. WSL synchronized-host-wall comparisons at
+batch=32 show 1.11x RFFT and 1.18x IRFFT at N=1024, while N=256 RFFT is noisy
+around parity. Retain the implementation, but do not issue a selector-grade
+promotion until bare-metal device events confirm the envelope. The next ROCm
+optimization is folding Hermitian pre/post processing into the fused-LDS
+kernel for small transforms, eliminating its extra launch.
+
+Cross-backend sync `ROCM-BUILD-ARTIFACT-DISCOVERY-2026-08-07` — **ROCm-owned
+test-infrastructure closure.** `TESSERA_BUILD_DIR` now selects one CMake tree
+fail-closed, an explicit `TESSERA_OPT` can infer its owning CMake root, and
+artifact-specific overrides remain authoritative. Legacy ROCm tests no longer
+hardcode `build/` or `build-rocm/` for `tessera-opt`, `tessera-rocm-opt`, lit
+site configuration, the GEMM/attention runtime libraries, or the static runtime
+bridge. Apple, NVIDIA, and x86 assessed the additive shared resolver as parity
+validated with no physical schedule or exact-device claim transfer. On the
+gfx1151 WSL host, the formerly path-gated cohort passes **89/89** using only
+`TESSERA_BUILD_DIR`; the complete non-performance `test_rocm_*.py` corpus
+passes **2340/2340** with no skips, and the shared discovery/audit/lit slice
+passes **205/205**.
 
 Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
 Python-reference contract; ROCm physical follow-up required.** `sparsemax`,
@@ -115,7 +141,7 @@ Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **typed Schedule→Tile and
 bounded gfx1151 physical package complete.** The five TSOL
 composites now execute in the prebuilt `libtessera_spectral_rocm.so` image in
 the requested order: `spectral_filter`, `dct`, `spectral_conv`, `stft`, and
-`istft`. `tessera.scheduled_spectral.v3` materializes one verified
+`istft`. `tessera.scheduled_spectral.v5` materializes one verified
 `schedule.spectral_program` → `tile.spectral_program_kernel` edge and
 content-addresses each compound
 program's child FFT Schedule/Tile digests, interleaved-complex layout, axis,
@@ -131,6 +157,38 @@ child FFT plans remain independently digest-bound. Exact WSL-visible gfx1151
 tests pass for aligned, batched, ragged, and prime-length Bluestein children.
 `gfx1200`/`gfx1250` fail closed. Apple/NVIDIA physical adoption remains a
 sibling-owned follow-up and inherits no gfx1151 result.
+
+Cross-backend sync `TSOL-GFX1151-FUSED-BATCH-2026-08-08` — **missing-image
+blocker closed and batched LDS execution retained on gfx1151.** A HIP-enabled
+production compiler build now closes over `TesseraSpectralHIP`: building
+`tessera-opt`, `tessera-rocm-opt`, or `TesseraCompilerFoundation` also builds
+the exact-architecture `libtessera_spectral_rocm.so` image. The 15 formerly
+blocked composite tests now pass, and the combined FFT/TSOL and artifact gates
+pass **58/58**. The later `gfx1151_stockham_bluestein_v5` contract records
+`persistent_device_plan_fused_lds_batch` for non-Bluestein power-of-two
+lengths through 1024. The executor launches one workgroup per transform over
+the whole batch, keeping every radix-4/radix-2 stage in two LDS slabs instead
+of launching every stage separately for every row.
+
+A 50-iteration same-host comparison against the committed 2026-08-06 packet
+retained the implementation: median DCT improved from 1.442 to 0.513 ms
+(2.81x), spectral convolution from 3.560 to 0.865 ms (4.12x), STFT from 5.574
+to 0.627 ms (8.89x), and ISTFT from 6.129 to 0.661 ms (9.27x). Spectral filter,
+which has no FFT child, remained effectively flat at 0.445 ms. Aligned,
+bounded-dynamic, arbitrary-axis, fp16/bf16-storage, forward-normalized, and
+ortho-normalized rows remained within their numerical limits. These are
+synchronized WSL host-wall measurements: they justify retaining the launch
+topology but remain ineligible for a performance-selector promotion claim
+until bare-metal HIP-event/ROCprofiler calibration is available.
+
+Cross-backend sync `TSOL-DCT-CONTRACT-2026-08-08` — **shared correctness hole
+closed; gfx1151 type-II identity retained.** The public API, Graph verifier,
+autodiff rules, and `tessera.scheduled_spectral.v5` artifact now reject DCT
+types I/III/IV instead of silently executing type II. `dct_type = 2` is part of
+the template digest, exact Schedule digest, and launch Tile artifact. DCT and
+spectral convolution are now canonical TSOL inventory rows. No new gfx1151
+physical type or performance claim is made; native type-I/III/IV work remains
+open behind separate exact-device evidence.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **correctness defects
 fixed and boundary envelope expanded on gfx1151.** Var/std now use one
@@ -170,8 +228,10 @@ gfx1151 harness now records the raw HIP interval: all five N=64--1024 samples
 returned exactly zero event milliseconds. `rocprofv3 --kernel-trace` also
 initialized but emitted no trace files or dispatch timestamps under WSL DXG.
 Correctness still passes, but selector-grade confirmation requires bare-metal
-gfx1151. Production still executes global-memory ping-pong inside its
-persistent device plan; it does not select the experimental LDS residency.
+gfx1151. At that evidence point production still executed global-memory
+ping-pong; `TSOL-GFX1151-FUSED-BATCH-2026-08-08` subsequently retained the
+batched small-power-of-two LDS topology with explicit artifact identity while
+leaving selector-grade promotion evidence open.
 
 Cross-backend sync `FFT-PERF-FOUNDATION-2026-08-05` — **radix-17 retained and
 the first fused-LDS envelope validated on gfx1151.** The optional C++ benchmark now runs
@@ -190,8 +250,10 @@ sequence. A separate single-workgroup candidate now keeps every radix-4
 and radix-2 stage in two LDS slabs for N=64--1024. It passed forward and
 round-trip comparison on the WSL-visible gfx1151 and measured 1.84x--2.76x
 faster than the shipping global-ping-pong lane in the same synchronized
-host-wall domain. It remains experimental until valid device-event evidence
-can promote `lds_ping_pong` residency; gfx1200/gfx1250 remain fail-closed.
+host-wall domain. It was experimental at this checkpoint; the later
+`TSOL-GFX1151-FUSED-BATCH-2026-08-08` batch-level validation retained it for
+the gfx1151 v4 package, while valid device-event evidence is still required
+for a performance-promotion claim. gfx1200/gfx1250 remain fail-closed.
 
 Cross-backend sync `E2E-REAL-FFT-2026-08-05` — **gfx1151 typed
 Schedule→Tile consumption and prebuilt packaging implemented.**
@@ -920,7 +982,8 @@ overload, vector multi-reduction API split, and MFMA control operands becoming
 attributes. Validation on the visible `gfx1151` device records:
 
 - initial ROCm Target IR transition slice: **32/32 pass**; the current expanded
-  suite is **36/36** after the dtype-totality additions recorded below;
+  suite is **53/53** after typed composition, strict executable-boundary, and
+  dtype-totality additions;
 - compiled ROCm correctness corpus on gfx1151: **1280/1280 pass**;
 - valid baseline/performance ratchets: **21/21 pass**;
 - combined paged-KV, ReplaySSM, portable Tile, grouped GEMM/SwiGLU, and
@@ -936,7 +999,7 @@ evidence and not evidence for any sibling architecture.
 
 | ID | State | Current outcome |
 |---|---|---|
-| LLVM23/ROCm 7.14 | complete on gfx1151 WSL | Clean build, 36/36 ROCm lit, 1280/1280 compiled correctness, and 21/21 valid performance ratchets pass; the combined sweep is 86/90 with four zero-event-only failures. |
+| LLVM23/ROCm 7.14 | complete on gfx1151 WSL | Clean build, 53/53 ROCm lit, 1280/1280 compiled correctness, and 21/21 valid performance ratchets pass; the combined sweep is 86/90 with four zero-event-only failures. |
 | ROCM-TILE-1 | complete on gfx1151 | Portable f16/bf16/int8/int4 fragments execute and compare on gfx1151. Other architectures are owned by ROCM-1 through ROCM-5. |
 | ROCM-9 | complete on gfx1151 | Non-identity paged-KV direct and gather routes execute, compare, and have a measured serving decision. |
 | ROCM-REPLAY-1 | complete on gfx1151 | Persistent state, flush/rollback, block submission, asynchronous ring, lifetime proof, and the wider performance matrix are committed. |
@@ -948,7 +1011,7 @@ evidence and not evidence for any sibling architecture.
 | ROCM-E2E-1 | complete on gfx1151 | The f16/f32 pilot lowers typed Tile IR to `tessera_rocm.softmax`, packages an ELF HSACO and descriptor, executes across the exact-device boundary/aligned/ragged matrix, rejects invalid contracts, retains driver-selected device-library plus cold/warm identity, and passes isolated device and end-to-end non-regression. |
 | ROCM-E2E-2 | complete on gfx1151 | Reduction covers f16/bf16/f32 input with f32 output and passes all paired gates. Direct f32/i32 paged-KV and MoE dispatch have typed artifact/descriptor, negative, exact-device, and retained-route evidence; both movement descriptors are measured non-winners, so production routes remain selected. |
 | E2E-SPINE-3 | complete on gfx1151 | The hash-sealed four-family release packet records exact-device Level-C results, cold/warm identity, resources, and stable kernel-wall/end-to-end timing for softmax, reduction, paged-KV, and MoE. All four fleet rows are `release_ready`; no production selector changed. |
-| ROCM-TEST-1 | complete | The ROCm-only LLVM/MLIR 23 build owns a 27-node host-free compiler lane; 27/27 pass with Apple/NVIDIA/CPU ownership excluded and foreign pipeline absence retained in the report. |
+| ROCM-TEST-1 | complete | The ROCm-only LLVM/MLIR 23 build owns a 35-node host-free compiler lane; 35/35 pass with Apple/NVIDIA/CPU ownership excluded and foreign pipeline absence retained in the report. |
 | ROCM-DTYPE-1 | complete on gfx1151 | FP64 and integer widths have per-operation Target-IR/runtime assessments; unsigned LLVM probes pass without inventing unsigned storage ABIs; signed int4 is canonical and physically packed; gfx1151 FP8/BF8 is rejected by name. |
 | ROCM-SSA-LDS | complete | AMD async-copy, waitcnt, and matrix consumers use shared SSA allocation, token, and pipeline-state identity; compatibility readers are retired, shared/ROCm fixtures are SSA-only, host structural and compiler-benchmark gates pass, while exact-device performance remains intentionally unclaimed. |
 | ROCM-E2E-ATTENTION | complete on gfx1151 | FP16 and BF16 forward consume the canonical rank-4 recurrence with per-head bias, softcap, dropout, GQA/window/ragged policy, and exact numerical/timing proof. FP16 and BF16 backward consume the tensor-valued shared dQ/split-partial/ascending-reduction loops directly into the compiler-owned five-entry package; exact combined gradients and dtype-specific resident program-wall ratchets pass. |
@@ -986,10 +1049,10 @@ named exact device can satisfy an execution gate.
 
 **Status: complete (2026-07-21).**
 
-The clean `build-rocm-7.14-llvm23-clean` capability set declares ROCm and HIP
+The clean ROCm-only capability set declares ROCm and HIP
 enabled with Apple, NVIDIA, and CUDA disabled. The owned marker expression
 explicitly excludes Apple, CPU, NVIDIA, performance, and every hardware lane;
-it collects 27 ROCm compiler nodes and passes **27/27** with 15,866 tests
+it collects 35 ROCm compiler nodes and passes **35/35** with 17,675 tests
 deselected. The ROCm pipeline probe is available, while the Apple and NVIDIA
 pipeline probes retain their expected unregistered-pipeline diagnostics. The
 report also retains the build command, CMake flags, LLVM/MLIR 23 tool and runner
@@ -1192,7 +1255,7 @@ for launch shape scalars. Both FP8 encodings are explicitly rejected on
 gfx1151 by `ROCM_TILE_UNSUPPORTED_DTYPE` in selection, Target IR, and runtime.
 
 Closure evidence on the gfx1151 host: LLVM 23 compile probes cover fp64,
-signed i16/i32/i64, and unsigned u8/u16/u32/u64; ROCm backend lit is 36/36;
+signed i16/i32/i64, and unsigned u8/u16/u32/u64; ROCm backend lit is 53/53;
 the focused registry/target/audit suite is 512/512; and four aligned/ragged packed-int4
 launch comparisons pass exactly against NumPy int32 accumulation. Cross-backend
 sync `ROCM-DTYPE1-CLOSE-2026-07-21` owns the additive canonical-int4 and storage
@@ -2871,3 +2934,72 @@ consumers no longer retain or reconstruct Graph-op metadata. **ROCm outcome:
 parity validated for the bounded E2E-REAL-5C slice.** Exact gfx1151 Lion,
 factored/full Adafactor, and gated/modified DeltaNet backward tests pass.
 gfx1200/gfx1250 stay fail-closed pending profiles and exact-device evidence.
+
+## Cross-backend sync `ROCM-TYPED-EXECUTABLE-PIPELINE-2026-08-07`
+
+`ROCM-EXEC-PIPELINE-1` is **complete** for its bounded gfx1151 family set.
+Production matmul, softmax, reduction,
+paged-KV, attention forward/backward, and MoE dispatch now select typed
+semantic-family plugins through `tessera-rocm-executable`; Python no longer
+assembles those generators, conversions, or packaging passes as comma-separated
+strings. The pipeline stamps its Tile producer, `tessera_rocm` Target-IR
+consumer, `rocdl_hsaco` code generator, architecture, family, and terminal
+artifact level as module attributes. Binary construction runs runnable
+`tessera_rocm.async_copy` lowering before Target-IR-to-ROCDL conversion and
+lowers its counter-class threshold to a real `rocdl.s.waitcnt` before the workgroup
+barrier. The executable boundary now rejects every surviving `tile.*` or
+`tessera_rocm.*` op, `llvm.mlir.undef`, and `.contract` symbol. Compatibility
+aliases stop at typed Target IR: they no longer fabricate marker calls or
+replace live results with undefined values. Target-only `buffer_load` and
+`ds_read_tr` contracts remain inspectable but cannot be mislabeled executable.
+gfx1151 passed the 53-test ROCm lit suite and 151 focused runtime/family tests.
+gfx1200/gfx1250 remain fail-closed.
+The ROCm-only compiler driver now registers the same ROCDL translation and
+target interfaces as production `tessera-opt`; the executable async-copy
+fixture reaches `gpu.binary` through both drivers instead of advertising a
+pipeline that only the production driver could serialize.
+The follow-on family expansion is also complete for the existing physical
+scalar activation/unary/binary/where/compare/predicate/logical/bitwise lanes;
+Cholesky/triangular-solve/LU/QR/SVD; block-sparse attention/top-k and
+SpMM/SDDMM; and recurrent-cell, linear-attention, selective-SSM forward/
+backward, and DeltaNet. Each caller now selects a named semantic plugin and the
+C++ pipeline owns its generator and binary packaging order. Exact gfx1151
+validation passed **607/607** scalar tests and **188/188** solver/sparse/
+sequence tests.
+
+The final runtime-family migration is complete. Normalization, arg-reduction,
+scan, gather/scatter, f32 GEMM/batched GEMM, sort, RNG, losses, optimizers,
+quantization/packing, EBM, DFT, ALiBi/RoPE, Clifford, DSpark, and MLA decode now
+also select closed semantic plugins. The generic
+`_build_rocm_elementwise_hsaco(pass_name, ...)` helper and the last manually
+composed `gpu-module-to-binary` strings have been deleted. A structural unit
+gate forbids either escape hatch from returning. The complete migrated
+`test_rocm_*compiled.py` selection passed **1534** tests. The temporary-build
+spectral-image omission that separately blocked 15 TSOL composite tests is now
+closed by `TSOL-GFX1151-FUSED-BATCH-2026-08-08`; all 15 execute against the
+selected build's prebuilt image. The 53-test ROCm lit suite passed **53/53**,
+and the dedicated DFT/no-escape-hatch plus audit/registry selection passed
+**185/185**.
+`build.hidden/` was not used or modified.
+
+## Cross-backend sync `TSOL-PACKED-FUSION-2026-08-08`
+
+`tessera.scheduled_spectral.v5` now hashes the compound fusion topology in
+addition to child FFT digests. On gfx1151, even-length spectral convolution,
+STFT, and ISTFT bind N/2 child plans and execute device-resident
+RFFT→complex-multiply→IRFFT, frame/window→RFFT, and IRFFT→window/overlap-add
+programs through `tessera.rocm.spectral_composite.v5`. Full-complex N-point
+intermediates and their workspace allocations are removed from these paths.
+Odd windows retain support through a separately named and hashed full-complex
+fallback; they cannot be mistaken for packed execution. gfx1200/gfx1250
+remain fail-closed and inherit no gfx1151 schedule.
+
+**ROCm verdict: retain, not promote.** The package rebuilds for gfx1151 and all
+15 exact-device composite tests pass on the WSL-visible Radeon 8060S. The
+20-sample host-wall packet records numerical error, artifact/child digests,
+physical lengths, workspace, dtype, axis, and normalization policy in
+[`../../../../benchmarks/baselines/tsol_packed_fusion_gfx1151_2026_08_08.json`](../../../../benchmarks/baselines/tsol_packed_fusion_gfx1151_2026_08_08.json).
+Baseline f32 maxima are `2.86e-6` for convolution, `1.23e-6` for STFT, and
+`8.77e-6` for ISTFT. WSL host-wall medians are regression evidence only;
+promotion still requires bare-metal device-event timing and a same-run
+full-complex/rocFFT comparison.

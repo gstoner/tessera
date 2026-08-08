@@ -119,7 +119,7 @@ supports HIP/API tracing through DXG, but PMCs and PC sampling require a future
 ROCDXG implementation or a bare-metal KFD host.
 
 The post-cleanup HIP-event retest still returned exactly `0.0 ms`. Final local
-validation totals are: clean build complete, ROCm lit **32/32**, compiled ROCm
+validation totals are: clean build complete, ROCm lit **53/53**, compiled ROCm
 correctness **1280/1280**, valid baseline/performance ratchets **21/21**, and
 the combined paged-KV, ReplaySSM, portable Tile, grouped GEMM/SwiGLU, and
 architecture sweep **86/90**. Its four failures are exclusively the known

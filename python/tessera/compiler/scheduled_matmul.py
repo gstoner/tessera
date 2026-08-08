@@ -230,10 +230,17 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
 
 
 def find_tessera_opt() -> Path | None:
-    if configured := os.environ.get("TESSERA_OPT"):
-        path = Path(configured).expanduser()
-        return path if path.is_file() else None
+    for name in ("TESSERA_OPT", "TESSERA_OPT_BIN"):
+        if configured := os.environ.get(name):
+            path = Path(configured).expanduser()
+            return path if path.is_file() else None
     root = Path(__file__).resolve().parents[3]
+    if selected_build := os.environ.get("TESSERA_BUILD_DIR"):
+        build = Path(selected_build).expanduser()
+        if not build.is_absolute():
+            build = root / build
+        path = build / "tools/tessera-opt/tessera-opt"
+        return path if path.is_file() else None
     for path in (
         root / "build/tools/tessera-opt/tessera-opt",
         root / "build-rocm-ci-local/tools/tessera-opt/tessera-opt",

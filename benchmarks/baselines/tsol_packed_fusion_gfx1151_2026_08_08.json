@@ -1,0 +1,1361 @@
+{
+  "architecture": "gfx1151",
+  "device_event_follow_up": "bare_metal_required",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "iterations": 20,
+  "package_abi": "tessera.rocm.spectral_composite.v5",
+  "processor": "x86_64",
+  "python": "3.11.15",
+  "rows": [
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_filter",
+      "child_fft_digests": [],
+      "child_physical_lengths": [],
+      "cold_ms": 175.008532,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "a7532b3f3a8c75a2f9e4ce861f3cb4e579f52277defb7d23fcf13038807d1a66",
+      "fusion_topology": "standalone_complex_multiply_v1",
+      "initial_schedule_digest": "a7532b3f3a8c75a2f9e4ce861f3cb4e579f52277defb7d23fcf13038807d1a66",
+      "input_shapes": [
+        [
+          8,
+          17
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 2.384185791015625e-07,
+      "native_entry": "ts_spectral_filter_plan_hostptr_amd",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_filter",
+      "output_melems_per_s": 0.3040937503144352,
+      "output_shape": [
+        8,
+        17
+      ],
+      "rms_error": 4.4789855637734755e-08,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "13b2412ea2be29fb743604f039781930c8ff86ce34f0e69be64003f70c03eb5f",
+      "tile_digest": "20d15bf212b9d67160e3d70e0d4f5c572c9c29b2c6cc314029a58ff7c1214eaa",
+      "warm_mad_ms": 0.008003,
+      "warm_median_ms": 0.4472305,
+      "workspace_bytes": 3264
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_dct",
+      "child_fft_digests": [
+        "0a53054ffdaf0959447b934a25e0278272fa28dea76afa9727a4d998380f545d"
+      ],
+      "child_physical_lengths": [
+        128
+      ],
+      "cold_ms": 3.931853,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "9d6c99d9bb7dc8b5facc9a5ce8bcd3aa44b2716c3106276fa9e4580654dad836",
+      "fusion_topology": "even_extension_c2c_v1",
+      "initial_schedule_digest": "9d6c99d9bb7dc8b5facc9a5ce8bcd3aa44b2716c3106276fa9e4580654dad836",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 3.814697265625e-06,
+      "native_entry": "ts_dct_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 1.2219162128234378,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 1.043815634497426e-06,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "28d44e340e5a90db3812de118c62a245c01ae9dd63fc8f901b7a58fb24d5ae34",
+      "tile_digest": "e541030b708f6513777982bf04e7447e39594f4897d0830f26d6a5da204cdc33",
+      "warm_mad_ms": 0.0255265,
+      "warm_median_ms": 0.419014,
+      "workspace_bytes": 20480
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_conv",
+      "child_fft_digests": [
+        "dcc11cf48af6e58af1157aaff336604c2ed5645e1f084eff99ede65fcccdfa7a",
+        "706c969fca5d5493730620fc60dc25763f6ebad9a9124b3151ec7c53a55c33fb"
+      ],
+      "child_physical_lengths": [
+        64,
+        64
+      ],
+      "cold_ms": 1.751597,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "e5c00804ec50f716a54875147771bf8b2336179d8d3c1d5dec615688f970f7b6",
+      "fusion_topology": "packed_rfft_cmul_irfft_single_artifact_v1",
+      "initial_schedule_digest": "e5c00804ec50f716a54875147771bf8b2336179d8d3c1d5dec615688f970f7b6",
+      "input_shapes": [
+        [
+          8,
+          64
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 2.86102294921875e-06,
+      "native_entry": "ts_spectral_conv_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 1.2501562695336919,
+      "output_shape": [
+        8,
+        80
+      ],
+      "rms_error": 8.506529533287721e-07,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "b637e7516fa9e11e748bd5054667f80388d39ca8712c286e5943209fa311f7b0",
+      "tile_digest": "c59cb728544f2f0e19be007a47e2803cffbca57125c448d421d2e448bd140b94",
+      "warm_mad_ms": 0.023118,
+      "warm_median_ms": 0.511936,
+      "workspace_bytes": 29920
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_stft",
+      "child_fft_digests": [
+        "946cf6fe867c9dbbcbef368ee03d9b674b8465c0554b7e949dadf785503ee18e"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 2.020551,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "0cc50f6fd2f79ab59ff9aa0ccca3111d928d9f402cde7f7fed3d3f97f2bf81d9",
+      "fusion_topology": "frame_window_packed_rfft_single_artifact_v1",
+      "initial_schedule_digest": "0cc50f6fd2f79ab59ff9aa0ccca3111d928d9f402cde7f7fed3d3f97f2bf81d9",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 1.2218952178955078e-06,
+      "native_entry": "ts_stft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 1.6067971570492319,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 3.833358764517933e-07,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "2aa2b90a16dbc57435b5116563883b066bdce5e9285d65830d858cbe88a1a9bb",
+      "tile_digest": "81d9eee05a914e44605b746bd15441d5d2b85c0bf62d90dfbd285fc4bd0c2a56",
+      "warm_mad_ms": 0.0645615,
+      "warm_median_ms": 0.592483,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "baseline_istft",
+      "child_fft_digests": [
+        "9ad9575a4f5fd4207acd63db5c8ab24d50178b9f28344f22a2934a21aaa4c291"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.355409,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "07fe98db932d563da04796839ac0d168461b38cc43a8e8cace7d6390dc3b4bdd",
+      "fusion_topology": "packed_irfft_window_ola_single_artifact_v1",
+      "initial_schedule_digest": "07fe98db932d563da04796839ac0d168461b38cc43a8e8cace7d6390dc3b4bdd",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 8.761882781982422e-06,
+      "native_entry": "ts_istft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 2.1140688806583343,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 5.8503171086858e-07,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "fa4d8ee4557c8bba7b31b24c9269c7538b056537c702f6c50a99292b40bfff23",
+      "tile_digest": "05e877529acdfc563d3485f0716df747a83cbd2dd34a01c094c562f323b205be",
+      "warm_mad_ms": 0.014455,
+      "warm_median_ms": 0.484374,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_filter",
+      "child_fft_digests": [],
+      "child_physical_lengths": [],
+      "cold_ms": 1.709692,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "fcb9b13e3b4ad74067b7b1a9995eed82d70b014daf088f83a0e489fb7cdebad6",
+      "fusion_topology": "standalone_complex_multiply_v1",
+      "initial_schedule_digest": "4331b01ac15d3dfef6ff589cb63596b14d3f72fa56d56c368850ae191b442309",
+      "input_shapes": [
+        [
+          8,
+          17
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 2.384185791015625e-07,
+      "native_entry": "ts_spectral_filter_plan_hostptr_amd",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_filter",
+      "output_melems_per_s": 0.296032833523977,
+      "output_shape": [
+        8,
+        17
+      ],
+      "rms_error": 4.4789855637734755e-08,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "b151a6293dfe1141997626aa6c6a6ca6ef429faae472b180ff0c5dc452bc891a",
+      "tile_digest": "3f539bb5548b7e2357ef414219e55b9da6d52baf3231a454e1fa0e264aae0e0b",
+      "warm_mad_ms": 0.0271495,
+      "warm_median_ms": 0.4594085,
+      "workspace_bytes": 3264
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_dct",
+      "child_fft_digests": [
+        "0a53054ffdaf0959447b934a25e0278272fa28dea76afa9727a4d998380f545d"
+      ],
+      "child_physical_lengths": [
+        128
+      ],
+      "cold_ms": 1.511945,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "2da83c3d9b5cb695db4435bf9ba91c6d60b150ba6a903394a8e2a796b8544bc8",
+      "fusion_topology": "even_extension_c2c_v1",
+      "initial_schedule_digest": "00ed90d9816c8bc5bfb1620cca633970d1b20d799e37ec4b02410cc8971cd6c8",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 3.814697265625e-06,
+      "native_entry": "ts_dct_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 1.1379383535232193,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 1.043815634497426e-06,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "c23b780c9e9c3c900b87536f181963547afee8d3419d1f5491bf4628a5ba1ec9",
+      "tile_digest": "16b10787176baf569268aef114504fe2ade764684b6bf04e5e4f9287334c7d43",
+      "warm_mad_ms": 0.030389,
+      "warm_median_ms": 0.4499365,
+      "workspace_bytes": 20480
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_conv",
+      "child_fft_digests": [
+        "dcc11cf48af6e58af1157aaff336604c2ed5645e1f084eff99ede65fcccdfa7a",
+        "706c969fca5d5493730620fc60dc25763f6ebad9a9124b3151ec7c53a55c33fb"
+      ],
+      "child_physical_lengths": [
+        64,
+        64
+      ],
+      "cold_ms": 1.257591,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "585f7d6ea515575ca0c1388712db352e2ba40bca2529210d86188a1a8a577dab",
+      "fusion_topology": "packed_rfft_cmul_irfft_single_artifact_v1",
+      "initial_schedule_digest": "fd67876263674d0e2f052a27ec2540d7cacf26e3c23f8064a53434667bacbccf",
+      "input_shapes": [
+        [
+          8,
+          64
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 2.86102294921875e-06,
+      "native_entry": "ts_spectral_conv_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 1.2599702528898107,
+      "output_shape": [
+        8,
+        80
+      ],
+      "rms_error": 8.506529533287721e-07,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "881117641766fc90bf257f6b378a5a29187b86d41107944391578c7d9f2c5ca8",
+      "tile_digest": "b567ad66b6a078880892df37adfd44f541cad15f046725555c1be71e37916ce6",
+      "warm_mad_ms": 0.012634,
+      "warm_median_ms": 0.5079485,
+      "workspace_bytes": 29920
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_stft",
+      "child_fft_digests": [
+        "946cf6fe867c9dbbcbef368ee03d9b674b8465c0554b7e949dadf785503ee18e"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.81638,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "a38cc694857d1ac6356c9c82ea99e78d7ae9b09dd6d9bb2be5f8469fc18a0c7f",
+      "fusion_topology": "frame_window_packed_rfft_single_artifact_v1",
+      "initial_schedule_digest": "ff6689ac0868fe6f9be1982ffadd64288ed3be3ffb5fcd328f2d436f05bb74cf",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 1.2218952178955078e-06,
+      "native_entry": "ts_stft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 1.9194554553262873,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 3.833358764517933e-07,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "949bceacc5c79f1c8b8267db56c1da5f943e93daba9ba60c7fde00ebef8948b1",
+      "tile_digest": "26e4bf130eeba701f8d52ac7bfe9411a908a245405174291402188a3d49d2477",
+      "warm_mad_ms": 0.0207525,
+      "warm_median_ms": 0.495974,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "bounded_dynamic_istft",
+      "child_fft_digests": [
+        "9ad9575a4f5fd4207acd63db5c8ab24d50178b9f28344f22a2934a21aaa4c291"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.969156,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "35e0e44c8ad2e641165444eae2f6f16605e6bf279be672cfedfd5300dcd3f67e",
+      "fusion_topology": "packed_irfft_window_ola_single_artifact_v1",
+      "initial_schedule_digest": "6bdb50217866921f038cbbf37354719800bf92bc55c3944ec0f3561d9c2ce8e8",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 8.761882781982422e-06,
+      "native_entry": "ts_istft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 2.124271985644568,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 5.8503171086858e-07,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "f4e5102552abf5608aed868a77a6911964d9c09e415b5000f787ba709e86a6c9",
+      "tile_digest": "1a5cb1a93b7752c56d2c48585ab8b66d23f9b4971987da566f4e17f6c807321f",
+      "warm_mad_ms": 0.005517,
+      "warm_median_ms": 0.4820475,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "axis0_dct",
+      "child_fft_digests": [
+        "0a53054ffdaf0959447b934a25e0278272fa28dea76afa9727a4d998380f545d"
+      ],
+      "child_physical_lengths": [
+        128
+      ],
+      "cold_ms": 1.653537,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "77f0fc16bfdd2304e704f458e4a65358c436dfb08362edb190609348a58be595",
+      "fusion_topology": "even_extension_c2c_v1",
+      "initial_schedule_digest": "77f0fc16bfdd2304e704f458e4a65358c436dfb08362edb190609348a58be595",
+      "input_shapes": [
+        [
+          64,
+          8
+        ]
+      ],
+      "max_abs_error": 4.291534423828125e-06,
+      "native_entry": "ts_dct_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 1.2236274819084765,
+      "output_shape": [
+        64,
+        8
+      ],
+      "rms_error": 1.1289017053790803e-06,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "3b6c7b80f41eb84ed1bda35e4da86eb243dcc9a8ac60159f5f20fea95093ff21",
+      "tile_digest": "4cd38570932089e5e66a9a9872ee4f95cc62421cb468beb24197dc52c620ac03",
+      "warm_mad_ms": 0.033805,
+      "warm_median_ms": 0.418428,
+      "workspace_bytes": 20480
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "axis0_conv",
+      "child_fft_digests": [
+        "dcc11cf48af6e58af1157aaff336604c2ed5645e1f084eff99ede65fcccdfa7a",
+        "706c969fca5d5493730620fc60dc25763f6ebad9a9124b3151ec7c53a55c33fb"
+      ],
+      "child_physical_lengths": [
+        64,
+        64
+      ],
+      "cold_ms": 1.7502,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "ba15083263f188c9a525d7cf2f7c5898fb98e945a8e6e5bd602b24c76e96a346",
+      "fusion_topology": "packed_rfft_cmul_irfft_single_artifact_v1",
+      "initial_schedule_digest": "ba15083263f188c9a525d7cf2f7c5898fb98e945a8e6e5bd602b24c76e96a346",
+      "input_shapes": [
+        [
+          64,
+          8
+        ],
+        [
+          17,
+          8
+        ]
+      ],
+      "max_abs_error": 4.76837158203125e-06,
+      "native_entry": "ts_spectral_conv_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 1.2230078348939424,
+      "output_shape": [
+        80,
+        8
+      ],
+      "rms_error": 9.497640904013302e-07,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "088d2decb30be1a6602f027fcc3280ee8ac9b50f170db06f9f9a855225b7d282",
+      "tile_digest": "19107ccd617d06aebfc401f8196c37dfde570376b7c4d27493926dff7d32556c",
+      "warm_mad_ms": 0.029223,
+      "warm_median_ms": 0.5233,
+      "workspace_bytes": 29920
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "axis0_stft",
+      "child_fft_digests": [
+        "946cf6fe867c9dbbcbef368ee03d9b674b8465c0554b7e949dadf785503ee18e"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.376427,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "de1c429d8dd72adb1f38240f84b3a8e0b4b0859207693e57d074fb549b37cfd9",
+      "fusion_topology": "frame_window_packed_rfft_single_artifact_v1",
+      "initial_schedule_digest": "de1c429d8dd72adb1f38240f84b3a8e0b4b0859207693e57d074fb549b37cfd9",
+      "input_shapes": [
+        [
+          128,
+          8
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 1.5600029428242124e-06,
+      "native_entry": "ts_stft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 1.9444702595112067,
+      "output_shape": [
+        7,
+        17,
+        8
+      ],
+      "rms_error": 3.6635582201461104e-07,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "f97d0cf0ae680d8ec5844266e5edffe36a0e1704813b35849a549b8125385fe6",
+      "tile_digest": "af45697106801f6df9c20f6636cda08fa6c9d3746f50b8317e343d48626e37c0",
+      "warm_mad_ms": 0.021407,
+      "warm_median_ms": 0.4895935,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 1,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "axis1_istft",
+      "child_fft_digests": [
+        "9ad9575a4f5fd4207acd63db5c8ab24d50178b9f28344f22a2934a21aaa4c291"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.848513,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "672b09819effb37361f712d8094a433a7c85773763786028aeadea6c8ca04f8d",
+      "fusion_topology": "packed_irfft_window_ola_single_artifact_v1",
+      "initial_schedule_digest": "672b09819effb37361f712d8094a433a7c85773763786028aeadea6c8ca04f8d",
+      "input_shapes": [
+        [
+          7,
+          17,
+          8
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 1.4662742614746094e-05,
+      "native_entry": "ts_istft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 2.1427794192732965,
+      "output_shape": [
+        128,
+        8
+      ],
+      "rms_error": 8.408810864323132e-07,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "5f8f9f83d843e388ba61b8ea37bd6e138118b8032fd9a91a9b6f18076200ef84",
+      "tile_digest": "ed2db26eb8af629cc8f890ca9dcb579b44760ffa3a23f12fbe2b3313072a746c",
+      "warm_mad_ms": 0.010253,
+      "warm_median_ms": 0.477884,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_f16_dct",
+      "child_fft_digests": [
+        "0a53054ffdaf0959447b934a25e0278272fa28dea76afa9727a4d998380f545d"
+      ],
+      "child_physical_lengths": [
+        128
+      ],
+      "cold_ms": 1.556347,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "c8706927fa61c929f16f2f4b5c1bca825374a54b15cb921c1858d58afa0834d6",
+      "fusion_topology": "even_extension_c2c_v1",
+      "initial_schedule_digest": "c8706927fa61c929f16f2f4b5c1bca825374a54b15cb921c1858d58afa0834d6",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 0.0101318359375,
+      "native_entry": "ts_dct_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 1.2861752489138476,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 0.0017633369087506246,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "ce05b65d038d8c1bade472f2c45f3eb65a0d886cff4162d74330d8f6bcc74d18",
+      "tile_digest": "5db139a5bc8b7ccfea7fdb131e92d36a0468912607cd0537c6189d870000b8df",
+      "warm_mad_ms": 0.012265,
+      "warm_median_ms": 0.3980795,
+      "workspace_bytes": 20480
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_f16_spectral_conv",
+      "child_fft_digests": [
+        "dcc11cf48af6e58af1157aaff336604c2ed5645e1f084eff99ede65fcccdfa7a",
+        "706c969fca5d5493730620fc60dc25763f6ebad9a9124b3151ec7c53a55c33fb"
+      ],
+      "child_physical_lengths": [
+        64,
+        64
+      ],
+      "cold_ms": 1.496933,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "efb1b5cafbf7fc19d16e718be3f7b3cef8e89095e0491d9d7cd89d07e49675c6",
+      "fusion_topology": "packed_rfft_cmul_irfft_single_artifact_v1",
+      "initial_schedule_digest": "efb1b5cafbf7fc19d16e718be3f7b3cef8e89095e0491d9d7cd89d07e49675c6",
+      "input_shapes": [
+        [
+          8,
+          64
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 0.0036420822143554688,
+      "native_entry": "ts_spectral_conv_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 1.2575193269913751,
+      "output_shape": [
+        8,
+        80
+      ],
+      "rms_error": 0.0007553470985151484,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "387176460927ba5011c51a90ab53240a0d1b1f13130b0ffc2de1e0ec2f7d58ec",
+      "tile_digest": "67d1f3b28a902115ab4049d23209a239d0d76fa65e2743f372982038eb6d4618",
+      "warm_mad_ms": 0.01286,
+      "warm_median_ms": 0.5089385,
+      "workspace_bytes": 29920
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_f16_stft",
+      "child_fft_digests": [
+        "946cf6fe867c9dbbcbef368ee03d9b674b8465c0554b7e949dadf785503ee18e"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.769028,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "142d6e7b16bf742c72917c154b661f4685813ade294889c26a3a120b5ad1568f",
+      "fusion_topology": "frame_window_packed_rfft_single_artifact_v1",
+      "initial_schedule_digest": "142d6e7b16bf742c72917c154b661f4685813ade294889c26a3a120b5ad1568f",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 1.4745373846380971e-06,
+      "native_entry": "ts_stft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 1.929339950915322,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 3.812976464737974e-07,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "84302ec0fc540dbe40a0c8c70777ace020bb20504634f44ab9569a60cb4bb465",
+      "tile_digest": "bc3e0b682dc03fc1fa9e044348686e720c146e419aa8ff39eb689025b16cbc61",
+      "warm_mad_ms": 0.0168585,
+      "warm_median_ms": 0.493433,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "storage_f16_istft",
+      "child_fft_digests": [
+        "9ad9575a4f5fd4207acd63db5c8ab24d50178b9f28344f22a2934a21aaa4c291"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.667354,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "28bf6364bd50ffe4f2ebfda79581a445695444e02f6cf3065658bb76f010fb87",
+      "fusion_topology": "packed_irfft_window_ola_single_artifact_v1",
+      "initial_schedule_digest": "28bf6364bd50ffe4f2ebfda79581a445695444e02f6cf3065658bb76f010fb87",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0009524822235107422,
+      "native_entry": "ts_istft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 2.1089898782902763,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 0.00019865702080968013,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "6918ff908054302a3cbb31dbe5c477717ab2a132d89d66969a3878e3982265c0",
+      "tile_digest": "47c71faffa4b7b518ffc6d2ff0dcc778cad7a9c5c3752f1e914bc54f42a8b922",
+      "warm_mad_ms": 0.0104895,
+      "warm_median_ms": 0.4855405,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_bf16_dct",
+      "child_fft_digests": [
+        "0a53054ffdaf0959447b934a25e0278272fa28dea76afa9727a4d998380f545d"
+      ],
+      "child_physical_lengths": [
+        128
+      ],
+      "cold_ms": 1.272673,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "3aea72e8705eebeac636ddc3a61b093332b027d34d4dc96f14a142da76b5de5d",
+      "fusion_topology": "even_extension_c2c_v1",
+      "initial_schedule_digest": "3aea72e8705eebeac636ddc3a61b093332b027d34d4dc96f14a142da76b5de5d",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 0.0869140625,
+      "native_entry": "ts_dct_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 1.3074933156957933,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 0.014766723408575225,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "0219fd33532991849ca0656a58c8e026a626b119ba00f7a5cb85eb25e27b9606",
+      "tile_digest": "852f17907be2ae15ddc5a1272704d24642b13053dd9db3de3314157f1c4e19e7",
+      "warm_mad_ms": 0.0133155,
+      "warm_median_ms": 0.391589,
+      "workspace_bytes": 20480
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_bf16_spectral_conv",
+      "child_fft_digests": [
+        "dcc11cf48af6e58af1157aaff336604c2ed5645e1f084eff99ede65fcccdfa7a",
+        "706c969fca5d5493730620fc60dc25763f6ebad9a9124b3151ec7c53a55c33fb"
+      ],
+      "child_physical_lengths": [
+        64,
+        64
+      ],
+      "cold_ms": 1.873165,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "75cfdeacfdf695fa0e76426705beaccb5bc14089629cd78e5c7f81e1fddc9d2d",
+      "fusion_topology": "packed_rfft_cmul_irfft_single_artifact_v1",
+      "initial_schedule_digest": "75cfdeacfdf695fa0e76426705beaccb5bc14089629cd78e5c7f81e1fddc9d2d",
+      "input_shapes": [
+        [
+          8,
+          64
+        ],
+        [
+          8,
+          17
+        ]
+      ],
+      "max_abs_error": 0.030612945556640625,
+      "native_entry": "ts_spectral_conv_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.spectral_conv",
+      "output_melems_per_s": 1.28157890521122,
+      "output_shape": [
+        8,
+        80
+      ],
+      "rms_error": 0.005640829370893246,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "4fd9f4e1f84f4ec75f92e5d87e524f933b047a109354d26896f3ac5079683406",
+      "tile_digest": "0b1ca23a4129fcc8552f377a4a6b3428deb7e90cc1b4ecc6e5a2a28f7fd39367",
+      "warm_mad_ms": 0.0169845,
+      "warm_median_ms": 0.499384,
+      "workspace_bytes": 29920
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "storage_bf16_stft",
+      "child_fft_digests": [
+        "946cf6fe867c9dbbcbef368ee03d9b674b8465c0554b7e949dadf785503ee18e"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.392965,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "3952ea10d4b1d244c72e6d37ffbea8974912407fd9f2b98822760681b758dd2b",
+      "fusion_topology": "frame_window_packed_rfft_single_artifact_v1",
+      "initial_schedule_digest": "3952ea10d4b1d244c72e6d37ffbea8974912407fd9f2b98822760681b758dd2b",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 1.3486991292666062e-06,
+      "native_entry": "ts_stft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 1.9056140551046736,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 3.513649937151803e-07,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "8599f507d870235d724ae000b9e4cd9f7229b89ad05d9eae2dd3167fc0acb077",
+      "tile_digest": "988ce8ccf1791f95cef4d15709e46a2c9e78f078bce50ce2eb5a3d7fa319df95",
+      "warm_mad_ms": 0.0255205,
+      "warm_median_ms": 0.4995765,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "storage_bf16_istft",
+      "child_fft_digests": [
+        "9ad9575a4f5fd4207acd63db5c8ab24d50178b9f28344f22a2934a21aaa4c291"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.761718,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "54558add943437fb4315c31c3951448cc39b2b516292710a0a6acaa9663542f6",
+      "fusion_topology": "packed_irfft_window_ola_single_artifact_v1",
+      "initial_schedule_digest": "54558add943437fb4315c31c3951448cc39b2b516292710a0a6acaa9663542f6",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0077228546142578125,
+      "native_entry": "ts_istft_plan_hostptr_strided_storage_amd",
+      "normalization": "backward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 2.1167367939085935,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 0.0016184439508614625,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "05fe71edbc1fa839752ef00a844ab7fbaed43d5a2ff7e071b2e1d10451b77801",
+      "tile_digest": "5cc9e2e61d1783ac974cfd0f5c5a0a42e1c5f78ca2682f22c141100fd2ec0a04",
+      "warm_mad_ms": 0.0131565,
+      "warm_median_ms": 0.4837635,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_forward_dct",
+      "child_fft_digests": [
+        "0a53054ffdaf0959447b934a25e0278272fa28dea76afa9727a4d998380f545d"
+      ],
+      "child_physical_lengths": [
+        128
+      ],
+      "cold_ms": 1.445207,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "848deaeff350499a65ff8b7ffae94762e24bd9ac59b90d5ff6fe14ee4a43f9dd",
+      "fusion_topology": "even_extension_c2c_v1",
+      "initial_schedule_digest": "848deaeff350499a65ff8b7ffae94762e24bd9ac59b90d5ff6fe14ee4a43f9dd",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 2.9802322387695312e-08,
+      "native_entry": "ts_dct_plan_hostptr_strided_storage_amd",
+      "normalization": "forward",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 1.2659198069472295,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 8.154809644511141e-09,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "c87426b2919719e60424646cf5cb915f781d029e988e80072a91b799f66aff28",
+      "tile_digest": "224b252433792a4d7b7ffe55161a9f9a46ee17762d933fbb464920b20c6ae691",
+      "warm_mad_ms": 0.017678,
+      "warm_median_ms": 0.404449,
+      "workspace_bytes": 20480
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_forward_stft",
+      "child_fft_digests": [
+        "946cf6fe867c9dbbcbef368ee03d9b674b8465c0554b7e949dadf785503ee18e"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.619562,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "617356ef591b86f2559bd605e57e85b54e0e82c55e5aae1e5e489ab465b9c14a",
+      "fusion_topology": "frame_window_packed_rfft_single_artifact_v1",
+      "initial_schedule_digest": "617356ef591b86f2559bd605e57e85b54e0e82c55e5aae1e5e489ab465b9c14a",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 3.818422555923462e-08,
+      "native_entry": "ts_stft_plan_hostptr_strided_storage_amd",
+      "normalization": "forward",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 1.9782064815353542,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 1.197924613911854e-08,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "b02bb6afd7ca4bc97cd7d724c84c0622c379cd14d9a3e286c458d1f9dd065a25",
+      "tile_digest": "71af7c1e695d3bdf98eb8ebdc85bd403ab9c90d93d938faf4c3ce6ee69af3f22",
+      "warm_mad_ms": 0.017287,
+      "warm_median_ms": 0.481244,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_forward_istft",
+      "child_fft_digests": [
+        "9ad9575a4f5fd4207acd63db5c8ab24d50178b9f28344f22a2934a21aaa4c291"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.219067,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "576963be7ffe9a52fd886adecdfca5def94159af6130d1269fd6fc1adf12a195",
+      "fusion_topology": "packed_irfft_window_ola_single_artifact_v1",
+      "initial_schedule_digest": "576963be7ffe9a52fd886adecdfca5def94159af6130d1269fd6fc1adf12a195",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 0.0002803802490234375,
+      "native_entry": "ts_istft_plan_hostptr_strided_storage_amd",
+      "normalization": "forward",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 2.1554808995764816,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 1.872101474779456e-05,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "31ffd0ad12862ea10cdb8d1585a80495d87eeef8c14adc192d627638717ffcc0",
+      "tile_digest": "b218f7e8652b145b1d55fe041c8154aa1712082c57cd0ff47f0658efb24e2e9a",
+      "warm_mad_ms": 0.015104,
+      "warm_median_ms": 0.475068,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_ortho_dct",
+      "child_fft_digests": [
+        "0a53054ffdaf0959447b934a25e0278272fa28dea76afa9727a4d998380f545d"
+      ],
+      "child_physical_lengths": [
+        128
+      ],
+      "cold_ms": 2.000992,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "289fb92ad2e2bd4fc89a7db6cca4ab1cd85d37e2c01857426ad2cc9969932d7f",
+      "fusion_topology": "even_extension_c2c_v1",
+      "initial_schedule_digest": "289fb92ad2e2bd4fc89a7db6cca4ab1cd85d37e2c01857426ad2cc9969932d7f",
+      "input_shapes": [
+        [
+          8,
+          64
+        ]
+      ],
+      "max_abs_error": 4.76837158203125e-07,
+      "native_entry": "ts_dct_plan_hostptr_strided_storage_amd",
+      "normalization": "ortho",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 1.3301171516268606,
+      "output_shape": [
+        8,
+        64
+      ],
+      "rms_error": 9.777052538642591e-08,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "44fb82c00f5fbf38d71359645845351e3fc5147d25e666952d3b9eb93464dc35",
+      "tile_digest": "c72af06ad128259f0327a7d836d1ad064d0fc885671528162951b0125bac8a72",
+      "warm_mad_ms": 0.007486,
+      "warm_median_ms": 0.3849285,
+      "workspace_bytes": 20480
+    },
+    {
+      "abi_storage": "f32",
+      "axis": -1,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_ortho_stft",
+      "child_fft_digests": [
+        "946cf6fe867c9dbbcbef368ee03d9b674b8465c0554b7e949dadf785503ee18e"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 1.870624,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "3d028c0d8b24b8854f0792cc2ef65477e9bb7179d68c2fc5835975643fec2635",
+      "fusion_topology": "frame_window_packed_rfft_single_artifact_v1",
+      "initial_schedule_digest": "3d028c0d8b24b8854f0792cc2ef65477e9bb7179d68c2fc5835975643fec2635",
+      "input_shapes": [
+        [
+          8,
+          128
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 2.602375843707705e-07,
+      "native_entry": "ts_stft_plan_hostptr_strided_storage_amd",
+      "normalization": "ortho",
+      "op_name": "tessera.stft",
+      "output_melems_per_s": 1.9639941286478044,
+      "output_shape": [
+        8,
+        7,
+        17
+      ],
+      "rms_error": 7.348747073627647e-08,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "7662b10fd68b9251bc4377b6a860e9ed372adab97d9ee9042586f5861cab0cd5",
+      "tile_digest": "0662652b90d95542e4f41ba46d56966dbbc1be1e18df33a682ef10b168ff44da",
+      "warm_mad_ms": 0.0175415,
+      "warm_median_ms": 0.4847265,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 2,
+      "axis_packing": "none_contiguous",
+      "case": "normalization_ortho_istft",
+      "child_fft_digests": [
+        "9ad9575a4f5fd4207acd63db5c8ab24d50178b9f28344f22a2934a21aaa4c291"
+      ],
+      "child_physical_lengths": [
+        16
+      ],
+      "cold_ms": 2.128391,
+      "error_limit": 0.02,
+      "executed_schedule_digest": "8bffbe1ee8c83fd1cb9937191932cc88b6f39dea27531a6fdc52b9fe374db05a",
+      "fusion_topology": "packed_irfft_window_ola_single_artifact_v1",
+      "initial_schedule_digest": "8bffbe1ee8c83fd1cb9937191932cc88b6f39dea27531a6fdc52b9fe374db05a",
+      "input_shapes": [
+        [
+          8,
+          7,
+          17
+        ],
+        [
+          32
+        ]
+      ],
+      "max_abs_error": 4.9591064453125e-05,
+      "native_entry": "ts_istft_plan_hostptr_strided_storage_amd",
+      "normalization": "ortho",
+      "op_name": "tessera.istft",
+      "output_melems_per_s": 1.9907751678015448,
+      "output_shape": [
+        8,
+        128
+      ],
+      "rms_error": 3.3072153238732885e-06,
+      "runtime_respecialized": false,
+      "shape_policy": "exact_runtime_specialization_v1",
+      "storage": "f32",
+      "storage_boundary": "native_f32",
+      "template_digest": "5c6dd76336bcf5704a586c06719be650ab3c61d02363856a93ed342bec1d2649",
+      "tile_digest": "cde3de75f62e28cb1c512b9ab45f6f475afe7482b043b4d7b36a0847976eb8d3",
+      "warm_mad_ms": 0.0417525,
+      "warm_median_ms": 0.5143725,
+      "workspace_bytes": 19008
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "combined_dynamic_axis_ortho_f16_dct",
+      "child_fft_digests": [
+        "295be70f708a5706c829b57769f93173ced36ecc86f98e84830942bf354a9c35"
+      ],
+      "child_physical_lengths": [
+        128
+      ],
+      "cold_ms": 1.54242,
+      "error_limit": 0.15,
+      "executed_schedule_digest": "7355745f557044c128264fff1232ba825e20f29721627f08b62b68d59185191f",
+      "fusion_topology": "even_extension_c2c_v1",
+      "initial_schedule_digest": "aa8857504b9297372ad61976a36dd45ec6c9213de7f740ac27b8419e2083eff2",
+      "input_shapes": [
+        [
+          64,
+          6
+        ]
+      ],
+      "max_abs_error": 0.0007071495056152344,
+      "native_entry": "ts_dct_plan_hostptr_strided_storage_amd",
+      "normalization": "ortho",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 0.878961909361631,
+      "output_shape": [
+        64,
+        6
+      ],
+      "rms_error": 0.00014161367802666093,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "f16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "dafae0dedfd30c885885b3faf39aad39e06e8817b0c291ef52917e4e41d5ebe1",
+      "tile_digest": "2558f3d1a399bb8566ca515e2ab8cbe0e107c922c84dffbf95859945f84420c8",
+      "warm_mad_ms": 0.0371885,
+      "warm_median_ms": 0.436879,
+      "workspace_bytes": 15360
+    },
+    {
+      "abi_storage": "f32",
+      "axis": 0,
+      "axis_packing": "native_package_host_pack_v1",
+      "case": "combined_dynamic_axis_ortho_bf16_dct",
+      "child_fft_digests": [
+        "295be70f708a5706c829b57769f93173ced36ecc86f98e84830942bf354a9c35"
+      ],
+      "child_physical_lengths": [
+        128
+      ],
+      "cold_ms": 1.887455,
+      "error_limit": 0.75,
+      "executed_schedule_digest": "e7bbf765d8093e94af7b1fe0ebfc15b71bd03d3e4ef8a27bf1fd23a0816ce815",
+      "fusion_topology": "even_extension_c2c_v1",
+      "initial_schedule_digest": "f2a64e6ace0cf8e6d29e43642c66e7cbb19e0695df6cadb03e3fcc0e13c177fc",
+      "input_shapes": [
+        [
+          64,
+          6
+        ]
+      ],
+      "max_abs_error": 0.005974292755126953,
+      "native_entry": "ts_dct_plan_hostptr_strided_storage_amd",
+      "normalization": "ortho",
+      "op_name": "tessera.dct",
+      "output_melems_per_s": 0.9190791497081804,
+      "output_shape": [
+        64,
+        6
+      ],
+      "rms_error": 0.0011677191037998344,
+      "runtime_respecialized": true,
+      "shape_policy": "bounded_runtime_specialization_v1",
+      "storage": "bf16",
+      "storage_boundary": "native_package_cast_f32_accumulate_cast_output_v1",
+      "template_digest": "6f11b089e5318de651d84e8cf7819e308a9bb3f82cc2e3a24d5a9d9ec574a550",
+      "tile_digest": "613b5419751f78577c5e38d77bd1a0487f57ef6f31260de03a75f9606dc75f28",
+      "warm_mad_ms": 0.0302135,
+      "warm_median_ms": 0.4178095,
+      "workspace_bytes": 15360
+    }
+  ],
+  "schema": "tessera.tsol_physical_policy_evidence.v2",
+  "selector_eligible": false,
+  "target": "rocm",
+  "timing_domain": "synchronized_host_wall"
+}

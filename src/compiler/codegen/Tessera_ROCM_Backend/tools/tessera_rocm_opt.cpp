@@ -8,9 +8,21 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/InitAllExtensions.h"
 #include "mlir/IR/DialectRegistry.h"
+#include "mlir/Target/LLVM/ROCDL/Target.h"
+#include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/GPU/GPUToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/ROCDL/ROCDLToLLVMIRTranslation.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
+#include "llvm/Support/TargetSelect.h"
 int main(int argc, char **argv){
+  llvm::InitializeAllTargetInfos();
+  llvm::InitializeAllTargets();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllAsmParsers();
+  llvm::InitializeAllAsmPrinters();
   mlir::DialectRegistry registry;
   // scf is registered so the wave/LDS pipeline + legality can be exercised on
   // software-pipelined loop bodies (scf.for) — that is the transform's real
@@ -22,6 +34,12 @@ int main(int argc, char **argv){
                   mlir::LLVM::LLVMDialect, mlir::ROCDL::ROCDLDialect,
                   mlir::scf::SCFDialect, mlir::vector::VectorDialect,
                   tessera::tile::TesseraTileDialect>();
+  mlir::registerAllExtensions(registry);
+  mlir::registerBuiltinDialectTranslation(registry);
+  mlir::registerLLVMDialectTranslation(registry);
+  mlir::registerGPUDialectTranslation(registry);
+  mlir::registerROCDLDialectTranslation(registry);
+  mlir::ROCDL::registerROCDLTargetInterfaceExternalModels(registry);
   mlir::tessera_rocm::registerTesseraROCMDialects(registry);
   mlir::tessera_rocm::registerTesseraROCMPasses();
   return failed(mlir::MlirOptMain(argc, argv, "tessera-rocm-opt\n", registry));

@@ -12,7 +12,7 @@ from tessera.compiler.scheduled_spectral import (
     spectral_architecture_profile,
     validate_scheduled_spectral_metadata,
 )
-from tessera.compiler.scheduled_matmul import find_tessera_opt
+from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 # These lower through the production `tessera-opt`, which the CI unit lane does
 # not build. The library correctly RAISES rather than silently degrading, so
@@ -42,7 +42,8 @@ def test_compound_contract_binds_physical_and_child_identity(
     metadata = artifact.to_metadata()
     validate_scheduled_spectral_metadata(metadata, input_shapes=shapes)
 
-    assert metadata["schema"] == "tessera.scheduled_spectral.v3"
+    assert metadata["schema"] == "tessera.scheduled_spectral.v5"
+    assert metadata["dct_type"] == (2 if op_name == "tessera.dct" else 0)
     assert metadata["shape_policy"] == "exact_runtime_specialization_v1"
     assert metadata["storage"] == "f32"
     assert metadata["abi_storage"] == "f32"
@@ -74,11 +75,63 @@ def test_compound_contract_rejects_tampering():
         )
 
 
+@_needs_opt
+@pytest.mark.parametrize("target", ["x86", "rocm"])
+def test_even_real_composites_bind_n2_children_and_fusion_topology(target):
+    convolution = lower_scheduled_spectral(
+        target=target,
+        op_name="tessera.spectral_conv",
+        input_shapes=((2, 65), (2, 17)),
+    ).to_metadata()
+    assert convolution["fusion_topology"] == (
+        "packed_rfft_cmul_irfft_single_artifact_v1"
+    )
+    assert [child["real_transform_policy"] for child in convolution["child_ffts"]] == [
+        "packed_even_n2_hermitian_v1",
+        "packed_even_n2_hermitian_v1",
+    ]
+    assert [child["physical_length"] for child in convolution["child_ffts"]] == [
+        64,
+        64,
+    ]
+
+    stft = lower_scheduled_spectral(
+        target=target,
+        op_name="tessera.stft",
+        input_shapes=((2, 96), (32,)),
+        hop=8,
+    ).to_metadata()
+    assert stft["fusion_topology"] == (
+        "frame_window_packed_rfft_single_artifact_v1"
+    )
+    assert stft["child_ffts"][0]["physical_length"] == 16
+
+
+@_needs_opt
+def test_odd_window_fallback_is_explicit_and_hashed():
+    artifact = lower_scheduled_spectral(
+        target="rocm",
+        op_name="tessera.stft",
+        input_shapes=((43,), (17,)),
+        hop=6,
+    ).to_metadata()
+    assert artifact["fusion_topology"] == (
+        "frame_window_full_complex_odd_fallback_v1"
+    )
+    assert artifact["child_ffts"][0]["physical_length"] == 17
+    tampered = copy.deepcopy(artifact)
+    tampered["fusion_topology"] = "frame_window_packed_rfft_single_artifact_v1"
+    with pytest.raises(ValueError, match="fusion_topology"):
+        validate_scheduled_spectral_metadata(
+            tampered, input_shapes=((43,), (17,))
+        )
+
+
 @pytest.mark.parametrize("target", ["rocm_gfx1200", "rocm_gfx1250"])
 def test_compound_contract_fails_closed_without_architecture_evidence(target):
     profile = spectral_architecture_profile(target)
     assert profile.execution_status == "fail_closed"
-    assert profile.native_package_abi == "tessera.rocm.spectral_composite.v4"
+    assert profile.native_package_abi == "tessera.rocm.spectral_composite.v5"
     assert profile.package_status == "build_only"
     with pytest.raises(ValueError, match="fails closed"):
         lower_scheduled_spectral(
@@ -105,6 +158,30 @@ def test_target_neutral_contract_supports_bounded_dynamic_shapes_and_axis():
     assert contract.specialize(((9, 7, 33),)) == ((9, 7, 33),)
     with pytest.raises(ValueError, match="violates signature"):
         contract.specialize(((17, 7, 33),))
+
+
+@pytest.mark.parametrize("dct_type", [1, 3, 4])
+def test_dct_contract_rejects_unimplemented_types(dct_type):
+    with pytest.raises(ValueError, match="only dct_type=2"):
+        define_spectral_program_contract(
+            op_name="tessera.dct",
+            input_signature=((8,),),
+            dct_type=dct_type,
+        )
+
+
+@_needs_opt
+def test_graph_dct_verifier_rejects_silent_type_aliasing():
+    source = '''module {
+  func.func @bad_dct(%x: tensor<8xf32>) -> tensor<8xf32> {
+    %0 = "tessera.dct"(%x) {axis = -1 : i64, type = 3 : i64} :
+      (tensor<8xf32>) -> tensor<8xf32>
+    return %0 : tensor<8xf32>
+  }
+}
+'''
+    with pytest.raises(RuntimeError, match="currently supports only type = 2"):
+        run_tessera_opt(find_tessera_opt(), source, "--tessera-graph-to-schedule")
 
 
 @_needs_opt
@@ -195,8 +272,8 @@ def test_every_compound_family_rebuilds_an_exact_bounded_specialization(
 @pytest.mark.parametrize(
     ("target", "filename", "selector_eligible"),
     [
-        ("x86", "tsol_physical_policies_zen5_2026_08_06.json", True),
-        ("rocm", "tsol_physical_policies_gfx1151_2026_08_06.json", False),
+        ("x86", "tsol_packed_fusion_zen5_2026_08_08.json", True),
+        ("rocm", "tsol_packed_fusion_gfx1151_2026_08_08.json", False),
     ],
 )
 def test_full_family_physical_policy_packet_is_complete(
@@ -208,6 +285,7 @@ def test_full_family_physical_policy_packet_is_complete(
 
     assert packet["schema"] == "tessera.tsol_physical_policy_evidence.v2"
     assert packet["target"] == target
+    assert packet["package_abi"].endswith("spectral_composite.v5")
     assert packet["selector_eligible"] is selector_eligible
     assert len(rows) == 30
     assert {row["op_name"] for row in rows} == {
@@ -228,6 +306,15 @@ def test_full_family_physical_policy_packet_is_complete(
     }
     assert all(len(row["executed_schedule_digest"]) == 64 for row in rows)
     assert all(len(row["tile_digest"]) == 64 for row in rows)
+    compound = {
+        row["op_name"]: row for row in rows
+        if row["case"].startswith("baseline_")
+    }
+    assert compound["tessera.spectral_conv"]["fusion_topology"] == (
+        "packed_rfft_cmul_irfft_single_artifact_v1"
+    )
+    assert compound["tessera.stft"]["child_physical_lengths"] == [16]
+    assert compound["tessera.istft"]["child_physical_lengths"] == [16]
 
 
 @_needs_opt

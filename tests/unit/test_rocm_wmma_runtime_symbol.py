@@ -22,10 +22,8 @@ from pathlib import Path
 import pytest
 
 np = pytest.importorskip("numpy")
+from tests._support.rocm_build import rocm_gemm_lib_path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-GEMM_LIB = (REPO_ROOT / "build" / "src" / "compiler" / "codegen"
-            / "Tessera_ROCM_Backend" / "runtime" / "hip" / "libtessera_rocm_gemm.so")
 ROCM_LIB_DIR = os.environ.get("ROCM_PATH", "/opt/rocm") + "/lib"
 
 
@@ -35,9 +33,10 @@ def _bf16():
 
 
 def _load_lib():
-    if not GEMM_LIB.is_file():
-        pytest.skip(f"build the shipped GEMM lib: ninja -C build tessera_rocm_gemm "
-                    f"({GEMM_LIB} missing)")
+    gemm_lib = rocm_gemm_lib_path()
+    if gemm_lib is None:
+        pytest.skip("build the shipped GEMM lib: ninja -C build tessera_rocm_gemm "
+                    "(set TESSERA_BUILD_DIR for a non-default build)")
     # Preload the HIP runtime + HIPRTC globally so the gemm lib resolves them.
     for dep in ("libamdhip64.so", "libhiprtc.so"):
         p = os.path.join(ROCM_LIB_DIR, dep)
@@ -46,7 +45,7 @@ def _load_lib():
                 ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL)
             except OSError:
                 pass
-    return ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_LOCAL)
+    return ctypes.CDLL(str(gemm_lib), mode=ctypes.RTLD_LOCAL)
 
 
 def _bind(lib, name):
@@ -174,7 +173,8 @@ def test_zerocopy_path_matches_numpy_subprocess():
     clean env is needed; this also keeps it isolated from the other in-process
     rocm tests. Skip-clean when the lib isn't built / no GPU."""
     import sys
-    if not GEMM_LIB.is_file():
+    gemm_lib = rocm_gemm_lib_path()
+    if gemm_lib is None:
         pytest.skip("build the shipped GEMM lib: ninja -C build tessera_rocm_gemm")
     sys.path.insert(0, str(Path(__file__).parent))
     import _subprocess  # repo's timeout/OOM-aware runner
@@ -187,7 +187,7 @@ for dep in ("libamdhip64.so", "libhiprtc.so"):
     if os.path.isfile(p):
         try: ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL)
         except OSError: pass
-lib = ctypes.CDLL({str(GEMM_LIB)!r}, mode=ctypes.RTLD_LOCAL)
+lib = ctypes.CDLL({str(gemm_lib)!r}, mode=ctypes.RTLD_LOCAL)
 fn = lib.tessera_rocm_wmma_gemm_f16
 fn.argtypes = [ctypes.c_void_p]*3 + [ctypes.c_int]*3
 fn.restype = ctypes.c_int

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-07
+last_updated: 2026-08-08
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,23 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `TSOL-NATIVE-REAL-FFT-2026-08-08` — **Zen 5 packed-real
+lane retained.** The v3 FFT artifact distinguishes logical and physical
+lengths and hashes its Hermitian policy. Supported even RFFT/IRFFT shapes now
+enter architecture-owned native C ABI functions using an N/2 complex FFT;
+odd or unevidenced factorisations retain an explicit full-complex fallback.
+Cached Hermitian twiddles were required: recomputing sin/cos made the sum of
+the parts slower than the old lane. After caching, WSL synchronized-host-wall
+measurements at batch=32 show 1.33x/2.23x RFFT/IRFFT at N=256 and
+1.76x/2.53x at N=1024. All 66 Schedule/Tile and x86 numerical tests pass.
+Bare-metal timing remains required for a performance-promotion packet.
+
+Cross-backend sync `ROCM-BUILD-ARTIFACT-DISCOVERY-2026-08-07` — **parity
+validated; no x86 physical change.** Shared compiler-test discovery now accepts
+fail-closed `TESSERA_BUILD_DIR` selection while retaining explicit
+`TESSERA_OPT` precedence. The migrated runtime-library and backend-tool users
+are ROCm-owned; AVX-512/AMX packages, evidence, and selectors are unchanged.
 
 Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
 Python-reference contract; x86 physical follow-up required.** `sparsemax`,
@@ -131,7 +148,7 @@ That packet must be regenerated from the same commit as the aligned/ragged
 benchmark; WSL timing and the event-source inventory cannot satisfy it.
 
 Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared typed carrier and
-x86/Zen 5 physical consumer complete.** `tessera.scheduled_spectral.v3`
+x86/Zen 5 physical consumer complete.** `tessera.scheduled_spectral.v5`
 materializes one verified `schedule.spectral_program` →
 `tile.spectral_program_kernel` edge and binds child FFT digests plus the full
 compound policy. The native AVX-512 package now owns DCT mirroring,
@@ -141,6 +158,20 @@ digest-keyed workspace; runtime no longer reconstructs these programs with
 host NumPy. Exact Zen 5 aligned, ragged, and prime/Bluestein cases agree with
 NumPy. This is architecture-owned evidence and does not inherit gfx1151
 performance or scheduling choices.
+
+Cross-backend sync `TSOL-GFX1151-FUSED-BATCH-2026-08-08` — **shared artifact
+truth assessed; no x86 physical change.** The FFT artifact can now identify
+gfx1151's batched fused-LDS residency and v4 native family, but Zen 5 retains
+its independently selected AVX-512 FFT/package policy. The HIP image build
+dependency, LDS schedule, and WSL timings do not transfer to x86; no x86
+correctness or performance claim changes.
+
+Cross-backend sync `TSOL-DCT-CONTRACT-2026-08-08` — **shared correctness hole
+closed; Zen 5 type-II identity retained.** DCT types I/III/IV now fail closed
+across the API, Graph verifier, autodiff, and the v4 Schedule→Tile artifact;
+the existing AVX-512 package remains explicitly type II. DCT and spectral
+convolution join the canonical TSOL inventory. This transfers no new numerical
+or performance evidence to unsupported DCT types.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **shared atan2 semantic
 fix and x86 Welford parity apply; ROCm physical kernels are not applicable.** Shared quadrant logic
@@ -746,3 +777,37 @@ consumers no longer retain or reconstruct Graph-op metadata. **x86 outcome:
 parity validated for the bounded E2E-REAL-5C slice.** Exact Zen 5 Lion,
 factored/full Adafactor, and gated/modified DeltaNet backward tests pass. No AMX
 evidence is inferred.
+
+## Cross-backend sync `ROCM-TYPED-EXECUTABLE-PIPELINE-2026-08-07`
+
+The new configuration schema makes the Tile producer, Target-IR consumer, and
+backend code generator explicit instead of accepting Python-composed pass
+strings. **x86 outcome: follow-up required.** The schema is applicable to the
+canonical AVX-512 spine, but this ROCm-owned slice changes no x86 pipeline,
+native image, selector, or Zen 5 evidence. x86 must introduce its own typed
+family-plugin registry and preserve the existing Schedule→Tile→`tessera_x86`
+artifact identity; AMD async-copy/waitcnt semantics are not applicable. Intel
+AMX remains separately access-gated. The shared executable policy—no surviving
+Target IR, undefined result, or contract-marker symbol in a native image—is
+accepted for the future x86 plugin boundary; no x86 binary changed here.
+ROCm has now retired its final generic runtime pass-name helper. **x86 outcome:
+follow-up required:** x86 should use the same closed-family configuration rule
+when its plugin registry lands; this ROCm change transfers no AVX-512/AMX code,
+schedule, selector, or evidence.
+
+## Cross-backend sync `TSOL-PACKED-FUSION-2026-08-08`
+
+`tessera.x86.spectral_composite.v5` consumes the new hashed compound-fusion
+topology directly. Even-length convolution uses two packed N/2 RFFTs, a
+Hermitian-bin multiply, and packed IRFFT; STFT frames into real storage before
+the N/2 transform; ISTFT sends the half spectrum directly through packed IRFFT
+before deterministic overlap-add. Odd windows retain a separately identified
+full-complex fallback so the public shape envelope is unchanged.
+
+**x86 verdict: retain.** All 16 native AVX-512 composite tests pass on the
+Ryzen AI MAX+ 395 Zen 5 host. The 20-sample synchronized-host-wall packet is
+[`../../../../benchmarks/baselines/tsol_packed_fusion_zen5_2026_08_08.json`](../../../../benchmarks/baselines/tsol_packed_fusion_zen5_2026_08_08.json);
+baseline f32 maximum errors are `2.87e-6`, `9.71e-7`, and `8.77e-6` for
+convolution/STFT/ISTFT. This changes no AMX claim. A same-run comparison with
+the retired full-complex composite is still required before calling the v5
+package a performance promotion rather than a correctness/workspace win.

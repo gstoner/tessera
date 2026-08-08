@@ -1,10 +1,10 @@
 // RUN: %trop %s | FileCheck %s --check-prefix=ROUNDTRIP
-// RUN: %trop --lower-tessera-target-to-rocdl %s | FileCheck %s --check-prefix=ROCDL
+// RUN: not %trop --lower-tessera-target-to-rocdl %s 2>&1 | FileCheck %s --check-prefix=STRICT
 //
 // B3 — tessera_rocm.buffer_load (AMD buffer addressing + native OOB) and
 // tessera_rocm.ds_read_tr (transposing LDS read) as hardware-free Target-IR
-// ops.  ROUNDTRIP proves they parse/verify/print; ROCDL proves they lower to
-// the artifact marker contract (and leave no tessera_rocm.* op behind).
+// ops. ROUNDTRIP proves they parse/verify/print. They deliberately fail closed
+// at executable lowering until physical buffer/LDS consumers land.
 
 module {
   func.func @k(%base: !llvm.ptr, %off: i32, %lds: !llvm.ptr) -> f32 {
@@ -18,6 +18,5 @@ module {
 // ROUNDTRIP-SAME: oob
 // ROUNDTRIP: tessera_rocm.ds_read_tr
 
-// ROCDL-DAG: llvm.call @llvm.amdgcn.raw.buffer.load.contract
-// ROCDL-DAG: llvm.call @llvm.amdgcn.ds.read.tr.contract
-// ROCDL-NOT: tessera_rocm.
+// STRICT: ROCm target operation has no executable ROCDL lowering
+// STRICT-NOT: .contract

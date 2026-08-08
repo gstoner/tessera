@@ -3,10 +3,24 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-07
+last_updated: 2026-08-08
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `TSOL-NATIVE-REAL-FFT-2026-08-08` — **shared artifact
+follow-up required; no Metal schedule transfers.** The target-neutral FFT
+contract now distinguishes logical and physical length and hashes Hermitian
+layout plus packed/fallback policy. The x86 and gfx1151 N/2 packages provide
+no Apple physical evidence. Apple must map this contract to its own MPSGraph or
+Metal FFT consumer and prove it on a Mac before selecting packed execution.
+
+Cross-backend sync `ROCM-BUILD-ARTIFACT-DISCOVERY-2026-08-07` — **parity
+validated; no Apple physical change.** Shared compiler-test discovery now
+accepts fail-closed `TESSERA_BUILD_DIR` selection while retaining explicit
+`TESSERA_OPT` precedence. The migrated runtime-library and backend-tool users
+are ROCm-owned; Apple Metal packages, schedules, evidence, and selectors are
+unchanged.
 
 Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
 Python-reference contract; Apple physical follow-up required.** `sparsemax`,
@@ -54,6 +68,19 @@ The target-neutral `schedule.spectral_program` and
 and AVX-512 helpers and their exact-device evidence transfer no Metal schedule
 or support claim. Apple must first close its architecture-owned FFT gap, then
 derive compound workspace/residency policy on a Mac.
+
+Cross-backend sync `TSOL-GFX1151-FUSED-BATCH-2026-08-08` — **not applicable to
+Metal execution.** The shared FFT artifact now names gfx1151's batched
+fused-LDS residency, while the HIP build closure, AMD kernel, and WSL timing
+packet transfer no Apple implementation or evidence. Apple still requires a
+Mac-owned FFT package and independently measured residency policy.
+
+Cross-backend sync `TSOL-DCT-CONTRACT-2026-08-08` — **shared fail-closed
+semantics adopted; Metal package remains follow-up.** DCT type II is now
+explicit in the content-addressed contract and types I/III/IV are rejected
+instead of silently executing type II. DCT and spectral convolution join the
+canonical TSOL inventory. The Apple reference/composed lane receives the same
+rejection rule, but no Mac physical-package evidence is claimed.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **not applicable to Apple
 physical code.** ROCm's centered Welford and scalar boundary corrections do
@@ -2860,3 +2887,27 @@ factored/full Adafactor VJP, and sequence-mixer backward. **Apple outcome:
 follow-up required.** This changes no Metal package. Apple must bind its own
 buffers to those exact artifacts and validate on the owning Mac; x86 and
 gfx1151 evidence does not transfer.
+
+## Cross-backend sync `ROCM-TYPED-EXECUTABLE-PIPELINE-2026-08-07`
+
+The shared orchestration direction now has a concrete typed configuration for
+family ownership and the Tile-producer→Target-IR-consumer→backend-codegen
+boundary. **Apple outcome: follow-up required on the owning Mac.** Apple must
+define Metal/CPU family plugins around its own `tessera_apple` and native
+packaging contracts; ROCm async-copy, waitcnt encoding, schedules, and gfx1151
+evidence are not applicable. No MSL, AIR, metallib, MPS, selector, or Apple
+device claim changes in this slice. Apple accepts the shared strict native-image
+boundary policy; enforcement in Metal/CPU family plugins remains Apple-owned
+follow-up.
+ROCm has now retired its final generic runtime pass-name helper. **Apple
+outcome: follow-up required on the owning Mac:** Metal/CPU plugin configuration
+should adopt the same closed semantic-family rule. No Apple binary, schedule,
+selector, or device evidence changes here.
+
+## Cross-backend sync `TSOL-PACKED-FUSION-2026-08-08`
+
+The shared `schedule.spectral_program` contract now hashes packed-real fusion
+topology and N/2 child identity. **Apple outcome: follow-up required on the
+owning Mac.** No MSL/metallib or Accelerate consumer changed. Apple must choose
+an architecture-owned real-transform plan and consume the exact v5 artifact;
+x86/gfx1151 physical choices and evidence do not transfer.

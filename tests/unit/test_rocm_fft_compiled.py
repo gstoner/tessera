@@ -91,6 +91,21 @@ def test_rfft_irfft(n):
                                **_TOL)
 
 
+def test_even_real_fft_does_not_reenter_full_complex_lane(monkeypatch):
+    rt = _rocm_or_skip()
+    x = np.arange(128, dtype=np.float32).reshape(2, 64)
+    monkeypatch.setattr(
+        rt,
+        "_rocm_fft_rows",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("packed real FFT re-entered full C2C")
+        ),
+    )
+    result = rt.launch(_art(rt, "tessera.rfft", {"axis": -1}, x), (x,))
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_allclose(result["output"], np.fft.rfft(x), **_TOL)
+
+
 def test_fft_codegen_lowers():
     # The direct DFT remains buildable as a diagnostic/oracle, but is no
     # longer the public rocm_fft_compiled execution package.

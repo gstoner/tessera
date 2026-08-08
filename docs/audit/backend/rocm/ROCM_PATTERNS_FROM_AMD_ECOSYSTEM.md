@@ -541,11 +541,11 @@ were fixed with order-robust `CHECK-DAG`. `check-tessera-rocm` now reports
 normal pytest lane (skips when the backend isn't built) so the wiring can't
 silently regress.
 
-**Still genuinely deferred (hardware-gated):**
-- *Full numeric* `rocdl.mfma/wmma` intrinsic emission — `TesseraTargetToROCDL.cpp`
-  still emits marker ops; a complete, assemblable, numerically-correct kernel
-  needs the offline emitter + real silicon (the rest of B4). The `fp8_flavor`
-  attribute is now in place to carry the flavor down to that emitter when it lands.
+**Still genuinely deferred (hardware-gated):** broader MFMA architecture and
+dtype coverage. Typed gfx1151 F16/BF16 WMMA fragments lower to real ROCDL;
+abstract/scalar matrix contracts now fail closed at the executable boundary
+instead of emitting marker calls. The `fp8_flavor` attribute remains available
+for architectures that actually support the selected instruction family.
 
 ---
 
@@ -560,12 +560,12 @@ kernels will need; the executable kernels themselves stay hardware-gated.
 |------|--------|-------|-------|
 | **B1** register budget | `rocm_target.py` (`vgpr_budget`/`agpr_budget`/`total_reg_budget`, per-arch tables: CDNA 256+256, RDNA 256+0) + `compiler/rocm_tiling.py` (`TileShape`/`TileCandidate`, `estimate_vgpr_usage`, `prune_candidates`→`PruneResult`, `quad_slice`/`n_slice`) | 30 | The Gluon v6 lesson encoded: a double-buffered over-budget tile is pruned; quad-slice fits it. Never silently drops — `PruneResult` records dropped candidates. |
 | **B2** pipeline + LDS layout | `compiler/rocm_lds.py` — `SoftwarePipeline(stages)`→N-buffered LDS; `SwizzledLdsLayout` (XOR) vs `PaddedLdsLayout`; `select_lds_layout(arch, global_to_lds=…)` | 32 | Padding for gfx950 `GLOBAL_LOAD_LDS`, swizzle elsewhere (arch-keyed). |
-| **B3** buffer_load / ds_read_tr | `tessera_rocm.buffer_load` (OOB addressing) + `ds_read_tr` ops in the dialect ODS + ROCDL marker lowering | lit | `test/rocm/buffer_load_ds_read_tr.mlir` (roundtrip + lowering); `check-tessera-rocm` 10/10. |
+| **B3** buffer_load / ds_read_tr | `tessera_rocm.buffer_load` (OOB addressing) + `ds_read_tr` ops in the dialect ODS; typed Target-IR inspection only until real executable lowering lands | lit | `test/rocm/buffer_load_ds_read_tr.mlir` proves roundtrip retention and strict binary-boundary rejection. |
 | **C1** symmetric heap | `symmetric_heap.py` — `SymmetricHeap` (offset-arithmetic `remote_address`) + `SymmetricShardSpec` (replicated/partitioned) | 32 | The substrate for one-sided collectives (Iris/Mori): the *offset* is symmetric across ranks; base pointers may differ. |
 | **C3** overlap modeling | `compiler/comm_overlap.py` — SC-HRF `MemoryScope`/`MemoryOrdering`, `SignalOp` (producer=release / consumer=acquire), `OverlapPlan` + `plan_overlap` | 38 | Models the three Iris overlap patterns (sequential-fused / workgroup-specialized / unfused). |
 
-**Still hardware-gated (need Strix Halo / MI300 / NICs):** B4 full numeric
-`rocdl.mfma/wmma` emission, B5 counter-driven scoring (`rocprofv3 --att`), C2
+**Still hardware-gated (need Strix Halo / MI300 / NICs):** B4 broader numeric
+MFMA/WMMA architecture coverage, B5 counter-driven scoring (`rocprofv3 --att`), C2
 comm device-function bitcode ABI, and `backend_kernel = complete` (execute-and-
 compare on real silicon — see `STRIX_HALO_EXECUTION_PLAN.md`).
 

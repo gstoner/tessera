@@ -95,7 +95,7 @@ not a duplicate RNG catalog entry.
 |----------|----------------------|
 | Linear Algebra | `tessera.ops.gemm`, `tessera.ops.matmul`, `tessera.ops.batched_gemm`, `tessera.ops.einsum`, `tessera.ops.factorized_matmul`, `tessera.ops.tri_solve`, `tessera.ops.cholesky`, `tessera.ops.qr`, `tessera.ops.svd` |
 | Neural Network Primitives | `tessera.ops.conv2d`, `tessera.ops.conv3d`, `tessera.ops.layer_norm`, `tessera.ops.rmsnorm`, `tessera.ops.softmax`, `tessera.ops.gelu`, `tessera.ops.relu`, `tessera.ops.silu`, `tessera.ops.dropout`, `tessera.ops.qkv_projection`, `tessera.ops.flash_attn`, `tessera.ops.rope`, `tessera.ops.moe`, `tessera.ops.moe_dispatch`, `tessera.ops.moe_combine` |
-| Spectral Operators | `tessera.ops.fft`, `tessera.ops.ifft`, `tessera.ops.rfft`, `tessera.ops.irfft`, `tessera.ops.stft`, `tessera.ops.istft`, `tessera.ops.spectral_filter` |
+| Spectral Operators | `tessera.ops.fft`, `tessera.ops.ifft`, `tessera.ops.rfft`, `tessera.ops.irfft`, `tessera.ops.dct`, `tessera.ops.stft`, `tessera.ops.istft`, `tessera.ops.spectral_conv`, `tessera.ops.spectral_filter` |
 | Sparse, Segment, And Graph Operators | `tessera.ops.spmm_coo`, `tessera.ops.spmm_csr`, `tessera.ops.sddmm`, `tessera.ops.bsmm`, `tessera.ops.segment_reduce` |
 | RNG And Initialization | `tessera.ops.rng_uniform`, `tessera.ops.rng_normal` |
 | Collectives | `tessera.ops.all_reduce`, `tessera.ops.reduce_scatter`, `tessera.ops.all_gather`, `tessera.ops.all_to_all` |

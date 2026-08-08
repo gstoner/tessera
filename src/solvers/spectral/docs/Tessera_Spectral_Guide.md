@@ -2,30 +2,53 @@
 # Tessera Spectral Guide (v1.0)
 
 ## Overview
-Tessera Spectral provides tile‑first FFT/iFFT with mixed‑precision (FP4/FP8/FP16/BF16/FP32) and optional f32 accumulation, plan caching, distributed 2D/3D decomposition, and hooks for NVIDIA/AMD/CPU backends.
+Tessera Spectral provides content-addressed one-dimensional FFT/iFFT packages,
+mixed-radix and Bluestein planning, and compound DCT, spectral-convolution,
+STFT, ISTFT, and spectral-filter programs. Native typed consumers are currently
+validated on Zen 5 AVX-512 and ROCm gfx1151. NVIDIA and Apple physical
+consumption remains architecture-owned follow-up work.
 
 ## Key Concepts
-- **Plan**: holds axes, radix sequence (autotuned by default), element and accumulation precision, scaling policy (BlockFP per stage), and normalization.
-- **Mixed Precision**: use FP8/FP4 storage with FP32 accumulators; per‑tile amax → exponent metadata.
-- **Distributed**: pencil/slab decomposition emits overlapped all‑to‑alls.
+- **Plan**: binds the transform axis, radix sequence, algorithm, workspace,
+  residency, normalization, and exact target architecture to a Schedule→Tile
+  digest.
+- **Precision**: FFT arithmetic is complex64/f32. Compound real transforms can
+  accept fp16 or bf16 storage through explicit native-package conversion and
+  still accumulate in f32. This is not an FP16/BF16 arithmetic FFT claim.
+- **Scope**: the promoted physical contract is one-dimensional. Distributed
+  pencil/slab decomposition and native 2D/3D execution are not implemented.
 
 ## Quick Start
 ```mlir
-%plan = "tessera_spectral.plan"() {axes=[0,1], elem_precision="fp8_e4m3",
-                                   acc_precision="f32", scaling="blockfp_per_stage",
-                                   inplace=false, is_real_input=false, norm_policy="backward"} : () -> !any
+%plan = "tessera_spectral.plan"() {axes=[-1], elem_precision="f32",
+                                   acc_precision="f32", scaling="none",
+                                   inplace=false, is_real_input=false,
+                                   norm_policy="backward"} : () -> !any
 "tessera_spectral.fft"(%plan, %src, %dst) : (!any, memref<?xcomplex<f32>>, memref<?xcomplex<f32>>) -> ()
 ```
 
 ## Policies
-- `elem_precision`: `fp4_e2m1 | fp8_e4m3 | fp8_e5m2 | fp16 | bf16 | f32`
-- `acc_precision`: `f16 | bf16 | f32` (recommend `f32` for long transforms)
-- `scaling`: `none | blockfp_per_stage | dynamic_per_tile`
-- `norm_policy`: `none | ortho | backward`
+- FFT element/accumulation precision: complex64/f32.
+- Compound real-storage policy: `fp16 | bf16 | fp32`, with f32 arithmetic.
+- Normalization: `backward | forward | ortho` for compound physical packages;
+  the core FFT artifact currently uses backward normalization.
+- DCT: type II only. Types I, III, and IV fail closed until their identities,
+  adjoints, and native packages are implemented.
 
 ## Examples
 - **FFT‑based convolution**: see `examples/fft_conv_example.mlir`
 - **Spectral normalization**: see `examples/spectral_norm_example.mlir`
 
 ## Roadmap
-v1.1 adds Bluestein and improved FP4 twiddle packing; v1.2 explores sFFT and NTT.
+
+Even-length RFFT/IRFFT use a content-addressed N/2 complex transform with
+architecture-owned Hermitian pre/post processing on x86 and gfx1151.
+`tessera.scheduled_spectral.v5` carries that boundary through one compound
+artifact for RFFT→multiply→IRFFT spectral convolution, framed/windowed RFFT
+STFT, and packed IRFFT→deterministic overlap-add ISTFT. Intermediate real and
+Hermitian slabs remain in native package workspace. Odd lengths retain an
+explicitly hashed full-complex fallback. The next physical work is folding the
+gfx1151 Hermitian step into its fused-LDS launch, production STFT/ISTFT padding
+and streaming policies, and measured multidimensional/distributed transforms.
+Reduced-arithmetic FP16/BF16, FP8/FP4, sFFT, and NTT remain research or planned
+work rather than shipped capabilities.

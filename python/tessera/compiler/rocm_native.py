@@ -35,6 +35,11 @@ from .native_artifact import (
 from .scheduled_matmul import ScheduledMatmulArtifact
 from .scheduled_kernel import ScheduledKernelArtifact
 from .scheduled_attention import ScheduledAttentionArtifact
+from .rocm_pipeline import (
+    ROCMExecutablePipeline,
+    ROCMInputLevel,
+    ROCMOutputLevel,
+)
 
 if TYPE_CHECKING:  # noqa: SIM108 -- see below
     # `scheduled_attention_backward` imports from THIS module, so importing
@@ -134,11 +139,25 @@ def _repo_root() -> Path:
 
 
 def _tessera_opt() -> Path | None:
-    configured = os.environ.get("TESSERA_OPT")
-    if configured:
-        path = Path(configured).expanduser()
-        return path if path.is_file() else None
+    for name in ("TESSERA_OPT", "TESSERA_OPT_BIN"):
+        configured = os.environ.get(name)
+        if configured:
+            path = Path(configured).expanduser()
+            return path if path.is_file() else None
     root = _repo_root()
+    selected_build = os.environ.get("TESSERA_BUILD_DIR")
+    if selected_build:
+        build = Path(selected_build).expanduser()
+        if not build.is_absolute():
+            build = root / build
+        for relative in (
+            "tools/tessera-opt/tessera-opt",
+            "src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt",
+        ):
+            path = build / relative
+            if path.is_file():
+                return path
+        return None
     for path in (
         root / "build/tools/tessera-opt/tessera-opt",
         root / "build/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt",
@@ -1179,9 +1198,10 @@ def _compile_native_tile_ir(
     tile_ir: str,
     *,
     directive: str,
-    generator: str,
-    semantic_pipeline: str = "",
-    generator_before_lowering: bool = False,
+    family: str,
+    input_level: ROCMInputLevel = ROCMInputLevel.TILE,
+    tile_q: int = 64,
+    tile_kv: int = 64,
 ) -> tuple[
     str,
     str,
@@ -1200,8 +1220,8 @@ def _compile_native_tile_ir(
     )
     key = hashlib.sha256(
         (
-            f"{tile_ir}|{directive}|{generator}|{semantic_pipeline}|"
-            f"{generator_before_lowering}|{library_identity}"
+            f"{tile_ir}|{directive}|{family}|{input_level.value}|"
+            f"{tile_q}|{tile_kv}|{library_identity}"
         ).encode()
     ).hexdigest()
     cached = _cache.get(key)
@@ -1217,27 +1237,14 @@ def _compile_native_tile_ir(
             "warm_cache",
         )
 
-    semantic_prefix = f"{semantic_pipeline}," if semantic_pipeline else ""
-    if generator_before_lowering:
-        target_physical_pipeline = (
-            f"{semantic_prefix}{generator},lower-tile-to-rocm{{arch=gfx1151}}"
-        )
-        native_physical_pipeline = target_physical_pipeline
-    else:
-        target_physical_pipeline = (
-            f"{semantic_prefix}rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
-            "lower-tile-to-rocm{arch=gfx1151}"
-        )
-        native_physical_pipeline = (
-            f"{target_physical_pipeline},{generator}"
-        )
-    target_pipeline = f"builtin.module({target_physical_pipeline})"
-    native_pipeline = (
-        f"builtin.module({native_physical_pipeline},lower-tessera-target-to-rocdl,"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts,rocm-materialize-dynamic-lds),"
-        "rocdl-attach-target{chip=gfx1151},gpu-module-to-binary)"
+    config = ROCMExecutablePipeline(
+        family=family,
+        input_level=input_level,
+        tile_q=tile_q,
+        tile_kv=tile_kv,
     )
+    target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
+    native_pipeline = config.pass_pipeline(output=ROCMOutputLevel.BINARY)
     target_ir = _run_opt(tool, tile_ir, target_pipeline)
     if directive not in target_ir:
         raise RuntimeError(f"ROCm native packaging did not produce typed {directive} Target IR")
@@ -1271,7 +1278,7 @@ def _compile_tile_ir(tile_ir: str):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.softmax",
-        generator="generate-rocm-softmax-kernel",
+        family="softmax",
     )
 
 
@@ -1279,7 +1286,7 @@ def _compile_reduction_tile_ir(tile_ir: str):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.reduce",
-        generator="generate-rocm-reduce-kernel",
+        family="reduction",
     )
 
 
@@ -1287,7 +1294,7 @@ def _compile_paged_kv_tile_ir(tile_ir: str):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.paged_kv_read",
-        generator="generate-rocm-paged-kv-read-kernel",
+        family="paged_kv",
     )
 
 
@@ -1295,7 +1302,7 @@ def _compile_moe_dispatch_tile_ir(tile_ir: str):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.moe_dispatch",
-        generator="generate-rocm-moe-kernel",
+        family="moe_dispatch",
     )
 
 
@@ -1303,7 +1310,7 @@ def _compile_attention_tile_ir(tile_ir: str):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.flash_attn",
-        generator="generate-wmma-flash-attn-kernel",
+        family="attention",
     )
 
 
@@ -1311,7 +1318,7 @@ def _compile_scheduled_attention_tile_ir(tile_ir: str):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.flash_attn",
-        generator="generate-wmma-flash-attn-kernel",
+        family="attention",
     )
 
 
@@ -1319,8 +1326,10 @@ def _compile_attention_graph_ir(tile_ir: str, *, tile_q: int, tile_kv: int):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.flash_attn",
-        generator="generate-wmma-flash-attn-kernel",
-        semantic_pipeline=(f"tessera-tile-ir-lowering{{tile-q={tile_q} tile-kv={tile_kv} sm=90}}"),
+        family="attention",
+        input_level=ROCMInputLevel.GRAPH,
+        tile_q=tile_q,
+        tile_kv=tile_kv,
     )
 
 
@@ -1328,7 +1337,7 @@ def _compile_attention_backward_tile_ir(tile_ir: str):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.flash_attn_bwd",
-        generator=("generate-wmma-flash-attn-kernel,generate-wmma-flash-attn-bwd-kernel"),
+        family="attention_backward",
     )
 
 
@@ -1336,8 +1345,10 @@ def _compile_attention_backward_graph_ir(graph_ir: str, *, tile_q: int, tile_kv:
     return _compile_native_tile_ir(
         graph_ir,
         directive="tessera_rocm.flash_attn_bwd",
-        generator=("generate-wmma-flash-attn-kernel,generate-wmma-flash-attn-bwd-kernel"),
-        semantic_pipeline=(f"tessera-tile-ir-lowering{{tile-q={tile_q} tile-kv={tile_kv} sm=90}}"),
+        family="attention_backward",
+        input_level=ROCMInputLevel.GRAPH,
+        tile_q=tile_q,
+        tile_kv=tile_kv,
     )
 
 
@@ -1345,8 +1356,7 @@ def _compile_scheduled_matmul_tile_ir(tile_ir: str):
     return _compile_native_tile_ir(
         tile_ir,
         directive="tessera_rocm.wmma",
-        generator="generate-wmma-gemm-kernel{via-tile=true}",
-        generator_before_lowering=True,
+        family="matmul",
     )
 
 

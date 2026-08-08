@@ -23,8 +23,9 @@ from pathlib import Path
 
 import pytest
 
+from tests._support.rocm_build import tessera_runtime_lib_path
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_LIB = REPO_ROOT / "build" / "src" / "runtime" / "libtessera_runtime.a"
 RUNTIME_INCLUDE = REPO_ROOT / "src" / "runtime" / "include"
 
 
@@ -149,7 +150,8 @@ def test_rocm_wmma_gemm_executes_and_compares_through_bridge(tmp_path):
     hipcc = _hipcc()
     if hipcc is None:
         pytest.skip("hipcc (ROCm) not found")
-    if not RUNTIME_LIB.is_file():
+    runtime_lib = tessera_runtime_lib_path()
+    if runtime_lib is None:
         pytest.skip("build libtessera_runtime.a (ninja -C build tessera_runtime)")
 
     src = tmp_path / "wmma_exec.cpp"
@@ -161,7 +163,7 @@ def test_rocm_wmma_gemm_executes_and_compares_through_bridge(tmp_path):
                         "-c", str(src), "-o", str(obj)],
                        capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, f"hipcc compile failed:\n{r.stderr[:4000]}"
-    r = subprocess.run([hipcc, str(obj), str(RUNTIME_LIB), "-lpthread", "-o", str(binp)],
+    r = subprocess.run([hipcc, str(obj), str(runtime_lib), "-lpthread", "-o", str(binp)],
                        capture_output=True, text=True, timeout=300)
     assert r.returncode == 0, f"hipcc link failed:\n{r.stderr[:4000]}"
 

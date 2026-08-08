@@ -17,14 +17,12 @@ from __future__ import annotations
 import ctypes
 import os
 import subprocess
-from pathlib import Path
 
 import pytest
 
 np = pytest.importorskip("numpy")
+from tests._support.compiler_tool import tessera_opt_path
 
-REPO = Path(__file__).resolve().parents[2]
-TESSERA_OPT = REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 
@@ -57,12 +55,13 @@ def _extract_hsaco(text):
 
 
 def _build(head_dim):
-    if not TESSERA_OPT.is_file():
+    tool = tessera_opt_path()
+    if tool is None:
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")
     directive = ('module {\n  "tessera_rocm.flash_attn_bwd"() {name = "fa", '
                  f'head_dim = {head_dim} : i64, dtype = "f16", gqa = true}} '
                  ': () -> ()\n}\n')
-    r = subprocess.run([str(TESSERA_OPT), "-", f"--pass-pipeline={_pipeline()}"],
+    r = subprocess.run([str(tool), "-", f"--pass-pipeline={_pipeline()}"],
                        input=directive, capture_output=True, text=True)
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
         pytest.skip(f"gqa bwd serialize unavailable (rc={r.returncode}): "

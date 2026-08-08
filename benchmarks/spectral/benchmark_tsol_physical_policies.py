@@ -14,6 +14,7 @@ import json
 import platform
 import statistics
 import time
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 
@@ -309,6 +310,12 @@ def _run(target: str, iterations: int) -> dict[str, Any]:
             "storage_boundary": executed["storage_conversion"],
             "axis_packing": executed["axis_packing"],
             "native_entry": executed["native_entry"],
+            "fusion_topology": executed["fusion_topology"],
+            "child_fft_digests": executed["child_fft_digests"],
+            "child_physical_lengths": [
+                child["physical_length"] for child in executed["child_ffts"]
+            ],
+            "workspace_bytes": executed["workspace_bytes"],
         })
     return {
         "schema": "tessera.tsol_physical_policy_evidence.v2",
@@ -318,9 +325,9 @@ def _run(target: str, iterations: int) -> dict[str, Any]:
         "processor": platform.processor(),
         "python": platform.python_version(),
         "package_abi": (
-            "tessera.x86.spectral_composite.v4"
+            "tessera.x86.spectral_composite.v5"
             if target == "x86"
-            else "tessera.rocm.spectral_composite.v4"
+            else "tessera.rocm.spectral_composite.v5"
         ),
         "timing_domain": "synchronized_host_wall",
         "selector_eligible": target == "x86",
@@ -334,8 +341,15 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--target", choices=("x86", "rocm"), required=True)
     parser.add_argument("--iterations", type=int, default=20)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    print(json.dumps(_run(args.target, args.iterations), indent=2, sort_keys=True))
+    payload = json.dumps(
+        _run(args.target, args.iterations), indent=2, sort_keys=True
+    ) + "\n"
+    if args.output is not None:
+        args.output.write_text(payload)
+    else:
+        print(payload, end="")
 
 
 if __name__ == "__main__":

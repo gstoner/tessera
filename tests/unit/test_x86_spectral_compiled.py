@@ -27,6 +27,7 @@ def _art(rt, op_name, operands, kwargs):
         input_shapes=tuple(tuple(int(dim) for dim in value.shape) for value in operands),
         axis=int(kwargs.get("axis", -1)),
         hop=kwargs.get("hop"),
+        dct_type=kwargs.get("type"),
         input_signature=kwargs.get("input_signature"),
         shape_bounds=kwargs.get("shape_bounds"),
         storage=kwargs.get("storage", "f32"),

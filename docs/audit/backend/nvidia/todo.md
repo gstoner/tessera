@@ -3,10 +3,24 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-07
+last_updated: 2026-08-08
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `TSOL-NATIVE-REAL-FFT-2026-08-08` — **shared artifact
+follow-up required; no CUDA schedule transfers.** The target-neutral FFT
+contract now binds logical/physical length, Hermitian layout, and packed-real
+versus full-complex policy. Only x86 and gfx1151 own physical N/2 consumers and
+evidence. SM120 must implement and measure its own real-transform package
+before selecting the packed policy; it inherits no AVX-512 or RDNA schedule.
+
+Cross-backend sync `ROCM-BUILD-ARTIFACT-DISCOVERY-2026-08-07` — **parity
+validated; no CUDA physical change.** Shared compiler-test discovery now
+accepts fail-closed `TESSERA_BUILD_DIR` selection while retaining explicit
+`TESSERA_OPT` precedence. The migrated runtime-library and backend-tool users
+are ROCm-owned; SM120 packages, schedules, evidence, and selectors are
+unchanged.
 
 Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
 Python-reference contract; CUDA physical follow-up required.** `sparsemax`,
@@ -53,6 +67,19 @@ registered in production. NVIDIA still lacks a promoted canonical FFT package,
 so it cannot consume the compound artifact or inherit ROCm/x86 evidence. A
 future CUDA implementation must first close its FFT package gap, then bind its
 own workspace/residency policy and SM120 device evidence.
+
+Cross-backend sync `TSOL-GFX1151-FUSED-BATCH-2026-08-08` — **not applicable to
+CUDA execution.** The content-addressed FFT vocabulary now carries gfx1151's
+batched fused-LDS residency explicitly, but the HIP image dependency, AMD LDS
+kernel, and WSL timing evidence establish no CUDA package or SM120 selector.
+NVIDIA's architecture-owned FFT/TSOL follow-up is unchanged.
+
+Cross-backend sync `TSOL-DCT-CONTRACT-2026-08-08` — **shared fail-closed
+semantics adopted; CUDA physical follow-up unchanged.** DCT type II is now
+explicitly content-addressed and other types are rejected rather than aliased.
+DCT and spectral convolution join the canonical TSOL inventory, but NVIDIA
+still lacks the prerequisite promoted FFT/compound package and inherits no
+x86/gfx1151 execution evidence.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **not applicable to
 NVIDIA codegen.** Centered Welford and the scalar boundary fixes alter ROCm C++
@@ -2453,3 +2480,28 @@ NVIDIA-owned Graph-to-Tile synthesis. NVIDIA must define its own LSE identity,
 consume this exact artifact, and validate MHA/GQA/MQA plus modifier/ragged
 coverage before claiming parity; x86/gfx1151 schedules and evidence do not
 transfer.
+
+## Cross-backend sync `ROCM-TYPED-EXECUTABLE-PIPELINE-2026-08-07`
+
+The shared orchestration direction now has a concrete typed configuration:
+family, input artifact level, output artifact level, architecture, Tile
+producer, Target-IR consumer, and backend code generator. **NVIDIA outcome:
+follow-up required.** CUDA must define its own SM-specific family plugins around
+the canonical Schedule/Tile artifact and NVVM/PTX/cubin code generator; this
+change does not transfer gfx1151 scheduling or AMD wait semantics and supplies
+no CUDA-enabled or SM120 evidence. The existing Graph-owned synthesis lane is
+unchanged. NVIDIA accepts the shared strict-boundary policy (no surviving Tile
+or Target IR, undefined result, or contract-marker symbol), but enforcement in
+the NVVM/PTX/cubin pipeline remains CUDA-owned follow-up.
+ROCm has now retired its final generic runtime pass-name helper. **NVIDIA
+outcome: follow-up required:** CUDA family plugins must likewise expose a
+closed semantic registry rather than an arbitrary pass option. No PTX/cubin,
+SM schedule, selector, or device evidence changes here.
+
+## Cross-backend sync `TSOL-PACKED-FUSION-2026-08-08`
+
+The shared `schedule.spectral_program` contract now hashes packed-real fusion
+topology and N/2 child identity. **NVIDIA outcome: follow-up required on a
+CUDA-enabled host.** No NVVM/PTX/cubin consumer changed. NVIDIA must select its
+own real-transform plan and carry the exact v5 artifact through its physical
+package; Zen 5 and gfx1151 schedules, workspaces, and evidence do not transfer.

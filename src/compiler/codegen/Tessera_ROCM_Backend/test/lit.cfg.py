@@ -12,6 +12,12 @@ config.suffixes = ['.mlir']
 # some standalone ``lit`` installs lack), only on the stdlib + the tools dir.
 if getattr(config, "environment", None) is None:
     config.environment = dict(os.environ)
+# Standalone lit may pre-create a minimal environment that omits the active
+# ROCm alternatives prefix. Preserve the owning WSL toolchain selection so
+# gpu-module-to-binary finds amdgcn/bitcode instead of guessing /opt/rocm.
+for name in ("ROCM_PATH", "HIP_PATH"):
+    if os.environ.get(name):
+        config.environment[name] = os.environ[name]
 _tools = getattr(config, "llvm_tools_dir", "") or ""
 _path = config.environment.get("PATH", os.environ.get("PATH", ""))
 if _tools:

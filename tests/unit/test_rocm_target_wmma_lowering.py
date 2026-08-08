@@ -11,9 +11,9 @@ Python side-emitter (compiler path 4) into the MLIR Target IR pass (path 3).
 The golden intrinsic name is taken from `rocdl_emit.wmma_intrinsic(dtype)` so the
 two emitters can never silently diverge.
 
-Abstract / scalar WMMA (contract-level IR, no real fragments) still lowers to the
-marker — fragment materialization is a separate (Stage K) lowering step; the
-marker is the honest lowering at that abstraction level.
+Abstract / scalar WMMA is Target IR only.  The executable conversion fails
+closed until fragment materialization has produced the hardware vector ABI;
+it never manufactures a void marker or an undefined result.
 
 Skip-clean: tessera-opt / mlir-translate not built or found.
 """
@@ -117,9 +117,8 @@ llvm.func @w(%a: {frag}, %b: {frag}, %c: vector<8xf32>) -> vector<8xf32> {{
         assert "<16 x half>" in llvmir
 
 
-def test_abstract_scalar_wmma_still_lowers_to_marker():
-    """Contract-level IR (scalar operands, no real fragments) keeps the artifact
-    marker — fragment materialization is a separate lowering step."""
+def test_abstract_scalar_wmma_fails_closed_at_executable_boundary():
+    """Scalar contracts cannot masquerade as executable ROCm artifacts."""
     _need_opt()
     src = '''
 func.func @w(%a: f16, %b: f16, %c: f16) -> f16 {
@@ -127,6 +126,7 @@ func.func @w(%a: f16, %b: f16, %c: f16) -> f16 {
   return %d : f16
 }
 '''
-    rocdl = _lower(src)
-    assert "llvm.amdgcn.wmma.contract" in rocdl
-    assert "rocdl.wmma" not in rocdl
+    result = run_tessera_opt(src, "--lower-tessera-target-to-rocdl")
+    assert result.returncode != 0
+    assert "requires typed hardware fragment vectors" in result.stderr
+    assert "wmma.contract" not in result.stdout

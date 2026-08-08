@@ -29,6 +29,7 @@ def _art(rt, op_name, operands, kwargs):
         input_shapes=tuple(tuple(int(dim) for dim in value.shape) for value in operands),
         axis=int(kwargs.get("axis", -1)),
         hop=kwargs.get("hop"),
+        dct_type=kwargs.get("type"),
         input_signature=kwargs.get("input_signature"),
         shape_bounds=kwargs.get("shape_bounds"),
         storage=kwargs.get("storage", "f32"),
@@ -100,7 +101,7 @@ def test_composite_workspace_plan_is_reused_by_artifact_digest():
     contract = artifact.metadata["scheduled_spectral"]
     lib = candidates._amd_composite_lib()
     assert lib is not None
-    assert lib.ts_spectral_composite_package_abi_amd() == b"tessera.rocm.spectral_composite.v4"
+    assert lib.ts_spectral_composite_package_abi_amd() == b"tessera.rocm.spectral_composite.v5"
     assert lib.ts_spectral_composite_arch_amd() == b"gfx1151"
 
     first = candidates._rocm_composite_plan(contract, lib)

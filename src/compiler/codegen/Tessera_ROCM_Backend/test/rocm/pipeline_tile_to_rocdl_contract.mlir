@@ -9,10 +9,10 @@ module {
   }
 }
 
-// The async global→LDS copy lowers to a targeted vmcnt wait (NOT a full
-// barrier), so the matrix core can keep issuing while the copy is in flight.
-// CHECK: llvm.call @llvm.amdgcn.mfma.contract
-// CHECK: llvm.call @llvm.amdgcn.raw.buffer.copy.contract
-// CHECK: llvm.call @llvm.amdgcn.s.waitcnt.vmcnt.contract
-// CHECK-NOT: llvm.amdgcn.s.barrier.contract
-// CHECK-NOT: tessera_rocm.
+// The compatibility alias stops at typed Target IR. The selected counter and
+// SSA token remain inspectable without fabricating LLVM symbols.
+// CHECK: tessera_rocm.mfma
+// CHECK: tessera_rocm.async_copy
+// CHECK: tessera_rocm.wait
+// CHECK-SAME: counter = "vmcnt"
+// CHECK-NOT: .contract

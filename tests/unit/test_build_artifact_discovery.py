@@ -92,6 +92,41 @@ def test_runtime_honors_common_build_directory(monkeypatch, tmp_path):
     assert runtime._rocm_gemm_lib_path() == gemm
 
 
+def test_x86_runtime_and_packager_honor_common_build_directory(
+    monkeypatch, tmp_path
+):
+    from tessera import runtime
+    from tessera.compiler import x86_native
+
+    root, tool = _fake_build(tmp_path)
+    library = root / (
+        "src/compiler/codegen/tessera_x86_backend/"
+        "libtessera_x86_elementwise.so"
+    )
+    library.parent.mkdir(parents=True)
+    library.write_text("library", encoding="utf-8")
+    monkeypatch.delenv("TESSERA_OPT", raising=False)
+    monkeypatch.delenv("TESSERA_X86_ELEMENTWISE_LIB", raising=False)
+    monkeypatch.setenv("TESSERA_BUILD_DIR", str(root))
+
+    assert runtime._x86_elementwise_lib_path() == library
+    assert x86_native._tessera_opt() == tool
+    assert x86_native._library_path() == library
+
+
+def test_bad_x86_build_directory_does_not_fall_back(monkeypatch, tmp_path):
+    from tessera import runtime
+    from tessera.compiler import x86_native
+
+    monkeypatch.delenv("TESSERA_OPT", raising=False)
+    monkeypatch.delenv("TESSERA_X86_ELEMENTWISE_LIB", raising=False)
+    monkeypatch.setenv("TESSERA_BUILD_DIR", str(tmp_path / "missing"))
+
+    assert runtime._x86_elementwise_lib_path() is None
+    assert x86_native._tessera_opt() is None
+    assert x86_native._library_path() is None
+
+
 def test_hip_compiler_build_closes_over_spectral_runtime_image():
     cmake = (_REPO_ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
 

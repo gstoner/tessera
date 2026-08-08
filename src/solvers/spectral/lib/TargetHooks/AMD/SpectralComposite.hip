@@ -70,6 +70,12 @@ __global__ void complexMultiply(const float2 *a, const float2 *b, float2 *out,
   if (i < elements) out[i] = multiply(a[i], b[i]);
 }
 
+__global__ void realMultiply(const float *a, const float *b, float *out,
+                             size_t elements) {
+  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i < elements) out[i] = a[i] * b[i];
+}
+
 __global__ void mirrorRealForDCT(const float *input, float2 *padded, int batch,
                                  int n) {
   size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -89,6 +95,47 @@ __global__ void realPrefix(const float2 *input, float *output, int batch,
   int row = int(i / size_t(outputLength));
   int column = int(i % size_t(outputLength));
   output[i] = input[size_t(row) * inputStride + column].x * scale;
+}
+
+__global__ void dctDirect(const float *input, float *output, int batch, int n,
+                          int dctType, float scale) {
+  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  size_t total = size_t(batch) * n;
+  if (i >= total) return;
+  int row = int(i / size_t(n));
+  int k = int(i % size_t(n));
+  double value = 0.0;
+  if (dctType == 1) {
+    value = input[size_t(row) * n] +
+            ((k & 1) ? -1.0 : 1.0) * input[size_t(row) * n + n - 1];
+    for (int j = 1; j + 1 < n; ++j)
+      value += 2.0 * input[size_t(row) * n + j] *
+               cos(M_PI * double(j * k) / double(n - 1));
+  } else if (dctType == 3) {
+    value = input[size_t(row) * n];
+    for (int j = 1; j < n; ++j)
+      value += 2.0 * input[size_t(row) * n + j] *
+               cos(M_PI * double((2 * k + 1) * j) / double(2 * n));
+  } else {
+    for (int j = 0; j < n; ++j)
+      value += 2.0 * input[size_t(row) * n + j] *
+               cos(M_PI * double((2 * k + 1) * (2 * j + 1)) /
+                   double(4 * n));
+  }
+  output[i] = float(value * scale);
+}
+
+__global__ void dctType2Prefix(const float2 *input, float *output, int batch,
+                               int n, float scale) {
+  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  size_t total = size_t(batch) * n;
+  if (i >= total) return;
+  int row = int(i / size_t(n));
+  int k = int(i % size_t(n));
+  float s, c;
+  __sincosf(-float(M_PI) * float(k) / float(2 * n), &s, &c);
+  float2 value = input[size_t(row) * size_t(2 * n) + k];
+  output[i] = (value.x * c - value.y * s) * scale;
 }
 
 __global__ void realPrefixScalar(const float *input, float *output, int batch,
@@ -254,7 +301,7 @@ int syncAndCopy(void *host, const void *device, size_t bytes) {
 } // namespace
 
 extern "C" const char *ts_spectral_composite_package_abi_amd() {
-  return "tessera.rocm.spectral_composite.v5";
+  return "tessera.rocm.spectral_composite.v6";
 }
 
 #ifndef TESSERA_ROCM_SPECTRAL_ARCH
@@ -293,15 +340,18 @@ extern "C" int ts_spectral_filter_hostptr_amd(
 extern "C" int ts_dct_hostptr_batch_amd(void *forwardPlan,
                                           const float *inputHost,
                                           float *outputHost, int batch, int n,
-                                          float outputScale) {
-  if (!forwardPlan || !inputHost || !outputHost || batch <= 0 || n <= 0 ||
-      ts_fft_plan_length_amd(forwardPlan) != 2 * n)
+                                          int dctType, float outputScale) {
+  if (!inputHost || !outputHost || batch <= 0 || n <= 0 || dctType < 1 ||
+      dctType > 4 || (dctType == 1 && n < 2) ||
+      (dctType == 2 &&
+       (!forwardPlan || ts_fft_plan_length_amd(forwardPlan) != 2 * n)))
     return 20;
   float *input = nullptr, *output = nullptr;
   float2 *padded = nullptr, *transformed = nullptr;
   size_t inCount = size_t(batch) * n, fftCount = 2 * inCount;
   if (!allocate(&input, inCount) || !allocate(&output, inCount) ||
-      !allocate(&padded, fftCount) || !allocate(&transformed, fftCount)) {
+      (dctType == 2 &&
+       (!allocate(&padded, fftCount) || !allocate(&transformed, fftCount)))) {
     release(input, output, padded, transformed);
     return 21;
   }
@@ -309,17 +359,25 @@ extern "C" int ts_dct_hostptr_batch_amd(void *forwardPlan,
                      hipMemcpyHostToDevice) == hipSuccess
                ? 0
                : 22;
-  if (!rc) {
+  if (!rc && dctType == 2) {
     hipLaunchKernelGGL(mirrorRealForDCT,
                        dim3((fftCount + kThreads - 1) / kThreads),
                        dim3(kThreads), 0, 0, input, padded, batch, n);
     rc = ts_fft_plan_execute_device_batch_amd(forwardPlan, padded, transformed,
                                                batch, 0);
   }
+  if (!rc && dctType == 2) {
+    hipLaunchKernelGGL(dctType2Prefix,
+                       dim3((inCount + kThreads - 1) / kThreads),
+                       dim3(kThreads), 0, 0, transformed, output, batch, n,
+                       outputScale);
+  } else if (!rc) {
+    hipLaunchKernelGGL(dctDirect,
+                       dim3((inCount + kThreads - 1) / kThreads),
+                       dim3(kThreads), 0, 0, input, output, batch, n, dctType,
+                       outputScale);
+  }
   if (!rc) {
-    hipLaunchKernelGGL(realPrefix, dim3((inCount + kThreads - 1) / kThreads),
-                       dim3(kThreads), 0, 0, transformed, output, batch, 2 * n,
-                       n, outputScale);
     rc = syncAndCopy(outputHost, output, inCount * sizeof(float));
   }
   release(input, output, padded, transformed);
@@ -331,25 +389,29 @@ extern "C" int ts_spectral_conv_hostptr_batch_amd(
     const float *kernelHost, int kernelN, float *outputHost, int batch,
     int fftN) {
   int outputN = inputN + kernelN - 1;
-  if (!forwardPlan || !inversePlan || !inputHost || !kernelHost ||
-      !outputHost || inputN <= 0 || kernelN <= 0 || batch <= 0 ||
-      fftN < outputN || fftN < 2 || (fftN & 1) ||
-      ts_fft_plan_length_amd(forwardPlan) != fftN / 2 ||
-      ts_fft_plan_length_amd(inversePlan) != fftN / 2)
+  if (!inputHost || !kernelHost || !outputHost || inputN <= 0 ||
+      kernelN <= 0 || batch <= 0 || fftN < outputN)
+    return 30;
+  bool scalar = fftN == 1;
+  if (!scalar &&
+      (!forwardPlan || !inversePlan || fftN < 2 || (fftN & 1) ||
+       ts_fft_plan_length_amd(forwardPlan) != fftN / 2 ||
+       ts_fft_plan_length_amd(inversePlan) != fftN / 2))
     return 30;
   float *input = nullptr, *kernel = nullptr, *output = nullptr;
-  float2 *xPad = nullptr, *wPad = nullptr, *xFFT = nullptr, *wFFT = nullptr,
-         *product = nullptr, *inverse = nullptr;
+  float *xPad = nullptr, *wPad = nullptr, *inverse = nullptr;
+  float2 *xFFT = nullptr, *wFFT = nullptr, *product = nullptr;
   size_t xCount = size_t(batch) * inputN;
   size_t wCount = size_t(batch) * kernelN;
   size_t fftCount = size_t(batch) * fftN;
   size_t halfCount = size_t(batch) * (fftN / 2 + 1);
   size_t outputCount = size_t(batch) * outputN;
   if (!allocate(&input, xCount) || !allocate(&kernel, wCount) ||
-      !allocate(&output, outputCount) || !allocate(&xPad, fftCount) ||
-      !allocate(&wPad, fftCount) || !allocate(&xFFT, fftCount) ||
-      !allocate(&wFFT, fftCount) || !allocate(&product, fftCount) ||
-      !allocate(&inverse, fftCount)) {
+      !allocate(&output, outputCount) ||
+      (!scalar &&
+       (!allocate(&xPad, fftCount) || !allocate(&wPad, fftCount) ||
+        !allocate(&xFFT, halfCount) || !allocate(&wFFT, halfCount) ||
+        !allocate(&product, halfCount) || !allocate(&inverse, fftCount)))) {
     release(input, kernel, output, xPad, wPad, xFFT, wFFT, product, inverse);
     return 31;
   }
@@ -359,31 +421,37 @@ extern "C" int ts_spectral_conv_hostptr_batch_amd(
       hipMemcpy(kernel, kernelHost, wCount * sizeof(float),
                 hipMemcpyHostToDevice) != hipSuccess)
     rc = 32;
-  int blocks = int((fftCount + kThreads - 1) / kThreads);
-  if (!rc) {
-    hipLaunchKernelGGL(padReal, dim3(blocks), dim3(kThreads), 0, 0, input,
-                       xPad, batch, inputN, fftN);
-    hipLaunchKernelGGL(padReal, dim3(blocks), dim3(kThreads), 0, 0, kernel,
-                       wPad, batch, kernelN, fftN);
-    rc = ts_fft_plan_execute_device_batch_amd(forwardPlan, xPad, xFFT, batch,
-                                               0);
+  if (!rc && scalar) {
+    hipLaunchKernelGGL(realMultiply,
+                       dim3((outputCount + kThreads - 1) / kThreads),
+                       dim3(kThreads), 0, 0, input, kernel, output,
+                       outputCount);
+  } else if (!rc) {
+    int blocks = int((fftCount + kThreads - 1) / kThreads);
+    hipLaunchKernelGGL(padRealScalar, dim3(blocks), dim3(kThreads), 0, 0,
+                       input, xPad, batch, inputN, fftN);
+    hipLaunchKernelGGL(padRealScalar, dim3(blocks), dim3(kThreads), 0, 0,
+                       kernel, wPad, batch, kernelN, fftN);
+    rc = ts_fft_plan_execute_r2c_packed_device_batch_amd(
+        forwardPlan, xPad, xFFT, batch, fftN, 0);
+    if (!rc)
+      rc = ts_fft_plan_execute_r2c_packed_device_batch_amd(
+          forwardPlan, wPad, wFFT, batch, fftN, 0);
+    if (!rc) {
+      int halfBlocks = int((halfCount + kThreads - 1) / kThreads);
+      hipLaunchKernelGGL(complexMultiply, dim3(halfBlocks), dim3(kThreads), 0,
+                         0, xFFT, wFFT, product, halfCount);
+      rc = ts_fft_plan_execute_c2r_packed_device_batch_amd(
+          inversePlan, product, inverse, batch, fftN, 0);
+    }
+    if (!rc)
+      hipLaunchKernelGGL(realPrefixScalar,
+                         dim3((outputCount + kThreads - 1) / kThreads),
+                         dim3(kThreads), 0, 0, inverse, output, batch, fftN,
+                         outputN, 1.0f);
   }
   if (!rc)
-    rc = ts_fft_plan_execute_device_batch_amd(forwardPlan, wPad, wFFT, batch,
-                                               0);
-  if (!rc) {
-    hipLaunchKernelGGL(complexMultiply, dim3(blocks), dim3(kThreads), 0, 0,
-                       xFFT, wFFT, product, fftCount);
-    rc = ts_fft_plan_execute_device_batch_amd(inversePlan, product, inverse,
-                                               batch, 0);
-  }
-  if (!rc) {
-    hipLaunchKernelGGL(realPrefix,
-                       dim3((outputCount + kThreads - 1) / kThreads),
-                       dim3(kThreads), 0, 0, inverse, output, batch, fftN,
-                       outputN, 1.0f);
     rc = syncAndCopy(outputHost, output, outputCount * sizeof(float));
-  }
   release(input, kernel, output, xPad, wPad, xFFT, wFFT, product, inverse);
   return rc;
 }
@@ -532,31 +600,41 @@ extern "C" int ts_spectral_filter_plan_hostptr_amd(
 
 extern "C" int ts_dct_plan_hostptr_batch_amd(
     void *opaque, void *forwardPlan, const float *inputHost,
-    float *outputHost, int batch, int n, float outputScale) {
+    float *outputHost, int batch, int n, int dctType, float outputScale) {
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
-  if (!plan || !forwardPlan || !inputHost || !outputHost || batch <= 0 ||
-      n <= 0 || ts_fft_plan_length_amd(forwardPlan) != 2 * n)
+  if (!plan || !inputHost || !outputHost || batch <= 0 || n <= 0 ||
+      dctType < 1 || dctType > 4 || (dctType == 1 && n < 2) ||
+      (dctType == 2 &&
+       (!forwardPlan || ts_fft_plan_length_amd(forwardPlan) != 2 * n)))
     return 80;
   size_t inputCount = size_t(batch) * n, fftCount = 2 * inputCount;
   WorkspaceCursor cursor(plan);
   float *input = cursor.take<float>(inputCount);
   float *output = cursor.take<float>(inputCount);
-  float2 *padded = cursor.take<float2>(fftCount);
-  float2 *transformed = cursor.take<float2>(fftCount);
-  if (!input || !output || !padded || !transformed) return 81;
+  float2 *padded = dctType == 2 ? cursor.take<float2>(fftCount) : nullptr;
+  float2 *transformed = dctType == 2 ? cursor.take<float2>(fftCount) : nullptr;
+  if (!input || !output || (dctType == 2 && (!padded || !transformed))) return 81;
   if (hipMemcpy(input, inputHost, inputCount * sizeof(float),
                 hipMemcpyHostToDevice) != hipSuccess)
     return 82;
-  hipLaunchKernelGGL(mirrorRealForDCT,
-                     dim3((fftCount + kThreads - 1) / kThreads),
-                     dim3(kThreads), 0, 0, input, padded, batch, n);
-  int rc = ts_fft_plan_execute_device_batch_amd(forwardPlan, padded, transformed,
-                                                 batch, 0);
-  if (rc) return rc;
-  hipLaunchKernelGGL(realPrefix,
-                     dim3((inputCount + kThreads - 1) / kThreads),
-                     dim3(kThreads), 0, 0, transformed, output, batch, 2 * n, n,
-                     outputScale);
+  int rc = 0;
+  if (dctType == 2) {
+    hipLaunchKernelGGL(mirrorRealForDCT,
+                       dim3((fftCount + kThreads - 1) / kThreads),
+                       dim3(kThreads), 0, 0, input, padded, batch, n);
+    rc = ts_fft_plan_execute_device_batch_amd(forwardPlan, padded, transformed,
+                                               batch, 0);
+    if (rc) return rc;
+    hipLaunchKernelGGL(dctType2Prefix,
+                       dim3((inputCount + kThreads - 1) / kThreads),
+                       dim3(kThreads), 0, 0, transformed, output, batch, n,
+                       outputScale);
+  } else {
+    hipLaunchKernelGGL(dctDirect,
+                       dim3((inputCount + kThreads - 1) / kThreads),
+                       dim3(kThreads), 0, 0, input, output, batch, n, dctType,
+                       outputScale);
+  }
   return syncAndCopy(outputHost, output, inputCount * sizeof(float));
 }
 
@@ -566,11 +644,14 @@ extern "C" int ts_spectral_conv_plan_hostptr_batch_amd(
     int batch, int fftN) {
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   int outputN = inputN + kernelN - 1;
-  if (!plan || !forwardPlan || !inversePlan || !inputHost || !kernelHost ||
-      !outputHost || inputN <= 0 || kernelN <= 0 || batch <= 0 ||
-      fftN < outputN || fftN < 2 || (fftN & 1) ||
-      ts_fft_plan_length_amd(forwardPlan) != fftN / 2 ||
-      ts_fft_plan_length_amd(inversePlan) != fftN / 2)
+  if (!plan || !inputHost || !kernelHost || !outputHost || inputN <= 0 ||
+      kernelN <= 0 || batch <= 0 || fftN < outputN)
+    return 90;
+  bool scalar = fftN == 1;
+  if (!scalar &&
+      (!forwardPlan || !inversePlan || fftN < 2 || (fftN & 1) ||
+       ts_fft_plan_length_amd(forwardPlan) != fftN / 2 ||
+       ts_fft_plan_length_amd(inversePlan) != fftN / 2))
     return 90;
   size_t inputCount = size_t(batch) * inputN;
   size_t kernelCount = size_t(batch) * kernelN;
@@ -581,20 +662,27 @@ extern "C" int ts_spectral_conv_plan_hostptr_batch_amd(
   float *input = cursor.take<float>(inputCount);
   float *kernel = cursor.take<float>(kernelCount);
   float *output = cursor.take<float>(outputCount);
+  if (!input || !kernel || !output) return 91;
+  if (hipMemcpy(input, inputHost, inputCount * sizeof(float),
+                hipMemcpyHostToDevice) != hipSuccess ||
+      hipMemcpy(kernel, kernelHost, kernelCount * sizeof(float),
+                hipMemcpyHostToDevice) != hipSuccess)
+    return 92;
+  if (scalar) {
+    hipLaunchKernelGGL(realMultiply,
+                       dim3((outputCount + kThreads - 1) / kThreads),
+                       dim3(kThreads), 0, 0, input, kernel, output,
+                       outputCount);
+    return syncAndCopy(outputHost, output, outputCount * sizeof(float));
+  }
   float *xPad = cursor.take<float>(fftCount);
   float *wPad = cursor.take<float>(fftCount);
   float2 *xFFT = cursor.take<float2>(halfCount);
   float2 *wFFT = cursor.take<float2>(halfCount);
   float2 *product = cursor.take<float2>(halfCount);
   float *inverse = cursor.take<float>(fftCount);
-  if (!input || !kernel || !output || !xPad || !wPad || !xFFT || !wFFT ||
-      !product || !inverse)
+  if (!xPad || !wPad || !xFFT || !wFFT || !product || !inverse)
     return 91;
-  if (hipMemcpy(input, inputHost, inputCount * sizeof(float),
-                hipMemcpyHostToDevice) != hipSuccess ||
-      hipMemcpy(kernel, kernelHost, kernelCount * sizeof(float),
-                hipMemcpyHostToDevice) != hipSuccess)
-    return 92;
   int blocks = int((fftCount + kThreads - 1) / kThreads);
   hipLaunchKernelGGL(padRealScalar, dim3(blocks), dim3(kThreads), 0, 0, input, xPad,
                      batch, inputN, fftN);
@@ -625,7 +713,7 @@ extern "C" int ts_stft_plan_hostptr_batch_amd(
     int win, int hop, int frames, float outputScale) {
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !forwardPlan || !inputHost || !windowHost || !outputHost ||
-      batch <= 0 || samples <= 0 || win < 2 || hop <= 0 || frames <= 0 ||
+      batch <= 0 || samples <= 0 || win <= 0 || hop <= 0 || frames <= 0 ||
       ts_fft_plan_length_amd(forwardPlan) != ((win & 1) ? win : win / 2))
     return 100;
   int rows = batch * frames, bins = win / 2 + 1;
@@ -682,7 +770,7 @@ extern "C" int ts_istft_plan_hostptr_batch_amd(
     int win, int hop, float outputScale) {
   CompositePlan *plan = static_cast<CompositePlan *>(opaque);
   if (!plan || !inversePlan || !inputHost || !windowHost || !outputHost ||
-      batch <= 0 || frames <= 0 || win < 2 || hop <= 0 ||
+      batch <= 0 || frames <= 0 || win <= 0 || hop <= 0 ||
       ts_fft_plan_length_amd(inversePlan) != ((win & 1) ? win : win / 2))
     return 110;
   int rows = batch * frames, bins = win / 2 + 1;
@@ -779,17 +867,18 @@ void packStorage(const std::vector<float> &input, void *output, int storage) {
 
 extern "C" int ts_dct_plan_hostptr_batch_storage_amd(
     void *opaque, void *forwardPlan, const void *inputHost, void *outputHost,
-    int batch, int n, int storage, float outputScale) {
+    int batch, int n, int dctType, int storage, float outputScale) {
   if (!validStorage(storage) || !inputHost || !outputHost) return 120;
   if (storage == 0)
     return ts_dct_plan_hostptr_batch_amd(
         opaque, forwardPlan, static_cast<const float *>(inputHost),
-        static_cast<float *>(outputHost), batch, n, outputScale);
+        static_cast<float *>(outputHost), batch, n, dctType, outputScale);
   size_t elements = size_t(batch) * n;
   std::vector<float> input = unpackStorage(inputHost, elements, storage);
   std::vector<float> output(elements);
   int rc = ts_dct_plan_hostptr_batch_amd(
-      opaque, forwardPlan, input.data(), output.data(), batch, n, outputScale);
+      opaque, forwardPlan, input.data(), output.data(), batch, n, dctType,
+      outputScale);
   if (!rc) packStorage(output, outputHost, storage);
   return rc;
 }
@@ -886,7 +975,8 @@ void unpackAxis(const void *input, void *output, int64_t outer,
 
 extern "C" int ts_dct_plan_hostptr_strided_storage_amd(
     void *opaque, void *forwardPlan, const void *inputHost, void *outputHost,
-    int64_t outer, int64_t n, int64_t inner, int storage, float outputScale) {
+    int64_t outer, int64_t n, int64_t inner, int dctType, int storage,
+    float outputScale) {
   if (!validStorage(storage) || outer <= 0 || inner <= 0) return 160;
   size_t bytes = storageBytes(storage);
   size_t total = size_t(outer * n * inner) * bytes;
@@ -894,7 +984,7 @@ extern "C" int ts_dct_plan_hostptr_strided_storage_amd(
   packAxis(inputHost, input.data(), outer, n, inner, bytes);
   int rc = ts_dct_plan_hostptr_batch_storage_amd(
       opaque, forwardPlan, input.data(), output.data(), int(outer * inner),
-      int(n), storage, outputScale);
+      int(n), dctType, storage, outputScale);
   if (!rc) unpackAxis(output.data(), outputHost, outer, n, inner, bytes);
   return rc;
 }

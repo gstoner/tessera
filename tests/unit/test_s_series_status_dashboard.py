@@ -107,14 +107,36 @@ def test_backend_status_is_reported_per_target() -> None:
     assert "## Backend Proof By Target" in text
     assert "`rocm`" in text
     assert "`x86`" in text
-    assert "Native proven" in text
+    assert "Exact-device verified" in text
+    assert "Implementation present" in text
     assert "not the architecture completion signal" in text
 
 
-def test_backend_target_tally_has_native_proof_for_rocm_and_x86() -> None:
+def test_backend_target_tally_has_exact_proof_for_rocm_and_x86() -> None:
     rows = {str(r["target"]): r for r in tally_backend_by_target()}
-    assert int(rows["rocm"]["native_proven"]) > 0
-    assert int(rows["x86"]["native_proven"]) > 0
+    assert int(rows["rocm"]["exact_verified"]) > 0
+    assert int(rows["x86"]["exact_verified"]) > 0
+
+
+def test_backend_proof_levels_partition_each_declared_target_grain() -> None:
+    for row in tally_backend_by_target():
+        partition = sum(
+            int(row[key])
+            for key in (
+                "exact_verified",
+                "implementation_present",
+                "reference",
+                "open",
+                "other",
+            )
+        )
+        assert partition == int(row["declared"]), row
+
+
+def test_fused_and_packaged_are_not_execution_proof() -> None:
+    text = render_markdown()
+    assert "`fused` and `packaged` mean an implementation is present" in text
+    assert "Only `device_verified_abi` and `device_verified_jit` count" in text
 
 
 def test_priority_50_or_below_anchors_high_use_surface() -> None:

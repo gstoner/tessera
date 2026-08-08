@@ -6,8 +6,8 @@ Reference date for staleness: **2026-08-08**.
 
 ## Headline
 
-- **139** docs catalogued across the canonical doc tree.
-- **138** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **138** docs catalogued across the canonical doc tree.
+- **137** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
 - **85** updated within the last 30 days.
 - **12** older than 90 days; **0** older than 180 days.
 
@@ -133,8 +133,8 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `MASTER_AUDIT.md` | - | 2026-08-04 | 4 | ✓ |
-| `README.md` | - | 2026-07-28 | 11 | ✓ |
+| `MASTER_AUDIT.md` | - | 2026-08-08 | 0 | ✓ |
+| `README.md` | - | 2026-08-08 | 0 | ✓ |
 | `backend/BACKEND_AUDIT.md` | - | 2026-07-31 | 8 | ✓ |
 | `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-07-27 | 12 | ✓ |
 | `backend/X86_AVX512_ABI_INVENTORY.md` | - | 2026-07-22 | 17 | ✓ |
@@ -158,28 +158,27 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/todo.md` | - | 2026-08-08 | 0 | ✓ |
 | `backend/x86/todo.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 11 | ✓ |
-| `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-02 | 6 | ✓ |
-| `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-07-14 | 25 | ✓ |
+| `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-08 | 0 | ✓ |
+| `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-02 | 6 | ✓ |
 | `compiler/COMPILER_AUDIT.md` | - | 2026-07-30 | 9 | ✓ |
-| `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-07-22 | 17 | ✓ |
+| `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 11 | ✓ |
-| `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-08-06 | 2 | ✓ |
-| `compiler/EVALUATOR_PLAN.md` | - | 2026-07-22 | 17 | ✓ |
+| `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-08-08 | 0 | ✓ |
+| `compiler/EVALUATOR_PLAN.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 6 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-08-06 | 2 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 6 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 12 | ✓ |
-| `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-07-14 | 25 | ✓ |
-| `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-02 | 6 | ✓ |
-| `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-07-17 | 22 | ✓ |
+| `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 0 | ✓ |
+| `compiler/README.md` | - | 2026-08-08 | 0 | ✓ |
+| `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 0 | ✓ |
+| `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 22 | ✓ |
-| `compiler/STAGE_A_EMIT_PLAN.md` | - | 2026-07-11 | 28 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 6 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 9 | ✓ |
 | `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-04 | 4 | ✓ |
 | `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 6 | ✓ |
-| `compiler/WORKSTREAM_C_HANDOFF.md` | - | 2026-07-06 | 33 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-06-21 | 48 | ✓ |
 | `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 58 | ✓ |
 | `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-08-02 | 6 | ✓ |

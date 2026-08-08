@@ -1,11 +1,14 @@
 ---
 last_updated: 2026-07-28
-audit_role: plan
-plan_state: open
+audit_role: reference
 ---
 
 # Tessera Compiler — Theory of Operation
 
+> **Navigation:** start at [`README.md`](README.md). Global work ordering lives
+> only in [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md); this
+> document owns the durable architecture model and does not form a second queue.
+>
 > **Paired with** [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) (the
 > execution plan). This document is the durable *conceptual model*: how the
 > pieces fit, what the invariants are, and why the shape is what it is. The plan
@@ -15,7 +18,8 @@ plan_state: open
 > [`OPTIMIZING_COMPILER_PLAN.md`](OPTIMIZING_COMPILER_PLAN.md) (F0–F6 middle-end
 > synthesis), [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md) (the scoring engine that
 > gates promotion), [`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) (current state), and
-> [`STAGE_A_EMIT_PLAN.md`](STAGE_A_EMIT_PLAN.md) (cross-vendor emit grounding).
+> the archived [`STAGE_A_EMIT_PLAN.md`](archive/STAGE_A_EMIT_PLAN.md)
+> (cross-vendor emit grounding and provenance).
 >
 > **External assessment:**
 > [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) — analytical tile-centric

@@ -2528,16 +2528,47 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return out.astype(want, copy=False)
 
     def dct(x, type: int = 2, axis: int = -1):
-        if int(type) != 2:
-            raise ValueError("tessera.ops.dct currently supports only type=2")
         if hasattr(x, "_data"):
             x = x._data
-        n = x.shape[axis]
-        y = np.concatenate([x, np.flip(x, axis=axis)], axis=axis)
-        spec = np.fft.fft(y, axis=axis)
-        slicer = [slice(None)] * spec.ndim
-        slicer[axis] = slice(0, n)
-        return np.real(spec[tuple(slicer)])
+        x = np.asarray(x)
+        dct_type = int(type)
+        if dct_type not in {1, 2, 3, 4}:
+            raise ValueError("tessera.ops.dct requires type in {1, 2, 3, 4}")
+        axis_idx = axis if axis >= 0 else x.ndim + axis
+        if axis_idx < 0 or axis_idx >= x.ndim:
+            raise ValueError(f"dct axis {axis} is invalid for rank {x.ndim}")
+        moved = np.moveaxis(x, axis_idx, -1)
+        n = moved.shape[-1]
+        if dct_type == 1 and n < 2:
+            raise ValueError("DCT-I requires a transform length greater than one")
+        source = np.arange(n, dtype=np.float64)
+        frequency = np.arange(n, dtype=np.float64)
+        if dct_type == 1:
+            basis = 2.0 * np.cos(
+                np.pi * np.outer(source, frequency) / float(n - 1)
+            )
+            basis[0, :] = 1.0
+            basis[-1, :] = (-1.0) ** frequency
+        elif dct_type == 2:
+            basis = 2.0 * np.cos(
+                np.pi * np.outer(2.0 * source + 1.0, frequency)
+                / float(2 * n)
+            )
+        elif dct_type == 3:
+            basis = 2.0 * np.cos(
+                np.pi * np.outer(source, 2.0 * frequency + 1.0)
+                / float(2 * n)
+            )
+            basis[0, :] = 1.0
+        else:
+            basis = 2.0 * np.cos(
+                np.pi
+                * np.outer(2.0 * source + 1.0, 2.0 * frequency + 1.0)
+                / float(4 * n)
+            )
+        result = moved.astype(np.float64) @ basis
+        want = x.dtype if x.dtype.kind == "f" else np.dtype("float32")
+        return np.moveaxis(result, -1, axis_idx).astype(want, copy=False)
 
     def spectral_conv(x, w):
         if hasattr(x, "_data"):
@@ -2553,13 +2584,52 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         want = x.dtype if x.dtype.kind == "f" else np.dtype("float32")
         return y[..., :n].astype(want, copy=False)
 
-    def stft(x, win, hop: int):
+    def stft(
+        x,
+        win,
+        hop: int,
+        *,
+        axis: int = -1,
+        n_fft: int | None = None,
+        center: bool = False,
+        pad_mode: str = "constant",
+        onesided: bool = True,
+    ):
         if hasattr(x, "_data"):
             x = x._data
         if hasattr(win, "_data"):
             win = win._data
         x = np.asarray(x)
         win = np.asarray(win)
+        if win.ndim != 1:
+            raise ValueError("stft window must be rank-1")
+        axis_idx = axis if axis >= 0 else x.ndim + axis
+        if axis_idx < 0 or axis_idx >= x.ndim:
+            raise ValueError(f"stft axis {axis} is invalid for rank {x.ndim}")
+        hop = int(hop)
+        fft_length = int(n_fft if n_fft is not None else win.shape[0])
+        if hop <= 0 or fft_length < win.shape[0]:
+            raise ValueError("stft requires hop > 0 and n_fft >= window length")
+        if pad_mode not in {"constant", "reflect"}:
+            raise ValueError("stft pad_mode must be 'constant' or 'reflect'")
+        moved = np.moveaxis(x, axis_idx, -1)
+        if center:
+            width = fft_length // 2
+            pad_width = [(0, 0)] * (moved.ndim - 1) + [(width, width)]
+            if pad_mode == "constant":
+                moved = np.pad(moved, pad_width, mode="constant")
+            else:
+                moved = np.pad(moved, pad_width, mode="reflect")
+        if moved.shape[-1] < fft_length:
+            moved = np.pad(
+                moved,
+                [(0, 0)] * (moved.ndim - 1)
+                + [(0, fft_length - moved.shape[-1])],
+                mode="constant",
+            )
+        padded_window = np.zeros(fft_length, dtype=win.dtype)
+        window_offset = (fft_length - win.shape[0]) // 2
+        padded_window[window_offset : window_offset + win.shape[0]] = win
         # `np.fft.rfft` computes and returns in double, so an f32 signal came
         # back complex128. Compute wide, store at the input's component width
         # -- the same contract `fft`/`rfft` above follow. These three spectral
@@ -2567,31 +2637,96 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         # which is why fixing that op did not reach them.
         want = _complex_for(x.dtype)
         frames = []
-        for start in range(0, max(1, x.shape[-1] - win.shape[-1] + 1), int(hop)):
-            frames.append(np.fft.rfft(x[..., start:start + win.shape[-1]] * win, axis=-1))
-        return np.stack(frames, axis=-2).astype(want, copy=False)
+        for start in range(0, moved.shape[-1] - fft_length + 1, hop):
+            framed = moved[..., start : start + fft_length] * padded_window
+            transform = np.fft.rfft if onesided else np.fft.fft
+            frames.append(transform(framed, axis=-1))
+        result = np.stack(frames, axis=-2).astype(want, copy=False)
+        lead_rank = x.ndim - 1
+        order = (
+            list(range(axis_idx))
+            + [lead_rank, lead_rank + 1]
+            + list(range(axis_idx, lead_rank))
+        )
+        return np.transpose(result, order)
 
-    def istft(xf, win, hop: int):
+    def istft(
+        xf,
+        win,
+        hop: int,
+        *,
+        axis: int = -1,
+        n_fft: int | None = None,
+        center: bool = False,
+        length: int | None = None,
+        onesided: bool = True,
+    ):
         if hasattr(xf, "_data"):
             xf = xf._data
         if hasattr(win, "_data"):
             win = win._data
         xf = np.asarray(xf)
         win = np.asarray(win)
-        frame_count = xf.shape[-2]
-        frame_len = win.shape[-1]
-        out = np.zeros(xf.shape[:-2] + ((frame_count - 1) * int(hop) + frame_len,), dtype=np.float64)
+        if win.ndim != 1:
+            raise ValueError("istft window must be rank-1")
+        axis_idx = axis if axis >= 0 else xf.ndim + axis
+        if axis_idx <= 0 or axis_idx >= xf.ndim:
+            raise ValueError("istft frequency axis requires a preceding frame axis")
+        frame_axis = axis_idx - 1
+        moved = np.moveaxis(xf, (frame_axis, axis_idx), (-2, -1))
+        frame_count = moved.shape[-2]
+        # Match STFT and the established public contract: absent an explicit
+        # transform length, the window owns n_fft.  Inferring it from the
+        # spectrum broke older callers whose stored spectrum was truncated or
+        # padded; those callers remain valid while wider transforms opt in via
+        # n_fft=.
+        fft_length = int(n_fft if n_fft is not None else win.shape[0])
+        if fft_length < win.shape[0] or int(hop) <= 0:
+            raise ValueError("istft requires hop > 0 and n_fft >= window length")
+        padded_window = np.zeros(fft_length, dtype=win.dtype)
+        window_offset = (fft_length - win.shape[0]) // 2
+        padded_window[window_offset : window_offset + win.shape[0]] = win
+        out = np.zeros(
+            moved.shape[:-2] + ((frame_count - 1) * int(hop) + fft_length,),
+            dtype=np.float64,
+        )
         weight = np.zeros_like(out)
         for idx in range(frame_count):
-            frame = np.fft.irfft(xf[..., idx, :], n=frame_len, axis=-1) * win
+            inverse = np.fft.irfft if onesided else np.fft.ifft
+            frame = np.real(
+                inverse(moved[..., idx, :], n=fft_length, axis=-1)
+            ) * padded_window
             start = idx * int(hop)
-            out[..., start:start + frame_len] += frame
-            weight[..., start:start + frame_len] += win * win
+            out[..., start : start + fft_length] += frame
+            weight[..., start : start + fft_length] += padded_window * padded_window
         # The f64 accumulator is deliberate -- overlap-add sums many frames --
         # but the RESULT is stored at the width implied by the spectrum, not at
         # the accumulator's.
         want = _real_for(xf.dtype) if xf.dtype.kind == "c" else xf.dtype
-        return (out / np.maximum(weight, 1e-12)).astype(want, copy=False)
+        result = out / np.maximum(weight, 1e-12)
+        if center:
+            width = fft_length // 2
+            result = result[..., width : result.shape[-1] - width]
+        if length is not None:
+            requested = int(length)
+            if requested < 0:
+                raise ValueError("istft length must be non-negative")
+            if result.shape[-1] < requested:
+                result = np.pad(
+                    result,
+                    [(0, 0)] * (result.ndim - 1)
+                    + [(0, requested - result.shape[-1])],
+                )
+            else:
+                result = result[..., :requested]
+        result = result.astype(want, copy=False)
+        lead_rank = xf.ndim - 2
+        order = (
+            list(range(frame_axis))
+            + [lead_rank]
+            + list(range(frame_axis, lead_rank))
+        )
+        return np.transpose(result, order)
 
     def spectral_filter(Xf, Hf):
         if hasattr(Xf, "_data"):

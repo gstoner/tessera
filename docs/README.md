@@ -85,7 +85,8 @@ backend-build seam). As of 2026-07 the framework it describes is largely **built
 and hardware-proven** — the `KernelEmitter`/`KernelRunner`/`compile_fn` plugin
 protocol + universal F4 oracle + measured arbiter live in
 `python/tessera/compiler/emit/`, with NVIDIA sm_120, ROCm gfx1151, and x86 Zen 5
-plugins executing (see the plan's landed annotations + `WORKSTREAM_C_HANDOFF.md`).
+plugins executing (see the refactor plan's landed annotations and the generated
+runtime execution matrix).
 These docs are *direction*; `docs/audit/MASTER_AUDIT.md` and the generated
 dashboards stay status truth.
 

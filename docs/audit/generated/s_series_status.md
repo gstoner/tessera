@@ -22,19 +22,19 @@
 
 ## Backend Proof By Target
 
-The registry-level `backend_kernel` axis is deliberately conservative and should not be read as an all-up veto.  Per-architecture completion comes from `BackendKernelEntry` rows: `device_verified_abi`, `device_verified_jit`, `fused`, and `packaged` count as native proof for that target; `reference` is correct execution without a native kernel; `artifact_only` / `compileable` / `planned` remain open for that target.
+The registry-level `backend_kernel` axis is deliberately conservative and should not be read as an all-up veto.  Per-architecture completion comes from one `BackendKernelEntry` per op×target.  Only `device_verified_abi` and `device_verified_jit` count as exact-device execution proof.  `fused` and `packaged` mean an implementation is present but still lacks exact-device proof; `reference` is correct execution without a native kernel; `artifact_only` / `compileable` / `planned` remain open for that target.
 
-| Target | Declared | Native proven | Reference | Open artifact/planned | Missing target row |
-|---|---:|---:|---:|---:|---:|
-| `cpu` | 338 | 0 | 338 | 0 | 149 |
-| `x86` | 337 | 335 | 2 | 0 | 150 |
-| `apple_cpu` | 370 | 4 | 366 | 0 | 117 |
-| `apple_gpu` | 207 | 199 | 4 | 4 | 280 |
-| `rocm` | 345 | 343 | 2 | 0 | 142 |
-| `nvidia_sm80` | 68 | 0 | 0 | 68 | 419 |
-| `nvidia_sm90` | 100 | 0 | 2 | 98 | 387 |
-| `nvidia_sm100` | 68 | 0 | 0 | 68 | 419 |
-| `nvidia_sm120` | 92 | 31 | 0 | 61 | 395 |
+| Target | Declared | Exact-device verified | Implementation present | Reference | Open artifact/planned | Other | Missing target row |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `cpu` | 338 | 0 | 0 | 338 | 0 | 0 | 149 |
+| `x86` | 337 | 286 | 49 | 2 | 0 | 0 | 150 |
+| `apple_cpu` | 370 | 0 | 4 | 366 | 0 | 0 | 117 |
+| `apple_gpu` | 207 | 148 | 51 | 4 | 4 | 0 | 280 |
+| `rocm` | 345 | 343 | 0 | 2 | 0 | 0 | 142 |
+| `nvidia_sm80` | 68 | 0 | 0 | 0 | 68 | 0 | 419 |
+| `nvidia_sm90` | 100 | 0 | 0 | 2 | 98 | 0 | 387 |
+| `nvidia_sm100` | 68 | 0 | 0 | 0 | 68 | 0 | 419 |
+| `nvidia_sm120` | 92 | 31 | 0 | 0 | 61 | 0 | 395 |
 
 ## Per-category breakdown
 

@@ -252,10 +252,6 @@ _SINGLE_GPU_TILE_TARGET_TERMINAL: dict[str, str] = {
         "single-GPU terminal contract until a backend-specific dynamic-shape "
         "kernel lands"
     ),
-    "adafactor": (
-        "factored optimizer update with tree/state metadata; scalar/vector "
-        "backend pieces are tracked separately from Tile/Target IR"
-    ),
     "cache_commit": "state cursor mutation; no tensor Tile/Target kernel",
     "cache_rollback": "state cursor mutation; no tensor Tile/Target kernel",
     "kv_cache_append": "cache handle mutation; runtime state lane, not Tile IR",

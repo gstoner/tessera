@@ -1,11 +1,15 @@
 ---
-last_updated: 2026-07-17
+last_updated: 2026-08-08
 audit_role: plan
-plan_state: open
+plan_state: landing
 ---
 
 # Sequence Mixer Engineering Plan
 
+> **Routing:** start at [`README.md`](README.md). This document owns mixer
+> semantics and family-specific acceptance criteria; global ordering lives only
+> in [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
+>
 > **Status:** engineering plan (Track L / compiler direction). Pairs with
 > [`SEQUENCE_MIXER_THEORY.md`](SEQUENCE_MIXER_THEORY.md) (read first — facet
 > vocabulary and the layer map come from there). Extends Decision #28.
@@ -386,7 +390,8 @@ theme audit (`compiler/COMPILER_AUDIT.md`) as rows flip, not this plan.
 
 ## 5. Fleet ownership
 
-Per the fleet coordination model (Decision #28 / `WORKSTREAM_C_HANDOFF.md`):
+Per the fleet coordination model (Decision #28 and
+[`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) §7):
 
 * **Mac (M-series)** — W1, W2, W3, W4, and the Apple lane of W5/W6/W7/W8
   (into `apple/todo.md` items 8–14). The host-free + Apple-GPU critical path;

@@ -76,6 +76,23 @@ _EXPLICIT_BENCH_OPS: dict[str, str] = {
     "reduce_scatter": "benchmarks/benchmark_collective.py",
     "all_to_all": "benchmarks/benchmark_collective.py",
     "multi_head_attention": "benchmarks/benchmark_attention.py",
+    # TSOL physical-policy and packed-real harnesses exercise the canonical
+    # typed Schedule->Tile packages on x86 and gfx1151.  Keep these in the live
+    # benchmark registry so the support table cannot regress to `bench: none`
+    # while checked-in evidence packets exist.
+    "fft": "benchmarks/spectral/benchmark_x86_fft.py",
+    "ifft": "benchmarks/spectral/benchmark_x86_fft.py",
+    "rfft": "benchmarks/spectral/benchmark_native_real_fft.py",
+    "irfft": "benchmarks/spectral/benchmark_native_real_fft.py",
+    "dct": "benchmarks/spectral/benchmark_tsol_physical_policies.py",
+    "spectral_conv": "benchmarks/spectral/benchmark_tsol_physical_policies.py",
+    "spectral_filter": "benchmarks/spectral/benchmark_tsol_physical_policies.py",
+    "stft": "benchmarks/spectral/benchmark_tsol_physical_policies.py",
+    "istft": "benchmarks/spectral/benchmark_tsol_physical_policies.py",
+    # The ROCm Adafactor harness owns forward and physical-adjoint packets.
+    # Other targets retain their independent execution evidence; this entry is
+    # only the aggregate dashboard's "a benchmark exists" statement.
+    "adafactor": "benchmarks/rocm/benchmark_rocm_adafactor.py",
 }
 
 _SINGLE_GPU_CLOSEOUT_SMOKE_OPS: dict[str, str] = {

@@ -3,7 +3,7 @@
 The AMD analog of :mod:`tessera.compiler.ptx_emit` (NVIDIA WGMMA PTX) and
 :mod:`tessera.compiler.msl_gemm_emit` (Apple simdgroup_matrix), completing the
 host-free Stage-A emit set across all three vendors. See
-``docs/audit/compiler/STAGE_A_EMIT_PLAN.md`` and
+``docs/audit/compiler/archive/STAGE_A_EMIT_PLAN.md`` and
 ``docs/audit/backend/rocm/STRIX_HALO_EXECUTION_PLAN.md`` (the ``amdgpu``→``rocdl``
 emit path this realizes at the LLVM-IR level).
 

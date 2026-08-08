@@ -73,6 +73,37 @@ def test_bench_axis_is_no_longer_ga_ebm_only():
     assert {"matmul", "flash_attn", "all_reduce", "gemm"} <= non_ga_ebm
 
 
+def test_tsol_and_adafactor_physical_harnesses_feed_bench_axis():
+    expected = {
+        "fft",
+        "ifft",
+        "rfft",
+        "irfft",
+        "dct",
+        "spectral_conv",
+        "spectral_filter",
+        "stft",
+        "istft",
+        "adafactor",
+    }
+    assert expected <= bc.benchmarked_ops()
+    assert bc.benchmark_source_for("fft") == (
+        "benchmarks/spectral/benchmark_x86_fft.py"
+    )
+    assert bc.benchmark_source_for("ifft") == (
+        "benchmarks/spectral/benchmark_x86_fft.py"
+    )
+    assert bc.benchmark_source_for("rfft") == (
+        "benchmarks/spectral/benchmark_native_real_fft.py"
+    )
+    assert bc.benchmark_source_for("stft") == (
+        "benchmarks/spectral/benchmark_tsol_physical_policies.py"
+    )
+    assert bc.benchmark_source_for("adafactor") == (
+        "benchmarks/rocm/benchmark_rocm_adafactor.py"
+    )
+
+
 def test_ga_ebm_alias_rows_are_covered_by_ga_ebm_harness():
     assert bc.benchmark_source_for("ebm_energy_quadratic") == (
         "benchmarks/apple_gpu/benchmark_ga_ebm.py"

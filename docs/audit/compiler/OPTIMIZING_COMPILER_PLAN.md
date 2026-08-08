@@ -1,12 +1,16 @@
 ---
-last_updated: 2026-07-14
+last_updated: 2026-08-08
 audit_role: plan
-plan_state: open
+plan_state: landing
 ---
 
 # Tessera Optimizing-Compiler Plan — from op-library to world-class
 
-> Status: proposed (2026-06-14).  Companion to `EVALUATOR_PLAN.md` (the scoring
+> **Routing:** start at [`README.md`](README.md). This document owns middle-end
+> synthesis and backend-lift acceptance details; global ordering lives only in
+> [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
+>
+> Status: landing; originally proposed 2026-06-14. Companion to `EVALUATOR_PLAN.md` (the scoring
 > engine this plan is gated by) and `COMPILER_AUDIT.md` (current state).
 > Scope: the execution middle-end.  The `@jit` frontend (Graph IR emission,
 > multi-output ops, scalar-attr lowering) is done; this plan is about what
@@ -35,8 +39,8 @@ plan_state: open
 >    in [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md): the
 >    synthesizer generalizes for the *fusable-DAG middle ground*; the leads keep
 >    hand-tuned kernels as first-class **arbiter candidates**. The prerequisite
->    liftability split has since **landed** (post-dated by
->    [`WORKSTREAM_C_HANDOFF.md`](WORKSTREAM_C_HANDOFF.md), 2026-07-06): the
+>    liftability split has since **landed** (the original 2026-07-06 machine
+>    handoff is [archived](archive/WORKSTREAM_C_HANDOFF.md)): the
 >    arch-agnostic core is `fusion_core.py`, the `KernelEmitter`/`KernelRunner`/
 >    `SpecPolicy` interface + cache live in `emit/kernel_emitter.py` +
 >    `emit/kernel_cache.py`, and `emit/apple_msl.py` is the reference plugin;

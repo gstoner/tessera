@@ -8,6 +8,27 @@ last_updated: 2026-08-08
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` — **proof
+levels corrected; no Apple physical change.** Apple CPU reference execution
+and Apple GPU exact-device proof now occupy separate op×target rows;
+`fused`/`packaged` entries report implementation presence without being
+promoted to execution proof. No Metal evidence or selector transfers.
+
+Cross-backend sync `X86-BUILD-ARTIFACT-DISCOVERY-2026-08-08` — **shared
+fail-closed selection assessed; no Apple package changes.** The x86 runtime
+and native packager now honor the common `TESSERA_BUILD_DIR` before default
+build names and reject a missing selected tree instead of falling through to a
+stale image. This is applicable build-selection policy, but it transfers no
+AVX-512 implementation, timing, or Mac evidence to Apple.
+
+Cross-backend sync `STANDALONE-COVERAGE-TRUTH-2026-08-08` — **registry truth
+adopted; no Metal execution claim changes.** The standalone dashboard now
+generates its counts, compiler-layer rollup, exact-target manifest summary,
+and open queues from the live registries. It no longer treats the strongest
+sibling-backend row as universal support. Apple still owns every Mac/Metal
+physical and benchmark follow-up shown by its exact-target manifest; x86 and
+gfx1151 TSOL or Adafactor evidence does not transfer.
+
 Cross-backend sync `TSOL-NATIVE-REAL-FFT-2026-08-08` — **shared artifact
 follow-up required; no Metal schedule transfers.** The target-neutral FFT
 contract now distinguishes logical and physical length and hashes Hermitian
@@ -75,12 +96,16 @@ fused-LDS residency, while the HIP build closure, AMD kernel, and WSL timing
 packet transfer no Apple implementation or evidence. Apple still requires a
 Mac-owned FFT package and independently measured residency policy.
 
-Cross-backend sync `TSOL-DCT-CONTRACT-2026-08-08` — **shared fail-closed
-semantics adopted; Metal package remains follow-up.** DCT type II is now
-explicit in the content-addressed contract and types I/III/IV are rejected
-instead of silently executing type II. DCT and spectral convolution join the
-canonical TSOL inventory. The Apple reference/composed lane receives the same
-rejection rule, but no Mac physical-package evidence is claimed.
+Cross-backend sync `TSOL-SPECTRAL-POLICY-2026-08-08` — **shared DCT and
+streaming policy adopted; Metal package remains follow-up.** DCT-I/II/III/IV
+now have distinct public, autodiff, Graph, Schedule, and Tile identities. The
+target-neutral chunked-STFT state binds its policy digest, retained overlap,
+sample count, and emitted-frame count; centred streaming fails closed until
+lookahead lineage exists. Apple receives these shared semantics and the
+expanded centred/n-FFT/one-sided eager reference, but still owns no Metal
+spectral package and inherits no Zen 5 or gfx1151 physical evidence. The
+length-one convolution and one-sample STFT/ISTFT physical boundary repairs are
+therefore not applicable to Metal until that package exists.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **not applicable to Apple
 physical code.** ROCm's centered Welford and scalar boundary corrections do

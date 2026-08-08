@@ -51,6 +51,17 @@ def _stft_ref(x, win, hop):
 _TOL = dict(atol=2e-3, rtol=2e-3)
 
 
+def _dct2_ref(x, axis=-1, scale=1.0):
+    moved = np.moveaxis(np.asarray(x, np.float64), axis, -1)
+    n = moved.shape[-1]
+    source = np.arange(n, dtype=np.float64)
+    frequency = np.arange(n, dtype=np.float64)
+    basis = 2.0 * np.cos(
+        np.pi * np.outer(2.0 * source + 1.0, frequency) / float(2 * n)
+    )
+    return np.moveaxis(moved @ basis, -1, axis) * scale
+
+
 @pytest.mark.parametrize("shape_pre", [(), (3,)])
 def test_dct(shape_pre):
     rt = _rt_or_skip()
@@ -59,9 +70,22 @@ def test_dct(shape_pre):
     res = rt.launch(_art(rt, "tessera.dct", (x,), {"axis": -1}), (x,))
     assert res["ok"] is True, res.get("reason")
     assert res["compiler_path"] == "x86_spectral_compiled"
-    y = np.concatenate([x, np.flip(x, -1)], -1).astype(np.complex64)
-    ref = np.real(np.fft.fft(y, axis=-1)[..., :8]).astype(np.float32)
+    ref = _dct2_ref(x).astype(np.float32)
     np.testing.assert_allclose(np.asarray(res["output"]), ref, **_TOL)
+
+
+@pytest.mark.parametrize("dct_type", [1, 3, 4])
+def test_extended_dct_types_use_distinct_physical_contracts(dct_type):
+    import tessera
+
+    rt = _rt_or_skip()
+    x = np.linspace(-1.0, 1.0, 16, dtype=np.float32).reshape(2, 8)
+    result = rt.launch(
+        _art(rt, "tessera.dct", (x,), {"type": dct_type}), (x,)
+    )
+    assert result["ok"] is True, result.get("reason")
+    reference = tessera.ops.dct(x, type=dct_type)
+    np.testing.assert_allclose(np.asarray(result["output"]), reference, **_TOL)
 
 
 def test_spectral_conv():
@@ -75,6 +99,17 @@ def test_spectral_conv():
     nfft = 1 << int(np.ceil(np.log2(n)))
     ref = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)[..., :n]
     np.testing.assert_allclose(np.asarray(res["output"]), ref, **_TOL)
+
+
+def test_scalar_convolution_preserves_length_one_contract():
+    rt = _rt_or_skip()
+    x = np.array([[2.0], [-3.0], [0.5]], dtype=np.float32)
+    w = np.array([[4.0], [2.0], [-8.0]], dtype=np.float32)
+    result = rt.launch(
+        _art(rt, "tessera.spectral_conv", (x, w), {}), (x, w)
+    )
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_array_equal(np.asarray(result["output"]), x * w)
 
 
 def test_spectral_filter():
@@ -109,14 +144,33 @@ def test_stft_istft():
     assert rec.shape[-1] == (sref.shape[-2] - 1) * 4 + 8
 
 
+def test_unit_window_stft_istft_uses_odd_fallback():
+    rt = _rt_or_skip()
+    signal = np.array([1.0, -2.0, 3.5, 0.25], dtype=np.float32)
+    window = np.ones((1,), dtype=np.float32)
+    stft = rt.launch(
+        _art(rt, "tessera.stft", (signal, window), {"hop": 1}),
+        (signal, window),
+    )
+    assert stft["ok"] is True, stft.get("reason")
+    spectrum = np.asarray(stft["output"])
+    np.testing.assert_array_equal(spectrum[:, 0].real, signal)
+    np.testing.assert_array_equal(spectrum[:, 0].imag, 0.0)
+    istft = rt.launch(
+        _art(rt, "tessera.istft", (spectrum, window), {"hop": 1}),
+        (spectrum, window),
+    )
+    assert istft["ok"] is True, istft.get("reason")
+    np.testing.assert_array_equal(np.asarray(istft["output"]), signal)
+
+
 def test_ragged_prime_bluestein_package():
     rt = _rt_or_skip()
     rng = np.random.default_rng(9)
     x = rng.standard_normal((2, 19)).astype(np.float32)
     d = rt.launch(_art(rt, "tessera.dct", (x,), {}), (x,))
     assert d["ok"] is True, d.get("reason")
-    mirrored = np.concatenate([x, np.flip(x, -1)], -1).astype(np.complex64)
-    reference = np.fft.fft(mirrored, axis=-1)[..., :19].real.astype(np.float32)
+    reference = _dct2_ref(x).astype(np.float32)
     np.testing.assert_allclose(np.asarray(d["output"]), reference, **_TOL)
 
     signal = rng.standard_normal((2, 47)).astype(np.float32)
@@ -146,8 +200,7 @@ def test_bounded_dynamic_specialization_rebuilds_exact_artifact():
     x = np.arange(24, dtype=np.float32).reshape(3, 8)
     result = rt.launch(artifact, (x,))
     assert result["ok"] is True, result.get("reason")
-    mirrored = np.concatenate([x, np.flip(x, -1)], -1).astype(np.complex64)
-    reference = np.fft.fft(mirrored, axis=-1)[..., :8].real.astype(np.float32)
+    reference = _dct2_ref(x).astype(np.float32)
     np.testing.assert_allclose(np.asarray(result["output"]), reference, **_TOL)
 
 
@@ -158,8 +211,7 @@ def test_arbitrary_axis_dct_conv_and_stft_istft():
     x = rng.standard_normal((8, 3)).astype(np.float32)
     dct = rt.launch(_art(rt, "tessera.dct", (x,), {"axis": 0}), (x,))
     assert dct["ok"] is True, dct.get("reason")
-    mirrored = np.concatenate([x, np.flip(x, 0)], axis=0).astype(np.complex64)
-    dct_ref = np.fft.fft(mirrored, axis=0)[:8].real.astype(np.float32)
+    dct_ref = _dct2_ref(x, axis=0).astype(np.float32)
     np.testing.assert_allclose(np.asarray(dct["output"]), dct_ref, **_TOL)
 
     signal = rng.standard_normal((12, 3)).astype(np.float32)
@@ -203,8 +255,7 @@ def test_reduced_storage_dct_uses_f32_accumulation(storage):
     assert result["ok"] is True, result.get("reason")
     assert str(np.asarray(result["output"]).dtype) == str(np.dtype(dtype))
     source = x.astype(np.float32)
-    mirrored = np.concatenate([source, np.flip(source, -1)], -1).astype(np.complex64)
-    reference = np.fft.fft(mirrored, axis=-1)[..., :8].real.astype(np.float32)
+    reference = _dct2_ref(source).astype(np.float32)
     np.testing.assert_allclose(
         np.asarray(result["output"]).astype(np.float32), reference,
         atol=3e-2, rtol=3e-2,
@@ -264,9 +315,8 @@ def test_native_forward_and_ortho_normalization(normalization):
         _art(rt, "tessera.dct", (x,), {"normalization": normalization}), (x,)
     )
     assert dct["ok"] is True, dct.get("reason")
-    mirrored = np.concatenate([x, np.flip(x, -1)], -1).astype(np.complex64)
     scale = 1.0 / (16.0 if normalization == "forward" else np.sqrt(16.0))
-    reference = np.fft.fft(mirrored, axis=-1)[..., :8].real * scale
+    reference = _dct2_ref(x, scale=scale)
     np.testing.assert_allclose(np.asarray(dct["output"]), reference, **_TOL)
 
     signal = rng.standard_normal((24,)).astype(np.float32)
@@ -323,8 +373,7 @@ def test_combined_dynamic_axis_reduced_storage_ortho_policy(storage):
     result = rt.launch(artifact, (x,))
     assert result["ok"] is True, result.get("reason")
     source = x.astype(np.float32)
-    mirrored = np.concatenate([source, np.flip(source, 0)], axis=0).astype(np.complex64)
-    reference = np.fft.fft(mirrored, axis=0)[:64].real / np.sqrt(128.0)
+    reference = _dct2_ref(source, axis=0, scale=1.0 / np.sqrt(128.0))
     np.testing.assert_allclose(
         np.asarray(result["output"]).astype(np.float32), reference,
         atol=0.15 if storage == "bf16" else 4e-2, rtol=4e-2,

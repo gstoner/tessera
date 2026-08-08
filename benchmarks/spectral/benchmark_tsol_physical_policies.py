@@ -325,9 +325,9 @@ def _run(target: str, iterations: int) -> dict[str, Any]:
         "processor": platform.processor(),
         "python": platform.python_version(),
         "package_abi": (
-            "tessera.x86.spectral_composite.v5"
+            "tessera.x86.spectral_composite.v6"
             if target == "x86"
-            else "tessera.rocm.spectral_composite.v5"
+            else "tessera.rocm.spectral_composite.v6"
         ),
         "timing_domain": "synchronized_host_wall",
         "selector_eligible": target == "x86",

@@ -516,7 +516,7 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
   schedule.twiddlePolicy =
       rocm ? "device_sincos_per_butterfly" : "thread_local_cached_f32";
   schedule.kernelFamily =
-      rocm ? "gfx1151_stockham_bluestein_v5" : "zen5_avx512_fft_v4";
+      rocm ? "gfx1151_stockham_bluestein_v6" : "zen5_avx512_fft_v4";
   schedule.workgroupSize = rocm ? 256 : 1;
   schedule.inputShape.assign(input.getShape().begin(), input.getShape().end());
   schedule.outputShape.assign(output.getShape().begin(), output.getShape().end());
@@ -611,7 +611,9 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
     }
     if (schedule.strategy != "bluestein" && schedule.physicalLength <= 1024 &&
         isPowerOfTwo(schedule.physicalLength))
-      schedule.residency = "persistent_device_plan_fused_lds_batch";
+      schedule.residency = packedReal
+                               ? "persistent_device_plan_fused_lds_hermitian_batch"
+                               : "persistent_device_plan_fused_lds_batch";
   } else {
     auto stages = mixedRadixSequence(schedule.physicalLength);
     if (stages && preferX86MixedRadix(schedule.physicalLength, *stages)) {

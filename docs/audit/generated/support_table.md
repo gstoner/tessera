@@ -103,7 +103,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `ebm_refinement` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_self_verify` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_sphere_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
-| `adafactor` | functional_optimizer_step | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `adafactor` | functional_optimizer_step | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `adam` | functional_optimizer_step | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `adamw` | functional_optimizer_step | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `lion` | functional_optimizer_step | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -295,15 +295,15 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `sddmm` | sparse | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `spmm_coo` | sparse | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `spmm_csr` | sparse | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `dct` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `fft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `ifft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `irfft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `istft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `rfft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `spectral_conv` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `spectral_filter` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `stft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `dct` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
+| `fft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
+| `ifft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
+| `irfft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
+| `istft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
+| `rfft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
+| `spectral_conv` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
+| `spectral_filter` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
+| `stft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `log_softmax` | stable_reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `logsumexp` | stable_reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `reduce` | stable_reduction | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
@@ -351,7 +351,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | contraction | 1 | PPGCFCN· |
 | elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
-| functional_optimizer_step | 7 | PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| functional_optimizer_step | 7 | PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | fused_epilogue | 1 | PPGCFCN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |
@@ -378,7 +378,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | segment_reduce | 1 | PPGCnnN· |
 | sort | 3 | PPGCFCN· PPGCFCN· PPGCFCN· |
 | sparse | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
-| spectral | 9 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| spectral | 9 | PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB |
 | stable_reduction | 7 | PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFHNB PPGCFHN· PPGCFCNB |
 | state_space | 1 | PPGCFCN· |
 | state_update | 5 | PPGCnnN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFFNB |

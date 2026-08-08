@@ -10105,17 +10105,25 @@ _x86_elementwise_loaded = False
 
 
 def _x86_elementwise_lib_path() -> Optional[Path]:
-    """Locate libtessera_x86_elementwise.so (env override → CMake build dir)."""
-    env = os.environ.get("TESSERA_X86_ELEMENTWISE_LIB")
-    candidates: list[Path] = []
-    if env:
-        candidates.append(Path(env))
+    """Locate the x86 image through the fail-closed build-selection contract."""
+    if env := os.environ.get("TESSERA_X86_ELEMENTWISE_LIB"):
+        path = Path(env).expanduser()
+        return path if path.is_file() else None
     root = Path(__file__).resolve().parents[2]
-    candidates.append(root / "build/src/compiler/codegen/tessera_x86_backend" / "libtessera_x86_elementwise.so")
-    for c in candidates:
-        if c.is_file():
-            return c
-    return None
+    if selected_build := os.environ.get("TESSERA_BUILD_DIR"):
+        build = Path(selected_build).expanduser()
+        if not build.is_absolute():
+            build = root / build
+        path = build / (
+            "src/compiler/codegen/tessera_x86_backend/"
+            "libtessera_x86_elementwise.so"
+        )
+        return path if path.is_file() else None
+    path = root / (
+        "build/src/compiler/codegen/tessera_x86_backend/"
+        "libtessera_x86_elementwise.so"
+    )
+    return path if path.is_file() else None
 
 
 def _load_x86_elementwise() -> ctypes.CDLL | None:
@@ -10274,7 +10282,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_spectral_filter_f32": [
             ctypes.c_char_p, c_f32, c_f32, c_f32, i64
         ],
-        "tessera_x86_dct_f32": [ctypes.c_char_p, c_f32, c_f32, i64, i64, ctypes.c_float],
+        "tessera_x86_dct_f32": [
+            ctypes.c_char_p, c_f32, c_f32, i64, i64, ctypes.c_int,
+            ctypes.c_float,
+        ],
         "tessera_x86_spectral_conv_f32": [
             ctypes.c_char_p, c_f32, i64, c_f32, i64, c_f32, i64, i64
         ],
@@ -10288,7 +10299,7 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         ],
         "tessera_x86_dct_storage": [
             ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, i64, i64,
-            ctypes.c_int, ctypes.c_float,
+            ctypes.c_int, ctypes.c_int, ctypes.c_float,
         ],
         "tessera_x86_spectral_conv_storage": [
             ctypes.c_char_p, ctypes.c_void_p, i64, ctypes.c_void_p, i64,
@@ -10304,7 +10315,7 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         ],
         "tessera_x86_dct_strided_storage": [
             ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, i64, i64, i64,
-            ctypes.c_int, ctypes.c_float,
+            ctypes.c_int, ctypes.c_int, ctypes.c_float,
         ],
         "tessera_x86_spectral_conv_strided_storage": [
             ctypes.c_char_p, ctypes.c_void_p, i64, ctypes.c_void_p, i64,
@@ -12464,12 +12475,14 @@ def _execute_x86_compiled_stat_reduce(artifact: RuntimeArtifact, args: Any) -> A
         var.ctypes.data_as(cf),
     )
     kept_shape = tuple(int(x.shape[i]) for i in kept)
-    var = var.reshape(kept_shape) if kept_shape else var.reshape(())
+    result: Any = var.reshape(kept_shape) if kept_shape else var.reshape(())
     if op_name == "tessera.std":
-        var = np.sqrt(var).astype(np.float32)
+        result = np.sqrt(result).astype(np.float32)
     if keepdims:
-        var = var.reshape([1 if i in axes else int(x.shape[i]) for i in range(n)])
-    return var.astype(np.float32)
+        result = result.reshape(
+            [1 if i in axes else int(x.shape[i]) for i in range(n)]
+        )
+    return result.astype(np.float32)
 
 
 _X86_STABLE_REDUCE_OPS = ("tessera.logsumexp", "tessera.log_softmax", "tessera.softmax_safe", "tessera.sigmoid_safe")
@@ -12908,7 +12921,7 @@ def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any
     if op_name == "tessera.spectral_filter":  # pointwise cmul
         return (np.asarray(operands[0]) * np.asarray(operands[1])).astype(np.complex64)
 
-    if op_name == "tessera.dct":  # type-2 via FFT
+    if op_name == "tessera.dct":  # phase-corrected type-2 via FFT
         if int(kwargs.get("type", 2)) != 2:
             raise ValueError("compiled DCT currently supports only type=2")
         x = np.asarray(operands[0])
@@ -12919,7 +12932,12 @@ def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any
         spec = np.asarray(fftexec("tessera.fft", y, {"axis": ax}))
         sl = [slice(None)] * spec.ndim
         sl[ax] = slice(0, n)
-        return np.real(spec[tuple(sl)]).astype(np.float32)
+        phase_shape = [1] * spec.ndim
+        phase_shape[ax] = n
+        phase = np.exp(-1j * np.pi * np.arange(n) / (2.0 * n)).reshape(
+            phase_shape
+        )
+        return np.real(spec[tuple(sl)] * phase).astype(np.float32)
 
     if op_name == "tessera.spectral_conv":  # FFT convolution
         x = np.asarray(operands[0], np.float32)
@@ -13012,7 +13030,7 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
     lib = _load_x86_elementwise()
     if lib is None or not hasattr(lib, "tessera_x86_spectral_composite_package_abi"):
         raise RuntimeError("x86 compound spectral package is unavailable")
-    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v5":
+    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v6":
         raise RuntimeError("x86 compound spectral package ABI mismatch")
     digest = str(contract["schedule_digest"]).encode("ascii")
     output_shape = tuple(int(dim) for dim in contract["output_shape"])
@@ -13060,8 +13078,13 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
         output = np.empty(output_shape, operands[0].dtype)
         outer, n, inner = folded_axis(tuple(x.shape), axis)
         rc = lib.tessera_x86_dct_strided_storage(
-            digest, vptr(x), vptr(output), outer, n, inner, storage_code,
-            spectral_output_scale(op_name, normalization, 2 * n),
+            digest, vptr(x), vptr(output), outer, n, inner,
+            int(contract["dct_type"]), storage_code,
+            spectral_output_scale(
+                op_name,
+                normalization,
+                2 * (n - 1) if int(contract["dct_type"]) == 1 else 2 * n,
+            ),
         )
     elif op_name == "tessera.spectral_conv":
         x = np.ascontiguousarray(operands[0])
@@ -32122,7 +32145,12 @@ def _apple_gpu_dispatch_spectral(op_name: Any, operands: Any, kwargs: Any, np: A
         spec = _g(y, "fft", axis=axis)
         sl = [slice(None)] * spec.ndim
         sl[axis] = slice(0, n)
-        return np.ascontiguousarray(np.real(spec[tuple(sl)]))
+        phase_shape = [1] * spec.ndim
+        phase_shape[axis] = n
+        phase = np.exp(-1j * np.pi * np.arange(n) / (2.0 * n)).reshape(
+            phase_shape
+        )
+        return np.ascontiguousarray(np.real(spec[tuple(sl)] * phase))
     if bare == "spectral_conv":
         w = np.asarray(operands[1])
         n = x.shape[-1] + w.shape[-1] - 1

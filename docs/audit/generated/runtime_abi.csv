@@ -772,8 +772,10 @@ x86,tessera_x86_ebm_partition_exact_f32,ebm_partition_exact,f32,src/compiler/cod
 x86,tessera_x86_epilogue_bias_fp32,epilogue_bias_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_epilogue_bias_gelu_fp32,epilogue_bias_gelu_fp32,,src/compiler/codegen/tessera_x86_backend/src/kernels/epilogue.cpp
 x86,tessera_x86_fft_c2c_f32,fft_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
+x86,tessera_x86_fft_c2r_full_complex_f32,fft_c2r_full_complex,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_fft_c2r_packed_f32,fft_c2r_packed,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_fft_mixed_c2c_f32,fft_mixed_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
+x86,tessera_x86_fft_r2c_full_complex_f32,fft_r2c_full_complex,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_fft_r2c_packed_f32,fft_r2c_packed,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_fft_six_step_c2c_f32,fft_six_step_c2c,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_flash_attn_bwd_f32,flash_attn_bwd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_flash_attn_f32.cpp
@@ -815,6 +817,7 @@ x86,tessera_x86_scatter_f32,scatter,f32,src/compiler/codegen/tessera_x86_backend
 x86,tessera_x86_selective_ssm_bwd_f32,selective_ssm_bwd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_ssm_bwd_f32.cpp
 x86,tessera_x86_spectral_composite_package_abi,spectral_composite_package_abi,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_spectral_conv_f32,spectral_conv,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
+x86,tessera_x86_spectral_conv_full_complex_comparison_f32,spectral_conv_full_complex_comparison,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_spectral_conv_storage,spectral_conv_storage,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_spectral_conv_strided_storage,spectral_conv_strided_storage,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp
 x86,tessera_x86_spectral_filter_f32,spectral_filter,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp

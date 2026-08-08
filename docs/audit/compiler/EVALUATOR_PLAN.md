@@ -2,12 +2,16 @@
 status: Ratified (direction locked 2026-06-11); implementation phased below
 classification: Design / Roadmap
 authority: Compiler evaluator architecture — supersedes ad-hoc benchmark/conformance framing
-last_updated: 2026-07-22
+last_updated: 2026-08-08
 audit_role: plan
 plan_state: landing
 ---
 # Tessera Compiler Evaluator — Architecture & Roadmap
 
+> **Routing:** start at [`README.md`](README.md). This document owns evaluator
+> rungs, evidence, and promotion acceptance; global ordering lives only in
+> [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
+>
 > **One-line thesis.** Tessera's compiler is past surface-inventory mode. The
 > next unlock is not more ops — it is to make the **evaluator** generative,
 > execution-derived, and **backend-rung-aware**, so the conformance matrix,
@@ -102,12 +106,12 @@ Verdict(p) = {
   inputs: [generated, hidden],                          # hidden = candidate never sees
   per_backend: {
     <target>: {
-      rung: <1..7>,                                      # highest honest rung reached
+      rung: <1..8>,                                      # highest honest rung reached
       correctness: PASS | FAIL | UNPROVEN,               # multi-oracle (§4)
       execution_kind: reference | optimized_native | artifact_only,
       provenance_ok: bool,                               # NOT a silent fallback
       semantics_unproven: bool,                          # e.g. WGMMA assembles, not proven
-      latency_ms?: {median,p10,p90},                     # only where rung>=6 (or Apple/x86)
+      latency_ms?: {median,p10,p90},                     # only for real execution (rung>=7)
       blocker: (op, failing_gate) | null,
     }, ...
   }
@@ -121,7 +125,7 @@ reward(p, target) =
   0   if  rung < demanded_rung           # compile/lower/assemble failed
       or  correctness == FAIL
       or  provenance_ok == false         # silent fallback ≠ success
-  else  speedup_vs_reference(target)     # perf gradient — ONLY where rung>=6
+  else  speedup_vs_reference(target)     # perf gradient — ONLY where rung>=7
 ```
 
 This is the convergent shape of FunSearch / AlphaEvolve / Magellan / Compiler-R1
@@ -152,30 +156,28 @@ to avoid NaN/Inf regions that dominate FP comparison.
 
 ---
 
-## 5. Driving NVIDIA & AMD ROCm forward (without local silicon)
+## 5. Driving NVIDIA and AMD ROCm with architecture-owned evidence
 
-Three hardware-free levers, in priority order:
+The original plan was written before exact `sm_120a` and `gfx1151` execution
+was available. The hardware-free levers remain useful for every untested
+architecture, but they are prerequisites—not substitutes—for its own device
+proof:
 
-1. **Assembler-text emission, THEN assembly of every emitted kernel (rungs
-   2.5 → 3) — corrected.** The earlier framing ("assemble Tessera's real emitted
-   PTX — buildable now") had an unmet prerequisite: **Tessera does not emit
-   assembler text today.** `@jit(target="rocm")` / the NVIDIA pipeline stop at
-   Target IR MLIR (`tessera_rocm.mfma` / `tessera.tile.wgmma`), and
-   `scripts/validate_nvcc_compile.py` assembles its *own* 8 hand-written CUDA
-   stubs, not Tessera output. So the real sequence is:
-   (i) **rung 2.5 — build the emission path**: lower `tessera.tile.wgmma` →
+1. **Assembler-text emission, then assembly of every emitted kernel (rungs
+   3 → 4).** The required sequence is:
+   (i) **rung 3 — emit assembler text**: lower `tessera.tile.wgmma` →
    actual `wgmma.mma` PTX (and `tessera_rocm.mfma` → `v_mfma` AMDGCN), one narrow
    kernel at a time (e.g. an sm_90 bf16 matmul);
-   (ii) **rung 3 — assemble it**: `ptxas -arch=sm_90a` / `hipcc`+`llvm-mc` over
+   (ii) **rung 4 — assemble it**: `ptxas -arch=sm_90a` / `hipcc`+`llvm-mc` over
    the *real emitted* text — strictly stronger than `nvcc -ptx`; catches register
    pressure and illegal encodings. This is the NVIDIA/ROCm analog of the Apple
    provenance gate: it turns "we emit NVIDIA artifacts" into "every kernel we
-   emit assembles for sm_90a." Rung 3 runs on a Linux x86 CI box with the
+   emit assembles for sm_90a." Rung 4 runs on a Linux x86 CI box with the
    CUDA/ROCm toolchain and **no GPU**; both rungs skip-clean on the arm64 dev Mac
-   (no toolchain), so rung 2.5 (emission) is the only piece verifiable up to
+   (no toolchain), so rung 3 (emission) is the only piece verifiable up to
    "emits valid-looking text" locally — assembly is Linux-CI.
 
-2. **Correctness transfer via backend-independent Tile IR (rungs 2+4).**
+2. **Algorithm transfer via backend-independent Tile IR.**
    Graph/Schedule/Tile IR is backend-neutral. If the Evaluator proves `p`
    correct on Apple/x86 (which execute) **and** proves the NVIDIA lowering is a
    structure-preserving transform of the *same* Tile IR — same `fusion_groups`,
@@ -186,7 +188,7 @@ Three hardware-free levers, in priority order:
    - **Irreducible limit (stated plainly):** this transfers *algorithm*
      correctness, **not** *codegen faithfulness*. Whether the WGMMA / TMA /
      tcgen05 / MFMA microkernel actually implements its descriptor is the one
-     thing needing rung 5 (symbolic) or rung 7 (hardware). A subtly-wrong WGMMA
+     thing needing rung 6 (symbolic) or rung 8 (hardware + oracle). A subtly-wrong WGMMA
      descriptor **assembles fine and computes garbage** — so for these ops the
      Evaluator marks `semantics_unproven = true` and never lets `assembles`
      masquerade as correct.
@@ -202,9 +204,9 @@ Three hardware-free levers, in priority order:
 need to *own* a GPU — you need a thin, well-defined hardware-touch step, and the
 **G7 launch bridge** (`tsrRegisterGpuLauncher` / `tsrLaunchKernel`, landed
 2026-06-10) is the seam (it is the NVIDIA audit's own next-work item #2). Because
-rungs 1–5 are green *before* any silicon, a nightly/on-demand GPU runner (GH
+rungs 1–6 can be green *before* any silicon, a nightly/on-demand GPU runner (GH
 Actions GPU, Lambda, RunPod, Modal; MI300 cloud increasingly cheap) runs the
-**already-assembly-validated batch** and promotes rungs 6–7 across the whole set
+**already-assembly-validated batch** and promotes rungs 7–8 across the whole set
 in hours. The hardware session is a batch promotion, not a bring-up.
 
 ---
@@ -221,8 +223,8 @@ in hours. The hardware session is a batch promotion, not a bring-up.
 
 | | correctness/coverage | perf |
 |---|---|---|
-| **Apple GPU / x86** | real today (rungs 1–7) | real today (measured) |
-| **NVIDIA / ROCm** | real today to rung 4 (assembles + codegen-stable + algorithm-transfer); rung 5 symbolic aspirational; rung 7 in HW window | **pre-trainable today, validated only in a HW window** — never claim a perf flywheel before an executed signal exists |
+| **Apple GPU / x86** | exact programs can reach rung 8 | measured only where the packet records a valid timing domain |
+| **NVIDIA / ROCm** | bounded `sm_120a`/`gfx1151` programs can reach rung 8; every other architecture stops at its own earned rung | measured only from matching architecture/device evidence; no transfer of performance proof |
 
 The schema **enforces** this asymmetry: an `artifact_only` backend can earn a
 correctness reward, never a perf reward — which structurally prevents the Sakana
@@ -309,8 +311,8 @@ count authority; this is a structural map, not a count.
 | **Evaluator engine** (E1) | ✅ landed | `evaluator.py` — `Rung` ladder (8 rungs), `verdict_for`/`evaluate` (execution-derived, provenance-gated), `run_native` |
 | **Oracles** | ✅ landed | vertical (`evaluate`), horizontal/PolyJuice (`horizontal_equivalence`), metamorphic (`metamorphic_equivalence`), **DESIL cross-path** (`cross_path_equivalence`) |
 | **Legal-by-construction inputs** (E2) | ✅ landed | `safe_input` (DESIL UB-elim / NNSmith) |
-| **Conformance corroboration** (E1c) | ✅ landed | `conformance_evaluator.py` — all complete cells re-derived at rung 7 ("derive validates declare") |
-| **NVIDIA emission/execution** | ✅ `sm_120` reaches rung 7 | The host-free PTX emitter remains covered, while the exact RTX 5070 Ti lane now packages, launches, and numerically verifies compiler-produced `sm_120a` images. Other SM generations remain compile-only or hardware-deferred and do not inherit this proof. |
+| **Conformance corroboration** (E1c) | ✅ landed | `conformance_evaluator.py` — complete cells are re-derived at rung 8 ("derive validates declare") |
+| **NVIDIA emission/execution** | ✅ bounded `sm_120` programs reach rung 8 | The host-free PTX emitter remains covered, while the exact RTX 5070 Ti lane packages, launches, and numerically verifies compiler-produced `sm_120a` images. Other SM generations remain compile-only or hardware-deferred and do not inherit this proof. |
 | **Flywheel** (E3) | ✅ landed | `flywheel.py` (records, roofline, sweep, per-chip calibration, persist/distill) + `flywheel_autotune.py` (autotune_v2 bridge, `autotune_matmul`) |
 | **Scored environment / grader** (E5) | ✅ landed | `compiler_grader.py` (TensorBench-style, hidden inputs, anti-cheat) + `attention_tasks.py` (LongCA mask×seqlen) |
 | **Search layers** (E5) | ✅ landed | `magellan.py` (gated heuristic evolution) + `alphaevolve.py` (evaluator-driven search; reward-hack rejection proven) |
@@ -334,7 +336,7 @@ flywheel,flywheel_autotune,compiler_grader,attention_tasks,magellan,alphaevolve}
 One engine, one generated program set, a per-backend `Verdict`:
 - *Apple:* horizontal-equivalence oracle (run `p` through its fusion rewrites,
   assert pre ≡ post on Apple GPU) + provenance gate (silent numpy fallback =
-  hard FAIL) → reaches rung 7; *emits* conformance rows rather than sitting
+  hard FAIL) → reaches rung 8 after an oracle match; *emits* conformance rows rather than sitting
   beside the matrix.
 - *NVIDIA/ROCm:* the `ptxas`/`hipcc` assembly rung (rung 3) over Tessera's real
   emitted kernels, replacing the 8 hand stubs; WGMMA/MFMA tagged
@@ -354,7 +356,7 @@ op-dependency coverage to steer generation toward novel adjacencies.
 corpus; decision-tree distillation for O(1) dispatch.
 
 **Phase E4 — NVIDIA/ROCm hardware window. 🟡 architecture-partial.** CUDA and
-HIP launchers now reach rungs 6–7 on exact `sm_120a` and `gfx1151` hosts, with
+CUDA and HIP launchers now reach rungs 7–8 on exact `sm_120a` and `gfx1151` hosts, with
 hash-sealed release packets for the recorded families. Continue the same gate on
 `sm_90a`, `sm_100a`, RDNA4, and CDNA hardware; never transfer proof between
 architectures. Fine-tune cost models only from the matching target's evidence.
@@ -367,16 +369,16 @@ anti-cheat (§8) baked in.
 
 ## 11. Non-goals, risks, honesty constraints
 
-- **`ptxas` clean ≠ hardware-verified.** Rung 3 proves *assembleability*, not
+- **`ptxas` clean ≠ hardware-verified.** Rung 4 proves *assembleability*, not
   computation. Never let a green assembly rung read as correctness, especially
   for WGMMA/TMA/tcgen05/MFMA (`semantics_unproven`).
 - **Algorithm transfer ≠ codegen transfer.** §5 lever 2 transfers Tile-IR
-  semantics, not microkernel faithfulness; the last mile is rung 5 or 7.
+  semantics, not microkernel faithfulness; the last mile is rung 6 or 8.
 - **No perf flywheel claim for NVIDIA/ROCm before an executed signal.** Apple
   perf is real; NVIDIA/ROCm perf is pre-trained + HW-window-validated. Say which.
-- **Symbolic (rung 5) is heavy.** Treat finite-field/SMT equivalence as a
+- **Symbolic (rung 6) is heavy.** Treat finite-field/SMT equivalence as a
   research track, not a near-term gate; the credible near-term closer is the
-  hardware batch (rung 7).
+  hardware-plus-oracle batch (rung 8).
 - **Generated dashboards stay the count authority.** The Evaluator *emits into*
   conformance / benchmark / record surfaces; it never becomes a second
   hand-maintained source of truth (Decision #26).
@@ -395,6 +397,6 @@ anti-cheat (§8) baked in.
 - `tests/unit/_diff_lane.py` + the differential generators → the Evaluator's
   generation + oracle core.
 - `scripts/validate_nvcc_compile.py` / `validate_hipcc_compile.py` → grow into
-  the rung-3 assembly lane over real emitted kernels.
+  the rung-4 assembly lane over real emitted kernels.
 - `autotune_v2.py` → the Flywheel's search engine.
-- G7 `tsrRegisterGpuLauncher` → the rung-6/7 hardware seam.
+- G7 `tsrRegisterGpuLauncher` → the rung-7/8 hardware seam.

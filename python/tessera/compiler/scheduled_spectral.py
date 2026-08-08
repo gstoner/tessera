@@ -41,28 +41,28 @@ class SpectralArchitectureProfile:
 _ARCHITECTURE_PROFILES = {
     "x86": SpectralArchitectureProfile(
         "x86", "x86", "zen5-avx512", "ready",
-        "tessera.x86.spectral_composite.v5", "exact_device_validated",
+        "tessera.x86.spectral_composite.v6", "exact_device_validated",
         "exact Zen 5 package",
     ),
     "rocm": SpectralArchitectureProfile(
         "rocm", "rocm", "gfx1151", "ready",
-        "tessera.rocm.spectral_composite.v5", "exact_device_validated",
+        "tessera.rocm.spectral_composite.v6", "exact_device_validated",
         "exact gfx1151 package",
     ),
     "rocm_gfx1151": SpectralArchitectureProfile(
         "rocm_gfx1151", "rocm", "gfx1151", "ready",
-        "tessera.rocm.spectral_composite.v5", "exact_device_validated",
+        "tessera.rocm.spectral_composite.v6", "exact_device_validated",
         "exact gfx1151 package",
     ),
     "rocm_gfx1200": SpectralArchitectureProfile(
         "rocm_gfx1200", "rocm", "gfx1200", "fail_closed",
-        "tessera.rocm.spectral_composite.v5", "build_only",
+        "tessera.rocm.spectral_composite.v6", "build_only",
         "architecture-stamped package exists; RDNA 4 schedule and exact-device "
         "evidence are required for execution",
     ),
     "rocm_gfx1250": SpectralArchitectureProfile(
         "rocm_gfx1250", "rocm", "gfx1250", "fail_closed",
-        "tessera.rocm.spectral_composite.v5", "build_only",
+        "tessera.rocm.spectral_composite.v6", "build_only",
         "architecture-stamped package exists; gfx1250 schedule and exact-device "
         "evidence are required for execution",
     ),
@@ -178,8 +178,8 @@ def define_spectral_program_contract(
         raise ValueError("TSOL shape signatures use positive extents or -1")
     selected_dct_type = int(dct_type if dct_type is not None else 2)
     if op_name == "tessera.dct":
-        if selected_dct_type != 2:
-            raise ValueError("scheduled DCT currently supports only dct_type=2")
+        if selected_dct_type not in {1, 2, 3, 4}:
+            raise ValueError("scheduled DCT requires dct_type in {1, 2, 3, 4}")
     elif dct_type is not None:
         raise ValueError("dct_type applies only to tessera.dct")
     else:
@@ -397,7 +397,11 @@ class ScheduledSpectralArtifact:
             raise ValueError("TSOL package workspace policy mismatch")
         expected_fusion = {
             "tessera.spectral_filter": "standalone_complex_multiply_v1",
-            "tessera.dct": "even_extension_c2c_v1",
+            "tessera.dct": (
+                "even_extension_c2c_phase_corrected_v2"
+                if self.dct_type == 2
+                else "direct_cosine_kernel_v1"
+            ),
             "tessera.spectral_conv": "packed_rfft_cmul_irfft_single_artifact_v1",
             "tessera.stft": (
                 "frame_window_packed_rfft_single_artifact_v1"
@@ -515,20 +519,29 @@ def lower_scheduled_spectral(
             else "ts_spectral_filter_plan_hostptr_amd"
         )
     elif op_name == "tessera.dct":
-        fusion_topology = "even_extension_c2c_v1"
+        fusion_topology = (
+            "even_extension_c2c_phase_corrected_v2"
+            if semantic_contract.dct_type == 2
+            else "direct_cosine_kernel_v1"
+        )
         if len(shapes) != 1:
             raise ValueError("dct requires one input")
         n = shapes[0][normalized_axis]
         batch_shape = shapes[0][:normalized_axis] + shapes[0][normalized_axis + 1 :]
-        child_shape = (*batch_shape, 2 * n)
-        children = (_child(compiler_target, "tessera.fft", child_shape),)
+        if semantic_contract.dct_type == 2:
+            child_shape = (*batch_shape, 2 * n)
+            children = (_child(compiler_target, "tessera.fft", child_shape),)
         output = shapes[0]
         padding = (0, n)
         crop = (0, n)
-        # Host staging (input/output) plus two complex device buffers at 2N.
         elements = math.prod(batch_shape or (1,)) * n
-        workspace = _packed_workspace_bytes(
-            (4, elements), (4, elements), (8, 2 * elements), (8, 2 * elements)
+        workspace = (
+            _packed_workspace_bytes(
+                (4, elements), (4, elements), (8, 2 * elements),
+                (8, 2 * elements),
+            )
+            if semantic_contract.dct_type == 2
+            else _packed_workspace_bytes((4, elements), (4, elements))
         )
         entry = (
             "tessera_x86_dct_strided_storage"

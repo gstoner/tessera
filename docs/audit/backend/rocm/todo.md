@@ -7,6 +7,28 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` — **gfx1151
+exact proof retained; no ROCm physical change.** The codegen dashboard now
+uses one manifest op×target denominator and reports runtime paths separately.
+The two reference rows remain visible rather than being silently promoted; no
+HIP image, selector, timing, or architecture support changes.
+
+Cross-backend sync `X86-BUILD-ARTIFACT-DISCOVERY-2026-08-08` — **shared build
+contract parity validated; no ROCm physical change.** The x86 runtime and
+packager now join ROCm in honoring the fail-closed `TESSERA_BUILD_DIR`
+selection. No HIP image, gfx1151 schedule, device evidence, or selector is
+changed; a missing selected x86 tree cannot fall through to ROCm's build
+artifacts accidentally.
+
+Cross-backend sync `STANDALONE-COVERAGE-TRUTH-2026-08-08` — **gfx1151 package
+evidence is now represented without changing a selector.** The standalone
+dashboard generates its registry and compiler-layer counts, exact-target
+manifest summary, and open queues. The audit no longer hides the verified
+Adafactor Schedule→Tile/native package behind a single-GPU terminal override,
+and the benchmark inventory now names the physical TSOL and Adafactor
+harnesses. This is an audit correction only; no new timing eligibility,
+gfx1200/gfx1250 support, or architecture transfer is claimed.
+
 Cross-backend sync `TSOL-NATIVE-REAL-FFT-2026-08-08` — **gfx1151 correctness
 retained; performance promotion remains open.** The v3 FFT artifact now binds
 logical length separately from physical length, an explicit Hermitian layout,
@@ -181,14 +203,19 @@ synchronized WSL host-wall measurements: they justify retaining the launch
 topology but remain ineligible for a performance-selector promotion claim
 until bare-metal HIP-event/ROCprofiler calibration is available.
 
-Cross-backend sync `TSOL-DCT-CONTRACT-2026-08-08` — **shared correctness hole
-closed; gfx1151 type-II identity retained.** The public API, Graph verifier,
-autodiff rules, and `tessera.scheduled_spectral.v5` artifact now reject DCT
-types I/III/IV instead of silently executing type II. `dct_type = 2` is part of
-the template digest, exact Schedule digest, and launch Tile artifact. DCT and
-spectral convolution are now canonical TSOL inventory rows. No new gfx1151
-physical type or performance claim is made; native type-I/III/IV work remains
-open behind separate exact-device evidence.
+Cross-backend sync `TSOL-SPECTRAL-POLICY-2026-08-08` — **DCT physical coverage
+expanded on gfx1151; performance promotion remains open.** DCT-I/II/III/IV now
+carry distinct public, autodiff, Graph, Schedule, and Tile identities.
+`tessera.rocm.spectral_composite.v6` keeps phase-corrected type II on its FFT
+child and executes types I/III/IV through separately hashed direct cosine
+kernels; exact-device smoke and compiled-suite coverage pass. The shared
+chunked-STFT state binds policy and overlap lineage and fails closed for
+centred streaming until lookahead is explicit. No direct-kernel selector or
+performance claim is made for the newly added DCT types.
+The v6 boundary audit also routes the standalone convolution export through
+the packed R2C/C2R ABI, gives scalar convolution an explicit device kernel,
+and preserves the odd full-complex fallback for one-sample STFT/ISTFT. Direct
+standalone-ABI and canonical-package tests pass on gfx1151.
 
 Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **correctness defects
 fixed and boundary envelope expanded on gfx1151.** Var/std now use one
@@ -3003,3 +3030,14 @@ Baseline f32 maxima are `2.86e-6` for convolution, `1.23e-6` for STFT, and
 `8.77e-6` for ISTFT. WSL host-wall medians are regression evidence only;
 promotion still requires bare-metal device-event timing and a same-run
 full-complex/rocFFT comparison.
+
+The follow-on `gfx1151_stockham_bluestein_v6` path now folds real-pair packing,
+all N/2 Stockham stages, and Hermitian post-processing into one fused-LDS RFFT
+dispatch. IRFFT likewise folds Hermitian preprocessing, inverse Stockham, N/2
+scaling, and paired-real stores into one dispatch, removing both the separate
+pre-kernel and device-to-device copy. The residency identity is
+`persistent_device_plan_fused_lds_hermitian_batch`; **58/58** focused
+Schedule→Tile and exact-device FFT/TSOL tests pass. This is a correctness and
+launch-count retain verdict only. Fresh bare-metal gfx1151 device-event timing
+and application-kernel instrumentation comparison remain required before
+performance promotion. gfx1200/gfx1250 stay fail-closed.

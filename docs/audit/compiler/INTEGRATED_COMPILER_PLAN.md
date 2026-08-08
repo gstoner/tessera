@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-06
+last_updated: 2026-08-08
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
@@ -8,13 +8,21 @@ supersedes_queues_in:
   - IR_STACK_INTEGRATION_REVIEW.md §5
   - AUTODIFF_ARCHITECTURE_REVIEW.md §5
   - TARGET_IR_REVIEW.md §5
+  - AUTODIFF_UNIFICATION_PLAN.md §7
+  - COMPILER_REFACTOR_PLAN.md §9
+  - EVALUATOR_PLAN.md §10
+  - OPTIMIZING_COMPILER_PLAN.md §5
+  - SEQUENCE_MIXER_ENGINEERING_PLAN.md §7
   - ../domain/GA_EBM_ARCHITECTURE_REVIEW.md §4
   - RIEMANNIAN_OT_PLAN.md §4
 ---
 
 # Integrated Compiler Plan
 
-One plan across seven reviews. Each review's own ranked queue stays as *evidence
+Start at [`README.md`](README.md) for the folder authority map. This is the sole
+cross-domain compiler sequencing authority.
+
+One plan across the compiler reviews and scoped plans. Each document's ranked queue stays as *evidence
 and rationale*; **this document owns sequencing and de-duplication.** Where a
 review's queue and this document disagree on ordering or cost, this document
 wins — the reviews were written independently and double-counted overlapping
@@ -23,6 +31,54 @@ work.
 Status truth remains `MASTER_AUDIT.md` and `docs/audit/generated/`
 (Decision #26). Nothing here reclassifies a row. Effort figures are engineering
 estimates for a single track with no hardware gates, not commitments.
+
+## How to execute this plan now
+
+Earlier E2E-REAL slices established content-addressed Graph→Schedule→Tile
+lineage and bounded x86/gfx1151 physical consumers. The next route is no longer
+E2E-REAL-0:
+
+1. **AD-CORE-LINEAR-1:** compiler-owned linear transposition and one paired
+   Graph-IR forward/backward CPU proof.
+2. **AD-TSOL-SPECTRAL-1:** FFT/IFFT adjoints, then packed-real/DCT, then
+   compound spectral adjoints through the existing typed artifact boundary.
+3. **AD-CORE-EFFECT-CONTROL-1:** canonical `stop_gradient`, activity/effect
+   propagation, and fail-closed region adjoints.
+4. **AD-SOLVER-IFT-1:** value-producing implicit-root/Newton autodiff lowering.
+5. **AD-RESIDUAL-EVAL-1:** complete backward-cost and residual-memory evidence
+   feeding recomputation/treeverse candidates into the Evaluator.
+6. **E2E-REAL-6:** remove duplicate lowering authorities only after migrated
+   families satisfy lineage, correctness, and architecture-owned evidence.
+
+Scoped plans own the design and acceptance details for these items. Backend
+plans own exact-device promotion. Neither creates a competing global order.
+
+Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` normalizes the
+codegen dashboard to one `BackendKernelEntry` op×target grain. Runtime paths
+are now independent evidence rather than a second additive denominator;
+exact-device verification is split from `fused`/`packaged` implementation
+presence; explicit no-kernel terminals close Tile/Target phases; and closed
+rows no longer appear as open work. This changes reporting and drift gates,
+not physical packages, selectors, or device evidence.
+
+The standalone primitive dashboard now generates its live registry totals,
+compiler-layer summary, exact-target manifest rollup, and open queues. Its
+aggregate compiler row is explicitly best-available evidence, not a universal
+backend claim. The 2026-08-08 reconciliation removed the stale Adafactor
+single-GPU terminal override and registered existing physical TSOL/Adafactor
+benchmark harnesses; it changed audit truth, not implementation or selector
+state. The remaining foundation queues are therefore the four partial
+collective Tile rows, nine planned distributed/sharding backend contracts,
+autodiff/sharding breadth, target-specific benchmark evidence, and the
+duplicate-authority deletion in E2E-REAL-6.
+
+The x86 production tool/image boundary also follows the common fail-closed
+build selection as of 2026-08-08: `TESSERA_BUILD_DIR` selects both
+`tessera-opt` and `libtessera_x86_elementwise.so`. This prevents a current
+Python contract from pairing with a stale compiler or image in another CMake
+tree. The exact-host FFT suite passes against the selected clean LLVM/MLIR 23
+tree, and the standalone comparison now measures normalized forward and
+inverse C2C execution independently.
 
 **Source reviews:**
 [GA/EBM](../domain/GA_EBM_ARCHITECTURE_REVIEW.md) ·
@@ -149,14 +205,13 @@ identical.
 | 5D | **E2E-REAL-FFT — canonical spectral FFT** — **typed artifact boundary, persistent ROCm package, and the second x86/gfx1151 performance slice implemented; hardware follow-ups remain landing, 2026-08-05.** | `schedule.fft` content-addresses mode, shape/axis, direction, normalization, storage/accumulation, algorithm, radix policy/sequence through radix 17, Bluestein size, workspace policy, residency, twiddle policy, kernel family, and launch size. x86 caches Bluestein plans and owns native AVX-512 mixed-radix Stockham codelets. gfx1151 loads a prebuilt versioned shared image whose bounded persistent plan is keyed by the exact Tile digest; Bluestein owns four M buffers including an immutable transformed chirp. Rader remains candidate-only, Bailey is rejected, and gfx1151 fused LDS remains a separate candidate. | Production `tessera-opt`, native x86 images, and `libtessera_spectral_rocm.so` rebuild. ROCm persistent plans are 1.24x--1.45x faster than legacy per-call allocation at N=257/509/1009 in synchronized WSL host-wall timing. x86 cached Bluestein is 1.57x--1.76x faster and mixed radix wins 12/13 shapes. HIP events still return zero and rocprofv3 emits no WSL timestamps, so fused LDS remains experimental pending bare-metal evidence. gfx1200/gfx1250 fail closed. |
 | 5E | **TSOL-ROCM-E2E-1 — compound spectral programs** — **typed Schedule→Tile carriers plus expanded x86/Zen 5 and ROCm/gfx1151 consumers implemented 2026-08-06.** | `schedule.spectral_program` content-addresses child FFT digests, bounded specialization template and exact shape, arbitrary axis, storage, normalization, layout, pad/crop, window/hop/frames, workspace, accumulation, native entry, and mutation lineage for all five compound spectral ops. Both runtimes consume one exact Tile artifact without Graph re-entry. Native package ABI v4 owns forward/ortho scaling, f16/bf16 conversion around f32 accumulation, and host-side arbitrary-axis pack/unpack. The HIP image exports one compiled architecture and stale cross-architecture images fail closed. | 36 combined Zen 5 contract/package/evidence tests and 15 exact gfx1151 package tests pass. Each architecture owns a 30-row full-family packet covering all five operations, seven digest-changing bounded specializations, every physical policy, and combined dynamic-axis-reduced-storage-ortho execution. x86 timing is selector-eligible; gfx1151 timing is synchronized WSL host wall and remains selector-ineligible. Separately stamped gfx1200/gfx1250 ABI-v4 packages cross-build, but their profiles remain `build_only`/fail-closed pending architecture-owned schedules and exact-device evidence. Bare-metal gfx1151 device events and Apple/NVIDIA physical consumers remain follow-ups. |
 | 5F | **ROCM-MATH-EVIDENCE + MATH-PHYSICAL-2 — stable statistics, boundary semantics, and physical math efficiency** — **gfx1151 and Zen 5 bounded slices implemented 2026-08-06.** | ROCm var/std use centered parallel Welford; unary/binary codegen preserves difficult IEEE/NumPy domains; generated HIP math modules are process-cached by family/chip/op/dtype; and x86 arithmetic scans use an evidence-selected AVX-512 Hillis--Steele prefix while extrema retain their faster scalar recurrence. Binary physical packages reject mixed input storage. | Exact gfx1151 math passes 579 tests across fp32/fp16/bf16 storage; exact Zen 5 math passes 167 tests. The gfx1151 module cache improves seven f32 host-wall medians by 1.46x--3.58x. Paired Zen 5 `cumsum`/`cumprod` improve 1.48x/1.47x. ROCm timing remains selector-ineligible under WSL; sibling GPU backends require owning-device validation. |
-| 5G | **TSOL-CONTRACT-GENERALIZE + X86-WELFORD-PARITY** — **shared contract, x86 Welford parity, and x86/gfx1151 TSOL policy expansion implemented 2026-08-06; packed compound fusion landed 2026-08-08.** | `tessera.scheduled_spectral.v5` separates a bounded template digest from each exact physical specialization and carries dynamic bounds, arbitrary axes, fp32/fp16/bf16 storage, backward/forward/ortho normalization, an explicit fail-closed DCT type, and hashed fusion topology through verified Schedule→Tile lowering. Even-length convolution/STFT/ISTFT now bind packed N/2 children; odd-window fallback identity is explicit. x86 var/std use a native mergeable-f64-Welford state ABI; ROCm var/std manifests match fp16/bf16/fp32 evidence. | Native x86 and gfx1151 packages rebuild and focused policy suites pass. v5 benchmark packets retain both consumers but do not promote gfx1151 without bare-metal device-event comparison. gfx1200/gfx1250 execution remains fail-closed; CUDA/SM120 and Apple/Metal physical consumers remain architecture-owned follow-ups. |
+| 5G | **TSOL-CONTRACT-GENERALIZE + X86-WELFORD-PARITY** — **shared contract, x86 Welford parity, and x86/gfx1151 TSOL policy expansion implemented 2026-08-06; packed fusion and DCT-I/III/IV landed 2026-08-08.** | `tessera.scheduled_spectral.v5` separates bounded template identity from exact physical specialization and carries dynamic bounds, arbitrary axes, fp32/fp16/bf16 storage, backward/forward/ortho normalization, explicit DCT-I/II/III/IV identity, and hashed fusion topology through verified Schedule→Tile lowering. Even-length compound paths bind packed N/2 children; gfx1151 v6 folds Hermitian work into fused LDS. The causal streaming-STFT policy content-addresses overlap state and fails closed for centred streaming without lookahead lineage. | Native x86 and gfx1151 correctness suites pass. Historical v5 packets remain historical; v6 promotion requires fresh clean Zen 5 and bare-metal gfx1151 evidence. Physical adoption of centred/n-FFT/full-spectrum/output-length STFT policies remains open. gfx1200/gfx1250 execution stays fail-closed; CUDA/SM120 and Apple/Metal physical consumers remain architecture-owned follow-ups. |
 | 6 | **E2E-REAL-6 — delete duplicate authorities** | After migrated families cover the required envelope, make the tracer the sole general frontend, demote the Python lowering ladder to an oracle, remove the C++ annotation skeletons, and delete backend Graph-to-Tile resynthesizers that have no retained candidate role. | Decision #31 inventory reports one production lowering per boundary; every retained second implementation is named `oracle` or `candidate` and has a differential gate. |
 
-The **first implementation PR** should contain E2E-REAL-0 and the minimal
-Schedule dialect build/registration portion of E2E-REAL-1 only. It must not mix
-in a backend kernel rewrite. The second PR makes one matmul cross the first two
-IR boundaries. The third is the gfx1151/AVX-512 hardware synchronization point.
-This keeps failures attributable and makes each PR independently reviewable.
+**Historical delivery note.** E2E-REAL-0 through the bounded E2E-REAL-5 family
+slices landed using small, attributable PRs. Preserve that vertical-slice
+discipline for the current autodiff route above; do not restart the already
+completed Schedule-dialect bootstrap.
 
 ### 0.4 Relationship to W0-W6
 
@@ -191,7 +246,7 @@ then no pass reads it.
 |---|---|---|
 | `manifold` attribute on `ebm.langevin_step` | every backend codegen (6 grep hits, all comments) | GA/EBM §1.1 |
 | `MultivectorSpec.grades`, `IsRotor`, `Even`/`Odd` | `geometric_product` — iterates all `dim²` pairs | GA/EBM §2.1 |
-| `batching_rule` axis, closed across 480 primitives | `vmap` — a Python `for` loop | Autodiff §B3 |
+| `batching_rule` axis, closed across 487 primitives | `vmap` — a Python `for` loop | Autodiff §B3 |
 | `shape_rule` axis, reported closed | `_infer_result_type` — a five-case if-chain | Frontend §G2 |
 | `!tile.fragment`, `!tile.buffer`, `!tile.tmem`, … (9 types) | partially consumed; core `tile.mma`/`tile.async_copy` and compatibility envelopes remain open | IR Stack §T1 |
 | `numeric_policy` (Decision #15a) | no carrier below Graph IR at all | IR Stack §T6 |
@@ -715,9 +770,11 @@ accumulate.
 
 ---
 
-## 8. What this plan does not cover
+## 8. Delegated detail and scope boundaries
 
-Not examined across the seven reviews, and therefore not planned:
+The integrated queue owns sequence, not every implementation detail. The
+following subjects remain delegated and must return here only when they change
+global order or a shared contract:
 
 - ~~Target IR dialects~~ — **reviewed 2026-08-02**
   ([TARGET_IR_REVIEW.md](TARGET_IR_REVIEW.md)). The `AnyType` finding **does**
@@ -729,11 +786,16 @@ Not examined across the seven reviews, and therefore not planned:
 - `emit/nvidia_cuda.py` (4722 lines) internals. `emit/rocm_hip.py` was inspected
   far enough to establish that it is an arbiter candidate/runner surface, not a
   drop-in replacement for the canonical MLIR→ROCDL package spine.
-- Spectral and TPP solver families; the collectives and neighbors dialects;
-  the RubinCPX backend.
+- Spectral implementation details are owned by E2E-REAL-5D/5E/5G and the TSOL
+  physical packages; spectral autodiff is now AD-TSOL-SPECTRAL-1. TPP solver
+  families, collectives/neighbors, and RubinCPX still require separately bound
+  work items before they enter this sequence.
 - Quantization numerics; the KV-cache and memory model.
-- The Evaluator program (`EVALUATOR_PLAN.md` §9.5) — it is a consumer of this
-  work, not a subject of it.
+- The Evaluator implementation is owned by
+  [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md). It supplies proof and promotion
+  decisions to every slice here; it does not independently set their order.
 - `WarpSpecializationPass` and `AsyncCopyLoweringPass` bodies.
 
-Absence from this plan is not a clean bill of health.
+Absence from this plan is not a clean bill of health or authorization to start
+an unbound queue. Add an owning integrated ID when delegated work becomes a
+cross-compiler priority.

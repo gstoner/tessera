@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 286 |
+| ``complete`` | 287 |
 | ``runnable_reference`` | 4 |
 | ``artifact_only`` | 0 |
-| ``partial`` | 34 |
+| ``partial`` | 33 |
 | ``planned`` | 0 |
 | **total** | **324** |
 
-## complete (286)
+## complete (287)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -118,6 +118,7 @@ each row into a single E2E tier.
 | ``ebm_refinement`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_self_verify`` | energy_based_models | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``ebm_sphere_langevin`` | energy_based_models | public | public | not_applicable | fused | fused | fused | benchmarked |
+| ``adafactor`` | functional_optimizer_step | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``adam`` | functional_optimizer_step | public | public | registered | fused | device_verified_jit | ready | none |
 | ``adamw`` | functional_optimizer_step | public | public | registered | fused | device_verified_jit | ready | none |
 | ``lion`` | functional_optimizer_step | public | public | registered | fused | device_verified_jit | ready | none |
@@ -290,15 +291,15 @@ each row into a single E2E tier.
 | ``sddmm`` | sparse | public | public | registered | fused | device_verified_jit | ready | none |
 | ``spmm_coo`` | sparse | public | public | registered | fused | device_verified_jit | ready | none |
 | ``spmm_csr`` | sparse | public | public | registered | fused | device_verified_jit | ready | none |
-| ``dct`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
-| ``fft`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
-| ``ifft`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
-| ``irfft`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
-| ``istft`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
-| ``rfft`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
-| ``spectral_conv`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
-| ``spectral_filter`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
-| ``stft`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
+| ``dct`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
+| ``fft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
+| ``ifft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
+| ``irfft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
+| ``istft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
+| ``rfft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
+| ``spectral_conv`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
+| ``spectral_filter`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
+| ``stft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``log_softmax`` | stable_reduction | public | public | registered | fused | device_verified_jit | ready | none |
 | ``logsumexp`` | stable_reduction | public | public | registered | fused | device_verified_jit | ready | none |
 | ``reduce`` | stable_reduction | public | public | registered | fused | device_verified_jit | ready | benchmarked |
@@ -331,12 +332,11 @@ each row into a single E2E tier.
 | ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
 
-## partial (34)
+## partial (33)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
 | ``target_verify`` | acceptance_verification | public | public | registered | not_applicable | not_applicable | ready | none |
-| ``adafactor`` | functional_optimizer_step | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``nonzero`` | indexing | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``arange`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``broadcast`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |

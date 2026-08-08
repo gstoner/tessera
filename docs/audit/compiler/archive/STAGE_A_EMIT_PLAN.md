@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-11
+last_updated: 2026-08-08
 audit_role: historical_design
 plan_state: superseded_for_active_execution_work
 ---
@@ -10,11 +10,11 @@ plan_state: superseded_for_active_execution_work
 > Stage-A, host-free emitter/validator work and the ISA findings that shaped it.
 > It is not the active backend-execution plan. For the active shared-lowering,
 > codegen-plugin, arbitration, and proof work, use
-> [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md); for the concrete
-> per-backend implementation handoff, use
+> [`COMPILER_REFACTOR_PLAN.md`](../COMPILER_REFACTOR_PLAN.md). The former
+> per-backend implementation handoff is archived alongside this record as
 > [`WORKSTREAM_C_HANDOFF.md`](WORKSTREAM_C_HANDOFF.md). Current executable
 > pathways live in
-> [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md).
+> [`runtime_execution_matrix.md`](../../generated/runtime_execution_matrix.md).
 
 > Consolidates the 2026-06-17 spec-grounding pass (CUDA 13.3 Programming Guide + Tile IR/Tile C++ +
 > RDNA 3.5 & RDNA 4 ISAs + Metal Feature Set Tables + MSL Spec + MPP guide + MLX source) and lays out

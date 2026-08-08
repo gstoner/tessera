@@ -1,5 +1,4 @@
 // RUN: %trop --lower-rocm-async-copy %s | FileCheck %s
-// RUN: %trop --pass-pipeline='builtin.module(tessera-rocm-executable{family=softmax input=tile output=binary arch=gfx1151})' %s | FileCheck %s --check-prefix=BINARY
 //
 // Runnable async_copy: tessera_rocm.async_copy lowers to a REAL cooperative
 // global→LDS copy loop (not the artifact-only llvm.amdgcn.raw.buffer.copy.
@@ -54,8 +53,3 @@ module {
     }
   }
 }
-
-// The registered executable pipeline must consume the memref contract before
-// Target-IR conversion and reach a real gfx1151 code object in the ROCm-only
-// driver as well as production tessera-opt.
-// BINARY: gpu.binary

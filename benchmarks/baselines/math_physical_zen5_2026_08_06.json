@@ -1,0 +1,25 @@
+{
+  "architecture": "zen5-avx512",
+  "host": "AMD Ryzen AI Max+ 395 under WSL2",
+  "iterations": 20,
+  "schema": "tessera.physical_math_evidence.v1",
+  "selector_eligible": true,
+  "storage_dtypes": ["f32"],
+  "timing_domain": "synchronized_host_wall",
+  "workload_shape": [256, 1024],
+  "rows": [
+    {"family": "unary", "op_name": "sqrt", "warm_median_ms": 0.0917395, "effective_gb_s": 22.8599, "max_abs_error": 0.0},
+    {"family": "transcendental", "op_name": "exp", "warm_median_ms": 0.8584785, "effective_gb_s": 2.4429, "max_abs_error": 9.5367431640625e-7},
+    {"family": "binary", "op_name": "add", "warm_median_ms": 0.120072, "effective_gb_s": 26.1987, "max_abs_error": 0.0},
+    {"family": "binary", "op_name": "div", "warm_median_ms": 0.113923, "effective_gb_s": 27.6128, "max_abs_error": 0.0},
+    {"family": "reduce", "op_name": "sum", "warm_median_ms": 0.153239, "effective_gb_s": 6.8494, "max_abs_error": 0.000244140625},
+    {"family": "scan", "op_name": "cumsum", "warm_median_ms": 1.124507, "effective_gb_s": 1.8650, "max_abs_error": 0.00146484375},
+    {"family": "scan", "op_name": "cummax", "warm_median_ms": 1.29428, "effective_gb_s": 1.6203, "max_abs_error": 0.0}
+  ],
+  "scan_selector_evidence": [
+    {"op_name": "cumsum", "selected_policy": "avx512_hillis_steele_16", "reference_median_ms": 1.550913, "selected_median_ms": 1.04439, "speedup": 1.484994, "max_abs_difference": 0.00006103515625},
+    {"op_name": "cumprod", "selected_policy": "avx512_hillis_steele_16", "reference_median_ms": 1.5348525, "selected_median_ms": 1.041078, "speedup": 1.474292, "max_abs_difference": 0.000005245208740234375},
+    {"op_name": "cummax", "selected_policy": "scalar_recurrence_retained", "reference_median_ms": 1.2179135, "selected_median_ms": 1.22387, "speedup": 0.995133, "max_abs_difference": 0.0},
+    {"op_name": "cummin", "selected_policy": "scalar_recurrence_retained", "reference_median_ms": 1.23195, "selected_median_ms": 1.2327975, "speedup": 0.999313, "max_abs_difference": 0.0}
+  ]
+}

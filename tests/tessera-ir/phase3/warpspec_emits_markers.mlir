@@ -8,17 +8,20 @@
 // RUN: tessera-opt --tessera-warp-specialization --allow-unregistered-dialect %s | FileCheck %s
 // RUN: tessera-opt --tessera-warp-specialization --tessera-tile-pipeline-legality --tessera-warpspec-legality --allow-unregistered-dialect %s | FileCheck %s --check-prefix=GATED
 
-// The markers print on the schedule.warp region's closing-brace attr line.
-// Anchor the checks on that line so the SSA pipeline_init role attribute cannot
-// be mistaken for the region contract.
+// Registered schedule.warp properties print at the region opening; the
+// extensible Tile scheduling markers remain on the closing-brace attr line.
+// Check both surfaces so a pipeline_init role cannot be mistaken for the
+// region contract.
+// CHECK: "schedule.warp"() <{role = "producer"}> ({
 // CHECK: tile.pipeline_init
 // CHECK-SAME: phase = 1
 // CHECK-SAME: role = "producer"
-// CHECK: }) {role = "producer", tile.pipeline = "warpspec.0", tile.warp_role = "producer"}
+// CHECK: }) {tile.pipeline = "warpspec.0", tile.warp_role = "producer"}
+// CHECK: "schedule.warp"() <{role = "consumer"}> ({
 // CHECK: tile.pipeline_init
 // CHECK-SAME: phase = 0
 // CHECK-SAME: role = "consumer"
-// CHECK: }) {role = "consumer", tile.pipeline = "warpspec.0", tile.warp_role = "consumer"}
+// CHECK: }) {tile.pipeline = "warpspec.0", tile.warp_role = "consumer"}
 // CHECK-NOT: tile.pipeline_state = #tile.pipeline_state
 
 // The legality gates pass → the IR is still emitted (func survives).

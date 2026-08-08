@@ -9,7 +9,7 @@ This is an agent-friendly rendering of the project eval strategy. `tests/COMPILE
 | Eval Family | Required Coverage | Gate |
 | --- | --- | --- |
 | Spec conformance | Canonical API symbols, named pipeline aliases, dialect symbols, and README phase/status claims match the implementation. | No stale public contracts or unsupported status claims. |
-| End-to-end compiler evals | Representative Python/API samples lower through Graph IR, Schedule IR, Tile IR, and Target IR with semantic invariants preserved. | Required IR layers emitted and no illegal effect, shape, layout, or memory-space transition. |
+| End-to-end compiler evals | Representative Python/API samples produce lineage-linked Graph, Schedule, Tile, Target, backend, image, descriptor, and runtime evidence; package-only and compiler-boundary E2E remain distinct. | Every adjacent digest joins, the declared producer consumed the preceding artifact, semantic metadata survives or has a named drop, and fallback is disabled for execution claims. |
 | Numerical correctness | Supported operators compare against NumPy/PyTorch-style references across shape classes, seeds, and dtype-specific tolerances. | Results stay within the declared tolerance for each dtype and backend mode. |
 | Shape/layout evals | Symbolic shapes, tile boundaries, layout transforms, sharding plans, halo inference, and neighborhood topology cases. | Valid programs infer stable metadata; invalid programs fail before lowering. |
 | Diagnostics quality | Invalid programs for effects, distributions, target support, memory spaces, and shapes produce stable useful errors. | Diagnostics include source context, compiler stage, violated invariant, and actionable category. |
@@ -25,4 +25,4 @@ This is an agent-friendly rendering of the project eval strategy. `tests/COMPILE
 | Fast local | Spec conformance, documentation smoke checks, context graph generation checks, sample import checks, and CLI/package health. | Developer opt-in and cheap enough for pre-commit use. |
 | CI deterministic | Project evals that require no accelerator, including context graph output freshness, and do not depend on machine-specific timings. | Always on once the corresponding eval harness exists. |
 | Scheduled | Numerical sweeps, broader sample execution, documentation execution, and performance regression checks. | Nightly or weekly depending on runtime cost. |
-| Hardware-marked | SM80/SM90/SM100, ROCm, and distributed backend evals. | Opt-in with explicit hardware environment flags. |
+| Hardware-marked | Apple7, NVIDIA SM120, ROCm gfx1151, x86/AVX-512, access-gated AMX, and distributed backend evals. | Opt-in through the architecture-owned exact-device command; required before changing that architecture's execution or promotion claim. |

@@ -712,11 +712,25 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
-        supported_ops=_ops(
-            "artifact_only",
-            ("tessera.matmul",),
-            reason="ROCm 7.2.4 RDNA 3.5 (Strix Halo APU) WMMA artifact; HIP execution gated on real gfx1151 silicon",
-        ),
+        supported_ops={
+            **_ops(
+                "artifact_only",
+                ("tessera.matmul",),
+                reason=(
+                    "ROCm 7.2.4 RDNA 3.5 (Strix Halo APU) WMMA artifact; "
+                    "HIP execution gated on real gfx1151 silicon"
+                ),
+            ),
+            **_ops(
+                "ready",
+                ("tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft"),
+                dtypes=("fp32",),
+                reason=(
+                    "Exact-device gfx1151 mixed-radix Stockham/Bluestein package "
+                    "executes through the strict rocm_fft_compiled runtime lane"
+                ),
+            ),
+        },
         # ISA §7.9 Table 33: F16/BF16/IU8 executable surface; no FP8 WMMA on
         # RDNA 3.5 (the load-bearing difference from gfx1200).
         supported_dtypes=("bf16", "fp16", "fp32", "int8", "int4"),

@@ -50,6 +50,8 @@ def collect_provider_status(
         return _rocm_status(native_proof=native_proof)
     if normalized in {"nvidia", "cuda", "cupti"}:
         return _nvidia_status(native_proof=native_proof)
+    if normalized in {"x86", "x86_64", "x86_avx512", "x86_perf"}:
+        return _x86_status(native_proof=native_proof)
     if normalized == "cpu":
         return provider_status_artifact(
             provider="cpu",
@@ -57,7 +59,7 @@ def collect_provider_status(
             status="native_available",
             diagnostics={"runtime_trace": "tessera runtime callback spine"},
         )
-    raise ValueError("provider must be one of apple, rocm, nvidia, cpu")
+    raise ValueError("provider must be one of apple, rocm, nvidia, x86, cpu")
 
 
 def validate_provider_status_artifact(payload: Mapping[str, Any]) -> None:
@@ -84,14 +86,12 @@ def _apple_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str,
     is_darwin = platform.system() == "Darwin"
     proof = dict(native_proof or {})
     counter_proof = proof.get("counter_discovery")
-    counter_discovery_available = (
-        isinstance(counter_proof, Mapping)
-        and bool(counter_proof.get("counter_discovery_available"))
+    counter_discovery_available = isinstance(counter_proof, Mapping) and bool(
+        counter_proof.get("counter_discovery_available")
     )
     command_buffer_proof = proof.get("command_buffer_timestamp")
-    command_buffer_timestamp_available = (
-        isinstance(command_buffer_proof, Mapping)
-        and bool(command_buffer_proof.get("timestamp_available"))
+    command_buffer_timestamp_available = isinstance(command_buffer_proof, Mapping) and bool(
+        command_buffer_proof.get("timestamp_available")
     )
     proof_passed = bool(
         proof.get("metal_visible")
@@ -189,6 +189,47 @@ def _nvidia_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str
     )
 
 
+def _x86_status(*, native_proof: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    proof = dict(native_proof or {})
+    proof_passed = bool(
+        proof.get("x86_64")
+        and proof.get("avx512_visible")
+        and proof.get("monotonic_raw_valid")
+        and proof.get("invariant_tsc")
+        and proof.get("rdtscp_valid")
+        and proof.get("affinity_stable")
+        and proof.get("clock_agreement_valid")
+        and proof.get("perf_event_open")
+        and proof.get("timing_sample_valid")
+        and proof.get("event_map_valid")
+    )
+    status: ProviderStatus
+    if proof_passed:
+        status = "native_available"
+    elif proof:
+        status = "native_failed"
+    else:
+        status = "planned"
+    diagnostics: dict[str, Any] = {
+        "platform": platform.platform(),
+        "native_provider": "CLOCK_MONOTONIC_RAW + fenced RDTSCP + perf_event_open + exact event-map digest",
+        "native_proof_required": (
+            "exact x86/AVX-512 host, stable CPU affinity, clock agreement, readable perf task-clock sample, and event-map digest"
+        ),
+        "availability_rule": (
+            "x86 remains planned/native_failed until the multi-clock timing artifact and perf-event proof pass"
+        ),
+    }
+    if proof:
+        diagnostics["native_proof"] = proof
+    return provider_status_artifact(
+        provider="x86",
+        target="x86_avx512",
+        status=status,
+        diagnostics=diagnostics,
+    )
+
+
 def _target_for_provider(provider: str) -> str:
     normalized = provider.strip().lower().replace("-", "_")
     if normalized in {"apple", "metal", "apple_gpu"}:
@@ -197,6 +238,8 @@ def _target_for_provider(provider: str) -> str:
         return "rocm"
     if normalized in {"nvidia", "cuda", "cupti"}:
         return "nvidia"
+    if normalized in {"x86", "x86_64", "x86_avx512", "x86_perf"}:
+        return "x86_avx512"
     return normalized
 
 

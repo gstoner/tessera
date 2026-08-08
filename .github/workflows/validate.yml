@@ -343,10 +343,14 @@ jobs:
         env:
           PYTHONPATH: python
           PATH: "${{ github.workspace }}/build/tools/tessera-opt:${{ github.workspace }}/build/tools/tessera-translate:/usr/lib/llvm-23/bin:${{ env.PATH }}"
+          TESSERA_OPT: "${{ github.workspace }}/build/tools/tessera-opt/tessera-opt"
         run: |
           python -m pytest \
             tests/unit/test_cli_translate.py \
             tests/unit/test_tessera_opt_build.py \
+            tests/unit/test_scheduled_attention_consumers.py::test_attention_lowers_through_one_content_addressed_tile_artifact \
+            tests/unit/test_scheduled_attention_consumers.py::test_attention_modifiers_survive_the_shared_recurrence \
+            tests/unit/test_scheduled_attention_consumers.py::test_attention_schedule_policy_tampering_fails_closed \
             -q
 
       - name: Run lit smoke (TESSERA_VALIDATE_LIT=1)

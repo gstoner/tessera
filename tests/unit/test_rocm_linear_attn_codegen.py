@@ -16,6 +16,7 @@ the codegen:
 from __future__ import annotations
 
 import re
+from collections import Counter
 from pathlib import Path
 
 from tests._support.compiler_tool import run_tessera_opt
@@ -92,3 +93,30 @@ def test_linear_attn_lowers_to_rocdl():
              "convert-gpu-to-rocdl,reconcile-unrealized-casts))")
     assert r.returncode == 0, r.stderr
     assert "rocdl.wmma" in r.stdout
+
+
+def test_via_tile_uses_typed_register_owned_fragments_and_preserves_rocdl():
+    directive = _directive("relu")
+    typed = _opt(directive,
+                 "--generate-wmma-linear-attn-kernel=via-tile=true")
+    assert typed.returncode == 0, typed.stderr
+    assert "tile.mma" in typed.stdout
+    assert "!tile.fragment<m = 16, n = 16, k = 16" in typed.stdout
+    assert "builtin.unrealized_conversion_cast" in typed.stdout
+    assert "tessera_rocm.wmma" not in typed.stdout
+
+    direct = _opt(directive, "--generate-wmma-linear-attn-kernel",
+                  "--lower-tessera-target-to-rocdl")
+    lowered = _opt(
+        directive,
+        "--generate-wmma-linear-attn-kernel=via-tile=true",
+        "--rocm-wave-lds-pipeline", "--rocm-wave-lds-legality",
+        "--lower-tile-to-rocm=arch=gfx1151",
+        "--lower-tessera-target-to-rocdl",
+    )
+    assert direct.returncode == 0, direct.stderr
+    assert lowered.returncode == 0, lowered.stderr
+    assert "tile.fragment" not in lowered.stdout
+    assert "unrealized_conversion_cast" not in lowered.stdout
+    op = re.compile(r"\b[a-z_]+\.[a-z_.]+\b")
+    assert Counter(op.findall(direct.stdout)) == Counter(op.findall(lowered.stdout))

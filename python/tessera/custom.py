@@ -7,7 +7,8 @@ from typing import Any, Callable
 
 import numpy as np
 
-from .autodiff.jvp import register_jvp
+from .autodiff.jvp import get_jvp, register_jvp
+from .autodiff.linear import make_linear_jvp
 from .autodiff.tape import install_op_wrappers
 from .autodiff.vjp import register_vjp
 
@@ -21,6 +22,8 @@ class CustomPrimitive:
     impl: Callable[..., Any]
     effect: str = "pure"
     opaque: bool = False
+    linear: bool = False
+    linear_args: tuple[int, ...] = (0,)
     shape_rule: Rule | None = None
     dtype_rule: Rule | None = None
     batching_rule: Rule | None = None
@@ -59,6 +62,18 @@ class CustomPrimitive:
 
     def def_transpose(self, fn: Rule) -> Rule:
         self.transpose_rule = fn
+        # Consumer for the declared transpose_rule (Decision #29). For a linear
+        # primitive the transpose of the forward map *is* the VJP (the adjoint
+        # l*), and the JVP is the forward applied to the tangent (∂l(w)[v] =
+        # l(v)). Wiring both here is what makes `transpose_rule` load-bearing
+        # rather than merely reported in metadata.
+        if self.linear:
+            register_vjp(self.name, fn)
+            if get_jvp(self.name) is None:
+                register_jvp(
+                    self.name,
+                    make_linear_jvp(self.impl, tuple(self.linear_args)),
+                )
         _sync_metadata(self)
         return fn
 
@@ -96,6 +111,8 @@ def custom_primitive(
     name: str,
     *,
     effect: str = "pure",
+    linear: bool = False,
+    linear_args: tuple[int, ...] = (0,),
     shape_rule: Rule | None = None,
     dtype_rule: Rule | None = None,
     vjp: Rule | None = None,
@@ -105,17 +122,25 @@ def custom_primitive(
     sharding_rule: Rule | None = None,
     masking_rule: Rule | None = None,
 ) -> Callable[[Callable[..., Any]], CustomPrimitive]:
-    """Decorate a Python reference implementation as a Tessera primitive."""
+    """Decorate a Python reference implementation as a Tessera primitive.
+
+    Set ``linear=True`` (with ``linear_args`` naming the linearly-entered
+    positional arguments) to opt into automatic transposition: a declared
+    ``transpose_rule`` is used as the VJP and the JVP is derived from linearity
+    (see ``autodiff/linear.py``), so a linear primitive needs only a forward and
+    a transpose.
+    """
 
     def decorate(fn: Callable[..., Any]) -> CustomPrimitive:
         prim = CustomPrimitive(
             name=name,
             impl=fn,
             effect=effect,
+            linear=linear,
+            linear_args=tuple(linear_args),
             shape_rule=shape_rule,
             dtype_rule=dtype_rule,
             batching_rule=batching_rule,
-            transpose_rule=transpose_rule,
             sharding_rule=sharding_rule,
             masking_rule=masking_rule,
         )
@@ -124,6 +149,11 @@ def custom_primitive(
             prim.def_vjp(vjp)
         if jvp is not None:
             prim.def_jvp(jvp)
+        # def_transpose has the side effect of wiring VJP/JVP for a linear
+        # primitive, so route the kwarg through it rather than setting the
+        # field directly.
+        if transpose_rule is not None:
+            prim.def_transpose(transpose_rule)
         return prim
 
     return decorate

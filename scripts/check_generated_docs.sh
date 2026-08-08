@@ -18,7 +18,13 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 export PYTHONPATH="${REPO_ROOT}/python${PYTHONPATH:+:${PYTHONPATH}}"
-PY="${PYTHON:-python3}"
+
+# Resolve an interpreter that can import numpy rather than trusting PATH order —
+# a python3 without it turns a passing gate into a spurious drift failure.
+# Honors $TESSERA_PYTHON / $PYTHON first. See scripts/_python_env.sh.
+# shellcheck source=_python_env.sh
+. "${SCRIPT_DIR}/_python_env.sh" || exit 1
+PY="${TESSERA_PY}"
 
 case "${1:-}" in
   "")

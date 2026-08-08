@@ -39,6 +39,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -46,7 +47,6 @@ TESSERA_OPT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
 GEMM_LIB = (REPO_ROOT / "build" / "src" / "compiler" / "codegen"
             / "Tessera_ROCM_Backend" / "runtime" / "hip"
             / "libtessera_rocm_gemm.so")
-ROCM_LIB_DIR = os.path.join(os.environ.get("ROCM_PATH", "/opt/rocm"), "lib")
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 # The macro-tiles to sweep: the L1 baseline (1x1), small (2x4), and the
@@ -113,16 +113,29 @@ def _build_hsaco(mlir_opt, mt, nt) -> bytes:
     return _extract_hsaco(ser.stdout)
 
 
+def _build_typed_hsaco(mt, nt) -> bytes:
+    """Build the full Tile fragment chain, including shared address bases."""
+    pipeline = (
+        "builtin.module("
+        "generate-wmma-gemm-kernel{via-tile=true},"
+        f"lower-tile-to-rocm{{arch={CHIP}}},"
+        "lower-tessera-target-to-rocdl,"
+        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
+        "reconcile-unrealized-casts),"
+        f"rocdl-attach-target{{chip={CHIP}}},gpu-module-to-binary)"
+    )
+    result = subprocess.run(
+        [str(TESSERA_OPT), "-", f"--pass-pipeline={pipeline}"],
+        input=_directive(mt, nt), capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"typed tessera-opt failed for {mt}x{nt}: {result.stderr}")
+    return _extract_hsaco(result.stdout)
+
+
 def _load_hip():
-    for dep in ("libamdhip64.so", "libhiprtc.so"):
-        p = os.path.join(ROCM_LIB_DIR, dep)
-        if os.path.isfile(p):
-            try:
-                ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
-            except OSError:
-                pass
     try:
-        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_GLOBAL)
+        return ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_LOCAL)
     except OSError:
         return None
 
@@ -180,6 +193,44 @@ def _time_compiled(hip, hsaco, M, N, K, mt, nt, iters):
     return ms.value / iters
 
 
+def _time_compiled_host_wall(hip, hsaco, M, N, K, mt, nt, iters):
+    """Host-wall launch timing for WSL hosts with unreliable HIP events."""
+    mod = ctypes.c_void_p()
+    if hip.hipModuleLoadData(ctypes.byref(mod), hsaco) != 0:
+        return None
+    fn = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(fn), mod, b"gemm") != 0:
+        return None
+    da, db, dd = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    for device, size in ((da, 2 * M * K), (db, 2 * K * N), (dd, 4 * M * N)):
+        if hip.hipMalloc(ctypes.byref(device), size) != 0:
+            return None
+    args = (_mr(da, M * K) + _mr(db, K * N) + _mr(dd, M * N)
+            + [ctypes.c_int64(M), ctypes.c_int64(N), ctypes.c_int64(K)])
+    array = (ctypes.c_void_p * len(args))()
+    for index, argument in enumerate(args):
+        array[index] = ctypes.cast(ctypes.byref(argument), ctypes.c_void_p)
+    launch = hip.hipModuleLaunchKernel
+    launch.argtypes = ([ctypes.c_void_p] + [ctypes.c_uint] * 6
+                       + [ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p,
+                          ctypes.c_void_p])
+    gx = (N + 16 * nt - 1) // (16 * nt)
+    gy = (M + 16 * mt - 1) // (16 * mt)
+    for _ in range(3):
+        if launch(fn, gx, gy, 1, 32, 1, 1, 0, None, array, None) != 0:
+            return None
+    hip.hipDeviceSynchronize()
+    started = time.perf_counter()
+    for _ in range(iters):
+        if launch(fn, gx, gy, 1, 32, 1, 1, 0, None, array, None) != 0:
+            return None
+    hip.hipDeviceSynchronize()
+    elapsed_ms = (time.perf_counter() - started) * 1.0e3 / iters
+    for device in (da, db, dd):
+        hip.hipFree(device)
+    return elapsed_ms
+
+
 def _time_handwritten(lib, M, N, K, mt, nt, iters):
     fn = lib.tessera_rocm_wmma_gemm_f16_bench
     fn.argtypes = [ctypes.c_int] * 6 + [ctypes.POINTER(ctypes.c_double)]
@@ -195,6 +246,14 @@ def main() -> int:
                     help="square M=N=K problem size")
     ap.add_argument("--iters", type=int, default=50)
     ap.add_argument("--output", type=str, default=None)
+    ap.add_argument(
+        "--typed-compare", action="store_true",
+        help="compare direct and typed 2x4 lanes in three interleaved host-wall trials",
+    )
+    ap.add_argument(
+        "--dump-hsaco-dir", type=Path, default=None,
+        help="optionally retain direct/typed code objects for ISA comparison",
+    )
     args = ap.parse_args()
     M = N = K = args.size
 
@@ -217,11 +276,53 @@ def main() -> int:
         if args.output:
             Path(args.output).write_text("[]\n")
         return 0
-    lib = ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_GLOBAL) \
+    lib = ctypes.CDLL(str(GEMM_LIB), mode=ctypes.RTLD_LOCAL) \
         if GEMM_LIB.is_file() else None
 
     flop = 2.0 * M * N * K
     rows = []
+    if args.typed_compare:
+        mt, nt = 2, 4
+        direct = _build_hsaco(mlir_opt, mt, nt)
+        typed = _build_typed_hsaco(mt, nt)
+        if args.dump_hsaco_dir is not None:
+            args.dump_hsaco_dir.mkdir(parents=True, exist_ok=True)
+            (args.dump_hsaco_dir / "direct.hsaco").write_bytes(direct)
+            (args.dump_hsaco_dir / "typed.hsaco").write_bytes(typed)
+        samples = {"direct": [], "typed": []}
+        for trial in range(3):
+            order = ("direct", "typed") if trial % 2 == 0 else ("typed", "direct")
+            for lane in order:
+                hsaco = direct if lane == "direct" else typed
+                measured = _time_compiled_host_wall(
+                    hip, hsaco, M, N, K, mt, nt, args.iters)
+                if measured is None or measured <= 0:
+                    raise RuntimeError(f"{lane} host-wall measurement failed")
+                samples[lane].append(measured)
+        import statistics
+        medians = {lane: statistics.median(values)
+                   for lane, values in samples.items()}
+        tflops = {lane: flop / (ms / 1e3) / 1e12
+                  for lane, ms in medians.items()}
+        ratio = tflops["typed"] / tflops["direct"]
+        print(f"# typed physical-body comparison, {M}x{N}x{K}, "
+              f"{args.iters} launches x 3 interleaved trials, host_wall")
+        print(f"direct={tflops['direct']:.2f} TFLOP/s "
+              f"typed={tflops['typed']:.2f} TFLOP/s ratio={ratio:.3f}x")
+        for lane in ("direct", "typed"):
+            rows.append({
+                "backend": "rocm", "op": "gemm", "shape": [M, N, K],
+                "dtype": "f16", "latency_ms": medians[lane],
+                "tflops": tflops[lane], "memory_bw_gb_s": None,
+                "device": CHIP, "tessera_version": "L2-typed-physical-body",
+                "mt": mt, "nt": nt, "path": lane,
+                "timer_source": "host_wall", "warm_state": "warm",
+                "trial_latency_ms": samples[lane],
+                "typed_vs_direct": ratio,
+            })
+        if args.output:
+            Path(args.output).write_text(json.dumps(rows, indent=2) + "\n")
+        return 0
     print(f"# compiled-vs-handwritten WMMA GEMM, {M}x{N}x{K}, "
           f"{args.iters} iters, {CHIP}")
     print(f"# {'mt x nt':>8} {'compiled TF/s':>14} {'handwritten TF/s':>17} "

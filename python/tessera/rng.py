@@ -283,6 +283,30 @@ def categorical(
     return np.argmax(logits + g, axis=axis)
 
 
+def gumbel(
+    key: RNGKey,
+    shape: int | Sequence[int] = (),
+    *,
+    loc: float = 0.0,
+    scale: float = 1.0,
+    dtype: str | np.dtype = "fp32",
+) -> np.ndarray:
+    """Gumbel(loc, scale) samples: ``loc - scale·log(-log(U))``, ``U~Uniform``.
+
+    The standard Gumbel (loc=0, scale=1) is the noise behind the Gumbel-max /
+    Gumbel-softmax trick used to relax discrete sampling (Blondel & Roulet
+    §"Gumbel tricks"); ``categorical`` already uses it inline, and
+    ``ops.gumbel_softmax`` (relaxation.py) builds on it. Exposed as a first-class
+    sampler so relaxations don't each re-derive it.
+    """
+    if scale < 0:
+        raise ValueError(f"gumbel requires scale >= 0, got scale={scale}")
+    rng = key._generator()
+    u = rng.uniform(low=0.0, high=1.0, size=_shape_tuple(shape))
+    g = loc - scale * np.log(-np.log(u + 1e-20) + 1e-20)
+    return np.asarray(g, dtype=_np_dtype(dtype))
+
+
 def multinomial(
     key: RNGKey,
     n: int,
@@ -684,6 +708,7 @@ __all__ = [
     "truncated_normal",
     "bernoulli",
     "categorical",
+    "gumbel",
     "multinomial",
     "randint",
     "permutation",

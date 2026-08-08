@@ -16,7 +16,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from .attention_contract import plan_attention_backward_workspace
 from .graph_ir import GraphIRModule
@@ -32,7 +32,19 @@ from .native_artifact import (
     ShapeGuard,
     WorkspaceRequirement,
 )
+from .scheduled_matmul import ScheduledMatmulArtifact
+from .scheduled_kernel import ScheduledKernelArtifact
+from .scheduled_attention import ScheduledAttentionArtifact
 
+if TYPE_CHECKING:  # noqa: SIM108 -- see below
+    # `scheduled_attention_backward` imports from THIS module, so importing
+    # it at runtime is a cycle. Under `from __future__ import annotations`
+    # the annotations below are strings, so mypy resolves the type without
+    # one. Typing these parameters `object` instead cost 36 spurious
+    # `attr-defined` errors and hid every real attribute typo behind them.
+    from .scheduled_attention_backward import (
+        ScheduledAttentionBackwardArtifact,
+    )
 
 GFX1151_SOFTMAX_F16_ABI = "tessera.rocm.softmax.x_o_rows_k.f16.v1"
 GFX1151_SOFTMAX_F32_ABI = "tessera.rocm.softmax.x_o_rows_k.f32.v1"
@@ -47,6 +59,7 @@ GFX1151_ATTN_BWD_PRE_ABI = "tessera.rocm.attention_backward.pre.v1"
 GFX1151_ATTN_BWD_DKDV_ABI = "tessera.rocm.attention_backward.dkdv_split.v1"
 GFX1151_ATTN_BWD_REDUCE_ABI = "tessera.rocm.attention_backward.dkdv_reduce.v1"
 GFX1151_ATTN_BWD_DQ_ABI = "tessera.rocm.attention_backward.dq.v1"
+GFX1151_MATMUL_F16_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.f16_f32.v1"
 
 
 @dataclass(frozen=True)
@@ -1168,6 +1181,7 @@ def _compile_native_tile_ir(
     directive: str,
     generator: str,
     semantic_pipeline: str = "",
+    generator_before_lowering: bool = False,
 ) -> tuple[
     str,
     str,
@@ -1185,7 +1199,10 @@ def _compile_native_tile_ir(
         f"{item.logical_name}:{item.content_digest}:{item.link_mode}" for item in device_libraries
     )
     key = hashlib.sha256(
-        (f"{tile_ir}|{directive}|{generator}|{semantic_pipeline}|{library_identity}").encode()
+        (
+            f"{tile_ir}|{directive}|{generator}|{semantic_pipeline}|"
+            f"{generator_before_lowering}|{library_identity}"
+        ).encode()
     ).hexdigest()
     cached = _cache.get(key)
     if cached is not None:
@@ -1201,20 +1218,25 @@ def _compile_native_tile_ir(
         )
 
     semantic_prefix = f"{semantic_pipeline}," if semantic_pipeline else ""
-    target_pipeline = (
-        "builtin.module("
-        f"{semantic_prefix}rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
-        "lower-tile-to-rocm{arch=gfx1151})"
-    )
+    if generator_before_lowering:
+        target_physical_pipeline = (
+            f"{semantic_prefix}{generator},lower-tile-to-rocm{{arch=gfx1151}}"
+        )
+        native_physical_pipeline = target_physical_pipeline
+    else:
+        target_physical_pipeline = (
+            f"{semantic_prefix}rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
+            "lower-tile-to-rocm{arch=gfx1151}"
+        )
+        native_physical_pipeline = (
+            f"{target_physical_pipeline},{generator}"
+        )
+    target_pipeline = f"builtin.module({target_physical_pipeline})"
     native_pipeline = (
-        f"builtin.module({semantic_prefix}"
-        "rocm-wave-lds-pipeline,rocm-wave-lds-legality,"
-        f"lower-tile-to-rocm{{arch=gfx1151}},{generator},"
-        "lower-tessera-target-to-rocdl,"
+        f"builtin.module({native_physical_pipeline},lower-tessera-target-to-rocdl,"
         "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
         "reconcile-unrealized-casts,rocm-materialize-dynamic-lds),"
-        "rocdl-attach-target{chip=gfx1151},"
-        "gpu-module-to-binary)"
+        "rocdl-attach-target{chip=gfx1151},gpu-module-to-binary)"
     )
     target_ir = _run_opt(tool, tile_ir, target_pipeline)
     if directive not in target_ir:
@@ -1285,6 +1307,14 @@ def _compile_attention_tile_ir(tile_ir: str):
     )
 
 
+def _compile_scheduled_attention_tile_ir(tile_ir: str):
+    return _compile_native_tile_ir(
+        tile_ir,
+        directive="tessera_rocm.flash_attn",
+        generator="generate-wmma-flash-attn-kernel",
+    )
+
+
 def _compile_attention_graph_ir(tile_ir: str, *, tile_q: int, tile_kv: int):
     return _compile_native_tile_ir(
         tile_ir,
@@ -1308,6 +1338,349 @@ def _compile_attention_backward_graph_ir(graph_ir: str, *, tile_q: int, tile_kv:
         directive="tessera_rocm.flash_attn_bwd",
         generator=("generate-wmma-flash-attn-kernel,generate-wmma-flash-attn-bwd-kernel"),
         semantic_pipeline=(f"tessera-tile-ir-lowering{{tile-q={tile_q} tile-kv={tile_kv} sm=90}}"),
+    )
+
+
+def _compile_scheduled_matmul_tile_ir(tile_ir: str):
+    return _compile_native_tile_ir(
+        tile_ir,
+        directive="tessera_rocm.wmma",
+        generator="generate-wmma-gemm-kernel{via-tile=true}",
+        generator_before_lowering=True,
+    )
+
+
+def package_scheduled_matmul(
+    artifact: ScheduledMatmulArtifact,
+    *,
+    pipeline_name: str,
+) -> ROCMNativePackage:
+    """Package the exact Schedule-to-Tile artifact without re-entering Graph IR."""
+
+    artifact.validate()
+    if (
+        artifact.target != "rocm"
+        or artifact.architecture != "gfx1151"
+        or (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
+        != ("fp16", "fp16", "fp32")
+    ):
+        raise ValueError("ROCm scheduled matmul requires the gfx1151 f16/f32 contract")
+    (
+        target_ir,
+        backend_ir,
+        payload,
+        compiler_fp,
+        toolchain_fp,
+        device_libraries,
+        compile_state,
+    ) = _compile_scheduled_matmul_tile_ir(artifact.tile_ir)
+    entry = artifact.function_name
+    image = NativeImageArtifact(
+        target="rocm_gfx1151",
+        architecture="gfx1151",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="hsaco",
+        payload=payload,
+        entry_points=(NativeEntryPoint(entry, GFX1151_MATMUL_F16_F32_ABI),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=GFX1151_MATMUL_F16_F32_ABI,
+        buffers=(
+            BufferBinding(0, artifact.a_name, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(1, artifact.b_name, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(2, artifact.output_name, "output", "fp32", 2, "row_major", 4),
+        ),
+        scalars=(
+            ScalarArgument(3, "M", "int64"),
+            ScalarArgument(4, "N", "int64"),
+            ScalarArgument(5, "K", "int64"),
+        ),
+        shape_guards=(
+            ShapeGuard(artifact.a_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.a_name, 1, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 0, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 1, "eq", artifact.n),
+            ShapeGuard(artifact.output_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.output_name, 1, "eq", artifact.n),
+        ),
+        geometry=LaunchGeometry(policy="rocm_wmma_macro_tile_grid"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="none",
+            synchronization=("completion",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-3",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "route": "canonical_scheduled_tile_consumer",
+            "shape": [artifact.m, artifact.n, artifact.k],
+            "a_storage": artifact.storage,
+            "b_storage": artifact.storage,
+            "output_storage": artifact.accum,
+            "accum": artifact.accum,
+            "macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return ROCMNativePackage(
+        artifact.tile_ir,
+        target_ir,
+        backend_ir,
+        image,
+        descriptor,
+    )
+
+
+def package_scheduled_kernel(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> ROCMNativePackage:
+    """Package the exact E2E-REAL-5 Tile artifact without Graph resynthesis."""
+
+    artifact.validate()
+    if (
+        artifact.target != "rocm"
+        or artifact.architecture != "gfx1151"
+        or artifact.dtype != "fp32"
+        or artifact.storage != "f32"
+        or artifact.accum != "f32"
+    ):
+        raise ValueError("ROCm scheduled semantic kernel requires the gfx1151 f32 contract")
+    scalars: tuple[ScalarArgument, ...]
+    if artifact.family == "softmax":
+        abi = GFX1151_SOFTMAX_F32_ABI
+        compile_result = _compile_tile_ir(artifact.tile_ir)
+        scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
+        geometry = "gfx1151_softmax_workgroup_per_row_256"
+    elif artifact.family == "reduce":
+        abi = GFX1151_REDUCE_F32_ABI
+        compile_result = _compile_reduction_tile_ir(artifact.tile_ir)
+        scalars = (
+            ScalarArgument(2, "Outer", "int64"),
+            ScalarArgument(3, "AxisExtent", "int64"),
+            ScalarArgument(4, "Inner", "int64"),
+        )
+        geometry = "gfx1151_reduce_workgroup_per_output_256"
+    else:
+        raise ValueError("unsupported ROCm scheduled semantic-kernel family")
+    target_ir, backend_ir, payload, compiler_fp, toolchain_fp, device_libraries, compile_state = compile_result
+    entry = artifact.function_name
+    image = NativeImageArtifact(
+        target="rocm_gfx1151", architecture="gfx1151", pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="hsaco", payload=payload,
+        entry_points=(NativeEntryPoint(entry, abi),), compile_state=compile_state,
+        device_libraries=device_libraries,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=abi,
+        buffers=(
+            BufferBinding(0, artifact.input_name, "input", "fp32", len(artifact.input_shape), "row_major", 4),
+            BufferBinding(1, artifact.output_name, "output", "fp32", len(artifact.output_shape), "row_major", 4),
+        ),
+        scalars=scalars,
+        shape_guards=tuple(
+            [ShapeGuard(artifact.input_name, i, "eq", extent) for i, extent in enumerate(artifact.input_shape)]
+            + [ShapeGuard(artifact.output_name, i, "eq", extent) for i, extent in enumerate(artifact.output_shape)]
+        ),
+        geometry=LaunchGeometry(policy=geometry),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
+        provenance={
+            "work_item": "E2E-REAL-5",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "route": "canonical_scheduled_tile_consumer",
+            "family": artifact.family,
+            "kind": artifact.kind,
+            "shape": list(artifact.input_shape),
+            "output_shape": list(artifact.output_shape),
+            "axis": artifact.axis,
+            "keepdims": artifact.keepdims,
+            "rows": artifact.rows,
+            "columns": artifact.columns,
+            "outer": artifact.outer,
+            "axis_extent": artifact.axis_extent,
+            "inner": artifact.inner,
+            "exp_mode": "accurate",
+            "ftz": False,
+            "storage": artifact.storage,
+            "accum": artifact.accum,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return ROCMNativePackage(artifact.tile_ir, target_ir, backend_ir, image, descriptor)
+
+
+def package_scheduled_attention(
+    artifact: ScheduledAttentionArtifact,
+    *,
+    pipeline_name: str,
+) -> ROCMNativePackage:
+    """Package the exact E2E-REAL-5A Tile artifact without Graph re-entry."""
+
+    artifact.validate()
+    if (
+        artifact.target != "rocm"
+        or artifact.architecture != "gfx1151"
+        or artifact.dtype not in {"fp16", "bf16"}
+        or artifact.storage not in {"f16", "bf16"}
+        or artifact.accum != "f32"
+        or artifact.backward_lse_policy != "gfx1151_auto_128"
+    ):
+        raise ValueError("ROCm scheduled attention requires the gfx1151 policy")
+    (
+        target_ir,
+        backend_ir,
+        payload,
+        compiler_fp,
+        toolchain_fp,
+        device_libraries,
+        compile_state,
+    ) = _compile_scheduled_attention_tile_ir(artifact.tile_ir)
+    abi = GFX1151_ATTN_F16_ABI if artifact.dtype == "fp16" else GFX1151_ATTN_BF16_ABI
+    entry = artifact.function_name
+    image = NativeImageArtifact(
+        target="rocm_gfx1151",
+        architecture="gfx1151",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="hsaco",
+        payload=payload,
+        entry_points=(NativeEntryPoint(entry, abi),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+    )
+    b, hq, hkv, sq, sk, d, dv = artifact.dims
+    alignment = 2
+    bindings = [
+        BufferBinding(0, artifact.q_name, "input", artifact.dtype, 4, "row_major", alignment),
+        BufferBinding(1, artifact.k_name, "input", artifact.dtype, 4, "row_major", alignment),
+        BufferBinding(2, artifact.v_name, "input", artifact.dtype, 4, "row_major", alignment),
+    ]
+    if artifact.bias_name is not None:
+        bindings.append(
+            BufferBinding(3, artifact.bias_name, "input", "fp32", 4, "row_major", 4)
+        )
+    bindings.append(
+        BufferBinding(
+            len(bindings), artifact.output_name, "output", "fp32", 4,
+            "row_major", 4,
+        )
+    )
+    scalars = [
+        ScalarArgument(4 + int(artifact.bias_name is not None), "Sq", "int64"),
+        ScalarArgument(5 + int(artifact.bias_name is not None), "Sk", "int64"),
+        ScalarArgument(6 + int(artifact.bias_name is not None), "Scale", "float32"),
+        ScalarArgument(7 + int(artifact.bias_name is not None), "Causal", "int64"),
+    ]
+    if hq != hkv:
+        scalars.extend(
+            (
+                ScalarArgument(8 + int(artifact.bias_name is not None), "Hq", "int64"),
+                ScalarArgument(9 + int(artifact.bias_name is not None), "KvRatio", "int64"),
+            )
+        )
+    if artifact.window_left >= 0:
+        scalars.append(
+            ScalarArgument(
+                8 + int(artifact.bias_name is not None) + 2 * int(hq != hkv),
+                "Window",
+                "int64",
+            )
+        )
+    if artifact.softcap > 0.0:
+        scalars.append(
+            ScalarArgument(
+                8
+                + int(artifact.bias_name is not None)
+                + 2 * int(hq != hkv)
+                + int(artifact.window_left >= 0),
+                "Softcap",
+                "float32",
+            )
+        )
+    if artifact.dropout_p > 0.0:
+        dropout_base = (
+            8
+            + int(artifact.bias_name is not None)
+            + 2 * int(hq != hkv)
+            + int(artifact.window_left >= 0)
+            + int(artifact.softcap > 0.0)
+        )
+        scalars.extend(
+            (
+                ScalarArgument(dropout_base, "DropoutP", "float32"),
+                ScalarArgument(dropout_base + 1, "DropoutSeed", "int64"),
+            )
+        )
+    shapes = {
+        artifact.q_name: (b, hq, sq, d),
+        artifact.k_name: (b, hkv, sk, d),
+        artifact.v_name: (b, hkv, sk, dv),
+        artifact.output_name: (b, hq, sq, dv),
+    }
+    if artifact.bias_name is not None:
+        shapes[artifact.bias_name] = (b, hq, sq, sk)
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=abi,
+        buffers=tuple(bindings),
+        scalars=tuple(scalars),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name, shape in shapes.items()
+            for axis, extent in enumerate(shape)
+        ),
+        geometry=LaunchGeometry(policy="gfx1151_attention_wmma_query_tile_wave32"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="none",
+            synchronization=("completion",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-5A",
+            "sync_key": "E2E-REAL-ATTENTION-2026-08-05",
+            "route": "canonical_scheduled_tile_consumer",
+            "semantic_route": artifact.recurrence,
+            "shape": list(artifact.dims),
+            "storage": artifact.storage,
+            "accum": artifact.accum,
+            "scale": artifact.scale,
+            "causal": artifact.causal,
+            "gqa": hq != hkv,
+            "kv_ratio": hq // hkv,
+            "bias": artifact.bias_name is not None,
+            "window_left": artifact.window_left,
+            "window_right": artifact.window_right,
+            "softcap": artifact.softcap,
+            "dropout_p": artifact.dropout_p,
+            "dropout_seed": artifact.dropout_seed,
+            "tile_q": artifact.tile_q,
+            "tile_kv": artifact.tile_kv,
+            "backward_lse_policy": artifact.backward_lse_policy,
+            "backward_lse_selection": artifact.backward_lse_selection,
+            "schedule_digest": artifact.schedule_digest,
+            "semantic_ir_digest": artifact.semantic_ir_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return ROCMNativePackage(
+        artifact.tile_ir, target_ir, backend_ir, image, descriptor
     )
 
 
@@ -1770,7 +2143,12 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
     return ROCMNativePackage(tile_ir, target_ir, backend_ir, image, descriptor)
 
 
-def package_attention_backward(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativeProgram:
+def package_attention_backward(
+    module: GraphIRModule,
+    *,
+    pipeline_name: str,
+    _scheduled_artifact: ScheduledAttentionBackwardArtifact | None = None,
+) -> ROCMNativeProgram:
     """Package the gfx1151 forward-recompute + split/reduced VJP program."""
     contract = _attention_backward_contract(module)
     if contract is None:
@@ -1814,6 +2192,25 @@ def package_attention_backward(module: GraphIRModule, *, pipeline_name: str) -> 
         else requested_checkpoint
     )
     save_lse = selected_checkpoint == "saved"
+    if _scheduled_artifact is not None:
+        artifact = _scheduled_artifact
+        artifact.validate()
+        if (
+            artifact.target != "rocm"
+            or artifact.architecture != "gfx1151"
+            or artifact.storage != storage
+            or artifact.dims != dims
+            or artifact.input_names != names
+            or artifact.bias_name != bias_name
+            or artifact.output_names != tuple(
+                name.removeprefix("%") for name in result_names
+            )
+            or artifact.lse_checkpoint_selection != selected_checkpoint
+            or artifact.reduction_order != (0, 1)
+        ):
+            raise ValueError(
+                "scheduled gfx1151 attention backward artifact disagrees with its launch contract"
+            )
     semantic_key = hashlib.sha256(
         f"{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:"
         f"{window_right}:{softcap:.17g}:{dropout_p:.17g}:"
@@ -1835,20 +2232,24 @@ def package_attention_backward(module: GraphIRModule, *, pipeline_name: str) -> 
         GFX1151_ATTN_BWD_REDUCE_ABI,
         GFX1151_ATTN_BWD_DQ_ABI,
     )
-    tile_ir = emit_attention_backward_graph_ir(
-        forward_entry=forward_entry,
-        backward_entry=backward_entry,
-        storage=storage,
-        dims=dims,
-        scale=scale,
-        causal=causal,
-        bias=bias_name is not None,
-        window_left=window_left,
-        window_right=window_right,
-        softcap=softcap,
-        dropout_p=dropout_p,
-        dropout_seed=dropout_seed,
-        save_lse=save_lse,
+    tile_ir = (
+        artifact.tile_ir
+        if _scheduled_artifact is not None
+        else emit_attention_backward_graph_ir(
+            forward_entry=forward_entry,
+            backward_entry=backward_entry,
+            storage=storage,
+            dims=dims,
+            scale=scale,
+            causal=causal,
+            bias=bias_name is not None,
+            window_left=window_left,
+            window_right=window_right,
+            softcap=softcap,
+            dropout_p=dropout_p,
+            dropout_seed=dropout_seed,
+            save_lse=save_lse,
+        )
     )
     (
         target_ir,
@@ -1858,8 +2259,12 @@ def package_attention_backward(module: GraphIRModule, *, pipeline_name: str) -> 
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = _compile_attention_backward_graph_ir(tile_ir, tile_q=sq, tile_kv=16)
-    if (
+    ) = (
+        _compile_attention_backward_tile_ir(tile_ir)
+        if _scheduled_artifact is not None
+        else _compile_attention_backward_graph_ir(tile_ir, tile_q=sq, tile_kv=16)
+    )
+    if _scheduled_artifact is None and (
         'source = "canonical_rank4_kv_scf_for"' not in target_ir
         or 'source = "canonical_tensor_backward_scf_for"' not in target_ir
         or "canonical_phase_loops = true" not in target_ir
@@ -2140,6 +2545,69 @@ def package_attention_backward(module: GraphIRModule, *, pipeline_name: str) -> 
     )
 
 
+def package_scheduled_attention_backward(
+    artifact: ScheduledAttentionBackwardArtifact,
+    *,
+    pipeline_name: str,
+) -> ROCMNativeProgram:
+    """Package the exact E2E-REAL-5B Tile program without Graph lowering."""
+    from .graph_ir import GraphIRFunction, IRArg, IROp, IRType
+
+    artifact.validate()
+    if artifact.target != "rocm" or artifact.architecture != "gfx1151":
+        raise ValueError("scheduled ROCm attention backward requires gfx1151")
+    b, hq, hkv, sq, sk, d, dv = artifact.dims
+    element = {"fp16": "f16", "bf16": "bf16"}[artifact.dtype]
+
+    def tensor(shape: tuple[int, ...], dtype: str, spelling: str) -> IRType:
+        return IRType(
+            f"tensor<{'x'.join(map(str, shape))}x{spelling}>",
+            tuple(map(str, shape)), dtype,
+        )
+
+    do_type = tensor((b, hq, sq, dv), artifact.dtype, element)
+    q_type = tensor((b, hq, sq, d), artifact.dtype, element)
+    k_type = tensor((b, hkv, sk, d), artifact.dtype, element)
+    v_type = tensor((b, hkv, sk, dv), artifact.dtype, element)
+    bias_type = tensor((b, hq, sq, sk), "fp32", "f32")
+    dq_type = tensor((b, hq, sq, d), "fp32", "f32")
+    dk_type = tensor((b, hkv, sk, d), "fp32", "f32")
+    dv_type = tensor((b, hkv, sk, dv), "fp32", "f32")
+    input_types = (do_type, q_type, k_type, v_type)
+    args = [
+        IRArg(name, ir_type)
+        for name, ir_type in zip(artifact.input_names, input_types, strict=True)
+    ]
+    operands = [f"%{name}" for name in artifact.input_names]
+    operand_types = [str(value) for value in input_types]
+    if artifact.bias_name is not None:
+        args.append(IRArg(artifact.bias_name, bias_type))
+        operands.append(f"%{artifact.bias_name}")
+        operand_types.append(str(bias_type))
+    operation = IROp(
+        result=",".join(artifact.output_names),
+        op_name="tessera.flash_attn_bwd",
+        operands=operands,
+        operand_types=operand_types,
+        kwargs={
+            "scale": artifact.scale, "causal": artifact.causal,
+            "window": (artifact.window_left, artifact.window_right),
+            "softcap": artifact.softcap, "dropout_p": artifact.dropout_p,
+            "dropout_seed": artifact.dropout_seed,
+            "lse_checkpoint": artifact.lse_checkpoint_selection,
+            "route": "deterministic_direct", "deterministic": True,
+        },
+    )
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name=artifact.function_name, args=args,
+        result_types=[dq_type, dk_type, dv_type], body=[operation],
+        return_values=[f"%{name}" for name in artifact.output_names],
+    )])
+    return package_attention_backward(
+        module, pipeline_name=pipeline_name, _scheduled_artifact=artifact
+    )
+
+
 def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativePackage:
     contract = _moe_dispatch_contract(module)
     if contract is None:
@@ -2217,6 +2685,7 @@ __all__ = [
     "GFX1151_ATTN_BWD_REDUCE_ABI",
     "GFX1151_ATTN_F16_ABI",
     "GFX1151_MOE_DISPATCH_F32_ABI",
+    "GFX1151_MATMUL_F16_F32_ABI",
     "GFX1151_PAGED_KV_F32_ABI",
     "GFX1151_REDUCE_BF16_ABI",
     "GFX1151_REDUCE_F16_ABI",
@@ -2235,6 +2704,10 @@ __all__ = [
     "emit_softmax_tile_ir",
     "package_moe_dispatch",
     "package_native",
+    "package_scheduled_kernel",
+    "package_scheduled_attention",
+    "package_scheduled_attention_backward",
+    "package_scheduled_matmul",
     "package_attention",
     "package_attention_backward",
     "package_reduction",

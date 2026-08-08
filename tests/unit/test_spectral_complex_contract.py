@@ -128,6 +128,9 @@ def test_complex_support_follows_whether_the_target_declares_the_op_at_all():
     mention FFT. Rejecting a complex FFT there is the correct answer.
     """
     assert supports_op("x86", "tessera.fft", dtype="complex64").supported
+    rocm_fft = supports_op("rocm_gfx1151", "tessera.fft", dtype="complex64")
+    assert rocm_fft.supported
+    assert rocm_fft.runtime_status == "ready"
     assert not supports_op("nvidia_sm120", "tessera.fft", dtype="complex64").supported
 
 

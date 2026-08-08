@@ -105,7 +105,9 @@ def test_passes_emitting_code_helper() -> None:
 _STANDARD_MLIR_DIALECTS = frozenset({
     "func", "scf", "arith", "memref", "tensor", "linalg",
     "llvm", "math", "builtin", "vector", "affine", "bufferization",
-    "nvvm", "rocdl",
+    # `gpu` is upstream MLIR (mlir/Dialect/GPU) and passes that emit
+    # `gpu.thread_id` -- e.g. lower-tile-to-rocm -- legitimately name it.
+    "gpu", "nvvm", "rocdl",
     # Tessera-side dialects not yet in Arch-4's manifest — see Arch-4
     # rollout (today only the 3 already-registered dialects are
     # captured; this set absorbs the rest).

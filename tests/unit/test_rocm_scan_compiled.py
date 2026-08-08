@@ -84,6 +84,47 @@ def test_scan_long_row_crosses_tiles():
         np.cumsum(x, axis=-1), atol=1e-3, rtol=1e-3)
 
 
+def test_scan_bf16_cumprod_short_rows():
+    rt = _scan_or_skip()
+    dtype = pytest.importorskip("ml_dtypes").bfloat16
+    rng = np.random.default_rng(131)
+    x = rng.uniform(0.98, 1.02, size=(5, 12)).astype(dtype)
+    result = rt.launch(_artifact(rt, "tessera.cumprod", -1), (x,))
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_allclose(
+        np.asarray(result["output"], np.float32),
+        np.cumprod(x.astype(np.float32), axis=-1),
+        atol=8e-2,
+        rtol=8e-2,
+    )
+
+
+@pytest.mark.parametrize("op_name", ["tessera.cumsum", "tessera.cummax", "tessera.cummin"])
+@pytest.mark.parametrize("dtype,tol", [(np.float16, 8e-2), ("bf16", 2e-1)])
+def test_scan_arbitrary_middle_axis_ragged_reduced_precision(op_name, dtype, tol):
+    rt = _scan_or_skip()
+    if dtype == "bf16":
+        dtype = pytest.importorskip("ml_dtypes").bfloat16
+    rng = np.random.default_rng(109)
+    x = rng.uniform(-1.0, 1.0, size=(3, 263, 5)).astype(dtype)
+    result = rt.launch(_artifact(rt, op_name, 1), (x,))
+    assert result["ok"] is True, result.get("reason")
+    reference = _CASES[op_name][0](x.astype(np.float32), axis=1)
+    np.testing.assert_allclose(
+        np.asarray(result["output"], np.float32), reference, atol=tol, rtol=tol
+    )
+
+
+def test_scan_four_thousand_element_cross_tile_carry():
+    rt = _scan_or_skip()
+    x = np.ones((1, 4097), np.float32)
+    result = rt.launch(_artifact(rt, "tessera.cumsum", -1), (x,))
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_array_equal(
+        np.asarray(result["output"], np.float32), np.arange(1, 4098, dtype=np.float32)[None, :]
+    )
+
+
 def test_scan_unknown_op_rejected():
     from tessera import runtime as rt
     x = np.zeros((4, 8), np.float32)

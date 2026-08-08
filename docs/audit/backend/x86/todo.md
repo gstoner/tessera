@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-03
+last_updated: 2026-08-07
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,199 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
+Python-reference contract; x86 physical follow-up required.** `sparsemax`,
+`entmax15`, `soft_top_k`, `gumbel_softmax`, and `perturbed_argmax` now have
+storage-preserving reference semantics and autodiff rules, but no AVX-512
+lowering or exact Zen 5 evidence. They remain explicitly reference-only until
+an x86-owned physical package is selected and proven.
+
+Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **Zen 5 scan selector and
+dtype boundary retained.** The f32 scan ABI now selects a 16-lane AVX-512
+Hillis--Steele prefix for `cumsum` and `cumprod`; paired interleaved measurement
+against the scalar reference records 1.48x and 1.47x speedups on Ryzen AI Max+
+395. The same implementation regressed extrema, so `cummax` and `cummin`
+deliberately retain the scalar recurrence. NaN propagation and signed-zero
+behavior are exact-tested. The complete x86 physical math cohort passes 167
+tests, and the benchmark packet covers unary, transcendental, binary,
+reduction, and scan families. General x86 math remains an explicit f32 ABI;
+target-wide bf16 capability does not imply bf16 support for these packages.
+Binary packages now reject mixed input dtypes. Evidence:
+`benchmarks/baselines/math_physical_zen5_2026_08_06.json`.
+
+Cross-backend sync `TSOL-CONTRACT-GENERALIZE-2026-08-06` — **Zen 5 physical
+policy expansion implemented and retained.** The v3 contract specializes
+bounded dynamic shapes into exact content-addressed packages, packs arbitrary
+axes inside the native AVX-512 package, admits fp32/fp16/bf16 real storage with f32
+accumulation, and carries backward/forward/ortho scaling into the native
+package. ABI v4 and 36 focused contract/package/evidence tests pass on AMD Ryzen AI
+Max+ 395. The policy
+packet `benchmarks/baselines/tsol_physical_policies_zen5_2026_08_06.json`
+now contains 30 numerical-and-performance rows across all five compound
+operations, including seven digest-changing bounded specializations and
+combined dynamic-axis-reduced-storage-ortho cases. Warm medians span
+0.058--0.177 ms; every row meets its recorded error limit. Reduced storage
+conversion and arbitrary-axis pack/unpack are package-owned host-side work
+around f32 native FFT accumulation, not claims of reduced-arithmetic FFT
+instructions or device-side packing.
+
+Cross-backend sync `X86-WELFORD-PARITY-2026-08-06` — **native implementation
+and exact Zen 5 validation complete.** `var`/`std` now call a dedicated
+`tessera_x86_avx512_welford_f32` ABI. It accumulates independent SIMD-lane
+f64 Welford states and merges them deterministically after the existing
+arbitrary-axis fold, replacing the cancellation-prone `mean(x²)-mean(x)²`
+composition. On the AMD Ryzen AI Max+ 395 Zen 5 host, the native image rebuilt
+with LLVM/MLIR 23 and all 17 focused tests passed, including
+large-offset/low-variance data, ragged extents, multiple axes, and tuple axes.
+Cross-backend sync `TPROF-MULTICLOCK-2026-08-06` — **shared schema and native
+`TPROF-X86-TIME-1` timing provider landed; exact-host evidence open.** The ROCm
+work establishes the shared
+rule that every applicable clock is an independent provenance/validity record;
+it does not require HIP-specific slots in x86 packets. The existing `cpu`
+provider already exposes runtime callback spans and `steady_clock` timestamps,
+but that is not yet an AVX-512 PMU or sampling profiler.
+
+`TPROF-X86-TIME-1` now extends the same tprof artifact/CLI with four independently
+validated x86 records:
+
+1. `host_wall_ns`: raw `steady_clock` batch time with one terminal
+   synchronization plus separate empty-call/dispatch calibration.
+2. `monotonic_raw_ns`: Linux `CLOCK_MONOTONIC_RAW` for OS-adjustment and clock-
+   agreement checks where available.
+3. `tsc_cycles`: fenced `RDTSCP` entry/exit with invariant-TSC capability,
+   calibrated frequency, start/end logical CPU, and migration invalidation.
+4. `perf_task_clock_ns`: `perf_event_open` task-clock timing with explicit
+   permission, multiplexing, enabled-time, and running-time fields.
+
+The first portable PMU group is cycles, reference cycles, instructions,
+branches, branch misses, cache references, and cache misses. Model-specific Zen
+5 events, IBS samples, PEBS, raw event encodings, and derived cache-level claims
+remain capability-gated by vendor/family/model, kernel support, and an exact-
+machine event-map digest. Unsupported or permission-denied events are explicit
+unavailable records, never zero counters.
+
+The x86 provider runs the canonical typed AVX-512 package in a fresh subprocess
+with recorded affinity, NUMA node, SMT state, governor/frequency context,
+microcode, kernel, compiler, image/artifact digests, warm/cold state, and sample
+distribution. Sampling uses Linux perf IP/callchain/branch-stack or AMD IBS only
+when advertised; it must correlate samples to the package image and symbol
+range. Instrumented and uninstrumented images stay paired so probe overhead is
+visible.
+
+WSL host timing may support same-host regression and retain/reject decisions.
+PMU- or sampling-dependent promotion requires a non-virtualized exact Zen 5
+host, non-multiplexed or correctly scaled counters, stable affinity, and an
+independent clock-agreement packet. Intel AMX remains a separate named-host
+evidence obligation. HIP `wall_clock64()`, `rtg_hsa_dispatch`, ROCprofiler, and
+gfx1151 evidence do not transfer to x86.
+
+Execution order:
+
+1. **Complete:** generalize the TPROF clock-record validator and CLI away from
+   GPU-only names.
+2. **Complete:** add x86 host/raw/TSC timing with migration and invariant-TSC
+   checks.
+3. **Complete:** add the `perf_event_open` provider, permission diagnostics,
+   scaling, portable PMU group, `tprof x86 timing-status`, and optional native
+   proof snapshot workflow.
+4. **Landing:** `tprof_x86_event_map.py` now digests the exact CPU identity,
+   microcode, sysfs PMU encodings, and `perf` catalog. `tprof_x86_sample.py`
+   embeds that map, pins the command with `taskset`, and records perf samples against an image
+   build ID, DSO-aware symbolization, and the matching static ELF symbol range,
+   avoiding invalid ASLR-relative comparisons. AMD IBS is admitted only for
+   family 26 with AVX-512 and an advertised `ibs_op`/`ibs_fetch` event. Exact
+   perf/IBS samples remain open because this WSL host has no `perf` executable
+   and denies `perf_event_open`. The truthful host packet
+   [`../../../../benchmarks/baselines/x86_zen5_event_map_2026_08_07.json`](../../../../benchmarks/baselines/x86_zen5_event_map_2026_08_07.json)
+   identifies AMD family 26/model 112 and captures the visible sysfs event
+   sources, but marks the catalog and promotion gates unavailable under WSL.
+5. **Landing:** the exact-host runner now binds the existing aligned/ragged
+   E2E-REAL-4 comparison to clock, sampling, source-commit, dirty-worktree, and
+   artifact provenance. The current packet is
+   [`../../../../benchmarks/baselines/x86_zen5_profiler_packet_2026_08_06.json`](../../../../benchmarks/baselines/x86_zen5_profiler_packet_2026_08_06.json):
+   scheduled/production is 1.018x aligned and 1.008x ragged with exact route
+   parity. Verdict `retain`; WSL clocks, denied PMU access, unavailable symbol
+   samples, and the development worktree block promotion. A clean bare-metal
+   rerun with real samples remains open; AMX stays access-gated.
+
+The next exact-host action is one clean bare-metal Zen 5 run with a fixed CPU,
+stable governor/NUMA placement, working `perf_event_open`, the model-specific
+event-map digest, and symbol-correlated cycles plus advertised IBS samples.
+That packet must be regenerated from the same commit as the aligned/ragged
+benchmark; WSL timing and the event-source inventory cannot satisfy it.
+
+Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared typed carrier and
+x86/Zen 5 physical consumer complete.** `tessera.scheduled_spectral.v3`
+materializes one verified `schedule.spectral_program` →
+`tile.spectral_program_kernel` edge and binds child FFT digests plus the full
+compound policy. The native AVX-512 package now owns DCT mirroring,
+padding/cropping, framing/windowing, half-spectrum expansion/compaction,
+complex multiplication, deterministic overlap-add, and a bounded thread-local
+digest-keyed workspace; runtime no longer reconstructs these programs with
+host NumPy. Exact Zen 5 aligned, ragged, and prime/Bluestein cases agree with
+NumPy. This is architecture-owned evidence and does not inherit gfx1151
+performance or scheduling choices.
+
+Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **shared atan2 semantic
+fix and x86 Welford parity apply; ROCm physical kernels are not applicable.** Shared quadrant logic
+now preserves signed-zero origins, infinity diagonals, and NaN propagation.
+The x86 atan kernel remains the magnitude consumer and requires its existing
+Zen 5 differential gate. The x86 statistical path now has an independently
+implemented and Zen 5-tested native Welford ABI under
+`X86-WELFORD-PARITY-2026-08-06`; it does not inherit gfx1151 evidence.
+
+Cross-backend sync `ROCM-FFT-PREBUILT-2026-08-05` — **not applicable; x86
+parity assessed.** The opaque device-plan ABI, persistent HIP allocations, and
+prebuilt ROCm shared image are architecture-owned. x86 retains its existing
+content-addressed native package and thread-local cached Bluestein plan; no x86
+schedule or numerical policy changed.
+
+Cross-backend sync `FFT-PERF-2-2026-08-05` — **Bluestein cache and work-gated
+mixed-radix Stockham promoted; Rader conditional; Bailey rejected.** Immutable
+chirp/kernel FFT plans plus thread-local padded workspaces improve warm
+Bluestein by 1.57x--1.76x at N=127--1009. The native mixed-radix ABI caches
+stage matrices/twiddles and executes 16 contiguous butterflies per AVX-512
+codelet. It beat Bluestein on 12/13 measured composite shapes; representative
+speedups are 1.91x at N=68, 3.75x at N=289, and 2.82x--4.90x at
+N=768--5120. A factor-work gate promotes those wins through the exact
+Schedule→Tile artifact while rejecting N=255 to cached Bluestein.
+
+Rader is retained as a named candidate only: it wins at N=257 because its
+convolution and workspace are half Bluestein's, but loses at N=127/509/1009.
+The native Bailey candidate fuses its middle transpose with twiddle
+multiplication yet remains 1.66x--2.23x slower at N=64K--1M, so it is rejected
+without coefficient tuning. The sweep also fixed a correctness defect where
+the out-of-place runtime helper mutated contiguous caller inputs.
+
+Cross-backend sync `FFT-PERF-FOUNDATION-2026-08-05` — **AVX-512 plan/twiddle
+cache and generated permutation retained; mixed-radix SIMD remains open.** The production C2C ABI now keeps a
+bounded thread-local immutable plan containing gather offsets and all
+per-stage twiddles, removing allocation and transcendental work from warm
+execution. Same-host ratios against `scipy.fft(workers=1)` improved from
+8.63x/22.75x/17.20x to 3.46x/3.85x/3.10x at N=1024/8192/65536, with the
+existing numerical gates passing. The former scalar random-swap bit reversal
+is now a cached AVX-512 gather into reusable thread-local workspace; the gap
+improved again to 2.92x/1.86x/2.73x with the C++ correctness corpus passing.
+This is a retain, not parity; radix-2-only execution and the absence of
+mixed-radix SIMD codelets remain the next x86 FFT work.
+
+The v2 content-addressed artifact records `cooley_tukey_dit`, host-inplace
+residency, cached-f32 twiddles, workspace policy, radix sequence, and the
+complex64/f32 numeric policy. Evidence is in
+`benchmarks/baselines/fft_plan_cache_radix17_2026_08_05.json`.
+
+Cross-backend sync `E2E-REAL-FFT-2026-08-05` — **typed artifact consumption
+implemented; physical package parity validated on Zen 5.**
+ROCm's public runtime now consumes its proven Stockham/Bluestein package rather
+than a duplicate O(N²) DFT. x86 keeps its existing AVX-512 radix-2/Bluestein
+package unchanged and remains numerically covered. It now consumes the exact
+content-addressed `schedule.fft`→`tile.fft_kernel` identity without Graph
+metadata or a second planner decision. The contract preserves x86's radix-2,
+tiny-DFT, and Bluestein choices rather than transferring gfx1151's physical
+stage sequence. Focused Schedule/Tile tamper tests and exact Zen 5 FFT tests
+pass. The remaining shared packaging action is ROCm-specific runtime-`hipcc`
+removal; x86 keeps its existing prebuilt native ABI.
 
 Cross-backend sync `FFT-MIXED-RADIX-BLUESTEIN-2026-08-03` — **parity validated on host; the reference lane for the family.**
 Tessera's own FFT (Stockham, `TargetHooks/`) extends from powers of two to
@@ -428,3 +621,128 @@ Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{a
 `ViewOp::verify` now defines the pointer-backed operand contract: exactly 3 `(base, rowOrigin, colOrigin)` or 5 with `(rowBound, colBound)`. It previously accepted any count >= 3, so a 4-operand view was legal and meaningless and the bounded form's validity was decided by whichever backend looked.
 
 **Outcome: not applicable — architecture-specific reason.** x86 carries `!tessera_x86.tile` and has no `tile.view`-backed fragment path.
+
+## Cross-backend sync `TILE-VIEW-LINEAR-BASE-2026-08-05` — should `tile.view` carry a precomputed linear base?
+
+ROCm W1.1 step 3 (`W1_1_TYPING_DESIGN.md` §4.7) established that isolated
+fragment address derivation could not express the direct lane's shared row
+offset. Measurement selected an optional precomputed `linear_base` operand on
+`tile.view`; logical row/column origins remain present for bounds.
+
+ROCm implemented explicit `tile.view` linear-base sharing. Its new same-run
+final rebuilt measurement improves typed/direct from 0.685x to 0.711x, but does not close the
+gap; load scheduling/wait overhead remains the ROCm-owned follow-up.
+
+**Outcome for x86: NOT APPLICABLE.** This backend consumes neither `tile.view`
+nor `tile.fragment_pack` (0 files). AMX/AVX-512 operands come from
+`tessera_x86.amx_tile_load` over the `!tessera_x86.tile` type (Decision #19),
+which addresses its own source directly; there is no `tile.view`-backed fragment
+path whose base could be hoisted. If a future x86 path adopts Tile fragments,
+re-open under this key.
+
+## Cross-backend sync `TILE-DYNAMIC-LEADING-DIM-2026-08-04` — generic typed fragment addresses
+
+Shared `tile.view` / `tile.store` can now carry an SSA leading dimension when
+`#tile.memory_layout` states zero. **Outcome for x86: NOT APPLICABLE.** AVX-512
+and access-gated AMX consume `!tessera_x86.tile`, not Tile fragments or
+pointer-backed `tile.view`; no x86 lowering changed. Host Zen 5 validation:
+x86 dtype + matmul-family suites, 21 passed.
+
+## Cross-backend sync `E2E-REAL-LINEAGE-SCHEDULE-2026-08-05`
+
+Shared compiler orchestration now records explicit artifact ancestry and
+production `tessera-opt` registers the generated Schedule dialect. **x86
+outcome: follow-up required under E2E-REAL-3.** Canonical x86 packaging still
+accepts `GraphIRModule` and re-derives its launch Tile program, so the recorded
+Graph→package-Tile edge exposes the fork and `lineage_complete` remains false.
+No AVX-512 ABI, generated code, selector, or AMX gate changed. The consumer PR
+must accept the canonical launch-Tile artifact and rerun Zen 5 exact execution;
+this does not supply the separately access-gated Intel AMX packet.
+
+## Cross-backend sync `E2E-REAL-SCHEDULED-MATMUL-2026-08-05`
+
+The shared C++ spine now preserves a bounded static Graph matmul behind a
+content-addressed `schedule.matmul` SSA edge and lowers it exactly once to the
+portable A/B/D/M/N/K `tile.matmul_kernel` contract. The x86 instance is f32
+storage/accumulation/output with m16n16k16 row/col layout and explicit
+pipeline/raster fields. **x86 outcome: structural parity validated; physical
+follow-up required under E2E-REAL-3.** No AVX-512 execution or performance is
+claimed by this host-free conversion. Canonical x86 packaging must accept this
+exact Tile artifact, run TileToX86, and repeat the Zen 5 numerical/performance
+ratchet without reconstructing the launch contract from Graph IR. Intel AMX
+evidence remains separately access-gated.
+
+## Cross-backend sync `E2E-REAL-PHYSICAL-CONSUMERS-2026-08-05`
+
+The bounded f32 matmul package now accepts `ScheduledMatmulArtifact` and
+consumes its exact launch-level Tile text through TileToX86. The compile bundle
+records adjacent Graph→Schedule→Tile→Target→backend digests rather than a
+Graph-owned package fork. **x86 outcome: parity validated for E2E-REAL-3.**
+Exact Zen 5 descriptor execution agrees numerically on the established
+`1x1x1`, `5x17x9`, and `16x31x19` corpus, and the physical lit fixture proves
+no Graph, Schedule, or launch-level matmul op survives. E2E-REAL-4 still owns
+the AVX-512 performance ratchet and promotion decision. This is not Intel AMX
+evidence; that named-host packet remains access-gated.
+
+## Cross-backend sync `E2E-REAL-PERFORMANCE-2026-08-05`
+
+The scheduled artifact now separates the physical 16x16 instruction tile from
+an architecture-owned macro tile; x86 selects 16x16 for both. **x86 outcome:
+promote.** On the exact Ryzen AI MAX+ 395 Zen 5 host, the established aligned
+`64x128x96` and ragged `127x65x79` rows are bit-identical to the production
+AVX-512 package. Scheduled/production median ratios are 1.031x and 0.988x,
+inside the existing 10% ratchet. The report records compiler/toolchain and all
+Graph/Schedule/Tile/Target/image digests, compile state, image size, CPU
+features, and host-wall operation-total timing:
+[`../../../../benchmarks/baselines/x86_avx512_e2e_real4_matmul_2026_08_05.json`](../../../../benchmarks/baselines/x86_avx512_e2e_real4_matmul_2026_08_05.json).
+This is AVX-512 evidence only; Intel AMX remains access-gated.
+
+## Cross-backend sync `E2E-REAL-SEMANTIC-KERNELS-2026-08-05`
+
+The bounded canonical f32 softmax/reduction route now crosses real
+Graph→Schedule→Tile boundaries. `schedule.softmax` and `schedule.reduce` bind
+architecture, numeric policy, axis/kind, launch width, and durable SHA-256
+identity; `ScheduledKernelArtifact` feeds the exact Tile text to TileToX86
+without Graph re-entry. Static last-axis softmax and last-axis rank-reducing
+sum/mean/max are lineage-complete, and tampered policy fails closed. Exact Zen
+5 AVX-512 descriptor launches for scheduled softmax and reduction agree with
+NumPy. **x86 outcome: parity validated for the bounded E2E-REAL-5 slice; no new
+selector or performance promotion.** `keepdims=true` remains on the explicit
+Graph-owned descriptor route because canonical `tessera.reduce` is presently
+rank-reducing. This is AVX-512 evidence only; the named Intel AMX lane remains
+access-gated and unchanged.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-2026-08-05`
+
+`schedule.attention` now binds the shared static rank-4 online-softmax
+recurrence, modifiers, launch contract, and architecture-owned backward-LSE
+policy into one SHA-256 identity. The x86 package consumes the exact emitted
+`tile.attention_kernel` through TileToX86 without returning to Graph IR and
+preserves `save_lse/saved`. **x86 outcome: parity validated for E2E-REAL-5A.**
+On the exact Ryzen AI MAX+ 395 Zen 5 host, the scheduled AVX-512 descriptor
+launch agrees with the NumPy oracle for ragged `Sq=5/Sk=7` f32 attention.
+This changes no selector and supplies no Intel AMX evidence. Canonical
+attention backward was the next x86 family boundary.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-BACKWARD-2026-08-05`
+
+`schedule.attention_backward` now carries the canonical tensor-valued dQ,
+split-dK/dV, and ascending-reduction loops as one content-addressed three-result
+program artifact. The exact Tile program lowers to
+`tessera_x86_flash_attn_bwd_f32`; its descriptor requires the forward-owned
+`row_lse` buffer, so `save_lse/saved` is explicit data identity rather than an
+untracked policy string. **x86 outcome: parity validated for E2E-REAL-5B.**
+Exact Zen 5 tests pass for MHA, GQA, and MQA; aligned and ragged shapes; and the
+combined causal, symmetric-window, bias, and softcap envelope while preserving
+the established AVX-512 modifier contract. No AMX evidence or selector
+promotion is inferred.
+
+## Cross-backend sync `E2E-REAL-5C-STATE-LINEAGE-2026-08-05`
+
+The Zen 5 Lion VJP, factored/full Adafactor VJP, and sequence-mixer backward
+launchers now enforce the shared content-addressed logical-buffer lineage and
+consume exact typed Schedule→Tile artifacts before native launch. Runtime
+consumers no longer retain or reconstruct Graph-op metadata. **x86 outcome:
+parity validated for the bounded E2E-REAL-5C slice.** Exact Zen 5 Lion,
+factored/full Adafactor, and gated/modified DeltaNet backward tests pass. No AMX
+evidence is inferred.

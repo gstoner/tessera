@@ -22,6 +22,10 @@ from .native_artifact import (
     ScalarArgument,
     ShapeGuard,
 )
+from .scheduled_matmul import ScheduledMatmulArtifact
+from .scheduled_kernel import ScheduledKernelArtifact
+from .scheduled_attention import ScheduledAttentionArtifact
+from .scheduled_attention_backward import ScheduledAttentionBackwardArtifact
 
 
 X86_SOFTMAX_F32_ABI = "tessera.x86.softmax.x_o_rows_k.f32.v1"
@@ -32,6 +36,9 @@ X86_MATMUL_U8S8_S32_ABI = "tessera.x86.matmul.a_b_o_m_n_k.u8s8_s32.v1"
 X86_MATMUL_F64_ABI = "tessera.x86.matmul.a_b_o_m_n_k.f64.v1"
 X86_ATTENTION_F32_ABI = "tessera.x86.attention.q_k_v_o_dims.f32.v1"
 X86_ATTENTION_EXT_F32_ABI = "tessera.x86.attention_ext.q_k_v_bias_o_dims.f32.v1"
+X86_ATTENTION_BACKWARD_LSE_F32_ABI = (
+    "tessera.x86.attention_backward.do_q_k_v_bias_lse_dq_dk_dv_dims.f32.v1"
+)
 X86_UNARY_F32_ABI = "tessera.x86.elementwise.unary.x_o_n_kind.f32.v1"
 X86_BINARY_F32_ABI = "tessera.x86.elementwise.binary.a_b_o_n_kind.f32.v1"
 X86_PREDICATE_F32_ABI = "tessera.x86.elementwise.predicate.x_o_n_kind.f32_i8.v1"
@@ -132,8 +139,8 @@ def _tessera_opt() -> Path | None:
         return path if path.is_file() else None
     root = _repo_root()
     for path in (
-        root / "build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt",
         root / "build/tools/tessera-opt/tessera-opt",
+        root / "build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt",
     ):
         if path.is_file():
             return path
@@ -159,9 +166,9 @@ def _library_path(architecture: str = X86_AVX512_ARCHITECTURE) -> Path | None:
         return path if path.is_file() else None
     root = _repo_root()
     for path in (
+        root / "build/src/compiler/codegen/tessera_x86_backend" / library_name,
         root / "build-rocm-7.14-llvm23-clean/src/compiler/codegen/tessera_x86_backend" / library_name,
         root / "build-nvidia-cuda/src/compiler/codegen/tessera_x86_backend" / library_name,
-        root / "build/src/compiler/codegen/tessera_x86_backend" / library_name,
     ):
         if path.is_file():
             return path
@@ -1245,6 +1252,361 @@ def package_matmul(module: GraphIRModule, *, pipeline_name: str) -> X86NativePac
     return X86NativePackage(tile_ir, target_ir, target_ir, image, descriptor)
 
 
+def package_scheduled_matmul(
+    artifact: ScheduledMatmulArtifact,
+    *,
+    pipeline_name: str,
+) -> X86NativePackage:
+    """Package the exact Schedule-to-Tile artifact without re-entering Graph IR."""
+
+    artifact.validate()
+    if (
+        artifact.target != "x86"
+        or artifact.architecture != "zen5-avx512"
+        or (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
+        != ("fp32", "fp32", "fp32")
+    ):
+        raise ValueError("x86 scheduled matmul requires the f32 Zen 5 AVX-512 contract")
+    symbol = "tessera_x86_avx512_gemm_f32"
+    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    image = _image(
+        target_ir=target_ir,
+        payload=payload,
+        compiler=compiler,
+        toolchain=toolchain,
+        pipeline_name=pipeline_name,
+        symbol=symbol,
+        abi=X86_MATMUL_F32_ABI,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=symbol,
+        abi_id=X86_MATMUL_F32_ABI,
+        buffers=(
+            BufferBinding(0, artifact.a_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(1, artifact.b_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(2, artifact.output_name, "output", "fp32", 2, "row_major", 4),
+        ),
+        scalars=(
+            ScalarArgument(3, "M", "int64"),
+            ScalarArgument(4, "N", "int64"),
+            ScalarArgument(5, "K", "int64"),
+        ),
+        shape_guards=(
+            ShapeGuard(artifact.a_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.a_name, 1, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 0, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 1, "eq", artifact.n),
+            ShapeGuard(artifact.output_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.output_name, 1, "eq", artifact.n),
+        ),
+        geometry=LaunchGeometry(policy="x86_avx512_gemm_rows"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="all",
+            synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-3",
+            "route": "canonical_scheduled_tile_consumer",
+            "shape": [artifact.m, artifact.n, artifact.k],
+            "a_storage": artifact.storage,
+            "b_storage": artifact.storage,
+            "output_storage": artifact.accum,
+            "accum": artifact.accum,
+            "macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
+            "required_features": ["avx512f", "fma"],
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return X86NativePackage(
+        artifact.tile_ir,
+        target_ir,
+        target_ir,
+        image,
+        descriptor,
+    )
+
+
+def package_scheduled_kernel(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> X86NativePackage:
+    """Package the exact E2E-REAL-5 Tile artifact without Graph resynthesis."""
+
+    artifact.validate()
+    if (
+        artifact.target != "x86"
+        or artifact.architecture != "zen5-avx512"
+        or artifact.dtype != "fp32"
+        or artifact.storage != "f32"
+        or artifact.accum != "f32"
+    ):
+        raise ValueError("x86 scheduled semantic kernel requires the f32 Zen 5 contract")
+    scalars: tuple[ScalarArgument, ...]
+    if artifact.family == "softmax":
+        symbol, abi = "tessera_x86_avx512_softmax_f32", X86_SOFTMAX_F32_ABI
+        scalars = (ScalarArgument(2, "Rows", "int64"), ScalarArgument(3, "K", "int64"))
+        geometry = "x86_64_avx512_rows"
+    elif artifact.family == "reduce" and artifact.axis == len(artifact.input_shape) - 1:
+        symbol, abi = "tessera_x86_avx512_reduce_f32", X86_REDUCE_F32_ABI
+        scalars = (
+            ScalarArgument(2, "Outer", "int64"),
+            ScalarArgument(3, "AxisExtent", "int64"),
+            ScalarArgument(4, "Inner", "int64"),
+        )
+        geometry = "x86_64_avx512_rows"
+    else:
+        raise ValueError("unsupported x86 scheduled semantic-kernel family")
+    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    image = _image(
+        target_ir=target_ir, payload=payload, compiler=compiler,
+        toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=symbol,
+        abi_id=abi,
+        buffers=(
+            BufferBinding(0, artifact.input_name, "input", "fp32", len(artifact.input_shape), "row_major", 4),
+            BufferBinding(1, artifact.output_name, "output", "fp32", len(artifact.output_shape), "row_major", 4),
+        ),
+        scalars=scalars,
+        shape_guards=tuple(
+            [ShapeGuard(artifact.input_name, i, "eq", extent) for i, extent in enumerate(artifact.input_shape)]
+            + [ShapeGuard(artifact.output_name, i, "eq", extent) for i, extent in enumerate(artifact.output_shape)]
+        ),
+        geometry=LaunchGeometry(policy=geometry),
+        ordering=OrderingSemantics(ordered_submission=True, residency="all", synchronization=("return",)),
+        provenance={
+            "work_item": "E2E-REAL-5",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "route": "canonical_scheduled_tile_consumer",
+            "family": artifact.family,
+            "kind": artifact.kind,
+            "shape": list(artifact.input_shape),
+            "output_shape": list(artifact.output_shape),
+            "axis": artifact.axis,
+            "keepdims": artifact.keepdims,
+            "rows": artifact.rows,
+            "columns": artifact.columns,
+            "outer": artifact.outer,
+            "axis_extent": artifact.axis_extent,
+            "inner": artifact.inner,
+            "exp_mode": "accurate",
+            "ftz": False,
+            "storage": artifact.storage,
+            "accum": artifact.accum,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+            "required_features": ["avx512f"],
+        },
+    )
+    return X86NativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+def package_scheduled_attention(
+    artifact: ScheduledAttentionArtifact,
+    *,
+    pipeline_name: str,
+) -> X86NativePackage:
+    """Package the exact E2E-REAL-5A Tile artifact without Graph re-entry."""
+
+    artifact.validate()
+    if (
+        artifact.target != "x86"
+        or artifact.architecture != "zen5-avx512"
+        or artifact.dtype != "fp32"
+        or artifact.storage != "f32"
+        or artifact.accum != "f32"
+        or artifact.dropout_p != 0.0
+        or artifact.window_left != artifact.window_right
+        or artifact.backward_lse_policy != "save_lse"
+        or artifact.backward_lse_selection != "saved"
+    ):
+        raise ValueError("x86 scheduled attention requires the Zen 5 f32 policy")
+    extended = (
+        artifact.bias_name is not None
+        or artifact.window_left >= 0
+        or artifact.softcap > 0.0
+    )
+    symbol = (
+        "tessera_x86_flash_attn_ext_f32"
+        if extended
+        else "tessera_x86_flash_attn_f32"
+    )
+    abi = X86_ATTENTION_EXT_F32_ABI if extended else X86_ATTENTION_F32_ABI
+    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    image = _image(
+        target_ir=target_ir,
+        payload=payload,
+        compiler=compiler,
+        toolchain=toolchain,
+        pipeline_name=pipeline_name,
+        symbol=symbol,
+        abi=abi,
+    )
+    b, hq, hkv, sq, sk, d, dv = artifact.dims
+    bindings = [
+        BufferBinding(0, artifact.q_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(1, artifact.k_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(2, artifact.v_name, "input", "fp32", 4, "row_major", 4),
+    ]
+    if artifact.bias_name is not None:
+        bindings.append(
+            BufferBinding(3, artifact.bias_name, "input", "fp32", 4, "row_major", 4)
+        )
+    bindings.append(
+        BufferBinding(
+            len(bindings), artifact.output_name, "output", "fp32", 4,
+            "row_major", 4,
+        )
+    )
+    shapes = {
+        artifact.q_name: (b, hq, sq, d),
+        artifact.k_name: (b, hkv, sk, d),
+        artifact.v_name: (b, hkv, sk, dv),
+        artifact.output_name: (b, hq, sq, dv),
+    }
+    if artifact.bias_name is not None:
+        shapes[artifact.bias_name] = (b, hq, sq, sk)
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=symbol,
+        abi_id=abi,
+        buffers=tuple(bindings),
+        scalars=tuple(
+            ScalarArgument(len(bindings) + index, name, "int64")
+            for index, name in enumerate(("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
+        ),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name, shape in shapes.items()
+            for axis, extent in enumerate(shape)
+        ),
+        geometry=LaunchGeometry(policy="x86_avx512_attention_rows"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="all",
+            synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-5A",
+            "sync_key": "E2E-REAL-ATTENTION-2026-08-05",
+            "route": "canonical_scheduled_tile_consumer",
+            "semantic_route": artifact.recurrence,
+            "shape": list(artifact.dims),
+            "storage": artifact.storage,
+            "accum": artifact.accum,
+            "scale": artifact.scale,
+            "causal": artifact.causal,
+            "bias": artifact.bias_name is not None,
+            "window_left": artifact.window_left,
+            "window_right": artifact.window_right,
+            "softcap": artifact.softcap,
+            "dropout_p": artifact.dropout_p,
+            "tile_q": artifact.tile_q,
+            "tile_kv": artifact.tile_kv,
+            "backward_lse_policy": artifact.backward_lse_policy,
+            "backward_lse_selection": artifact.backward_lse_selection,
+            "schedule_digest": artifact.schedule_digest,
+            "semantic_ir_digest": artifact.semantic_ir_digest,
+            "tile_ir_digest": artifact.tile_digest,
+            "required_features": ["avx512f"],
+        },
+    )
+    return X86NativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+def package_scheduled_attention_backward(
+    artifact: ScheduledAttentionBackwardArtifact,
+    *,
+    pipeline_name: str,
+) -> X86NativePackage:
+    """Package the exact E2E-REAL-5B backward Tile artifact."""
+
+    artifact.validate()
+    if (
+        artifact.target != "x86"
+        or artifact.architecture != "zen5-avx512"
+        or artifact.storage != "f32"
+        or artifact.dropout_p != 0.0
+        or artifact.window_left != artifact.window_right
+        or artifact.lse_checkpoint_policy != "save_lse"
+        or artifact.lse_checkpoint_selection != "saved"
+        or artifact.reduction_order != (0, 1)
+    ):
+        raise ValueError("x86 scheduled attention backward requires the Zen 5 saved-LSE policy")
+    symbol = "tessera_x86_flash_attn_bwd_f32"
+    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    image = _image(
+        target_ir=target_ir, payload=payload, compiler=compiler,
+        toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol,
+        abi=X86_ATTENTION_BACKWARD_LSE_F32_ABI,
+    )
+    b, hq, hkv, sq, sk, d, dv = artifact.dims
+    do_name, q_name, k_name, v_name = artifact.input_names
+    dq_name, dk_name, dv_name = artifact.output_names
+    specs = [
+        (do_name, "input", 4), (q_name, "input", 4),
+        (k_name, "input", 4), (v_name, "input", 4),
+    ]
+    if artifact.bias_name is not None:
+        specs.append((artifact.bias_name, "input", 4))
+    specs.extend([
+        ("row_lse", "input", 3), (dq_name, "output", 4),
+        (dk_name, "output", 4), (dv_name, "output", 4),
+    ])
+    bindings = tuple(
+        BufferBinding(index, name, direction, "fp32", rank, "row_major", 4)
+        for index, (name, direction, rank) in enumerate(specs)
+    )
+    shapes = {
+        do_name: (b, hq, sq, dv), q_name: (b, hq, sq, d),
+        k_name: (b, hkv, sk, d), v_name: (b, hkv, sk, dv),
+        "row_lse": (b, hq, sq), dq_name: (b, hq, sq, d),
+        dk_name: (b, hkv, sk, d), dv_name: (b, hkv, sk, dv),
+    }
+    if artifact.bias_name is not None:
+        shapes[artifact.bias_name] = (b, hq, sq, sk)
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol,
+        abi_id=X86_ATTENTION_BACKWARD_LSE_F32_ABI, buffers=bindings,
+        scalars=tuple(
+            ScalarArgument(len(bindings) + index, name, "int64")
+            for index, name in enumerate(("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
+        ),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name, shape in shapes.items() for axis, extent in enumerate(shape)
+        ),
+        geometry=LaunchGeometry(policy="x86_avx512_attention_backward_rows"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="all", synchronization=("return",)
+        ),
+        provenance={
+            "work_item": "E2E-REAL-5B",
+            "sync_key": "E2E-REAL-ATTENTION-BACKWARD-2026-08-05",
+            "route": "canonical_scheduled_tile_consumer",
+            "semantic_route": artifact.recurrence,
+            "shape": list(artifact.dims), "storage": "f32", "accum": "f32",
+            "scale": artifact.scale, "causal": artifact.causal,
+            "bias": artifact.bias_name is not None,
+            "window": artifact.window_left, "softcap": artifact.softcap,
+            "lse_checkpoint_policy": artifact.lse_checkpoint_policy,
+            "lse_checkpoint_selection": artifact.lse_checkpoint_selection,
+            "reduction_order": list(artifact.reduction_order),
+            "schedule_digest": artifact.schedule_digest,
+            "semantic_ir_digest": artifact.semantic_ir_digest,
+            "tile_ir_digest": artifact.tile_digest,
+            "required_features": ["avx512f"],
+        },
+    )
+    return X86NativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
 def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86NativePackage:
     contract = _attention_contract(module)
     if contract is None:
@@ -1399,6 +1761,7 @@ def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86Nati
 __all__ = [
     "X86NativePackage", "X86_ALIBI_F32_ABI", "X86_ARGREDUCE_F32_ABI",
     "X86_ATTENTION_EXT_F32_ABI", "X86_ATTENTION_F32_ABI",
+    "X86_ATTENTION_BACKWARD_LSE_F32_ABI",
     "X86_BINARY_F32_ABI", "X86_BINARY_MATH_F32_ABI", "X86_BITWISE_I32_ABI", "X86_COMPARE_F32_ABI",
     "X86_LOGICAL_I8_ABI", "X86_MATMUL_BF16_F32_ABI", "X86_MATMUL_F32_ABI",
     "X86_MATMUL_F64_ABI", "X86_MATMUL_U8S8_S32_ABI", "X86_PREDICATE_F32_ABI",
@@ -1409,8 +1772,9 @@ __all__ = [
     "X86_LOGICAL_KINDS", "X86_TRANSCENDENTAL_KINDS", "X86_WHERE_KINDS",
     "emit_attention_tile_ir", "emit_cohort2_tile_ir", "emit_elementwise_tile_ir", "emit_matmul_tile_ir", "emit_reduce_tile_ir",
     "emit_softmax_tile_ir", "native_package_kind", "package_attention", "package_matmul",
-    "package_native",
+    "package_native", "package_scheduled_kernel", "package_scheduled_matmul",
     "emit_attention_graph_ir", "package_attention_backward_semantics",
+    "package_scheduled_attention", "package_scheduled_attention_backward",
     "package_cohort2", "package_elementwise",
     "package_reduction", "package_softmax", "requests_attention",
     "requests_cohort2",

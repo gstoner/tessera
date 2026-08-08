@@ -42,7 +42,8 @@ def _artifact(rt, op_name, kwargs):
 
 _NP = {"tessera.sum": np.sum, "tessera.mean": np.mean,
        "tessera.max": np.amax, "tessera.min": np.amin,
-       "tessera.amax": np.amax, "tessera.amin": np.amin}
+       "tessera.amax": np.amax, "tessera.amin": np.amin,
+       "tessera.var": np.var, "tessera.std": np.std}
 
 
 @pytest.mark.parametrize("op_name", list(_NP))
@@ -113,7 +114,7 @@ def _opt(directive, *passes):
     return run_tessera_opt(directive, *passes)
 
 
-@pytest.mark.parametrize("kind", ["sum", "mean", "max", "min"])
+@pytest.mark.parametrize("kind", ["sum", "mean", "max", "min", "var", "std"])
 def test_reduce_codegen_and_lowers(kind):
     import re
     d = ('module {\n  "tessera_rocm.reduce"() {name = "rd", '
@@ -134,4 +135,18 @@ def test_reduce_codegen_bad_kind_rejected():
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-reduce-kernel")
     assert r.returncode != 0 and \
-        "kind must be sum, mean, max, min, or prod" in r.stderr
+        "kind must be sum, mean, max, min, prod, var, or std" in r.stderr
+
+
+@pytest.mark.parametrize("op_name", ["tessera.var", "tessera.std"])
+def test_welford_preserves_low_variance_at_large_offset(op_name):
+    rt = _reduce_or_skip()
+    # E[x*x]-E[x]^2 collapses this distribution to zero or a large spurious
+    # value in f32; Welford retains the representable deviations.
+    offsets = (np.arange(1025, dtype=np.float32) % 9 - 4.0) * np.float32(8.0)
+    x = (np.float32(1.0e7) + offsets).reshape(1, -1)
+    result = rt.launch(_artifact(rt, op_name, {"axis": -1}), (x,))
+    assert result["ok"] is True, result.get("reason")
+    out = np.asarray(result["output"], dtype=np.float32)
+    reference = _NP[op_name](x.astype(np.float64), axis=-1).astype(np.float32)
+    np.testing.assert_allclose(out, reference, rtol=2e-3, atol=2e-3)

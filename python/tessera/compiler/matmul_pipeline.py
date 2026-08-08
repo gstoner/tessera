@@ -13,8 +13,12 @@ existing Graph IR text and executes the operation on CPU via NumPy.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence
+
+
+LINEAGE_CONTRACT_VERSION = "tessera.compiler.lineage.v1"
 
 import numpy as np
 
@@ -65,10 +69,74 @@ class ReferenceKVCache:
 
 @dataclass(frozen=True)
 class LoweringArtifact:
-    """Textual artifact for one compiler layer."""
+    """One compiler-layer artifact with explicit boundary provenance.
+
+    ``input_digest`` names the exact preceding artifact consumed by
+    ``producer``.  It is deliberately optional for the root Graph artifact and
+    for legacy callers: a missing edge is reported as incomplete lineage by the
+    bundle rather than being guessed from stage presence.
+    """
 
     level: str
     text: str
+    producer: str = "legacy-unknown"
+    input_digest: str | None = None
+    representation: str = "mlir"
+    contract_version: str = LINEAGE_CONTRACT_VERSION
+    output_digest: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not self.level:
+            raise ValueError("artifact level must be non-empty")
+        if not self.producer:
+            raise ValueError("artifact producer must be non-empty")
+        if not self.representation:
+            raise ValueError("artifact representation must be non-empty")
+        if not self.contract_version:
+            raise ValueError("artifact contract version must be non-empty")
+        if self.input_digest is not None and not _is_sha256(self.input_digest):
+            raise ValueError("artifact input_digest must be a SHA-256 digest")
+        object.__setattr__(
+            self,
+            "output_digest",
+            hashlib.sha256(self.text.encode("utf-8")).hexdigest(),
+        )
+
+    @property
+    def has_declared_lineage(self) -> bool:
+        return self.producer != "legacy-unknown" and self.contract_version == LINEAGE_CONTRACT_VERSION
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {
+            "level": self.level,
+            "text": self.text,
+            "producer": self.producer,
+            "input_digest": self.input_digest,
+            "output_digest": self.output_digest,
+            "representation": self.representation,
+            "contract_version": self.contract_version,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "LoweringArtifact":
+        artifact = cls(
+            level=str(data["level"]),
+            text=str(data["text"]),
+            producer=str(data["producer"]),
+            input_digest=(str(data["input_digest"]) if data.get("input_digest") is not None else None),
+            representation=str(data["representation"]),
+            contract_version=str(data["contract_version"]),
+        )
+        serialized_digest = data.get("output_digest")
+        if serialized_digest is not None and serialized_digest != artifact.output_digest:
+            raise ValueError("serialized artifact output_digest does not match its text")
+        return artifact
+
+
+def _is_sha256(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    return all(char in "0123456789abcdef" for char in value)
 
 
 @dataclass(frozen=True)
@@ -147,9 +215,7 @@ class CPUPlan:
                 if op.operands:
                     cond_name = _operand_name(op.operands[0])
                     if cond_name not in values:
-                        raise ValueError(
-                            f"scf.if condition operand {cond_name!r} "
-                            f"not bound; CPU plan can't dispatch")
+                        raise ValueError(f"scf.if condition operand {cond_name!r} not bound; CPU plan can't dispatch")
                     cond = bool(_as_value(values[cond_name]))
                 else:
                     cond = bool(op.kwargs.get("condition", True))
@@ -158,8 +224,7 @@ class CPUPlan:
                     branch_lo, branch_hi = i + 1, else_idx if else_idx is not None else end_idx
                 else:
                     branch_lo, branch_hi = (
-                        (else_idx + 1, end_idx) if else_idx is not None
-                        else (end_idx, end_idx)  # empty else
+                        (else_idx + 1, end_idx) if else_idx is not None else (end_idx, end_idx)  # empty else
                     )
                 self._execute_range(branch_lo, branch_hi, values)
                 i = end_idx + 1
@@ -197,21 +262,36 @@ class CPUPlan:
         operand_names = tuple(_operand_name(operand) for operand in op.operands)
         missing = [name for name in operand_names if name not in values]
         if missing:
-            raise ValueError(
-                f"CPU plan requires operand(s): {', '.join(missing)}")
+            raise ValueError(f"CPU plan requires operand(s): {', '.join(missing)}")
         operands = [_as_value(values[name]) for name in operand_names]
         if op.result is None:
-            raise ValueError(
-                f"CPU plan cannot execute void op {op.op_name!r}")
+            raise ValueError(f"CPU plan cannot execute void op {op.op_name!r}")
         values[op.result] = _execute_op(op.op_name, operands, op.kwargs)
 
     def artifacts(self) -> tuple[LoweringArtifact, ...]:
-        return (
-            LoweringArtifact("graph", self.graph_ir),
-            LoweringArtifact("schedule", self.schedule_ir),
-            LoweringArtifact("tile", self.tile_ir),
-            LoweringArtifact("target", self.target_ir),
+        graph = LoweringArtifact("graph", self.graph_ir, producer="graph-ir-renderer")
+        schedule = LoweringArtifact(
+            "schedule",
+            self.schedule_ir,
+            producer="python.schedule_ir.lower_graph_to_schedule_ir",
+            input_digest=graph.output_digest,
+            representation="python_object",
         )
+        tile = LoweringArtifact(
+            "tile",
+            self.tile_ir,
+            producer="python.tile_ir.lower_schedule_to_tile_ir",
+            input_digest=schedule.output_digest,
+            representation="python_object",
+        )
+        target = LoweringArtifact(
+            "target",
+            self.target_ir,
+            producer="python.target_ir.lower_tile_to_target_ir",
+            input_digest=tile.output_digest,
+            representation="target_ir",
+        )
+        return (graph, schedule, tile, target)
 
 
 MatmulCPUPlan = CPUPlan
@@ -231,13 +311,15 @@ def build_matmul_cpu_plan(
 # control flow in the CPU executor, not generic unknown ops. Listed
 # here separately from SUPPORTED_CPU_OPS so the planner can accept
 # bodies that mix scf markers with supported leaf ops.
-_SUPPORTED_CONTROL_FLOW_OPS = frozenset({
-    "tessera.scf.if.begin",
-    "tessera.scf.else",
-    "tessera.scf.if.end",
-    "tessera.scf.for.begin",
-    "tessera.scf.for.end",
-})
+_SUPPORTED_CONTROL_FLOW_OPS = frozenset(
+    {
+        "tessera.scf.if.begin",
+        "tessera.scf.else",
+        "tessera.scf.if.end",
+        "tessera.scf.for.begin",
+        "tessera.scf.for.end",
+    }
+)
 
 
 def _scf_body_is_plannable(body: "Sequence[IROp]") -> bool:
@@ -270,7 +352,8 @@ def _scf_body_is_plannable(body: "Sequence[IROp]") -> bool:
 
 
 def _find_scf_if_brackets(
-    ops: "Sequence[IROp]", begin_idx: int,
+    ops: "Sequence[IROp]",
+    begin_idx: int,
 ) -> tuple[Optional[int], int]:
     """For an op at ``begin_idx`` of kind ``tessera.scf.if.begin``,
     return ``(else_idx, end_idx)`` — the matching ``scf.else`` (or
@@ -289,8 +372,7 @@ def _find_scf_if_brackets(
                 return else_idx, j
         elif name == "tessera.scf.else" and depth == 1:
             else_idx = j
-    raise ValueError(
-        f"unbalanced scf.if at index {begin_idx} (no matching scf.if.end)")
+    raise ValueError(f"unbalanced scf.if at index {begin_idx} (no matching scf.if.end)")
 
 
 def _find_scf_for_end(ops: "Sequence[IROp]", begin_idx: int) -> int:
@@ -305,8 +387,7 @@ def _find_scf_for_end(ops: "Sequence[IROp]", begin_idx: int) -> int:
             depth -= 1
             if depth == 0:
                 return j
-    raise ValueError(
-        f"unbalanced scf.for at index {begin_idx} (no matching scf.for.end)")
+    raise ValueError(f"unbalanced scf.for at index {begin_idx} (no matching scf.for.end)")
 
 
 def _static_trip_count(op: IROp, values: Mapping[str, Any]) -> int:
@@ -315,9 +396,7 @@ def _static_trip_count(op: IROp, values: Mapping[str, Any]) -> int:
     elif op.operands:
         name = _operand_name(op.operands[0])
         if name not in values:
-            raise ValueError(
-                f"scf.for trip-count operand {name!r} not bound; "
-                "CPU plan can't dispatch")
+            raise ValueError(f"scf.for trip-count operand {name!r} not bound; CPU plan can't dispatch")
         trip_count = int(np.asarray(_as_value(values[name])).item())
     else:
         raise ValueError("scf.for requires a static trip_count")
@@ -337,9 +416,7 @@ def build_cpu_plan(
 
     _validate_tile(tile)
     target_kind = normalize_target_kind(target_kind)
-    schedule_config = _validated_measured_schedule(
-        measured_schedule, target_kind=target_kind
-    )
+    schedule_config = _validated_measured_schedule(measured_schedule, target_kind=target_kind)
     if schedule_config is not None:
         tile = (
             _measured_int(schedule_config, "tile_m"),
@@ -469,8 +546,7 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
     # handle (text-only condition, or nested scf, or scf.for/while),
     # the eager-fallback diagnostic still fires. Otherwise: no
     # diagnostic — the function compiles through the real plan.
-    scf_ops = [op for op in fn.body
-               if _canonical_op_name(op.op_name).startswith("tessera.scf.")]
+    scf_ops = [op for op in fn.body if _canonical_op_name(op.op_name).startswith("tessera.scf.")]
     if scf_ops:
         plannable = _scf_body_is_plannable(fn.body)
         if not plannable:
@@ -478,17 +554,20 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
             return JitDiagnostic(
                 "info",
                 _Code.EAGER_FALLBACK_CONTROL_FLOW.value,
-                (f"function contains structured control flow ({seen!r} and "
-                 f"{len(scf_ops) - 1} other scf op(s)); CPU plan executor "
-                 f"handles scf.if with SSA / static conditions and "
-                 f"static or SSA-bound trip-count scf.for, but this body "
-                 f"has scf.while, text-only scf.for, nested unsupported "
-                 f"control flow, or a text-only condition — "
-                 f"falling back to eager Python (numerically correct, "
-                 f"unoptimized)"),
+                (
+                    f"function contains structured control flow ({seen!r} and "
+                    f"{len(scf_ops) - 1} other scf op(s)); CPU plan executor "
+                    f"handles scf.if with SSA / static conditions and "
+                    f"static or SSA-bound trip-count scf.for, but this body "
+                    f"has scf.while, text-only scf.for, nested unsupported "
+                    f"control flow, or a text-only condition — "
+                    f"falling back to eager Python (numerically correct, "
+                    f"unoptimized)"
+                ),
             )
     unsupported = [
-        op for op in fn.body
+        op
+        for op in fn.body
         if _canonical_op_name(op.op_name) not in SUPPORTED_CPU_OPS
         and _canonical_op_name(op.op_name) not in _SUPPORTED_CONTROL_FLOW_OPS
     ]
@@ -534,14 +613,18 @@ def explain_cpu_plan(module: GraphIRModule, *, target: str = "cpu") -> JitDiagno
         from .capabilities import supports_op
 
         op_names = tuple(_canonical_op_name(op.op_name) for op in fn.body)
-        if (op_names and all(op_name in runtime_ops() for op_name in op_names)
-                and all(supports_op("apple_gpu", op_name).runtime_status == "ready"
-                        for op_name in op_names)):
+        if (
+            op_names
+            and all(op_name in runtime_ops() for op_name in op_names)
+            and all(supports_op("apple_gpu", op_name).runtime_status == "ready" for op_name in op_names)
+        ):
             return JitDiagnostic(
                 "info",
                 _Code.COMPILED_TARGET_RUNTIME.value,
-                (f"compiled {fn.name} through Graph IR -> Schedule IR -> "
-                 "Tile IR -> apple_gpu Target IR -> Metal runtime dispatch"),
+                (
+                    f"compiled {fn.name} through Graph IR -> Schedule IR -> "
+                    "Tile IR -> apple_gpu Target IR -> Metal runtime dispatch"
+                ),
             )
     return JitDiagnostic(
         "info",
@@ -606,18 +689,20 @@ def _render_target_ir(
         )
     lines = [
         'module attributes {tessera.ir.level = "target", tessera.target = "cpu"} {',
-        f'  func.func @{fn.name}() {{',
+        f"  func.func @{fn.name}() {{",
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
         lines.append(
             f'    "{_target_op_name(op_name)}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, abi = "numpy"}} : () -> ()'
         )
-    lines.extend([
-        '    return',
-        '  }',
-        "}",
-    ])
+    lines.extend(
+        [
+            "    return",
+            "  }",
+            "}",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -641,7 +726,7 @@ def _render_object_target_ir(
 def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
         'module attributes {tessera.ir.level = "target", tessera.target = "rocm", tessera.arch = "gfx90a"} {',
-        f'  func.func @{fn.name}() {{',
+        f"  func.func @{fn.name}() {{",
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -649,12 +734,14 @@ def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
             # `mfma` declares (a, b, acc) -> res in TesseraROCMOps.td, so it
             # must be emitted with that signature or the dialect's verifier
             # rejects it. Fragment values are structural placeholders.
-            lines.extend([
-                f'    %mfma_a_{idx} = ub.poison : vector<16xf16>',
-                f'    %mfma_b_{idx} = ub.poison : vector<16xf16>',
-                f'    %mfma_acc_{idx} = ub.poison : vector<8xf32>',
-                f'    %mfma_res_{idx} = "tessera_rocm.mfma"(%mfma_a_{idx}, %mfma_b_{idx}, %mfma_acc_{idx}) {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "gfx90a", shape = "m16n16k16", accum = "f32"}} : (vector<16xf16>, vector<16xf16>, vector<8xf32>) -> vector<8xf32>',
-            ])
+            lines.extend(
+                [
+                    f"    %mfma_a_{idx} = ub.poison : vector<16xf16>",
+                    f"    %mfma_b_{idx} = ub.poison : vector<16xf16>",
+                    f"    %mfma_acc_{idx} = ub.poison : vector<8xf32>",
+                    f'    %mfma_res_{idx} = "tessera_rocm.mfma"(%mfma_a_{idx}, %mfma_b_{idx}, %mfma_acc_{idx}) {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "gfx90a", shape = "m16n16k16", accum = "f32"}} : (vector<16xf16>, vector<16xf16>, vector<8xf32>) -> vector<8xf32>',
+                ]
+            )
         elif op_name == "tessera.flash_attn":
             lines.append(
                 f'    "tessera.target.diagnostic"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, target = "rocm", severity = "unsupported", reason = "flash_attn target kernel contract is not implemented for ROCm in this phase"}} : () -> ()'
@@ -668,25 +755,29 @@ def _render_rocm_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
                 f'    "tessera_rocm.elementwise"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "gfx90a"}} : () -> ()'
             )
         # async_copy yields a token that wait consumes -- a real dependency.
-        lines.extend([
-            f'    %copy_dst_{idx} = ub.poison : memref<16xf16>',
-            f'    %copy_src_{idx} = ub.poison : memref<16xf16>',
-            f'    %copy_bytes_{idx} = arith.constant 16 : i64',
-            f'    %copy_tok_{idx} = "tessera_rocm.async_copy"(%copy_dst_{idx}, %copy_src_{idx}, %copy_bytes_{idx}) {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, src_space = "global", dst_space = "lds", bytes = 16 : i64}} : (memref<16xf16>, memref<16xf16>, i64) -> !tessera_rocm.token',
-            f'    "tessera_rocm.wait"(%copy_tok_{idx}) {{ordinal = {idx} : i64}} : (!tessera_rocm.token) -> ()',
-        ])
-    lines.extend([
-        '    return',
-        '  }',
-        "}",
-    ])
+        lines.extend(
+            [
+                f"    %copy_dst_{idx} = ub.poison : memref<16xf16>",
+                f"    %copy_src_{idx} = ub.poison : memref<16xf16>",
+                f"    %copy_bytes_{idx} = arith.constant 16 : i64",
+                f'    %copy_tok_{idx} = "tessera_rocm.async_copy"(%copy_dst_{idx}, %copy_src_{idx}, %copy_bytes_{idx}) {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, src_space = "global", dst_space = "lds", bytes = 16 : i64}} : (memref<16xf16>, memref<16xf16>, i64) -> !tessera_rocm.token',
+                f'    "tessera_rocm.wait"(%copy_tok_{idx}) {{ordinal = {idx} : i64}} : (!tessera_rocm.token) -> ()',
+            ]
+        )
+    lines.extend(
+        [
+            "    return",
+            "  }",
+            "}",
+        ]
+    )
     return "\n".join(lines)
 
 
 def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
         'module attributes {tessera.ir.level = "target", tessera.target = "apple_cpu", tessera.arch = "arm64-apple-silicon", tessera.execution_mode = "cpu_accelerate"} {',
-        f'  func.func @{fn.name}() {{',
+        f"  func.func @{fn.name}() {{",
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -705,18 +796,20 @@ def _render_apple_cpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
         lines.append(
             f'    "{target_op}"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, {attrs}}} : () -> ()'
         )
-    lines.extend([
-        '    return',
-        '  }',
-        "}",
-    ])
+    lines.extend(
+        [
+            "    return",
+            "  }",
+            "}",
+        ]
+    )
     return "\n".join(lines)
 
 
 def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str:
     lines = [
         'module attributes {tessera.ir.level = "target", tessera.target = "apple_gpu", tessera.arch = "apple-metal", tessera.execution_mode = "metal_artifact"} {',
-        f'  func.func @{fn.name}() {{',
+        f"  func.func @{fn.name}() {{",
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -740,7 +833,9 @@ def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
         elif op_name in ROPE_OPS:
             kernel = "rope_contract"
             framework = "Metal"
-            extra = 'status = "artifact_only", grid = "tokens_heads", threadgroup = "128x1x1", temporary_memory = "none"'
+            extra = (
+                'status = "artifact_only", grid = "tokens_heads", threadgroup = "128x1x1", temporary_memory = "none"'
+            )
         else:
             kernel = "elementwise_contract"
             framework = "Metal"
@@ -751,11 +846,13 @@ def _render_apple_gpu_target_ir(fn: GraphIRFunction, ops: Sequence[IROp]) -> str
         lines.append(
             f'    "tessera_apple.gpu.dispatch"() {{ordinal = {idx} : i64, queue = "MTLCommandQueue", artifact = "metallib", tessera.execution_mode = "metal_artifact"}} : () -> ()'
         )
-    lines.extend([
-        '    return',
-        '  }',
-        "}",
-    ])
+    lines.extend(
+        [
+            "    return",
+            "  }",
+            "}",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -774,7 +871,7 @@ def _render_nvidia_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target
     }.get(target_kind, "sm_90a")
     lines = [
         f'module attributes {{tessera.ir.level = "target", tessera.target = "{target_kind}", tessera.arch = "{arch}"}} {{',
-        f'  func.func @{fn.name}() {{',
+        f"  func.func @{fn.name}() {{",
     ]
     for idx, op in enumerate(ops):
         op_name = _canonical_op_name(op.op_name)
@@ -814,17 +911,17 @@ def _render_nvidia_target_ir(fn: GraphIRFunction, ops: Sequence[IROp], *, target
             lines.append(
                 f'    "tessera_nvidia.cuda_kernel"() {{source = "{op_name}", result = "{op.result}", ordinal = {idx} : i64, arch = "{arch}", kernel = "elementwise_contract", status = "artifact_only"}} : () -> ()'
             )
-    lines.extend([
-        '    return',
-        '  }',
-        "}",
-    ])
+    lines.extend(
+        [
+            "    return",
+            "  }",
+            "}",
+        ]
+    )
     return "\n".join(lines)
 
 
-def emit_nvidia_ptx(
-    ops: Sequence[IROp], *, target_kind: str
-) -> tuple[str, bool] | None:
+def emit_nvidia_ptx(ops: Sequence[IROp], *, target_kind: str) -> tuple[str, bool] | None:
     """Rung-2.5 emission: for an sm_90 NVIDIA matmul program, emit the documented
     WGMMA PTX assembler text (the encoding the ``tessera_nvidia.wgmma`` Target IR
     op describes). Returns ``(ptx_text, structurally_valid)`` or ``None`` when the
@@ -857,17 +954,14 @@ def _validate_tile(tile: tuple[int, int, int]) -> None:
         raise ValueError("CPU matmul tile must be a positive (tile_m, tile_n, tile_k) tuple")
 
 
-def _validated_measured_schedule(
-    schedule: Mapping[str, Any] | None, *, target_kind: str
-) -> dict[str, object] | None:
+def _validated_measured_schedule(schedule: Mapping[str, Any] | None, *, target_kind: str) -> dict[str, object] | None:
     if schedule is None:
         return None
     if str(schedule.get("method", "")) != "measured":
         raise ValueError("schedule application requires method='measured'")
     if str(schedule.get("target", "")) != target_kind:
         raise ValueError(
-            f"measured schedule target {schedule.get('target')!r} does not "
-            f"match compilation target {target_kind!r}"
+            f"measured schedule target {schedule.get('target')!r} does not match compilation target {target_kind!r}"
         )
     latency = float(schedule.get("latency_ms", 0.0))
     if not np.isfinite(latency) or latency <= 0.0:
@@ -883,13 +977,9 @@ def _validated_measured_schedule(
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError(f"measured schedule {name} must be an integer")
         config[name] = value
-    missing = {
-        "tile_m", "tile_n", "tile_k", "num_warps", "num_stages"
-    } - set(config)
+    missing = {"tile_m", "tile_n", "tile_k", "num_warps", "num_stages"} - set(config)
     if missing:
-        raise ValueError(
-            "measured schedule config is missing " + ", ".join(sorted(missing))
-        )
+        raise ValueError("measured schedule config is missing " + ", ".join(sorted(missing)))
     _validate_tile(
         (
             _measured_int(config, "tile_m"),
@@ -923,7 +1013,9 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         return np.matmul(operands[0], operands[1])
     if op_name in CONV2D_OPS:
         bias = operands[2] if len(operands) > 2 else kwargs.get("bias", None)
-        return _conv2d_nhwc(operands[0], operands[1], bias=bias, stride=kwargs.get("stride", 1), padding=kwargs.get("padding", 0))
+        return _conv2d_nhwc(
+            operands[0], operands[1], bias=bias, stride=kwargs.get("stride", 1), padding=kwargs.get("padding", 0)
+        )
     if op_name == "tessera.layer_norm":
         x = np.asarray(operands[0])
         eps = float(kwargs.get("eps", 1e-5))
@@ -977,11 +1069,9 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         # Variadic: the frontends flatten ``cat([a, b, …], axis)`` into N
         # operands, so re-pack them as the concatenation list here (the public
         # ``cat(xs, axis)`` would otherwise bind operand[1] to ``axis``).
-        return np.concatenate([np.asarray(o) for o in operands],
-                              axis=int(kwargs.get("axis", 0)))
+        return np.concatenate([np.asarray(o) for o in operands], axis=int(kwargs.get("axis", 0)))
     if op_name == "tessera.stack":
-        return np.stack([np.asarray(o) for o in operands],
-                        axis=int(kwargs.get("axis", 0)))
+        return np.stack([np.asarray(o) for o in operands], axis=int(kwargs.get("axis", 0)))
     if op_name == "tessera.cast":
         dtype = str(kwargs.get("dtype", "fp32"))
         cast_map: dict[str, Any] = {"bf16": np.float32, "fp16": np.float16, "fp32": np.float32, "fp64": np.float64}
@@ -1062,10 +1152,7 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
     if op_name == "tessera.kv_cache.read":
         read_cache = operands[0]
         start = int(np.asarray(operands[1]).item())
-        end = (
-            int(np.asarray(operands[2]).item())
-            if len(operands) > 2 else start + 1
-        )
+        end = int(np.asarray(operands[2]).item()) if len(operands) > 2 else start + 1
         if hasattr(read_cache, "read"):
             return read_cache.read(start, end)
         if isinstance(read_cache, ReferenceKVCache):
@@ -1098,7 +1185,10 @@ def _tile_op_name(op_name: str) -> str:
     op_name = _canonical_op_name(op_name)
     bare = op_name.split(".")[-1]
     if op_name in MATMUL_OPS:
-        return "tile.mma"
+        # The Python lane carries a value-level/launch-level contraction, not
+        # physical cooperative-matrix fragments. `tile.mma` is reserved for
+        # the typed SSA dialect contract materialized by C++ backends.
+        return "tile.matmul"
     if op_name in CONV2D_OPS:
         return "tile.conv2d"
     if op_name in ROPE_OPS:
@@ -1201,7 +1291,7 @@ def _conv2d_nhwc(x: Any, weight: Any, *, bias: Any = None, stride: Any = 1, padd
     out = np.zeros((batch, out_h, out_w, out_c), dtype=np.result_type(x, weight))
     for i in range(out_h):
         for j in range(out_w):
-            window = x_pad[:, i * stride_h:i * stride_h + k_h, j * stride_w:j * stride_w + k_w, :]
+            window = x_pad[:, i * stride_h : i * stride_h + k_h, j * stride_w : j * stride_w + k_w, :]
             out[:, i, j, :] = np.tensordot(window, weight, axes=([1, 2, 3], [0, 1, 2]))
     if bias is not None:
         out = out + np.asarray(bias)

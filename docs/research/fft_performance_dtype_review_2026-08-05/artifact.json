@@ -1,0 +1,279 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "FFT Performance and DType Coverage Review",
+    "description": "A measured ROCm and x86 FFT assessment, dtype coverage audit, and research-backed optimization plan.",
+    "generatedAt": "2026-08-05T18:00:00-05:00",
+    "sources": [
+      {
+        "id": "local_measurements",
+        "label": "Tessera local WSL measurements, revision 0255b6b7b90a",
+        "query": {
+          "engine": "host-wsl",
+          "language": "bash/python",
+          "id": "fft-review-2026-08-05",
+          "description": "Complex64 C2C forward transforms measured on Radeon 8060S gfx1151 and Ryzen AI MAX+ 395. GPU compares the Tessera Stockham harness with rocFFT; CPU compares Tessera's AVX-512 package with scipy.fft workers=1. Plans are outside timed loops. Both use synchronized host-wall timing.",
+          "executed_at": "2026-08-05T17:30:00-05:00",
+          "filters": [
+            "batch=1",
+            "complex64 C2C forward",
+            "20 warmups and 100 timed repeats on GPU",
+            "single-threaded comparator on CPU",
+            "local branch agent/e2e-real-attention-forward at 0255b6b7b90a with uncommitted FFT changes"
+          ],
+          "metric_definitions": [
+            "latency_ratio = Tessera synchronized host-wall latency / optimized-library synchronized host-wall latency",
+            "GFLOP/s = 5*N*log2(N) / elapsed_seconds / 1e9",
+            "GPU comparator = installed rocFFT 1.0.34 through HIP 7.14.60850",
+            "CPU comparator = scipy.fft.fft with workers=1"
+          ]
+        }
+      },
+      {
+        "id": "local_contracts",
+        "label": "Tessera spectral planner, target hooks, and benchmark sources",
+        "path": "python/tessera/compiler/spectral_plan.py",
+        "query": {
+          "engine": "repository",
+          "language": "source-review",
+          "description": "Reviewed the spectral plan, dtype registry, backend manifests, AMD Stockham target hook, x86 AVX-512 target hook, and spectral benchmark sources at local revision 0255b6b7b90a.",
+          "tables_used": [
+            "python/tessera/compiler/spectral_plan.py",
+            "python/tessera/compiler/dtype.py",
+            "python/tessera/compiler/backend_manifest.py",
+            "src/solvers/spectral/lib/TargetHooks/AMD/StockhamRadix4.hip",
+            "src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_fft_f32.cpp",
+            "benchmarks/spectral/cpp/spectral_fft_bench.cpp"
+          ]
+        }
+      },
+      {
+        "id": "amd_rocfft",
+        "label": "AMD rocFFT documentation and releases",
+        "href": "https://rocm.docs.amd.com/projects/rocFFT/en/latest/what-is-rocfft.html",
+        "query": {
+          "engine": "web",
+          "description": "Official rocFFT capability, callback, and release documentation.",
+          "url": "https://github.com/ROCm/rocFFT/releases",
+          "executed_at": "2026-08-05"
+        }
+      },
+      {
+        "id": "intel_fft",
+        "label": "Intel oneMKL and IPP FFT guidance",
+        "href": "https://www.intel.com/content/www/us/en/developer/articles/technical/onemkl-ipp-choosing-an-fft.html",
+        "query": {
+          "engine": "web",
+          "description": "Official Intel FFT precision, factorization, ISA, and library-selection guidance.",
+          "url": "https://www.intel.com/content/www/us/en/docs/onemkl/developer-reference-dpcpp/2026-0/scoped-enumerations-001.html",
+          "executed_at": "2026-08-05"
+        }
+      },
+      {
+        "id": "gpu_research",
+        "label": "GPU FFT architecture and mixed-precision research",
+        "href": "https://arxiv.org/abs/2412.05824",
+        "query": {
+          "engine": "web",
+          "description": "Primary papers and official vendor documentation covering fused GPU FFTs, tensor-core decompositions, register/shared-memory execution, and low-precision FFT error control.",
+          "executed_at": "2026-08-05",
+          "tables_used": [
+            "TurboFFT (arXiv:2412.05824)",
+            "tcFFT (arXiv:2104.11471)",
+            "FlashFFTConv (arXiv:2311.05908)",
+            "Mixed Precision FFT for MRI (arXiv:2512.04317)",
+            "NVIDIA cuFFTDx performance guide"
+          ]
+        }
+      },
+      {
+        "id": "codegen_research",
+        "label": "FFTc and SPIRAL/FFTX code-generation research",
+        "href": "https://arxiv.org/abs/2207.06803",
+        "query": {
+          "engine": "web",
+          "description": "Primary sources on MLIR-based FFT compilation and build-time FFT code generation/autotuning.",
+          "url": "https://www.spiral.net/software/fftx.html",
+          "executed_at": "2026-08-05"
+        }
+      }
+    ],
+    "cards": [],
+    "charts": [
+      {
+        "id": "latency_gap",
+        "title": "Tessera FFT latency relative to optimized libraries",
+        "subtitle": "A value of 1× is parity; the gap widens sharply for large gfx1151 transforms.",
+        "intent": "trend",
+        "question": "How does Tessera's execution-time gap change with transform size on the measured ROCm and x86 systems?",
+        "rationale": "A two-series line chart exposes the size-dependent crossover and prevents a single-size result from hiding the large-transform regression.",
+        "type": "line",
+        "dataset": "performance",
+        "sourceId": "local_measurements",
+        "encodings": {
+          "x": {"field": "log2_n", "type": "quantitative", "label": "FFT size (log2 N)"},
+          "y": {"field": "latency_ratio", "type": "quantitative", "label": "Tessera / baseline latency", "unit": "x"},
+          "color": {"field": "platform", "type": "nominal", "label": "Platform"},
+          "tooltip": [
+            {"field": "platform", "type": "nominal", "label": "Platform"},
+            {"field": "n", "type": "quantitative", "label": "N"},
+            {"field": "tessera_ms", "type": "quantitative", "label": "Tessera ms"},
+            {"field": "baseline_ms", "type": "quantitative", "label": "Baseline ms"},
+            {"field": "latency_ratio", "type": "quantitative", "label": "Latency ratio"}
+          ]
+        },
+        "xAxisTitle": "FFT size (log2 N)",
+        "yAxisTitle": "Tessera / baseline latency (x)",
+        "layout": "full",
+        "referenceLines": [
+          {"value": 1, "axis": "y", "label": "Parity", "lineStyle": "dashed"}
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "id": "dtype_matrix",
+        "title": "Recommended physical FFT dtype tiers",
+        "subtitle": "Parser-visible dtypes are not counted as executable support.",
+        "dataset": "dtype_coverage",
+        "sourceId": "local_contracts",
+        "defaultSort": {"field": "priority", "direction": "asc"},
+        "density": "dense",
+        "layout": "full",
+        "columns": [
+          {"field": "priority", "label": "Priority", "type": "number"},
+          {"field": "backend", "label": "Backend", "type": "text"},
+          {"field": "logical_dtype", "label": "Logical dtype", "type": "text"},
+          {"field": "physical_policy", "label": "Physical policy", "type": "text"},
+          {"field": "current_state", "label": "Current state", "type": "text"},
+          {"field": "decision", "label": "Decision", "type": "text"}
+        ]
+      },
+      {
+        "id": "research_transfer",
+        "title": "Research ideas that transfer to Tessera",
+        "subtitle": "Claims remain architecture-scoped until exact-device validation.",
+        "dataset": "research_actions",
+        "sourceId": "gpu_research",
+        "defaultSort": {"field": "priority", "direction": "asc"},
+        "density": "spacious",
+        "layout": "full",
+        "columns": [
+          {"field": "priority", "label": "Priority", "type": "number"},
+          {"field": "source", "label": "Source", "type": "text"},
+          {"field": "transferable_idea", "label": "Transferable idea", "type": "text"},
+          {"field": "tessera_action", "label": "Tessera action", "type": "text"},
+          {"field": "evidence_boundary", "label": "Evidence boundary", "type": "text"}
+        ]
+      }
+    ],
+    "blocks": [
+      {"id": "title", "type": "markdown", "body": "# FFT Performance and DType Coverage Review"},
+      {
+        "id": "summary",
+        "type": "markdown",
+        "body": "## Technical summary\n\nTessera's FFT packages are correct enough to continue, but their performance status should remain **experimental**. On the current WSL host, the gfx1151 complex64 path is 2.4× slower than rocFFT at N=64 and 15.3× slower at N=1,048,576. The single-threaded x86 package is 6–23× slower than SciPy's optimized CPU FFT over most practical sizes. These are synchronized host-wall measurements, not selector-grade device timing.\n\nThe dominant problem is architectural: each GPU radix stage round-trips global memory, computes trigonometric twiddles inside the butterfly, and pays repeated launch/scratch costs; the CPU path rebuilds twiddles and scratch, performs scalar bit reversal, and implements radix-2 only. The immediate milestone should therefore be **plan reuse plus fused register/LDS/cache-local stages**, followed by generated mixed-radix codelets. Tensor-core decomposition and new low-precision dtypes belong behind that baseline, not ahead of it.\n\nDType truth is also narrower than the front-end surface suggests. The only physically shipped shared tier is complex64 with float32 storage/twiddles/accumulation. The next evidence-worthy tiers are complex32 on ROCm (FP16 storage with a declared accumulation policy) and complex128 on x86/ROCm. BF16 and FP8/MX FFTs should remain research contracts until scaling and application-level accuracy are proven."
+      },
+      {
+        "id": "findings",
+        "type": "markdown",
+        "body": "## Key findings\n\n1. **The gfx1151 gap grows with size.** Tessera reaches about 87 GFLOP/s at N=64K–256K, but rocFFT is 4.5× faster at 64K, 8.0× at 256K, and 15.3× at 1M. This pattern is consistent with stage-by-stage global traffic and launch overhead, not a missing scalar coefficient.\n2. **The CPU lane lacks a production FFT plan.** It allocates and regenerates twiddles per call, uses scalar bit reversal, and has only radix-2 decomposition. Batching amortizes call overhead but does not close the execution gap.\n3. **The repository benchmark is not yet an FFT benchmark.** `spectral_fft_bench.cpp` detects FFT libraries but times a synthetic sine/cosine loop, so it cannot support retain/promote decisions.\n4. **Coverage claims must distinguish logical from physical dtype support.** Complex32/64/128 spellings exist, while x86 and ROCm packages currently execute only interleaved complex64.\n5. **Recent work converges on memory hierarchy and fusion.** rocFFT's large single-kernel plans, cuFFTDx's register/shared-memory execution, TurboFFT's architecture-aware fusion, and FFTc/SPIRAL code generation all point in the same direction."
+      },
+      {"id": "latency_chart", "type": "chart", "chartId": "latency_gap"},
+      {
+        "id": "scope",
+        "type": "markdown",
+        "body": "## Scope, data, and metrics\n\nThe measured scope is one-dimensional, batch-1, complex64 C2C forward FFTs at powers of two from 64 through 1,048,576. The GPU host is a Radeon 8060S (`gfx1151`, wave32) using HIP 7.14.60850 and rocFFT 1.0.34. The CPU is a Ryzen AI MAX+ 395 with AVX-512, compared to `scipy.fft.fft(workers=1)`.\n\nPrimary metrics are synchronized host-wall latency, the ratio to the same-host optimized library, and nominal `5*N*log2(N)` GFLOP/s. Correctness for the Tessera GPU path passed the existing complex64 absolute tolerance of 0.01, with forward maximum error rising from 3.0e-6 at N=64 to 2.25e-3 at N=1M and round-trip error remaining about 2.18e-6 at N=1M. The temporary rocFFT comparator checked execution, not output equality, so its timing is descriptive rather than promotable evidence."
+      },
+      {
+        "id": "methodology",
+        "type": "markdown",
+        "body": "## Methodology\n\nThe review combined source inspection, same-host execution, and primary-source research. Source inspection traced the logical dtype contract through `SpectralPlan`, backend manifests, Schedule/Tile lowering, and the AMD/x86 target hooks. GPU and CPU timings excluded plan construction where the comparator APIs permit it and synchronized work before reading host time. A second CPU batch sweep tested whether call overhead alone explained the gap; per-transform latency improved with batching, but Tessera remained roughly 6–10× slower for N=256–4096.\n\nResearch was screened for transferability rather than copied as a schedule. Vendor documentation defines supported precision and execution mechanisms. Papers contribute candidate decompositions, fusion strategies, and accuracy techniques. Every physical schedule still requires independent gfx1151, future gfx1200/gfx1250, and x86 evidence."
+      },
+      {"id": "dtype_heading", "type": "markdown", "body": "## DType coverage and promotion order\n\nComplex64 remains the sole production-shaped tier. Promote a new tier only when its storage ABI, twiddle precision, accumulation precision, error oracle, architecture capability, and package path are all explicit."},
+      {"id": "dtype_table", "type": "table", "tableId": "dtype_matrix"},
+      {
+        "id": "optimization_plan",
+        "type": "markdown",
+        "body": "## Recommended engineering sequence\n\n### FFT-PERF-0 — establish truthful evidence\n\nReplace the placeholder C++ spectral benchmark with real rocFFT and CPU-library execution. Record plan/build time separately from warm execution; cover C2C, R2C, C2R, batch 1/8/32/256, aligned and strided layouts, powers of two, mixed factors 3/5/7/11/13/17, and primes that exercise Bluestein or Rader. On bare-metal gfx1151 use device events plus rocprofv3 launch, LDS, cache, wave, and stall counters. On x86 pin cores and report both one-thread latency and throughput-thread scaling.\n\n### FFT-PERF-1 — remove avoidable work\n\nCache plans, twiddles, and workspaces by `(target, dtype, N, direction, batch, strides)`. Eliminate per-butterfly `sin/cos`, runtime allocations, and final parity copies. This is the smallest change likely to help every size and dtype.\n\n### FFT-PERF-2 — make stages local\n\nFor GPU, fuse several Stockham stages into one kernel using registers and padded LDS; tune elements-per-thread, FFTs-per-block, radix sequence, and the single-kernel size envelope per architecture profile. For CPU, replace scalar bit reversal with Stockham autosort or a vectorized permutation and generate SIMD codelets for radices 2/3/4/5/7/8/11/13/17. Vectorize across transforms for small batched FFTs and across butterflies for larger FFTs.\n\n### FFT-PERF-3 — handle large and irregular transforms\n\nUse six-step/Bailey-style tiling and fused transposes for large transforms. Add radix 17 to match the optimized-factor envelope of rocFFT. Compare direct mixed radix, Rader, and Bluestein for primes with workspace and numerical-error gates. Fuse real packing and adjacent pointwise spectral operations when the graph makes them visible.\n\n### FFT-DTYPE-1 — widen only behind evidence\n\nFirst add a ROCm complex32 experiment and x86/ROCm complex128 packages. Keep BF16 as storage-convert-to-F32 unless a native algorithm wins end to end. Treat FP8/MX as an application-specific research lane requiring block scaling, power-of-two prescaling, low-bit twiddle policy, SNR/error budgets, and comparison to the complex64 result."
+      },
+      {"id": "research_table", "type": "table", "tableId": "research_transfer"},
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## Limitations and robustness\n\nThe GPU timing domain is synchronized host wall because HIP events are invalid in this WSL configuration. It includes launch/synchronization overhead and cannot establish device-kernel promotion. The rocFFT comparison used an ad hoc comparator whose output was not checked against Tessera in the same executable. The CPU comparison uses SciPy as an optimized implementation proxy rather than a directly linked oneMKL/FFTW packet, and timing varied between sweeps. Current local FFT sources also contain uncommitted changes, so the report is pinned to revision 0255b6b7b90a plus the recorded dirty-file scope.\n\nResearch speedups are not Tessera forecasts. TurboFFT and tcFFT report NVIDIA results; FlashFFTConv is specialized for long convolutions; new FP8/MX papers optimize particular numerical settings. They justify experiments, not cross-architecture schedule transfer. gfx1200/gfx1250 must remain fail-closed until profiles, ISA choices, and device evidence exist."
+      },
+      {
+        "id": "next_steps",
+        "type": "markdown",
+        "body": "## Next steps\n\n1. Land `FFT-PERF-0` as a benchmark-truth PR, including the exact-device packet schema and real library calls.\n2. Implement a reusable plan/twiddle/workspace cache on both backends and rerun the full size/factor matrix.\n3. Prototype one gfx1151 fused register/LDS Stockham envelope and one x86 generated mixed-radix/autosort envelope; retain only improvements that beat the current package without weakening error limits.\n4. Add complex32 ROCm and complex128 x86/ROCm as separate fail-closed capability rows, then promote only with exact-device numerical and performance evidence.\n5. Feed the winning plan decisions into the existing content-addressed Schedule→Tile artifact so packages consume the selected FFT plan without re-entering Graph IR."
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## Further questions\n\n- What portion of gfx1151 time is global traffic, twiddle transcendental work, launch latency, and wait/stall behavior at 64K, 256K, and 1M?\n- At what transform size does a fused single-kernel plan exceed the LDS/register budget on gfx1151, gfx1200, and gfx1250?\n- Which CPU vectorization orientation wins by regime: lanes across transforms, butterflies, or real/imag components?\n- Do target workloads need isolated FFTs, or can pointwise multiply, normalization, convolution, and real packing be fused across the artifact boundary?\n- Which application error metric—not only elementwise tolerance—governs complex32, BF16-storage, and FP8/MX experiments?"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-05T18:00:00-05:00",
+    "status": "ready",
+    "datasets": {
+      "performance": [
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":64,"log2_n":6,"tessera_ms":0.0087,"baseline_ms":0.003691,"latency_ratio":2.357,"tessera_gflops":0.22,"baseline_gflops":0.520,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":128,"log2_n":7,"tessera_ms":0.0109,"baseline_ms":0.004071,"latency_ratio":2.677,"tessera_gflops":0.41,"baseline_gflops":1.100,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":256,"log2_n":8,"tessera_ms":0.0107,"baseline_ms":0.004292,"latency_ratio":2.493,"tessera_gflops":0.96,"baseline_gflops":2.386,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":512,"log2_n":9,"tessera_ms":0.0116,"baseline_ms":0.005006,"latency_ratio":2.317,"tessera_gflops":1.99,"baseline_gflops":4.603,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":1024,"log2_n":10,"tessera_ms":0.0125,"baseline_ms":0.004738,"latency_ratio":2.638,"tessera_gflops":4.10,"baseline_gflops":10.806,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":2048,"log2_n":11,"tessera_ms":0.0157,"baseline_ms":0.005083,"latency_ratio":3.089,"tessera_gflops":7.16,"baseline_gflops":22.162,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":4096,"log2_n":12,"tessera_ms":0.0169,"baseline_ms":0.007163,"latency_ratio":2.359,"tessera_gflops":14.52,"baseline_gflops":34.309,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":8192,"log2_n":13,"tessera_ms":0.0200,"baseline_ms":0.012460,"latency_ratio":1.605,"tessera_gflops":26.60,"baseline_gflops":42.735,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":16384,"log2_n":14,"tessera_ms":0.0252,"baseline_ms":0.009549,"latency_ratio":2.639,"tessera_gflops":45.48,"baseline_gflops":120.106,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":65536,"log2_n":16,"tessera_ms":0.0603,"baseline_ms":0.013361,"latency_ratio":4.513,"tessera_gflops":86.93,"baseline_gflops":392.414,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":262144,"log2_n":18,"tessera_ms":0.2730,"baseline_ms":0.034141,"latency_ratio":7.996,"tessera_gflops":86.42,"baseline_gflops":691.053,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"ROCm gfx1151 vs rocFFT","baseline":"rocFFT 1.0.34","n":1048576,"log2_n":20,"tessera_ms":2.2580,"baseline_ms":0.147605,"latency_ratio":15.298,"tessera_gflops":46.44,"baseline_gflops":710.393,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":64,"log2_n":6,"tessera_ms":0.006175,"baseline_ms":0.003841,"latency_ratio":1.608,"tessera_gflops":0.311,"baseline_gflops":0.500,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":128,"log2_n":7,"tessera_ms":0.009451,"baseline_ms":0.002548,"latency_ratio":3.709,"tessera_gflops":0.474,"baseline_gflops":1.758,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":256,"log2_n":8,"tessera_ms":0.015375,"baseline_ms":0.002963,"latency_ratio":5.189,"tessera_gflops":0.666,"baseline_gflops":3.456,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":512,"log2_n":9,"tessera_ms":0.026523,"baseline_ms":0.003227,"latency_ratio":8.218,"tessera_gflops":0.869,"baseline_gflops":7.139,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":1024,"log2_n":10,"tessera_ms":0.049426,"baseline_ms":0.005730,"latency_ratio":8.626,"tessera_gflops":1.036,"baseline_gflops":8.935,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":2048,"log2_n":11,"tessera_ms":0.099237,"baseline_ms":0.006257,"latency_ratio":15.861,"tessera_gflops":1.135,"baseline_gflops":18.003,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":4096,"log2_n":12,"tessera_ms":0.199703,"baseline_ms":0.010272,"latency_ratio":19.442,"tessera_gflops":1.231,"baseline_gflops":23.926,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":8192,"log2_n":13,"tessera_ms":0.407149,"baseline_ms":0.017897,"latency_ratio":22.750,"tessera_gflops":1.308,"baseline_gflops":29.753,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":16384,"log2_n":14,"tessera_ms":0.833669,"baseline_ms":0.037639,"latency_ratio":22.149,"tessera_gflops":1.376,"baseline_gflops":30.471,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":65536,"log2_n":16,"tessera_ms":3.471488,"baseline_ms":0.201805,"latency_ratio":17.202,"tessera_gflops":1.510,"baseline_gflops":25.980,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":262144,"log2_n":18,"tessera_ms":14.984208,"baseline_ms":1.764725,"latency_ratio":8.491,"tessera_gflops":1.575,"baseline_gflops":13.369,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"},
+        {"platform":"x86 AVX-512 vs SciPy","baseline":"scipy.fft workers=1","n":1048576,"log2_n":20,"tessera_ms":68.553381,"baseline_ms":7.583397,"latency_ratio":9.040,"tessera_gflops":1.530,"baseline_gflops":13.827,"timing_domain":"host_wall_synchronized","batch":1,"dtype":"complex64"}
+      ],
+      "dtype_coverage": [
+        {"priority":1,"backend":"ROCm gfx1151","logical_dtype":"complex64","physical_policy":"FP32 storage + twiddles + accumulation","current_state":"Executable; measured; performance experimental","decision":"Retain correctness tier; optimize before promote"},
+        {"priority":1,"backend":"x86 AVX-512","logical_dtype":"complex64","physical_policy":"FP32 storage + twiddles + accumulation","current_state":"Executable; measured; performance experimental","decision":"Retain correctness tier; replace current plan"},
+        {"priority":2,"backend":"ROCm","logical_dtype":"complex32","physical_policy":"FP16 storage; compare FP16 vs FP32 twiddle/accumulation","current_state":"Logical spelling only; rocFFT has FP16 precedent","decision":"Next dtype experiment"},
+        {"priority":3,"backend":"x86 + ROCm","logical_dtype":"complex128","physical_policy":"FP64 storage + twiddles + accumulation","current_state":"Logical/capability surfaces exist; package absent","decision":"Add for scientific completeness"},
+        {"priority":4,"backend":"x86 + ROCm","logical_dtype":"BF16 complex storage","physical_policy":"BF16 storage converted to FP32 compute","current_state":"No native rocFFT/oneMKL FFT precedent","decision":"Research only; do not claim native support"},
+        {"priority":5,"backend":"ROCm and future GPU profiles","logical_dtype":"FP8/MX complex storage","physical_policy":"Block scaling + power-of-two prescale + explicit twiddle policy","current_state":"Aspirational metadata/recent research only","decision":"Application-specific research; fail closed"}
+      ],
+      "research_actions": [
+        {"priority":1,"source":"rocFFT 1.0.34","transferable_idea":"Specialized FP32 kernels and large single-kernel plans when LDS permits","tessera_action":"Define an architecture-owned fused-stage envelope and tune it per gfx profile","evidence_boundary":"AMD implementation precedent; Tessera still needs gfx1151 counters and timing"},
+        {"priority":1,"source":"NVIDIA cuFFTDx","transferable_idea":"Execute FFTs from registers/shared memory and tune elements per thread and FFTs per block","tessera_action":"Model register/LDS residency explicitly in Schedule→Tile FFT artifacts","evidence_boundary":"Programming model transfers; NVIDIA schedules do not"},
+        {"priority":1,"source":"TurboFFT (2024/2025)","transferable_idea":"Padding-free architecture-aware fusion and template-generated kernels","tessera_action":"Generate fused radix sequences and search a bounded target-specific schedule space","evidence_boundary":"Reported speedups are NVIDIA-only"},
+        {"priority":2,"source":"FFTc + SPIRAL/FFTX","transferable_idea":"MLIR/build-time generation, layout transforms, and autotuned codelets","tessera_action":"Represent radix/codelet/layout choices in Schedule IR and emit content-addressed plans","evidence_boundary":"Compiler architecture evidence, not Tessera performance evidence"},
+        {"priority":3,"source":"tcFFT","transferable_idea":"Reformulate selected FFT stages as matrix operations for FP16 tensor cores","tessera_action":"Evaluate only after the memory-efficient scalar/SIMD baseline, starting with batched long transforms","evidence_boundary":"V100/A100 results; gfx1151 WMMA requires independent design"},
+        {"priority":3,"source":"FlashFFTConv","transferable_idea":"Fuse FFT-based convolution to remove intermediate global-memory traffic","tessera_action":"Add graph-visible convolution/pointwise fusion candidates across the FFT artifact boundary","evidence_boundary":"Application-specific long convolution, not general FFT"},
+        {"priority":4,"source":"Mixed Precision FFT for MRI (2025)","transferable_idea":"Per-block microscaling, global power-of-two prescaling, and prequantized low-bit twiddles","tessera_action":"Use as the minimum contract for any FP8/MX experiment","evidence_boundary":"Recent preprint; accuracy is workload dependent"}
+      ]
+    },
+    "accessIssues": []
+  },
+  "sources": [
+    {"id":"local_measurements","label":"Tessera local WSL measurements, revision 0255b6b7b90a"},
+    {"id":"local_contracts","label":"Tessera spectral planner, target hooks, and benchmark sources","path":"python/tessera/compiler/spectral_plan.py"},
+    {"id":"amd_rocfft","label":"AMD rocFFT documentation and releases","href":"https://rocm.docs.amd.com/projects/rocFFT/en/latest/what-is-rocfft.html"},
+    {"id":"intel_fft","label":"Intel oneMKL and IPP FFT guidance","href":"https://www.intel.com/content/www/us/en/developer/articles/technical/onemkl-ipp-choosing-an-fft.html"},
+    {"id":"gpu_research","label":"GPU FFT architecture and mixed-precision research","href":"https://arxiv.org/abs/2412.05824"},
+    {"id":"codegen_research","label":"FFTc and SPIRAL/FFTX code-generation research","href":"https://arxiv.org/abs/2207.06803"}
+  ]
+}

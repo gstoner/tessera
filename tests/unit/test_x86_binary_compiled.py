@@ -86,6 +86,14 @@ def test_x86_binary_shape_mismatch_rejected():
         rt._execute_x86_compiled_binary(_artifact(rt, "tessera.sub"), (a, b))
 
 
+def test_x86_binary_mixed_dtype_rejected():
+    from tessera import runtime as rt
+    a = np.zeros((4, 8), np.float32)
+    b = np.zeros((4, 8), np.float16)
+    with pytest.raises(ValueError, match="matching operand dtypes"):
+        rt._execute_x86_compiled_binary(_artifact(rt, "tessera.sub"), (a, b))
+
+
 def test_x86_binary_unknown_op_rejected():
     from tessera import runtime as rt
     a = np.zeros((4, 8), np.float32)

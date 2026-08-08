@@ -27,6 +27,8 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 
+#include <limits>
+
 using namespace mlir;
 
 namespace {
@@ -70,10 +72,16 @@ void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     y = b.create<math::PowFOp>(loc, a, bb);
     break;
   case Bin::Maximum:
-    y = b.create<arith::MaximumFOp>(loc, a, bb);
+    // NumPy's maximum/minimum return the second operand on an ordered tie,
+    // which makes signed-zero behavior operand-order-sensitive.
+    y = b.create<arith::SelectOp>(
+        loc, b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OEQ, a, bb),
+        bb, b.create<arith::MaximumFOp>(loc, a, bb));
     break;
   case Bin::Minimum:
-    y = b.create<arith::MinimumFOp>(loc, a, bb);
+    y = b.create<arith::SelectOp>(
+        loc, b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OEQ, a, bb),
+        bb, b.create<arith::MinimumFOp>(loc, a, bb));
     break;
   case Bin::Add:
     y = b.create<arith::AddFOp>(loc, a, bb);
@@ -82,12 +90,63 @@ void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     y = b.create<arith::MulFOp>(loc, a, bb);
     break;
   case Bin::FloorDiv:
-    y = b.create<math::FloorOp>(loc, b.create<arith::DivFOp>(loc, a, bb));
-    break;
   case Bin::Mod: {
-    // numpy.mod: a - floor(a/b)*b
-    Value q = b.create<math::FloorOp>(loc, b.create<arith::DivFOp>(loc, a, bb));
-    y = b.create<arith::SubFOp>(loc, a, b.create<arith::MulFOp>(loc, q, bb));
+    Value zero = b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(0.0f));
+    Value oneNeg = b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(-1.0f));
+    Value inf = b.create<arith::ConstantOp>(
+        loc, f32, b.getF32FloatAttr(std::numeric_limits<float>::infinity()));
+    Value nan = b.create<arith::ConstantOp>(
+        loc, f32, b.getF32FloatAttr(std::numeric_limits<float>::quiet_NaN()));
+    Value isInfA = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OEQ, b.create<math::AbsFOp>(loc, a), inf);
+    Value isInfB = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OEQ, b.create<math::AbsFOp>(loc, bb), inf);
+    Type i32 = b.getI32Type();
+    Value ai = b.create<arith::BitcastOp>(loc, i32, a);
+    Value bi = b.create<arith::BitcastOp>(loc, i32, bb);
+    Value zi = b.create<arith::ConstantIntOp>(loc, i32, 0);
+    Value signA = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, ai, zi);
+    Value signB = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, bi, zi);
+    Value signDiff = b.create<arith::XOrIOp>(loc, signA, signB);
+    Value aZero = b.create<arith::CmpFOp>(
+        loc, arith::CmpFPredicate::OEQ, a, zero);
+    Value quotient = b.create<arith::DivFOp>(loc, a, bb);
+    Value floored = b.create<math::FloorOp>(loc, quotient);
+    Value finiteA = b.create<arith::XOrIOp>(
+        loc, isInfA, b.create<arith::ConstantIntOp>(loc, 1, 1));
+    Value finiteB = b.create<arith::XOrIOp>(
+        loc, isInfB, b.create<arith::ConstantIntOp>(loc, 1, 1));
+    if (bin == Bin::FloorDiv) {
+      Value negNonzero = b.create<arith::AndIOp>(
+          loc, b.create<arith::AndIOp>(loc, isInfB, finiteA),
+          b.create<arith::AndIOp>(
+              loc, signDiff,
+              b.create<arith::XOrIOp>(
+                  loc, aZero, b.create<arith::ConstantIntOp>(loc, 1, 1))));
+      Value bInfResult = b.create<arith::SelectOp>(loc, negNonzero, oneNeg,
+                                                   quotient);
+      Value aInfOnly = b.create<arith::AndIOp>(loc, isInfA, finiteB);
+      y = b.create<arith::SelectOp>(
+          loc, aInfOnly, nan,
+          b.create<arith::SelectOp>(loc, isInfB, bInfResult, floored));
+    } else {
+      Value regular = b.create<arith::SubFOp>(
+          loc, a, b.create<arith::MulFOp>(loc, floored, bb));
+      Value signedZero = b.create<math::CopySignOp>(loc, zero, bb);
+      Value nonzeroInfResult = b.create<arith::SelectOp>(loc, signDiff, bb, a);
+      Value bInfResult = b.create<arith::SelectOp>(loc, aZero, signedZero,
+                                                   nonzeroInfResult);
+      Value bInfFiniteA = b.create<arith::AndIOp>(loc, isInfB, finiteA);
+      Value bZero = b.create<arith::CmpFOp>(
+          loc, arith::CmpFPredicate::OEQ, bb, zero);
+      Value zeroModuloNonzero = b.create<arith::AndIOp>(
+          loc, aZero,
+          b.create<arith::XOrIOp>(
+              loc, bZero, b.create<arith::ConstantIntOp>(loc, 1, 1)));
+      y = b.create<arith::SelectOp>(
+          loc, zeroModuloNonzero, signedZero,
+          b.create<arith::SelectOp>(loc, bInfFiniteA, bInfResult, regular));
+    }
     break;
   }
   }

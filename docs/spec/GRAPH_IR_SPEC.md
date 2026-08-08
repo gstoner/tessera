@@ -390,9 +390,13 @@ them as target artifacts or reference CPU behavior:
 | Architecture search | `tessera.arch.parameter`, `tessera.arch.gumbel_softmax`, `tessera.arch.hard_concrete`, `tessera.arch.ste_one_hot`, `tessera.arch.weighted_sum`, `tessera.arch.switch`, `tessera.arch.mixed` | implemented / scaffolded lowering |
 
 The public Python op catalog also contains `tessera.all_to_all`,
-`tessera.rng_uniform`, `tessera.rng_normal`, `tessera.rmsnorm`, and
-`tessera.kv_cache.*` aliases. Those names are current frontend/catalog entries;
-ODS-backed op definitions should be added when they need MLIR verifier or
+`tessera.rng_uniform`, `tessera.rng_normal`, `tessera.rmsnorm`, the
+reference-only relaxation family (`tessera.sparsemax`, `tessera.entmax15`,
+`tessera.soft_top_k`, `tessera.gumbel_softmax`, and
+`tessera.perturbed_argmax`), and `tessera.kv_cache.*` aliases. Those names are
+current frontend/catalog entries; the relaxation entries have Python-reference
+semantics and no physical backend or ODS lowering claim. ODS-backed op
+definitions should be added when they need MLIR verifier or
 canonicalization behavior beyond generic operation emission.
 
 ### 4.8 String-based ops referenced in canonicalization

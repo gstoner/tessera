@@ -1671,7 +1671,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "via runtime.launch() (rocm_nvfp4_compiled).",
     } for op in ("quantize_nvfp4", "dequantize_nvfp4")},
     # S2 reduction foundation — prod via the warp-shuffle reduce kernel (new
-    # combine); var/std/count_nonzero composed from it. rocm_reduce_compiled /
+    # combine); var/std use centered parallel Welford; count_nonzero composes sum.
     # rocm_stat_reduce_compiled.
     "prod": {
         "dtypes": ("fp32", "fp16", "bf16"),
@@ -1681,12 +1681,19 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "runtime.launch() (rocm_reduce_compiled).",
     },
     **{op: {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction",),
+        "notes": f"Statistical reduction {op} — compiler-generated centered "
+                 "parallel Welford with reduced-precision storage and f32 "
+                 "accumulation. Executes via "
+                 "runtime.launch() (rocm_stat_reduce_compiled).",
+    } for op in ("var", "std")},
+    "count_nonzero": {
         "dtypes": ("fp32",),
         "feature_flags": ("reduction",),
-        "notes": f"Statistical reduction {op} — composed from the warp-shuffle "
-                 "reduce kernel (var=mean(x^2)-mean(x)^2). Executes via "
-                 "runtime.launch() (rocm_stat_reduce_compiled).",
-    } for op in ("var", "std", "count_nonzero")},
+        "notes": "Statistical reduction count_nonzero — sum composition. "
+                 "Executes via runtime.launch() (rocm_stat_reduce_compiled).",
+    },
     # S2 stable-reduction foundation — logsumexp/log_softmax (max-shifted reduce
     # + exp/log lane), softmax_safe/sigmoid_safe (alias stable softmax/sigmoid).
     **{op: {
@@ -1696,24 +1703,33 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "unary exp/log lane. Executes via runtime.launch() "
                  "(rocm_stable_reduce_compiled).",
     } for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")},
-    # Spectral FFT (PR4) — fft/ifft/rfft/irfft on the COMPILER-GENERATED DFT
-    # kernel (generate-rocm-dft-kernel) on gfx1151 (rocm_fft_compiled).
+    # Spectral FFT — fft/ifft/rfft/irfft on the shipping mixed-radix
+    # Stockham/Bluestein target hook on gfx1151 (rocm_fft_compiled).
     **{op: {
         "dtypes": ("fp32",),
         "feature_flags": ("spectral",),
-        "notes": f"Spectral {op} — direct DFT kernel (generate-rocm-dft-kernel, "
-                 "cos/sin via math->rocdl) any length + r2c/c2r + plan scale. "
+        "notes": f"Spectral {op} — strict gfx1151 Stockham/Bluestein package "
+                 "with batched rows, r2c/c2r, and plan-owned scale. "
                  "Executes via runtime.launch() (rocm_fft_compiled).",
     } for op in ("fft", "ifft", "rfft", "irfft")},
-    # Spectral composites (PR5) — dct/stft/istft/spectral_conv/spectral_filter
-    # composed on the gfx1151 FFT (DFT) lane (rocm_spectral_compiled).
+    # Content-addressed TSOL composites with device-resident helpers around
+    # persistent digest-bound child FFT plans (rocm_spectral_compiled).
     **{op: {
+        "dtypes": ("bf16", "fp16", "fp32"),
+        "feature_flags": ("spectral",),
+        "notes": f"Spectral {op} — content-addressed gfx1151 package with "
+                 "device framing/window/overlap-add/pointwise work around "
+                 "persistent digest-bound child FFT plans; reduced storage "
+                 "uses package-owned conversion into f32 accumulation and "
+                 "arbitrary axes use package-owned host packing. Executes via "
+                 "runtime.launch() (rocm_spectral_compiled).",
+    } for op in ("dct", "stft", "istft", "spectral_conv")},
+    "spectral_filter": {
         "dtypes": ("fp32",),
         "feature_flags": ("spectral",),
-        "notes": f"Spectral {op} — composes the rocm_fft_compiled DFT lane "
-                 "(frame/window/overlap-add/pointwise on host). Executes via "
-                 "runtime.launch() (rocm_spectral_compiled).",
-    } for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
+        "notes": "Spectral filter — content-addressed gfx1151 interleaved-"
+                 "complex-f32 pointwise package.",
+    },
     # Sparse (PR) — COMPILER-GENERATED gfx1151 sparse kernels (spmm CSR row-wise,
     # sddmm sampled dense-dense) + the WMMA matmul for bsmm (rocm_sparse_compiled).
     **{op: {
@@ -1840,22 +1856,24 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "softplus", "sin", "cos", "tan", "sinh", "cosh", "asin", "acos",
                  "atan", "erfc", "floor", "ceil", "round", "trunc")},
     # P2e — lgamma: ln Γ(x) via an MLIR-built Lanczos g=5 series + reflection
-    # (no math.lgamma exists). fp32 only (the series is f32-tuned).
+    # (no math.lgamma exists). Reduced storage converts to f32 compute.
     "lgamma": {
-        "dtypes": ("fp32",),
+        "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "Standalone elementwise lgamma — MLIR-built Lanczos g=5 series "
                  "(generate-rocm-unary-kernel; reflection via math.sin for "
-                 "x<0.5). Executes via runtime.launch() (rocm_unary_compiled).",
+                 "x<0.5), with f32 compute for every storage dtype. Executes "
+                 "via runtime.launch() (rocm_unary_compiled).",
     },
     # P2e — digamma: ψ(x) via an MLIR-built recurrence + asymptotic series
-    # (no math.digamma); reflection (math.tan) + pole->NaN for x<=0. fp32 only.
+    # (no math.digamma); reflection (math.tan) + pole->NaN for x<=0.
     "digamma": {
-        "dtypes": ("fp32",),
+        "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "Standalone elementwise digamma — MLIR-built recurrence + "
                  "asymptotic series (generate-rocm-unary-kernel; reflection via "
-                 "math.tan, poles->NaN for x<=0). Executes via runtime.launch() "
+                 "math.tan, poles->NaN for x<=0), with f32 compute for every "
+                 "storage dtype. Executes via runtime.launch() "
                  "(rocm_unary_compiled).",
     },
     # S2 binary-arithmetic family — flat 2-operand per-element kernel
@@ -3731,9 +3749,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": f"AVX-512 statistical reduction {op} (composed from the reduce "
-                 "kernel; x86_stat_reduce_compiled lane; f32)",
-    } for op in ("var", "std", "count_nonzero")},
+        "notes": f"AVX-512 statistical reduction {op} (f32 storage/output, "
+                 "native mergeable f64 Welford state ABI; "
+                 "x86_stat_reduce_compiled lane)",
+    } for op in ("var", "std")},
+    "count_nonzero": {
+        "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("fp32",),
+        "notes": "AVX-512 count_nonzero (sum composition; "
+                 "x86_stat_reduce_compiled lane; f32)",
+    },
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
@@ -3754,11 +3779,18 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     # composed on the AVX-512 FFT lane (x86_spectral_compiled).
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
+        "dtypes": ("bf16", "fp16", "fp32"),
+        "notes": f"Spectral {op} — content-addressed AVX-512 native package "
+                 "with package-owned arbitrary-axis packing, reduced-storage "
+                 "conversion into f32 accumulation, and backward/forward/ortho policy "
+                 "(x86_spectral_compiled lane)",
+    } for op in ("dct", "stft", "istft", "spectral_conv")},
+    "spectral_filter": {
+        "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": f"Spectral {op} — composes the x86_fft_compiled radix-2 lane "
-                 "(frame/window/overlap-add/pointwise on host; "
-                 "x86_spectral_compiled lane; f32, matches np.fft)",
-    } for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
+        "notes": "Spectral filter — AVX-512 native interleaved-complex-f32 "
+                 "pointwise package (x86_spectral_compiled lane)",
+    },
     # Sparse (PR) — genuinely sparse AVX-512 kernels (spmm_csr row-AXPY, sddmm
     # sampled-dot) + the GEMM microkernel for bsmm (x86_sparse_compiled).
     **{op: {

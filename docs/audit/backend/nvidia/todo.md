@@ -3,10 +3,90 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-03
+last_updated: 2026-08-07
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `AUTODIFF-RELAXATION-1-2026-08-07` — **shared
+Python-reference contract; CUDA physical follow-up required.** `sparsemax`,
+`entmax15`, `soft_top_k`, `gumbel_softmax`, and `perturbed_argmax` now have
+storage-preserving reference semantics and autodiff rules, but no CUDA lowering
+or SM120 evidence. They remain explicitly reference-only until a CUDA-owned
+physical package is selected and proven.
+
+Cross-backend sync `MATH-PHYSICAL-2-2026-08-06` — **shared dtype contract
+assessed; CUDA follow-up required.** Physical binary math packages now require
+matching input storage dtypes. The Zen 5 scan selector and gfx1151 HIP module
+cache are architecture-owned and transfer no PTX schedule, dtype, or
+performance claim. NVIDIA must run the reduced-storage and difficult-domain
+corpus on its canonical CUDA math packages before claiming parity.
+
+Cross-backend sync `TSOL-CONTRACT-GENERALIZE-2026-08-06` — **shared semantic
+contract adopted; physical consumer remains follow-up.** Bounded dynamic
+dimensions, arbitrary axes, storage policy, and normalization are now explicit
+before an exact TSOL specialization is emitted. Zen 5 and gfx1151 now consume
+that wider contract, but their ABI and evidence do not transfer. NVIDIA still lacks the
+prerequisite promoted FFT package, so Schedule→Tile lowering rejects CUDA
+physical consumption and records no dtype, numerical, or performance claim.
+The architecture-owned sequence remains: close canonical CUDA FFT, define an
+SM120 workspace/residency ABI, implement the compound package, then gather
+exact-device evidence.
+Cross-backend sync `TPROF-MULTICLOCK-2026-08-06` — **shared evidence schema is
+executable on ROCm/x86; CUDA adoption remains follow-up.** The ROCm plan now records each
+clock independently and forbids fallback relabeling. CUDA should adopt the same
+provenance, validity, calibration, instrumentation, and verdict fields for host
+wall, CUDA events, an architecture-qualified device clock, and CUPTI activity.
+HIP `wall_clock64()`, `rtg_hsa_dispatch`, ROCprofiler, and gfx1151 evidence do
+not transfer to SM120. CUDA clock choice and CUPTI/SM120 promotion remain
+architecture-owned exact-device work.
+The native-evidence extension adds content-digested provider captures,
+clean-versus-instrumented image/resource comparisons, and exact-machine event
+maps. These are shared evidence concepts only: ROCprofiler, RTG, Linux perf,
+IBS, gfx1151, and Zen 5 records transfer no CUDA result. NVIDIA must populate
+the corresponding fields from CUPTI activity/metrics/PC sampling on SM120.
+
+Cross-backend sync `TSOL-ROCM-E2E-1-2026-08-06` — **shared ODS vocabulary
+adopted; CUDA physical execution remains follow-up.** The target-neutral
+`schedule.spectral_program` and `tile.spectral_program_kernel` contract is
+registered in production. NVIDIA still lacks a promoted canonical FFT package,
+so it cannot consume the compound artifact or inherit ROCm/x86 evidence. A
+future CUDA implementation must first close its FFT package gap, then bind its
+own workspace/residency policy and SM120 device evidence.
+
+Cross-backend sync `ROCM-MATH-EVIDENCE-2026-08-06` — **not applicable to
+NVIDIA codegen.** Centered Welford and the scalar boundary fixes alter ROCm C++
+generators plus shared host-side atan2 quadrant semantics; no PTX, CUDA ABI,
+math mode, or NVIDIA capability changed. NVIDIA must evaluate the same domains
+on its own canonical math/reduction lanes.
+
+Cross-backend sync `ROCM-FFT-PREBUILT-2026-08-05` — **not applicable; NVIDIA
+still has no promoted canonical FFT package.** The ROCm opaque plan ABI and HIP
+allocation policy are not transferred. A future CUDA package must define and
+measure its own artifact-bound plan/workspace contract on NVIDIA hardware.
+
+Cross-backend sync `FFT-PERF-2-2026-08-05` — **not applicable to the unproven
+CUDA lane; follow-up remains required.** The new cached Bluestein, Rader,
+mixed-radix AVX-512 codelets, and rejected Bailey candidate are x86-owned.
+They do not establish SM120 code generation or evidence. NVIDIA's existing
+mixed-radix/Bluestein and exact-CUDA gaps remain unchanged.
+
+Cross-backend sync `FFT-PERF-FOUNDATION-2026-08-05` — **follow-up required;
+radix-17 source changed without CUDA evidence.** The shared planner now admits
+radix 17 and the CUDA generic-stage private array was widened accordingly, but
+this Ubuntu/gfx1151 host cannot compile or execute the SM120 lane. NVIDIA must
+compile and compare radix-17 direct execution against its prior rejection path
+on CUDA before claiming parity. The expanded Schedule→Tile FFT identity remains
+outside NVIDIA until its Bluestein gap closes.
+
+Cross-backend sync `E2E-REAL-FFT-2026-08-05` — **follow-up required; no support claim.**
+ROCm corrected its public FFT authority to the proven Stockham/Bluestein
+package and identified `schedule.fft`→launch Tile as the remaining shared
+boundary. That shared content-addressed contract is now implemented and
+consumed by x86/gfx1151, while NVIDIA remains deliberately outside its target
+set. NVIDIA must join it only after its existing mixed-radix
+hook gains Bluestein and passes exact CUDA/SM120 evidence; ROCm evidence does
+not promote this lane.
 
 Cross-backend sync `FFT-MIXED-RADIX-BLUESTEIN-2026-08-03` — **follow-up required — mixed-radix only, no Bluestein, unverified.**
 Tessera's own FFT (Stockham, `TargetHooks/`) extends from powers of two to
@@ -424,6 +504,15 @@ order, and canonical `softcap(scale*QK^T + bias)` semantics to the shared
 carrier/oracle. NVIDIA is **follow-up required** to consume this form through
 its SM120 schedule and validate dropout replay; AMD code and evidence do not
 transfer.
+
+## Cross-backend sync `E2E-REAL-5C-STATE-LINEAGE-2026-08-05`
+
+The shared training spine now defines content-addressed logical-buffer lineage,
+mutation identity, and typed Schedule→Tile contracts for Lion VJP,
+factored/full Adafactor VJP, and sequence-mixer backward. **NVIDIA outcome:
+follow-up required.** Existing SM120 packages remain NVIDIA-owned and do not
+yet consume these exact artifacts. CUDA evidence and CUDA-owned buffer bindings
+remain required.
 
 Cross-backend sync `ROCM-E2E-ATTENTION-BACKWARD-2026-07-26` is not applicable
 to NVIDIA physical execution. It adds a ROCm-owned five-entry HSACO and
@@ -2256,3 +2345,111 @@ Both ROCm compiled pipelines (plain and canonical) now run `lower-tile-to-rocm{a
 **Explicitly not verified:** the NVIDIA dialect is off by default in this build, and neither `--tessera-lower-to-gpu` nor `--tessera-nvidia-pipeline-sm120` reached the materializer with a bounded view on this host — no diagnostic, no error. The code path is written and compiles; it has not been executed. Verifying it needs a build with `-DTESSERA_ENABLE_CUDA=ON` and, for the numeric half, an sm_120 host.
 
 Until this materializer grows masking, a portable producer must emit the 3-operand form; only ROCm can consume the bounded one.
+
+## Cross-backend sync `TILE-VIEW-LINEAR-BASE-2026-08-05` — should `tile.view` carry a precomputed linear base?
+
+ROCm W1.1 step 3 (`W1_1_TYPING_DESIGN.md` §4.7) established that isolated
+fragment address derivation could not express the direct lane's shared row
+offset. Measurement selected an optional precomputed `linear_base` operand on
+`tile.view`; logical row/column origins remain present for bounds.
+
+**ROCm has implemented and measured the shared answer.** `tile.view` now accepts
+an optional precomputed `linear_base`, and the ROCm producer uses it for A-base
+hoisting and sibling-B address sharing. At 2048^3 the final rebuilt ratio is
+0.711x (15.45/21.74 TFLOP/s), still insufficient for promotion. The
+remaining ROCm evidence points to fragmented load scheduling and excess waits.
+
+**Outcome for NVIDIA: FOLLOW-UP REQUIRED.** This backend consumes `tile.view`
+and `tile.fragment_pack` (8 files each), so it must consume the optional base
+form correctly or fail closed when a producer selects it. No exact-device
+evidence from an NVIDIA host is claimed. This is also the owner of W1.1's final two untyped C++ `tile.mma`
+construction sites: both are tensor-valued producers in
+`TileIRLoweringPass`. They must migrate together with NVIDIA's typed
+tensor-to-fragment materializer and accumulator-threading gate; ROCm/x86
+hardware cannot validate that physical decision.
+
+## Cross-backend sync `TILE-DYNAMIC-LEADING-DIM-2026-08-04` — generic typed fragment addresses
+
+Shared `tile.view` / `tile.store` can now carry an SSA leading dimension when
+`#tile.memory_layout` states zero. **Outcome for NVIDIA: FOLLOW-UP REQUIRED.**
+The sm_120 fragment materializer fails closed on this valid shared form and
+still requires a static leading dimension. No CUDA-enabled build or sm_120
+device evidence is claimed from this ROCm/x86 host.
+
+## Cross-backend sync `E2E-REAL-LINEAGE-SCHEDULE-2026-08-05`
+
+Shared compiler orchestration now records explicit artifact ancestry and
+production `tessera-opt` registers the generated Schedule dialect. **NVIDIA
+outcome: follow-up required.** SM120 packaging still consumes `GraphIRModule`
+and synthesizes NVIDIA-owned Tile, so its lineage truthfully records the Graph
+fork and remains incomplete. This change does not migrate the two untyped
+`tile.mma` producers, accumulator threading, bounded/dynamic views, PTX, or a
+physical schedule; no SM120 evidence is claimed. Those remain NVIDIA-owned
+gates after the shared x86/ROCm vertical slice establishes the consumer API.
+
+## Cross-backend sync `E2E-REAL-SCHEDULED-MATMUL-2026-08-05`
+
+Shared Graph→Schedule→launch-Tile lowering is now real for the initial x86-f32
+and ROCm-f16/f32 matmul instances. **NVIDIA outcome: follow-up required, not
+validated by this slice.** SM120 is deliberately outside the first bounded
+dtype/descriptor selector and therefore fails closed rather than inheriting
+another architecture's schedule. NVIDIA packaging still synthesizes its Tile
+program from Graph IR. Its later consumer must accept the canonical scheduled
+artifact only after the final two untyped `tile.mma` producers, accumulator
+threading, and dynamic/bounded view gates pass in a CUDA-enabled SM120 lane.
+
+## Cross-backend sync `E2E-REAL-PHYSICAL-CONSUMERS-2026-08-05`
+
+The shared package boundary is now concrete: a validated
+`ScheduledMatmulArtifact` carries exact Graph, Schedule, and launch-Tile text
+plus content identities into x86 and ROCm physical consumers. **NVIDIA outcome:
+follow-up required.** No CUDA code changed and no SM120 evidence is claimed.
+The NVIDIA consumer remains blocked on its two untyped `tile.mma` producers,
+accumulator threading, dynamic/bounded view support, and CUDA-enabled SM120
+validation before it can adopt this boundary without recreating Graph intent.
+
+## Cross-backend sync `E2E-REAL-PERFORMANCE-2026-08-05`
+
+Schedule/Tile matmul now distinguishes instruction-tile shape from an
+architecture-owned macro tile and carries that value through artifact identity
+and launch provenance. **NVIDIA outcome: follow-up required.** This generic
+contract is applicable, but no CUDA lowering, SM120 schedule, PTX, selector, or
+device evidence changed. NVIDIA must choose its own macro tile after its two
+untyped producers, accumulator threading, and bounded/dynamic view gates land;
+the gfx1151 32x64 decision does not transfer.
+
+## Cross-backend sync `E2E-REAL-SEMANTIC-KERNELS-2026-08-05`
+
+The shared spine now has content-addressed `schedule.softmax` and
+`schedule.reduce` SSA edges and atomically lowers the bounded canonical f32
+contracts to launch-level Tile artifacts. **NVIDIA outcome: follow-up required
+on a CUDA-enabled SM120 host.** Existing NVIDIA physical Tile softmax/reduction
+lowering is unchanged, but SM120 packaging still synthesizes its Tile program
+from `GraphIRModule`; no PTX, cubin, descriptor, schedule, selector, or device
+claim changed. Its consumer must accept the exact scheduled artifact and run
+the established SM120 numerical/performance gates. x86/gfx1151 schedules and
+evidence do not transfer. Canonical Graph reduction currently excludes
+mixed-output and keepdims forms; widening that shared contract is separate
+from adopting this first f32 boundary.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-2026-08-05`
+
+The shared spine now defines a content-addressed `schedule.attention` edge and
+one launch-level Tile artifact for the bounded x86/gfx1151 instances.
+**NVIDIA outcome: follow-up required on a CUDA-enabled SM120 host.** Existing
+SM120 forward packaging still synthesizes an NVIDIA-owned Tile program from
+Graph IR; no PTX, cubin, LSE policy, schedule, selector, or device evidence
+changes here. NVIDIA must define its own schedule/LSE instance, consume the
+exact artifact, and run its forward numerical/performance gates. x86 and
+gfx1151 policy or evidence does not transfer.
+
+## Cross-backend sync `E2E-REAL-ATTENTION-BACKWARD-2026-08-05`
+
+The shared spine now defines a content-addressed three-result
+`schedule.attention_backward` program carrying dQ, split-dK/dV, fixed reduction,
+workspace, and LSE checkpoint identity. **NVIDIA outcome: follow-up required on
+a CUDA-enabled SM120 host.** Existing SM120 backward packaging remains
+NVIDIA-owned Graph-to-Tile synthesis. NVIDIA must define its own LSE identity,
+consume this exact artifact, and validate MHA/GQA/MQA plus modifier/ragged
+coverage before claiming parity; x86/gfx1151 schedules and evidence do not
+transfer.

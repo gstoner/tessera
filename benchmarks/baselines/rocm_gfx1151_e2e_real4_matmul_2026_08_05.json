@@ -1,0 +1,201 @@
+{
+  "schema": "tessera.compiler.e2e_real4.rocm_matmul.v1",
+  "work_item": "E2E-REAL-4",
+  "created_at": "2026-08-05T13:10:47.191139+00:00",
+  "architecture": "gfx1151",
+  "device": "AMD Radeon(TM) 8060S Graphics",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "timing_domain": "resident_host_wall_synchronized",
+  "timing_source_reason": "WSL /dev/dxg HIP events return invalid zero samples",
+  "selector_eligible": false,
+  "warmup_launches_per_trial": 5,
+  "iterations_per_trial": 100,
+  "trials": 3,
+  "correctness": [
+    {
+      "shape_mnk": [
+        64,
+        64,
+        64
+      ],
+      "shape_class": "aligned",
+      "direct": {
+        "max_abs_error": 1.9371509552001953e-07,
+        "normalized_error": 1.9371509552001953e-07,
+        "mismatch_count": null
+      },
+      "scheduled": {
+        "max_abs_error": 1.9371509552001953e-07,
+        "normalized_error": 1.9371509552001953e-07,
+        "mismatch_count": null
+      },
+      "route_parity": {
+        "max_abs_error": 0.0,
+        "normalized_error": 0.0,
+        "mismatch_count": null
+      },
+      "passed": true,
+      "scheduled_compile_ms": 540.673235,
+      "digests": {
+        "graph": "111f651b5a61aa0da2d8b43656805708189bc317b5512e99c3481ce777ea5ea5",
+        "schedule": "e65ee91e0233306bf4c357da974766ca28cd6edec81fbc527b4f9196d2550f88",
+        "decision": "b917de4544409859c41b6fa90682c437f617d1a82cab7474c3ff7ed88f2b513a",
+        "tile": "d633cc5ed4909631c0ddf54a0f8a9734f0e31faa88e3945732f4f4f6f258682a",
+        "target": "67e52d03c317d9d1227448a72fe53102120ead6c2c75d060601fde92cb18a2fb",
+        "image": "9f86948996df06df82d2ab44129fd4750c38a8b5fd491877ce628d5669e48a08"
+      }
+    },
+    {
+      "shape_mnk": [
+        65,
+        67,
+        31
+      ],
+      "shape_class": "ragged",
+      "direct": {
+        "max_abs_error": 8.940696716308594e-08,
+        "normalized_error": 8.940696716308594e-08,
+        "mismatch_count": null
+      },
+      "scheduled": {
+        "max_abs_error": 8.940696716308594e-08,
+        "normalized_error": 8.940696716308594e-08,
+        "mismatch_count": null
+      },
+      "route_parity": {
+        "max_abs_error": 0.0,
+        "normalized_error": 0.0,
+        "mismatch_count": null
+      },
+      "passed": true,
+      "scheduled_compile_ms": 561.24911,
+      "digests": {
+        "graph": "bcb5abd32d77922d7c74df250f0544c5ba85409ec3769a05686c2bc40c38e963",
+        "schedule": "c530172c188f7e5bc96557290583509db937a1620ffe3b2877efec40c1b92e2c",
+        "decision": "534f744e3d16dc062af4955ca2861dd865900feaa2f5fbde5709dd0a6bd1fc07",
+        "tile": "a7b9e30f702e27eecf488c501bc23c7882c1a50b53c0804001e1db46cb1b2268",
+        "target": "67e52d03c317d9d1227448a72fe53102120ead6c2c75d060601fde92cb18a2fb",
+        "image": "9f86948996df06df82d2ab44129fd4750c38a8b5fd491877ce628d5669e48a08"
+      }
+    }
+  ],
+  "compile": {
+    "direct_ms": 546.427392,
+    "scheduled_cold_ms": 533.629978,
+    "scheduled_warm_ms": 54.328841,
+    "scheduled_cold_state": "cold",
+    "scheduled_warm_state": "warm_cache",
+    "compiler_fingerprint": "3922d2da8ab54b9b28bb8e6dc55b85c41a9bed7579c13d3a310bec4aac251f1d",
+    "toolchain_fingerprint": "ef67d9396a2a9ce61fbff2e06a448ba28844bd640da2849a1571131ee93384fc",
+    "device_libraries": [
+      {
+        "logical_name": "rocm.ocml",
+        "content_digest": "7b4d3f1057c38d23e12f7bb9ae66a406d0f6e99383e7bb6b4d83bca891bb56af",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.ockl",
+        "content_digest": "65145f2847c536a27ae328e4b4eb99d62ca80b78ff196c75260bbad4dbe0c7be",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_unsafe_math_off",
+        "content_digest": "5df6ad2a201a6bbefedbf18e4467402da98512e19e0db7f6ce2c5f9c706465a9",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_finite_only_off",
+        "content_digest": "872368d5c54a2e8ead07c10f48af50462469096d09da8291831c43a91dda2dd2",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_wavefrontsize64_off",
+        "content_digest": "423087e3b64107f03b995f6417ace9998885f9e03c0187968e03f889f45394be",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_isa_version_1151",
+        "content_digest": "3b93c57b385c9cb849a87972c3f27aeb71610a903f085d13954d1c814370ec66",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_abi_version_600",
+        "content_digest": "1e791caa4e73225528a8a2966772d697f0e482d52c1a651ebfdd22e9a7251402",
+        "link_mode": "compiler_driver"
+      }
+    ]
+  },
+  "digests": {
+    "graph": "a099067954b09b1bd9eb005fb32d7e392a97f1ecba272bbfe1ee3c989290a60e",
+    "schedule": "c3779ea536ffa0ddc72e12185cf640bd5a64355325454d9dc2b3ce5d09845478",
+    "decision": "1aba48521db56b7c9500f18d39377e2183b812c183fc4cbb0eae27387de3945b",
+    "tile": "974be9326ff9948bf1e25bf9208708786cb5d268741266344e36610369d1b9a7",
+    "target": "67e52d03c317d9d1227448a72fe53102120ead6c2c75d060601fde92cb18a2fb",
+    "scheduled_image": "9f86948996df06df82d2ab44129fd4750c38a8b5fd491877ce628d5669e48a08",
+    "direct_image": "bfb1d40b7c9938f4a6c9ccc19b365611d9d0c2b7d97eb9c54ad97752c67f1a97"
+  },
+  "resources": {
+    "scheduled": {
+      "vgpr_count": 256,
+      "sgpr_count": 107,
+      "agpr_count": null,
+      "lds_bytes": 0,
+      "scratch_bytes": 108,
+      "private_segment_bytes": 108,
+      "wavefront_size": 32,
+      "max_flat_workgroup_size": 256,
+      "vgpr_spill_count": 28,
+      "sgpr_spill_count": 20,
+      "spill_count": 48,
+      "spills": true,
+      "vgpr_limited_waves_per_simd": 6,
+      "occupancy_model": "gfx1151 1536 VGPR/SIMD divided by assembler VGPR count"
+    },
+    "direct": {
+      "vgpr_count": 256,
+      "sgpr_count": 107,
+      "agpr_count": null,
+      "lds_bytes": 0,
+      "scratch_bytes": 108,
+      "private_segment_bytes": 108,
+      "wavefront_size": 32,
+      "max_flat_workgroup_size": 256,
+      "vgpr_spill_count": 28,
+      "sgpr_spill_count": 20,
+      "spill_count": 48,
+      "spills": true,
+      "vgpr_limited_waves_per_simd": 6,
+      "occupancy_model": "gfx1151 1536 VGPR/SIMD divided by assembler VGPR count"
+    }
+  },
+  "performance": {
+    "shape_mnk": [
+      2048,
+      2048,
+      2048
+    ],
+    "direct_samples_ms": [
+      0.9491367099999999,
+      0.9366291800000001,
+      0.93078198
+    ],
+    "scheduled_samples_ms": [
+      0.9446547099999999,
+      0.93924423,
+      0.9257095700000001
+    ],
+    "direct_median_ms": 0.9366291800000001,
+    "scheduled_median_ms": 0.93924423,
+    "direct_tflops": 18.342231430372475,
+    "scheduled_tflops": 18.291162868256322,
+    "committed_floor_tflops": 8.02,
+    "scheduled_over_floor": 2.2806936244708633,
+    "scheduled_over_direct": 0.9972157933831546,
+    "direct_parity_floor": 0.85
+  },
+  "verdict": "retain",
+  "selector_changed": false,
+  "next_action": "retain scheduled candidate; obtain valid device-event timing before promotion",
+  "report_sha256": "d7834de49f83c4c214e02b56d0ee94732ec2c73a6a88aa284a934f1d69f69bfe"
+}

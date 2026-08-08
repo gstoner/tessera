@@ -72,7 +72,8 @@ def test_lower_schedule_to_tile_ir_materializes_matmul_and_prefetch():
     tile = lower_schedule_to_tile_ir(schedule)
     assert tile.verify().ok
     text = tile.to_mlir()
-    assert "tile.mma" in text
+    assert "tile.matmul" in text
+    assert "tile.mma" not in text
     assert "tile.async_copy" in text
     assert "tensor_core_mma" in text
     assert "shared_memory_bytes" in text

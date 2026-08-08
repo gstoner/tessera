@@ -207,7 +207,52 @@ class CompileArtifactBundle:
 
     @property
     def artifact_hashes(self) -> dict[str, str]:
-        return {artifact.level: stable_hash(artifact.text) for artifact in self.lowering_artifacts()}
+        return {artifact.level: artifact.output_digest for artifact in self.lowering_artifacts()}
+
+    @property
+    def lineage_complete(self) -> bool:
+        """Whether every emitted stage names the artifact it actually consumed.
+
+        This is intentionally stricter than ``spine_stages``.  A package that
+        replaces a shared Tile artifact with one rebuilt from Graph IR keeps
+        all of its stages, but the non-adjacent input digest makes this false.
+        """
+        artifacts = self.lowering_artifacts()
+        if not artifacts or not all(item.has_declared_lineage for item in artifacts):
+            return False
+        if [artifact.level for artifact in artifacts[:4]] != [
+            "graph",
+            "schedule",
+            "tile",
+            "target",
+        ]:
+            return False
+        if artifacts[0].level != "graph" or artifacts[0].input_digest is not None:
+            return False
+        for previous, current in zip(artifacts, artifacts[1:]):
+            if current.input_digest != previous.output_digest:
+                return False
+        if self.native_image is not None:
+            if self.target_ir is None or self.native_image.target_ir_digest != self.target_ir.output_digest:
+                return False
+        if self.launch_descriptor is not None:
+            if self.native_image is None or self.launch_descriptor.image_digest != self.native_image.image_digest:
+                return False
+        return True
+
+    @property
+    def artifact_lineage(self) -> tuple[dict[str, str | None], ...]:
+        return tuple(
+            {
+                "level": artifact.level,
+                "producer": artifact.producer,
+                "input_digest": artifact.input_digest,
+                "output_digest": artifact.output_digest,
+                "representation": artifact.representation,
+                "contract_version": artifact.contract_version,
+            }
+            for artifact in self.lowering_artifacts()
+        )
 
     def diagnostics_text(self) -> tuple[str, ...]:
         return tuple(d.format() for d in self.diagnostics)
@@ -237,7 +282,11 @@ class CompileArtifactBundle:
                 {
                     "stage": name,
                     "status": "complete" if artifact is not None else "not_produced",
-                    "digest": stable_hash(artifact.text) if artifact is not None else None,
+                    "digest": artifact.output_digest if artifact is not None else None,
+                    "producer": artifact.producer if artifact is not None else None,
+                    "input_digest": artifact.input_digest if artifact is not None else None,
+                    "representation": artifact.representation if artifact is not None else None,
+                    "contract_version": artifact.contract_version if artifact is not None else None,
                 }
             )
         stages.extend(
@@ -309,11 +358,93 @@ class CompileArtifactBundle:
             "tool_invocations": [invocation.to_dict() for invocation in self.tool_invocations],
             "orchestration_state": self.orchestration_state,
             "spine_stages": list(self.spine_stages()),
+            "artifact_lineage": list(self.artifact_lineage),
+            "lineage_complete": self.lineage_complete,
             "native_image_digest": (self.native_image.image_digest if self.native_image is not None else None),
             "launch_descriptor_digest": (
                 self.launch_descriptor.descriptor_digest if self.launch_descriptor is not None else None
             ),
         }
+
+
+def _package_artifacts(
+    graph: LoweringArtifact,
+    target_kind: str,
+    tile_text: str,
+    target_text: str,
+    backend_text: str,
+) -> tuple[LoweringArtifact, LoweringArtifact, LoweringArtifact]:
+    """Record the retained Graph-owned package fork without disguising it.
+
+    Current native package APIs consume ``GraphIRModule`` directly.  Their Tile
+    artifact therefore names Graph as its input, which intentionally breaks
+    adjacency when the shared Schedule artifact is also present.  E2E-REAL-3
+    will change this helper's input to the canonical Tile artifact when each
+    backend API actually consumes it.
+    """
+    tile = LoweringArtifact(
+        "tile",
+        tile_text,
+        producer=f"{target_kind}.package_native.tile",
+        input_digest=graph.output_digest,
+        representation="mlir",
+    )
+    target = LoweringArtifact(
+        "target",
+        target_text,
+        producer=f"{target_kind}.package_native.target",
+        input_digest=tile.output_digest,
+        representation="target_ir",
+    )
+    backend = LoweringArtifact(
+        "backend",
+        backend_text,
+        producer=f"{target_kind}.package_native.backend",
+        input_digest=target.output_digest,
+        representation="target_ir",
+    )
+    return tile, target, backend
+
+
+def _scheduled_package_artifacts(
+    graph: LoweringArtifact,
+    schedule_text: str,
+    tile_text: str,
+    target_kind: str,
+    target_text: str,
+    backend_text: str,
+) -> tuple[LoweringArtifact, LoweringArtifact, LoweringArtifact, LoweringArtifact]:
+    """Record one adjacent production Graph -> Schedule -> Tile package spine."""
+
+    schedule = LoweringArtifact(
+        "schedule",
+        schedule_text,
+        producer="tessera-opt.tessera-graph-to-schedule",
+        input_digest=graph.output_digest,
+        representation="mlir",
+    )
+    tile = LoweringArtifact(
+        "tile",
+        tile_text,
+        producer="tessera-opt.tessera-schedule-to-tile",
+        input_digest=schedule.output_digest,
+        representation="mlir",
+    )
+    target = LoweringArtifact(
+        "target",
+        target_text,
+        producer=f"{target_kind}.package_scheduled.target",
+        input_digest=tile.output_digest,
+        representation="target_ir",
+    )
+    backend = LoweringArtifact(
+        "backend",
+        backend_text,
+        producer=f"{target_kind}.package_scheduled.backend",
+        input_digest=target.output_digest,
+        representation="target_ir",
+    )
+    return schedule, tile, target, backend
 
 
 def compile_graph_module(
@@ -354,6 +485,46 @@ def compile_graph_module(
     # Graph IR verifier defaults to CPU for standalone callers, so the driver
     # must carry its normalized target through this pre-lowering verification.
     graph_text = module.to_mlir(target=target_kind)
+    scheduled_matmul_artifact = None
+    scheduled_kernel_artifact = None
+    scheduled_attention_artifact = None
+    if bool(options.get("package_native", False)) and target_kind in {
+        "x86",
+        "rocm_gfx1151",
+    }:
+        from . import scheduled_matmul
+
+        if scheduled_matmul.supports_scheduled_matmul(module, target=target_kind):
+            scheduled_matmul_artifact = scheduled_matmul.lower_scheduled_matmul(
+                module,
+                target=target_kind,
+            )
+            graph_text = scheduled_matmul_artifact.graph_ir
+        else:
+            from . import scheduled_attention
+
+            if scheduled_attention.supports_scheduled_attention(
+                module, target=target_kind
+            ):
+                scheduled_attention_artifact = (
+                    scheduled_attention.lower_scheduled_attention(
+                        module,
+                        target=target_kind,
+                    )
+                )
+                graph_text = scheduled_attention_artifact.graph_ir
+            else:
+                from . import scheduled_kernel
+
+                if scheduled_kernel.supports_scheduled_kernel(
+                    module,
+                    target=target_kind,
+                ):
+                    scheduled_kernel_artifact = scheduled_kernel.lower_scheduled_kernel(
+                        module,
+                        target=target_kind,
+                    )
+                    graph_text = scheduled_kernel_artifact.graph_ir
     function_name = module.functions[0].name if module.functions else "<unknown>"
     request = CompileRequest(
         source_origin=source_origin,
@@ -401,11 +572,60 @@ def compile_graph_module(
         tool_invocations.append(invocation)
         trace_events.append(event)
 
-    graph = LoweringArtifact("graph", graph_text)
-    schedule = LoweringArtifact("schedule", cpu_plan.schedule_ir) if cpu_plan is not None else None
-    tile = LoweringArtifact("tile", cpu_plan.tile_ir) if cpu_plan is not None else None
-    target_artifact = LoweringArtifact("target", cpu_plan.target_ir) if cpu_plan is not None else None
+    graph = LoweringArtifact(
+        "graph",
+        graph_text,
+        producer=(
+            "graph-ir-renderer.targeted"
+            if scheduled_matmul_artifact is not None
+            or scheduled_kernel_artifact is not None
+            or scheduled_attention_artifact is not None
+            else "graph-ir-renderer"
+        ),
+        representation="mlir",
+    )
+    schedule = (
+        LoweringArtifact(
+            "schedule",
+            cpu_plan.schedule_ir,
+            producer="python.schedule_ir.lower_graph_to_schedule_ir",
+            input_digest=graph.output_digest,
+            representation="python_object",
+        )
+        if cpu_plan is not None
+        else None
+    )
+    tile = (
+        LoweringArtifact(
+            "tile",
+            cpu_plan.tile_ir,
+            producer="python.tile_ir.lower_schedule_to_tile_ir",
+            input_digest=schedule.output_digest,
+            representation="python_object",
+        )
+        if cpu_plan is not None and schedule is not None
+        else None
+    )
+    target_artifact = (
+        LoweringArtifact(
+            "target",
+            cpu_plan.target_ir,
+            producer="python.target_ir.lower_tile_to_target_ir",
+            input_digest=tile.output_digest,
+            representation="target_ir",
+        )
+        if cpu_plan is not None and tile is not None
+        else None
+    )
     backend_artifact = _backend_artifact_for(target_kind, cpu_plan)
+    if backend_artifact is not None and target_artifact is not None:
+        backend_artifact = LoweringArtifact(
+            "backend",
+            backend_artifact.text,
+            producer=f"python.backend_artifact.{target_kind}",
+            input_digest=target_artifact.output_digest,
+            representation="target_ir",
+        )
 
     executable = cpu_plan is not None and (
         target_kind == "cpu" or _is_apple_cpu_accelerate_executable(cpu_plan) or _is_apple_gpu_mps_executable(cpu_plan)
@@ -434,7 +654,13 @@ def compile_graph_module(
             module.to_mlir(verify=False, canonical=True), target_kind
         )
         if value_ir:
-            target_artifact = LoweringArtifact("target", value_ir)
+            target_artifact = LoweringArtifact(
+                "target",
+                value_ir,
+                producer="apple.value_target_ir",
+                input_digest=graph.output_digest,
+                representation="target_ir",
+            )
             # CPU value calls are executable now; the GPU value row stays gated
             # in the execution matrix regardless, so this flag is safe there.
             if target_kind == "apple_cpu":
@@ -463,9 +689,13 @@ def compile_graph_module(
             options=options,
         )
         package_dtype = nvidia_package.descriptor.buffers[0].dtype
-        tile = LoweringArtifact("tile", nvidia_package.tile_ir)
-        target_artifact = LoweringArtifact("target", nvidia_package.target_ir)
-        backend_artifact = LoweringArtifact("backend", nvidia_package.backend_ir)
+        tile, target_artifact, backend_artifact = _package_artifacts(
+            graph,
+            target_kind,
+            nvidia_package.tile_ir,
+            nvidia_package.target_ir,
+            nvidia_package.backend_ir,
+        )
         native_image = nvidia_package.image
         launch_descriptor = nvidia_package.descriptor
         executable = True
@@ -498,14 +728,61 @@ def compile_graph_module(
             (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
         )
         package_start = time.perf_counter()
-        package_kind = rocm_native.native_package_kind(module)
-        rocm_package = rocm_native.package_native(
-            module,
-            pipeline_name=producer,
-        )
-        tile = LoweringArtifact("tile", rocm_package.tile_ir)
-        target_artifact = LoweringArtifact("target", rocm_package.target_ir)
-        backend_artifact = LoweringArtifact("backend", rocm_package.backend_ir)
+        if scheduled_matmul_artifact is not None:
+            package_kind = "matmul"
+            rocm_package = rocm_native.package_scheduled_matmul(
+                scheduled_matmul_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_matmul_artifact.schedule_ir,
+                rocm_package.tile_ir,
+                target_kind,
+                rocm_package.target_ir,
+                rocm_package.backend_ir,
+            )
+        elif scheduled_attention_artifact is not None:
+            package_kind = "attention"
+            rocm_package = rocm_native.package_scheduled_attention(
+                scheduled_attention_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_attention_artifact.schedule_ir,
+                rocm_package.tile_ir,
+                target_kind,
+                rocm_package.target_ir,
+                rocm_package.backend_ir,
+            )
+        elif scheduled_kernel_artifact is not None:
+            package_kind = scheduled_kernel_artifact.family
+            rocm_package = rocm_native.package_scheduled_kernel(
+                scheduled_kernel_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_kernel_artifact.schedule_ir,
+                rocm_package.tile_ir,
+                target_kind,
+                rocm_package.target_ir,
+                rocm_package.backend_ir,
+            )
+        else:
+            package_kind = rocm_native.native_package_kind(module)
+            rocm_package = rocm_native.package_native(
+                module,
+                pipeline_name=producer,
+            )
+            tile, target_artifact, backend_artifact = _package_artifacts(
+                graph,
+                target_kind,
+                rocm_package.tile_ir,
+                rocm_package.target_ir,
+                rocm_package.backend_ir,
+            )
         native_image = rocm_package.image
         launch_descriptor = rocm_package.descriptor
         executable = True
@@ -528,9 +805,13 @@ def compile_graph_module(
                     "dtype": rocm_package.descriptor.buffers[0].dtype,
                     "op_family": package_kind,
                     "work_item": (
-                        "ROCM-E2E-1"
-                        if package_kind == "softmax"
-                        else "ROCM-E2E-2"
+                        "E2E-REAL-3"
+                        if package_kind == "matmul"
+                        else "E2E-REAL-5A"
+                        if scheduled_attention_artifact is not None
+                        else "E2E-REAL-5"
+                        if scheduled_kernel_artifact is not None
+                        else "ROCM-E2E-1" if package_kind == "softmax" else "ROCM-E2E-2"
                     ),
                 },
             )
@@ -540,19 +821,64 @@ def compile_graph_module(
 
         resolution = target_pipeline_lookup(target_kind)
         producer = (
-            (resolution.declared_pipeline or request.pipeline_name)
-            if resolution is not None
-            else request.pipeline_name
+            (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
         )
         package_start = time.perf_counter()
-        package_kind = x86_native.native_package_kind(module)
-        x86_package = x86_native.package_native(
-            module,
-            pipeline_name=producer,
-        )
-        tile = LoweringArtifact("tile", x86_package.tile_ir)
-        target_artifact = LoweringArtifact("target", x86_package.target_ir)
-        backend_artifact = LoweringArtifact("backend", x86_package.backend_ir)
+        if scheduled_matmul_artifact is not None:
+            package_kind = "matmul"
+            x86_package = x86_native.package_scheduled_matmul(
+                scheduled_matmul_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_matmul_artifact.schedule_ir,
+                x86_package.tile_ir,
+                target_kind,
+                x86_package.target_ir,
+                x86_package.backend_ir,
+            )
+        elif scheduled_attention_artifact is not None:
+            package_kind = "attention"
+            x86_package = x86_native.package_scheduled_attention(
+                scheduled_attention_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_attention_artifact.schedule_ir,
+                x86_package.tile_ir,
+                target_kind,
+                x86_package.target_ir,
+                x86_package.backend_ir,
+            )
+        elif scheduled_kernel_artifact is not None:
+            package_kind = scheduled_kernel_artifact.family
+            x86_package = x86_native.package_scheduled_kernel(
+                scheduled_kernel_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_kernel_artifact.schedule_ir,
+                x86_package.tile_ir,
+                target_kind,
+                x86_package.target_ir,
+                x86_package.backend_ir,
+            )
+        else:
+            package_kind = x86_native.native_package_kind(module)
+            x86_package = x86_native.package_native(
+                module,
+                pipeline_name=producer,
+            )
+            tile, target_artifact, backend_artifact = _package_artifacts(
+                graph,
+                target_kind,
+                x86_package.tile_ir,
+                x86_package.target_ir,
+                x86_package.backend_ir,
+            )
         native_image = x86_package.image
         launch_descriptor = x86_package.descriptor
         executable = True
@@ -575,7 +901,13 @@ def compile_graph_module(
                     "dtype": x86_package.descriptor.buffers[0].dtype,
                     "op_family": package_kind,
                     "work_item": (
-                        "X86-E2E-2"
+                        "E2E-REAL-3"
+                        if scheduled_matmul_artifact is not None
+                        else "E2E-REAL-5A"
+                        if scheduled_attention_artifact is not None
+                        else "E2E-REAL-5"
+                        if scheduled_kernel_artifact is not None
+                        else "X86-E2E-2"
                         if package_kind in {"elementwise", "cohort2", "breadth"}
                         else "X86-E2E-1"
                     ),
@@ -589,12 +921,18 @@ def compile_graph_module(
         if package_kind is None:
             raise ValueError("Apple CPU native packaging requires one static supported descriptor contract")
         resolution = target_pipeline_lookup(target_kind)
-        producer = (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
+        producer = (
+            (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
+        )
         package_start = time.perf_counter()
         apple_cpu_package = apple_cpu_native.package_native(module, pipeline_name=producer)
-        tile = LoweringArtifact("tile", apple_cpu_package.tile_ir)
-        target_artifact = LoweringArtifact("target", apple_cpu_package.target_ir)
-        backend_artifact = LoweringArtifact("backend", apple_cpu_package.backend_ir)
+        tile, target_artifact, backend_artifact = _package_artifacts(
+            graph,
+            target_kind,
+            apple_cpu_package.tile_ir,
+            apple_cpu_package.target_ir,
+            apple_cpu_package.backend_ir,
+        )
         native_image = apple_cpu_package.image
         launch_descriptor = apple_cpu_package.descriptor
         executable = True
@@ -603,16 +941,22 @@ def compile_graph_module(
         execution_kind = "native_cpu"
         trace_events.append(
             CompileTraceEvent(
-                pass_name="apple-cpu-native-package", target=target_kind,
-                input_hash=stable_hash(apple_cpu_package.tile_ir), output_hash=apple_cpu_package.image.image_digest,
-                elapsed_ms=(time.perf_counter() - package_start) * 1000.0, status="ok",
-                metadata={"pipeline_name": producer, "binary_format": apple_cpu_package.image.binary_format,
-                          "compile_state": apple_cpu_package.image.compile_state,
-                          "entry_symbol": apple_cpu_package.descriptor.entry_symbol,
-                          "dtype": apple_cpu_package.descriptor.buffers[0].dtype,
-                          "op_family": package_kind,
-                          "descriptor_op_family": apple_cpu_package.descriptor.provenance["op_kind"],
-                          "work_item": apple_cpu_package.descriptor.provenance["work_item"]},
+                pass_name="apple-cpu-native-package",
+                target=target_kind,
+                input_hash=stable_hash(apple_cpu_package.tile_ir),
+                output_hash=apple_cpu_package.image.image_digest,
+                elapsed_ms=(time.perf_counter() - package_start) * 1000.0,
+                status="ok",
+                metadata={
+                    "pipeline_name": producer,
+                    "binary_format": apple_cpu_package.image.binary_format,
+                    "compile_state": apple_cpu_package.image.compile_state,
+                    "entry_symbol": apple_cpu_package.descriptor.entry_symbol,
+                    "dtype": apple_cpu_package.descriptor.buffers[0].dtype,
+                    "op_family": package_kind,
+                    "descriptor_op_family": apple_cpu_package.descriptor.provenance["op_kind"],
+                    "work_item": apple_cpu_package.descriptor.provenance["work_item"],
+                },
             )
         )
     elif target_kind == "apple_gpu" and bool((options or {}).get("package_native", False)):
@@ -623,14 +967,17 @@ def compile_graph_module(
             raise ValueError("Apple GPU native packaging requires one static supported descriptor contract")
         resolution = target_pipeline_lookup(target_kind)
         producer = (
-            (resolution.declared_pipeline or request.pipeline_name)
-            if resolution is not None else request.pipeline_name
+            (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
         )
         package_start = time.perf_counter()
         apple_package = apple_native.package_native(module, pipeline_name=producer)
-        tile = LoweringArtifact("tile", apple_package.tile_ir)
-        target_artifact = LoweringArtifact("target", apple_package.target_ir)
-        backend_artifact = LoweringArtifact("backend", apple_package.backend_ir)
+        tile, target_artifact, backend_artifact = _package_artifacts(
+            graph,
+            target_kind,
+            apple_package.tile_ir,
+            apple_package.target_ir,
+            apple_package.backend_ir,
+        )
         native_image = apple_package.image
         launch_descriptor = apple_package.descriptor
         executable = True
@@ -694,10 +1041,7 @@ def _resolve_apple_target_ir_mode(options: Mapping[str, Any]) -> str:
         return "artifact"
     if isinstance(raw, str) and raw in {"artifact", "value"}:
         return raw
-    raise ValueError(
-        "apple_target_ir_mode must be 'artifact' or 'value', "
-        f"got {raw!r}"
-    )
+    raise ValueError(f"apple_target_ir_mode must be 'artifact' or 'value', got {raw!r}")
 
 
 def canonical_compile_options(
@@ -730,39 +1074,29 @@ def canonical_compile_options(
     if target_kind == "nvidia_sm120" and "package_native" not in resolved:
         from .nvidia_native import supports_native_package, tools_available
 
-        resolved["package_native"] = (
-            supports_native_package(module) and tools_available()
-        )
+        resolved["package_native"] = supports_native_package(module) and tools_available()
     if target_kind == "rocm_gfx1151" and "package_native" not in resolved:
         from .rocm_native import (
             native_packaging_available,
             supports_native_package,
         )
 
-        resolved["package_native"] = (
-            supports_native_package(module) and native_packaging_available()
-        )
+        resolved["package_native"] = supports_native_package(module) and native_packaging_available()
     if target_kind == "x86" and "package_native" not in resolved:
         from .x86_native import supports_native_package, tools_available
 
-        resolved["package_native"] = (
-            supports_native_package(module) and tools_available()
-        )
+        resolved["package_native"] = supports_native_package(module) and tools_available()
     if target_kind == "apple_gpu" and "package_native" not in resolved:
         from .apple_native import native_package_kind, tools_available
 
         resolved["package_native"] = (
-            apple_target_ir_mode != "value"
-            and native_package_kind(module) is not None
-            and tools_available()
+            apple_target_ir_mode != "value" and native_package_kind(module) is not None and tools_available()
         )
     if target_kind == "apple_cpu" and "package_native" not in resolved:
         from .apple_cpu_native import native_package_kind, tools_available
 
         resolved["package_native"] = (
-            apple_target_ir_mode != "value"
-            and native_package_kind(module) is not None
-            and tools_available()
+            apple_target_ir_mode != "value" and native_package_kind(module) is not None and tools_available()
         )
     return resolved
 

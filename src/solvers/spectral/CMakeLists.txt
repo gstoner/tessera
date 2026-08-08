@@ -34,6 +34,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     message(STATUS "Found MLIR: ${MLIR_PACKAGE_VERSION} at ${MLIR_DIR}")
 endif()
 
+if(TESSERA_ENABLE_HIP AND NOT CMAKE_HIP_COMPILER)
+    enable_language(HIP)
+    find_package(hip REQUIRED CONFIG)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -96,8 +101,32 @@ if(TESSERA_ENABLE_CUDA)
 endif()
 
 if(TESSERA_ENABLE_HIP)
-    add_library(TesseraSpectralHIP OBJECT lib/TargetHooks/AMD/StockhamRadix4.hip)
+    # The package exports one exact architecture identity through
+    # ts_spectral_composite_arch_amd().  A fat binary would make that identity
+    # ambiguous, so architecture coverage is produced as one build directory
+    # and one package per target.
+    if(DEFINED CMAKE_HIP_ARCHITECTURES)
+        set(_tessera_spectral_hip_arches ${CMAKE_HIP_ARCHITECTURES})
+        list(LENGTH _tessera_spectral_hip_arches _tessera_spectral_hip_arch_count)
+        if(_tessera_spectral_hip_arch_count GREATER 1)
+            message(FATAL_ERROR
+                "TesseraSpectralHIP requires exactly one CMAKE_HIP_ARCHITECTURES entry")
+        endif()
+    endif()
+    add_library(TesseraSpectralHIP SHARED
+        lib/TargetHooks/AMD/StockhamRadix4.hip
+        lib/TargetHooks/AMD/SpectralComposite.hip)
     set_property(TARGET TesseraSpectralHIP PROPERTY POSITION_INDEPENDENT_CODE ON)
+    set_target_properties(TesseraSpectralHIP PROPERTIES
+        OUTPUT_NAME tessera_spectral_rocm
+    )
+    if(DEFINED CMAKE_HIP_ARCHITECTURES)
+        set_property(TARGET TesseraSpectralHIP PROPERTY
+            HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}")
+        target_compile_definitions(TesseraSpectralHIP PRIVATE
+            TESSERA_ROCM_SPECTRAL_ARCH="${CMAKE_HIP_ARCHITECTURES}")
+    endif()
+    install(TARGETS TesseraSpectralHIP LIBRARY DESTINATION lib)
 endif()
 
 # ------------------------------------------------------------------

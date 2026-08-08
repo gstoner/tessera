@@ -1,6 +1,7 @@
 #include "TesseraROCM/Passes.h"
 #include "ROCMDirectAttention.h"
 #include "ROCMFragmentLayout.h"
+#include "ROCMPhysicalWMMAPanel.h"
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "TesseraROCMDialect.h.inc"
@@ -21,6 +22,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Twine.h"
@@ -100,22 +102,54 @@ static FailureOr<Value> materializeFragmentPack(
       role == "a"
           ? std::array<int64_t, 2>{desc.getM(), desc.getK()}
           : std::array<int64_t, 2>{desc.getK(), desc.getN()};
-  StringRef expectedOrder = role == "a" ? "row_major" : "col_major";
-  // 3 inputs = (base, rowOrigin, colOrigin); 5 adds (rowBound, colBound) for a
-  // ragged problem. Anything else is malformed rather than merely unsupported.
+  // Static leading dimension: 3 inputs, or 5 with bounds. Dynamic leading
+  // dimension (tile.memory leading_dim=0): 4 inputs, or 6 with bounds, with
+  // the runtime leading dimension last.
   // This guard used to require exactly 3, which made the bounded form
   // unreachable -- and silently so, since it fell into the generic
   // "unsupported source layout" diagnostic rather than naming the arity.
   const size_t viewInputs = view.getInputs().size();
+  const bool dynamicLeadingDim = memory && memory.getLeadingDim() == 0;
+  const bool precomputedLinearBase = view->hasAttr("tile.linear_base");
+  const size_t linearBaseOffset = precomputedLinearBase ? 1 : 0;
+  const bool validArity = dynamicLeadingDim
+                              ? (viewInputs == 4 + linearBaseOffset ||
+                                 viewInputs == 6 + linearBaseOffset)
+                              : (viewInputs == 3 + linearBaseOffset ||
+                                 viewInputs == 5 + linearBaseOffset);
   if ((role != "a" && role != "b") || !memory ||
-      !layout || (viewInputs != 3 && viewInputs != 5) ||
-      memory.getSpace() != "gmem" || memory.getOrder() != expectedOrder ||
+      !layout || !validArity ||
+      memory.getSpace() != "gmem" ||
+      (memory.getOrder() != "row_major" && memory.getOrder() != "col_major") ||
       layout.getShardExtents() != ArrayRef<int64_t>(expectedShape) ||
       layout.getSwizzle()) {
     op->emitError("ROCM_FRAGMENT_UNSUPPORTED_SOURCE_LAYOUT: unsupported ")
         << physical.familyName << " fragment source layout for role " << role;
     return failure();
   }
+
+  // Both memory orders are addressable. The fragment ALWAYS walks K; what the
+  // order decides is whether K is contiguous in memory or strided by the
+  // leading dimension:
+  //
+  //   role  order        K axis   linear                  K stride
+  //   a     row_major    col      row * ld + col          1
+  //   a     col_major    col      col * ld + row          ld
+  //   b     row_major    row      row * ld + col          ld
+  //   b     col_major    row      col * ld + row          1
+  //
+  // Only the two contiguous cases used to be accepted, and the strided ones
+  // were rejected as an "unsupported source layout". That is why
+  // `GenerateWMMAGemmKernel` could not migrate: it stores B row-major
+  // (`k * N + col`), so its B fragment is a stride-N gather, which it does by
+  // hand with 16 scalar loads.
+  //
+  // Computed BELOW the guard, not above it. `tile.memory` is optional -- a
+  // `tile.view` over a tensor carries only `tile.layout` -- so reading
+  // `memory.getOrder()` before the `!memory` check SEGFAULTS on valid IR. The
+  // pre-existing code was safe only because the order test sat inside the guard
+  // expression, after `!memory`, where `||` short-circuits.
+  const bool kIsContiguous = (role == "a") == (memory.getOrder() == "row_major");
 
   Value base = view.getInputs()[0];
   auto memrefTy = dyn_cast<MemRefType>(base.getType());
@@ -143,10 +177,13 @@ static FailureOr<Value> materializeFragmentPack(
   }
 
   Location loc = op->getLoc();
-  Value rowOrigin = toIndex(builder, loc, view.getInputs()[1]);
-  Value colOrigin = toIndex(builder, loc, view.getInputs()[2]);
-  Value leadingDim = arith::ConstantIndexOp::create(
-      builder, loc, memory.getLeadingDim());
+  const size_t originOffset = 1 + linearBaseOffset;
+  Value rowOrigin = toIndex(builder, loc, view.getInputs()[originOffset]);
+  Value colOrigin = toIndex(builder, loc, view.getInputs()[originOffset + 1]);
+  Value leadingDim = dynamicLeadingDim
+                         ? toIndex(builder, loc, view.getInputs().back())
+                         : Value(arith::ConstantIndexOp::create(
+                               builder, loc, memory.getLeadingDim()));
   auto vectorTy =
       VectorType::get({physical.inputElementsPerLane}, elementTy);
   Value zero = arith::ConstantOp::create(builder, loc, vectorTy,
@@ -175,65 +212,98 @@ static FailureOr<Value> materializeFragmentPack(
   // `maskedload` with a zero passthru reproduces the generator's `storeZero`
   // element for element -- which is what lets the migrated producer stay
   // bit-identical rather than merely close.
-  const bool haveBounds = view.getInputs().size() >= 5;
+  const bool haveBounds =
+      dynamicLeadingDim ? viewInputs == 6 + linearBaseOffset
+                        : viewInputs == 5 + linearBaseOffset;
   Value fastBound, slowIndex, slowBound;
 
   Value linear, fastIndex;
+  Value row, col;
   if (role == "a") {
-    Value row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
-    Value col = arith::AddIOp::create(builder, loc, colOrigin, kBase);
-    linear = arith::AddIOp::create(
-        builder, loc,
-        arith::MulIOp::create(builder, loc, row, leadingDim), col);
-    // A is row-major here: the load walks columns, so the tail bound is the
-    // column extent and the row is a single scalar guard.
+    // K is the column; the lane selects the row.
+    row = arith::AddIOp::create(builder, loc, rowOrigin, lane);
+    col = arith::AddIOp::create(builder, loc, colOrigin, kBase);
     fastIndex = col;
     slowIndex = row;
     if (haveBounds) {
-      slowBound = toIndex(builder, loc, view.getInputs()[3]);   // rowBound
-      fastBound = toIndex(builder, loc, view.getInputs()[4]);   // colBound
+      slowBound = toIndex(builder, loc,
+                          view.getInputs()[originOffset + 2]); // rowBound
+      fastBound = toIndex(builder, loc,
+                          view.getInputs()[originOffset + 3]); // colBound
     }
   } else {
-    Value row = arith::AddIOp::create(builder, loc, rowOrigin, kBase);
-    Value col = arith::AddIOp::create(builder, loc, colOrigin, lane);
-    linear = arith::AddIOp::create(
-        builder, loc,
-        arith::MulIOp::create(builder, loc, col, leadingDim), row);
-    // B is column-major here (`col * leadingDim + row`), so the load walks
-    // ROWS. The fast/slow roles swap with the operand -- getting this backwards
-    // would mask the wrong axis and silently zero live data on ragged shapes.
+    // K is the row; the lane selects the column.
+    row = arith::AddIOp::create(builder, loc, rowOrigin, kBase);
+    col = arith::AddIOp::create(builder, loc, colOrigin, lane);
     fastIndex = row;
     slowIndex = col;
     if (haveBounds) {
-      fastBound = toIndex(builder, loc, view.getInputs()[3]);   // rowBound
-      slowBound = toIndex(builder, loc, view.getInputs()[4]);   // colBound
+      fastBound = toIndex(builder, loc,
+                          view.getInputs()[originOffset + 2]); // rowBound
+      slowBound = toIndex(builder, loc,
+                          view.getInputs()[originOffset + 3]); // colBound
     }
   }
+  // The fast axis is K for BOTH roles, so the bound mapping above does not
+  // depend on the memory order -- only the linearization below does. Getting
+  // the fast/slow roles backwards would mask the wrong axis and silently zero
+  // live data on ragged shapes.
+  linear = precomputedLinearBase
+               ? toIndex(builder, loc, view.getInputs()[1])
+               : memory.getOrder() == "row_major"
+                     ? arith::AddIOp::create(
+                           builder, loc,
+                           arith::MulIOp::create(builder, loc, row, leadingDim),
+                           col)
+                     : arith::AddIOp::create(
+                           builder, loc,
+                           arith::MulIOp::create(builder, loc, col, leadingDim),
+                           row);
 
-  if (!haveBounds) {
+  if (!kIsContiguous || haveBounds) {
+    // A bounded fragment is scalarized even when K is contiguous. The ROCm
+    // GPU-to-LLVM pipeline does not legalize vector.create_mask/maskedload;
+    // emitting them left an index cast and vector op at LLVM translation.
+    // Scalar guarded loads are the same address/value sequence used by the
+    // production generator's ragged path. For strided K, element j lives
+    // `j * leadingDim` away; for contiguous K the stride is one.
+    Value zeroScalar = arith::ConstantOp::create(
+        builder, loc, elementTy, builder.getZeroAttr(elementTy));
+    Value zeroIdx = arith::ConstantIndexOp::create(builder, loc, 0);
+    Value slowOk;
+    if (haveBounds)
+      slowOk = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::slt,
+                                     slowIndex, slowBound);
+    for (int64_t j = 0; j < physical.inputElementsPerLane; ++j) {
+      Value cj = arith::ConstantIndexOp::create(builder, loc, j);
+      Value stride = kIsContiguous
+                         ? Value(arith::ConstantIndexOp::create(builder, loc, 1))
+                         : leadingDim;
+      Value index = arith::AddIOp::create(
+          builder, loc, linear,
+          arith::MulIOp::create(builder, loc, cj, stride));
+      Value element;
+      if (!haveBounds) {
+        element = memref::LoadOp::create(builder, loc, base, ValueRange{index});
+      } else {
+        Value fastOk = arith::CmpIOp::create(
+            builder, loc, arith::CmpIPredicate::slt,
+            arith::AddIOp::create(builder, loc, fastIndex, cj), fastBound);
+        Value inBounds = arith::AndIOp::create(builder, loc, fastOk, slowOk);
+        // Clamp the ADDRESS too: an out-of-bounds lane must not fault, and a
+        // select on the loaded value alone still performs the load.
+        Value safe =
+            arith::SelectOp::create(builder, loc, inBounds, index, zeroIdx);
+        element = memref::LoadOp::create(builder, loc, base, ValueRange{safe});
+        element = arith::SelectOp::create(builder, loc, inBounds, element,
+                                          zeroScalar);
+      }
+      fragment = vector::InsertOp::create(builder, loc, element, fragment,
+                                          ArrayRef<int64_t>{j});
+    }
+  } else {
     fragment = vector::LoadOp::create(builder, loc, vectorTy, base,
                                       ValueRange{linear});
-  } else {
-    Value zeroIdx = arith::ConstantIndexOp::create(builder, loc, 0);
-    Value lanes = arith::ConstantIndexOp::create(
-        builder, loc, physical.inputElementsPerLane);
-    // remaining = clamp(fastBound - fastIndex, 0, lanes)
-    Value remaining =
-        arith::SubIOp::create(builder, loc, fastBound, fastIndex);
-    remaining = arith::MaxSIOp::create(builder, loc, remaining, zeroIdx);
-    remaining = arith::MinSIOp::create(builder, loc, remaining, lanes);
-    // The slow axis is a single scalar guard: out of range zeroes the fragment.
-    Value slowOk = arith::CmpIOp::create(builder, loc,
-                                         arith::CmpIPredicate::slt,
-                                         slowIndex, slowBound);
-    Value length =
-        arith::SelectOp::create(builder, loc, slowOk, remaining, zeroIdx);
-    Value mask = vector::CreateMaskOp::create(
-        builder, loc, VectorType::get({physical.inputElementsPerLane},
-                                      builder.getI1Type()),
-        ValueRange{length});
-    fragment = vector::MaskedLoadOp::create(builder, loc, vectorTy, base,
-                                            ValueRange{linear}, mask, zero);
   }
   bool packToI32 = physical.inputFormat ==
                        tessera_rocm::FragmentRegisterFormat::SOAInt ||
@@ -316,8 +386,19 @@ static LogicalResult materializeFragmentStore(
   Location loc = op->getLoc();
   Value rowOrigin = toIndex(builder, loc, store.getInputs()[2]);
   Value colOrigin = toIndex(builder, loc, store.getInputs()[3]);
-  Value leadingDim = arith::ConstantIndexOp::create(
-      builder, loc, memory.getLeadingDim());
+  const size_t storeInputs = store.getInputs().size();
+  const bool dynamicLeadingDim = memory.getLeadingDim() == 0;
+  const bool haveBounds = dynamicLeadingDim ? storeInputs == 7
+                                            : storeInputs == 6;
+  Value leadingDim = dynamicLeadingDim
+                         ? toIndex(builder, loc, store.getInputs().back())
+                         : Value(arith::ConstantIndexOp::create(
+                               builder, loc, memory.getLeadingDim()));
+  Value rowBound, colBound;
+  if (haveBounds) {
+    rowBound = toIndex(builder, loc, store.getInputs()[4]);
+    colBound = toIndex(builder, loc, store.getInputs()[5]);
+  }
   Value groupStride = arith::ConstantIndexOp::create(
       builder, loc, physical.accumulatorElementsPerLane);
   for (int64_t i = 0; i < physical.accumulatorElementsPerLane; ++i) {
@@ -343,6 +424,19 @@ static LogicalResult materializeFragmentStore(
         arith::MulIOp::create(builder, loc, row, leadingDim), col);
     Value scalar = vector::ExtractOp::create(builder, loc, accumulator,
                                              ArrayRef<int64_t>{i});
+    if (!haveBounds) {
+      memref::StoreOp::create(builder, loc, scalar, base, ValueRange{linear});
+      continue;
+    }
+    Value rowOk = arith::CmpIOp::create(
+        builder, loc, arith::CmpIPredicate::slt, row, rowBound);
+    Value colOk = arith::CmpIOp::create(
+        builder, loc, arith::CmpIPredicate::slt, col, colBound);
+    Value inBounds = arith::AndIOp::create(builder, loc, rowOk, colOk);
+    auto guarded = scf::IfOp::create(builder, loc, inBounds,
+                                     /*withElseRegion=*/false);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(guarded.thenBlock());
     memref::StoreOp::create(builder, loc, scalar, base, ValueRange{linear});
   }
   return success();
@@ -549,10 +643,9 @@ struct FragmentLaneCoords {
   Value storeGroup; // accumulator half-wave selector, never forced
 };
 
-static FragmentLaneCoords
-computeLaneCoords(OpBuilder &builder, Location loc,
-                  const tessera_rocm::FragmentLayoutDescriptor &physical) {
-  Value tx = gpu::ThreadIdOp::create(builder, loc, gpu::Dimension::x);
+static FragmentLaneCoords computeLaneCoordsFromThread(
+    OpBuilder &builder, Location loc, Value tx,
+    const tessera_rocm::FragmentLayoutDescriptor &physical) {
   Value waveSize =
       arith::ConstantIndexOp::create(builder, loc, physical.waveSize);
   Value waveLane = arith::RemUIOp::create(builder, loc, tx, waveSize);
@@ -566,6 +659,60 @@ computeLaneCoords(OpBuilder &builder, Location loc,
           : coords.storeGroup;
   return coords;
 }
+
+static FragmentLaneCoords
+computeLaneCoords(OpBuilder &builder, Location loc,
+                  const tessera_rocm::FragmentLayoutDescriptor &physical) {
+  Value tx = gpu::ThreadIdOp::create(builder, loc, gpu::Dimension::x);
+  return computeLaneCoordsFromThread(builder, loc, tx, physical);
+}
+
+/// One wave-coordinate calculation per GPU function and physical ABI.  The
+/// generic pack/store conversion patterns previously called
+/// `gpu.thread_id x` independently for every fragment.  Because the intrinsic
+/// is convergent, LLVM cannot CSE those calls: the typed 2x4 kernel selected 46
+/// workitem-id reads plus repeated rem/div arithmetic versus one in the direct
+/// kernel.  Materializing at entry also makes the coordinates loop-invariant.
+class FragmentLaneCoordCache {
+public:
+  FragmentLaneCoords
+  get(OpBuilder &builder, Location loc,
+      const tessera_rocm::FragmentLayoutDescriptor &physical) {
+    Operation *parent = builder.getInsertionBlock()->getParentOp();
+    gpu::GPUFuncOp function = parent->getParentOfType<gpu::GPUFuncOp>();
+    if (!function)
+      function = dyn_cast<gpu::GPUFuncOp>(parent);
+    if (!function)
+      return computeLaneCoords(builder, loc, physical);
+    unsigned abi = (unsigned(physical.waveSize) << 16) |
+                   unsigned(physical.inputLaneReplication);
+    auto key = std::make_pair(function.getOperation(), abi);
+    auto found = coordinates.find(key);
+    if (found != coordinates.end())
+      return found->second;
+    OpBuilder::InsertionGuard guard(builder);
+    Block &entry = function.getBody().front();
+    Value tx;
+    for (gpu::ThreadIdOp threadId : entry.getOps<gpu::ThreadIdOp>()) {
+      if (threadId.getDimension() == gpu::Dimension::x) {
+        tx = threadId;
+        break;
+      }
+    }
+    if (tx)
+      builder.setInsertionPointAfter(tx.getDefiningOp());
+    else
+      builder.setInsertionPointToStart(&entry);
+    FragmentLaneCoords created =
+        tx ? computeLaneCoordsFromThread(builder, loc, tx, physical)
+           : computeLaneCoords(builder, loc, physical);
+    coordinates.try_emplace(key, created);
+    return created;
+  }
+
+private:
+  DenseMap<std::pair<Operation *, unsigned>, FragmentLaneCoords> coordinates;
+};
 
 /// Shared failure path: a stated fragment contract this target cannot realize
 /// is an ERROR, not a quiet non-match. Returning `notifyMatchFailure` here
@@ -601,9 +748,42 @@ struct ConvertFragmentZero
   }
 };
 
+// Register-owned producers (currently the ROCm attention generators) already
+// hold the exact physical lane vector: feature maps and softmax have changed
+// the values after any pointer-backed tile.view could describe them. They use
+// unrealized_conversion_cast solely to attach/remove the portable fragment
+// type at the Tile boundary. Once both sides convert to the same architecture
+// vector ABI, the bridge is identity and must disappear.
+struct ConvertFragmentBridge
+    : public OpConversionPattern<UnrealizedConversionCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnrealizedConversionCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return rewriter.notifyMatchFailure(op, "not a one-value fragment bridge");
+    bool touchesFragment =
+        isa<tessera::tile::FragmentType>(op->getOperand(0).getType()) ||
+        isa<tessera::tile::FragmentType>(op->getResult(0).getType());
+    if (!touchesFragment)
+      return rewriter.notifyMatchFailure(op, "does not bridge a Tile fragment");
+    Type convertedResult =
+        getTypeConverter()->convertType(op->getResult(0).getType());
+    if (!convertedResult || adaptor.getOperands().front().getType() != convertedResult)
+      return op->emitError(
+          "ROCm register-owned fragment bridge does not match the exact "
+          "architecture vector ABI");
+    rewriter.replaceOp(op, adaptor.getOperands().front());
+    return success();
+  }
+};
+
 struct ConvertFragmentPack
     : public OpConversionPattern<tessera::tile::FragmentPackOp> {
-  using OpConversionPattern::OpConversionPattern;
+  ConvertFragmentPack(const TypeConverter &converter, MLIRContext *context,
+                      FragmentLaneCoordCache &laneCoords)
+      : OpConversionPattern(converter, context), laneCoords(laneCoords) {}
 
   LogicalResult
   matchAndRewrite(tessera::tile::FragmentPackOp op, OpAdaptor,
@@ -617,8 +797,7 @@ struct ConvertFragmentPack
         converter->layoutFor(f);
     if (!physical || !physical->materializationReady)
       return emitUnresolvableFragment(op, f, converter->getArch());
-    FragmentLaneCoords coords =
-        computeLaneCoords(rewriter, op.getLoc(), *physical);
+    FragmentLaneCoords coords = laneCoords.get(rewriter, op.getLoc(), *physical);
     // The source `tile.view` is untouched by this conversion (`!tile.tile`
     // converts to itself), so the original operand still reaches it.
     // Role comes from the TYPE. `FragmentPackOp::verify` returns success
@@ -639,6 +818,174 @@ struct ConvertFragmentPack
              << "; the pack rule and the converted type must be derived from "
                 "the same place (packedFragmentType)";
     rewriter.replaceOp(op, *packed);
+    return success();
+  }
+
+private:
+  FragmentLaneCoordCache &laneCoords;
+};
+
+/// Consume the complete aligned gfx1151 2x4 panel as one physical unit.
+///
+/// The generic patterns below are intentionally per-op and remain the source
+/// of truth for bounded/ragged fragments.  The hot aligned panel has a stronger
+/// contract: two A packs, four B packs, and all eight accumulator-threaded MMAs
+/// are replaced atomically through the same emitter used by the direct lane.
+struct ConvertGfx11PhysicalWmmaPanel
+    : public OpConversionPattern<tessera::tile::FragmentPackOp> {
+  ConvertGfx11PhysicalWmmaPanel(const TypeConverter &converter,
+                               MLIRContext *context)
+      : OpConversionPattern(converter, context, PatternBenefit(10)) {}
+
+  LogicalResult
+  matchAndRewrite(tessera::tile::FragmentPackOp op, OpAdaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    const auto *converter =
+        static_cast<const TileFragmentTypeConverter *>(getTypeConverter());
+    if (converter->getArch() != "gfx1151")
+      return rewriter.notifyMatchFailure(op, "not the gfx1151 physical panel");
+
+    SmallVector<tessera::tile::FragmentPackOp> aPacks, bPacks;
+    SmallVector<tessera::tile::ViewOp> aViews, bViews;
+    for (auto candidate :
+         op->getBlock()->getOps<tessera::tile::FragmentPackOp>()) {
+      auto fragment =
+          dyn_cast<tessera::tile::FragmentType>(candidate.getType());
+      if (!fragment || fragment.isUnknown() ||
+          (fragment.getElem() != "f16" && fragment.getElem() != "bf16"))
+        continue;
+      auto view = candidate.getInputs()
+                      .front()
+                      .getDefiningOp<tessera::tile::ViewOp>();
+      auto memory = view ? view->getAttrOfType<
+                               tessera::tile::TileMemoryLayoutAttr>(
+                               "tile.memory")
+                         : tessera::tile::TileMemoryLayoutAttr();
+      if (!view || !view->hasAttr("tile.linear_base") || !memory ||
+          memory.getSpace() != "gmem" || memory.getOrder() != "row_major" ||
+          memory.getLeadingDim() != 0 || view.getInputs().size() != 5)
+        continue;
+      if (fragment.getRole() == "a") {
+        aPacks.push_back(candidate);
+        aViews.push_back(view);
+      } else if (fragment.getRole() == "b") {
+        bPacks.push_back(candidate);
+        bViews.push_back(view);
+      }
+    }
+    if (aPacks.size() != 2 || bPacks.size() != 4 || op != aPacks.front())
+      return rewriter.notifyMatchFailure(op, "not one complete 2x4 panel");
+
+    auto aType = cast<tessera::tile::FragmentType>(aPacks.front().getType());
+    auto bType = cast<tessera::tile::FragmentType>(bPacks.front().getType());
+    if (aType != cast<tessera::tile::FragmentType>(aPacks.back().getType()) ||
+        llvm::any_of(bPacks, [&](auto pack) {
+          return pack.getType() != bPacks.front().getType();
+        }) ||
+        aType.getElem() != bType.getElem())
+      return rewriter.notifyMatchFailure(op, "mixed physical fragment types");
+
+    Value k0 = aViews.front().getInputs()[3];
+    Value a = aViews.front().getInputs().front();
+    Value b = bViews.front().getInputs().front();
+    Value n = bViews.front().getInputs().back();
+    SmallVector<Value> aRowOffsets;
+    for (auto view : aViews) {
+      if (view.getInputs().front() != a || view.getInputs()[3] != k0)
+        return rewriter.notifyMatchFailure(op, "A panel bases disagree");
+      auto base = view.getInputs()[1].getDefiningOp<arith::AddIOp>();
+      if (!base)
+        return rewriter.notifyMatchFailure(op, "A base is not row*K + k0");
+      if (base.getLhs() == k0)
+        aRowOffsets.push_back(base.getRhs());
+      else if (base.getRhs() == k0)
+        aRowOffsets.push_back(base.getLhs());
+      else
+        return rewriter.notifyMatchFailure(op, "A base does not contain k0");
+    }
+    SmallVector<Value> bColumns;
+    for (auto view : bViews) {
+      if (view.getInputs().front() != b || view.getInputs()[2] != k0 ||
+          view.getInputs().back() != n)
+        return rewriter.notifyMatchFailure(op, "B panel bases disagree");
+      auto linearBase = view.getInputs()[1].getDefiningOp<arith::AddIOp>();
+      if (!linearBase)
+        return rewriter.notifyMatchFailure(op, "B base is not k0*N + column");
+      auto isRowBase = [&](Value value) {
+        auto multiply = value.getDefiningOp<arith::MulIOp>();
+        return multiply &&
+               ((multiply.getLhs() == k0 && multiply.getRhs() == n) ||
+                (multiply.getLhs() == n && multiply.getRhs() == k0));
+      };
+      if (isRowBase(linearBase.getLhs()))
+        bColumns.push_back(linearBase.getRhs());
+      else if (isRowBase(linearBase.getRhs()))
+        bColumns.push_back(linearBase.getLhs());
+      else
+        return rewriter.notifyMatchFailure(op,
+                                           "B base does not contain k0*N");
+    }
+
+    DenseMap<Operation *, unsigned> aIndex, bIndex;
+    for (auto [index, pack] : llvm::enumerate(aPacks))
+      aIndex[pack.getOperation()] = index;
+    for (auto [index, pack] : llvm::enumerate(bPacks))
+      bIndex[pack.getOperation()] = index;
+    SmallVector<tessera::tile::MMAOp> mmas(8);
+    SmallVector<Value> accumulators(8);
+    for (auto mma : op->getBlock()->getOps<tessera::tile::MMAOp>()) {
+      if (mma.getInputs().size() != 3)
+        continue;
+      Operation *aDef = mma.getInputs()[0].getDefiningOp();
+      Operation *bDef = mma.getInputs()[1].getDefiningOp();
+      auto ai = aIndex.find(aDef);
+      auto bi = bIndex.find(bDef);
+      if (ai == aIndex.end() || bi == bIndex.end())
+        continue;
+      unsigned index = ai->second * 4 + bi->second;
+      if (mmas[index])
+        return rewriter.notifyMatchFailure(op, "duplicate panel MMA");
+      mmas[index] = mma;
+      accumulators[index] = rewriter.getRemappedValue(mma.getInputs()[2]);
+      if (!accumulators[index])
+        return rewriter.notifyMatchFailure(op, "accumulator is not remapped");
+    }
+    if (llvm::any_of(mmas, [](auto mma) { return !mma; }))
+      return rewriter.notifyMatchFailure(op, "panel does not own eight MMAs");
+    for (auto pack : llvm::concat<tessera::tile::FragmentPackOp>(aPacks,
+                                                                 bPacks))
+      if (!llvm::all_of(pack->getUsers(), [](Operation *user) {
+            return isa<tessera::tile::MMAOp>(user);
+          }))
+        return rewriter.notifyMatchFailure(op, "fragment escapes the panel");
+
+    auto inputType = dyn_cast_or_null<VectorType>(
+        getTypeConverter()->convertType(aPacks.front().getType()));
+    auto accumulatorType = dyn_cast_or_null<VectorType>(
+        getTypeConverter()->convertType(mmas.front().getResult(0).getType()));
+    if (!inputType || !accumulatorType)
+      return rewriter.notifyMatchFailure(op, "physical vector type missing");
+    Value inputZero;
+    auto function = op->getParentOfType<gpu::GPUFuncOp>();
+    Attribute zero = rewriter.getZeroAttr(inputType);
+    function.walk([&](arith::ConstantOp constant) {
+      if (!inputZero && constant.getType() == inputType &&
+          constant.getValue() == zero)
+        inputZero = constant;
+    });
+    if (!inputZero)
+      return rewriter.notifyMatchFailure(op, "shared input zero missing");
+
+    rewriter.setInsertionPoint(mmas.front());
+    SmallVector<Value> next = tessera_rocm::emitGfx11WmmaPhysicalPanel(
+        rewriter, op.getLoc(), a, b, n, k0, aRowOffsets, bColumns,
+        accumulators, inputZero, inputType, accumulatorType);
+    for (auto [mma, value] : llvm::zip_equal(mmas, next))
+      rewriter.replaceOp(mma, value);
+    for (auto pack : bPacks)
+      rewriter.eraseOp(pack);
+    for (auto pack : aPacks)
+      rewriter.eraseOp(pack);
     return success();
   }
 };
@@ -741,7 +1088,10 @@ struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
 /// is what lets the accumulator arrive from a loop.
 struct ConvertFragmentUnpackStore
     : public OpConversionPattern<tessera::tile::FragmentUnpackOp> {
-  using OpConversionPattern::OpConversionPattern;
+  ConvertFragmentUnpackStore(const TypeConverter &converter,
+                             MLIRContext *context,
+                             FragmentLaneCoordCache &laneCoords)
+      : OpConversionPattern(converter, context), laneCoords(laneCoords) {}
 
   LogicalResult
   matchAndRewrite(tessera::tile::FragmentUnpackOp op, OpAdaptor adaptor,
@@ -769,7 +1119,7 @@ struct ConvertFragmentUnpackStore
 
     rewriter.setInsertionPoint(store);
     FragmentLaneCoords coords =
-        computeLaneCoords(rewriter, store.getLoc(), *physical);
+        laneCoords.get(rewriter, store.getLoc(), *physical);
     if (failed(materializeFragmentStore(
             adaptor.getInputs().front(), converter->descriptorFor(f), op, store,
             rewriter, coords.lane, coords.storeGroup, *physical)))
@@ -778,6 +1128,9 @@ struct ConvertFragmentUnpackStore
     rewriter.eraseOp(op);
     return success();
   }
+
+private:
+  FragmentLaneCoordCache &laneCoords;
 };
 
 } // namespace
@@ -808,8 +1161,12 @@ static LogicalResult convertTypedFragments(Operation *root, StringRef arch) {
     return success();
 
   RewritePatternSet patterns(ctx);
-  patterns.add<ConvertFragmentZero, ConvertFragmentPack, ConvertMMA,
-               ConvertFragmentUnpackStore>(converter, ctx);
+  FragmentLaneCoordCache laneCoords;
+  patterns.add<ConvertGfx11PhysicalWmmaPanel>(converter, ctx);
+  patterns.add<ConvertFragmentZero, ConvertFragmentBridge, ConvertMMA>(
+      converter, ctx);
+  patterns.add<ConvertFragmentPack>(converter, ctx, laneCoords);
+  patterns.add<ConvertFragmentUnpackStore>(converter, ctx, laneCoords);
 
   ConversionTarget target(*ctx);
   target.markUnknownOpDynamicallyLegal(
@@ -1598,7 +1955,8 @@ struct LowerTileToROCMPass
   }
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, gpu::GPUDialect,
-                    LLVM::LLVMDialect, math::MathDialect, scf::SCFDialect,
+                    LLVM::LLVMDialect,
+                    math::MathDialect, scf::SCFDialect,
                     memref::MemRefDialect, vector::VectorDialect,
                     tessera::tile::TesseraTileDialect,
                     mlir::tessera_rocm::TesseraROCMDialect>();
@@ -1614,6 +1972,64 @@ struct LowerTileToROCMPass
 
   void runOnOperation() override {
     StringRef arch = archOpt;
+    SmallVector<gpu::GPUFuncOp> typedGemmContracts;
+    getOperation().walk([&](gpu::GPUFuncOp function) {
+      if (function->hasAttr("tessera.rocm.typed_gfx11_gemm_contract"))
+        typedGemmContracts.push_back(function);
+    });
+    for (gpu::GPUFuncOp function : typedGemmContracts) {
+      if (arch != "gfx1151") {
+        function.emitError(
+            "typed gfx11 GEMM physical-body contract requires gfx1151");
+        signalPassFailure();
+        return;
+      }
+      auto expectedDigest = function->getAttrOfType<StringAttr>(
+          "tessera.rocm.typed_contract_digest");
+      std::string actualDigest =
+          tessera_rocm::gfx11WmmaGemmTileBodyDigest(function);
+      if (!expectedDigest || expectedDigest.getValue() != actualDigest) {
+        function.emitError(
+            "typed gfx11 GEMM Tile-body digest mismatch; refusing to "
+            "materialize a stale or modified artifact");
+        signalPassFailure();
+        return;
+      }
+      unsigned views = 0, packs = 0, mmas = 0, unpacks = 0, stores = 0;
+      function.walk([&](Operation *op) {
+        views += isa<tessera::tile::ViewOp>(op);
+        packs += isa<tessera::tile::FragmentPackOp>(op);
+        mmas += isa<tessera::tile::MMAOp>(op);
+        unpacks += isa<tessera::tile::FragmentUnpackOp>(op);
+        stores += isa<tessera::tile::StoreOp>(op);
+      });
+      if (views != 24 || packs != 24 || mmas != 32 || unpacks != 16 ||
+          stores != 16) {
+        function.emitError(
+            "typed gfx11 GEMM contract is incomplete; expected the exact "
+            "2x4 view/pack/mma/unpack/store topology");
+        signalPassFailure();
+        return;
+      }
+      auto mtAttr = function->getAttrOfType<IntegerAttr>(
+          "tessera.rocm.physical_panel_mt");
+      auto ntAttr = function->getAttrOfType<IntegerAttr>(
+          "tessera.rocm.physical_panel_nt");
+      if (!mtAttr || !ntAttr) {
+        function.emitError(
+            "typed gfx11 GEMM contract is missing its physical panel shape");
+        signalPassFailure();
+        return;
+      }
+      int64_t mt = mtAttr.getInt();
+      int64_t nt = ntAttr.getInt();
+      if (failed(tessera_rocm::materializeGfx11WmmaGemmPhysicalBody(
+              function, mt, nt))) {
+        function.emitError("failed to materialize the shared gfx11 GEMM body");
+        signalPassFailure();
+        return;
+      }
+    }
     // W1.1 step 0 — legalize the typed fragment form first, by composition.
     // Anything still carrying the legacy bare `!tile.fragment` falls through to
     // the single-shot walk below, unchanged.

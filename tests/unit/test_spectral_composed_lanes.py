@@ -218,11 +218,11 @@ def test_stft_istft_round_trips_through_the_composed_lanes():
 # sizes. So these cases are grouped by WHICH PATH they exercise, not by round
 # numbers: a gate that only probes one class re-derives the same blind spot.
 
-#: Factor entirely within the radix set {4,2,3,5,7,11,13} — mixed-radix stages.
-_MIXED_RADIX_SIZES = (1, 2, 3, 4, 5, 7, 8, 12, 15, 16, 24, 27, 32, 45, 48, 49,
-                      64, 100, 121, 128, 169, 180, 720, 1024, 1331)
+#: Factor entirely within the radix set {4,2,3,5,7,11,13,17} — mixed-radix stages.
+_MIXED_RADIX_SIZES = (1, 2, 3, 4, 5, 7, 8, 12, 15, 16, 17, 24, 27, 32, 45, 48,
+                      49, 64, 100, 121, 128, 169, 180, 255, 720, 1024, 1331)
 #: A prime or a factor above the radix bound — Bluestein.
-_BLUESTEIN_SIZES = (17, 19, 23, 29, 31, 37, 101, 127, 255, 257, 509, 1009)
+_BLUESTEIN_SIZES = (19, 23, 29, 31, 37, 101, 127, 257, 509, 1009)
 
 
 @pytest.mark.parametrize("n", _MIXED_RADIX_SIZES + _BLUESTEIN_SIZES)
@@ -286,7 +286,7 @@ def test_mixed_radix_sizes_factor_within_the_radix_set(n):
     assert stages >= 0, f"n={n} unexpectedly needs Bluestein"
     product = 1
     for i in range(stages):
-        assert buf[i] in (2, 3, 4, 5, 7, 11, 13), buf[i]
+        assert buf[i] in (2, 3, 4, 5, 7, 11, 13, 17), buf[i]
         product *= buf[i]
     assert product == n, f"stages multiply to {product}, not {n}"
 

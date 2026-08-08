@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import inspect
 import subprocess
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -37,6 +38,24 @@ from tessera import runtime as rt
 #: braces. Matching the *rendered* form (`{arch=`) is what the first version of
 #: this gate did, and it failed against its own target.
 _PASS_LITERAL = "lower-tile-to-rocm{{arch={chip}}}"
+_REPO = Path(__file__).resolve().parents[2]
+_TESSERA_OPT = _REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
+_GEMM_DIRECTIVE = (
+    'module { "tessera_rocm.wmma_gemm"() {name = "gemm", '
+    'm = 16 : i64, n = 16 : i64, k = 16 : i64, mt = 2 : i64, '
+    'nt = 4 : i64, dtype = "f16"} : () -> () }\n'
+)
+
+
+def _run_opt(pipeline: str, source: str = _GEMM_DIRECTIVE):
+    if not _TESSERA_OPT.is_file():
+        pytest.skip("tessera-opt not built")
+    return subprocess.run(
+        [str(_TESSERA_OPT), "-", f"--pass-pipeline={pipeline}"],
+        input=source,
+        capture_output=True,
+        text=True,
+    )
 
 
 def test_every_wmma_gemm_pipeline_can_lower_tile_mma():
@@ -72,6 +91,65 @@ def test_the_tile_lowering_always_states_its_arch():
         assert bad not in src, f"tile lowering used without arch=: {bad}"
 
 
+def test_gfx1151_typed_contract_materializes_the_direct_physical_body():
+    """The Tile artifact is real, then its target body has one owner."""
+    generated = _run_opt(
+        "builtin.module(generate-wmma-gemm-kernel{via-tile=true})"
+    )
+    assert generated.returncode == 0, generated.stderr
+    assert "tessera.rocm.typed_gfx11_gemm_contract" in generated.stdout
+    assert generated.stdout.count("tile.fragment_pack") == 24
+    assert generated.stdout.count("tile.mma ") == 32
+    assert generated.stdout.count("tile.fragment_unpack") == 16
+    assert generated.stdout.count("tile.store ") == 16
+
+    for dtype in ("f16", "bf16"):
+        source = _GEMM_DIRECTIVE.replace('dtype = "f16"', f'dtype = "{dtype}"')
+        direct = _run_opt(
+            "builtin.module(generate-wmma-gemm-kernel,"
+            "lower-tile-to-rocm{arch=gfx1151})",
+            source,
+        )
+        typed = _run_opt(
+            "builtin.module(generate-wmma-gemm-kernel{via-tile=true},"
+            "lower-tile-to-rocm{arch=gfx1151})",
+            source,
+        )
+        assert direct.returncode == typed.returncode == 0
+        assert typed.stdout == direct.stdout
+
+
+def test_gfx1151_typed_physical_contract_fails_closed_when_tampered():
+    generated = _run_opt(
+        "builtin.module(generate-wmma-gemm-kernel{via-tile=true})"
+    )
+    assert generated.returncode == 0, generated.stderr
+    tampered = generated.stdout.replace(
+        "tessera.rocm.physical_panel_mt = 2 : i64",
+        "tessera.rocm.physical_panel_mt = 3 : i64",
+        1,
+    )
+    assert tampered != generated.stdout
+    lowered = _run_opt(
+        "builtin.module(lower-tile-to-rocm{arch=gfx1151})", tampered
+    )
+    assert lowered.returncode != 0
+    assert "failed to materialize the shared gfx11 GEMM body" in lowered.stderr
+
+    # Counts and types still agree after swapping one same-typed A fragment;
+    # only exact body identity can detect this valid-looking semantic change.
+    operand_tampered = generated.stdout.replace(
+        "tile.mma %60, %67", "tile.mma %63, %67", 1
+    )
+    assert operand_tampered != generated.stdout
+    lowered = _run_opt(
+        "builtin.module(lower-tile-to-rocm{arch=gfx1151})",
+        operand_tampered,
+    )
+    assert lowered.returncode != 0
+    assert "Tile-body digest mismatch" in lowered.stderr
+
+
 @pytest.mark.skipif(
     not rt._rocm_wmma_runtime_available(),
     reason="no AMD GPU / libtessera_rocm_gemm.so",
@@ -79,11 +157,11 @@ def test_the_tile_lowering_always_states_its_arch():
 def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
     """The claim the structural gate cannot make: the accumulator survives.
 
-    `via-tile` routes the GEMM through `tile.mma %a, %b, %acc`. If the
-    accumulator were dropped in the round trip — the defect found on the NVIDIA
-    side, where the WGMMA lowering passes only (A, B) — a K-loop would return
-    the last partial product. Bit-identical output is what rules that out; a
-    lowering fixture checking emitted ops would not.
+    `via-tile` routes the production 2x4 macro tile through the complete typed
+    `tile.view -> fragment_pack -> tile.mma -> fragment_unpack -> tile.store`
+    chain. If addressing, masking, accumulator threading, or stores diverge,
+    bit-identical output fails; a lowering fixture checking emitted ops would
+    not prove any of those properties.
 
     The control matters as much as the comparison: an earlier version of this
     experiment reported bit-identical output while the injection silently never
@@ -153,15 +231,20 @@ def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
     )
 
     rng = np.random.default_rng(21)
-    a = (rng.standard_normal((64, 64)) * 0.4).astype(np.float16)
-    b = (rng.standard_normal((64, 64)) * 0.4).astype(np.float16)
-    base, _ = launch(None, a, b)
-    tiled, hits = launch("generate-wmma-gemm-kernel{via-tile=true},", a, b)
+    # The second shape crosses every dynamic-address boundary: ragged M/N make
+    # the edge stores and A/B bounds live, while ragged K executes the scalar
+    # guarded tail pack. The aligned case remains the production 2x4 baseline.
+    for m, n, k in ((64, 64, 64), (65, 67, 31)):
+        a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)
+        b = (rng.standard_normal((k, n)) * 0.4).astype(np.float16)
+        base, _ = launch(None, a, b)
+        tiled, hits = launch(
+            "generate-wmma-gemm-kernel{via-tile=true},", a, b
+        )
 
-    assert hits == 1, "via-tile injection did not reach the pipeline"
-    assert base.get("ok") is True, base.get("reason")
-    assert tiled.get("ok") is True, tiled.get("reason")
-    assert float(np.max(np.abs(base["output"] - tiled["output"]))) == 0.0, (
-        "via-tile diverged from the production lane — the accumulator did not "
-        "survive the tile.mma round trip"
-    )
+        assert hits == 1, "via-tile injection did not reach the pipeline"
+        assert base.get("ok") is True, base.get("reason")
+        assert tiled.get("ok") is True, tiled.get("reason")
+        assert float(np.max(np.abs(base["output"] - tiled["output"]))) == 0.0, (
+            f"via-tile diverged from production at ragged shape {m}x{n}x{k}"
+        )

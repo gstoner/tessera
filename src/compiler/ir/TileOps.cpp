@@ -691,23 +691,29 @@ LogicalResult ViewOp::verify() {
     // The pointer-backed operand contract, defined HERE rather than per
     // backend (PR #510 review).
     //
-    //   3 inputs: (base, rowOrigin, colOrigin)
-    //   5 inputs: + (rowBound, colBound) -- the LOGICAL extents, runtime values
-    //             on a ragged problem, so a fragment straddling the edge can be
-    //             masked instead of reading past it.
+    //   static leading_dim:  3 inputs, or 5 with (rowBound, colBound)
+    //   dynamic leading_dim: 4 inputs, or 6 with bounds; the final operand is
+    //                        the runtime leading dimension.
     //
     // This used to accept any count >= 3, which made a 4-operand view legal and
     // meaningless, and left "is the bounded form valid?" to whichever backend
     // happened to look. A shared-IR op whose accepted shape is decided by its
     // consumers is how the same valid Tile IR becomes backend-dependent.
     const size_t inputs = getInputs().size();
-    if (inputs != 3 && inputs != 5)
+    const bool dynamic = memory.getLeadingDim() == 0;
+    const bool linearBase = getOperation()->hasAttr("tile.linear_base");
+    const size_t offset = linearBase ? 1 : 0;
+    const bool valid = dynamic ? (inputs == 4 + offset || inputs == 6 + offset)
+                               : (inputs == 3 + offset || inputs == 5 + offset);
+    if (!valid)
       return emitOpError()
              << "TILE_VIEW_POINTER_ARITY: pointer-backed tile.view takes "
                 "(base, rowOrigin, colOrigin), optionally followed by "
-                "(rowBound, colBound); got "
+                "(rowBound, colBound), and requires a final SSA leading "
+                "dimension exactly when tile.memory leading_dim is zero; "
+                "tile.linear_base adds one precomputed row-major/column-major "
+                "linear origin immediately after base; got "
              << inputs << " operands";
-    (void)memory;
   }
   return success();
 }
@@ -985,14 +991,27 @@ LogicalResult FragmentUnpackOp::verify() {
 }
 
 LogicalResult StoreOp::verify() {
-  if (getInputs().size() != 4 ||
+  if (getInputs().empty() ||
       !isa<TileValueType>(getInputs().front().getType()))
     return emitOpError(
         "pointer-backed form expects tile, base, row origin, column origin");
   if (!getOperation()->getAttrOfType<TileLayoutAttr>("tile.layout"))
     return emitOpError("requires a #tile.layout attribute");
-  if (!getOperation()->getAttrOfType<TileMemoryLayoutAttr>("tile.memory"))
+  auto memory =
+      getOperation()->getAttrOfType<TileMemoryLayoutAttr>("tile.memory");
+  if (!memory)
     return emitOpError("requires a #tile.memory_layout attribute");
+  const size_t inputs = getInputs().size();
+  const bool dynamic = memory.getLeadingDim() == 0;
+  const bool valid = dynamic ? (inputs == 5 || inputs == 7)
+                             : (inputs == 4 || inputs == 6);
+  if (!valid)
+    return emitOpError()
+           << "TILE_STORE_POINTER_ARITY: pointer-backed tile.store takes "
+              "(tile, base, rowOrigin, colOrigin), optionally followed by "
+              "(rowBound, colBound), and requires a final SSA leading "
+              "dimension exactly when tile.memory leading_dim is zero; got "
+           << inputs << " operands";
   return success();
 }
 
@@ -1057,6 +1076,19 @@ LogicalResult MatmulKernelOp::verify() {
         tileK.getInt() != desc.getK())
       return emitOpError(
           "canonical K-loop tile sizes must match the physical MMA descriptor");
+    auto macroM = getOperation()->getAttrOfType<IntegerAttr>(
+        "tessera.macro_tile_m");
+    auto macroN = getOperation()->getAttrOfType<IntegerAttr>(
+        "tessera.macro_tile_n");
+    if (bool(macroM) != bool(macroN))
+      return emitOpError(
+          "canonical K-loop macro_tile_m and macro_tile_n must appear together");
+    if (macroM &&
+        (macroM.getInt() < desc.getM() || macroN.getInt() < desc.getN() ||
+         macroM.getInt() % desc.getM() != 0 ||
+         macroN.getInt() % desc.getN() != 0))
+      return emitOpError(
+          "canonical K-loop macro tile must be a positive multiple of the physical MMA tile");
     if (desc.getAccType() != "f32" && desc.getAccType() != "s32" &&
         desc.getAccType() != "int32" && desc.getAccType() != "f64")
       return emitOpError(
@@ -1129,6 +1161,100 @@ LogicalResult ReduceKernelOp::verify() {
     return emitOpError("requires schedule=serial|cooperative_128");
   if (!nanMode || nanMode.getValue() != "propagate")
     return emitOpError("currently requires nan_mode=\"propagate\"");
+  return success();
+}
+
+LogicalResult FFTKernelOp::verify() {
+  if (getInputs().size() != 4)
+    return emitOpError("expects source, destination, batch, and length operands");
+  if (!isa<LLVM::LLVMPointerType>(getInputs()[0].getType()) ||
+      !isa<LLVM::LLVMPointerType>(getInputs()[1].getType()))
+    return emitOpError("source and destination operands must be !llvm.ptr");
+  if (!getInputs()[2].getType().isInteger(64) ||
+      !getInputs()[3].getType().isInteger(64))
+    return emitOpError("batch and length must be i64");
+  auto requiredString = [&](StringRef name) -> StringRef {
+    auto attr = getOperation()->getAttrOfType<StringAttr>(name);
+    return attr ? attr.getValue() : StringRef();
+  };
+  StringRef mode = requiredString("mode");
+  StringRef strategy = requiredString("strategy");
+  StringRef radixPolicy = requiredString("radix_policy");
+  if ((mode != "c2c" && mode != "r2c" && mode != "c2r") ||
+      (strategy != "radix2" && strategy != "mixed_radix" &&
+       strategy != "dft" && strategy != "bluestein") ||
+      (radixPolicy != "radix2" && radixPolicy != "mixed_radix"))
+    return emitOpError("requires explicit mode, strategy, and radix policy");
+  if (requiredString("storage") != "complex64_interleaved_f32" ||
+      requiredString("accum") != "f32" ||
+      requiredString("normalization") != "backward" ||
+      requiredString("twiddle_layout") != "interleaved_f32" ||
+      requiredString("algorithm").empty() ||
+      requiredString("workspace_policy").empty() ||
+      requiredString("residency").empty() ||
+      requiredString("twiddle_policy").empty() ||
+      requiredString("kernel_family").empty())
+    return emitOpError("requires the canonical complex64/f32 FFT package policy");
+  auto sequence = getOperation()->getAttrOfType<DenseI64ArrayAttr>("radix_sequence");
+  auto length = getOperation()->getAttrOfType<IntegerAttr>("length");
+  auto batch = getOperation()->getAttrOfType<IntegerAttr>("batch");
+  auto axis = getOperation()->getAttrOfType<IntegerAttr>("axis");
+  auto workspace = getOperation()->getAttrOfType<IntegerAttr>("workspace_elems");
+  auto workgroup = getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
+  auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  if (!sequence || !length || length.getInt() <= 0 || !batch ||
+      batch.getInt() <= 0 || !axis || axis.getInt() < 0 || !workspace ||
+      workspace.getInt() < 0 || !workgroup || workgroup.getInt() <= 0 ||
+      !hash || hash.getValue().size() != 64)
+    return emitOpError("requires complete launch dimensions, workspace, and schedule identity");
+  return success();
+}
+
+LogicalResult SpectralProgramKernelOp::verify() {
+  auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+  auto inputCount = getOperation()->getAttrOfType<IntegerAttr>("input_count");
+  auto workspace = getOperation()->getAttrOfType<IntegerAttr>("workspace_bytes");
+  auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  if (!kind || !inputCount || inputCount.getInt() < 1 ||
+      inputCount.getInt() > 2 || !workspace || workspace.getInt() <= 0 ||
+      !hash || hash.getValue().size() != 64)
+    return emitOpError("requires kind, input count, workspace, and schedule identity");
+  if (getInputs().size() != static_cast<size_t>(inputCount.getInt() + 2))
+    return emitOpError("expects source pointers, destination pointer, and workspace bytes");
+  for (int64_t index = 0; index <= inputCount.getInt(); ++index)
+    if (!isa<LLVM::LLVMPointerType>(getInputs()[index].getType()))
+      return emitOpError("source and destination operands must be !llvm.ptr");
+  if (!getInputs().back().getType().isInteger(64))
+    return emitOpError("workspace size operand must be i64");
+  auto requiredString = [&](StringRef name) -> StringRef {
+    auto attr = getOperation()->getAttrOfType<StringAttr>(name);
+    return attr ? attr.getValue() : StringRef();
+  };
+  if (requiredString("target").empty() || requiredString("arch").empty() ||
+      requiredString("input_shapes").empty() ||
+      requiredString("input_signature").empty() ||
+      requiredString("shape_bounds").empty() ||
+      requiredString("template_digest").size() != 64 ||
+      (requiredString("shape_policy") != "exact_runtime_specialization_v1" &&
+       requiredString("shape_policy") != "bounded_runtime_specialization_v1") ||
+      (requiredString("storage") != "f32" &&
+       requiredString("storage") != "f16" &&
+       requiredString("storage") != "bf16") ||
+      requiredString("abi_storage") != "f32" ||
+      (requiredString("storage_conversion") != "native_f32" &&
+       requiredString("storage_conversion") !=
+           "native_package_cast_f32_accumulate_cast_output_v1") ||
+      (requiredString("axis_packing") != "none_contiguous" &&
+       requiredString("axis_packing") != "native_package_host_pack_v1") ||
+      (requiredString("normalization") != "backward" &&
+       requiredString("normalization") != "forward" &&
+       requiredString("normalization") != "ortho") ||
+      requiredString("complex_layout") != "interleaved_f32x2" ||
+      requiredString("workspace_policy") != "persistent_artifact_workspace" ||
+      requiredString("mutation_lineage") !=
+          "inputs_immutable_output_fresh_v1" ||
+      requiredString("native_entry").empty())
+    return emitOpError("requires complete spectral package policy");
   return success();
 }
 
@@ -1643,6 +1769,90 @@ LogicalResult AttentionBackwardKernelOp::verify() {
   if (!loopOrder || loopOrder.size() != 5)
     return emitOpError(
         "split/reduced route requires five-level canonical loop_order");
+  return success();
+}
+
+LogicalResult TrainingKernelOp::verify() {
+  auto family = getOperation()->getAttrOfType<StringAttr>("family");
+  if (!family)
+    return emitOpError("requires a training family");
+  bool lion = family.getValue() == "lion_vjp";
+  bool sequenceMixer = family.getValue() == "sequence_mixer_backward";
+  auto topology = getOperation()->getAttrOfType<StringAttr>("topology");
+  bool factored = !lion && !sequenceMixer && topology &&
+                  topology.getValue() == "factored";
+  bool full = !lion && !sequenceMixer && topology &&
+              topology.getValue() == "full";
+  if (!lion && !sequenceMixer && family.getValue() != "adafactor_vjp")
+    return emitOpError(
+        "training contract supports Lion, Adafactor, and sequence mixers");
+  unsigned pointerCount =
+      sequenceMixer ? 13 : lion ? 8 : factored ? 9 : full ? 7 : 0;
+  unsigned dimensionCount = sequenceMixer ? 5 : factored ? 2 : 1;
+  if (!pointerCount || getInputs().size() != pointerCount + dimensionCount)
+    return emitOpError("training operands disagree with family/state topology");
+  for (Value pointer : getInputs().take_front(pointerCount))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("training buffers must be !llvm.ptr");
+  for (Value dimension : getInputs().drop_front(pointerCount))
+    if (!dimension.getType().isInteger(64))
+      return emitOpError("training dimensions must be i64");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto mutation = getOperation()->getAttrOfType<StringAttr>("mutation_mode");
+  auto alias = getOperation()->getAttrOfType<StringAttr>("alias_policy");
+  auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  if (!storage || storage.getValue() != "f32")
+    return emitOpError("initial training contract requires f32 storage");
+  if (lion) {
+    auto derivative =
+        getOperation()->getAttrOfType<StringAttr>("derivative_policy");
+    if (!derivative || derivative.getValue() != "stop_gradient_through_sign")
+      return emitOpError("requires the canonical stop-sign derivative policy");
+  }
+  if (!mutation || mutation.getValue() != "functional" || !alias ||
+      alias.getValue() != "no_input_output_alias")
+    return emitOpError("requires a functional no-alias state transition");
+  if (!hash || hash.getValue().size() != 64)
+    return emitOpError("requires a schedule lineage hash");
+  if (sequenceMixer) {
+    auto mixer = getOperation()->getAttrOfType<StringAttr>("mixer_family");
+    auto workspace =
+        getOperation()->getAttrOfType<StringAttr>("workspace_owner");
+    auto phases = getOperation()->getAttrOfType<ArrayAttr>("phase_order");
+    auto chunk = getOperation()->getAttrOfType<IntegerAttr>("chunk_size");
+    if (!mixer || (mixer.getValue() != "gated_deltanet" &&
+                   mixer.getValue() != "kimi_delta_attention" &&
+                   mixer.getValue() != "modified_delta_attention"))
+      return emitOpError("requires a proven sequence-mixer family");
+    if (!workspace || workspace.getValue() != "program_launch" || !chunk ||
+        chunk.getInt() <= 0)
+      return emitOpError("requires positive chunks and launch-owned workspace");
+    static constexpr StringLiteral expected[] = {
+        "checkpoint", "chunk_summary", "chunk_prefix", "chunk_fill", "reverse"};
+    if (!phases || phases.size() != 5)
+      return emitOpError("requires five ordered sequence-mixer phases");
+    for (auto [attribute, name] : llvm::zip_equal(phases, expected)) {
+      auto value = dyn_cast<StringAttr>(attribute);
+      if (!value || value.getValue() != name)
+        return emitOpError("requires canonical sequence-mixer phase order");
+    }
+    return success();
+  }
+  auto transition =
+      getOperation()->getAttrOfType<StringAttr>("state_transition");
+  if (!transition)
+    return emitOpError("requires an optimizer state transition");
+  if (lion && transition.getValue() != "m@0-read-only;d_m@1-fresh")
+    return emitOpError("requires the Lion state transition");
+  if (!lion && transition.getValue() != "state@0-read-only;d_state@1-fresh")
+    return emitOpError("requires the Adafactor state transition");
+  SmallVector<StringRef> coefficientNames{"learning_rate", "beta2"};
+  coefficientNames.push_back(lion ? "weight_decay" : "epsilon");
+  for (StringRef name : coefficientNames) {
+    auto value = getOperation()->getAttrOfType<FloatAttr>(name);
+    if (!value || !value.getValue().isFinite())
+      return emitOpError("requires finite Lion coefficients");
+  }
   return success();
 }
 

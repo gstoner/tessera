@@ -97,3 +97,93 @@ def test_reference_fallback_when_no_candidate():
     out, tag = C.run_arbitrated(reg, OP_SPECTRAL_FFT, "no_such_target", x)
     assert tag == "reference"
     assert np.allclose(out, reg.reference(x))
+
+
+def test_canonical_rocm_loader_never_falls_back_to_source_compile(monkeypatch):
+    saved = SC._libs.pop("amd_prebuilt", None)
+    monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: ())
+    monkeypatch.setattr(
+        SC,
+        "_amd_source_lib",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("canonical ROCm FFT attempted a source build")
+        ),
+    )
+    try:
+        assert SC._amd_lib() is None
+    finally:
+        if saved is not None:
+            SC._libs["amd_prebuilt"] = saved
+
+
+class _FakeAmdPackage:
+    ts_fft_plan_create_for_artifact_amd = object()
+    ts_fft_plan_artifact_digest_amd = object()
+    ts_fft_plan_execute_hostptr_batch_amd = object()
+    ts_fft_plan_workspace_elems_amd = object()
+    ts_fft_plan_destroy_amd = object()
+
+    def __init__(self, arch: bytes):
+        self._arch = arch
+
+    @staticmethod
+    def ts_fft_package_abi_amd():
+        return b"tessera.rocm.fft.plan.v1"
+
+    @staticmethod
+    def ts_spectral_composite_package_abi_amd():
+        return b"tessera.rocm.spectral_composite.v4"
+
+    def ts_spectral_composite_arch_amd(self):
+        return self._arch
+
+
+@pytest.mark.parametrize("arch", [b"gfx1200", b"gfx1250", b"unknown"])
+def test_rocm_fft_fallback_is_not_a_composite_candidate(monkeypatch, tmp_path, arch):
+    package = tmp_path / "libtessera_spectral_rocm.so"
+    package.touch()
+    fake = _FakeAmdPackage(arch)
+    saved = dict(SC._libs)
+    SC._libs.pop("amd_prebuilt", None)
+    SC._libs.pop("amd_composite_prebuilt", None)
+    monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: (package,))
+    monkeypatch.setattr(SC.ctypes, "CDLL", lambda _path: fake)
+    monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
+    try:
+        assert SC._amd_lib() is fake  # Architecture-neutral FFT ABI remains usable.
+        assert SC._amd_composite_lib() is None
+    finally:
+        SC._libs.clear()
+        SC._libs.update(saved)
+
+
+def test_rocm_composite_loader_accepts_exact_gfx1151_package(monkeypatch, tmp_path):
+    package = tmp_path / "libtessera_spectral_rocm.so"
+    package.touch()
+    fake = _FakeAmdPackage(b"gfx1151")
+    saved = dict(SC._libs)
+    SC._libs.pop("amd_prebuilt", None)
+    SC._libs.pop("amd_composite_prebuilt", None)
+    monkeypatch.setattr(SC, "_prebuilt_amd_paths", lambda: (package,))
+    monkeypatch.setattr(SC.ctypes, "CDLL", lambda _path: fake)
+    monkeypatch.setattr(SC, "_configure_amd_lib", lambda lib: lib)
+    try:
+        assert SC._amd_composite_lib() is fake
+        assert SC._libs["amd_composite_prebuilt"] is fake
+    finally:
+        SC._libs.clear()
+        SC._libs.update(saved)
+
+
+def test_rocm_composite_launch_rechecks_architecture(monkeypatch):
+    from tessera.compiler import scheduled_spectral
+
+    fake = _FakeAmdPackage(b"gfx1200")
+    monkeypatch.setattr(SC, "_amd_composite_lib", lambda: fake)
+    monkeypatch.setattr(
+        scheduled_spectral,
+        "validate_scheduled_spectral_metadata",
+        lambda _metadata, input_shapes: object(),
+    )
+    with pytest.raises(RuntimeError, match="architecture mismatch"):
+        SC.run_rocm_spectral_composite({}, [])

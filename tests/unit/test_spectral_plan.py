@@ -36,6 +36,19 @@ def test_large_non_pow2_uses_bluestein():
     assert sp.plan_fft(12289).bluestein_m == sp.next_power_of_two(2 * 12289 - 1)
 
 
+def test_gfx_stockham_mixed_radix_plan_matches_shared_target_hook():
+    p = sp.plan_fft(100, radix_policy="mixed_radix")
+    assert p.strategy == "mixed_radix"
+    assert p.radix_seq == (4, 5, 5)
+    assert p.workspace_elems == 100
+    radix17 = sp.plan_fft(68, radix_policy="mixed_radix")
+    assert radix17.strategy == "mixed_radix"
+    assert radix17.radix_seq == (4, 17)
+    prime = sp.plan_fft(257, radix_policy="mixed_radix")
+    assert prime.strategy == "bluestein"
+    assert prime.radix_seq == ()
+
+
 @pytest.mark.parametrize("n", [8, 100])
 def test_normalization_scales(n):
     # backward (numpy default): fwd unscaled, inv 1/N
@@ -71,6 +84,8 @@ def test_invalid_inputs_rejected():
         sp.plan_fft(8, mode="bogus")
     with pytest.raises(ValueError, match="norm must be"):
         sp.plan_fft(8, norm="bogus")
+    with pytest.raises(ValueError, match="radix_policy"):
+        sp.plan_fft(8, radix_policy="hidden-kernel-choice")
 
 
 def test_helpers():

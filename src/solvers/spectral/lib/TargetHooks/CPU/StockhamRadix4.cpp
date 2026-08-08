@@ -15,7 +15,7 @@
 //   * radix-4 stages drain all factors of 4, then a single radix-2
 //     stage handles the residual factor of 2 (so every power-of-two N
 //     is covered: 64=4^3, 128=4^3*2, 256=4^4, 512=4^4*2, ...).
-//   * a generic radix-r stage covers the odd small primes (3..13) using a
+//   * a generic radix-r stage covers the odd small primes (3..17) using a
 //     precomputed r-point DFT matrix -- r^2 entries, built once per stage
 //     rather than recomputing sin/cos inside every butterfly.
 //   * Bluestein (chirp-z) covers large primes and anything else that does

@@ -215,6 +215,31 @@ _ACTIVE_TAPE: contextvars.ContextVar[Tape | None] = contextvars.ContextVar(
     "_tessera_autodiff_tape", default=None
 )
 
+# Opt-in primitive-execution counter (R1 / Baur–Strassen oracle). When a box is
+# bound, every actual `tessera.ops.<name>` *execution* (not a tracer record)
+# bumps it. Used to measure the cost ratio between a plain forward and a full
+# gradient/Jacobian — a ratio far above the Baur–Strassen constant flags an
+# implementation that re-runs the forward pass (the jacrev/jacfwd defect B1/B2).
+_EXEC_COUNT: contextvars.ContextVar[list | None] = contextvars.ContextVar(
+    "_tessera_exec_count", default=None
+)
+
+
+@contextmanager
+def count_primitive_executions():
+    """Count primitive op *executions* inside the block.
+
+    Yields a single-element ``[count]`` box; read ``box[0]`` after the block.
+    Only counts ops that actually run (eager or taped); tracer records do not
+    execute a primitive and are not counted.
+    """
+    box = [0]
+    token = _EXEC_COUNT.set(box)
+    try:
+        yield box
+    finally:
+        _EXEC_COUNT.reset(token)
+
 
 @contextmanager
 def tape():
@@ -229,6 +254,49 @@ def tape():
         yield t
     finally:
         _ACTIVE_TAPE.reset(token)
+
+
+def record_custom_vjp_call(
+    name: str,
+    forward: Callable[..., Any],
+    vjp_fn: Callable[..., Any],
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    """Execute and, when a tape is active, record a Python custom-VJP call.
+
+    This is the narrow reference-lane bridge for operations whose forward is a
+    Python callable rather than an entry in ``tessera.ops``.  It deliberately
+    shares the tape's input-description and recording rules with ordinary ops,
+    so a custom VJP composes with ``grad`` instead of merely exposing a manual
+    callback on the decorated function.
+
+    ``vjp_fn`` follows the normal convention ``(dout, *array_inputs, **kwargs)
+    -> tuple[cotangent, ...]``.  Non-array positional arguments are passed to
+    ``forward`` but are not recorded as differentiable inputs.
+    """
+    active = _ACTIVE_TAPE.get()
+    if active is None:
+        return forward(*(_to_forward_arg(a) for a in args), **kwargs)
+
+    descs_full = tuple(_describe(a) for a in args)
+    forward_args: list[Any] = []
+    array_descs: list[InputDesc] = []
+    for arg, desc in zip(args, descs_full):
+        if desc is _NON_ARRAY:
+            forward_args.append(arg)
+        else:
+            forward_args.append(desc.array)
+            array_descs.append(desc)
+
+    out = forward(*forward_args, **kwargs)
+    if not isinstance(out, (np.ndarray, np.generic)):
+        raise TesseraAutodiffError(
+            f"custom VJP call {name!r} must return an ndarray or numpy scalar; "
+            f"got {type(out).__name__}"
+        )
+    active.record(name, tuple(array_descs), dict(kwargs), out, vjp_fn)
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -348,6 +416,11 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
         _tracer = active_tracer()
         if _tracer is not None:
             return _tracer.record_op(name, original, args, kwargs)
+
+        # R1 cost oracle: count this primitive execution if a counter is bound.
+        _exec_box = _EXEC_COUNT.get()
+        if _exec_box is not None:
+            _exec_box[0] += 1
 
         active = _ACTIVE_TAPE.get()
         if active is None:

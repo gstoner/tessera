@@ -2,7 +2,7 @@
 status: Informative
 classification: Guide
 authority: Profiling and autotuning workflows; defers schedule artifact semantics to docs/spec/SHAPE_SYSTEM.md and compiler autotuner implementation
-last_updated: 2026-07-13
+last_updated: 2026-08-06
 ---
 
 # Tessera Profiling and Autotuning Guide
@@ -462,6 +462,35 @@ Required behavior for the production implementation:
 - Capture failure diagnostics for bad candidates.
 - Persist both failed and successful trials for future pruning.
 - Export measurements for learned surrogate cost models.
+
+ROCm measurements additionally follow `TPROF-ROCM-TIME-1` in
+[`CITL_ROCM_TRACE_PROFILER_SPEC.md`](../spec/CITL_ROCM_TRACE_PROFILER_SPEC.md).
+Each sample preserves synchronized host wall, HIP event, instrumented
+`wall_clock64()`, and profiler activity as independent clock records. Invalid or
+unavailable sources stay explicit; wall time is never relabeled as device time.
+WSL dual-clock evidence may rank same-host regressions, while promotion and any
+counter-dependent decision retain their exact-device bare-metal gates.
+
+An optional `rtg_hsa_dispatch` source may diagnose HSA dispatch timing when WSL
+ROCprofiler activity tables are empty. Because it intercepts queues and changes
+completion-signal handling, it runs in a fresh process, carries its own
+provenance and overhead record, and cannot establish ROCprofiler availability.
+
+For x86/AVX-512, `TPROF-X86-TIME-1` uses the same independent-clock artifact
+shape with target-appropriate sources: `steady_clock`,
+`CLOCK_MONOTONIC_RAW`, fenced `RDTSCP`, and perf task clock. The generic CPU
+runtime callback tracer is already executable, but it proves only host/runtime
+spans. The separate x86 provider now implements those clocks and the portable
+PMU group through `tprof x86 timing-status`; exact-host packets and instruction
+sampling remain separate gates.
+
+The portable x86 counter group begins with cycles, reference cycles,
+instructions, branches, branch misses, cache references, and cache misses.
+Every perf record includes permission, enabled/running time, multiplexing, and
+scaling. Raw Zen 5 events and IBS samples require exact vendor/family/model and
+event-map provenance; unsupported events remain unavailable. Reports also bind
+affinity, NUMA, SMT, frequency/governor, microcode, package image, and artifact
+digests so measurements cannot silently move between machines or binaries.
 
 ---
 

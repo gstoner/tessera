@@ -1,0 +1,22 @@
+{
+  "schema": "tessera.rocm_fft_plan_cache_packet.v1",
+  "date": "2026-08-05",
+  "target": "rocm_gfx1151",
+  "device_environment": "WSL-visible gfx1151",
+  "device": "AMD Ryzen AI MAX+ 395 with Radeon 8060S",
+  "toolchain": "HIP 7.14.60850; AMD clang 23.0.0git",
+  "package_abi": "tessera.rocm.fft.plan.v1",
+  "package_sha256": "e434bdb96083e970fc78ad6c99eeaae4d6ba2191676820312248774ae1016099",
+  "timing_domain": "host_wall_synchronized",
+  "selector_eligible": false,
+  "warmup": 3,
+  "repeats": 11,
+  "batch": 1,
+  "verdict": "retain_persistent_plan_boundary",
+  "reason": "Exact outputs match the legacy package while cached plans remove repeated Bluestein chirp FFT and device allocation. WSL timing is operational evidence only.",
+  "results": [
+    {"n": 257, "workspace_elems": 4096, "legacy_warm_median_ms": 0.426857, "cached_warm_median_ms": 0.344353, "warm_speedup": 1.2395913495744193, "max_abs_error": 3.075507265748456e-05},
+    {"n": 509, "workspace_elems": 4096, "legacy_warm_median_ms": 0.444723, "cached_warm_median_ms": 0.306621, "warm_speedup": 1.450399679082646, "max_abs_error": 3.910064697265625e-05},
+    {"n": 1009, "workspace_elems": 8192, "legacy_warm_median_ms": 0.438749, "cached_warm_median_ms": 0.335541, "warm_speedup": 1.307586852277367, "max_abs_error": 6.209877028595656e-05}
+  ]
+}

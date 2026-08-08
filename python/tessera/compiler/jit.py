@@ -653,6 +653,7 @@ class JitFn:
         the active sink (no-op when no sink is active).
         """
         self._enforce_call_time_constraints(args, kwargs)
+        self._enforce_call_time_stochastic_certificate(args, kwargs)
         if self.differentiation_request is not None:
             self._specialized_autodiff_module(args, kwargs)
         try:
@@ -709,6 +710,39 @@ class JitFn:
             from . import compile_report as _cr
             if _cr.active_sink_is_capturing():
                 _cr.emit_compile_report(self.compile_report())
+
+    def _enforce_call_time_stochastic_certificate(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> None:
+        """Close AST aliasing holes with the canonical traced-op graph.
+
+        The source effect walker remains useful at decoration time, but aliases
+        and dispatch obscure the callee spelling.  A concrete trace observes the
+        canonical op names, so an unseeded deterministic request must reject any
+        random dependency it finds before the eager fallback can execute it.
+        Seeded RNG remains permitted by the established deterministic contract.
+        """
+        if not self.deterministic or self.seed is not None:
+            return
+        import numpy as np
+        from .effects import TesseraEffectError
+        from .stochastic_graph import certify_deterministic
+        from .trace import TesseraTraceError, trace
+
+        if kwargs or not all(isinstance(arg, np.ndarray) for arg in args):
+            return  # Existing AST gate remains the diagnostic for non-traceable calls.
+        try:
+            traced = trace(self._fn, *args)
+        except TesseraTraceError:
+            return  # A tracing limitation must not reject an otherwise valid JIT call.
+        deterministic, reason = certify_deterministic(traced.body, traced.outputs)
+        if not deterministic:
+            raise TesseraEffectError(
+                self._fn.__name__, Effect.pure, Effect.random,
+                message=(f"@jit(deterministic=True) function {self._fn.__name__!r} "
+                         f"has a random traced dependency: {reason}. Add seed=... "
+                         "or remove the RNG call."),
+            )
 
     def _enforce_call_time_constraints(
         self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
@@ -877,6 +911,14 @@ class JitFn:
             if len(graph_ops) == 1:
                 op = graph_ops[0]
                 name = op.op_name.removeprefix("tessera.")
+                if name in {
+                    "gated_deltanet",
+                    "kimi_delta_attention",
+                    "modified_delta_attention",
+                }:
+                    return self._native_sequence_mixer_backward(
+                        "x86", args, kwargs, out_cotangents=out_cotangents
+                    )
                 ordered = self._ordered_inputs(args, kwargs)
                 if ordered is None:
                     raise TesseraJitError(
@@ -983,6 +1025,14 @@ class JitFn:
                             "x86 Lion VJP requires p/g/m and two output cotangents"
                         )
                     names = ["p", "g", "m", "dp", "dm"]
+                    from .stateful_training import lower_scheduled_lion_vjp
+
+                    scheduled_lion = lower_scheduled_lion_vjp(
+                        target="x86",
+                        shape=cotangents[0].shape,
+                        kwargs=op.kwargs,
+                    )
+                    state_contract = dict(scheduled_lion.state_contract)
                     artifact = RuntimeArtifact(metadata={
                         "target": "x86",
                         "compiler_path": "x86_lion_bwd_compiled",
@@ -990,11 +1040,8 @@ class JitFn:
                         "execution_kind": "native_cpu",
                         "arg_names": names,
                         "out_cotangents": ["dp", "dm"],
-                        "ops": [{
-                            "op_name": "tessera.lion",
-                            "operands": names[:3],
-                            "kwargs": dict(op.kwargs),
-                        }],
+                        "state_contract": state_contract,
+                        "scheduled_training": scheduled_lion.metadata(),
                     })
                     result = launch(artifact, tuple([*inputs, *cotangents]))
                     path = "x86_lion_bwd_compiled"
@@ -1009,6 +1056,15 @@ class JitFn:
                         if len(inputs) == 4
                         else ["p", "g", "moment"]
                     )
+                    from .stateful_training import lower_scheduled_adafactor_vjp
+
+                    topology = "factored" if len(inputs) == 4 else "full"
+                    scheduled_adafactor = lower_scheduled_adafactor_vjp(
+                        target="x86",
+                        parameter_shape=inputs[0].shape,
+                        topology=topology,
+                        kwargs=op.kwargs,
+                    )
                     artifact = RuntimeArtifact(metadata={
                         "target": "x86",
                         "compiler_path": "x86_adafactor_bwd_compiled",
@@ -1016,11 +1072,10 @@ class JitFn:
                         "execution_kind": "native_cpu",
                         "arg_names": [*names, "dy"],
                         "out_cotangent": "dy",
-                        "ops": [{
-                            "op_name": "tessera.adafactor",
-                            "operands": names,
-                            "kwargs": dict(op.kwargs),
-                        }],
+                        "state_contract": dict(
+                            scheduled_adafactor.state_contract
+                        ),
+                        "scheduled_training": scheduled_adafactor.metadata(),
                     })
                     result = launch(artifact, tuple([*inputs, cotangents[0]]))
                     path = "x86_adafactor_bwd_compiled"
@@ -1475,6 +1530,96 @@ class JitFn:
         }
         return tuple(by_name[name] for name in request.wrt)
 
+    def _native_rocm_adafactor_backward(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        out_cotangents: Any,
+    ) -> tuple[Any, ...]:
+        """Launch typed full/factored gfx1151 Adafactor VJP artifacts."""
+        import numpy as np
+        from tessera.runtime import RuntimeArtifact, launch
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) not in {3, 4}:
+            raise TesseraJitError(
+                "ROCm Adafactor backward requires p/g and full or factored state"
+            )
+        cotangents = (
+            out_cotangents
+            if isinstance(out_cotangents, (tuple, list))
+            else (out_cotangents,)
+        )
+        if len(cotangents) != 1:
+            raise TesseraJitError(
+                "ROCm Adafactor backward requires one parameter cotangent"
+            )
+        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        if len(graph_ops) != 1 or graph_ops[0].op_name.removeprefix(
+            "tessera."
+        ) != "adafactor":
+            raise TesseraJitError(
+                "compiled Adafactor backward requires one Adafactor Graph op"
+            )
+        source = graph_ops[0]
+        topology = "factored" if len(ordered) == 4 else "full"
+        names = (
+            ["p", "g", "row", "col"]
+            if topology == "factored"
+            else ["p", "g", "moment"]
+        )
+        from .stateful_training import lower_scheduled_adafactor_vjp
+
+        scheduled = lower_scheduled_adafactor_vjp(
+            target="rocm_gfx1151",
+            parameter_shape=np.asarray(ordered[0]).shape,
+            topology=topology,
+            kwargs=source.kwargs,
+        )
+        path = "rocm_adafactor_bwd_compiled"
+        artifact = RuntimeArtifact(
+            metadata={
+                "target": "rocm",
+                "compiler_path": path,
+                "executable": True,
+                "execution_kind": "native_gpu",
+                "execution_mode": "hip_runtime",
+                "autodiff_phase": "backward",
+                "arg_names": [*names, "dy"],
+                "out_cotangent": "dy",
+                "state_contract": dict(scheduled.state_contract),
+                "scheduled_training": scheduled.metadata(),
+            }
+        )
+        result = launch(
+            artifact,
+            tuple(
+                np.ascontiguousarray(np.asarray(value), dtype=np.float32)
+                for value in (*ordered, cotangents[0])
+            ),
+        )
+        if not result.get("ok") or result.get("execution_mode") != "hip_runtime":
+            raise TesseraJitError(
+                "verified ROCm Adafactor backward launch failed: "
+                + str(result.get("reason"))
+            )
+        gradients = tuple(result["output"])
+        by_name = dict(zip(self.arg_names, gradients))
+        request = self.differentiation_request
+        if request is None:
+            raise TesseraJitError("native backward requires differentiation request")
+        self.last_backward_execution = {
+            "compiler_path": path,
+            "execution_kind": "native_gpu",
+            "execution_mode": "hip_runtime",
+            "evidence_target": "rocm_gfx1151",
+            "implementation": "scheduled_artifact",
+            "residual_policy": "recompute_optimizer_state",
+            "op_family": "adafactor",
+        }
+        return tuple(by_name[name] for name in request.wrt)
+
     def _native_rocm_lion_backward(
         self,
         args: Tuple[Any, ...],
@@ -1510,6 +1655,14 @@ class JitFn:
         source = graph_ops[0]
         cotangent_names = ["dparam_out", "dmoment_out"]
         path = "rocm_lion_bwd_compiled"
+        from .stateful_training import lower_scheduled_lion_vjp
+
+        scheduled_lion = lower_scheduled_lion_vjp(
+            target="rocm_gfx1151",
+            shape=np.asarray(cotangents[0]).shape,
+            kwargs=source.kwargs,
+        )
+        state_contract = dict(scheduled_lion.state_contract)
         artifact = RuntimeArtifact(
             metadata={
                 "target": "rocm",
@@ -1521,14 +1674,8 @@ class JitFn:
                 "out_cotangents": cotangent_names,
                 "arg_names": list(self.arg_names) + cotangent_names,
                 "output_names": [f"d_{name}" for name in self.arg_names],
-                "ops": [
-                    {
-                        "op_name": source.op_name,
-                        "result": source.result,
-                        "operands": list(self.arg_names),
-                        "kwargs": dict(source.kwargs),
-                    }
-                ],
+                "state_contract": state_contract,
+                "scheduled_training": scheduled_lion.metadata(),
             }
         )
         result = launch(
@@ -2115,6 +2262,112 @@ class JitFn:
             f"no verified SM120 paired training candidate for ops {sorted(ops)}"
         )
 
+    def _native_sequence_mixer_backward(
+        self,
+        target: str,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        out_cotangents: Any,
+    ) -> tuple[Any, ...]:
+        """Consume one typed Schedule->Tile sequence-mixer backward artifact."""
+        import numpy as np
+        from tessera.runtime import RuntimeArtifact, launch
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != 6:
+            raise TesseraJitError(
+                "typed sequence-mixer backward currently requires "
+                "Q/K/V/gate/beta/decay"
+            )
+        cotangents = (
+            out_cotangents
+            if isinstance(out_cotangents, (tuple, list))
+            else (out_cotangents,)
+        )
+        if len(cotangents) != 1:
+            raise TesseraJitError(
+                "sequence-mixer backward requires one output cotangent"
+            )
+        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        if len(graph_ops) != 1:
+            raise TesseraJitError(
+                "typed sequence-mixer backward requires one Graph operation"
+            )
+        source = graph_ops[0]
+        family = source.op_name.removeprefix("tessera.")
+        if family not in {
+            "gated_deltanet",
+            "kimi_delta_attention",
+            "modified_delta_attention",
+        } or not bool(source.kwargs.get("causal", True)):
+            raise TesseraJitError(
+                "typed sequence-mixer backward requires a causal DeltaNet family"
+            )
+        q, _k, v, _gate, _beta, _decay = (
+            np.ascontiguousarray(np.asarray(value), dtype=np.float32)
+            for value in ordered
+        )
+        dy = np.ascontiguousarray(
+            np.asarray(cotangents[0]), dtype=np.float32
+        )
+        chunk_size = int(source.kwargs.get("chunk_size", 64))
+        parallel_chunks = bool(source.kwargs.get("parallel_chunks", True))
+        from .stateful_training import (
+            lower_scheduled_sequence_mixer_backward,
+        )
+
+        schedule_target = "x86" if target == "x86" else "rocm_gfx1151"
+        scheduled = lower_scheduled_sequence_mixer_backward(
+            target=schedule_target,
+            family=family,
+            q_shape=q.shape,
+            v_shape=v.shape,
+            erase=bool(source.kwargs.get("erase", False)),
+            chunk_size=chunk_size,
+            parallel_chunks=parallel_chunks,
+        )
+        path = f"{target}_deltanet_bwd_compiled"
+        execution_mode = "cpu_avx512" if target == "x86" else "hip_runtime"
+        artifact = RuntimeArtifact(
+            metadata={
+                "target": target,
+                "compiler_path": path,
+                "executable": True,
+                "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
+                "execution_mode": execution_mode,
+                "autodiff_phase": "backward",
+                "arg_names": ["q", "k", "v", "gate", "beta", "decay", "dy"],
+                "output_name": "grads",
+                "state_contract": dict(scheduled.state_contract),
+                "scheduled_training": scheduled.metadata(),
+            }
+        )
+        values = tuple(
+            np.ascontiguousarray(np.asarray(value), dtype=np.float32)
+            for value in (*ordered, dy)
+        )
+        result = launch(artifact, values)
+        if not result.get("ok") or result.get("execution_mode") != execution_mode:
+            raise TesseraJitError(
+                f"verified {target} sequence-mixer backward launch failed: "
+                + str(result.get("reason"))
+            )
+        gradients = dict(zip(self.arg_names, result["output"]))
+        request = self.differentiation_request
+        if request is None:
+            raise TesseraJitError("native backward requires autodiff request")
+        self.last_backward_execution = {
+            "compiler_path": path,
+            "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
+            "execution_mode": execution_mode,
+            "evidence_target": "x86_avx512" if target == "x86" else "rocm_gfx1151",
+            "implementation": "scheduled_artifact",
+            "residual_policy": "launch_owned_checkpoint_workspace",
+            "op_family": family,
+        }
+        return tuple(gradients[name] for name in request.wrt)
+
     def _native_rocm_backward(
         self,
         args: Tuple[Any, ...],
@@ -2152,6 +2405,17 @@ class JitFn:
         if len(graph_ops) == 1 and ops == {"lion"}:
             return self._native_rocm_lion_backward(
                 args, kwargs, out_cotangents=out_cotangents)
+        if len(graph_ops) == 1 and ops == {"adafactor"}:
+            return self._native_rocm_adafactor_backward(
+                args, kwargs, out_cotangents=out_cotangents)
+        if len(graph_ops) == 1 and ops <= {
+            "gated_deltanet",
+            "kimi_delta_attention",
+            "modified_delta_attention",
+        }:
+            return self._native_sequence_mixer_backward(
+                "rocm", args, kwargs, out_cotangents=out_cotangents
+            )
 
         regression_losses = {
             "loss.mse", "mse_loss", "loss.mae", "mae_loss",

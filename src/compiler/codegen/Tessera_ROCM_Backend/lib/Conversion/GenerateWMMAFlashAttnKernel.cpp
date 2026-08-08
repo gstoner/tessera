@@ -55,6 +55,13 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Type idxTy = b.getIndexType();
   auto fragTy = VectorType::get({16}, storeTy);
   auto accTy = VectorType::get({8}, f32);
+  StringRef fragmentElem = storeTy.isF16() ? "f16" : "bf16";
+  auto aFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, fragmentElem, "f32", "a", "row_major", "wmma");
+  auto bFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, fragmentElem, "f32", "b", "col_major", "wmma");
+  auto accFragmentTy = tessera::tile::FragmentType::get(
+      ctx, 16, 16, 16, "f32", "f32", "acc", "row_major", "wmma");
   auto slt = arith::CmpIPredicate::slt;
   auto sge = arith::CmpIPredicate::sge;
   auto ne = arith::CmpIPredicate::ne;
@@ -226,11 +233,32 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   // matrix ops route through rocm-wave-lds-pipeline + lower-tile-to-rocm (which
   // lowers them back to tessera_rocm.wmma with the same operands). Default emits
   // tessera_rocm.wmma directly. Same operands/types — only the op name differs.
-  auto wmma = [&](OpBuilder &bb, Location l, Value a, Value bb2, Value acc) {
-    OperationState st(l, viaTile ? "tile.mma" : "tessera_rocm.wmma");
-    st.addOperands({a, bb2, acc});
-    st.addTypes({accTy});
-    return bb.create(st)->getResult(0);
+  auto wmma = [&](OpBuilder &bb, Location l, Value a, Value bb2,
+                  Value acc) -> Value {
+    if (!viaTile) {
+      OperationState st(l, "tessera_rocm.wmma");
+      st.addOperands({a, bb2, acc});
+      st.addTypes({accTy});
+      return bb.create(st)->getResult(0);
+    }
+    // Attention's P fragment is computed in registers/LDS after softmax; it is
+    // not a pointer-backed source that can truthfully be reconstructed as a
+    // tile.view. Preserve the generator-owned lane map while making the matrix
+    // contract typed. Dialect conversion maps these fragment types back to the
+    // exact vector ABI, so the unrealized bridges reconcile to identity.
+    Value typedA = UnrealizedConversionCastOp::create(bb, l, aFragmentTy, a)
+                       .getResult(0);
+    Value typedB = UnrealizedConversionCastOp::create(bb, l, bFragmentTy, bb2)
+                       .getResult(0);
+    Value typedAcc =
+        UnrealizedConversionCastOp::create(bb, l, accFragmentTy, acc)
+            .getResult(0);
+    OperationState st(l, "tile.mma");
+    st.addOperands({typedA, typedB, typedAcc});
+    st.addTypes({accFragmentTy});
+    Value typedResult = bb.create(st)->getResult(0);
+    return UnrealizedConversionCastOp::create(bb, l, accTy, typedResult)
+        .getResult(0);
   };
 
   // --- the KV loop (firstKt = window lower bound, else 0) ---

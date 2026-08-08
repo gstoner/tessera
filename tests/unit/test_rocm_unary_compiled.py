@@ -12,6 +12,8 @@ Validated vs numpy. Skip-clean: tessera-opt not built, or no usable AMD GPU.
 
 from __future__ import annotations
 
+import ctypes
+
 import numpy as np
 import pytest
 
@@ -34,6 +36,36 @@ def _artifact(rt, op_name):
         "arg_names": ["x"], "output_name": "o",
         "ops": [{"op_name": op_name, "result": "o", "operands": ["x"]}],
     })
+
+
+def test_math_module_cache_loads_each_physical_contract_once():
+    from tessera import runtime as rt
+
+    class FakeHip:
+        def __init__(self):
+            self.loads = 0
+            self.lookups = 0
+
+        def hipModuleLoadData(self, output, _image):
+            self.loads += 1
+            ctypes.cast(output, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(11)
+            return 0
+
+        def hipModuleGetFunction(self, output, _module, _symbol):
+            self.lookups += 1
+            ctypes.cast(output, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.c_void_p(17)
+            return 0
+
+    hip = FakeHip()
+    key = ("unary", "gfx1151", "sqrt", "f32")
+    rt._rocm_math_module_cache.pop(key, None)
+    first = rt._rocm_math_cached_function(hip, b"image", b"u", key)
+    second = rt._rocm_math_cached_function(hip, b"different-image", b"u", key)
+
+    assert first == second
+    assert hip.loads == 1
+    assert hip.lookups == 1
+    rt._rocm_math_module_cache.pop(key, None)
 
 
 def _np_softplus(x):
@@ -61,6 +93,7 @@ _CASES = {
     "tessera.expm1": (np.expm1, _DOMAIN_ANY),
     "tessera.softplus": (_np_softplus, _DOMAIN_ANY),
     # tail: trig / special / rounding (2026-06-26)
+    "tessera.sin": (np.sin, _DOMAIN_ANY),
     "tessera.cos": (np.cos, _DOMAIN_ANY),
     # tan: stay inside (-π/2, π/2) to avoid the poles
     "tessera.tan": (np.tan, lambda rng, shp:
@@ -78,6 +111,10 @@ _CASES = {
     "tessera.ceil": (np.ceil, _DOMAIN_ANY),
     "tessera.round": (np.round, _DOMAIN_ANY),   # round-half-to-even
     "tessera.trunc": (np.trunc, _DOMAIN_ANY),
+    "tessera.lgamma": (lambda x: __import__("scipy").special.gammaln(x),
+                        _DOMAIN_POS),
+    "tessera.digamma": (lambda x: __import__("scipy").special.digamma(x),
+                         _DOMAIN_POS),
 }
 
 
@@ -143,7 +180,82 @@ def test_unary_unknown_op_rejected():
 _KINDS = ["exp", "log", "sqrt", "rsqrt", "reciprocal", "abs", "neg", "sign",
           "erf", "tanh", "sigmoid", "log1p", "expm1", "softplus",
           "cos", "tan", "sinh", "cosh", "asin", "acos", "atan", "erfc",
-          "floor", "ceil", "round", "trunc"]
+          "floor", "ceil", "round", "trunc", "sin", "lgamma", "digamma"]
+
+
+def _assert_fp_contract(actual, expected, *, atol=2e-5, rtol=2e-5):
+    actual = np.asarray(actual, np.float32)
+    expected = np.asarray(expected, np.float32)
+    np.testing.assert_array_equal(np.isnan(actual), np.isnan(expected))
+    np.testing.assert_array_equal(np.isposinf(actual), np.isposinf(expected))
+    np.testing.assert_array_equal(np.isneginf(actual), np.isneginf(expected))
+    finite = np.isfinite(expected)
+    np.testing.assert_allclose(actual[finite], expected[finite], atol=atol, rtol=rtol)
+    zeros = finite & (expected == 0)
+    np.testing.assert_array_equal(np.signbit(actual[zeros]), np.signbit(expected[zeros]))
+
+
+@pytest.mark.parametrize(
+    ("op_name", "values", "reference", "tol"),
+    [
+        ("tessera.exp",
+         [-np.inf, -104.0, -88.0, -0.0, 0.0, 80.0, 89.0, np.inf, np.nan],
+         np.exp, 3e-5),
+        ("tessera.expm1",
+         [-np.inf, -20.0, -1e-7, -0.0, 0.0, 1e-7, 80.0, np.inf, np.nan],
+         np.expm1, 3e-5),
+        ("tessera.log",
+         [-1.0, -0.0, 0.0, np.nextafter(np.float32(0), np.float32(1)),
+          1.0, np.inf, np.nan], np.log, 3e-5),
+        ("tessera.log1p",
+         [-2.0, -1.0, np.nextafter(np.float32(-1), np.float32(0)),
+          -1e-7, -0.0, 0.0, 1e-7, np.inf, np.nan], np.log1p, 3e-5),
+        ("tessera.sqrt",
+         [-1.0, -0.0, 0.0, np.nextafter(np.float32(0), np.float32(1)),
+          1.0, np.inf, np.nan], np.sqrt, 3e-5),
+        ("tessera.reciprocal",
+         [-np.inf, -1.0, -0.0, 0.0, 1.0, np.inf, np.nan],
+         np.reciprocal, 3e-5),
+    ],
+)
+def test_unary_boundary_domain_contract(op_name, values, reference, tol):
+    rt = _unary_or_skip()
+    x = np.asarray(values, np.float32)
+    with np.errstate(all="ignore"):
+        expected = reference(x)
+    result = rt.launch(_artifact(rt, op_name), (x,))
+    assert result["ok"] is True, result.get("reason")
+    _assert_fp_contract(result["output"], expected, atol=tol, rtol=tol)
+
+
+@pytest.mark.parametrize("op_name,reference", [
+    ("tessera.sin", np.sin), ("tessera.cos", np.cos), ("tessera.tan", np.tan),
+])
+def test_trig_large_argument_and_special_value_contract(op_name, reference):
+    rt = _unary_or_skip()
+    x = np.array([-1e10, -1e6, -1e4, -np.pi / 2, -0.0, 0.0,
+                  np.pi / 2, 1e4, 1e6, 1e10, np.inf, -np.inf, np.nan],
+                 np.float32)
+    with np.errstate(all="ignore"):
+        expected = reference(x).astype(np.float32)
+    result = rt.launch(_artifact(rt, op_name), (x,))
+    assert result["ok"] is True, result.get("reason")
+    _assert_fp_contract(result["output"], expected, atol=2e-4, rtol=2e-4)
+
+
+@pytest.mark.parametrize("op_name,reference", [
+    ("tessera.lgamma", lambda x: __import__("scipy").special.gammaln(x)),
+    ("tessera.digamma", lambda x: __import__("scipy").special.digamma(x)),
+])
+def test_special_function_reflection_and_pole_neighborhoods(op_name, reference):
+    rt = _unary_or_skip()
+    x = np.array([-3.0, -3.001, -2.999, -2.0, -1.001, -0.999,
+                  -0.1, 0.1, 0.5, 1.0, 8.0, 32.0], np.float32)
+    with np.errstate(all="ignore"):
+        expected = reference(x).astype(np.float32)
+    result = rt.launch(_artifact(rt, op_name), (x,))
+    assert result["ok"] is True, result.get("reason")
+    _assert_fp_contract(result["output"], expected, atol=8e-3, rtol=8e-3)
 
 
 def _opt(directive, *passes):

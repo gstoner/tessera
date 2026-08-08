@@ -93,24 +93,26 @@ sites, not ten files.
 
 **No C++ pass emits the typed form.** Zero producers set `#tile.mma_desc`.
 
-The typed form's only producers are **Python text emitters** —
-`python/tessera/compiler/nvidia_native.py` (four sites: `mma_sync`, NVFP4,
-int4, and the attention lane) and `python/tessera/runtime.py` (one). They write
-`#tile.mma_desc<family = "mma_sync", m = …, n = …, k = …, a = …, b = …, acc = …,
-a_layout = …, b_layout = …, k_blocks = …>` into MLIR **source text** that is then
-parsed.
+**Re-inventory correction, 2026-08-04.** The five Python sites counted below
+no longer produce `tile.mma`. They emit the typed launch-level
+`tile.matmul_kernel` envelope with a `#tile.mma_desc`; its C++ target
+materializer owns fragment construction. The structured Python Tile IR builder
+now emits logical `tile.matmul` as well. A repository search finds no Python
+lowering that constructs `tile.mma`; remaining occurrences are compatibility
+consumers/verifiers, descriptors, comments, and pipeline explanations. W1.1
+step 4 is therefore closed by removal of the
+split producer lane, not by adding five new Python fragment chains.
 
 Two consequences to design around:
 
-1. **The typed Tile contract has no C++ producer at all.** The verifier's
-   strongest branch is exercised only by text the Python side writes. This is
-   the same seam `CLAUDE.md` already describes for Apple GPU — the Python and
-   C++ sides are two compilers — showing up again one level down.
-2. **No lit fixture pairs `!tile.fragment` with `tile.mma`.** Searching
-   `tests/tessera-ir/` for files containing both returns nothing. The typed
-   branch's coverage is Python-side (`test_rocm_wmma_gemm_generated.py`,
-   `test_apple_threadgroup_pipeline.py`, `test_tile_fragment_compiler_path.py`)
-   plus a few phase2 fixtures that use `mma_desc` without `tile.mma`.
+1. **At inventory time the typed Tile contract had no C++ producer.** The first
+   current producer is now `GenerateWMMAGemmKernel{via-tile=true}`; Python has
+   converged on the launch envelope instead of retaining a second fragment
+   compiler.
+2. **That original coverage gap is closed.** Phase-2 fixtures now pair
+   parameterized fragments with `tile.mma`, including K-loop, chained,
+   ragged-bound, strided-K, and negative-contract cases. ROCm generator tests
+   additionally cover the typed C++ producers.
 
 ### 2.1 The blocker — the typed form and warp-spec token sync are mutually exclusive
 

@@ -18,12 +18,16 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures" / "profiler"
 
 
-@pytest.mark.parametrize("provider,target", [
-    ("apple", "apple_gpu"),
-    ("rocm", "rocm"),
-    ("nvidia", "nvidia"),
-    ("cpu", "cpu"),
-])
+@pytest.mark.parametrize(
+    "provider,target",
+    [
+        ("apple", "apple_gpu"),
+        ("rocm", "rocm"),
+        ("nvidia", "nvidia"),
+        ("x86", "x86_avx512"),
+        ("cpu", "cpu"),
+    ],
+)
 def test_collect_provider_status_emits_stable_artifact(provider: str, target: str) -> None:
     payload = collect_provider_status(provider)
 
@@ -118,6 +122,32 @@ def test_rocm_and_nvidia_require_native_callback_activity_proof() -> None:
     assert nvidia_passed["status"] == "native_available"
 
 
+def test_x86_requires_multiclock_and_perf_proof() -> None:
+    failed = collect_provider_status(
+        "x86",
+        native_proof={"x86_64": True, "avx512_visible": True},
+    )
+    assert failed["status"] == "native_failed"
+
+    passed = collect_provider_status(
+        "x86",
+        native_proof={
+            "x86_64": True,
+            "avx512_visible": True,
+            "monotonic_raw_valid": True,
+            "invariant_tsc": True,
+            "rdtscp_valid": True,
+            "affinity_stable": True,
+            "clock_agreement_valid": True,
+            "perf_event_open": True,
+            "timing_sample_valid": True,
+            "event_map_valid": True,
+        },
+    )
+    assert passed["status"] == "native_available"
+    assert passed["target"] == "x86_avx512"
+
+
 def test_tprof_provider_status_cli_prints_json() -> None:
     proc = subprocess.run(
         [
@@ -210,10 +240,13 @@ def test_tprof_apple_metal_smoke_command_buffer_probe_is_ci_safe(tmp_path: Path)
     validate_provider_status_artifact(payload)
 
 
-@pytest.mark.parametrize(("script", "provider"), [
-    ("tprof_rocm_native_smoke.py", "rocm"),
-    ("tprof_nvidia_cupti_smoke.py", "nvidia"),
-])
+@pytest.mark.parametrize(
+    ("script", "provider"),
+    [
+        ("tprof_rocm_native_smoke.py", "rocm"),
+        ("tprof_nvidia_cupti_smoke.py", "nvidia"),
+    ],
+)
 def test_native_smoke_scripts_emit_status_snapshots_without_hardware(
     tmp_path: Path,
     script: str,
@@ -241,12 +274,15 @@ def test_native_smoke_scripts_emit_status_snapshots_without_hardware(
     validate_provider_status_artifact(payload)
 
 
-@pytest.mark.parametrize("name", [
-    "provider_status_apple_compiled_shell.json",
-    "provider_status_rocm_planned.json",
-    "provider_status_nvidia_planned.json",
-    "provider_status_cpu_native_available.json",
-])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "provider_status_apple_compiled_shell.json",
+        "provider_status_rocm_planned.json",
+        "provider_status_nvidia_planned.json",
+        "provider_status_cpu_native_available.json",
+    ],
+)
 def test_provider_status_fixtures_validate(name: str) -> None:
     payload = json.loads((FIXTURES / name).read_text())
     validate_provider_status_artifact(payload)

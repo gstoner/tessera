@@ -1,0 +1,97 @@
+{
+  "application": [
+    "build.hidden/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/launch_demo"
+  ],
+  "capabilities": {
+    "dev_dxg": true,
+    "dev_kfd": false,
+    "dev_kfd_readable": false,
+    "platform": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "rocprofiler_native_interface": false,
+    "rocprofv3": "/opt/rocm-7.2.4/core-7.14/bin/rocprofv3",
+    "rtg_library": null,
+    "rtg_library_available": false,
+    "wsl": true
+  },
+  "command": [
+    "/opt/rocm/core/bin/rocprofv3",
+    "--runtime-trace",
+    "--kernel-trace",
+    "--memory-copy-trace",
+    "--stats",
+    "--output-format",
+    "json",
+    "--output-directory",
+    "/tmp/tessera-rocprof-native-2026-08-07",
+    "--output-file",
+    "tessera",
+    "--pmc",
+    "SQ_WAVES",
+    "TCC_MISS",
+    "--pc-sampling-beta-enabled",
+    "--pc-sampling-method",
+    "host_trap",
+    "--pc-sampling-unit",
+    "time",
+    "--pc-sampling-interval",
+    "1",
+    "--",
+    "build.hidden/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/launch_demo"
+  ],
+  "eligible_for_promotion": false,
+  "eligible_for_regression": false,
+  "fresh_process": true,
+  "output_documents": [],
+  "process": {
+    "clean_exit": false,
+    "duration_ns": 1771,
+    "ended_ns": 1786079152052642694,
+    "returncode": null,
+    "signal": null,
+    "started_ns": 1786079152052640923,
+    "stderr": "",
+    "stdout": "",
+    "timed_out": false
+  },
+  "proof": {
+    "counter_records_seen": false,
+    "dispatch_activity_seen": false,
+    "hip_callback_seen": false,
+    "hsa_callback_seen": false,
+    "pc_samples_seen": false
+  },
+  "provider": "rocprofiler",
+  "provider_trace": {
+    "provider": "rocprofiler",
+    "provider_statuses": [],
+    "record_count": 0,
+    "record_source": "native",
+    "records": [],
+    "schema": "tessera.profiler_provider_trace.v1",
+    "source": "/tmp/tessera-rocprof-native-2026-08-07",
+    "source_status": "native_failed",
+    "summary": {
+      "correlation_count": 0,
+      "dropped_records": 0,
+      "kinds": {},
+      "launch_count": 0,
+      "probe_count": 0
+    },
+    "traceEvents": []
+  },
+  "reason": "ROCPROFILER_DEVICE_INTERFACE_UNAVAILABLE",
+  "requested": {
+    "counters": [
+      "SQ_WAVES",
+      "TCC_MISS"
+    ],
+    "dispatch_activity": true,
+    "pc_sampling": true,
+    "pc_sampling_interval": 1,
+    "pc_sampling_method": "host_trap",
+    "pc_sampling_unit": "time",
+    "runtime_trace": true
+  },
+  "schema": "tessera.profiler_rocm_native_capture.v1",
+  "status": "blocked"
+}

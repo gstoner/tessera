@@ -1352,8 +1352,8 @@ def _rocm_dspark_draft_block_native(
     """Run the generated DS2 fused draft-block kernel on ROCm. f32/i64 ABI."""
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.dspark_draft_block"() {name = "ds"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-dspark-draft-block-kernel", directive, _rocm_dspark_draft_block_hsaco_cache, (chip,)
+    hsaco = _build_rocm_family_hsaco(
+        "draft_dspark", directive, _rocm_dspark_draft_block_hsaco_cache, (chip,)
     )
     hip = _load_hip_for_launch()
     if hip is None:
@@ -1537,8 +1537,8 @@ _rocm_dequant_gemm_hsaco_cache: dict[tuple[str], bytes] = {}
 def _rocm_dequant_gemm_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.dequant_gemm"() {name = "dq"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-dequant-gemm-kernel", directive, _rocm_dequant_gemm_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "quant_dequant_gemm", directive, _rocm_dequant_gemm_hsaco_cache, (chip,)
     )
 
 
@@ -1772,7 +1772,15 @@ def _rocm_gemm_lib_path() -> Optional[Path]:
     if env:
         candidates.append(Path(env))
     root = Path(__file__).resolve().parents[2]
-    candidates.append(root / "build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip" / "libtessera_rocm_gemm.so")
+    if build_dir := os.environ.get("TESSERA_BUILD_DIR"):
+        selected = Path(build_dir).expanduser()
+        selected = selected if selected.is_absolute() else root / selected
+        candidates.append(selected / (
+            "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/"
+            "libtessera_rocm_gemm.so"
+        ))
+    else:
+        candidates.append(root / "build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip" / "libtessera_rocm_gemm.so")
     for c in candidates:
         if c.is_file():
             return c
@@ -5666,11 +5674,16 @@ def _rocm_compiled_failed(reason: str):
 
 
 def _tessera_opt_path() -> Optional[Path]:
-    """Locate the tessera-opt driver (env override → canonical build dir)."""
-    env = os.environ.get("TESSERA_OPT")
-    if env and Path(env).is_file():
-        return Path(env)
-    p = Path(__file__).resolve().parents[2] / "build/tools/tessera-opt/tessera-opt"
+    """Locate the driver (artifact override → build override → default)."""
+    for name in ("TESSERA_OPT", "TESSERA_OPT_BIN"):
+        env = os.environ.get(name)
+        if env and Path(env).is_file():
+            return Path(env)
+    root = Path(__file__).resolve().parents[2]
+    build_dir = Path(os.environ.get("TESSERA_BUILD_DIR", "build")).expanduser()
+    if not build_dir.is_absolute():
+        build_dir = root / build_dir
+    p = build_dir / "tools/tessera-opt/tessera-opt"
     return p if p.is_file() else None
 
 
@@ -5843,29 +5856,11 @@ def _build_compiled_gemm_hsaco(
         f"{schedule_attrs}{storage_pack}{epi}}} : () -> ()\n"
         "}\n"
     )
-    pipeline = (
-        "builtin.module("
-        "generate-wmma-gemm-kernel,"
-        # W1.1 — lower any tile.mma the generator emitted.
-        #
-        # `generate-wmma-gemm-kernel{via-tile=true}` emits the typed
-        # view/pack/mma/unpack/store chain. Without this pass those ops survive to LLVM
-        # translation and the build dies with "missing
-        # LLVMTranslationDialectInterface registration ... for op:
-        # tile.mma", so via-tile was unreachable in production.
-        #
-        # A no-op when via-tile is off: verified byte-identical hsaco
-        # with and without the pass on the default path. The arch is
-        # mandatory -- lower-tile-to-rocm defaults to a CDNA part and
-        # would emit `llvm.amdgcn.mfma.contract`, an MFMA intrinsic that
-        # is wrong for RDNA 3.5 and does not resolve.
-        f"lower-tile-to-rocm{{arch={chip}}},"
-        "lower-tessera-target-to-rocdl,"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),"
-        f"rocdl-attach-target{{chip={chip}}},"
-        "gpu-module-to-binary)"
-    )
+    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
+
+    pipeline = ROCMExecutablePipeline(
+        family="matmul", input_level=ROCMInputLevel.DIRECTIVE, arch=chip
+    ).pass_pipeline()
     import subprocess
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
@@ -5935,33 +5930,14 @@ def _build_canonical_gemm_hsaco(
   }}
 }}
 """
-    pipeline = (
-        "builtin.module("
-        "tessera-tiling,"
-        "tessera-tile-ir-lowering,"
-        "rocm-wave-lds-pipeline,"
-        "rocm-wave-lds-legality,"
-        f"generate-wmma-gemm-kernel{{canonical-staging={staging}}},"
-        # W1.1 — lower any tile.mma the generator emitted.
-        #
-        # `generate-wmma-gemm-kernel{via-tile=true}` emits the typed
-        # view/pack/mma/unpack/store chain. Without this pass those ops survive to LLVM
-        # translation and the build dies with "missing
-        # LLVMTranslationDialectInterface registration ... for op:
-        # tile.mma", so via-tile was unreachable in production.
-        #
-        # A no-op when via-tile is off: verified byte-identical hsaco
-        # with and without the pass on the default path. The arch is
-        # mandatory -- lower-tile-to-rocm defaults to a CDNA part and
-        # would emit `llvm.amdgcn.mfma.contract`, an MFMA intrinsic that
-        # is wrong for RDNA 3.5 and does not resolve.
-        f"lower-tile-to-rocm{{arch={chip}}},"
-        "lower-tessera-target-to-rocdl,"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),"
-        f"rocdl-attach-target{{chip={chip}}},"
-        "gpu-module-to-binary)"
-    )
+    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
+
+    pipeline = ROCMExecutablePipeline(
+        family="matmul",
+        input_level=ROCMInputLevel.GRAPH,
+        arch=chip,
+        staging=staging,
+    ).pass_pipeline()
     import subprocess
 
     result = subprocess.run(
@@ -6689,15 +6665,11 @@ def _build_compiled_flash_attn_hsaco(
         ": () -> ()\n"
         "}\n"
     )
-    pipeline = (
-        "builtin.module("
-        "generate-wmma-flash-attn-kernel,"
-        "lower-tessera-target-to-rocdl,"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),"
-        f"rocdl-attach-target{{chip={chip}}},"
-        "gpu-module-to-binary)"
-    )
+    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
+
+    pipeline = ROCMExecutablePipeline(
+        family="attention", input_level=ROCMInputLevel.DIRECTIVE, arch=chip
+    ).pass_pipeline()
     import subprocess
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
@@ -7022,15 +6994,11 @@ def _build_compiled_flash_attn_bwd_hsaco(
         ": () -> ()\n"
         "}\n"
     )
-    pipeline = (
-        "builtin.module("
-        "generate-wmma-flash-attn-bwd-kernel,"
-        "lower-tessera-target-to-rocdl,"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),"
-        f"rocdl-attach-target{{chip={chip}}},"
-        "gpu-module-to-binary)"
-    )
+    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
+
+    pipeline = ROCMExecutablePipeline(
+        family="attention_backward", input_level=ROCMInputLevel.DIRECTIVE, arch=chip
+    ).pass_pipeline()
     import subprocess
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
@@ -8157,27 +8125,9 @@ def _build_compiled_linear_attn_hsaco(
         ": () -> ()\n"
         "}\n"
     )
-    pipeline = (
-        "builtin.module("
-        "generate-wmma-linear-attn-kernel,"
-        "lower-tessera-target-to-rocdl,"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),"
-        f"rocdl-attach-target{{chip={chip}}},"
-        "gpu-module-to-binary)"
+    return _build_rocm_family_hsaco(
+        "sequence_linear_attention", directive, _rocm_la_hsaco_cache, key
     )
-    import subprocess
-
-    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
-    if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        _rocm_compiled_failed(
-            f"tessera-opt did not serialize the compiled linear_attn in-process (rc={r.returncode}): {r.stderr[:400]}"
-        )
-    hsaco = _extract_hsaco_blob(r.stdout)
-    if hsaco[:4] != b"\x7fELF":
-        _rocm_compiled_failed("compiled ROCm linear_attn lane: gpu.binary was not an ELF hsaco")
-    _rocm_la_hsaco_cache[key] = hsaco
-    return hsaco
 
 
 def _execute_rocm_compiled_linear_attn(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -9538,8 +9488,8 @@ def _execute_nvidia_mla_decode_fused_compiled(artifact: RuntimeArtifact, args: A
 # ROCm COMPILED softmax lane (2026-06-25) — the first non-matmul/non-WMMA
 # compiler-generated ROCm kernel. ``runtime.launch()`` of an artifact stamped
 # ``compiler_path = "rocm_softmax_compiled"`` builds the COMPILER-GENERATED
-# row-reduction kernel (the ``generate-rocm-softmax-kernel`` pipeline → hsaco;
-# no WMMA / no lower-tessera-target-to-rocdl) and launches it via HIP. Stable
+# row-reduction kernel through the typed ``softmax`` family plugin and launches
+# its HSACO via HIP. Stable
 # softmax over the last axis; f32/f16/bf16 storage, f32-reduce. ONE hsaco per
 # (chip, dtype) — the kernel is (M,K)-generic — cached.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -9550,8 +9500,8 @@ _rocm_softmax_hsaco_cache: dict[tuple[str, str], bytes] = {}
 
 def _build_compiled_softmax_hsaco(dtype: str = "f32") -> bytes:
     """Generate + serialize the compiler's row-reduction softmax kernel to
-    hsaco, in-process via tessera-opt. Cached per (chip, dtype). No WMMA → the
-    pipeline is the plain gpu→ROCDL chain (no lower-tessera-target-to-rocdl)."""
+    hsaco, in-process via tessera-opt. Cached per (chip, dtype). The registered
+    executable pipeline owns generator, ROCDL, and packaging order."""
     chip = _rocm_chip()
     key = (chip, dtype)
     cached = _rocm_softmax_hsaco_cache.get(key)
@@ -9561,14 +9511,11 @@ def _build_compiled_softmax_hsaco(dtype: str = "f32") -> bytes:
     if opt is None:
         raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm softmax lane")
     directive = f'module {{\n  "tessera_rocm.softmax"() {{name = "sm", dtype = "{dtype}"}} : () -> ()\n}}\n'
-    pipeline = (
-        "builtin.module("
-        "generate-rocm-softmax-kernel,"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),"
-        f"rocdl-attach-target{{chip={chip}}},"
-        "gpu-module-to-binary)"
-    )
+    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
+
+    pipeline = ROCMExecutablePipeline(
+        family="softmax", input_level=ROCMInputLevel.DIRECTIVE, arch=chip
+    ).pass_pipeline()
     import subprocess
 
     r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
@@ -9738,34 +9685,12 @@ def _build_compiled_norm_hsaco(
     cached = _rocm_norm_hsaco_cache.get(key)
     if cached is not None:
         return cached
-    opt = _tessera_opt_path()
-    if opt is None:
-        raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm norm lane")
     directive = (
         f'module {{\n  "tessera_rocm.norm"() {{name = "nm", kind = "{kind}", '
         f'dtype = "{dtype}", epilogue = "{epilogue}", '
         f"epilogue_param = {float(epilogue_param):e} : f32}} : () -> ()\n}}\n"
     )
-    pipeline = (
-        "builtin.module("
-        "generate-rocm-norm-kernel,"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),"
-        f"rocdl-attach-target{{chip={chip}}},"
-        "gpu-module-to-binary)"
-    )
-    import subprocess
-
-    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
-    if r.returncode != 0 or "gpu.binary" not in r.stdout:
-        _rocm_compiled_failed(
-            f"tessera-opt did not serialize the compiled norm in-process (rc={r.returncode}): {r.stderr[:400]}"
-        )
-    hsaco = _extract_hsaco_blob(r.stdout)
-    if hsaco[:4] != b"\x7fELF":
-        _rocm_compiled_failed("compiled ROCm norm lane: gpu.binary was not an ELF hsaco")
-    _rocm_norm_hsaco_cache[key] = hsaco
-    return hsaco
+    return _build_rocm_family_hsaco("normalization", directive, _rocm_norm_hsaco_cache, key)
 
 
 def _build_compiled_norm_backward_hsaco(kind: str, dtype: str = "f32") -> bytes:
@@ -9779,40 +9704,13 @@ def _build_compiled_norm_backward_hsaco(kind: str, dtype: str = "f32") -> bytes:
     cached = _rocm_norm_bwd_hsaco_cache.get(key)
     if cached is not None:
         return cached
-    opt = _tessera_opt_path()
-    if opt is None:
-        raise _RocmCompiledUnavailable("tessera-opt not built — no compiled ROCm norm backward lane")
     directive = (
         "module {\n"
         '  "tessera_rocm.norm"() {name = "nmb", '
         f'kind = "{kind}", dtype = "{dtype}", backward = true}} : () -> ()\n'
         "}\n"
     )
-    pipeline = (
-        "builtin.module("
-        "generate-rocm-norm-kernel,"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts),"
-        f"rocdl-attach-target{{chip={chip}}},"
-        "gpu-module-to-binary)"
-    )
-    import subprocess
-
-    result = subprocess.run(
-        [str(opt), "-", f"--pass-pipeline={pipeline}"],
-        input=directive,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0 or "gpu.binary" not in result.stdout:
-        _rocm_compiled_failed(
-            f"tessera-opt did not serialize compiled norm backward (rc={result.returncode}): {result.stderr[:400]}"
-        )
-    hsaco = _extract_hsaco_blob(result.stdout)
-    if hsaco[:4] != b"\x7fELF":
-        _rocm_compiled_failed("compiled ROCm norm backward lane: gpu.binary was not ELF")
-    _rocm_norm_bwd_hsaco_cache[key] = hsaco
-    return hsaco
+    return _build_rocm_family_hsaco("normalization", directive, _rocm_norm_bwd_hsaco_cache, key)
 
 
 #: op_name → (norm kind, default eps). rmsnorm_safe uses a tighter eps default.
@@ -10367,6 +10265,12 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_fft_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
         "tessera_x86_fft_mixed_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
         "tessera_x86_fft_six_step_c2c_f32": [c_f32, i64, i64, ctypes.c_int],
+        "tessera_x86_fft_r2c_packed_f32": [
+            ctypes.c_char_p, c_f32, c_f32, i64, i64
+        ],
+        "tessera_x86_fft_c2r_packed_f32": [
+            ctypes.c_char_p, c_f32, c_f32, i64, i64
+        ],
         "tessera_x86_spectral_filter_f32": [
             ctypes.c_char_p, c_f32, c_f32, c_f32, i64
         ],
@@ -10478,6 +10382,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
     for sym in (
         "tessera_x86_fft_mixed_c2c_f32",
         "tessera_x86_fft_six_step_c2c_f32",
+        "tessera_x86_fft_r2c_packed_f32",
+        "tessera_x86_fft_c2r_packed_f32",
         "tessera_x86_spectral_filter_f32",
         "tessera_x86_dct_f32",
         "tessera_x86_spectral_conv_f32",
@@ -12919,6 +12825,8 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     inverse = bool(contract["inverse"])
     strategy = str(contract["strategy"])
     scale = float(contract["scale"])
+    real_policy = str(contract["real_transform_policy"])
+    digest = str(contract["schedule_digest"]).encode("ascii")
 
     xm = np.moveaxis(x, ax, -1)
     lead = xm.shape[:-1]
@@ -12931,6 +12839,22 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
         return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.complex64)
 
     if op_name == "tessera.rfft":
+        if real_policy == "packed_even_n2_hermitian_v1":
+            lib = _load_x86_elementwise()
+            if lib is None or not hasattr(lib, "tessera_x86_fft_r2c_packed_f32"):
+                raise _RocmCompiledUnavailable("x86 packed RFFT package is unavailable")
+            rows = np.ascontiguousarray(xm.reshape(-1, n), np.float32)
+            half = np.empty((rows.shape[0], n // 2 + 1), np.complex64)
+            status = lib.tessera_x86_fft_r2c_packed_f32(
+                digest,
+                rows.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                half.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                ctypes.c_int64(rows.shape[0]),
+                ctypes.c_int64(n),
+            )
+            if status != 0:
+                raise ValueError(f"x86 packed RFFT declined N={n} status={status}")
+            return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax)
         rows = xm.reshape(-1, n).astype(np.complex64)  # im = 0
         full = _x86_transform_rows(rows, False, strategy, np)
         half = full[:, : n // 2 + 1]
@@ -12938,6 +12862,22 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
 
     # tessera.irfft — Hermitian-reconstruct the full spectrum, ifft, take real.
     rows = xm.reshape(-1, m).astype(np.complex64)
+    if real_policy == "packed_even_n2_hermitian_v1":
+        lib = _load_x86_elementwise()
+        if lib is None or not hasattr(lib, "tessera_x86_fft_c2r_packed_f32"):
+            raise _RocmCompiledUnavailable("x86 packed IRFFT package is unavailable")
+        rows = np.ascontiguousarray(rows, np.complex64)
+        out = np.empty((rows.shape[0], n), np.float32)
+        status = lib.tessera_x86_fft_c2r_packed_f32(
+            digest,
+            rows.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            ctypes.c_int64(rows.shape[0]),
+            ctypes.c_int64(n),
+        )
+        if status != 0:
+            raise ValueError(f"x86 packed IRFFT declined N={n} status={status}")
+        return np.moveaxis(out.reshape(*lead, n), -1, ax)
     batch = rows.shape[0]
     full = np.zeros((batch, n), np.complex64)
     full[:, :m] = rows[:, :m]
@@ -12969,6 +12909,8 @@ def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any
         return (np.asarray(operands[0]) * np.asarray(operands[1])).astype(np.complex64)
 
     if op_name == "tessera.dct":  # type-2 via FFT
+        if int(kwargs.get("type", 2)) != 2:
+            raise ValueError("compiled DCT currently supports only type=2")
         x = np.asarray(operands[0])
         axis = int(kwargs.get("axis", -1))
         ax = axis if axis >= 0 else x.ndim + axis
@@ -13070,7 +13012,7 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
     lib = _load_x86_elementwise()
     if lib is None or not hasattr(lib, "tessera_x86_spectral_composite_package_abi"):
         raise RuntimeError("x86 compound spectral package is unavailable")
-    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v4":
+    if lib.tessera_x86_spectral_composite_package_abi() != b"tessera.x86.spectral_composite.v5":
         raise RuntimeError("x86 compound spectral package ABI mismatch")
     digest = str(contract["schedule_digest"]).encode("ascii")
     output_shape = tuple(int(dim) for dim in contract["output_shape"])
@@ -15120,8 +15062,8 @@ _rocm_ebm_langevin_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_ebm_langevin_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.ebm_langevin"() {name = "lv"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-ebm-langevin-kernel", directive, _rocm_ebm_langevin_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "ebm_langevin", directive, _rocm_ebm_langevin_hsaco_cache, (chip,)
     )
 
 
@@ -15202,8 +15144,8 @@ _rocm_ebm_affine_langevin_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_ebm_affine_langevin_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.ebm_affine_langevin"() {name = "lva"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-ebm-affine-langevin-kernel", directive, _rocm_ebm_affine_langevin_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "ebm_affine_langevin", directive, _rocm_ebm_affine_langevin_hsaco_cache, (chip,)
     )
 
 
@@ -15277,8 +15219,8 @@ _rocm_ebm_partition_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_ebm_partition_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.ebm_partition"() {name = "part"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-ebm-partition-kernel", directive, _rocm_ebm_partition_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "ebm_partition", directive, _rocm_ebm_partition_hsaco_cache, (chip,)
     )
 
 
@@ -15371,8 +15313,8 @@ _rocm_ebm_decode_init_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_ebm_decode_init_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.ebm_decode_init"() {name = "dinit"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-ebm-decode-init-kernel", directive, _rocm_ebm_decode_init_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "ebm_decode_init", directive, _rocm_ebm_decode_init_hsaco_cache, (chip,)
     )
 
 
@@ -15473,8 +15415,8 @@ _rocm_ebm_energy_quadratic_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_ebm_energy_quadratic_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.ebm_energy_quadratic"() {name = "eq"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-ebm-energy-quadratic-kernel", directive, _rocm_ebm_energy_quadratic_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "ebm_energy_quadratic", directive, _rocm_ebm_energy_quadratic_hsaco_cache, (chip,)
     )
 
 
@@ -15587,8 +15529,8 @@ _rocm_ebm_ebt_tiny_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_ebm_ebt_tiny_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.ebm_ebt_tiny"() {name = "ebt"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-ebm-ebt-tiny-kernel", directive, _rocm_ebm_ebt_tiny_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "ebm_ebt_tiny", directive, _rocm_ebm_ebt_tiny_hsaco_cache, (chip,)
     )
 
 
@@ -15760,8 +15702,8 @@ def _build_rocm_int4_pack_hsaco(kind: str) -> bytes:
         raise ValueError(f"INT4 storage conversion kind must be pack/unpack; got {kind!r}")
     chip = _rocm_chip()
     directive = f'module {{\n  "tessera_rocm.int4_pack"() {{name = "int4_{kind}", kind = "{kind}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-int4-pack-kernel",
+    return _build_rocm_family_hsaco(
+        "quant_int4_pack",
         directive,
         _rocm_int4_pack_hsaco_cache,
         (chip, kind),
@@ -16784,7 +16726,7 @@ _rocm_philox_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_philox_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.philox"() {name = "ph"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco("generate-rocm-philox-kernel", directive, _rocm_philox_hsaco_cache, (chip,))
+    return _build_rocm_family_hsaco("rng_philox", directive, _rocm_philox_hsaco_cache, (chip,))
 
 
 def _rocm_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
@@ -17923,7 +17865,7 @@ _rocm_row_gather_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_gather_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.gather"() {name = "g"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco("generate-rocm-gather-kernel", directive, _rocm_gather_hsaco_cache, (chip,))
+    return _build_rocm_family_hsaco("indexing_gather", directive, _rocm_gather_hsaco_cache, (chip,))
 
 
 def _rocm_gather(src: Any, idx: Any, out: Any) -> None:
@@ -17983,8 +17925,8 @@ def _rocm_gather(src: Any, idx: Any, out: Any) -> None:
 def _build_compiled_row_gather_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.gather"() {name = "rg", row = true} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-gather-kernel", directive, _rocm_row_gather_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "indexing_gather", directive, _rocm_row_gather_hsaco_cache, (chip,)
     )
 
 
@@ -18035,8 +17977,8 @@ def _build_compiled_scatter_hsaco(mode: int) -> bytes:
     chip = _rocm_chip()
     mname = _SCATTER_MODE_NAME[mode]
     directive = f'module {{\n  "tessera_rocm.scatter"() {{name = "sc", mode = "{mname}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-scatter-kernel", directive, _rocm_scatter_hsaco_cache, (chip, mode)
+    return _build_rocm_family_hsaco(
+        "indexing_scatter", directive, _rocm_scatter_hsaco_cache, (chip, mode)
     )
 
 
@@ -18113,8 +18055,8 @@ def _rocm_weighted_scatter_add(
         raise ValueError("weighted scatter shape mismatch")
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.scatter"() {name = "wsc", mode = "weighted_add"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-scatter-kernel", directive, _rocm_weighted_scatter_hsaco_cache, (chip,)
+    hsaco = _build_rocm_family_hsaco(
+        "indexing_scatter", directive, _rocm_weighted_scatter_hsaco_cache, (chip,)
     )
     hip = _load_hip_for_launch()
     if hip is None or hip.hipInit(0) != 0:
@@ -18164,8 +18106,8 @@ def _build_compiled_gemm_f32_hsaco(tm: int = 4, tn: int = 4) -> bytes:
     directive = (
         f'module {{\n  "tessera_rocm.gemm_f32"() {{name = "g", tm = {tm} : i64, tn = {tn} : i64}} : () -> ()\n}}\n'
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-gemm-f32-kernel", directive, _rocm_gemm_f32_hsaco_cache, (chip, tm, tn)
+    return _build_rocm_family_hsaco(
+        "matmul_f32", directive, _rocm_gemm_f32_hsaco_cache, (chip, tm, tn)
     )
 
 
@@ -18175,8 +18117,8 @@ _rocm_batched_gemm_f32_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_batched_gemm_f32_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.batched_gemm_f32"() {name = "bg"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-batched-gemm-f32-kernel", directive, _rocm_batched_gemm_f32_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "matmul_batched_f32", directive, _rocm_batched_gemm_f32_hsaco_cache, (chip,)
     )
 
 
@@ -18335,8 +18277,8 @@ def _build_compiled_recurrent_cell_hsaco(cell: str, dtype: str, act: str) -> byt
         f'{{name = "rc", cell = "{cell}", dtype = "{dtype}", '
         f'act = "{act}"}} : () -> ()\n}}\n'
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-recurrent-cell-kernel", directive, _rocm_recurrent_hsaco_cache, (chip, cell, dtype, act)
+    return _build_rocm_family_hsaco(
+        "sequence_recurrent_cell", directive, _rocm_recurrent_hsaco_cache, (chip, cell, dtype, act)
     )
 
 
@@ -18782,7 +18724,7 @@ _rocm_sort_hsaco_cache: dict[tuple[str], bytes] = {}
 def _build_compiled_sort_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.sort"() {name = "s"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco("generate-rocm-sort-kernel", directive, _rocm_sort_hsaco_cache, (chip,))
+    return _build_rocm_family_hsaco("ordering_sort", directive, _rocm_sort_hsaco_cache, (chip,))
 
 
 def _rocm_sort(keys: Any, idx: Any, rows: int, pn: int) -> None:
@@ -18963,8 +18905,8 @@ def _build_compiled_clifford_hsaco(kind: int) -> bytes:
     chip = _rocm_chip()
     kname = _CLIFFORD_KIND_NAME[kind]
     directive = f'module {{\n  "tessera_rocm.clifford"() {{name = "c", kind = "{kname}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-clifford-kernel", directive, _rocm_clifford_hsaco_cache, (chip, kind)
+    return _build_rocm_family_hsaco(
+        "algebra_clifford", directive, _rocm_clifford_hsaco_cache, (chip, kind)
     )
 
 
@@ -19545,8 +19487,8 @@ def _build_compiled_reduce_hsaco(kind: str, dtype: str = "f32") -> bytes:
     directive = (
         f'module {{\n  "tessera_rocm.reduce"() {{name = "rd", kind = "{kind}", dtype = "{dtype}"}} : () -> ()\n}}\n'
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-reduce-kernel", directive, _rocm_reduce_hsaco_cache, (chip, kind, dtype)
+    return _build_rocm_family_hsaco(
+        "reduction", directive, _rocm_reduce_hsaco_cache, (chip, kind, dtype)
     )
 
 
@@ -19689,8 +19631,8 @@ def _build_compiled_argreduce_hsaco(kind: str, dtype: str = "f32") -> bytes:
     directive = (
         f'module {{\n  "tessera_rocm.argreduce"() {{name = "ar", kind = "{kind}", dtype = "{dtype}"}} : () -> ()\n}}\n'
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-argreduce-kernel", directive, _rocm_argreduce_hsaco_cache, (chip, kind, dtype)
+    return _build_rocm_family_hsaco(
+        "reduction_arg", directive, _rocm_argreduce_hsaco_cache, (chip, kind, dtype)
     )
 
 
@@ -19817,8 +19759,8 @@ def _build_compiled_scan_hsaco(kind: str, dtype: str = "f32") -> bytes:
     directive = (
         f'module {{\n  "tessera_rocm.scan"() {{name = "sc", kind = "{kind}", dtype = "{dtype}"}} : () -> ()\n}}\n'
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-scan-kernel", directive, _rocm_scan_hsaco_cache, (chip, kind, dtype)
+    return _build_rocm_family_hsaco(
+        "scan", directive, _rocm_scan_hsaco_cache, (chip, kind, dtype)
     )
 
 
@@ -19944,9 +19886,12 @@ _ROCM_ACT_OPS: dict[str, str] = {
 }
 
 
-def _build_rocm_elementwise_hsaco(pass_name: str, directive: str, cache: dict, key: tuple) -> bytes:
-    """Shared in-process build for the plain gpu→ROCDL elementwise/rope kernels
-    (no WMMA, no lower-tessera-target-to-rocdl). Cached by `key`."""
+def _build_rocm_family_hsaco(family: str, directive: str, cache: dict, key: tuple) -> bytes:
+    """Build a promoted ROCm family through the typed executable pipeline.
+
+    Callers select a closed semantic family; the registered C++ pipeline owns
+    generator, Target-IR, wait, ROCDL, and packaging order.
+    """
     cached = cache.get(key)
     if cached is not None:
         return cached
@@ -19954,24 +19899,27 @@ def _build_rocm_elementwise_hsaco(pass_name: str, directive: str, cache: dict, k
     if opt is None:
         raise _RocmCompiledUnavailable("tessera-opt not built — no compiled lane")
     chip = _rocm_chip()
-    pipeline = (
-        "builtin.module("
-        f"{pass_name},"
-        "gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-        "reconcile-unrealized-casts,rocm-materialize-dynamic-lds),"
-        f"rocdl-attach-target{{chip={chip}}},"
-        "gpu-module-to-binary)"
-    )
+    from .compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel
+
+    pipeline = ROCMExecutablePipeline(
+        family=family, input_level=ROCMInputLevel.DIRECTIVE, arch=chip
+    ).pass_pipeline()
     import subprocess
 
-    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
-    if r.returncode != 0 or "gpu.binary" not in r.stdout:
+    result = subprocess.run(
+        [str(opt), "-", f"--pass-pipeline={pipeline}"],
+        input=directive,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 or "gpu.binary" not in result.stdout:
         _rocm_compiled_failed(
-            f"tessera-opt did not serialize {pass_name} in-process (rc={r.returncode}): {r.stderr[:400]}"
+            f"tessera-opt did not serialize ROCm family {family!r} in-process "
+            f"(rc={result.returncode}): {result.stderr[:400]}"
         )
-    hsaco = _extract_hsaco_blob(r.stdout)
+    hsaco = _extract_hsaco_blob(result.stdout)
     if hsaco[:4] != b"\x7fELF":
-        _rocm_compiled_failed(f"{pass_name}: gpu.binary not an ELF hsaco")
+        _rocm_compiled_failed(f"ROCm family {family!r}: gpu.binary not an ELF hsaco")
     cache[key] = hsaco
     return hsaco
 
@@ -19981,8 +19929,8 @@ def _build_compiled_activation_hsaco(kind: str, dtype: str = "f32") -> bytes:
     directive = (
         f'module {{\n  "tessera_rocm.activation"() {{name = "a", kind = "{kind}", dtype = "{dtype}"}} : () -> ()\n}}\n'
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-activation-kernel", directive, _rocm_act_hsaco_cache, (chip, kind, dtype)
+    return _build_rocm_family_hsaco(
+        "scalar_activation", directive, _rocm_act_hsaco_cache, (chip, kind, dtype)
     )
 
 
@@ -20120,8 +20068,8 @@ def _build_compiled_unary_hsaco(kind: str, dtype: str = "f32") -> bytes:
     directive = (
         f'module {{\n  "tessera_rocm.unary"() {{name = "u", kind = "{kind}", dtype = "{dtype}"}} : () -> ()\n}}\n'
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-unary-kernel", directive, _rocm_unary_hsaco_cache, (chip, kind, dtype)
+    return _build_rocm_family_hsaco(
+        "scalar_unary", directive, _rocm_unary_hsaco_cache, (chip, kind, dtype)
     )
 
 
@@ -20240,8 +20188,8 @@ def _build_compiled_binary_hsaco(kind: str, dtype: str = "f32") -> bytes:
     directive = (
         f'module {{\n  "tessera_rocm.binary"() {{name = "b", kind = "{kind}", dtype = "{dtype}"}} : () -> ()\n}}\n'
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-binary-kernel", directive, _rocm_binary_hsaco_cache, (chip, kind, dtype)
+    return _build_rocm_family_hsaco(
+        "scalar_binary", directive, _rocm_binary_hsaco_cache, (chip, kind, dtype)
     )
 
 
@@ -20433,8 +20381,8 @@ _rocm_where_hsaco_cache: dict[tuple[str, str], bytes] = {}
 def _build_compiled_where_hsaco(dtype: str = "f32") -> bytes:
     chip = _rocm_chip()
     directive = f'module {{\n  "tessera_rocm.where"() {{name = "w", dtype = "{dtype}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-where-kernel", directive, _rocm_where_hsaco_cache, (chip, dtype)
+    return _build_rocm_family_hsaco(
+        "scalar_where", directive, _rocm_where_hsaco_cache, (chip, dtype)
     )
 
 
@@ -20565,8 +20513,8 @@ def _build_compiled_compare_hsaco(kind: str, dtype: str = "f32") -> bytes:
     directive = (
         f'module {{\n  "tessera_rocm.compare"() {{name = "c", kind = "{kind}", dtype = "{dtype}"}} : () -> ()\n}}\n'
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-compare-kernel", directive, _rocm_compare_hsaco_cache, (chip, kind, dtype)
+    return _build_rocm_family_hsaco(
+        "scalar_compare", directive, _rocm_compare_hsaco_cache, (chip, kind, dtype)
     )
 
 
@@ -20588,8 +20536,8 @@ def _rocm_predicate(x: Any, kind: str, np: Any) -> Any:
         return np.zeros(shape, dtype=np.bool_)
     chip = _rocm_chip()
     directive = f'module {{\n  "tessera_rocm.predicate"() {{name = "pr", kind = "{kind}"}} : () -> ()\n}}\n'
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-predicate-kernel", directive, _rocm_predicate_hsaco_cache, (chip, kind)
+    hsaco = _build_rocm_family_hsaco(
+        "scalar_predicate", directive, _rocm_predicate_hsaco_cache, (chip, kind)
     )
     hip = _load_hip_for_launch()
     if hip is None:
@@ -20756,8 +20704,8 @@ _ROCM_LOGICAL_OPS: dict[str, tuple[str, int]] = {
 def _build_compiled_logical_hsaco(kind: str) -> bytes:
     chip = _rocm_chip()
     directive = f'module {{\n  "tessera_rocm.logical"() {{name = "l", kind = "{kind}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-logical-kernel", directive, _rocm_logical_hsaco_cache, (chip, kind)
+    return _build_rocm_family_hsaco(
+        "scalar_logical", directive, _rocm_logical_hsaco_cache, (chip, kind)
     )
 
 
@@ -20878,8 +20826,8 @@ _ROCM_BITWISE_OPS: dict[str, tuple[str, int]] = {
 def _build_compiled_bitwise_hsaco(kind: str) -> bytes:
     chip = _rocm_chip()
     directive = f'module {{\n  "tessera_rocm.bitwise"() {{name = "w", kind = "{kind}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-bitwise-kernel", directive, _rocm_bitwise_hsaco_cache, (chip, kind)
+    return _build_rocm_family_hsaco(
+        "scalar_bitwise", directive, _rocm_bitwise_hsaco_cache, (chip, kind)
     )
 
 
@@ -20988,8 +20936,8 @@ _rocm_silu_mul_hsaco_cache: dict[tuple[str, str], bytes] = {}
 def _build_compiled_silu_mul_hsaco(dtype: str = "f32") -> bytes:
     chip = _rocm_chip()
     directive = f'module {{\n  "tessera_rocm.silu_mul"() {{name = "sm", dtype = "{dtype}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-silu-mul-kernel", directive, _rocm_silu_mul_hsaco_cache, (chip, dtype)
+    return _build_rocm_family_hsaco(
+        "fused_silu_mul", directive, _rocm_silu_mul_hsaco_cache, (chip, dtype)
     )
 
 
@@ -21149,8 +21097,8 @@ def _build_compiled_pointwise_loss_hsaco(kind: int, param: float, dtype: str = "
     )
     # param only affects huber/smooth_l1; bake it into the cache key for those.
     key = (chip, dtype, int(kind)) if kind not in (2, 3) else (chip, f"{dtype}:{float(param):e}", int(kind))
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-pointwise-loss-kernel", directive, _rocm_pointwise_loss_hsaco_cache, key
+    return _build_rocm_family_hsaco(
+        "loss_pointwise", directive, _rocm_pointwise_loss_hsaco_cache, key
     )
 
 
@@ -21167,8 +21115,8 @@ def _build_compiled_regression_loss_backward_hsaco(
         "}\n"
     )
     key = (chip, f"{dtype}:{kind}:{float(param):e}", reduction)
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-pointwise-loss-kernel",
+    return _build_rocm_family_hsaco(
+        "loss_pointwise",
         directive,
         _rocm_mse_backward_hsaco_cache,
         key,
@@ -21191,8 +21139,8 @@ def _build_compiled_training_loss_sgd_hsaco(kind: int, param: float, reduction: 
         "}\n"
     )
     key = (chip, f"{dtype}:{kind}:{float(param):e}", reduction)
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-pointwise-loss-kernel",
+    return _build_rocm_family_hsaco(
+        "loss_pointwise",
         directive,
         _rocm_training_loss_sgd_hsaco_cache,
         key,
@@ -21210,8 +21158,8 @@ def _build_compiled_training_loss_adamw_hsaco(kind: int, param: float, reduction
         "}\n"
     )
     key = (chip, f"{dtype}:{kind}:{float(param):e}", reduction)
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-pointwise-loss-kernel",
+    return _build_rocm_family_hsaco(
+        "loss_pointwise",
         directive,
         _rocm_training_loss_adamw_hsaco_cache,
         key,
@@ -21572,8 +21520,8 @@ def _execute_rocm_compiled_distribution_loss_backward(
         f'{{name = "distribution_bwd", kind = 0 : i64, backward = true, '
         f'distribution = "{kind}", reduction = "{reduction}"}} : () -> ()\n}}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-pointwise-loss-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "loss_pointwise",
         directive,
         _rocm_distribution_backward_hsaco_cache,
         (chip, kind, reduction),
@@ -21986,8 +21934,8 @@ def _build_compiled_binary_loss_hsaco(kind: int, pw: float, nw: float, dtype: st
         f"neg_weight = {float(nw):e} : f32}} : () -> ()\n}}\n"
     )
     key = (chip, dtype, int(kind), float(pw), float(nw))
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-binary-loss-kernel", directive, _rocm_binary_loss_hsaco_cache, key
+    return _build_rocm_family_hsaco(
+        "loss_binary", directive, _rocm_binary_loss_hsaco_cache, key
     )
 
 
@@ -22000,8 +21948,8 @@ def _build_compiled_binary_loss_backward_hsaco(reduction: str, dtype: str = "f32
         f'reduction = "{reduction}"}} : () -> ()\n'
         "}\n"
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-binary-loss-kernel",
+    return _build_rocm_family_hsaco(
+        "loss_binary",
         directive,
         _rocm_binary_loss_backward_hsaco_cache,
         (chip, dtype, reduction),
@@ -22019,8 +21967,8 @@ def _build_compiled_class_loss_backward_hsaco(
         f'ignore_index = {ignore_index} : i64, reduction = "{reduction}"}} '
         ": () -> ()\n}\n"
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-binary-loss-kernel",
+    return _build_rocm_family_hsaco(
+        "loss_binary",
         directive,
         _rocm_class_loss_backward_hsaco_cache,
         (chip, dtype, smoothing, ignore_index, reduction),
@@ -22320,8 +22268,8 @@ def _build_compiled_policy_loss_hsaco(kind: int, clip: float, dtype: str = "f32"
         f"kind = {int(kind)} : i64, clip = {float(clip):e} : f32}} "
         ": () -> ()\n}\n"
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-policy-loss-kernel",
+    return _build_rocm_family_hsaco(
+        "loss_policy",
         directive,
         _rocm_policy_loss_hsaco_cache,
         (chip, dtype, int(kind), float(clip)),
@@ -22450,8 +22398,8 @@ def _rocm_fpgrid(x: Any, max_normal: float, mantissa_bits: int, min_exp: int, np
         f"mantissa_bits = {int(mantissa_bits)} : i64, "
         f"min_exp = {int(min_exp)} : i64}} : () -> ()\n}}\n"
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-fpquant-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "quant_fp",
         directive,
         _rocm_fpquant_hsaco_cache,
         (chip, float(max_normal), int(mantissa_bits), int(min_exp)),
@@ -23589,8 +23537,8 @@ def _rocm_dft_rows(rows: Any, inverse: bool, np: Any) -> Any:
         f'  "tessera_rocm.dft"() {{name = "dt", '
         f"inverse = {'true' if inverse else 'false'}}} : () -> ()\n}}\n"
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-dft-kernel", directive, _rocm_dft_hsaco_cache, (chip, bool(inverse))
+    hsaco = _build_rocm_family_hsaco(
+        "spectral_dft", directive, _rocm_dft_hsaco_cache, (chip, bool(inverse))
     )
     hip = _load_hip_for_launch()
     if hip is None:
@@ -23701,6 +23649,7 @@ def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     strategy = str(contract["strategy"])
     artifact_digest = str(contract["schedule_digest"])
     scale = float(contract["scale"])
+    real_policy = str(contract["real_transform_policy"])
 
     xm = np.moveaxis(x, ax, -1)
     lead = xm.shape[:-1]
@@ -23717,6 +23666,18 @@ def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
         return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.complex64)
 
     if op_name == "tessera.rfft":
+        if real_policy == "packed_even_n2_hermitian_v1":
+            from .compiler.emit.spectral_candidates import run_rocm_packed_real_rows
+
+            half = run_rocm_packed_real_rows(
+                xm.reshape(-1, n),
+                inverse=False,
+                logical_n=n,
+                artifact_digest=artifact_digest,
+            )
+            return np.moveaxis(
+                half.reshape(*lead, n // 2 + 1), -1, ax
+            ).astype(np.complex64)
         full = _rocm_fft_rows(
             xm.reshape(-1, n), False, strategy, artifact_digest, np
         )
@@ -23724,6 +23685,16 @@ def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
         return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax).astype(np.complex64)
 
     rows = xm.reshape(-1, m).astype(np.complex64)
+    if real_policy == "packed_even_n2_hermitian_v1":
+        from .compiler.emit.spectral_candidates import run_rocm_packed_real_rows
+
+        out = run_rocm_packed_real_rows(
+            rows,
+            inverse=True,
+            logical_n=n,
+            artifact_digest=artifact_digest,
+        )
+        return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
     batch = rows.shape[0]
     full = np.zeros((batch, n), np.complex64)
     full[:, :m] = rows[:, :m]
@@ -23883,8 +23854,8 @@ def _rocm_block_sparse_attn_hsaco(*, tiled: bool = True) -> bytes:
     op = "block_sparse_attention_tiled" if tiled else "block_sparse_attention"
     name = "bsat" if tiled else "bsa"
     directive = f'module {{\n  "tessera_rocm.{op}"() {{name = "{name}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-block-sparse-attn-kernel", directive, _rocm_block_sparse_attn_hsaco_cache, (chip, bool(tiled))
+    return _build_rocm_family_hsaco(
+        "sparse_block_attention", directive, _rocm_block_sparse_attn_hsaco_cache, (chip, bool(tiled))
     )
 
 
@@ -23897,8 +23868,8 @@ def _rocm_block_sparse_topk_hsaco(*, cooperative: bool = True) -> bytes:
         f'{{name = "btopk", strategy = "{strategy}"}} : () -> ()\n'
         "}\n"
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-block-sparse-topk-kernel",
+    return _build_rocm_family_hsaco(
+        "sparse_block_topk",
         directive,
         _rocm_block_sparse_topk_hsaco_cache,
         (chip, bool(cooperative)),
@@ -24355,7 +24326,7 @@ def _rocm_spmm_csr(indptr: Any, indices: Any, values: Any, B: Any, m: int, n: in
     """C[m,n] = A_csr @ B[K,n] on the gfx1151 row-wise SpMM kernel. f32."""
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.spmm"() {name = "sp"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco("generate-rocm-spmm-kernel", directive, _rocm_spmm_hsaco_cache, (chip,))
+    hsaco = _build_rocm_family_hsaco("sparse_spmm", directive, _rocm_spmm_hsaco_cache, (chip,))
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
@@ -24390,7 +24361,7 @@ def _rocm_sddmm(A: Any, B: Any, mask: Any, np: Any) -> Any:
     """OUT[M,N] = (A[M,K] @ B[K,N]) ⊙ mask on the gfx1151 sampled kernel. f32."""
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.sddmm"() {name = "sd"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco("generate-rocm-sddmm-kernel", directive, _rocm_sddmm_hsaco_cache, (chip,))
+    hsaco = _build_rocm_family_hsaco("sparse_sddmm", directive, _rocm_sddmm_hsaco_cache, (chip,))
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
@@ -24508,8 +24479,8 @@ def _rocm_selective_ssm(x: Any, A: Any, B: Any, C: Any, delta: Any, gate: Any, s
     chip = _rocm_chip()
     dattr = "" if dtag == "f32" else f', dtype = "{dtag}"'
     directive = f'module {{\n  "tessera_rocm.selective_ssm"() {{name = "ss"{dattr}}} : () -> ()\n}}\n'
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-selective-ssm-kernel", directive, _rocm_ssm_hsaco_cache, (chip, dtag)
+    hsaco = _build_rocm_family_hsaco(
+        "sequence_selective_ssm", directive, _rocm_ssm_hsaco_cache, (chip, dtag)
     )
     hip = _load_hip_for_launch()
     if hip is None:
@@ -24563,8 +24534,8 @@ def _rocm_selective_ssm_bwd(x, A, B, C, delta, dout, gate, state, np):
     )
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.selective_ssm_bwd"() {name = "ssb"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-selective-ssm-bwd-kernel", directive, _rocm_ssm_bwd_hsaco_cache, (chip,)
+    hsaco = _build_rocm_family_hsaco(
+        "sequence_selective_ssm_backward", directive, _rocm_ssm_bwd_hsaco_cache, (chip,)
     )
     hip = _load_hip_for_launch()
     if hip is None:
@@ -24722,8 +24693,8 @@ def _rocm_grouped_gemm_native(x: Any, experts: Any, group_sizes: Any, np: Any, *
     directive = (
         f'module {{\n  "tessera_rocm.grouped_gemm"() {{name = "grouped_gemm", tn = {tile_n} : i64}} : () -> ()\n}}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-moe-kernel", directive, _rocm_grouped_gemm_hsaco_cache, (chip, tile_n)
+    hsaco = _build_rocm_family_hsaco(
+        "moe_dispatch", directive, _rocm_grouped_gemm_hsaco_cache, (chip, tile_n)
     )
     hip = _load_hip_for_launch()
     if hip is None or hip.hipInit(0) != 0:
@@ -24757,7 +24728,7 @@ def _rocm_moe(x: Any, experts: Any, route: Any, scores: Any, np: Any) -> Any:
     f32."""
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.moe"() {name = "mo"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco("generate-rocm-moe-kernel", directive, _rocm_moe_hsaco_cache, (chip,))
+    hsaco = _build_rocm_family_hsaco("moe_dispatch", directive, _rocm_moe_hsaco_cache, (chip,))
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
@@ -24835,8 +24806,8 @@ def _rocm_optimizer_kernel(
     chip = _rocm_chip()
     kstr = _OPTIMIZER_KIND_STR[kind]
     directive = f'module {{\n  "tessera_rocm.optimizer"() {{name = "op", kind = "{kstr}"}} : () -> ()\n}}\n'
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-optimizer-kernel", directive, _rocm_opt_hsaco_cache, (chip, kstr)
+    hsaco = _build_rocm_family_hsaco(
+        "optimizer", directive, _rocm_opt_hsaco_cache, (chip, kstr)
     )
     hip = _load_hip_for_launch()
     if hip is None:
@@ -24992,8 +24963,8 @@ def _rocm_adafactor_matrix(
         'module {\n  "tessera_rocm.optimizer"() '
         '{name = "adafactor", kind = "adafactor"} : () -> ()\n}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-optimizer-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "optimizer",
         directive,
         _rocm_adafactor_hsaco_cache,
         (chip,),
@@ -25146,8 +25117,8 @@ def _rocm_adafactor_full(
         'module {\n  "tessera_rocm.optimizer"() '
         '{name = "adafactor", kind = "adafactor"} : () -> ()\n}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-optimizer-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "optimizer",
         directive,
         _rocm_adafactor_hsaco_cache,
         (chip,),
@@ -25302,8 +25273,8 @@ def _rocm_adafactor_factored_backward(
         '{name = "adafactor", kind = "adafactor", backward = true} '
         ': () -> ()\n}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-optimizer-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "optimizer",
         directive,
         _rocm_adafactor_hsaco_cache,
         (chip,),
@@ -25539,8 +25510,8 @@ def _rocm_adafactor_full_backward(
         '{name = "adafactor", kind = "adafactor", backward = true} '
         ': () -> ()\n}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-optimizer-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "optimizer",
         directive,
         _rocm_adafactor_hsaco_cache,
         (chip,),
@@ -25702,8 +25673,8 @@ def _execute_rocm_compiled_sgd_backward(artifact: RuntimeArtifact, args: Any) ->
     directive = (
         'module {\n  "tessera_rocm.optimizer"() {name = "sgd_bwd", kind = "sgd", backward = true} : () -> ()\n}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-optimizer-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "optimizer",
         directive,
         _rocm_sgd_bwd_hsaco_cache,
         (chip,),
@@ -25786,8 +25757,8 @@ def _execute_rocm_compiled_momentum_backward(artifact: RuntimeArtifact, args: An
         'module {\n  "tessera_rocm.optimizer"() {name = "momentum_bwd", '
         f'kind = "{kind}", backward = true}} : () -> ()\n}}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-optimizer-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "optimizer",
         directive,
         _rocm_momentum_bwd_hsaco_cache,
         (chip, kind),
@@ -25881,8 +25852,8 @@ def _execute_rocm_compiled_adam_backward(
         'module {\n  "tessera_rocm.optimizer"() {name = "adam_bwd", '
         f'kind = "{kind}", backward = true}} : () -> ()\n}}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-optimizer-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "optimizer",
         directive,
         _rocm_adam_bwd_hsaco_cache,
         (chip, kind),
@@ -26014,8 +25985,8 @@ def _execute_rocm_compiled_lion_backward(
         'module {\n  "tessera_rocm.optimizer"() {name = "lion_bwd", '
         'kind = "lion", backward = true} : () -> ()\n}\n'
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-optimizer-kernel",
+    hsaco = _build_rocm_family_hsaco(
+        "optimizer",
         directive,
         _rocm_lion_bwd_hsaco_cache,
         (chip,),
@@ -26126,7 +26097,7 @@ def _rocm_cholesky(A: Any, np: Any) -> Any:
     """L[..,n,n] lower s.t. A=L·Lᵀ on the gfx1151 batched Cholesky kernel. f32."""
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.cholesky"() {name = "ch"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco("generate-rocm-cholesky-kernel", directive, _rocm_chol_hsaco_cache, (chip,))
+    hsaco = _build_rocm_family_hsaco("solver_cholesky", directive, _rocm_chol_hsaco_cache, (chip,))
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
@@ -26154,8 +26125,8 @@ def _rocm_tri_solve_raw(A: Any, B: Any, lower: bool, np: Any) -> Any:
         'module {\n  "tessera_rocm.tri_solve"() {name = "ts", '
         f"lower = {'true' if lower else 'false'}}} : () -> ()\n}}\n"
     )
-    hsaco = _build_rocm_elementwise_hsaco(
-        "generate-rocm-tri-solve-kernel", directive, _rocm_tri_hsaco_cache, (chip, bool(lower))
+    hsaco = _build_rocm_family_hsaco(
+        "solver_triangular_solve", directive, _rocm_tri_hsaco_cache, (chip, bool(lower))
     )
     hip = _load_hip_for_launch()
     if hip is None:
@@ -26188,7 +26159,7 @@ def _rocm_lu(A: Any, np: Any) -> tuple:
     """getrf — A[..,n,n] → (packed LU[..,n,n], pivots[..,n] int32) on gfx1151."""
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.lu"() {name = "lu"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco("generate-rocm-lu-kernel", directive, _rocm_lu_hsaco_cache, (chip,))
+    hsaco = _build_rocm_family_hsaco("solver_lu", directive, _rocm_lu_hsaco_cache, (chip,))
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
@@ -26216,7 +26187,7 @@ def _rocm_qr(A: Any, np: Any) -> tuple:
     """Householder QR — A[..,m,n] → reduced (Q[..,m,k], R[..,k,n]) on gfx1151."""
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.qr"() {name = "qr"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco("generate-rocm-qr-kernel", directive, _rocm_qr_hsaco_cache, (chip,))
+    hsaco = _build_rocm_family_hsaco("solver_qr", directive, _rocm_qr_hsaco_cache, (chip,))
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
@@ -26255,7 +26226,7 @@ def _rocm_svd_mn(A: Any, np: Any) -> tuple:
     Vh[..,n,n]) on the gfx1151 kernel. f32."""
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.svd"() {name = "sv"} : () -> ()\n}\n'
-    hsaco = _build_rocm_elementwise_hsaco("generate-rocm-svd-kernel", directive, _rocm_svd_hsaco_cache, (chip,))
+    hsaco = _build_rocm_family_hsaco("solver_svd", directive, _rocm_svd_hsaco_cache, (chip,))
     hip = _load_hip_for_launch()
     if hip is None:
         raise _RocmCompiledUnavailable("libamdhip64.so not loadable")
@@ -26335,8 +26306,8 @@ _rocm_alibi_hsaco_cache: dict[tuple[str, str], bytes] = {}
 def _build_compiled_alibi_hsaco(dtype: str = "f32") -> bytes:
     chip = _rocm_chip()
     directive = f'module {{\n  "tessera_rocm.alibi"() {{name = "ab", dtype = "{dtype}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-alibi-kernel", directive, _rocm_alibi_hsaco_cache, (chip, dtype)
+    return _build_rocm_family_hsaco(
+        "position_alibi", directive, _rocm_alibi_hsaco_cache, (chip, dtype)
     )
 
 
@@ -26451,7 +26422,7 @@ def _execute_rocm_compiled_alibi(artifact: RuntimeArtifact, args: Any) -> Any:
 def _build_compiled_rope_hsaco(dtype: str = "f32") -> bytes:
     chip = _rocm_chip()
     directive = f'module {{\n  "tessera_rocm.rope"() {{name = "r", dtype = "{dtype}"}} : () -> ()\n}}\n'
-    return _build_rocm_elementwise_hsaco("generate-rocm-rope-kernel", directive, _rocm_rope_hsaco_cache, (chip, dtype))
+    return _build_rocm_family_hsaco("position_rope", directive, _rocm_rope_hsaco_cache, (chip, dtype))
 
 
 def _execute_rocm_compiled_rope(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -26610,8 +26581,8 @@ _rocm_mla_absorb_decode_hsaco_cache: dict[tuple[str], bytes] = {}
 def _rocm_mla_absorb_decode_hsaco() -> bytes:
     chip = _rocm_chip()
     directive = 'module {\n  "tessera_rocm.mla_absorb_decode"() {name = "mla"} : () -> ()\n}\n'
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-mla-absorb-decode-kernel", directive, _rocm_mla_absorb_decode_hsaco_cache, (chip,)
+    return _build_rocm_family_hsaco(
+        "attention_mla_decode", directive, _rocm_mla_absorb_decode_hsaco_cache, (chip,)
     )
 
 
@@ -26958,7 +26929,7 @@ def _build_compiled_deltanet_hsaco(
         f'has_decay = {_b(has_decay)}, dtype = "{dtype}"}} : () -> ()\n}}\n'
     )
     key = (chip, d_qk, d_v, erase, modified, has_gate, has_beta, has_decay, dtype)
-    return _build_rocm_elementwise_hsaco("generate-rocm-deltanet-kernel", directive, _rocm_deltanet_hsaco_cache, key)
+    return _build_rocm_family_hsaco("sequence_deltanet", directive, _rocm_deltanet_hsaco_cache, key)
 
 
 def _build_compiled_deltanet_bwd_hsaco(
@@ -26990,8 +26961,8 @@ def _build_compiled_deltanet_bwd_hsaco(
         chip, d_qk, d_v, erase, modified, has_gate, has_beta, has_decay,
         chunk_size,
     )
-    return _build_rocm_elementwise_hsaco(
-        "generate-rocm-deltanet-kernel",
+    return _build_rocm_family_hsaco(
+        "sequence_deltanet",
         directive,
         _rocm_deltanet_bwd_hsaco_cache,
         key,
@@ -32143,6 +32114,8 @@ def _apple_gpu_dispatch_spectral(op_name: Any, operands: Any, kwargs: Any, np: A
         n = kw.get("n")
         return _g(x, "irfft", n=(int(n) if n is not None else None), axis=int(kw.get("axis", -1)))
     if bare == "dct":
+        if int(kw.get("type", 2)) != 2:
+            raise ValueError("Apple DCT currently supports only type=2")
         axis = int(kw.get("axis", -1))
         n = x.shape[axis]
         y = np.concatenate([x, np.flip(x, axis=axis)], axis=axis)

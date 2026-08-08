@@ -5,16 +5,18 @@
 //
 //   tessera_rocm.async_copy(%dst, %src, %count)  ->  a cooperative copy loop
 //       for i = tid; i < count; i += blockDim.x:  %dst[i] = %src[i]
-//   tessera_rocm.wait(%tok)                       ->  gpu.barrier
+//   tessera_rocm.wait(%tok)                       ->  rocdl.s.waitcnt +
+//                                                     gpu.barrier
 //
 // On RDNA there is no hardware global→LDS DMA (no GLOBAL_LOAD_LDS — confirmed
 // from the RDNA3.5 ISA archive), so a "copy" is a cooperative load-from-global /
 // store-to-LDS loop; the standard gpu.module → ROCDL lowering turns the
 // memref.load/store into real `global_load` / `ds_store`. This is the runnable
-// half of the Fork-A pipeline (the markers stay for the IR-contract path when
-// this pass is not run). `%dst`/`%src` are 1-D memrefs of the same element type;
-// `%count` is the element count. The token SSA edge is dropped here (the
-// lowered `gpu.barrier` provides the ordering the token modeled).
+// half of the executable pipeline. Target-IR inspection retains the typed ops
+// when this pass is not run. `%dst`/`%src` are 1-D memrefs of the same element type;
+// `%count` is the element count. A barrier does not retire memory counters on
+// RDNA 3.5, so the lowering emits the counter-selective hardware wait first;
+// the barrier then supplies cross-wave workgroup visibility.
 //===----------------------------------------------------------------------===//
 
 #include "TesseraROCM/Passes.h"
@@ -22,6 +24,7 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
@@ -31,6 +34,30 @@
 using namespace mlir;
 
 namespace {
+
+// RDNA 3.5 S_WAITCNT SIMM16 (ISA archive, instructions.json): EXPCNT [2:0],
+// LGKMCNT [9:4], VMCNT [15:10]. An all-ones field means "do not wait".
+static FailureOr<uint32_t> encodeGfx1151Waitcnt(Operation *op) {
+  StringRef counter;
+  if (auto attr = op->getAttrOfType<StringAttr>("counter"))
+    counter = attr.getValue();
+  int64_t threshold = 0;
+  if (auto attr = op->getAttrOfType<IntegerAttr>("threshold"))
+    threshold = attr.getInt();
+  if (threshold < 0 || threshold > 63) {
+    op->emitError("lower-rocm-async-copy: waitcnt threshold must be in [0, 63]");
+    return failure();
+  }
+  if (counter.empty())
+    return 0u; // drain every memory counter before the workgroup barrier.
+  if (counter == "vmcnt")
+    return 0x3f7u | (static_cast<uint32_t>(threshold) << 10);
+  if (counter == "lgkmcnt")
+    return 0xfc07u | (static_cast<uint32_t>(threshold) << 4);
+  op->emitError("lower-rocm-async-copy: unknown wait counter '")
+      << counter << "' (expected vmcnt, lgkmcnt, or none)";
+  return failure();
+}
 
 // Materialize the affine portion of #tile.layout.  Before this consumer the
 // attribute survived lowering as a marker while the executable loop always
@@ -91,12 +118,12 @@ struct LowerROCMAsyncCopyToLoopPass
   StringRef getArgument() const final { return "lower-rocm-async-copy"; }
   StringRef getDescription() const final {
     return "Lower tessera_rocm.async_copy to a runnable cooperative global→LDS "
-           "copy loop (and tessera_rocm.wait to gpu.barrier) — the executable "
-           "alternative to the artifact-only contract markers.";
+           "copy loop and tessera_rocm.wait to a targeted hardware wait plus "
+           "workgroup barrier for the strict executable path.";
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, arith::ArithDialect,
-                    memref::MemRefDialect>();
+                    memref::MemRefDialect, ROCDL::ROCDLDialect>();
   }
 
   void runOnOperation() override {
@@ -110,10 +137,17 @@ struct LowerROCMAsyncCopyToLoopPass
         waits.push_back(op);
     });
 
-    // Waits first: each becomes a gpu.barrier and is erased — which releases the
-    // token uses, so the async_copy results below are use-free and erasable.
+    // Waits first: materialize a real ISA wait before the workgroup barrier.
+    // RDNA's barrier explicitly does not wait for memory counters, so omitting
+    // S_WAITCNT here can expose partially staged LDS to another wave.
     for (Operation *op : waits) {
       OpBuilder b(op);
+      FailureOr<uint32_t> bitfield = encodeGfx1151Waitcnt(op);
+      if (failed(bitfield)) {
+        signalPassFailure();
+        return;
+      }
+      b.create<ROCDL::SWaitcntOp>(op->getLoc(), *bitfield);
       b.create<gpu::BarrierOp>(op->getLoc());
       op->erase();
     }
@@ -154,12 +188,16 @@ struct LowerROCMAsyncCopyToLoopPass
         }
         b.create<memref::StoreOp>(loc, v, dst, ValueRange{*physical});
       }
-      // The token result modeled completion ordering; the gpu.barrier (from the
-      // consuming wait, lowered above) provides it. Any remaining token use
-      // (e.g. an mma in a fused kernel — the Fork-A T3c case) is dropped so the
-      // op erases cleanly; the barrier still serializes the copy before its use.
-      for (Value r : op->getResults())
-        r.dropAllUses();
+      // The token result modeled completion ordering. Its wait was erased above
+      // only after materializing S_WAITCNT + barrier. Any other live use means
+      // this pass cannot prove where completion is consumed; never sever that
+      // dependency to make an executable artifact appear legal.
+      for (Value r : op->getResults()) {
+        if (!r.use_empty()) {
+          op->emitError("lower-rocm-async-copy: token has a non-wait consumer");
+          return signalPassFailure();
+        }
+      }
       op->erase();
     }
   }

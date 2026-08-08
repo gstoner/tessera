@@ -39,10 +39,12 @@ sddmm,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,comple
 segment_reduce,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 spmm_coo,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 spmm_csr,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+dct,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 fft,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 ifft,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 irfft,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 istft,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 rfft,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+spectral_conv,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 spectral_filter,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 stft,Spectral Operators,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.

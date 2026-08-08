@@ -13,7 +13,6 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -23,18 +22,12 @@ from tessera.compiler.rocm_target import (
     fp8_semantics,
     rocm_arch_string,
 )
-
-_REPO = Path(__file__).resolve().parents[2]
-_CANDIDATES = [
-    _REPO / "build-rocm/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt",
-    _REPO / "build/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt",
-]
+from tests._support.rocm_build import rocm_opt_path
 
 
 def _trop() -> str:
-    for c in _CANDIDATES:
-        if c.exists():
-            return str(c)
+    if selected := rocm_opt_path():
+        return str(selected)
     found = shutil.which("tessera-rocm-opt")
     if found:
         return found

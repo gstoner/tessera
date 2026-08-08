@@ -433,6 +433,8 @@ struct FFTSchedule {
   StringRef radixPolicy;
   StringRef strategy;
   StringRef algorithm;
+  StringRef realTransformPolicy;
+  StringRef hermitianLayout;
   StringRef kernelFamily;
   StringRef workspacePolicy;
   StringRef residency;
@@ -442,6 +444,7 @@ struct FFTSchedule {
   SmallVector<int64_t> radixSequence;
   int64_t axis = -1;
   int64_t length = 0;
+  int64_t physicalLength = 0;
   int64_t batch = 0;
   bool inverse = false;
   double scale = 1.0;
@@ -513,7 +516,7 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
   schedule.twiddlePolicy =
       rocm ? "device_sincos_per_butterfly" : "thread_local_cached_f32";
   schedule.kernelFamily =
-      rocm ? "gfx1151_stockham_bluestein_v3" : "zen5_avx512_fft_v3";
+      rocm ? "gfx1151_stockham_bluestein_v5" : "zen5_avx512_fft_v4";
   schedule.workgroupSize = rocm ? 256 : 1;
   schedule.inputShape.assign(input.getShape().begin(), input.getShape().end());
   schedule.outputShape.assign(output.getShape().begin(), output.getShape().end());
@@ -573,41 +576,63 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
   if (input.getRank() == 1) schedule.batch = 1;
   schedule.scale = schedule.inverse ? 1.0 / schedule.length : 1.0;
 
+  const bool realMode = schedule.mode == "r2c" || schedule.mode == "c2r";
+  const int64_t candidatePhysicalLength =
+      realMode && schedule.length % 2 == 0 ? schedule.length / 2
+                                           : schedule.length;
+  auto candidateStages = mixedRadixSequence(candidatePhysicalLength);
+  const bool packedReal =
+      realMode && schedule.length % 2 == 0 &&
+      (rocm || isPowerOfTwo(candidatePhysicalLength) ||
+       (candidateStages &&
+        preferX86MixedRadix(candidatePhysicalLength, *candidateStages)));
+  schedule.physicalLength =
+      packedReal ? candidatePhysicalLength : schedule.length;
+  schedule.realTransformPolicy =
+      packedReal ? "packed_even_n2_hermitian_v1"
+                 : realMode ? "full_complex_hermitian_fallback"
+                            : "not_applicable";
+  schedule.hermitianLayout =
+      realMode ? "half_spectrum_nyquist_explicit" : "full_complex";
+
   if (rocm) {
-    auto stages = mixedRadixSequence(schedule.length);
+    auto stages = mixedRadixSequence(schedule.physicalLength);
     if (stages) {
       schedule.strategy = "mixed_radix";
       schedule.radixSequence = *stages;
-      schedule.workspaceElems = schedule.length;
+      schedule.workspaceElems = schedule.physicalLength;
       schedule.workspacePolicy = "persistent_plan_n";
     } else {
       schedule.strategy = "bluestein";
-      schedule.bluesteinM = nextPowerOfTwo(2 * schedule.length - 1);
+      schedule.bluesteinM = nextPowerOfTwo(2 * schedule.physicalLength - 1);
       schedule.workspaceElems = 4 * schedule.bluesteinM;
       schedule.workspacePolicy = "persistent_plan_4m";
       schedule.twiddlePolicy = "persistent_device_chirp_fft";
     }
+    if (schedule.strategy != "bluestein" && schedule.physicalLength <= 1024 &&
+        isPowerOfTwo(schedule.physicalLength))
+      schedule.residency = "persistent_device_plan_fused_lds_batch";
   } else {
-    auto stages = mixedRadixSequence(schedule.length);
-    if (stages && preferX86MixedRadix(schedule.length, *stages)) {
+    auto stages = mixedRadixSequence(schedule.physicalLength);
+    if (stages && preferX86MixedRadix(schedule.physicalLength, *stages)) {
       schedule.radixPolicy = "mixed_radix";
       schedule.strategy = "mixed_radix";
       schedule.algorithm = "stockham_autosort";
       schedule.radixSequence = *stages;
-      schedule.workspaceElems = 2 * schedule.length;
+      schedule.workspaceElems = 2 * schedule.physicalLength;
       schedule.workspacePolicy = "thread_local_2n";
       schedule.residency = "host_thread_local_ping_pong";
-    } else if (isPowerOfTwo(schedule.length)) {
+    } else if (isPowerOfTwo(schedule.physicalLength)) {
       schedule.strategy = "radix2";
-      for (int64_t rest = schedule.length; rest > 1; rest /= 2)
+      for (int64_t rest = schedule.physicalLength; rest > 1; rest /= 2)
         schedule.radixSequence.push_back(2);
       schedule.workspacePolicy = "inplace_no_scratch";
-    } else if (schedule.length <= 8) {
+    } else if (schedule.physicalLength <= 8) {
       schedule.strategy = "dft";
       schedule.workspacePolicy = "inplace_no_scratch";
     } else {
       schedule.strategy = "bluestein";
-      schedule.bluesteinM = nextPowerOfTwo(2 * schedule.length - 1);
+      schedule.bluesteinM = nextPowerOfTwo(2 * schedule.physicalLength - 1);
       schedule.workspaceElems = schedule.bluesteinM;
       schedule.workspacePolicy = "host_temporary_m";
     }
@@ -631,7 +656,10 @@ static std::string fftScheduleDigest(const FFTSchedule &schedule) {
        shapeText(schedule.inputShape) + ";output=" +
        shapeText(schedule.outputShape) + ";axis=" + Twine(schedule.axis) +
        ";length=" + Twine(schedule.length) + ";batch=" +
-       Twine(schedule.batch) + ";inverse=" +
+       Twine(schedule.batch) + ";physical_length=" +
+       Twine(schedule.physicalLength) + ";real_transform_policy=" +
+       schedule.realTransformPolicy + ";hermitian_layout=" +
+       schedule.hermitianLayout + ";inverse=" +
        Twine(schedule.inverse ? 1 : 0) + ";normalization=backward;scale=" +
        std::to_string(static_cast<float>(schedule.scale)) +
        ";storage=complex64_interleaved_f32;accum=f32;radix_policy=" +
@@ -664,10 +692,10 @@ static FailureOr<std::string> spectralProgramDigest(Operation *op) {
                          "shape_policy", "storage", "abi_storage",
                          "storage_conversion", "axis_packing", "normalization",
                          "complex_layout", "accumulation",
-                         "workspace_policy", "mutation_lineage",
+                         "workspace_policy", "fusion_topology", "mutation_lineage",
                          "native_entry", "child_fft_digests"})
     if (!stringAttr(name)) return failure();
-  for (StringRef name : {"axis", "window_length", "hop", "frames",
+  for (StringRef name : {"axis", "dct_type", "window_length", "hop", "frames",
                          "workspace_bytes", "workgroup_size"})
     if (!intAttr(name)) return failure();
   if (!output || !padding || !crop) return failure();
@@ -680,13 +708,14 @@ static FailureOr<std::string> spectralProgramDigest(Operation *op) {
     return result;
   };
   std::string contract =
-      (Twine("schema=tessera.scheduled_spectral.v3;op=") +
+      (Twine("schema=tessera.scheduled_spectral.v5;op=") +
        stringAttr("kind").getValue() + ";target=" +
        stringAttr("target").getValue() + ";arch=" +
        stringAttr("arch").getValue() + ";inputs=" +
        stringAttr("input_shapes").getValue() + ";output=" +
        arrayText(output.asArrayRef(), "x") + ";axis=" +
-       Twine(intAttr("axis").getInt()) + ";shape_policy=" +
+       Twine(intAttr("axis").getInt()) + ";dct_type=" +
+       Twine(intAttr("dct_type").getInt()) + ";shape_policy=" +
        stringAttr("shape_policy").getValue() + ";storage=" +
        stringAttr("storage").getValue() + ";abi_storage=" +
        stringAttr("abi_storage").getValue() + ";storage_conversion=" +
@@ -704,7 +733,8 @@ static FailureOr<std::string> spectralProgramDigest(Operation *op) {
        stringAttr("complex_layout").getValue() + ";accumulation=" +
        stringAttr("accumulation").getValue() + ";workspace_bytes=" +
        Twine(intAttr("workspace_bytes").getInt()) + ";workspace_policy=" +
-       stringAttr("workspace_policy").getValue() + ";mutation_lineage=" +
+       stringAttr("workspace_policy").getValue() + ";fusion_topology=" +
+       stringAttr("fusion_topology").getValue() + ";mutation_lineage=" +
        stringAttr("mutation_lineage").getValue() + ";native_entry=" +
        stringAttr("native_entry").getValue() + ";child_fft_digests=" +
        stringAttr("child_fft_digests").getValue() + ";workgroup=" +
@@ -1272,7 +1302,13 @@ struct GraphToSchedulePass
       state.addAttribute("mode", builder.getStringAttr(selected->mode));
       state.addAttribute("axis", builder.getI64IntegerAttr(selected->axis));
       state.addAttribute("length", builder.getI64IntegerAttr(selected->length));
+      state.addAttribute("physical_length",
+                         builder.getI64IntegerAttr(selected->physicalLength));
       state.addAttribute("batch", builder.getI64IntegerAttr(selected->batch));
+      state.addAttribute("real_transform_policy",
+                         builder.getStringAttr(selected->realTransformPolicy));
+      state.addAttribute("hermitian_layout",
+                         builder.getStringAttr(selected->hermitianLayout));
       state.addAttribute("inverse", builder.getBoolAttr(selected->inverse));
       state.addAttribute("normalization", builder.getStringAttr("backward"));
       state.addAttribute("scale", builder.getF32FloatAttr(selected->scale));
@@ -1894,10 +1930,10 @@ struct ScheduleToTilePass
             "shape_bounds", "template_digest", "shape_policy",
             "storage", "abi_storage", "storage_conversion", "axis_packing",
             "normalization",
-            "complex_layout", "accumulation", "workspace_policy",
+            "complex_layout", "accumulation", "workspace_policy", "fusion_topology",
             "mutation_lineage", "native_entry", "child_fft_digests"})
         kernelState.addAttribute(name, scheduled->getAttr(name));
-      for (StringRef name : {"output_shape", "axis", "padding", "crop",
+      for (StringRef name : {"output_shape", "axis", "dct_type", "padding", "crop",
                              "window_length", "hop", "frames",
                              "workspace_bytes"})
         kernelState.addAttribute(name, scheduled->getAttr(name));
@@ -1952,7 +1988,11 @@ struct ScheduleToTilePass
           stringAttr("mode") != selected->mode ||
           intAttr("axis") != selected->axis ||
           intAttr("length") != selected->length ||
+          intAttr("physical_length") != selected->physicalLength ||
           intAttr("batch") != selected->batch ||
+          stringAttr("real_transform_policy") !=
+              selected->realTransformPolicy ||
+          stringAttr("hermitian_layout") != selected->hermitianLayout ||
           boolAttr("inverse") != selected->inverse ||
           stringAttr("normalization") != "backward" ||
           stringAttr("storage") != "complex64_interleaved_f32" ||
@@ -2024,8 +2064,15 @@ struct ScheduleToTilePass
       kernelState.addAttribute("axis", builder.getI64IntegerAttr(selected->axis));
       kernelState.addAttribute("length",
                                builder.getI64IntegerAttr(selected->length));
+      kernelState.addAttribute("physical_length",
+                               builder.getI64IntegerAttr(selected->physicalLength));
       kernelState.addAttribute("batch",
                                builder.getI64IntegerAttr(selected->batch));
+      kernelState.addAttribute(
+          "real_transform_policy",
+          builder.getStringAttr(selected->realTransformPolicy));
+      kernelState.addAttribute("hermitian_layout",
+                               builder.getStringAttr(selected->hermitianLayout));
       kernelState.addAttribute("inverse", builder.getBoolAttr(selected->inverse));
       kernelState.addAttribute("normalization",
                                builder.getStringAttr("backward"));

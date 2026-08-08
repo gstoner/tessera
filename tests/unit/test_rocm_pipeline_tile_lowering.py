@@ -24,7 +24,6 @@ Two gates, because they fail for different reasons:
 
 from __future__ import annotations
 
-import inspect
 import subprocess
 from pathlib import Path
 
@@ -32,14 +31,22 @@ import numpy as np
 import pytest
 
 from tessera import runtime as rt
+from tessera.compiler.rocm_pipeline import (
+    ROCMExecutablePipeline,
+    ROCMInputLevel,
+    ROCMOutputLevel,
+)
+from tests._support.compiler_tool import tessera_opt_path
+
+REPO = Path(__file__).resolve().parents[2]
 
 
-#: The pass literal as it appears in the SOURCE, where the f-string escapes its
-#: braces. Matching the *rendered* form (`{arch=`) is what the first version of
-#: this gate did, and it failed against its own target.
-_PASS_LITERAL = "lower-tile-to-rocm{{arch={chip}}}"
-_REPO = Path(__file__).resolve().parents[2]
-_TESSERA_OPT = _REPO / "build" / "tools" / "tessera-opt" / "tessera-opt"
+def test_runtime_has_no_generic_rocm_pass_string_escape_hatch() -> None:
+    source = (REPO / "python/tessera/runtime.py").read_text()
+    assert "def _build_rocm_elementwise_hsaco" not in source
+    assert '"gpu-module-to-binary)"' not in source
+
+
 _GEMM_DIRECTIVE = (
     'module { "tessera_rocm.wmma_gemm"() {name = "gemm", '
     'm = 16 : i64, n = 16 : i64, k = 16 : i64, mt = 2 : i64, '
@@ -48,10 +55,11 @@ _GEMM_DIRECTIVE = (
 
 
 def _run_opt(pipeline: str, source: str = _GEMM_DIRECTIVE):
-    if not _TESSERA_OPT.is_file():
+    tool = tessera_opt_path()
+    if tool is None:
         pytest.skip("tessera-opt not built")
     return subprocess.run(
-        [str(_TESSERA_OPT), "-", f"--pass-pipeline={pipeline}"],
+        [str(tool), "-", f"--pass-pipeline={pipeline}"],
         input=source,
         capture_output=True,
         text=True,
@@ -59,36 +67,31 @@ def _run_opt(pipeline: str, source: str = _GEMM_DIRECTIVE):
 
 
 def test_every_wmma_gemm_pipeline_can_lower_tile_mma():
-    """Structural: the tile lowering follows the generator in every ROCm lane.
-
-    Both the plain and the canonical pipeline were missing it. Counting rather
-    than checking presence, so adding a third lane without the pass fails here
-    instead of silently shipping a lane where `tile.mma` reaches LLVM
-    translation.
-    """
-    src = inspect.getsource(rt)
-    generators = src.count('"generate-wmma-gemm-kernel,"') + \
-        src.count('f"generate-wmma-gemm-kernel{{canonical-staging={staging}}},"')
-    lowerings = src.count(_PASS_LITERAL)
-    assert lowerings == generators, (
-        f"{generators} wmma-gemm pipeline(s) but {lowerings} tile lowering(s); "
-        "a lane without it emits tile.mma that dies at LLVM translation"
+    """The registered family plugin owns producer-to-consumer ordering."""
+    config = ROCMExecutablePipeline(
+        family="matmul",
+        input_level=ROCMInputLevel.TILE,
+        output_level=ROCMOutputLevel.TARGET,
     )
-    assert lowerings >= 2, "expected the plain and canonical lanes"
+    pipeline = config.pass_pipeline()
+    assert "tessera-rocm-executable{" in pipeline
+    assert "family=matmul" in pipeline
+    assert "input=tile" in pipeline
+    assert "generate-wmma-gemm-kernel" not in pipeline
+    assert "lower-tile-to-rocm" not in pipeline
+
+    lowered = _run_opt(pipeline)
+    assert lowered.returncode == 0, lowered.stderr
+    assert "tile.mma" not in lowered.stdout
+    assert "tessera_rocm.wmma" in lowered.stdout
 
 
 def test_the_tile_lowering_always_states_its_arch():
-    """`lower-tile-to-rocm` defaults to a CDNA part.
-
-    Without `arch=`, it emits `llvm.amdgcn.mfma.contract` — an MFMA intrinsic
-    that is wrong for RDNA 3.5 (gfx1151 has WMMA, no MFMA) and does not resolve,
-    so the build fails at translation with an unreferenced symbol. The pipeline
-    string would still be syntactically valid, which is why this is a gate and
-    not a comment.
-    """
-    src = inspect.getsource(rt)
-    for bad in ('"lower-tile-to-rocm,"', '"lower-tile-to-rocm)"'):
-        assert bad not in src, f"tile lowering used without arch=: {bad}"
+    """The typed configuration carries exact architecture and fails closed."""
+    config = ROCMExecutablePipeline(family="matmul")
+    assert "arch=gfx1151" in config.pass_pipeline()
+    with pytest.raises(ValueError, match="fail-closed"):
+        ROCMExecutablePipeline(family="matmul", arch="gfx1200")
 
 
 def test_gfx1151_typed_contract_materializes_the_direct_physical_body():
@@ -195,16 +198,16 @@ def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
 
     monkeypatch.setattr(rt, "_execute_rocm_wmma_artifact", _no_fallback)
 
-    def launch(inject, a, b):
+    def launch(replacement, a, b):
         rt._rocm_compiled_hsaco_cache.clear()
         hits = [0]
 
         def patched(cmd, *args, **kwargs):
-            if isinstance(cmd, list) and inject:
+            if isinstance(cmd, list) and replacement:
                 out = []
                 for c in cmd:
-                    if isinstance(c, str) and "generate-wmma-gemm-kernel," in c:
-                        c = c.replace("generate-wmma-gemm-kernel,", inject)
+                    if isinstance(c, str) and replacement[0] in c:
+                        c = c.replace(replacement[0], replacement[1])
                         hits[0] += 1
                     out.append(c)
                 cmd = out
@@ -224,8 +227,7 @@ def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
             monkeypatch.setattr(subprocess, "run", real_run)
 
     zeros = np.zeros((64, 64), dtype=np.float16)
-    control, _ = launch("generate-wmma-gemm-kernel{not-a-real-option=true},",
-                        zeros, zeros)
+    control, _ = launch(("family=matmul", "family=not_a_family"), zeros, zeros)
     assert control.get("ok") is False, (
         "the harness cannot fail, so a match below would prove nothing"
     )
@@ -238,9 +240,7 @@ def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
         a = (rng.standard_normal((m, k)) * 0.4).astype(np.float16)
         b = (rng.standard_normal((k, n)) * 0.4).astype(np.float16)
         base, _ = launch(None, a, b)
-        tiled, hits = launch(
-            "generate-wmma-gemm-kernel{via-tile=true},", a, b
-        )
+        tiled, hits = launch(("input=directive", "input=tile"), a, b)
 
         assert hits == 1, "via-tile injection did not reach the pipeline"
         assert base.get("ok") is True, base.get("reason")

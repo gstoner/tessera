@@ -176,6 +176,17 @@ add_subdirectory(tools/tessera-translate)
 # Phase 0 production-lane CPU JIT (experimental). docs/spec/PRODUCTION_COMPILER_PLAN.md
 add_subdirectory(tools/tessera-jit)
 
+# A HIP-enabled production compiler emits typed spectral/TSOL packages that
+# are consumed through this exact-architecture image.  Keep the compiler and
+# its required runtime image in one build closure so a selected build cannot
+# expose tessera-opt while silently omitting the package.
+if(TARGET TesseraSpectralHIP)
+    add_dependencies(tessera-opt TesseraSpectralHIP)
+    if(TARGET tessera-rocm-opt)
+        add_dependencies(tessera-rocm-opt TesseraSpectralHIP)
+    endif()
+endif()
+
 set(TESSERA_COMPILER_FOUNDATION_DEPS
     TesseraIRTableGen
     TesseraAttnTableGen
@@ -195,6 +206,9 @@ if(TARGET tessera_solvers_passes)
 endif()
 if(TARGET tessera_linalg_solver_passes)
     list(APPEND TESSERA_COMPILER_FOUNDATION_DEPS tessera_linalg_solver_passes)
+endif()
+if(TARGET TesseraSpectralHIP)
+    list(APPEND TESSERA_COMPILER_FOUNDATION_DEPS TesseraSpectralHIP)
 endif()
 
 add_custom_target(TesseraCompilerFoundation

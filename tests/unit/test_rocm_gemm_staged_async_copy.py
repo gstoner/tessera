@@ -22,9 +22,8 @@ from pathlib import Path
 import pytest
 
 np = pytest.importorskip("numpy")
+from tests._support.rocm_build import rocm_opt_path
 
-REPO = Path(__file__).resolve().parents[2]
-ROP = REPO / "build/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt"
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 
@@ -132,13 +131,14 @@ def _mr(p, n):
 
 
 def test_gemm_tile_staged_through_async_copy_matches_numpy():
-    if not ROP.is_file():
+    rocm_opt = rocm_opt_path()
+    if rocm_opt is None:
         pytest.skip("build tessera-rocm-opt")
     mlir_opt = _find_mlir_opt()
     if mlir_opt is None:
         pytest.skip("mlir-opt not found")
     lowered = subprocess.run(
-        [str(ROP), "-", "--lower-rocm-async-copy",
+        [str(rocm_opt), "-", "--lower-rocm-async-copy",
          "--lower-tessera-target-to-rocdl"],
         input=_kernel(), capture_output=True, text=True)
     if lowered.returncode != 0:

@@ -465,7 +465,9 @@ class TestH4RocmLitFixtures:
     def test_architecture_selection_distinguishes_wmma_and_mfma(self):
         body = (ROCM_FIXTURES / "wmma_rdna3_matmul.mlir").read_text()
         assert "gfx1100" in body
-        assert "llvm.amdgcn.wmma" in body
+        assert "WMMA: tessera_rocm.wmma" in body
+        assert "WMMA-NOT: tessera_rocm.mfma" in body
+        assert "executable ROCm matrix lowering requires typed hardware fragment vectors" in body
         cdna = (ROCM_FIXTURES / "tile_matmul_to_rocm.mlir").read_text()
         assert "tessera_rocm.mfma" in cdna
 

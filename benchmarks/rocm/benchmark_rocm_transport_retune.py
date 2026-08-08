@@ -147,8 +147,8 @@ def _combine_case(hip, rows, width, trials, iterations, rng):
     chip = rt._rocm_chip()
     directive = ('module {\n  "tessera_rocm.scatter"() '
                  '{name = "wsc", mode = "weighted_add"} : () -> ()\n}\n')
-    hsaco = rt._build_rocm_elementwise_hsaco(
-        "generate-rocm-scatter-kernel", directive,
+    hsaco = rt._build_rocm_family_hsaco(
+        "indexing_scatter", directive,
         rt._rocm_weighted_scatter_hsaco_cache, (chip,))
     newk = _Kernel(hip, hsaco, b"wsc", new_args, src.size)
     for _ in range(3):

@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 import tessera
 from tessera.compiler.graph_ir import _OpExtractor
@@ -162,7 +163,14 @@ def test_graph_ir_recognizes_new_operator_names():
     ir = spectral_kernel.ir_text()
     assert "tessera.fft" in ir
     assert "tessera.dct" in ir
+    assert "type = 2" in ir
     assert "tessera.spectral_conv" in ir
+
+
+@pytest.mark.parametrize("dct_type", [1, 3, 4])
+def test_reference_dct_rejects_unimplemented_types(dct_type):
+    with pytest.raises(ValueError, match="only type=2"):
+        tessera.ops.dct(np.arange(8, dtype=np.float32), type=dct_type)
 
 
 def test_graph_ir_recognizes_small_tsol_completion_slice():

@@ -33,13 +33,13 @@ def test_compiled_packed_weight_matches_dequant_gemm_physical_abi(monkeypatch):
 def test_packed_consumer_builder_emits_backend_owned_directives(monkeypatch):
     observed = []
 
-    def fake_build(pass_name, directive, cache, key):
-        observed.append((pass_name, directive, key))
+    def fake_build(family, directive, cache, key):
+        observed.append((family, directive, key))
         return b"\x7fELF"
 
     monkeypatch.setattr(
         "benchmarks.rocm.benchmark_rocm_packed_consumers."
-        "rt._build_rocm_elementwise_hsaco",
+        "rt._build_rocm_family_hsaco",
         fake_build,
     )
     monkeypatch.setattr(
@@ -53,5 +53,5 @@ def test_packed_consumer_builder_emits_backend_owned_directives(monkeypatch):
     assert {item[2][1] for item in observed} == {
         "relu", "sparse_gather", "cache_append"
     }
-    assert all(item[0] == "generate-rocm-int4-pack-kernel"
+    assert all(item[0] == "quant_int4_pack"
                for item in observed)

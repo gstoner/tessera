@@ -35,6 +35,10 @@ from tessera.compiler.pipeline_registry import (
     render_compilation_spine_csv,
     target_pipeline_lookup,
 )
+from tessera.compiler.rocm_pipeline import (
+    EXECUTABLE_PIPELINE_SCHEMA_VERSION,
+    FAMILY_PLUGINS,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -109,6 +113,15 @@ def test_verifier_passes_are_subset_of_passes() -> None:
             )
 
 
+def test_rocm_executable_family_plugins_are_cross_registry_total() -> None:
+    spec = pipeline_lookup("tessera-rocm-executable")
+    assert spec is not None
+    plugins = dict(spec.family_plugins)
+    assert set(plugins) == set(FAMILY_PLUGINS)
+    assert all(passes for passes in plugins.values())
+    assert EXECUTABLE_PIPELINE_SCHEMA_VERSION == "tessera.executable_pipeline.v1"
+
+
 def test_required_dialects_are_registered() -> None:
     """Cross-registry check: any required dialect must be in the
     Arch-4 dialect manifest, OR be a standard MLIR dialect we use
@@ -117,7 +130,7 @@ def test_required_dialects_are_registered() -> None:
     standard_mlir_dialects = {
         "func", "scf", "arith", "memref", "tensor", "linalg",
         "llvm", "math", "builtin", "vector", "affine", "bufferization",
-        "nvvm", "rocdl",
+        "nvvm", "rocdl", "gpu",
         # Tessera-side dialects not yet in REGISTERED_DIALECTS today —
         # add them to the manifest if we want full coverage.  For now,
         # accept the ones that exist as known C++ dialects.
@@ -392,8 +405,9 @@ def test_compilation_spine_inventory_is_machine_readable_and_truthful() -> None:
     assert all(
         row.level_c == "absent"
         for row in rows
-        if row.target not in {"apple_gpu", "apple_cpu"}
+        if row.target not in {"apple_gpu", "apple_cpu", "rocm_gfx1151"}
     )
+    assert next(row for row in rows if row.target == "rocm_gfx1151").level_c == "partial"
     assert target_pipeline_lookup("nvidia_sm80").declared_pipeline is None  # type: ignore[union-attr]
     assert next(row for row in rows if row.target == "nvidia_sm120").level_a == "native"
     assert next(row for row in rows if row.target == "rocm_gfx1151").level_a == "native"

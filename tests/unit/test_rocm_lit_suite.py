@@ -33,14 +33,9 @@ from pathlib import Path
 import pytest
 
 from _subprocess import run_checked
+from tests._support.rocm_build import rocm_lit_site_path
 
 _REPO = Path(__file__).resolve().parents[2]
-
-# Candidate build dirs that may hold the configured ROCm lit site config.
-_SITE_CANDIDATES = [
-    _REPO / "build-rocm/src/compiler/codegen/Tessera_ROCM_Backend/test/lit.site.cfg.py",
-    _REPO / "build/src/compiler/codegen/Tessera_ROCM_Backend/test/lit.site.cfg.py",
-]
 
 _OPT_TARGET = "tessera-rocm-opt"
 
@@ -62,10 +57,8 @@ def _lit() -> str | None:
 
 
 def _site_dir() -> Path | None:
-    for c in _SITE_CANDIDATES:
-        if c.exists():
-            return c.parent
-    return None
+    site = rocm_lit_site_path()
+    return site.parent if site is not None else None
 
 
 def _opt_binary(test_dir: Path) -> Path | None:

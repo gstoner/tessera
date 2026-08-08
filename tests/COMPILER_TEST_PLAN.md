@@ -134,6 +134,10 @@ contract promise it; otherwise the declared dtype tolerance is the gate.
 All project tests run in the host environment. CUDA and ROCm commands must
 first verify the intended device and toolchain are visible. A skip caused by
 missing hardware is an honest access result, not validation of the feature.
+Out-of-tree compiler validation selects one coherent CMake tree through
+`TESSERA_BUILD_DIR`; that selector fails closed when an expected artifact is
+absent. Explicit per-artifact variables remain authoritative for deliberate
+mixed-package tests, and their use must be visible in retained evidence.
 
 ## Project-Level Eval Matrix
 

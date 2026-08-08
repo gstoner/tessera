@@ -33,6 +33,7 @@
 
 #include <hip/hip_runtime.h>
 
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <new>
@@ -113,6 +114,44 @@ extern "C" __global__ void ts_fft_scale_amd(float2 *__restrict__ x, int N,
   x[t].y *= inv;
 }
 
+extern "C" __global__ void ts_rfft_post_amd(
+    const float2 *__restrict__ packed, float2 *__restrict__ spectrum, int M,
+    int N, int batch) {
+  int t = blockIdx.x * blockDim.x + threadIdx.x;
+  int total = batch * (M + 1);
+  if (t >= total) return;
+  int row = t / (M + 1), k = t % (M + 1);
+  const float2 *z = packed + size_t(row) * M;
+  int ai = k == M ? 0 : k;
+  int bi = (M - k) % M;
+  float2 a = z[ai], b = make_float2(z[bi].x, -z[bi].y);
+  float2 diff = make_float2(a.x - b.x, a.y - b.y);
+  float s, c;
+  __sincosf(-2.0f * float(M_PI) * float(k) / float(N), &s, &c);
+  float2 q = cmul(make_float2(c, s), diff);
+  spectrum[t] = make_float2(0.5f * (a.x + b.x + q.y),
+                            (k == 0 || k == M)
+                                ? 0.0f
+                                : 0.5f * (a.y + b.y - q.x));
+}
+
+extern "C" __global__ void ts_irfft_pre_amd(
+    const float2 *__restrict__ spectrum, float2 *__restrict__ packed, int M,
+    int N, int batch) {
+  int t = blockIdx.x * blockDim.x + threadIdx.x;
+  int total = batch * M;
+  if (t >= total) return;
+  int row = t / M, k = t % M;
+  const float2 *x = spectrum + size_t(row) * (M + 1);
+  float2 a = x[k], b = make_float2(x[M - k].x, -x[M - k].y);
+  float2 diff = make_float2(a.x - b.x, a.y - b.y);
+  float s, c;
+  __sincosf(2.0f * float(M_PI) * float(k) / float(N), &s, &c);
+  float2 q = cmul(make_float2(c, s), diff);
+  packed[t] = make_float2(0.5f * (a.x + b.x - q.y),
+                          0.5f * (a.y + b.y + q.x));
+}
+
 // One generic radix-r Stockham stage for the odd small primes (3..17).
 // Thread t owns one butterfly.  The r-point DFT is evaluated inline; at these
 // radices the O(r^2) inner loop is cheaper than the extra global traffic a
@@ -154,18 +193,20 @@ extern "C" __global__ void ts_stockham_rn_amd(const float2 *__restrict__ in,
   }
 }
 
-// Experimental single-workgroup envelope for small power-of-two transforms.
-// All stages ping-pong between two LDS slabs and touch global memory only at
-// entry/exit.  It is a separate symbol until same-device evidence promotes the
-// residency policy into the content-addressed FFT artifact.
+// Small power-of-two residency selected by the content-addressed gfx1151 v4
+// FFT contract. All stages ping-pong between two LDS slabs and touch global
+// memory only at entry/exit; one workgroup owns each transform in the batch.
 extern "C" __global__ void
 ts_fft_stockham_fused_lds_amd(const float2 *__restrict__ in,
                              float2 *__restrict__ out, int N, int sign) {
   extern __shared__ float2 storage[];
   float2 *cur = storage;
   float2 *other = storage + N;
+  const size_t rowOffset = size_t(blockIdx.x) * size_t(N);
+  const float2 *rowIn = in + rowOffset;
+  float2 *rowOut = out + rowOffset;
   for (int i = threadIdx.x; i < N; i += blockDim.x)
-    cur[i] = in[i];
+    cur[i] = rowIn[i];
   __syncthreads();
 
   int L = 1;
@@ -227,7 +268,7 @@ ts_fft_stockham_fused_lds_amd(const float2 *__restrict__ in,
 
   const float scale = sign > 0 ? 1.0f / float(N) : 1.0f;
   for (int i = threadIdx.x; i < N; i += blockDim.x)
-    out[i] = make_float2(cur[i].x * scale, cur[i].y * scale);
+    rowOut[i] = make_float2(cur[i].x * scale, cur[i].y * scale);
 }
 
 extern "C" int ts_fft_stockham_fused_lds_launch_amd(
@@ -235,6 +276,16 @@ extern "C" int ts_fft_stockham_fused_lds_launch_amd(
   if (N < 2 || N > 1024 || (N & (N - 1)) != 0)
     return 7;
   hipLaunchKernelGGL(ts_fft_stockham_fused_lds_amd, dim3(1), dim3(256),
+                     size_t(2 * N) * sizeof(float2), stream, d_in, d_out, N,
+                     sign);
+  return hipGetLastError() == hipSuccess ? 0 : 8;
+}
+
+static int launch_fused_lds_batch(const float2 *d_in, float2 *d_out, int batch,
+                                  int N, int sign, hipStream_t stream) {
+  if (batch <= 0 || N < 2 || N > 1024 || (N & (N - 1)) != 0)
+    return 7;
+  hipLaunchKernelGGL(ts_fft_stockham_fused_lds_amd, dim3(batch), dim3(256),
                      size_t(2 * N) * sizeof(float2), stream, d_in, d_out, N,
                      sign);
   return hipGetLastError() == hipSuccess ? 0 : 8;
@@ -469,8 +520,10 @@ struct TSFFTPlanAMD {
   int bluesteinM = 0;
   tessera::spectral::FFTPlan arithmetic{};
   size_t batchCapacity = 0;
+  size_t realSpectrumCapacity = 0;
   float2 *input = nullptr;
   float2 *output = nullptr;
+  float2 *realSpectrum = nullptr;
   float2 *nScratch = nullptr;
   // Bluestein: four persistent M-sized buffers. `kernelFFT` is immutable after
   // creation; a/fa/mScratch are serialized mutable execution workspace.
@@ -489,6 +542,7 @@ void destroy_plan_storage(TSFFTPlanAMD *plan) {
   if (!plan) return;
   if (plan->input) (void)hipFree(plan->input);
   if (plan->output) (void)hipFree(plan->output);
+  if (plan->realSpectrum) (void)hipFree(plan->realSpectrum);
   if (plan->nScratch) (void)hipFree(plan->nScratch);
   if (plan->a) (void)hipFree(plan->a);
   if (plan->fa) (void)hipFree(plan->fa);
@@ -511,6 +565,18 @@ int ensure_batch_capacity(TSFFTPlanAMD *plan, size_t batch) {
   plan->input = newInput;
   plan->output = newOutput;
   plan->batchCapacity = batch;
+  return 0;
+}
+
+int ensure_real_spectrum_capacity(TSFFTPlanAMD *plan, size_t batch) {
+  if (batch <= plan->realSpectrumCapacity) return 0;
+  float2 *replacement = nullptr;
+  if (hipMalloc(&replacement,
+                batch * size_t(plan->n + 1) * sizeof(float2)) != hipSuccess)
+    return 1;
+  if (plan->realSpectrum) (void)hipFree(plan->realSpectrum);
+  plan->realSpectrum = replacement;
+  plan->realSpectrumCapacity = batch;
   return 0;
 }
 
@@ -621,6 +687,13 @@ static int execute_device_batch_locked(TSFFTPlanAMD *plan,
                                        float2 *outputDevice, int batch,
                                        hipStream_t stream) {
   ts_fft_clear_error_amd();
+  // gfx1151 power-of-two transforms up to 1024 fit two complex slabs in LDS.
+  // One workgroup owns one row, so a composite STFT launches the entire
+  // [batch*frames, N] slab once instead of issuing stages for every row.
+  if (plan->arithmetic.kind != tessera::spectral::kFFTBluestein &&
+      plan->n >= 2 && plan->n <= 1024 && (plan->n & (plan->n - 1)) == 0)
+    return launch_fused_lds_batch(inputDevice, outputDevice, batch, plan->n,
+                                  plan->sign, stream);
   for (int row = 0; row < batch; ++row) {
     const size_t offset = size_t(row) * size_t(plan->n);
     if (plan->arithmetic.kind == tessera::spectral::kFFTBluestein)
@@ -647,6 +720,56 @@ extern "C" int ts_fft_plan_execute_device_batch_amd(
                                      stream);
 }
 
+// Device-pointer packed-real ABI for compound packages. The caller owns the
+// real and Hermitian slabs; the child plan owns only the N/2 complex scratch.
+// This keeps RFFT -> consumer -> IRFFT intermediates device resident.
+extern "C" int ts_fft_plan_execute_r2c_packed_device_batch_amd(
+    void *handle, const float *inputDevice, float2 *outputDevice, int batch,
+    int logicalN, hipStream_t stream) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  if (!plan || !inputDevice || !outputDevice || batch <= 0 || logicalN < 2 ||
+      (logicalN & 1) || plan->n != logicalN / 2 || plan->sign != -1)
+    return 30;
+  const int m = logicalN / 2;
+  std::lock_guard<std::mutex> guard(plan->mutex);
+  if (ensure_batch_capacity(plan, static_cast<size_t>(batch)) != 0) return 21;
+  int rc = execute_device_batch_locked(
+      plan, reinterpret_cast<const float2 *>(inputDevice), plan->output, batch,
+      stream);
+  if (rc != 0) return rc;
+  constexpr int threads = 256;
+  int total = batch * (m + 1);
+  hipLaunchKernelGGL(ts_rfft_post_amd,
+                     dim3((total + threads - 1) / threads), dim3(threads), 0,
+                     stream, plan->output, outputDevice, m, logicalN, batch);
+  return hipGetLastError() == hipSuccess ? 0 : 31;
+}
+
+extern "C" int ts_fft_plan_execute_c2r_packed_device_batch_amd(
+    void *handle, const float2 *inputDevice, float *outputDevice, int batch,
+    int logicalN, hipStream_t stream) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  if (!plan || !inputDevice || !outputDevice || batch <= 0 || logicalN < 2 ||
+      (logicalN & 1) || plan->n != logicalN / 2 || plan->sign != 1)
+    return 30;
+  const int m = logicalN / 2;
+  std::lock_guard<std::mutex> guard(plan->mutex);
+  if (ensure_batch_capacity(plan, static_cast<size_t>(batch)) != 0) return 21;
+  constexpr int threads = 256;
+  int total = batch * m;
+  hipLaunchKernelGGL(ts_irfft_pre_amd,
+                     dim3((total + threads - 1) / threads), dim3(threads), 0,
+                     stream, inputDevice, plan->input, m, logicalN, batch);
+  int rc = execute_device_batch_locked(plan, plan->input, plan->output, batch,
+                                       stream);
+  if (rc != 0) return rc;
+  return hipMemcpyAsync(outputDevice, plan->output,
+                        size_t(batch) * logicalN * sizeof(float),
+                        hipMemcpyDeviceToDevice, stream) == hipSuccess
+             ? 0
+             : 32;
+}
+
 extern "C" int ts_fft_plan_execute_hostptr_batch_amd(
     void *handle, const float2 *inputHost, float2 *outputHost, int batch) {
   auto *plan = static_cast<TSFFTPlanAMD *>(handle);
@@ -664,6 +787,74 @@ extern "C" int ts_fft_plan_execute_hostptr_batch_amd(
   if (hipDeviceSynchronize() != hipSuccess) return 24;
   if (hipMemcpy(outputHost, plan->output, bytes, hipMemcpyDeviceToHost) !=
       hipSuccess)
+    return 25;
+  return 0;
+}
+
+// Native package-owned even-length real transforms.  The opaque plan must be
+// an N/2 complex plan; host pointers are staged once by the package and the
+// GPU therefore executes half the complex arithmetic/storage of the legacy
+// N-point wrapper.  Device-resident pre/post kernels are the fusion follow-up.
+extern "C" int ts_fft_plan_execute_r2c_packed_hostptr_amd(
+    void *handle, const float *inputHost, float2 *outputHost, int batch,
+    int logicalN) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  if (!plan || !inputHost || !outputHost || batch <= 0 || logicalN < 2 ||
+      (logicalN & 1) || plan->n != logicalN / 2 || plan->sign != -1)
+    return 30;
+  const int m = logicalN / 2;
+  std::lock_guard<std::mutex> guard(plan->mutex);
+  if (ensure_batch_capacity(plan, static_cast<size_t>(batch)) != 0 ||
+      ensure_real_spectrum_capacity(plan, static_cast<size_t>(batch)) != 0)
+    return 21;
+  if (hipMemcpy(plan->input, inputHost,
+                size_t(batch) * logicalN * sizeof(float),
+                hipMemcpyHostToDevice) != hipSuccess)
+    return 22;
+  int rc = execute_device_batch_locked(plan, plan->input, plan->output, batch, 0);
+  if (rc != 0) return rc;
+  constexpr int threads = 256;
+  int total = batch * (m + 1);
+  hipLaunchKernelGGL(ts_rfft_post_amd, dim3((total + threads - 1) / threads),
+                     dim3(threads), 0, 0, plan->output, plan->realSpectrum, m,
+                     logicalN, batch);
+  if (hipDeviceSynchronize() != hipSuccess) return 24;
+  if (hipMemcpy(outputHost, plan->realSpectrum,
+                size_t(total) * sizeof(float2), hipMemcpyDeviceToHost) !=
+      hipSuccess)
+    return 25;
+  return 0;
+}
+
+extern "C" int ts_fft_plan_execute_c2r_packed_hostptr_amd(
+    void *handle, const float2 *inputHost, float *outputHost, int batch,
+    int logicalN) {
+  auto *plan = static_cast<TSFFTPlanAMD *>(handle);
+  if (!plan || !inputHost || !outputHost || batch <= 0 || logicalN < 2 ||
+      (logicalN & 1) || plan->n != logicalN / 2 || plan->sign != 1)
+    return 30;
+  const int m = logicalN / 2;
+  std::lock_guard<std::mutex> guard(plan->mutex);
+  if (ensure_batch_capacity(plan, static_cast<size_t>(batch)) != 0 ||
+      ensure_real_spectrum_capacity(plan, static_cast<size_t>(batch)) != 0)
+    return 21;
+  int totalSpectrum = batch * (m + 1);
+  if (hipMemcpy(plan->realSpectrum, inputHost,
+                size_t(totalSpectrum) * sizeof(float2),
+                hipMemcpyHostToDevice) != hipSuccess)
+    return 22;
+  constexpr int threads = 256;
+  int totalPacked = batch * m;
+  hipLaunchKernelGGL(ts_irfft_pre_amd,
+                     dim3((totalPacked + threads - 1) / threads),
+                     dim3(threads), 0, 0, plan->realSpectrum, plan->input, m,
+                     logicalN, batch);
+  int rc = execute_device_batch_locked(plan, plan->input, plan->output, batch, 0);
+  if (rc != 0) return rc;
+  if (hipDeviceSynchronize() != hipSuccess) return 24;
+  if (hipMemcpy(outputHost, plan->output,
+                size_t(batch) * logicalN * sizeof(float),
+                hipMemcpyDeviceToHost) != hipSuccess)
     return 25;
   return 0;
 }

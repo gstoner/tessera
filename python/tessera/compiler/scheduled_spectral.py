@@ -41,28 +41,28 @@ class SpectralArchitectureProfile:
 _ARCHITECTURE_PROFILES = {
     "x86": SpectralArchitectureProfile(
         "x86", "x86", "zen5-avx512", "ready",
-        "tessera.x86.spectral_composite.v4", "exact_device_validated",
+        "tessera.x86.spectral_composite.v5", "exact_device_validated",
         "exact Zen 5 package",
     ),
     "rocm": SpectralArchitectureProfile(
         "rocm", "rocm", "gfx1151", "ready",
-        "tessera.rocm.spectral_composite.v4", "exact_device_validated",
+        "tessera.rocm.spectral_composite.v5", "exact_device_validated",
         "exact gfx1151 package",
     ),
     "rocm_gfx1151": SpectralArchitectureProfile(
         "rocm_gfx1151", "rocm", "gfx1151", "ready",
-        "tessera.rocm.spectral_composite.v4", "exact_device_validated",
+        "tessera.rocm.spectral_composite.v5", "exact_device_validated",
         "exact gfx1151 package",
     ),
     "rocm_gfx1200": SpectralArchitectureProfile(
         "rocm_gfx1200", "rocm", "gfx1200", "fail_closed",
-        "tessera.rocm.spectral_composite.v4", "build_only",
+        "tessera.rocm.spectral_composite.v5", "build_only",
         "architecture-stamped package exists; RDNA 4 schedule and exact-device "
         "evidence are required for execution",
     ),
     "rocm_gfx1250": SpectralArchitectureProfile(
         "rocm_gfx1250", "rocm", "gfx1250", "fail_closed",
-        "tessera.rocm.spectral_composite.v4", "build_only",
+        "tessera.rocm.spectral_composite.v5", "build_only",
         "architecture-stamped package exists; gfx1250 schedule and exact-device "
         "evidence are required for execution",
     ),
@@ -107,6 +107,7 @@ class SpectralProgramContract:
     input_signature: tuple[tuple[int, ...], ...]
     shape_bounds: tuple[tuple[int, ...], ...]
     axis: int
+    dct_type: int
     storage: str
     normalization: str
 
@@ -129,6 +130,7 @@ class SpectralProgramContract:
         return digest_text(
             f"schema=tessera.spectral_program_template.v1;op={self.op_name};"
             f"signature={signature};bounds={bounds};axis={self.axis};"
+            f"dct_type={self.dct_type};"
             f"storage={self.storage};normalization={self.normalization}"
         )
 
@@ -158,6 +160,7 @@ def define_spectral_program_contract(
     input_signature: Sequence[Sequence[int | None]],
     shape_bounds: Sequence[Sequence[int]] | None = None,
     axis: int = -1,
+    dct_type: int | None = None,
     storage: str = "f32",
     normalization: str = "backward",
 ) -> SpectralProgramContract:
@@ -173,6 +176,14 @@ def define_spectral_program_contract(
         raise ValueError(f"{op_name} requires {expected_inputs} non-scalar inputs")
     if any(dim == 0 or dim < -1 for shape in signatures for dim in shape):
         raise ValueError("TSOL shape signatures use positive extents or -1")
+    selected_dct_type = int(dct_type if dct_type is not None else 2)
+    if op_name == "tessera.dct":
+        if selected_dct_type != 2:
+            raise ValueError("scheduled DCT currently supports only dct_type=2")
+    elif dct_type is not None:
+        raise ValueError("dct_type applies only to tessera.dct")
+    else:
+        selected_dct_type = 0
     if shape_bounds is None:
         if any(dim == -1 for shape in signatures for dim in shape):
             raise ValueError("dynamic TSOL dimensions require explicit shape bounds")
@@ -202,6 +213,7 @@ def define_spectral_program_contract(
         input_signature=signatures,
         shape_bounds=bounds,
         axis=normalized_axis,
+        dct_type=selected_dct_type,
         storage=storage,
         normalization=normalization,
     )
@@ -227,6 +239,7 @@ class ScheduledSpectralArtifact:
     shape_bounds: tuple[tuple[int, ...], ...]
     output_shape: tuple[int, ...]
     axis: int
+    dct_type: int
     shape_policy: str
     storage: str
     padding: tuple[int, int]
@@ -239,6 +252,7 @@ class ScheduledSpectralArtifact:
     accumulation: str
     workspace_bytes: int
     workspace_policy: str
+    fusion_topology: str
     mutation_lineage: str
     native_entry: str
     child_ffts: tuple[Mapping[str, Any], ...]
@@ -286,9 +300,10 @@ class ScheduledSpectralArtifact:
     def _identity_payload(self) -> str:
         output = "x".join(str(dim) for dim in self.output_shape)
         return (
-            f"schema=tessera.scheduled_spectral.v3;op={self.op_name};"
+            f"schema=tessera.scheduled_spectral.v5;op={self.op_name};"
             f"target={self.target};arch={self.architecture};"
             f"inputs={self._input_shapes_text()};output={output};axis={self.axis};"
+            f"dct_type={self.dct_type};"
             f"shape_policy={self.shape_policy};storage={self.storage};"
             f"abi_storage={self.abi_storage};storage_conversion={self.storage_conversion};"
             f"axis_packing={self.axis_packing};"
@@ -301,6 +316,7 @@ class ScheduledSpectralArtifact:
             f"complex_layout={self.complex_layout};accumulation={self.accumulation};"
             f"workspace_bytes={self.workspace_bytes};"
             f"workspace_policy={self.workspace_policy};"
+            f"fusion_topology={self.fusion_topology};"
             f"mutation_lineage={self.mutation_lineage};native_entry={self.native_entry};"
             f"child_fft_digests={self._child_digests_text()};"
             f"workgroup={1 if self.target == 'x86' else 256}"
@@ -308,7 +324,7 @@ class ScheduledSpectralArtifact:
 
     def _identity(self) -> dict[str, Any]:
         return {
-            "schema": "tessera.scheduled_spectral.v3",
+            "schema": "tessera.scheduled_spectral.v5",
             "op_name": self.op_name,
             "target": self.target,
             "architecture": self.architecture,
@@ -317,6 +333,7 @@ class ScheduledSpectralArtifact:
             "shape_bounds": [list(shape) for shape in self.shape_bounds],
             "output_shape": list(self.output_shape),
             "axis": self.axis,
+            "dct_type": self.dct_type,
             "shape_policy": self.shape_policy,
             "storage": self.storage,
             "abi_storage": self.abi_storage,
@@ -332,6 +349,7 @@ class ScheduledSpectralArtifact:
             "accumulation": self.accumulation,
             "workspace_bytes": self.workspace_bytes,
             "workspace_policy": self.workspace_policy,
+            "fusion_topology": self.fusion_topology,
             "mutation_lineage": self.mutation_lineage,
             "native_entry": self.native_entry,
             "child_fft_digests": [
@@ -368,6 +386,7 @@ class ScheduledSpectralArtifact:
             input_signature=self.input_signature,
             shape_bounds=self.shape_bounds,
             axis=self.axis,
+            dct_type=self.dct_type if self.op_name == "tessera.dct" else None,
             storage=self.storage,
             normalization=self.normalization,
         )
@@ -376,6 +395,23 @@ class ScheduledSpectralArtifact:
             raise ValueError("TSOL package template identity mismatch")
         if self.workspace_policy != "persistent_artifact_workspace":
             raise ValueError("TSOL package workspace policy mismatch")
+        expected_fusion = {
+            "tessera.spectral_filter": "standalone_complex_multiply_v1",
+            "tessera.dct": "even_extension_c2c_v1",
+            "tessera.spectral_conv": "packed_rfft_cmul_irfft_single_artifact_v1",
+            "tessera.stft": (
+                "frame_window_packed_rfft_single_artifact_v1"
+                if self.window_length % 2 == 0
+                else "frame_window_full_complex_odd_fallback_v1"
+            ),
+            "tessera.istft": (
+                "packed_irfft_window_ola_single_artifact_v1"
+                if self.window_length % 2 == 0
+                else "full_complex_odd_window_ola_fallback_v1"
+            ),
+        }[self.op_name]
+        if self.fusion_topology != expected_fusion:
+            raise ValueError("TSOL package fusion topology mismatch")
         if self.mutation_lineage != "inputs_immutable_output_fresh_v1":
             raise ValueError("TSOL package mutation lineage mismatch")
         if self.schedule_ir.count("schedule.spectral_program") != 1:
@@ -388,6 +424,8 @@ class ScheduledSpectralArtifact:
             raise ValueError("TSOL Tile package retained Schedule IR")
         if _HASH_RE.findall(self.tile_ir) != [self.schedule_digest]:
             raise ValueError("TSOL Tile package has stale schedule identity")
+        if f"dct_type = {self.dct_type} : i64" not in self.tile_ir:
+            raise ValueError("TSOL Tile package has stale DCT type identity")
 
     def to_metadata(self) -> dict[str, Any]:
         result = self._identity()
@@ -426,6 +464,7 @@ def lower_scheduled_spectral(
     input_shapes: tuple[tuple[int, ...], ...],
     axis: int = -1,
     hop: int | None = None,
+    dct_type: int | None = None,
     input_signature: tuple[tuple[int | None, ...], ...] | None = None,
     shape_bounds: tuple[tuple[int, ...], ...] | None = None,
     storage: str = "f32",
@@ -444,6 +483,7 @@ def lower_scheduled_spectral(
         input_signature=input_signature or shapes,
         shape_bounds=shape_bounds,
         axis=axis,
+        dct_type=dct_type,
         storage=storage,
         normalization=normalization,
     )
@@ -460,8 +500,10 @@ def lower_scheduled_spectral(
     children: tuple[Mapping[str, Any], ...] = ()
     accumulation = "f32"
     policy = "persistent_artifact_workspace"
+    fusion_topology = ""
 
     if op_name == "tessera.spectral_filter":
+        fusion_topology = "standalone_complex_multiply_v1"
         if len(shapes) != 2 or shapes[0] != shapes[1]:
             raise ValueError("spectral_filter requires two equal complex shapes")
         output = shapes[0]
@@ -473,6 +515,7 @@ def lower_scheduled_spectral(
             else "ts_spectral_filter_plan_hostptr_amd"
         )
     elif op_name == "tessera.dct":
+        fusion_topology = "even_extension_c2c_v1"
         if len(shapes) != 1:
             raise ValueError("dct requires one input")
         n = shapes[0][normalized_axis]
@@ -493,6 +536,7 @@ def lower_scheduled_spectral(
             else "ts_dct_plan_hostptr_strided_storage_amd"
         )
     elif op_name == "tessera.spectral_conv":
+        fusion_topology = "packed_rfft_cmul_irfft_single_artifact_v1"
         if len(shapes) != 2 or len(shapes[0]) != len(shapes[1]):
             raise ValueError("spectral_conv requires equal input ranks")
         x_batch = shapes[0][:normalized_axis] + shapes[0][normalized_axis + 1 :]
@@ -504,8 +548,13 @@ def lower_scheduled_spectral(
         rows = math.prod(x_batch or (1,))
         child_shape = (rows, fft_n)
         children = (
-            _child(compiler_target, "tessera.fft", child_shape),
-            _child(compiler_target, "tessera.ifft", child_shape),
+            _child(compiler_target, "tessera.rfft", child_shape),
+            _child(
+                compiler_target,
+                "tessera.irfft",
+                (rows, fft_n // 2 + 1),
+                n=fft_n,
+            ),
         )
         output = (
             shapes[0][:normalized_axis]
@@ -517,12 +566,16 @@ def lower_scheduled_spectral(
             fft_n - shapes[1][normalized_axis],
         )
         crop = (0, fft_n - output_n)
-        # Three real staging buffers and six complex FFT-sized buffers.
+        # Host staging, two padded-real inputs, three packed spectra, and the
+        # packed inverse's real output. No full-complex N-point intermediate.
         workspace = _packed_workspace_bytes(
             (4, rows * shapes[0][normalized_axis]),
             (4, rows * shapes[1][normalized_axis]),
             (4, rows * output_n),
-            *((8, rows * fft_n),) * 6,
+            (4, rows * fft_n),
+            (4, rows * fft_n),
+            *((8, rows * (fft_n // 2 + 1)),) * 3,
+            (4, rows * fft_n),
         )
         entry = (
             "tessera_x86_spectral_conv_strided_storage"
@@ -533,6 +586,11 @@ def lower_scheduled_spectral(
         if len(shapes) != 2 or len(shapes[1]) != 1:
             raise ValueError("stft requires a signal and rank-1 window")
         win = shapes[1][0]
+        fusion_topology = (
+            "frame_window_packed_rfft_single_artifact_v1"
+            if win % 2 == 0
+            else "frame_window_full_complex_odd_fallback_v1"
+        )
         stride = int(hop or 0)
         samples = shapes[0][normalized_axis]
         if stride <= 0 or win > samples:
@@ -546,12 +604,21 @@ def lower_scheduled_spectral(
             + (frames, win // 2 + 1)
             + shapes[0][normalized_axis + 1 :]
         )
-        workspace = _packed_workspace_bytes(
-            (4, batch * samples),
-            (4, win),
-            (8, batch * frames * win),
-            (8, batch * frames * win),
-            (8, batch * frames * (win // 2 + 1)),
+        workspace = (
+            _packed_workspace_bytes(
+                (4, batch * samples),
+                (4, win),
+                (4, batch * frames * win),
+                (8, batch * frames * (win // 2 + 1)),
+            )
+            if win % 2 == 0
+            else _packed_workspace_bytes(
+                (4, batch * samples),
+                (4, win),
+                (8, batch * frames * win),
+                (8, batch * frames * win),
+                (8, batch * frames * (win // 2 + 1)),
+            )
         )
         entry = (
             "tessera_x86_stft_strided_storage"
@@ -562,6 +629,11 @@ def lower_scheduled_spectral(
         if len(shapes) != 2 or len(shapes[1]) != 1:
             raise ValueError("istft requires spectra and a rank-1 window")
         win = shapes[1][0]
+        fusion_topology = (
+            "packed_irfft_window_ola_single_artifact_v1"
+            if win % 2 == 0
+            else "full_complex_odd_window_ola_fallback_v1"
+        )
         stride = int(hop or 0)
         if normalized_axis <= 0:
             raise ValueError("istft frequency axis requires a preceding frame axis")
@@ -588,12 +660,21 @@ def lower_scheduled_spectral(
             + (samples,)
             + shapes[0][normalized_axis + 1 :]
         )
-        workspace = _packed_workspace_bytes(
-            (4, win),
-            (4, batch * samples),
-            (8, batch * frames * (win // 2 + 1)),
-            (8, batch * frames * win),
-            (8, batch * frames * win),
+        workspace = (
+            _packed_workspace_bytes(
+                (4, win),
+                (4, batch * samples),
+                (8, batch * frames * (win // 2 + 1)),
+                (4, batch * frames * win),
+            )
+            if win % 2 == 0
+            else _packed_workspace_bytes(
+                (4, win),
+                (4, batch * samples),
+                (8, batch * frames * (win // 2 + 1)),
+                (8, batch * frames * win),
+                (8, batch * frames * win),
+            )
         )
         accumulation = "deterministic_f32_ascending_frames"
         entry = (
@@ -613,6 +694,7 @@ def lower_scheduled_spectral(
         shape_bounds=semantic_contract.shape_bounds,
         output_shape=output,
         axis=normalized_axis,
+        dct_type=semantic_contract.dct_type,
         shape_policy=semantic_contract.shape_policy,
         storage=semantic_contract.storage,
         padding=padding,
@@ -625,6 +707,7 @@ def lower_scheduled_spectral(
         accumulation=accumulation,
         workspace_bytes=workspace,
         workspace_policy=policy,
+        fusion_topology=fusion_topology,
         mutation_lineage="inputs_immutable_output_fresh_v1",
         native_entry=entry,
         child_ffts=children,
@@ -671,6 +754,7 @@ def lower_scheduled_spectral(
         f'shape_bounds = "{provisional._shapes_text(provisional.shape_bounds)}", '
         f'template_digest = "{provisional.template_digest}", '
         f'output_shape = array<i64: {output_shape_text}>, axis = {normalized_axis} : i64, '
+        f'dct_type = {semantic_contract.dct_type} : i64, '
         f'shape_policy = "{semantic_contract.shape_policy}", storage = "{semantic_contract.storage}", '
         f'abi_storage = "{provisional.abi_storage}", '
         f'storage_conversion = "{provisional.storage_conversion}", '
@@ -680,6 +764,7 @@ def lower_scheduled_spectral(
         f'normalization = "{semantic_contract.normalization}", complex_layout = "interleaved_f32x2", '
         f'accumulation = "{accumulation}", workspace_bytes = {workspace} : i64, '
         f'workspace_policy = "{policy}", mutation_lineage = "inputs_immutable_output_fresh_v1", '
+        f'fusion_topology = "{fusion_topology}", '
         f'native_entry = "{entry}", child_fft_digests = "{child_digests}", '
         f'workgroup_size = {1 if compiler_target == "x86" else 256} : i64'
     )
@@ -715,8 +800,8 @@ def lower_scheduled_spectral(
 def validate_scheduled_spectral_metadata(
     metadata: Mapping[str, Any], *, input_shapes: Sequence[Sequence[int]]
 ) -> Mapping[str, Any]:
-    if metadata.get("schema") != "tessera.scheduled_spectral.v3":
-        raise ValueError("TSOL package requires tessera.scheduled_spectral.v3 metadata")
+    if metadata.get("schema") != "tessera.scheduled_spectral.v5":
+        raise ValueError("TSOL package requires tessera.scheduled_spectral.v5 metadata")
     shapes = tuple(tuple(int(dim) for dim in shape) for shape in input_shapes)
     declared_shapes = tuple(
         tuple(int(dim) for dim in shape)
@@ -729,6 +814,7 @@ def validate_scheduled_spectral_metadata(
         input_signature=signature,
         shape_bounds=bounds,
         axis=int(metadata.get("axis", -1)),
+        dct_type=int(metadata.get("dct_type", 0)) or None,
         storage=str(metadata.get("storage", "f32")),
         normalization=str(metadata.get("normalization", "backward")),
     )
@@ -739,6 +825,7 @@ def validate_scheduled_spectral_metadata(
         input_shapes=declared_shapes,
         axis=int(metadata.get("axis", -1)),
         hop=int(metadata.get("hop", 0)) or None,
+        dct_type=semantic.dct_type if semantic.op_name == "tessera.dct" else None,
         input_signature=semantic.input_signature,
         shape_bounds=semantic.shape_bounds,
         storage=semantic.storage,
@@ -758,6 +845,7 @@ def validate_scheduled_spectral_metadata(
         input_shapes=shapes,
         axis=int(metadata.get("axis", -1)),
         hop=int(metadata.get("hop", 0)) or None,
+        dct_type=semantic.dct_type if semantic.op_name == "tessera.dct" else None,
         input_signature=semantic.input_signature,
         shape_bounds=semantic.shape_bounds,
         storage=semantic.storage,

@@ -1178,6 +1178,8 @@ LogicalResult FFTKernelOp::verify() {
     return attr ? attr.getValue() : StringRef();
   };
   StringRef mode = requiredString("mode");
+  StringRef realPolicy = requiredString("real_transform_policy");
+  StringRef hermitianLayout = requiredString("hermitian_layout");
   StringRef strategy = requiredString("strategy");
   StringRef radixPolicy = requiredString("radix_policy");
   if ((mode != "c2c" && mode != "r2c" && mode != "c2r") ||
@@ -1185,6 +1187,12 @@ LogicalResult FFTKernelOp::verify() {
        strategy != "dft" && strategy != "bluestein") ||
       (radixPolicy != "radix2" && radixPolicy != "mixed_radix"))
     return emitOpError("requires explicit mode, strategy, and radix policy");
+  if ((realPolicy != "not_applicable" &&
+       realPolicy != "packed_even_n2_hermitian_v1" &&
+       realPolicy != "full_complex_hermitian_fallback") ||
+      (hermitianLayout != "full_complex" &&
+       hermitianLayout != "half_spectrum_nyquist_explicit"))
+    return emitOpError("requires an explicit real-transform and Hermitian policy");
   if (requiredString("storage") != "complex64_interleaved_f32" ||
       requiredString("accum") != "f32" ||
       requiredString("normalization") != "backward" ||
@@ -1197,16 +1205,23 @@ LogicalResult FFTKernelOp::verify() {
     return emitOpError("requires the canonical complex64/f32 FFT package policy");
   auto sequence = getOperation()->getAttrOfType<DenseI64ArrayAttr>("radix_sequence");
   auto length = getOperation()->getAttrOfType<IntegerAttr>("length");
+  auto physicalLength =
+      getOperation()->getAttrOfType<IntegerAttr>("physical_length");
   auto batch = getOperation()->getAttrOfType<IntegerAttr>("batch");
   auto axis = getOperation()->getAttrOfType<IntegerAttr>("axis");
   auto workspace = getOperation()->getAttrOfType<IntegerAttr>("workspace_elems");
   auto workgroup = getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
   auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
-  if (!sequence || !length || length.getInt() <= 0 || !batch ||
+  if (!sequence || !length || length.getInt() <= 0 || !physicalLength ||
+      physicalLength.getInt() <= 0 || !batch ||
       batch.getInt() <= 0 || !axis || axis.getInt() < 0 || !workspace ||
       workspace.getInt() < 0 || !workgroup || workgroup.getInt() <= 0 ||
       !hash || hash.getValue().size() != 64)
     return emitOpError("requires complete launch dimensions, workspace, and schedule identity");
+  if (realPolicy == "packed_even_n2_hermitian_v1" &&
+      (mode == "c2c" || length.getInt() % 2 != 0 ||
+       physicalLength.getInt() != length.getInt() / 2))
+    return emitOpError("has an invalid packed-real physical length");
   return success();
 }
 
@@ -1251,6 +1266,7 @@ LogicalResult SpectralProgramKernelOp::verify() {
        requiredString("normalization") != "ortho") ||
       requiredString("complex_layout") != "interleaved_f32x2" ||
       requiredString("workspace_policy") != "persistent_artifact_workspace" ||
+      requiredString("fusion_topology").empty() ||
       requiredString("mutation_lineage") !=
           "inputs_immutable_output_fresh_v1" ||
       requiredString("native_entry").empty())

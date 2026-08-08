@@ -2,7 +2,7 @@
 on gfx1151.
 
 `tessera_rocm.async_copy` previously lowered only to an artifact-only contract
-marker (`llvm.amdgcn.raw.buffer.copy.contract`). The `--lower-rocm-async-copy`
+placeholder marker. The `--lower-rocm-async-copy`
 pass lowers it to a real cooperative copy loop (global load → LDS store; on RDNA
 there is no GLOBAL_LOAD_LDS DMA, confirmed from the ISA archive) and
 `tessera_rocm.wait` → `gpu.barrier`. This test builds a kernel that async_copies
@@ -23,9 +23,8 @@ from pathlib import Path
 import pytest
 
 np = pytest.importorskip("numpy")
+from tests._support.rocm_build import rocm_opt_path
 
-REPO = Path(__file__).resolve().parents[2]
-ROP = REPO / "build/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt"
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
 _KERNEL = """
@@ -103,12 +102,13 @@ def _mr(p, n):
 
 
 def test_async_copy_runnable_global_to_lds_roundtrip():
-    if not ROP.is_file():
+    rocm_opt = rocm_opt_path()
+    if rocm_opt is None:
         pytest.skip("build tessera-rocm-opt")
     mlir_opt = _find_mlir_opt()
     if mlir_opt is None:
         pytest.skip("mlir-opt not found")
-    lowered = subprocess.run([str(ROP), "-", "--lower-rocm-async-copy"],
+    lowered = subprocess.run([str(rocm_opt), "-", "--lower-rocm-async-copy"],
                              input=_KERNEL, capture_output=True, text=True)
     assert lowered.returncode == 0, lowered.stderr
     assert "tessera_rocm.async_copy" not in lowered.stdout  # consumed

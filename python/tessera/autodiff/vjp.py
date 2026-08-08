@@ -4839,8 +4839,10 @@ def vjp_dequantize_int4(dout, q, scale, zero_point=0, **_):
 # ── Spectral family ─────────────────────────────────────────────────────────
 
 @_vjp("dct")
-def vjp_dct(dout, x, *, axis=-1, **_):
+def vjp_dct(dout, x, *, axis=-1, type=2, **_):
     """DCT-II (orthonormal) — transpose is the matching DCT-III (IDCT)."""
+    if int(type) != 2:
+        raise ValueError("dct VJP currently supports only type=2")
     do = np.asarray(dout, dtype=np.float64)
     axis_idx = axis if axis >= 0 else do.ndim + axis
     do_moved = np.moveaxis(do, axis_idx, -1)

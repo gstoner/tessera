@@ -45,8 +45,11 @@ class ScheduledFFTArtifact:
     output_shape: tuple[int, ...]
     axis: int
     length: int
+    physical_length: int
     batch: int
     mode: str
+    real_transform_policy: str
+    hermitian_layout: str
     inverse: bool
     normalization: str
     scale: float
@@ -94,6 +97,7 @@ class ScheduledFFTArtifact:
         for name, value in (
             ("axis", self.axis),
             ("length", self.length),
+            ("physical_length", self.physical_length),
             ("batch", self.batch),
             ("bluestein_m", self.bluestein_m),
             ("workspace_elems", self.workspace_elems),
@@ -103,6 +107,8 @@ class ScheduledFFTArtifact:
                 raise ValueError(f"scheduled FFT Tile package has stale {name}")
         for attr_name, attr_value in (
             ("mode", self.mode),
+            ("real_transform_policy", self.real_transform_policy),
+            ("hermitian_layout", self.hermitian_layout),
             ("normalization", self.normalization),
             ("radix_policy", self.radix_policy),
             ("strategy", self.strategy),
@@ -126,7 +132,7 @@ class ScheduledFFTArtifact:
 
     def to_metadata(self) -> dict[str, Any]:
         return {
-            "schema": "tessera.scheduled_fft.v2",
+            "schema": "tessera.scheduled_fft.v3",
             "target": self.target,
             "architecture": self.architecture,
             "op_name": self.op_name,
@@ -136,8 +142,11 @@ class ScheduledFFTArtifact:
             "output_shape": list(self.output_shape),
             "axis": self.axis,
             "length": self.length,
+            "physical_length": self.physical_length,
             "batch": self.batch,
             "mode": self.mode,
+            "real_transform_policy": self.real_transform_policy,
+            "hermitian_layout": self.hermitian_layout,
             "inverse": self.inverse,
             "normalization": self.normalization,
             "scale": self.scale,
@@ -198,13 +207,38 @@ def lower_scheduled_fft(
         output_shape[normalized_axis] = length
     output = tuple(output_shape)
     batch = math.prod(dim for index, dim in enumerate(shape) if index != normalized_axis)
-    x86_radices = mixed_radix_sequence(length) if compiler_target == "x86" else None
-    x86_mixed = _prefer_x86_mixed_radix(length, x86_radices)
+    real_mode = mode in {"r2c", "c2r"}
+    candidate_physical_length = length // 2 if real_mode and length % 2 == 0 else length
+    candidate_x86_radices = (
+        mixed_radix_sequence(candidate_physical_length)
+        if compiler_target == "x86"
+        else None
+    )
+    packed_real = real_mode and length % 2 == 0 and (
+        compiler_target == "rocm"
+        or candidate_physical_length & (candidate_physical_length - 1) == 0
+        or _prefer_x86_mixed_radix(candidate_physical_length, candidate_x86_radices)
+    )
+    physical_length = candidate_physical_length if packed_real else length
+    real_transform_policy = (
+        "packed_even_n2_hermitian_v1"
+        if packed_real
+        else "full_complex_hermitian_fallback"
+        if real_mode
+        else "not_applicable"
+    )
+    hermitian_layout = (
+        "half_spectrum_nyquist_explicit" if real_mode else "full_complex"
+    )
+    x86_radices = (
+        mixed_radix_sequence(physical_length) if compiler_target == "x86" else None
+    )
+    x86_mixed = _prefer_x86_mixed_radix(physical_length, x86_radices)
     radix_policy = (
         "mixed_radix" if compiler_target != "x86" or x86_mixed else "radix2"
     )
     plan = plan_fft(
-        length,
+        physical_length,
         axis=normalized_axis,
         mode=mode,
         inverse=inverse,
@@ -217,7 +251,7 @@ def lower_scheduled_fft(
         # package and is not algorithm workspace.
         workspace = 4 * plan.bluestein_m
     if compiler_target == "x86" and plan.strategy == "mixed_radix":
-        workspace = 2 * length
+        workspace = 2 * physical_length
     algorithm = (
         "stockham_autosort"
         if compiler_target != "x86" or plan.strategy == "mixed_radix"
@@ -228,6 +262,10 @@ def lower_scheduled_fft(
         if compiler_target == "x86" and plan.strategy == "mixed_radix"
         else "host_inplace"
         if compiler_target == "x86"
+        else "persistent_device_plan_fused_lds_batch"
+        if plan.strategy != "bluestein"
+        and physical_length <= 1024
+        and physical_length & (physical_length - 1) == 0
         else "persistent_device_plan"
     )
     twiddle_policy = (
@@ -255,9 +293,9 @@ def lower_scheduled_fft(
             else "inplace_no_scratch"
         )
     kernel_family = (
-        "zen5_avx512_fft_v3"
+        "zen5_avx512_fft_v4"
         if compiler_target == "x86"
-        else "gfx1151_stockham_bluestein_v3"
+        else "gfx1151_stockham_bluestein_v5"
     )
     input_element = "f32" if op_name == "tessera.rfft" else "complex<f32>"
     output_element = "f32" if op_name == "tessera.irfft" else "complex<f32>"
@@ -297,11 +335,14 @@ def lower_scheduled_fft(
         output_shape=output,
         axis=normalized_axis,
         length=length,
+        physical_length=physical_length,
         batch=batch,
         mode=mode,
+        real_transform_policy=real_transform_policy,
+        hermitian_layout=hermitian_layout,
         inverse=inverse,
         normalization="backward",
-        scale=plan.scale,
+        scale=1.0 / length if inverse else 1.0,
         radix_policy=radix_policy,
         strategy=plan.strategy,
         algorithm=algorithm,
@@ -327,8 +368,8 @@ def validate_scheduled_fft_metadata(
 ) -> Mapping[str, Any]:
     expected_target = "x86" if target == "x86" else "rocm"
     expected_architecture = "zen5-avx512" if expected_target == "x86" else "gfx1151"
-    if metadata.get("schema") != "tessera.scheduled_fft.v2":
-        raise ValueError("FFT package requires tessera.scheduled_fft.v2 metadata")
+    if metadata.get("schema") != "tessera.scheduled_fft.v3":
+        raise ValueError("FFT package requires tessera.scheduled_fft.v3 metadata")
     if metadata.get("target") != expected_target:
         raise ValueError("FFT package target identity mismatch")
     if metadata.get("architecture") != expected_architecture:
@@ -343,6 +384,7 @@ def validate_scheduled_fft_metadata(
     if axis < 0 or axis >= len(shape):
         raise ValueError("FFT package axis is not normalized")
     length = int(metadata.get("length", 0))
+    physical_length = int(metadata.get("physical_length", 0))
     # An rFFT spectrum with ``bins`` entries can represent either an even
     # length ``2*(bins-1)`` or the adjacent odd length. The explicit ``n`` is
     # part of the content-addressed Tile artifact, so validate the bin/length
@@ -354,6 +396,17 @@ def validate_scheduled_fft_metadata(
     )
     if not valid_length:
         raise ValueError("FFT package transform length mismatch")
+    mode = str(metadata.get("mode") or "")
+    real_mode = mode in {"r2c", "c2r"}
+    policy = str(metadata.get("real_transform_policy") or "")
+    packed = policy == "packed_even_n2_hermitian_v1"
+    if packed and (not real_mode or length % 2 or physical_length != length // 2):
+        raise ValueError("FFT package packed-real physical length mismatch")
+    if not packed and physical_length != length:
+        raise ValueError("FFT package fallback physical length mismatch")
+    expected_layout = "half_spectrum_nyquist_explicit" if real_mode else "full_complex"
+    if metadata.get("hermitian_layout") != expected_layout:
+        raise ValueError("FFT package Hermitian layout mismatch")
     expected_batch = math.prod(dim for index, dim in enumerate(shape) if index != axis)
     if int(metadata.get("batch", 0)) != expected_batch:
         raise ValueError("FFT package batch mismatch")
@@ -384,6 +437,8 @@ def validate_scheduled_fft_metadata(
         raise ValueError("FFT package schedule identity mismatch")
     for key in (
         "mode",
+        "real_transform_policy",
+        "hermitian_layout",
         "radix_policy",
         "strategy",
         "algorithm",
@@ -395,7 +450,7 @@ def validate_scheduled_fft_metadata(
     ):
         if f'{key} = "{metadata.get(key)}"' not in tile_ir:
             raise ValueError(f"FFT package Tile contract mismatch for {key}")
-    for key in ("axis", "length", "batch", "bluestein_m", "workspace_elems"):
+    for key in ("axis", "length", "physical_length", "batch", "bluestein_m", "workspace_elems"):
         if not re.search(rf"{key} = {int(metadata.get(key, -1))} : i64", tile_ir):
             raise ValueError(f"FFT package Tile contract mismatch for {key}")
     inverse = "true" if expected_inverse else "false"

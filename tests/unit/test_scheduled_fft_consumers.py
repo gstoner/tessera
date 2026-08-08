@@ -24,13 +24,13 @@ _needs_opt = pytest.mark.skipif(
     ("target", "op_name", "shape", "axis", "n", "strategy", "radices"),
     [
         ("x86", "tessera.fft", (2, 16), -1, None, "radix2", (2, 2, 2, 2)),
-        ("x86", "tessera.irfft", (2, 51), -1, 100, "mixed_radix", (4, 5, 5)),
+        ("x86", "tessera.irfft", (2, 51), -1, 100, "mixed_radix", (2, 5, 5)),
         ("x86", "tessera.fft", (2, 255), -1, None, "bluestein", ()),
         ("x86", "tessera.fft", (2, 768), -1, None, "mixed_radix", (4, 4, 4, 4, 3)),
         ("rocm", "tessera.fft", (3, 100), -1, None, "mixed_radix", (4, 5, 5)),
         ("rocm", "tessera.fft", (2, 68), -1, None, "mixed_radix", (4, 17)),
         ("rocm", "tessera.fft", (257,), -1, None, "bluestein", ()),
-        ("rocm", "tessera.rfft", (4, 16, 3), 1, None, "mixed_radix", (4, 4)),
+        ("rocm", "tessera.rfft", (4, 16, 3), 1, None, "mixed_radix", (4, 2)),
     ],
 )
 @_needs_opt
@@ -66,6 +66,8 @@ def test_fft_lowers_to_one_content_addressed_tile_package(
         "workspace_policy",
         "twiddle_policy",
         "batch",
+        "physical_length",
+        "real_transform_policy",
     ],
 )
 @_needs_opt
@@ -96,7 +98,7 @@ def test_schedule_to_tile_rederives_and_rejects_stale_fft_policy():
         target="rocm", op_name="tessera.fft", input_shape=(3, 100)
     )
     stale = artifact.schedule_ir.replace(
-        'kernel_family = "gfx1151_stockham_bluestein_v3"',
+        'kernel_family = "gfx1151_stockham_bluestein_v5"',
         'kernel_family = "stale_kernel"',
     )
 
@@ -114,7 +116,44 @@ def test_rocm_bluestein_artifact_describes_persistent_native_plan():
     assert artifact.workspace_policy == "persistent_plan_4m"
     assert artifact.residency == "persistent_device_plan"
     assert artifact.twiddle_policy == "persistent_device_chirp_fft"
-    assert artifact.kernel_family == "gfx1151_stockham_bluestein_v3"
+    assert artifact.kernel_family == "gfx1151_stockham_bluestein_v5"
+
+
+@_needs_opt
+def test_rocm_small_power_of_two_artifact_selects_batched_fused_lds():
+    artifact = lower_scheduled_fft(
+        target="rocm", op_name="tessera.fft", input_shape=(56, 256)
+    )
+
+    assert artifact.batch == 56
+    assert artifact.residency == "persistent_device_plan_fused_lds_batch"
+    assert artifact.kernel_family == "gfx1151_stockham_bluestein_v5"
+    assert 'residency = "persistent_device_plan_fused_lds_batch"' in artifact.tile_ir
+
+
+@_needs_opt
+@pytest.mark.parametrize("target", ["x86", "rocm"])
+def test_even_real_fft_artifact_names_half_length_physical_transform(target):
+    artifact = lower_scheduled_fft(
+        target=target, op_name="tessera.rfft", input_shape=(3, 256)
+    )
+
+    assert artifact.length == 256
+    assert artifact.physical_length == 128
+    assert artifact.real_transform_policy == "packed_even_n2_hermitian_v1"
+    assert artifact.hermitian_layout == "half_spectrum_nyquist_explicit"
+    assert "physical_length = 128 : i64" in artifact.tile_ir
+
+
+@_needs_opt
+@pytest.mark.parametrize("target", ["x86", "rocm"])
+def test_odd_real_fft_artifact_keeps_explicit_full_complex_fallback(target):
+    artifact = lower_scheduled_fft(
+        target=target, op_name="tessera.rfft", input_shape=(2, 255)
+    )
+
+    assert artifact.physical_length == 255
+    assert artifact.real_transform_policy == "full_complex_hermitian_fallback"
 
 
 @_needs_opt

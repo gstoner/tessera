@@ -88,6 +88,21 @@ def test_rfft_irfft(n):
                                **_TOL)
 
 
+def test_even_real_fft_does_not_reenter_full_complex_lane(monkeypatch):
+    rt = _x86_or_skip()
+    x = np.arange(128, dtype=np.float32).reshape(2, 64)
+    monkeypatch.setattr(
+        rt,
+        "_x86_transform_rows",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("packed real FFT re-entered full C2C")
+        ),
+    )
+    result = rt.launch(_art(rt, "tessera.rfft", {"axis": -1}, x), (x,))
+    assert result["ok"] is True, result.get("reason")
+    np.testing.assert_allclose(result["output"], np.fft.rfft(x), **_TOL)
+
+
 @pytest.mark.parametrize("n", [3, 5, 6, 7])      # tiny -> naive DFT (gemm)
 def test_fft_tiny_dft(n):
     rt = _x86_or_skip()

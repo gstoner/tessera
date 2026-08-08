@@ -1,5 +1,5 @@
 // RUN: %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1100})' %s | FileCheck %s --check-prefix=WMMA
-// RUN: %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1100},lower-tessera-target-to-rocdl)' %s | FileCheck %s --check-prefix=ROCDL
+// RUN: not %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1100},lower-tessera-target-to-rocdl)' %s 2>&1 | FileCheck %s --check-prefix=STRICT
 //
 // Strix Halo bring-up (Stage A) — RDNA 3 / 3.5 (gfx1100 on the WSL box,
 // gfx1151 native) has no MFMA matrix core; the matmul tile must lower to the
@@ -20,7 +20,7 @@ module {
 // WMMA-SAME: source = "tessera.matmul"
 // WMMA-NOT: tessera_rocm.mfma
 
-// The WMMA target op lowers to the AMDGCN WMMA artifact marker.
-// ROCDL: llvm.func @llvm.amdgcn.wmma.contract
-// ROCDL: llvm.call @llvm.amdgcn.wmma.contract
-// ROCDL-NOT: llvm.amdgcn.mfma.contract
+// Scalar WMMA is an inspectable Target-IR contract, not executable hardware
+// fragments. Binary lowering must fail rather than replace its value with undef.
+// STRICT: executable ROCm matrix lowering requires typed hardware fragment vectors
+// STRICT-NOT: .contract

@@ -1,4 +1,5 @@
-// RUN: %trop --lower-tessera-target-to-rocdl %s | FileCheck %s
+// RUN: %trop %s | FileCheck %s --check-prefix=TARGET
+// RUN: not %trop --lower-tessera-target-to-rocdl %s 2>&1 | FileCheck %s --check-prefix=STRICT
 
 // Decoupled waits (moonmath CDNA3 attention writeup, §"Decoupled Waits"): the
 // `counter` attribute on tessera_rocm.wait selects a targeted AMDGCN wait
@@ -20,8 +21,11 @@ module {
   }
 }
 
-// All three wait flavors lower to distinct markers; CHECK-DAG is order-robust.
-// CHECK-DAG: llvm.call @llvm.amdgcn.s.waitcnt.vmcnt.contract
-// CHECK-DAG: llvm.call @llvm.amdgcn.s.waitcnt.lgkmcnt.contract
-// CHECK-DAG: llvm.call @llvm.amdgcn.s.barrier.contract
-// CHECK-NOT: tessera_rocm.wait
+// Counter intent remains typed and inspectable at the Target-IR boundary.
+// TARGET: tessera_rocm.wait
+// TARGET-SAME: counter = "vmcnt"
+// TARGET: tessera_rocm.wait
+// TARGET-SAME: counter = "lgkmcnt"
+// TARGET: tessera_rocm.wait
+// TARGET-NOT: .contract
+// STRICT: executable ROCm async operations must pass through lower-rocm-async-copy

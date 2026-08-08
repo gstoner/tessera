@@ -36,6 +36,7 @@ from pathlib import Path
 import pytest
 
 from tests._support.compiler_tool import require_tessera_opt
+from tests._support.rocm_build import rocm_gemm_lib_path
 
 np = pytest.importorskip("numpy")
 
@@ -44,17 +45,6 @@ REPO = Path(__file__).resolve().parents[2]
 #: failing inside MLIR with an unknown-argument error.
 _ROCM_PASSES = ("--generate-wmma-gemm-kernel",
                 "--lower-tessera-target-to-rocdl")
-ORACLE_LIB = (
-    REPO
-    / "build"
-    / "src"
-    / "compiler"
-    / "codegen"
-    / "Tessera_ROCM_Backend"
-    / "runtime"
-    / "hip"
-    / "libtessera_rocm_gemm.so"
-)
 CHIP = os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 TYPED_FRAGMENT_FIXTURE = (
     REPO / "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm" / "gfx1151_tile_fragment_store.mlir"
@@ -525,9 +515,10 @@ def test_compiler_generated_gemm_matches_numpy_and_oracle(source, shape):
 
     assert float(np.max(np.abs(D - A.astype(np.float32) @ B.astype(np.float32)))) < 5e-2
 
-    if not ORACLE_LIB.is_file():
+    oracle_lib = rocm_gemm_lib_path()
+    if oracle_lib is None:
         pytest.skip("oracle lib not built: ninja -C build tessera_rocm_gemm")
-    lib = ctypes.CDLL(str(ORACLE_LIB), mode=ctypes.RTLD_LOCAL)
+    lib = ctypes.CDLL(str(oracle_lib), mode=ctypes.RTLD_LOCAL)
     ofn = lib.tessera_rocm_wmma_gemm_f16
     ofn.argtypes = [ctypes.c_void_p] * 3 + [ctypes.c_int] * 3
     ofn.restype = ctypes.c_int

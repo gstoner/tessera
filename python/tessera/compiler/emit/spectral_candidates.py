@@ -143,6 +143,17 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
         lib.ts_fft_plan_execute_hostptr_batch_amd.restype = ctypes.c_int
         lib.ts_fft_plan_execute_hostptr_batch_amd.argtypes = [
             ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
+        if hasattr(lib, "ts_fft_plan_execute_r2c_packed_hostptr_amd"):
+            lib.ts_fft_plan_execute_r2c_packed_hostptr_amd.restype = ctypes.c_int
+            lib.ts_fft_plan_execute_r2c_packed_hostptr_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_int, ctypes.c_int,
+            ]
+            lib.ts_fft_plan_execute_c2r_packed_hostptr_amd.restype = ctypes.c_int
+            lib.ts_fft_plan_execute_c2r_packed_hostptr_amd.argtypes = [
+                ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                ctypes.c_int, ctypes.c_int,
+            ]
         lib.ts_fft_plan_workspace_elems_amd.restype = ctypes.c_longlong
         lib.ts_fft_plan_workspace_elems_amd.argtypes = [ctypes.c_void_p]
         lib.ts_fft_plan_destroy_amd.restype = None
@@ -298,6 +309,13 @@ def _prebuilt_amd_paths() -> tuple[Path, ...]:
     paths = []
     if configured:
         paths.append(Path(configured).expanduser())
+    if selected_build := os.environ.get("TESSERA_BUILD_DIR"):
+        build = Path(selected_build).expanduser()
+        if not build.is_absolute():
+            build = _REPO_ROOT / build
+        paths.append(
+            build / "src/solvers/spectral/libtessera_spectral_rocm.so"
+        )
     paths.extend(
         [
             _REPO_ROOT / "build-rocm-fft" / "src" / "solvers" / "spectral"
@@ -343,7 +361,7 @@ def _amd_lib() -> ctypes.CDLL | None:
         if (
             hasattr(lib, "ts_spectral_composite_package_abi_amd")
             and lib.ts_spectral_composite_package_abi_amd()
-            == b"tessera.rocm.spectral_composite.v4"
+            == b"tessera.rocm.spectral_composite.v5"
             and hasattr(lib, "ts_spectral_composite_arch_amd")
             and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
         ):
@@ -360,7 +378,7 @@ def _is_gfx1151_composite_lib(lib: ctypes.CDLL | None) -> bool:
         lib is not None
         and hasattr(lib, "ts_spectral_composite_package_abi_amd")
         and lib.ts_spectral_composite_package_abi_amd()
-        == b"tessera.rocm.spectral_composite.v4"
+        == b"tessera.rocm.spectral_composite.v5"
         and hasattr(lib, "ts_spectral_composite_arch_amd")
         and lib.ts_spectral_composite_arch_amd() == b"gfx1151"
     )
@@ -547,6 +565,39 @@ def run_rocm_stockham_rows(
     return out
 
 
+def run_rocm_packed_real_rows(
+    rows: np.ndarray, *, inverse: bool, logical_n: int, artifact_digest: str
+) -> np.ndarray:
+    """Run the gfx1151 package-owned N/2 packed real-transform ABI."""
+
+    n = int(logical_n)
+    if n < 2 or n % 2:
+        raise ValueError("ROCm packed real FFT requires a positive even length")
+    physical_n = n // 2
+    lib, plan = _rocm_plan(physical_n, 1 if inverse else -1, artifact_digest)
+    symbol = (
+        "ts_fft_plan_execute_c2r_packed_hostptr_amd"
+        if inverse
+        else "ts_fft_plan_execute_r2c_packed_hostptr_amd"
+    )
+    if not hasattr(lib, symbol):
+        raise RuntimeError("prebuilt ROCm spectral image lacks packed-real ABI")
+    if inverse:
+        values = np.ascontiguousarray(rows, np.complex64)
+        if values.ndim != 2 or values.shape[1] != physical_n + 1:
+            raise ValueError("ROCm packed IRFFT input has the wrong half-spectrum shape")
+        out = np.empty((values.shape[0], n), np.float32)
+    else:
+        values = np.ascontiguousarray(rows, np.float32)
+        if values.ndim != 2 or values.shape[1] != n:
+            raise ValueError("ROCm packed RFFT input has the wrong real shape")
+        out = np.empty((values.shape[0], physical_n + 1), np.complex64)
+    rc = getattr(lib, symbol)(plan, _cptr(values), _cptr(out), values.shape[0], n)
+    if rc != 0:
+        raise RuntimeError(f"ROCm packed real FFT execution failed rc={rc}")
+    return out
+
+
 def run_rocm_spectral_composite(
     metadata: dict[str, Any], operands: list[np.ndarray]
 ) -> np.ndarray:
@@ -570,7 +621,7 @@ def run_rocm_spectral_composite(
         raise RuntimeError("prebuilt ROCm spectral composite image is unavailable")
     if (
         lib.ts_spectral_composite_package_abi_amd()
-        != b"tessera.rocm.spectral_composite.v4"
+        != b"tessera.rocm.spectral_composite.v5"
     ):
         raise RuntimeError("ROCm spectral composite package ABI mismatch")
     if (
@@ -635,10 +686,12 @@ def run_rocm_spectral_composite(
         _, kernel_n, _ = folded_axis(tuple(kernel.shape), axis)
         fft_n = int(children[0]["length"])
         _, forward = _rocm_plan(
-            fft_n, -1, str(children[0]["schedule_digest"])
+            int(children[0]["physical_length"]), -1,
+            str(children[0]["schedule_digest"])
         )
         _, inverse = _rocm_plan(
-            fft_n, 1, str(children[1]["schedule_digest"])
+            int(children[1]["physical_length"]), 1,
+            str(children[1]["schedule_digest"])
         )
         rc = lib.ts_spectral_conv_plan_hostptr_strided_storage_amd(
             composite_plan, forward, inverse, _cptr(x), input_n,
@@ -651,7 +704,10 @@ def run_rocm_spectral_composite(
         out = np.empty(output_shape, np.complex64)
         outer, samples, inner = folded_axis(tuple(x.shape), axis)
         win = int(contract["window_length"])
-        _, plan = _rocm_plan(win, -1, str(children[0]["schedule_digest"]))
+        _, plan = _rocm_plan(
+            int(children[0]["physical_length"]), -1,
+            str(children[0]["schedule_digest"]),
+        )
         rc = lib.ts_stft_plan_hostptr_strided_storage_amd(
             composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), outer,
             samples, inner, win, int(contract["hop"]),
@@ -666,7 +722,10 @@ def run_rocm_spectral_composite(
         outer = int(np.prod(x.shape[:frame_axis], dtype=np.int64))
         inner = int(np.prod(x.shape[axis + 1 :], dtype=np.int64))
         win = int(contract["window_length"])
-        _, plan = _rocm_plan(win, 1, str(children[0]["schedule_digest"]))
+        _, plan = _rocm_plan(
+            int(children[0]["physical_length"]), 1,
+            str(children[0]["schedule_digest"]),
+        )
         rc = lib.ts_istft_plan_hostptr_strided_storage_amd(
             composite_plan, plan, _cptr(x), _cptr(window), _cptr(out), outer,
             int(contract["frames"]), int(x.shape[axis]), inner, win,

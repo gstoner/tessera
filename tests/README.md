@@ -21,6 +21,22 @@ exactly what each suite costs in RAM and wall clock, and explains the
 `slow` marker boundary so you don't accidentally trigger the 30-minute
 SuperBench / GEMM tail.
 
+## Selecting a compiler build
+
+Set `TESSERA_BUILD_DIR` to one CMake build root when the active tree is not
+`build/`, for example:
+
+```bash
+TESSERA_BUILD_DIR=/tmp/tessera-rocm-clean pytest tests/unit/test_rocm_*.py -q
+```
+
+The selector is fail-closed: a missing artifact in the requested tree does not
+fall through to a stale default build. `TESSERA_OPT` and `TESSERA_OPT_BIN`
+remain the more specific compiler-driver selectors, while
+`TESSERA_ROCM_GEMM_LIB`, `TESSERA_ROCM_FLASH_ATTN_LIB`,
+`TESSERA_ROCM_SPECTRAL_LIB`, and `TESSERA_ROCM_OPT` override individual ROCm
+artifacts when deliberately testing a mixed package.
+
 ## Layout
 
 | Directory | Purpose | Default run |

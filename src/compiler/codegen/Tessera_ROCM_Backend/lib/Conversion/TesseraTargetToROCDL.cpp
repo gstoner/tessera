@@ -5,7 +5,6 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 
 using namespace mlir;
@@ -27,10 +26,9 @@ namespace {
 // --offload-arch=gfx1151). FP8/F32/TF32 WMMA do not exist on RDNA 3.5.
 //
 // Returns true if it emitted the real op (and replaced/erased `op`); false when
-// the operands are NOT real fragments (abstract / scalar contract-level IR, e.g.
-// a `tile.mma` on scalars before fragment materialization) — the caller then
-// falls through to the artifact-marker path, which is the honest lowering at
-// that abstraction level.
+// the operands are not executable fragments. Target-only inspection stops
+// before this pass; reaching binary lowering with an abstract contract is an
+// error, never a request to synthesize a placeholder call.
 bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
   if (op->getNumOperands() != 3 || op->getNumResults() != 1)
     return false;
@@ -192,34 +190,14 @@ bool lowerRealMFMA(Operation *op, PatternRewriter &rewriter) {
   return false;
 }
 
-LLVM::LLVMFuncOp declareVoidMarker(ModuleOp module, StringRef name) {
-  if (auto fn = module.lookupSymbol<LLVM::LLVMFuncOp>(name))
-    return fn;
-
-  OpBuilder builder(module.getBodyRegion());
-  builder.setInsertionPointToStart(module.getBody());
-  auto fnType = LLVM::LLVMFunctionType::get(
-      LLVM::LLVMVoidType::get(module.getContext()), {}, false);
-  return builder.create<LLVM::LLVMFuncOp>(module.getLoc(), name, fnType);
-}
-
-void replaceResultUsesWithUndef(Operation *op, PatternRewriter &rewriter) {
-  for (Value result : op->getResults()) {
-    if (result.use_empty())
-      continue;
-    auto undef = rewriter.create<LLVM::UndefOp>(op->getLoc(), result.getType());
-    result.replaceAllUsesExcept(undef, undef);
-  }
-}
-
 struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LoweringPass)
 
   StringRef getArgument() const final { return "lower-tessera-target-to-rocdl"; }
 
   StringRef getDescription() const final {
-    return "Lower Tessera ROCm target ops to ROCDL: real rocdl.wmma for WMMA "
-           "ops carrying fragment vectors, artifact markers otherwise";
+    return "Lower executable Tessera ROCm target ops to real ROCDL and reject "
+           "target-only or abstract contracts";
   }
 
   void runOnOperation() override {
@@ -248,51 +226,25 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
 
       StringRef opName = op->getName().getStringRef();
 
-      // Stage J: a WMMA op carrying real fragment vectors lowers to the real
-      // rocdl.wmma intrinsic; only abstract/scalar WMMA falls through to the
-      // marker below.
+      // A matrix op carrying real fragment vectors lowers to the real ROCDL
+      // intrinsic. Abstract/scalar contracts fail closed below.
       if (opName == "tessera_rocm.wmma" && lowerRealWMMA(op, rewriter))
         continue;
       if (opName == "tessera_rocm.mfma" && lowerRealMFMA(op, rewriter))
         continue;
 
-      StringRef markerName = "llvm.tessera.rocm.unknown";
-      if (opName == "tessera_rocm.mfma")
-        markerName = "llvm.amdgcn.mfma.contract";
-      else if (opName == "tessera_rocm.wmma")
-        markerName = "llvm.amdgcn.wmma.contract";
-      else if (opName == "tessera_rocm.async_copy")
-        markerName = "llvm.amdgcn.raw.buffer.copy.contract";
-      else if (opName == "tessera_rocm.buffer_load")
-        markerName = "llvm.amdgcn.raw.buffer.load.contract";
-      else if (opName == "tessera_rocm.ds_read_tr")
-        markerName = "llvm.amdgcn.ds.read.tr.contract";
-      else if (opName == "tessera_rocm.wait") {
-        // A targeted counter wait (vmcnt / lgkmcnt) lets the matrix core keep
-        // issuing past an in-flight copy; only a wait with no counter class is
-        // a true synchronization point that drains the wavefront (s_barrier).
-        StringRef counter;
-        if (auto attr = op->getAttrOfType<StringAttr>("counter"))
-          counter = attr.getValue();
-        if (counter == "vmcnt")
-          markerName = "llvm.amdgcn.s.waitcnt.vmcnt.contract";
-        else if (counter == "lgkmcnt")
-          markerName = "llvm.amdgcn.s.waitcnt.lgkmcnt.contract";
-        else if (counter.empty())
-          markerName = "llvm.amdgcn.s.barrier.contract";
-        else {
-          op->emitError("tessera_rocm.wait: unknown counter class '")
-              << counter << "' (expected 'vmcnt', 'lgkmcnt', or none)";
-          signalPassFailure();
-          return;
-        }
-      }
-
-      auto marker = declareVoidMarker(module, markerName);
-      rewriter.create<LLVM::CallOp>(op->getLoc(), TypeRange{},
-                                    SymbolRefAttr::get(marker), ValueRange{});
-      replaceResultUsesWithUndef(op, rewriter);
-      rewriter.eraseOp(op);
+      if (opName == "tessera_rocm.wmma" || opName == "tessera_rocm.mfma")
+        op->emitError("executable ROCm matrix lowering requires typed hardware "
+                      "fragment vectors; scalar/abstract contracts are target-only");
+      else if (opName == "tessera_rocm.async_copy" ||
+               opName == "tessera_rocm.wait")
+        op->emitError("executable ROCm async operations must pass through "
+                      "lower-rocm-async-copy with the memref/token contract");
+      else
+        op->emitError("ROCm target operation has no executable ROCDL lowering; "
+                      "retain it with output=target until a physical consumer lands");
+      signalPassFailure();
+      return;
     }
 
     bool leakedROCMOp = false;

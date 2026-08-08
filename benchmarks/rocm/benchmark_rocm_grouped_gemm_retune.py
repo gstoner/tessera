@@ -41,8 +41,8 @@ def _hsaco(tile_n: int) -> bytes:
     directive = (
         'module {\n  "tessera_rocm.grouped_gemm"() '
         f'{{name = "grouped_gemm", tn = {tile_n} : i64}} : () -> ()\n}}\n')
-    return rt._build_rocm_elementwise_hsaco(
-        "generate-rocm-moe-kernel", directive,
+    return rt._build_rocm_family_hsaco(
+        "moe_dispatch", directive,
         rt._rocm_grouped_gemm_hsaco_cache, (chip, tile_n))
 
 

@@ -1,4 +1,5 @@
-// RUN: %trop --lower-tessera-target-to-rocdl %s | FileCheck %s
+// RUN: %trop %s | FileCheck %s --check-prefix=TARGET
+// RUN: not %trop --lower-tessera-target-to-rocdl %s 2>&1 | FileCheck %s --check-prefix=STRICT
 
 module {
   func.func @kernel(%a: f32, %b: f32, %dst: !llvm.ptr, %src: !llvm.ptr, %bytes: i64) {
@@ -9,11 +10,8 @@ module {
   }
 }
 
-// All three ROCDL marker declarations are emitted; CHECK-DAG is order-robust
-// (the pass declares them in dependency order, not source order).
-// CHECK-DAG: llvm.func @llvm.amdgcn.mfma.contract
-// CHECK-DAG: llvm.func @llvm.amdgcn.raw.buffer.copy.contract
-// CHECK-DAG: llvm.func @llvm.amdgcn.s.barrier.contract
-// CHECK-NOT: tessera_rocm.mfma
-// CHECK-NOT: tessera_rocm.async_copy
-// CHECK-NOT: tessera_rocm.wait
+// TARGET: tessera_rocm.mfma
+// TARGET: tessera_rocm.async_copy
+// TARGET: tessera_rocm.wait
+// TARGET-NOT: .contract
+// STRICT: executable ROCm async operations must pass through lower-rocm-async-copy

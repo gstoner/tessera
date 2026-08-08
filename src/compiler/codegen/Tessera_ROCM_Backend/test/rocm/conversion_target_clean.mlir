@@ -10,7 +10,7 @@ module {
 }
 
 // CHECK-LABEL: func.func @my_kernel
-// CHECK-NOT: tessera_rocm.async_copy
-// CHECK-NOT: tessera_rocm.wait
-// CHECK: llvm.call @llvm.amdgcn.raw.buffer.copy.contract
-// CHECK: llvm.call @llvm.amdgcn.s.barrier.contract
+// The compatibility alias is now a typed Target-IR inspection pipeline.
+// CHECK: tessera_rocm.async_copy
+// CHECK: tessera_rocm.wait
+// CHECK-NOT: .contract

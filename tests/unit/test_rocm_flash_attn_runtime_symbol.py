@@ -18,16 +18,12 @@ from __future__ import annotations
 
 import ctypes
 import os
-from pathlib import Path
 
 import pytest
 
 np = pytest.importorskip("numpy")
+from tests._support.rocm_build import rocm_flash_attn_lib_path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ATTN_LIB = (REPO_ROOT / "build" / "src" / "compiler" / "codegen"
-            / "Tessera_ROCM_Backend" / "runtime" / "hip"
-            / "libtessera_rocm_flash_attn.so")
 ROCM_LIB_DIR = os.environ.get("ROCM_PATH", "/opt/rocm") + "/lib"
 
 
@@ -37,9 +33,10 @@ def _bf16():
 
 
 def _load_lib():
-    if not ATTN_LIB.is_file():
-        pytest.skip(f"build the shipped flash-attn lib: ninja -C build "
-                    f"tessera_rocm_flash_attn ({ATTN_LIB} missing)")
+    attn_lib = rocm_flash_attn_lib_path()
+    if attn_lib is None:
+        pytest.skip("build the shipped flash-attn lib: ninja -C build "
+                    "tessera_rocm_flash_attn")
     for dep in ("libamdhip64.so", "libhiprtc.so"):
         p = os.path.join(ROCM_LIB_DIR, dep)
         if os.path.isfile(p):
@@ -47,7 +44,7 @@ def _load_lib():
                 ctypes.CDLL(p, mode=ctypes.RTLD_LOCAL)
             except OSError:
                 pass
-    return ctypes.CDLL(str(ATTN_LIB), mode=ctypes.RTLD_LOCAL)
+    return ctypes.CDLL(str(attn_lib), mode=ctypes.RTLD_LOCAL)
 
 
 def _bind(lib, name):

@@ -76,7 +76,7 @@ _TSOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
         "Spectral Operators",
         (
             "fft", "ifft", "rfft", "irfft",
-            "stft", "istft", "spectral_filter",
+            "dct", "stft", "istft", "spectral_conv", "spectral_filter",
         ),
     ),
     (

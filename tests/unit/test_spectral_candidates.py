@@ -132,7 +132,7 @@ class _FakeAmdPackage:
 
     @staticmethod
     def ts_spectral_composite_package_abi_amd():
-        return b"tessera.rocm.spectral_composite.v4"
+        return b"tessera.rocm.spectral_composite.v5"
 
     def ts_spectral_composite_arch_amd(self):
         return self._arch

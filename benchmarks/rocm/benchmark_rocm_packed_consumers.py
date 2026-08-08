@@ -22,25 +22,20 @@ import numpy as np
 from tessera import runtime as rt
 from tessera.stdlib.quant import PackedQuantTensor, QuantScheme
 
-_consumer_hsaco_cache: dict[str, bytes] = {}
+_consumer_hsaco_cache: dict[tuple[str, str], bytes] = {}
 
 
 def _build_consumer_hsaco(kind: str) -> bytes:
-    cached = _consumer_hsaco_cache.get(kind)
-    if cached is not None:
-        return cached
     directive = (
         'module {\n  "tessera_rocm.int4_pack"() '
         f'{{name = "int4_{kind}", kind = "{kind}"}} : () -> ()\n}}\n'
     )
-    hsaco = rt._build_rocm_elementwise_hsaco(
-        "generate-rocm-int4-pack-kernel",
+    return rt._build_rocm_family_hsaco(
+        "quant_int4_pack",
         directive,
-        {},
+        _consumer_hsaco_cache,
         (rt._rocm_chip(), kind),
     )
-    _consumer_hsaco_cache[kind] = hsaco
-    return hsaco
 
 
 def _memref(pointer: ctypes.c_void_p, size: int) -> list[Any]:

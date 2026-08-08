@@ -39,6 +39,9 @@ class PipelineSpec:
         ``OPT_PASS_REGISTRATION``).  Documents the intended chain;
         the C++ source remains authoritative for the actual
         composition.
+    family_plugins
+        Optional semantic-family to concrete pass mapping for pipelines whose
+        typed options select one plugin rather than running every producer.
     required_dialects
         Dialect names that must be loaded into the MLIRContext before
         the pipeline runs.  Cross-checked against
@@ -68,6 +71,7 @@ class PipelineSpec:
     passes: tuple[str, ...]
     required_dialects: tuple[str, ...]
     targets: tuple[str, ...]
+    family_plugins: tuple[tuple[str, tuple[str, ...]], ...] = ()
     verifier_passes: tuple[str, ...] = ()
     lit_fixtures: tuple[str, ...] = ()
     phase: str = "lowering"
@@ -568,6 +572,104 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         status="lit_verified",
         sprint="Pipeline-PP",
     ),
+    PipelineSpec(
+        name="tessera-rocm-executable",
+        passes=(
+            "declare-rocm-pipeline-contract",
+            "rocm-wave-lds-pipeline",
+            "rocm-wave-lds-legality",
+            "lower-tile-to-rocm",
+            "lower-tessera-kernel-abi",
+            "lower-rocm-async-copy",
+            "lower-tessera-target-to-rocdl",
+            "verify-rocm-executable",
+            "convert-scf-to-cf",
+            "convert-gpu-to-rocdl",
+            "reconcile-unrealized-casts",
+            "rocm-materialize-dynamic-lds",
+            "rocdl-attach-target",
+            "gpu-module-to-binary",
+        ),
+        required_dialects=(
+            "tessera", "tile", "tessera_rocm", "gpu", "llvm", "rocdl",
+            "func", "scf", "arith", "memref",
+        ),
+        targets=("rocm_gfx1151",),
+        family_plugins=(
+            ("algebra_clifford", ("generate-rocm-clifford-kernel",)),
+            ("attention", ("generate-wmma-flash-attn-kernel",)),
+            ("attention_mla_decode", ("generate-rocm-mla-absorb-decode-kernel",)),
+            (
+                "attention_backward",
+                (
+                    "generate-wmma-flash-attn-kernel",
+                    "generate-wmma-flash-attn-bwd-kernel",
+                ),
+            ),
+            ("draft_dspark", ("generate-rocm-dspark-draft-block-kernel",)),
+            ("ebm_affine_langevin", ("generate-rocm-ebm-affine-langevin-kernel",)),
+            ("ebm_decode_init", ("generate-rocm-ebm-decode-init-kernel",)),
+            ("ebm_ebt_tiny", ("generate-rocm-ebm-ebt-tiny-kernel",)),
+            ("ebm_energy_quadratic", ("generate-rocm-ebm-energy-quadratic-kernel",)),
+            ("ebm_langevin", ("generate-rocm-ebm-langevin-kernel",)),
+            ("ebm_partition", ("generate-rocm-ebm-partition-kernel",)),
+            ("fused_silu_mul", ("generate-rocm-silu-mul-kernel",)),
+            ("indexing_gather", ("generate-rocm-gather-kernel",)),
+            ("indexing_scatter", ("generate-rocm-scatter-kernel",)),
+            ("loss_binary", ("generate-rocm-binary-loss-kernel",)),
+            ("loss_pointwise", ("generate-rocm-pointwise-loss-kernel",)),
+            ("loss_policy", ("generate-rocm-policy-loss-kernel",)),
+            ("matmul", ("generate-wmma-gemm-kernel",)),
+            ("matmul_batched_f32", ("generate-rocm-batched-gemm-f32-kernel",)),
+            ("matmul_f32", ("generate-rocm-gemm-f32-kernel",)),
+            ("moe_dispatch", ("generate-rocm-moe-kernel",)),
+            ("normalization", ("generate-rocm-norm-kernel",)),
+            ("optimizer", ("generate-rocm-optimizer-kernel",)),
+            ("ordering_sort", ("generate-rocm-sort-kernel",)),
+            ("paged_kv", ("generate-rocm-paged-kv-read-kernel",)),
+            ("position_alibi", ("generate-rocm-alibi-kernel",)),
+            ("position_rope", ("generate-rocm-rope-kernel",)),
+            ("quant_dequant_gemm", ("generate-rocm-dequant-gemm-kernel",)),
+            ("quant_fp", ("generate-rocm-fpquant-kernel",)),
+            ("quant_int4_pack", ("generate-rocm-int4-pack-kernel",)),
+            ("reduction", ("generate-rocm-reduce-kernel",)),
+            ("reduction_arg", ("generate-rocm-argreduce-kernel",)),
+            ("rng_philox", ("generate-rocm-philox-kernel",)),
+            ("scan", ("generate-rocm-scan-kernel",)),
+            ("scalar_activation", ("generate-rocm-activation-kernel",)),
+            ("scalar_binary", ("generate-rocm-binary-kernel",)),
+            ("scalar_bitwise", ("generate-rocm-bitwise-kernel",)),
+            ("scalar_compare", ("generate-rocm-compare-kernel",)),
+            ("scalar_logical", ("generate-rocm-logical-kernel",)),
+            ("scalar_predicate", ("generate-rocm-predicate-kernel",)),
+            ("scalar_unary", ("generate-rocm-unary-kernel",)),
+            ("scalar_where", ("generate-rocm-where-kernel",)),
+            ("sequence_deltanet", ("generate-rocm-deltanet-kernel",)),
+            ("sequence_linear_attention", ("generate-wmma-linear-attn-kernel",)),
+            ("sequence_recurrent_cell", ("generate-rocm-recurrent-cell-kernel",)),
+            ("sequence_selective_ssm", ("generate-rocm-selective-ssm-kernel",)),
+            ("sequence_selective_ssm_backward", ("generate-rocm-selective-ssm-bwd-kernel",)),
+            ("solver_cholesky", ("generate-rocm-cholesky-kernel",)),
+            ("solver_lu", ("generate-rocm-lu-kernel",)),
+            ("solver_qr", ("generate-rocm-qr-kernel",)),
+            ("solver_svd", ("generate-rocm-svd-kernel",)),
+            ("solver_triangular_solve", ("generate-rocm-tri-solve-kernel",)),
+            ("sparse_block_attention", ("generate-rocm-block-sparse-attn-kernel",)),
+            ("sparse_block_topk", ("generate-rocm-block-sparse-topk-kernel",)),
+            ("sparse_sddmm", ("generate-rocm-sddmm-kernel",)),
+            ("sparse_spmm", ("generate-rocm-spmm-kernel",)),
+            ("spectral_dft", ("generate-rocm-dft-kernel",)),
+            ("softmax", ("generate-rocm-softmax-kernel",)),
+        ),
+        verifier_passes=("rocm-wave-lds-legality", "verify-rocm-executable"),
+        lit_fixtures=(
+            "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/executable_pipeline_contract.mlir",
+            "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/executable_boundary_strict.mlir",
+        ),
+        phase="target",
+        status="lit_verified",
+        sprint="ROCM-E2E-SPINE",
+    ),
 )
 
 
@@ -640,10 +742,11 @@ TARGET_PIPELINE_RESOLUTIONS: tuple[TargetPipelineResolution, ...] = (
         "partial", "absent", "The ROCm pipeline is family-shared; the exact driver route remains artifact-only.",
     ),
     TargetPipelineResolution(
-        "rocm_gfx1151", "tessera-target-artifact", "tessera-lower-to-rocm",
-        "declared_shared_builder", "exact_architecture", "rocm",
+        "rocm_gfx1151", "tessera-target-artifact", "tessera-rocm-executable",
+        "declared_exact", "exact_architecture", "rocm",
         "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
-        "partial", "absent", "The family-shared pipeline now owns typed gfx1151 softmax and f32 arbitrary-axis reduction producers and HSACO packages; target-wide Level C remains absent while other families use legacy routes.",
+        "partial", "partial", "The exact typed family-plugin pipeline owns the promoted gfx1151 matmul, softmax, reduction, paged-KV, attention forward/backward, and MoE HSACO boundary; unsupported families and architectures fail closed.",
+        driver_registration_source="src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
     ),
     TargetPipelineResolution(
         "rocm_gfx1200", "tessera-target-artifact", "tessera-lower-to-rocm",

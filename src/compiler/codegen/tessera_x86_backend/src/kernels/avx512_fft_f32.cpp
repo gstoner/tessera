@@ -68,6 +68,28 @@ struct SixStepPlan {
     std::vector<float> twiddle_im;
 };
 
+struct RealFFTPlan {
+    std::vector<float> forward_re;
+    std::vector<float> forward_im;
+};
+
+const RealFFTPlan& real_fft_plan(int64_t n) {
+    thread_local std::unordered_map<int64_t, std::shared_ptr<RealFFTPlan>> cache;
+    if (auto found = cache.find(n); found != cache.end()) return *found->second;
+    if (cache.size() >= 8) cache.erase(cache.begin());
+    auto plan = std::make_shared<RealFFTPlan>();
+    const int64_t m = n / 2;
+    plan->forward_re.resize(static_cast<size_t>(m + 1));
+    plan->forward_im.resize(static_cast<size_t>(m + 1));
+    for (int64_t k = 0; k <= m; ++k) {
+        const double angle = -2.0 * M_PI * static_cast<double>(k) / n;
+        plan->forward_re[static_cast<size_t>(k)] = static_cast<float>(std::cos(angle));
+        plan->forward_im[static_cast<size_t>(k)] = static_cast<float>(std::sin(angle));
+    }
+    auto inserted = cache.emplace(n, std::move(plan));
+    return *inserted.first->second;
+}
+
 // Per-thread and deliberately bounded: callers commonly execute several rows
 // of one shape, so a shared global cache would add locking to the hot path.
 // Eight plans cover the normal benchmark/autotune working set while preventing
@@ -546,8 +568,98 @@ int execute_any_fft(float* data, int64_t batch, int64_t n, bool inverse,
 
 }  // namespace
 
+// Packed even-length real transforms.  The physical FFT is N/2 complex
+// values: z[j] = x[2j] + i*x[2j+1].  The pre/post processing stays inside the
+// native package so the Python executor cannot accidentally reconstruct an
+// N-point complex lane while advertising an r2c/c2r artifact.
+extern "C" int tessera_x86_fft_r2c_packed_f32(
+    const char* digest, const float* input, float* output, int64_t batch,
+    int64_t n) {
+    if (!valid_digest(digest) || !input || !output || batch <= 0 || n < 2 ||
+        (n & 1))
+        return 1;
+    const int64_t m = n / 2;
+    const RealFFTPlan& realPlan = real_fft_plan(n);
+    auto packedOwner = spectral_workspace(
+        digest, "r2c_packed", static_cast<size_t>(2 * batch * m));
+    float* packed = packedOwner->data();
+    for (int64_t row = 0; row < batch; ++row)
+        for (int64_t j = 0; j < m; ++j) {
+            packed[2 * (row * m + j)] = input[row * n + 2 * j];
+            packed[2 * (row * m + j) + 1] = input[row * n + 2 * j + 1];
+        }
+    if ((m & (m - 1)) == 0)
+        tessera_x86_fft_c2c_f32(packed, batch, m, 0);
+    else if (tessera_x86_fft_mixed_c2c_f32(packed, batch, m, 0) != 0)
+        return 2;
+
+    for (int64_t row = 0; row < batch; ++row) {
+        const float* z = packed + 2 * row * m;
+        float* spectrum = output + 2 * row * (m + 1);
+        for (int64_t k = 0; k <= m; ++k) {
+            const int64_t aIndex = k == m ? 0 : k;
+            const int64_t bIndex = (m - k) % m;
+            const float ar = z[2 * aIndex], ai = z[2 * aIndex + 1];
+            const float br = z[2 * bIndex], bi = -z[2 * bIndex + 1];
+            const float sumr = ar + br, sumi = ai + bi;
+            const float diffr = ar - br, diffi = ai - bi;
+            const float wr = realPlan.forward_re[static_cast<size_t>(k)];
+            const float wi = realPlan.forward_im[static_cast<size_t>(k)];
+            const float tr = wr * diffr - wi * diffi;
+            const float ti = wr * diffi + wi * diffr;
+            spectrum[2 * k] = 0.5f * (sumr + ti);
+            spectrum[2 * k + 1] = 0.5f * (sumi - tr);
+        }
+        spectrum[1] = 0.0f;
+        spectrum[2 * m + 1] = 0.0f;
+    }
+    return 0;
+}
+
+extern "C" int tessera_x86_fft_c2r_packed_f32(
+    const char* digest, const float* input, float* output, int64_t batch,
+    int64_t n) {
+    if (!valid_digest(digest) || !input || !output || batch <= 0 || n < 2 ||
+        (n & 1))
+        return 1;
+    const int64_t m = n / 2;
+    const RealFFTPlan& realPlan = real_fft_plan(n);
+    auto packedOwner = spectral_workspace(
+        digest, "c2r_packed", static_cast<size_t>(2 * batch * m));
+    float* packed = packedOwner->data();
+    for (int64_t row = 0; row < batch; ++row) {
+        const float* spectrum = input + 2 * row * (m + 1);
+        float* z = packed + 2 * row * m;
+        for (int64_t k = 0; k < m; ++k) {
+            const int64_t mirror = m - k;
+            const float xr = spectrum[2 * k], xi = spectrum[2 * k + 1];
+            const float yr = spectrum[2 * mirror];
+            const float yi = -spectrum[2 * mirror + 1];
+            const float sumr = xr + yr, sumi = xi + yi;
+            const float diffr = xr - yr, diffi = xi - yi;
+            const float wr = realPlan.forward_re[static_cast<size_t>(k)];
+            const float wi = -realPlan.forward_im[static_cast<size_t>(k)];
+            const float tr = wr * diffr - wi * diffi;
+            const float ti = wr * diffi + wi * diffr;
+            z[2 * k] = 0.5f * (sumr - ti);
+            z[2 * k + 1] = 0.5f * (sumi + tr);
+        }
+    }
+    if ((m & (m - 1)) == 0)
+        tessera_x86_fft_c2c_f32(packed, batch, m, 1);
+    else if (tessera_x86_fft_mixed_c2c_f32(packed, batch, m, 1) != 0)
+        return 2;
+    const float scale = 1.0f / static_cast<float>(m);
+    for (int64_t row = 0; row < batch; ++row)
+        for (int64_t j = 0; j < m; ++j) {
+            output[row * n + 2 * j] = packed[2 * (row * m + j)] * scale;
+            output[row * n + 2 * j + 1] = packed[2 * (row * m + j) + 1] * scale;
+        }
+    return 0;
+}
+
 extern "C" const char* tessera_x86_spectral_composite_package_abi() {
-    return "tessera.x86.spectral_composite.v4";
+    return "tessera.x86.spectral_composite.v5";
 }
 
 extern "C" int tessera_x86_spectral_filter_f32(
@@ -591,30 +703,47 @@ extern "C" int tessera_x86_spectral_conv_f32(
     int64_t fft_n) {
     const int64_t output_n = input_n + kernel_n - 1;
     if (!valid_digest(digest) || !input || !kernel || !output || batch <= 0 ||
-        input_n <= 0 || kernel_n <= 0 || fft_n < output_n) return 1;
-    const size_t floats = static_cast<size_t>(2 * batch * fft_n);
-    auto xOwner = spectral_workspace(digest, "conv_x", floats);
-    auto wOwner = spectral_workspace(digest, "conv_w", floats);
+        input_n <= 0 || kernel_n <= 0 || fft_n < output_n || fft_n < 2 ||
+        (fft_n & 1)) return 1;
+    const int64_t bins = fft_n / 2 + 1;
+    const size_t realFloats = static_cast<size_t>(batch * fft_n);
+    const size_t spectrumFloats = static_cast<size_t>(2 * batch * bins);
+    auto xOwner = spectral_workspace(digest, "conv_x_real", realFloats);
+    auto wOwner = spectral_workspace(digest, "conv_w_real", realFloats);
+    auto xSpectrumOwner = spectral_workspace(
+        digest, "conv_x_spectrum", spectrumFloats);
+    auto wSpectrumOwner = spectral_workspace(
+        digest, "conv_w_spectrum", spectrumFloats);
+    auto inverseOwner = spectral_workspace(
+        digest, "conv_inverse_real", realFloats);
     std::vector<float>& x = *xOwner;
     std::vector<float>& w = *wOwner;
-    std::fill(x.begin(), x.begin() + floats, 0.0f);
-    std::fill(w.begin(), w.begin() + floats, 0.0f);
+    std::vector<float>& xSpectrum = *xSpectrumOwner;
+    std::vector<float>& wSpectrum = *wSpectrumOwner;
+    std::vector<float>& inverse = *inverseOwner;
+    std::fill(x.begin(), x.begin() + realFloats, 0.0f);
+    std::fill(w.begin(), w.begin() + realFloats, 0.0f);
     for (int64_t row = 0; row < batch; ++row) {
-        for (int64_t i = 0; i < input_n; ++i) x[2 * (row * fft_n + i)] = input[row * input_n + i];
-        for (int64_t i = 0; i < kernel_n; ++i) w[2 * (row * fft_n + i)] = kernel[row * kernel_n + i];
+        std::memcpy(x.data() + row * fft_n, input + row * input_n,
+                    static_cast<size_t>(input_n) * sizeof(float));
+        std::memcpy(w.data() + row * fft_n, kernel + row * kernel_n,
+                    static_cast<size_t>(kernel_n) * sizeof(float));
     }
-    if (execute_any_fft(x.data(), batch, fft_n, false, digest) ||
-        execute_any_fft(w.data(), batch, fft_n, false, digest)) return 2;
-    for (int64_t i = 0; i < batch * fft_n; ++i) {
-        const float ar = x[2 * i], ai = x[2 * i + 1];
-        const float br = w[2 * i], bi = w[2 * i + 1];
-        x[2 * i] = ar * br - ai * bi;
-        x[2 * i + 1] = ar * bi + ai * br;
+    if (tessera_x86_fft_r2c_packed_f32(
+            digest, x.data(), xSpectrum.data(), batch, fft_n) ||
+        tessera_x86_fft_r2c_packed_f32(
+            digest, w.data(), wSpectrum.data(), batch, fft_n)) return 2;
+    for (int64_t i = 0; i < batch * bins; ++i) {
+        const float ar = xSpectrum[2 * i], ai = xSpectrum[2 * i + 1];
+        const float br = wSpectrum[2 * i], bi = wSpectrum[2 * i + 1];
+        xSpectrum[2 * i] = ar * br - ai * bi;
+        xSpectrum[2 * i + 1] = ar * bi + ai * br;
     }
-    if (execute_any_fft(x.data(), batch, fft_n, true, digest)) return 3;
+    if (tessera_x86_fft_c2r_packed_f32(
+            digest, xSpectrum.data(), inverse.data(), batch, fft_n)) return 3;
     for (int64_t row = 0; row < batch; ++row)
-        for (int64_t i = 0; i < output_n; ++i)
-            output[row * output_n + i] = x[2 * (row * fft_n + i)];
+        std::memcpy(output + row * output_n, inverse.data() + row * fft_n,
+                    static_cast<size_t>(output_n) * sizeof(float));
     return 0;
 }
 
@@ -623,22 +752,39 @@ extern "C" int tessera_x86_stft_f32(
     int64_t batch, int64_t samples, int64_t win, int64_t hop, int64_t frames,
     float output_scale) {
     if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
-        samples <= 0 || win <= 0 || hop <= 0 || frames <= 0) return 1;
+        samples <= 0 || win < 2 || hop <= 0 || frames <= 0) return 1;
     const int64_t rows = batch * frames, bins = win / 2 + 1;
-    auto fullOwner = spectral_workspace(
-        digest, "stft", static_cast<size_t>(2 * rows * win));
-    std::vector<float>& full = *fullOwner;
+    if (win & 1) {
+        auto fullOwner = spectral_workspace(
+            digest, "stft_odd_full", static_cast<size_t>(2 * rows * win));
+        std::vector<float>& full = *fullOwner;
+        for (int64_t row = 0; row < batch; ++row)
+            for (int64_t frame = 0; frame < frames; ++frame)
+                for (int64_t i = 0; i < win; ++i) {
+                    const int64_t at = (row * frames + frame) * win + i;
+                    full[2 * at] =
+                        input[row * samples + frame * hop + i] * window[i];
+                    full[2 * at + 1] = 0.0f;
+                }
+        if (execute_any_fft(full.data(), rows, win, false, digest)) return 2;
+        for (int64_t row = 0; row < rows; ++row)
+            for (int64_t i = 0; i < 2 * bins; ++i)
+                output[2 * row * bins + i] =
+                    full[2 * row * win + i] * output_scale;
+        return 0;
+    }
+    auto framesOwner = spectral_workspace(
+        digest, "stft_frames_real", static_cast<size_t>(rows * win));
+    std::vector<float>& framed = *framesOwner;
     for (int64_t row = 0; row < batch; ++row)
         for (int64_t frame = 0; frame < frames; ++frame)
             for (int64_t i = 0; i < win; ++i) {
                 const int64_t at = (row * frames + frame) * win + i;
-                full[2 * at] = input[row * samples + frame * hop + i] * window[i];
-                full[2 * at + 1] = 0.0f;
+                framed[at] = input[row * samples + frame * hop + i] * window[i];
             }
-    if (execute_any_fft(full.data(), rows, win, false, digest)) return 2;
-    for (int64_t row = 0; row < rows; ++row)
-        for (int64_t i = 0; i < 2 * bins; ++i)
-            output[2 * row * bins + i] = full[2 * row * win + i] * output_scale;
+    if (tessera_x86_fft_r2c_packed_f32(
+            digest, framed.data(), output, rows, win)) return 2;
+    if (output_scale != 1.0f) scale_complex(output, rows * bins, output_scale);
     return 0;
 }
 
@@ -647,23 +793,47 @@ extern "C" int tessera_x86_istft_f32(
     int64_t batch, int64_t frames, int64_t win, int64_t hop,
     float output_scale) {
     if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
-        frames <= 0 || win <= 0 || hop <= 0) return 1;
+        frames <= 0 || win < 2 || hop <= 0) return 1;
     const int64_t rows = batch * frames, bins = win / 2 + 1;
     const int64_t samples = (frames - 1) * hop + win;
-    auto fullOwner = spectral_workspace(
-        digest, "istft", static_cast<size_t>(2 * rows * win));
-    std::vector<float>& full = *fullOwner;
-    for (int64_t row = 0; row < rows; ++row) {
-        for (int64_t i = 0; i < bins; ++i) {
-            full[2 * (row * win + i)] = input[2 * (row * bins + i)];
-            full[2 * (row * win + i) + 1] = input[2 * (row * bins + i) + 1];
+    if (win & 1) {
+        auto fullOwner = spectral_workspace(
+            digest, "istft_odd_full", static_cast<size_t>(2 * rows * win));
+        std::vector<float>& full = *fullOwner;
+        for (int64_t row = 0; row < rows; ++row) {
+            for (int64_t i = 0; i < bins; ++i) {
+                full[2 * (row * win + i)] = input[2 * (row * bins + i)];
+                full[2 * (row * win + i) + 1] =
+                    input[2 * (row * bins + i) + 1];
+            }
+            for (int64_t i = bins; i < win; ++i) {
+                full[2 * (row * win + i)] =
+                    input[2 * (row * bins + win - i)];
+                full[2 * (row * win + i) + 1] =
+                    -input[2 * (row * bins + win - i) + 1];
+            }
         }
-        for (int64_t i = bins; i < win; ++i) {
-            full[2 * (row * win + i)] = input[2 * (row * bins + win - i)];
-            full[2 * (row * win + i) + 1] = -input[2 * (row * bins + win - i) + 1];
-        }
+        if (execute_any_fft(full.data(), rows, win, true, digest)) return 2;
+        for (int64_t row = 0; row < batch; ++row)
+            for (int64_t sample = 0; sample < samples; ++sample) {
+                float sum = 0.0f, weight = 0.0f;
+                for (int64_t frame = 0; frame < frames; ++frame) {
+                    const int64_t local = sample - frame * hop;
+                    if (local < 0 || local >= win) continue;
+                    const float w = window[local];
+                    sum += full[2 * ((row * frames + frame) * win + local)] * w;
+                    weight += w * w;
+                }
+                output[row * samples + sample] =
+                    (sum / std::max(weight, 1.0e-12f)) * output_scale;
+            }
+        return 0;
     }
-    if (execute_any_fft(full.data(), rows, win, true, digest)) return 2;
+    auto framesOwner = spectral_workspace(
+        digest, "istft_frames_real", static_cast<size_t>(rows * win));
+    std::vector<float>& framed = *framesOwner;
+    if (tessera_x86_fft_c2r_packed_f32(
+            digest, input, framed.data(), rows, win)) return 2;
     for (int64_t row = 0; row < batch; ++row)
         for (int64_t sample = 0; sample < samples; ++sample) {
             float sum = 0.0f, weight = 0.0f;
@@ -671,7 +841,7 @@ extern "C" int tessera_x86_istft_f32(
                 const int64_t local = sample - frame * hop;
                 if (local < 0 || local >= win) continue;
                 const float w = window[local];
-                sum += full[2 * ((row * frames + frame) * win + local)] * w;
+                sum += framed[(row * frames + frame) * win + local] * w;
                 weight += w * w;
             }
             output[row * samples + sample] =

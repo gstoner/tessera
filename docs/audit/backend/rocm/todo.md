@@ -7,6 +7,16 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **shared ES low-rank
+correction contract + fp32/s32 accumulation policy defined; ROCm emitter is
+follow-up required.** The Evolution-Strategies reference tier
+(`tessera.stdlib.es`) landed; the Graph-IR op `es_low_rank_correction` and its
+emitters are W2. ROCm is a lead performance target (Decision #28): a hand
+SGMV / WMMA(MFMA) low-rank correction stays a Tier-3 arbiter candidate. The
+`s32` lane maps to WMMA IU8 (gfx1151 16×16×16, no FP8 WMMA); member-keyed RNG
+(G2) and the fp32/s32 accumulation policy (I6 / Decision #32) apply. Contract:
+`docs/audit/compiler/EGGROLL_SUPPORT_PLAN.md`.
+
 Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **three
 independent executable boundaries landed; exact-device packets open.** Zero-CU Copy
 Engine now has an explicit `copy_engine` artifact lane and a communicator

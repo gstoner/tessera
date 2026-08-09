@@ -8,6 +8,16 @@ last_updated: 2026-08-09
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **shared ES low-rank
+correction contract + fp32/s32 accumulation policy defined; Apple emitter is
+follow-up required.** The Evolution-Strategies reference tier
+(`tessera.stdlib.es`) landed; the Graph-IR op `es_low_rank_correction` and its
+emitters are W2. Apple owns the **reference-impl** MSL emitter first (rank-1
+bucket, `simdgroup_matrix`); member-keyed RNG (G2) and the fp32 accumulation lane
+(I6 / Decision #32) apply. The `s32` integer lane is the separate EGG track —
+**not applicable** to the float MSL path. Contract:
+`docs/audit/compiler/EGGROLL_SUPPORT_PLAN.md`.
+
 Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **shared
 fail-closed artifact vocabulary adopted; not applicable to Metal.** Copy
 Engine, GIN/RMA, and gfx1250 DDA are independent RCCL lanes with distinct

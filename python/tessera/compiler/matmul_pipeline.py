@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Literal, Mapping, Optional, Sequence, cast
 
 
 LINEAGE_CONTRACT_VERSION = "tessera.compiler.lineage.v1"
@@ -32,6 +32,7 @@ from .tile_ir import lower_schedule_to_tile_ir
 
 
 MATMUL_OPS = {"tessera.matmul", "tessera.gemm"}
+_FFTNorm = Literal["backward", "ortho", "forward"]
 CONV2D_OPS = {"tessera.conv2d_nhwc", "tessera.conv2d"}
 UNARY_OPS = {
     "tessera.layer_norm",
@@ -1007,6 +1008,13 @@ def _valid_arity(op: IROp) -> bool:
     return spec.valid_arity(len(op.operands)) if spec is not None else False
 
 
+def _fft_norm(value: object) -> _FFTNorm:
+    normalized = str(value)
+    if normalized not in {"backward", "forward", "ortho"}:
+        raise ValueError("FFT normalization must be backward, forward, or ortho")
+    return cast(_FFTNorm, normalized)
+
+
 def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[str, Any]) -> Any:
     op_name = _canonical_op_name(op_name)
     if op_name in MATMUL_OPS:
@@ -1126,19 +1134,19 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
         return x
     if op_name == "tessera.fft":
         return np.fft.fft(operands[0], axis=int(kwargs.get("axis", -1)),
-                          norm=str(kwargs.get("normalization", kwargs.get("norm", "backward"))))
+                          norm=_fft_norm(kwargs.get("normalization", kwargs.get("norm", "backward"))))
     if op_name == "tessera.ifft":
         return np.fft.ifft(operands[0], axis=int(kwargs.get("axis", -1)),
-                           norm=str(kwargs.get("normalization", kwargs.get("norm", "backward"))))
+                           norm=_fft_norm(kwargs.get("normalization", kwargs.get("norm", "backward"))))
     if op_name == "tessera.rfft":
         return np.fft.rfft(operands[0], axis=int(kwargs.get("axis", -1)),
-                           norm=str(kwargs.get("normalization", kwargs.get("norm", "backward"))))
+                           norm=_fft_norm(kwargs.get("normalization", kwargs.get("norm", "backward"))))
     if op_name == "tessera.irfft":
         n = kwargs.get("n", None)
         return np.fft.irfft(
             operands[0], n=None if n is None else int(n),
             axis=int(kwargs.get("axis", -1)),
-            norm=str(kwargs.get("normalization", kwargs.get("norm", "backward"))),
+            norm=_fft_norm(kwargs.get("normalization", kwargs.get("norm", "backward"))),
         )
     if op_name == "tessera.dct":
         return _dct_reference(

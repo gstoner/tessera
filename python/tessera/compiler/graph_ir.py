@@ -3125,7 +3125,10 @@ def _shape_istft(operand_types: List[IRType],
     )
     window_length = _dim(win.shape[-1]) if win is not None and win.shape else None
     fft_n = _dim(attrs.get("logical_length")) or window_length
-    if hop is None or frames is None or fft_n is None or frame_axis is None:
+    if (
+        hop is None or frames is None or fft_n is None
+        or frame_axis is None or axis is None
+    ):
         return _unknown_like(xf, dtype)
     output_length = _dim(attrs.get("output_length"))
     if output_length is None:

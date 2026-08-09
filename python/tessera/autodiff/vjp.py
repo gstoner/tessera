@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 import copy
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import numpy as np
 
@@ -27,6 +27,20 @@ from .nonsmooth import (
 # `tessera.ops.<name>`. Use `register_vjp(name, fn)` (or the `custom_rule`
 # decorator) to add or override.
 _VJPS: dict[str, Callable] = {}
+
+_FFTNorm = Literal["backward", "ortho", "forward"]
+
+
+def _transpose_fft_norm(value: object) -> _FFTNorm:
+    normalized = str(value)
+    mapping: dict[str, _FFTNorm] = {
+        "backward": "forward",
+        "forward": "backward",
+        "ortho": "ortho",
+    }
+    if normalized not in mapping:
+        raise ValueError("FFT normalization must be backward, forward, or ortho")
+    return mapping[normalized]
 
 
 def register_vjp(name: str, fn: Callable) -> None:
@@ -1901,7 +1915,7 @@ def vjp_fft(dout, x, *, axis=-1, axes=None, norm="backward", normalization=None,
     """
     target_axis = axes[-1] if axes is not None else axis
     active_norm = normalization or norm
-    transpose_norm = {"backward": "forward", "forward": "backward", "ortho": "ortho"}[active_norm]
+    transpose_norm = _transpose_fft_norm(active_norm)
     return (np.fft.ifft(dout, axis=target_axis, norm=transpose_norm),)
 
 
@@ -1910,7 +1924,7 @@ def vjp_ifft(dout, x, *, axis=-1, axes=None, norm="backward", normalization=None
     """Adjoint of inverse FFT — adjoint is `(1/n) * fft(dout, axis)`."""
     target_axis = axes[-1] if axes is not None else axis
     active_norm = normalization or norm
-    transpose_norm = {"backward": "forward", "forward": "backward", "ortho": "ortho"}[active_norm]
+    transpose_norm = _transpose_fft_norm(active_norm)
     return (np.fft.fft(dout, axis=target_axis, norm=transpose_norm),)
 
 
@@ -1920,7 +1934,7 @@ def vjp_rfft(dout, x, *, axis=-1, axes=None, norm="backward", normalization=None
     target_axis = axes[-1] if axes is not None else axis
     n = x.shape[target_axis]
     active_norm = normalization or norm
-    transpose_norm = {"backward": "forward", "forward": "backward", "ortho": "ortho"}[active_norm]
+    transpose_norm = _transpose_fft_norm(active_norm)
     weighted = np.array(dout, dtype=np.complex128, copy=True)
     bins = weighted.shape[target_axis]
     stop = bins - 1 if n % 2 == 0 else bins
@@ -1936,7 +1950,7 @@ def vjp_irfft(dout, x, *, axis=-1, axes=None, n=None, norm="backward", normaliza
     target_axis = axes[-1] if axes is not None else axis
     n_out = n if n is not None else 2 * (x.shape[target_axis] - 1)
     active_norm = normalization or norm
-    transpose_norm = {"backward": "forward", "forward": "backward", "ortho": "ortho"}[active_norm]
+    transpose_norm = _transpose_fft_norm(active_norm)
     grad = np.fft.rfft(dout, n=n_out, axis=target_axis, norm=transpose_norm)
     bins = grad.shape[target_axis]
     stop = bins - 1 if n_out % 2 == 0 else bins

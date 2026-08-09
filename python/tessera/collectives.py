@@ -236,6 +236,10 @@ class _NCCLExecutor:
                 raise RuntimeError(
                     "zero-CTA communicator requires RCCL symmetric-memory APIs"
                 )
+            assert self._symmetric_alloc is not None
+            assert self._symmetric_free is not None
+            assert self._window_register is not None
+            assert self._window_deregister is not None
             self._symmetric_alloc.argtypes = [
                 ctypes.POINTER(void_p), ctypes.c_size_t
             ]
@@ -288,7 +292,7 @@ class _NCCLExecutor:
             config.size = ctypes.sizeof(self._Config)
             config.magic = 0xCAFEBEEF
             config.version = int(self._version_code.value)
-            for field, _ctype in self._Config._fields_[3:]:
+            for field, *_field_spec in self._Config._fields_[3:]:
                 if field not in {"net_name", "comm_name"}:
                     setattr(config, field, undefined)
             config.net_name = None
@@ -380,7 +384,8 @@ class _NCCLExecutor:
         send_bytes: int,
         receive_bytes: int,
     ) -> tuple[list[ctypes.c_void_p], list[ctypes.c_void_p]]:
-        assert self._window_register is not None
+        window_register = self._window_register
+        assert window_register is not None
 
         def register(rank: int) -> tuple[ctypes.c_void_p, ctypes.c_void_p]:
             self._check_device(
@@ -390,14 +395,14 @@ class _NCCLExecutor:
             send_window = ctypes.c_void_p()
             receive_window = ctypes.c_void_p()
             self._check_nccl(
-                self._window_register(
+                window_register(
                     self.comms[rank], sends[rank], send_bytes,
                     ctypes.byref(send_window), 0x01,
                 ),
                 "send-window registration",
             )
             self._check_nccl(
-                self._window_register(
+                window_register(
                     self.comms[rank], recvs[rank], receive_bytes,
                     ctypes.byref(receive_window), 0x01,
                 ),
@@ -462,7 +467,8 @@ class _NCCLExecutor:
     def _cleanup(
         self, sends, recvs, streams, send_windows, receive_windows
     ) -> None:
-        if self._window_deregister is not None:
+        window_deregister = self._window_deregister
+        if window_deregister is not None:
             def deregister(rank: int) -> None:
                 self._check_device(
                     self._set_device(self.topology.device_ordinals[rank]),
@@ -470,14 +476,14 @@ class _NCCLExecutor:
                 )
                 if send_windows[rank]:
                     self._check_nccl(
-                        self._window_deregister(
+                        window_deregister(
                             self.comms[rank], send_windows[rank]
                         ),
                         "send-window deregistration",
                     )
                 if receive_windows[rank]:
                     self._check_nccl(
-                        self._window_deregister(
+                        window_deregister(
                             self.comms[rank], receive_windows[rank]
                         ),
                         "receive-window deregistration",

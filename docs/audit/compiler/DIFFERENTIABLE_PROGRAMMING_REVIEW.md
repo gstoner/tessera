@@ -57,7 +57,7 @@ labelled as such; they are evidence for *gaps*, not status claims.
 | **C6** | GGN / Fisher / IHVP / Hessian-diagonal — a 13th contract axis | Ch. 8 | folds into D6 | — |
 | **T1** | Smoothing/relaxation family absent (sparsemax, gumbel, soft-topk, perturbed) | Ch. 4, 12, 13 | ~3 wk | PB-3 shape |
 | **T2** | Fenchel-Young losses collapse a chunk of `losses.py` | Ch. 15 §4 | ~2 wk | — |
-| **T3** | Python `custom_root`/IHVP oracle landed; compiled implicit differentiation remains missing | Ch. 10 | ~3 wk | — |
+| **T3** | Python `custom_root`/IHVP oracle plus value-producing compiler IFT IR landed; physical solver consumption remains open | Ch. 10 | landing | — |
 | **R1** | Baur–Strassen cost-ratio oracle | §4.4.3 | days | catches B1/B2 |
 | **R2** | Randomized forward-mode gradient (memory-free lane) | §4.8 | folds into D2 | #28 |
 
@@ -80,7 +80,7 @@ not here.
 | **T2** | ✅ Python helper | `losses.py` (`fenchel_young_loss`/`fy_loss_and_grad`/`sparsemax_loss`/`softmax_fy_loss`) | `test_fenchel_young_losses.py` |
 | **C3** | ✅ Python trace analysis | `compiler/stochastic_graph.py` (analysis + `certify_deterministic`) | `test_stochastic_graph.py` |
 | **C4** | ⏳ open | semirings — larger, rides the sequence-mixer track | — |
-| **C5** | ⏳ open | cost-weighted treeverse — folds into the planned D5 | — |
+| **C5** | landing | complete-backward/residual-memory measurement and measured-step treeverse candidate pruning landed; executable treeverse and exact family packets remain open | `compiler/residual_evaluator.py` |
 | **C6** | ⏳ open | GGN/Fisher/IHVP-optimizer/Hessian-diagonal — IHVP primitive landed in T3; the second-order *estimators* remain | — |
 | **R2** | ⏳ open | randomized forward-mode — folds into the planned D2 | — |
 
@@ -263,23 +263,25 @@ from one template, each with a closed-form *exact* gradient rather than a
 hand-derived VJP. Fewer rules to maintain, and fewer to get wrong at the kink
 (see C2).
 
-### T3. Implicit differentiation — reference surface exists; compiler lowering does not (Ch. 10)
+### T3. Implicit differentiation — value-producing shared IR; physical consumption open (Ch. 10)
 
 **Current split:** `custom_vjp` is exported from
 [`custom.py`](../../../python/tessera/custom.py), and the Python reference lane
 now provides `custom_root`, IHVP, and adjoint-state helpers in
-[`implicit.py`](../../../python/tessera/autodiff/implicit.py). The compiler still
-has no value-producing fixed-point/implicit-root lowering; `NewtonAutodiff.cpp`
-remains annotation-only. The book's §10.4 gives the whole recipe: the JVP solves
+[`implicit.py`](../../../python/tessera/autodiff/implicit.py). The compiler now
+validates an explicit residual function and emits registered, value-producing
+`residual` → matrix-free `linear_solve` → `residual_adjoint` VJP values plus an
+optional JVP function. Architecture-owned lowering and execution of that chain
+remain open. The book's §10.4 gives the recipe: the JVP solves
 `A t = B v`, the VJP solves `A* r = u` then `B* r`, where
 `A` / `B` are the JVPs of the residual `F` and `A*` / `B*` its VJPs — built
 entirely from machinery already present, plus a matrix-free solver.
-`solver_config.py` already names CG and GMRES, so the solver half exists; it is
-simply not wired to AD.
+`solver_config.py` already names CG and GMRES. The shared AD wiring now exists;
+physical matrix-free solver selection and execution are the remaining seam.
 
 Downstream consumers, all already in-tree: the EBM / Langevin samplers in
 `rng.py`, [`NewtonAutodiff.cpp`](../../../src/solvers/core/passes/NewtonAutodiff.cpp)
-(which mentions the IFT but does not implement it), the
+(which now emits the shared IFT value chain), the
 [`RIEMANNIAN_OT_PLAN.md`](RIEMANNIAN_OT_PLAN.md), and any bilevel / hyperparameter
 work. The same CG instantiation also yields IHVP — the missing piece for a real
 Newton / natural-gradient path in `optim.py`.
@@ -325,11 +327,11 @@ variance/dimension trade-off, so budget it as an arbiter candidate (Decision
 
 | # | Item | State | Next compiler boundary |
 |---|---|---|---|
-| 1 | **C1** linear transposition | Python oracle landed | AD-CORE-LINEAR-1: compiler Graph-IR interface and paired proof |
-| 2 | TSOL spectral adjoints | open | AD-TSOL-SPECTRAL-1: FFT/IFFT first, then packed/compound transforms |
-| 3 | **C3** stochastic/effect typing plus `stop_gradient` | Python analysis only | AD-CORE-EFFECT-CONTROL-1: C++ effects, activity, region adjoints |
-| 4 | **T3** implicit differentiation | Python oracle landed | AD-SOLVER-IFT-1: finish value-producing Newton/implicit-root lowering |
-| 5 | **R1/C5** cost and residual policy | partial guard only | AD-RESIDUAL-EVAL-1: complete backward work/memory measurement and treeverse candidates |
+| 1 | **C1** linear transposition | Compiler interface and paired CPU proof complete | `LinearTransposeInterface` owns the migrated Graph families; Python remains the oracle |
+| 2 | TSOL spectral adjoints | Compiler Graph/Schedule/Tile slice complete; native compound-backward packages open | FFT/IFFT/RFFT/IRFFT/DCT have numerical compiler proof; x86/gfx1151 native package work stays architecture-owned |
+| 3 | **C3** stochastic/effect typing plus `stop_gradient` | Compiler Graph/pass slice complete | C++ activity/effects and fail-closed regions are direct-tested; residual save policy remains separately owned |
+| 4 | **T3** implicit differentiation | Python oracle and value-producing shared solver IR landed | Add architecture-owned matrix-free solve/adjoint consumers and compiled numerical/device packets |
+| 5 | **R1/C5** cost and residual policy | Measurement/selection boundary landed | Record exact family SAVE/RECOMPUTE/HYBRID packets; execute and measure region-adjoint treeverse schedules |
 | 6 | **C4/C6/R2/T1/T2** breadth | reference or open | Bind separate integrated IDs only after the spine above is executable |
 
 The global order and stop-the-line gates live in

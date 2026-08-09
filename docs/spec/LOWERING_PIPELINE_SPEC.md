@@ -244,11 +244,20 @@ Applied in order; the highest-level effect found wins (lattice join):
 | `tessera.copy` op | `memory` |
 | `schedule.prefetch`, `schedule.async_copy`, `schedule.await_movement`, `tile.async_copy`, or `tile.wait_async` | `movement` |
 | `tessera.kv_cache.*`, `tessera.ring.*`, `cache.*`, or `ring.*` | `state` |
-| `tessera.collective.*` or `collective.*` | `collective` |
+| `tessera_collective.*` or Graph-level `tessera.{all_reduce,reduce_scatter,all_gather,all_to_all}` | `collective` |
 | `rng.uniform` or `tessera.rng.*` | `random` |
 | Any argument with `tessera.effect = "write"` or `"reduce_*"` attribute | `memory` |
 | `func.call` to external non-tessera function | `io` |
 | None of the above | `pure` |
+
+The `tessera_collective` Target dialect also owns the rank-local one-sided
+sequence `window.register` → `put_signal`/`signal`/`wait_signal` →
+`window.deregister`. These operations carry an SSA window resource and exact
+buffer extent, dtype, peer, offset, signal-index, and RMA-context attributes.
+They are legal only inside an RCCL `gin_rma` artifact with symmetric windows,
+strict ordering, a matching communicator digest, host-RMA support, and a
+nonzero GIN type. Package verification rejects duplicate registration,
+use-before-registration, and leaked windows before runtime dispatch.
 
 #### Invariants
 

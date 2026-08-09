@@ -1020,6 +1020,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         }
         return x.astype(_map.get(dtype, np.float32))
 
+    def stop_gradient(x):
+        """Return ``x`` while terminating compiler/tape differentiation."""
+        if hasattr(x, "_data"):
+            x = x._data
+        return np.asarray(x)
+
     def dropout(x, p: float = 0.1, rng=None, training: bool = True, seed: int | None = None):
         if not training:
             return x
@@ -2494,28 +2500,28 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return np.dtype("float64" if np.dtype(complex_dtype).itemsize >= 16
                         else "float32")
 
-    def fft(x, axis: int = -1, axes=None):
+    def fft(x, axis: int = -1, axes=None, norm: str = "backward"):
         if hasattr(x, "_data"):
             x = x._data
         x = np.asarray(x)
         want = _complex_for(x.dtype) if x.dtype.kind != "c" else x.dtype
-        return np.fft.fft(x, axis=_axis_from_axes(axis, axes)).astype(want, copy=False)
+        return np.fft.fft(x, axis=_axis_from_axes(axis, axes), norm=norm).astype(want, copy=False)
 
-    def ifft(xf, axis: int = -1, axes=None):
+    def ifft(xf, axis: int = -1, axes=None, norm: str = "backward"):
         if hasattr(xf, "_data"):
             xf = xf._data
         xf = np.asarray(xf)
         want = xf.dtype if xf.dtype.kind == "c" else _complex_for(xf.dtype)
-        return np.fft.ifft(xf, axis=_axis_from_axes(axis, axes)).astype(want, copy=False)
+        return np.fft.ifft(xf, axis=_axis_from_axes(axis, axes), norm=norm).astype(want, copy=False)
 
-    def rfft(x, axis: int = -1, axes=None):
+    def rfft(x, axis: int = -1, axes=None, norm: str = "backward"):
         if hasattr(x, "_data"):
             x = x._data
         x = np.asarray(x)
         want = _complex_for(x.dtype)
-        return np.fft.rfft(x, axis=_axis_from_axes(axis, axes)).astype(want, copy=False)
+        return np.fft.rfft(x, axis=_axis_from_axes(axis, axes), norm=norm).astype(want, copy=False)
 
-    def irfft(xf, axis: int = -1, axes=None, n=None):
+    def irfft(xf, axis: int = -1, axes=None, n=None, norm: str = "backward"):
         # The one member of the family that returns REAL values, not complex.
         # It was exempted alongside the other three under "returns complex64,
         # which is planned_gated" -- a sentence true of its siblings and simply
@@ -2524,16 +2530,18 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             xf = xf._data
         xf = np.asarray(xf)
         want = _real_for(xf.dtype) if xf.dtype.kind == "c" else xf.dtype
-        out = np.fft.irfft(xf, n=n, axis=_axis_from_axes(axis, axes))
+        out = np.fft.irfft(xf, n=n, axis=_axis_from_axes(axis, axes), norm=norm)
         return out.astype(want, copy=False)
 
-    def dct(x, type: int = 2, axis: int = -1):
+    def dct(x, type: int = 2, axis: int = -1, norm: str = "backward"):
         if hasattr(x, "_data"):
             x = x._data
         x = np.asarray(x)
         dct_type = int(type)
         if dct_type not in {1, 2, 3, 4}:
             raise ValueError("tessera.ops.dct requires type in {1, 2, 3, 4}")
+        if norm not in {"backward", "forward", "ortho"}:
+            raise ValueError("tessera.ops.dct norm must be backward, forward, or ortho")
         axis_idx = axis if axis >= 0 else x.ndim + axis
         if axis_idx < 0 or axis_idx >= x.ndim:
             raise ValueError(f"dct axis {axis} is invalid for rank {x.ndim}")
@@ -2567,22 +2575,38 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                 / float(4 * n)
             )
         result = moved.astype(np.float64) @ basis
+        if norm == "forward":
+            result /= float(n)
+        elif norm == "ortho":
+            result /= np.sqrt(float(n))
         want = x.dtype if x.dtype.kind == "f" else np.dtype("float32")
         return np.moveaxis(result, -1, axis_idx).astype(want, copy=False)
 
-    def spectral_conv(x, w):
+    def spectral_conv(x, w, axis: int = -1, norm: str = "backward"):
         if hasattr(x, "_data"):
             x = x._data
         if hasattr(w, "_data"):
             w = w._data
         x = np.asarray(x)
-        n = x.shape[-1] + np.asarray(w).shape[-1] - 1
+        w = np.asarray(w)
+        axis_idx = axis if axis >= 0 else x.ndim + axis
+        if x.ndim != w.ndim or axis_idx < 0 or axis_idx >= x.ndim:
+            raise ValueError("spectral_conv requires equal ranks and a valid axis")
+        n = x.shape[axis_idx] + w.shape[axis_idx] - 1
         nfft = 1 << int(np.ceil(np.log2(n)))
-        y = np.fft.irfft(np.fft.rfft(x, nfft) * np.fft.rfft(w, nfft), nfft)
+        y = np.fft.irfft(
+            np.fft.rfft(x, nfft, axis=axis_idx, norm=norm)
+            * np.fft.rfft(w, nfft, axis=axis_idx, norm=norm),
+            nfft,
+            axis=axis_idx,
+            norm=norm,
+        )
         # FULL convolution keeps the whole support (n + m - 1), and the result
         # stays at the input's width rather than numpy's f64.
         want = x.dtype if x.dtype.kind == "f" else np.dtype("float32")
-        return y[..., :n].astype(want, copy=False)
+        crop = [slice(None)] * y.ndim
+        crop[axis_idx] = slice(0, n)
+        return y[tuple(crop)].astype(want, copy=False)
 
     def stft(
         x,
@@ -2594,6 +2618,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         center: bool = False,
         pad_mode: str = "constant",
         onesided: bool = True,
+        norm: str = "backward",
     ):
         if hasattr(x, "_data"):
             x = x._data
@@ -2640,7 +2665,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         for start in range(0, moved.shape[-1] - fft_length + 1, hop):
             framed = moved[..., start : start + fft_length] * padded_window
             transform = np.fft.rfft if onesided else np.fft.fft
-            frames.append(transform(framed, axis=-1))
+            frames.append(transform(framed, axis=-1, norm=norm))
         result = np.stack(frames, axis=-2).astype(want, copy=False)
         lead_rank = x.ndim - 1
         order = (
@@ -2660,6 +2685,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         center: bool = False,
         length: int | None = None,
         onesided: bool = True,
+        norm: str = "backward",
     ):
         if hasattr(xf, "_data"):
             xf = xf._data
@@ -2694,7 +2720,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         for idx in range(frame_count):
             inverse = np.fft.irfft if onesided else np.fft.ifft
             frame = np.real(
-                inverse(moved[..., idx, :], n=fft_length, axis=-1)
+                inverse(
+                    moved[..., idx, :], n=fft_length, axis=-1, norm=norm
+                )
             ) * padded_window
             start = idx * int(hop)
             out[..., start : start + fft_length] += frame
@@ -4385,6 +4413,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "cross_attention": cross_attention,
         "adam": adam,
         "transpose": transpose,
+        "stop_gradient": stop_gradient,
         "cast": cast,
         "dropout": dropout,
         "qkv_projection": qkv_projection,
@@ -4981,6 +5010,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         adafactor=adafactor,
         lion=lion,
         transpose=transpose,
+        stop_gradient=stop_gradient,
         cast=cast,
         dropout=dropout,
         conv2d=conv2d,

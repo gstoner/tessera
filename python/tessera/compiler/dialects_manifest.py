@@ -30,8 +30,9 @@ five touchpoints stay consistent.  The drift gate at
     files; the drift gate makes the missing touchpoint show up
     immediately.
 
-Today's coverage: 7 dialects (tessera, tessera.attn, tessera.queue,
-tessera.neighbors, tessera.solver, tessera_apple, tpp).
+Today's coverage includes the core Graph/Tile dialects, attention/queue,
+portable collective Target IR, NVIDIA/ROCm Target IR, and the registered
+``tessera_solver`` dialect.
 """
 
 from __future__ import annotations
@@ -147,6 +148,18 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
         sprint="V8",
     ),
     DialectSpec(
+        name="tessera_collective",
+        target="TesseraCollectiveDialect",
+        header="src/collectives/include/tessera/Dialect/Collective/IR/CollectiveDialect.h",
+        cpp_dir="src/collectives/lib/Dialect/Collective/IR",
+        register_fn="tessera::collective::registerCollectiveDialect",
+        cmake_flag="TESSERA_HAVE_COLLECTIVES",
+        eager_load_parent=None,
+        has_typedefs=True,
+        standalone_lit_parseable=True,
+        sprint="COLLECTIVE-TARGET-FUNCTIONAL-1",
+    ),
+    DialectSpec(
         name="tessera_nvidia",
         target="TesseraNVIDIAIR",
         header="src/compiler/codegen/tessera_gpu_backend_NVIDIA/include/tessera/gpu/BackendRegistration.h",
@@ -169,6 +182,18 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
         has_typedefs=True,
         standalone_lit_parseable=True,
         sprint="ROCm Tile-IR convergence",
+    ),
+    DialectSpec(
+        name="tessera_solver",
+        target="tessera_linalg_solver_passes",
+        header="src/solvers/linalg/include/tessera/Dialect/Solver/SolverDialect.h",
+        cpp_dir="src/solvers/linalg/lib/Dialect",
+        register_fn="tessera::solver::registerTesseraLinalgSolverDialect",
+        cmake_flag="TESSERA_HAVE_SOLVERS",
+        eager_load_parent=None,
+        has_typedefs=False,
+        standalone_lit_parseable=True,
+        sprint="AD-SOLVER-IFT-1",
     ),
     # Sprint 9 value-lane Tile IR dialect (src/compiler/ir), grown in the TIRx
     # review (C1/C3/C5) with first-class attributes: #tile.layout / #tile.swizzle

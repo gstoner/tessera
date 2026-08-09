@@ -1,5 +1,5 @@
-// RUN: tessera-opt --tessera-adjoint-collective-insertion --verify-each=false %s | FileCheck %s
-// RUN: tessera-opt --tessera-adjoint-collective-insertion --verify-each=false %s | FileCheck %s --check-prefix=PLAN
+// RUN: tessera-opt --tessera-adjoint-collective-insertion %s | FileCheck %s
+// RUN: tessera-opt --tessera-adjoint-collective-insertion %s | FileCheck %s --check-prefix=PLAN
 //
 // Phase F5 — regression guard: a function-level `tessera.effect` SUMMARY is not
 // per-arg effect information.
@@ -27,8 +27,12 @@ module {
     %dB = "test.cotan"(%B) : (tensor<8x16xf32>) -> tensor<8x16xf32>
 
     // Both collectives are still inserted (not skipped as "pure").
-    // CHECK: "tessera.collective.reduce_scatter"(%{{.*}}) {{.*}}axis = "dp"
-    // CHECK: "tessera.collective.all_gather"(%{{.*}}) {{.*}}axis = "tp"
+    // CHECK: tessera_collective.reduce_scatter
+    // CHECK-SAME: mesh_axis = "dp"
+    // CHECK: tessera_collective.await
+    // CHECK: tessera_collective.all_gather
+    // CHECK-SAME: mesh_axis = "tp"
+    // CHECK: tessera_collective.await
     func.return %out, %dA, %dB
         : tensor<4x16xf32>, tensor<4x8xf32>, tensor<8x16xf32>
   }

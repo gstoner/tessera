@@ -8,8 +8,8 @@ module attributes {tessera.ir.version = "1.1"} {
   // CHECK: tessera.kv_cache.create
   // CHECK: schedule.prefetch
   // CHECK: tessera.flash_attn
-  // CHECK: tessera.collective.reduce_scatter
-  // CHECK: tessera.collective.await
+  // CHECK: tessera_collective.reduce_scatter
+  // CHECK: tessera_collective.await
   // CHECK: schedule.artifact
 
   func.func @decode(%q: tensor<1x128xbf16>, %k: tensor<1x128xbf16>,
@@ -39,14 +39,13 @@ module attributes {tessera.ir.version = "1.1"} {
         storage = "bf16", accum = "f32", rounding = "nearest_even",
         scale = 1.0, quant_axis = "none", deterministic = true>
     } : (tensor<1x128xbf16>, !tessera.kv_cache) -> tensor<1x128xbf16>
-    %future = "tessera.collective.reduce_scatter"(%grad) {
-      reduce_op = "sum",
+    %future = "tessera_collective.reduce_scatter"(%grad) {
+      reduction = "sum",
       mesh_axis = "dp",
-      scatter_dim = 0 : i64,
-      tessera.future_payload = memref<128xbf16>
-    } : (memref<128xbf16>) -> !tessera.collective.future<memref<128xbf16>>
-    %reduced = "tessera.collective.await"(%future)
-      : (!tessera.collective.future<memref<128xbf16>>) -> memref<128xbf16>
+      tensor_axis = 0 : i64
+    } : (memref<128xbf16>) -> !tessera_collective.future<memref<128xbf16>>
+    %reduced = "tessera_collective.await"(%future)
+      : (!tessera_collective.future<memref<128xbf16>>) -> memref<128xbf16>
     "schedule.artifact"() {
       hash = "0123456789abcdef",
       arch = "sm90",

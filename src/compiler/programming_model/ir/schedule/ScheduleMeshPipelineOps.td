@@ -133,6 +133,7 @@ def Schedule_FFTOp : Op<ScheduleDialect, "fft", [Pure]> {
                        StrAttr:$mode,
                        StrAttr:$real_transform_policy,
                        StrAttr:$hermitian_layout,
+                       StrAttr:$hermitian_weight,
                        I64Attr:$axis,
                        I64Attr:$length,
                        I64Attr:$physical_length,
@@ -195,6 +196,30 @@ def Schedule_SpectralProgramOp : Op<ScheduleDialect, "spectral_program", [Pure]>
                        I64Attr:$workgroup_size);
   let results = (outs AnyType:$scheduled);
   let assemblyFormat = "$subjects attr-dict `:` type($subjects) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
+def Schedule_SpectralBackwardOp : Op<ScheduleDialect, "spectral_backward", [Pure]> {
+  let summary = "Content-addressed multi-output compound spectral adjoint";
+  let arguments = (ins Variadic<AnyType>:$subjects,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$target,
+                       StrAttr:$arch,
+                       StrAttr:$kind,
+                       OptionalAttr<I64Attr>:$axis,
+                       OptionalAttr<I64Attr>:$logical_length,
+                       StrAttr:$normalization,
+                       StrAttr:$spectrum_layout,
+                       OptionalAttr<I64Attr>:$hop,
+                       BoolAttr:$center,
+                       BoolAttr:$onesided,
+                       StrAttr:$pad_mode,
+                       OptionalAttr<I64Attr>:$output_length,
+                       StrAttr:$input_signature,
+                       StrAttr:$output_signature,
+                       StrAttr:$mutation_lineage);
+  let results = (outs Variadic<AnyType>:$gradients);
+  let assemblyFormat = "$subjects attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
 

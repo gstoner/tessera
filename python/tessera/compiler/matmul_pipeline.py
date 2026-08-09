@@ -1125,16 +1125,27 @@ def _execute_op(op_name: str, operands: Sequence[np.ndarray], kwargs: Mapping[st
             return np.maximum(0, x)
         return x
     if op_name == "tessera.fft":
-        return np.fft.fft(operands[0], axis=int(kwargs.get("axis", -1)))
+        return np.fft.fft(operands[0], axis=int(kwargs.get("axis", -1)),
+                          norm=str(kwargs.get("normalization", kwargs.get("norm", "backward"))))
     if op_name == "tessera.ifft":
-        return np.fft.ifft(operands[0], axis=int(kwargs.get("axis", -1)))
+        return np.fft.ifft(operands[0], axis=int(kwargs.get("axis", -1)),
+                           norm=str(kwargs.get("normalization", kwargs.get("norm", "backward"))))
     if op_name == "tessera.rfft":
-        return np.fft.rfft(operands[0], axis=int(kwargs.get("axis", -1)))
+        return np.fft.rfft(operands[0], axis=int(kwargs.get("axis", -1)),
+                           norm=str(kwargs.get("normalization", kwargs.get("norm", "backward"))))
     if op_name == "tessera.irfft":
         n = kwargs.get("n", None)
-        return np.fft.irfft(operands[0], n=None if n is None else int(n), axis=int(kwargs.get("axis", -1)))
+        return np.fft.irfft(
+            operands[0], n=None if n is None else int(n),
+            axis=int(kwargs.get("axis", -1)),
+            norm=str(kwargs.get("normalization", kwargs.get("norm", "backward"))),
+        )
     if op_name == "tessera.dct":
-        return _dct_reference(operands[0], axis=int(kwargs.get("axis", -1)))
+        return _dct_reference(
+            operands[0], axis=int(kwargs.get("axis", -1)),
+            dct_type=int(kwargs.get("type", 2)),
+            normalization=str(kwargs.get("normalization", kwargs.get("norm", "backward"))),
+        )
     if op_name == "tessera.spectral_conv":
         x = np.asarray(operands[0])
         w = np.asarray(operands[1])
@@ -1321,14 +1332,46 @@ def _flash_attn_reference(q: Any, k: Any, v: Any, kwargs: Mapping[str, Any]) -> 
     return np.matmul(weights, v)
 
 
-def _dct_reference(x: Any, axis: int = -1) -> np.ndarray:
+def _dct_reference(
+    x: Any,
+    axis: int = -1,
+    dct_type: int = 2,
+    normalization: str = "backward",
+) -> np.ndarray:
     x = np.asarray(x)
-    n = x.shape[axis]
-    y = np.concatenate([x, np.flip(x, axis=axis)], axis=axis)
-    spec = np.fft.fft(y, axis=axis)
-    slicer = [slice(None)] * spec.ndim
-    slicer[axis] = slice(0, n)
-    return np.real(spec[tuple(slicer)])
+    axis_index = axis if axis >= 0 else x.ndim + axis
+    n = x.shape[axis_index]
+    if dct_type not in {1, 2, 3, 4} or (dct_type == 1 and n < 2):
+        raise ValueError("invalid DCT type/length contract")
+    if normalization not in {"backward", "forward", "ortho"}:
+        raise ValueError("invalid DCT normalization")
+    source = np.arange(n, dtype=np.float64)
+    frequency = np.arange(n, dtype=np.float64)
+    if dct_type == 1:
+        basis = 2.0 * np.cos(np.pi * np.outer(source, frequency) / (n - 1))
+        basis[0, :] = 1.0
+        basis[-1, :] = (-1.0) ** frequency
+    elif dct_type == 2:
+        basis = 2.0 * np.cos(
+            np.pi * np.outer(2.0 * source + 1.0, frequency) / (2.0 * n)
+        )
+    elif dct_type == 3:
+        basis = 2.0 * np.cos(
+            np.pi * np.outer(source, 2.0 * frequency + 1.0) / (2.0 * n)
+        )
+        basis[0, :] = 1.0
+    else:
+        basis = 2.0 * np.cos(
+            np.pi * np.outer(2.0 * source + 1.0, 2.0 * frequency + 1.0)
+            / (4.0 * n)
+        )
+    moved = np.moveaxis(x, axis_index, -1).astype(np.float64)
+    result = moved @ basis
+    if normalization == "forward":
+        result /= float(n)
+    elif normalization == "ortho":
+        result /= np.sqrt(float(n))
+    return np.moveaxis(result, -1, axis_index)
 
 
 def _rope_reference(x: Any, theta: Any) -> np.ndarray:

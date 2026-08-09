@@ -6,22 +6,22 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **487** ops in `primitive_coverage` registry.
-- **4857** total Python-test references, **1171** total lit-fixture references.
-- **87** ops have **zero** references in either test surface.
+- **488** ops in `primitive_coverage` registry.
+- **4911** total Python-test references, **1195** total lit-fixture references.
+- **78** ops have **zero** references in either test surface.
 - **124** ops have ≤1 reference ("thinly tested").
-- **165** ops have ≥10 references ("well tested").
+- **164** ops have ≥10 references ("well tested").
 - **135** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  464 |  265 |  729 |  21 | `bf16`, `f16`, `f32`, `f64` … |
-| `flash_attn` |  129 |   72 |  201 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  466 |  266 |  732 |  21 | `bf16`, `f16`, `f32`, `f64` … |
+| `flash_attn` |  129 |   73 |  202 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `softmax` |  146 |   48 |  194 |  31 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |  127 |   32 |  159 |  10 | `bf16`, `f16`, `f32`, `f64` … |
-| `relu` |  115 |   36 |  151 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `relu` |  115 |   37 |  152 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |  105 |   17 |  122 |   8 | `bf16`, `f16`, `f32`, `f64` … |
 | `rmsnorm` |  103 |   18 |  121 |   6 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |  101 |   15 |  116 |   8 | `bf16`, `f16`, `f32`, `f64` … |
@@ -31,7 +31,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `gelu` |   58 |   23 |   81 |   1 | `bf16`, `f16`, `f32`, `f64` … |
 | `selective_ssm` |   71 |   10 |   81 |   3 | `bf16`, `f16`, `fp16`, `fp32` |
 | `layer_norm` |   60 |   16 |   76 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
-| `transpose` |   30 |   37 |   67 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
+| `transpose` |   32 |   40 |   72 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `attn_local_window_2d` |   36 |   25 |   61 |   1 | `fp16`, `fp32` |
 | `cholesky` |   28 |   30 |   58 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `msa_sparse_attention` |   47 |   11 |   58 |   1 |  |
@@ -123,23 +123,17 @@ Companion section to the by-op coverage table above: that section says **which**
 |--------|------:|---------|
 | `covered_by_family`      |   26 | Tested via a parent op or family wrapper |
 | `structural_only`        |   87 | Registry/metadata/wrapper; no direct numerical test meaningful |
-| `needs_direct_test`      |    7 | **Actionable test debt** — real primitive without direct test |
+| `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
+| `directly_tested`         |    7 | Direct proof exists; parameterization/defining surfaces keep the lexical count ≤1 |
 
 ## Actionable: `needs_direct_test` ops
 
-These **7** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
+These **0** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
 
 | Op | py refs | lit refs | reason |
 |----|--------:|---------:|--------|
-| `entmax15` |   0 |   0 | category default for 'normalization' |
-| `gumbel_softmax` |   0 |   0 | category default for 'normalization' |
-| `perturbed_argmax` |   0 |   0 | category default for 'normalization' |
-| `soft_top_k` |   0 |   0 | category default for 'normalization' |
-| `sparsemax` |   0 |   0 | category default for 'normalization' |
-| `training.loss_adamw` |   0 |   0 | category default for 'optimizer' |
-| `training.loss_sgd` |   0 |   0 | category default for 'optimizer' |
 
 ## Hardware-gated ops
 

@@ -35,6 +35,11 @@
 #include "tessera/ProgrammingModel/PMPasses.h"
 #include <string>
 
+#ifdef TESSERA_HAVE_COLLECTIVES
+#include "tessera/Dialect/Collective/IR/CollectiveDialect.h"
+#include "tessera/Dialect/Collective/IR/CollectivePasses.h"
+#endif
+
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
 #include "Tessera/IR/Dialects.h"
 #include "Tessera/Transforms/Passes.h"
@@ -356,6 +361,9 @@ int main(int argc, char **argv) {
 #endif
 #ifdef TESSERA_OPT_LEAN_ARTIFACT_DRIVER
   tessera::registerPMV11Passes();
+#ifdef TESSERA_HAVE_COLLECTIVES
+  tessera::collective::registerCollectivePasses();
+#endif
   // Hardware-free target artifact builds intentionally keep tessera-opt lean:
   // only the dialects and passes needed by the target contract spine are
   // registered, avoiding a dependency on every upstream MLIR component.
@@ -381,6 +389,9 @@ int main(int argc, char **argv) {
                   mlir::ROCDL::ROCDLDialect, mlir::scf::SCFDialect,
                   mlir::vector::VectorDialect,
                   tessera::tile::TesseraTileDialect>();
+#ifdef TESSERA_HAVE_COLLECTIVES
+  tessera::collective::registerCollectiveDialect(registry);
+#endif
 #ifdef TESSERA_HAVE_NVIDIA_BACKEND
   tessera::registerTesseraNVIDIABackendDialects(registry);
 #endif
@@ -391,6 +402,9 @@ int main(int argc, char **argv) {
   return failed(mlir::MlirOptMain(argc, argv, tesseraOptBuildInfo(), registry));
 #else
   tessera::registerPMV11Passes();
+#ifdef TESSERA_HAVE_COLLECTIVES
+  tessera::collective::registerCollectivePasses();
+#endif
 #ifdef TESSERA_HAVE_CORE_TESSERA_IR
   tessera::registerTesseraPasses();
   // Upstream canonicalize / cse so Tessera per-op folders + canonicalizers
@@ -541,6 +555,9 @@ int main(int argc, char **argv) {
 
 #ifdef TESSERA_HAVE_SOLVERS
   tessera::solver::registerTesseraLinalgSolverDialect(registry);
+#endif
+#ifdef TESSERA_HAVE_COLLECTIVES
+  tessera::collective::registerCollectiveDialect(registry);
 #endif
 #ifdef TESSERA_HAVE_NEIGHBORS
   tessera::neighbors::registerNeighborsDialect(registry);

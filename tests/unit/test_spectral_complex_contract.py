@@ -31,10 +31,97 @@ import numpy as np
 import pytest
 
 from tessera.compiler.capabilities import get_target_capability, supports_op
-from tessera.compiler.graph_ir import _infer_result_type, tensor_ir_type
+from tessera.compiler.graph_ir import (
+    _canonicalize_spectral_attrs,
+    _infer_result_type,
+    tensor_ir_type,
+)
 from tessera.compiler.op_catalog import DELIBERATELY_UNDECLARED, shape_rule_for
 
 _FOUR_BACKENDS = ("x86", "nvidia_sm120", "rocm_gfx1151", "apple_cpu")
+
+
+def test_python_graph_producer_canonicalizes_spectral_identity():
+    attrs = {"axis": -1, "n": 9, "norm": "ortho"}
+    _canonicalize_spectral_attrs(
+        "tessera.irfft", [tensor_ir_type(("5",), "complex64")], attrs
+    )
+    assert attrs == {
+        "axis": -1,
+        "logical_length": 9,
+        "normalization": "ortho",
+        "spectrum_layout": "half_spectrum_nyquist_explicit",
+        "hermitian_weight": "none",
+    }
+
+    dct_attrs = {}
+    _canonicalize_spectral_attrs(
+        "tessera.dct", [tensor_ir_type(("8",), "fp32")], dct_attrs
+    )
+    assert dct_attrs == {
+        "normalization": "backward",
+        "logical_length": 8,
+        "spectrum_layout": "full_real",
+        "type": 2,
+        "transpose_basis": False,
+    }
+
+
+def test_compound_spectral_identity_is_explicit_and_content_addressable():
+    stft_attrs = {"axis": 0, "n_fft": 16, "onesided": False}
+    _canonicalize_spectral_attrs(
+        "tessera.stft",
+        [tensor_ir_type(("31", "3"), "fp32"), tensor_ir_type(("8",), "fp32")],
+        stft_attrs,
+    )
+    assert stft_attrs == {
+        "axis": 0,
+        "logical_length": 16,
+        "onesided": False,
+        "normalization": "backward",
+        "spectrum_layout": "full_complex",
+        "center": False,
+        "pad_mode": "constant",
+    }
+
+    conv_attrs = {"axis": 1}
+    _canonicalize_spectral_attrs(
+        "tessera.spectral_conv",
+        [tensor_ir_type(("2", "9"), "fp32"), tensor_ir_type(("1", "5"), "fp32")],
+        conv_attrs,
+    )
+    assert conv_attrs["logical_length"] == 16
+    assert conv_attrs["spectrum_layout"] == "half_spectrum_nyquist_explicit"
+
+
+def test_stft_and_istft_shape_rules_preserve_batch_axes_and_length_policy():
+    signal = tensor_ir_type(("31", "3"), "fp32")
+    window = tensor_ir_type(("8",), "fp32")
+    spectrum = _infer_result_type(
+        "tessera.stft",
+        [signal, window],
+        {
+            "axis": 0,
+            "hop": 4,
+            "logical_length": 8,
+            "center": False,
+            "onesided": True,
+        },
+    )
+    assert spectrum.shape == ("6", "5", "3")
+    restored = _infer_result_type(
+        "tessera.istft",
+        [spectrum, window],
+        {
+            "axis": 1,
+            "hop": 4,
+            "logical_length": 8,
+            "output_length": 31,
+            "center": False,
+            "onesided": True,
+        },
+    )
+    assert restored.shape == signal.shape
 
 
 @pytest.mark.parametrize("op", ["fft", "ifft", "rfft", "irfft"])

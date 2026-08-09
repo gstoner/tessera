@@ -15,8 +15,8 @@ The independent proof axes (see plan §3) and where each is sourced from:
 rung                    source (existing, read-only here)
 ======================  ==================================================
 ``python_reference``    ``primitive_coverage`` ``vjp``/``jvp`` contract axis
-``ir_adjoint``          ``AdjointInterface.cpp`` — a *native* ``buildAdjoint``
-                        (emits real Graph IR) vs. a ``placeholder`` one
+``ir_adjoint``          C++ derivative interfaces — native ``buildAdjoint`` or
+                        ``buildLinearTranspose`` Graph IR vs. a ``placeholder``
                         (``custom_adjoint_call`` → round-trips to the Python
                         VJP, i.e. **not** native) vs. ``none``
 ``target_lowered``      backward lowering probe (Phase 3) — none wired yet
@@ -46,6 +46,9 @@ from . import primitive_coverage
 # Repo root: python/tessera/compiler/autodiff_ledger.py → parents[3].
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _ADJOINT_CPP = _REPO_ROOT / "src" / "compiler" / "ir" / "AdjointInterface.cpp"
+_LINEAR_TRANSPOSE_CPP = (
+    _REPO_ROOT / "src" / "compiler" / "ir" / "LinearTransposeInterface.cpp"
+)
 
 # The backend targets the backward-execution rungs are tracked against.  Kept in
 # sync with the runtime execution matrix's target set; the ledger reports which
@@ -60,7 +63,7 @@ _TARGETS: tuple[str, ...] = (
 # NOT native Graph-IR adjoints — they are the compiler saying "ask Python".
 _PLACEHOLDER_MACRO_RE = re.compile(r'POINTWISE_BUILD_ADJOINT\(\s*\w+\s*,\s*"([^"]+)"\s*\)')
 
-# Every hand-written `<OpName>Op::buildAdjoint` definition. Whether it is a
+# Every hand-written compiler derivative-interface definition. Whether it is a
 # NATIVE adjoint (emits real backward Graph IR — matmul's transposed matmuls,
 # tanh/sigmoid's W5 closed forms) or a PLACEHOLDER round-trip is decided by the
 # body, NOT by the mere existence of the def: a hand-written body that itself
@@ -69,7 +72,9 @@ _PLACEHOLDER_MACRO_RE = re.compile(r'POINTWISE_BUILD_ADJOINT\(\s*\w+\s*,\s*"([^"
 # because it has an explicit definition. (The macro body also textually contains
 # `OPNAME::buildAdjoint`, but "OPNAME" carries no "Op::" so it never matches; the
 # filter below is belt-and-suspenders.)
-_EXPLICIT_BUILDADJOINT_RE = re.compile(r'(\w+)Op::buildAdjoint\b')
+_EXPLICIT_DERIVATIVE_RE = re.compile(
+    r'(\w+)Op::(?:buildAdjoint|buildLinearTranspose)\b'
+)
 
 # The runtime VJP key a placeholder body carries (e.g. getStringAttr("layer_norm")).
 # This — not the lowercased OpName — is the family key that matches the primitive
@@ -96,10 +101,13 @@ _REDUCTION_KIND_ALIASES = {"amax": "max", "amin": "min"}
 # execution, Phase 4) and device verification; it does NOT set those columns.
 _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
     {
-        "add", "amax", "amin", "broadcast", "gelu", "layer_norm", "max",
-        "huber_loss", "mae_loss", "mean", "min", "mse_loss", "mul", "matmul",
+        "add", "amax", "amin", "broadcast", "expand", "flatten", "gelu",
+        "layer_norm", "max", "huber_loss", "mae_loss", "mean", "min",
+        "mse_loss", "mul", "matmul", "permute", "reshape", "squeeze",
+        "transpose", "unsqueeze", "view",
         "relu", "rmsnorm", "sgd", "silu", "smooth_l1_loss", "softmax", "sum",
         "tanh", "sigmoid",
+        "fft", "ifft", "rfft", "irfft", "dct",
     }
 )
 
@@ -115,13 +123,16 @@ class LedgerError(RuntimeError):
 
 
 def _read_adjoint_source() -> str:
-    if not _ADJOINT_CPP.is_file():
+    sources = (_ADJOINT_CPP, _LINEAR_TRANSPOSE_CPP)
+    missing = [path for path in sources if not path.is_file()]
+    if missing:
         raise LedgerError(
-            f"cannot build the autodiff ledger: {_ADJOINT_CPP} is missing — the "
-            "`ir_adjoint` rung is sourced from it (Decision #26: no silent "
-            "no-op)."
+            "cannot build the autodiff ledger: derivative source(s) missing: "
+            f"{', '.join(str(path) for path in missing)} — the `ir_adjoint` "
+            "rung is sourced from both compiler interfaces (Decision #26: no "
+            "silent no-op)."
         )
-    return _ADJOINT_CPP.read_text(encoding="utf-8")
+    return "\n".join(path.read_text(encoding="utf-8") for path in sources)
 
 
 def _buildadjoint_body(text: str, sig_start: int) -> str:
@@ -152,7 +163,14 @@ def _cpp_op_family(name: str) -> str:
     # generated ledger keyed to the canonical op catalog, not an incidental
     # CamelCase split.
     return {
+        "d_c_t": "dct",
+        "f_f_t": "fft",
+        "i_f_f_t": "ifft",
+        "i_r_f_f_t": "irfft",
+        "i_s_t_f_t": "istft",
+        "r_f_f_t": "rfft",
         "rms_norm": "rmsnorm",
+        "s_t_f_t": "stft",
         "m_s_e_loss": "mse_loss",
         "m_a_e_loss": "mae_loss",
         "s_g_d": "sgd",
@@ -173,7 +191,7 @@ def _ir_adjoint_classes() -> tuple[frozenset[str], frozenset[str]]:
     # Macro-generated placeholder ops: the 2nd macro arg is the family key.
     placeholder: set[str] = set(_PLACEHOLDER_MACRO_RE.findall(text))
     native: set[str] = set()
-    for m in _EXPLICIT_BUILDADJOINT_RE.finditer(text):
+    for m in _EXPLICIT_DERIVATIVE_RE.finditer(text):
         name = m.group(1)
         if name == "OPNAME":  # macro template token, not a real op
             continue
@@ -190,7 +208,8 @@ def _ir_adjoint_classes() -> tuple[frozenset[str], frozenset[str]]:
     placeholder -= native
     if not native and not placeholder:
         raise LedgerError(
-            f"parsed no adjoint keys from {_ADJOINT_CPP}; the macro/fallback "
+            "parsed no derivative keys from the compiler interface sources; "
+            "the macro/fallback "
             "conventions changed — update the ledger regexes rather than "
             "silently reporting zero IR adjoints."
         )

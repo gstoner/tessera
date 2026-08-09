@@ -7,90 +7,96 @@ class TesseraCollectiveOp<string m, list<Trait> T = []>
     : Op<Tessera_Collective_Dialect, m, T>;
 
 //===----------------------------------------------------------------------===//
-// Point-to-all collectives (existing)
+// Canonical target-neutral collective dispatches
 //===----------------------------------------------------------------------===//
 
-def AllToAllOp : TesseraCollectiveOp<"all_to_all",
-    [MemoryEffects<[MemWrite, MemRead]>]> {
-  let summary = "All-to-all scatter: each rank sends a distinct shard to every other rank";
-  let arguments = (ins AnyMemRef:$input,
+class TargetCollectiveOp<string mnemonic, string summaryText>
+    : TesseraCollectiveOp<mnemonic,
+        [MemoryEffects<[MemWrite, MemRead]>]> {
+  let summary = summaryText;
+  let description = [{
+    This is the portable Target-IR dispatch boundary. `mesh_axis` selects the
+    process-group dimension and `tensor_axis` selects the payload dimension.
+    `world_size`, when present, makes static gather/scatter shape verification
+    exact. The result is asynchronous and must be consumed by
+    `tessera_collective.await` before entering ordinary tensor computation.
+  }];
+  let arguments = (ins AnyType:$input,
+                       StrAttr:$mesh_axis,
+                       I64Attr:$tensor_axis,
+                       DefaultValuedAttr<StrAttr, "\"none\"">:$reduction,
+                       OptionalAttr<I64Attr>:$world_size,
                        OptionalAttr<StrAttr>:$dtype,
                        OptionalAttr<I64Attr>:$chunk_bytes);
   let results = (outs Tessera_FutureType:$result);
-  let assemblyFormat = [{ $input attr-dict `:` type($input) `->` type($result) }];
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
 }
+
+def AllReduceOp : TargetCollectiveOp<
+    "all_reduce", "Reduce a tensor across a named mesh axis">;
+def ReduceScatterOp : TargetCollectiveOp<
+    "reduce_scatter", "Reduce then scatter a tensor across ranks">;
+def AllGatherOp : TargetCollectiveOp<
+    "all_gather", "Gather rank-local tensor shards onto every rank">;
+def AllToAllOp : TargetCollectiveOp<
+    "all_to_all", "Exchange equal tensor partitions across ranks">;
 
 //===----------------------------------------------------------------------===//
-// Reduction collectives (Phase 4 additions)
+// Rank-local registered-window and one-sided Target operations
 //===----------------------------------------------------------------------===//
 
-def AllReduceOp : TesseraCollectiveOp<"all_reduce",
-    [MemoryEffects<[MemWrite, MemRead]>]> {
-  let summary = "All-reduce: reduce a tensor across all ranks; each rank gets the result";
-  let description = [{
-    Reduces `input` across all ranks using `reduce_op` and writes the result
-    into every rank's output buffer.  Equivalent to NCCL ncclAllReduce.
-
-    `mesh_axis` names the mesh axis along which ranks are connected.
-    `chunk_bytes` controls the transport chunk size for the ring algorithm.
-  }];
-  let arguments = (ins AnyMemRef:$input,
-                       StrAttr:$reduce_op,
-                       StrAttr:$mesh_axis,
-                       OptionalAttr<StrAttr>:$dtype,
-                       OptionalAttr<I64Attr>:$chunk_bytes);
-  let results = (outs Tessera_FutureType:$result);
-  let assemblyFormat = [{
-    $input `,` $reduce_op `on` $mesh_axis attr-dict `:` type($input) `->` type($result)
-  }];
+def WindowRegisterOp : TesseraCollectiveOp<"window.register",
+    [MemoryEffects<[MemRead, MemWrite]>]> {
+  let summary = "Register a rank-local buffer as a symmetric transport window";
+  let arguments = (ins AnyMemRef:$buffer, StrAttr:$window_id, I64Attr:$bytes,
+                       DefaultValuedAttr<BoolAttr, "true">:$strict_ordering);
+  let results = (outs Tessera_WindowType:$window);
+  let assemblyFormat = "$buffer attr-dict `:` type($buffer) `->` type($window)";
+  let hasVerifier = 1;
 }
 
-def ReduceScatterOp : TesseraCollectiveOp<"reduce_scatter",
-    [MemoryEffects<[MemWrite, MemRead]>]> {
-  let summary = "Reduce-scatter: reduce across ranks then scatter one shard to each rank";
-  let description = [{
-    Reduces `input` across all ranks, then scatters rank k's shard of the
-    result to rank k.  Equivalent to NCCL ncclReduceScatter.
-
-    Used at data-parallel boundaries during the backward pass: each rank
-    accumulates its local gradient, then reduce-scatter distributes the
-    per-rank gradient slice.
-
-    `scatter_dim` is the tensor dimension to scatter along (typically 0).
-  }];
-  let arguments = (ins AnyMemRef:$input,
-                       StrAttr:$reduce_op,
-                       StrAttr:$mesh_axis,
-                       I64Attr:$scatter_dim,
-                       OptionalAttr<StrAttr>:$dtype,
-                       OptionalAttr<I64Attr>:$chunk_bytes);
-  let results = (outs Tessera_FutureType:$result);
-  let assemblyFormat = [{
-    $input `,` $reduce_op `on` $mesh_axis `dim` $scatter_dim attr-dict `:` type($input) `->` type($result)
-  }];
+def WindowDeregisterOp : TesseraCollectiveOp<"window.deregister",
+    [MemoryEffects<[MemWrite]>]> {
+  let summary = "Deregister a symmetric transport window";
+  let arguments = (ins Tessera_WindowType:$window);
+  let results = (outs);
+  let assemblyFormat = "$window attr-dict `:` type($window)";
 }
 
-def AllGatherOp : TesseraCollectiveOp<"all_gather",
-    [MemoryEffects<[MemWrite, MemRead]>]> {
-  let summary = "All-gather: each rank contributes a shard; every rank gets the full tensor";
-  let description = [{
-    Concatenates each rank's `input` shard along `gather_dim` and makes the
-    full tensor available on all ranks.  Equivalent to NCCL ncclAllGather.
+def PutSignalOp : TesseraCollectiveOp<"put_signal",
+    [MemoryEffects<[MemRead, MemWrite]>]> {
+  let summary = "Put into a peer registered window and signal completion";
+  let arguments = (ins AnyMemRef:$source, Tessera_WindowType:$peer_window,
+                       I64Attr:$count, StrAttr:$dtype, I64Attr:$peer,
+                       I64Attr:$peer_window_offset,
+                       DefaultValuedAttr<I64Attr, "0">:$signal_index,
+                       DefaultValuedAttr<I64Attr, "0">:$rma_context);
+  let results = (outs);
+  let assemblyFormat = "$source `to` $peer_window attr-dict `:` type($source) `,` type($peer_window)";
+  let hasVerifier = 1;
+}
 
-    Used before tensor-parallel layers that need full activations (row-parallel
-    linear: gather the distributed output before the next layer).
+def SignalOp : TesseraCollectiveOp<"signal", [MemoryEffects<[MemWrite]>]> {
+  let summary = "Signal a peer without transferring a payload";
+  let arguments = (ins I64Attr:$peer,
+                       DefaultValuedAttr<I64Attr, "0">:$signal_index,
+                       DefaultValuedAttr<I64Attr, "0">:$rma_context);
+  let results = (outs);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
 
-    `gather_dim` is the tensor dimension to gather along (typically 0 or 1).
-  }];
-  let arguments = (ins AnyMemRef:$input,
-                       StrAttr:$mesh_axis,
-                       I64Attr:$gather_dim,
-                       OptionalAttr<StrAttr>:$dtype,
-                       OptionalAttr<I64Attr>:$chunk_bytes);
-  let results = (outs Tessera_FutureType:$result);
-  let assemblyFormat = [{
-    $input `on` $mesh_axis `dim` $gather_dim attr-dict `:` type($input) `->` type($result)
-  }];
+def WaitSignalOp : TesseraCollectiveOp<"wait_signal",
+    [MemoryEffects<[MemRead]>]> {
+  let summary = "Wait for one or more peer signals in stream order";
+  let arguments = (ins I64Attr:$peer,
+                       DefaultValuedAttr<I64Attr, "1">:$operation_count,
+                       DefaultValuedAttr<I64Attr, "0">:$signal_index,
+                       DefaultValuedAttr<I64Attr, "0">:$rma_context);
+  let results = (outs);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -104,11 +110,13 @@ def PackCastOp : Op<Tessera_Collective_Dialect, "pack_cast", []> {
   let assemblyFormat = [{ $input attr-dict `:` type($input) `->` type($packed) }];
 }
 
-def AwaitOp : Op<Tessera_Collective_Dialect, "await", []> {
+def AwaitOp : Op<Tessera_Collective_Dialect, "await",
+    [MemoryEffects<[MemRead]>]> {
   let summary = "Await completion of an async collective future";
   let arguments = (ins Tessera_FutureType:$future);
   let results = (outs AnyType:$value);
   let assemblyFormat = [{ $future attr-dict `:` type($future) `->` type($value) }];
+  let hasVerifier = 1;
 }
 
 def ShardViewOp : Op<Tessera_Collective_Dialect, "shard_view", []> {
@@ -132,6 +140,7 @@ def QoSLimitOp : Op<Tessera_Collective_Dialect, "qos.limit", []> {
   let arguments = (ins I64Attr:$max_inflight);
   let results = (outs);
   let assemblyFormat = [{ attr-dict }];
+  let hasVerifier = 1;
 }
 
 def QoSAcquireOp : Op<Tessera_Collective_Dialect, "qos.acquire", []> {

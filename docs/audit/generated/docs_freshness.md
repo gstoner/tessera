@@ -161,7 +161,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-02 | 6 | ✓ |
-| `compiler/COMPILER_AUDIT.md` | - | 2026-07-30 | 9 | ✓ |
+| `compiler/COMPILER_AUDIT.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 0 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 11 | ✓ |
 | `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-08-08 | 0 | ✓ |

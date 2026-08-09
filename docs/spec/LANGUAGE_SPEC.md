@@ -394,8 +394,11 @@ At the `@tessera.jit` level, inter-rank synchronization is implicit in `Region` 
 annotations. No explicit `barrier()` call is available at the `@jit` level — synchronization
 is always derived from data-flow and privilege annotations.
 
-`Region["reduce_sum/max/min"]` signals that a collective **may** be inserted at the DP
-mesh boundary. This is a Phase 4+ planned feature (`GPUCollectiveInsertionPass`).
+`Region["reduce_sum/max/min"]` signals that a collective may be inserted at the DP
+mesh boundary. `GPUCollectiveInsertionPass` now emits a registered asynchronous
+`tessera_collective` dispatch, inserts an explicit await, and rewires downstream
+SSA consumers through the awaited value. Native multi-rank transport remains a
+target-owned runtime capability.
 
 ### 7.3 Forward Progress Guarantees
 

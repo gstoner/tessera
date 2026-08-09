@@ -45,10 +45,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `power_attn` | attention | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `retention` | attention | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `varlen_sdpa` | attention | public | public | registered | complete | fused | fused | ready | benchmarked |
-| `all_gather` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
-| `all_reduce` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
-| `all_to_all` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
-| `reduce_scatter` | collective | public | public | registered | complete | partial | reference | ready | benchmarked |
+| `all_gather` | collective | public | public | registered | complete | complete | reference | ready | benchmarked |
+| `all_reduce` | collective | public | public | registered | complete | complete | reference | ready | benchmarked |
+| `all_to_all` | collective | public | public | registered | complete | complete | reference | ready | benchmarked |
+| `reduce_scatter` | collective | public | public | registered | complete | complete | reference | ready | benchmarked |
 | `eq` | comparison | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `ge` | comparison | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `gt` | comparison | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -169,6 +169,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `split` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `squeeze` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
 | `stack` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `stop_gradient` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `tile` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `tile_view` | layout_transform | public | public | registered | complete | fused | no_kernel_required | ready | none |
 | `transpose` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
@@ -346,7 +347,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 |--------|------:|------|
 | acceptance_verification | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCnnN· |
 | attention | 26 | PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCN· PPGCFHNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB |
-| collective | 4 | PPGCpRNB PPGCpRNB PPGCpRNB PPGCpRNB |
+| collective | 4 | PPGCCRNB PPGCCRNB PPGCCRNB PPGCCRNB |
 | comparison | 6 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | contraction | 1 | PPGCFCN· |
 | elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB |
@@ -355,7 +356,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | fused_epilogue | 1 | PPGCFCN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |
-| layout_transform | 30 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCnnN· |
+| layout_transform | 31 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCnnN· |
 | linalg_decomposition | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | linalg_solver | 2 | PPGCFCN· PPGCFCN· |
 | logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |

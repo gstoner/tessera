@@ -1972,6 +1972,20 @@ struct LowerTileToROCMPass
 
   void runOnOperation() override {
     StringRef arch = archOpt;
+    Operation *unsupportedSpectralBackward = nullptr;
+    getOperation().walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tile.spectral_backward_kernel") {
+        unsupportedSpectralBackward = op;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    if (unsupportedSpectralBackward) {
+      unsupportedSpectralBackward->emitError(
+          "ROCm compound spectral adjoint package is not implemented; refusing to preserve an unconsumed Tile launch");
+      signalPassFailure();
+      return;
+    }
     SmallVector<gpu::GPUFuncOp> typedGemmContracts;
     getOperation().walk([&](gpu::GPUFuncOp function) {
       if (function->hasAttr("tessera.rocm.typed_gfx11_gemm_contract"))

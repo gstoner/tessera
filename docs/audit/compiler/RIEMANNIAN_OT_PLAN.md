@@ -107,11 +107,11 @@ Three independent reasons, in decreasing order of durability:
    A general `stop_gradient` primitive and an implicit-function-theorem
    differentiation seam (`custom_root`) are prerequisites for deep equilibrium
    models, bilevel/meta-learning, proximal and ADMM layers, differentiable
-   physics, and differentiable convex solvers. The Python reference lane now
-   has `custom_root`, IHVP, and adjoint-state helpers, but the compiler has
-   neither seam: the only stop-gradient in the tree is `jepa_stop_gradient`, a
-   model-specific op in `models/jepa.py`, and `NewtonAutodiff.cpp` remains an
-   annotation-only scaffold rather than a value-producing implicit-root rule.
+   physics, and differentiable convex solvers. The Python reference lane has
+   `custom_root`, IHVP, and adjoint-state helpers. The compiler now owns a
+   canonical `stop_gradient` barrier and registered, value-producing implicit
+   residual/linear-solve/adjoint IR; architecture-owned solver consumption and
+   compiled numerical proof remain open.
 
 2. **It makes *geometry* a first-class IR object, which is our own thesis
    applied one axis further.** Tessera already treats tiles, memory spaces,
@@ -162,8 +162,8 @@ twelve contract axes are closed.**
 
 | Paper concept | Needed | Today |
 |---|---|---|
-| envelope theorem at the argmin | general `stop_gradient` primitive | **missing.** Only `jepa_stop_gradient` (model-specific, `models/jepa.py:183`) |
-| IFT Jacobian `−(D_yF)⁻¹ D_xF` | `custom_root` / implicit-diff VJP | **scaffolded, not missing** — corrected 2026-08-02. `src/solvers/core/passes/NewtonAutodiff.cpp` walks `tessera_solver.implicit` ops and its header specifies exactly `dF/dx = -(dR/dx)⁻¹·dR/du`; the body only *annotates* `tessera_solver.{vjp,jvp} = "generated"` and defers values to runtime. R2 must **finish that pass**, not build a parallel mechanism. See [`AUTODIFF_ARCHITECTURE_REVIEW.md §B8`](AUTODIFF_ARCHITECTURE_REVIEW.md) |
+| envelope theorem at the argmin | general `stop_gradient` primitive | **shared compiler barrier landed.** Canonical Graph `stop_gradient` carries explicit activity semantics; model migration remains consumer work. |
+| IFT Jacobian `−(D_yF)⁻¹ D_xF` | `custom_root` / implicit-diff VJP | **value-producing shared IR landed 2026-08-08.** `NewtonAutodiff.cpp` validates the residual function ABI and emits registered residual → transposed matrix-free solve → negative residual-adjoint values. Architecture-owned lowering/execution and compiled numerical proof remain open; R2 must consume this path, not build a parallel mechanism. |
 | `log|det J|` | `slogdet` | **missing.** No `det`, no `logdet`, no `slogdet` in the catalog |
 | `[D_yF]⁻¹ [D_xF]` (dense `p×p`) | general `linalg.solve` | **partial.** `tri_solve` and `cholesky_solve` exist; `D_yF` is neither triangular nor SPD in general |
 | JVP/VJP against `p` basis vectors | batched JVP over a basis | `autodiff/jvp.py` exists; batched-over-basis is untested for this shape |
@@ -270,12 +270,13 @@ New `python/tessera/geom/`: `exp_map`, `log_map`, `geodesic_distance`,
    given `F(x, y*) = 0`, `dy*/dx = −(∂F/∂y)⁻¹ (∂F/∂x)`. Register through the
    existing `@custom_primitive` machinery in `custom.py`, which already has
    `def_vjp` / `def_jvp` / `def_batching` / `def_transpose` hooks.
-   **On the compiler side this means completing `NewtonAutodiff.cpp`** — emitting
-   real `tessera_solver.residual` + `linear_solve` ops in place of its current
-   annotations — *not* adding a second implicit-diff path. This is a shared
+   **On the compiler side the shared `NewtonAutodiff.cpp` body is now landed:**
+   it emits registered value-producing residual, matrix-free linear-solve,
+   residual-JVP, and residual-adjoint operations. R2 must lower and execute
+   that contract, *not* add a second implicit-diff path. This remains a shared
    deliverable with the autodiff track; see
    [`AUTODIFF_ARCHITECTURE_REVIEW.md §5`](AUTODIFF_ARCHITECTURE_REVIEW.md)
-   ("Alongside — finish `NewtonAutodiff`"). Budget it once, not twice.
+   ("Alongside — consume the `NewtonAutodiff` IFT body"). Budget it once, not twice.
 3. **`slogdet`** and a general **`linalg.solve`**, lowering alongside the existing
    `linalg_decomposition` / `linalg_solver` families.
 4. Batched JVP against a tangent basis — the App. F.3 note that the projected

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-09
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
@@ -38,17 +38,68 @@ Earlier E2E-REAL slices established content-addressed Graph→Schedule→Tile
 lineage and bounded x86/gfx1151 physical consumers. The next route is no longer
 E2E-REAL-0:
 
-1. **AD-CORE-LINEAR-1:** compiler-owned linear transposition and one paired
-   Graph-IR forward/backward CPU proof.
-2. **AD-TSOL-SPECTRAL-1:** FFT/IFFT adjoints, then packed-real/DCT, then
-   compound spectral adjoints through the existing typed artifact boundary.
-3. **AD-CORE-EFFECT-CONTROL-1:** canonical `stop_gradient`, activity/effect
-   propagation, and fail-closed region adjoints.
-4. **AD-SOLVER-IFT-1:** value-producing implicit-root/Newton autodiff lowering.
-5. **AD-RESIDUAL-EVAL-1:** complete backward-cost and residual-memory evidence
-   feeding recomputation/treeverse candidates into the Evaluator.
-6. **E2E-REAL-6:** remove duplicate lowering authorities only after migrated
+1. **Completed — AD-CORE-LINEAR-1:** `LinearTransposeInterface` is the Graph-IR
+   authority for transpose/reshape, broadcast/expand, the structural view
+   family, and operand-wise multilinear matmul. Both autodiff passes consume
+   it; paired CPU execution covers inverse shape transport, every matmul
+   transpose-flag combination, and fail-closed unsupported operations. The
+   Python linear registry remains an oracle, not the production authority.
+2. **Compiler slice complete — AD-TSOL-SPECTRAL-1:** Graph IR now owns explicit
+   normalization, logical length, spectrum layout/Hermitian identity, and DCT
+   type. FFT/IFFT/RFFT/IRFFT/DCT transposes have paired CPU numerical proof;
+   STFT/ISTFT/filter/convolution emit a content-addressed multi-output
+   Schedule→Tile carrier. Real-input full FFT autodiff fails closed and directs
+   callers to the explicit packed-real `rfft` contract. Native x86/gfx1151 compound-backward packages remain
+   architecture-owned and fail closed rather than leaking an unconsumed Tile op.
+3. **Completed foundation audit — GRAPH-VERIFY-SIGNED-1:** registered Graph and
+   canonical-attention integer legality now reads the signed `IntegerAttr`
+   spelling rather than MLIR 23's unsigned native value accessor. Negative
+   extents, block counts, seeds, cache windows, control bounds, and indices fail
+   closed, with direct negative IR proof. Registration and `hasVerifier`
+   coverage are not treated as semantic-verifier proof.
+4. **Completed — AD-CORE-EFFECT-CONTROL-1:** canonical `stop_gradient` is a
+   Graph operation and compiler barrier; both autodiff passes compute backward
+   SSA activity, carry registered Graph effects, reject active stochastic work,
+   permit inactive regions, and fail closed for active regions or stopped
+   residuals that cannot be replayed safely. Direct lit and paired CPU proof
+   cover the legal and negative paths.
+5. **AD-SOLVER-IFT-1 — shared IR landed:** the registered solver dialect now
+   owns implicit, residual, matrix-free linear-solve, residual-JVP, and
+   residual-adjoint operations. `NewtonAutodiff` validates the residual symbol
+   ABI and emits private value-producing VJP/JVP functions; architecture-owned
+   solve/adjoint consumers and compiled numerical/device proof remain open.
+6. **AD-RESIDUAL-EVAL-1 — shared measurement boundary landed:** complete
+   backward samples and unique retained residual bytes can now stamp the Graph
+   rematerialization decision. Only exact-device execution rows are selector
+   eligible. Measured-step treeverse envelopes prune candidates but cannot
+   promote them; complete family packets and executable region adjoints remain
+   open.
+7. **E2E-REAL-6:** remove duplicate lowering authorities only after migrated
    families satisfy lineage, correctness, and architecture-owned evidence.
+8. **COLLECTIVE-NATIVE-FOUNDATION-1 — landing:** the C++ NCCL/RCCL adapters
+   issue real NCCL-compatible calls, query initialized communicator properties,
+   and own symmetric registrations through move-only RAII windows. Target
+   artifacts bind initiation, registration, ordering, capture policy,
+   backend/source identity, and the exact communicator-capability digest;
+   device initiation rejects a mismatched runtime topology. The two-gfx1151
+   LSA harness is compiled and registered as an opt-in hardware CTest. Current
+   WSL communicator discovery passes but reports device API false, zero LSA
+   teams, no GIN, host RMA true, and one visible GPU; symmetric registration
+   and peer correctness therefore remain blocked. Zero-CU Copy Engine,
+   GIN/RMA, and gfx1250 DDA now have independent typed artifact lanes and
+   legality gates. Copy Engine binds zero-CTA communicator initialization;
+   GIN/RMA binds strict registered windows and public one-sided operations;
+   gfx1250 DDA binds architecture plus selector-evidence identity without
+   importing an RCCL-internal selector. Exact-device correctness, route proof,
+   and performance packets remain separate open slices under sync
+   `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09`.
+   GIN now has registered Target operations for window lifetime and ordered
+   put/signal/wait, a content-addressed lifetime verifier, and rank-local
+   runtime dispatch. Its native executable binds explicit Tessera, OpenMPI,
+   PMI, or Slurm ranks to `ncclCommInitRank`, shared rendezvous, symmetric
+   windows, exact ring readback, and independent HIP-event/host-wall clocks.
+   Exact multi-node gfx1151 proof remains open; ordinary collective records
+   cannot opt into the one-sided lane.
 
 Scoped plans own the design and acceptance details for these items. Backend
 plans own exact-device promotion. Neither creates a competing global order.
@@ -67,10 +118,28 @@ aggregate compiler row is explicitly best-available evidence, not a universal
 backend claim. The 2026-08-08 reconciliation removed the stale Adafactor
 single-GPU terminal override and registered existing physical TSOL/Adafactor
 benchmark harnesses; it changed audit truth, not implementation or selector
-state. The remaining foundation queues are therefore the four partial
-collective Tile rows, nine planned distributed/sharding backend contracts,
+state. The four collective Tile contracts are now first-class ODS operations
+with exact Schedule→Tile lowering and shared shape/reduction verification.
+They lower into a registered asynchronous `tessera_collective` Target dialect
+and a content-addressed runtime-adapter package; deterministic two-rank tests
+execute all four operations without returning to Graph IR. The functional
+portable Target/runtime axis is complete. As of
+`COLLECTIVE-ASYNC-UNIFY-2026-08-09`, the older forward/autodiff transform
+producers also emit this registered future/await contract and rewire SSA users;
+no active compiler producer emits an unregistered collective pseudo-dialect.
+Native architecture transport,
+exact multi-rank execution, and performance proof stay open and
+architecture-owned. The remaining foundation queues are therefore
+nine planned distributed/sharding backend contracts,
 autodiff/sharding breadth, target-specific benchmark evidence, and the
 duplicate-authority deletion in E2E-REAL-6.
+
+Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` also closes
+the actionable direct-test bucket: the five differentiable relaxations now
+have public-forward/oracle coverage and the two fused training rows have exact
+x86/gfx1151 fused-versus-unfused proof. The raw thin-reference count remains a
+scanner metric; its 87 structural rows are explicitly non-numerical contracts,
+not hidden primitive test debt.
 
 The x86 production tool/image boundary also follows the common fail-closed
 build selection as of 2026-08-08: `TESSERA_BUILD_DIR` selects both
@@ -583,7 +652,7 @@ path was carrying.
 | W3.2 | **Superseded in delivery shape by E2E-REAL-0 through E2E-REAL-5.** Build and register a real Schedule dialect, preserve Graph SSA under schedule decisions, lower one scheduled matmul to the launch-level Tile ABI, make x86/ROCm packages consume that artifact, then migrate families. The Python spine is the differential oracle. This is three boundaries plus bufferization/package API work, not a 3-week convergence edit. | IR Stack §U3 + Target §X5 | re-estimate after the matmul vertical slice |
 | W3.3 | Split the Tile dialect by level: primitives stay `tile.*`; whole-kernel ops → Graph IR / `tessera.kernel.*`; domain ops → `tessera_ebm`; `svd`/`qr`/`cholesky`/`lu` → linalg solver | IR Stack §U4 | 2w |
 | W3.4 | Decompose `JitFn` (11 `_native_*_backward` → `emit/candidate.py` candidates behind `@f__bwd`); split `__init__.py`'s 315 nested defs into `tessera/ops/` | Frontend §U5–U6 | 3w |
-| W3.5 | Finish `NewtonAutodiff`'s IFT body (`dF/dx = -(dR/dx)⁻¹dR/du`) — emits real `residual` + `linear_solve` ops | Autodiff §B8 + OT R2 | 2w |
+| W3.5 | **Shared IR landed 2026-08-08.** `NewtonAutodiff` validates an explicit residual function ABI and emits private, value-producing IFT VJP/JVP functions over registered `tessera_solver.residual`, matrix-free `linear_solve`, `residual_jvp`, and `residual_adjoint` operations. Invalid/missing residual contracts fail closed. Remaining: architecture-owned lowering/execution of those operations and compiled numerical/device packets. | Autodiff §B8 + OT R2 | landing |
 | W3.6 | Batched operands in `ExpandProductTable`; connect `RotorSandwichFold`'s marker to a consumer | GA/EBM §1.3 | 2w |
 | W3.7 | **Define ROCm producer ownership per package family** across registered C++ generators, compatibility Target-IR text, and `emit/rocm_hip.py` candidates. Add differential gates and retire only producers proven duplicate; preserve C++ MLIR→ROCDL/HSACO as the canonical native spine | Target §X6 | 2w initial inventory/gate |
 
@@ -615,7 +684,7 @@ an existing hardcoded choice through the arbiter Decision #28 already built.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| W5.1 | Residual policy as an arbiter axis (SAVE/RECOMPUTE/HYBRID per `(op, bucket, dtype, target)`); Revolve/treeverse for counted loops; delete `EBMCheckpointInnerLoop` | Autodiff D5 + GA/EBM §1.5 | 4w |
+| W5.1 | **Measurement boundary landed 2026-08-08; execution remains open.** Complete-backward samples and unique retained residual allocations produce exact evidence; only exact-device rows stamp `tessera.backward_work_ns` and `tessera.residual.retained_bytes`, which the rematerialization pass consumes. Treeverse candidates derive pruning envelopes from measured step work but remain promotion-ineligible until complete backward execution. Remaining: SAVE/RECOMPUTE/HYBRID packets by family/target and executable region-adjoint/treeverse schedules. | Autodiff D5 + GA/EBM §1.5 | landing |
 | W5.2 | Scheduling decisions at Schedule IR — tile sizes, stage counts, raster order, warp roles chosen from `fusion_core` cost models via the measured arbiter, not from `--tile-q=64` | Frontend §U3 + IR Stack §U6 | 5w |
 | W5.3 | Generic fusion region discovery over a legality oracle (a W2.1 client); keep the measured cost models | Sweep §F3 | *(folded into W5.2)* |
 | W5.4 | Sharding **propagation** (GSPMD/Shardy-style) — annotate a few tensors, infer the rest | Sweep §F4 | 4w |

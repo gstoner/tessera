@@ -31,7 +31,7 @@ struct ExportDeploymentManifestPass : public PassWrapper<ExportDeploymentManifes
       if (name.starts_with("tessera.mesh.")) {
         ++meshOps;
       }
-      if (name.starts_with("tessera.collective.")) {
+      if (name.starts_with("tessera_collective.")) {
         ++collectiveOps;
       }
       if (name == "tessera_sr.checkpoint") {

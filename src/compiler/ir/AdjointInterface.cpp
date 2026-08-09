@@ -32,6 +32,75 @@ namespace tessera {
 
 namespace tessera {
 
+llvm::SmallVector<mlir::Value> StopGradientOp::buildAdjoint(
+    mlir::OpBuilder &, mlir::ValueRange) {
+  // The null value is intentional: accumulateCotangent ignores it, so reverse
+  // activity ends at this op while the forward value remains an identity.
+  return {mlir::Value()};
+}
+
+static llvm::SmallVector<mlir::Value> buildCompoundSpectralAdjoint(
+    mlir::Operation *op, llvm::StringRef kind, mlir::ValueRange primals,
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return llvm::SmallVector<mlir::Value>(primals.size());
+  mlir::OperationState state(op->getLoc(), "tessera.spectral_backward");
+  state.addOperands(outputCotangents[0]);
+  state.addOperands(primals);
+  for (mlir::Value primal : primals)
+    state.addTypes(primal.getType());
+  state.addAttribute("kind", builder.getStringAttr(kind));
+  for (llvm::StringRef name : {"axis", "logical_length", "normalization",
+                               "spectrum_layout", "hop", "center",
+                               "onesided", "pad_mode", "output_length"})
+    if (mlir::Attribute attr = op->getAttr(name))
+      state.addAttribute(name, attr);
+  if (!state.attributes.get("normalization"))
+    state.addAttribute("normalization", builder.getStringAttr("backward"));
+  if (!state.attributes.get("spectrum_layout"))
+    state.addAttribute(
+        "spectrum_layout",
+        builder.getStringAttr(kind == "tessera.spectral_filter"
+                                  ? "full_complex"
+                                  : "half_spectrum_nyquist_explicit"));
+  if (!state.attributes.get("center"))
+    state.addAttribute("center", builder.getBoolAttr(false));
+  if (!state.attributes.get("onesided"))
+    state.addAttribute("onesided", builder.getBoolAttr(true));
+  if (!state.attributes.get("pad_mode"))
+    state.addAttribute("pad_mode", builder.getStringAttr("constant"));
+  mlir::Operation *backward = builder.create(state);
+  return llvm::SmallVector<mlir::Value>(backward->getResults());
+}
+
+llvm::SmallVector<mlir::Value> STFTOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildCompoundSpectralAdjoint(
+      getOperation(), "tessera.stft", {getX(), getParameter()}, builder,
+      outputCotangents);
+}
+
+llvm::SmallVector<mlir::Value> ISTFTOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildCompoundSpectralAdjoint(
+      getOperation(), "tessera.istft", {getX(), getParameter()}, builder,
+      outputCotangents);
+}
+
+llvm::SmallVector<mlir::Value> SpectralFilterOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildCompoundSpectralAdjoint(
+      getOperation(), "tessera.spectral_filter", {getX(), getParameter()},
+      builder, outputCotangents);
+}
+
+llvm::SmallVector<mlir::Value> SpectralConvOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildCompoundSpectralAdjoint(
+      getOperation(), "tessera.spectral_conv", {getX(), getFilter()}, builder,
+      outputCotangents);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // F5 collectives. These are the IR counterparts of the existing DDP/FSDP VJPs:
 // all-reduce(sum) is self-dual; all-gather and reduce-scatter are transposes.
@@ -67,40 +136,13 @@ llvm::SmallVector<mlir::Value> ReduceScatterOp::buildAdjoint(
   return {grad.getY()};
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MatmulOp
-//
-// Forward:  C = A @ B
-// Adjoints: dA = dout @ B^T
-//           dB = A^T @ dout
-//
-// Mirrors python/tessera/autodiff/vjp.py::vjp_gemm.
-// ─────────────────────────────────────────────────────────────────────────────
-
-llvm::SmallVector<mlir::Value> MatmulOp::buildAdjoint(
+llvm::SmallVector<mlir::Value> AllToAllOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
-  if (outputCotangents.size() != 1 || !outputCotangents[0])
-    return {mlir::Value(), mlir::Value()};
-  mlir::Value dOut = outputCotangents[0];
-  auto loc = getLoc();
-
-  // dA = dout @ B^T
-  auto dA = builder.create<MatmulOp>(
-      loc, getLhs().getType(), dOut, getRhs(),
-      /*tile_k=*/mlir::IntegerAttr(),
-      /*numeric_policy=*/nullptr,
-      /*transposeA=*/builder.getBoolAttr(false),
-      /*transposeB=*/builder.getBoolAttr(true));
-
-  // dB = A^T @ dout
-  auto dB = builder.create<MatmulOp>(
-      loc, getRhs().getType(), getLhs(), dOut,
-      /*tile_k=*/mlir::IntegerAttr(),
-      /*numeric_policy=*/nullptr,
-      /*transposeA=*/builder.getBoolAttr(true),
-      /*transposeB=*/builder.getBoolAttr(false));
-
-  return {dA.getResult(), dB.getResult()};
+  if (outputCotangents.empty() || !outputCotangents[0])
+    return {mlir::Value()};
+  auto grad = builder.create<AllToAllOp>(
+      getLoc(), getX().getType(), outputCotangents[0], getAxisAttr(), getOpAttr());
+  return {grad.getY()};
 }
 
 static llvm::SmallVector<mlir::Value>
@@ -433,60 +475,6 @@ llvm::SmallVector<mlir::Value> AdamWOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
   return buildAdamAdjoint(
       getOperation(), builder, outputCotangents, true);
-}
-
-// Broadcast is inverted by summing every expanded dimension. Reduce in
-// descending axis order so each remaining axis keeps its original index, then
-// reshape to restore the input's explicit singleton dimensions. Leading axes
-// and statically-singleton aligned axes remain known under dynamic shapes.
-// An aligned `? -> static non-unit` dimension is genuinely ambiguous (runtime
-// equality versus runtime singleton expansion), so only that case retains the
-// reference fallback.
-llvm::SmallVector<mlir::Value> BroadcastOp::buildAdjoint(
-    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
-  if (outputCotangents.size() != 1 || !outputCotangents[0])
-    return {mlir::Value()};
-
-  auto inTy = mlir::dyn_cast<mlir::RankedTensorType>(getX().getType());
-  auto outTy = mlir::dyn_cast<mlir::RankedTensorType>(getY().getType());
-  mlir::Value dy = outputCotangents[0];
-  if (!inTy || !outTy)
-    return placeholderAdjoint(builder, getLoc(), getX().getType(), "broadcast",
-                              dy, getX());
-
-  llvm::SmallVector<int64_t> reduceAxes;
-  int64_t offset = outTy.getRank() - inTy.getRank();
-  for (int64_t axis = 0; axis < offset; ++axis)
-    reduceAxes.push_back(axis);
-  for (int64_t axis = 0; axis < inTy.getRank(); ++axis) {
-    int64_t outAxis = axis + offset;
-    int64_t inputExtent = inTy.getDimSize(axis);
-    int64_t outputExtent = outTy.getDimSize(outAxis);
-    if (mlir::ShapedType::isDynamic(inputExtent) &&
-        !mlir::ShapedType::isDynamic(outputExtent) && outputExtent != 1)
-      return placeholderAdjoint(builder, getLoc(), getX().getType(),
-                                "broadcast", dy, getX());
-    if (inputExtent == 1 && outputExtent != 1)
-      reduceAxes.push_back(outAxis);
-  }
-
-  mlir::Value grad = dy;
-  for (int64_t i = static_cast<int64_t>(reduceAxes.size()) - 1; i >= 0; --i) {
-    int64_t axis = reduceAxes[i];
-    auto currentTy = mlir::cast<mlir::RankedTensorType>(grad.getType());
-    llvm::SmallVector<int64_t> shape(currentTy.getShape());
-    shape.erase(shape.begin() + axis);
-    auto reducedTy = mlir::RankedTensorType::get(
-        shape, currentTy.getElementType(), currentTy.getEncoding());
-    grad = builder
-               .create<ReduceOp>(getLoc(), reducedTy, grad,
-                                 builder.getStringAttr("sum"),
-                                 builder.getI64IntegerAttr(axis))
-               .getResult();
-  }
-  if (grad.getType() != inTy)
-    grad = builder.create<ReshapeOp>(getLoc(), inTy, grad).getY();
-  return {grad};
 }
 
 // Single-axis reductions. Sum and static-extent mean retain the small

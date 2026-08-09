@@ -191,8 +191,16 @@ LogicalResult FFTOp::verify() {
       getBatchAttr().getInt() <= 0 || !physicalLength ||
       physicalLength.getInt() <= 0 || !realPolicy || !hermitianLayout)
     return emitOpError("requires normalized axis and positive length/batch");
-  if (getNormalization() != "backward")
-    return emitOpError("initial FFT contract requires backward normalization");
+  if (getNormalization() != "backward" && getNormalization() != "forward" &&
+      getNormalization() != "ortho")
+    return emitOpError("normalization must be backward, forward, or ortho");
+  auto hermitianWeight =
+      getOperation()->getAttrOfType<StringAttr>("hermitian_weight");
+  if (!hermitianWeight ||
+      (hermitianWeight.getValue() != "none" &&
+       hermitianWeight.getValue() != "half_interior" &&
+       hermitianWeight.getValue() != "double_interior"))
+    return emitOpError("requires an explicit Hermitian weighting policy");
   if (!getScale().isFinite() || getScale().convertToDouble() <= 0.0)
     return emitOpError("requires a finite positive normalization scale");
   if (getStorage() != "complex64_interleaved_f32" || getAccum() != "f32")
@@ -221,6 +229,12 @@ LogicalResult FFTOp::verify() {
                         2 * physicalLength.getInt() - 1))
     return emitOpError("Bluestein strategy requires a sufficient padded length");
   const bool realMode = getMode() == "r2c" || getMode() == "c2r";
+  if (!realMode && hermitianWeight.getValue() != "none")
+    return emitOpError("full-complex FFT cannot apply Hermitian weighting");
+  if (getMode() == "r2c" && hermitianWeight.getValue() == "half_interior")
+    return emitOpError("r2c cannot apply input-side half-interior weighting");
+  if (getMode() == "c2r" && hermitianWeight.getValue() == "double_interior")
+    return emitOpError("c2r cannot apply output-side double-interior weighting");
   if (realPolicy.getValue() == "packed_even_n2_hermitian_v1" &&
       (!realMode || logicalLength % 2 != 0 ||
        physicalLength.getInt() != logicalLength / 2))
@@ -296,6 +310,40 @@ LogicalResult SpectralProgramOp::verify() {
   if (getKind() != "tessera.spectral_filter" && !directDct &&
       getChildFftDigests().empty())
     return emitOpError("FFT-based spectral programs require child digests");
+  return success();
+}
+
+LogicalResult SpectralBackwardOp::verify() {
+  if (getSubjects().empty() || getGradients().size() != getSubjects().size())
+    return emitOpError(
+        "requires one retained Graph result per scheduled gradient");
+  if (getArtifactHash().size() != 64 ||
+      !llvm::all_of(getArtifactHash(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }))
+    return emitOpError("requires a lowercase SHA-256 artifact_hash");
+  if ((getTarget() == "x86" && getArch() != "zen5-avx512") ||
+      (getTarget() == "rocm" && getArch() != "gfx1151") ||
+      (getTarget() != "x86" && getTarget() != "rocm"))
+    return emitOpError("requires an exact x86/Zen 5 or ROCm/gfx1151 profile");
+  if (getKind() != "tessera.stft" && getKind() != "tessera.istft" &&
+      getKind() != "tessera.spectral_filter" &&
+      getKind() != "tessera.spectral_conv")
+    return emitOpError("requires a registered compound spectral kind");
+  if (getNormalization() != "backward" && getNormalization() != "forward" &&
+      getNormalization() != "ortho")
+    return emitOpError("requires a supported normalization");
+  if (getPadMode() != "constant" && getPadMode() != "reflect")
+    return emitOpError("requires pad_mode in {constant, reflect}");
+  if (auto length = (*this)->getAttrOfType<IntegerAttr>("output_length");
+      length && length.getInt() < 0)
+    return emitOpError("requires output_length >= 0");
+  if (getInputSignature().empty() || getOutputSignature().empty() ||
+      getMutationLineage() != "inputs_immutable_outputs_fresh_v1")
+    return emitOpError("requires output identity and immutable-input lineage");
+  for (auto [subject, gradient] : llvm::zip(getSubjects(), getGradients()))
+    if (subject.getType() != gradient.getType())
+      return emitOpError("gradient types must match retained forward operands");
   return success();
 }
 

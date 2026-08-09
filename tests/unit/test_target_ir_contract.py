@@ -244,18 +244,35 @@ import tempfile
 # A build can register ROCm or NVIDIA but not both (the lean registration path
 # has no arm for both), so a second build dir is the only way to exercise the
 # NVIDIA dialect. Probe both; each target skips unless ITS dialect is present.
-_TESSERA_OPT_CANDIDATES = tuple(
-    Path(__file__).resolve().parents[2] / p
-    for p in (
-        "build/tools/tessera-opt/tessera-opt",
-        "build-nvidia/tools/tessera-opt/tessera-opt",
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _tessera_opt_candidates() -> tuple[Path, ...]:
+    """Return compiler candidates with an explicit fresh build first.
+
+    Developers and CI may build against more than one LLVM configuration in
+    the same checkout.  An older ``build/`` must not hide the compiler named by
+    ``TESSERA_OPT`` or a fresh LLVM 23 build and turn an ODS-registration check
+    into a stale-binary failure.
+    """
+    candidates: list[Path] = []
+    configured = os.environ.get("TESSERA_OPT")
+    if configured:
+        candidates.append(Path(configured))
+    candidates.extend(
+        _REPO_ROOT / path
+        for path in (
+            "build-llvm23/tools/tessera-opt/tessera-opt",
+            "build/tools/tessera-opt/tessera-opt",
+            "build-nvidia/tools/tessera-opt/tessera-opt",
+        )
     )
-)
+    return tuple(dict.fromkeys(candidates))
 
 
 def _opt_with_dialect(dialect: str):
     """The first built tessera-opt that registers `dialect`, if any."""
-    for candidate in _TESSERA_OPT_CANDIDATES:
+    for candidate in _tessera_opt_candidates():
         if candidate.is_file() and os.access(candidate, os.X_OK):
             if dialect in _registered_dialects(candidate):
                 return candidate
@@ -263,7 +280,7 @@ def _opt_with_dialect(dialect: str):
 
 
 def _tessera_opt() -> Path | None:
-    for candidate in _TESSERA_OPT_CANDIDATES:
+    for candidate in _tessera_opt_candidates():
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return candidate
     found = shutil.which("tessera-opt")

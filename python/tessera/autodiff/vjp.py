@@ -254,6 +254,12 @@ def vjp_cast(dout, x, *, dtype=None, **_):
     return (dout.astype(x.dtype, copy=False),)
 
 
+@_vjp("stop_gradient")
+def vjp_stop_gradient(dout, x, **_):
+    del dout
+    return (np.zeros_like(x),)
+
+
 def _normalize_axis(axis: int, ndim: int) -> int:
     return axis if axis >= 0 else ndim + axis
 
@@ -1885,7 +1891,7 @@ def vjp_cispo_policy_loss(dout, logp_new, logp_old, rewards=None, **kwargs):
 
 
 @_vjp("fft")
-def vjp_fft(dout, x, *, axis=-1, axes=None, **_):
+def vjp_fft(dout, x, *, axis=-1, axes=None, norm="backward", normalization=None, **_):
     """Adjoint of full FFT — adjoint is `n * ifft(dout, axis)` for non-orthonormal FFT.
 
     NumPy's ``np.fft.fft`` is non-orthonormal: ``ifft(fft(x)) == x`` exactly,
@@ -1893,33 +1899,51 @@ def vjp_fft(dout, x, *, axis=-1, axes=None, **_):
     the FFT length. Returns a complex grad — for real inputs, the user is
     responsible for taking the real part.
     """
-    n = x.shape[axes[-1] if axes is not None else axis]
-    return (n * np.fft.ifft(dout, axis=axes[-1] if axes is not None else axis),)
+    target_axis = axes[-1] if axes is not None else axis
+    active_norm = normalization or norm
+    transpose_norm = {"backward": "forward", "forward": "backward", "ortho": "ortho"}[active_norm]
+    return (np.fft.ifft(dout, axis=target_axis, norm=transpose_norm),)
 
 
 @_vjp("ifft")
-def vjp_ifft(dout, x, *, axis=-1, axes=None, **_):
+def vjp_ifft(dout, x, *, axis=-1, axes=None, norm="backward", normalization=None, **_):
     """Adjoint of inverse FFT — adjoint is `(1/n) * fft(dout, axis)`."""
-    n = x.shape[axes[-1] if axes is not None else axis]
-    return ((1.0 / n) * np.fft.fft(dout, axis=axes[-1] if axes is not None else axis),)
+    target_axis = axes[-1] if axes is not None else axis
+    active_norm = normalization or norm
+    transpose_norm = {"backward": "forward", "forward": "backward", "ortho": "ortho"}[active_norm]
+    return (np.fft.fft(dout, axis=target_axis, norm=transpose_norm),)
 
 
 @_vjp("rfft")
-def vjp_rfft(dout, x, *, axis=-1, axes=None, **_):
+def vjp_rfft(dout, x, *, axis=-1, axes=None, norm="backward", normalization=None, **_):
     """Adjoint of real FFT — pads ``dout`` back to full length then `n*ifft`."""
     target_axis = axes[-1] if axes is not None else axis
     n = x.shape[target_axis]
-    # Adjoint of rfft is irfft(dout * n) followed by taking the real part —
-    # but np.fft.irfft already does the (1/n) so multiply by n.
-    return (np.fft.irfft(dout, n=n, axis=target_axis) * n,)
+    active_norm = normalization or norm
+    transpose_norm = {"backward": "forward", "forward": "backward", "ortho": "ortho"}[active_norm]
+    weighted = np.array(dout, dtype=np.complex128, copy=True)
+    bins = weighted.shape[target_axis]
+    stop = bins - 1 if n % 2 == 0 else bins
+    sl = [slice(None)] * weighted.ndim
+    sl[target_axis] = slice(1, stop)
+    weighted[tuple(sl)] *= 0.5
+    return (np.fft.irfft(weighted, n=n, axis=target_axis, norm=transpose_norm),)
 
 
 @_vjp("irfft")
-def vjp_irfft(dout, x, *, axis=-1, axes=None, n=None, **_):
+def vjp_irfft(dout, x, *, axis=-1, axes=None, n=None, norm="backward", normalization=None, **_):
     """Adjoint of inverse real FFT — `rfft(dout) / n`."""
     target_axis = axes[-1] if axes is not None else axis
     n_out = n if n is not None else 2 * (x.shape[target_axis] - 1)
-    return ((1.0 / n_out) * np.fft.rfft(dout, axis=target_axis),)
+    active_norm = normalization or norm
+    transpose_norm = {"backward": "forward", "forward": "backward", "ortho": "ortho"}[active_norm]
+    grad = np.fft.rfft(dout, n=n_out, axis=target_axis, norm=transpose_norm)
+    bins = grad.shape[target_axis]
+    stop = bins - 1 if n_out % 2 == 0 else bins
+    sl = [slice(None)] * grad.ndim
+    sl[target_axis] = slice(1, stop)
+    grad[tuple(sl)] *= 2.0
+    return (grad,)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4839,7 +4863,7 @@ def vjp_dequantize_int4(dout, q, scale, zero_point=0, **_):
 # ── Spectral family ─────────────────────────────────────────────────────────
 
 @_vjp("dct")
-def vjp_dct(dout, x, *, axis=-1, type=2, **_):
+def vjp_dct(dout, x, *, axis=-1, type=2, norm="backward", normalization=None, **_):
     """Apply the exact transpose of the selected unnormalised DCT basis."""
     dct_type = int(type)
     if dct_type not in {1, 2, 3, 4}:
@@ -4870,68 +4894,242 @@ def vjp_dct(dout, x, *, axis=-1, type=2, **_):
             np.pi * np.outer(2 * source + 1, 2 * frequency + 1) / (4 * N)
         )
     grad_moved = do_moved @ basis.T
+    active_norm = normalization or norm
+    if active_norm == "forward":
+        grad_moved /= float(N)
+    elif active_norm == "ortho":
+        grad_moved /= np.sqrt(float(N))
+    elif active_norm != "backward":
+        raise ValueError("dct VJP normalization must be backward, forward, or ortho")
     return (np.moveaxis(grad_moved, -1, axis_idx),)
 
 
 @_vjp("stft")
-def vjp_stft(dout, x, window=None, *, n_fft=None, hop_length=None, **_):
-    """STFT is linear in x — VJP is overlap-add of windowed iFFT per frame."""
+def vjp_stft(
+    dout,
+    x,
+    window=None,
+    *,
+    n_fft=None,
+    hop=None,
+    hop_length=None,
+    axis=-1,
+    center=False,
+    pad_mode="constant",
+    onesided=True,
+    norm="backward",
+    normalization=None,
+    **_,
+):
+    """Exact transpose of framing, windowing, and the selected FFT basis."""
     x_arr = np.asarray(x, dtype=np.float64)
-    do = np.asarray(dout, dtype=np.complex128)
-    n_fft = int(n_fft or do.shape[-2])
-    hop = int(hop_length or n_fft // 4)
-    n_frames = do.shape[-1]
-    n_samples = x_arr.shape[-1]
-    grad = np.zeros_like(x_arr)
-    win = np.ones(n_fft) if window is None else np.asarray(window, dtype=np.float64)
-    for t in range(n_frames):
-        frame = np.fft.irfft(do[..., t], n=n_fft) * win
-        start = t * hop
-        end = min(start + n_fft, n_samples)
-        grad[..., start:end] += frame[..., :end - start]
-    return (grad, None)
+    win = np.ones(int(n_fft or x_arr.shape[axis])) if window is None else np.asarray(window, dtype=np.float64)
+    fft_n = int(n_fft or win.shape[0])
+    hop_n = int(hop if hop is not None else hop_length if hop_length is not None else fft_n // 4)
+    active_norm = normalization or norm
+    axis_idx = axis if axis >= 0 else x_arr.ndim + axis
+    moved_x = np.moveaxis(x_arr, axis_idx, -1)
+    original_length = moved_x.shape[-1]
+    if center:
+        width = fft_n // 2
+        pads = [(0, 0)] * (moved_x.ndim - 1) + [(width, width)]
+        moved_x = np.pad(moved_x, pads, mode=pad_mode)
+    if moved_x.shape[-1] < fft_n:
+        moved_x = np.pad(
+            moved_x,
+            [(0, 0)] * (moved_x.ndim - 1) + [(0, fft_n - moved_x.shape[-1])],
+        )
+    padded_window = np.zeros(fft_n, dtype=np.float64)
+    window_offset = (fft_n - win.shape[0]) // 2
+    padded_window[window_offset : window_offset + win.shape[0]] = win
+
+    frame_axis = axis_idx
+    freq_axis = axis_idx + 1
+    moved_do = np.moveaxis(np.asarray(dout), (frame_axis, freq_axis), (-2, -1))
+    grad_moved = np.zeros_like(moved_x)
+    dwindow = np.zeros(fft_n, dtype=np.float64)
+    for frame_index in range(moved_do.shape[-2]):
+        spectral_grad = moved_do[..., frame_index, :]
+        if onesided:
+            (frame_grad,) = vjp_rfft(
+                spectral_grad,
+                np.zeros(spectral_grad.shape[:-1] + (fft_n,)),
+                n=fft_n,
+                norm=active_norm,
+            )
+        else:
+            (complex_grad,) = vjp_fft(
+                spectral_grad,
+                np.zeros(spectral_grad.shape[:-1] + (fft_n,), dtype=np.complex128),
+                norm=active_norm,
+            )
+            frame_grad = np.real(complex_grad)
+        start = frame_index * hop_n
+        segment = moved_x[..., start : start + fft_n]
+        grad_moved[..., start : start + fft_n] += frame_grad * padded_window
+        dwindow += np.sum(
+            frame_grad * segment,
+            axis=tuple(range(frame_grad.ndim - 1)),
+        )
+    if center:
+        width = fft_n // 2
+        centered_length = original_length + 2 * width
+        grad_moved = grad_moved[..., :centered_length]
+        if pad_mode == "reflect":
+            reflected = np.pad(
+                np.arange(original_length), (width, width), mode="reflect"
+            )
+            unpadded = np.zeros(
+                grad_moved.shape[:-1] + (original_length,), dtype=grad_moved.dtype
+            )
+            for padded_index, source_index in enumerate(reflected):
+                unpadded[..., source_index] += grad_moved[..., padded_index]
+            grad_moved = unpadded
+        else:
+            grad_moved = grad_moved[..., width : width + original_length]
+    grad_moved = grad_moved[..., :original_length]
+    dx = np.moveaxis(grad_moved, -1, axis_idx)
+    dw = dwindow[window_offset : window_offset + win.shape[0]]
+    return (dx, None if window is None else dw)
 
 
 @_vjp("istft")
-def vjp_istft(dout, X, window=None, *, n_fft=None, hop_length=None, **_):
-    """iSTFT is linear in X — VJP is per-frame STFT of the cotangent."""
-    do = np.asarray(dout, dtype=np.float64)
+def vjp_istft(
+    dout,
+    X,
+    window=None,
+    *,
+    n_fft=None,
+    hop=None,
+    hop_length=None,
+    axis=-1,
+    center=False,
+    length=None,
+    onesided=True,
+    norm="backward",
+    normalization=None,
+    **_,
+):
+    """Transpose the normalized overlap-add program, including its window."""
     X_arr = np.asarray(X)
-    n_fft = int(n_fft or (X_arr.shape[-2] - 1) * 2)
-    hop = int(hop_length or n_fft // 4)
-    win = np.ones(n_fft) if window is None else np.asarray(window, dtype=np.float64)
-    n_samples = do.shape[-1]
-    n_frames = max((n_samples - n_fft) // hop + 1, 0)
-    grad = np.zeros(X_arr.shape, dtype=np.complex128)
-    for t in range(n_frames):
-        start = t * hop
-        frame = do[..., start:start + n_fft] * win
-        grad[..., :, t] = np.fft.rfft(frame, n=n_fft)
-    return (grad, None)
+    axis_idx = axis if axis >= 0 else X_arr.ndim + axis
+    if axis_idx <= 0 or axis_idx >= X_arr.ndim:
+        raise ValueError("istft VJP frequency axis requires a frame axis")
+    frame_axis = axis_idx - 1
+    moved_X = np.moveaxis(X_arr, (frame_axis, axis_idx), (-2, -1))
+    win = np.ones(int(n_fft or 2 * (moved_X.shape[-1] - 1))) if window is None else np.asarray(window, dtype=np.float64)
+    fft_n = int(n_fft or win.shape[0])
+    hop_n = int(hop if hop is not None else hop_length if hop_length is not None else fft_n // 4)
+    active_norm = normalization or norm
+    padded_window = np.zeros(fft_n, dtype=np.float64)
+    window_offset = (fft_n - win.shape[0]) // 2
+    padded_window[window_offset : window_offset + win.shape[0]] = win
+    raw_length = (moved_X.shape[-2] - 1) * hop_n + fft_n
+    raw = np.zeros(moved_X.shape[:-2] + (raw_length,), dtype=np.float64)
+    weight = np.zeros_like(raw)
+    frame_values = []
+    for frame_index in range(moved_X.shape[-2]):
+        transform = np.fft.irfft if onesided else np.fft.ifft
+        frame = np.real(transform(moved_X[..., frame_index, :], n=fft_n, norm=active_norm))
+        frame_values.append(frame)
+        start = frame_index * hop_n
+        raw[..., start : start + fft_n] += frame * padded_window
+        weight[..., start : start + fft_n] += padded_window * padded_window
+    denom = np.maximum(weight, 1e-12)
+
+    do = np.asarray(dout, dtype=np.float64)
+    output_axis = frame_axis
+    moved_do = np.moveaxis(do, output_axis, -1)
+    untrimmed = np.zeros_like(raw)
+    start_offset = fft_n // 2 if center else 0
+    available = raw_length - 2 * start_offset if center else raw_length
+    requested = available if length is None else int(length)
+    copied = min(moved_do.shape[-1], requested, available)
+    untrimmed[..., start_offset : start_offset + copied] = moved_do[..., :copied]
+    draw = untrimmed / denom
+    dweight = np.where(weight > 1e-12, -untrimmed * raw / (denom * denom), 0.0)
+    dX = np.zeros_like(moved_X, dtype=np.complex128)
+    dwindow = np.zeros(fft_n, dtype=np.float64)
+    for frame_index, frame in enumerate(frame_values):
+        start = frame_index * hop_n
+        local_draw = draw[..., start : start + fft_n]
+        local_dweight = dweight[..., start : start + fft_n]
+        dframe = local_draw * padded_window
+        if onesided:
+            (spectrum_grad,) = vjp_irfft(
+                dframe,
+                moved_X[..., frame_index, :],
+                n=fft_n,
+                norm=active_norm,
+            )
+        else:
+            (spectrum_grad,) = vjp_ifft(
+                dframe.astype(np.complex128),
+                moved_X[..., frame_index, :],
+                norm=active_norm,
+            )
+        dX[..., frame_index, :] = spectrum_grad
+        dwindow += np.sum(
+            local_draw * frame + 2.0 * local_dweight * padded_window,
+            axis=tuple(range(local_draw.ndim - 1)),
+        )
+    restored_dX = np.moveaxis(dX, (-2, -1), (frame_axis, axis_idx))
+    dw = dwindow[window_offset : window_offset + win.shape[0]]
+    return (restored_dX, None if window is None else dw)
 
 
 @_vjp("spectral_filter")
 def vjp_spectral_filter(dout, x, filter_spec, **_):
-    """y = ifft(filter * fft(x)). Linear in x → transpose is same op on do."""
-    do = np.asarray(dout, dtype=np.float64)
-    f = np.asarray(filter_spec, dtype=np.float64)
-    spectrum = np.fft.rfft(do, axis=-1)
-    f_truncated = f[..., :spectrum.shape[-1]]
-    grad = np.fft.irfft(spectrum * f_truncated, n=do.shape[-1], axis=-1)
-    return (grad, None)
+    """Adjoint of the public complex pointwise filter, including its filter."""
+    do = np.asarray(dout, dtype=np.complex128)
+    x_arr = np.asarray(x, dtype=np.complex128)
+    f = np.asarray(filter_spec, dtype=np.complex128)
+    dx = do * np.conj(f)
+    df = do * np.conj(x_arr)
+    # Undo NumPy broadcasting for a shared filter tensor.
+    while df.ndim > f.ndim:
+        df = df.sum(axis=0)
+    for axis, (actual, wanted) in enumerate(zip(df.shape, f.shape)):
+        if wanted == 1 and actual != 1:
+            df = df.sum(axis=axis, keepdims=True)
+    return (dx, df)
 
 
 @_vjp("spectral_conv")
-def vjp_spectral_conv(dout, x, kernel, **_):
+def vjp_spectral_conv(
+    dout, x, kernel, *, axis=-1, norm="backward", normalization=None, **_
+):
     """y = ifft(fft(x) * fft(kernel)). Bilinear in (x, kernel)."""
     do = np.asarray(dout, dtype=np.float64)
     x_arr = np.asarray(x, dtype=np.float64)
     k_arr = np.asarray(kernel, dtype=np.float64)
-    X = np.fft.rfft(x_arr, axis=-1)
-    K = np.fft.rfft(k_arr, axis=-1)
-    dY = np.fft.rfft(do, axis=-1)
-    dx = np.fft.irfft(dY * np.conj(K), n=x_arr.shape[-1], axis=-1)
-    dk = np.fft.irfft(dY * np.conj(X), n=k_arr.shape[-1], axis=-1)
+    axis_idx = axis if axis >= 0 else x_arr.ndim + axis
+    output_n = x_arr.shape[axis_idx] + k_arr.shape[axis_idx] - 1
+    if do.shape[axis_idx] != output_n:
+        raise ValueError("spectral_conv VJP requires the full-convolution cotangent")
+    nfft = 1 << int(np.ceil(np.log2(max(output_n, 1))))
+    active_norm = normalization or norm
+    X = np.fft.rfft(x_arr, n=nfft, axis=axis_idx, norm=active_norm)
+    K = np.fft.rfft(k_arr, n=nfft, axis=axis_idx, norm=active_norm)
+    dY = np.fft.rfft(do, n=nfft, axis=axis_idx, norm=active_norm)
+    dx_full = np.fft.irfft(
+        dY * np.conj(K), n=nfft, axis=axis_idx, norm=active_norm
+    )
+    dk_full = np.fft.irfft(
+        dY * np.conj(X), n=nfft, axis=axis_idx, norm=active_norm
+    )
+    x_crop = [slice(None)] * dx_full.ndim
+    x_crop[axis_idx] = slice(0, x_arr.shape[axis_idx])
+    k_crop = [slice(None)] * dk_full.ndim
+    k_crop[axis_idx] = slice(0, k_arr.shape[axis_idx])
+    dx = dx_full[tuple(x_crop)]
+    dk = dk_full[tuple(k_crop)]
+    for dim, wanted in reversed(list(enumerate(x_arr.shape))):
+        if wanted == 1 and dx.shape[dim] != 1:
+            dx = dx.sum(axis=dim, keepdims=True)
+    for dim, wanted in reversed(list(enumerate(k_arr.shape))):
+        if wanted == 1 and dk.shape[dim] != 1:
+            dk = dk.sum(axis=dim, keepdims=True)
     return (dx, dk)
 
 

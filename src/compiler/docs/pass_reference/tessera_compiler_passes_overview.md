@@ -65,7 +65,7 @@ The compiler is organized into several major pass families:
 - **Memory Management**: Shared memory allocation and barriers
 - **Intrinsic Lowering**: Maps to hardware-specific operations
 - **Register Allocation**: Manages register pressure
-- **Collective Insertion**: Adds typed async `tessera.collective.*` ops with
+- **Collective Insertion**: Adds typed async `tessera_collective.*` ops with
   future/await dependencies
 
 ### 5. Target IR Passes

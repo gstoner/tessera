@@ -13,11 +13,10 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 388 | backend_pathway_owned=373, multi_gpu_deferred=15 | backend_codegen=373, distributed_validation=15 |
+| `backend_kernel` | 389 | backend_pathway_owned=374, multi_gpu_deferred=15 | backend_codegen=374, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
 | `target_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
-| `tile_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
 
 ## Rows
 
@@ -192,6 +191,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `rearrange` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rope_merge` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rope_split` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `stop_gradient` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `transpose` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `unpack` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `cholesky` | linalg_decomposition | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -459,7 +459,3 @@ test, ABI, and surface dashboards.
 | `target_ir` | `all_reduce` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `all_to_all` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `reduce_scatter` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
-| `tile_ir` | `all_gather` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
-| `tile_ir` | `all_reduce` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
-| `tile_ir` | `all_to_all` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |
-| `tile_ir` | `reduce_scatter` | collective | partial | `multi_gpu_deferred` | distributed_validation | Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle. |

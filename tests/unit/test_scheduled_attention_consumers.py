@@ -222,7 +222,10 @@ def test_driver_records_adjacent_attention_lineage(monkeypatch, target: str) -> 
     assert bundle.launch_descriptor.provenance["work_item"] == "E2E-REAL-5A"
 
 
-@pytest.mark.skipif(not x86_native.tools_available(), reason="x86 compiler/image unavailable")
+@pytest.mark.skipif(
+    not x86_native.tools_available() or find_tessera_opt() is None,
+    reason="x86 compiler/image unavailable",
+)
 def test_x86_scheduled_attention_executes_exact_artifact() -> None:
     module = _module(target="x86", query_rows=5)
     bundle = compile_graph_module(

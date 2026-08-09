@@ -376,6 +376,19 @@ struct TileToX86PassImpl
       getOperation().emitError("x86 architecture must be avx512 or base");
       return signalPassFailure();
     }
+    Operation *unsupportedSpectralBackward = nullptr;
+    getOperation().walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tile.spectral_backward_kernel") {
+        unsupportedSpectralBackward = op;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    if (unsupportedSpectralBackward) {
+      unsupportedSpectralBackward->emitError(
+          "x86 compound spectral adjoint package is not implemented; refusing to preserve an unconsumed Tile launch");
+      return signalPassFailure();
+    }
     bool portableBase = architectureOpt == "base";
     RewritePatternSet patterns(&getContext());
     bool amx = preferAMXOpt;

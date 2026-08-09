@@ -306,6 +306,19 @@ def test_x86_loader_keeps_base_and_avx512_images_distinct() -> None:
     assert getattr(avx512_library, avx512.descriptor.entry_symbol, None) is not None
 
 
+@pytest.mark.skipif(not tools_available(), reason="AVX-512 x86 image unavailable")
+def test_x86_loader_uses_unique_temporary_image_without_memfd(monkeypatch) -> None:
+    package = package_softmax(
+        _softmax_module((2, 2)), pipeline_name="tessera-lower-to-x86",
+    )
+    rt._x86_native_image_libraries.pop(package.image.image_digest, None)
+    monkeypatch.delattr(rt.os, "memfd_create", raising=False)
+
+    library = rt._load_x86_native_image(package.image)
+
+    assert getattr(library, package.descriptor.entry_symbol, None) is not None
+
+
 def test_driver_joins_x86_native_package(monkeypatch) -> None:
     monkeypatch.setattr(
         "tessera.compiler.scheduled_kernel.supports_scheduled_kernel",

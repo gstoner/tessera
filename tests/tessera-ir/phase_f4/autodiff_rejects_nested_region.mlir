@@ -12,10 +12,10 @@ module {
       attributes {tessera.autodiff = "reverse"} {
     %C = "tessera.matmul"(%A, %B) :
         (tensor<4x8xf32>, tensor<8x16xf32>) -> tensor<4x16xf32>
-    // An op with a nested region at the top level of the function body.
-    "test.region_op"() ({
+    // An op with a nested region on the active return path.
+    %D = "test.region_op"(%C) ({
       "test.terminator"() : () -> ()
-    }) : () -> ()
-    func.return %C : tensor<4x16xf32>
+    }) : (tensor<4x16xf32>) -> tensor<4x16xf32>
+    func.return %D : tensor<4x16xf32>
   }
 }

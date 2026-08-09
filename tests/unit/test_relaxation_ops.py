@@ -23,6 +23,7 @@ from tessera.relaxation import (
     _perturbed_argmax_vjp,
 )
 from tessera import rng as trng
+from tessera import ops
 
 
 def _fd_vjp(forward, z, dout, *, eps=1e-6, **kw):
@@ -190,3 +191,22 @@ def test_relaxation_ops_registered_with_vjp():
     for name in ("sparsemax", "entmax15", "soft_top_k", "gumbel_softmax", "perturbed_argmax"):
         assert get_vjp(name) is not None, f"{name} has no VJP"
         assert hasattr(ops, name), f"ops.{name} missing"
+
+
+def test_public_relaxation_forward_surface_matches_defining_implementations():
+    """Exercise the public primitives, not only their private VJP oracles."""
+    z = np.array([1.0, 0.4, -0.2, 0.7], dtype=np.float64)
+    np.testing.assert_allclose(ops.sparsemax(z), _sparsemax_forward(z))
+    np.testing.assert_allclose(ops.entmax15(z), _entmax15_forward(z))
+    np.testing.assert_allclose(
+        ops.soft_top_k(z, k=2, tau=0.7),
+        _soft_top_k_forward(z, k=2, tau=0.7),
+    )
+    np.testing.assert_allclose(
+        ops.gumbel_softmax(z, tau=0.8),
+        _gumbel_softmax_forward(z, tau=0.8),
+    )
+    np.testing.assert_allclose(
+        ops.perturbed_argmax(z, sigma=0.5, n_samples=128, seed=11),
+        _perturbed_argmax_forward(z, sigma=0.5, n_samples=128, seed=11),
+    )

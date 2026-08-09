@@ -3,6 +3,13 @@ from __future__ import annotations
 import pytest
 
 from tessera.compiler.frontend import lower_text_to_graph_ir
+from tessera.compiler.graph_ir import (
+    GraphIRFunction,
+    GraphIRModule,
+    IRArg,
+    IROp,
+    TENSOR_OPAQUE,
+)
 from tessera.compiler.schedule_ir import ScheduleFunction, ScheduleIRModule, ScheduleOp, lower_graph_to_schedule_ir
 from tessera.compiler.tile_ir import (
     TileFunction,
@@ -78,6 +85,40 @@ def test_lower_schedule_to_tile_ir_materializes_matmul_and_prefetch():
     assert "tensor_core_mma" in text
     assert "shared_memory_bytes" in text
     assert "register_estimate" in text
+
+
+def test_graph_schedule_tile_preserves_four_typed_collective_contracts():
+    graph = GraphIRModule(functions=[GraphIRFunction(
+        "collectives",
+        args=[IRArg("x", TENSOR_OPAQUE)],
+        body=[
+            IROp("r", "tessera.all_reduce", ["%x"], ["tensor<8xf32>"],
+                 "tensor<8xf32>", kwargs={"axis": "dp", "op": "sum"}),
+            IROp("s", "tessera.reduce_scatter", ["%x"], ["tensor<8xf32>"],
+                 "tensor<?xf32>", kwargs={"axis": "dp", "op": "sum"}),
+            IROp("g", "tessera.all_gather", ["%x"], ["tensor<8xf32>"],
+                 "tensor<?xf32>", kwargs={"axis": "dp"}),
+            IROp("a", "tessera.all_to_all", ["%x"], ["tensor<8xf32>"],
+                 "tensor<8xf32>", kwargs={"axis": 0}),
+        ],
+    )])
+
+    schedule = lower_graph_to_schedule_ir(graph, target_kind="cpu")
+    scheduled = [op for op in schedule.functions[0].body
+                 if op.op_name == "schedule.collective"]
+    assert [op.attrs["kind"] for op in scheduled] == [
+        "all_reduce", "reduce_scatter", "all_gather", "all_to_all"]
+    assert all(op.attrs["effect"] == "collective" for op in scheduled)
+
+    tile = lower_schedule_to_tile_ir(schedule, target_kind="cpu")
+    assert tile.verify().ok
+    collectives = [op.op_name for op in tile.functions[0].body
+                   if op.op_name in {
+                       "tile.all_reduce", "tile.reduce_scatter",
+                       "tile.all_gather", "tile.all_to_all"}]
+    assert collectives == [
+        "tile.all_reduce", "tile.reduce_scatter", "tile.all_gather",
+        "tile.all_to_all"]
 
 
 def test_schedule_debug_artifact_and_barrier_marker_reach_tile_ir():

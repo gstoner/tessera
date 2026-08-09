@@ -197,6 +197,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "tessera.model_persistent_bytes",
             "tessera.remat_budget_mb",
             "tessera.remat_cost_ns",
+            "tessera.backward_work_ns",
+            "tessera.residual.retained_bytes",
         ),
         preserved_attrs=("tessera.autodiff.phase",),
         diagnostic_codes=(
@@ -206,6 +208,25 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         ),
         pass_kind="transform",
         sprint="CORE-COMPILER-CFG-MEMORY-BUDGETS-2026-07-24",
+    ),
+    PassMetadata(
+        name="tessera-adjoint-collective-insertion",
+        cpp_class="AdjointCollectiveInsertionPass",
+        summary=(
+            "Wraps active sharded cotangent SSA values in registered async "
+            "reduce-scatter/all-gather/all-reduce operations and awaits the "
+            "payloads before returning them."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "tessera_collective", "func"),
+        required_attrs=(
+            "tessera.autodiff.arg_cotangents",
+            "tessera.weight_sharding",
+        ),
+        preserved_attrs=("tessera.effect",),
+        must_run_after=("tessera-autodiff",),
+        pass_kind="transform",
+        sprint="COLLECTIVE-ASYNC-UNIFY-2026-08-09",
     ),
     PassMetadata(
         name="tessera-apple-canonical-gemm",
@@ -340,6 +361,42 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="APPLE-PIPE-1",
     ),
     PassMetadata(
+        name="tessera-autodiff",
+        cpp_class="AutodiffPass",
+        summary=(
+            "Builds an in-place reverse program using Graph adjoint and "
+            "linear-transposition interfaces with SSA activity propagation."
+        ),
+        input_dialects=("tessera", "func", "arith"),
+        output_dialects=("tessera", "func", "arith"),
+        required_attrs=("tessera.autodiff",),
+        preserved_attrs=("tessera.autodiff.activity",),
+        diagnostic_codes=("AUTODIFF_STOCHASTIC_EFFECT",),
+        pass_kind="transform",
+        sprint="AD-CORE-EFFECT-CONTROL-1",
+    ),
+    PassMetadata(
+        name="tessera-autodiff-paired",
+        cpp_class="AutodiffPairedPass",
+        summary=(
+            "Emits paired forward and backward functions under the explicit "
+            "recompute-all residual policy."
+        ),
+        input_dialects=("tessera", "func", "arith"),
+        output_dialects=("tessera", "func", "arith"),
+        required_attrs=("tessera.autodiff",),
+        preserved_attrs=(
+            "tessera.autodiff.activity",
+            "tessera.autodiff.residual_policy",
+        ),
+        diagnostic_codes=(
+            "AUTODIFF_STOCHASTIC_EFFECT",
+            "AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED",
+        ),
+        pass_kind="transform",
+        sprint="AD-CORE-EFFECT-CONTROL-1",
+    ),
+    PassMetadata(
         name="tessera-compute-legalize",
         cpp_class="ComputeLegalize",
         summary=(
@@ -390,6 +447,22 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="Phase 2",
     ),
     PassMetadata(
+        name="tessera-gpu-collective-insertion",
+        cpp_class="GPUCollectiveInsertionPass",
+        summary=(
+            "Inserts registered asynchronous reduce-scatter/all-gather Target "
+            "operations at DP/TP boundaries and rewires downstream SSA users "
+            "through explicit awaits."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "tessera_collective", "func"),
+        required_attrs=("tessera.weight_sharding",),
+        preserved_attrs=("tessera.dim_bindings", "tessera.arg_dim_names"),
+        must_run_after=("tessera-effect-annotate",),
+        pass_kind="transform",
+        sprint="COLLECTIVE-ASYNC-UNIFY-2026-08-09",
+    ),
+    PassMetadata(
         name="tessera-layout-legality",
         cpp_class="LayoutLegalityPass",
         summary=(
@@ -406,6 +479,35 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         ),
         pass_kind="verifier",
         sprint="V2 + V4a",
+    ),
+    PassMetadata(
+        name="tessera-lower-tile-collectives",
+        cpp_class="LowerTileCollectivesPass",
+        summary=(
+            "Lowers the four typed Tile collectives to asynchronous portable "
+            "tessera_collective Target IR plus explicit await dependencies."
+        ),
+        input_dialects=("tile", "func"),
+        output_dialects=("tessera_collective", "func"),
+        required_attrs=("mesh_axis", "tensor_axis", "reduction"),
+        preserved_attrs=("world_size", "dtype", "chunk_bytes"),
+        pass_kind="lowering",
+        sprint="COLLECTIVE-TARGET-FUNCTIONAL-1",
+    ),
+    PassMetadata(
+        name="tessera-newton-autodiff",
+        cpp_class="NewtonAutodiffPass",
+        summary=(
+            "Validates the implicit residual function ABI and emits private "
+            "value-producing IFT VJP/JVP functions over registered residual, "
+            "matrix-free solve, and residual-adjoint operations."
+        ),
+        input_dialects=("tessera_solver", "func"),
+        output_dialects=("tessera_solver", "func"),
+        required_attrs=("residual",),
+        preserved_attrs=("residual",),
+        pass_kind="transform",
+        sprint="AD-SOLVER-IFT-1-2026-08-08",
     ),
     PassMetadata(
         name="tessera-nvidia-materialize-layout-casts",

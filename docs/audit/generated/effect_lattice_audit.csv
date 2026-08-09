@@ -293,6 +293,7 @@ stack,pure,,1,1,0
 std,pure,,1,1,0
 stereographic,pure,,1,1,0
 stft,pure,,1,1,0
+stop_gradient,pure,,1,1,0
 sub,pure,,1,1,0
 sum,pure,,1,1,0
 svd,pure,,1,1,0

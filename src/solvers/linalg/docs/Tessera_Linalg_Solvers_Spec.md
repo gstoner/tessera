@@ -26,16 +26,16 @@ Accumulate type is carried as an attribute on matmul/solve ops: `accum_type = #t
 
 ## Core ops (Solver dialect)
 ```
-tessera.solver.getrf   // LU w/ partial pivoting (in-place or out)
-tessera.solver.getrs   // triangular solves using LU factors + pivots
-tessera.solver.potrf   // Cholesky (LL^T / U^TU)
-tessera.solver.potrs   // solve with Cholesky
-tessera.solver.geqrf   // QR (Householder, blocked)
-tessera.solver.ormqr   // apply Q
-tessera.solver.gels    // least squares via QR
-tessera.solver.trsm    // triangular solve (general)
-tessera.solver.gmres   // flexible GMRES kernel (blocked Arnoldi) with callbacks
-tessera.solver.ir_step // iterative refinement step (A, x_k, b) -> (x_{k+1}, r)
+tessera_solver.getrf   // LU w/ partial pivoting (in-place or out)
+tessera_solver.getrs   // triangular solves using LU factors + pivots
+tessera_solver.potrf   // Cholesky (LL^T / U^TU)
+tessera_solver.potrs   // solve with Cholesky
+tessera_solver.geqrf   // QR (Householder, blocked)
+tessera_solver.ormqr   // apply Q
+tessera_solver.gels    // least squares via QR
+tessera_solver.trsm    // triangular solve (general)
+tessera_solver.gmres   // flexible GMRES kernel (blocked Arnoldi) with callbacks
+tessera_solver.ir_step // iterative refinement step (A, x_k, b) -> (x_{k+1}, r)
 ```
 All ops accept attributes:
 - `policy`: `#tessera.precision<compute=fp8:e4m3, accum=fp32, residual=fp32, scale=per_tile>`
@@ -75,9 +75,9 @@ Ops accept a leading batch dimension; lowering chooses block-panel batching and 
 // A x = b (SPD), FP8 compute with FP32 accum + iterative refinement
 %Af8  = tessera.quantize %A : tensor<?x?xf32> to tensor<?x?x!tessera.fp8.e4m3> {scale = #tessera.scale<per_tile>}
 %bf8  = tessera.quantize %b : tensor<?xf32> to tensor<?x!tessera.fp8.e4m3> {scale = #tessera.scale<per_tile>}
-%L    = tessera.solver.potrf %Af8 : tensor<?x?x!tessera.fp8.e4m3> {policy = #tessera.precision<compute=fp8:e4m3,accum=f32,residual=f32>}
-%x0   = tessera.solver.potrs %L, %bf8 : ...
-%x, %r = tessera.solver.ir_step %A, %x0, %b : (tensor<?x?xf32>, tensor<?xf32>, tensor<?xf32>) -> (tensor<?xf32>, tensor<?xf32>) {max_iters = 5, tol = 1e-3}
+%L    = tessera_solver.potrf %Af8 : tensor<?x?x!tessera.fp8.e4m3> {policy = #tessera.precision<compute=fp8:e4m3,accum=f32,residual=f32>}
+%x0   = tessera_solver.potrs %L, %bf8 : ...
+%x, %r = tessera_solver.ir_step %A, %x0, %b : (tensor<?x?xf32>, tensor<?xf32>, tensor<?xf32>) -> (tensor<?xf32>, tensor<?xf32>) {max_iters = 5, tol = 1e-3}
 return %x : tensor<?xf32>
 ```
 

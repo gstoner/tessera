@@ -221,6 +221,22 @@ add_custom_target(TesseraCompilerFoundation
 if(TESSERA_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+    if(TESSERA_ENABLE_RCCL_LSA_DEVICE_TEST AND
+       TARGET tessera-rccl-lsa-smoke)
+        add_test(NAME tessera-rccl-lsa-smoke-root
+            COMMAND tessera-rccl-lsa-smoke)
+        set_tests_properties(tessera-rccl-lsa-smoke-root PROPERTIES
+            LABELS "hardware_rocm;gfx1151;rccl_lsa"
+            SKIP_RETURN_CODE 77)
+    endif()
+    if(TESSERA_ENABLE_RCCL_GIN_DEVICE_TEST AND
+       TARGET tessera-rccl-gin-smoke)
+        add_test(NAME tessera-rccl-gin-smoke-root
+            COMMAND tessera-rccl-gin-smoke)
+        set_tests_properties(tessera-rccl-gin-smoke-root PROPERTIES
+            LABELS "hardware_rocm;gfx1151;rccl_gin;multinode"
+            SKIP_RETURN_CODE 77)
+    endif()
 endif()
 
 # --------------------------------------------------------------------------

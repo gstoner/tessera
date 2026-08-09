@@ -23,7 +23,7 @@
 - Compute blocks **await()** only at **true use sites** (no global barriers).
 - Example:
   ```mlir
-  %f = tessera.collective.reduce_scatter %grad : memref<...> {op="sum"}
+  %f = tessera_collective.reduce_scatter %grad : memref<...> {reduction="sum"}
   // ... do other compute here ...
   %shard = tessera.await %f  // only where actually needed
   ```
@@ -39,7 +39,7 @@
 - Example, BWD overlap:
   ```mlir
   %dw_k     = tessera.compute.matmul %a_k, %b_k
-  %ar_fut   = tessera.collective.all_reduce %dw_k_prev {chunk=512KiB}
+  %ar_fut   = tessera_collective.all_reduce %dw_k_prev {chunk=512KiB}
   tessera.store %dw_k -> @stash
   %dw_km1  = tessera.await %ar_fut
   ```
@@ -144,7 +144,7 @@
 ### 9.1 All-reduce with overlap
 ```mlir
 %dw      = tessera.compute.matmul %x, %y
-%f       = tessera.collective.all_reduce %dw 
+%f       = tessera_collective.all_reduce %dw
             {op="sum", chunk=1MiB, dtype="bf16", algo="auto", path="auto", scope="node"}
 ; ... compute next tile ...
 %dw_red  = tessera.await %f
@@ -153,9 +153,9 @@
 
 ### 9.2 Reduce-scatter / All-gather pair
 ```mlir
-%f_rs  = tessera.collective.reduce_scatter %grads {op="sum", chunk=2MiB}
+%f_rs  = tessera_collective.reduce_scatter %grads {reduction="sum", chunk=2MiB}
 %shard = tessera.await %f_rs
 ; use shard locally ...
-%f_ag  = tessera.collective.all_gather %weights_sharded {chunk=2MiB}
+%f_ag  = tessera_collective.all_gather %weights_sharded {chunk=2MiB}
 %W     = tessera.await %f_ag
 ```

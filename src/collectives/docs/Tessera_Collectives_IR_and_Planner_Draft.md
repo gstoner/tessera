@@ -8,7 +8,7 @@
 
 ## 1. Dialect Overview
 
-- Dialect: `tessera.collective`
+- Dialect: `tessera_collective`
 - Key types:
   - `!tessera.future<T>` — asynchronous handle producing `T`.
   - `!tessera.shard<T>` — logical shard view of `T`.
@@ -25,7 +25,7 @@
 include "mlir/IR/OpBase.td"
 
 def Tessera_Collective_Dialect : Dialect {
-  let name = "tessera.collective";
+  let name = "tessera_collective";
   let cppNamespace = "tessera::collective";
 }
 
@@ -76,7 +76,7 @@ def AllReduceOp : TesseraCollectiveOp<"all_reduce", [AttrSizedOperandSegments]> 
   let assemblyFormat = [{ $input attr-dict }];
 
   let extraClassDeclaration = [{
-    static StringRef getOpName() { return "tessera.collective.all_reduce"; }
+    static StringRef getOpName() { return "tessera_collective.all_reduce"; }
   }];
 }
 
@@ -109,9 +109,9 @@ def AwaitOp : Op<Tessera_Collective_Dialect, "await", []> {
 **Notes**
 - The concrete result type of `await` is derived from the future’s payload (`Future<T> → T`).  
 - Wire precision / algo / path / scope appear as optional attrs on collective ops:
-  - `algo : #tessera.collective<Algo "auto">`
-  - `path : #tessera.collective<Path "auto">`
-  - `dtype : #tessera.collective<WireDType "bf16">`
+  - `algo : #tessera_collective<Algo "auto">`
+  - `path : #tessera_collective<Path "auto">`
+  - `dtype : #tessera_collective<WireDType "bf16">`
   - `chunk_bytes : i64`  
   - `max_inflight : i64`
 
@@ -266,7 +266,7 @@ std::unique_ptr<Pass> createPlanChunkedCollectivesPass() {
 
 ### Before
 ```mlir
-%f = tessera.collective.all_reduce %dw
+%f = tessera_collective.all_reduce %dw
         {op="sum", chunk_bytes = 1048576, dtype="bf16"}
 ; ... unrelated compute ...
 %dw_red = tessera.await %f
@@ -277,7 +277,7 @@ use %dw_red
 ```mlir
 scf.for %i = 0 to %numChunks step 1 {
   %sub = memref.subview %dw [..., %i*sz] [ ..., %sz ] [ ..., 1 ]
-  %f_i = tessera.collective.all_reduce %sub {dtype="bf16"}
+  %f_i = tessera_collective.all_reduce %sub {dtype="bf16"}
   ; optionally enqueue for overlap; await only at true consumer
 }
 
@@ -296,7 +296,7 @@ use %dw_red
 
 // CHECK: scf.for
 // CHECK: memref.subview
-// CHECK: tessera.collective.all_reduce
+// CHECK: tessera_collective.all_reduce
 // CHECK: tessera.await
 ```
 
@@ -304,9 +304,8 @@ use %dw_red
 
 ## 8. Next Steps
 
-- Add `tessera.collective` ODS files and generated headers into the repo.
+- Maintain the registered `tessera_collective` ODS files and generated headers.
 - Implement `AcceptsAsync` op trait for key compute ops in Tessera.
 - Flesh out planner with multi-dim tiles and `max_inflight` throttling.
 - NCCL/RCCL adapters that accept **chunked submissions** + completion callbacks.
 ```
-

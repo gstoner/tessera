@@ -28,6 +28,12 @@ ATTN_OPS = {
     "tessera_attn.lse_save", "tessera_attn.attend_v",
     "tessera_attn.msa_kv_outer_sparse",
 }
+TILE_COLLECTIVE_OPS = {
+    "tile.all_reduce",
+    "tile.reduce_scatter",
+    "tile.all_gather",
+    "tile.all_to_all",
+}
 
 
 def _diagnostic_level(severity: str) -> DiagnosticLevel:
@@ -169,6 +175,8 @@ class TileIRVerifier:
                 self._require_attrs(op, diagnostics, "source", "result", "ordinal")
             elif op.op_name == "tile.reduce":
                 self._require_attrs(op, diagnostics, "op", "order")
+            elif op.op_name in TILE_COLLECTIVE_OPS:
+                self._verify_collective(op, diagnostics)
             elif op.op_name == "tile.kv_cache.read":
                 self._require_attrs(
                     op, diagnostics, "source", "result", "ordinal",
@@ -198,6 +206,32 @@ class TileIRVerifier:
             diagnostics.append(TileIRDiagnostic("error", "async_copy stage must be >= 0", "TILE_IR_ASYNC_STAGE"))
         if int(op.attrs.get("vector", 0)) < 1:
             diagnostics.append(TileIRDiagnostic("error", "async_copy vector must be >= 1", "TILE_IR_ASYNC_VECTOR"))
+
+    def _verify_collective(self, op: TileOp, diagnostics: list[TileIRDiagnostic]) -> None:
+        self._require_attrs(
+            op, diagnostics, "source", "result", "ordinal", "kind",
+            "mesh_axis", "tensor_axis", "effect")
+        if op.attrs.get("effect") != "collective":
+            diagnostics.append(TileIRDiagnostic(
+                "error", f"{op.op_name} effect must be collective",
+                "TILE_IR_COLLECTIVE_EFFECT"))
+        if not str(op.attrs.get("mesh_axis", "")):
+            diagnostics.append(TileIRDiagnostic(
+                "error", f"{op.op_name} mesh_axis must be non-empty",
+                "TILE_IR_COLLECTIVE_MESH_AXIS"))
+        if not isinstance(op.attrs.get("tensor_axis"), int):
+            diagnostics.append(TileIRDiagnostic(
+                "error", f"{op.op_name} tensor_axis must be an integer",
+                "TILE_IR_COLLECTIVE_TENSOR_AXIS"))
+        elif int(op.attrs["tensor_axis"]) < 0:
+            diagnostics.append(TileIRDiagnostic(
+                "error", f"{op.op_name} tensor_axis must be non-negative",
+                "TILE_IR_COLLECTIVE_TENSOR_AXIS"))
+        if op.op_name in {"tile.all_reduce", "tile.reduce_scatter"} and \
+                op.attrs.get("reduction") not in {"sum", "mean", "max", "min", "prod"}:
+            diagnostics.append(TileIRDiagnostic(
+                "error", f"{op.op_name} has unsupported reduction",
+                "TILE_IR_COLLECTIVE_REDUCTION"))
 
     def _require_attrs(self, op: TileOp, diagnostics: list[TileIRDiagnostic], *attrs: str) -> None:
         missing = [attr for attr in attrs if attr not in op.attrs]
@@ -306,7 +340,14 @@ def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
             lowered.append(TileOp("tile.async_copy", _copy_attrs(op)))
             continue
         if op.op_name == "schedule.collective":
-            lowered.append(TileOp("tile.collective", dict(op.attrs)))
+            kind = str(op.attrs.get("kind", ""))
+            tile_name = f"tile.{kind}"
+            lowered.append(TileOp(
+                tile_name,
+                dict(op.attrs),
+                operands=list(op.operands),
+                result=op.result,
+            ))
             continue
         if op.op_name == "schedule.marker":
             marker = op.attrs.get("marker")

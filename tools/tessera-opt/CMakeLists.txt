@@ -61,6 +61,17 @@ function(tessera_opt_feature label macro)
   set(TESSERA_OPT_FEATURES "${TESSERA_OPT_FEATURES};${label}" PARENT_SCOPE)
 endfunction()
 
+# The portable collective dialect is the common Tile -> Target transport
+# boundary and is required by both full and lean backend artifact drivers.
+if(TARGET TesseraCollectiveDialect)
+  tessera_opt_feature(collectives TESSERA_HAVE_COLLECTIVES)
+  target_include_directories(tessera-opt PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/collectives/include
+    ${CMAKE_BINARY_DIR}/src/collectives/lib/Dialect/Collective/IR
+  )
+  target_link_libraries(tessera-opt PRIVATE TesseraCollectiveDialect)
+endif()
+
 # ---------------------------------------------------------------------------
 # Leanness contract.
 #
@@ -248,7 +259,7 @@ endif()
 # silently compiled out, producing a binary that claims a capability it does
 # not have. That must be a configure error, not a runtime surprise.
 # ---------------------------------------------------------------------------
-set(_tessera_opt_lean_permitted core-tessera-ir nvidia-backend rocm-backend)
+set(_tessera_opt_lean_permitted core-tessera-ir collectives nvidia-backend rocm-backend)
 set(_tessera_opt_conflicts "")
 if(TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
   foreach(_feature IN LISTS TESSERA_OPT_FEATURES)

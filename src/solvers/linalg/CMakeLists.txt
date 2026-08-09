@@ -5,8 +5,8 @@ mlir_tablegen(TesseraLinalgSolverOps.h.inc -gen-op-decls)
 mlir_tablegen(TesseraLinalgSolverOps.cpp.inc -gen-op-defs)
 mlir_tablegen(TesseraLinalgSolverDialect.h.inc -gen-dialect-decls)
 mlir_tablegen(TesseraLinalgSolverDialect.cpp.inc -gen-dialect-defs)
-mlir_tablegen(TesseraLinalgSolverAttrs.h.inc -gen-attrdef-decls -attrdefs-dialect=tessera.solver)
-mlir_tablegen(TesseraLinalgSolverAttrs.cpp.inc -gen-attrdef-defs -attrdefs-dialect=tessera.solver)
+mlir_tablegen(TesseraLinalgSolverAttrs.h.inc -gen-attrdef-decls -attrdefs-dialect=tessera_solver)
+mlir_tablegen(TesseraLinalgSolverAttrs.cpp.inc -gen-attrdef-defs -attrdefs-dialect=tessera_solver)
 add_public_tablegen_target(TesseraLinalgSolverTableGen)
 
 add_library(tessera_linalg_solver_passes STATIC

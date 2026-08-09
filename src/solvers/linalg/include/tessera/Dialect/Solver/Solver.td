@@ -6,7 +6,10 @@ include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def Tessera_Solver_Dialect : Dialect {
-  let name = "tessera.solver";
+  // MLIR operation namespaces end at the first dot.  The historical
+  // `tessera.solver` spelling therefore registered a dialect that could never
+  // own operations named `tessera.solver.*` (those belong to `tessera`).
+  let name = "tessera_solver";
   let cppNamespace = "tessera::solver";
 }
 
@@ -106,4 +109,50 @@ def IRStepOp : Op<Tessera_Solver_Dialect, "ir_step", [Pure]> {
   ];
   let hasVerifier = 0;
   let assemblyFormat = "$A `,` $xk `,` $b attr-dict `:` type($A) `,` type($xk) `,` type($b) `->` type($xkp1) `,` type($r)";
+}
+
+// Target-independent implicit-function differentiation contracts.  These ops
+// intentionally use generic assembly: the parameter/solution arities are
+// variadic and are verified against the referenced residual by
+// NewtonAutodiffPass before any of these values are created.
+def ImplicitOp : Op<Tessera_Solver_Dialect, "implicit", [Pure]> {
+  let summary = "Implicit solution linked to an explicit residual function";
+  let arguments = (ins Variadic<AnyType>:$parameters,
+                       FlatSymbolRefAttr:$residual);
+  let results = (outs Variadic<AnyType>:$solutions);
+}
+
+def ResidualOp : Op<Tessera_Solver_Dialect, "residual", [Pure]> {
+  let summary = "Evaluate a residual at an explicit parameter/solution point";
+  let arguments = (ins Variadic<AnyType>:$primals,
+                       FlatSymbolRefAttr:$callee);
+  let results = (outs Variadic<AnyType>:$residuals);
+}
+
+def LinearSolveOp : Op<Tessera_Solver_Dialect, "linear_solve", [Pure]> {
+  let summary = "Matrix-free solve of a residual linearization";
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       FlatSymbolRefAttr:$residual,
+                       BoolAttr:$transpose,
+                       StrAttr:$linearization,
+                       OptionalAttr<F64Attr>:$rhs_scale);
+  let results = (outs Variadic<AnyType>:$solution);
+}
+
+def ResidualAdjointOp
+    : Op<Tessera_Solver_Dialect, "residual_adjoint", [Pure]> {
+  let summary = "Apply a residual VJP to an adjoint-state value";
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       FlatSymbolRefAttr:$residual,
+                       StrAttr:$wrt,
+                       F64Attr:$scale);
+  let results = (outs Variadic<AnyType>:$cotangents);
+}
+
+def ResidualJvpOp : Op<Tessera_Solver_Dialect, "residual_jvp", [Pure]> {
+  let summary = "Apply a residual JVP to parameter tangent values";
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       FlatSymbolRefAttr:$residual,
+                       StrAttr:$wrt);
+  let results = (outs Variadic<AnyType>:$tangents);
 }

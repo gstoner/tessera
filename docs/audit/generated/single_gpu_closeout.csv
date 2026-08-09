@@ -168,6 +168,7 @@ backend_kernel,pixel_unshuffle,layout_transform,partial,backend_pathway_owned,ba
 backend_kernel,rearrange,layout_transform,partial,backend_pathway_owned,backend_codegen,Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete.,primitive_coverage.contract_status.backend_kernel
 backend_kernel,rope_merge,layout_transform,partial,backend_pathway_owned,backend_codegen,Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete.,primitive_coverage.contract_status.backend_kernel
 backend_kernel,rope_split,layout_transform,partial,backend_pathway_owned,backend_codegen,Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete.,primitive_coverage.contract_status.backend_kernel
+backend_kernel,stop_gradient,layout_transform,partial,backend_pathway_owned,backend_codegen,Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete.,primitive_coverage.contract_status.backend_kernel
 backend_kernel,transpose,layout_transform,partial,backend_pathway_owned,backend_codegen,Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete.,primitive_coverage.contract_status.backend_kernel
 backend_kernel,unpack,layout_transform,partial,backend_pathway_owned,backend_codegen,Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete.,primitive_coverage.contract_status.backend_kernel
 backend_kernel,cholesky,linalg_decomposition,partial,backend_pathway_owned,backend_codegen,Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete.,primitive_coverage.contract_status.backend_kernel
@@ -435,7 +436,3 @@ target_ir,all_gather,collective,reference,multi_gpu_deferred,distributed_validat
 target_ir,all_reduce,collective,reference,multi_gpu_deferred,distributed_validation,Keep reference lane until a real collective/distributed proof exists.,support_table.csv
 target_ir,all_to_all,collective,reference,multi_gpu_deferred,distributed_validation,Keep reference lane until a real collective/distributed proof exists.,support_table.csv
 target_ir,reduce_scatter,collective,reference,multi_gpu_deferred,distributed_validation,Keep reference lane until a real collective/distributed proof exists.,support_table.csv
-tile_ir,all_gather,collective,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv
-tile_ir,all_reduce,collective,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv
-tile_ir,all_to_all,collective,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv
-tile_ir,reduce_scatter,collective,partial,multi_gpu_deferred,distributed_validation,Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.,support_table.csv

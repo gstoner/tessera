@@ -29,10 +29,10 @@ multi_head_attention,attention,public,public,registered,complete,fused,device_ve
 power_attn,attention,public,public,registered,complete,fused,device_verified_jit,ready,none
 retention,attention,public,public,registered,complete,fused,device_verified_jit,ready,none
 varlen_sdpa,attention,public,public,registered,complete,fused,fused,ready,benchmarked
-all_gather,collective,public,public,registered,complete,partial,reference,ready,benchmarked
-all_reduce,collective,public,public,registered,complete,partial,reference,ready,benchmarked
-all_to_all,collective,public,public,registered,complete,partial,reference,ready,benchmarked
-reduce_scatter,collective,public,public,registered,complete,partial,reference,ready,benchmarked
+all_gather,collective,public,public,registered,complete,complete,reference,ready,benchmarked
+all_reduce,collective,public,public,registered,complete,complete,reference,ready,benchmarked
+all_to_all,collective,public,public,registered,complete,complete,reference,ready,benchmarked
+reduce_scatter,collective,public,public,registered,complete,complete,reference,ready,benchmarked
 eq,comparison,public,public,registered,complete,fused,device_verified_jit,ready,none
 ge,comparison,public,public,registered,complete,fused,device_verified_jit,ready,none
 gt,comparison,public,public,registered,complete,fused,device_verified_jit,ready,none
@@ -153,6 +153,7 @@ rope_split,layout_transform,public,public,registered,complete,fused,fused,ready,
 split,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 squeeze,layout_transform,public,public,registered,complete,no_kernel_required,no_kernel_required,ready,none
 stack,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
+stop_gradient,layout_transform,public,public,registered,complete,not_applicable,not_applicable,ready,none
 tile,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
 tile_view,layout_transform,public,public,registered,complete,fused,no_kernel_required,ready,none
 transpose,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked

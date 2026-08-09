@@ -104,6 +104,8 @@ _SPECS = [
     OpSpec("ebm_langevin_step", "tessera.ebm.langevin_step", 3, 3,
            lowering="ebm"),
     OpSpec("transpose", "tessera.transpose", 1, 1, lowering="layout_transform"),
+    OpSpec("stop_gradient", "tessera.stop_gradient", 1, 1,
+           lowering="layout_transform", shape_rule="same_as_first"),
     OpSpec("cast", "tessera.cast", 1, 1, lowering="layout_transform"),
     OpSpec("dropout", "tessera.dropout", 1, 1, effect="random", lowering="random_mask"),
     OpSpec("qkv_projection", "tessera.qkv_projection", 2, 2, lowering="projection"),

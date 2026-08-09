@@ -105,6 +105,33 @@ class DiagnosticCode:
 
 REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
+        code="AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED",
+        pass_origin="AutodiffPairedPass",
+        severity="error",
+        summary=(
+            "The recompute-all paired pass cannot preserve a stopped "
+            "intermediate without replaying its inactive producer cone."
+        ),
+        fix_hint=(
+            "Stop a function input directly or select a paired residual "
+            "policy that saves the stopped primal."
+        ),
+        spec="docs/audit/compiler/AUTODIFF_UNIFICATION_PLAN.md",
+        sprint="AD-CORE-EFFECT-CONTROL-1",
+    ),
+    DiagnosticCode(
+        code="AUTODIFF_STOCHASTIC_EFFECT",
+        pass_origin="AutodiffPass/AutodiffPairedPass",
+        severity="error",
+        summary="An active stochastic Graph operation has no explicit gradient estimator.",
+        fix_hint=(
+            "Insert tessera.stop_gradient or register an explicit pathwise or "
+            "score-function adjoint for the stochastic operation."
+        ),
+        spec="docs/audit/compiler/AUTODIFF_UNIFICATION_PLAN.md",
+        sprint="AD-CORE-EFFECT-CONTROL-1",
+    ),
+    DiagnosticCode(
         code="E_FUSED_EPILOGUE_BAD_DTYPE",
         pass_origin="tessera.compiler.fusion_core.FusedRegion",
         severity="error",

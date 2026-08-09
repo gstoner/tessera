@@ -180,7 +180,9 @@ def test_qos_limit_set_clamps_nonpositive_tokens() -> None:
 
 def test_submit_snapshots_adapters_under_lock() -> None:
     text = EXEC_H.read_text(encoding="utf-8")
-    submit_idx = text.find("void submit(const ChunkDesc& d)")
+    # Match the stable API prefix: submit may carry lifetime-management
+    # parameters after the descriptor.
+    submit_idx = text.find("void submit(const ChunkDesc& d")
     assert submit_idx >= 0
     body_end = text.find("  // Exposed to C hooks", submit_idx)
     body = text[submit_idx:body_end] if body_end > 0 else text[submit_idx:]

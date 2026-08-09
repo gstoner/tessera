@@ -181,7 +181,10 @@ def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, target, fa
     assert bundle.launch_descriptor.provenance["work_item"] == "E2E-REAL-5"
 
 
-@pytest.mark.skipif(not x86_native.tools_available(), reason="x86 compiler/image unavailable")
+@pytest.mark.skipif(
+    not x86_native.tools_available() or find_tessera_opt() is None,
+    reason="x86 compiler/image unavailable",
+)
 @pytest.mark.parametrize("family", ["softmax", "reduce"])
 def test_x86_scheduled_semantic_kernel_executes_exact_artifact(family) -> None:
     module = _module(family=family, target="x86")

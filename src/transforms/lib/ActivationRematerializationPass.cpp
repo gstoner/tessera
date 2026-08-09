@@ -77,6 +77,9 @@ constexpr const char *kRematAutoSelectedAttr = "tessera.remat_auto_selected";
 constexpr const char *kRecomputeScopeAttr = "tessera.recompute_scope";
 constexpr const char *kAutodiffPhaseAttr = "tessera.autodiff.phase";
 constexpr const char *kMeasuredCostAttr = "tessera.remat_cost_ns";
+constexpr const char *kMeasuredBackwardWorkAttr = "tessera.backward_work_ns";
+constexpr const char *kMeasuredResidualBytesAttr =
+    "tessera.residual.retained_bytes";
 constexpr const char *kPeakBeforeAttr = "tessera.remat_peak_before_bytes";
 constexpr const char *kPeakAfterAttr = "tessera.remat_peak_after_bytes";
 constexpr const char *kSelectedCostAttr = "tessera.remat_selected_cost_ns";
@@ -233,6 +236,9 @@ deriveModelMemoryBudget(mlir::func::FuncOp func, bool &invalid) {
 }
 
 static int64_t estimateResultBytes(mlir::Operation *op) {
+  if (auto measured =
+          op->getAttrOfType<mlir::IntegerAttr>(kMeasuredResidualBytesAttr))
+    return std::max<int64_t>(measured.getInt(), 0);
   int64_t bytes = 0;
   for (mlir::Value result : op->getResults()) {
     auto shaped = mlir::dyn_cast<mlir::ShapedType>(result.getType());
@@ -265,6 +271,9 @@ static int64_t estimateResultBytes(mlir::Operation *op) {
 // stable operation-work estimate. The fallback is only a ranking unit, not a
 // latency claim.
 static int64_t estimateRecomputeCost(mlir::Operation *op) {
+  if (auto measured =
+          op->getAttrOfType<mlir::IntegerAttr>(kMeasuredBackwardWorkAttr))
+    return std::max<int64_t>(measured.getInt(), 1);
   if (auto measured = op->getAttrOfType<mlir::IntegerAttr>(kMeasuredCostAttr))
     return std::max<int64_t>(measured.getInt(), 1);
 

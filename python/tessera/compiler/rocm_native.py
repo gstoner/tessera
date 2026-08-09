@@ -1246,8 +1246,24 @@ def _compile_native_tile_ir(
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
     native_pipeline = config.pass_pipeline(output=ROCMOutputLevel.BINARY)
     target_ir = _run_opt(tool, tile_ir, target_pipeline)
+    # At the Target-IR boundary the family plugin must consume Tile IR and
+    # materialize its typed tessera_rocm directive inside a physical GPU
+    # module.  The following binary pipeline owns conversion of that directive
+    # to ROCDL; rejecting it here would conflate Target IR with Backend IR.
+    if 'tessera.pipeline.target_ir_consumer = "tessera_rocm"' not in target_ir:
+        raise RuntimeError("ROCm native packaging lost its Target IR consumer identity")
+    if "gpu.module" not in target_ir:
+        raise RuntimeError(
+            f"ROCm native packaging did not physically consume {directive}"
+        )
     if directive not in target_ir:
-        raise RuntimeError(f"ROCm native packaging did not produce typed {directive} Target IR")
+        raise RuntimeError(
+            f"ROCm native packaging did not materialize Target IR directive {directive}"
+        )
+    if "tile." in target_ir:
+        raise RuntimeError(
+            "ROCm native packaging left source Tile IR unconsumed"
+        )
     backend_ir = _run_opt(tool, tile_ir, native_pipeline)
     payload = _extract_hsaco(backend_ir)
     compiler_fp = _version_fingerprint(tool)
@@ -2274,14 +2290,17 @@ def package_attention_backward(
         if _scheduled_artifact is not None
         else _compile_attention_backward_graph_ir(tile_ir, tile_q=sq, tile_kv=16)
     )
+    # Canonical-loop identity belongs to the input artifact contract.  The
+    # family plugin is required to consume those source operations, so looking
+    # for their attributes in physical Target IR incorrectly requires dead
+    # marker metadata to survive lowering.
     if _scheduled_artifact is None and (
-        'source = "canonical_rank4_kv_scf_for"' not in target_ir
-        or 'source = "canonical_tensor_backward_scf_for"' not in target_ir
-        or "canonical_phase_loops = true" not in target_ir
+        '"tessera.flash_attn"' not in tile_ir
+        or '"tessera_attn.backward"' not in tile_ir
     ):
         raise RuntimeError(
             "gfx1151 attention backward packaging requires direct shared "
-            "forward and tensor-valued backward Target-IR consumers"
+            "forward and tensor-valued backward Graph-IR consumers"
         )
     image = NativeImageArtifact(
         target="rocm_gfx1151",

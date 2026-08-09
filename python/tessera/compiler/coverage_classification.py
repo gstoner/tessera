@@ -185,6 +185,32 @@ _CATEGORY_DEFAULT_BUCKET: dict[str, str] = {
 # the category defaults are wrong and should be revisited.
 
 _NAME_OVERRIDES: dict[str, tuple[str, str]] = {
+    # AD-CORE-EFFECT-CONTROL-1 direct-evidence closure.  The vectorized
+    # reference counter sees one public call site for each relaxation even
+    # though the same owning file also contains defining-property and
+    # finite-difference VJP tests.  The fused training rows likewise have one
+    # artifact spelling driving a target/kind/reduction matrix on x86 + ROCm.
+    "sparsemax": (
+        DIRECTLY_TESTED, "public forward plus simplex/sparsity and FD-VJP tests"
+    ),
+    "entmax15": (
+        DIRECTLY_TESTED, "public forward plus simplex and FD-VJP tests"
+    ),
+    "soft_top_k": (
+        DIRECTLY_TESTED, "public forward plus exact-k, domain, and FD-VJP tests"
+    ),
+    "gumbel_softmax": (
+        DIRECTLY_TESTED, "public forward plus simplex/noise and FD-VJP tests"
+    ),
+    "perturbed_argmax": (
+        DIRECTLY_TESTED, "public forward plus matched-seed Monte-Carlo VJP test"
+    ),
+    "training.loss_sgd": (
+        DIRECTLY_TESTED, "parameterized exact x86/ROCm fused-versus-unfused oracle"
+    ),
+    "training.loss_adamw": (
+        DIRECTLY_TESTED, "parameterized exact x86/ROCm fused-versus-unfused oracle"
+    ),
     # ── hardware_gated: Phase G/H device-required ────────────────────
     "ebm_bivector_langevin_sample": (
         HARDWARE_GATED, "manifold Langevin needs real GPU mesh (Phase G)"
@@ -399,6 +425,10 @@ def render_classification_dashboard() -> str:
     lines.append(
         f"| `deprecated_or_internal` | {summary[DEPRECATED_OR_INTERNAL]:>4} "
         f"| Not public test debt |"
+    )
+    lines.append(
+        f"| `directly_tested`         | {summary[DIRECTLY_TESTED]:>4} "
+        f"| Direct proof exists; parameterization/defining surfaces keep the lexical count ≤1 |"
     )
     lines.append("")
 

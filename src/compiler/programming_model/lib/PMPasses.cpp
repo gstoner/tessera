@@ -28,8 +28,10 @@
 #include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/SHA256.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <optional>
 #include <string>
@@ -435,6 +437,8 @@ struct FFTSchedule {
   StringRef algorithm;
   StringRef realTransformPolicy;
   StringRef hermitianLayout;
+  StringRef hermitianWeight;
+  StringRef normalization;
   StringRef kernelFamily;
   StringRef workspacePolicy;
   StringRef residency;
@@ -526,7 +530,19 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
   if (schedule.axis < 0) schedule.axis += input.getRank();
   if (schedule.axis < 0 || schedule.axis >= input.getRank()) return failure();
   auto norm = op->getAttrOfType<StringAttr>("norm");
-  if (norm && norm.getValue() != "backward") return failure();
+  auto normalization = op->getAttrOfType<StringAttr>("normalization");
+  schedule.normalization = normalization ? normalization.getValue() :
+                                           norm ? norm.getValue() : "backward";
+  if (schedule.normalization != "backward" &&
+      schedule.normalization != "forward" &&
+      schedule.normalization != "ortho")
+    return failure();
+  auto weight = op->getAttrOfType<StringAttr>("hermitian_weight");
+  schedule.hermitianWeight = weight ? weight.getValue() : "none";
+  if (schedule.hermitianWeight != "none" &&
+      schedule.hermitianWeight != "half_interior" &&
+      schedule.hermitianWeight != "double_interior")
+    return failure();
 
   StringRef name = op->getName().getStringRef();
   auto isComplexF32 = [](Type type) {
@@ -555,7 +571,8 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
       return failure();
     schedule.mode = "c2r";
     schedule.inverse = true;
-    auto lengthAttr = op->getAttrOfType<IntegerAttr>("n");
+    auto lengthAttr = op->getAttrOfType<IntegerAttr>("logical_length");
+    if (!lengthAttr) lengthAttr = op->getAttrOfType<IntegerAttr>("n");
     schedule.length =
         lengthAttr ? lengthAttr.getInt() : output.getDimSize(schedule.axis);
     if (output.getDimSize(schedule.axis) != schedule.length ||
@@ -563,6 +580,10 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
       return failure();
   } else {
     return failure();
+  }
+  if (auto logicalLength =
+          op->getAttrOfType<IntegerAttr>("logical_length")) {
+    if (logicalLength.getInt() != schedule.length) return failure();
   }
   if (schedule.length <= 0) return failure();
   for (int64_t dimension = 0; dimension < input.getRank(); ++dimension) {
@@ -574,7 +595,12 @@ static FailureOr<FFTSchedule> getFFTSchedule(Operation *op) {
                          : schedule.batch * input.getDimSize(dimension);
   }
   if (input.getRank() == 1) schedule.batch = 1;
-  schedule.scale = schedule.inverse ? 1.0 / schedule.length : 1.0;
+  schedule.scale = schedule.normalization == "ortho"
+                       ? 1.0 / std::sqrt(static_cast<double>(schedule.length))
+                   : schedule.normalization == "forward"
+                       ? (schedule.inverse ? 1.0
+                                           : 1.0 / schedule.length)
+                       : (schedule.inverse ? 1.0 / schedule.length : 1.0);
 
   const bool realMode = schedule.mode == "r2c" || schedule.mode == "c2r";
   const int64_t candidatePhysicalLength =
@@ -661,8 +687,10 @@ static std::string fftScheduleDigest(const FFTSchedule &schedule) {
        Twine(schedule.batch) + ";physical_length=" +
        Twine(schedule.physicalLength) + ";real_transform_policy=" +
        schedule.realTransformPolicy + ";hermitian_layout=" +
-       schedule.hermitianLayout + ";inverse=" +
-       Twine(schedule.inverse ? 1 : 0) + ";normalization=backward;scale=" +
+       schedule.hermitianLayout + ";hermitian_weight=" +
+       schedule.hermitianWeight + ";inverse=" +
+       Twine(schedule.inverse ? 1 : 0) + ";normalization=" +
+       schedule.normalization + ";scale=" +
        std::to_string(static_cast<float>(schedule.scale)) +
        ";storage=complex64_interleaved_f32;accum=f32;radix_policy=" +
        schedule.radixPolicy + ";strategy=" + schedule.strategy +
@@ -741,6 +769,64 @@ static FailureOr<std::string> spectralProgramDigest(Operation *op) {
        stringAttr("native_entry").getValue() + ";child_fft_digests=" +
        stringAttr("child_fft_digests").getValue() + ";workgroup=" +
        Twine(intAttr("workgroup_size").getInt()))
+          .str();
+  return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
+                     /*LowerCase=*/true);
+}
+
+static std::string spectralBackwardTypeSignature(ValueRange values) {
+  std::string signature;
+  llvm::raw_string_ostream stream(signature);
+  llvm::interleave(
+      values, stream,
+      [&](Value value) { value.getType().print(stream); }, ",");
+  stream.flush();
+  return signature;
+}
+
+static FailureOr<std::string> spectralBackwardDigest(Operation *op) {
+  auto stringAttr = [&](StringRef name) {
+    return op->getAttrOfType<StringAttr>(name);
+  };
+  auto kind = stringAttr("kind");
+  auto target = stringAttr("target");
+  auto arch = stringAttr("arch");
+  auto normalization = stringAttr("normalization");
+  auto layout = stringAttr("spectrum_layout");
+  auto padMode = stringAttr("pad_mode");
+  auto lineage = stringAttr("mutation_lineage");
+  if (!kind || !target || !arch || !normalization || !layout || !padMode ||
+      !lineage)
+    return failure();
+  auto integer = [&](StringRef name, int64_t fallback) {
+    auto attr = op->getAttrOfType<IntegerAttr>(name);
+    return attr ? attr.getInt() : fallback;
+  };
+  auto boolean = [&](StringRef name, bool fallback) {
+    auto attr = op->getAttrOfType<BoolAttr>(name);
+    return attr ? attr.getValue() : fallback;
+  };
+  auto inputSignature = stringAttr("input_signature");
+  auto outputSignature = stringAttr("output_signature");
+  std::string inputs = inputSignature
+                           ? inputSignature.getValue().str()
+                           : spectralBackwardTypeSignature(op->getOperands());
+  std::string outputs = outputSignature
+                            ? outputSignature.getValue().str()
+                            : spectralBackwardTypeSignature(op->getResults());
+  std::string contract =
+      (Twine("schema=tessera.spectral_backward.v1;kind=") + kind.getValue() +
+       ";target=" + target.getValue() + ";arch=" + arch.getValue() +
+       ";inputs=" + inputs + ";outputs=" + outputs +
+       ";axis=" + Twine(integer("axis", -1)) + ";logical_length=" +
+       Twine(integer("logical_length", -1)) + ";normalization=" +
+       normalization.getValue() + ";spectrum_layout=" + layout.getValue() +
+       ";hop=" + Twine(integer("hop", -1)) + ";center=" +
+       Twine(boolean("center", false) ? 1 : 0) + ";onesided=" +
+       Twine(boolean("onesided", true) ? 1 : 0) + ";pad_mode=" +
+       padMode.getValue() + ";output_length=" +
+       Twine(integer("output_length", -1)) + ";mutation_lineage=" +
+       lineage.getValue())
           .str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
@@ -1290,7 +1376,7 @@ struct GraphToSchedulePass
       if (failed(selected)) {
         op->emitError(
             "E2E-REAL-FFT Graph->Schedule requires a static f32-pair FFT on "
-            "Zen 5 or gfx1151 with backward normalization");
+            "Zen 5 or gfx1151 with an explicit supported spectral contract");
         return signalPassFailure();
       }
       std::string digest = fftScheduleDigest(*selected);
@@ -1311,8 +1397,11 @@ struct GraphToSchedulePass
                          builder.getStringAttr(selected->realTransformPolicy));
       state.addAttribute("hermitian_layout",
                          builder.getStringAttr(selected->hermitianLayout));
+      state.addAttribute("hermitian_weight",
+                         builder.getStringAttr(selected->hermitianWeight));
       state.addAttribute("inverse", builder.getBoolAttr(selected->inverse));
-      state.addAttribute("normalization", builder.getStringAttr("backward"));
+      state.addAttribute("normalization",
+                         builder.getStringAttr(selected->normalization));
       state.addAttribute("scale", builder.getF32FloatAttr(selected->scale));
       state.addAttribute("storage",
                          builder.getStringAttr("complex64_interleaved_f32"));
@@ -1379,8 +1468,104 @@ struct GraphToSchedulePass
           "numeric_policy",
           builder.getStringAttr(
               (Twine("complex64_interleaved_f32->f32;") +
-               selected->strategy + ";backward")
+               selected->strategy + ";" + selected->normalization)
                   .str()));
+      builder.create(artifactState);
+    }
+
+    SmallVector<Operation *> spectralBackwards;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tessera.spectral_backward")
+        spectralBackwards.push_back(op);
+    });
+    for (Operation *op : spectralBackwards) {
+      ModuleOp module = op->getParentOfType<ModuleOp>();
+      StringRef configuredTarget = moduleString(module, "tessera.target", "target");
+      StringRef configuredArch = moduleString(module, "tessera.arch", "arch");
+      const bool x86 = configuredTarget == "x86" ||
+                       configuredArch.contains("avx512") ||
+                       configuredArch.contains("zen5");
+      const bool rocm = configuredArch.contains("gfx1151");
+      if (!x86 && !rocm) {
+        op->emitError(
+            "AD-TSOL-SPECTRAL-1 compound adjoints require an exact Zen 5 or gfx1151 profile");
+        return signalPassFailure();
+      }
+      for (Type type : op->getOperandTypes()) {
+        auto tensor = dyn_cast<RankedTensorType>(type);
+        if (!tensor || !tensor.hasStaticShape()) {
+          op->emitError("compound spectral adjoint scheduling requires static tensors");
+          return signalPassFailure();
+        }
+      }
+      op->setAttr("target", builder.getStringAttr(x86 ? "x86" : "rocm"));
+      op->setAttr("arch", builder.getStringAttr(x86 ? "zen5-avx512" : "gfx1151"));
+      op->setAttr("mutation_lineage",
+                  builder.getStringAttr("inputs_immutable_outputs_fresh_v1"));
+      if (!op->hasAttr("normalization"))
+        op->setAttr("normalization", builder.getStringAttr("backward"));
+      if (!op->hasAttr("spectrum_layout"))
+        op->setAttr("spectrum_layout",
+                    builder.getStringAttr(
+                        op->getAttrOfType<StringAttr>("kind").getValue() ==
+                                "tessera.spectral_filter"
+                            ? "full_complex"
+                            : "half_spectrum_nyquist_explicit"));
+      if (!op->hasAttr("center"))
+        op->setAttr("center", builder.getBoolAttr(false));
+      if (!op->hasAttr("onesided"))
+        op->setAttr("onesided", builder.getBoolAttr(true));
+      if (!op->hasAttr("pad_mode"))
+        op->setAttr("pad_mode", builder.getStringAttr("constant"));
+      op->setAttr(
+          "input_signature",
+          builder.getStringAttr(spectralBackwardTypeSignature(op->getOperands())));
+      op->setAttr(
+          "output_signature",
+          builder.getStringAttr(spectralBackwardTypeSignature(op->getResults())));
+      FailureOr<std::string> digest = spectralBackwardDigest(op);
+      if (failed(digest)) {
+        op->emitError("compound spectral adjoint has an incomplete semantic contract");
+        return signalPassFailure();
+      }
+      op->setAttr("schedule.artifact_hash", builder.getStringAttr(*digest));
+      builder.setInsertionPointAfter(op);
+      OperationState state(op->getLoc(), "schedule.spectral_backward");
+      state.addOperands(op->getResults());
+      state.addTypes(op->getResultTypes());
+      state.addAttribute("artifact_hash", builder.getStringAttr(*digest));
+      for (StringRef name : {"target", "arch", "kind", "axis",
+                             "logical_length", "normalization",
+                             "spectrum_layout", "hop", "center", "onesided",
+                             "pad_mode", "output_length",
+                             "input_signature", "output_signature",
+                             "mutation_lineage"})
+        if (Attribute attr = op->getAttr(name)) state.addAttribute(name, attr);
+      Operation *scheduled = builder.create(state);
+      for (auto [original, replacement] :
+           llvm::zip(op->getResults(), scheduled->getResults()))
+        for (OpOperand &use : llvm::make_early_inc_range(original.getUses()))
+          if (use.getOwner() != scheduled) use.set(replacement);
+
+      builder.setInsertionPointAfter(scheduled);
+      OperationState artifactState(op->getLoc(), "schedule.artifact");
+      artifactState.addAttribute("hash", builder.getStringAttr(*digest));
+      artifactState.addAttribute("arch", op->getAttr("arch"));
+      artifactState.addAttribute(
+          "shape_key",
+          builder.getStringAttr((Twine("family=spectral_backward;kind=") +
+                                 op->getAttrOfType<StringAttr>("kind").getValue())
+                                    .str()));
+      artifactState.addAttribute(
+          "tile", builder.getDictionaryAttr({builder.getNamedAttr(
+                      "output_count",
+                      builder.getI64IntegerAttr(op->getNumResults()))}));
+      artifactState.addAttribute(
+          "numeric_policy",
+          builder.getStringAttr((Twine("adjoint;") +
+                                 op->getAttrOfType<StringAttr>("normalization")
+                                     .getValue())
+                                    .str()));
       builder.create(artifactState);
     }
 
@@ -1861,6 +2046,111 @@ struct ScheduleToTilePass
       for (schedule::ArtifactOp artifact : matchingArtifacts) artifact.erase();
     }
 
+    SmallVector<Operation *> scheduledSpectralBackwards;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "schedule.spectral_backward")
+        scheduledSpectralBackwards.push_back(op);
+    });
+    for (Operation *scheduled : scheduledSpectralBackwards) {
+      auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
+      FailureOr<std::string> derived = spectralBackwardDigest(scheduled);
+      if (failed(derived) || !hash || *derived != hash.getValue()) {
+        scheduled->emitError(
+            "scheduled spectral adjoint policy was altered after hashing");
+        return signalPassFailure();
+      }
+      if (scheduled->getNumOperands() == 0) {
+        scheduled->emitError("requires retained Graph spectral adjoint results");
+        return signalPassFailure();
+      }
+      Operation *graph = scheduled->getOperand(0).getDefiningOp();
+      if (!graph || graph->getName().getStringRef() !=
+                        "tessera.spectral_backward") {
+        scheduled->emitError("requires the retained Graph spectral adjoint");
+        return signalPassFailure();
+      }
+      SmallVector<schedule::ArtifactOp> matchingArtifacts;
+      mod.walk([&](schedule::ArtifactOp artifact) {
+        if (artifact.getHash() == hash.getValue())
+          matchingArtifacts.push_back(artifact);
+      });
+      if (matchingArtifacts.size() != 1) {
+        scheduled->emitError("requires exactly one matching schedule.artifact");
+        return signalPassFailure();
+      }
+
+      Location loc = scheduled->getLoc();
+      builder.setInsertionPoint(scheduled);
+      auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      auto tensorPointer = [&](Value tensor) -> FailureOr<Value> {
+        auto type = dyn_cast<RankedTensorType>(tensor.getType());
+        if (!type || !type.hasStaticShape()) return failure();
+        auto memref = MemRefType::get(type.getShape(), type.getElementType());
+        Value buffer =
+            builder.create<bufferization::ToBufferOp>(loc, memref, tensor);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer = builder.create<arith::IndexCastOp>(
+            loc, builder.getI64Type(), index);
+        return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer)
+            .getResult();
+      };
+      SmallVector<Value> launchOperands;
+      for (Value input : graph->getOperands()) {
+        FailureOr<Value> pointer = tensorPointer(input);
+        if (failed(pointer)) {
+          scheduled->emitError("requires static ranked adjoint inputs");
+          return signalPassFailure();
+        }
+        launchOperands.push_back(*pointer);
+      }
+      SmallVector<Value> outputBuffers;
+      for (Type type : scheduled->getResultTypes()) {
+        auto tensor = dyn_cast<RankedTensorType>(type);
+        if (!tensor || !tensor.hasStaticShape()) {
+          scheduled->emitError("requires static ranked gradient outputs");
+          return signalPassFailure();
+        }
+        auto memref = MemRefType::get(tensor.getShape(), tensor.getElementType());
+        Value buffer = builder.create<memref::AllocOp>(loc, memref);
+        outputBuffers.push_back(buffer);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer = builder.create<arith::IndexCastOp>(
+            loc, builder.getI64Type(), index);
+        launchOperands.push_back(
+            builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer));
+      }
+
+      OperationState kernelState(loc, "tile.spectral_backward_kernel");
+      kernelState.addOperands(launchOperands);
+      kernelState.addAttribute(
+          "input_count", builder.getI64IntegerAttr(graph->getNumOperands()));
+      kernelState.addAttribute(
+          "output_count", builder.getI64IntegerAttr(scheduled->getNumResults()));
+      for (StringRef name : {"target", "arch", "kind", "axis",
+                             "logical_length", "normalization",
+                             "spectrum_layout", "hop", "center", "onesided",
+                             "pad_mode", "output_length",
+                             "input_signature", "output_signature",
+                             "mutation_lineage"})
+        if (Attribute attr = scheduled->getAttr(name))
+          kernelState.addAttribute(name, attr);
+      kernelState.addAttribute("tessera.schedule_hash", hash);
+      builder.create(kernelState);
+
+      for (auto [result, buffer, type] :
+           llvm::zip(scheduled->getResults(), outputBuffers,
+                     scheduled->getResultTypes())) {
+        Value tensor = builder.create<bufferization::ToTensorOp>(
+            loc, cast<RankedTensorType>(type), buffer);
+        result.replaceAllUsesWith(tensor);
+      }
+      scheduled->erase();
+      if (graph->use_empty()) graph->erase();
+      for (schedule::ArtifactOp artifact : matchingArtifacts) artifact.erase();
+    }
+
     SmallVector<Operation *> scheduledSpectralPrograms;
     mod.walk([&](Operation *op) {
       if (op->getName().getStringRef() == "schedule.spectral_program")
@@ -1995,8 +2285,9 @@ struct ScheduleToTilePass
           stringAttr("real_transform_policy") !=
               selected->realTransformPolicy ||
           stringAttr("hermitian_layout") != selected->hermitianLayout ||
+          stringAttr("hermitian_weight") != selected->hermitianWeight ||
           boolAttr("inverse") != selected->inverse ||
-          stringAttr("normalization") != "backward" ||
+          stringAttr("normalization") != selected->normalization ||
           stringAttr("storage") != "complex64_interleaved_f32" ||
           stringAttr("accum") != "f32" ||
           stringAttr("radix_policy") != selected->radixPolicy ||
@@ -2075,9 +2366,11 @@ struct ScheduleToTilePass
           builder.getStringAttr(selected->realTransformPolicy));
       kernelState.addAttribute("hermitian_layout",
                                builder.getStringAttr(selected->hermitianLayout));
+      kernelState.addAttribute("hermitian_weight",
+                               builder.getStringAttr(selected->hermitianWeight));
       kernelState.addAttribute("inverse", builder.getBoolAttr(selected->inverse));
       kernelState.addAttribute("normalization",
-                               builder.getStringAttr("backward"));
+                               builder.getStringAttr(selected->normalization));
       kernelState.addAttribute("scale", builder.getF32FloatAttr(selected->scale));
       kernelState.addAttribute("storage",
                                builder.getStringAttr("complex64_interleaved_f32"));

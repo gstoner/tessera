@@ -9,6 +9,7 @@ include "mlir/IR/CommonAttrConstraints.td"
 // Phase F4 — AdjointInterface op trait for reverse-mode autodiff.
 // Each differentiable op below opts in via DeclareOpInterfaceMethods.
 include "Tessera/AdjointInterface.td"
+include "Tessera/LinearTransposeInterface.td"
 
 def Tessera_Dialect : Dialect {
   let name = "tessera";
@@ -176,7 +177,7 @@ def Tessera_MatmulOp : Op<
      "getTiledImplementation",
      "getResultTilePosition",
    ]>,
-   DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+   DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
 > {
   let summary = "Matrix multiply (A @ B)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs,
@@ -1990,7 +1991,7 @@ def Tessera_MorScatterOp : Op<
 
 def Tessera_TransposeOp : Op<
   Tessera_Dialect, "transpose",
-  [Pure]
+  [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
 > {
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2021,7 +2022,7 @@ def Tessera_TransposeOp : Op<
 // attrs — they don't appear in the ODS argument list.
 def Tessera_ReshapeOp : Op<
   Tessera_Dialect, "reshape",
-  [Pure]
+  [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
 > {
   let summary = "Element-count-preserving tensor reshape";
   let arguments = (ins TensorType:$x);
@@ -2036,6 +2037,22 @@ def Tessera_ReshapeOp : Op<
   // -dim annotations that SymbolicDimEqualityPass reads.
   let hasFolder = 1;
   let hasCanonicalizer = 1;
+}
+
+// Canonical differentiation barrier.  This is an identity in the forward
+// program, but its adjoint deliberately produces no cotangent for `x`.
+// Autodiff removes the barrier only after constructing the backward program,
+// so downstream x86/ROCm consumers see an ordinary SSA identity rather than a
+// backend-specific stop-gradient spelling.
+def Tessera_StopGradientOp : Op<
+  Tessera_Dialect, "stop_gradient",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Forward identity that terminates reverse-mode activity";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 def Tessera_CastOp : Op<
@@ -2064,7 +2081,8 @@ def Tessera_CastOp : Op<
 // view/copy analysis (§6.B) instead of dropping to the numpy reference. Pure:
 // no FLOP, no memory effect (their backend_kernel is `not_applicable`, P0).
 // Frontend emission + the view-elision lowering are the P1b/§6.B follow-ups.
-def Tessera_SqueezeOp : Op<Tessera_Dialect, "squeeze", [Pure, SameOperandsAndResultElementType]> {
+def Tessera_SqueezeOp : Op<Tessera_Dialect, "squeeze", [Pure, SameOperandsAndResultElementType,
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
   let summary = "Remove size-1 dimensions (optional `axes` attr selects which)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2073,7 +2091,8 @@ def Tessera_SqueezeOp : Op<Tessera_Dialect, "squeeze", [Pure, SameOperandsAndRes
   let hasFolder = 1;
 }
 
-def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure, SameOperandsAndResultElementType]> {
+def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure, SameOperandsAndResultElementType,
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
   let summary = "Insert size-1 dimensions (the `axes` attr selects positions)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2082,7 +2101,8 @@ def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure, SameOperandsAn
   let hasFolder = 1;
 }
 
-def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure, SameOperandsAndResultElementType]> {
+def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure, SameOperandsAndResultElementType,
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
   let summary = "Broadcast-expand to a larger shape (stride-0 view, no copy)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2094,7 +2114,7 @@ def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure, SameOperandsAndResul
 def Tessera_BroadcastOp : Op<
   Tessera_Dialect, "broadcast",
   [Pure, SameOperandsAndResultElementType,
-   DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+   DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
 > {
   let summary = "Broadcast to a target shape (stride-0 view, no copy)";
   let arguments = (ins TensorType:$x);
@@ -2104,7 +2124,8 @@ def Tessera_BroadcastOp : Op<
   let hasFolder = 1;
 }
 
-def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure, SameOperandsAndResultElementType]> {
+def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure, SameOperandsAndResultElementType,
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
   let summary = "General axis permutation (the `perm` attr is the new order)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2113,7 +2134,8 @@ def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure, SameOperandsAndRes
   let hasFolder = 1;
 }
 
-def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure, SameOperandsAndResultElementType]> {
+def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure, SameOperandsAndResultElementType,
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
   let summary = "Collapse a contiguous dim range (optional `start`/`end` attrs)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2122,7 +2144,8 @@ def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure, SameOperandsAndRes
   let hasFolder = 1;
 }
 
-def Tessera_ViewOp : Op<Tessera_Dialect, "view", [Pure, SameOperandsAndResultElementType]> {
+def Tessera_ViewOp : Op<Tessera_Dialect, "view", [Pure, SameOperandsAndResultElementType,
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
   let summary = "Reshape sharing storage (contiguous view, no copy; `shape` attr)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2164,14 +2187,19 @@ class Tessera_CollectiveOp<string mnemonic, string summaryText> : Op<
 def Tessera_AllReduceOp : Tessera_CollectiveOp<"all_reduce", "Single-rank/reference all-reduce semantic op">;
 def Tessera_ReduceScatterOp : Tessera_CollectiveOp<"reduce_scatter", "Single-rank/reference reduce-scatter semantic op">;
 def Tessera_AllGatherOp : Tessera_CollectiveOp<"all_gather", "Single-rank/reference all-gather semantic op">;
+def Tessera_AllToAllOp : Tessera_CollectiveOp<"all_to_all", "Single-rank/reference all-to-all semantic op">;
 
 class Tessera_SpectralUnaryOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
-  [Pure]
+  [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
 > {
   let summary = summaryText;
   let arguments = (ins TensorType:$x,
-                       OptionalAttr<I64Attr>:$axis);
+                       OptionalAttr<I64Attr>:$axis,
+                       OptionalAttr<I64Attr>:$logical_length,
+                       DefaultValuedAttr<StrAttr, "\"backward\"">:$normalization,
+                       DefaultValuedAttr<StrAttr, "\"full_complex\"">:$spectrum_layout,
+                       DefaultValuedAttr<StrAttr, "\"none\"">:$hermitian_weight);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
@@ -2184,14 +2212,78 @@ def Tessera_IRFFTOp : Tessera_SpectralUnaryOp<"irfft", "Inverse real FFT spectra
 def Tessera_DCTOp : Tessera_SpectralUnaryOp<"dct", "Discrete cosine transform"> {
   let arguments = (ins TensorType:$x,
                        OptionalAttr<I64Attr>:$axis,
-                       OptionalAttr<I64Attr>:$type);
+                       OptionalAttr<I64Attr>:$logical_length,
+                       DefaultValuedAttr<StrAttr, "\"backward\"">:$normalization,
+                       DefaultValuedAttr<StrAttr, "\"full_real\"">:$spectrum_layout,
+                       DefaultValuedAttr<StrAttr, "\"none\"">:$hermitian_weight,
+                       DefaultValuedAttr<I64Attr, "2">:$type,
+                       DefaultValuedAttr<BoolAttr, "false">:$transpose_basis);
   let hasVerifier = 1;
 }
 
-def Tessera_SpectralConvOp : Op<Tessera_Dialect, "spectral_conv", [Pure]> {
-  let summary = "Reference spectral convolution semantic op";
-  let arguments = (ins TensorType:$x, TensorType:$filter);
+class Tessera_SpectralCompoundOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic,
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$x, TensorType:$parameter,
+                       OptionalAttr<I64Attr>:$axis,
+                       OptionalAttr<I64Attr>:$logical_length,
+                       DefaultValuedAttr<StrAttr, "\"backward\"">:$normalization,
+                       DefaultValuedAttr<StrAttr, "\"half_spectrum_nyquist_explicit\"">:$spectrum_layout,
+                       OptionalAttr<I64Attr>:$hop,
+                       DefaultValuedAttr<BoolAttr, "false">:$center,
+                       DefaultValuedAttr<BoolAttr, "true">:$onesided,
+                       DefaultValuedAttr<StrAttr, "\"constant\"">:$pad_mode,
+                       OptionalAttr<I64Attr>:$output_length);
   let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_STFTOp : Tessera_SpectralCompoundOp<
+  "stft", "Short-time Fourier transform with explicit window policy">;
+def Tessera_ISTFTOp : Tessera_SpectralCompoundOp<
+  "istft", "Inverse short-time Fourier transform with overlap-add policy">;
+def Tessera_SpectralFilterOp : Tessera_SpectralCompoundOp<
+  "spectral_filter", "Pointwise complex spectral filter">;
+
+def Tessera_SpectralConvOp : Op<
+  Tessera_Dialect, "spectral_conv",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+> {
+  let summary = "Reference spectral convolution semantic op";
+  let arguments = (ins TensorType:$x, TensorType:$filter,
+                       OptionalAttr<I64Attr>:$axis,
+                       OptionalAttr<I64Attr>:$logical_length,
+                       DefaultValuedAttr<StrAttr, "\"backward\"">:$normalization,
+                       DefaultValuedAttr<StrAttr, "\"half_spectrum_nyquist_explicit\"">:$spectrum_layout);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_SpectralBackwardOp : Op<Tessera_Dialect, "spectral_backward", [Pure]> {
+  let summary = "Typed compound spectral transpose/VJP carrier";
+  let description = [{
+    Carries a complete compound spectral backward program as Graph IR. `kind`
+    identifies the forward operation; semantic attributes are copied from that
+    operation. The first operand is the result cotangent, followed by the
+    forward operands, and results correspond one-for-one with those operands.
+    Schedule lowering hashes this carrier as one fused spectral artifact.
+  }];
+  let arguments = (ins Variadic<TensorType>:$inputs,
+                       StrAttr:$kind,
+                       OptionalAttr<I64Attr>:$axis,
+                       OptionalAttr<I64Attr>:$logical_length,
+                       DefaultValuedAttr<StrAttr, "\"backward\"">:$normalization,
+                       DefaultValuedAttr<StrAttr, "\"half_spectrum_nyquist_explicit\"">:$spectrum_layout,
+                       OptionalAttr<I64Attr>:$hop,
+                       DefaultValuedAttr<BoolAttr, "false">:$center,
+                       DefaultValuedAttr<BoolAttr, "true">:$onesided,
+                       DefaultValuedAttr<StrAttr, "\"constant\"">:$pad_mode,
+                       OptionalAttr<I64Attr>:$output_length);
+  let results = (outs Variadic<TensorType>:$gradients);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }

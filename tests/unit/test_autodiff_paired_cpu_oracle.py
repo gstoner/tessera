@@ -28,6 +28,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tessera.autodiff.vjp import get_vjp
+
 _REPO = Path(__file__).resolve().parents[2]
 _TESSERA_OPT_CANDIDATES = (
     _REPO / "build" / "tools" / "tessera-opt" / "tessera-opt",
@@ -53,7 +55,9 @@ pytestmark = pytest.mark.skipif(
 
 _SSA = re.compile(r"%[A-Za-z0-9_]+")
 _DIMS = re.compile(r"tensor<([0-9x]+)x[a-z0-9]+>")
-_SHAPE = re.compile(r"tensor<((?:[?0-9]+x)*)(?:bf16|f16|f32|f64|i1)>")
+_SHAPE = re.compile(
+    r"tensor<((?:[?0-9]+x)*)(?:bf16|f16|f32|f64|i1|complex<f32>|complex<f64>)>"
+)
 _DENSE = re.compile(r"dense<([-0-9.eE+]+)>")
 
 
@@ -108,6 +112,79 @@ class _Interp:
                 if "transposeB = true" in head:
                     b = np.swapaxes(b, -1, -2)
                 env[dst] = (a @ b).astype(np.float32)
+            elif op in {
+                "tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft"
+            }:
+                value = env[operands[0]].copy()
+                axis_match = re.search(r"axis = (-?\d+)", rhs)
+                axis = int(axis_match.group(1)) if axis_match else -1
+                norm_match = re.search(r'normalization = "([^"]+)"', rhs)
+                norm = norm_match.group(1) if norm_match else "backward"
+                length_match = re.search(r"logical_length = (\d+)", rhs)
+                length = int(length_match.group(1)) if length_match else None
+                weight_match = re.search(r'hermitian_weight = "([^"]+)"', rhs)
+                weight = weight_match.group(1) if weight_match else "none"
+                if op == "tessera.irfft" and weight == "half_interior":
+                    interior = [slice(None)] * value.ndim
+                    stop = -1 if length is not None and length % 2 == 0 else None
+                    interior[axis] = slice(1, stop)
+                    value[tuple(interior)] *= 0.5
+                transforms = {
+                    "tessera.fft": np.fft.fft,
+                    "tessera.ifft": np.fft.ifft,
+                    "tessera.rfft": np.fft.rfft,
+                    "tessera.irfft": np.fft.irfft,
+                }
+                kwargs = {"axis": axis, "norm": norm}
+                if op == "tessera.irfft":
+                    kwargs["n"] = length
+                result = transforms[op](value, **kwargs)
+                if op == "tessera.rfft" and weight == "double_interior":
+                    interior = [slice(None)] * result.ndim
+                    stop = -1 if length is not None and length % 2 == 0 else None
+                    interior[axis] = slice(1, stop)
+                    result[tuple(interior)] *= 2.0
+                env[dst] = result
+            elif op == "tessera.dct":
+                value = env[operands[0]]
+                axis_match = re.search(r"axis = (-?\d+)", rhs)
+                axis = int(axis_match.group(1)) if axis_match else -1
+                type_match = re.search(r"type = (\d+)", rhs)
+                dct_type = int(type_match.group(1)) if type_match else 2
+                norm_match = re.search(r'normalization = "([^"]+)"', rhs)
+                norm = norm_match.group(1) if norm_match else "backward"
+                moved = np.moveaxis(value, axis, -1)
+                n = moved.shape[-1]
+                source = np.arange(n, dtype=np.float64)
+                frequency = np.arange(n, dtype=np.float64)
+                if dct_type == 1:
+                    basis = 2.0 * np.cos(
+                        np.pi * np.outer(source, frequency) / (n - 1)
+                    )
+                    basis[0, :] = 1.0
+                    basis[-1, :] = (-1.0) ** frequency
+                elif dct_type == 2:
+                    basis = 2.0 * np.cos(
+                        np.pi * np.outer(2 * source + 1, frequency) / (2 * n)
+                    )
+                elif dct_type == 3:
+                    basis = 2.0 * np.cos(
+                        np.pi * np.outer(source, 2 * frequency + 1) / (2 * n)
+                    )
+                    basis[0, :] = 1.0
+                else:
+                    basis = 2.0 * np.cos(
+                        np.pi
+                        * np.outer(2 * source + 1, 2 * frequency + 1)
+                        / (4 * n)
+                    )
+                matrix = basis.T if "transpose_basis = true" in rhs else basis
+                result = moved @ matrix
+                if norm == "forward":
+                    result /= n
+                elif norm == "ortho":
+                    result /= np.sqrt(n)
+                env[dst] = np.moveaxis(result, -1, axis)
             elif op == "tessera.tanh":
                 env[dst] = np.tanh(env[operands[0]]).astype(np.float32)
             elif op == "tessera.sigmoid":
@@ -309,9 +386,24 @@ class _Interp:
                 axes_text = rhs.split("axes =", 1)[1].split("}", 1)[0]
                 axis = int(re.search(r"\[\s*(-?\d+)", axes_text).group(1))
                 env[dst] = np.expand_dims(env[operands[0]], axis=axis)
+            elif op == "tessera.squeeze":
+                axes_text = rhs.split("axes =", 1)[1].split("]", 1)[0]
+                axes = tuple(int(v) for v in re.findall(r"-?\d+", axes_text))
+                env[dst] = np.squeeze(env[operands[0]], axis=axes)
+            elif op == "tessera.expand":
+                env[dst] = np.broadcast_to(
+                    env[operands[0]], result_shape(rhs)).copy()
+            elif op == "tessera.permute":
+                perm_text = rhs.split("perm =", 1)[1].split("]", 1)[0]
+                perm = tuple(int(v) for v in re.findall(r"-?\d+", perm_text))
+                env[dst] = np.transpose(env[operands[0]], axes=perm)
+            elif op in {"tessera.flatten", "tessera.view"}:
+                env[dst] = env[operands[0]].reshape(result_shape(rhs))
             elif op == "tessera.reshape":
                 dims = result_shape(rhs)
                 env[dst] = env[operands[0]].reshape(dims)
+            elif op == "tessera.transpose":
+                env[dst] = np.transpose(env[operands[0]])
             elif op == "arith.addf":
                 env[dst] = (env[operands[0]] + env[operands[1]]).astype(np.float32)
             else:
@@ -386,6 +478,74 @@ def _oracle(act: str, x: np.ndarray, w: np.ndarray):
     return a, dx, dw
 
 
+@pytest.mark.parametrize(
+    ("op", "input_type", "output_type", "length"),
+    [
+        ("fft", "tensor<9xcomplex<f32>>", "tensor<9xcomplex<f32>>", 9),
+        ("ifft", "tensor<9xcomplex<f32>>", "tensor<9xcomplex<f32>>", 9),
+        ("rfft", "tensor<9xf32>", "tensor<5xcomplex<f32>>", 9),
+        ("irfft", "tensor<5xcomplex<f32>>", "tensor<9xf32>", 9),
+    ],
+)
+@pytest.mark.parametrize("normalization", ["backward", "forward", "ortho"])
+def test_compiler_fft_transposes_match_python_oracle(
+    op: str, input_type: str, output_type: str, length: int, normalization: str
+):
+    mlir = f"""
+module {{
+  func.func @spectral(%x: {input_type}) -> {output_type}
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %y = "tessera.{op}"(%x) {{axis = -1 : i64,
+      logical_length = {length} : i64, normalization = "{normalization}",
+      spectrum_layout = "{'half_spectrum_nyquist_explicit' if op in {'rfft', 'irfft'} else 'full_complex'}",
+      hermitian_weight = "none"}} : ({input_type}) -> {output_type}
+    return %y : {output_type}
+  }}
+}}
+"""
+    rng = np.random.default_rng(903 + len(op))
+    if "complex" in input_type:
+        x = (rng.standard_normal(length if op != "irfft" else length // 2 + 1)
+             + 1j * rng.standard_normal(length if op != "irfft" else length // 2 + 1))
+    else:
+        x = rng.standard_normal(length)
+    output_size = length // 2 + 1 if op == "rfft" else length
+    if "complex" in output_type:
+        seed = rng.standard_normal(output_size) + 1j * rng.standard_normal(output_size)
+    else:
+        seed = rng.standard_normal(output_size)
+    funcs = _run_paired(mlir)
+    (actual,) = funcs["spectral__bwd"].run([x, seed])
+    kwargs = {"axis": -1, "norm": normalization}
+    if op == "irfft":
+        kwargs["n"] = length
+    (expected,) = get_vjp(op)(seed, x, **kwargs)
+    np.testing.assert_allclose(actual, expected, atol=2e-11, rtol=2e-11)
+
+
+@pytest.mark.parametrize("dct_type", [1, 2, 3, 4])
+def test_compiler_dct_transpose_matches_python_oracle(dct_type: int):
+    mlir = f"""
+module {{
+  func.func @cosine(%x: tensor<8xf32>) -> tensor<8xf32>
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %y = "tessera.dct"(%x) {{axis = -1 : i64, logical_length = 8 : i64,
+      normalization = "ortho", spectrum_layout = "full_real",
+      hermitian_weight = "none", type = {dct_type} : i64,
+      transpose_basis = false}} : (tensor<8xf32>) -> tensor<8xf32>
+    return %y : tensor<8xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(940 + dct_type)
+    x = rng.standard_normal(8)
+    seed = rng.standard_normal(8)
+    funcs = _run_paired(mlir)
+    (actual,) = funcs["cosine__bwd"].run([x, seed])
+    (expected,) = get_vjp("dct")(seed, x, axis=-1, type=dct_type, norm="ortho")
+    np.testing.assert_allclose(actual, expected, atol=2e-11, rtol=2e-11)
+
+
 def _binary_forward_mlir(op: str) -> str:
     return f"""
 module {{
@@ -396,6 +556,110 @@ module {{
   }}
 }}
 """
+
+
+def test_compiler_linear_transpose_matches_numpy_oracle():
+    """AD-CORE-LINEAR-1: execute a composed linear map and its transpose."""
+    mlir = """
+module {
+  func.func @linear(%x: tensor<2x3xf32>) -> tensor<6xf32>
+      attributes {tessera.autodiff = "reverse"} {
+    %t = "tessera.transpose"(%x) :
+        (tensor<2x3xf32>) -> tensor<3x2xf32>
+    %y = "tessera.reshape"(%t) :
+        (tensor<3x2xf32>) -> tensor<6xf32>
+    return %y : tensor<6xf32>
+  }
+}
+"""
+    rng = np.random.default_rng(19)
+    x = rng.standard_normal((2, 3)).astype(np.float32)
+    seed = rng.standard_normal((6,)).astype(np.float32)
+
+    funcs = _run_paired(mlir)
+    (primal,) = funcs["linear"].run([x])
+    (dx,) = funcs["linear__bwd"].run([x, seed])
+
+    np.testing.assert_array_equal(primal, x.T.reshape(6))
+    np.testing.assert_array_equal(dx, seed.reshape(3, 2).T)
+
+
+@pytest.mark.parametrize("transpose_a,transpose_b", [
+    (False, False), (False, True), (True, False), (True, True),
+])
+def test_multilinear_matmul_transpose_matches_numpy_oracle(
+        transpose_a: bool, transpose_b: bool):
+    a_type = "3x2" if transpose_a else "2x3"
+    b_type = "4x3" if transpose_b else "3x4"
+    mlir = f"""
+module {{
+  func.func @matmul(%a: tensor<{a_type}xf32>,
+                    %b: tensor<{b_type}xf32>) -> tensor<2x4xf32>
+      attributes {{tessera.autodiff = "reverse"}} {{
+    %y = "tessera.matmul"(%a, %b)
+        {{transposeA = {str(transpose_a).lower()},
+          transposeB = {str(transpose_b).lower()}}} :
+        (tensor<{a_type}xf32>, tensor<{b_type}xf32>) -> tensor<2x4xf32>
+    return %y : tensor<2x4xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(71 + 2 * transpose_a + transpose_b)
+    a = rng.standard_normal(tuple(map(int, a_type.split("x")))).astype(np.float32)
+    b = rng.standard_normal(tuple(map(int, b_type.split("x")))).astype(np.float32)
+    seed = rng.standard_normal((2, 4)).astype(np.float32)
+
+    funcs = _run_paired(mlir)
+    primal = funcs["matmul"].run([a, b])[0]
+    da, db = funcs["matmul__bwd"].run([a, b, seed])
+    logical_a = a.T if transpose_a else a
+    logical_b = b.T if transpose_b else b
+    expected_da = seed @ logical_b.T
+    expected_db = logical_a.T @ seed
+    if transpose_a:
+        expected_da = expected_da.T
+    if transpose_b:
+        expected_db = expected_db.T
+
+    np.testing.assert_allclose(primal, logical_a @ logical_b, rtol=2e-6)
+    np.testing.assert_allclose(da, expected_da, rtol=2e-6)
+    np.testing.assert_allclose(db, expected_db, rtol=2e-6)
+
+
+def test_structural_view_family_transpose_matches_numpy_oracle():
+    mlir = """
+module {
+  func.func @views(%x: tensor<1x2x3xf32>) -> tensor<24xf32>
+      attributes {tessera.autodiff = "reverse"} {
+    %a = "tessera.squeeze"(%x) {axes = [0]} :
+        (tensor<1x2x3xf32>) -> tensor<2x3xf32>
+    %b = "tessera.unsqueeze"(%a) {axes = [0]} :
+        (tensor<2x3xf32>) -> tensor<1x2x3xf32>
+    %c = "tessera.expand"(%b) :
+        (tensor<1x2x3xf32>) -> tensor<4x2x3xf32>
+    %d = "tessera.permute"(%c) {perm = [1, 0, 2]} :
+        (tensor<4x2x3xf32>) -> tensor<2x4x3xf32>
+    %e = "tessera.flatten"(%d) {start = 1 : i64, end = 2 : i64} :
+        (tensor<2x4x3xf32>) -> tensor<2x12xf32>
+    %y = "tessera.view"(%e) {shape = [24]} :
+        (tensor<2x12xf32>) -> tensor<24xf32>
+    return %y : tensor<24xf32>
+  }
+}
+"""
+    rng = np.random.default_rng(83)
+    x = rng.standard_normal((1, 2, 3)).astype(np.float32)
+    seed = rng.standard_normal((24,)).astype(np.float32)
+    funcs = _run_paired(mlir)
+    primal = funcs["views"].run([x])[0]
+    dx = funcs["views__bwd"].run([x, seed])[0]
+
+    expanded = np.broadcast_to(x, (4, 2, 3))
+    expected_primal = expanded.transpose(1, 0, 2).reshape(24)
+    expected_dx = seed.reshape(2, 4, 3).transpose(1, 0, 2).sum(
+        axis=0, keepdims=True)
+    np.testing.assert_array_equal(primal, expected_primal)
+    np.testing.assert_array_equal(dx, expected_dx)
 
 
 def test_native_broadcast_backward_matches_numpy_oracle():

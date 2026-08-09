@@ -57,9 +57,11 @@ struct ImplicitLowerPass
         return;
 
       // Require autodiff annotation from NewtonAutodiffPass.
-      if (!op->hasAttr("tessera_solver.autodiff_ready") &&
+      if (!op->hasAttr("tessera.solver.autodiff_ready") &&
+          !op->hasAttr("tessera.solver.vjp") &&
+          !op->hasAttr("tessera_solver.autodiff_ready") &&
           !op->hasAttr("tessera_solver.vjp")) {
-        op->emitWarning("tessera_solver.implicit op not autodiff-annotated; "
+        op->emitWarning("tessera_solver.implicit op not autodiff-lowered; "
                         "run tessera-newton-autodiff first");
       }
 

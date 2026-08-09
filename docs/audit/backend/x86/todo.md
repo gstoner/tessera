@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-09
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,82 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **shared
+fail-closed artifact vocabulary adopted; not applicable to AVX-512.** Zero-CU
+Copy Engine, GIN/RMA, and gfx1250 DDA are distinct RCCL lanes and cannot be
+selected by the x86 runtime. The eventual MPI/OFI/SHMEM transport keeps its
+own communicator, one-sided-memory, and evidence contracts.
+The registered window and put/signal/wait Target operations are RCCL-gated;
+they do not create an x86 RMA implementation or replace the future OFI/SHMEM
+lane.
+The launcher-neutral RCCL GIN harness is not an x86 transport. Only its explicit
+rank/rendezvous and dual-clock evidence discipline is reusable by the future
+MPI/OFI/SHMEM lane.
+
+Cross-backend sync `COLLECTIVE-NATIVE-FOUNDATION-2026-08-09` — **shared
+artifact vocabulary adopted; no x86 accelerator transport claim.** Target
+collective artifacts now bind initiation, registration, ordering, capture
+policy, backend/source identity, and capability evidence. NCCL/RCCL host calls
+and AMD LSA/Copy Engine/DDA paths do not apply to AVX-512. The portable
+CPU/software adapter remains the x86 path until a separately owned
+MPI/OFI/SHMEM transport and multi-rank evidence are introduced. Shared
+runtime/artifact capability-digest rejection applies to that future transport.
+
+Cross-backend sync `COLLECTIVE-ASYNC-UNIFY-2026-08-09` — **shared software
+contract closed; process transport evidence open.** Active transform producers
+now use the registered async `tessera_collective` dialect, explicit awaits, and
+real SSA rewiring instead of unregistered marker strings. Runtime mesh-axis
+validation fails closed when the adapter cannot implement a subgroup. x86
+still needs a production multi-process transport and exact Zen 5 multi-rank
+packet; AVX-512/AMX selectors and performance claims are unchanged.
+
+Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **shared typed IFT
+and measured-policy boundary landed; AVX-512 physical follow-up required.**
+The registered solver dialect now carries value-producing residual,
+matrix-free solve, residual-JVP, and residual-adjoint chains, with fail-closed
+residual ABI verification. Rematerialization consumes exact complete-backward
+work and unique retained-residual bytes; estimated treeverse envelopes cannot
+promote a policy. Existing Zen 5 producer-recompute measurements are not a
+complete implicit backward, and x86 has no native consumer/packet for the new
+solver chain. AVX-512/AMX packages, selectors, and evidence remain unchanged.
+
+Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` — **shared
+effect/control parity and native x86 consumption validated; multi-rank
+transport open.** The native x86 spine passes 31 tests on the AVX-512 host;
+three availability-gated cases skip. The loader now preserves
+content-addressed base/AVX-512 image identity when the host Python lacks
+`memfd_create` by using a unique unlinked temporary image. The four typed Tile
+collectives now lower into a content-addressed portable Target queue and run
+through the deterministic two-rank adapter. A production process transport
+and exact multi-rank x86 proof remain open. No new performance or selector
+promotion is made; AMX is unaffected.
+
+Cross-backend sync `GRAPH-VERIFY-SIGNED-1-2026-08-08` — **shared legality
+parity validated; AVX-512/AMX packages unchanged.** Graph and canonical-
+attention verifiers now inspect signed `IntegerAttr` values before enforcing
+positive and non-negative bounds, so MLIR 23 unsigned value accessors cannot
+admit negative schedules, cache windows, seeds, or control bounds. Direct
+negative IR cases cover both dialects. No native ABI, schedule, selector,
+package, or Zen 5/AMX evidence changes.
+
+Cross-backend sync `AD-TSOL-SPECTRAL-1-2026-08-08` — **shared adjoint carrier
+landed; native AVX-512 backward package open.** FFT/IFFT/RFFT/IRFFT/DCT compiler
+transposes have paired CPU numerical proof and compound spectral VJPs retain
+their exact semantics through one content-addressed multi-output Tile carrier.
+TileToX86 deliberately rejects that carrier until a Zen 5 native
+compound-backward package and correctness/performance packet land. Existing
+forward AVX-512 TSOL packages and evidence are unchanged; AMX is not implicated.
+After rebuilding the separately owned v6 shared image, 41 compiled FFT and 21
+compiled compound-spectral cases pass on the local Zen 5 host; those forward
+results do not promote the new backward carrier.
+
+Cross-backend sync `AD-CORE-LINEAR-1-2026-08-08` — **shared Graph-IR parity
+validated; AVX-512 package unchanged.** Both compiler autodiff passes now
+consume compiler-owned transposes for structural views, broadcast, and
+operand-wise matmul. Paired CPU execution proves the emitted inverse view chain
+and all matmul transpose-flag combinations. This transfers no AVX-512/AMX
+schedule, selector, performance, or exact-device claim.
 
 Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` — **portable
 CPU and native AVX-512 proof separated; no x86 physical change.** The x86 row

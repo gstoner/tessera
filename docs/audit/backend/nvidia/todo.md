@@ -3,10 +3,84 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-08
+last_updated: 2026-08-09
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **shared
+artifact discrimination adopted; AMD transports not applicable.** Advanced
+collective artifacts now distinguish Copy Engine, GIN/RMA, and gfx1250 DDA and
+bind target architecture plus selector evidence where required. These RCCL
+lanes do not transfer to SM120. NVIDIA device-initiated communication remains
+an architecture-owned NCCL follow-up with its own public API, legality, and
+exact-device packet; it must not reuse an AMD transport or selector claim.
+The shared Target dialect now registers explicit window-lifecycle and
+put/signal/wait operations, but those records are RCCL GIN-gated and do not
+imply NCCL device-initiated support on SM120.
+The native multi-process harness binds only the RCCL GIN ABI; its launcher
+metadata and evidence schema may be reused, but no AMD operation or result
+transfers to NVIDIA's separately gated NCCL device-initiated lane.
+
+Cross-backend sync `COLLECTIVE-NATIVE-FOUNDATION-2026-08-09` — **host adapter
+and artifact contract landing; SM120 evidence open.** The C++ NCCL adapter now
+executes all-reduce, reduce-scatter, all-gather, and grouped send/receive
+all-to-all from an explicit communicator and CUDA stream instead of compiling
+to successful no-ops. The shared Target artifact binds initiation,
+registration, ordering, capture compatibility, backend/source identity, and a
+capability digest. Shared communicator-property discovery, move-only symmetric
+window ownership, and runtime-digest rejection are available, but still need a
+CUDA-enabled build and SM120 packet. No AMD LSA, Copy Engine, GIN, or DDA claim
+transfers.
+
+Cross-backend sync `COLLECTIVE-ASYNC-UNIFY-2026-08-09` — **shared software
+contract closed; SM120 NCCL evidence open.** The legacy unregistered
+`tessera.collective.*` markers are gone from active producers and fixtures.
+Forward and adjoint passes emit registered futures, await their payloads, and
+rewire SSA uses. Runtime topology validation now fails closed for unknown or
+unsupported subgroup mesh axes, and native v1 forbids implicit non-fp32
+conversion. Exact multi-GPU NCCL correctness/performance remains required; no
+PTX selector or device claim changes.
+
+Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **shared typed IFT
+and measurement contracts available; CUDA consumers/evidence required.** The
+registered solver dialect now carries value-producing residual, matrix-free
+solve, residual-JVP, and residual-adjoint SSA chains with fail-closed residual
+ABI verification. Complete-backward timing and unique retained-residual bytes
+are eligible for policy selection only when executed on the exact target;
+treeverse estimates only prune. SM120 has no consumer or complete-backward
+packet for this chain, so no PTX package, selector, policy, or device claim
+changes.
+
+Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` — **shared
+Graph/Tile/portable-Target contracts available; CUDA follow-up required.** Compiler activity,
+effects, `stop_gradient`, stochastic rejection, and fail-closed region
+adjoints are target-independent. The four collectives now lower into one
+content-addressed asynchronous Target queue and execute through the shared
+runtime-adapter ABI. SM120 still needs exact multi-GPU NCCL execution and a
+device packet. No PTX selector, native performance, or device evidence is
+claimed or transferred.
+
+Cross-backend sync `GRAPH-VERIFY-SIGNED-1-2026-08-08` — **shared legality
+parity validated; no CUDA physical claim.** Graph and canonical-attention
+integer bounds now consume signed `IntegerAttr` values, preventing MLIR 23
+unsigned accessors from accepting negative schedules, seeds, cache windows, or
+control bounds. Direct negative IR cases cover both dialects. No PTX ABI,
+SM120 schedule, selector, package, or exact-device evidence changes.
+
+Cross-backend sync `AD-TSOL-SPECTRAL-1-2026-08-08` — **shared Graph contract
+available; CUDA follow-up required.** Compiler spectral identity and the
+FFT/RFFT/DCT transpose rules are target-independent and CPU-oracle proven.
+SM120 still needs its own Schedule→Tile/native compound-backward package and
+exact-device evidence; no CUDA support or performance claim follows from the
+x86/gfx1151 carrier.
+
+Cross-backend sync `AD-CORE-LINEAR-1-2026-08-08` — **shared Graph-IR follow-up
+available; no CUDA physical claim.** Compiler-owned linear transposition now
+covers structural views, broadcast, and operand-wise matmul in both autodiff
+passes with CPU numerical proof. SM120 backward packaging remains
+architecture-owned; no CUDA image, selector, schedule, or device evidence is
+transferred by this shared interface.
 
 Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` — **SM90 and
 SM120 proof separated; no CUDA physical change.** SM90 compile/artifact rows

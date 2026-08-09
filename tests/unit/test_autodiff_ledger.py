@@ -32,18 +32,22 @@ def test_python_reference_reconciles_with_primitive_coverage() -> None:
 def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     native, placeholder = autodiff_ledger._ir_adjoint_classes()
     assert not (native & placeholder), "an op cannot be both native and placeholder"
-    # The native set is EXACTLY the buildAdjoint bodies that emit real Graph IR:
-    # matmul's transposed matmuls, native add/multiply tensor algebra, and
+    # The native set is EXACTLY the compiler derivative-interface bodies that
+    # emit real Graph IR: linear transposes, native add/multiply tensor algebra,
     # tanh/sigmoid's W5 closed forms, comparison-backed ReLU, and the shared
     # normalization-statistics formulas. Nothing else.
     assert native == {
-            "add", "broadcast", "gelu", "huber_loss", "mae_loss", "mse_loss",
-            "mul", "matmul", "reduce", "sgd", "silu", "smooth_l1_loss",
+            "add", "broadcast", "expand", "flatten", "gelu", "huber_loss",
+            "mae_loss", "mse_loss", "mul", "matmul", "permute", "reshape",
+            "squeeze", "transpose", "unsqueeze", "view", "reduce", "sgd",
+            "silu", "smooth_l1_loss",
             "softmax", "tanh", "sigmoid", "relu", "rmsnorm", "layer_norm",
-            "all_reduce", "all_gather", "reduce_scatter",
+            "all_reduce", "all_gather", "reduce_scatter", "all_to_all",
             "binary_cross_entropy_loss", "cross_entropy_loss",
             "k_l_divergence_loss", "j_s_divergence_loss",
             "momentum", "nesterov", "adam", "adam_w",
+            "fft", "ifft", "rfft", "irfft", "dct", "stft", "istft",
+            "spectral_filter", "spectral_conv", "stop_gradient",
     }, (
         f"native adjoint set drifted: {sorted(native)} — a buildAdjoint that "
         "emits a CustomAdjointCallOp is a Python round-trip, not native"

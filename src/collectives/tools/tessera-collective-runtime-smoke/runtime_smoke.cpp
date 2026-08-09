@@ -29,6 +29,10 @@
 //      writer's internal mutex would fail this test before it
 //      destabilizes the rest of the runtime.
 //
+//   5. **Async runtime and adapter lifetimes reach completion.** Replacing an
+//      adapter and dropping the caller's runtime owner cannot destroy either
+//      object before the delayed callback releases its token.
+//
 // Exit code 0 on success, non-zero on any contract violation.
 //
 //===----------------------------------------------------------------------===//
@@ -43,6 +47,8 @@
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -217,6 +223,62 @@ int test_perfetto_trace_writer_is_internally_thread_safe() {
   return 0;
 }
 
+struct DelayedState {
+  std::mutex mu;
+  Callback callback;
+  std::atomic<int> adapterDestructions{0};
+};
+
+struct DelayedNCCLAdapter final : NCCLAdapter {
+  explicit DelayedNCCLAdapter(std::shared_ptr<DelayedState> state)
+      : state(std::move(state)) {}
+  ~DelayedNCCLAdapter() override { ++state->adapterDestructions; }
+
+  void submitChunkAsync(const void*, size_t, int, int, Callback cb) override {
+    std::lock_guard<std::mutex> lock(state->mu);
+    state->callback = std::move(cb);
+  }
+
+  std::shared_ptr<DelayedState> state;
+};
+
+int test_async_runtime_and_adapter_lifetimes_reach_completion() {
+  auto state = std::make_shared<DelayedState>();
+  auto runtime = std::make_shared<ExecRuntime>(
+      /*maxInflight=*/1, Policy::fromEnv(), /*pidBase=*/3000);
+  runtime->setNCCL(std::make_unique<DelayedNCCLAdapter>(state));
+  uint8_t buf[16] = {0};
+  runtime->submit(ChunkDesc{buf, sizeof(buf), 0, 0, true}, runtime);
+
+  // Replacement drops the runtime's adapter owner, and reset drops the
+  // caller's runtime owner. The callback must retain both objects.
+  runtime->setNCCL(std::make_unique<NCCLAdapter>());
+  runtime.reset();
+  if (state->adapterDestructions.load() != 0) {
+    std::fprintf(stderr, "[FAIL] async adapter destroyed before completion\n");
+    return 1;
+  }
+
+  Callback completion;
+  {
+    std::lock_guard<std::mutex> lock(state->mu);
+    completion = std::move(state->callback);
+    state->callback = {};
+  }
+  if (!completion) {
+    std::fprintf(stderr, "[FAIL] delayed adapter did not retain completion\n");
+    return 1;
+  }
+  completion();
+  completion = {};
+  if (state->adapterDestructions.load() != 1) {
+    std::fprintf(stderr, "[FAIL] async adapter not released after completion\n");
+    return 1;
+  }
+  std::printf("[OK] async runtime/adapter lifetime reached completion\n");
+  return 0;
+}
+
 }  // namespace
 
 int main() {
@@ -225,6 +287,7 @@ int main() {
   rc |= test_shutdown_while_submitting();
   rc |= test_repeat_initialize_after_shutdown();
   rc |= test_perfetto_trace_writer_is_internally_thread_safe();
+  rc |= test_async_runtime_and_adapter_lifetimes_reach_completion();
   if (rc == 0) {
     std::printf("[ALL OK]\n");
   } else {

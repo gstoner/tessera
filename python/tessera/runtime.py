@@ -33,6 +33,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -3724,24 +3725,44 @@ def _load_x86_native_image(image: NativeImageArtifact) -> ctypes.CDLL:
     cached = _x86_native_image_libraries.get(image.image_digest)
     if cached is not None:
         return cached
-    if not hasattr(os, "memfd_create"):
-        raise RuntimeError("x86 shared-object descriptors require Linux memfd_create")
-    fd = os.memfd_create(f"tessera-x86-{image.image_digest[:12]}", flags=0)
-    try:
-        view = memoryview(image.payload)
-        written = 0
-        while written < len(view):
-            written += os.write(fd, view[written:])
-        library = ctypes.CDLL(f"/proc/self/fd/{fd}")
-    except Exception:
-        os.close(fd)
-        raise
-    # Keep the memfd alive with the loaded image.  Closing it allows Linux to
-    # reuse the same fd number; glibc may then return the already-loaded handle
-    # for that repeated ``/proc/self/fd/N`` spelling even though the new fd
-    # contains a different architecture image.  The prior behavior could make
-    # an AVX-512 descriptor resolve against the base-x86 library.
-    _x86_native_image_fds[image.image_digest] = fd
+    if hasattr(os, "memfd_create"):
+        fd = os.memfd_create(f"tessera-x86-{image.image_digest[:12]}", flags=0)
+        try:
+            view = memoryview(image.payload)
+            written = 0
+            while written < len(view):
+                written += os.write(fd, view[written:])
+            library = ctypes.CDLL(f"/proc/self/fd/{fd}")
+        except Exception:
+            os.close(fd)
+            raise
+        # Keep the memfd alive with the loaded image.  Closing it allows Linux
+        # to reuse the same fd number; glibc may then return the already-loaded
+        # handle for that repeated ``/proc/self/fd/N`` spelling even though the
+        # new fd contains a different architecture image.
+        _x86_native_image_fds[image.image_digest] = fd
+    else:
+        # Some valid Linux Python builds (including the project's WSL host
+        # toolchain) do not expose os.memfd_create.  A uniquely named temporary
+        # image preserves the same content-addressed loading semantics.  Linux
+        # keeps the mapped object alive after unlink, so no artifact is left on
+        # disk and distinct base/AVX-512 images cannot alias by pathname.
+        path = ""
+        try:
+            with tempfile.NamedTemporaryFile(
+                prefix=f"tessera-x86-{image.image_digest[:12]}-",
+                suffix=".so",
+                delete=False,
+            ) as handle:
+                handle.write(image.payload)
+                path = handle.name
+            library = ctypes.CDLL(path)
+        finally:
+            if path:
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
     _x86_native_image_libraries[image.image_digest] = library
     return library
 
@@ -12839,6 +12860,7 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     strategy = str(contract["strategy"])
     scale = float(contract["scale"])
     real_policy = str(contract["real_transform_policy"])
+    hermitian_weight = str(contract.get("hermitian_weight", "none"))
     digest = str(contract["schedule_digest"]).encode("ascii")
 
     xm = np.moveaxis(x, ax, -1)
@@ -12867,14 +12889,28 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
             )
             if status != 0:
                 raise ValueError(f"x86 packed RFFT declined N={n} status={status}")
+            if hermitian_weight == "double_interior":
+                stop = -1 if n % 2 == 0 else None
+                half[:, 1:stop] *= np.complex64(2.0)
+            if scale != 1.0:
+                half *= np.complex64(scale)
             return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax)
         rows = xm.reshape(-1, n).astype(np.complex64)  # im = 0
         full = _x86_transform_rows(rows, False, strategy, np)
         half = full[:, : n // 2 + 1]
+        if hermitian_weight == "double_interior":
+            stop = -1 if n % 2 == 0 else None
+            half[:, 1:stop] *= np.complex64(2.0)
+        if scale != 1.0:
+            half *= np.complex64(scale)
         return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax).astype(np.complex64)
 
     # tessera.irfft — Hermitian-reconstruct the full spectrum, ifft, take real.
     rows = xm.reshape(-1, m).astype(np.complex64)
+    if hermitian_weight == "half_interior":
+        rows = rows.copy()
+        stop = -1 if n % 2 == 0 else None
+        rows[:, 1:stop] *= np.complex64(0.5)
     if real_policy == "packed_even_n2_hermitian_v1":
         lib = _load_x86_elementwise()
         if lib is None or not hasattr(lib, "tessera_x86_fft_c2r_packed_f32"):
@@ -12890,6 +12926,9 @@ def _execute_x86_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
         )
         if status != 0:
             raise ValueError(f"x86 packed IRFFT declined N={n} status={status}")
+        native_scale = scale * n
+        if native_scale != 1.0:
+            out *= np.float32(native_scale)
         return np.moveaxis(out.reshape(*lead, n), -1, ax)
     batch = rows.shape[0]
     full = np.zeros((batch, n), np.complex64)
@@ -23673,6 +23712,7 @@ def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     artifact_digest = str(contract["schedule_digest"])
     scale = float(contract["scale"])
     real_policy = str(contract["real_transform_policy"])
+    hermitian_weight = str(contract.get("hermitian_weight", "none"))
 
     xm = np.moveaxis(x, ax, -1)
     lead = xm.shape[:-1]
@@ -23698,16 +23738,28 @@ def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
                 logical_n=n,
                 artifact_digest=artifact_digest,
             )
-            return np.moveaxis(
-                half.reshape(*lead, n // 2 + 1), -1, ax
-            ).astype(np.complex64)
+            if hermitian_weight == "double_interior":
+                stop = -1 if n % 2 == 0 else None
+                half[:, 1:stop] *= np.complex64(2.0)
+            if scale != 1.0:
+                half *= np.complex64(scale)
+            return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax).astype(np.complex64)
         full = _rocm_fft_rows(
             xm.reshape(-1, n), False, strategy, artifact_digest, np
         )
         half = full[:, : n // 2 + 1]
+        if hermitian_weight == "double_interior":
+            stop = -1 if n % 2 == 0 else None
+            half[:, 1:stop] *= np.complex64(2.0)
+        if scale != 1.0:
+            half *= np.complex64(scale)
         return np.moveaxis(half.reshape(*lead, n // 2 + 1), -1, ax).astype(np.complex64)
 
     rows = xm.reshape(-1, m).astype(np.complex64)
+    if hermitian_weight == "half_interior":
+        rows = rows.copy()
+        stop = -1 if n % 2 == 0 else None
+        rows[:, 1:stop] *= np.complex64(0.5)
     if real_policy == "packed_even_n2_hermitian_v1":
         from .compiler.emit.spectral_candidates import run_rocm_packed_real_rows
 
@@ -23717,6 +23769,9 @@ def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
             logical_n=n,
             artifact_digest=artifact_digest,
         )
+        native_scale = scale * n
+        if native_scale != 1.0:
+            out *= np.float32(native_scale)
         return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
     batch = rows.shape[0]
     full = np.zeros((batch, n), np.complex64)
@@ -23724,6 +23779,9 @@ def _execute_rocm_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     if n - m > 0:
         full[:, m:n] = np.conj(rows[:, 1 : n - n // 2])[:, ::-1]
     out = _rocm_fft_rows(full, True, strategy, artifact_digest, np).real
+    native_scale = scale * n
+    if native_scale != 1.0:
+        out *= np.float32(native_scale)
     return np.moveaxis(out.reshape(*lead, n), -1, ax).astype(np.float32)
 
 

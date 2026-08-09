@@ -21,6 +21,7 @@
 # Core IR layer (must come first — other components link against it)
 # ------------------------------------------------------------------
 add_subdirectory(compiler/ir)          # TesseraIR dialect + tablegen
+add_subdirectory(collectives)          # Collective Target dialect + transport ABI
 add_subdirectory(transforms)           # All lowering passes (Phases 1–3)
 
 # ------------------------------------------------------------------
@@ -62,4 +63,3 @@ if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_
 else()
   message(STATUS "Skipping solver suite for hardware-free target artifact build")
 endif()
-add_subdirectory(collectives)          # Collective-communication dialect

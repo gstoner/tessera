@@ -47,6 +47,33 @@ module {
     return %sum : tensor<512x512xf32>
   }
 
+  // Execution-derived residual bytes override the static result allocation,
+  // and complete backward work overrides the forward-only recompute proxy.
+  // The large tensor is measured as retaining only 640 KiB; the candidate with
+  // lower complete-backward work wins even though its old recompute proxy is
+  // deliberately larger.
+  // CHECK-LABEL: func.func @measured_residual_and_backward
+  // CHECK-SAME: tessera.remat_auto_selected = 1
+  // CHECK-SAME: tessera.remat_peak_after_bytes = 655360
+  // CHECK-SAME: tessera.remat_peak_before_bytes = 1310720
+  // CHECK-SAME: tessera.remat_selected_cost_ns = 40
+  func.func @measured_residual_and_backward(
+      %x: tensor<1024x1024xf32>) -> tensor<1024x1024xf32>
+      attributes {tessera.remat_budget_mb = 1 : i32} {
+    %slow = arith.mulf %x, %x {
+      tessera.backward_work_ns = 900 : i64,
+      tessera.remat_cost_ns = 1 : i64,
+      tessera.residual.retained_bytes = 655360 : i64
+    } : tensor<1024x1024xf32>
+    %fast = arith.negf %x {
+      tessera.backward_work_ns = 40 : i64,
+      tessera.remat_cost_ns = 9999 : i64,
+      tessera.residual.retained_bytes = 655360 : i64
+    } : tensor<1024x1024xf32>
+    %sum = arith.addf %slow, %fast : tensor<1024x1024xf32>
+    return %sum : tensor<1024x1024xf32>
+  }
+
   // CHECK-NOT: tessera.recompute
 
   // A production training graph may omit a hand-authored activation budget.

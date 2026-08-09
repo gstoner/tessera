@@ -1,6 +1,6 @@
 //===- GPUCollectiveInsertionPass.cpp — Phase 4 ───────────────────────────===//
 //
-// Inserts tessera.collective.reduce_scatter and tessera.collective.all_gather
+// Inserts tessera_collective.reduce_scatter and tessera_collective.all_gather
 // ops at
 // data-parallel and tensor-parallel mesh boundaries.
 //
@@ -34,6 +34,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Transforms/Passes.h"
+#include "tessera/Dialect/Collective/IR/CollectiveDialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -77,53 +78,32 @@ static StringRef getMeshAxis(Operation *op, StringRef kind) {
   return "";
 }
 
-/// Emit a `tessera.collective.reduce_scatter` generic op after \p insertAfter.
-static void insertReduceScatter(OpBuilder &b, Operation *insertAfter,
-                                 Value input, StringRef meshAxis,
-                                 int64_t scatterDim) {
+/// Emit a registered async collective and await its payload.
+static Value insertCollective(OpBuilder &b, Operation *insertAfter, Value input,
+                              StringRef kind, StringRef meshAxis,
+                              int64_t tensorAxis, StringRef reduction) {
   b.setInsertionPointAfter(insertAfter);
   Location loc = insertAfter->getLoc();
+  std::string opName = ("tessera_collective." + kind).str();
+  OperationState dispatchState(loc, opName);
+  dispatchState.addOperands(input);
+  dispatchState.addTypes(
+      tessera::collective::FutureType::get(b.getContext(), input.getType()));
+  dispatchState.addAttribute("mesh_axis", b.getStringAttr(meshAxis));
+  dispatchState.addAttribute("tensor_axis", b.getI64IntegerAttr(tensorAxis));
+  dispatchState.addAttribute("reduction", b.getStringAttr(reduction));
+  dispatchState.addAttribute("tessera.collective.abi", b.getStringAttr("v1"));
+  Operation *dispatch = b.create(dispatchState);
 
-  OperationState state(loc, "tessera.collective.reduce_scatter");
-  state.addOperands(input);
-  state.addAttribute("reduce_op", b.getStringAttr("sum"));
-  state.addAttribute("mesh_axis", b.getStringAttr(meshAxis));
-  state.addAttribute("scatter_dim", b.getI64IntegerAttr(scatterDim));
-  state.addAttribute("tessera.collective", UnitAttr::get(b.getContext()));
-  state.addAttribute("tessera.future_payload",
-                     TypeAttr::get(input.getType()));
-  // The registered collective dialect defines result type !tessera.collective.future<T>.
-  // This generic transform library avoids a hard dependency on generated
-  // collective headers, so it preserves the payload type and marks it as a
-  // future for later dialect-aware legalization.
-  state.addTypes(input.getType());
-
-  b.create(state);
+  b.setInsertionPointAfter(dispatch);
+  OperationState awaitState(loc, "tessera_collective.await");
+  awaitState.addOperands(dispatch->getResult(0));
+  awaitState.addTypes(input.getType());
+  Operation *await = b.create(awaitState);
   LLVM_DEBUG(llvm::dbgs()
-             << "[collective-insert] reduce_scatter on " << meshAxis
+             << "[collective-insert] " << kind << " on " << meshAxis
              << " after " << insertAfter->getName() << "\n");
-}
-
-/// Emit a `tessera.collective.all_gather` generic op after \p insertAfter.
-static void insertAllGather(OpBuilder &b, Operation *insertAfter,
-                             Value input, StringRef meshAxis,
-                             int64_t gatherDim) {
-  b.setInsertionPointAfter(insertAfter);
-  Location loc = insertAfter->getLoc();
-
-  OperationState state(loc, "tessera.collective.all_gather");
-  state.addOperands(input);
-  state.addAttribute("mesh_axis", b.getStringAttr(meshAxis));
-  state.addAttribute("gather_dim", b.getI64IntegerAttr(gatherDim));
-  state.addAttribute("tessera.collective", UnitAttr::get(b.getContext()));
-  state.addAttribute("tessera.future_payload",
-                     TypeAttr::get(input.getType()));
-  state.addTypes(input.getType());
-
-  b.create(state);
-  LLVM_DEBUG(llvm::dbgs()
-             << "[collective-insert] all_gather on " << meshAxis
-             << " after " << insertAfter->getName() << "\n");
+  return await->getResult(0);
 }
 
 //===----------------------------------------------------------------------===//
@@ -153,6 +133,10 @@ struct GPUCollectiveInsertionPass
   StringRef getDescription() const override {
     return "Insert collective.reduce_scatter / collective.all_gather at "
            "DP/TP mesh boundaries for distributed training";
+  }
+
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<tessera::collective::TesseraCollectiveDialect>();
   }
 
   void runOnOperation() override {
@@ -186,11 +170,15 @@ struct GPUCollectiveInsertionPass
 
       if (sharding == "col_parallel") {
         // Column-parallel: each rank has partial dot product → reduce_scatter
-        insertReduceScatter(b, op, output, axis, /*scatterDim=*/0);
+        Value reduced = insertCollective(b, op, output, "reduce_scatter", axis,
+                                         /*tensorAxis=*/0, "sum");
+        output.replaceAllUsesExcept(reduced, reduced.getDefiningOp()->getPrevNode());
         ++rsInserted;
       } else if (sharding == "row_parallel") {
         // Row-parallel: activations split across TP ranks → all_gather
-        insertAllGather(b, op, output, axis, /*gatherDim=*/0);
+        Value gathered = insertCollective(b, op, output, "all_gather", axis,
+                                          /*tensorAxis=*/0, "none");
+        output.replaceAllUsesExcept(gathered, gathered.getDefiningOp()->getPrevNode());
         ++agInserted;
       }
     }
@@ -218,7 +206,10 @@ struct GPUCollectiveInsertionPass
       for (Operation *op : gradOps) {
         StringRef axis = getMeshAxis(op, "dp");
         if (axis.empty()) axis = dpAxis;
-        insertReduceScatter(b, op, op->getResult(0), axis, /*scatterDim=*/0);
+        Value output = op->getResult(0);
+        Value reduced = insertCollective(b, op, output, "reduce_scatter", axis,
+                                         /*tensorAxis=*/0, "sum");
+        output.replaceAllUsesExcept(reduced, reduced.getDefiningOp()->getPrevNode());
         ++rsInserted;
       }
     });

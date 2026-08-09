@@ -14,6 +14,8 @@
 //        - Look up cotangents for its results in the cotangent map.
 //        - If `op` implements `AdjointInterface` and is differentiable,
 //          dispatch to `buildAdjoint`.
+//        - Otherwise, if `op` implements `LinearTransposeInterface`, dispatch
+//          to its compiler-owned transposed linear map.
 //        - If `op->customAdjointName()` is non-empty, the implementation
 //          is responsible for emitting a `tessera.custom_adjoint_call`
 //          placeholder that the runtime VJP registry resolves.
@@ -62,6 +64,46 @@ constexpr const char *kAutodiffPhase = "tessera.autodiff.phase";
 /// Track per-Value cotangents. Map keys are forward Values; map values are
 /// the Value of the cotangent emitted into the backward IR.
 using CotangentMap = llvm::DenseMap<mlir::Value, mlir::Value>;
+
+using ActiveOpSet = llvm::SmallPtrSet<mlir::Operation *, 32>;
+
+ActiveOpSet computeActiveOps(mlir::ValueRange outputs) {
+  ActiveOpSet active;
+  llvm::SmallVector<mlir::Value> worklist(outputs.begin(), outputs.end());
+  while (!worklist.empty()) {
+    mlir::Value value = worklist.pop_back_val();
+    mlir::Operation *producer = value.getDefiningOp();
+    if (!producer || !active.insert(producer).second)
+      continue;
+    if (producer->getName().getStringRef() == "tessera.stop_gradient")
+      continue;
+    worklist.append(producer->operand_begin(), producer->operand_end());
+  }
+  return active;
+}
+
+bool hasStochasticEffect(mlir::Operation *op) {
+  if (auto effect =
+          op->getAttrOfType<mlir::StringAttr>("tessera.effect_kind"))
+    return effect.getValue() == "random";
+  llvm::StringRef name = op->getName().getStringRef();
+  return name == "tessera.dropout" || name == "tessera.arch.gumbel_softmax" ||
+         name == "tessera.arch.hard_concrete";
+}
+
+void eraseStopGradientBarriers(mlir::func::FuncOp func) {
+  llvm::SmallVector<mlir::Operation *> barriers;
+  func.walk([&](mlir::Operation *op) {
+    if (op->getName().getStringRef() == "tessera.stop_gradient")
+      barriers.push_back(op);
+  });
+  for (mlir::Operation *op : barriers) {
+    if (op->getNumOperands() == 1 && op->getNumResults() == 1) {
+      op->getResult(0).replaceAllUsesWith(op->getOperand(0));
+      op->erase();
+    }
+  }
+}
 
 /// Accumulate `g` into `cotan[v]`. First contribution stores directly; later
 /// contributions add (float → arith.addf, integer → arith.addi) so an integer
@@ -121,13 +163,6 @@ public:
       mlir::Operation *op = &opRef;
       if (mlir::isa<mlir::func::ReturnOp>(op))
         continue;
-      if (op->getNumRegions() != 0) {
-        op->emitError() << "[AUTODIFF_NESTED_REGION] reverse-mode autodiff does "
-                           "not yet support ops with nested regions ('"
-                        << op->getName().getStringRef() << "')";
-        signalPassFailure();
-        return;
-      }
       forwardOps.push_back(op);
     }
 
@@ -141,6 +176,12 @@ public:
       return signalPassFailure();
     }
     mlir::Value lossValue = returnOp.getOperand(0);
+    ActiveOpSet activeOps = computeActiveOps(mlir::ValueRange{lossValue});
+    mlir::Builder activityBuilder(&getContext());
+    for (mlir::Operation *op : forwardOps)
+      op->setAttr("tessera.autodiff.activity",
+                  activityBuilder.getStringAttr(
+                      activeOps.contains(op) ? "active" : "inactive"));
 
     // Step 3: build cotangent map. Seed with cotangent=1.0 at the loss.
     mlir::OpBuilder builder(&getContext());
@@ -180,8 +221,8 @@ public:
     }
     cotan[lossValue] = seed;
 
-    // Step 4: reverse walk. Dispatch to `buildAdjoint` for each op that
-    // implements AdjointInterface and lies on the gradient path.
+    // Step 4: reverse walk. Prefer a general nonlinear adjoint, then use the
+    // compiler-owned transposed map for linear operations.
     for (auto it = forwardOps.rbegin(); it != forwardOps.rend(); ++it) {
       mlir::Operation *op = *it;
 
@@ -196,8 +237,46 @@ public:
       if (!anyOutCotan)
         continue;  // Op is not on the gradient path.
 
-      auto adjointOp = mlir::dyn_cast<AdjointInterface>(op);
-      if (!adjointOp) {
+      if (op->getNumRegions() != 0) {
+        op->emitError() << "[AUTODIFF_NESTED_REGION] active reverse-mode path "
+                           "contains unsupported nested-region op ('"
+                        << op->getName().getStringRef() << "')";
+        return signalPassFailure();
+      }
+      if (hasStochasticEffect(op)) {
+        op->emitError()
+            << "AUTODIFF_STOCHASTIC_EFFECT: active stochastic op "
+            << op->getName()
+            << " requires an explicit pathwise or score-function adjoint";
+        return signalPassFailure();
+      }
+
+      // Keep every emitted derivative after the forward program and in scope
+      // of the seed and previously emitted cotangents.
+      builder.setInsertionPoint(returnOp);
+
+      llvm::SmallVector<mlir::Value> inCotans;
+      if (auto adjointOp = mlir::dyn_cast<AdjointInterface>(op)) {
+        if (!adjointOp.isDifferentiable()) {
+          op->emitError() << "tessera-autodiff: op " << op->getName()
+                          << " declares AdjointInterface but isDifferentiable() "
+                             "returned false";
+          return signalPassFailure();
+        }
+        inCotans = adjointOp.buildAdjoint(builder, outCotans);
+      } else if (auto linearOp =
+                     mlir::dyn_cast<LinearTransposeInterface>(op)) {
+        inCotans = linearOp.buildLinearTranspose(builder, outCotans);
+        for (auto [index, cotangent] : llvm::enumerate(inCotans)) {
+          if (cotangent && !linearOp.isLinearInOperand(index)) {
+            op->emitError()
+                << "tessera-autodiff: LinearTransposeInterface produced a "
+                   "cotangent for non-linear operand "
+                << index;
+            return signalPassFailure();
+          }
+        }
+      } else {
         // Decision #21 (documented in the pass header but previously not
         // implemented): an op ON the gradient path that cannot propagate
         // cotangents must fail loudly — silently skipping it drops the
@@ -206,32 +285,18 @@ public:
         if (op->getNumOperands() > 0) {
           op->emitError()
               << "[AUTODIFF_OP_NOT_DIFFERENTIABLE] op " << op->getName()
-              << " is on the gradient path but does not implement "
-                 "AdjointInterface; its operand cotangents would be "
+              << " is on the gradient path but implements neither "
+                 "AdjointInterface nor LinearTransposeInterface; its operand "
+                 "cotangents would be "
                  "silently dropped";
           return signalPassFailure();
         }
         continue;
       }
-      if (!adjointOp.isDifferentiable()) {
-        op->emitError() << "tessera-autodiff: op " << op->getName()
-                        << " declares AdjointInterface but isDifferentiable() "
-                           "returned false";
-        return signalPassFailure();
-      }
-
-      // Position the builder right before the return — keeps the seed (which
-      // we inserted there) in scope for every adjoint, and avoids dominance
-      // errors when later-walked ops produce cotangents consumed by
-      // earlier-walked adjoints.
-      builder.setInsertionPoint(returnOp);
-
-      llvm::SmallVector<mlir::Value> inCotans =
-          adjointOp.buildAdjoint(builder, outCotans);
 
       if (inCotans.size() != op->getNumOperands()) {
         op->emitError()
-            << "tessera-autodiff: buildAdjoint returned "
+            << "tessera-autodiff: derivative interface returned "
             << inCotans.size() << " cotangents, expected "
             << op->getNumOperands() << " (one per operand)";
         return signalPassFailure();
@@ -304,6 +369,7 @@ public:
           func.getFunctionType().getInputs(), newResultTypes);
       func.setType(newFnType);
     }
+    eraseStopGradientBarriers(func);
   }
 };
 

@@ -1385,6 +1385,7 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 |-----------|-----------|--------|------------------|
 | `gemm(A, B)` | `(array, array) → array` | `pure` | `np.matmul(A, B)` |
 | `matmul(A, B)` | `(array, array) → array` | `pure` | Alias for `gemm` |
+| `stop_gradient(x)` | `(array) → array` | `pure` | Identity in primal execution and a canonical compiler/tape gradient barrier: its input is inactive in reverse mode and its VJP is zero. It is consumed before physical backend dispatch and intentionally has no architecture-owned arithmetic lane; Graph IR op `tessera.stop_gradient`. |
 | `batched_gemm(A, B)` | `(array, array) → array` | `pure` | Batched `np.matmul` reference |
 | `bmm(A, B, epilogue=None)` | `(array, array) → array` | `pure` | Batched matmul (rank-3+) with shared-`[1,K,N]`-B broadcasting; Apple GPU `tessera_apple_gpu_bmm_{f32,f16}` (`metal_runtime`) |
 | `fake_quantize(x, ...)` | `(array, ...) → array` | `pure` | QAT fake-quantize with straight-through gradient (`tessera.quantization`) |

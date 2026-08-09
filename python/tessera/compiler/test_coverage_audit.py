@@ -277,8 +277,10 @@ def _all_op_names() -> tuple[str, ...]:
 # Python's re module forbids duplicate named groups across alternatives,
 # so we use anonymous groups and pick whichever fired.
 _OP_NAME_RE = r"([a-zA-Z_][a-zA-Z0-9_]*)"
+_TRAINING_OP_NAME_RE = r"(training\.[a-zA-Z_][a-zA-Z0-9_]*)"
 _PY_OP_REFERENCE_RE = re.compile(
-    rf"\b(?:tessera|ts)\.ops\.{_OP_NAME_RE}\b"
+    rf'"tessera\.{_TRAINING_OP_NAME_RE}"'
+    rf"|\b(?:tessera|ts)\.ops\.{_OP_NAME_RE}\b"
     rf"|(?<![A-Za-z0-9_])ops\.{_OP_NAME_RE}\b"
     rf'|"tessera\.{_OP_NAME_RE}"'
     rf"|\bfrom tessera\.ops import [^\n]*?\b{_OP_NAME_RE}\b"

@@ -7,6 +7,7 @@ src/compiler/ir/TesseraOps.td,AdamWOp,1,1,real
 src/compiler/ir/TesseraOps.td,AddOp,1,1,real
 src/compiler/ir/TesseraOps.td,AllGatherOp,1,1,real
 src/compiler/ir/TesseraOps.td,AllReduceOp,1,1,real
+src/compiler/ir/TesseraOps.td,AllToAllOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchGumbelSoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchHardConcreteOp,1,1,real
 src/compiler/ir/TesseraOps.td,ArchMixedOp,1,1,real
@@ -86,6 +87,7 @@ src/compiler/ir/TesseraOps.td,HuberLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,HybridAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,IFFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,IRFFTOp,1,1,real
+src/compiler/ir/TesseraOps.td,ISTFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,JSDivergenceLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,KLDivergenceLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,KVCacheAppendOp,1,1,real
@@ -167,6 +169,7 @@ src/compiler/ir/TesseraOps.td,RopeOp,1,1,real
 src/compiler/ir/TesseraOps.td,RopeSplitOp,1,1,real
 src/compiler/ir/TesseraOps.td,SGDBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,SGDOp,1,1,real
+src/compiler/ir/TesseraOps.td,STFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,SVDOp,1,1,real
 src/compiler/ir/TesseraOps.td,ScoreCombineOp,1,1,real
 src/compiler/ir/TesseraOps.td,SelectOp,1,1,real
@@ -182,8 +185,11 @@ src/compiler/ir/TesseraOps.td,SoftplusOp,1,1,real
 src/compiler/ir/TesseraOps.td,SpecAcceptOp,1,1,real
 src/compiler/ir/TesseraOps.td,SpecAcceptSampleOp,1,1,real
 src/compiler/ir/TesseraOps.td,SpecAcceptTreeSampleOp,1,1,real
+src/compiler/ir/TesseraOps.td,SpectralBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,SpectralConvOp,1,1,real
+src/compiler/ir/TesseraOps.td,SpectralFilterOp,1,1,real
 src/compiler/ir/TesseraOps.td,SqueezeOp,1,1,real
+src/compiler/ir/TesseraOps.td,StopGradientOp,1,1,real
 src/compiler/ir/TesseraOps.td,SubOp,1,1,real
 src/compiler/ir/TesseraOps.td,SwigluFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,TanhOp,1,1,real

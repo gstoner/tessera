@@ -17,6 +17,7 @@
 // because the generated op class declarations reference
 // `::tessera::AdjointInterface`.
 #include "Tessera/AdjointInterface.h.inc"
+#include "Tessera/LinearTransposeInterface.h.inc"
 
 #define GET_OP_CLASSES
 #include "TesseraOps.h.inc"

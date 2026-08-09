@@ -278,6 +278,22 @@ _SINGLE_GPU_TILE_TARGET_TERMINAL: dict[str, str] = {
     "soft_top_k": "reference relaxation; no physical backend lowering",
     "gumbel_softmax": "reference relaxation; no physical backend lowering",
     "perturbed_argmax": "reference relaxation; no physical backend lowering",
+    "stop_gradient": (
+        "compiler-only autodiff barrier erased before physical lowering; "
+        "no Tile/Target kernel"
+    ),
+}
+
+
+_TYPED_TILE_CONTRACTS: dict[str, str] = {
+    # These operations have first-class ODS Tile operations and exact
+    # Schedule -> Tile lowering.  This is deliberately narrower than physical
+    # multi-rank execution: Target IR, transport, and exact-device proof remain
+    # visible on their own axes and in the architecture queues.
+    "all_reduce": "tile.all_reduce",
+    "reduce_scatter": "tile.reduce_scatter",
+    "all_gather": "tile.all_gather",
+    "all_to_all": "tile.all_to_all",
 }
 
 
@@ -394,6 +410,11 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
             "not_applicable",
             "single_gpu_closeout.terminal:"
             + _SINGLE_GPU_TILE_TARGET_TERMINAL[op_name],
+        )
+    if op_name in _TYPED_TILE_CONTRACTS:
+        return AxisCell(
+            "complete",
+            "TileOps.td + schedule_ir.py:" + _TYPED_TILE_CONTRACTS[op_name],
         )
     # Prefer the most concrete evidence: a fused manifest entry beats
     # a registry "partial" because the registry's backend_kernel axis

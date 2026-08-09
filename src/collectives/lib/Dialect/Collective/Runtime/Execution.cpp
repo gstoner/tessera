@@ -14,9 +14,8 @@ namespace tessera { namespace collective {
 //   * ``TokenLimiter`` — own ``std::mutex`` + ``condition_variable``.
 //   * ``PerfettoTraceWriter`` — own ``std::mutex``; ``write()`` takes
 //     an event-vector snapshot under the lock before flushing.
-//   * ``NCCLAdapter`` / ``RCCLAdapter`` slots — written only via
-//     ``setNCCL`` / ``setRCCL`` at runtime construction time; the
-//     read inside ``submit()`` is benign.
+//   * ``NCCLAdapter`` / ``RCCLAdapter`` slots — snapshotted as shared owners
+//     under the runtime mutex and retained by the completion callback.
 //
 // Why dropping the global lock from ``submit()`` matters:
 //
@@ -28,11 +27,10 @@ namespace tessera { namespace collective {
 //     every submit serializes every collective across every stream
 //     and device.  Multi-stream callers couldn't overlap submits
 //     with each other.
-//   * **Shutdown safety.**  By holding ``shared_ptr<ExecRuntime>``
-//     we keep an in-flight submitter's runtime alive even if
-//     another thread calls ``tessera_shutdown_runtime()``
-//     mid-submit — the last reference drops cleanly when the
-//     in-flight call returns.
+//   * **Shutdown safety.** The asynchronous completion callback owns a
+//     ``shared_ptr<ExecRuntime>`` even if another thread calls
+//     ``tessera_shutdown_runtime()`` after submission. It releases that owner
+//     only after closing tracing and returning the limiter token.
 static std::mutex& _rtMutex() {
   static std::mutex m;
   return m;
@@ -90,9 +88,10 @@ extern "C" void tessera_submit_chunk_async(const void* ptr, uint64_t bytes, int 
   auto rt = _grabRuntime(/*tokens*/1);
   // Mutex released here.  The local ``shared_ptr`` keeps the
   // runtime alive even if another thread calls
-  // ``tessera_shutdown_runtime()`` while we're inside ``submit()``.
+  // ``tessera_shutdown_runtime()`` while the asynchronous operation is in
+  // flight. The callback owns this strong reference until completion.
   ChunkDesc d{ptr, bytes, device, stream, /*intraNode*/true};
-  rt->submit(d);
+  rt->submit(d, rt);
 }
 extern "C" void tessera_trace_write(const char* path) {
   // Snapshot the slot under the lock; do the (potentially heavy)
@@ -116,8 +115,8 @@ extern "C" void tessera_trace_write(const char* path) {
 //
 // Lifetime contract: it is safe to call ``tessera_shutdown_runtime()``
 // while another thread is inside ``tessera_submit_chunk_async()``.
-// The in-flight submitter holds a ``shared_ptr`` strong reference, so
-// the runtime is only destroyed when the last submit returns.  The
+// Each asynchronous completion callback holds a ``shared_ptr`` strong
+// reference, so the runtime is only destroyed after the last callback. The
 // caller is, however, responsible for not relying on any specific
 // runtime *identity* after shutdown (a subsequent submit may
 // re-initialize a fresh runtime with a different ``TokenLimiter``).

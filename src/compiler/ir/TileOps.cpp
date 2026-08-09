@@ -12,6 +12,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 
 using namespace mlir;
@@ -36,6 +37,59 @@ bool sameStaticShape(RankedTensorType a, RankedTensorType b) {
     if (a.getDimSize(i) != b.getDimSize(i))
       return false;
   return true;
+}
+
+LogicalResult verifyCollective(Operation *op, Value input, Value output,
+                               bool scalesAxis, bool multiply,
+                               bool requiresReduction) {
+  auto meshAxis = op->getAttrOfType<StringAttr>("mesh_axis");
+  auto tensorAxis = op->getAttrOfType<IntegerAttr>("tensor_axis");
+  auto reduction = op->getAttrOfType<StringAttr>("reduction");
+  auto worldSize = op->getAttrOfType<IntegerAttr>("world_size");
+  if (!meshAxis || meshAxis.getValue().empty())
+    return op->emitOpError("requires a non-empty mesh_axis");
+  if (!tensorAxis)
+    return op->emitOpError("requires tensor_axis");
+  if (worldSize && worldSize.getInt() <= 0)
+    return op->emitOpError("world_size must be positive when present");
+  if (requiresReduction &&
+      (!reduction ||
+       !llvm::is_contained({"sum", "mean", "max", "min", "prod"},
+                           reduction.getValue())))
+    return op->emitOpError(
+        "reduction must be one of sum, mean, max, min, prod");
+
+  auto inTy = dyn_cast<RankedTensorType>(input.getType());
+  auto outTy = dyn_cast<RankedTensorType>(output.getType());
+  if (!inTy || !outTy)
+    return success();
+  if (inTy.getRank() != outTy.getRank() ||
+      inTy.getElementType() != outTy.getElementType())
+    return op->emitOpError("must preserve rank and element type");
+  int64_t axis = tensorAxis.getInt();
+  if (axis < 0)
+    axis += inTy.getRank();
+  if (axis < 0 || axis >= inTy.getRank())
+    return op->emitOpError("tensor_axis is out of range");
+  for (int64_t dim = 0; dim < inTy.getRank(); ++dim) {
+    int64_t in = inTy.getDimSize(dim);
+    int64_t out = outTy.getDimSize(dim);
+    if (ShapedType::isDynamic(in) || ShapedType::isDynamic(out))
+      continue;
+    if (dim != axis || !scalesAxis) {
+      if (in != out)
+        return op->emitOpError("must preserve every non-collective dimension");
+      continue;
+    }
+    if (!worldSize)
+      continue;
+    int64_t size = worldSize.getInt();
+    bool valid = multiply ? out == in * size : in == out * size;
+    if (!valid)
+      return op->emitOpError(
+          "collective-axis extent disagrees with world_size");
+  }
+  return success();
 }
 
 LogicalResult requireBoolAttr(Operation *op, llvm::StringRef name,
@@ -1180,6 +1234,7 @@ LogicalResult FFTKernelOp::verify() {
   StringRef mode = requiredString("mode");
   StringRef realPolicy = requiredString("real_transform_policy");
   StringRef hermitianLayout = requiredString("hermitian_layout");
+  StringRef hermitianWeight = requiredString("hermitian_weight");
   StringRef strategy = requiredString("strategy");
   StringRef radixPolicy = requiredString("radix_policy");
   if ((mode != "c2c" && mode != "r2c" && mode != "c2r") ||
@@ -1191,11 +1246,15 @@ LogicalResult FFTKernelOp::verify() {
        realPolicy != "packed_even_n2_hermitian_v1" &&
        realPolicy != "full_complex_hermitian_fallback") ||
       (hermitianLayout != "full_complex" &&
-       hermitianLayout != "half_spectrum_nyquist_explicit"))
+       hermitianLayout != "half_spectrum_nyquist_explicit") ||
+      (hermitianWeight != "none" && hermitianWeight != "half_interior" &&
+       hermitianWeight != "double_interior"))
     return emitOpError("requires an explicit real-transform and Hermitian policy");
   if (requiredString("storage") != "complex64_interleaved_f32" ||
       requiredString("accum") != "f32" ||
-      requiredString("normalization") != "backward" ||
+      (requiredString("normalization") != "backward" &&
+       requiredString("normalization") != "forward" &&
+       requiredString("normalization") != "ortho") ||
       requiredString("twiddle_layout") != "interleaved_f32" ||
       requiredString("algorithm").empty() ||
       requiredString("workspace_policy").empty() ||
@@ -1203,6 +1262,12 @@ LogicalResult FFTKernelOp::verify() {
       requiredString("twiddle_policy").empty() ||
       requiredString("kernel_family").empty())
     return emitOpError("requires the canonical complex64/f32 FFT package policy");
+  if (mode == "c2c" && hermitianWeight != "none")
+    return emitOpError("full-complex FFT cannot apply Hermitian weighting");
+  if (mode == "r2c" && hermitianWeight == "half_interior")
+    return emitOpError("r2c cannot apply input-side half-interior weighting");
+  if (mode == "c2r" && hermitianWeight == "double_interior")
+    return emitOpError("c2r cannot apply output-side double-interior weighting");
   auto sequence = getOperation()->getAttrOfType<DenseI64ArrayAttr>("radix_sequence");
   auto length = getOperation()->getAttrOfType<IntegerAttr>("length");
   auto physicalLength =
@@ -1271,6 +1336,34 @@ LogicalResult SpectralProgramKernelOp::verify() {
           "inputs_immutable_output_fresh_v1" ||
       requiredString("native_entry").empty())
     return emitOpError("requires complete spectral package policy");
+  return success();
+}
+
+LogicalResult SpectralBackwardKernelOp::verify() {
+  auto inputCount = getOperation()->getAttrOfType<IntegerAttr>("input_count");
+  auto outputCount = getOperation()->getAttrOfType<IntegerAttr>("output_count");
+  auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  if (!inputCount || inputCount.getInt() < 2 || !outputCount ||
+      outputCount.getInt() + 1 != inputCount.getInt() || !hash ||
+      hash.getValue().size() != 64)
+    return emitOpError("requires complete multi-output spectral adjoint identity");
+  if (getInputs().size() != static_cast<size_t>(inputCount.getInt() +
+                                                outputCount.getInt()))
+    return emitOpError("expects source pointers followed by gradient destinations");
+  for (Value operand : getInputs())
+    if (!isa<LLVM::LLVMPointerType>(operand.getType()))
+      return emitOpError("all launch operands must be !llvm.ptr");
+  auto requiredString = [&](StringRef name) -> StringRef {
+    auto attr = getOperation()->getAttrOfType<StringAttr>(name);
+    return attr ? attr.getValue() : StringRef();
+  };
+  if (requiredString("kind").empty() ||
+      (requiredString("pad_mode") != "constant" &&
+       requiredString("pad_mode") != "reflect") ||
+      requiredString("output_signature").empty() ||
+      requiredString("mutation_lineage") !=
+          "inputs_immutable_outputs_fresh_v1")
+    return emitOpError("requires kind, output signature, and mutation lineage");
   return success();
 }
 
@@ -1490,6 +1583,30 @@ LogicalResult PipelineAdvanceOp::verify() {
     return emitOpError(
         "first operand must be the prior !tile.pipeline_state");
   return success();
+}
+
+LogicalResult AllReduceOp::verify() {
+  return verifyCollective(getOperation(), getInput(), getOutput(),
+                          /*scalesAxis=*/false, /*multiply=*/false,
+                          /*requiresReduction=*/true);
+}
+
+LogicalResult ReduceScatterOp::verify() {
+  return verifyCollective(getOperation(), getInput(), getOutput(),
+                          /*scalesAxis=*/true, /*multiply=*/false,
+                          /*requiresReduction=*/true);
+}
+
+LogicalResult AllGatherOp::verify() {
+  return verifyCollective(getOperation(), getInput(), getOutput(),
+                          /*scalesAxis=*/true, /*multiply=*/true,
+                          /*requiresReduction=*/false);
+}
+
+LogicalResult AllToAllOp::verify() {
+  return verifyCollective(getOperation(), getInput(), getOutput(),
+                          /*scalesAxis=*/false, /*multiply=*/false,
+                          /*requiresReduction=*/false);
 }
 
 static LogicalResult verifyPointerAndI64Tail(Operation *op, ValueRange inputs,

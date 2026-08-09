@@ -41,12 +41,13 @@ proof at every boundary:
 
 | Order | Owning item | Outcome |
 |---|---|---|
-| 1 | **AD-CORE-LINEAR-1** | Move automatic linear transposition from the Python reference into compiler-owned Graph IR interfaces and prove one paired forward/backward CPU oracle. |
-| 2 | **AD-TSOL-SPECTRAL-1** | Add compiler adjoints for FFT/IFFT first, then packed-real/DCT, then compound spectral programs; consume the same content-addressed Schedule→Tile artifacts on x86 and gfx1151. |
-| 3 | **AD-CORE-EFFECT-CONTROL-1** | Add canonical `stop_gradient`, carry activity and stochastic effects into C++ Graph IR, and make region adjoints fail closed on unsupported effects. |
-| 4 | **AD-SOLVER-IFT-1** | Finish value-producing `NewtonAutodiff`/implicit-root lowering; the Python `custom_root` implementation remains its oracle, not proof of compiled implicit differentiation. |
-| 5 | **AD-RESIDUAL-EVAL-1** | Measure complete forward/backward work and residual memory, then admit recomputation/treeverse candidates through the Evaluator; use TileSight only to prune candidates. |
-| 6 | **E2E-REAL-6** | Delete duplicate Graph-to-backend authorities only after each migrated family has lineage, correctness, and architecture-owned evidence. |
+| 1 | **AD-CORE-LINEAR-1 — complete** | `LinearTransposeInterface` owns transpose/reshape, broadcast/expand, structural views, and operand-wise matmul; both compiler autodiff passes and paired CPU numerical proofs consume it. |
+| 2 | **AD-TSOL-SPECTRAL-1 — compiler slice complete** | Explicit Graph spectral identity, FFT/IFFT/RFFT/IRFFT/DCT transposes, compound VJPs, and a content-addressed multi-output Schedule→Tile carrier are implemented. Native x86/gfx1151 compound-backward packages remain architecture-owned and fail closed. |
+| 3 | **GRAPH-VERIFY-SIGNED-1 — complete** | Graph and canonical-attention integer verifiers consume signed `IntegerAttr` values, with negative IR tests proving that MLIR 23 unsigned accessors cannot bypass legality. |
+| 4 | **AD-CORE-EFFECT-CONTROL-1 — complete** | Canonical `stop_gradient`, SSA activity, Graph effect propagation, active-stochastic rejection, and fail-closed active-region/residual behavior are compiler-owned and directly tested. |
+| 5 | **AD-SOLVER-IFT-1 — shared IR landed; physical consumers open** | `NewtonAutodiff` now requires a typed residual ABI and emits private value-producing VJP/JVP functions containing registered `tessera_solver.residual` → `linear_solve` → `residual_adjoint` chains. Missing or mismatched residual functions fail closed. Architecture-owned matrix-free solve/adjoint lowering and compiled numerical packets remain open; Python `custom_root` is still the oracle, not device proof. |
+| 6 | **AD-RESIDUAL-EVAL-1 — measurement boundary landed; packets/treeverse execution open** | The Evaluator measures complete backward samples and unique retained residual allocation, only exact-device evidence may stamp `tessera.backward_work_ns`/`tessera.residual.retained_bytes`, and rematerialization consumes both. Treeverse envelopes use measured step work for pruning but are explicitly promotion-ineligible until their complete backward executes. Exact family packets and region-adjoint/treeverse execution remain open. |
+| 7 | **E2E-REAL-6** | Delete duplicate Graph-to-backend authorities only after each migrated family has lineage, correctness, and architecture-owned evidence. |
 
 Hardware packets and backend-specific tuning are synchronized follow-ups to
 these slices, not blockers for landing shared contracts with honest fail-closed

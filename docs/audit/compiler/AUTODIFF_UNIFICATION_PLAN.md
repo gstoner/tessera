@@ -68,6 +68,25 @@ can a generated report say whether the native compiler executes its **forward**
 and its **backward**, and whether each was numerically proven — without reading
 source?* Today it cannot. Every phase moves one concrete step toward "yes."
 
+### 2026-08-08 shared effect/control closeout
+
+`AD-CORE-EFFECT-CONTROL-1` is complete. `tessera.stop_gradient` is a registered
+Graph op whose adjoint is null and whose forward lowering is identity. Both
+compiler autodiff passes compute backward SSA activity before transforming the
+program, stamp active/inactive state, and consume the registered Graph effect
+kind. An active random effect is rejected with
+`AUTODIFF_STOCHASTIC_EFFECT`; an inactive stochastic or nested-region producer
+is legal. Active nested regions fail closed, and the paired pass rejects a
+stopped intermediate requiring an unavailable residual with
+`AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED` rather than replaying state or
+randomness.
+
+The same slice completes the Graph adjoint and typed Schedule→Tile contracts
+for all-reduce, reduce-scatter, all-gather, and all-to-all. This is not a
+multi-rank execution claim: Target transport, overlap, and exact-device proof
+remain in each backend plan. x86 and gfx1151 consumption were validated
+independently; no evidence transfers to Apple or NVIDIA.
+
 ---
 
 ## 2. Why now — the current contradiction
@@ -330,6 +349,41 @@ lit fixture checks the backward signature + body, no Python needed.
   [`tests/tessera-ir/phase2_autodiff/`](../../../tests/tessera-ir/phase2_autodiff/)
   (matmul paired fwd/bwd; non-differentiable-op rejection), plus the Phase 0 F4
   smoke test — all 5 autodiff lit tests pass on the built `tessera-opt`.
+
+**AD-CORE-LINEAR-1 landed (2026-08-08).** A distinct compiler-owned
+`LinearTransposeInterface` now expresses unary linear and operand-wise
+multilinear Graph operations. `AutodiffPass` and `AutodiffPairedPass` prefer the
+existing general adjoint where present and otherwise consume the linear
+transpose. Transpose/reshape, broadcast/expand, squeeze/unsqueeze,
+permute/flatten/view, and matmul have moved off handwritten duplicate adjoints.
+The paired CPU proof executes the emitted inverse view chain and every matmul
+transpose-flag combination against independent NumPy oracles. An unsupported
+gradient-path operation still fails with `AUTODIFF_OP_NOT_DIFFERENTIABLE`. The
+Python linear registry remains a temporary numerical oracle and does not select
+production compiler behavior.
+
+**AD-TSOL-SPECTRAL-1 compiler slice landed (2026-08-08).** Graph IR now binds
+normalization, logical transform length, full-versus-packed spectrum identity,
+Hermitian endpoint/interior weighting, and DCT-I/II/III/IV identity. The linear
+transpose interface emits exact FFT/IFFT normalization duals, weighted
+RFFT/IRFFT duals, and transposed DCT bases; the paired compiler output is
+numerically interpreted for every normalization and DCT type. STFT and ISTFT
+differentiate framing, windows, Hermitian transforms, normalized overlap-add,
+centering, padding mode, arbitrary transform axis, and output length. The
+Graph verifier now checks real/complex component types and static transform
+extents. A real-input full `fft` remains valid for forward execution but fails
+closed in autodiff because it is not complex-linear; callers must use `rfft`
+to bind the required Hermitian projection explicitly. Spectral filtering differentiates both complex
+operands with conjugation, and full spectral convolution differentiates both
+inputs with broadcasting, arbitrary-axis cropping, and normalization. Compound VJPs cross a SHA-256-bound,
+multi-output `schedule.spectral_backward` → `tile.spectral_backward_kernel`
+boundary on `zen5-avx512` and `gfx1151`. Native compound-backward packages are
+not inferred from forward TSOL execution: both backend conversions reject the
+carrier until architecture-owned implementations and exact-device proof land.
+The unchanged forward boundary was revalidated after this change: 41 x86 FFT
+plus 21 x86 compound-package cases pass on Zen 5, and 17 ROCm FFT plus 21 ROCm
+compound-package cases pass on the WSL-visible gfx1151. These are forward
+non-regression results, not evidence for the newly fail-closed backward carrier.
 
 **Deferred to Phase 5 (not in the first cut):** SAVE residual policy (explicit
 forward residual outputs + the save-vs-recompute cost decision per adjoint);

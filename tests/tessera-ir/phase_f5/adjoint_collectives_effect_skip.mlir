@@ -1,6 +1,6 @@
-// RUN: tessera-opt --tessera-adjoint-collective-insertion --verify-each=false %s | FileCheck %s
-// RUN: tessera-opt --tessera-adjoint-collective-insertion --verify-each=false %s | FileCheck %s --check-prefix=PLAN
-// RUN: tessera-opt --tessera-adjoint-collective-insertion --verify-each=false %s | FileCheck %s --check-prefix=NONE
+// RUN: tessera-opt --tessera-adjoint-collective-insertion %s | FileCheck %s
+// RUN: tessera-opt --tessera-adjoint-collective-insertion %s | FileCheck %s --check-prefix=PLAN
+// RUN: tessera-opt --tessera-adjoint-collective-insertion %s | FileCheck %s --check-prefix=NONE
 //
 // Phase F5 — effect-aware gating skips non-memory arguments.
 //
@@ -25,7 +25,8 @@ module {
 
     // Exactly one collective — for the memory-class weight. The pure
     // activation's cotangent gets none (asserted by the NONE prefix below).
-    // CHECK: "tessera.collective.reduce_scatter"
+    // CHECK: tessera_collective.reduce_scatter
+    // CHECK: tessera_collective.await
     func.return %out, %dW, %dX
         : tensor<4x16xf32>, tensor<4x8xf32>, tensor<8x16xf32>
   }

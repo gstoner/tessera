@@ -1,5 +1,5 @@
-// RUN: tessera-opt --tessera-adjoint-collective-insertion --verify-each=false %s | FileCheck %s
-// RUN: tessera-opt --tessera-adjoint-collective-insertion --verify-each=false %s | FileCheck %s --check-prefix=PLAN
+// RUN: tessera-opt --tessera-adjoint-collective-insertion %s | FileCheck %s
+// RUN: tessera-opt --tessera-adjoint-collective-insertion %s | FileCheck %s --check-prefix=PLAN
 //
 // Phase F5 — AdjointCollectiveInsertionPass, effect-aware path.
 //
@@ -15,8 +15,8 @@
 //
 // Placeholder producers use the unregistered `test` dialect (the cotangent
 // SSA values are all this pass needs; the real backward graph is AutodiffPass's
-// job upstream). Because the pass inserts unregistered `tessera.collective.*`
-// marker ops, the module prints in generic form — CHECKs are substring-based.
+// job upstream). The pass inserts registered asynchronous collectives and
+// awaits each payload before rewriting the return.
 
 module {
   // CHECK: sym_name = "bwd"
@@ -34,9 +34,16 @@ module {
     %dB = "test.cotan"(%B) : (tensor<8x16xf32>) -> tensor<8x16xf32>
     %dC = "test.cotan"(%C) : (tensor<4x16xf32>) -> tensor<4x16xf32>
 
-    // CHECK: "tessera.collective.reduce_scatter"(%{{.*}}) {{.*}}axis = "dp"
-    // CHECK: "tessera.collective.all_gather"(%{{.*}}) {{.*}}axis = "tp"
-    // CHECK: "tessera.collective.all_reduce"(%{{.*}}) {{.*}}axis = "dp"
+    // CHECK: %[[RS_F:.*]] = tessera_collective.reduce_scatter
+    // CHECK-SAME: mesh_axis = "dp"
+    // CHECK: %[[RS:.*]] = tessera_collective.await %[[RS_F]]
+    // CHECK: %[[AG_F:.*]] = tessera_collective.all_gather
+    // CHECK-SAME: mesh_axis = "tp"
+    // CHECK: %[[AG:.*]] = tessera_collective.await %[[AG_F]]
+    // CHECK: %[[AR_F:.*]] = tessera_collective.all_reduce
+    // CHECK-SAME: mesh_axis = "dp"
+    // CHECK: %[[AR:.*]] = tessera_collective.await %[[AR_F]]
+    // CHECK: func.return %out, %[[RS]], %[[AG]], %[[AR]]
     func.return %out, %dA, %dB, %dC
         : tensor<4x16xf32>, tensor<4x8xf32>, tensor<8x16xf32>, tensor<4x16xf32>
   }

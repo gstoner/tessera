@@ -28,7 +28,7 @@ last_updated: 2026-07-14
 | Item | Status |
 |------|--------|
 | Graph/Tile IR adjoint ops | **✅ Phase F4 landed at the IR level** — `AdjointInterface` ODS + `AutodiffPass.cpp` produce valid backward IR, lit-verified on MLIR 23. *Not* an execution claim: no target executes backward natively yet — see [`autodiff_connection_ledger.md`](../audit/generated/autodiff_connection_ledger.md) + [`AUTODIFF_UNIFICATION_PLAN.md`](../audit/compiler/AUTODIFF_UNIFICATION_PLAN.md). |
-| Effect-aware adjoint collective insertion | **✅ Phase F5 landed** — Python: `tessera.distributed.DDP` / `FSDP` validate against `mock_collective`. IR: `AdjointCollectiveInsertionPass` (`--tessera-adjoint-collective-insertion`) gates on per-arg `tessera.effect` (memory-class) and inserts `reduce_scatter`/`all_gather`/`all_reduce` by sharding kind; lit `tests/tessera-ir/phase_f5/`. |
+| Effect-aware adjoint collective insertion | **✅ Phase F5 landed** — Python: `tessera.distributed.DDP` / `FSDP` validate against `mock_collective`. IR: `AdjointCollectiveInsertionPass` (`--tessera-adjoint-collective-insertion`) gates on per-arg `tessera.effect` (memory-class), inserts registered asynchronous `reduce_scatter`/`all_gather`/`all_reduce` operations by sharding kind, and returns their explicitly awaited payloads; lit `tests/tessera-ir/phase_f5/`. |
 | Activation checkpointing / rematerialization | **✅ Phase F2 landed** — Python: `tessera.autodiff.rematerialize` (alias `checkpoint`). IR: `ActivationRematerializationPass` (`--tessera-activation-rematerialization`) clones `tessera.recompute`-tagged pure ops to their backward consumers; lit `tests/tessera-ir/phase_f2/`. |
 | Mixed-precision autocast + loss scaling | **✅ Phase F1 landed** — `tessera.autodiff.autocast(dtype)` + `GradScaler`. fp8 backend lowering still pending Phase G. |
 | Higher-order derivatives (HVP, jacrev, jacfwd) | **✅ Phase F7 landed** — `tessera.autodiff.{grad, hvp, jacrev, jacfwd, elementwise_grad}`. |
@@ -368,7 +368,9 @@ Landed alongside F4 (previously out of scope for the F4 first cut):
   (`write` / `reduce_*` / `memory`) — a pure read-only input never gets a
   gradient collective. The sharding *kind* (`tessera.weight_sharding`) then
   selects the op: `dp` → `reduce_scatter`, `tp` → `all_gather`, `replicated`
-  → `all_reduce`. When no effect annotation is present the pass falls back to a
+  → `all_reduce`. Each dispatch returns `!tessera_collective.future<T>` and an
+  explicit `tessera_collective.await` supplies the returned cotangent. When no
+  effect annotation is present the pass falls back to a
   weight_sharding-only plan (recorded distinctly as `[sharding-only]` vs
   `[effect-gated]` in `tessera.adjoint_collective_plan`). Composed pipeline:
   `--tessera-autodiff-pipeline` (F4 → F2 → F5). Lit: `tests/tessera-ir/phase_f5/`.

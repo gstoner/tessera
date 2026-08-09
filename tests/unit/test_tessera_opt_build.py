@@ -89,7 +89,7 @@ def test_core_tessera_dialects_are_registered() -> None:
     for dialect in (
         "tessera",
         "tessera.neighbors",
-        "tessera.solver",
+        "tessera_solver",
         "tpp",
     ):
         assert dialect in dialects, (

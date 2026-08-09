@@ -27,9 +27,9 @@ each row into a single E2E tier.
 | ``complete`` | 287 |
 | ``runnable_reference`` | 4 |
 | ``artifact_only`` | 0 |
-| ``partial`` | 33 |
+| ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **324** |
+| **total** | **325** |
 
 ## complete (287)
 
@@ -327,12 +327,12 @@ each row into a single E2E tier.
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
-| ``all_gather`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``all_reduce`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``all_to_all`` | collective | public | public | registered | partial | reference | ready | benchmarked |
-| ``reduce_scatter`` | collective | public | public | registered | partial | reference | ready | benchmarked |
+| ``all_gather`` | collective | public | public | registered | complete | reference | ready | benchmarked |
+| ``all_reduce`` | collective | public | public | registered | complete | reference | ready | benchmarked |
+| ``all_to_all`` | collective | public | public | registered | complete | reference | ready | benchmarked |
+| ``reduce_scatter`` | collective | public | public | registered | complete | reference | ready | benchmarked |
 
-## partial (33)
+## partial (34)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -347,6 +347,7 @@ each row into a single E2E tier.
 | ``mor_scatter`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``reshape`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
 | ``squeeze`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
+| ``stop_gradient`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``tile_view`` | layout_transform | public | public | registered | fused | no_kernel_required | ready | none |
 | ``unsqueeze`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
 | ``view`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |

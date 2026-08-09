@@ -26,6 +26,11 @@ from .effects import EffectLattice, Effect, TesseraEffectError
 from .graph_ir import GraphIRConstructionContext, KVCacheSpec, NumericPolicy, construct_mlir_module
 from .schedule_ir import ScheduleIRModule, ScheduleFunction, ScheduleOp, lower_graph_to_schedule_ir
 from .tile_ir import TileIRModule, TileFunction, TileOp, lower_schedule_to_tile_ir
+from .collective_target import (
+    CollectiveTargetArtifact,
+    lower_tile_collective_artifact,
+    package_one_sided_target_artifact,
+)
 from .target_ir import (
     TargetIRModule,
     TargetFunction,

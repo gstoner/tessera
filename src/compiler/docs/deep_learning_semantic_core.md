@@ -68,14 +68,14 @@ movement from being invented late in codegen.
 Collectives produce futures and may operate on typed shards.
 
 ```mlir
-%s = tessera.collective.shard_view %x on "tp" dim 0
-%f = tessera.collective.reduce_scatter %x, "sum" on "tp" dim 0
-%y = tessera.collective.await %f
+%s = tessera_collective.shard_view %x on "tp" dim 0
+%f = tessera_collective.reduce_scatter %x {reduction = "sum", mesh_axis = "tp", tensor_axis = 0}
+%y = tessera_collective.await %f
 ```
 
 The transform library may temporarily mark generic ops with
 `tessera.future_payload` when it avoids linking generated collective headers,
-but dialect-aware legalization must materialize `!tessera.collective.future<T>`.
+and dialect-aware legalization materializes `!tessera_collective.future<T>`.
 
 ## 5. Schedule Artifacts
 

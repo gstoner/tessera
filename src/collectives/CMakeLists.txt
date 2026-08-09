@@ -28,6 +28,18 @@ endif()
 
 option(TESSERA_ENABLE_NCCL "Enable NCCL adapter" OFF)
 option(TESSERA_ENABLE_RCCL "Enable RCCL adapter" OFF)
+option(TESSERA_ENABLE_RCCL_LSA_DEVICE_TEST
+    "Register the exact-device RCCL LSA packet with CTest" OFF)
+option(TESSERA_ENABLE_RCCL_GIN_DEVICE_TEST
+    "Register the exact-device multi-node RCCL GIN packet with CTest" OFF)
+if(TESSERA_ENABLE_RCCL_LSA_DEVICE_TEST OR TESSERA_ENABLE_RCCL_GIN_DEVICE_TEST)
+    enable_testing()
+endif()
+if(TESSERA_ENABLE_NCCL AND TESSERA_ENABLE_RCCL)
+    message(FATAL_ERROR
+        "TesseraCollectiveRuntime selects one NCCL-compatible ABI per target; "
+        "build separate CUDA and ROCm runtime targets")
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)

@@ -199,6 +199,33 @@ def Tile_PipelineAdvanceOp : Tile_Op<"pipeline_advance"> {
   let hasVerifier = 1;
 }
 
+// Target-neutral multi-rank transport.  Schedule lowering must resolve the
+// overloaded Graph `axis` into separate mesh and tensor axes before reaching
+// this layer.  `world_size` is optional because launch packaging may bind a
+// dynamic process group; when present the verifier proves gather/scatter shape
+// scaling exactly.  Target/runtime ownership remains architecture-specific.
+class Tile_CollectiveOp<string mnemonic, string summaryText> : Tile_Op<
+    mnemonic, [MemoryEffects<[MemWrite]>]> {
+  let summary = summaryText;
+  let arguments = (ins AnyType:$input,
+                       StrAttr:$mesh_axis,
+                       I64Attr:$tensor_axis,
+                       DefaultValuedAttr<StrAttr, "\"none\"">:$reduction,
+                       OptionalAttr<I64Attr>:$world_size);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $output)";
+  let hasVerifier = 1;
+}
+
+def Tile_AllReduceOp : Tile_CollectiveOp<
+    "all_reduce", "Reduce a tensor across one named mesh axis">;
+def Tile_ReduceScatterOp : Tile_CollectiveOp<
+    "reduce_scatter", "Reduce then scatter one tensor axis across a mesh axis">;
+def Tile_AllGatherOp : Tile_CollectiveOp<
+    "all_gather", "Gather one tensor axis across a named mesh axis">;
+def Tile_AllToAllOp : Tile_CollectiveOp<
+    "all_to_all", "Exchange equal tensor-axis partitions across a mesh axis">;
+
 // Target-neutral SSA vocabulary for asynchronous tensor movement. Availability
 // and physical lowering remain target owned: NVIDIA maps these to TMA and
 // mbarrier on supporting architectures, while other backends may reject or
@@ -690,6 +717,18 @@ def Tile_FFTKernelOp : Tile_Op<"fft_kernel"> {
 // fixed before this boundary.
 def Tile_SpectralProgramKernelOp : Tile_Op<"spectral_program_kernel"> {
   let summary = "Launch-level compound spectral package with fixed child FFTs";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Multi-output compound spectral adjoint. Inputs are the output cotangent and
+// retained forward operands followed by one destination pointer per gradient.
+// Backend conversion must fail closed until the named architecture provides a
+// native package for the exact content-addressed contract.
+def Tile_SpectralBackwardKernelOp : Tile_Op<"spectral_backward_kernel"> {
+  let summary = "Launch-level typed compound spectral adjoint package";
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs);
   let assemblyFormat = "$inputs attr-dict `:` type($inputs)";

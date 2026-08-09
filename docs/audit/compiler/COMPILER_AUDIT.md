@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-30
+last_updated: 2026-08-09
 audit_role: theme
 ---
 
@@ -7,6 +7,64 @@ audit_role: theme
 
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
+
+## Collective async unification (2026-08-09)
+
+Cross-backend sync `COLLECTIVE-ASYNC-UNIFY-2026-08-09` removes the final active
+unregistered `tessera.collective.*` producers. `GPUCollectiveInsertionPass` and
+`AdjointCollectiveInsertionPass` now depend on the registered collective
+dialect, produce typed futures, insert explicit awaits, and route forward or
+cotangent SSA consumers through the awaited values. Their lit lanes no longer
+disable per-pass verification to tolerate marker strings.
+
+The second-pass functional hardening proves equal all-to-all partitioning,
+positive QoS/chunk contracts, future/payload identity, and explicit mesh-axis
+topology. The runtime rejects unknown axes and subgroup execution that its
+full-communicator adapter cannot honor; dtype and chunk metadata survive the
+content-addressed artifact; native v1 rejects implicit conversion to fp32.
+Native adapter replacement and singleton shutdown are also completion-safe:
+in-flight callbacks retain strong runtime and adapter owners until tracing is
+closed and the limiter token is returned.
+This closes the portable software contract, not architecture evidence. Native
+NCCL/RCCL/Metal/x86 process transport packets and performance remain open.
+
+## Effect/control and collective boundary closeout (2026-08-08)
+
+`AD-CORE-EFFECT-CONTROL-1` is complete at the shared compiler boundary.
+`tessera.stop_gradient` is registered in the public catalog and Graph dialect;
+both autodiff passes compute backward SSA activity, propagate registered Graph
+effects, reject active stochastic operations, ignore inactive regions, and
+fail closed on active regions or stopped values whose residuals cannot be
+safely replayed. Direct lit negatives and the paired CPU oracle cover these
+contracts.
+
+The four collectives now lower as exact `tile.all_reduce`,
+`tile.reduce_scatter`, `tile.all_gather`, and `tile.all_to_all` ODS operations
+with shared mesh/tensor-axis, reduction, rank, dtype, and static extent checks.
+`tessera-lower-tile-collectives` carries those operations into the registered
+asynchronous `tessera_collective` Target dialect, inserts explicit await
+dependencies, and stamps the portable runtime-adapter ABI. A content-addressed
+Python package executes the same ordered Target records through the existing
+collective adapter; deterministic two-rank tests prove all four operations and
+SSA input/output lineage. This is the functional software transport boundary.
+Native NCCL/RCCL/Metal/x86 process transport, exact multi-rank evidence, and
+device performance remain architecture-owned.
+
+The same Target dialect now registers a typed window resource and rank-local
+`window.register`, `put_signal`, `signal`, `wait_signal`, and
+`window.deregister` operations. The content-addressed GIN/RMA package verifies
+window lifetime and dispatches the ordered records through an explicit
+rank-local adapter. A launcher-neutral native harness binds
+Tessera/OpenMPI/PMI/Slurm ranks to one RCCL rank and emits exact readback plus
+dual-clock timing. This closes the software and launcher boundary, not the
+still-hardware-gated multi-node gfx1151 evidence packet.
+
+The seven formerly actionable thin-test rows are directly proven: five
+differentiable relaxations use their public forward surface plus defining/VJP
+oracles, while `training.loss_sgd` and `training.loss_adamw` use exact x86 and
+gfx1151 fused-versus-unfused tests. The remaining thin-reference rows are
+classified aliases, structural contracts, hardware gates, or internal rows;
+the raw scanner count is not presented as untriaged numerical debt.
 
 ## Cost-model foundations: target perf + rasterization knob (2026-07-28)
 
@@ -206,7 +264,7 @@ Two facts make the transition cheaper than it looks:
 |---|---|---|---|
 | **Python `@jit`** | Decoration-time constraint + effect analysis; honest fallback gating (won't let eager Python masquerade as compiled). | Effect/constraint analysis is single-function, AST-only. A general IR-optimization step (folders/effects) between emission and execution is still thin. | Component-aware multi-op metadata **landed** (carried to the `@jit` artifact); fusion dispatch is **authoritative** (Phase 0 seam closed). Remaining: effect interfaces + broader folding. |
 | **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast`/`reshape` folders + `matmul`/`transpose`/`reshape` canonicalizers (8 ops — `reshape` carries an identity fold + a `reshape(reshape(x))` chain-collapse, both guarding the optional `dim_names` symbolic-dim annotations), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). **Per-op effect interfaces landed (2026-06-22):** all 23 non-pure ops carry an explicit `MemoryEffectsOpInterface` — deterministic value ops (`adam`/`adamw`/`momentum`/`adafactor`/`lion`, `arch.ste_one_hot`/`weighted_sum`/`switch`/`mixed`) are `[Pure]`; random (`dropout`/`arch.gumbel_softmax`/`arch.hard_concrete`), stateful (`kv_cache.*`/`ring.create`/`arch.parameter`), collective (`all_reduce`/`reduce_scatter`/`all_gather`) and MoE-transport ops carry `MemWrite`/`MemRead`, so generic CSE/DCE is sound and precise across them (`graph_ir_op_effects.mlir`). `LayoutAssignmentPass` is wired into the named x86/GPU/CUDA-13 pipelines. x86 and NVIDIA default it on because their Graph-cast materializers consume the markers immediately; Apple and ROCm retain architecture-owned opt-in boundaries until their complete physical consumer envelopes are proven. **Phase 1 closed (2026-06-22)** — effect interfaces, target-scoped LayoutAssignment wiring, and reshape folder coverage all landed. ~5 passes are attribute-stamp-only. | Add folders opportunistically as new algebraic identities surface; ~5 attribute-stamp-only passes could gain real bodies. |
-| **Schedule IR** | DistributionLowering performs structural wiring and collective insertion. `PipelineStagePartition` emits `tessera.pp_stage`; insertion rewires send/recv SSA; `PipelineScheduleLegality` proves the contract and materializes unique-clock `tessera.pipeline_steps` across warmup, steady, and cooldown. The shared runtime executes those steps in compiler order, overlaps selected backward collectives on an independent transport executor, joins them before completion, and binds typed collective descriptors to explicit OptimizerShard replicated/rank-local ownership transitions. | The portable runtime path is proven with deterministic adapters, but no backend has supplied a real multi-rank CUDA, ROCm, or Metal packet. Collective placement and overlap remain runtime machinery rather than a complete middle-end optimization pass. | Land architecture-owned multi-rank NCCL/RCCL/Metal execution and exact-device evidence; then promote placement/overlap policy into the middle end. |
+| **Schedule IR** | DistributionLowering performs structural wiring and collective insertion. `PipelineStagePartition` emits `tessera.pp_stage`; insertion rewires send/recv SSA; `PipelineScheduleLegality` proves the contract and materializes unique-clock `tessera.pipeline_steps` across warmup, steady, and cooldown. The shared runtime executes those steps in compiler order, overlaps selected backward collectives on an independent transport executor, joins them before completion, and binds typed collective descriptors to explicit OptimizerShard replicated/rank-local ownership transitions. All four descriptors also survive Tile into the registered asynchronous `tessera_collective` Target queue and its content-addressed runtime package. | The portable Target/runtime path is proven with deterministic adapters, but no backend has supplied a real multi-rank CUDA, ROCm, Metal, or x86 process packet. Collective placement and overlap remain runtime machinery rather than a complete middle-end optimization pass. | Land architecture-owned multi-rank NCCL/RCCL/Metal/x86 process execution and exact-device evidence; then promote placement/overlap policy into the middle end. |
 | **Tile IR (FA-4)** | `#tile.layout` is attached to real views/copies/fragments; SSA buffer, pipeline, TMA, mbarrier, TMEM, and TCGen05 vocabulary is registered. Canonical GEMM has explicit M/N/K loops; its ROCm consumer now requires planned buffer/token/pipeline-state SSA ownership and has exact gfx1151 register/LDS comparison proof. FlashAttention has explicit rank-4 batch/query-head distribution into a KV `scf.for` carrying `(acc,m,l,producer,consumer,boundary)` with typed slice coordinates and ragged extents. ROCm consumes that shared forward recurrence and its deterministic tensor-valued backward workspace/reduction loops directly. NVIDIA, shared legality fixtures, and ROCm LDS consumers are free of name-based buffer identity. | The direct NVIDIA execution consumer of the shared attention loop remains open. Deprecated `#tile.buffer_ref` is parser-visible only for migration diagnostics and archived IR. SM100 TCGen05/TMEM has structural proof only. | Finish the direct NVIDIA distributed-attention consumer; exact SM100 TCGen05/TMEM. |
 | **Autotuner** | `BayesianAutotuner` tunes `{tile_m/n/k, num_warps, num_stages}`. Target/evidence/latency-valid measured schedule records change the actual Schedule IR and Tile IR M/N/K, warp-count, and pipeline-depth attributes. Hardware-free pruning uses a symbolic tile-reuse/capacity model with explicit compute, DRAM-bandwidth, cache, dtype-width, and raster-order inputs; measured rows always outrank analytical rows and cache reuse is exact to shape/dtype/target/layout/movement. | T1 is GEMM-only and intentionally cannot distinguish warp/stage choices; T3 action-DAG ordering, T4 overlap structure, production target-cache semantics (especially Apple SLC and x86 hierarchy), and per-target correlation/selector packets remain incomplete. | Correlate T1 against each architecture's committed corpus and retain or reject it per backend. Keep exact-device latency authoritative; do not coefficient-tune a failed model. |
 | **Target IR / runtime** | x86 AMX/AVX-512, Apple GPU, NVIDIA `sm_120`, and ROCm `gfx1151` all have checked-in native execution rows. The generated runtime matrix currently records 24 NVIDIA and 69 ROCm rows; the E2E fleet additionally seals release packets for NVIDIA softmax/reduction and ROCm softmax/reduction/paged-KV/MoE. `fusion.py` remains real runtime MSL codegen for matmul-epilogue regions, and `tessera_jit` is a real MLIR→LLVM CPU JIT. | Native breadth is architecture-specific, not backend-wide: NVIDIA `sm_80`/`sm_90`/`sm_100` and the ROCm target-map tail remain artifact-only or exact-device gated. Apple still has a name→lane→ctypes dispatcher seam, and reference execution remains explicit for unsupported rows. | Close the dispatcher seam and promote the remaining target-map tails only with exact-device execute-and-compare evidence. |

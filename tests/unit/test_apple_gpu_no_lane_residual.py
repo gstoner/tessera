@@ -96,6 +96,9 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         "index_update", "masked_fill", "nonzero", "pad", "permute", "rearrange",
         "repeat", "reshape", "roll", "select", "split", "squeeze", "stack",
         "take", "tile", "tile_view",
+        # Compiler-owned AD barrier: it is consumed by activity analysis and
+        # intentionally has no architecture-owned arithmetic dispatch lane.
+        "stop_gradient",
         "unsqueeze", "view", "argsort", "sort",
         # Latent-KV (target-lowering gated, Decision #21).
         "latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v",

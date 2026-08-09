@@ -46,7 +46,7 @@ smoothing/relaxation operator family, and a Baur–Strassen cost-ratio oracle.
 | Reverse-mode passes | `AutodiffPass.cpp` (in-place), `AutodiffPairedPass.cpp` (paired ABI) | 316 + 285 |
 | Remat | `ActivationRematerializationPass.cpp` | 624 |
 | Distributed adjoints | `AdjointCollectiveInsertionPass.cpp` | 269 |
-| Implicit-op derivatives | `solvers/core/passes/NewtonAutodiff.cpp` | 87 (annotation-only) |
+| Implicit-op derivatives | `solvers/core/passes/NewtonAutodiff.cpp`, registered `tessera_solver` ODS | value-producing shared VJP/JVP IR; physical solve/adjoint lowering open |
 
 The generated ledger reports a broad Python VJP/JVP reference surface, a much
 smaller native Graph-IR adjoint set, three placeholder families that round-trip
@@ -140,10 +140,11 @@ cache-and-analysis approach. Structured control flow is where MLIR-level AD is
 
 ### A4. There is no forward mode in the compiler at all
 
-Verified by grep across `src/` for genuine forward-mode markers (excluding the
-word "cotangent"): the only hits are `NewtonAutodiff.cpp`'s annotation strings.
-There is no `TangentInterface`, no forward-mode pass, no dual-number lowering,
-no `--tessera-autodiff-forward`. JVP exists only as 3.8k lines of Python.
+There is still no general `TangentInterface`, forward-mode pass, dual-number
+lowering, or `--tessera-autodiff-forward`. `NewtonAutodiff.cpp` now emits a
+solver-local implicit JVP function when requested, but that specialized IFT
+construction is not a general forward-mode transform. General JVP remains the
+3.8k-line Python implementation.
 
 This blocks, in one stroke: compiler HVP, `jacfwd`, Taylor/jet mode, any
 forward-over-reverse composition, and tangent-space ops for the manifold work in
@@ -350,18 +351,21 @@ rather than buried.
 
 ### B8. Implicit-function-theorem differentiation is scaffolded, not absent
 
-`NewtonAutodiff.cpp` walks `tessera_solver.implicit` ops and annotates
-`tessera_solver.{vjp,jvp} = "generated"`. Its header states the intended
-decomposition — `dF/dx = -(dR/dx)⁻¹ · dR/du` — and admits the body only
-annotates and structurally decomposes; values resolve "at runtime via the
-registered vjp/jvp kernels."
+`NewtonAutodiff.cpp` now walks registered `tessera_solver.implicit` operations,
+requires an explicit residual-function symbol and exact signature, and emits a
+private value-producing VJP (and optional JVP) function. The VJP carries
+`residual(parameters, solution)` → transposed matrix-free `linear_solve` →
+negative `residual_adjoint` SSA values, implementing
+`dF/dx = -(dR/dx)⁻¹ · dR/du` without a runtime annotation lookup. Missing and
+mismatched residual ABIs fail closed. Target-owned lowering and execution of
+the solver operations remains open, so this is shared compiler IR rather than
+an x86/ROCm/CUDA/Metal execution claim.
 
 **This corrects a claim in the [OT plan](RIEMANNIAN_OT_PLAN.md) §3.2.** The
-implicit-diff seam is not missing; it is a stub in the solver dialect with the
-right shape and the right formula in its header. R2's `custom_root` should
-*finish that pass*, not introduce a parallel mechanism. Same correction applies
-to the RNOT Jacobian requirement — App. F.3's
-`J = −[D_yF]⁻¹[D_xF]` is literally the formula in the header comment.
+implicit-diff seam now has a value-producing shared IR body. R2's `custom_root`
+must lower through this function contract rather than introduce a parallel
+mechanism. Same correction applies to the RNOT Jacobian requirement — App.
+F.3's `J = −[D_yF]⁻¹[D_xF]` is the emitted residual/solve/adjoint chain.
 
 ---
 
@@ -585,12 +589,13 @@ defensible "exceeds the state of the art" claim rather than a catch-up.
 
 Maps to: new capability.
 
-### Alongside — finish `NewtonAutodiff`
+### Alongside — consume the `NewtonAutodiff` IFT body
 
-Implement the IFT body the header already specifies (`dF/dx = -(dR/dx)⁻¹ dR/du`),
-emitting real `tessera_solver.residual` + `linear_solve` ops instead of
-annotations. Shared deliverable with [OT plan](RIEMANNIAN_OT_PLAN.md) R2 — the
-two tracks should not build this twice. ~2 weeks.
+The shared IFT body landed on 2026-08-08: registered residual, matrix-free
+linear-solve, residual-JVP, and residual-adjoint values replace annotations.
+The remaining shared deliverable with [OT plan](RIEMANNIAN_OT_PLAN.md) R2 is a
+physical consumer plus compiled numerical proof; the two tracks still must not
+build this twice.
 
 ### Sequencing
 

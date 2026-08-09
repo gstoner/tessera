@@ -1,4 +1,4 @@
-// RUN: tessera-opt --tessera-gpu-collective-insertion --allow-unregistered-dialect --verify-each=false %s | FileCheck %s
+// RUN: tessera-opt --tessera-gpu-collective-insertion %s | FileCheck %s
 
 // Test: GPUCollectiveInsertionPass inserts reduce_scatter after a
 // column-parallel linear op (tagged tessera.weight_sharding = "col_parallel")
@@ -6,10 +6,8 @@
 //
 // 2026-06: un-XFAIL'd.  The matmuls moved to value-semantics tensor form
 // (the MLIR-23 TesseraMatmulOp verifier requires one tensor result).  The
-// pass inserts lightweight `tessera.collective.*` marker ops that downstream
-// collective lowering / runtime adapters consume; they are not yet first-class
-// `tessera` dialect ODS ops, so --allow-unregistered-dialect + --verify-each=false
-// let the marker-insertion output round-trip for FileCheck.
+// pass inserts registered asynchronous Target operations and rewires downstream
+// users through explicit awaits.
 
 module attributes {
   tessera.distributed_plan = {
@@ -29,20 +27,23 @@ module attributes {
                      %w2: tensor<512x256xbf16>) -> tensor<128x256xbf16> {
 
     // Column-parallel matmul: each TP rank computes a partial column block.
-    // The pass should insert tessera.collective.reduce_scatter after this op.
-    // CHECK: tessera.collective.reduce_scatter
+    // The pass should insert tessera_collective.reduce_scatter after this op.
+    // CHECK: %[[RS_F:.*]] = tessera_collective.reduce_scatter
     // CHECK-SAME: mesh_axis
-    // CHECK-SAME: reduce_op = "sum"
-    // CHECK-SAME: tessera.future_payload
+    // CHECK-SAME: reduction = "sum"
+    // CHECK: %[[RS:.*]] = tessera_collective.await %[[RS_F]]
     %partial = "tessera.matmul"(%x, %w1) {
       tessera.weight_sharding = "col_parallel",
       tessera.tp_axis = "tp"
     } : (tensor<128x256xbf16>, tensor<256x512xbf16>) -> tensor<128x512xbf16>
 
-    // Row-parallel matmul: the pass should insert tessera.collective.all_gather.
-    // CHECK: tessera.collective.all_gather
+    // Row-parallel matmul consumes the awaited reduce-scatter value and then
+    // inserts an all-gather for its own downstream users.
+    // CHECK: "tessera.matmul"(%[[RS]],
+    // CHECK: %[[AG_F:.*]] = tessera_collective.all_gather
     // CHECK-SAME: mesh_axis
-    // CHECK-SAME: tessera.future_payload
+    // CHECK-SAME: reduction = "none"
+    // CHECK: tessera_collective.await %[[AG_F]]
     %partial2 = "tessera.matmul"(%partial, %w2) {
       tessera.weight_sharding = "row_parallel",
       tessera.tp_axis = "tp"

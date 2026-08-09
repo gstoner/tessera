@@ -487,7 +487,7 @@ The `EffectAnnotationPass` (flag: `--tessera-effect-annotation`) attaches `tesse
 | Body contains `tessera.flash_attn` with `dropout_p != 0.0`, `tessera.dropout`, or `tessera.rng.*` / `rng.uniform` | `random` |
 | Body contains `schedule.prefetch` / `schedule.async_copy` / `tile.async_copy` / `tile.wait_async` | `movement` |
 | Body contains `tessera.kv_cache.*` / `tessera.ring.*` / `cache.*` | `state` |
-| Body contains `tessera.all_reduce` / `reduce_scatter` / `all_gather` / `tessera.collective.*` | `collective` |
+| Body contains `tessera.all_reduce` / `reduce_scatter` / `all_gather` / `all_to_all` or Target-level `tessera_collective.*` | `collective` |
 | Body contains `tessera.copy` | `memory` |
 | Any argument has `tessera.effect = "write"` or `"reduce_*"` attribute | `memory` |
 | Body contains `func.call` to external non-tessera function | `io` |

@@ -450,9 +450,12 @@ LogicalResult DiffusionBlockStepOp::verify() {
     return emitOpError("canvas denoising must be bidirectional (causal = false); "
                        "a causal step is the encoder prefill, not the block-"
                        "diffusion canvas region");
-  if (getNumDenoiseLayers() <= 0)
+  const int64_t numDenoiseLayers = getNumDenoiseLayersAttr().getInt();
+  const int64_t hq = getNumAttentionHeadsAttr().getInt();
+  const int64_t hkv = getNumKvHeadsAttr().getInt();
+  const int64_t dh = getHeadDimAttr().getInt();
+  if (numDenoiseLayers <= 0)
     return emitOpError("num_denoise_layers must be positive");
-  int64_t hq = getNumAttentionHeads(), hkv = getNumKvHeads(), dh = getHeadDim();
   if (hq <= 0 || hkv <= 0)
     return emitOpError("num_attention_heads and num_kv_heads must be positive");
   if (hq % hkv != 0)
@@ -630,6 +633,14 @@ LogicalResult verifyRequiredSameRankedShape(Operation *op, RankedTensorType a,
 }
 
 LogicalResult verifyPositiveI64(Operation *op, StringRef name, int64_t value) {
+  // MLIR 23's generated value accessors for signless I64Attr fields return an
+  // unsigned native value.  Read an explicitly present attribute through
+  // IntegerAttr so a negative spelling cannot wrap to a large positive value
+  // before this shared verifier sees it.  The supplied value remains the
+  // fallback for default-valued attributes that are not materialized on the
+  // operation.
+  if (auto attr = op->getAttrOfType<IntegerAttr>(name))
+    value = attr.getInt();
   if (value <= 0)
     return op->emitOpError() << name << " must be positive";
   return success();
@@ -637,6 +648,8 @@ LogicalResult verifyPositiveI64(Operation *op, StringRef name, int64_t value) {
 
 LogicalResult verifyPositiveOptionalI64(Operation *op, StringRef name,
                                         std::optional<int64_t> value) {
+  if (auto attr = op->getAttrOfType<IntegerAttr>(name))
+    value = attr.getInt();
   if (value && *value <= 0)
     return op->emitOpError() << name << " must be positive when set";
   return success();
@@ -1919,7 +1932,8 @@ static int64_t maxHeadDimForTargetSm(StringRef sm) {
 }
 
 LogicalResult FlashAttnOp::verify() {
-  if (getHeadDim() <= 0)
+  const int64_t headDim = getHeadDimAttr().getInt();
+  if (headDim <= 0)
     return emitOpError("head_dim must be positive");
   if (auto dropout = getDropoutP()) {
     double p = dropout->convertToDouble();
@@ -1937,8 +1951,7 @@ LogicalResult FlashAttnOp::verify() {
   if (parent) {
     if (auto attr = dyn_cast<StringAttr>(parent->getAttr("tessera.target_sm"))) {
       int64_t limit = maxHeadDimForTargetSm(attr.getValue());
-      uint64_t headDim = getHeadDim();
-      if (limit > 0 && headDim > static_cast<uint64_t>(limit))
+      if (limit > 0 && headDim > limit)
         return emitOpError("head_dim=")
                << getHeadDim() << " exceeds the SM "
                << attr.getValue()
@@ -1990,7 +2003,8 @@ LogicalResult FlashAttnOp::verify() {
 // head_dim; rank-1 integer cu_seqlens; k/v sharing total_k. The same
 // target-aware per-SM head_dim ceiling as FlashAttnOp applies.
 LogicalResult VarlenSdpaOp::verify() {
-  if (getHeadDim() <= 0)
+  const int64_t headDim = getHeadDimAttr().getInt();
+  if (headDim <= 0)
     return emitOpError("head_dim must be positive");
 
   auto qT = dyn_cast<RankedTensorType>(getQ().getType());
@@ -2078,6 +2092,15 @@ LogicalResult ReshapeOp::verify() {
     return emitOpError("reshape must preserve element count: input has ")
            << inProd << " elements but output has " << outProd;
   return success();
+}
+
+LogicalResult StopGradientOp::verify() {
+  auto inputType = dyn_cast<RankedTensorType>(getX().getType());
+  auto resultType = dyn_cast<RankedTensorType>(getY().getType());
+  if (!inputType || !resultType)
+    return emitOpError("expects ranked tensor input and result");
+  return verifySameRankedShapeAndElementType(
+      getOperation(), inputType, resultType, "stop_gradient");
 }
 
 // Sprint V1 (2026-05-22) — TransposeOp: rank-preserving permutation.
@@ -2528,7 +2551,7 @@ LogicalResult HybridAttentionOp::verify() {
   if (failed(verifyAllowedStringAttr(this->getOperation(), "state_dtype",
                                      {"fp32", "fp16", "bf16"}, "fp32")))
     return failure();
-  if (getLayerIndex() < 0)
+  if (getLayerIndexAttr().getInt() < 0)
     return emitOpError("layer_index must be non-negative");
   return verifyAttentionQKV(this->getOperation(), getQ(), getK(), getV(),
                             getO(), "hybrid_attention");
@@ -2771,6 +2794,7 @@ LogicalResult ALiBiOp::verify() {
 LogicalResult RopeSplitOp::verify() {
   if (failed(verifyPositiveI64(getOperation(), "rope_dim", getRopeDim())))
     return failure();
+  const int64_t ropeDim = getRopeDimAttr().getInt();
   auto xTy = dyn_cast<RankedTensorType>(getX().getType());
   auto ropeTy = dyn_cast<RankedTensorType>(getRopePart().getType());
   auto noRopeTy = dyn_cast<RankedTensorType>(getNoRopePart().getType());
@@ -2790,7 +2814,7 @@ LogicalResult RopeSplitOp::verify() {
   int64_t xLast = xTy.getDimSize(rank - 1);
   int64_t ropeLast = ropeTy.getDimSize(rank - 1);
   int64_t noRopeLast = noRopeTy.getDimSize(rank - 1);
-  if (!ShapedType::isDynamic(ropeLast) && ropeLast != getRopeDim())
+  if (!ShapedType::isDynamic(ropeLast) && ropeLast != ropeDim)
     return emitOpError("rope_part last dim must equal rope_dim");
   if (!ShapedType::isDynamic(xLast) && !ShapedType::isDynamic(ropeLast) &&
       !ShapedType::isDynamic(noRopeLast) && ropeLast + noRopeLast != xLast)
@@ -3041,7 +3065,7 @@ LogicalResult MaskedFillOp::verify() {
 }
 
 LogicalResult WriteRowOp::verify() {
-  if (getRow() < 0)
+  if (getRowAttr().getInt() < 0)
     return emitOpError("row must be non-negative");
   auto bufferTy = dyn_cast<RankedTensorType>(getBuffer().getType());
   auto valueTy = dyn_cast<RankedTensorType>(getValue().getType());
@@ -3896,6 +3920,10 @@ LogicalResult AllGatherOp::verify() {
   return verifyCollectiveOp(getOperation(), getX(), getY(), "all_gather");
 }
 
+LogicalResult AllToAllOp::verify() {
+  return verifyCollectiveOp(getOperation(), getX(), getY(), "all_to_all");
+}
+
 LogicalResult DeepSeekSparseAttentionOp::verify() {
   if (failed(verifyPositiveI64(this->getOperation(), "window_size",
                                getWindowSize())) ||
@@ -4044,7 +4072,7 @@ LogicalResult KVCacheAppendOp::verify() {
 }
 
 LogicalResult KVCachePruneOp::verify() {
-  if (getWindow() <= 0)
+  if (getWindowAttr().getInt() <= 0)
     return emitOpError("window must be positive");
   return success();
 }
@@ -4334,7 +4362,7 @@ LogicalResult ControlIfOp::verify() {
 }
 
 LogicalResult ControlWhileOp::verify() {
-  if (getMaxIters() <= 0)
+  if (getMaxItersAttr().getInt() <= 0)
     return emitOpError("max_iters must be positive");
   int64_t n = static_cast<int64_t>(getIterArgs().size());
   int64_t idx = getCarryArgIndex();
@@ -4350,7 +4378,8 @@ LogicalResult ControlWhileOp::verify() {
 }
 
 LogicalResult ControlScanOp::verify() {
-  if (getTrip() <= 0)
+  const int64_t trip = getTripAttr().getInt();
+  if (trip <= 0)
     return emitOpError("trip must be positive");
   if (getCarryArgIndex() != 0)
     return emitOpError("carry_arg_index must be 0 (init is the scan carry)");
@@ -4361,7 +4390,7 @@ LogicalResult ControlScanOp::verify() {
   // statically known).
   if (auto ysT = dyn_cast<RankedTensorType>(getYs().getType()))
     if (ysT.getRank() >= 1 && !ysT.isDynamicDim(0) &&
-        ysT.getDimSize(0) != static_cast<int64_t>(getTrip()))
+        ysT.getDimSize(0) != trip)
       return emitOpError("ys leading dim must equal trip (")
              << getTrip() << "), got " << ysT.getDimSize(0);
   return verifyControlPayload(getOperation(), "body");
@@ -4496,7 +4525,7 @@ LogicalResult MorRouterOp::verify() {
   return verifyPositiveI64(getOperation(), "max_depth", getMaxDepth());
 }
 LogicalResult MorPartitionOp::verify() {
-  if (getStep() < 0)
+  if (getStepAttr().getInt() < 0)
     return emitOpError("step must be non-negative");
   return success();
 }
@@ -4558,26 +4587,194 @@ static LogicalResult verifySpectralAxis(Operation *op, Value x,
                              << " for rank-" << rank << " input";
   return success();
 }
+static LogicalResult verifySpectralContract(Operation *op, Value x,
+                                            std::optional<int64_t> axis,
+                                            StringRef name,
+                                            bool realTransform) {
+  if (failed(verifySpectralAxis(op, x, axis, name)))
+    return failure();
+  auto normalization = op->getAttrOfType<StringAttr>("normalization");
+  if (normalization && normalization.getValue() != "backward" &&
+      normalization.getValue() != "forward" &&
+      normalization.getValue() != "ortho")
+    return op->emitOpError("requires normalization in {backward, forward, ortho}");
+  auto logicalLength = op->getAttrOfType<IntegerAttr>("logical_length");
+  if (logicalLength && logicalLength.getInt() <= 0)
+    return op->emitOpError("requires logical_length > 0");
+  auto layout = op->getAttrOfType<StringAttr>("spectrum_layout");
+  if (layout && layout.getValue() != "full_complex" &&
+      layout.getValue() != "half_spectrum_nyquist_explicit" &&
+      layout.getValue() != "full_real")
+    return op->emitOpError("has an unsupported spectrum_layout");
+  if (realTransform && layout &&
+      layout.getValue() != "half_spectrum_nyquist_explicit")
+    return op->emitOpError(
+        "requires spectrum_layout=half_spectrum_nyquist_explicit");
+  auto weight = op->getAttrOfType<StringAttr>("hermitian_weight");
+  if (weight && weight.getValue() != "none" &&
+      weight.getValue() != "half_interior" &&
+      weight.getValue() != "double_interior")
+    return op->emitOpError(
+        "requires hermitian_weight in {none, half_interior, double_interior}");
+  if (!realTransform && weight && weight.getValue() != "none")
+    return op->emitOpError("full-spectrum transform cannot apply Hermitian weighting");
+  if (name == "rfft" && weight && weight.getValue() == "half_interior")
+    return op->emitOpError("rfft cannot apply input-side half-interior weighting");
+  if (name == "irfft" && weight && weight.getValue() == "double_interior")
+    return op->emitOpError("irfft cannot apply output-side double-interior weighting");
+  return success();
+}
+static LogicalResult verifySpectralTypes(Operation *op, Value x, Value y,
+                                         std::optional<int64_t> axis,
+                                         StringRef name) {
+  auto xTy = dyn_cast<RankedTensorType>(x.getType());
+  auto yTy = dyn_cast<RankedTensorType>(y.getType());
+  if (!xTy || !yTy)
+    return success();
+  if (xTy.getRank() != yTy.getRank())
+    return op->emitOpError() << name << " input/result ranks must match";
+
+  auto xComplex = dyn_cast<ComplexType>(xTy.getElementType());
+  auto yComplex = dyn_cast<ComplexType>(yTy.getElementType());
+  Type xComponent = xComplex ? xComplex.getElementType() : xTy.getElementType();
+  Type yComponent = yComplex ? yComplex.getElementType() : yTy.getElementType();
+  bool realToComplex = name == "rfft";
+  bool complexToReal = name == "irfft";
+  bool realToReal = name == "dct";
+  bool fullForward = name == "fft";
+  if ((realToComplex && (xComplex || !yComplex)) ||
+      (complexToReal && (!xComplex || yComplex)) ||
+      (realToReal && (xComplex || yComplex)) ||
+      (fullForward && !yComplex) ||
+      (!realToComplex && !complexToReal && !realToReal &&
+       !fullForward && (!xComplex || !yComplex)))
+    return op->emitOpError()
+           << name << " has an incompatible real/complex tensor contract";
+  if (!isa<FloatType>(xComponent) || xComponent != yComponent)
+    return op->emitOpError()
+           << name << " requires matching floating component types";
+
+  int64_t selectedAxis = axis.value_or(-1);
+  if (selectedAxis < 0)
+    selectedAxis += xTy.getRank();
+  if (selectedAxis < 0 || selectedAxis >= xTy.getRank())
+    return success();  // The axis verifier owns the diagnostic.
+  auto agree = [](int64_t lhs, int64_t rhs) {
+    return ShapedType::isDynamic(lhs) || ShapedType::isDynamic(rhs) ||
+           lhs == rhs;
+  };
+  for (int64_t dim = 0; dim < xTy.getRank(); ++dim)
+    if (dim != selectedAxis &&
+        !agree(xTy.getDimSize(dim), yTy.getDimSize(dim)))
+      return op->emitOpError()
+             << name << " may resize only the selected transform axis";
+
+  int64_t inputExtent = xTy.getDimSize(selectedAxis);
+  int64_t expected = inputExtent;
+  if (auto length = op->getAttrOfType<IntegerAttr>("logical_length"))
+    expected = length.getInt();
+  else if (complexToReal && !ShapedType::isDynamic(inputExtent))
+    expected = 2 * (inputExtent - 1);
+  if (realToComplex && !ShapedType::isDynamic(expected))
+    expected = expected / 2 + 1;
+  if (!agree(expected, yTy.getDimSize(selectedAxis)))
+    return op->emitOpError()
+           << name << " result extent disagrees with logical_length";
+  return success();
+}
 LogicalResult FFTOp::verify() {
-  return verifySpectralAxis(getOperation(), getX(), getAxis(), "fft");
+  if (failed(verifySpectralContract(getOperation(), getX(), getAxis(), "fft", false)))
+    return failure();
+  return verifySpectralTypes(getOperation(), getX(), getY(), getAxis(), "fft");
 }
 LogicalResult IFFTOp::verify() {
-  return verifySpectralAxis(getOperation(), getX(), getAxis(), "ifft");
+  if (failed(verifySpectralContract(getOperation(), getX(), getAxis(), "ifft", false)))
+    return failure();
+  return verifySpectralTypes(getOperation(), getX(), getY(), getAxis(), "ifft");
 }
 LogicalResult RFFTOp::verify() {
-  return verifySpectralAxis(getOperation(), getX(), getAxis(), "rfft");
+  if (failed(verifySpectralContract(getOperation(), getX(), getAxis(), "rfft", true)))
+    return failure();
+  return verifySpectralTypes(getOperation(), getX(), getY(), getAxis(), "rfft");
 }
 LogicalResult IRFFTOp::verify() {
-  return verifySpectralAxis(getOperation(), getX(), getAxis(), "irfft");
+  if (failed(verifySpectralContract(getOperation(), getX(), getAxis(), "irfft", true)))
+    return failure();
+  return verifySpectralTypes(getOperation(), getX(), getY(), getAxis(), "irfft");
 }
 LogicalResult DCTOp::verify() {
   if (IntegerAttr type = getTypeAttr();
       type && (type.getInt() < 1 || type.getInt() > 4))
     return emitOpError("requires type in [1, 4]");
-  return verifySpectralAxis(getOperation(), getX(), getAxis(), "dct");
+  if (getSpectrumLayout() != "full_real")
+    return emitOpError("requires spectrum_layout=full_real");
+  if (failed(verifySpectralContract(getOperation(), getX(), getAxis(), "dct", false)))
+    return failure();
+  return verifySpectralTypes(getOperation(), getX(), getY(), getAxis(), "dct");
+}
+
+static LogicalResult verifySpectralCompound(Operation *op, Value x,
+                                            Value parameter,
+                                            std::optional<int64_t> axis,
+                                            StringRef name) {
+  auto onesided = op->getAttrOfType<BoolAttr>("onesided");
+  bool packedReal = (name == "stft" || name == "istft") &&
+                    (!onesided || onesided.getValue());
+  if (failed(verifySpectralContract(op, x, axis, name, packedReal)))
+    return failure();
+  auto xTy = dyn_cast<RankedTensorType>(x.getType());
+  auto parameterTy = dyn_cast<RankedTensorType>(parameter.getType());
+  if (!xTy || !parameterTy)
+    return success();
+  if ((name == "stft" || name == "istft") && parameterTy.getRank() != 1)
+    return op->emitOpError() << name << " window must be rank-1";
+  if ((name == "stft" || name == "istft")) {
+    auto hop = op->getAttrOfType<IntegerAttr>("hop");
+    if (!hop || hop.getInt() <= 0)
+      return op->emitOpError() << name << " requires hop > 0";
+    auto padMode = op->getAttrOfType<StringAttr>("pad_mode");
+    if (!padMode || (padMode.getValue() != "constant" &&
+                     padMode.getValue() != "reflect"))
+      return op->emitOpError()
+             << name << " requires pad_mode in {constant, reflect}";
+    auto outputLength = op->getAttrOfType<IntegerAttr>("output_length");
+    if (outputLength && outputLength.getInt() < 0)
+      return op->emitOpError() << name << " requires output_length >= 0";
+    auto layout = op->getAttrOfType<StringAttr>("spectrum_layout");
+    StringRef requiredLayout = packedReal
+                                   ? "half_spectrum_nyquist_explicit"
+                                   : "full_complex";
+    if (!layout || layout.getValue() != requiredLayout)
+      return op->emitOpError()
+             << name << " requires spectrum_layout=" << requiredLayout;
+  }
+  return success();
+}
+
+LogicalResult STFTOp::verify() {
+  return verifySpectralCompound(getOperation(), getX(), getParameter(), getAxis(),
+                                "stft");
+}
+LogicalResult ISTFTOp::verify() {
+  return verifySpectralCompound(getOperation(), getX(), getParameter(), getAxis(),
+                                "istft");
+}
+LogicalResult SpectralFilterOp::verify() {
+  if (failed(verifySpectralCompound(getOperation(), getX(), getParameter(),
+                                    getAxis(), "spectral_filter")))
+    return failure();
+  if (getSpectrumLayout() != "full_complex")
+    return emitOpError("requires spectrum_layout=full_complex");
+  if (getX().getType() != getParameter().getType() ||
+      getX().getType() != getY().getType())
+    return emitOpError("requires equal complex input, filter, and result types");
+  return success();
 }
 
 LogicalResult SpectralConvOp::verify() {
+  if (failed(verifySpectralContract(getOperation(), getX(), getAxis(),
+                                    "spectral_conv", false)))
+    return failure();
   auto xTy = dyn_cast<RankedTensorType>(getX().getType());
   auto filterTy = dyn_cast<RankedTensorType>(getFilter().getType());
   auto yTy = dyn_cast<RankedTensorType>(getY().getType());
@@ -4585,8 +4782,60 @@ LogicalResult SpectralConvOp::verify() {
     return success();
   if (!isFloatTensor(xTy) || !isFloatTensor(filterTy) || !isFloatTensor(yTy))
     return emitOpError("spectral_conv operands and result must be floating tensors");
-  return verifySameRankedShapeAndElementType(getOperation(), xTy, yTy,
-                                             "spectral_conv");
+  if (xTy.getRank() != filterTy.getRank() || xTy.getRank() != yTy.getRank() ||
+      xTy.getElementType() != filterTy.getElementType() ||
+      xTy.getElementType() != yTy.getElementType())
+    return emitOpError(
+        "spectral_conv requires equal ranks and element types");
+  int64_t axis = getAxis().value_or(-1);
+  if (axis < 0)
+    axis += xTy.getRank();
+  for (int64_t dim = 0; dim < xTy.getRank(); ++dim) {
+    int64_t xExtent = xTy.getDimSize(dim);
+    int64_t filterExtent = filterTy.getDimSize(dim);
+    int64_t outputExtent = yTy.getDimSize(dim);
+    if (dim == axis) {
+      if (!ShapedType::isDynamic(xExtent) &&
+          !ShapedType::isDynamic(filterExtent) &&
+          !ShapedType::isDynamic(outputExtent) &&
+          outputExtent != xExtent + filterExtent - 1)
+        return emitOpError(
+            "spectral_conv transform-axis output must be input + filter - 1");
+      continue;
+    }
+    if (!ShapedType::isDynamic(xExtent) &&
+        !ShapedType::isDynamic(filterExtent) && xExtent != filterExtent &&
+        xExtent != 1 && filterExtent != 1)
+      return emitOpError("spectral_conv batch dimensions must broadcast");
+    if (!ShapedType::isDynamic(outputExtent)) {
+      int64_t expected = xExtent == 1 ? filterExtent : xExtent;
+      if (!ShapedType::isDynamic(expected) && outputExtent != expected)
+        return emitOpError(
+            "spectral_conv output batch dimensions must match broadcasting");
+    }
+  }
+  return success();
+}
+
+LogicalResult SpectralBackwardOp::verify() {
+  if (getInputs().size() < 2 || getGradients().size() + 1 != getInputs().size())
+    return emitOpError(
+        "requires one output cotangent, forward operands, and one gradient per forward operand");
+  if (getKind() != "tessera.stft" && getKind() != "tessera.istft" &&
+      getKind() != "tessera.spectral_filter" &&
+      getKind() != "tessera.spectral_conv")
+    return emitOpError("requires a registered compound spectral kind");
+  auto padMode = getPadMode();
+  if (padMode != "constant" && padMode != "reflect")
+    return emitOpError("requires pad_mode in {constant, reflect}");
+  if (auto length = (*this)->getAttrOfType<IntegerAttr>("output_length");
+      length && length.getInt() < 0)
+    return emitOpError("requires output_length >= 0");
+  for (auto [input, result] :
+       llvm::zip(getInputs().drop_front(), getGradients()))
+    if (input.getType() != result.getType())
+      return emitOpError("gradient types must match forward operand types");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

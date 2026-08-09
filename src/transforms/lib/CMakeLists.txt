@@ -106,12 +106,17 @@ target_include_directories(TesseraPasses
     ${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/tile_opt_fa4/include
 )
 
-# Phase F4 — pass body needs the AdjointInterface generated header.
-add_dependencies(TesseraPasses TesseraAdjointInterfaceTableGen)
+# Phase F4 / AD-CORE-LINEAR-1 — pass bodies need both generated derivative
+# interface headers before compiling.
+add_dependencies(TesseraPasses
+  TesseraAdjointInterfaceTableGen
+  TesseraLinearTransposeInterfaceTableGen
+)
 
 target_link_libraries(TesseraPasses
   PUBLIC
     TesseraIR
+    TesseraCollectiveDialect
     MLIRIR
     MLIRPass
     MLIRParser

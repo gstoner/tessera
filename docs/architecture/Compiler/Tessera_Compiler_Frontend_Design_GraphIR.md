@@ -269,7 +269,7 @@ The builder maps Python-level `tessera.ops.*` calls to MLIR op names:
 | `tessera.ops.layer_norm(x)` | `tessera.layer_norm` |
 | `tessera.ops.softmax(x)` | `tessera.softmax` |
 | `tessera.ops.dropout(x, p)` | `tessera.dropout` |
-| `tessera.ops.all_reduce(x)` | `tessera.collective.all_reduce` (Phase 4 stub) |
+| `tessera.ops.all_reduce(x)` | `tessera.all_reduce` → Schedule/Tile → `tessera_collective.all_reduce` |
 
 ### 6.3 Shard attribute emission
 

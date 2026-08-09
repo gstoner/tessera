@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 216 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 222 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 216 | |
+| **Total** | 222 | |
 
 ## Per-dialect details
 
@@ -26,6 +26,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `AddOp` | `real` |
 | `AllGatherOp` | `real` |
 | `AllReduceOp` | `real` |
+| `AllToAllOp` | `real` |
 | `ArchGumbelSoftmaxOp` | `real` |
 | `ArchHardConcreteOp` | `real` |
 | `ArchMixedOp` | `real` |
@@ -105,6 +106,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `HybridAttentionOp` | `real` |
 | `IFFTOp` | `real` |
 | `IRFFTOp` | `real` |
+| `ISTFTOp` | `real` |
 | `JSDivergenceLossOp` | `real` |
 | `KLDivergenceLossOp` | `real` |
 | `KVCacheAppendOp` | `real` |
@@ -186,6 +188,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `RopeSplitOp` | `real` |
 | `SGDBackwardOp` | `real` |
 | `SGDOp` | `real` |
+| `STFTOp` | `real` |
 | `SVDOp` | `real` |
 | `ScoreCombineOp` | `real` |
 | `SelectOp` | `real` |
@@ -201,8 +204,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SpecAcceptOp` | `real` |
 | `SpecAcceptSampleOp` | `real` |
 | `SpecAcceptTreeSampleOp` | `real` |
+| `SpectralBackwardOp` | `real` |
 | `SpectralConvOp` | `real` |
+| `SpectralFilterOp` | `real` |
 | `SqueezeOp` | `real` |
+| `StopGradientOp` | `real` |
 | `SubOp` | `real` |
 | `SwigluFusedOp` | `real` |
 | `TanhOp` | `real` |

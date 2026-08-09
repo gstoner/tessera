@@ -1,5 +1,5 @@
-// RUN: tessera-opt --tessera-autodiff-pipeline --verify-each=false %s | FileCheck %s
-// RUN: tessera-opt --tessera-autodiff-pipeline --verify-each=false %s | FileCheck %s --check-prefix=PLAN
+// RUN: tessera-opt --tessera-autodiff-pipeline %s | FileCheck %s
+// RUN: tessera-opt --tessera-autodiff-pipeline %s | FileCheck %s --check-prefix=PLAN
 //
 // End-to-end composition of the reverse-mode autodiff pipeline:
 //   AutodiffPass (F4) → ActivationRematerializationPass (F2) → AdjointCollectiveInsertionPass (F5)
@@ -26,8 +26,10 @@ module {
   // F4 emitted the transposed-matmul adjoints for the two weights ...
   // CHECK: tessera.matmul
   // ... and F5 wrapped each weight's cotangent in a dp reduce_scatter.
-  // CHECK: "tessera.collective.reduce_scatter"(%{{.*}}) {{.*}}axis = "dp"
-  // CHECK: "tessera.collective.reduce_scatter"(%{{.*}}) {{.*}}axis = "dp"
+  // CHECK: tessera_collective.reduce_scatter
+  // CHECK: tessera_collective.await
+  // CHECK: tessera_collective.reduce_scatter
+  // CHECK: tessera_collective.await
 
   // Both plans are effect-gated (the memory effect drove the insertion), and
   // F4's arg_cotangents record survives onto the function.

@@ -29,6 +29,12 @@ SCHEDULE_OVERLAPS = {"none", "compute", "collective"}
 MATMUL_OPS = {"tessera.matmul", "tessera.gemm"}
 CONV2D_OPS = {"tessera.conv2d_nhwc", "tessera.conv2d"}
 ROPE_OPS = {"tessera.rope"}
+COLLECTIVE_OPS = {
+    "tessera.all_reduce",
+    "tessera.reduce_scatter",
+    "tessera.all_gather",
+    "tessera.all_to_all",
+}
 MEDIA_OPS = {
     "tessera.image_preprocess",
     "tessera.video_frame_sample",
@@ -354,8 +360,25 @@ def _lower_graph_ops(
         if op_name.startswith("tessera.schedule."):
             scheduled.extend(_lower_schedule_directive(op, idx))
             continue
-        if op_name.startswith("tessera.dist."):
-            scheduled.append(ScheduleOp("schedule.collective", _base_attrs(op, idx)))
+        if op_name.startswith("tessera.dist.") or op_name in COLLECTIVE_OPS:
+            axis = op.kwargs.get("axis", "dp")
+            tensor_axis = axis if isinstance(axis, int) and not isinstance(axis, bool) else 0
+            mesh_axis = "default" if isinstance(axis, int) and not isinstance(axis, bool) else str(axis)
+            kind = op_name.removeprefix("tessera.dist.").removeprefix("tessera.")
+            scheduled.append(ScheduleOp(
+                "schedule.collective",
+                {
+                    **_base_attrs(op, idx),
+                    "kind": kind,
+                    "mesh_axis": mesh_axis,
+                    "tensor_axis": tensor_axis,
+                    "reduction": op.kwargs.get("op", "sum"),
+                    "effect": "collective",
+                },
+                operands=list(op.operands),
+                result=op.result,
+                source_op=op,
+            ))
             continue
         if op_name in MATMUL_OPS:
             scheduled.extend([

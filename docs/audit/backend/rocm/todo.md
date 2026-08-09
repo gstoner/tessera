@@ -1,11 +1,117 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-09
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **three
+independent executable boundaries landed; exact-device packets open.** Zero-CU Copy
+Engine now has an explicit `copy_engine` artifact lane and a communicator
+created with `NCCL_CTA_POLICY_ZERO`; legality requires ROCm 7.12+, a single
+node, registered symmetric buffers, device-API support, no graph capture, and
+an RCCL-supported operation. GIN/RMA is a distinct strict-ordering lane backed
+by public `ncclPutSignal`/`ncclSignal`/`ncclWaitSignal` adapter calls; it
+requires both host-RMA and nonzero GIN properties on a multi-node communicator,
+so current WSL's `host_rma_support=true, gin_type=0` is correctly insufficient.
+The registered Target dialect owns a typed window resource plus
+`window.register`, `put_signal`, `signal`, `wait_signal`, and
+`window.deregister`. Content-addressed packages validate window lifetimes and
+the rank-local runtime consumes ordered records through an explicit adapter;
+ordinary collective records cannot select GIN.
+gfx1250 DDA remains selector-owned: the artifact requires `target_arch=gfx1250`
+and a separate selector-evidence digest, and never calls RCCL internal DDA
+symbols. The source authority is ROCm Systems/RCCL develop at
+`5bc651a82683`; its CE and DDA routing predicates are modeled as eligibility
+guards, not copied selectors. Current gfx1151 WSL can provide declaration
+evidence only. Open hardware packets are: two-rank single-node CE correctness
+plus RCCL route proof, multi-node GIN put/signal/wait ordering, and gfx1250
+DDA correctness/route/performance. None promotes another lane.
+The native GIN launcher binding now accepts explicit Tessera, OpenMPI, PMI, or
+Slurm rank metadata without taking an MPI ABI dependency, exchanges the RCCL
+unique ID through a run-scoped shared rendezvous, and aggregates exact
+put/signal/wait readback plus HIP-event and host-wall timing across ranks. The
+packet remains open because this WSL host has one gfx1151 and `gin_type=0`;
+closure requires running the
+[exact-device runbook](GIN_EXACT_DEVICE_RUNBOOK.md) on at least two GIN-connected
+gfx1151 nodes with matching artifact and communicator digests. No single-node
+functional result can close it.
+
+Cross-backend sync `COLLECTIVE-NATIVE-FOUNDATION-2026-08-09` — **communicator
+and window ownership landed; two-rank device evidence blocked by access.** The
+C++ RCCL adapter issues all four collectives, queries each initialized
+communicator, and owns symmetric strict-ordering registration through a
+move-only RAII window. The Python runtime seals rank/device, device-API, LSA
+team, multimem, GIN, and host-RMA properties into a topology-specific digest;
+device artifacts reject mismatches. A compiled gfx1151 LSA harness requires
+two distinct gfx1151 ordinals, one device-API-capable LSA team, peer writes,
+and exact readback. On current WSL, communicator-property discovery passes but
+reports `device_api_support=false`, `lsa_team_count=0`, `gin_type=0`, and
+`host_rma_support=true`; symmetric registration is blocked and only one
+gfx1151 is visible. The opt-in CTest therefore exits with the structured
+hardware-skip code 77 and no correctness promotion. gfx1200 remains
+fail-closed; gfx1250 DDA, zero-CU Copy Engine, and GIN/RMA remain independent.
+
+Cross-backend sync `COLLECTIVE-ASYNC-UNIFY-2026-08-09` — **shared software
+contract closed; native RCCL evidence open.** Active forward/autodiff producers
+no longer emit unregistered `tessera.collective.*` markers: they create typed
+`tessera_collective` futures, explicit awaits, and rewired SSA consumers.
+All-to-all divisibility, QoS/chunk bounds, mesh-axis topology, and native fp32
+storage now fail closed. gfx1151 still needs a real multi-GPU RCCL packet;
+single-GPU WSL cannot supply it. gfx1200/gfx1250 and selectors are unchanged.
+
+Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **shared typed IFT
+and measured-policy boundary landed; gfx1151 physical follow-up required.**
+`NewtonAutodiff` now emits registered residual → transposed matrix-free solve →
+residual-adjoint values and rejects missing/mismatched residual ABIs. The
+shared rematerialization pass consumes exact complete-backward work and unique
+retained-residual bytes; treeverse estimates remain pruning-only. Existing
+gfx1151 producer-recompute timings are not complete implicit-backward packets,
+and ROCm has no physical consumer for the new solver chain. No HIP image,
+selector, residual policy, or gfx1200/gfx1250 claim changes.
+
+Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` — **shared
+effect/control parity and gfx1151 consumption validated; multi-rank transport
+open.** The rebuilt LLVM/MLIR 23 ROCm compiler consumes canonical Graph
+attention operations into physical GPU modules. The Target-IR artifact retains
+its typed `tessera_rocm` directive after consuming Tile IR; the binary pipeline
+then consumes that directive before its strict ROCDL boundary. The exact-device
+gfx1151 spine passes 65/65.
+The four typed Tile collective contracts now lower into the portable
+`tessera_collective` Target dialect and content-addressed runtime-adapter
+package; deterministic two-rank software tests execute all four operations.
+This does not constitute native RCCL execution or multi-rank performance
+proof. No new selector or performance promotion is made; gfx1200/gfx1250
+remain fail-closed.
+
+Cross-backend sync `GRAPH-VERIFY-SIGNED-1-2026-08-08` — **shared legality
+parity validated; gfx1151 packages unchanged.** Graph and canonical-attention
+verifiers now read signed `IntegerAttr` values before checking positive and
+non-negative bounds, preventing MLIR 23 unsigned accessors from admitting
+negative schedules, cache windows, seeds, or control bounds. Direct negative
+IR cases cover both dialects. No HIP ABI, gfx1151 schedule, selector, image, or
+exact-device evidence changes.
+
+Cross-backend sync `AD-TSOL-SPECTRAL-1-2026-08-08` — **shared adjoint carrier
+landed; native gfx1151 backward package open.** FFT/IFFT/RFFT/IRFFT/DCT compiler
+transposes and compound STFT/ISTFT/filter/convolution VJPs now retain explicit
+spectral identity. `gfx1151` receives one content-addressed, multi-output Tile
+carrier, but `lower-tile-to-rocm` deliberately rejects it until a native
+compound-backward package and exact-device numerical/performance packet land.
+Existing forward TSOL packages and evidence are unchanged; gfx1200/gfx1250
+remain fail-closed. The rebuilt host package passes 17 compiled FFT and 21
+compiled compound-spectral gfx1151 cases; those forward results do not promote
+the new backward carrier.
+
+Cross-backend sync `AD-CORE-LINEAR-1-2026-08-08` — **shared Graph-IR parity
+validated; existing gfx1151 packages unchanged.** Both compiler autodiff passes
+now consume a single linear-transposition interface for structural views,
+broadcast, and operand-wise matmul, with paired CPU numerical proof and
+fail-closed rejection. Existing gfx1151 matmul backward execution remains its
+architecture-owned physical evidence; no HIP schedule, image, selector, or
+timing result changes.
 
 Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` — **gfx1151
 exact proof retained; no ROCm physical change.** The codegen dashboard now

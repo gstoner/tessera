@@ -3,10 +3,78 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-08
+last_updated: 2026-08-09
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **shared
+fail-closed artifact vocabulary adopted; not applicable to Metal.** Copy
+Engine, GIN/RMA, and gfx1250 DDA are independent RCCL lanes with distinct
+target and evidence gates. Apple receives only the shared discrimination and
+cannot select any AMD lane. A future Metal communicator remains separately
+owned and requires Mac exact-device evidence.
+The registered window and put/signal/wait Target operations remain RCCL-gated;
+Metal adopts only their fail-closed IR vocabulary.
+The launcher-neutral RCCL GIN executable is AMD-only and has no Metal
+consumer; Apple still requires a separately owned communicator implementation.
+
+Cross-backend sync `COLLECTIVE-NATIVE-FOUNDATION-2026-08-09` — **shared
+artifact vocabulary adopted; Metal transport still open.** Target collective
+artifacts now identify initiation, registration, ordering, capture policy,
+backend/source version, and the capability evidence digest. The functional
+NCCL/RCCL host adapters and AMD LSA/Copy Engine/DDA candidates are not
+applicable to Metal. Apple still needs a native communicator/window mapping
+and exact multi-device Mac evidence. Runtime/artifact capability-digest
+matching is shared policy and applies to that future mapping.
+
+Cross-backend sync `COLLECTIVE-ASYNC-UNIFY-2026-08-09` — **shared software
+contract closed; Metal transport evidence open.** The legacy unregistered
+`tessera.collective.*` producers are removed. Forward and adjoint insertion now
+emit registered `tessera_collective` futures, explicit awaits, and real SSA
+rewiring; the portable runtime rejects unknown/subgroup mesh axes rather than
+executing them on the wrong communicator. Apple still needs a native Metal
+multi-rank adapter and exact-device packet; no selector or performance claim
+changes.
+
+Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **shared typed IFT
+and measurement contracts available; Metal consumers/evidence required.** The
+registered solver dialect owns value-producing residual, matrix-free solve,
+residual-JVP, and residual-adjoint operations, and malformed implicit residual
+ABIs fail closed. Complete-backward timing plus unique retained-residual bytes
+can drive rematerialization only from exact-device evidence; modeled treeverse
+rows are pruning-only. Apple has no Metal consumer or complete-backward packet
+for these contracts, so no package, selector, policy, or device claim changes.
+
+Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` — **shared
+Graph/Tile/portable-Target contracts available; Metal follow-up required.** Compiler activity,
+effects, `stop_gradient`, stochastic rejection, and fail-closed region
+adjoints are target-independent. The four collectives now lower from exact
+typed Tile operations into one content-addressed asynchronous Target queue and
+execute through the deterministic software adapter. Apple still needs a Metal
+native transport adapter and exact multi-rank execution. No Metal schedule,
+selector, performance, or device evidence is claimed or transferred.
+
+Cross-backend sync `GRAPH-VERIFY-SIGNED-1-2026-08-08` — **shared legality
+parity validated; no Metal physical claim.** Graph and canonical-attention
+integer bounds now use signed `IntegerAttr` values, preventing MLIR 23 unsigned
+accessors from accepting negative schedules, seeds, cache windows, or control
+bounds. Direct negative IR cases cover both dialects. No Apple schedule,
+package, selector, runtime ABI, or Mac evidence changes.
+
+Cross-backend sync `AD-TSOL-SPECTRAL-1-2026-08-08` — **shared Graph contract
+available; Metal follow-up required.** Normalization, logical length,
+packed-real/Hermitian identity, and DCT type now survive compiler autodiff, and
+the core FFT/RFFT/DCT transposes have CPU numerical proof. Apple has no physical
+consumer for the new compound-backward artifact; no Metal schedule, package,
+selector, or device evidence is claimed or transferred.
+
+Cross-backend sync `AD-CORE-LINEAR-1-2026-08-08` — **shared Graph-IR parity
+validated; no Metal physical claim.** Compiler-owned linear transposition now
+covers structural views, broadcast, and operand-wise matmul in both autodiff
+passes with CPU numerical proof. This changes no Apple schedule, package,
+selector, or exact-device evidence; later Apple backward materializers may
+consume the shared backward Graph artifacts without inheriting x86/ROCm proof.
 
 Cross-backend sync `COMPILER-DASHBOARD-PROOF-TRUTH-2026-08-08` — **proof
 levels corrected; no Apple physical change.** Apple CPU reference execution

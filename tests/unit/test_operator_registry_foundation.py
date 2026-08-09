@@ -213,9 +213,9 @@ def test_jit_cpu_executes_reconciled_numpy_ops():
         y = tessera.ops.layer_norm(x)
         z = tessera.ops.gelu(y)
         c = tessera.ops.cast(z, dtype="fp32")
-        f = tessera.ops.fft(c)
-        d = tessera.ops.dct(f)
-        return tessera.ops.spectral_conv(d, w)
+        d = tessera.ops.dct(c)
+        s = tessera.ops.spectral_conv(d, w)
+        return tessera.ops.fft(s)
 
     x = np.arange(6, dtype=np.float32).reshape(2, 3)
     w = np.array([1.0, 0.5], dtype=np.float32)

@@ -387,7 +387,7 @@ mlir::LogicalResult DropoutMaskOp::verify() {
   double p = getDropoutP().convertToDouble();
   if (!(p >= 0.0) || !(p < 1.0))
     return emitOpError("dropout_p must satisfy 0.0 <= p < 1.0");
-  if (getSeed() < 0)
+  if (getSeedAttr().getInt() < 0)
     return emitOpError("seed must be non-negative");
   auto scoresType =
       mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
@@ -402,7 +402,7 @@ mlir::LogicalResult DropoutMaskOp::verify() {
 }
 
 mlir::LogicalResult CausalMaskOp::verify() {
-  if (getQOffset() < 0 || getKvOffset() < 0)
+  if (getQOffsetAttr().getInt() < 0 || getKvOffsetAttr().getInt() < 0)
     return emitOpError("q_offset and kv_offset must be non-negative");
   auto scoresType =
       mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
@@ -417,10 +417,10 @@ mlir::LogicalResult CausalMaskOp::verify() {
 }
 
 mlir::LogicalResult BoundaryMaskOp::verify() {
-  if (static_cast<int64_t>(getWindowLeft()) < -1 ||
-      static_cast<int64_t>(getWindowRight()) < -1)
+  if (getWindowLeftAttr().getInt() < -1 ||
+      getWindowRightAttr().getInt() < -1)
     return emitOpError("window_left and window_right must be >= -1");
-  if (getLogicalSk() <= 0)
+  if (getLogicalSkAttr().getInt() <= 0)
     return emitOpError("logical_sk must be positive");
   auto scoresType =
       mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
@@ -436,7 +436,7 @@ mlir::LogicalResult BlockDropoutOp::verify() {
   double p = getDropoutP().convertToDouble();
   if (!(p >= 0.0) || !(p < 1.0))
     return emitOpError("dropout_p must satisfy 0.0 <= p < 1.0");
-  if (getSeed() < 0)
+  if (getSeedAttr().getInt() < 0)
     return emitOpError("seed must be non-negative");
   auto scoresType =
       mlir::dyn_cast<mlir::RankedTensorType>(getScores().getType());
@@ -521,9 +521,10 @@ mlir::LogicalResult BackwardOp::verify() {
   double dropout = getDropoutP().convertToDouble();
   if (!getDropoutP().isFinite() || dropout < 0.0 || dropout >= 1.0)
     return emitOpError("dropout_p must satisfy 0 <= p < 1");
-  if (getDropoutSeed() < 0)
+  if (getDropoutSeedAttr().getInt() < 0)
     return emitOpError("dropout_seed must be nonnegative");
-  if (getSplitCount() < 2 || getQueryBlock() <= 0 || getKeyBlock() <= 0)
+  if (getSplitCountAttr().getInt() < 2 ||
+      getQueryBlockAttr().getInt() <= 0 || getKeyBlockAttr().getInt() <= 0)
     return emitOpError("split_count >= 2 and positive block sizes are required");
   return mlir::success();
 }

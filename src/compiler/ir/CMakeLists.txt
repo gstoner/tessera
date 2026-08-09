@@ -13,6 +13,12 @@ mlir_tablegen(Tessera/AdjointInterface.h.inc -gen-op-interface-decls)
 mlir_tablegen(Tessera/AdjointInterface.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(TesseraAdjointInterfaceTableGen)
 
+# AD-CORE-LINEAR-1 — compiler-owned transposition for linear Graph IR ops.
+set(LLVM_TARGET_DEFINITIONS include/Tessera/LinearTransposeInterface.td)
+mlir_tablegen(Tessera/LinearTransposeInterface.h.inc -gen-op-interface-decls)
+mlir_tablegen(Tessera/LinearTransposeInterface.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(TesseraLinearTransposeInterfaceTableGen)
+
 set(LLVM_TARGET_DEFINITIONS TesseraOps.td)
 
 # TesseraOps.td now includes "Tessera/AdjointInterface.td" — surface that path
@@ -52,12 +58,14 @@ add_mlir_dialect_library(TesseraIR
   TesseraOps.cpp
   TesseraTiling.cpp
   AdjointInterface.cpp
+  LinearTransposeInterface.cpp
   TileDialect.cpp
   TileOps.cpp
 
   DEPENDS
     TesseraIRTableGen
     TesseraAdjointInterfaceTableGen
+    TesseraLinearTransposeInterfaceTableGen
     TesseraTileIRTableGen
 
   LINK_LIBS PUBLIC

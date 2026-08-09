@@ -14,7 +14,7 @@
 //   tessera.copy                                 → memory
 //   schedule.prefetch / schedule.async_copy      → movement
 //   tessera.kv_cache.* / tessera.ring.*          → state
-//   tessera.collective.* / tessera.all_reduce    → collective
+//   tessera_collective.* / tessera.all_reduce    → collective
 //   any arg  tessera.effect = "write"|"reduce_*" → memory
 //   func.call to an external non-tessera func    → io
 //   everything else                              → pure
@@ -111,7 +111,7 @@ struct EffectAnnotation
     if (name == "tessera.all_reduce" ||
         name == "tessera.reduce_scatter" ||
         name == "tessera.all_gather" ||
-        name.starts_with("tessera.collective.") ||
+        name.starts_with("tessera_collective.") ||
         name.starts_with("collective."))
       return EffectLevel::Collective;
 

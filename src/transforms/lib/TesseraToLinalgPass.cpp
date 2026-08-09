@@ -2702,6 +2702,20 @@ struct TransposeLowering : public RewritePattern {
   }
 };
 
+struct StopGradientLowering : public RewritePattern {
+  StopGradientLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.stop_gradient", /*benefit=*/1, ctx) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1 ||
+        op->getOperand(0).getType() != op->getResult(0).getType())
+      return failure();
+    rewriter.replaceOp(op, op->getOperand(0));
+    return success();
+  }
+};
+
 // ── Pass ───────────────────────────────────────────────────────────────────
 
 class TesseraToLinalgPass
@@ -2736,6 +2750,7 @@ public:
     patterns.add<WriteRowLowering>(ctx);
     patterns.add<MatmulLowering>(ctx);
     patterns.add<BatchedGemmLowering>(ctx);
+    patterns.add<StopGradientLowering>(ctx);
     patterns.add<TransposeLowering>(ctx);
     patterns.add<ReduceLowering>(ctx);
     patterns.add<ReduceBackwardLowering>(ctx);

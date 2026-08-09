@@ -50,6 +50,7 @@ class ScheduledFFTArtifact:
     mode: str
     real_transform_policy: str
     hermitian_layout: str
+    hermitian_weight: str
     inverse: bool
     normalization: str
     scale: float
@@ -109,6 +110,7 @@ class ScheduledFFTArtifact:
             ("mode", self.mode),
             ("real_transform_policy", self.real_transform_policy),
             ("hermitian_layout", self.hermitian_layout),
+            ("hermitian_weight", self.hermitian_weight),
             ("normalization", self.normalization),
             ("radix_policy", self.radix_policy),
             ("strategy", self.strategy),
@@ -147,6 +149,7 @@ class ScheduledFFTArtifact:
             "mode": self.mode,
             "real_transform_policy": self.real_transform_policy,
             "hermitian_layout": self.hermitian_layout,
+            "hermitian_weight": self.hermitian_weight,
             "inverse": self.inverse,
             "normalization": self.normalization,
             "scale": self.scale,
@@ -179,11 +182,19 @@ def lower_scheduled_fft(
     input_shape: tuple[int, ...],
     axis: int = -1,
     n: int | None = None,
+    normalization: str = "backward",
+    hermitian_weight: str = "none",
     input_name: str = "x",
     output_name: str = "o",
 ) -> ScheduledFFTArtifact:
     if op_name not in _FFT_OPS:
         raise ValueError(f"unsupported scheduled FFT op {op_name!r}")
+    if normalization not in {"backward", "forward", "ortho"}:
+        raise ValueError("scheduled FFT normalization must be backward, forward, or ortho")
+    if hermitian_weight not in {"none", "half_interior", "double_interior"}:
+        raise ValueError("scheduled FFT has an invalid Hermitian weighting policy")
+    if op_name in {"tessera.fft", "tessera.ifft"} and hermitian_weight != "none":
+        raise ValueError("full-complex FFT does not accept Hermitian weighting")
     shape = tuple(int(dim) for dim in input_shape)
     if not shape or any(dim <= 0 for dim in shape):
         raise ValueError("scheduled FFT requires a positive static input shape")
@@ -306,7 +317,13 @@ def lower_scheduled_fft(
     output_element = "f32" if op_name == "tessera.irfft" else "complex<f32>"
     input_type = _shape_type(shape, input_element)
     output_type = _shape_type(output, output_element)
-    attrs = [f"axis = {axis} : i64"]
+    attrs = [
+        f"axis = {axis} : i64",
+        f"logical_length = {length} : i64",
+        f'normalization = "{normalization}"',
+        f'spectrum_layout = "{hermitian_layout}"',
+        f'hermitian_weight = "{hermitian_weight}"',
+    ]
     if op_name == "tessera.irfft":
         attrs.append(f"n = {length} : i64")
     graph_ir = (
@@ -345,9 +362,20 @@ def lower_scheduled_fft(
         mode=mode,
         real_transform_policy=real_transform_policy,
         hermitian_layout=hermitian_layout,
+        hermitian_weight=hermitian_weight,
         inverse=inverse,
-        normalization="backward",
-        scale=1.0 / length if inverse else 1.0,
+        normalization=normalization,
+        scale=(
+            1.0 / length
+            if normalization == "forward" and not inverse
+            else 1.0
+            if normalization == "forward"
+            else 1.0 / math.sqrt(length)
+            if normalization == "ortho"
+            else 1.0 / length
+            if inverse
+            else 1.0
+        ),
         radix_policy=radix_policy,
         strategy=plan.strategy,
         algorithm=algorithm,
@@ -412,6 +440,9 @@ def validate_scheduled_fft_metadata(
     expected_layout = "half_spectrum_nyquist_explicit" if real_mode else "full_complex"
     if metadata.get("hermitian_layout") != expected_layout:
         raise ValueError("FFT package Hermitian layout mismatch")
+    weight = metadata.get("hermitian_weight")
+    if weight not in {"none", "half_interior", "double_interior"}:
+        raise ValueError("FFT package Hermitian weighting mismatch")
     expected_batch = math.prod(dim for index, dim in enumerate(shape) if index != axis)
     if int(metadata.get("batch", 0)) != expected_batch:
         raise ValueError("FFT package batch mismatch")
@@ -430,7 +461,7 @@ def validate_scheduled_fft_metadata(
     expected_inverse = op_name in {"tessera.ifft", "tessera.irfft"}
     if bool(metadata.get("inverse")) != expected_inverse:
         raise ValueError("FFT package direction mismatch")
-    if metadata.get("normalization") != "backward":
+    if metadata.get("normalization") not in {"backward", "forward", "ortho"}:
         raise ValueError("FFT package normalization mismatch")
     if not str(metadata.get("input_name") or ""):
         raise ValueError("FFT package input binding is missing")
@@ -444,6 +475,7 @@ def validate_scheduled_fft_metadata(
         "mode",
         "real_transform_policy",
         "hermitian_layout",
+        "hermitian_weight",
         "radix_policy",
         "strategy",
         "algorithm",

@@ -37,9 +37,11 @@
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 
 #include "Tessera/AdjointInterface.h.inc"
+#include "Tessera/LinearTransposeInterface.h.inc"
 
 namespace tessera {
 
@@ -48,6 +50,45 @@ namespace {
 constexpr const char *kAutodiffMarker = "tessera.autodiff";
 
 using CotangentMap = llvm::DenseMap<mlir::Value, mlir::Value>;
+using ActiveOpSet = llvm::SmallPtrSet<mlir::Operation *, 32>;
+
+ActiveOpSet computeActiveOps(mlir::ValueRange outputs) {
+  ActiveOpSet active;
+  llvm::SmallVector<mlir::Value> worklist(outputs.begin(), outputs.end());
+  while (!worklist.empty()) {
+    mlir::Value value = worklist.pop_back_val();
+    mlir::Operation *producer = value.getDefiningOp();
+    if (!producer || !active.insert(producer).second)
+      continue;
+    if (producer->getName().getStringRef() == "tessera.stop_gradient")
+      continue;
+    worklist.append(producer->operand_begin(), producer->operand_end());
+  }
+  return active;
+}
+
+bool hasStochasticEffect(mlir::Operation *op) {
+  if (auto effect =
+          op->getAttrOfType<mlir::StringAttr>("tessera.effect_kind"))
+    return effect.getValue() == "random";
+  llvm::StringRef name = op->getName().getStringRef();
+  return name == "tessera.dropout" || name == "tessera.arch.gumbel_softmax" ||
+         name == "tessera.arch.hard_concrete";
+}
+
+void eraseStopGradientBarriers(mlir::func::FuncOp func) {
+  llvm::SmallVector<mlir::Operation *> barriers;
+  func.walk([&](mlir::Operation *op) {
+    if (op->getName().getStringRef() == "tessera.stop_gradient")
+      barriers.push_back(op);
+  });
+  for (mlir::Operation *op : barriers) {
+    if (op->getNumOperands() == 1 && op->getNumResults() == 1) {
+      op->getResult(0).replaceAllUsesWith(op->getOperand(0));
+      op->erase();
+    }
+  }
+}
 
 /// Accumulate `g` into `cotan[v]` (float → addf, integer → addi). Shared shape
 /// with AutodiffPass.cpp; kept local so the two passes stay independent.
@@ -113,28 +154,40 @@ private:
     }
     mlir::Block &fwdBlock = fwd.getBody().front();
 
-    // Collect gradient-path-eligible forward ops (top level only; nested
-    // regions rejected until structured reverse-mode lands — matches the
-    // in-place pass's contract).
+    auto returnOp = mlir::dyn_cast<mlir::func::ReturnOp>(fwdBlock.getTerminator());
+    if (!returnOp) {
+      fwd.emitError() << "[AUTODIFF_PAIRED] forward has no return terminator";
+      return mlir::failure();
+    }
+    ActiveOpSet activeOps = computeActiveOps(returnOp.getOperands());
+
+    // Collect only the backward-reachable forward cone. Inactive side
+    // computations and inactive nested regions are neither cloned nor rejected.
     llvm::SmallVector<mlir::Operation *> forwardOps;
     for (mlir::Operation &opRef : fwdBlock) {
       mlir::Operation *op = &opRef;
       if (mlir::isa<mlir::func::ReturnOp>(op))
         continue;
+      op->setAttr("tessera.autodiff.activity",
+                  mlir::StringAttr::get(ctx, activeOps.contains(op)
+                                                ? "active"
+                                                : "inactive"));
+      if (!activeOps.contains(op))
+        continue;
       if (op->getNumRegions() != 0) {
-        op->emitError() << "[AUTODIFF_NESTED_REGION] paired reverse-mode "
-                           "autodiff does not yet support ops with nested "
-                           "regions ('"
+        op->emitError() << "[AUTODIFF_NESTED_REGION] active paired reverse-mode "
+                           "path contains unsupported nested-region op ('"
                         << op->getName().getStringRef() << "')";
         return mlir::failure();
       }
+      if (hasStochasticEffect(op)) {
+        op->emitError()
+            << "AUTODIFF_STOCHASTIC_EFFECT: active stochastic op "
+            << op->getName()
+            << " requires an explicit pathwise or score-function adjoint";
+        return mlir::failure();
+      }
       forwardOps.push_back(op);
-    }
-
-    auto returnOp = mlir::dyn_cast<mlir::func::ReturnOp>(fwdBlock.getTerminator());
-    if (!returnOp) {
-      fwd.emitError() << "[AUTODIFF_PAIRED] forward has no return terminator";
-      return mlir::failure();
     }
 
     // Backward signature: (forward inputs..., out_cotangents...) ->
@@ -178,6 +231,18 @@ private:
     // adjoint's `getX()` resolves to a value that lives in this function.
     llvm::SmallVector<mlir::Operation *> clones;
     for (mlir::Operation *op : forwardOps) {
+      // Recompute-all can preserve a stopped primal only when its operand is
+      // already a backward argument.  Recomputing an inactive producer cone
+      // here would be wrong for stateful or stochastic producers; a future
+      // saved-residual policy can lift this restriction explicitly.
+      if (op->getName().getStringRef() == "tessera.stop_gradient" &&
+          !map.contains(op->getOperand(0))) {
+        op->emitError()
+            << "AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED: paired "
+               "recompute-all cannot preserve a stopped intermediate; save "
+               "the stopped primal as an explicit residual";
+        return mlir::failure();
+      }
       mlir::Operation *clone = builder.clone(*op, map);
       clones.push_back(clone);
     }
@@ -213,26 +278,39 @@ private:
       if (!any)
         continue;
 
-      auto adj = mlir::dyn_cast<AdjointInterface>(op);
-      if (!adj) {
+      llvm::SmallVector<mlir::Value> inCotans;
+      if (auto adj = mlir::dyn_cast<AdjointInterface>(op)) {
+        if (!adj.isDifferentiable()) {
+          op->emitError() << "[AUTODIFF_PAIRED] op " << op->getName()
+                          << " declares AdjointInterface but isDifferentiable() "
+                             "is false";
+          return mlir::failure();
+        }
+        inCotans = adj.buildAdjoint(builder, outCotans);
+      } else if (auto linear =
+                     mlir::dyn_cast<LinearTransposeInterface>(op)) {
+        inCotans = linear.buildLinearTranspose(builder, outCotans);
+        for (auto [index, cotangent] : llvm::enumerate(inCotans)) {
+          if (cotangent && !linear.isLinearInOperand(index)) {
+            op->emitError()
+                << "[AUTODIFF_PAIRED] LinearTransposeInterface produced a "
+                   "cotangent for non-linear operand "
+                << index;
+            return mlir::failure();
+          }
+        }
+      } else {
         if (op->getNumOperands() > 0) {
           op->emitError() << "[AUTODIFF_OP_NOT_DIFFERENTIABLE] op "
                           << op->getName()
-                          << " is on the gradient path but does not implement "
-                             "AdjointInterface";
+                          << " is on the gradient path but implements neither "
+                             "AdjointInterface nor LinearTransposeInterface";
           return mlir::failure();
         }
         continue;
       }
-      if (!adj.isDifferentiable()) {
-        op->emitError() << "[AUTODIFF_PAIRED] op " << op->getName()
-                        << " declares AdjointInterface but isDifferentiable() "
-                           "is false";
-        return mlir::failure();
-      }
-      llvm::SmallVector<mlir::Value> inCotans = adj.buildAdjoint(builder, outCotans);
       if (inCotans.size() != op->getNumOperands()) {
-        op->emitError() << "[AUTODIFF_PAIRED] buildAdjoint returned "
+        op->emitError() << "[AUTODIFF_PAIRED] derivative interface returned "
                         << inCotans.size() << " cotangents, expected "
                         << op->getNumOperands();
         return mlir::failure();
@@ -272,6 +350,8 @@ private:
                  mlir::FlatSymbolRefAttr::get(ctx, bwdName));
     fwd->setAttr("tessera.autodiff.residual_policy",
                  builder.getStringAttr("recompute_all"));
+    eraseStopGradientBarriers(bwd);
+    eraseStopGradientBarriers(fwd);
     return mlir::success();
   }
 };

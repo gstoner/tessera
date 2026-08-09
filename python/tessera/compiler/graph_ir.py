@@ -108,6 +108,98 @@ _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
 }
 
 
+_SPECTRAL_GRAPH_OPS = frozenset({
+    "tessera.fft",
+    "tessera.ifft",
+    "tessera.rfft",
+    "tessera.irfft",
+    "tessera.dct",
+    "tessera.stft",
+    "tessera.istft",
+    "tessera.spectral_filter",
+    "tessera.spectral_conv",
+})
+
+
+def _canonicalize_spectral_attrs(
+    op_name: str, operand_types: List[IRType], attrs: Dict[str, Any]
+) -> None:
+    """Stamp the canonical Graph spectral contract at its Python producer.
+
+    The public API retains NumPy-compatible ``norm``/``n``/``n_fft`` names,
+    while Graph IR has one target-independent vocabulary.  Leaving both
+    spellings in emitted IR made artifact identity depend on consumer-side
+    defaults and allowed the Python and C++ lowering lanes to disagree.
+    """
+    if op_name not in _SPECTRAL_GRAPH_OPS:
+        return
+
+    normalization = attrs.pop("norm", attrs.get("normalization", "backward"))
+    attrs["normalization"] = normalization
+    if "output_length" not in attrs and "length" in attrs:
+        attrs["output_length"] = attrs.pop("length")
+    if "logical_length" not in attrs:
+        legacy_length = attrs.pop("n", attrs.pop("n_fft", None))
+        if legacy_length is not None:
+            attrs["logical_length"] = legacy_length
+    else:
+        attrs.pop("n", None)
+        attrs.pop("n_fft", None)
+
+    half_spectrum = op_name in {
+        "tessera.rfft",
+        "tessera.irfft",
+        "tessera.spectral_conv",
+    } or (
+        op_name in {"tessera.stft", "tessera.istft"}
+        and attrs.get("onesided", True)
+    )
+    default_layout = (
+        "full_real"
+        if op_name == "tessera.dct"
+        else "half_spectrum_nyquist_explicit"
+        if half_spectrum
+        else "full_complex"
+    )
+    attrs.setdefault("spectrum_layout", default_layout)
+    if op_name in {"tessera.stft", "tessera.istft"}:
+        attrs.setdefault("center", False)
+        attrs.setdefault("onesided", True)
+        attrs.setdefault("pad_mode", "constant")
+    if op_name in {"tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft"}:
+        attrs.setdefault("hermitian_weight", "none")
+
+    if (
+        "logical_length" not in attrs
+        and op_name == "tessera.spectral_conv"
+        and len(operand_types) >= 2
+    ):
+        x, kernel = operand_types[:2]
+        axis = _transform_axis(x, attrs)
+        if axis is not None and x.shape and kernel.shape:
+            x_extent = _dim(x.shape[axis])
+            kernel_extent = _dim(kernel.shape[axis])
+            if x_extent is not None and kernel_extent is not None:
+                full_extent = x_extent + kernel_extent - 1
+                attrs["logical_length"] = 1 << (full_extent - 1).bit_length()
+
+    if "logical_length" not in attrs and operand_types:
+        first = operand_types[0]
+        axis = _transform_axis(first, attrs)
+        if axis is not None and first.shape:
+            extent = _dim(first.shape[axis])
+            if extent is not None:
+                if op_name == "tessera.irfft":
+                    extent = 2 * (extent - 1)
+                elif op_name == "tessera.istft":
+                    extent = 2 * (extent - 1)
+                attrs["logical_length"] = extent
+
+    if op_name == "tessera.dct":
+        attrs.setdefault("type", 2)
+        attrs.setdefault("transpose_basis", False)
+
+
 # Keyword-only TENSOR operands — the other half of the same contract.
 #
 # W1.3 (2026-08-03). `_POSITIONAL_ATTR_PARAMS` above fixes one direction: a
@@ -664,6 +756,18 @@ class IROp:
         if self.attrs:
             attr_parts.append(self.attrs)
         attr_parts.extend(f"{k} = {_format_attr_value(v)}" for k, v in self.kwargs.items())
+        # Carry the traced catalog effect into Graph IR.  Only non-pure effects
+        # need an explicit attribute; absence continues to mean pure.  C++
+        # autodiff consumes this derived fact, so aliased Python RNG calls do
+        # not need to be rediscovered from their source spelling.
+        if "tessera.effect_kind" not in (self.attrs or "") and \
+                "tessera.effect_kind" not in self.kwargs:
+            from .op_catalog import get_op_spec
+            spec = get_op_spec(self.op_name)
+            if spec is not None and spec.effect != "pure":
+                attr_parts.append(
+                    f'tessera.effect_kind = "{spec.effect}"'
+                )
         if (
             self.op_name == "tessera.rl.ppo_policy_loss"
             and "operandSegmentSizes" not in (self.attrs or "")
@@ -1905,9 +2009,14 @@ class _OpExtractor(ast.NodeVisitor):
                 operand_types.append(
                     str(self._value_types.get(value, TENSOR_OPAQUE)))
 
+        inferred_operands = [
+            self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands
+        ]
+        _canonicalize_spectral_attrs(mlir_name, inferred_operands, kwargs)
+
         result_types = _infer_result_types(
             mlir_name,
-            [self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands],
+            inferred_operands,
             attrs=kwargs)
         result_type = result_types[0]
 
@@ -2199,7 +2308,9 @@ def _shape_irfft(operand_types: List[IRType],
     if first.rank is None or not first.shape or axis is None:
         return tensor_ir_type(("*",), real_dtype, layout=first.layout)
     dims = list(first.shape)
-    explicit = _dim((attrs or {}).get("n"))
+    explicit = _dim(
+        (attrs or {}).get("logical_length", (attrs or {}).get("n"))
+    )
     if explicit is not None:
         dims[axis] = str(explicit)
         return tensor_ir_type(tuple(dims), real_dtype, layout=first.layout)
@@ -2899,13 +3010,21 @@ def _shape_stft(operand_types: List[IRType],
     """
     x, win = operand_types[0], (operand_types[1] if len(operand_types) > 1 else None)
     dtype = _complex_of(x.dtype)
-    hop = _dim((attrs or {}).get("hop"))
-    n = _dim(x.shape[-1]) if x.shape else None
+    attrs = attrs or {}
+    hop = _dim(attrs.get("hop"))
+    axis = _transform_axis(x, attrs)
+    n = _dim(x.shape[axis]) if x.shape and axis is not None else None
     w = _dim(win.shape[-1]) if win is not None and win.shape else None
-    if hop is None or n is None or w is None or not hop:
+    fft_n = _dim(attrs.get("logical_length")) or w
+    if hop is None or n is None or w is None or fft_n is None or not hop or axis is None:
         return _unknown_like(x, dtype)
-    return tensor_ir_type((str((n - w) // hop + 1), str(w // 2 + 1)), dtype,
-                          layout=x.layout)
+    effective = n + (2 * (fft_n // 2) if attrs.get("center", False) else 0)
+    effective = max(effective, fft_n)
+    frames = str((effective - fft_n) // hop + 1)
+    bins = str(fft_n // 2 + 1 if attrs.get("onesided", True) else fft_n)
+    result = list(x.shape)
+    result[axis : axis + 1] = [frames, bins]
+    return tensor_ir_type(tuple(result), dtype, layout=x.layout)
 
 
 def _shape_conv_full(operand_types: List[IRType],
@@ -2921,9 +3040,22 @@ def _shape_conv_full(operand_types: List[IRType],
     x, w = operand_types[0], operand_types[1]
     if x.rank is None or w.rank is None or not x.shape or not w.shape:
         return _unknown_like(x)
-    n, m = _dim(x.shape[-1]), _dim(w.shape[-1])
+    axis = _transform_axis(x, attrs)
+    if axis is None or len(x.shape) != len(w.shape):
+        return _unknown_like(x)
+    n, m = _dim(x.shape[axis]), _dim(w.shape[axis])
     total = str(n + m - 1) if n is not None and m is not None else "?"
-    return tensor_ir_type(x.shape[:-1] + (total,), x.dtype, layout=x.layout)
+    result = []
+    for index, (x_extent, w_extent) in enumerate(zip(x.shape, w.shape)):
+        if index == axis:
+            result.append(total)
+        elif x_extent == w_extent or w_extent == "1":
+            result.append(x_extent)
+        elif x_extent == "1":
+            result.append(w_extent)
+        else:
+            result.append("?")
+    return tensor_ir_type(tuple(result), x.dtype, layout=x.layout)
 
 
 def _shape_arange(operand_types: List[IRType],
@@ -2982,13 +3114,30 @@ def _shape_istft(operand_types: List[IRType],
     xf = operand_types[0]
     win = operand_types[1] if len(operand_types) > 1 else None
     dtype = _REAL_FOR_COMPLEX.get(xf.dtype or "", "fp32")
-    hop = _dim((attrs or {}).get("hop"))
-    frames = _dim(xf.shape[-2]) if xf.rank and len(xf.shape) >= 2 else None
-    length = _dim(win.shape[-1]) if win is not None and win.shape else None
-    if hop is None or frames is None or length is None:
+    attrs = attrs or {}
+    hop = _dim(attrs.get("hop"))
+    axis = _transform_axis(xf, attrs)
+    frame_axis = axis - 1 if axis is not None else None
+    frames = (
+        _dim(xf.shape[frame_axis])
+        if xf.rank and frame_axis is not None and frame_axis >= 0
+        else None
+    )
+    window_length = _dim(win.shape[-1]) if win is not None and win.shape else None
+    fft_n = _dim(attrs.get("logical_length")) or window_length
+    if (
+        hop is None or frames is None or fft_n is None
+        or frame_axis is None or axis is None
+    ):
         return _unknown_like(xf, dtype)
-    return tensor_ir_type(xf.shape[:-2] + (str((frames - 1) * hop + length),),
-                          dtype, layout=xf.layout)
+    output_length = _dim(attrs.get("output_length"))
+    if output_length is None:
+        output_length = (frames - 1) * hop + fft_n
+        if attrs.get("center", False):
+            output_length -= 2 * (fft_n // 2)
+    result = list(xf.shape)
+    result[frame_axis : axis + 1] = [str(output_length)]
+    return tensor_ir_type(tuple(result), dtype, layout=xf.layout)
 
 
 def _shape_layout_permute(operand_types: List[IRType],

@@ -5,7 +5,7 @@
 
 Execution-centric lens over the standalone-compiler primitive registry: given the one accelerator this repo can actually prove on — **Apple Silicon GPU (Metal)** — where does each primitive stand? *Accelerator-proven* means a `@jit(target="apple_gpu")` call runs it with `execution_mode == "metal_runtime"` and a numerically-validated result. NVIDIA/ROCm execution is hardware-gated (Phase G/H) and out of scope for this map.
 
-**200/487 primitives are accelerator-proven on Apple GPU today.** Of the 332 accelerator-relevant primitives (proven + eligible + special), **120 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
+**200/488 primitives are accelerator-proven on Apple GPU today.** Of the 332 accelerator-relevant primitives (proven + eligible + special), **120 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
 
 ## Classes
 
@@ -15,7 +15,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `eligible` | 120 | numeric — route-able to a Metal kernel (the actionable gap) |
 | `special` | 12 | needs a dedicated Apple-GPU kernel class (device RNG) |
 | `multi_device` | 10 | needs real multi-accelerator hardware (NVIDIA/AMD) |
-| `host` | 145 | structural / orchestration / shape — accelerator not-applicable |
+| `host` | 146 | structural / orchestration / shape — accelerator not-applicable |
 
 ## By category
 
@@ -40,7 +40,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `geometric_algebra` | 17 | 16 | 1 | `eligible` |
 | `grad_transform` | 7 | 0 | 7 | `eligible` |
 | `indexing` | 15 | 5 | 0 | `host` |
-| `layout_transform` | 16 | 1 | 0 | `host` |
+| `layout_transform` | 17 | 1 | 0 | `host` |
 | `linalg_decomposition` | 4 | 1 | 0 | `host` |
 | `linalg_solver` | 2 | 1 | 0 | `host` |
 | `logical` | 8 | 8 | 0 | `eligible` |

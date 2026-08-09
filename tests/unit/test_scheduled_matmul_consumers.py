@@ -158,7 +158,13 @@ def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch) -> None:
 
     def fake_run(tool: Path, source: str, pipeline: str) -> str:
         pipelines.append(pipeline)
-        return 'module { "tessera_rocm.test"() : () -> () }'
+        if "output=target" in pipeline:
+            return (
+                'module attributes {tessera.pipeline.target_ir_consumer = '
+                '"tessera_rocm"} { gpu.module @kernels { '
+                '"tessera_rocm.test"() : () -> () } }'
+            )
+        return "module { gpu.binary @gfx1151 }"
 
     monkeypatch.setattr(rocm_native, "_run_opt", fake_run)
     rocm_native._compile_native_tile_ir(
@@ -237,7 +243,10 @@ def test_driver_records_adjacent_scheduled_matmul_lineage(monkeypatch, target: s
     assert bundle.launch_descriptor.provenance["work_item"] == "E2E-REAL-3"
 
 
-@pytest.mark.skipif(not x86_native.tools_available(), reason="x86 compiler/image unavailable")
+@pytest.mark.skipif(
+    not x86_native.tools_available() or scheduled_matmul.find_tessera_opt() is None,
+    reason="x86 compiler/image unavailable",
+)
 @pytest.mark.parametrize("shape", [(1, 1, 1), (5, 17, 9), (16, 31, 19)])
 def test_x86_scheduled_matmul_executes_exact_artifact(shape) -> None:
     m, k, n = shape

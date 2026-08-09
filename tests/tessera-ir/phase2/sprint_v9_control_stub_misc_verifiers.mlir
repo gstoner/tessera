@@ -104,14 +104,14 @@ func.func @quant_fp8_shape(%x: tensor<4x8xf32>) -> (tensor<4x16xf8E4M3FN>, f32) 
 // -----
 // ─── FFT — axis out of range / positive ─────────────────────────────────────
 // CHECK-LABEL: func.func @fft_ok
-func.func @fft_ok(%x: tensor<4x16xf32>) -> tensor<4x16xf32> {
-  %y = "tessera.fft"(%x) {axis = -1 : i64} : (tensor<4x16xf32>) -> tensor<4x16xf32>
-  return %y : tensor<4x16xf32>
+func.func @fft_ok(%x: tensor<4x16xf32>) -> tensor<4x16xcomplex<f32>> {
+  %y = "tessera.fft"(%x) {axis = -1 : i64} : (tensor<4x16xf32>) -> tensor<4x16xcomplex<f32>>
+  return %y : tensor<4x16xcomplex<f32>>
 }
 
 // -----
-func.func @fft_axis(%x: tensor<4x16xf32>) -> tensor<4x16xf32> {
+func.func @fft_axis(%x: tensor<4x16xf32>) -> tensor<4x16xcomplex<f32>> {
   // expected-error @+1 {{fft axis out of range}}
-  %y = "tessera.fft"(%x) {axis = 5 : i64} : (tensor<4x16xf32>) -> tensor<4x16xf32>
-  return %y : tensor<4x16xf32>
+  %y = "tessera.fft"(%x) {axis = 5 : i64} : (tensor<4x16xf32>) -> tensor<4x16xcomplex<f32>>
+  return %y : tensor<4x16xcomplex<f32>>
 }

@@ -21,12 +21,19 @@ public:
   ExecRuntime(int maxInflight, Policy pol, int pidBase=0)
     : limiter_(maxInflight), policy_(pol), pidBase_(pidBase) {}
 
-  void setNCCL(std::unique_ptr<NCCLAdapter> a) { std::lock_guard<std::mutex> g(mu_); nccl_ = std::move(a); }
-  void setRCCL(std::unique_ptr<RCCLAdapter> a) { std::lock_guard<std::mutex> g(mu_); rccl_ = std::move(a); }
+  void setNCCL(std::unique_ptr<NCCLAdapter> a) {
+    std::lock_guard<std::mutex> g(mu_);
+    nccl_ = std::shared_ptr<NCCLAdapter>(std::move(a));
+  }
+  void setRCCL(std::unique_ptr<RCCLAdapter> a) {
+    std::lock_guard<std::mutex> g(mu_);
+    rccl_ = std::shared_ptr<RCCLAdapter>(std::move(a));
+  }
   PerfettoTraceWriter& trace() { return trace_; }
 
   // Core API: gated submission with policy + tracing
-  void submit(const ChunkDesc& d) {
+  void submit(const ChunkDesc& d,
+              std::shared_ptr<ExecRuntime> keepAlive = nullptr) {
     auto algo = policy_.chooseAlgo(d.bytes);
     auto path = policy_.choosePath(d.intraNode, topo_);
 
@@ -52,23 +59,25 @@ public:
     trace_.counter("chunk_bytes", static_cast<double>(d.bytes), pid, tid);
     trace_.annotate("path", (path==Path::NVLINK?"NVLINK": path==Path::RDMA?"RDMA":"PCIE"));
 
-    auto done = [this, pid, tid](){
-      trace_.end("CommChunk", "comm", pid, tid);
-      this->limiter_.release();
-    };
-
-    // Snapshot the adapter pointers under ``mu_`` so concurrent
-    // ``setNCCL`` / ``setRCCL`` writes don't race with the read here.
-    // The unique_ptr ownership stays inside the class — we only
-    // capture the raw pointer (whose lifetime is bounded by the
-    // class) for the call below.
-    NCCLAdapter* nccl_snap = nullptr;
-    RCCLAdapter* rccl_snap = nullptr;
+    // Snapshot strong adapter references so a concurrent replacement cannot
+    // destroy an adapter while its asynchronous submission is in flight.
+    std::shared_ptr<NCCLAdapter> nccl_snap;
+    std::shared_ptr<RCCLAdapter> rccl_snap;
     {
       std::lock_guard<std::mutex> g(mu_);
-      nccl_snap = nccl_.get();
-      rccl_snap = rccl_.get();
+      nccl_snap = nccl_;
+      rccl_snap = rccl_;
     }
+
+    // The C singleton path supplies ``keepAlive`` so shutdown cannot destroy
+    // the limiter/trace state before the completion callback runs. Direct
+    // stack-owned users retain the established contract: the caller keeps the
+    // ExecRuntime alive until its adapter has completed every submission.
+    auto done = [this, pid, tid, keepAlive = std::move(keepAlive),
+                 nccl_snap, rccl_snap]() {
+      trace_.end("CommChunk", "comm", pid, tid);
+      limiter_.release();
+    };
 
     // Prefer NCCL/RCCL if enabled; otherwise immediate completion.
     if (nccl_snap)      nccl_snap->submitChunkAsync(d.ptr, d.bytes, d.device, d.stream, done);
@@ -84,8 +93,8 @@ private:
   Policy policy_;
   Topology topo_;
   PerfettoTraceWriter trace_;
-  std::unique_ptr<NCCLAdapter> nccl_;
-  std::unique_ptr<RCCLAdapter> rccl_;
+  std::shared_ptr<NCCLAdapter> nccl_;
+  std::shared_ptr<RCCLAdapter> rccl_;
   std::mutex mu_;
   int pidBase_;
 };
@@ -102,9 +111,9 @@ extern "C" {
   // Subsequent ``tessera_*`` calls re-initialize on demand.
   //
   // Concurrency: this entry point is safe to call while another
-  // thread is inside ``tessera_submit_chunk_async`` — the in-flight
-  // submitter holds a ``shared_ptr`` to the runtime so the actual
-  // destruction is deferred until the last submit returns.  Callers
+  // thread is inside ``tessera_submit_chunk_async`` — each asynchronous
+  // completion callback holds a ``shared_ptr`` to the runtime so actual
+  // destruction is deferred until the last callback completes. Callers
   // must not, however, rely on any specific runtime *identity*
   // surviving across a shutdown: the next submit may construct a
   // fresh runtime with a freshly-configured ``TokenLimiter``.

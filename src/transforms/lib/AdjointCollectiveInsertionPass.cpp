@@ -16,7 +16,7 @@
 // The AutodiffPass multi-output rewrite (Phase F4) exposes each argument's
 // cotangent as an additional function result. This pass identifies those
 // trailing results, looks up the associated arg's sharding declaration,
-// and inserts the matching `tessera.collective.*` op on each.
+// and inserts the matching registered `tessera_collective.*` op on each.
 //
 // Effect-aware gating: when the function is effect-annotated (per-arg
 // `tessera.effect`, produced by EffectAnnotationPass), a cotangent is
@@ -37,6 +37,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/IR/TesseraOps.h"
+#include "tessera/Dialect/Collective/IR/CollectiveDialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
@@ -85,6 +86,10 @@ public:
     return "Phase F5 — emit reduce_scatter / all_gather / all_reduce on the "
            "cotangent SSA values produced by AutodiffPass for each sharded "
            "function argument.";
+  }
+
+  void getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<tessera::collective::TesseraCollectiveDialect>();
   }
 
   /// Options — match the forward-pass GPUCollectiveInsertionPass spelling so
@@ -205,37 +210,40 @@ public:
       // Pull the cotangent SSA value out of the (now-rewritten) return.
       mlir::Value cotanValue = returnOp.getOperand(cotanIndex);
 
-      // Emit the matching `tessera.collective.*` op via the generic
-      // OperationState path (matches GPUCollectiveInsertionPass — the
-      // collective ops are registered in a separate dialect that the
-      // transforms library doesn't link directly).
+      // Emit the matching registered asynchronous collective and await its
+      // payload before replacing the cotangent return value.
       mlir::Value reduced;
       auto loc = cotanValue.getLoc();
       mlir::OperationState state(loc, llvm::StringRef());
       state.addOperands(cotanValue);
-      state.addTypes(cotanValue.getType());
+      state.addTypes(tessera::collective::FutureType::get(
+          &getContext(), cotanValue.getType()));
       if (kind == "dp") {
-        state.name = mlir::OperationName("tessera.collective.reduce_scatter",
+        state.name = mlir::OperationName("tessera_collective.reduce_scatter",
                                           &getContext());
-        state.addAttribute("axis", builder.getStringAttr(dpAxis.getValue()));
-        state.addAttribute("op", builder.getStringAttr("sum"));
+        state.addAttribute("mesh_axis", builder.getStringAttr(dpAxis.getValue()));
+        state.addAttribute("reduction", builder.getStringAttr("sum"));
       } else if (kind == "tp") {
-        state.name = mlir::OperationName("tessera.collective.all_gather",
+        state.name = mlir::OperationName("tessera_collective.all_gather",
                                           &getContext());
-        state.addAttribute("axis", builder.getStringAttr(tpAxis.getValue()));
+        state.addAttribute("mesh_axis", builder.getStringAttr(tpAxis.getValue()));
+        state.addAttribute("reduction", builder.getStringAttr("none"));
       } else if (kind == "replicated") {
-        state.name = mlir::OperationName("tessera.collective.all_reduce",
+        state.name = mlir::OperationName("tessera_collective.all_reduce",
                                           &getContext());
-        state.addAttribute("axis", builder.getStringAttr(dpAxis.getValue()));
-        state.addAttribute("op", builder.getStringAttr("sum"));
+        state.addAttribute("mesh_axis", builder.getStringAttr(dpAxis.getValue()));
+        state.addAttribute("reduction", builder.getStringAttr("sum"));
       } else {
         cotanIndex++;
         continue;
       }
-      state.addAttribute("tessera.collective",
-                         mlir::UnitAttr::get(&getContext()));
+      state.addAttribute("tensor_axis", builder.getI64IntegerAttr(0));
+      state.addAttribute("tessera.collective.abi", builder.getStringAttr("v1"));
       auto *collectiveOp = builder.create(state);
-      reduced = collectiveOp->getResult(0);
+      mlir::OperationState awaitState(loc, "tessera_collective.await");
+      awaitState.addOperands(collectiveOp->getResult(0));
+      awaitState.addTypes(cotanValue.getType());
+      reduced = builder.create(awaitState)->getResult(0);
 
       // Splice the collective's result into the return operand list and
       // record the choice as a per-arg attribute for downstream tools.

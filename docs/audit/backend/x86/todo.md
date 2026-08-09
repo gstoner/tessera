@@ -9,6 +9,16 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **shared ES low-rank
+correction contract + fp32/s32 accumulation policy defined; x86 is follow-up
+required (lower priority).** The Evolution-Strategies reference tier
+(`tessera.stdlib.es`) landed; the Graph-IR op `es_low_rank_correction` and its
+emitters are W2. On x86 the population forward is a batched-LoRA AVX-512 GEMM
+plus a low-rank correction; the `s32` lane maps to VNNI (u8×s8→s32). No ES
+performance target is set for x86, so this trails the lead backends; member-keyed
+RNG (G2) and the fp32/s32 accumulation policy (I6 / Decision #32) apply.
+Contract: `docs/audit/compiler/EGGROLL_SUPPORT_PLAN.md`.
+
 Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **shared
 fail-closed artifact vocabulary adopted; not applicable to AVX-512.** Zero-CU
 Copy Engine, GIN/RMA, and gfx1250 DDA are distinct RCCL lanes and cannot be

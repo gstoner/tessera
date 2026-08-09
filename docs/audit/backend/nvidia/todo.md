@@ -8,6 +8,16 @@ last_updated: 2026-08-09
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **shared ES low-rank
+correction contract + fp32/s32 accumulation policy defined; NVIDIA emitter is
+follow-up required.** The Evolution-Strategies reference tier
+(`tessera.stdlib.es`) landed; the Graph-IR op `es_low_rank_correction` and its
+emitters are W2. NVIDIA is a lead performance target (Decision #28): a hand
+SGMV / `mma.sync` low-rank correction stays a Tier-3 arbiter candidate. The
+`s32` lane maps to native int8→s32 tensor cores; member-keyed RNG (G2) and the
+fp32/s32 accumulation policy (I6 / Decision #32) apply. Contract:
+`docs/audit/compiler/EGGROLL_SUPPORT_PLAN.md`.
+
 Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **shared
 artifact discrimination adopted; AMD transports not applicable.** Advanced
 collective artifacts now distinguish Copy Engine, GIN/RMA, and gfx1250 DDA and

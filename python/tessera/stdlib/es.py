@@ -48,9 +48,11 @@ from __future__ import annotations
 
 from typing import Sequence
 
+import ml_dtypes
 import numpy as np
 
 from .. import rng as _rng
+from ..dtype import canonicalize_dtype
 
 __all__ = [
     "reconstruct_factors",
@@ -61,9 +63,6 @@ __all__ = [
     "centered_rank",
     "antithetic_sign",
 ]
-
-_ACCUM_NP = {"fp32": np.float64, "f32": np.float64, "s32": np.int64, "int32": np.int64}
-
 
 def _as_key(key) -> "_rng.RNGKey":
     """Accept an ``RNGKey`` or a bare integer seed."""
@@ -147,16 +146,21 @@ def es_update(key, members: Sequence[int], fitness: np.ndarray,
 
     Computed as the factored GEMM ``Ā B̄ᵀ`` (contraction dim ``N·r``) — no
     per-member ``E_i`` is ever formed. ``fitness`` is the length-``P`` shaped
-    fitness (see :func:`fitness_shaping`). ``accum`` selects the accumulation
-    width and is a hard contract (I6 / Decision #32): ``fp32`` (float) or ``s32``
-    (int lane); bf16 accumulation is rejected because the sum over the population
-    cancels. Returns the ``[out, in]`` update (rank ``min(⌈N/2⌉·r, out, in)``
-    under antithetic pairing).
+    fitness (see :func:`fitness_shaping`). ``accum`` is the accumulation-width
+    contract (I6 / Decision #32): the reference implements ``fp32`` (float64
+    here); ``s32`` (the EGG integer lane) is reserved and raises
+    ``NotImplementedError`` until that track lands; bf16 is rejected because the
+    sum over the population cancels. Returns the ``[out, in]`` update (rank
+    ``min(⌈N/2⌉·r, out, in)`` under antithetic pairing).
     """
     if sigma is None:
         raise ValueError("sigma is semantic and must be provided (G4)")
-    if accum not in _ACCUM_NP:
-        raise ValueError(f"accum must be one of {sorted(_ACCUM_NP)} (I6), got {accum!r}")
+    if accum in ("s32", "int32"):
+        raise NotImplementedError(
+            "integer (s32) accumulation is the EGG integer lane (W-later); the "
+            "reference tier implements the fp32 lane only (I6 / Decision #32)")
+    if accum not in ("fp32", "f32"):
+        raise ValueError(f"accum must be 'fp32' or 's32' (I6), got {accum!r}")
     P = len(members)
     f = np.asarray(fitness, dtype=np.float64).reshape(P)
     A = np.empty((P, out_dim, rank)); B = np.empty((P, in_dim, rank)); s = np.empty(P)
@@ -215,6 +219,20 @@ def fitness_shaping(scores: np.ndarray, *, method: str = "zscore",
                      "(expected 'zscore' or 'centered_rank')")
 
 
+_STORAGE_NP = {"fp16": np.float16, "bf16": ml_dtypes.bfloat16,
+               "fp32": np.float32, "fp64": np.float64}
+
+
 def _np_storage(dtype: str):
-    return {"fp32": np.float32, "f32": np.float32, "fp64": np.float64,
-            "bf16": np.float32, "f16": np.float32}.get(str(dtype), np.float32)
+    """Canonical storage dtype → numpy dtype; rejects unsupported spellings.
+
+    Normalizes through the canonical registry (``f16``→``fp16`` etc.) and maps to
+    *real* numpy storage — ``fp16`` keeps ``np.float16`` rounding, ``bf16`` uses
+    ``ml_dtypes.bfloat16`` — instead of silently widening to float32 (Decision
+    #21a: no silent fallthrough)."""
+    canon = canonicalize_dtype(str(dtype))
+    if canon not in _STORAGE_NP:
+        raise ValueError(
+            f"storage dtype {dtype!r} (→ {canon}) is unsupported by the ES "
+            f"reference tier; expected one of {sorted(_STORAGE_NP)}")
+    return _STORAGE_NP[canon]

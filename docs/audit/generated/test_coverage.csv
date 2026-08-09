@@ -311,7 +311,7 @@ named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,3,0,0,3,0,bf16 f32 fp32 int32 int64 int8,directly_tested,3 direct test references
 nesterov,11,3,0,14,0,fp64,directly_tested,14 direct test references
 nonzero,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
-normalize_group_advantages,11,0,0,11,0,bf16 fp32 fp64,directly_tested,11 direct test references
+normalize_group_advantages,11,0,0,11,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,11 direct test references
 nt_xent_loss,8,0,0,8,0,,directly_tested,8 direct test references
 ntk_rope,2,0,0,2,0,,directly_tested,2 direct test references
 online_softmax,8,0,1,8,0,,directly_tested,8 direct test references

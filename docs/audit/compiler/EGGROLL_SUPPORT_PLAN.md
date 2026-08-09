@@ -172,6 +172,11 @@ minGRU, L1-norm, LUTs) is a *separate optional demonstration track* — great fo
 the int8 lane but orthogonal to the core ES win. Its operator needs are catalogued
 in §6 as cross-cutting improvements, not EGGROLL prerequisites.
 
+**Cross-backend sync key:** `EGGROLL-ES-LOWRANK-2026-08-09` — the shared
+`es_low_rank_correction` contract + fp32/s32 accumulation policy (I6) is recorded
+in each backend queue (`docs/audit/backend/{apple,nvidia,rocm,x86}/todo.md`) with
+its per-architecture outcome (follow-up required / not applicable), per AGENTS.md.
+
 ---
 
 ## 6. Operator-improvement catalog — where EGGROLL drives *overall* wins

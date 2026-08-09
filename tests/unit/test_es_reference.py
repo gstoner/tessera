@@ -93,6 +93,20 @@ def test_A5_accum_fp32_contract():                           # I6 / Decision #32
 
     with pytest.raises(ValueError):
         es.es_update(key, members, f, 8, 8, sigma=0.02, rank=1, accum="bf16")
+    # s32 (integer lane) is reserved, not silently aliased to fp32 (review P2)
+    with pytest.raises(NotImplementedError):
+        es.es_update(key, members, f, 8, 8, sigma=0.02, rank=1, accum="s32")
+
+
+def test_A_storage_dtype_is_honored_not_widened():           # review P2 (fp16)
+    key = rng.RNGKey.from_seed(0)
+    import ml_dtypes
+    assert es.low_rank_perturbation(key, 0, 8, 8, 1, sigma=0.1, dtype="fp16").dtype == np.float16
+    assert es.low_rank_perturbation(key, 0, 8, 8, 1, sigma=0.1, dtype="f16").dtype == np.float16
+    assert es.low_rank_perturbation(key, 0, 8, 8, 1, sigma=0.1,
+                                    dtype="bf16").dtype == ml_dtypes.bfloat16
+    with pytest.raises((ValueError, Exception)):               # unsupported spelling rejected
+        es.low_rank_perturbation(key, 0, 8, 8, 1, sigma=0.1, dtype="fp8_e4m3")
 
 
 def test_A_sigma_is_required_semantic():                     # G4

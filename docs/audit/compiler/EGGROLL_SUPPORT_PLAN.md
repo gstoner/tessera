@@ -12,6 +12,11 @@ plan_state: open
 > dashboards stay status truth (Decision #26); this plan is the build sequence
 > and the design rationale, not a status claim.
 >
+> **Routing:** start at [`README.md`](README.md). This document owns the
+> Evolution-Strategies track scope only; cross-plan sequencing (what lands next
+> across the compiler) is owned by
+> [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md), not here.
+>
 > **Provenance.** Derived from EGGROLL (*Evolution Strategies at the Hyperscale*,
 > arXiv:2511.16652v2) + the reference implementations `ESHyperscale/HyperscaleES`
 > and `ESHyperscale/nano-egg` (read as reference vocabulary only, Decision #23).

@@ -16504,6 +16504,16 @@ def _rng_dtype(kwargs: dict, default: str) -> str:
     return str(kwargs.get("dtype", default))
 
 
+def _rng_float_kwarg(
+    kwargs: dict[str, Any], primary: str, default: float, *, alias: str | None = None
+) -> float:
+    """Read an optional RNG scalar without passing ``None`` to ``float``."""
+    value = kwargs.get(primary)
+    if value is None and alias is not None:
+        value = kwargs.get(alias)
+    return default if value is None else float(value)
+
+
 def _rng_compute(op_name: str, operands: list, kwargs: dict, uniform_fn: Any, np: Any) -> Any:
     """``uniform_fn(seed, counter_base, n)`` returns n device Philox uniforms in
     [0,1). Host transforms mirror tessera.rng_device exactly."""
@@ -16747,8 +16757,8 @@ def _execute_x86_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
     n = int(np.prod(shape)) if shape else 1
     out = np.empty(n, np.float32)
     if op_name in {"tessera.rng_uniform", "tessera.rng_philox_uniform"}:
-        low = float(kwargs.get("lo", kwargs.get("low", 0.0)))
-        high = float(kwargs.get("hi", kwargs.get("high", 1.0)))
+        low = _rng_float_kwarg(kwargs, "lo", 0.0, alias="low")
+        high = _rng_float_kwarg(kwargs, "hi", 1.0, alias="high")
         lib.tessera_x86_philox_uniform_range_f32(
             seed_arg, counter_arg, ctypes.c_int64(n), ctypes.c_float(low),
             ctypes.c_float(high),
@@ -16757,7 +16767,7 @@ def _execute_x86_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
         lib.tessera_x86_philox_normal_f32(
             seed_arg, counter_arg, ctypes.c_int64(n),
             ctypes.c_float(float(kwargs.get("mean", 0.0))),
-            ctypes.c_float(float(kwargs.get("std", kwargs.get("stddev", 1.0)))),
+            ctypes.c_float(_rng_float_kwarg(kwargs, "std", 1.0, alias="stddev")),
             out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
     return out.reshape(shape)
 
@@ -17060,12 +17070,12 @@ def _execute_rocm_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
     if op_name in {"tessera.rng_uniform", "tessera.rng_philox_uniform"}:
         output = _rocm_philox_distribution(
             "uniform_range", seed, counter, n,
-            float(kwargs.get("lo", kwargs.get("low", 0.0))),
-            float(kwargs.get("hi", kwargs.get("high", 1.0))))
+            _rng_float_kwarg(kwargs, "lo", 0.0, alias="low"),
+            _rng_float_kwarg(kwargs, "hi", 1.0, alias="high"))
     else:
         output = _rocm_philox_distribution(
             "normal", seed, counter, n, float(kwargs.get("mean", 0.0)),
-            float(kwargs.get("std", kwargs.get("stddev", 1.0))))
+            _rng_float_kwarg(kwargs, "std", 1.0, alias="stddev"))
     return output.reshape(shape)
 
 

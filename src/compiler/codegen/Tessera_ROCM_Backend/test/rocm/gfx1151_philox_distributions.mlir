@@ -1,4 +1,4 @@
-// RUN: tessera-rocm-opt %s --generate-rocm-philox-kernel | FileCheck %s
+// RUN: %trop %s --generate-rocm-philox-kernel | FileCheck %s
 
 module {
   "tessera_rocm.philox"() {name = "uniform_range", mode = "uniform_range"} : () -> ()

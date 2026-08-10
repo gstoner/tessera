@@ -19,6 +19,12 @@ mlir_tablegen(Tessera/LinearTransposeInterface.h.inc -gen-op-interface-decls)
 mlir_tablegen(Tessera/LinearTransposeInterface.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(TesseraLinearTransposeInterfaceTableGen)
 
+# AD-FWD-CORE-1 — compiler-owned forward-mode JVP construction.
+set(LLVM_TARGET_DEFINITIONS include/Tessera/TangentInterface.td)
+mlir_tablegen(Tessera/TangentInterface.h.inc -gen-op-interface-decls)
+mlir_tablegen(Tessera/TangentInterface.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(TesseraTangentInterfaceTableGen)
+
 set(LLVM_TARGET_DEFINITIONS TesseraOps.td)
 
 # TesseraOps.td now includes "Tessera/AdjointInterface.td" — surface that path
@@ -59,6 +65,7 @@ add_mlir_dialect_library(TesseraIR
   TesseraTiling.cpp
   AdjointInterface.cpp
   LinearTransposeInterface.cpp
+  TangentInterface.cpp
   TileDialect.cpp
   TileOps.cpp
 
@@ -66,6 +73,7 @@ add_mlir_dialect_library(TesseraIR
     TesseraIRTableGen
     TesseraAdjointInterfaceTableGen
     TesseraLinearTransposeInterfaceTableGen
+    TesseraTangentInterfaceTableGen
     TesseraTileIRTableGen
 
   LINK_LIBS PUBLIC

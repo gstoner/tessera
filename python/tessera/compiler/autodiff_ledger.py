@@ -19,6 +19,9 @@ rung                    source (existing, read-only here)
                         ``buildLinearTranspose`` Graph IR vs. a ``placeholder``
                         (``custom_adjoint_call`` → round-trips to the Python
                         VJP, i.e. **not** native) vs. ``none``
+``ir_tangent``          C++ ``TangentInterface`` emits native Graph IR JVP
+``fwd_cpu_ir_oracle``   compiler-emitted paired JVP interpreted and compared
+                        with an independent numerical oracle
 ``target_lowered``      backward lowering probe (Phase 3) — none wired yet
 ``runtime_bound``       ``runtime_execution_matrix`` backward column (Phase 4)
 ``oracle_proven``       ``op_target_conformance`` backward fixture (Phase 3)
@@ -49,6 +52,7 @@ _ADJOINT_CPP = _REPO_ROOT / "src" / "compiler" / "ir" / "AdjointInterface.cpp"
 _LINEAR_TRANSPOSE_CPP = (
     _REPO_ROOT / "src" / "compiler" / "ir" / "LinearTransposeInterface.cpp"
 )
+_TANGENT_CPP = _REPO_ROOT / "src" / "compiler" / "ir" / "TangentInterface.cpp"
 
 # The backend targets the backward-execution rungs are tracked against.  Kept in
 # sync with the runtime execution matrix's target set; the ledger reports which
@@ -74,6 +78,10 @@ _PLACEHOLDER_MACRO_RE = re.compile(r'POINTWISE_BUILD_ADJOINT\(\s*\w+\s*,\s*"([^"
 # filter below is belt-and-suspenders.)
 _EXPLICIT_DERIVATIVE_RE = re.compile(
     r'(\w+)Op::(?:buildAdjoint|buildLinearTranspose)\b'
+)
+_EXPLICIT_TANGENT_RE = re.compile(r'(\w+)Op::buildTangent\b')
+_MACRO_TANGENT_RE = re.compile(
+    r'TESSERA_(?:UNARY_LINEAR|COLLECTIVE)_TANGENT\((\w+)Op\)'
 )
 
 # The runtime VJP key a placeholder body carries (e.g. getStringAttr("layer_norm")).
@@ -110,6 +118,10 @@ _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
         "fft", "ifft", "rfft", "irfft", "dct",
     }
 )
+_FWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
+    {"fft", "ifft", "irfft", "layer_norm", "matmul", "mul", "reduce",
+     "rfft", "rmsnorm", "sigmoid", "softmax", "tanh"}
+)
 
 # Stable build identifiers used in the ledger. They describe the configuration
 # that validates a claim, not the host directory in which somebody happened to
@@ -133,6 +145,24 @@ def _read_adjoint_source() -> str:
             "silent no-op)."
         )
     return "\n".join(path.read_text(encoding="utf-8") for path in sources)
+
+
+def _ir_tangent_classes() -> frozenset[str]:
+    if not _TANGENT_CPP.is_file():
+        raise LedgerError(
+            f"cannot build the autodiff ledger: tangent source missing: "
+            f"{_TANGENT_CPP} — do not silently erase compiler forward mode."
+        )
+    text = _TANGENT_CPP.read_text(encoding="utf-8")
+    stems = set(_EXPLICIT_TANGENT_RE.findall(text))
+    stems.update(_MACRO_TANGENT_RE.findall(text))
+    stems.discard("OPNAME")
+    if not stems:
+        raise LedgerError(
+            "parsed no TangentInterface implementations; update the ledger "
+            "parser rather than silently reporting zero compiler JVPs."
+        )
+    return frozenset(_cpp_op_family(stem) for stem in stems)
 
 
 def _buildadjoint_body(text: str, sig_start: int) -> str:
@@ -164,6 +194,7 @@ def _cpp_op_family(name: str) -> str:
     # CamelCase split.
     return {
         "d_c_t": "dct",
+        "e_s_low_rank_correction": "es_low_rank_correction",
         "f_f_t": "fft",
         "i_f_f_t": "ifft",
         "i_r_f_f_t": "irfft",
@@ -244,16 +275,20 @@ def _match_keys(cov: "primitive_coverage.PrimitiveCoverage") -> set[str]:
 
 class LedgerRow:
     __slots__ = ("family", "category", "python_reference", "ir_adjoint",
+                 "ir_tangent", "fwd_cpu_ir_oracle",
                  "bwd_cpu_ir_oracle", "bwd_target_lowered", "bwd_runtime_bound",
                  "bwd_oracle_proven", "bwd_device_verified_jit",
                  "bwd_device_verified_abi", "bwd_residual_policy",
                  "bwd_implementation", "build_evidence", "notes")
 
-    def __init__(self, family, category, python_reference, ir_adjoint, notes):
+    def __init__(self, family, category, python_reference, ir_adjoint,
+                 ir_tangent, notes):
         self.family = family
         self.category = category
         self.python_reference = python_reference
         self.ir_adjoint = ir_adjoint
+        self.ir_tangent = ir_tangent
+        self.fwd_cpu_ir_oracle: bool = family in _FWD_IR_ORACLE_CPU
         # Phase 3 — compiler-emitted backward IR oracle-verified on CPU by
         # interpretation (weaker than native execution; see _BWD_IR_ORACLE_CPU).
         self.bwd_cpu_ir_oracle: bool = family in _BWD_IR_ORACLE_CPU
@@ -278,6 +313,7 @@ def collect_rows() -> list[LedgerRow]:
     ledger cross-references.
     """
     native, placeholder = _ir_adjoint_classes()
+    tangents = _ir_tangent_classes()
     kind_classes = _ir_adjoint_kind_classes()
     covs = primitive_coverage.all_primitive_coverages()
     # Phase 4 (A2): the native backward-execution rungs are sourced from the
@@ -322,13 +358,15 @@ def collect_rows() -> list[LedgerRow]:
             ir_adjoint = "none"
             notes = ""
         differentiable = _is_differentiable(cov)
-        if not differentiable and ir_adjoint == "none":
+        ir_tangent = "native" if keys & tangents else "none"
+        if not differentiable and ir_adjoint == "none" and ir_tangent == "none":
             continue
         row = LedgerRow(
             family=name,
             category=cov.category,
             python_reference="yes" if differentiable else "no",
             ir_adjoint=ir_adjoint,
+            ir_tangent=ir_tangent,
             notes=notes,
         )
         builds: list[str] = []
@@ -336,6 +374,10 @@ def collect_rows() -> list[LedgerRow]:
             builds.append(f"python_reference={_PYTHON_REFERENCE_BUILD}")
         if ir_adjoint != "none":
             builds.append(f"ir_adjoint={_CORE_ADJOINT_BUILD}")
+        if ir_tangent != "none":
+            builds.append(f"ir_tangent={_CORE_ADJOINT_BUILD}")
+        if row.fwd_cpu_ir_oracle:
+            builds.append(f"fwd_cpu_ir_oracle={_CORE_ADJOINT_BUILD}")
         if row.bwd_cpu_ir_oracle:
             builds.append(f"bwd_cpu_ir_oracle={_CORE_ADJOINT_BUILD}")
         # Fill the native backward rungs from the matrix, matching on the
@@ -385,6 +427,8 @@ def _summary(rows: list[LedgerRow]) -> dict[str, int]:
         "ir_adjoint_native": sum(1 for r in rows if r.ir_adjoint == "native"),
         "ir_adjoint_placeholder": sum(1 for r in rows if r.ir_adjoint == "placeholder"),
         "ir_adjoint_mixed": sum(1 for r in rows if r.ir_adjoint == "mixed"),
+        "ir_tangent_native": sum(1 for r in rows if r.ir_tangent == "native"),
+        "forward_cpu_ir_oracle": sum(1 for r in rows if r.fwd_cpu_ir_oracle),
         "backward_cpu_ir_oracle": sum(1 for r in rows if r.bwd_cpu_ir_oracle),
         "backward_target_lowered": sum(1 for r in rows if r.bwd_target_lowered),
         "backward_runtime_bound": sum(1 for r in rows if r.bwd_runtime_bound),
@@ -403,7 +447,8 @@ def _fmt_targets(ts: tuple[str, ...]) -> str:
 def render_csv() -> str:
     rows = collect_rows()
     cols = (
-        "family", "category", "python_reference", "ir_adjoint",
+        "family", "category", "python_reference", "ir_adjoint", "ir_tangent",
+        "fwd_cpu_ir_oracle",
         "bwd_cpu_ir_oracle", "bwd_target_lowered", "bwd_runtime_bound",
         "bwd_oracle_proven", "bwd_device_verified_jit",
         "bwd_device_verified_abi", "build_evidence", "notes",
@@ -414,7 +459,8 @@ def render_csv() -> str:
     writer.writerow(cols)
     for r in rows:
         writer.writerow([
-            r.family, r.category, r.python_reference, r.ir_adjoint,
+            r.family, r.category, r.python_reference, r.ir_adjoint, r.ir_tangent,
+            "cpu" if r.fwd_cpu_ir_oracle else "",
             "cpu" if r.bwd_cpu_ir_oracle else "",
             _fmt_targets(r.bwd_target_lowered), _fmt_targets(r.bwd_runtime_bound),
             _fmt_targets(r.bwd_oracle_proven),
@@ -430,6 +476,7 @@ def render_markdown() -> str:
     rows = collect_rows()
     s = _summary(rows)
     native, placeholder = _ir_adjoint_classes()
+    tangents = _ir_tangent_classes()
     lines: list[str] = [
         "<!-- AUTO-GENERATED by tessera.compiler.autodiff_ledger — do not edit. "
         "Regenerate via scripts/check_generated_docs.sh --write -->",
@@ -440,7 +487,7 @@ def render_markdown() -> str:
         "[`AUTODIFF_UNIFICATION_PLAN.md`](../compiler/AUTODIFF_UNIFICATION_PLAN.md) "
         "§3. This is a **projection** that joins `primitive_coverage` "
         "(`vjp`/`jvp` axes — Decision #24 truth), the native/placeholder "
-        "adjoint classes parsed from `src/compiler/ir/AdjointInterface.cpp`, and "
+        "adjoint and tangent classes parsed from the C++ derivative interfaces, and "
         "(when they exist) the backward lanes of the runtime execution matrix "
         "and conformance fixtures. It is **not** a new source of truth. "
         "Regenerate via `scripts/check_generated_docs.sh --write`.",
@@ -454,6 +501,12 @@ def render_markdown() -> str:
         "IR (static-shape W5 path); `placeholder`: `buildAdjoint` emits a "
         "`custom_adjoint_call` that round-trips to the Python VJP at runtime "
         "(**not** native); `none`: no IR adjoint.",
+        "- **ir_tangent** — `native` when `--tessera-autodiff-forward` "
+        "consumes the op's compiler-owned `TangentInterface`; `none` means "
+        "forward mode fails closed for an active instance.",
+        "- **fwd_cpu_ir_oracle** — the paired primal/tangent Graph IR emitted "
+        "by `--tessera-autodiff-forward` is interpreted and compared against "
+        "an analytic and finite-difference NumPy oracle.",
         "- **bwd_cpu_ir_oracle** — the compiler-emitted paired backward IR "
         "(`--tessera-autodiff-paired`) is numerically **interpreted on CPU and "
         "matches an independent NumPy VJP oracle** (Phase 3). Strictly weaker "
@@ -484,6 +537,11 @@ def render_markdown() -> str:
         f"**{s['ir_adjoint_placeholder']}** ({', '.join(sorted(placeholder)) or '—'})",
         f"- `ir_adjoint = mixed` (kind-aware native + placeholder): "
         f"**{s['ir_adjoint_mixed']}**",
+        f"- `ir_tangent = native`: **{s['ir_tangent_native']}** "
+        f"({', '.join(sorted(tangents)) or '—'})",
+        f"- forward JVP IR **oracle-verified on CPU**: "
+        f"**{s['forward_cpu_ir_oracle']}** "
+        f"({', '.join(sorted(_FWD_IR_ORACLE_CPU)) or '—'})",
         f"- backward IR **oracle-verified on CPU** (interpreted): "
         f"**{s['backward_cpu_ir_oracle']}** ({', '.join(sorted(_BWD_IR_ORACLE_CPU)) or '—'})",
         f"- backward `target_lowered` on any exact target: "
@@ -520,13 +578,15 @@ def render_markdown() -> str:
         "",
         "## Ledger",
         "",
-        "| Family | Category | python_reference | ir_adjoint | bwd cpu_ir_oracle | bwd target_lowered | bwd runtime_bound | bwd oracle_proven | bwd device_verified_jit | bwd device_verified_abi | Residual policy | Implementation | Build evidence | Notes |",
-        "|---|---|:--:|:--:|:--:|---|---|---|---|---|---|---|---|---|",
+        "| Family | Category | python_reference | ir_adjoint | ir_tangent | fwd cpu_ir_oracle | bwd cpu_ir_oracle | bwd target_lowered | bwd runtime_bound | bwd oracle_proven | bwd device_verified_jit | bwd device_verified_abi | Residual policy | Implementation | Build evidence | Notes |",
+        "|---|---|:--:|:--:|:--:|:--:|:--:|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
         lines.append(
             f"| `{r.family}` | {r.category} | {r.python_reference} | "
-            f"{r.ir_adjoint} | {'cpu' if r.bwd_cpu_ir_oracle else '—'} | "
+            f"{r.ir_adjoint} | {r.ir_tangent} | "
+            f"{'cpu' if r.fwd_cpu_ir_oracle else '—'} | "
+            f"{'cpu' if r.bwd_cpu_ir_oracle else '—'} | "
             f"{_fmt_targets(r.bwd_target_lowered) or '—'} | "
             f"{_fmt_targets(r.bwd_runtime_bound) or '—'} | "
             f"{_fmt_targets(r.bwd_oracle_proven) or '—'} | "

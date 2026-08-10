@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-10
 audit_role: plan
 plan_state: landing
 ---
@@ -86,6 +86,64 @@ for all-reduce, reduce-scatter, all-gather, and all-to-all. This is not a
 multi-rank execution claim: Target transport, overlap, and exact-device proof
 remain in each backend plan. x86 and gfx1151 consumption were validated
 independently; no evidence transfers to Apple or NVIDIA.
+
+### 2026-08-09 closure program
+
+AutoDiff closure is now one ordered compiler-foundation program, not an
+unbounded family checklist:
+
+1. **AD-FWD-CORE-1 — complete.** `TangentInterface` and
+   `--tessera-autodiff-forward` emit a paired
+   `@f__jvp(primals, tangents) -> (outputs, output_tangents)` Graph function.
+   Add/sub/mul, matmul, transpose/reshape, and the structural view family have
+   compiler-owned rules. Matmul-plus-multiply executes in the CPU IR oracle and
+   matches both its analytic JVP and central finite differences. Unsupported
+   active operations and nested regions fail closed. The generated ledger now
+   exposes `ir_tangent` and `fwd_cpu_ir_oracle`; Python JVP registration is not
+   compiler proof.
+2. **AD-FWD-PRODUCT-2 / AD-STOCHASTIC-RNG-1 — landing.** Public `autodiff="forward"` and `"jvp"`
+   requests now canonicalize to one forward intent. A mode-neutral
+   differentiation provenance facet coexists with the reverse-only compatibility
+   field, so a Graph JVP can never be reported as native backward execution.
+   Stable `wrt_indices` drive the paired ABI: `@f__jvp` takes all primals and
+   only the requested input tangents. Inactive multilinear terms are omitted,
+   and `compiled_jvp_ir()` invokes the real C++ pass on a concrete signature.
+   Decoration-time provenance is drift-guarded against the ODS tangent set, so
+   a program containing an unsupported active family reports `UNSUPPORTED`
+   instead of claiming an IR transformation that the pass would reject.
+   The tangent set now spans reduction, softmax, LayerNorm/RMSNorm, core
+   spectral transforms, collectives, replayable dropout, and fixed-key EGGROLL.
+   A proof matrix makes smooth directional/duality identities, nonsmooth
+   boundary policies, stochastic replay, and implicit-residual obligations
+   explicit. Keyed/counter Philox Graph operations and estimator provenance
+   (`constant_noise`, `pathwise`, `score_function`, or reject) close the prior
+   implicit-RNG gap. x86 and gfx1151 now execute uniform scaling, Box–Muller,
+   and dropout masking natively; Philox words are bit exact and transcendental
+   transforms are bounded to one f32 ULP. Remaining work in this milestone is
+   compound spectral/solver and loss/optimizer tangent expansion plus
+   independently proven target JVP packages.
+3. **AD-REGION-1.** Add region activity plus `RegionAdjointInterface` and
+   `RegionTangentInterface`; execute bounded `if`, `for`, and `scan` derivatives
+   before admitting `while`. Effects, aliasing, and stochastic legality remain
+   fail-closed.
+4. **AD-TREEVERSE-1.** Turn measured counted-region candidates into an
+   executable checkpoint/replay schedule and report actual backward work plus
+   retained bytes.
+5. **AD-HIGHER-1.** Compose the compiler transforms for exact
+   forward-over-reverse HVP, then remove the structural `grad(grad(...))` block
+   only for proven families.
+6. **AD-SPARSE-1 / AD-BATCH-1.** Add Jacobian sparsity/coloring and a real
+   batching transform. The Python loop remains an explicit oracle fallback, not
+   native `vmap` evidence.
+7. **AD-CLOSEOUT-1.** Eliminate the remaining Python
+   `custom_adjoint_call` round-trips from `native_required`, close or explicitly
+   reject every registered differentiable family, and archive this plan only
+   after generated ledger totality, structured-control execution, exact HVP,
+   and independent backend evidence gates pass.
+
+Architecture-owned packages remain a parallel promotion queue. A shared Graph
+JVP does not transfer an AVX-512, gfx1151, Metal, or CUDA schedule or hardware
+claim.
 
 ---
 
@@ -603,11 +661,14 @@ checkpoint tuning, and fused backward promotion remain gated as ordered above.
 | 4 | 3 | Static CPU `matmul → tanh/sigmoid → loss` oracle proof | Task #4 | ✅ first-call specialization + paired MLIR/LLVM runtime launch + direct oracle proof |
 | 5 | 4 | Runtime ABI binding + backward matrix column + `native_required` enforcement | Task #5 | ✅ A1–A4 |
 
-**In progress: Phase 5 (Task #6)** — tensor algebra, kind-aware sum/mean,
-GELU/SiLU/ReLU, softmax, and unary/affine RMSNorm/LayerNorm are compiler-native
-and CPU-IR oracle-proven; normalization backward additionally has compiled
-gfx1151 and AVX-512 launches. Remaining family work begins with
-losses/optimizers, fused epilogues, and Apple/NVIDIA normalization promotion.
+**In progress: Phase 5 plus AD-FWD-CORE-1 (Task #6)** — reverse-mode family
+expansion includes native losses/optimizers, spectral transforms and bounded
+compound spectral packages, and bounded IFT solver packages beyond the older
+normalization-only summary. Compiler forward mode now has its first paired JVP
+contract and numerical CPU proof. The live ledger—not this prose—owns family
+counts. Product request/provenance, broader tangent coverage, structured
+regions, executable Treeverse, exact HVP, and Apple/NVIDIA physical promotion
+remain open in the ordered closure program above.
 
 ---
 
@@ -625,7 +686,8 @@ once Phase 0 lands.
 | 2 | Paired fwd/bwd/residual contract (`--tessera-autodiff-paired`, recompute-all) | ✅ first cut landed 2026-07-11 |
 | 3 | matmul→tanh/sigmoid→loss — backward native on CPU | ✅ paired-pass output launches through MLIR/LLVM JIT on `cpu_x86_64`; direct gradient oracle proof landed 2026-07-12 |
 | 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **complete** 2026-07-12 via A1–A4; aliases share their dedicated implementation, matmul is an explicit two-GEMM composition, and residual policy is structured per target. |
-| 5 | Closed operation-family expansion | 🟡 tensor algebra, kind-aware sum/mean, GELU/SiLU/ReLU, softmax, and unary/affine RMSNorm/LayerNorm emit native paired IR and are CPU-interpreter oracle-proven; normalization backward also launches compiled on gfx1151 and AVX-512. Losses/optimizers, fused epilogues, and Apple/NVIDIA target promotion remain open. |
+| 5 | Closed operation-family expansion | 🟡 live family and target truth is generated; native losses/optimizers, spectral transforms, bounded compound spectral backward, and bounded IFT packages have advanced beyond the older normalization-only summary. Apple/NVIDIA physical promotion and remaining family rows stay open. |
+| D2 | General compiler forward mode | 🟡 `TangentInterface`, paired JVP pass, fail-closed legality, mode-neutral public request/provenance, `wrt`-indexed product ABI, ledger axes, and numerical matmul/mul/tanh/sigmoid CPU proof have landed. Broad family rules, regions, and target packages remain open. |
 | 6 | NVIDIA sm_120 Flash Attention backward promotion | ✅ first CUDA family: f32/fp16 storage, f32 VJP accumulation, MHA/GQA/MQA aliases, mask/bias/soft-cap derivatives; exact `nvidia_sm120` `device_verified_jit` proof with recompute-all residual policy. |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand

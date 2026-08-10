@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 288 |
+| ``complete`` | 290 |
 | ``runnable_reference`` | 4 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **326** |
+| **total** | **328** |
 
-## complete (288)
+## complete (290)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -264,6 +264,8 @@ each row into a single E2E tier.
 | ``quantize_nvfp4`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dropout`` | random_mask | public | public | registered | fused | device_verified_jit | ready | none |
 | ``rng_normal`` | random_source | public | public | registered | fused | device_verified_jit | ready | none |
+| ``rng_philox_normal`` | random_source | public | public | registered | fused | device_verified_jit | ready | none |
+| ``rng_philox_uniform`` | random_source | public | public | registered | fused | device_verified_jit | ready | none |
 | ``rng_uniform`` | random_source | public | public | registered | fused | device_verified_jit | ready | none |
 | ``amax`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
 | ``amin`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |

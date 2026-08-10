@@ -247,6 +247,8 @@ rfft,pure,pure,1,1,0
 rmsnorm,pure,pure,1,1,0
 rmsnorm_safe,pure,,1,1,0
 rng_normal,random,random,1,1,0
+rng_philox_normal,pure,,1,1,0
+rng_philox_uniform,pure,,1,1,0
 rng_uniform,random,random,1,1,0
 roll,pure,,1,1,0
 rope,pure,,1,1,0

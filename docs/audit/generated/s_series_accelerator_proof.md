@@ -5,7 +5,7 @@
 
 Execution-centric lens over the standalone-compiler primitive registry: given the one accelerator this repo can actually prove on — **Apple Silicon GPU (Metal)** — where does each primitive stand? *Accelerator-proven* means a `@jit(target="apple_gpu")` call runs it with `execution_mode == "metal_runtime"` and a numerically-validated result. NVIDIA/ROCm execution is hardware-gated (Phase G/H) and out of scope for this map.
 
-**200/489 primitives are accelerator-proven on Apple GPU today.** Of the 333 accelerator-relevant primitives (proven + eligible + special), **121 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
+**200/491 primitives are accelerator-proven on Apple GPU today.** Of the 335 accelerator-relevant primitives (proven + eligible + special), **121 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
 
 ## Classes
 
@@ -13,7 +13,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 |-------|------:|---------|
 | `proven` | 200 | executes on Apple GPU today (`metal_runtime`) |
 | `eligible` | 121 | numeric — route-able to a Metal kernel (the actionable gap) |
-| `special` | 12 | needs a dedicated Apple-GPU kernel class (device RNG) |
+| `special` | 14 | needs a dedicated Apple-GPU kernel class (device RNG) |
 | `multi_device` | 10 | needs real multi-accelerator hardware (NVIDIA/AMD) |
 | `host` | 146 | structural / orchestration / shape — accelerator not-applicable |
 
@@ -60,7 +60,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `quantization` | 8 | 0 | 8 | `eligible` |
 | `quantize` | 8 | 0 | 8 | `eligible` |
 | `random_mask` | 1 | 0 | 1 | `eligible` |
-| `random_source` | 2 | 0 | 0 | `special` |
+| `random_source` | 4 | 0 | 0 | `special` |
 | `recurrent` | 3 | 0 | 3 | `eligible` |
 | `reduction` | 16 | 16 | 0 | `eligible` |
 | `rl_loss` | 4 | 0 | 4 | `eligible` |

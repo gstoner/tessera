@@ -165,7 +165,7 @@ lane; tolerances `∝ 1/√samples`.
 | WS | Scope | Gate |
 |---|---|---|
 | **W1 — reference tier (host-free)** ✅ **LANDED** | `python/tessera/stdlib/es.py`: perturbation, correction, population-forward, update, fitness shaping, centered rank, and antithetic sign. Physical reconstruction uses the versioned `splitmix64-philox4x32-boxmuller` member stream—not the unrelated host Philox-4x64/BLAKE2 stream. `tests/unit/test_es_reference.py` owns exact/statistical oracles and the RNG ABI vector. | oracles green ✅ |
-| **W2 — op + emitters** 🟡 **LANDING** | Shared Graph/Schedule/Tile ODS, verifiers, content-addressed lineage, required fp32 numeric policy, and terminal non-differentiable status have landed. The rank-1 fp32 ROCm emitter compiles to HSACO and is exact-device verified on gfx1151; its cooperative Wave32/LDS SGMV form hoists member RNG derivation and computes each row projection once. The Zen 5 AVX-512 consumer now executes the same architecture-bound contract through `runtime.launch`, caches O(in+out) factors, and has an exact-host packet including ragged dimensions. The integer VNNI lane is deliberately fail-closed until numeric policy carries quantization scales and saturating requantization. Still open: gfx1151 selector-grade device timing/direct-WMMA comparison, rank>1, s32, and Apple/NVIDIA consumers. | gfx1151 + Zen 5 rank-1 correctness ✅; performance/cross-backend open |
+| **W2 — op + emitters** 🟡 **LANDING** | Shared Graph/Schedule/Tile ODS, verifiers, content-addressed lineage, and required fp32 numeric policy have landed. The correction is zeroth-order with respect to fitness/RNG identity, but is a linear map of `x` when member ids and the key are fixed; the compiler now owns that JVP and rejects key/member tangents. The rank-1 fp32 ROCm emitter compiles to HSACO and is exact-device verified on gfx1151; its cooperative Wave32/LDS SGMV form hoists member RNG derivation and computes each row projection once. The Zen 5 AVX-512 consumer executes the same architecture-bound contract through `runtime.launch`, caches O(in+out) factors, and has an exact-host packet including ragged dimensions. The integer VNNI lane is deliberately fail-closed until numeric policy carries quantization scales and saturating requantization. Still open: the reverse linear transpose, gfx1151 selector-grade device timing/direct-WMMA comparison, rank>1, s32, and Apple/NVIDIA consumers. | fixed-key JVP + gfx1151/Zen 5 rank-1 correctness ✅; reverse/performance/cross-backend open |
 | **W3 — moment-free update path (G3)** 🟡 **LANDING** | The factored ES estimator feeds the existing Adam implementation, and `optim.moment_free` supplies a stateless, decoupled-weight-decay-capable sign-threshold update with explicit validation. Host oracles prove the Adam formula and zero-slot ternary path. Compiler/native fusion and external optimizer parity remain open. | host formula/oracle ✅; physical fusion open |
 | **W4 — distributed (Phase G/H)** 🟡 **LANDING** | `distributed_es_update` all-gathers only member ids and scalar fitnesses, shapes globally, and reconstructs the identical rank-invariant update on every worker. The four-rank deterministic mock-mesh proof matches centralized execution exactly. Native NCCL/RCCL launcher and performance packets remain open; base-3 packing stays optional. | mock multi-rank correctness ✅; native packet open |
 
@@ -222,9 +222,11 @@ serving on `runtime.launch()`; do not wrap vLLM.
 ## 7. Coverage axes (Decision #24/#29) for the new op
 
 `op_catalog._SPECS` += `OpSpec("es_low_rank_correction", ...)`; a
-`PrimitiveCoverage` entry over all 12 axes. Notable: **`vjp`/`jvp` = terminal
-`non_differentiable`** (ES is zeroth-order — the op has no adjoint; a clean use
-of the terminal status, and `_VJPS` auto-flip correctly does not fire). Every
+`PrimitiveCoverage` entry over all 12 axes. Notable: **`jvp = complete`, while
+`vjp` and the linear transpose remain partial.** ES is zeroth-order with
+respect to the sampled fitness/RNG identity, but for fixed member ids/key the
+correction is linear in `x`; conflating those two statements previously hid a
+valid tangent. Integer identity operands never receive tangents. Every
 attr has a named consumer (Decision #29): `score`→sampler+emitter,
 `member_ids`/`key`→RNG derivation, `rank`→factor shape, `numeric_policy`→accum.
 

@@ -70,6 +70,8 @@ _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.tile_view": ("BM", "BN"),
     "tessera.rng_normal": ("shape",),
     "tessera.rng_uniform": ("shape",),
+    "tessera.rng_philox_normal": ("shape",),
+    "tessera.rng_philox_uniform": ("shape",),
 
     "tessera.top_k": ("k", "axis"),
     # slice(x, start_indices, slice_sizes): the two trailing positional args are

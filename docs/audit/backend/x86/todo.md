@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-09
+last_updated: 2026-08-10
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,30 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `AD-STOCHASTIC-RNG-1-2026-08-10` — **native x86 base RNG
+transforms landed; clean Zen 5 packet remains required.** Explicit key/counter
+Graph ops, estimator provenance, dropout replay, fixed-key EGGROLL JVP, and the
+shared derivative proof matrix are compiler contracts. The x86 library now owns
+uniform scaling, Box–Muller normal, and dropout masking instead of applying the
+transforms in Python. Uniform words are bit exact and normal is one-f32-ULP
+bounded. This local WSL host is not a clean Zen 5 evidence environment, so no
+new AVX-512 performance or target-JVP promotion is claimed.
+
+Cross-backend sync `AD-FWD-PRODUCT-2-2026-08-10` — **public JVP ABI landed;
+AVX-512 execution remains follow-up required.** Forward/JVP requests now carry
+mode-neutral provenance and stable `wrt_indices`, and the compiler emits only
+requested tangent terms. Tanh/sigmoid add direct CPU-oracle proof. No native
+JVP package or Zen 5 evidence is claimed; target promotion remains fail-closed.
+
+Cross-backend sync `AD-FWD-CORE-1-2026-08-09` — **shared compiler JVP
+foundation landed; x86 physical consumption remains architecture-owned.** The
+Graph dialect now exposes compiler-owned tangent rules and a paired
+`--tessera-autodiff-forward` function contract. Matmul/mul has independent CPU
+IR numerical proof, while unsupported active operations and regions fail
+closed. The generated ledger distinguishes compiler `ir_tangent` evidence from
+Python JVP registration. This changes no AVX-512 package or Zen 5 evidence; x86
+must lower and prove any native JVP package independently.
 
 Cross-backend sync `X86-TYPED-FAMILY-PLUGIN-2026-08-09` — **the production
 AVX-512 native packager now crosses one registered, closed-family executable

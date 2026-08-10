@@ -926,6 +926,27 @@
       "reason": "public semantics require packing, composition, state, or multiple outputs"
     },
     {
+      "abi_key": "philox_uniform_range_f32",
+      "cohort": 4,
+      "decision": "retain_composite",
+      "threshold": null,
+      "reason": "public semantics require packing, composition, state, or multiple outputs"
+    },
+    {
+      "abi_key": "philox_normal_f32",
+      "cohort": 4,
+      "decision": "retain_composite",
+      "threshold": null,
+      "reason": "public semantics require packing, composition, state, or multiple outputs"
+    },
+    {
+      "abi_key": "philox_dropout_f32",
+      "cohort": 4,
+      "decision": "retain_composite",
+      "threshold": null,
+      "reason": "public semantics require packing, composition, state, or multiple outputs"
+    },
+    {
       "abi_key": "ebm_affine_langevin_f32",
       "cohort": 4,
       "decision": "retain_specialized",

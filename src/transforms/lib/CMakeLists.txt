@@ -36,6 +36,7 @@ add_library(TesseraPasses
   # ODS scaffold lives at src/compiler/ir/include/Tessera/AdjointInterface.td.
   AutodiffPass.cpp
   AutodiffPairedPass.cpp
+  AutodiffForwardPass.cpp
 
   # Phase F5 — adjoint collective insertion (runs after AutodiffPass).
   AdjointCollectiveInsertionPass.cpp
@@ -111,6 +112,7 @@ target_include_directories(TesseraPasses
 add_dependencies(TesseraPasses
   TesseraAdjointInterfaceTableGen
   TesseraLinearTransposeInterfaceTableGen
+  TesseraTangentInterfaceTableGen
 )
 
 target_link_libraries(TesseraPasses

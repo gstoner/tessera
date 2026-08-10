@@ -141,23 +141,24 @@ high-level dialects. Enzyme handles arbitrary LLVM control flow with its
 cache-and-analysis approach. Structured control flow is where MLIR-level AD is
 *supposed* to have the advantage, because the loop structure is still visible.
 
-### A4. There is no forward mode in the compiler at all
+### A4. Compiler forward mode exists; region and higher-order closure remain
 
-There is still no general `TangentInterface`, forward-mode pass, dual-number
-lowering, or `--tessera-autodiff-forward`. `NewtonAutodiff.cpp` now emits a
-solver-local implicit JVP function when requested, but that specialized IFT
-construction is not a general forward-mode transform. General JVP remains the
-3.8k-line Python implementation.
+`TangentInterface`, `--tessera-autodiff-forward`, and the public
+`autodiff="forward"`/`"jvp"` request now emit a typed paired Graph function.
+Thirty-one families have compiler-owned rules. Direct execution of emitted JVP
+IR covers matmul/mul, tanh/sigmoid, sum/mean reduction, softmax,
+LayerNorm/RMSNorm, and FFT/IFFT/RFFT/IRFFT; a separate property harness records
+the algebraic identity, valid domain, boundary policy, directional derivative,
+and forward/reverse duality obligations. Fixed-key EGGROLL and seeded Philox
+dropout have replay/linearity proofs rather than invalid smooth finite
+differences.
 
-This blocks, in one stroke: compiler HVP, `jacfwd`, Taylor/jet mode, any
-forward-over-reverse composition, and tangent-space ops for the manifold work in
-the [OT plan](RIEMANNIAN_OT_PLAN.md).
-
-It is also the cheapest large win available, because **forward mode is the mode a
-tile compiler is best at**: no tape, no residual liveness pressure, no
-forward/backward boundary, and tangent computations fuse into the primal loop
-nest trivially. Reverse mode is the hard one and it is the one that got built
-first.
+This is still partial: active structured regions fail closed, compound
+spectral/solver native JVP packages and independently proven target execution
+remain open, and compiler `jacfwd`, exact forward-over-reverse HVP, and
+Taylor/jet composition are not exposed. Forward mode avoids a reverse tape, but
+it still needs region activity, effect legality, and target lowering before it
+can close those capabilities.
 
 ### A5. Backward SSA activity is implemented; region and memory activity remain
 
@@ -369,9 +370,12 @@ private value-producing VJP (and optional JVP) function. The VJP carries
 `residual(parameters, solution)` → transposed matrix-free `linear_solve` →
 negative `residual_adjoint` SSA values, implementing
 `dF/dx = -(dR/dx)⁻¹ · dR/du` without a runtime annotation lookup. Missing and
-mismatched residual ABIs fail closed. Target-owned lowering and execution of
-the solver operations remains open, so this is shared compiler IR rather than
-an x86/ROCm/CUDA/Metal execution claim.
+mismatched residual ABIs fail closed. A bounded diagonal-sqrt pilot now lowers
+through content-addressed solver artifacts and executes complete
+residual/solve/adjoint packages on Zen 5 AVX-512 and gfx1151. General
+matrix-free iterative/Krylov execution, Apple/NVIDIA consumers, and broader
+shape/dtype envelopes remain open; the two pilot packets do not transfer proof
+to another architecture.
 
 **This corrects a claim in the [OT plan](RIEMANNIAN_OT_PLAN.md) §3.2.** The
 implicit-diff seam now has a value-producing shared IR body. R2's `custom_root`
@@ -392,7 +396,7 @@ not ecosystem packages or a performance comparison.
 |---|---|---|---|---|
 | Reverse mode, straight-line | ✅ bounded: 51 native IR adjoints; 36 CPU-oracle and 29 exact-target proven | ✅ | ✅ | ✅ |
 | Reverse mode through structured control flow | ❌ active regions fail closed; inactive regions are pruned (A3) | partial — `cond`/`scan` and static loops; `while_loop` is forward-only | ✅ | ✅ stated scope |
-| Forward mode in the compiler | ❌ no general pass; solver-local JVP only (A4) | ✅ | ✅ | partial |
+| Forward mode in the compiler | partial — public paired Graph JVP ABI, 31 native tangent families, and direct CPU-oracle proof for algebra, reduction/normalization, and core spectral transforms; regions, higher-order composition, and target packages open | ✅ | ✅ | partial |
 | Higher-order (`grad∘grad`) | ❌ structurally blocked (A2) | ✅ | ✅ | — |
 | Exact HVP | ❌ finite differences (B4) | ✅ fwd-over-rev | ✅ | — |
 | `vmap` as a transform | ❌ Python loop (B3) | ✅ | n/a | n/a |
@@ -407,11 +411,11 @@ not ecosystem packages or a performance comparison.
 
 The defensible Tessera distinction is its per-target backward proof discipline
 and the full cross-IR identity carried by collective adjoints—not the mere
-existence of collective transposes. Six material capability gaps remain:
-active structured-control differentiation, general compiler forward mode,
-higher-order composition, exact HVP, transformed `vmap`, and sparsity
-detection/coloring. Activity, residual selection, and Treeverse are partial
-foundations with explicit execution gaps rather than absent capabilities.
+existence of collective transposes. Five capabilities remain absent: active
+structured-control differentiation, higher-order composition, exact HVP,
+transformed `vmap`, and sparsity detection/coloring. General compiler forward
+mode, activity, residual selection, and Treeverse are partial foundations with
+explicit coverage or execution gaps rather than absent capabilities.
 
 ---
 
@@ -503,12 +507,28 @@ this plan is verified against it, so it must be correct and not absurdly slow.
 
 Maps to: unification-plan P0 (truthfulness). Independent of everything else.
 
-### D2 — Forward mode in the compiler  *(~3 weeks)*
+### D2 — Forward mode in the compiler  *(landing)*
 
-`TangentInterface` in ODS + `--tessera-autodiff-forward` + `buildTangent` for the
-native families reported by the generated ledger. Forward mode needs no tape, no
-residual policy, and no liveness analysis, so it is a fraction of the reverse-mode
-work.
+The AD-FWD-CORE-1 foundation and AD-FWD-PRODUCT-2 public boundary are
+implemented: ODS `TangentInterface`,
+`--tessera-autodiff-forward`, a paired JVP function contract, fail-closed active
+operation/region legality, and 31 native rules spanning algebra, structural
+views, sum/mean reduction, normalization, core spectral transforms,
+collectives, deterministic dropout replay, and fixed-key EGGROLL. Compiler JVP
+IR for algebra, reduction/normalization, and FFT/IFFT/RFFT/IRFFT executes in the
+CPU oracle and agrees with analytic, duality, or directional references. Public
+`autodiff="forward"` / `"jvp"` requests now select a
+mode-neutral provenance facet and a `wrt`-indexed paired ABI through
+`compiled_jvp_ir()`; reverse compatibility fields cannot accidentally report a
+JVP as backward execution. Tanh and sigmoid have direct compiler JVP proofs.
+The generated ledger reports `ir_tangent` separately from Python JVP
+availability.
+
+Still required for D2 closure: remaining compound spectral, solver, loss, and
+optimizer tangents; direct oracle rows for every advertised family; region
+tangents; and independently proven target consumption. Forward
+mode needs no reverse tape or residual policy, but it does require activity and
+effect legality once it crosses regions or memory.
 
 Immediately unlocks: compiler `jacfwd`, exact HVP via forward-over-reverse,
 tangent-space ops for the [manifold work](RIEMANNIAN_OT_PLAN.md), and the

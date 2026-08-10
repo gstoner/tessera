@@ -443,9 +443,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                              "prune over a contiguous resident f32 cache through "
                              "libtessera_x86_elementwise.so; matches the "
                              "KVCacheHandle reference",
-    "x86_rng_compiled": "x86 CPU device RNG — counter-based Philox-4x32-10 "
-                            "uniform kernel + host transform (uniform/normal/"
-                            "dropout). f32",
+    "x86_rng_compiled": "x86 CPU device RNG — native counter-based "
+                            "Philox-4x32-10 uniform/normal/dropout functions. f32",
     "x86_softcap_compiled": "x86 CPU softcap — cap*tanh(x/cap) composed on the "
                             "AVX-512 transcendental tanh kernel (scalar cap "
                             "broadcast on host). f32",
@@ -530,8 +529,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                               "table-driven bilinear kernel "
                               "(triples unrolled at generation time). f32",
     "rocm_rng_compiled": "AMD GPU RDNA device RNG — COMPILER-GENERATED gfx1151 "
-                            "Philox-4x32-10 uniform kernel + host transform "
-                            "(uniform/normal/dropout). f32",
+                            "Philox-4x32-10 uniform/normal/dropout kernels. f32",
     "rocm_softcap_compiled": "AMD GPU RDNA softcap — cap*tanh(x/cap) composed on "
                             "the rocm_unary_compiled tanh kernel (scalar cap "
                             "broadcast on host). f32",
@@ -2164,10 +2162,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="x86", compiler_path="x86_rng_compiled",
         execution_kind="native_cpu", executable=True,
         executor_id="x86_rng_compiled", runtime_status="success",
-        reason="x86 RNG lane runs counter-based Philox-4x32-10 on the AVX-512 "
-               "kernel for the uniform bits; host applies the distribution "
-               "transform (uniform scale / Box-Muller normal / dropout mask). "
-               "f32, bit-exact vs tessera.rng_device.",
+        reason="x86 RNG lane runs native counter-based Philox-4x32-10 "
+               "uniform scale, Box-Muller normal, and dropout functions. "
+               "Uniform is bit exact; normal is one-f32-ULP bounded.",
         execution_mode="cpu_avx512"),
     ("x86", "x86_strided_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_strided_compiled",
@@ -2649,10 +2646,9 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="rocm", compiler_path="rocm_rng_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_rng_compiled", runtime_status="success",
-        reason="ROCm RNG lane runs counter-based Philox-4x32-10 on the "
-               "COMPILER-GENERATED gfx1151 kernel (generate-rocm-philox-kernel) "
-               "for the uniform bits; host applies the distribution transform. "
-               "f32, bit-exact vs tessera.rng_device.",
+        reason="ROCm RNG lane runs COMPILER-GENERATED gfx1151 Philox-4x32-10 "
+               "uniform scale, Box-Muller normal, and dropout kernels. Uniform "
+               "is bit exact; normal is one-f32-ULP bounded.",
         execution_mode="hip_runtime"),
     ("rocm", "rocm_strided_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_strided_compiled",

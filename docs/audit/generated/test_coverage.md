@@ -6,25 +6,25 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **489** ops in `primitive_coverage` registry.
-- **4919** total Python-test references, **1207** total lit-fixture references.
+- **491** ops in `primitive_coverage` registry.
+- **4934** total Python-test references, **1229** total lit-fixture references.
 - **78** ops have **zero** references in either test surface.
-- **124** ops have ≤1 reference ("thinly tested").
+- **123** ops have ≤1 reference ("thinly tested").
 - **166** ops have ≥10 references ("well tested").
-- **136** ops have at least one associated `pytest.raises` negative test.
+- **137** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  466 |  266 |  732 |  21 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  468 |  273 |  741 |  21 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  129 |   73 |  202 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `softmax` |  146 |   48 |  194 |  31 | `bf16`, `f16`, `f32`, `f64` … |
-| `add` |  127 |   32 |  159 |  10 | `bf16`, `f16`, `f32`, `f64` … |
+| `softmax` |  147 |   48 |  195 |  31 | `bf16`, `f16`, `f32`, `f64` … |
+| `add` |  127 |   34 |  161 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  115 |   37 |  152 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `reduce` |  105 |   17 |  122 |   8 | `bf16`, `f16`, `f32`, `f64` … |
+| `reduce` |  106 |   17 |  123 |   8 | `bf16`, `f16`, `f32`, `f64` … |
+| `mul` |  102 |   19 |  121 |   8 | `bf16`, `f16`, `f32`, `f64` … |
 | `rmsnorm` |  103 |   18 |  121 |   6 | `bf16`, `f16`, `f32`, `f64` … |
-| `mul` |  101 |   15 |  116 |   8 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   87 |    8 |   95 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `cast` |   24 |   61 |   85 |   1 | `bf16`, `fp16`, `fp32`, `int8` |
 | `gemm` |   83 |    2 |   85 |   8 | `bf16`, `f16`, `f32`, `fp16` … |
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **124** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **123** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **124** ops have at most one test reference across the whole test surface.
 | `ebm_sphere_langevin_step` |    0 |    0 |    0 |
 | `ema_update` |    1 |    0 |    1 |
 
-_(64 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(63 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,12 +117,12 @@ Companion section to the by-op coverage table above: that section says **which**
 
 ## Headline
 
-**124** ops have ≤1 direct test reference.  They break down as:
+**123** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   26 | Tested via a parent op or family wrapper |
-| `structural_only`        |   87 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `structural_only`        |   86 | Registry/metadata/wrapper; no direct numerical test meaningful |
 | `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
@@ -179,7 +179,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `rng_multinomial` | category default for 'rng' |
 | `rng_permutation` | category default for 'rng' |
 
-## `structural_only` — 87 ops
+## `structural_only` — 86 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -216,4 +216,4 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `dataset_shuffle` | category default for 'data' |
 | `dataset_zip` | category default for 'data' |
 
-_(57 additional structural ops omitted.)_
+_(56 additional structural ops omitted.)_

@@ -33,6 +33,8 @@ rope,Neural Network Primitives,1,complete,complete,complete,complete,complete,co
 silu,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 softmax,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 rng_normal,RNG And Initialization,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+rng_philox_normal,RNG And Initialization,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+rng_philox_uniform,RNG And Initialization,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 rng_uniform,RNG And Initialization,1,complete,complete,complete,non_differentiable,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 bsmm,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 sddmm,"Sparse, Segment, And Graph Operators",1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.

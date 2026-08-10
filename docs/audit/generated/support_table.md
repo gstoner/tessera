@@ -268,6 +268,8 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `quantize_nvfp4` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `dropout` | random_mask | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `rng_normal` | random_source | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `rng_philox_normal` | random_source | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `rng_philox_uniform` | random_source | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `rng_uniform` | random_source | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `amax` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `amin` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -373,7 +375,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | projection | 1 | PPGCFCN· |
 | quantize | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | random_mask | 1 | PPGCFCN· |
-| random_source | 2 | PPGCFCN· PPGCFCN· |
+| random_source | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | reduction | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | rl_loss | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | rotary_embedding | 1 | PPGCFHN· |

@@ -3921,6 +3921,17 @@ LogicalResult DropoutOp::verify() {
       return emitOpError(
           "dropout probability must satisfy 0.0 <= p < 1.0; got ") << v;
   }
+  auto algorithm = (*this)->getAttrOfType<StringAttr>("rng_algorithm");
+  auto version = (*this)->getAttrOfType<IntegerAttr>("rng_version");
+  auto estimator = (*this)->getAttrOfType<StringAttr>("estimator");
+  if (!algorithm || algorithm.getValue() != "philox4x32-10" || !version ||
+      version.getInt() != 1)
+    return emitOpError(
+        "dropout replay requires rng_algorithm=philox4x32-10 and rng_version=1");
+  if (!estimator || estimator.getValue() != "constant_noise")
+    return emitOpError(
+        "dropout supports only estimator=constant_noise; score-function and "
+        "relaxed estimators require separate operations");
   auto inTy = dyn_cast<RankedTensorType>(getX().getType());
   auto outTy = dyn_cast<RankedTensorType>(getY().getType());
   if (inTy && outTy) {
@@ -3937,6 +3948,54 @@ LogicalResult DropoutOp::verify() {
     }
   }
   return success();
+}
+
+static LogicalResult verifyPhiloxRNG(Operation *op, Value key, Value counter,
+                                     Value sample, bool normal) {
+  auto keyTy = dyn_cast<RankedTensorType>(key.getType());
+  auto counterTy = dyn_cast<RankedTensorType>(counter.getType());
+  auto sampleTy = dyn_cast<RankedTensorType>(sample.getType());
+  if (!keyTy || keyTy.getRank() != 1 || keyTy.getDimSize(0) != 2 ||
+      !keyTy.getElementType().isInteger(64))
+    return op->emitOpError("key must be tensor<2xi64>");
+  if (!counterTy || counterTy.getRank() != 1 ||
+      counterTy.getDimSize(0) != 1 ||
+      !counterTy.getElementType().isInteger(64))
+    return op->emitOpError("counter must be tensor<1xi64>");
+  if (!sampleTy || !isa<FloatType>(sampleTy.getElementType()))
+    return op->emitOpError("sample must be a ranked floating tensor");
+  auto algorithm = op->getAttrOfType<StringAttr>("algorithm");
+  auto version = op->getAttrOfType<IntegerAttr>("version");
+  auto domain = op->getAttrOfType<StringAttr>("domain");
+  auto estimator = op->getAttrOfType<StringAttr>("estimator");
+  if (!algorithm || algorithm.getValue() != "philox4x32-10" || !version ||
+      version.getInt() != 1)
+    return op->emitOpError(
+        "requires algorithm=philox4x32-10 and version=1");
+  if (!domain || domain.getValue().empty())
+    return op->emitOpError("requires a non-empty RNG domain");
+  StringRef expected = normal ? "pathwise" : "constant_noise";
+  if (!estimator || estimator.getValue() != expected)
+    return op->emitOpError() << "requires estimator=" << expected;
+  return success();
+}
+
+LogicalResult RNGPhiloxUniformOp::verify() {
+  if (!std::isfinite(getLow().convertToDouble()) ||
+      !std::isfinite(getHigh().convertToDouble()) ||
+      !(getLow().convertToDouble() < getHigh().convertToDouble()))
+    return emitOpError("requires finite low < high");
+  return verifyPhiloxRNG(getOperation(), getKey(), getCounter(), getSample(),
+                         false);
+}
+
+LogicalResult RNGPhiloxNormalOp::verify() {
+  if (!std::isfinite(getMean().convertToDouble()) ||
+      !std::isfinite(getStddev().convertToDouble()) ||
+      !(getStddev().convertToDouble() > 0.0))
+    return emitOpError("requires finite mean and stddev > 0");
+  return verifyPhiloxRNG(getOperation(), getKey(), getCounter(), getSample(),
+                         true);
 }
 
 static LogicalResult verifyCollectiveOp(Operation *op, Value input,

@@ -369,6 +369,7 @@ class JitFn:
         recognized_package: Optional[Any] = None,
         dispatch_via_package: "bool | str" = False,
         differentiation_request: Optional[Any] = None,
+        differentiation_provenance: Optional[Any] = None,
         backward_provenance: Optional[Any] = None,
     ) -> None:
         self._fn = fn
@@ -408,11 +409,11 @@ class JitFn:
         self.source_origin = source_origin
         self.lowering_diagnostics = tuple(lowering_diagnostics or [])
         self.native_required = bool(native_required)
-        # Phase 1 (autodiff unification) — the validated differentiation request
-        # (or None) and its resolved backward provenance facet. The request is
-        # also mirrored onto ``compile_result.backward`` for the typed compile
-        # surface; these attributes are the ergonomic accessors on the JitFn.
+        # Autodiff unification — the validated differentiation request (or None)
+        # and its mode-neutral provenance facet. Reverse mode is additionally
+        # mirrored onto the compatibility-only ``backward`` surface.
         self.differentiation_request = differentiation_request
+        self.differentiation_provenance = differentiation_provenance
         self.backward_provenance = backward_provenance
         # PK8a (2026-06-02) — shape-free RecognizedOp when this module's
         # compute region is an authorable Apple-GPU packaged kernel, else
@@ -847,6 +848,43 @@ class JitFn:
             raise TesseraJitError("specialized_autodiff_ir requires autodiff=...")
         return self._specialized_autodiff_module(args, kwargs).to_mlir()
 
+    def compiled_jvp_ir(self, *args: Any, **kwargs: Any) -> str:
+        """Return the compiler-emitted paired JVP Graph IR for this signature.
+
+        This is an IR-transformed product ABI, not a native-execution claim.
+        The returned ``@f__jvp`` takes all primals followed by tangents for the
+        requested ``wrt`` indices and returns primals followed by output
+        tangents. Missing tools or an unsupported active op fail closed.
+        """
+        request = self.differentiation_request
+        if request is None or request.mode != "forward":
+            raise TesseraJitError(
+                "compiled_jvp_ir requires @jit(autodiff='forward' or 'jvp')"
+            )
+        import re
+        import subprocess
+        from .. import _jit_boundary as _jb
+
+        module = self._specialized_autodiff_module(args, kwargs)
+        opt = _jb._find_tessera_opt()
+        if opt is None:
+            raise TesseraJitError("tessera-opt not built; cannot emit paired JVP")
+        graph_text = re.sub(
+            r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir()
+        )
+        transformed = subprocess.run(
+            [str(opt), "--tessera-autodiff-forward", "/dev/stdin"],
+            input=graph_text,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if transformed.returncode != 0:
+            raise TesseraJitError(
+                "forward autodiff transform failed: " + transformed.stderr.strip()
+            )
+        return transformed.stdout
+
     def native_backward(
         self, *args: Any, out_cotangents: Any, **kwargs: Any
     ) -> tuple[Any, ...]:
@@ -858,6 +896,11 @@ class JitFn:
         """
         if self.differentiation_request is None:
             raise TesseraJitError("native_backward requires @jit(autodiff=...)")
+        if self.differentiation_request.mode != "reverse":
+            raise TesseraJitError(
+                "native_backward requires @jit(autodiff='reverse'); "
+                "forward requests use compiled_jvp_ir"
+            )
         target_kind = normalize_target_kind(self.target)
         if target_kind == "rocm":
             return self._native_rocm_backward(
@@ -3760,9 +3803,9 @@ def jit(
         # ── Step 6b: differentiation request (Phase 1 autodiff unification) ──
         # Validate @jit(autodiff=..., wrt=...) at decoration time, emit the
         # `tessera.autodiff` intent into the Graph IR module (the attribute the
-        # C++ --tessera-autodiff pass keys on), and resolve the backward
-        # provenance facet. Python owns validation + diagnostics; it does NOT
-        # execute backward here (Phase 3/4).
+        # C++ autodiff passes key on), and resolve the mode-neutral provenance
+        # facet. Python owns validation + diagnostics;
+        # the C++ reverse/JVP pass owns the actual Graph transformation.
         from . import autodiff_request as _ad
 
         diff_request = _ad.build_request(
@@ -3774,8 +3817,13 @@ def jit(
             tuple(compile_result.component_ops)
             if compile_result is not None else ()
         )
-        backward_prov = _ad.resolve_backward_provenance(
+        differentiation_prov = _ad.resolve_differentiation_provenance(
             diff_request, target=target_kind, op_families=_bwd_families)
+        backward_prov = (
+            differentiation_prov
+            if diff_request is not None and diff_request.mode == "reverse"
+            else _ad.NOT_REQUESTED
+        )
         if diff_request is not None and module is not None:
             intent = diff_request.module_intent_attrs()
             # The C++ --tessera-autodiff pass reads the `tessera.autodiff` marker
@@ -3791,7 +3839,11 @@ def jit(
                 gf.fn_attrs.update(intent)
         if diff_request is not None and compile_result is not None:
             import dataclasses as _dc
-            compile_result = _dc.replace(compile_result, backward=backward_prov)
+            compile_result = _dc.replace(
+                compile_result,
+                differentiation=differentiation_prov,
+                backward=(backward_prov if diff_request.mode == "reverse" else None),
+            )
 
         # ── Step 7: wrap and return ──────────────────────────────────────────
         jitfn = JitFn(
@@ -3814,6 +3866,7 @@ def jit(
             dispatch_via_package=_resolve_dispatch_via_package(
                 dispatch_via_package, target_kind),
             differentiation_request=diff_request,
+            differentiation_provenance=differentiation_prov,
             backward_provenance=backward_prov,
         )
         if _trace_deferred:

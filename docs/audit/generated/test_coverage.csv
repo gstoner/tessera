@@ -6,7 +6,7 @@ adafactor,13,0,0,13,0,fp32 fp64,directly_tested,13 direct test references
 adam,22,5,1,27,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,27 direct test references
 adamw,15,5,0,20,0,fp32 fp64,directly_tested,20 direct test references
 adaptive_pool,6,0,0,6,0,,directly_tested,6 direct test references
-add,127,32,10,159,0,bf16 f16 f32 f64 fp16 fp32 int8,directly_tested,159 direct test references
+add,127,34,10,161,0,bf16 f16 f32 f64 fp16 fp32 int8,directly_tested,161 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
 alibi,7,0,0,7,0,bf16 f16 f32 fp32 int32,directly_tested,7 direct test references
 all_gather,3,0,0,3,0,fp32,directly_tested,3 direct test references
@@ -148,7 +148,7 @@ dequantize_int8,4,0,1,4,0,,directly_tested,4 direct test references
 dequantize_nvfp4,9,0,2,9,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,9 direct test references
 digamma,11,0,0,11,0,bf16 f32,directly_tested,11 direct test references
 div,8,2,0,10,0,bf16 f16 f32 fp16 fp32,directly_tested,10 direct test references
-dropout,28,9,3,37,0,f32 fp32 fp64,directly_tested,37 direct test references
+dropout,30,12,3,42,0,f32 fp32 fp64,directly_tested,42 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dynamic_update_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dz,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
@@ -176,7 +176,7 @@ eq,5,0,1,5,0,bf16 f32 fp16 fp32 fp4_e2m1 fp8_e4m3 int32 int64 int8,directly_test
 equiprob_band_partition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 erf,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 erfc,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
-es_low_rank_correction,3,10,0,13,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,13 direct test references
+es_low_rank_correction,3,12,0,15,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,15 direct test references
 exp,12,0,2,12,0,bf16 f32 fp32,directly_tested,12 direct test references
 expand,6,8,0,14,0,,directly_tested,14 direct test references
 expm1,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
@@ -227,7 +227,7 @@ isnan,7,0,0,7,0,bf16 f32 fp16 fp32 fp4_e2m1 fp8_e4m3 int32,directly_tested,7 dir
 istft,25,2,1,27,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,27 direct test references
 iterable_dataset,1,0,0,1,1,,structural_only,category default for 'data'
 js_divergence,13,1,1,14,0,,directly_tested,14 direct test references
-jvp,0,1,0,1,1,,structural_only,category default for 'transform'
+jvp,0,2,0,2,0,,directly_tested,2 direct test references
 karras_sigma_schedule,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 kimi_delta_attention,10,4,0,14,0,f32 fp64,directly_tested,14 direct test references
 kl_divergence,12,1,0,13,0,,directly_tested,13 direct test references
@@ -270,7 +270,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,466,266,21,732,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,732 direct test references
+matmul,468,273,21,741,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,741 direct test references
 max,7,0,2,7,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,7 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,11,0,2,11,0,bf16 f32 fp16 fp32,directly_tested,11 direct test references
@@ -305,7 +305,7 @@ msa_index_scores,12,4,1,16,0,,directly_tested,16 direct test references
 msa_select_blocks,8,6,1,14,0,,directly_tested,14 direct test references
 msa_sparse_attention,47,11,1,58,0,,directly_tested,58 direct test references
 mse_loss,29,0,5,29,0,f32 fp32 int64,directly_tested,29 direct test references
-mul,101,15,8,116,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,116 direct test references
+mul,102,19,8,121,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,121 direct test references
 multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,13,0,0,13,0,,directly_tested,13 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
@@ -352,7 +352,7 @@ quantize_nvfp4,21,0,3,21,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,8,0,0,8,0,fp16,directly_tested,8 direct test references
 reciprocal,5,0,0,5,0,bf16 f32 fp16 fp32,directly_tested,5 direct test references
-reduce,105,17,8,122,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,122 direct test references
+reduce,106,17,8,123,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,123 direct test references
 reduce_scatter,2,0,0,2,0,,directly_tested,2 direct test references
 relu,115,37,9,152,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,152 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
@@ -362,7 +362,7 @@ retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,21,2,1,23,0,fp32 fp64 int32 int64 int8,directly_tested,23 direct test references
 rmsnorm,103,18,6,121,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,121 direct test references
 rmsnorm_safe,9,5,1,14,0,bf16 f16 f32,directly_tested,14 direct test references
-rng_bernoulli,4,0,0,4,0,,directly_tested,4 direct test references
+rng_bernoulli,6,0,0,6,0,,directly_tested,6 direct test references
 rng_beta,3,0,0,3,0,,directly_tested,3 direct test references
 rng_categorical,3,0,0,3,0,,directly_tested,3 direct test references
 rng_clone,0,0,0,0,1,,covered_by_family,category default for 'rng'
@@ -375,13 +375,15 @@ rng_key,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_langevin_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_mala_sample,0,0,0,0,1,,covered_by_family,category default for 'rng'
 rng_multinomial,0,0,0,0,1,,covered_by_family,category default for 'rng'
-rng_normal,10,0,0,10,0,fp32,directly_tested,10 direct test references
+rng_normal,11,0,0,11,0,fp32,directly_tested,11 direct test references
 rng_permutation,0,0,0,0,1,,covered_by_family,category default for 'rng'
+rng_philox_normal,3,0,1,3,0,,directly_tested,3 direct test references
+rng_philox_uniform,2,0,0,2,0,,directly_tested,2 direct test references
 rng_poisson,3,0,0,3,0,,directly_tested,3 direct test references
 rng_randint,3,0,0,3,0,,directly_tested,3 direct test references
 rng_split,3,0,0,3,0,,directly_tested,3 direct test references
 rng_truncated_normal,3,0,0,3,0,,directly_tested,3 direct test references
-rng_uniform,17,0,0,17,0,fp32,directly_tested,17 direct test references
+rng_uniform,17,1,0,18,0,fp32,directly_tested,18 direct test references
 roll,6,0,0,6,0,,directly_tested,6 direct test references
 rope,23,10,0,33,0,bf16 f32 fp32 int32,directly_tested,33 direct test references
 rope_merge,8,0,1,8,0,fp16 fp32,directly_tested,8 direct test references
@@ -411,13 +413,13 @@ sign,6,0,1,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 silu,87,8,5,95,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,95 direct test references
 silu_mul,18,13,1,31,0,bf16 fp32,directly_tested,31 direct test references
 simple_rnn_cell,10,0,0,10,0,bf16 f16 f32 fp16,directly_tested,10 direct test references
-sin,5,0,0,5,0,bf16 f32,directly_tested,5 direct test references
+sin,5,1,0,6,0,bf16 f32,directly_tested,6 direct test references
 sinh,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,9,0,0,9,0,f32,directly_tested,9 direct test references
 soft_top_k,1,0,0,1,1,fp64,directly_tested,"public forward plus exact-k, domain, and FD-VJP tests"
 softcap,11,0,1,11,0,bf16,directly_tested,11 direct test references
-softmax,146,48,31,194,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,194 direct test references
+softmax,147,48,31,195,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,195 direct test references
 softmax_safe,7,4,1,11,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,11 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 sort,13,0,0,13,0,,directly_tested,13 direct test references
@@ -442,7 +444,7 @@ state_partition,0,0,0,0,1,,structural_only,category default for 'state_tree'
 std,8,0,0,8,0,bf16 f32,directly_tested,8 direct test references
 stereographic,11,0,0,11,0,fp32,directly_tested,11 direct test references
 stft,30,2,2,32,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,32 direct test references
-stop_gradient,0,4,0,4,0,,directly_tested,4 direct test references
+stop_gradient,0,5,0,5,0,,directly_tested,5 direct test references
 sub,17,7,2,24,0,bf16 f16 f32 fp16 fp32,directly_tested,24 direct test references
 sum,14,0,2,14,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,14 direct test references
 svd,20,5,0,25,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,25 direct test references

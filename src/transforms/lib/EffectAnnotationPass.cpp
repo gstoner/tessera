@@ -115,7 +115,9 @@ struct EffectAnnotation
         name.starts_with("collective."))
       return EffectLevel::Collective;
 
-    if (name == "rng.uniform" || name.starts_with("tessera.rng."))
+    if (name == "rng.uniform" || name.starts_with("tessera.rng.") ||
+        name == "tessera.rng_uniform" ||
+        name == "tessera.rng_normal")
       return EffectLevel::Random;
 
     // External function calls (not tessera.*) raise the level to IO.

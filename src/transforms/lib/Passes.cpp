@@ -500,6 +500,8 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createAutodiffPass(); });
   // Phase 2 — paired forward/backward autodiff (separate @f__bwd function).
   ::mlir::registerPass([]() { return createAutodiffPairedPass(); });
+  // AD-FWD-CORE-1 — paired forward-mode JVP through TangentInterface.
+  ::mlir::registerPass([]() { return createAutodiffForwardPass(); });
 
   // ── Phase 8.4.8 SwiGLU fusion (Stage 2b of SwiGLU Performance Plan) ───────
   // Matches the 3-op SwiGLU chain at the Graph IR layer and emits

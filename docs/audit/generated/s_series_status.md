@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 0 | 489 |
-| `transpose_rule` | 0 | 489 |
-| `sharding_rule` | 43 | 446 |
-| `lowering_rule` | 0 | 489 |
-| `backend_kernel` | 390 | 99 |
+| `batching_rule` | 0 | 491 |
+| `transpose_rule` | 0 | 491 |
+| `sharding_rule` | 43 | 448 |
+| `lowering_rule` | 0 | 491 |
+| `backend_kernel` | 392 | 99 |
 
 ## Backend Proof By Target
 
@@ -26,15 +26,15 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 | Target | Declared | Exact-device verified | Implementation present | Reference | Open artifact/planned | Other | Missing target row |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `cpu` | 340 | 0 | 0 | 340 | 0 | 0 | 149 |
-| `x86` | 338 | 287 | 49 | 2 | 0 | 0 | 151 |
-| `apple_cpu` | 372 | 0 | 4 | 368 | 0 | 0 | 117 |
-| `apple_gpu` | 207 | 148 | 51 | 4 | 4 | 0 | 282 |
-| `rocm` | 346 | 344 | 0 | 2 | 0 | 0 | 143 |
-| `nvidia_sm80` | 68 | 0 | 0 | 0 | 68 | 0 | 421 |
-| `nvidia_sm90` | 100 | 0 | 0 | 2 | 98 | 0 | 389 |
-| `nvidia_sm100` | 68 | 0 | 0 | 0 | 68 | 0 | 421 |
-| `nvidia_sm120` | 92 | 31 | 0 | 0 | 61 | 0 | 397 |
+| `cpu` | 342 | 0 | 0 | 342 | 0 | 0 | 149 |
+| `x86` | 340 | 289 | 49 | 2 | 0 | 0 | 151 |
+| `apple_cpu` | 374 | 0 | 4 | 370 | 0 | 0 | 117 |
+| `apple_gpu` | 207 | 148 | 51 | 4 | 4 | 0 | 284 |
+| `rocm` | 348 | 346 | 0 | 2 | 0 | 0 | 143 |
+| `nvidia_sm80` | 68 | 0 | 0 | 0 | 68 | 0 | 423 |
+| `nvidia_sm90` | 100 | 0 | 0 | 2 | 98 | 0 | 391 |
+| `nvidia_sm100` | 68 | 0 | 0 | 0 | 68 | 0 | 423 |
+| `nvidia_sm120` | 92 | 31 | 0 | 0 | 61 | 0 | 399 |
 
 ## Per-category breakdown
 
@@ -84,7 +84,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `quantization` | 8 | — | — | — | — | 7 |
 | other | `quantize` | 8 | — | — | — | — | 8 |
 | other | `random_mask` | 1 | — | — | — | — | 1 |
-| other | `random_source` | 2 | — | — | — | — | 2 |
+| other | `random_source` | 4 | — | — | — | — | 4 |
 | other | `recurrent` | 3 | — | — | — | — | 3 |
 | other | `rng` | 18 | — | — | — | — | 14 |
 | other | `rotary_embedding` | 2 | — | — | — | — | 2 |
@@ -113,7 +113,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 0 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 281 | 0 | 0 | 23 | 229 |
+| other | 283 | 0 | 0 | 23 | 231 |
 
 ## Closure trajectory
 

@@ -10220,6 +10220,21 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             c_f32, ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_int64),
             c_f32, i64, i64, i64, i64, i64, ctypes.c_float, ctypes.c_int32,
         ],
+        "tessera_x86_philox_uniform_f32": [
+            ctypes.c_uint64, ctypes.c_uint64, i64, c_f32,
+        ],
+        "tessera_x86_philox_uniform_range_f32": [
+            ctypes.c_uint64, ctypes.c_uint64, i64, ctypes.c_float,
+            ctypes.c_float, c_f32,
+        ],
+        "tessera_x86_philox_normal_f32": [
+            ctypes.c_uint64, ctypes.c_uint64, i64, ctypes.c_float,
+            ctypes.c_float, c_f32,
+        ],
+        "tessera_x86_philox_dropout_f32": [
+            c_f32, ctypes.c_uint64, ctypes.c_uint64, i64, ctypes.c_float,
+            c_f32,
+        ],
         "tessera_x86_avx512_rope_f32": [c_f32, c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_alibi_f32": [c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_pointwise_loss_f32": [c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
@@ -16438,14 +16453,16 @@ def _execute_apple_gpu_compiled_conformal(artifact: RuntimeArtifact, args: Any) 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Device RNG (P6) — counter-based Philox-4x32-10. The device kernel generates the
-# uniform[0,1) bits (the RNG core, bit-exact vs tessera.rng_device); the host
-# applies the cheap distribution transform (uniform scale / Box-Muller normal /
-# dropout mask). A SEPARATE deterministic stream from tessera.rng (host
+# uniform[0,1) bits (the RNG core, bit-exact vs tessera.rng_device). Native
+# x86/gfx1151 helpers also own the base distribution transforms; higher-level
+# samplers remain structured compositions. A SEPARATE deterministic stream from tessera.rng (host
 # numpy-Generator). compiler_path="x86_rng_compiled" / "rocm_rng_compiled". f32.
 # ─────────────────────────────────────────────────────────────────────────────
 _RNG_OPS = (
     "tessera.rng_uniform",
     "tessera.rng_normal",
+    "tessera.rng_philox_uniform",
+    "tessera.rng_philox_normal",
     "tessera.dropout",
     "tessera.rng_bernoulli",
     "tessera.rng_beta",
@@ -16492,6 +16509,15 @@ def _rng_compute(op_name: str, operands: list, kwargs: dict, uniform_fn: Any, np
     [0,1). Host transforms mirror tessera.rng_device exactly."""
     seed = int(kwargs.get("seed", 0))
     cbase = int(kwargs.get("counter_base", 0))
+    if op_name in {"tessera.rng_philox_uniform", "tessera.rng_philox_normal"}:
+        if len(operands) != 2:
+            raise ValueError(f"{op_name} requires explicit key and counter operands")
+        key_words = np.asarray(operands[0], dtype=np.uint64).reshape(-1)
+        counter_words = np.asarray(operands[1], dtype=np.uint64).reshape(-1)
+        if key_words.size != 2 or counter_words.size != 1:
+            raise ValueError(f"{op_name} requires key[2] and counter[1]")
+        seed = int(key_words[0]) ^ int(key_words[1])
+        cbase = int(counter_words[0])
     if op_name == "tessera.dropout":
         x = np.ascontiguousarray(operands[0], np.float32)
         p = float(kwargs.get("p", 0.5))
@@ -16502,7 +16528,7 @@ def _rng_compute(op_name: str, operands: list, kwargs: dict, uniform_fn: Any, np
         return (x * (u >= np.float32(p)).astype(np.float32) * scale).astype(np.float32)
     shape = tuple(int(d) for d in kwargs.get("shape", ()))
     n = int(np.prod(shape)) if shape else 1
-    if op_name == "tessera.rng_uniform":
+    if op_name in {"tessera.rng_uniform", "tessera.rng_philox_uniform"}:
         # Accept both the public-API names (lo/hi, used by tessera.ops.rng_uniform
         # + the CPU reference) and the low/high aliases.
         lo = float(kwargs.get("lo", kwargs.get("low", 0.0)))
@@ -16511,7 +16537,7 @@ def _rng_compute(op_name: str, operands: list, kwargs: dict, uniform_fn: Any, np
         return out.reshape(shape).astype(np.float32)
     # rng_normal — Box-Muller from two Philox halves (mirrors rng_device.normal)
     mean = float(kwargs.get("mean", 0.0))
-    std = float(kwargs.get("std", 1.0))
+    std = float(kwargs.get("std", kwargs.get("stddev", 1.0)))
     m = (n + 1) // 2
     u1 = np.clip(uniform_fn(seed, cbase, m), np.float32(1e-7), np.float32(1.0))
     u2 = uniform_fn(seed, cbase + (m + 3) // 4 + 1, m)
@@ -16666,15 +16692,74 @@ def _execute_rng(artifact: RuntimeArtifact, args: Any, uniform_fn: Any, path: st
     operand_names = [str(n) for n in ops[0].get("operands", [])]
     values = _bind_launch_args(args, arg_names)
     operands = [_as_numpy(values[n]) for n in operand_names]
-    if op_name not in {"tessera.rng_uniform", "tessera.rng_normal", "tessera.dropout"}:
+    if op_name not in {"tessera.rng_uniform", "tessera.rng_normal",
+                       "tessera.rng_philox_uniform", "tessera.rng_philox_normal",
+                       "tessera.dropout"}:
         operands = [values[n] for n in operand_names]
         return _rng_distribution_compute(op_name, operands, ops[0].get("kwargs") or {}, np)
     return _rng_compute(op_name, operands, ops[0].get("kwargs") or {}, uniform_fn, np)
 
 
 def _execute_x86_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
-    """The ``target="x86"`` Philox RNG lane (rng_uniform/rng_normal/dropout)."""
-    return _execute_rng(artifact, args, _x86_philox_uniform, "x86_rng_compiled")
+    """Native x86 Philox core *and* base distribution transforms."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1:
+        raise ValueError("x86_rng_compiled expects exactly one operation")
+    op = ops[0]
+    op_name = str(op.get("op_name", ""))
+    if op_name not in {"tessera.rng_uniform", "tessera.rng_normal",
+                       "tessera.rng_philox_uniform", "tessera.rng_philox_normal",
+                       "tessera.dropout"}:
+        return _execute_rng(artifact, args, _x86_philox_uniform,
+                            "x86_rng_compiled")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    operands = [_as_numpy(values[str(n)]) for n in op.get("operands", [])]
+    kwargs = dict(op.get("kwargs") or {})
+    seed = int(kwargs.get("seed", 0))
+    counter = int(kwargs.get("counter_base", 0))
+    if op_name in {"tessera.rng_philox_uniform", "tessera.rng_philox_normal"}:
+        key_words = np.asarray(operands[0], dtype=np.uint64).reshape(-1)
+        counter_words = np.asarray(operands[1], dtype=np.uint64).reshape(-1)
+        if key_words.size != 2 or counter_words.size != 1:
+            raise ValueError(f"{op_name} requires key[2] and counter[1]")
+        seed = int(key_words[0]) ^ int(key_words[1])
+        counter = int(counter_words[0])
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    seed_arg = ctypes.c_uint64(seed & 0xFFFFFFFFFFFFFFFF)
+    counter_arg = ctypes.c_uint64(counter & 0xFFFFFFFFFFFFFFFF)
+    if op_name == "tessera.dropout":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        if not bool(kwargs.get("training", True)):
+            return x.copy()
+        out = np.empty_like(x)
+        lib.tessera_x86_philox_dropout_f32(
+            x.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), seed_arg,
+            counter_arg, ctypes.c_int64(x.size),
+            ctypes.c_float(float(kwargs.get("p", 0.5))),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
+        return out
+    shape = tuple(int(d) for d in kwargs.get("shape", ()))
+    n = int(np.prod(shape)) if shape else 1
+    out = np.empty(n, np.float32)
+    if op_name in {"tessera.rng_uniform", "tessera.rng_philox_uniform"}:
+        low = float(kwargs.get("lo", kwargs.get("low", 0.0)))
+        high = float(kwargs.get("hi", kwargs.get("high", 1.0)))
+        lib.tessera_x86_philox_uniform_range_f32(
+            seed_arg, counter_arg, ctypes.c_int64(n), ctypes.c_float(low),
+            ctypes.c_float(high),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
+    else:
+        lib.tessera_x86_philox_normal_f32(
+            seed_arg, counter_arg, ctypes.c_int64(n),
+            ctypes.c_float(float(kwargs.get("mean", 0.0))),
+            ctypes.c_float(float(kwargs.get("std", kwargs.get("stddev", 1.0)))),
+            out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
+    return out.reshape(shape)
 
 
 def _apple_rng_reference_uniform(seed: int, counter_base: int, n: int) -> Any:
@@ -16800,13 +16885,17 @@ def _execute_apple_gpu_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any
     return (_execute_rng(artifact, args, _apple_rng_reference_uniform, "apple_gpu_rng_compiled"), "reference_cpu")
 
 
-_rocm_philox_hsaco_cache: dict[tuple[str], bytes] = {}
+_rocm_philox_hsaco_cache: dict[tuple[str, ...], bytes] = {}
 
 
-def _build_compiled_philox_hsaco() -> bytes:
+def _build_compiled_philox_hsaco(mode: str = "uniform_core") -> bytes:
     chip = _rocm_chip()
-    directive = 'module {\n  "tessera_rocm.philox"() {name = "ph"} : () -> ()\n}\n'
-    return _build_rocm_family_hsaco("rng_philox", directive, _rocm_philox_hsaco_cache, (chip,))
+    directive = (
+        'module {\n  "tessera_rocm.philox"() '
+        f'{{name = "ph", mode = "{mode}"}} : () -> ()\n}}\n'
+    )
+    return _build_rocm_family_hsaco(
+        "rng_philox", directive, _rocm_philox_hsaco_cache, (chip, mode))
 
 
 def _rocm_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
@@ -16865,9 +16954,119 @@ def _rocm_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
     return o
 
 
+def _rocm_philox_distribution(
+    mode: str, seed: int, counter_base: int, n: int, parameter0: float,
+    parameter1: float | None = None, input_value: Any | None = None,
+) -> Any:
+    """Launch a gfx1151 kernel that owns the distribution transform."""
+    import numpy as np
+
+    n = int(n)
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("rocm philox distribution: HIP unavailable")
+    module = ctypes.c_void_p()
+    if hip.hipModuleLoadData(
+        ctypes.byref(module), _build_compiled_philox_hsaco(mode)) != 0:
+        raise _RocmCompiledUnavailable("rocm philox distribution: no usable AMD GPU")
+    function = ctypes.c_void_p()
+    if hip.hipModuleGetFunction(ctypes.byref(function), module, b"ph") != 0:
+        raise RuntimeError("rocm philox distribution: kernel symbol missing")
+    output = np.empty(n, np.float32)
+    device_output = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(device_output), 4 * n) != 0:
+        raise RuntimeError("rocm philox distribution: output allocation failed")
+    device_input = ctypes.c_void_p()
+
+    def descriptor(pointer: ctypes.c_void_p, size: int) -> list[Any]:
+        return [ctypes.c_void_p(pointer.value), ctypes.c_void_p(pointer.value),
+                ctypes.c_int64(0), ctypes.c_int64(size), ctypes.c_int64(1)]
+
+    launch_args: list[Any] = []
+    if input_value is not None:
+        host_input = np.ascontiguousarray(input_value, np.float32).reshape(-1)
+        if host_input.size != n or hip.hipMalloc(
+            ctypes.byref(device_input), 4 * n) != 0:
+            hip.hipFree(device_output)
+            raise RuntimeError("rocm philox distribution: input allocation failed")
+        hip.hipMemcpy(device_input, host_input.ctypes.data_as(ctypes.c_void_p),
+                      4 * n, 1)
+        launch_args.extend(descriptor(device_input, n))
+    launch_args.extend(descriptor(device_output, n))
+    s = int(seed) & 0xFFFFFFFFFFFFFFFF
+    cb = int(counter_base) & 0xFFFFFFFFFFFFFFFF
+    launch_args.extend([
+        ctypes.c_int64(n), ctypes.c_uint32(s & 0xFFFFFFFF),
+        ctypes.c_uint32((s >> 32) & 0xFFFFFFFF),
+        ctypes.c_uint32(cb & 0xFFFFFFFF),
+        ctypes.c_uint32((cb >> 32) & 0xFFFFFFFF), ctypes.c_float(parameter0),
+    ])
+    if parameter1 is not None:
+        launch_args.append(ctypes.c_float(parameter1))
+    packed = (ctypes.c_void_p * len(launch_args))()
+    for index, value in enumerate(launch_args):
+        packed[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+    blocks = (n + _GRID_BLOCKDIM - 1) // _GRID_BLOCKDIM
+    rc = hip.hipModuleLaunchKernel(
+        function, blocks, 1, 1, _GRID_BLOCKDIM, 1, 1, 0, None, packed, None)
+    if rc == 0:
+        rc = hip.hipDeviceSynchronize()
+    if rc == 0:
+        rc = hip.hipMemcpy(output.ctypes.data_as(ctypes.c_void_p),
+                           device_output, 4 * n, 2)
+    if device_input.value:
+        hip.hipFree(device_input)
+    hip.hipFree(device_output)
+    if rc != 0:
+        raise RuntimeError(f"rocm philox distribution launch failed rc={rc}")
+    return output
+
+
 def _execute_rocm_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
-    """The ``target="rocm"`` Philox RNG lane (rng_uniform/rng_normal/dropout)."""
-    return _execute_rng(artifact, args, _rocm_philox_uniform, "rocm_rng_compiled")
+    """gfx1151-native Philox core and base distribution transforms."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1:
+        raise ValueError("rocm_rng_compiled expects exactly one operation")
+    op = ops[0]
+    op_name = str(op.get("op_name", ""))
+    if op_name not in {"tessera.rng_uniform", "tessera.rng_normal",
+                       "tessera.rng_philox_uniform", "tessera.rng_philox_normal",
+                       "tessera.dropout"}:
+        return _execute_rng(artifact, args, _rocm_philox_uniform,
+                            "rocm_rng_compiled")
+    kwargs = dict(op.get("kwargs") or {})
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    operands = [_as_numpy(values[str(name)]) for name in op.get("operands", [])]
+    seed = int(kwargs.get("seed", 0))
+    counter = int(kwargs.get("counter_base", 0))
+    if op_name in {"tessera.rng_philox_uniform", "tessera.rng_philox_normal"}:
+        key = np.asarray(operands[0], dtype=np.uint64).reshape(-1)
+        ctr = np.asarray(operands[1], dtype=np.uint64).reshape(-1)
+        if key.size != 2 or ctr.size != 1:
+            raise ValueError(f"{op_name} requires key[2] and counter[1]")
+        seed, counter = int(key[0]) ^ int(key[1]), int(ctr[0])
+    if op_name == "tessera.dropout":
+        x = np.ascontiguousarray(operands[0], np.float32)
+        if not bool(kwargs.get("training", True)):
+            return x.copy()
+        return _rocm_philox_distribution(
+            "dropout", seed, counter, x.size, float(kwargs.get("p", 0.5)),
+            input_value=x).reshape(x.shape)
+    shape = tuple(int(d) for d in kwargs.get("shape", ()))
+    n = int(np.prod(shape)) if shape else 1
+    if op_name in {"tessera.rng_uniform", "tessera.rng_philox_uniform"}:
+        output = _rocm_philox_distribution(
+            "uniform_range", seed, counter, n,
+            float(kwargs.get("lo", kwargs.get("low", 0.0))),
+            float(kwargs.get("hi", kwargs.get("high", 1.0))))
+    else:
+        output = _rocm_philox_distribution(
+            "normal", seed, counter, n, float(kwargs.get("mean", 0.0)),
+            float(kwargs.get("std", kwargs.get("stddev", 1.0))))
+    return output.reshape(shape)
 
 
 # Strided-copy / 0-move lane (P4) — pad / cat / roll / flip / tile / repeat /

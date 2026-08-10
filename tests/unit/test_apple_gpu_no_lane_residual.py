@@ -72,6 +72,10 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         "all_gather", "all_reduce", "all_to_all", "reduce_scatter",
         # RNG / stochastic.
         "dropout", "rng_normal", "rng_uniform",
+        # Explicit keyed/counter Graph RNG is native on x86/gfx1151. Apple
+        # retains its older seed-attribute lane until it owns the new operand
+        # ABI and an exact-device replay packet.
+        "rng_philox_normal", "rng_philox_uniform",
         # Differentiable selection relaxations are reference-only until an
         # Apple-specific physical lowering and exact-device proof land.
         "sparsemax", "entmax15", "soft_top_k", "gumbel_softmax",

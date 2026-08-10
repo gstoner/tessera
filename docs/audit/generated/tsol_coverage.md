@@ -6,23 +6,23 @@ Spec: `docs/operations/Tessera_Standard_Operations.md`.  Full primitive registry
 
 ## Headline
 
-- **49** canonical TSOL ops in the spec catalog.
-- **49** of those have a matching row in `primitive_coverage.py`.
+- **51** canonical TSOL ops in the spec catalog.
+- **51** of those have a matching row in `primitive_coverage.py`.
 
 ## Per-axis status counts (TSOL slice only)
 
-Counts below are restricted to the 49 TSOL canonical names.  The full 489-primitive registry is summarised in `docs/audit/standalone_primitive_coverage.md`.
+Counts below are restricted to the 51 TSOL canonical names.  The full 491-primitive registry is summarised in `docs/audit/standalone_primitive_coverage.md`.
 
 | Axis | complete | partial | planned | by-design | other |
 |------|----------|---------|---------|-----|-------|
-| `math_semantics` |  49 |   0 |   0 |   0 |   0 |
-| `shape_rule` |  49 |   0 |   0 |   0 |   0 |
-| `dtype_layout_rule` |  49 |   0 |   0 |   0 |   0 |
-| `vjp` |  43 |   0 |   0 |   6 |   0 |
-| `jvp` |  42 |   0 |   0 |   7 |   0 |
-| `lowering_rule` |  49 |   0 |   0 |   0 |   0 |
-| `sharding_rule` |  31 |  18 |   0 |   0 |   0 |
-| `backend_kernel` |   0 |  48 |   0 |   1 |   0 |
+| `math_semantics` |  51 |   0 |   0 |   0 |   0 |
+| `shape_rule` |  51 |   0 |   0 |   0 |   0 |
+| `dtype_layout_rule` |  51 |   0 |   0 |   0 |   0 |
+| `vjp` |  43 |   0 |   0 |   8 |   0 |
+| `jvp` |  42 |   0 |   0 |   9 |   0 |
+| `lowering_rule` |  51 |   0 |   0 |   0 |   0 |
+| `sharding_rule` |  33 |  18 |   0 |   0 |   0 |
+| `backend_kernel` |   0 |  50 |   0 |   1 |   0 |
 
 ## Per-op coverage
 
@@ -92,6 +92,8 @@ Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • — exp
 |----|------|-------|-------|-----|-----|----------|----------|---------|
 | `rng_uniform` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | ◐ |
 | `rng_normal` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | ◐ |
+| `rng_philox_uniform` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | ◐ |
+| `rng_philox_normal` | ✅ | ✅ | ✅ | — `non_differentiable` | — `non_differentiable` | ✅ | ✅ | ◐ |
 
 ### Collectives
 
@@ -118,4 +120,4 @@ _None today — every TSOL canonical op has a registry entry and an explicit VJP
 
 ## Backend kernel honest baseline
 
-Per the registry's `backend_kernel` gating rule (see the "backend_kernel stays partial until each backend ships a real" note in `primitive_coverage.py`), `backend_kernel = complete` requires every declared target to ship a real hardware kernel with numerical proof.  Today **zero** of the 49 TSOL entries can claim that all-target aggregate.  Per-target native proof is reported separately and may exist even while this aggregate remains incomplete.  See `docs/audit/backend/BACKEND_AUDIT.md` and its target maps for the exact-target evidence and remaining punch list.
+Per the registry's `backend_kernel` gating rule (see the "backend_kernel stays partial until each backend ships a real" note in `primitive_coverage.py`), `backend_kernel = complete` requires every declared target to ship a real hardware kernel with numerical proof.  Today **zero** of the 51 TSOL entries can claim that all-target aggregate.  Per-target native proof is reported separately and may exist even while this aggregate remains incomplete.  See `docs/audit/backend/BACKEND_AUDIT.md` and its target maps for the exact-target evidence and remaining punch list.

@@ -480,17 +480,20 @@ _EXISTING_CATEGORIES: dict[str, str] = {
 #     hardware kernel — that's Phase G/H work.
 _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
     # EGGROLL W2 — an explicitly keyed, deterministic zeroth-order primitive.
-    # The generated correction is intentionally outside compiler AD: ES owns
-    # its estimator/update semantics and differentiating through the sampled
-    # factors would be a different algorithm. Native backend coverage remains
+    # With member ids and the Philox key held fixed, the correction is a linear
+    # map of x. The compiler owns that JVP and the mathematical transpose is
+    # closed by an explicit duality proof; emitting that transpose through the
+    # native reverse-mode/backend path remains recorded honestly by `vjp` and
+    # `backend_kernel`. Differentiating the integer RNG identity itself is
+    # intentionally outside AD. Native backend coverage remains
     # partial until Apple/CUDA consumers land; exact gfx1151 and Zen 5 AVX-512
     # correctness do not close the universal axis or transfer schedules.
     "es_low_rank_correction": {
         "math_semantics": "complete",
         "dtype_layout_rule": "complete",
-        "vjp": "non_differentiable",
-        "jvp": "non_differentiable",
-        "transpose_rule": "no_linear_transpose",
+        "vjp": "partial",
+        "jvp": "complete",
+        "transpose_rule": "complete",
         "sharding_rule": "complete",
         "masking_effect_rule": "complete",
         "lowering_rule": "complete",

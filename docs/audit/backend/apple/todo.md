@@ -3,10 +3,32 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-09
+last_updated: 2026-08-10
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `AD-STOCHASTIC-RNG-1-2026-08-10` — **shared stochastic JVP
+contract available; Metal follow-up required.** Explicit key/counter Graph ops,
+estimator provenance, dropout replay, fixed-key EGGROLL JVP, and derivative
+proof obligations are target-independent. x86 and gfx1151 distribution kernels
+do not transfer to Metal. Apple's existing Philox symbols need contract
+alignment plus Mac compiler-JVP and exact-device proof before promotion.
+
+Cross-backend sync `AD-FWD-PRODUCT-2-2026-08-10` — **public JVP ABI landed;
+Metal execution remains follow-up required.** Forward/JVP requests now carry
+mode-neutral provenance and stable `wrt_indices`, and the compiler emits only
+requested tangent terms. Tanh/sigmoid add direct CPU-oracle proof. No Metal
+package, selector, or Mac evidence transfers; native JVP remains fail-closed.
+
+Cross-backend sync `AD-FWD-CORE-1-2026-08-09` — **shared compiler JVP
+foundation landed; Apple physical consumption remains architecture-owned.**
+The Graph dialect now exposes compiler-owned tangent rules and a paired
+`--tessera-autodiff-forward` function contract. Matmul/mul has independent CPU
+IR numerical proof, while unsupported active operations and regions fail
+closed. The generated ledger distinguishes compiler `ir_tangent` evidence from
+Python JVP registration. This changes no Metal package or Mac evidence; Apple
+must lower and prove any native JVP package independently.
 
 Cross-backend sync `X86-TYPED-FAMILY-PLUGIN-2026-08-09` — **shared schema
 parity assessed; no Apple physical change.** x86 now validates a closed Tile

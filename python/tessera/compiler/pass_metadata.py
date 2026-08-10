@@ -391,6 +391,21 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="AD-CORE-EFFECT-CONTROL-1",
     ),
     PassMetadata(
+        name="tessera-autodiff-forward",
+        cpp_class="AutodiffForwardPass",
+        summary=(
+            "Emits a separate paired JVP function from compiler-owned Graph "
+            "TangentInterface implementations."
+        ),
+        input_dialects=("tessera", "func", "arith"),
+        output_dialects=("tessera", "func", "arith"),
+        required_attrs=("tessera.autodiff",),
+        preserved_attrs=("tessera.autodiff.jvp", "tessera.autodiff.role"),
+        diagnostic_codes=(),
+        pass_kind="transform",
+        sprint="AD-FWD-CORE-1",
+    ),
+    PassMetadata(
         name="tessera-autodiff-paired",
         cpp_class="AutodiffPairedPass",
         summary=(

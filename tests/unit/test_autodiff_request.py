@@ -41,9 +41,12 @@ def test_wrt_name_not_in_signature_raises():
         ad.build_request(_fn, autodiff="reverse", wrt=("nope",))
 
 
-def test_forward_mode_is_rejected_as_planned():
-    with pytest.raises(TesseraAutodiffError, match="reverse-mode only"):
-        ad.build_request(_fn, autodiff="forward", wrt=None)
+def test_forward_and_jvp_modes_are_canonicalized():
+    forward = ad.build_request(_fn, autodiff="forward", wrt=("w",))
+    alias = ad.build_request(_fn, autodiff="jvp", wrt=("w",))
+    assert forward == alias
+    assert forward.mode == "forward"
+    assert forward.wrt_indices == (1,)
 
 
 def test_unknown_mode_rejected():
@@ -61,6 +64,11 @@ def test_empty_wrt_rejected():
         ad.build_request(_fn, autodiff="reverse", wrt=())
 
 
+def test_duplicate_wrt_rejected_before_compiler_abi():
+    with pytest.raises(TesseraAutodiffError, match="duplicate"):
+        ad.build_request(_fn, autodiff="forward", wrt=("x", "x"))
+
+
 # ── intent attributes ──────────────────────────────────────────────────────
 
 def test_module_intent_attrs_are_valid_mlir_strings():
@@ -68,6 +76,7 @@ def test_module_intent_attrs_are_valid_mlir_strings():
     attrs = req.module_intent_attrs()
     assert attrs["tessera.autodiff"] == '"reverse"'
     assert attrs["tessera.autodiff.wrt"] == '["x", "w"]'
+    assert attrs["tessera.autodiff.wrt_indices"] == "[0, 1]"
 
 
 # ── backward provenance resolution ─────────────────────────────────────────
@@ -141,6 +150,36 @@ def test_provenance_native_sourced_false_off_target():
     assert not prov.native
 
 
+def test_forward_provenance_is_ir_transformed_not_backward_native():
+    req = ad.build_request(_fn, autodiff="forward", wrt=("w",))
+    prov = ad.resolve_differentiation_provenance(
+        req, target="x86", op_families=("matmul",)
+    )
+    assert prov.status is ad.DifferentiationStatus.IR_TRANSFORMED
+    assert prov.mode == "forward"
+    assert not prov.native
+    with pytest.raises(ValueError, match="reverse-mode"):
+        ad.resolve_backward_provenance(req)
+
+
+def test_forward_native_required_fails_closed_without_target_jvp_proof():
+    req = ad.build_request(
+        _fn, autodiff="forward", wrt=("w",), native_required=True
+    )
+    prov = ad.resolve_differentiation_provenance(req, target="rocm")
+    assert prov.status is ad.DifferentiationStatus.UNSUPPORTED
+    assert "no native JVP execution path" in prov.reason
+
+
+def test_forward_provenance_rejects_family_without_tangent_interface():
+    req = ad.build_request(_fn, autodiff="forward", wrt=("x",))
+    prov = ad.resolve_differentiation_provenance(
+        req, target="cpu", op_families=("sin",)
+    )
+    assert prov.status is ad.DifferentiationStatus.UNSUPPORTED
+    assert "no TangentInterface" in prov.reason
+
+
 # ── @jit integration ───────────────────────────────────────────────────────
 
 @tessera.jit(autodiff="reverse", wrt=("x", "w"))
@@ -199,3 +238,42 @@ def test_jit_without_autodiff_has_no_request():
     assert plain.differentiation_request is None
     assert plain.backward_provenance.status is BackwardStatus.NOT_REQUESTED
     assert "tessera.autodiff" not in plain.graph_ir.module_attrs
+
+
+@tessera.jit(autodiff="jvp", wrt=("w",))
+def _forward_loss(x, w):
+    return tessera.ops.matmul(x, w)
+
+
+def test_jit_exposes_forward_request_and_mode_neutral_provenance():
+    assert _forward_loss.differentiation_request.mode == "forward"
+    assert _forward_loss.differentiation_request.wrt_indices == (1,)
+    assert (
+        _forward_loss.differentiation_provenance.status
+        is ad.DifferentiationStatus.IR_TRANSFORMED
+    )
+    assert _forward_loss.backward_provenance.status is BackwardStatus.NOT_REQUESTED
+    assert _forward_loss.graph_ir.module_attrs["tessera.autodiff"] == '"forward"'
+    assert _forward_loss.graph_ir.module_attrs["tessera.autodiff.wrt_indices"] == "[1]"
+    if _forward_loss.compile_result is not None:
+        assert _forward_loss.compile_result.differentiation.mode == "forward"
+        assert _forward_loss.compile_result.backward is None
+
+
+def test_jit_compiled_jvp_ir_uses_requested_tangent_abi():
+    from tessera import _jit_boundary
+
+    if _jit_boundary._find_tessera_opt() is None:
+        pytest.skip("tessera-opt not built")
+    import numpy as np
+
+    ir = _forward_loss.compiled_jvp_ir(
+        np.ones((2, 3), dtype=np.float32),
+        np.ones((3, 4), dtype=np.float32),
+    )
+    assert "@_forward_loss__jvp" in ir
+    signature = ir.split("func.func private @_forward_loss__jvp", 1)[1].split(
+        "{", 1
+    )[0]
+    assert signature.count("tensor<2x3xf32>") == 1
+    assert signature.count("tensor<3x4xf32>") == 2

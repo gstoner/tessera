@@ -13,7 +13,10 @@
 // fill elements [4b, 4b+1, 4b+2, 4b+3]. key = (seed_lo, seed_hi). uniform =
 // out_u32 * 2^-32 ∈ [0, 1).
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <vector>
 
 namespace {
 constexpr uint32_t PHILOX_M0 = 0xD2511F53u;
@@ -55,4 +58,47 @@ extern "C" void tessera_x86_philox_uniform_f32(uint64_t seed,
             if (idx < n) out[idx] = static_cast<float>(c[j]) * kInv;
         }
     }
+}
+
+extern "C" void tessera_x86_philox_uniform_range_f32(
+    uint64_t seed, uint64_t counter_base, int64_t n, float low, float high,
+    float* out) {
+    tessera_x86_philox_uniform_f32(seed, counter_base, n, out);
+    const float width = high - low;
+    for (int64_t i = 0; i < n; ++i) out[i] = low + width * out[i];
+}
+
+extern "C" void tessera_x86_philox_normal_f32(
+    uint64_t seed, uint64_t counter_base, int64_t n, float mean, float stddev,
+    float* out) {
+    const int64_t pairs = (n + 1) / 2;
+    std::vector<float> u1(static_cast<size_t>(pairs));
+    std::vector<float> u2(static_cast<size_t>(pairs));
+    tessera_x86_philox_uniform_f32(seed, counter_base, pairs, u1.data());
+    const uint64_t second = counter_base + static_cast<uint64_t>((pairs + 3) / 4 + 1);
+    tessera_x86_philox_uniform_f32(seed, second, pairs, u2.data());
+    constexpr float kTwoPi = 6.2831853071795864769f;
+    for (int64_t pair = 0; pair < pairs; ++pair) {
+        const float a = std::clamp(u1[static_cast<size_t>(pair)], 1.0e-7f, 1.0f);
+        const float radius = std::sqrt(-2.0f * std::log(a));
+        const float theta = kTwoPi * u2[static_cast<size_t>(pair)];
+        const int64_t even = 2 * pair;
+        out[even] = mean + stddev * radius * std::cos(theta);
+        if (even + 1 < n)
+            out[even + 1] = mean + stddev * radius * std::sin(theta);
+    }
+}
+
+extern "C" void tessera_x86_philox_dropout_f32(
+    const float* input, uint64_t seed, uint64_t counter_base, int64_t n,
+    float probability, float* out) {
+    if (probability <= 0.0f) {
+        std::copy(input, input + n, out);
+        return;
+    }
+    std::vector<float> uniform(static_cast<size_t>(n));
+    tessera_x86_philox_uniform_f32(seed, counter_base, n, uniform.data());
+    const float scale = probability >= 1.0f ? 0.0f : 1.0f / (1.0f - probability);
+    for (int64_t i = 0; i < n; ++i)
+        out[i] = input[i] * (uniform[static_cast<size_t>(i)] >= probability ? scale : 0.0f);
 }

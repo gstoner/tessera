@@ -419,7 +419,9 @@ def _parse_functions(mlir: str) -> dict[str, _Interp]:
     lines = mlir.splitlines()
     i = 0
     while i < len(lines):
-        m = re.search(r"func\.func @([A-Za-z0-9_]+)\((.*?)\)", lines[i])
+        m = re.search(
+            r"func\.func(?: private)? @([A-Za-z0-9_]+)\((.*?)\)", lines[i]
+        )
         if not m:
             i += 1
             continue
@@ -442,6 +444,14 @@ def _parse_functions(mlir: str) -> dict[str, _Interp]:
 def _run_paired(fwd_mlir: str) -> dict[str, _Interp]:
     out = subprocess.run(
         [_TESSERA_OPT, "--tessera-autodiff-paired", "/dev/stdin"],
+        input=fwd_mlir, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, f"tessera-opt failed:\n{out.stderr}"
+    return _parse_functions(out.stdout)
+
+
+def _run_forward(fwd_mlir: str) -> dict[str, _Interp]:
+    out = subprocess.run(
+        [_TESSERA_OPT, "--tessera-autodiff-forward", "/dev/stdin"],
         input=fwd_mlir, capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, f"tessera-opt failed:\n{out.stderr}"
     return _parse_functions(out.stdout)
@@ -582,6 +592,181 @@ module {
 
     np.testing.assert_array_equal(primal, x.T.reshape(6))
     np.testing.assert_array_equal(dx, seed.reshape(3, 2).T)
+
+
+def test_compiler_forward_jvp_matches_numpy_and_finite_difference():
+    """AD-FWD-CORE-1: execute compiler-emitted paired primal/tangent IR."""
+    mlir = """
+module {
+  func.func @forward_core(
+      %x: tensor<2x3xf32>, %w: tensor<3x4xf32>) -> tensor<2x4xf32>
+      attributes {tessera.autodiff = "forward"} {
+    %m = "tessera.matmul"(%x, %w) :
+        (tensor<2x3xf32>, tensor<3x4xf32>) -> tensor<2x4xf32>
+    %y = "tessera.mul"(%m, %m) :
+        (tensor<2x4xf32>, tensor<2x4xf32>) -> tensor<2x4xf32>
+    return %y : tensor<2x4xf32>
+  }
+}
+"""
+    rng = np.random.default_rng(121)
+    x = rng.standard_normal((2, 3)).astype(np.float32)
+    w = rng.standard_normal((3, 4)).astype(np.float32)
+    dx = rng.standard_normal((2, 3)).astype(np.float32)
+    dw = rng.standard_normal((3, 4)).astype(np.float32)
+
+    funcs = _run_forward(mlir)
+    primal, tangent = funcs["forward_core__jvp"].run([x, w, dx, dw])
+    product = x @ w
+    product_tangent = dx @ w + x @ dw
+    expected_primal = product * product
+    expected_tangent = product_tangent * product + product * product_tangent
+
+    epsilon = np.float32(2.0e-3)
+    plus = ((x + epsilon * dx) @ (w + epsilon * dw)) ** 2
+    minus = ((x - epsilon * dx) @ (w - epsilon * dw)) ** 2
+    finite_difference = (plus - minus) / (2.0 * epsilon)
+
+    np.testing.assert_allclose(primal, expected_primal, rtol=2e-6, atol=2e-6)
+    np.testing.assert_allclose(tangent, expected_tangent, rtol=2e-6, atol=2e-6)
+    np.testing.assert_allclose(tangent, finite_difference, rtol=2e-3, atol=2e-3)
+
+
+@pytest.mark.parametrize("op", ["sigmoid", "tanh"])
+def test_compiler_activation_jvp_matches_finite_difference(op: str):
+    mlir = f"""
+module {{
+  func.func @activation(%x: tensor<9xf32>) -> tensor<9xf32>
+      attributes {{tessera.autodiff = "forward"}} {{
+    %y = "tessera.{op}"(%x) : (tensor<9xf32>) -> tensor<9xf32>
+    return %y : tensor<9xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(212 + len(op))
+    x = rng.uniform(-2.0, 2.0, 9).astype(np.float32)
+    dx = rng.standard_normal(9).astype(np.float32)
+    primal, tangent = _run_forward(mlir)["activation__jvp"].run([x, dx])
+    if op == "tanh":
+        expected_primal = np.tanh(x)
+        expected_tangent = dx * (1.0 - expected_primal * expected_primal)
+        forward = np.tanh
+    else:
+        expected_primal = 1.0 / (1.0 + np.exp(-x))
+        expected_tangent = dx * expected_primal * (1.0 - expected_primal)
+        forward = lambda value: 1.0 / (1.0 + np.exp(-value))
+    epsilon = np.float32(1.0e-3)
+    finite_difference = (
+        forward(x + epsilon * dx) - forward(x - epsilon * dx)
+    ) / (2.0 * epsilon)
+    np.testing.assert_allclose(primal, expected_primal, rtol=2e-6, atol=2e-6)
+    np.testing.assert_allclose(tangent, expected_tangent, rtol=3e-6, atol=3e-6)
+    np.testing.assert_allclose(tangent, finite_difference, rtol=2e-3, atol=2e-3)
+
+
+@pytest.mark.parametrize("kind", ["sum", "mean"])
+def test_compiler_reduction_jvp_matches_numpy(kind: str):
+    mlir = f"""
+module {{
+  func.func @reduction(%x: tensor<3x5xf32>) -> tensor<3xf32>
+      attributes {{tessera.autodiff = "forward"}} {{
+    %y = "tessera.reduce"(%x) {{axis = 1 : i64, kind = "{kind}"}} :
+        (tensor<3x5xf32>) -> tensor<3xf32>
+    return %y : tensor<3xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(333)
+    x = rng.standard_normal((3, 5)).astype(np.float32)
+    dx = rng.standard_normal((3, 5)).astype(np.float32)
+    primal, tangent = _run_forward(mlir)["reduction__jvp"].run([x, dx])
+    reducer = np.sum if kind == "sum" else np.mean
+    np.testing.assert_allclose(primal, reducer(x, axis=1), rtol=2e-6)
+    np.testing.assert_allclose(tangent, reducer(dx, axis=1), rtol=2e-6)
+
+
+def test_compiler_softmax_jvp_matches_directional_difference():
+    mlir = """
+module {
+  func.func @probabilities(%x: tensor<3x5xf32>) -> tensor<3x5xf32>
+      attributes {tessera.autodiff = "forward"} {
+    %y = "tessera.softmax"(%x) {axis = 1 : i64} :
+        (tensor<3x5xf32>) -> tensor<3x5xf32>
+    return %y : tensor<3x5xf32>
+  }
+}
+"""
+    rng = np.random.default_rng(334)
+    x = rng.standard_normal((3, 5)).astype(np.float32)
+    dx = rng.standard_normal((3, 5)).astype(np.float32)
+    primal, tangent = _run_forward(mlir)["probabilities__jvp"].run([x, dx])
+    expected = primal * (dx - np.sum(primal * dx, axis=1, keepdims=True))
+    np.testing.assert_allclose(tangent, expected, rtol=3e-6, atol=3e-6)
+
+
+@pytest.mark.parametrize("op,input_type,output_type", [
+    ("fft", "tensor<8xcomplex<f32>>", "tensor<8xcomplex<f32>>"),
+    ("ifft", "tensor<8xcomplex<f32>>", "tensor<8xcomplex<f32>>"),
+    ("rfft", "tensor<8xf32>", "tensor<5xcomplex<f32>>"),
+    ("irfft", "tensor<5xcomplex<f32>>", "tensor<8xf32>"),
+])
+def test_compiler_spectral_jvp_is_the_same_linear_transform(
+    op: str, input_type: str, output_type: str,
+):
+    layout = "full_complex" if op in {"fft", "ifft"} else "half_spectrum_nyquist_explicit"
+    mlir = f"""
+module {{
+  func.func @spectral_jvp(%x: {input_type}) -> {output_type}
+      attributes {{tessera.autodiff = "forward"}} {{
+    %y = "tessera.{op}"(%x) {{axis = -1 : i64, logical_length = 8 : i64,
+      normalization = "ortho", spectrum_layout = "{layout}",
+      hermitian_weight = "none"}} : ({input_type}) -> {output_type}
+    return %y : {output_type}
+  }}
+}}
+"""
+    rng = np.random.default_rng(400 + len(op))
+    n = 5 if op == "irfft" else 8
+    if "complex" in input_type:
+        x = rng.standard_normal(n) + 1j * rng.standard_normal(n)
+        dx = rng.standard_normal(n) + 1j * rng.standard_normal(n)
+    else:
+        x = rng.standard_normal(n).astype(np.float32)
+        dx = rng.standard_normal(n).astype(np.float32)
+    primal, tangent = _run_forward(mlir)["spectral_jvp__jvp"].run([x, dx])
+    transform = {"fft": np.fft.fft, "ifft": np.fft.ifft,
+                 "rfft": np.fft.rfft, "irfft": np.fft.irfft}[op]
+    kwargs = {"axis": -1, "norm": "ortho"}
+    if op == "irfft":
+        kwargs["n"] = 8
+    np.testing.assert_allclose(primal, transform(x, **kwargs), rtol=2e-6)
+    np.testing.assert_allclose(tangent, transform(dx, **kwargs), rtol=2e-6)
+
+
+@pytest.mark.parametrize("op", ["layer_norm", "rmsnorm"])
+def test_compiler_normalization_jvp_matches_directional_difference(op: str):
+    mlir = f"""
+module {{
+  func.func @normalization(%x: tensor<3x5xf32>) -> tensor<3x5xf32>
+      attributes {{tessera.autodiff = "forward"}} {{
+    %y = "tessera.{op}"(%x) {{eps = 1.0e-5 : f64}} :
+        (tensor<3x5xf32>) -> tensor<3x5xf32>
+    return %y : tensor<3x5xf32>
+  }}
+}}
+"""
+    rng = np.random.default_rng(480 + len(op))
+    x = rng.standard_normal((3, 5)).astype(np.float32)
+    dx = rng.standard_normal((3, 5)).astype(np.float32)
+    primal, tangent = _run_forward(mlir)["normalization__jvp"].run([x, dx])
+    def reference(value):
+        if op == "layer_norm":
+            value = value - np.mean(value, axis=-1, keepdims=True)
+        return value / np.sqrt(np.mean(value * value, axis=-1, keepdims=True) + 1e-5)
+    epsilon = np.float32(5e-4)
+    finite = (reference(x + epsilon * dx) - reference(x - epsilon * dx)) / (2 * epsilon)
+    np.testing.assert_allclose(primal, reference(x), rtol=2e-6, atol=2e-6)
+    np.testing.assert_allclose(tangent, finite, rtol=3e-3, atol=3e-3)
 
 
 @pytest.mark.parametrize("transpose_a,transpose_b", [

@@ -134,7 +134,8 @@ verified by rebuilding HEAD), negative-stage cases in
 `phase2/tile_async_token.mlir`, and a no-key-verifies-clean unit test in
 `test_tile_ir.py`. Full `lit tests/tessera-ir/` failure set is unchanged vs.
 baseline on the Mac config (29 pre-existing ROCm/x86-lane fixtures that need
-the primary box's build).
+the primary box's build). Remaining primary-box gates and follow-ups:
+[`STRIX_HALO_WORKLIST_2026-08-10.md`](STRIX_HALO_WORKLIST_2026-08-10.md).
 
 ## Collective async unification (2026-08-09)
 

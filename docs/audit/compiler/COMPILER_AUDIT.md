@@ -33,6 +33,54 @@ queue vocabulary — `lower_schedule_to_tile_ir` emits
 any revival must ship a parseable single-segment name, a real producer, and a
 passing fixture.
 
+## Dead verifier/plugin surfaces deleted (2026-08-10)
+
+Two C++ surfaces compiled by no CMake target were resolved per Decision #31
+(delete, not consume) after checking provenance: both landed together in the
+April 2026 scaffold commit `8fbc4eb` ("Compiler backend update") as a planned
+central `registerTesseraAll` registration entry that `tessera-opt` never
+adopted — the real drivers register through
+`src/compiler/ir/TesseraDialect.cpp::registerTesseraDialects`, a live function
+the dead plugin *also* declared under the same name (a latent symbol collision
+had it ever been linked).
+
+**Deleted:**
+- `src/compiler/programming_model/ir/ScheduleOps.cpp` — whole file. Its
+  `verifyProgrammingModelOp` dispatcher had zero callers;
+  `PMPasses.cpp::PMV11VerifierPass` (built into `TesseraPM`) is the single
+  production implementation of the `schedule.`/`cache.`/`tile.` structural
+  checks. Because the file was never compiled, none of its extra checks
+  (schedule.prefetch/async_copy/artifact, cache.*, tile.alloc_shared/reduce)
+  were ever enforced, so deletion loses nothing that was live — and several of
+  its contracts had drifted (no mbarrier arch gate; laxer mbarrier semantics
+  than PMV11's release/acq_rel/seq_cst). Note: this tree (main @ `af27ed8`)
+  still carried the `tile.async_copy`/`tile.wait_async` entries; the
+  whole-file deletion subsumes the async-contract reconciliation's partial
+  removal.
+- `src/compiler/mlir/` scaffold: `TesseraMLIRPlugin.cpp`,
+  `include/Tessera/TesseraMLIRPlugin.h`, `lib/Graph/TesseraGraphIR.cpp`,
+  `lib/Schedule/TesseraScheduleIR.cpp`, `lib/Target/TesseraTargetIR.cpp`
+  (unbuilt `emitAsyncCopy`/`verifyTargetOp` with zero callers — distinct from
+  the live `emitAsyncCopy` in `TileIRLoweringPass.cpp`).
+
+**Retained — the directory is NOT wholly dead:**
+`src/compiler/mlir/include/Tessera/Common/Lowering.h` is the Workstream A1
+shared Tile→Target lowering helper (`tessera::common::extractPtr`/
+`ensureExternalDecl`/fusion-call skeleton), consumed by
+`src/transforms/lib/TileToX86Pass.cpp` and the Apple backend via the root
+`CMakeLists.txt` `include_directories(src/compiler/mlir/include)`. That is its
+named consumer; it stays.
+
+**Drift-gate fallout fixed in `tests/unit/test_pipeline_registry.py`:** the
+`_PASS_REGISTRATION_FILES` scan had been treating the never-compiled plugin as
+C++ pipeline truth — `tessera-neighbors-pipeline` and `tessera-full-pipeline`
+existed *only* there and are now removed from `_KNOWN_UNTRACKED_PIPELINES`;
+the stale path to the long-deleted `PassPipelinesPM11.cpp` is replaced by the
+live `programming_model/lib/PMPasses.cpp`, which actually registers
+`tessera-pm-{verify,legalize}-pipeline`. Stale doc pointers updated in
+`docs/spec/COMPILER_REFERENCE.md`, `PROJECT_STRUCTURE.md`, and
+`docs/context/knowledge_map.yaml` (+ regenerated context outputs).
+
 ## Collective async unification (2026-08-09)
 
 Cross-backend sync `COLLECTIVE-ASYNC-UNIFY-2026-08-09` removes the final active

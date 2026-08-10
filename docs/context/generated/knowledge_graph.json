@@ -479,7 +479,7 @@
           "path": "docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md"
         },
         {
-          "path": "src/compiler/mlir/lib/Target/TesseraTargetIR.cpp"
+          "path": "python/tessera/compiler/target_ir.py"
         }
       ],
       "tags": [

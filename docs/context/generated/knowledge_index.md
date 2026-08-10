@@ -62,7 +62,7 @@ Use this generated index for navigation, then verify claims against the canonica
 | `ir.graph` | Graph IR | normative | docs/spec/GRAPH_IR_SPEC.md, src/compiler/ir/TesseraOps.td, python/tessera/compiler/graph_ir.py | example.ir_pipeline_tutorial -> depends_on; defined_by -> docs/spec/GRAPH_IR_SPEC.md; lowers_to -> ir.schedule |
 | `ir.schedule` | Schedule IR | normative | docs/spec/TARGET_IR_SPEC.md, docs/architecture/Compiler/Tessera_Compiler_ScheduleIR_Design.md, src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td | ir.graph -> lowers_to; lowers_to -> ir.tile |
 | `ir.tile` | Tile IR | normative | docs/spec/TILE_IR.md, docs/spec/TARGET_IR_SPEC.md, src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td | ir.schedule -> lowers_to; lowers_to -> ir.target |
-| `ir.target` | Target IR | normative | docs/spec/TARGET_IR_SPEC.md, docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md, src/compiler/mlir/lib/Target/TesseraTargetIR.cpp | ir.tile -> lowers_to; pass.lower_to_x86 -> depends_on |
+| `ir.target` | Target IR | normative | docs/spec/TARGET_IR_SPEC.md, docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md, python/tessera/compiler/target_ir.py | ir.tile -> lowers_to; pass.lower_to_x86 -> depends_on |
 
 ## pass
 

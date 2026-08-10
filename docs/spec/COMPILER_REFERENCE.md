@@ -38,7 +38,7 @@ Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, Apple, ...)
 | Layer | Primary active files | Status |
 |-------|----------------------|--------|
 | Graph IR | `python/tessera/compiler/graph_ir.py`, `python/tessera/compiler/frontend/parser.py`, `src/compiler/ir/TesseraOps.td`, `src/compiler/ir/TesseraTiling.cpp` | implemented; Matmul TilingInterface conservative path implemented, Conv2D interface scaffolded |
-| Schedule IR | `python/tessera/compiler/schedule_ir.py`, `src/compiler/programming_model/ir/ScheduleOps.cpp`, `src/compiler/programming_model/` | implemented / lit-testable |
+| Schedule IR | `python/tessera/compiler/schedule_ir.py`, `src/compiler/programming_model/ir/ScheduleDialect.cpp`, `src/compiler/programming_model/lib/PMPasses.cpp` | implemented / lit-testable |
 | Tile IR | `python/tessera/compiler/tile_ir.py`, `src/compiler/tile_opt_fa4/`, `src/transforms/lib/TileIRLoweringPass.cpp` | implemented / lit-testable |
 | Target IR | `python/tessera/compiler/target_ir.py`, `src/compiler/codegen/`, `python/tessera/compiler/matmul_pipeline.py` | implemented / lit-testable for CPU/NVIDIA/Apple/ROCm; hardware-runtime lanes exist for CPU (JIT), Apple CPU/GPU, ROCm gfx1151 (RDNA3.5 WMMA), and NVIDIA sm_120 (consumer Blackwell mma.sync) |
 

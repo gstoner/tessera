@@ -7,8 +7,8 @@ Reference date for staleness: **2026-08-10**.
 ## Headline
 
 - **142** docs catalogued across the canonical doc tree.
-- **140** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
-- **89** updated within the last 30 days.
+- **141** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **90** updated within the last 30 days.
 - **13** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -16,7 +16,6 @@ Reference date for staleness: **2026-08-10**.
 These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-form `Last updated:` line to participate in the audit.  Until tagged, the freshness signal is unavailable.
 
 - `docs/reference/tessera_frontend_lanes.md`
-- `docs/audit/compiler/TILERT_ASSESSMENT.md`
 
 ## Per-root inventory
 
@@ -180,7 +179,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 24 | ✓ |
 | `compiler/STRIX_HALO_WORKLIST_2026-08-10.md` | - | 2026-08-10 | 0 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 8 | ✓ |
-| `compiler/TILERT_ASSESSMENT.md` | - | _undated_ | - | _body_ |
+| `compiler/TILERT_ASSESSMENT.md` | - | 2026-08-10 | 0 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 11 | ✓ |
 | `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-04 | 6 | ✓ |
 | `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 8 | ✓ |

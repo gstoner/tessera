@@ -1,3 +1,8 @@
+---
+last_updated: 2026-08-10
+audit_role: reference
+---
+
 # TileRT assessment — tile-granular composition scheduling, with proofs
 
 **Date:** 2026-08-10 · **Status:** assessment + design note (direction, not status

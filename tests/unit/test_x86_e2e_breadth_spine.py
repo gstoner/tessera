@@ -40,6 +40,8 @@ COHORT4_SYMBOLS = {
     "tessera_x86_moe_f32", "tessera_x86_optimizer_f32", "tessera_x86_deltanet_f32",
     "tessera_x86_kv_cache_append_f32", "tessera_x86_kv_cache_read_f32",
     "tessera_x86_kv_cache_prune_f32", "tessera_x86_philox_uniform_f32",
+    "tessera_x86_philox_uniform_range_f32", "tessera_x86_philox_normal_f32",
+    "tessera_x86_philox_dropout_f32",
     "tessera_x86_ebm_affine_langevin_f32",
     "tessera_x86_ebm_decode_init_noise_apply_f32", "tessera_x86_ebm_ebt_tiny_f32",
     "tessera_x86_ebm_energy_quadratic_f32", "tessera_x86_ebm_langevin_philox_f32",

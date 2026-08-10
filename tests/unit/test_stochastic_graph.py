@@ -13,10 +13,12 @@ import pytest
 import numpy as np
 
 from tessera.compiler.stochastic_graph import (
+    EstimatorProvenance,
     analyze_stochastic_graph,
     certify_deterministic,
     is_distribution_op,
     is_reparameterizable_op,
+    resolve_estimator_provenance,
     DISTRIBUTION_OPS,
 )
 
@@ -156,3 +158,27 @@ def test_jit_deterministic_gate_rejects_aliased_rng_from_trace():
 
     with pytest.raises(TesseraEffectError, match="random traced dependency"):
         aliased_rng(np.ones((2, 2)))
+
+
+def test_estimator_provenance_fails_closed_and_requires_replay_identity():
+    rejected = resolve_estimator_provenance(
+        "tessera.dropout", requested="constant_noise", explicit_key=True)
+    assert rejected.provenance is EstimatorProvenance.REJECT
+    assert not rejected.legal
+    accepted = resolve_estimator_provenance(
+        "tessera.dropout", requested="constant_noise", explicit_key=True,
+        replayable=True)
+    assert accepted.provenance is EstimatorProvenance.CONSTANT_NOISE
+    assert accepted.legal
+
+
+def test_pathwise_and_score_function_are_explicit_and_typed():
+    pathwise = resolve_estimator_provenance(
+        "tessera.rng_philox_normal", requested="pathwise", explicit_key=True)
+    assert pathwise.legal and pathwise.provenance is EstimatorProvenance.PATHWISE
+    assert not resolve_estimator_provenance(
+        "tessera.rng_bernoulli", requested="pathwise", explicit_key=True).legal
+    score = resolve_estimator_provenance(
+        "tessera.rng_bernoulli", requested="score_function")
+    assert score.legal and score.provenance is EstimatorProvenance.SCORE_FUNCTION
+    assert not resolve_estimator_provenance("tessera.rng_normal").legal

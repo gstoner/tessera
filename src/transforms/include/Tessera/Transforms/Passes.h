@@ -168,6 +168,11 @@ std::unique_ptr<mlir::Pass> createAutodiffPass();
 // Body: src/transforms/lib/AutodiffPairedPass.cpp
 std::unique_ptr<mlir::Pass> createAutodiffPairedPass();
 
+// AutodiffForwardPass — AD-FWD-CORE-1. Emits a separate paired JVP:
+//   @f__jvp(inputs..., input_tangents...) -> (primals..., output_tangents...)
+// from Graph operations implementing TangentInterface.
+std::unique_ptr<mlir::Pass> createAutodiffForwardPass();
+
 // AdjointCollectiveInsertionPass — Phase F5. Runs **after** AutodiffPass.
 // For each function argument with both a recorded cotangent (set by
 // AutodiffPass via `tessera.autodiff.arg_cotangents`) and a sharding

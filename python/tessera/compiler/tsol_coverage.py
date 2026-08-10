@@ -88,7 +88,7 @@ _TSOL_CATEGORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "RNG And Initialization",
-        ("rng_uniform", "rng_normal"),
+        ("rng_uniform", "rng_normal", "rng_philox_uniform", "rng_philox_normal"),
     ),
     (
         "Collectives",

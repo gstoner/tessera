@@ -17,6 +17,10 @@
 // CHECK-LABEL: func.func @declared_pure
 // CHECK-SAME:  tessera.effect = "pure"
 
+// ── Test 5: canonical underscore RNG spelling → annotated random ─────────
+// CHECK-LABEL: func.func @canonical_rng
+// CHECK-SAME:  tessera.effect = "random"
+
 module attributes {tessera.ir.version = "1.0"} {
 
   func.func @pure_gemm(
@@ -56,5 +60,11 @@ module attributes {tessera.ir.version = "1.0"} {
     %C = "tessera.matmul"(%A, %B) : (tensor<32x32xbf16>, tensor<32x32xbf16>)
                                     -> tensor<32x32xf32>
     return %C : tensor<32x32xf32>
+  }
+
+  func.func @canonical_rng() -> tensor<8xf32> {
+    %sample = "tessera.rng_uniform"() {shape = [8], seed = 7 : i64}
+        : () -> tensor<8xf32>
+    return %sample : tensor<8xf32>
   }
 }

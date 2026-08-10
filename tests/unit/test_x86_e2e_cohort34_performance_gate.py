@@ -27,7 +27,7 @@ def test_cohort34_benchmark_is_operation_total() -> None:
     assert data["operation_total"] is True
     dispositions = data["dispositions"]
     assert {row["abi_key"] for row in dispositions} == set(X86_BREADTH_ABIS)
-    assert len(dispositions) == 33
+    assert len(dispositions) == 36
     assert all(row["decision"].startswith(("promote_", "retain_")) for row in dispositions)
 
 
@@ -57,12 +57,13 @@ def test_selector_thresholds_are_the_first_measured_passing_domains() -> None:
 def test_composite_and_specialized_entries_remain_unpromoted() -> None:
     data = json.loads(BASELINE.read_text())
     retained = [row for row in data["dispositions"] if row["decision"].startswith("retain_")]
-    assert len(retained) == 29
+    assert len(retained) == 32
     assert all(row["threshold"] is None for row in retained)
     by_key = {row["abi_key"]: row["decision"] for row in retained}
     for key in (
         "sddmm_f32", "bitonic_sort_kv_f32", "fft_c2c_f32",
         "clifford_bilinear_f32", "policy_loss_f32", "philox_uniform_f32",
+        "philox_uniform_range_f32", "philox_normal_f32", "philox_dropout_f32",
         "optimizer_f32", "kv_cache_append_f32",
     ):
         assert by_key[key] == "retain_composite"

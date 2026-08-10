@@ -3,10 +3,32 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-09
+last_updated: 2026-08-10
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `AD-STOCHASTIC-RNG-1-2026-08-10` — **shared stochastic JVP
+contract available; CUDA follow-up required.** Explicit key/counter Graph ops,
+estimator provenance, dropout replay, fixed-key EGGROLL JVP, and derivative
+proof obligations are target-independent. x86 and gfx1151 distribution kernels
+do not transfer to CUDA; SM120 needs its own Philox distribution consumer,
+compiler-JVP package, and exact-device proof.
+
+Cross-backend sync `AD-FWD-PRODUCT-2-2026-08-10` — **public JVP ABI landed;
+CUDA execution remains follow-up required.** Forward/JVP requests now carry
+mode-neutral provenance and stable `wrt_indices`, and the compiler emits only
+requested tangent terms. Tanh/sigmoid add direct CPU-oracle proof. No PTX
+package, selector, or SM120 evidence transfers; native JVP remains fail-closed.
+
+Cross-backend sync `AD-FWD-CORE-1-2026-08-09` — **shared compiler JVP
+foundation landed; NVIDIA physical consumption remains architecture-owned.**
+The Graph dialect now exposes compiler-owned tangent rules and a paired
+`--tessera-autodiff-forward` function contract. Matmul/mul has independent CPU
+IR numerical proof, while unsupported active operations and regions fail
+closed. The generated ledger distinguishes compiler `ir_tangent` evidence from
+Python JVP registration. This changes no PTX package or SM120 evidence; NVIDIA
+must lower and prove any native JVP package independently.
 
 Cross-backend sync `X86-TYPED-FAMILY-PLUGIN-2026-08-09` — **shared schema
 parity assessed; no CUDA physical change.** x86 now validates a closed Tile

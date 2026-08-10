@@ -252,6 +252,8 @@ quantize_fp8,quantize,public,public,registered,complete,fused,device_verified_ji
 quantize_nvfp4,quantize,public,public,registered,complete,fused,device_verified_jit,ready,none
 dropout,random_mask,public,public,registered,complete,fused,device_verified_jit,ready,none
 rng_normal,random_source,public,public,registered,complete,fused,device_verified_jit,ready,none
+rng_philox_normal,random_source,public,public,registered,complete,fused,device_verified_jit,ready,none
+rng_philox_uniform,random_source,public,public,registered,complete,fused,device_verified_jit,ready,none
 rng_uniform,random_source,public,public,registered,complete,fused,device_verified_jit,ready,none
 amax,reduction,public,public,registered,complete,fused,device_verified_jit,ready,none
 amin,reduction,public,public,registered,complete,fused,device_verified_jit,ready,none

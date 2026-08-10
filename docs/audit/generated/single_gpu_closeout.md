@@ -13,7 +13,7 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 390 | backend_pathway_owned=375, multi_gpu_deferred=15 | backend_codegen=375, distributed_validation=15 |
+| `backend_kernel` | 392 | backend_pathway_owned=377, multi_gpu_deferred=15 | backend_codegen=377, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
 | `target_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
@@ -312,6 +312,8 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `quantize_nvfp4` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dropout` | random_mask | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rng_normal` | random_source | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_philox_normal` | random_source | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `rng_philox_uniform` | random_source | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rng_uniform` | random_source | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `bidirectional_scan` | recurrent | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `gru_cell` | recurrent | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |

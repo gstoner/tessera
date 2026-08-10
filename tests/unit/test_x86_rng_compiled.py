@@ -1,7 +1,7 @@
 """Compiler-generated device RNG on x86 AVX-512 (P6 of S_SERIES_GAP_CLOSURE_PLAN)
-— counter-based Philox-4x32-10 (the JAX/cuRAND algorithm). The kernel produces
-the uniform[0,1) bits; the host applies the distribution transform
-(uniform-scale / Box-Muller normal / dropout mask). A SEPARATE deterministic
+— counter-based Philox-4x32-10 (the JAX/cuRAND algorithm). Native functions own
+the uniform-scale, Box-Muller normal, and dropout transforms as well as the
+uniform core. A SEPARATE deterministic
 stream from tessera.rng (host numpy-Generator) — validated BIT-EXACTLY against
 the tessera.rng_device numpy reference (same algorithm) + by statistics +
 determinism. Reachable via `compiler_path="x86_rng_compiled"`. Skip-clean:
@@ -57,6 +57,31 @@ def test_rng_uniform_accepts_lo_hi_alias():
     assert a.min() >= 2.0 and a.max() < 4.0
 
 
+@pytest.mark.parametrize(
+    ("op_name", "expected"),
+    (
+        ("tessera.rng_philox_uniform",
+         lambda seed, counter, n: R.uniform(seed, n, -2.0, 3.0, counter)),
+        ("tessera.rng_philox_normal",
+         lambda seed, counter, n: R.normal(seed, n, 1.5, 0.25, counter)),
+    ),
+)
+def test_explicit_key_counter_rng_uses_native_distribution(op_name, expected):
+    rt = _rt_or_skip()
+    key = np.array([0x1234, 0x55], dtype=np.uint64)
+    counter = np.array([19], dtype=np.uint64)
+    seed = int(key[0]) ^ int(key[1])
+    kwargs = {"shape": [17], "lo": -2.0, "hi": 3.0,
+              "mean": 1.5, "std": 0.25}
+    out = np.asarray(rt.launch(_art(rt, op_name, kwargs, (key, counter)),
+                               (key, counter))["output"])
+    reference = expected(seed, int(counter[0]), 17)
+    if op_name.endswith("uniform"):
+        np.testing.assert_array_equal(out, reference)
+    else:
+        np.testing.assert_allclose(out, reference, rtol=3e-7, atol=3e-7)
+
+
 def test_rng_uniform_statistics():
     rt = _rt_or_skip()
     out = np.asarray(rt.launch(_art(rt, "tessera.rng_uniform",
@@ -66,12 +91,15 @@ def test_rng_uniform_statistics():
     assert out.min() >= 0.0 and out.max() < 1.0
 
 
-def test_rng_normal_bit_exact_and_stats():
+def test_rng_normal_native_transform_and_stats():
     rt = _rt_or_skip()
     res = rt.launch(_art(rt, "tessera.rng_normal",
                          {"seed": 7, "shape": [100], "mean": 2.0, "std": 0.5}), ())
-    np.testing.assert_array_equal(np.asarray(res["output"]),
-                                  R.normal(7, 100, 2.0, 0.5))
+    # The Philox words are bit exact. libm sqrt/log/sin/cos may differ from
+    # NumPy by one f32 ULP, so the transform contract is correctly ULP-bounded.
+    np.testing.assert_allclose(np.asarray(res["output"]),
+                               R.normal(7, 100, 2.0, 0.5), rtol=3e-7,
+                               atol=3e-7)
     big = np.asarray(rt.launch(_art(rt, "tessera.rng_normal",
                                     {"seed": 1, "shape": [200000]}), ())["output"])
     assert abs(big.mean()) < 1e-2 and abs(big.std() - 1.0) < 1e-2

@@ -32,6 +32,7 @@ dataflow-effects work can wire into the real ``deterministic=True`` gate.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Iterable, Sequence
 
 from .effects import Effect, _OP_EFFECTS
@@ -51,6 +52,7 @@ def _random_op_names() -> frozenset[str]:
         "uniform", "normal", "truncated_normal", "bernoulli", "categorical",
         "gumbel", "multinomial", "randint", "permutation", "gamma", "beta",
         "dirichlet", "poisson", "randn", "rand", "dropout",
+        "rng_philox_uniform", "rng_philox_normal",
     }
     return frozenset(names)
 
@@ -62,12 +64,74 @@ DISTRIBUTION_OPS: frozenset[str] = _random_op_names()
 # distributions have no pathwise gradient → score-function estimator.
 REPARAMETERIZABLE_OPS: frozenset[str] = frozenset({
     "uniform", "normal", "truncated_normal", "gumbel", "gamma", "beta",
-    "dirichlet",
+    "dirichlet", "rng_philox_uniform", "rng_philox_normal",
 })
 
 
+class EstimatorProvenance(str, Enum):
+    """Compiler-visible meaning of a stochastic derivative request."""
+
+    CONSTANT_NOISE = "constant_noise"
+    PATHWISE = "pathwise"
+    SCORE_FUNCTION = "score_function"
+    REJECT = "reject"
+
+
+@dataclass(frozen=True)
+class EstimatorDecision:
+    provenance: EstimatorProvenance
+    legal: bool
+    reason: str
+
+
+def resolve_estimator_provenance(
+    op_name: str, *, requested: str | None = None,
+    explicit_key: bool = False, replayable: bool = False,
+) -> EstimatorDecision:
+    """Fail-closed estimator selection for one stochastic Graph operation.
+
+    Selection is never inferred from a generic ``random`` effect alone. A
+    discrete distribution needs an explicit score-function request, continuous
+    pathwise differentiation needs explicit counter state, and constant-noise
+    differentiation needs an exact replay identity.
+    """
+    base = _base_name(op_name)
+    try:
+        choice = EstimatorProvenance(requested or "reject")
+    except ValueError:
+        return EstimatorDecision(
+            EstimatorProvenance.REJECT, False,
+            f"unknown estimator provenance {requested!r}")
+    if choice == EstimatorProvenance.CONSTANT_NOISE:
+        if replayable and explicit_key:
+            return EstimatorDecision(choice, True, "explicit key/counter replay")
+        return EstimatorDecision(
+            EstimatorProvenance.REJECT, False,
+            "constant_noise requires an explicit replayable key/counter identity")
+    if choice == EstimatorProvenance.PATHWISE:
+        if base in REPARAMETERIZABLE_OPS and explicit_key:
+            return EstimatorDecision(choice, True, "explicit reparameterized noise")
+        return EstimatorDecision(
+            EstimatorProvenance.REJECT, False,
+            "pathwise requires a reparameterizable operation and explicit key/counter")
+    if choice == EstimatorProvenance.SCORE_FUNCTION:
+        if is_distribution_op(op_name):
+            return EstimatorDecision(choice, True, "explicit score-function estimator")
+        return EstimatorDecision(
+            EstimatorProvenance.REJECT, False,
+            "score_function applies only to distribution operations")
+    return EstimatorDecision(
+        EstimatorProvenance.REJECT, False,
+        "stochastic differentiation requires explicit estimator provenance")
+
+
 def _base_name(op_name: str) -> str:
-    return op_name.rsplit(".", 1)[-1]
+    base = op_name.rsplit(".", 1)[-1]
+    if base.startswith("rng_") and base not in {
+        "rng_philox_uniform", "rng_philox_normal"
+    }:
+        return base.removeprefix("rng_")
+    return base
 
 
 def _ssa_name(value: str) -> str:

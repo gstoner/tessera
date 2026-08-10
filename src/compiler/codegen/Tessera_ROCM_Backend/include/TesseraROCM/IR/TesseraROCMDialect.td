@@ -164,6 +164,11 @@ def ROCM_ReductionAttr
     : ROCM_EnumStrAttr<["none", "sum", "mean"],
                        "ROCm reduction policy: 'none', 'sum', or 'mean'">;
 
+def ROCM_PhiloxModeAttr
+    : ROCM_EnumStrAttr<["uniform_core", "uniform_range", "normal", "dropout"],
+                       "ROCm Philox kernel mode: core bits, scaled uniform, "
+                       "Box-Muller normal, or dropout mask">;
+
 // Scatter/segment combine mode.
 // Scatter/segment combine mode.
 //

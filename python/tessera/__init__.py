@@ -2467,6 +2467,37 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         rng = np.random.default_rng(None if seed is None else int(seed))
         return rng.normal(float(mean), float(std), tuple(shape)).astype(_dtype_for(dtype))
 
+    def _explicit_philox_state(key, counter):
+        key_words = np.asarray(key, dtype=np.uint64).reshape(-1)
+        counter_words = np.asarray(counter, dtype=np.uint64).reshape(-1)
+        if key_words.size != 2 or counter_words.size != 1:
+            raise ValueError(
+                "explicit Philox RNG requires key[2] and counter[1] uint64 words"
+            )
+        seed = int(key_words[0]) ^ int(key_words[1])
+        return seed, int(counter_words[0])
+
+    def rng_philox_uniform(key, counter, shape, dtype="fp32", low: float = 0.0,
+                           high: float = 1.0, domain: str = "default"):
+        del domain  # content-addressed semantic domain; key derivation owns it.
+        from . import rng_device
+        seed, counter_base = _explicit_philox_state(key, counter)
+        n = int(np.prod(tuple(shape), dtype=np.int64))
+        values = rng_device.philox_uniform(seed, counter_base, n)
+        out = np.float32(low) + np.float32(high - low) * values
+        return out.reshape(tuple(shape)).astype(_dtype_for(dtype))
+
+    def rng_philox_normal(key, counter, shape, dtype="fp32", mean: float = 0.0,
+                          stddev: float = 1.0, domain: str = "default"):
+        del domain
+        from . import rng_device
+        seed, counter_base = _explicit_philox_state(key, counter)
+        n = int(np.prod(tuple(shape), dtype=np.int64))
+        return rng_device.normal(
+            seed, n, mean=float(mean), std=float(stddev),
+            counter_base=counter_base,
+        ).reshape(tuple(shape)).astype(_dtype_for(dtype))
+
     def fused_epilogue(x, bias=None, activation="linear", residual=None, dropout_p: float = 0.0, cast_dtype=None, **kwargs):
         if hasattr(x, "_data"):
             x = x._data
@@ -4480,6 +4511,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "all_to_all": all_to_all,
         "rng_uniform": rng_uniform,
         "rng_normal": rng_normal,
+        "rng_philox_uniform": rng_philox_uniform,
+        "rng_philox_normal": rng_philox_normal,
         "fused_epilogue": fused_epilogue,
         "fft": fft,
         "ifft": ifft,
@@ -5107,6 +5140,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         all_to_all=all_to_all,
         rng_uniform=rng_uniform,
         rng_normal=rng_normal,
+        rng_philox_uniform=rng_philox_uniform,
+        rng_philox_normal=rng_philox_normal,
         fused_epilogue=fused_epilogue,
         fft=fft,
         ifft=ifft,

@@ -1996,15 +1996,17 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
                  "runtime.launch() (rocm_conformal_compiled).",
     } for op in ("mobius", "stereographic")},
     # P6 — device RNG: counter-based Philox-4x32-10 (generate-rocm-philox-kernel)
-    # produces the uniform bits; host applies the distribution transform. A
+    # and native distribution modes own uniform scaling, Box-Muller, and
+    # dropout masking. A
     # SEPARATE deterministic stream from the host numpy-Generator path.
     **{op: {
         "dtypes": ("fp32",),
         "feature_flags": ("random",),
-        "notes": f"Standalone {op} — Philox-4x32-10 uniform RNG kernel "
-                 "(generate-rocm-philox-kernel) + host transform. Executes via "
+        "notes": f"Standalone {op} — native Philox-4x32-10 distribution kernel "
+                 "(generate-rocm-philox-kernel). Executes via "
                  "runtime.launch() (rocm_rng_compiled).",
-    } for op in ("rng_uniform", "rng_normal", "dropout")},
+    } for op in ("rng_uniform", "rng_normal", "rng_philox_uniform",
+                 "rng_philox_normal", "dropout")},
     # P2e — atan2 composed on the gfx1151 unary atan lane (no new kernel;
     # quadrant/sign logic on host). Executes via rocm_atan2_compiled.
     "atan2": {
@@ -2515,9 +2517,11 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("softcap", "x86"): "tests/unit/test_x86_softcap_compiled.py",
     ("softcap", "rocm"): "tests/unit/test_rocm_softcap_compiled.py",
     **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
-       for op in ("rng_uniform", "rng_normal", "dropout")},
+       for op in ("rng_uniform", "rng_normal", "rng_philox_uniform",
+                  "rng_philox_normal", "dropout")},
     **{(op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
-       for op in ("rng_uniform", "rng_normal", "dropout")},
+       for op in ("rng_uniform", "rng_normal", "rng_philox_uniform",
+                  "rng_philox_normal", "dropout")},
     **{(op, "x86"): "tests/unit/test_x86_strided_compiled.py"
        for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
     **{(op, "rocm"): "tests/unit/test_rocm_strided_compiled.py"
@@ -3388,16 +3392,16 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
                  "lane; f32, matches tessera.complex)",
     } for op in ("mobius", "stereographic")},
     # P6 — device RNG: counter-based Philox-4x32-10 (tessera_x86_philox_uniform_f32)
-    # produces the uniform bits; host applies the distribution transform.
+    # plus native uniform/normal/dropout distribution transforms.
     **{op: {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": f"{op} — Philox-4x32-10 uniform RNG kernel "
-                 "(tessera_x86_philox_uniform_f32, runtime-loaded) + host "
-                 "transform; x86_rng_compiled lane; bit-exact vs "
+        "notes": f"{op} — native Philox-4x32-10 distribution functions "
+                 "(runtime-loaded); x86_rng_compiled lane; uniform bit-exact vs "
                  "tessera.rng_device (a deterministic stream, distinct from the "
                  "host numpy-Generator path)",
-    } for op in ("rng_uniform", "rng_normal", "dropout")},
+    } for op in ("rng_uniform", "rng_normal", "rng_philox_uniform",
+                 "rng_philox_normal", "dropout")},
     # P2e — atan2 composed on the AVX-512 transcendental atan kernel (no new
     # kernel; quadrant/sign logic on host; x86_atan2_compiled lane).
     "atan2": {

@@ -107,7 +107,8 @@ def test_special_is_exactly_the_device_rng_sampler_kernels():
     # After A + B, `special` is precisely the genuine device-RNG sampler kernels.
     special = {r.name for r in ap.all_rows() if r.accel_class == "special"}
     expected = {
-        "rng_uniform", "rng_normal", "rng_bernoulli", "rng_beta", "rng_gamma",
+        "rng_uniform", "rng_normal", "rng_philox_uniform", "rng_philox_normal",
+        "rng_bernoulli", "rng_beta", "rng_gamma",
         "rng_poisson", "rng_dirichlet", "rng_categorical", "rng_multinomial",
         "rng_truncated_normal", "rng_randint", "rng_permutation",
     }

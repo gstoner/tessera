@@ -1,11 +1,36 @@
 ---
-last_updated: 2026-08-09
+last_updated: 2026-08-10
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `AD-STOCHASTIC-RNG-1-2026-08-10` — **gfx1151 base RNG
+transforms are native and exact-device proven.** Explicit key/counter Graph ops,
+estimator provenance, dropout replay, fixed-key EGGROLL JVP, and the shared
+derivative proof matrix are compiler contracts. The gfx1151 generator now owns
+uniform scaling, Box–Muller normal, and dropout masking rather than copying
+uniforms to the host; the exact-device suite passes all six cases. Uniform
+words are bit exact and normal is one-f32-ULP bounded. Native target JVP package
+consumption remains a separate promotion gate; gfx1200/gfx1250 stay fail-closed.
+
+Cross-backend sync `AD-FWD-PRODUCT-2-2026-08-10` — **public JVP ABI landed;
+gfx1151 execution remains follow-up required.** Forward/JVP requests now carry
+mode-neutral provenance and stable `wrt_indices`, and the compiler emits only
+requested tangent terms. Tanh/sigmoid add direct CPU-oracle proof. No HIP/HSACO
+package or gfx1151 evidence transfers; gfx1200/gfx1250 remain fail-closed.
+
+Cross-backend sync `AD-FWD-CORE-1-2026-08-09` — **shared compiler JVP
+foundation landed; ROCm physical consumption remains architecture-owned.**
+The Graph dialect now exposes compiler-owned tangent rules and a paired
+`--tessera-autodiff-forward` function contract. Matmul/mul has independent CPU
+IR numerical proof, while unsupported active operations and regions fail
+closed. The generated ledger distinguishes compiler `ir_tangent` evidence from
+Python JVP registration. This changes no gfx1151 package or device evidence;
+ROCm must lower and prove any native JVP package independently, and gfx1200 /
+gfx1250 remain fail-closed.
 
 Cross-backend sync `X86-TYPED-FAMILY-PLUGIN-2026-08-09` — **x86 parity landed;
 ROCm Target-boundary regression repaired.** The shared executable-pipeline schema remains v1,

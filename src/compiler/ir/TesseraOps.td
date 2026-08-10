@@ -10,6 +10,7 @@ include "mlir/IR/CommonAttrConstraints.td"
 // Each differentiable op below opts in via DeclareOpInterfaceMethods.
 include "Tessera/AdjointInterface.td"
 include "Tessera/LinearTransposeInterface.td"
+include "Tessera/TangentInterface.td"
 
 def Tessera_Dialect : Dialect {
   let name = "tessera";
@@ -177,7 +178,8 @@ def Tessera_MatmulOp : Op<
      "getTiledImplementation",
      "getResultTilePosition",
    ]>,
-   DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
+   DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Matrix multiply (A @ B)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs,
@@ -217,7 +219,8 @@ def Tessera_BatchedGemmOp : Op<
 // x[P,...,n] is corrected independently for member_ids[P] using factors
 // reconstructed from the rank-invariant (key, epoch, member-pair) stream.
 def Tessera_ESLowRankCorrectionOp : Op<
-  Tessera_Dialect, "es_low_rank_correction", [Pure]
+  Tessera_Dialect, "es_low_rank_correction",
+  [Pure, DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Member-keyed low-rank Evolution-Strategies correction";
   let description = [{
@@ -1420,7 +1423,19 @@ class Tessera_UnaryPureOp<string mnemonic, string summaryText> : Op<
   let hasVerifier = 1;
 }
 
-def Tessera_LayerNormOp : Tessera_UnaryPureOp<"layer_norm", "LayerNorm over the innermost dimension"> {
+class Tessera_UnaryPureTangentOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic,
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_LayerNormOp : Tessera_UnaryPureTangentOp<"layer_norm", "LayerNorm over the innermost dimension"> {
   let arguments = (ins TensorType:$x, Variadic<TensorType>:$affine,
                        OptionalAttr<F64Attr>:$eps,
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
@@ -1431,7 +1446,7 @@ def Tessera_LayerNormOp : Tessera_UnaryPureOp<"layer_norm", "LayerNorm over the 
   let hasVerifier = 1;
 }
 
-def Tessera_SoftmaxOp : Tessera_UnaryPureOp<"softmax", "Softmax over an explicit or innermost axis"> {
+def Tessera_SoftmaxOp : Tessera_UnaryPureTangentOp<"softmax", "Softmax over an explicit or innermost axis"> {
   let arguments = (ins TensorType:$x,
                        OptionalAttr<I64Attr>:$axis,
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
@@ -1447,7 +1462,15 @@ def Tessera_GeluOp : Tessera_UnaryPureOp<"gelu", "Gaussian error linear unit"> {
 def Tessera_ReluOp : Tessera_UnaryPureOp<"relu", "Rectified linear unit"> {
   let hasVerifier = 1;
 }
-def Tessera_SigmoidOp : Tessera_UnaryPureOp<"sigmoid", "Sigmoid activation"> {
+def Tessera_SigmoidOp : Op<
+  Tessera_Dialect, "sigmoid",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
+> {
+  let summary = "Sigmoid activation";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
 def Tessera_SinOp : Tessera_UnaryPureOp<"sin", "Sine elementwise op"> {
@@ -1457,7 +1480,15 @@ def Tessera_SinOp : Tessera_UnaryPureOp<"sin", "Sine elementwise op"> {
 def Tessera_SiluOp : Tessera_UnaryPureOp<"silu", "SiLU / swish activation (x * sigmoid(x))"> {
   let hasVerifier = 1;
 }
-def Tessera_TanhOp : Tessera_UnaryPureOp<"tanh", "Hyperbolic tangent activation"> {
+def Tessera_TanhOp : Op<
+  Tessera_Dialect, "tanh",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
+> {
+  let summary = "Hyperbolic tangent activation";
+  let arguments = (ins TensorType:$x);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
 def Tessera_SoftplusOp : Tessera_UnaryPureOp<"softplus", "Softplus activation (log(1 + exp(x)))"> {
@@ -1472,7 +1503,8 @@ def Tessera_SoftplusOp : Tessera_UnaryPureOp<"softplus", "Softplus activation (l
 // custom verifier.
 def Tessera_AddOp : Op<
   Tessera_Dialect, "add",
-  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Elementwise tensor addition (a + b)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
@@ -1486,7 +1518,8 @@ def Tessera_AddOp : Op<
 // Tessera_AddOp — trivial, total, lowered by `tessera-to-linalg` through a
 // shared name→arith-kind table. sub/mul are the minimum needed before
 // softmax/normalization arrive (softmax = max → sub → exp → div).
-def Tessera_SubOp : Op<Tessera_Dialect, "sub", [Pure]> {
+def Tessera_SubOp : Op<Tessera_Dialect, "sub",
+  [Pure, DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
   let summary = "Elementwise tensor subtraction (a - b)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
   let results = (outs TensorType:$result);
@@ -1496,7 +1529,8 @@ def Tessera_SubOp : Op<Tessera_Dialect, "sub", [Pure]> {
 }
 def Tessera_MulOp : Op<
   Tessera_Dialect, "mul",
-  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Elementwise tensor multiplication (a * b)";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs);
@@ -1628,7 +1662,8 @@ def Tessera_WriteRowOp : Op<Tessera_Dialect, "write_row", [Pure]> {
 // result rank differs from its input rank.
 def Tessera_ReduceOp : Op<
   Tessera_Dialect, "reduce",
-  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Reduction over a single axis (sum/max/min/mean)";
   let arguments = (ins TensorType:$input, StrAttr:$kind, I64Attr:$axis);
@@ -1656,7 +1691,7 @@ def Tessera_ReduceBackwardOp : Op<
 }
 
 // RMSNorm (unweighted) over the innermost dimension; eps optional.
-def Tessera_RmsNormOp : Tessera_UnaryPureOp<"rmsnorm", "RMSNorm over the innermost dimension"> {
+def Tessera_RmsNormOp : Tessera_UnaryPureTangentOp<"rmsnorm", "RMSNorm over the innermost dimension"> {
   let arguments = (ins TensorType:$x, Variadic<TensorType>:$affine,
                        OptionalAttr<F64Attr>:$eps,
                        OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy);
@@ -2021,7 +2056,8 @@ def Tessera_MorScatterOp : Op<
 
 def Tessera_TransposeOp : Op<
   Tessera_Dialect, "transpose",
-  [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
+  [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2052,7 +2088,8 @@ def Tessera_TransposeOp : Op<
 // attrs — they don't appear in the ODS argument list.
 def Tessera_ReshapeOp : Op<
   Tessera_Dialect, "reshape",
-  [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
+  [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Element-count-preserving tensor reshape";
   let arguments = (ins TensorType:$x);
@@ -2076,7 +2113,8 @@ def Tessera_ReshapeOp : Op<
 // backend-specific stop-gradient spelling.
 def Tessera_StopGradientOp : Op<
   Tessera_Dialect, "stop_gradient",
-  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Forward identity that terminates reverse-mode activity";
   let arguments = (ins TensorType:$x);
@@ -2112,7 +2150,8 @@ def Tessera_CastOp : Op<
 // no FLOP, no memory effect (their backend_kernel is `not_applicable`, P0).
 // Frontend emission + the view-elision lowering are the P1b/§6.B follow-ups.
 def Tessera_SqueezeOp : Op<Tessera_Dialect, "squeeze", [Pure, SameOperandsAndResultElementType,
-    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+    DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
   let summary = "Remove size-1 dimensions (optional `axes` attr selects which)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2122,7 +2161,8 @@ def Tessera_SqueezeOp : Op<Tessera_Dialect, "squeeze", [Pure, SameOperandsAndRes
 }
 
 def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure, SameOperandsAndResultElementType,
-    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+    DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
   let summary = "Insert size-1 dimensions (the `axes` attr selects positions)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2132,7 +2172,8 @@ def Tessera_UnsqueezeOp : Op<Tessera_Dialect, "unsqueeze", [Pure, SameOperandsAn
 }
 
 def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure, SameOperandsAndResultElementType,
-    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+    DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
   let summary = "Broadcast-expand to a larger shape (stride-0 view, no copy)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2144,7 +2185,8 @@ def Tessera_ExpandOp : Op<Tessera_Dialect, "expand", [Pure, SameOperandsAndResul
 def Tessera_BroadcastOp : Op<
   Tessera_Dialect, "broadcast",
   [Pure, SameOperandsAndResultElementType,
-   DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
+   DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Broadcast to a target shape (stride-0 view, no copy)";
   let arguments = (ins TensorType:$x);
@@ -2155,7 +2197,8 @@ def Tessera_BroadcastOp : Op<
 }
 
 def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure, SameOperandsAndResultElementType,
-    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+    DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
   let summary = "General axis permutation (the `perm` attr is the new order)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2165,7 +2208,8 @@ def Tessera_PermuteOp : Op<Tessera_Dialect, "permute", [Pure, SameOperandsAndRes
 }
 
 def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure, SameOperandsAndResultElementType,
-    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+    DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
   let summary = "Collapse a contiguous dim range (optional `start`/`end` attrs)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2175,7 +2219,8 @@ def Tessera_FlattenOp : Op<Tessera_Dialect, "flatten", [Pure, SameOperandsAndRes
 }
 
 def Tessera_ViewOp : Op<Tessera_Dialect, "view", [Pure, SameOperandsAndResultElementType,
-    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]> {
+    DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+    DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
   let summary = "Reshape sharing storage (contiguous view, no copy; `shape` attr)";
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
@@ -2187,23 +2232,73 @@ def Tessera_ViewOp : Op<Tessera_Dialect, "view", [Pure, SameOperandsAndResultEle
   let hasFolder = 1;
 }
 
-def Tessera_DropoutOp : Op<Tessera_Dialect, "dropout", [MemoryEffects<[MemWrite]>]> {
+def Tessera_DropoutOp : Op<
+  Tessera_Dialect, "dropout",
+  [MemoryEffects<[MemWrite]>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
+> {
   let summary = "Reference random dropout with optional deterministic seed";
+  let hasVerifier = 1;
   // Sprint V4b (2026-05-22): dropout probability must be in [0, 1).
   // Shape is preserved; element type is preserved.
   let arguments = (ins TensorType:$x,
                        OptionalAttr<F64Attr>:$p,
                        OptionalAttr<I64Attr>:$seed,
+                       DefaultValuedAttr<I64Attr, "0">:$counter_base,
+                       DefaultValuedAttr<StrAttr, "\"philox4x32-10\"">:$rng_algorithm,
+                       DefaultValuedAttr<I64Attr, "1">:$rng_version,
+                       DefaultValuedAttr<StrAttr, "\"constant_noise\"">:$estimator,
                        DefaultValuedAttr<BoolAttr, "true">:$training);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// Functional, explicitly keyed counter RNG. These operations are deterministic
+// functions of their integer key/counter operands and may therefore be cloned
+// or rematerialized without changing sample identity. `estimator` is semantic
+// provenance for differentiation of distribution parameters; key/counter bits
+// are always non-differentiable.
+class Tessera_PhiloxRNGOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic, [Pure]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$key, TensorType:$counter,
+                       DefaultValuedAttr<StrAttr, "\"philox4x32-10\"">:$algorithm,
+                       DefaultValuedAttr<I64Attr, "1">:$version,
+                       DefaultValuedAttr<StrAttr, "\"default\"">:$domain,
+                       DefaultValuedAttr<StrAttr, "\"constant_noise\"">:$estimator);
+  let results = (outs TensorType:$sample);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
+}
+
+def Tessera_RNGPhiloxUniformOp : Tessera_PhiloxRNGOp<
+  "rng_philox_uniform", "Explicit-key Philox uniform random source"> {
+  let arguments = (ins TensorType:$key, TensorType:$counter,
+                       DefaultValuedAttr<F64Attr, "0.0">:$low,
+                       DefaultValuedAttr<F64Attr, "1.0">:$high,
+                       DefaultValuedAttr<StrAttr, "\"philox4x32-10\"">:$algorithm,
+                       DefaultValuedAttr<I64Attr, "1">:$version,
+                       DefaultValuedAttr<StrAttr, "\"default\"">:$domain,
+                       DefaultValuedAttr<StrAttr, "\"constant_noise\"">:$estimator);
+}
+
+def Tessera_RNGPhiloxNormalOp : Tessera_PhiloxRNGOp<
+  "rng_philox_normal", "Explicit-key reparameterizable Philox normal source"> {
+  let arguments = (ins TensorType:$key, TensorType:$counter,
+                       DefaultValuedAttr<F64Attr, "0.0">:$mean,
+                       DefaultValuedAttr<F64Attr, "1.0">:$stddev,
+                       DefaultValuedAttr<StrAttr, "\"philox4x32-10\"">:$algorithm,
+                       DefaultValuedAttr<I64Attr, "1">:$version,
+                       DefaultValuedAttr<StrAttr, "\"default\"">:$domain,
+                       DefaultValuedAttr<StrAttr, "\"pathwise\"">:$estimator);
 }
 
 class Tessera_CollectiveOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
   [MemoryEffects<[MemWrite]>,
-   DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+   DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = summaryText;
   let arguments = (ins TensorType:$x,
@@ -2221,7 +2316,8 @@ def Tessera_AllToAllOp : Tessera_CollectiveOp<"all_to_all", "Single-rank/referen
 
 class Tessera_SpectralUnaryOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
-  [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>]
+  [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = summaryText;
   let arguments = (ins TensorType:$x,

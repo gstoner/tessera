@@ -1115,7 +1115,7 @@ def ROCM_WhereKernelOp : TesseraROCM_Op<"where"> {
 }
 
 def ROCM_PhiloxKernelOp : TesseraROCM_Op<"philox"> {
-  let summary = "Counter-based Philox-4x32-10 uniform RNG kernel";
+  let summary = "Counter-based Philox-4x32-10 RNG and distribution kernel";
   let description = [{
     The directive `generate-rocm-philox-kernel` expands into a flat counter-based
     RNG gpu kernel: one thread per counter block `b` writes 4 uniform-f32 in
@@ -1126,7 +1126,9 @@ def ROCM_PhiloxKernelOp : TesseraROCM_Op<"philox"> {
     `(out : memref<?xf32>, N : index, seed_lo i32, seed_hi i32,
       cbase_lo i32, cbase_hi i32)`.
   }];
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins StrAttr:$name,
+                       DefaultValuedAttr<ROCM_PhiloxModeAttr,
+                                         "\"uniform_core\"">:$mode);
   let assemblyFormat = "attr-dict";
 }
 

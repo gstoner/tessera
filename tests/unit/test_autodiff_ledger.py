@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import pytest
 
-from tessera.compiler import autodiff_ledger, generated_docs, primitive_coverage
+from tessera.compiler import (
+    autodiff_ledger,
+    autodiff_request,
+    generated_docs,
+    primitive_coverage,
+)
 
 
 def _coverage_diff_families() -> frozenset[str]:
@@ -57,14 +62,33 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
     assert {"all_reduce", "all_gather", "reduce_scatter"} <= native
 
 
+def test_native_tangents_are_compiler_grounded() -> None:
+    native = autodiff_ledger._ir_tangent_classes()
+    assert native == {
+        "add", "sub", "mul", "matmul", "transpose", "reshape", "squeeze",
+        "unsqueeze", "expand", "broadcast", "permute", "flatten", "view",
+        "stop_gradient", "sigmoid", "tanh", "softmax", "reduce",
+        "fft", "ifft", "rfft", "irfft", "dct", "dropout", "layer_norm",
+        "rmsnorm",
+        "es_low_rank_correction", "all_reduce", "reduce_scatter",
+        "all_gather", "all_to_all",
+    }
+    assert autodiff_request.COMPILER_FORWARD_FAMILIES == native
+
+
 def test_rows_are_consistent() -> None:
     rows = autodiff_ledger.collect_rows()
     assert rows, "ledger produced no rows"
     for r in rows:
         assert r.python_reference in {"yes", "no"}
         assert r.ir_adjoint in {"native", "placeholder", "mixed", "none"}
+        assert r.ir_tangent in {"native", "none"}
         # A row exists only if differentiable OR carrying an IR adjoint.
-        assert r.python_reference == "yes" or r.ir_adjoint != "none"
+        assert (
+            r.python_reference == "yes"
+            or r.ir_adjoint != "none"
+            or r.ir_tangent != "none"
+        )
         # Phase 4 (A2): the native backward rungs are now SOURCED from the
         # Device verification requires both an oracle proof and runtime binding.
         verified = set(r.bwd_device_verified_jit) | set(r.bwd_device_verified_abi)
@@ -78,6 +102,10 @@ def test_rows_are_consistent() -> None:
             assert "python_reference=python-unit-registry" in evidence
         if r.ir_adjoint != "none":
             assert "ir_adjoint=llvm23-core" in evidence
+        if r.ir_tangent != "none":
+            assert "ir_tangent=llvm23-core" in evidence
+        if r.fwd_cpu_ir_oracle:
+            assert "fwd_cpu_ir_oracle=llvm23-core" in evidence
         if r.bwd_cpu_ir_oracle:
             assert "bwd_cpu_ir_oracle=llvm23-core" in evidence
         for target in verified:
@@ -165,6 +193,14 @@ def test_cpu_ir_oracle_families_are_proven_backward_capable() -> None:
             f"{fam!r} is marked bwd_cpu_ir_oracle but has no native IR adjoint")
     proven = {r.family for r in autodiff_ledger.collect_rows() if r.bwd_cpu_ir_oracle}
     assert proven == set(autodiff_ledger._BWD_IR_ORACLE_CPU)
+
+
+def test_forward_cpu_ir_oracle_families_have_native_tangents() -> None:
+    rows = {row.family: row for row in autodiff_ledger.collect_rows()}
+    for family in autodiff_ledger._FWD_IR_ORACLE_CPU:
+        assert rows[family].ir_tangent == "native"
+    proven = {r.family for r in rows.values() if r.fwd_cpu_ir_oracle}
+    assert proven == set(autodiff_ledger._FWD_IR_ORACLE_CPU)
 
 
 def test_reduce_adjoint_classification_is_kind_aware() -> None:

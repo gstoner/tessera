@@ -47,12 +47,13 @@ def test_lean_rocm_driver_excludes_ambient_fa4_targets() -> None:
         "if(TARGET TesseraAttnDialect AND NOT "
         "TESSERA_OPT_LEAN_ARTIFACT_DRIVER)"
     ) in opt
-    assert (
-        "if(TARGET TesseraQueueDialect AND NOT "
-        "TESSERA_OPT_LEAN_ARTIFACT_DRIVER)"
-    ) in opt
     assert "tessera_opt_feature(fa4-attn TESSERA_HAVE_FA4_ATTN)" in opt
-    assert "tessera_opt_feature(fa4-queue TESSERA_HAVE_FA4_QUEUE)" in opt
+    # The tessera.queue dialect (fa4-queue feature) was deleted 2026-08-10
+    # (Decisions #29/#31); assert it stays gone from the driver wiring.
+    assert "TesseraQueueDialect" not in opt
+    assert "fa4-queue" not in opt.replace(
+        "(and, before its 2026-08-10 deletion, fa4-queue)", ""
+    )
 
 
 def test_nvidia_lit_site_loads_tests_and_llvm_tools() -> None:

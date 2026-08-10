@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-09
+last_updated: 2026-08-10
 audit_role: theme
 ---
 
@@ -7,6 +7,31 @@ audit_role: theme
 
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
+
+## `tessera.queue` MLIR dialect deleted (2026-08-10)
+
+Decision #29/#31 disposition, per the TileRT assessment's §2.1 negative
+finding: the Sprint V8 `tessera.queue` MLIR dialect (3 ops, 2 types, 6
+diagnostic codes) had **zero producers and zero consumers** — no C++ code ever
+constructed a queue op, plugin registration was commented out, and the
+dotted-name type syntax (`!tessera.queue.tile_queue`) was unparseable in
+standalone lit IR, so its one fixture could never pass. The
+warp-specialization boundary's production synchronization mechanism is
+`!tile.pipeline_state` + `!tile.async_token` SSA chains; `WarpSpecializationPass`
+comments claiming queue-triple emission were corrected at the same time.
+
+Deleted: the dialect (`Queue.td`, `QueueOps.cpp`, `QueueVerifiers.cpp`,
+headers, CMake targets, `tessera-opt` registration/feature `fa4-queue`), the
+orphaned Python twin `compiler/queue_dialect.py`, the unpassable
+`queue_show.mlir` fixture, the six `QUEUE_*` diagnostic codes, and the
+`dialects_manifest.py` row. **Kept, untouched:** the live Python tile IR
+queue vocabulary — `lower_schedule_to_tile_ir` emits
+`tessera.queue.{create,push,pop,barrier}` strings, `tile_ir.py` +
+`memory_verifier.py` verify them (happens-before), and they feed the
+`queue_depth` resource records. A stays-deleted gate lives in
+`tests/unit/test_mlir_verifier_sprint.py::test_queue_mlir_dialect_stays_deleted`;
+any revival must ship a parseable single-segment name, a real producer, and a
+passing fixture.
 
 ## Collective async unification (2026-08-09)
 

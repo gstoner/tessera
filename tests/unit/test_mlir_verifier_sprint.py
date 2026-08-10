@@ -59,18 +59,17 @@ V3C_LIT = (
 SYMDIM_PASS = (
     REPO_ROOT / "src" / "transforms" / "lib" / "SymbolicDimEqualityPass.cpp"
 )
-# Sprint V8 (2026-05-22) targets:
-QUEUE_TD = (
+# Sprint V8 (2026-05-22) shipped the `tessera.queue` MLIR dialect; it was
+# deleted 2026-08-10 under Decisions #29/#31 (zero producers/consumers,
+# unparseable dotted type syntax).  The directory paths stay listed so the
+# stays-deleted gate below can assert they never come back silently.
+QUEUE_DIALECT_INCLUDE_DIR = (
     REPO_ROOT / "src" / "compiler" / "tile_opt_fa4"
-    / "include" / "tessera" / "Dialect" / "Queue" / "Queue.td"
+    / "include" / "tessera" / "Dialect" / "Queue"
 )
-QUEUE_VERIFIERS_CPP = (
+QUEUE_DIALECT_LIB_DIR = (
     REPO_ROOT / "src" / "compiler" / "tile_opt_fa4"
-    / "lib" / "Dialect" / "Queue" / "QueueVerifiers.cpp"
-)
-QUEUE_DIALECT_H = (
-    REPO_ROOT / "src" / "compiler" / "tile_opt_fa4"
-    / "include" / "tessera" / "Dialect" / "Queue" / "QueueDialect.h"
+    / "lib" / "Dialect" / "Queue"
 )
 SHAPE_INFERENCE_LIT = (
     REPO_ROOT / "tests" / "tessera-ir" / "phase6" / "shape_inference.mlir"
@@ -626,107 +625,30 @@ def test_sprint_v3c_lit_fixture_shape() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Sprint V8 — Queue verifier real bodies + shape_inference XFAIL audit
+# Sprint V8 — queue dialect DELETED 2026-08-10 + shape_inference XFAIL audit
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "op_def",
-    [
-        "def CreateOp",
-        "def PushOp",
-        "def PopOp",
-    ],
-)
-def test_sprint_v8_queue_op_has_hasverifier(op_def: str) -> None:
-    """V8 added `let hasVerifier = 1;` to the 3 queue ops so the
-    ODS-generated framework actually calls our verify() bodies."""
-    td = QUEUE_TD.read_text()
-    idx = td.find(op_def)
-    assert idx >= 0, f"queue op definition missing: {op_def}"
-    window = td[idx: idx + 600]
-    assert "let hasVerifier = 1;" in window, (
-        f"{op_def} missing `let hasVerifier = 1;` — V8 closure regressed"
+def test_queue_mlir_dialect_stays_deleted() -> None:
+    """The `tessera.queue` MLIR dialect (Sprint V8) was deleted 2026-08-10
+    under Decisions #29/#31: its verifiers had zero producers/consumers, the
+    dotted-name type syntax was unparseable in standalone lit IR, and the
+    warp-specialization boundary's production mechanism is
+    `!tile.pipeline_state` + `!tile.async_token` SSA chains.  The live queue
+    vocabulary is the Python tile IR spine (`tile_ir.py`, `memory_verifier.py`)
+    only.  Guard against a silent revival that would recreate the
+    declaration-without-consumer state (Decision #29)."""
+    assert not QUEUE_DIALECT_INCLUDE_DIR.exists(), (
+        "tessera.queue MLIR dialect headers reappeared — a revival must ship "
+        "a producer, a passing fixture, and a parseable (single-segment) "
+        "dialect name (Decisions #29/#31)"
     )
-
-
-_V8_VERIFIER_SIGNATURES = (
-    "LogicalResult CreateOp::verify()",
-    "LogicalResult PushOp::verify()",
-    "LogicalResult PopOp::verify()",
-)
-
-
-@pytest.mark.parametrize("sig", _V8_VERIFIER_SIGNATURES)
-def test_sprint_v8_queue_verifier_impl_present(sig: str) -> None:
-    """Each V8 queue op must have a real (non-trivial) verify() body
-    in QueueVerifiers.cpp.  The pre-V8 file held 3 orphan
-    `return success();` free functions that no codepath ever called."""
-    cpp = QUEUE_VERIFIERS_CPP.read_text()
-    assert sig in cpp, (
-        f"V8 verifier impl missing: {sig!r} — Sprint V8 closure regressed"
+    assert not QUEUE_DIALECT_LIB_DIR.exists(), (
+        "tessera.queue MLIR dialect sources reappeared — see Decisions #29/#31"
     )
-    # Reject the old free-function stub form.
-    for old in (
-        "LogicalResult verifyCreate(Operation *op)",
-        "LogicalResult verifyPush(Operation *op)",
-        "LogicalResult verifyPop(Operation *op)",
-    ):
-        assert old not in cpp, (
-            f"V8 regression: old orphan stub still in QueueVerifiers.cpp: {old!r}"
-        )
-
-
-_V8_DIAGNOSTIC_CODES = (
-    "QUEUE_CREATE_OPERAND_COUNT",
-    "QUEUE_PUSH_QUEUE_PROVENANCE",
-    "QUEUE_PUSH_TILE_TYPE",
-    "QUEUE_POP_QUEUE_PROVENANCE",
-    "QUEUE_POP_TOKEN_PROVENANCE",
-    "QUEUE_POP_TILE_TYPE",
-)
-
-
-@pytest.mark.parametrize("code", _V8_DIAGNOSTIC_CODES)
-def test_sprint_v8_queue_diagnostic_codes_present(code: str) -> None:
-    cpp = QUEUE_VERIFIERS_CPP.read_text()
-    assert code in cpp, (
-        f"V8 diagnostic code missing: {code!r} — closure regressed"
-    )
-
-
-def test_sprint_v8_queue_dialect_registration_header() -> None:
-    """V8 ships `QueueDialect.h` with a public
-    `registerQueueDialect(DialectRegistry&)` mirroring the V7 Attn
-    pattern, so tessera-opt can load the dialect at startup."""
-    assert QUEUE_DIALECT_H.exists(), (
-        f"V8 regression: {QUEUE_DIALECT_H.name} missing"
-    )
-    text = QUEUE_DIALECT_H.read_text()
-    assert "registerQueueDialect" in text, (
-        "V8 regression: public registration entry missing in QueueDialect.h"
-    )
-
-
-def test_sprint_v8_queue_registration_is_mlir23_compatible() -> None:
-    """Register the queue dialect without constructing it eagerly.
-
-    MLIR 23 rejects the legacy dotted ``tessera.queue`` namespace during
-    eager dialect construction. Tools that need queue IR load it explicitly.
-    """
-    cpp = (
-        REPO_ROOT / "src" / "compiler" / "tile_opt_fa4"
-        / "lib" / "Dialect" / "Queue" / "QueueOps.cpp"
-    ).read_text()
-    assert "registerQueueDialect" in cpp, (
-        "V8 regression: registerQueueDialect body missing in QueueOps.cpp"
-    )
-    assert "registry.insert<TesseraQueueDialect>()" in cpp, (
-        "V8 regression: Queue dialect is not inserted into the registry"
-    )
-    assert "addExtension" not in cpp, (
-        "MLIR 23 regression: eager construction of the dotted queue dialect "
-        "must remain disabled"
+    opt_cpp = (REPO_ROOT / "tools" / "tessera-opt" / "tessera-opt.cpp").read_text()
+    assert "registerQueueDialect" not in opt_cpp, (
+        "tessera-opt still references the deleted queue dialect registration"
     )
 
 

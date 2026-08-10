@@ -56,12 +56,6 @@
 #include "tessera/Dialect/Attn/AttnDialect.h"
 #endif
 
-// Sprint V8 (2026-05-22): FA-4 tile-queue dialect registration.
-// Same separation as V7's TESSERA_HAVE_FA4_ATTN.
-#ifdef TESSERA_HAVE_FA4_QUEUE
-#include "tessera/Dialect/Queue/QueueDialect.h"
-#endif
-
 // W0.10 (2026-08-02): hardware-free x86 Target IR dialect. x86 was the one
 // backend with no Target IR dialect at all, though Decision #19 says backends
 // MUST expose one; no carve-out was granted, so it is built and registered.
@@ -537,14 +531,6 @@ int main(int argc, char **argv) {
   // (flash_attn_full.mlir, tile_ir_lowering.mlir, V6c) that were
   // XFAIL'd because tessera-opt could not load this dialect.
   tessera::attn::registerAttnDialect(registry);
-#endif
-
-#ifdef TESSERA_HAVE_FA4_QUEUE
-  // Sprint V8 (2026-05-22) — FA-4 tile-queue dialect.  Required for
-  // the queue-op verifier lit fixtures and any future IR that uses
-  // `!tessera.queue.tile_queue` / `!tessera.queue.token` types
-  // directly (rather than only through the FA-4 lowering passes).
-  tessera::queue::registerQueueDialect(registry);
 #endif
 
 #ifdef TESSERA_HAVE_X86_TARGET_IR

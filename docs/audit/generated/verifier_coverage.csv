@@ -221,6 +221,3 @@ src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,ScaledDotProductO
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,ScoreBiasOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,SoftcapOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,StreamingUpdateOp,1,1,real
-src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td,CreateOp,1,1,real
-src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td,PopOp,1,1,real
-src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td,PushOp,1,1,real

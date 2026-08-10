@@ -823,6 +823,23 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="IRContractLegality",
     ),
 
+    # ── async_copy/wait_async single-contract reconciliation (2026-08-10) ──
+    DiagnosticCode(
+        code="TILE_ASYNC_STAGE_NEGATIVE",
+        pass_origin="AsyncCopyOp::verify / WaitAsyncOp::verify",
+        severity="error",
+        summary=(
+            "`stage` on tile.async_copy / tile.wait_async is an optional "
+            "legacy-form grouping key, but when present it must be >= 0."
+        ),
+        fix_hint=(
+            "Drop the `stage` attribute (typed !tile.async_token SSA form) "
+            "or set it to a non-negative stage index."
+        ),
+        spec="docs/spec/TILE_IR.md",
+        sprint="TILE-SYNC-RECONCILE-2026-08-10",
+    ),
+
     # ── W1.1 step 3 — pointer-backed Tile address contracts ────────────────
     DiagnosticCode(
         code="TILE_VIEW_POINTER_ARITY",

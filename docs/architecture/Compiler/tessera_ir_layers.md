@@ -36,7 +36,7 @@ Layer 2 — Schedule IR  (schedule.mesh.* dialect)
      │  x86:  [TilingPass → TileToX86Pass]
      │  GPU:  [TileIRLoweringPass → WarpSpecializationPass → AsyncCopyLoweringPass]
      ▼
-Layer 3 — Tile IR      (tile.* + tessera_attn.* + tessera.queue.*)
+Layer 3 — Tile IR      (tile.* + tessera_attn.*)
      │  GPU:  [NVWGMMALoweringPass → NVTMADescriptorPass → NVFlashAttnKernelEmitter]
      │  x86:  (produced directly by TileToX86Pass as func.call stubs)
      ▼
@@ -162,7 +162,9 @@ warps, fragments, shared memory, transaction barriers, and MMA instructions.
 All tensor ranks must be known and all symbolic dimensions resolved. Produced
 by `TileIRLoweringPass` for the GPU path.
 
-**Dialects:** `tile.*`, `tessera_attn.*`, `tessera.queue.*`
+**Dialects:** `tile.*`, `tessera_attn.*` (the `tessera.queue` MLIR dialect was
+deleted 2026-08-10, Decisions #29/#31 — producer/consumer sync is
+`!tile.pipeline_state` SSA, below)
 
 **Key ops:**
 
@@ -194,16 +196,17 @@ tile.async_copy %A_global, %A_shared {stage = 0, vector = 16}
 
 ```mlir
 // Producer warps: issue async copies
-tessera.schedule.warp {role = "producer", id = 0} {
-    tile.async_copy %Q_global, %Q_shared {stage = 0, vector = 16}
-    tessera.queue.push %q, %tok
+tessera.schedule.warp {tile.warp_role = "producer", tile.pipeline = "pipe0"} {
+    %ps = tile.pipeline_init {depth = 2, stage = 0, phase = 0, role = "producer"} : !tile.pipeline_state
+    %q_tile, %tok = tile.async_copy %Q_global, %Q_shared {stage = 0, vector = 16}
+    %ps1 = tile.pipeline_advance %ps, %tok : !tile.pipeline_state
 }
 
-// Consumer warps: wait, then compute
-tessera.schedule.warp {role = "consumer", id = 1} {
-    %tok = tessera.queue.pop %q
-    tile.mbarrier.try_wait %bar, %tok
-    tile.mma %fragA, %fragB, %fragC {m = 64, n = 256, k = 32, accum = "fp32"}
+// Consumer warps: ordering flows through the pipeline-state SSA chain
+tessera.schedule.warp {tile.warp_role = "consumer", tile.pipeline = "pipe0"} {
+    %ps = tile.pipeline_init {depth = 2, stage = 0, phase = 1, role = "consumer"} : !tile.pipeline_state
+    %acc = tile.mma %fragA, %fragB, %fragC {m = 64, n = 256, k = 32, accum = "fp32"}
+    %ps1 = tile.pipeline_advance %ps, %acc : !tile.pipeline_state
 }
 ```
 
@@ -221,7 +224,7 @@ tessera.schedule.warp {role = "consumer", id = 1} {
 | Pass | Role |
 |------|------|
 | `TileIRLoweringPass` | `schedule.mesh.region { tessera.flash_attn }` → `tile.*` + `tessera_attn.*` |
-| `WarpSpecializationPass` | Assigns producer/consumer roles; inserts `tessera.queue.*` barriers |
+| `WarpSpecializationPass` | Assigns producer/consumer roles; threads `!tile.pipeline_state` + `!tile.async_token` SSA chains between them |
 | `AsyncCopyLoweringPass` | `tile.async_copy` → TMA descriptor ops (SM_90+) or `cp.async` |
 
 **Normative reference:** [`docs/spec/TILE_IR.md`](../../spec/TILE_IR.md), [`docs/spec/MEMORY_MODEL_SPEC.md`](../../spec/MEMORY_MODEL_SPEC.md)
@@ -314,7 +317,7 @@ All pointers are address-space-qualified global pointers. Scalar uniforms are
 |----------|--------------|----------------|
 | Python/textual DSL → Graph IR | Decorated function or canonical DSL source | `tessera.*` ops with effect attrs, shape/dtype/layout metadata, diagnostics |
 | Graph IR → Schedule IR | Verified graph object; optional mesh and schedule directives | `schedule.mesh.define`, `schedule.mesh.region`, `schedule.pipeline.region`, `schedule.stage`, `schedule.yield` |
-| Schedule IR → Tile IR | Verified schedule object; movement plans explicit | `tile.*`, `tessera_attn.*`, `tessera.queue.*` |
+| Schedule IR → Tile IR | Verified schedule object; movement plans explicit | `tile.*`, `tessera_attn.*` (Python spine additionally renders textual `tessera.queue.*` handoff ops) |
 | Tile IR → Target IR | Verified tile object and target selection | Backend artifacts; Apple/ROCm are object-backed in Python, other targets vary by backend |
 
 ---

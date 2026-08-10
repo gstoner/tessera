@@ -56,9 +56,9 @@ Schedule IR  (schedule dialect — mesh.define, mesh.region, pipeline.region, st
                     flash_attn → tile.async_copy + tessera_attn.* + tile.mma
     │
     ▼
-Tile IR  (tile.* ops + tessera_attn.* FA-4 ops + tessera.queue.* barriers)
+Tile IR  (tile.* ops + tessera_attn.* FA-4 ops)
     │
-    ├── WarpSpecializationPass    (producer/consumer warp roles + queue barriers)
+    ├── WarpSpecializationPass    (producer/consumer warp roles + !tile.pipeline_state SSA sync)
     ├── AsyncCopyLoweringPass     (tile.async_copy → tessera.tma.* or cp.async)
     ├── NVWGMMALoweringPass       (tile.mma → wgmma.mma_async PTX or WMMA)
     ├── NVTMADescriptorPass       (TMA descriptor hoisting + mbarrier init)
@@ -258,7 +258,10 @@ Key design decisions:
 
 - **Producer** warps: run `tile.async_copy` + `tile.wait_async` (TMA prefetch)
 - **Consumer** warps: run `tessera_attn.*` compute ops + `tile.mma`
-- `tessera.queue.push/pop` ops at the boundary express the handoff ordering
+- `!tile.pipeline_state` + `!tile.async_token` SSA chains
+  (`tile.pipeline_init` / `tile.pipeline_advance`) at the boundary express the
+  handoff ordering. (Earlier revisions said `tessera.queue.push/pop`; the
+  `tessera.queue` MLIR dialect was deleted 2026-08-10, Decisions #29/#31.)
 
 Tile IR spec: `docs/spec/TARGET_IR_SPEC.md §3–5`.
 
@@ -358,5 +361,5 @@ Full pass-by-pass specification: `docs/spec/LOWERING_PIPELINE_SPEC.md`.
 | All Python public symbols with signatures | `docs/spec/PYTHON_API_SPEC.md` |
 | Graph IR op catalog + canonicalization patterns | `docs/spec/GRAPH_IR_SPEC.md` |
 | Every pass with input/output IR and invariants | `docs/spec/LOWERING_PIPELINE_SPEC.md` |
-| Schedule + Attn + Queue + tile.* dialects | `docs/spec/TARGET_IR_SPEC.md` |
+| Schedule + Attn + tile.* dialects | `docs/spec/TARGET_IR_SPEC.md` |
 | Programmer system overview with what-works table | `docs/architecture/system_overview.md` |

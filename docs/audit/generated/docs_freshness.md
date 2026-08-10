@@ -8,7 +8,7 @@ Reference date for staleness: **2026-08-10**.
 
 - **140** docs catalogued across the canonical doc tree.
 - **139** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **87** updated within the last 30 days.
+- **88** updated within the last 30 days.
 - **13** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -42,7 +42,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 23 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 80 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-07-13 | 28 | ✓ |
-| `TILE_IR.md` | Normative | 2026-05-22 | 80 | ✓ |
+| `TILE_IR.md` | Normative | 2026-08-10 | 0 | ✓ |
 | `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 8 | ✓ |
 | `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 67 | ✓ |
 

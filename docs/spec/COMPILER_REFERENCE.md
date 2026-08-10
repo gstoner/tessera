@@ -29,7 +29,7 @@ Graph IR    (tessera.* ops, effects, shape/dtype/layout metadata, diagnostics)
 Schedule IR (schedule.mesh.*, pipeline regions, stages, tiling structure)
      |
      v  [python/tessera/compiler/tile_ir.py, tile lowering, backend lowering]
-Tile IR     (tile.*, tessera_attn.* FA-4 ops, tessera.queue.* barriers)
+Tile IR     (tile.*, tessera_attn.* FA-4 ops; textual tessera.queue.* in the Python spine only)
      |
      v  [python/tessera/compiler/target_ir.py — per-backend lowering: CPU/NVIDIA/Apple/ROCm]
 Target IR   (backend-specific artifacts: x86, NVIDIA, ROCm, Apple, ...)
@@ -125,7 +125,7 @@ and roadmap: the front-to-back closure plan in
 | `TilingPass` | `src/transforms/lib/TilingPass.cpp` | Lower static matmul into tiled loop structure | implemented |
 | `TileToX86Pass` | `src/transforms/lib/TileToX86Pass.cpp` | Emit x86 C ABI calls for supported tiled ops | implemented |
 | `TileIRLoweringPass` | `src/transforms/lib/TileIRLoweringPass.cpp` | Lower schedule bodies into Tile IR and FA-4 ops | implemented / lit-testable |
-| `WarpSpecializationPass` | `src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp` | Producer/consumer warp roles and queue barriers | implemented / lit-testable |
+| `WarpSpecializationPass` | `src/compiler/tile_opt_fa4/lib/WarpSpecializationPass.cpp` | Producer/consumer warp roles synchronized via `!tile.pipeline_state` + `!tile.async_token` SSA | implemented / lit-testable |
 | `AsyncCopyLoweringPass` | `src/compiler/tile_opt_fa4/lib/AsyncCopyLoweringPass.cpp` | Lower async copies to TMA or cp.async-style artifacts | implemented / lit-testable |
 | NVIDIA WGMMA/TMA/FA emitter passes | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` | NVIDIA Target IR lowering contracts | implemented / lit-testable |
 | `GPUCollectiveInsertionPass` | `src/transforms/lib/GPUCollectiveInsertionPass.cpp` | Insert collective communication structure | implemented / scaffolded |
@@ -147,7 +147,7 @@ complete interface coverage.
 |-------|----------------|-------------------------|
 | Phase 1 | implemented | Python frontend, Graph IR, constraints, effects, distributed shape APIs; `tests/unit/test_constraints.py`, `test_effects.py`, `test_graph_ir.py` |
 | Phase 2 | implemented | x86/CPU lowering spine; `src/transforms/`, `tests/tessera-ir/phase2/` |
-| Phase 3 | implemented / lit-testable; sm_120 hardware-runtime | NVIDIA SM90+ target artifacts (lit-testable), FA-4 and queue dialects; the sm_120 `mma.sync` GEMM additionally executes on consumer Blackwell hardware; `tests/tessera-ir/phase3/` |
+| Phase 3 | implemented / lit-testable; sm_120 hardware-runtime | NVIDIA SM90+ target artifacts (lit-testable), FA-4 Attn dialect (the `tessera.queue` MLIR dialect was deleted 2026-08-10, Decisions #29/#31); the sm_120 `mma.sync` GEMM additionally executes on consumer Blackwell hardware; `tests/tessera-ir/phase3/` |
 | Phase 4 | implemented / scaffolded / lit-testable | collectives, cyclic distribution, distributed planners; `tests/tessera-ir/phase4/`, distributed unit tests |
 | Phase 5 | implemented / lit-testable | checkpointing, optimizer shard, Bayesian/autotune foundations, sparse/RNG/solver passes; `src/solvers/`, `tests/tessera-ir/phase5/` |
 | Phase 6 | mock-runtime / hardware-runtime where C runtime is built | runtime C ABI, Python runtime wrapper, diagnostics, benchmark smoke; `src/runtime/`, `python/tessera/runtime.py`, `tests/tessera-ir/phase6/` |
@@ -229,7 +229,7 @@ These decisions are closed unless a new normative spec supersedes them.
 | Graph IR ODS | `src/compiler/ir/TesseraOps.td` |
 | Transform passes | `src/transforms/lib/` |
 | FA-4 Attn dialect | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` |
-| Queue dialect | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td` |
+| Queue vocabulary (Python textual spine; MLIR dialect deleted 2026-08-10) | `python/tessera/compiler/tile_ir.py` |
 | x86 backend | `src/compiler/codegen/tessera_x86_backend/` |
 | NVIDIA backend | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | ROCm backend | `src/compiler/codegen/Tessera_ROCM_Backend/` |

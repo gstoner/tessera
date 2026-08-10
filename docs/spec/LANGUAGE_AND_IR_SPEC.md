@@ -271,6 +271,16 @@ tessera.queue.barrier {queue_id = 0, scope = "warpgroup"}
 tile.barrier
 ```
 
+> **Note (2026-08-10).** The `tessera.queue.{create,push,pop,barrier}` forms
+> above are the **Python tile IR reference spine's textual vocabulary**
+> (emitted by `python/tessera/compiler/tile_ir.py` with `queue_id`/`depth`/
+> `stage`/`scope` attributes and verified by `tile_ir.py` +
+> `memory_verifier.py`). They are not an MLIR dialect — the `tessera.queue`
+> MLIR dialect was deleted 2026-08-10 (Decisions #29/#31). On the MLIR side,
+> `WarpSpecializationPass` synchronizes warp roles through
+> `!tile.pipeline_state` + `!tile.async_token` SSA chains; see
+> `LOWERING_PIPELINE_SPEC.md` §3.7.
+
 Hopper forward rule: mbarrier transaction barriers are available for NVIDIA
 targets with `isa >= SM_90`. They are required for TMA-style asynchronous copy
 completion tracking and may lower to PTX `mbarrier.*` primitives.

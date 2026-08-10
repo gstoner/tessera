@@ -201,7 +201,11 @@ On SM_90 (Hopper), `WarpSpecializationPass` splits the kernel into **producer** 
 
 - **Producer warps** run `tile.async_copy` (TMA prefetch into shared memory).
 - **Consumer warps** run `tessera_attn.*` compute and `tile.mma`.
-- `tessera.queue.push/pop` at the boundary express the handoff ordering.
+- `!tile.pipeline_state` + `!tile.async_token` SSA chains
+  (`tile.pipeline_init` / `tile.pipeline_advance`) at the boundary express the
+  handoff ordering. (The Python reference lowering renders this handoff as
+  textual `tessera.queue.*` ops instead; the `tessera.queue` MLIR dialect was
+  deleted 2026-08-10, Decisions #29/#31.)
 
 This is structural — the backend allocates separate register files and mbarrier slots per role. You do not express warp roles in Python; the pass infers them from the Tile IR structure automatically.
 

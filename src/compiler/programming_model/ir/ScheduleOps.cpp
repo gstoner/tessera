@@ -305,31 +305,18 @@ LogicalResult verifyAllocShared(Operation *op) {
   return success();
 }
 
-// tile.async_copy — stage >= 0; src + dst are memrefs
-LogicalResult verifyAsyncCopy(Operation *op) {
-  auto stage = op->getAttrOfType<IntegerAttr>("stage");
-  if (!stage)
-    return op->emitOpError("requires 'stage' I32 integer attribute");
-  if (stage.getInt() < 0)
-    return op->emitOpError("'stage' must be >= 0");
-  if (op->getNumOperands() < 2)
-    return op->emitOpError("requires src and dst operands");
-  if (!op->getOperand(0).getType().isa<MemRefType>())
-    return op->emitOpError("'src' must be a memref");
-  if (!op->getOperand(1).getType().isa<MemRefType>())
-    return op->emitOpError("'dst' must be a memref");
-  return success();
-}
-
-// tile.wait_async — stage >= 0
-LogicalResult verifyWaitAsync(Operation *op) {
-  auto stage = op->getAttrOfType<IntegerAttr>("stage");
-  if (!stage)
-    return op->emitOpError("requires 'stage' I32 integer attribute");
-  if (stage.getInt() < 0)
-    return op->emitOpError("'stage' must be >= 0");
-  return success();
-}
+// tile.async_copy / tile.wait_async — DELIBERATELY NOT VERIFIED HERE
+// (reconciled 2026-08-10). This dispatcher used to state a third contract for
+// these ops — required `stage` attribute + memref src/dst operands — that
+// contradicted both the registered dialect's ODS contract (TileOps.td: typed
+// `!tile.async_token` SSA form as production, legacy barrier_id/depends_on/
+// stage grouping keys as the declared envelope) and the production emitter
+// (`TileIRLoweringPass::emitAsyncCopy`: tensor operand, tile+token results, no
+// stage). It had no in-tree producer. Per Decision #31 (one implementation per
+// boundary), the single owner of the async_copy/wait_async contract is
+// `AsyncCopyOp::verify` / `WaitAsyncOp::verify` in src/compiler/ir/TileOps.cpp;
+// the built mirror of this dispatcher (PMV11VerifierPass) checks only that an
+// optional `stage` is well formed. Do not reintroduce a second verifier here.
 
 // tile.mbarrier.alloc — count > 0; scope non-empty
 LogicalResult verifyMBarrierAlloc(Operation *op) {
@@ -429,10 +416,10 @@ LogicalResult verifyProgrammingModelOp(Operation *op) {
   if (name == "cache.pt.create")         return cache::verifyPTCreate(op);
   if (name == "cache.ring.create")       return cache::verifyRingCreate(op);
 
-  // Tile ops
+  // Tile ops. (tile.async_copy / tile.wait_async are deliberately absent —
+  // their contract is owned by the registered dialect verifiers in
+  // src/compiler/ir/TileOps.cpp; see the note above.)
   if (name == "tile.alloc_shared")       return tile::verifyAllocShared(op);
-  if (name == "tile.async_copy")         return tile::verifyAsyncCopy(op);
-  if (name == "tile.wait_async")         return tile::verifyWaitAsync(op);
   if (name == "tile.mbarrier.alloc")     return tile::verifyMBarrierAlloc(op);
   if (name == "tile.mbarrier.arrive_expect_tx")
     return tile::verifyMBarrierArriveExpectTx(op);

@@ -49,3 +49,19 @@ func.func @legacy_untyped_form_still_accepted(%a: memref<128xf16>) {
   "tile.wait_async"() {tile.barrier_id = 0 : i64} : () -> ()
   return
 }
+
+// The other legacy grouping key: an integer `stage`, consumed by
+// TileBufferReusePass (lifetime matching) and the Python reference spine. It
+// is OPTIONAL — the declared contract (reconciled 2026-08-10) requires only
+// that a present key be well formed (>= 0; see the invalid fixture for the
+// rejection). A required-stage model was a dead third contract and is gone.
+//
+// CHECK-LABEL: func.func @legacy_stage_grouping_key_accepted
+func.func @legacy_stage_grouping_key_accepted(%a: memref<128xf16>) {
+  // CHECK: tile.async_copy
+  // CHECK-SAME: stage = 0
+  "tile.async_copy"(%a) {stage = 0 : i64} : (memref<128xf16>) -> ()
+  // CHECK: tile.wait_async
+  "tile.wait_async"() {stage = 0 : i64} : () -> ()
+  return
+}

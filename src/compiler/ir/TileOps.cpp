@@ -893,7 +893,27 @@ LogicalResult FragmentZeroOp::verify() {
 // producer migration completes.
 //===----------------------------------------------------------------------===//
 
+// Shared by both sync ops: `stage` is an OPTIONAL legacy-form grouping key
+// (see the ODS description — TileBufferReusePass and the Python spine consume
+// it; a key-less op fails safe as "matches anything"). When it is present it
+// must be well formed. This is the one check the deleted ScheduleOps.cpp
+// stage-model verifier carried that was worth keeping; requiring the attribute
+// outright was not — no in-tree producer satisfies that, including the
+// production TileIRLoweringPass emitter.
+static LogicalResult verifyOptionalStage(Operation *op) {
+  if (auto stage = op->getAttrOfType<IntegerAttr>("stage"))
+    if (stage.getInt() < 0)
+      return op->emitOpError(
+          "TILE_ASYNC_STAGE_NEGATIVE: 'stage' is an optional grouping key, "
+          "but when present it must be >= 0; got ")
+             << stage.getInt();
+  return success();
+}
+
 LogicalResult AsyncCopyOp::verify() {
+  if (failed(verifyOptionalStage(getOperation())))
+    return failure();
+
   llvm::SmallVector<Value> tokens;
   for (Value out : getOutputs())
     if (isa<AsyncTokenType>(out.getType()))
@@ -922,6 +942,9 @@ LogicalResult AsyncCopyOp::verify() {
 }
 
 LogicalResult WaitAsyncOp::verify() {
+  if (failed(verifyOptionalStage(getOperation())))
+    return failure();
+
   for (Value in : getInputs()) {
     if (!isa<AsyncTokenType>(in.getType()))
       continue;

@@ -215,8 +215,10 @@ class AllToAllPlan:
     send_counts[src_rank][dst_rank] = number of tokens src sends to dst
     recv_counts[dst_rank][src_rank] = number of tokens dst receives from src
 
-    Used by the CollectiveScheduler to issue chunked sends and by
-    GPUCollectiveInsertionPass to size buffers.
+    Used by GPUCollectiveInsertionPass to size buffers. The planned overlap
+    scheduler (src/collectives/docs/Tessera_Collectives_Overlap_Design.md §4,
+    unimplemented) would consume it to issue chunked sends; today the C++
+    chunk path is ExecRuntime::submit (Execution.h).
     """
     num_ranks: int
     num_experts: int

@@ -477,7 +477,7 @@ human-readable summary; for the current per-component picture, read
 
 | Area | Status |
 |------|--------|
-| NCCL/RCCL collectives + cluster execution | Implemented lowering and adapter surfaces — `GPUCollectiveInsertionPass`, NCCL/RCCL adapters, `ChunkPlanner`, `CollectiveScheduler`; production multi-rank execution remains validation-gated. |
+| NCCL/RCCL collectives + cluster execution | Implemented lowering and adapter surfaces — `GPUCollectiveInsertionPass`, NCCL/RCCL adapters, `ExecRuntime` chunk submit + `TokenLimiter`; the overlap scheduler is an unimplemented draft (`src/collectives/docs/Tessera_Collectives_Overlap_Design.md` §4), and production multi-rank execution remains validation-gated. |
 | Autodiff transforms + custom VJP/JVP | Implemented — `tessera.autodiff` v1 ships broad VJP/JVP coverage (live counts in [`docs/audit/generated/s_series_status.md`](../audit/generated/s_series_status.md)); `tessera.custom.custom_vjp` / `custom_jvp` user-facing. |
 | Activation checkpointing + ZeRO sharding | Implemented — `tessera.autodiff.rematerialize` + ZeRO stage 2 via `OptimizerShardPass`. |
 | Bayesian autotuning | Implemented — `tessera.autotune` + `compiler/autotune_v2.py` (Optuna TPE + Hyperband + SQLite cache v2). |

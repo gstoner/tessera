@@ -21,6 +21,10 @@
 // CHECK-LABEL: func.func @canonical_rng
 // CHECK-SAME:  tessera.effect = "random"
 
+// ── Test 6: canonical normal RNG spelling → annotated random ─────────────
+// CHECK-LABEL: func.func @canonical_rng_normal
+// CHECK-SAME:  tessera.effect = "random"
+
 module attributes {tessera.ir.version = "1.0"} {
 
   func.func @pure_gemm(
@@ -64,6 +68,12 @@ module attributes {tessera.ir.version = "1.0"} {
 
   func.func @canonical_rng() -> tensor<8xf32> {
     %sample = "tessera.rng_uniform"() {shape = [8], seed = 7 : i64}
+        : () -> tensor<8xf32>
+    return %sample : tensor<8xf32>
+  }
+
+  func.func @canonical_rng_normal() -> tensor<8xf32> {
+    %sample = "tessera.rng_normal"() {shape = [8], seed = 11 : i64}
         : () -> tensor<8xf32>
     return %sample : tensor<8xf32>
   }

@@ -8,6 +8,27 @@ audit_role: theme
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
 
+## TileRT assessment — composition scheduling direction (2026-08-10)
+
+[`TILERT_ASSESSMENT.md`](TILERT_ASSESSMENT.md) assesses TileRT (tile-ai's
+closed low-latency inference runtime) as external validation of the W6 /
+TileSight-T3/T4 overlap-scheduling direction, with four analytic results: the
+bubble decomposition proving MoE is the max-bubble target, a hard ≤3× (batch-1
+≤2×) overlap-speedup ceiling that shows TileRT's own 3–4× claim is composite,
+a counterexample proving scalar-latency arbitration mis-selects kernels once
+any composition layer exists (→ record resource vectors in autotune records
+now, via the open `hot_path_metadata` slot — zero schema change), and a
+static-first/dynamic-only-under-variance scheduling rule with an explicit
+determinism constraint. The trace behind it found the connective tissue absent
+but the parts built: `comm_overlap.py` (contract, zero production consumers),
+the 2026-08-09 typed futures (awaits still adjacent to dispatch — window
+zero), `pipeline_planner.ScheduleStep` (discarded at the IR boundary), and the
+threaded MegaMoE pipeline. Negative findings: `tessera.queue` is dead
+unparseable vocabulary whose claimed producer never emits it;
+`CollectiveScheduler`/`ChunkPlanner` exist only as names in comments and docs.
+Direction only — no status rows changed. W2.2 is a named hard prerequisite for
+any scheduler beyond await-sinking.
+
 ## `tessera.queue` MLIR dialect deleted (2026-08-10)
 
 Decision #29/#31 disposition, per the TileRT assessment's §2.1 negative

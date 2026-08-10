@@ -116,7 +116,7 @@ generated support and E2E dashboards.
 | `NVFlashAttnKernelEmitter` — scale resolution, full mbarrier seq, launch bounds | ✅ | `src/compiler/codegen/tessera_gpu_backend_NVIDIA/` |
 | `tessera-lower-to-gpu` named pipeline | ✅ | registered in GPU backend |
 | FA-4 Attn dialect v2.0 — `ScaledDotProduct`, `OnlineSoftmax`, `LseAccumulate`, `DropoutMask`, `CausalMask` | ✅ | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td` |
-| `tessera.queue` dialect — `create`, `push`, `pop` | ✅ | `src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td` |
+| `tessera.queue` dialect | ❌ deleted 2026-08-10 (Decisions #29/#31 — zero producers/consumers; warp-spec sync is `!tile.pipeline_state` SSA) | queue vocabulary lives in `python/tessera/compiler/tile_ir.py` only |
 
 ### Work That Is Scaffolded Or Artifact-Only
 
@@ -189,7 +189,6 @@ src/
 │
 ├── tile_opt_fa4/
 │   ├── dialects/tessera_attn/      Attn.td v2.0 — 7 FA-4 ops
-│   ├── dialects/tessera_queue/     Queue.td — create, push, pop
 │   └── lib/
 │       ├── WarpSpecializationPass.cpp
 │       └── AsyncCopyLoweringPass.cpp

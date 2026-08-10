@@ -54,12 +54,13 @@ void registerTesseraDialects(mlir::DialectRegistry &registry) {
   // Neighbors dialect (tessera.neighbors.*)
   registerNeighborsDialect(registry);
 
-  // The Queue / Attn dialects are Python-only at this stage; their MLIR ops
-  // are represented as generic `tessera.queue.*` / `tessera_attn.*` strings
-  // and round-trip through the unknown-op path until ODS tables exist.
-  // When C++ ODS tables are generated, insert:
-  //   registry.insert<tessera::queue::QueueDialect,
-  //                   tessera::attn::AttnDialect>();
+  // The Attn dialect is Python-only at this stage; its MLIR ops are
+  // represented as generic `tessera_attn.*` strings and round-trip through
+  // the unknown-op path until ODS tables exist.  When C++ ODS tables are
+  // generated, insert:
+  //   registry.insert<tessera::attn::AttnDialect>();
+  // The `tessera.queue` MLIR dialect was deleted 2026-08-10 (Decisions
+  // #29/#31); the queue vocabulary lives only in the Python tile IR spine.
 }
 
 // ===========================================================================

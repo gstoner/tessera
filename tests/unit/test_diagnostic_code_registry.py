@@ -3,7 +3,7 @@
 The registry at ``python/tessera/compiler/diagnostic_codes.py`` is the
 single Python-side source of truth for MLIR verifier / pass diagnostic
 codes that Tessera's C++ layer emits (codes like
-``SYMDIM_BINDING_VIOLATION``, ``QUEUE_PUSH_QUEUE_PROVENANCE``).
+``SYMDIM_BINDING_VIOLATION``).
 
 This is a separate registry from the JIT-level ``JitDiagnosticCode`` /
 ``FallbackReason`` taxonomy at ``tests/unit/test_diagnostic_codes.py``
@@ -168,7 +168,7 @@ def test_registered_codes_have_no_duplicates() -> None:
 
 def test_registered_codes_group_by_language_and_prefix() -> None:
     """The registry organises codes by language (mlir / python) and
-    by prefix family (E_*, JIT_*, TS_ERR_*, SYMDIM_*, QUEUE_*,
+    by prefix family (E_*, JIT_*, TS_ERR_*, SYMDIM_*,
     LAYOUT_LEGALITY_*).  We don't enforce strict alphabetisation
     across the registry (low-value churn when adding new prefixes);
     we do verify the prefix-to-language mapping stays sensible."""
@@ -189,7 +189,6 @@ def test_registered_codes_group_by_language_and_prefix() -> None:
         "JIT": "python",
         "TS": "python",          # TS_ERR_* codes
         "SYMDIM": "mlir",
-        "QUEUE": "mlir",
         "LAYOUT": "mlir",         # LAYOUT_LEGALITY_*
     }
     for prefix, lang in expected.items():
@@ -211,8 +210,9 @@ def test_lookup_helpers_work() -> None:
     sym = codes_by_pass("SymbolicDimEqualityPass")
     assert len(sym) >= 5
     assert all(c.pass_origin == "SymbolicDimEqualityPass" for c in sym)
-    v8 = codes_by_sprint("V8")
-    assert len(v8) == 6  # 6 Queue codes from V8
+    # The 6 V8 QUEUE_* codes were removed 2026-08-10 with the
+    # `tessera.queue` dialect (Decisions #29/#31).
+    assert codes_by_sprint("V8") == ()
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -345,12 +345,8 @@ _LOCKED_SENTINEL_CODES = (
     "SYMDIM_CALL_ARG_MISMATCH",
     "SYMDIM_LOOP_YIELD_MISMATCH",
     "SYMDIM_IF_BRANCH_MISMATCH",
-    "QUEUE_CREATE_OPERAND_COUNT",
-    "QUEUE_PUSH_QUEUE_PROVENANCE",
-    "QUEUE_PUSH_TILE_TYPE",
-    "QUEUE_POP_QUEUE_PROVENANCE",
-    "QUEUE_POP_TOKEN_PROVENANCE",
-    "QUEUE_POP_TILE_TYPE",
+    # The six QUEUE_* sentinels were removed 2026-08-10 with the
+    # `tessera.queue` MLIR dialect (Decisions #29/#31).
     # TSOL-2 (2026-05-22) — Python-side family sentinels.
     "E_SHAPE_MISMATCH",
     "E_TILE_LOWERING",
@@ -384,7 +380,7 @@ def test_locked_sentinel_code_present(code: str) -> None:
         f"locked sentinel diagnostic code missing: {code}"
     )
     # JIT_* codes are legitimately warnings (informational telemetry);
-    # E_* / SYMDIM_* / QUEUE_* / LAYOUT_LEGALITY_* / TS_ERR_* are errors.
+    # E_* / SYMDIM_* / LAYOUT_LEGALITY_* / TS_ERR_* are errors.
     assert entry.severity in ("error", "warning"), (
         f"invalid severity for {code}: {entry.severity!r}"
     )

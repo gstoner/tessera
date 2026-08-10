@@ -35,7 +35,6 @@ namespace tessera {
 //
 // Dialects registered:
 //   tessera.neighbors.*  — Stencil / halo / topology ops
-//   tessera.queue.*      — Warp-specialised token queues
 //   tessera_attn.*       — Flash-attention ops (online softmax, LSE)
 //   tessera.schedule.*   — Programming Model v1.1 Schedule dialect
 //   tessera.cache.*      — Programming Model v1.1 Cache dialect

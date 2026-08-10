@@ -81,7 +81,9 @@ struct PMV11VerifierPass
   }
 
 private:
-  // Inline lightweight verification (mirrors ScheduleOps.cpp dispatcher).
+  // Inline lightweight verification — the single production implementation of
+  // the schedule./cache./tile. structural checks (Decision #31; the unbuilt
+  // ScheduleOps.cpp duplicate was deleted 2026-08-10).
   LogicalResult verifyOp(Operation *op) {
     StringRef name = op->getName().getStringRef();
 

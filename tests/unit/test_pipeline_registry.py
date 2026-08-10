@@ -55,8 +55,7 @@ _PASS_REGISTRATION_FILES = (
     REPO_ROOT / "src/compiler/codegen/Tessera_Apple_Backend/lib/Target/Apple/Passes.cpp",
     REPO_ROOT / "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
     REPO_ROOT / "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp",
-    REPO_ROOT / "src/compiler/programming_model/tools/tessera-opt/PassPipelinesPM11.cpp",
-    REPO_ROOT / "src/compiler/mlir/TesseraMLIRPlugin.cpp",
+    REPO_ROOT / "src/compiler/programming_model/lib/PMPasses.cpp",
     # Solver pipelines (ts-spectral-opt, ts-clifford-opt, etc.)
     REPO_ROOT / "src/solvers/core/passes/SolversPasses.cpp",
     REPO_ROOT / "src/solvers/spectral/tools/ts-spectral-opt.cpp",
@@ -215,7 +214,6 @@ _KNOWN_UNTRACKED_PIPELINES: frozenset[str] = frozenset({
     "tessera-linalg-solver",
     "tessera-solver-suite",
     "tessera-autodiff-pipeline",
-    "tessera-neighbors-pipeline",
     # Per-backend convenience aliases (separate from the
     # `tessera-lower-to-*` umbrella names tracked here).
     "tessera-rocm-backend",
@@ -233,7 +231,6 @@ _KNOWN_UNTRACKED_PIPELINES: frozenset[str] = frozenset({
     "tessera-emit-rocdl",
     # Internal cleanup / verification meta-pipelines.
     "tessera-cleanup",
-    "tessera-full-pipeline",
     "tessera-pm-legalize-pipeline",
     "tessera-pm-verify-pipeline",
 })

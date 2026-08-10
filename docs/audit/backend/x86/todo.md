@@ -84,7 +84,7 @@ Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **bounded AVX-512
 physical pilot and packet landed.** The diagonal-sqrt residual lowers as one
 content-addressed `schedule.solver_ift` → `tile.solver_ift_kernel` package and
 executes residual, transposed diagonal matrix-free solve, and parameter adjoint
-in the native AVX-512 image. The committed [Zen 5 3×257 f32 packet](../../../benchmarks/baselines/x86_zen5_solver_ift_evidence.json)
+in the native AVX-512 image. The committed [Zen 5 3×257 f32 packet](../../../../benchmarks/baselines/x86_zen5_solver_ift_evidence.json)
 reports 4.58e-7 maximum residual error, exact linear/adjoint outputs, 30 complete-
 backward samples, and 3,084 retained bytes. General residuals and
 iterative/Krylov solvers remain open and fail closed; AMX is unaffected.

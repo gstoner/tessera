@@ -110,7 +110,7 @@ physical pilot and correctness packet landed.** The diagonal-sqrt residual now
 lowers as one content-addressed `schedule.solver_ift` →
 `tile.solver_ift_kernel` → `tessera_rocm.solver_ift` package. Its generated HIP
 kernel executes residual, transposed diagonal matrix-free solve, and parameter
-adjoint. The committed [3×257 f32 packet](../../../benchmarks/baselines/rocm_gfx1151_solver_ift_evidence.json)
+adjoint. The committed [3×257 f32 packet](../../../../benchmarks/baselines/rocm_gfx1151_solver_ift_evidence.json)
 reports zero maximum error and 30
 complete-backward samples with 3,084 retained bytes. WSL synchronized-host
 timing is regression-only, not a performance promotion. General residuals,

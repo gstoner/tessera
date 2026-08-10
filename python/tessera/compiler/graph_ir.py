@@ -247,6 +247,7 @@ _KEYWORD_OPERANDS: Dict[str, tuple[str, ...]] = {
 # Values are the required keyword-only attribute names, so a rename in the
 # reference signature is caught rather than silently emitting a stale key.
 _KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
+    "tessera.es_low_rank_correction": ("out_dim", "rank", "sigma"),
     "tessera.attn_sliding_window": ("window_size",),
     "tessera.attn_top_k_blocks": ("top_k", "block_size"),
     "tessera.deepseek_sparse_attention": ("window_size", "block_size", "top_k"),
@@ -2105,6 +2106,19 @@ def _shape_matmul_2d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]
     return tensor_ir_type(("*",), dtype, layout=lhs.layout)
 
 
+def _shape_es_population_features(
+    operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None
+) -> IRType:
+    """Preserve population/row axes and replace the trailing feature extent."""
+    x = operand_types[0]
+    if x.rank is None or x.rank < 2:
+        return tensor_ir_type(("*",), x.dtype, layout=x.layout)
+    out_dim = _dim((attrs or {}).get("out_dim"))
+    dims = list(x.shape)
+    dims[-1] = str(out_dim) if out_dim is not None else "*"
+    return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
+
+
 def _shape_batched_gemm_3d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
     # Rank-3 C[b] = A[b] @ B[b]: result is B×M×N from A's (B,M) + B's N.
     if len(operand_types) < 2:
@@ -3221,6 +3235,7 @@ def _shape_reduce_trailing(operand_types: List[IRType], attrs: Optional[Dict[str
 _SHAPE_RULES = {
     "same_as_first": _shape_same_as_first,
     "matmul_2d": _shape_matmul_2d,
+    "es_population_features": _shape_es_population_features,
     "batched_gemm_3d": _shape_batched_gemm_3d,
     "same_shape_bool": _shape_same_shape_bool,
     "reduce_all": _shape_reduce_all,

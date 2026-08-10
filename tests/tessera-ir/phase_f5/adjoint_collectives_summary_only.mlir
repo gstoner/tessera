@@ -13,7 +13,7 @@
 // fallback and still insert.
 
 module {
-  // CHECK: sym_name = "bwd_summary_only"
+  // CHECK-LABEL: func.func @bwd_summary_only
   func.func @bwd_summary_only(%A: tensor<4x8xf32>, %B: tensor<8x16xf32>)
       -> (tensor<4x16xf32>, tensor<4x8xf32>, tensor<8x16xf32>)
       attributes {

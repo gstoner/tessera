@@ -1,0 +1,134 @@
+{
+  "schema": "tessera.eggroll.es_low_rank.zen5_avx512.v1",
+  "work_item": "EGGROLL-W2-X86",
+  "created_at": "2026-08-10T03:09:16.472768+00:00",
+  "architecture": "zen5-avx512",
+  "device": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "library_sha256": "93b11d4c75cd2b8f39e717179e7e7a858d32f33af6f009510a7fa3051f6891b4",
+  "algorithm": "member_factor_cache_plus_avx512_rank1_dot_outer",
+  "rng": "splitmix64-philox4x32-boxmuller.v1",
+  "dtype": {
+    "storage": "fp32",
+    "accum": "fp32"
+  },
+  "timing_domain": "steady_host_wall_ns",
+  "trials": 21,
+  "rows": [
+    {
+      "shape": {
+        "population": 4,
+        "rows_per_member": 3,
+        "in_dim": 8,
+        "out_dim": 6,
+        "rank": 1
+      },
+      "correct": true,
+      "max_abs_error": 1.862645149230957e-08,
+      "max_rel_error": 4.296447286833427e-07,
+      "samples_ns": [
+        6902,
+        7670,
+        6760,
+        6305,
+        7584,
+        6349,
+        5959,
+        5807,
+        7595,
+        5926,
+        5883,
+        7215,
+        7432,
+        5828,
+        5677,
+        7335,
+        5753,
+        11192,
+        5752,
+        5763,
+        5721
+      ],
+      "median_ns": 6305
+    },
+    {
+      "shape": {
+        "population": 8,
+        "rows_per_member": 7,
+        "in_dim": 257,
+        "out_dim": 193,
+        "rank": 1
+      },
+      "correct": true,
+      "max_abs_error": 7.152557373046875e-07,
+      "max_rel_error": 5.399609108280856e-06,
+      "samples_ns": [
+        91721,
+        89781,
+        90051,
+        104775,
+        97310,
+        90561,
+        89661,
+        89640,
+        89434,
+        96802,
+        90040,
+        89910,
+        89412,
+        91741,
+        90377,
+        102587,
+        103811,
+        90225,
+        89889,
+        89424,
+        89596
+      ],
+      "median_ns": 90051
+    },
+    {
+      "shape": {
+        "population": 16,
+        "rows_per_member": 32,
+        "in_dim": 1024,
+        "out_dim": 1024,
+        "rank": 1
+      },
+      "correct": true,
+      "max_abs_error": 2.1457672119140625e-06,
+      "max_rel_error": 6.164258229546249e-05,
+      "samples_ns": [
+        853910,
+        831439,
+        844593,
+        843628,
+        858406,
+        838927,
+        836618,
+        935803,
+        844245,
+        848330,
+        842642,
+        846781,
+        860454,
+        840432,
+        839554,
+        837583,
+        857506,
+        850952,
+        825188,
+        833715,
+        843173
+      ],
+      "median_ns": 843628
+    }
+  ],
+  "all_correct": true,
+  "verdict": {
+    "correctness": "retain",
+    "performance": "retain_avx512_f32",
+    "selector_eligible": true,
+    "vnni": "fail_closed_pending_quantization_scale_and_saturation_contract"
+  }
+}

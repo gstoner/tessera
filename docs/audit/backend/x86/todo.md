@@ -9,14 +9,38 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
-Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **shared ES low-rank
-correction contract + fp32/s32 accumulation policy defined; x86 is follow-up
-required (lower priority).** The Evolution-Strategies reference tier
-(`tessera.stdlib.es`) landed; the Graph-IR op `es_low_rank_correction` and its
-emitters are W2. On x86 the population forward is a batched-LoRA AVX-512 GEMM
-plus a low-rank correction; the `s32` lane maps to VNNI (u8×s8→s32). No ES
-performance target is set for x86, so this trails the lead backends; member-keyed
-RNG (G2) and the fp32/s32 accumulation policy (I6 / Decision #32) apply.
+Cross-backend sync `X86-TYPED-FAMILY-PLUGIN-2026-08-09` — **the production
+AVX-512 native packager now crosses one registered, closed-family executable
+pipeline.** `tessera-x86-executable` validates the semantic family against
+exactly one primary Tile carrier, binds `x86_64_avx512`, records the Tile producer,
+registered `tessera_x86` Target consumer, and prebuilt native-image boundary,
+then rejects surviving Tile operations or packages without both the typed
+Target marker and native ABI call. Python package producers use
+`X86ExecutablePipeline`; the former direct construction of
+`--tessera-tile-to-x86=...` is gone from production packaging. The base x86
+profile remains limited to its proven softmax/reduction subset, and AMX remains
+access-gated. Spectral backward, solver IFT, scheduled matmul, attention, and
+the broader AVX-512 ABI families all use the same boundary. Standalone legacy
+pass fixtures remain only to test the underlying lowering pass, not as a
+production configuration escape hatch.
+Attention backward explicitly admits one forward-recompute companion carrier;
+all other families remain single-carrier. This keeps LSE recompute identity in
+the same content-addressed program without weakening family discrimination.
+
+Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **the shared Graph,
+Schedule, Tile, lineage, member-RNG-v1, and fp32 numeric-policy contract has
+landed; rank-1 fp32 Zen 5 AVX-512 consumption is complete.** The typed x86
+family lowers the exact architecture-bound Schedule→Tile artifact to
+`tessera_x86_avx512_es_low_rank_correction_f32`; runtime execution preserves
+the shared SplitMix64/Philox4x32/Box–Muller member identity, caches only
+O(in+out) factors, and never materializes the perturbation matrix. The durable
+packet `benchmarks/baselines/x86_zen5_es_low_rank_2026_08_09.json` records
+correct aligned, ragged, and 16×32×1024→1024 cases (0.844 ms median for the
+largest case) on Ryzen AI MAX+ 395. The separate integer lane remains
+fail-closed: VNNI u8×s8→s32 cannot implement the Gaussian fp32 correction until
+Graph/Schedule carry explicit quantization scales and saturating requantization.
+W4 scalar-gather/member reconstruction passes mock-mesh proof; native x86
+transport integration remains open.
 Contract: `docs/audit/compiler/EGGROLL_SUPPORT_PLAN.md`.
 
 Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **shared
@@ -48,15 +72,22 @@ validation fails closed when the adapter cannot implement a subgroup. x86
 still needs a production multi-process transport and exact Zen 5 multi-rank
 packet; AVX-512/AMX selectors and performance claims are unchanged.
 
-Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **shared typed IFT
-and measured-policy boundary landed; AVX-512 physical follow-up required.**
-The registered solver dialect now carries value-producing residual,
-matrix-free solve, residual-JVP, and residual-adjoint chains, with fail-closed
-residual ABI verification. Rematerialization consumes exact complete-backward
-work and unique retained-residual bytes; estimated treeverse envelopes cannot
-promote a policy. Existing Zen 5 producer-recompute measurements are not a
-complete implicit backward, and x86 has no native consumer/packet for the new
-solver chain. AVX-512/AMX packages, selectors, and evidence remain unchanged.
+Cross-backend sync `DIST-SHARD-ALIAS-1-2026-08-09` — **portable alias bridge
+landed; native x86 transport unchanged.** Three public entries are compiler
+placement/region contracts; `psum`/`pmean`/`pmax`/`pmin` and
+`broadcast_to_axis` now resolve to the registered collective runtime instead
+of remaining nine undifferentiated backend rows. `collective_permute` remains
+an ordered point-to-point gap and fails closed. MPI/OFI/SHMEM binding and exact
+multi-rank Zen 5 evidence remain open; AVX-512/AMX selectors are unchanged.
+
+Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **bounded AVX-512
+physical pilot and packet landed.** The diagonal-sqrt residual lowers as one
+content-addressed `schedule.solver_ift` → `tile.solver_ift_kernel` package and
+executes residual, transposed diagonal matrix-free solve, and parameter adjoint
+in the native AVX-512 image. The committed [Zen 5 3×257 f32 packet](../../../../benchmarks/baselines/x86_zen5_solver_ift_evidence.json)
+reports 4.58e-7 maximum residual error, exact linear/adjoint outputs, 30 complete-
+backward samples, and 3,084 retained bytes. General residuals and
+iterative/Krylov solvers remain open and fail closed; AMX is unaffected.
 
 Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` — **shared
 effect/control parity and native x86 consumption validated; multi-rank
@@ -77,16 +108,16 @@ admit negative schedules, cache windows, seeds, or control bounds. Direct
 negative IR cases cover both dialects. No native ABI, schedule, selector,
 package, or Zen 5/AMX evidence changes.
 
-Cross-backend sync `AD-TSOL-SPECTRAL-1-2026-08-08` — **shared adjoint carrier
-landed; native AVX-512 backward package open.** FFT/IFFT/RFFT/IRFFT/DCT compiler
-transposes have paired CPU numerical proof and compound spectral VJPs retain
-their exact semantics through one content-addressed multi-output Tile carrier.
-TileToX86 deliberately rejects that carrier until a Zen 5 native
-compound-backward package and correctness/performance packet land. Existing
-forward AVX-512 TSOL packages and evidence are unchanged; AMX is not implicated.
-After rebuilding the separately owned v6 shared image, 41 compiled FFT and 21
-compiled compound-spectral cases pass on the local Zen 5 host; those forward
-results do not promote the new backward carrier.
+Cross-backend sync `AD-TSOL-SPECTRAL-NATIVE-2026-08-09` — **bounded AVX-512
+backward packages and exact-host correctness landed; performance open.** The
+content-addressed multi-output carrier now lowers complex-f32 spectral-filter
+and unbroadcast last-axis full-f32 spectral-convolution adjoints to native x86
+ABI calls without returning to Graph IR. Both gradient outputs pass direct
+numerical checks on the local Zen 5 AVX-512 host; convolution preserves the
+artifact-selected `backward`, `forward`, and `ortho` scale. Native STFT/ISTFT
+backward, broader axes/dtypes/broadcasting, and a clean timing/resource packet
+remain open and fail closed. Existing forward AVX-512 TSOL packages are
+unchanged; AMX is not implicated.
 
 Cross-backend sync `AD-CORE-LINEAR-1-2026-08-08` — **shared Graph-IR parity
 validated; AVX-512 package unchanged.** Both compiler autodiff passes now
@@ -320,7 +351,8 @@ without coefficient tuning. The sweep also fixed a correctness defect where
 the out-of-place runtime helper mutated contiguous caller inputs.
 
 Cross-backend sync `FFT-PERF-FOUNDATION-2026-08-05` — **AVX-512 plan/twiddle
-cache and generated permutation retained; mixed-radix SIMD remains open.** The production C2C ABI now keeps a
+cache, generated permutation, and every planner-admitted mixed-radix codelet
+are retained.** The production C2C ABI now keeps a
 bounded thread-local immutable plan containing gather offsets and all
 per-stage twiddles, removing allocation and transcendental work from warm
 execution. Same-host ratios against `scipy.fft(workers=1)` improved from
@@ -328,8 +360,14 @@ execution. Same-host ratios against `scipy.fft(workers=1)` improved from
 existing numerical gates passing. The former scalar random-swap bit reversal
 is now a cached AVX-512 gather into reusable thread-local workspace; the gap
 improved again to 2.92x/1.86x/2.73x with the C++ correctness corpus passing.
-This is a retain, not parity; radix-2-only execution and the absence of
-mixed-radix SIMD codelets remain the next x86 FFT work.
+This is a retain, not library parity. The runtime-radix DFT loop is now a
+compile-time specialization for radices 2/3/4/5/7/9/11/13/15/17, including
+AVX-512 butterfly batches and unrolled scalar tails. Native tests cover every
+radix plus a multistage N=68 round trip. The 2026-08-09 packet records correct
+N=68/225/289/768/3072/5120 transforms: native is 2.79× and 2.65× faster than
+NumPy at N=3072 and N=5120, while smaller rows remain slower. Therefore the
+existing work gate is retained and no global selector promotion is made.
+Remaining expansion is nontrivial stride, dtype, and larger-transform coverage.
 
 The v2 content-addressed artifact records `cooley_tukey_dit`, host-inplace
 residency, cached-f32 twiddles, workspace policy, radix sequence, and the
@@ -543,7 +581,7 @@ readiness, numerical, or performance claim is inferred.
 ## X86-CALIB-1: split verdict on the hardware-free score calibration
 
 Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **retired step-distance;
-bank-conflict not applicable; T1 cache-model follow-up required.** Owning host
+bank-conflict not applicable; T1 hierarchy rejected for latency ranking.** Owning host
 Zen 5 (Ryzen AI Max+ 395 CPU complex, AVX-512, no AMX).
 
 The original two static device-free scores were assessed against measured latency
@@ -564,17 +602,15 @@ constants.
 **Step-distance locality — rejected fleet-wide.** It failed on the ROCm
 architecture from which it was derived, so x86 will not retune or revive it.
 
-**T1 reuse/cache model — follow-up required.** The new shared model is
-structurally applicable to blocked AVX-512/AMX GEMM, but the current target
-profile does not yet provide trustworthy Zen 5 compute peaks and the generic
-single-cache abstraction must be mapped to the L1/L2/L3 hierarchy. x86 executes
-natively and has committed benchmarks
-(`benchmarks/x86/benchmark_x86_e2e*.py`), so it can supply the non-GPU
-retain/reject check once those inputs are evidence-backed.
-
-**Missing exact-device evidence.** Evidence-backed Zen 5 compute/bandwidth/cache
-inputs and rank correlation between T1 and recorded AVX-512 latencies over the
-e2e benchmark rows. No evidence is owed for the bank-conflict metric.
+**T1 reuse/cache model — rejected for ranking, retained as a pruning
+diagnostic.** The measured model now represents independent L1D/L2/L3 LRU
+levels plus DRAM, using sysfs capacities, CPU-pinned resident-copy bandwidths,
+and an architecture-derived single-core peak. Ten physically distinct blocked
+AVX-512 GEMM candidates were measured on three workloads. The durable packet
+`benchmarks/baselines/x86_zen5_t1_cache_model_2026_08_09.json` records median
+Spearman rho -0.4062 and 0/3 measured-winner matches. This fails the
+predeclared rho>0.25 promotion threshold. No coefficients were tuned, the
+production selector is unchanged, and measured latency remains authoritative.
 
 **Fleet outcome (2026-07-29).** ROCM-CALIB-1 reproduced 0/6 measured winners on
 the AMD home architecture (median rho -0.1381, 0% positive), triggering the
@@ -895,20 +931,13 @@ evidence is inferred.
 
 ## Cross-backend sync `ROCM-TYPED-EXECUTABLE-PIPELINE-2026-08-07`
 
-The new configuration schema makes the Tile producer, Target-IR consumer, and
-backend code generator explicit instead of accepting Python-composed pass
-strings. **x86 outcome: follow-up required.** The schema is applicable to the
-canonical AVX-512 spine, but this ROCm-owned slice changes no x86 pipeline,
-native image, selector, or Zen 5 evidence. x86 must introduce its own typed
-family-plugin registry and preserve the existing Schedule→Tile→`tessera_x86`
-artifact identity; AMD async-copy/waitcnt semantics are not applicable. Intel
-AMX remains separately access-gated. The shared executable policy—no surviving
-Target IR, undefined result, or contract-marker symbol in a native image—is
-accepted for the future x86 plugin boundary; no x86 binary changed here.
-ROCm has now retired its final generic runtime pass-name helper. **x86 outcome:
-follow-up required:** x86 should use the same closed-family configuration rule
-when its plugin registry lands; this ROCm change transfers no AVX-512/AMX code,
-schedule, selector, or evidence.
+The configuration schema makes the Tile producer, Target-IR consumer, and
+backend image boundary explicit instead of accepting Python-composed pass
+strings. **x86 outcome: parity validated.** The architecture-owned
+`tessera-x86-executable` registry now applies the same closed-family rule while
+preserving Schedule→Tile→`tessera_x86` identity and the stable AVX-512 shared
+image. AMD async-copy/waitcnt semantics remain not applicable; Intel AMX stays
+separately access-gated. No ROCm schedule or evidence transfers.
 
 ## Cross-backend sync `TSOL-PACKED-FUSION-2026-08-08`
 

@@ -104,8 +104,11 @@ def _attention_module(*, extended: bool = False) -> GraphIRModule:
     )])
 
 
-def _fake_lower(tile_ir: str, symbol: str):
+def _fake_lower(tile_ir: str, symbol: str, family: str):
     assert "tile." in tile_ir
+    assert family in {
+        "attention", "attention_backward", "matmul", "reduction", "softmax"
+    }
     return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-x86", "compiler", "toolchain"
 
 

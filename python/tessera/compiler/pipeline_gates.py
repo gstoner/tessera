@@ -201,6 +201,11 @@ def _platform_is_darwin_arm64() -> bool:
     return sys.platform == "darwin" and platform.machine() == "arm64"
 
 
+def _platform_is_x86_64() -> bool:
+    """True on the native 64-bit x86 hosts supported by the x86 package."""
+    return platform.machine().lower() in ("x86_64", "amd64")
+
+
 # --- Per-gate evaluators (each returns a single GateResult) --------------
 
 def _safe_get_capability(target: str) -> Optional["_cap.TargetCapability"]:
@@ -253,7 +258,7 @@ def _eval_toolchain(target: str, op_name: Optional[str]) -> GateResult:
     """The backend compiler binary exists. We probe the host PATH; pinned
     versions live in ``cmake/TesseraToolchainPins.cmake`` and aren't
     re-asserted here (drift gate on the pins file is its own surface)."""
-    if target in ("cpu", "apple_cpu", "apple_gpu"):
+    if target in ("cpu", "x86", "apple_cpu", "apple_gpu"):
         # Host clang/cc + Apple frameworks are part of the Mac base toolchain.
         if shutil.which("c++") or shutil.which("clang++"):
             return GateResult(GATE_TOOLCHAIN, STATUS_PASS, "host C++ compiler present")
@@ -324,12 +329,23 @@ def _eval_hardware_smoke(target: str, op_name: Optional[str]) -> GateResult:
     """A live tiny kernel can run on this host. Honest sniff:
 
     * cpu — always pass (every host has a CPU).
+    * x86 — pass on an x86-64 host; ISA-specific execution remains guarded by
+      the package loader and its numerical fixture.
     * apple_cpu / apple_gpu — pass on Darwin; fail elsewhere.
     * nvidia / rocm — would need a GPU probe; without one, fail with a
       precise reason instead of pretending.
     """
     if target == "cpu":
         return GateResult(GATE_HARDWARE_SMOKE, STATUS_PASS, "host CPU present")
+    if target == "x86":
+        if not _DASHBOARD_DETERMINISTIC and _platform_is_x86_64():
+            return GateResult(GATE_HARDWARE_SMOKE, STATUS_PASS,
+                              "x86-64 host present")
+        if _DASHBOARD_DETERMINISTIC:
+            return GateResult(GATE_HARDWARE_SMOKE, STATUS_NOT_EVALUATED,
+                              "x86-64 host not assumed by dashboard")
+        return GateResult(GATE_HARDWARE_SMOKE, STATUS_FAIL,
+                          "x86-64 host required for native execution")
     if target in ("apple_cpu", "apple_gpu"):
         if not _DASHBOARD_DETERMINISTIC and _platform_is_darwin_arm64():
             return GateResult(GATE_HARDWARE_SMOKE, STATUS_PASS,

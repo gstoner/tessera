@@ -1,4 +1,4 @@
-// RUN: %tessera_opt %s --tessera-autodiff-paired | FileCheck %s
+// RUN: tessera-opt %s --tessera-autodiff-paired | FileCheck %s
 
 // AD-TSOL-SPECTRAL-1: spectral transposes are compiler-owned Graph IR. The
 // semantic contract survives into the backward function; no Python callback

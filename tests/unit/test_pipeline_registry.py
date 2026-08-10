@@ -405,9 +405,10 @@ def test_compilation_spine_inventory_is_machine_readable_and_truthful() -> None:
     assert all(
         row.level_c == "absent"
         for row in rows
-        if row.target not in {"apple_gpu", "apple_cpu", "rocm_gfx1151"}
+        if row.target not in {"apple_gpu", "apple_cpu", "rocm_gfx1151", "x86"}
     )
     assert next(row for row in rows if row.target == "rocm_gfx1151").level_c == "partial"
+    assert next(row for row in rows if row.target == "x86").level_c == "partial"
     assert target_pipeline_lookup("nvidia_sm80").declared_pipeline is None  # type: ignore[union-attr]
     assert next(row for row in rows if row.target == "nvidia_sm120").level_a == "native"
     assert next(row for row in rows if row.target == "rocm_gfx1151").level_a == "native"

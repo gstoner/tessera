@@ -47,6 +47,9 @@ add_mlir_library(TesseraROCMConversion
   GenerateROCMArgReduceKernel.cpp
   GenerateROCMScanKernel.cpp
   GenerateROCMUnaryKernel.cpp
+  GenerateROCMSolverIFTKernel.cpp
+  GenerateROCMSpectralBackwardKernel.cpp
+  GenerateROCMESLowRankKernel.cpp
   GenerateROCMControlForKernel.cpp
   GenerateROCMControlForGemvKernel.cpp
   GenerateROCMControlForNormKernel.cpp

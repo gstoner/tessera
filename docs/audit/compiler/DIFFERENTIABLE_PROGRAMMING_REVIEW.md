@@ -330,7 +330,7 @@ variance/dimension trade-off, so budget it as an arbiter candidate (Decision
 | 1 | **C1** linear transposition | Compiler interface and paired CPU proof complete | `LinearTransposeInterface` owns the migrated Graph families; Python remains the oracle |
 | 2 | TSOL spectral adjoints | Compiler Graph/Schedule/Tile slice complete; native compound-backward packages open | FFT/IFFT/RFFT/IRFFT/DCT have numerical compiler proof; x86/gfx1151 native package work stays architecture-owned |
 | 3 | **C3** stochastic/effect typing plus `stop_gradient` | Compiler Graph/pass slice complete | C++ activity/effects and fail-closed regions are direct-tested; residual save policy remains separately owned |
-| 4 | **T3** implicit differentiation | Python oracle and value-producing shared solver IR landed | Add architecture-owned matrix-free solve/adjoint consumers and compiled numerical/device packets |
+| 4 | **T3** implicit differentiation | Python oracle, value-producing shared solver IR, and a bounded diagonal-sqrt AVX-512/gfx1151 physical pilot with compiled packets landed | Extend the same artifact path to general residuals and iterative/Krylov matrix-free solves; add Apple/NVIDIA consumers |
 | 5 | **R1/C5** cost and residual policy | Measurement/selection boundary landed | Record exact family SAVE/RECOMPUTE/HYBRID packets; execute and measure region-adjoint treeverse schedules |
 | 6 | **C4/C6/R2/T1/T2** breadth | reference or open | Bind separate integrated IDs only after the spine above is executable |
 

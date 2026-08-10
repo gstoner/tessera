@@ -1,10 +1,8 @@
 // RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --split-input-file %s | FileCheck %s --check-prefixes=X86,ROCM
-// RUN: not tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --tessera-tile-to-x86='prefer-amx=false architecture=avx512' --split-input-file %s 2>&1 | FileCheck %s --check-prefix=X86-FAIL
 
 // AD-TSOL-SPECTRAL-1: compound spectral VJPs retain one content-addressed,
-// multi-output artifact boundary. This slice intentionally stops at Tile:
-// architecture-owned native backward packages must be added before either
-// backend conversion is allowed to consume the carrier.
+// multi-output artifact boundary and is consumed by bounded architecture-owned
+// packages on Zen 5 AVX-512 and gfx1151.
 
 module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
   func.func @filter_backward(
@@ -31,7 +29,6 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
 // X86-SAME: tessera.schedule_hash = "[[X86_HASH:[0-9a-f]{64}]]"
 // X86-NOT: schedule.spectral_backward
 // X86-NOT: tessera.spectral_backward
-// X86-FAIL: error: x86 compound spectral adjoint package is not implemented
 
 // -----
 
@@ -58,4 +55,3 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
 // ROCM-SAME: tessera.schedule_hash = "[[ROCM_HASH:[0-9a-f]{64}]]"
 // ROCM-NOT: schedule.spectral_backward
 // ROCM-NOT: tessera.spectral_backward
-// ROCM-FAIL: error: ROCm compound spectral adjoint package is not implemented

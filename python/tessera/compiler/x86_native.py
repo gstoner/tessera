@@ -26,6 +26,7 @@ from .scheduled_matmul import ScheduledMatmulArtifact
 from .scheduled_kernel import ScheduledKernelArtifact
 from .scheduled_attention import ScheduledAttentionArtifact
 from .scheduled_attention_backward import ScheduledAttentionBackwardArtifact
+from .x86_pipeline import X86ExecutablePipeline
 
 
 X86_SOFTMAX_F32_ABI = "tessera.x86.softmax.x_o_rows_k.f32.v1"
@@ -280,7 +281,7 @@ def _version_fingerprint(tool: Path) -> str:
 
 
 def _lower(
-    tile_ir: str, symbol: str,
+    tile_ir: str, symbol: str, family: str,
     architecture: str = X86_AVX512_ARCHITECTURE,
 ) -> tuple[str, bytes, str, str]:
     tool, library = _tessera_opt(), _library_path(architecture)
@@ -288,9 +289,12 @@ def _lower(
         raise RuntimeError(
             f"X86 native packaging requires tessera-opt and the {architecture} shared image"
         )
-    pass_architecture = "base" if architecture == X86_BASE_ARCHITECTURE else "avx512"
+    pipeline = X86ExecutablePipeline(
+        family=family,
+        architecture=architecture,
+    )
     result = subprocess.run(
-        [str(tool), "-", f"--tessera-tile-to-x86=prefer-amx=false architecture={pass_architecture}"],
+        [str(tool), "-", f"--pass-pipeline={pipeline.pass_pipeline()}"],
         input=tile_ir, capture_output=True, text=True, check=False,
     )
     if result.returncode:
@@ -1047,7 +1051,7 @@ def package_cohort2(module: GraphIRModule, *, pipeline_name: str) -> X86NativePa
         entry=f"tessera_tile_x86_{family}_{kind}", family=family, kind=kind,
         eps=float(cast(Any, contract.get("eps", 0.0))),
     )
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol)
+    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol, family)
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler,
         toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,
@@ -1116,8 +1120,9 @@ def package_softmax(
     )
     tile_ir = emit_softmax_tile_ir(entry="tessera_tile_x86_softmax_f32")
     target_ir, payload, compiler, toolchain = (
-        _lower(tile_ir, symbol, architecture)
-        if architecture == X86_BASE_ARCHITECTURE else _lower(tile_ir, symbol)
+        _lower(tile_ir, symbol, "softmax", architecture)
+        if architecture == X86_BASE_ARCHITECTURE
+        else _lower(tile_ir, symbol, "softmax")
     )
     image = _image(target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
                    pipeline_name=pipeline_name, symbol=symbol, abi=X86_SOFTMAX_F32_ABI,
@@ -1164,8 +1169,9 @@ def package_reduction(
     )
     tile_ir = emit_reduce_tile_ir(entry=f"tessera_tile_x86_reduce_{kind}_f32", kind=kind, axis=axis, keepdims=keepdims)
     target_ir, payload, compiler, toolchain = (
-        _lower(tile_ir, symbol, architecture)
-        if architecture == X86_BASE_ARCHITECTURE else _lower(tile_ir, symbol)
+        _lower(tile_ir, symbol, "reduction", architecture)
+        if architecture == X86_BASE_ARCHITECTURE
+        else _lower(tile_ir, symbol, "reduction")
     )
     image = _image(target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
                    pipeline_name=pipeline_name, symbol=symbol, abi=X86_REDUCE_F32_ABI,
@@ -1230,7 +1236,7 @@ def package_matmul(module: GraphIRModule, *, pipeline_name: str) -> X86NativePac
         entry=f"tessera_tile_x86_matmul_{a_storage}_{b_storage}_{output_storage}",
         a_storage=a_storage, b_storage=b_storage, accum=accum, output=output_storage,
     )
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol)
+    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol, "matmul")
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
         pipeline_name=pipeline_name, symbol=symbol, abi=abi,
@@ -1280,7 +1286,9 @@ def package_scheduled_matmul(
     ):
         raise ValueError("x86 scheduled matmul requires the f32 Zen 5 AVX-512 contract")
     symbol = "tessera_x86_avx512_gemm_f32"
-    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    target_ir, payload, compiler, toolchain = _lower(
+        artifact.tile_ir, symbol, "matmul"
+    )
     image = _image(
         target_ir=target_ir,
         payload=payload,
@@ -1372,7 +1380,10 @@ def package_scheduled_kernel(
         geometry = "x86_64_avx512_rows"
     else:
         raise ValueError("unsupported x86 scheduled semantic-kernel family")
-    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    family = "reduction" if artifact.family == "reduce" else artifact.family
+    target_ir, payload, compiler, toolchain = _lower(
+        artifact.tile_ir, symbol, family
+    )
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler,
         toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,
@@ -1450,7 +1461,9 @@ def package_scheduled_attention(
         else "tessera_x86_flash_attn_f32"
     )
     abi = X86_ATTENTION_EXT_F32_ABI if extended else X86_ATTENTION_F32_ABI
-    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    target_ir, payload, compiler, toolchain = _lower(
+        artifact.tile_ir, symbol, "attention"
+    )
     image = _image(
         target_ir=target_ir,
         payload=payload,
@@ -1552,7 +1565,9 @@ def package_scheduled_attention_backward(
     ):
         raise ValueError("x86 scheduled attention backward requires the Zen 5 saved-LSE policy")
     symbol = "tessera_x86_flash_attn_bwd_f32"
-    target_ir, payload, compiler, toolchain = _lower(artifact.tile_ir, symbol)
+    target_ir, payload, compiler, toolchain = _lower(
+        artifact.tile_ir, symbol, "attention_backward"
+    )
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler,
         toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol,
@@ -1647,7 +1662,9 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> X86Native
         entry=f"tessera_tile_x86_attention_{semantic}", scale=scale, causal=causal,
         bias=bias_name is not None, window=window, softcap=softcap,
     )
-    target_ir, payload, compiler, toolchain = _lower(physical_carrier, symbol)
+    target_ir, payload, compiler, toolchain = _lower(
+        physical_carrier, symbol, "attention"
+    )
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
         pipeline_name=pipeline_name, symbol=symbol, abi=abi,
@@ -1728,7 +1745,9 @@ def package_elementwise(module: GraphIRModule, *, pipeline_name: str) -> X86Nati
     tile_ir = emit_elementwise_tile_ir(
         entry=f"tessera_tile_x86_{family}_{kind}", family=family, kind=kind,
     )
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, symbol)
+    target_ir, payload, compiler, toolchain = _lower(
+        tile_ir, symbol, "elementwise"
+    )
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler,
         toolchain=toolchain, pipeline_name=pipeline_name, symbol=symbol, abi=abi,

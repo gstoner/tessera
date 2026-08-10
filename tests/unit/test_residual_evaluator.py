@@ -6,6 +6,9 @@ import pytest
 from tessera.compiler.residual_evaluator import (
     ForwardCapture,
     ResidualEvidence,
+    capture_treeverse_forward,
+    execute_treeverse_region_adjoint,
+    measure_treeverse_region_candidate,
     measure_residual_candidate,
     retained_residual_bytes,
     select_residual_policy,
@@ -13,9 +16,7 @@ from tessera.compiler.residual_evaluator import (
 )
 
 
-def _evidence(
-    policy: str, work: int, residual_bytes: int, *, exact: bool = True
-) -> ResidualEvidence:
+def _evidence(policy: str, work: int, residual_bytes: int, *, exact: bool = True) -> ResidualEvidence:
     return ResidualEvidence(
         target="x86",
         operation="tessera.matmul",
@@ -73,12 +74,8 @@ def test_measurement_covers_complete_backward_and_stamps_attributes() -> None:
 def test_selector_uses_measured_work_subject_to_memory_budget() -> None:
     save = _evidence("save", 10, 4096)
     recompute = _evidence("recompute", 30, 0)
-    assert select_residual_policy(
-        (save, recompute), memory_budget_bytes=8192
-    ).policy == "save"
-    assert select_residual_policy(
-        (save, recompute), memory_budget_bytes=0
-    ).policy == "recompute"
+    assert select_residual_policy((save, recompute), memory_budget_bytes=8192).policy == "save"
+    assert select_residual_policy((save, recompute), memory_budget_bytes=0).policy == "recompute"
 
 
 def test_model_or_non_device_rows_cannot_select_or_stamp() -> None:
@@ -104,7 +101,63 @@ def test_treeverse_is_candidate_pruning_not_a_promotion_verdict() -> None:
         > two_checkpoints.estimated_backward_work_ns
         > save_all.estimated_backward_work_ns
     )
-    assert not any(
-        row.selector_eligible
-        for row in (no_checkpoints, two_checkpoints, save_all)
+    assert not any(row.selector_eligible for row in (no_checkpoints, two_checkpoints, save_all))
+
+
+def test_treeverse_region_adjoint_executes_exact_candidate_replay() -> None:
+    (candidate,) = treeverse_candidates(
+        steps=6,
+        state_bytes=16,
+        measured_step_work_ns=10,
+        memory_budgets=(32,),
     )
+    initial = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
+
+    def forward_step(index, state):
+        return state * np.float32(1.0 + 0.1 * (index + 1))
+
+    def backward_step(index, before, after, cotangent):
+        del before, after
+        return cotangent * np.float32(1.0 + 0.1 * (index + 1))
+
+    capture = capture_treeverse_forward(candidate=candidate, initial_state=initial, forward_step=forward_step)
+    assert retained_residual_bytes(capture.residuals) == candidate.retained_residual_bytes
+    execution = execute_treeverse_region_adjoint(
+        cotangent=np.ones_like(initial),
+        residuals=capture.residuals,
+        forward_step=forward_step,
+        backward_step=backward_step,
+    )
+    expected_scale = np.prod(np.array([1.0 + 0.1 * (i + 1) for i in range(candidate.steps)]))
+    np.testing.assert_allclose(execution.input_cotangent, expected_scale)
+    assert execution.replayed_steps == candidate.estimated_replayed_steps
+    assert execution.backward_steps == candidate.steps
+
+
+def test_executed_treeverse_can_select_only_with_exact_device_provenance() -> None:
+    (candidate,) = treeverse_candidates(
+        steps=4,
+        state_bytes=8,
+        measured_step_work_ns=10,
+        memory_budgets=(8,),
+    )
+    initial = np.ones((2,), dtype=np.float32)
+
+    row = measure_treeverse_region_candidate(
+        target="x86",
+        operation="test.counted_region",
+        shape_bucket=initial.shape,
+        dtype="f32",
+        candidate=candidate,
+        initial_state=initial,
+        forward_step=lambda _index, state: state * np.float32(1.25),
+        backward_step=lambda _index, _before, _after, ct: ct * np.float32(1.25),
+        cotangent=np.ones_like(initial),
+        warmup=0,
+        repetitions=2,
+        provenance="zen5_exact_device",
+        exact_device=True,
+    )
+    assert row.policy == "treeverse"
+    assert row.retained_residual_bytes == candidate.retained_residual_bytes
+    assert row.selector_eligible

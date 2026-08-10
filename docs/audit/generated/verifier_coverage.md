@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 222 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 223 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 222 | |
+| **Total** | 223 | |
 
 ## Per-dialect details
 
@@ -88,6 +88,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `EBMRefinementOp` | `real` |
 | `EBMSelfVerifyOp` | `real` |
 | `EBMSphereLangevinStepOp` | `real` |
+| `ESLowRankCorrectionOp` | `real` |
 | `EqOp` | `real` |
 | `ExpandOp` | `real` |
 | `FFTOp` | `real` |

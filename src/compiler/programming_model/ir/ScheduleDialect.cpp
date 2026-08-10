@@ -448,6 +448,66 @@ LogicalResult LionVJPOp::verify() {
   return success();
 }
 
+LogicalResult SolverIFTOp::verify() {
+  Type expected = getParameter().getType();
+  if (getSolution().getType() != expected ||
+      getCotangent().getType() != expected)
+    return emitOpError("requires parameter, solution, and cotangent to have one type");
+  for (Value result : {getResidual(), getLinearSolution(),
+                       getParameterCotangent()})
+    if (result.getType() != expected)
+      return emitOpError("requires all phase results to preserve the input type");
+  auto tensor = dyn_cast<RankedTensorType>(expected);
+  if (!tensor || !tensor.hasStaticShape() || !tensor.getElementType().isF32())
+    return emitOpError("initial physical IFT contract requires a static f32 tensor");
+  if (getArtifactHash().size() != 64 ||
+      !llvm::all_of(getArtifactHash(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }))
+    return emitOpError("requires a lowercase SHA-256 artifact_hash");
+  if (getLineagePayload().empty() || getResidualDigest().size() != 64)
+    return emitOpError("requires lineage payload and residual digest");
+  if (getArch() != "avx512" && getArch() != "gfx1151")
+    return emitOpError("physical IFT is promoted only for avx512 and gfx1151");
+  if (getResidualModel() != "diagonal_sqrt_v1" ||
+      getLinearSolver() != "diagonal_matrix_free_v1" || !getTranspose() ||
+      getWrt() != "parameter" || getAdjointScale().convertToDouble() != -1.0)
+    return emitOpError("requires the canonical diagonal-sqrt transposed IFT chain");
+  if (getStorage() != "f32" || getAccum() != "f32" ||
+      getWorkgroupSize() <= 0)
+    return emitOpError("requires f32 storage/accumulation and workgroup_size > 0");
+  return success();
+}
+
+LogicalResult ESLowRankCorrectionOp::verify() {
+  if (getSubject().getType() != getScheduled().getType())
+    return emitOpError("must preserve the Graph correction type");
+  auto tensor = dyn_cast<RankedTensorType>(getSubject().getType());
+  if (!tensor || !tensor.hasStaticShape() || !tensor.getElementType().isF32())
+    return emitOpError("initial physical ES contract requires a static f32 tensor");
+  if (getArtifactHash().size() != 64 ||
+      !llvm::all_of(getArtifactHash(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }))
+    return emitOpError("requires a lowercase SHA-256 artifact_hash");
+  if (getLineagePayload().empty() ||
+      (getArch() != "gfx1151" && getArch() != "zen5-avx512"))
+    return emitOpError(
+        "requires lineage payload and exact gfx1151 or Zen 5 AVX-512 identity");
+  if (getPopulation() <= 0 || getRowsPerMember() <= 0 || getInDim() <= 0 ||
+      getOutDim() <= 0 || getRank() != 1 || getEpoch() < 0)
+    return emitOpError("requires positive static dimensions, epoch >= 0, and rank = 1");
+  if (!getSigma().isFinite() || getSigma().convertToDouble() <= 0.0 ||
+      getScore() != "gaussian" ||
+      getRngAlgorithm() != "splitmix64-philox4x32-boxmuller" ||
+      getRngVersion() != 1)
+    return emitOpError("requires the version-1 Gaussian member RNG contract");
+  if (getStorage() != "f32" || getAccum() != "f32" ||
+      getWorkgroupSize() <= 0)
+    return emitOpError("requires f32 storage/accumulation and workgroup_size > 0");
+  return success();
+}
+
 LogicalResult AdafactorVJPOp::verify() {
   if (getArtifactHash().size() != 64 ||
       !llvm::all_of(getArtifactHash(), [](char c) {

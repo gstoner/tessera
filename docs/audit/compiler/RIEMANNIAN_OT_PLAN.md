@@ -110,8 +110,9 @@ Three independent reasons, in decreasing order of durability:
    physics, and differentiable convex solvers. The Python reference lane has
    `custom_root`, IHVP, and adjoint-state helpers. The compiler now owns a
    canonical `stop_gradient` barrier and registered, value-producing implicit
-   residual/linear-solve/adjoint IR; architecture-owned solver consumption and
-   compiled numerical proof remain open.
+   residual/linear-solve/adjoint IR. A bounded diagonal-sqrt IFT now has native
+   AVX-512 and gfx1151 consumption plus compiled proof; general OT residuals
+   and iterative/Krylov solves remain open.
 
 2. **It makes *geometry* a first-class IR object, which is our own thesis
    applied one axis further.** Tessera already treats tiles, memory spaces,
@@ -163,7 +164,7 @@ twelve contract axes are closed.**
 | Paper concept | Needed | Today |
 |---|---|---|
 | envelope theorem at the argmin | general `stop_gradient` primitive | **shared compiler barrier landed.** Canonical Graph `stop_gradient` carries explicit activity semantics; model migration remains consumer work. |
-| IFT Jacobian `−(D_yF)⁻¹ D_xF` | `custom_root` / implicit-diff VJP | **value-producing shared IR landed 2026-08-08.** `NewtonAutodiff.cpp` validates the residual function ABI and emits registered residual → transposed matrix-free solve → negative residual-adjoint values. Architecture-owned lowering/execution and compiled numerical proof remain open; R2 must consume this path, not build a parallel mechanism. |
+| IFT Jacobian `−(D_yF)⁻¹ D_xF` | `custom_root` / implicit-diff VJP | **shared IR and bounded physical pilot landed.** `NewtonAutodiff.cpp` validates the residual ABI and emits registered residual → transposed matrix-free solve → negative residual-adjoint values. The diagonal-sqrt family executes through AVX-512 and gfx1151 packages with compiled proof. R2 must extend this path to its residual and iterative solve, not build a parallel mechanism. |
 | `log|det J|` | `slogdet` | **missing.** No `det`, no `logdet`, no `slogdet` in the catalog |
 | `[D_yF]⁻¹ [D_xF]` (dense `p×p`) | general `linalg.solve` | **partial.** `tri_solve` and `cholesky_solve` exist; `D_yF` is neither triangular nor SPD in general |
 | JVP/VJP against `p` basis vectors | batched JVP over a basis | `autodiff/jvp.py` exists; batched-over-basis is untested for this shape |

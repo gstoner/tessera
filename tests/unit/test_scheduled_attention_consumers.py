@@ -167,7 +167,7 @@ def test_x86_packages_exact_attention_tile(monkeypatch) -> None:
     monkeypatch.setattr(
         x86_native,
         "_lower",
-        lambda tile, symbol: (
+        lambda tile, symbol, family: (
             ("target", b"image", "compiler", "toolchain")
             if tile == artifact.tile_ir
             else pytest.fail("Tile artifact was resynthesized")
@@ -201,7 +201,7 @@ def test_driver_records_adjacent_attention_lineage(monkeypatch, target: str) -> 
     artifact = _artifact(target="x86" if target == "x86" else "rocm")
     monkeypatch.setattr(scheduled_attention, "lower_scheduled_attention", lambda module, *, target: artifact)
     if target == "x86":
-        monkeypatch.setattr(x86_native, "_lower", lambda tile, symbol: ("target", b"image", "compiler", "toolchain"))
+        monkeypatch.setattr(x86_native, "_lower", lambda tile, symbol, family: ("target", b"image", "compiler", "toolchain"))
     else:
         monkeypatch.setattr(
             rocm_native,

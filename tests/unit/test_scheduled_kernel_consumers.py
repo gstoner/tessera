@@ -123,7 +123,7 @@ def test_x86_packages_exact_scheduled_softmax(monkeypatch) -> None:
     artifact = _artifact(family="softmax", target="x86")
     monkeypatch.setattr(
         x86_native, "_lower",
-        lambda tile_ir, symbol: (
+        lambda tile_ir, symbol, family: (
             f"module {{ call @{symbol} }}", b"x86-image", "compiler", "toolchain"
         ) if tile_ir == artifact.tile_ir else pytest.fail("Tile artifact was resynthesized"),
     )
@@ -162,7 +162,7 @@ def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, target, fa
     if target == "x86":
         monkeypatch.setattr(
             x86_native, "_lower",
-            lambda tile_ir, symbol: (f"module {{ call @{symbol} }}", b"x86", "compiler", "toolchain"),
+            lambda tile_ir, symbol, family: (f"module {{ call @{symbol} }}", b"x86", "compiler", "toolchain"),
         )
     else:
         monkeypatch.setattr(

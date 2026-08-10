@@ -490,6 +490,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "softplus/rounding), one thread per element, "
                             "dispatched by op name; process-cached HIP modules; "
                             "f32/f16/bf16 storage, f32 compute",
+    "rocm_solver_ift_compiled": "gfx1151 compiler-generated residual, "
+                            "transposed matrix-free diagonal solve, and "
+                            "parameter-residual adjoint in one typed package; "
+                            "content-addressed f32 contract",
     "rocm_binary_compiled": "AMD GPU RDNA flat 2-operand elementwise binary-"
                             "arithmetic kernel the Tessera compiler GENERATES "
                             "(generate-rocm-binary-kernel -> ROCDL -> hsaco, in-"
@@ -664,6 +668,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "adamw / lion) — AVX-512 fused per-parameter update "
                             "kernel (kind-selected; m/v state in-place; host "
                             "computes the 1-β^t bias correction). f32",
+    "x86_solver_ift_compiled": "x86 AVX-512 residual, transposed matrix-free "
+                            "diagonal solve, and parameter-residual adjoint in "
+                            "one typed content-addressed f32 package",
+    "x86_es_low_rank_compiled": "x86 AVX-512 rank-1 EGGROLL correction with "
+                            "explicit member-RNG-v1 identity and O(in+out) "
+                            "cached factors. f32",
     "x86_training_loss_sgd_compiled": "AVX-512 one-loop loss backward to SGD "
                             "training fusion with no prediction-gradient "
                             "materialization. f32",
@@ -1725,6 +1735,30 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "m/v state updated in place; the 1-β^t bias correction computed on "
                "host from the step). f32, matches the optim.py reference.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_solver_ift_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_solver_ift_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_solver_ift_compiled", runtime_status="success",
+        reason="One AVX-512 package executes the diagonal-sqrt residual, "
+               "transposed matrix-free solve, and parameter adjoint from the "
+               "verified Schedule-to-Tile artifact.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="solver_ift", device_proof="device_verified_abi",
+        evidence_target="x86_avx512",
+        proof_build="build-rocm-7.14-llvm23-clean",
+        numerical_fixture="tests/unit/test_solver_ift_artifact.py"),
+    ("x86", "x86_es_low_rank_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_es_low_rank_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_es_low_rank_compiled", runtime_status="success",
+        reason="The typed Zen 5 package executes the rank-1 fp32 EGGROLL "
+               "correction with the portable member-RNG-v1 identity and "
+               "without materializing the perturbation matrix.",
+        execution_mode="cpu_avx512", direction="forward",
+        op_family="es_low_rank_correction",
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        numerical_fixture="tests/unit/test_x86_es_low_rank_exec.py"),
     ("x86", "x86_sgd_bwd_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_sgd_bwd_compiled",
         execution_kind="native_cpu", executable=True,
@@ -2560,6 +2594,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "module and launches it. Dispatched by op name; f32/f16/bf16 "
                "storage with f32 compute.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_solver_ift_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_solver_ift_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_solver_ift_compiled", runtime_status="success",
+        reason="One gfx1151 package executes the diagonal-sqrt residual, "
+               "transposed matrix-free solve, and parameter adjoint from the "
+               "verified Schedule-to-Tile artifact.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="solver_ift", device_proof="device_verified_abi",
+        evidence_target="rocm_gfx1151",
+        proof_build="build-rocm-7.14-llvm23-clean",
+        numerical_fixture="tests/unit/test_solver_ift_artifact.py"),
     # Binary arithmetic — flat 2-operand elementwise.
     ("rocm", "rocm_binary_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_binary_compiled",

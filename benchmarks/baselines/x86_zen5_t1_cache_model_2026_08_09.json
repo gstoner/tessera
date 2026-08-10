@@ -1,0 +1,1288 @@
+{
+  "schema": "tessera.x86.t1_cache_model.v1",
+  "work_item": "T1-X86-CACHE-MODEL",
+  "created_at": "2026-08-10T03:09:15.980923+00:00",
+  "architecture": "zen5-avx512",
+  "device": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "library_sha256": "93b11d4c75cd2b8f39e717179e7e7a858d32f33af6f009510a7fa3051f6891b4",
+  "timing_domain": "steady_host_wall_ns",
+  "affinity": "pinned_cpu_0",
+  "trials": 11,
+  "hardware_inputs": {
+    "cache_levels": [
+      {
+        "name": "L1D",
+        "capacity_bytes": 49152,
+        "bandwidth_gbps": 92.13990449263514,
+        "bandwidth_samples_gbps": [
+          90.33743562064957,
+          92.13990449263514,
+          91.86051152344311,
+          92.17698152465383,
+          91.83870325506678,
+          93.27610702485225,
+          92.7857773845484,
+          93.61508730770893,
+          88.86733664349553
+        ],
+        "source": "sysfs capacity + resident np.copyto on cpu 0"
+      },
+      {
+        "name": "L2",
+        "capacity_bytes": 1048576,
+        "bandwidth_gbps": 186.78110670583635,
+        "bandwidth_samples_gbps": [
+          167.8586071826991,
+          175.3100540489706,
+          189.46922872775937,
+          192.90946956902934,
+          180.74782006789943,
+          195.0011448629361,
+          186.78110670583635,
+          179.47241544382132,
+          197.4632240220094
+        ],
+        "source": "sysfs capacity + resident np.copyto on cpu 0"
+      },
+      {
+        "name": "L3",
+        "capacity_bytes": 33554432,
+        "bandwidth_gbps": 136.8199057881855,
+        "bandwidth_samples_gbps": [
+          26.34108415159156,
+          136.64940414679216,
+          136.95448956497694,
+          132.01310907839087,
+          140.6409403884824,
+          136.8199057881855,
+          135.03034058966864,
+          137.2275396266309,
+          140.5372672986169
+        ],
+        "source": "sysfs capacity + resident np.copyto on cpu 0"
+      }
+    ],
+    "dram_bandwidth_gbps": 53.63114319142271,
+    "dram_bandwidth_samples_gbps": [
+      12.561366312703484,
+      50.76257786885091,
+      57.215990396485985,
+      57.01219037432565,
+      52.57887572066049,
+      53.63114319142271,
+      59.40110966266883,
+      57.75613819967085,
+      51.22360462737651
+    ],
+    "dram_bandwidth_source": "np.copyto working set 67108864 bytes",
+    "single_core_peak_tflops": 0.095994528,
+    "peak_source": "/proc/cpuinfo cpu MHz maximum * 16 f32 lanes * FMA2",
+    "frequency_hz": 2999829000.0
+  },
+  "rows": [
+    {
+      "shape_mnk": [
+        256,
+        256,
+        256
+      ],
+      "candidates": [
+        {
+          "config": {
+            "tile_m": 1,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            953051,
+            942033,
+            943203,
+            937147,
+            944406,
+            926145,
+            793965,
+            777974,
+            787876,
+            861223,
+            799209
+          ],
+          "predicted_ms": 0.767184017344265,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.767184017344265,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.873046875,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 926145
+        },
+        {
+          "config": {
+            "tile_m": 4,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            950928,
+            963311,
+            929087,
+            938685,
+            957146,
+            931481,
+            785038,
+            802123,
+            806554,
+            811592,
+            794150
+          ],
+          "predicted_ms": 0.3495452574130059,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.2209315735507827,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8671875,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 929087
+        },
+        {
+          "config": {
+            "tile_m": 8,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            936952,
+            931112,
+            944893,
+            927353,
+            927949,
+            993646,
+            876281,
+            791885,
+            810725,
+            869402,
+            815124
+          ],
+          "predicted_ms": 0.3495452574130059,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.1298894995852023,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.859375,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 927353
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 32,
+            "tile_k": 32,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            954080,
+            947006,
+            975564,
+            971132,
+            958836,
+            943366,
+            784453,
+            783825,
+            795341,
+            778462,
+            798884
+          ],
+          "predicted_ms": 0.3495452574130059,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.07583326816813896,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.4375,
+            "L2": 0.8333333333333334,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 943366
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            934081,
+            964979,
+            929108,
+            934991,
+            939454,
+            946095,
+            797324,
+            801907,
+            790098,
+            790574,
+            792329
+          ],
+          "predicted_ms": 0.3495452574130059,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.08436846260241213,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.84375,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 929108
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 128,
+            "tile_k": 32,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            952693,
+            937114,
+            949281,
+            951100,
+            943636,
+            928881,
+            775104,
+            779329,
+            770055,
+            782828,
+            789231
+          ],
+          "predicted_ms": 0.3495452574130059,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.07867833297956335,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.71875,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 928881
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 128,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            1011089,
+            948371,
+            916962,
+            923474,
+            936909,
+            934623,
+            777519,
+            786772,
+            817182,
+            792492,
+            788386
+          ],
+          "predicted_ms": 0.3495452574130059,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.07867833297956335,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.71875,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 916962
+        },
+        {
+          "config": {
+            "tile_m": 32,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            948761,
+            931329,
+            942217,
+            957948,
+            922878,
+            950419,
+            821245,
+            799784,
+            798927,
+            809350,
+            805948
+          ],
+          "predicted_ms": 0.3495452574130059,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.06160794411101703,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8125,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 922878
+        },
+        {
+          "config": {
+            "tile_m": 32,
+            "tile_n": 128,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            941437,
+            957632,
+            913063,
+            907299,
+            929076,
+            920593,
+            848698,
+            777411,
+            789967,
+            778234,
+            819966
+          ],
+          "predicted_ms": 0.3495452574130059,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.05591781448816826,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.6875,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 907299
+        },
+        {
+          "config": {
+            "tile_m": 64,
+            "tile_n": 128,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            924947,
+            949173,
+            999919,
+            918816,
+            945890,
+            936118,
+            777086,
+            785265,
+            797616,
+            781365,
+            809458
+          ],
+          "predicted_ms": 0.3495452574130059,
+          "predicted_compute_ms": 0.3495452574130059,
+          "predicted_memory_ms": 0.0445375552424707,
+          "predicted_dram_bytes": 786432.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.625,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 918816
+        }
+      ],
+      "spearman_rho": -0.058025885318565944,
+      "winner_match": false,
+      "measured_winner": {
+        "tile_m": 32,
+        "tile_n": 128,
+        "tile_k": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "raster_order": "row_major",
+        "raster_group": 1
+      },
+      "predicted_winner": {
+        "tile_m": 4,
+        "tile_n": 64,
+        "tile_k": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "raster_order": "row_major",
+        "raster_group": 1
+      }
+    },
+    {
+      "shape_mnk": [
+        384,
+        512,
+        256
+      ],
+      "candidates": [
+        {
+          "config": {
+            "tile_m": 1,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5296681,
+            5122633,
+            5179674,
+            5146198,
+            5059602,
+            5317362,
+            5407956,
+            5226379,
+            5269618,
+            5252012,
+            5206554
+          ],
+          "predicted_ms": 2.281033634064045,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 2.281033634064045,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.9361979166666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5226379
+        },
+        {
+          "config": {
+            "tile_m": 4,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5335933,
+            5158863,
+            5125451,
+            5155114,
+            5135093,
+            5281590,
+            5250354,
+            5324047,
+            5253421,
+            5106004,
+            5389713
+          ],
+          "predicted_ms": 1.0486357722390176,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 0.6422763026835981,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.9322916666666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5250354
+        },
+        {
+          "config": {
+            "tile_m": 8,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5263464,
+            5136870,
+            5179923,
+            5109330,
+            5188699,
+            5242132,
+            5301556,
+            5192458,
+            5257787,
+            5201114,
+            5278382
+          ],
+          "predicted_ms": 1.0486357722390176,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 0.36915008078685696,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.9270833333333334,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5201114
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 32,
+            "tile_k": 32,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5423730,
+            5277288,
+            5302617,
+            5212718,
+            5206272,
+            5287082,
+            5293322,
+            5317212,
+            5328283,
+            5340678,
+            5339291
+          ],
+          "predicted_ms": 1.0486357722390176,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 0.20271378931853032,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.46875,
+            "L2": 0.9019607843137255,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5302617
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5406115,
+            5169544,
+            5193347,
+            5210226,
+            5154680,
+            5424305,
+            5930943,
+            5393699,
+            5230702,
+            5252717,
+            5309736
+          ],
+          "predicted_ms": 1.0486357722390176,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 0.2325869698384864,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.9166666666666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5252717
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 128,
+            "tile_k": 32,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5369203,
+            5295543,
+            5226012,
+            5170985,
+            5250355,
+            5125559,
+            5358499,
+            5336040,
+            5387664,
+            5349994,
+            5348142
+          ],
+          "predicted_ms": 1.0486357722390176,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 0.21551658096994009,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8541666666666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5336040
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 128,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5369582,
+            5106990,
+            5146133,
+            5114324,
+            5120197,
+            5105570,
+            5776180,
+            5308533,
+            5238232,
+            5237203,
+            5303788
+          ],
+          "predicted_ms": 1.0486357722390176,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 0.21551658096994009,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8541666666666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5237203
+        },
+        {
+          "config": {
+            "tile_m": 32,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5282543,
+            5188233,
+            5213595,
+            5273583,
+            5149318,
+            5152254,
+            5624884,
+            5499676,
+            5276627,
+            5282304,
+            5431326
+          ],
+          "predicted_ms": 1.0486357722390176,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 0.1643054143643011,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8958333333333334,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5276627
+        },
+        {
+          "config": {
+            "tile_m": 32,
+            "tile_n": 128,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5242684,
+            5157335,
+            5207832,
+            5174246,
+            5266508,
+            5207041,
+            5418465,
+            5361088,
+            5335856,
+            5221342,
+            5659433
+          ],
+          "predicted_ms": 1.0486357722390176,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 0.14723502549575476,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8333333333333334,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5242684
+        },
+        {
+          "config": {
+            "tile_m": 64,
+            "tile_n": 128,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            5235469,
+            5235729,
+            5156977,
+            5110857,
+            5155450,
+            5135841,
+            5325737,
+            5679336,
+            5248276,
+            5204483,
+            5418443
+          ],
+          "predicted_ms": 1.0486357722390176,
+          "predicted_compute_ms": 1.0486357722390176,
+          "predicted_memory_ms": 0.11309424775866211,
+          "predicted_dram_bytes": 1703936.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.7916666666666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 5235469
+        }
+      ],
+      "spearman_rho": -0.4061811972299616,
+      "winner_match": false,
+      "measured_winner": {
+        "tile_m": 8,
+        "tile_n": 64,
+        "tile_k": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "raster_order": "row_major",
+        "raster_group": 1
+      },
+      "predicted_winner": {
+        "tile_m": 4,
+        "tile_n": 64,
+        "tile_k": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "raster_order": "row_major",
+        "raster_group": 1
+      }
+    },
+    {
+      "shape_mnk": [
+        511,
+        383,
+        257
+      ],
+      "candidates": [
+        {
+          "config": {
+            "tile_m": 1,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2105544,
+            2101427,
+            2046911,
+            2064992,
+            2055979,
+            2068145,
+            2070550,
+            2066661,
+            2072858,
+            2141188,
+            2101449
+          ],
+          "predicted_ms": 2.279546682718721,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 2.279546682718721,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.9156881930854534,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2070550
+        },
+        {
+          "config": {
+            "tile_m": 4,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2191522,
+            2162681,
+            2183494,
+            2130689,
+            2174946,
+            2234576,
+            2235432,
+            2166723,
+            2169962,
+            2151458,
+            2147222
+          ],
+          "predicted_ms": 1.0479397533992771,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 0.6429453336034374,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.9127604166666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2169962
+        },
+        {
+          "config": {
+            "tile_m": 8,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2217740,
+            2229961,
+            2171599,
+            2194111,
+            2180851,
+            2170916,
+            2167156,
+            2165661,
+            2173808,
+            2196245,
+            2294748
+          ],
+          "predicted_ms": 1.0479397533992771,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 0.369466256988873,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.9088541666666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2180851
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 32,
+            "tile_k": 32,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2079921,
+            2121751,
+            2092576,
+            2072912,
+            2081580,
+            2084060,
+            2096281,
+            2120375,
+            2092305,
+            2081677,
+            2066401
+          ],
+          "predicted_ms": 1.0479397533992771,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 0.26093725367522946,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.045717592592592594,
+            "L2": 0.939963614311704,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2084060
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2223763,
+            2211099,
+            2282722,
+            2199550,
+            2173808,
+            2191608,
+            2173461,
+            2164080,
+            2212746,
+            2194220,
+            2182356
+          ],
+          "predicted_ms": 1.0479397533992771,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 0.23272671868159087,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.9010416666666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2194220
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 128,
+            "tile_k": 32,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2145034,
+            2139779,
+            2135576,
+            2156127,
+            2165694,
+            2196430,
+            2176040,
+            2144481,
+            2142044,
+            2141545,
+            2132097
+          ],
+          "predicted_ms": 1.0479397533992771,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 0.21562311944651713,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8177083333333334,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2144481
+        },
+        {
+          "config": {
+            "tile_m": 16,
+            "tile_n": 128,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2154340,
+            2179193,
+            2187264,
+            2141600,
+            2206116,
+            2126204,
+            2132174,
+            2161945,
+            2137341,
+            2135228,
+            2221218
+          ],
+          "predicted_ms": 1.0479397533992771,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 0.21562311944651713,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8177083333333334,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2154340
+        },
+        {
+          "config": {
+            "tile_m": 32,
+            "tile_n": 64,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2184014,
+            2176160,
+            2178749,
+            2180981,
+            2184328,
+            2185455,
+            2199214,
+            2168706,
+            2178586,
+            2174166,
+            2169626
+          ],
+          "predicted_ms": 1.0479397533992771,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 0.16435694952794977,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8854166666666666,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2178749
+        },
+        {
+          "config": {
+            "tile_m": 32,
+            "tile_n": 128,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2197123,
+            2224912,
+            2165087,
+            2156409,
+            2141208,
+            2117525,
+            2198629,
+            2146659,
+            2136583,
+            2221510,
+            2156918
+          ],
+          "predicted_ms": 1.0479397533992771,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 0.14725335029287606,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.8020833333333334,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2156918
+        },
+        {
+          "config": {
+            "tile_m": 64,
+            "tile_n": 128,
+            "tile_k": 64,
+            "num_warps": 4,
+            "num_stages": 2,
+            "raster_order": "row_major",
+            "raster_group": 1
+          },
+          "correct": true,
+          "max_abs_error": 0.0,
+          "samples_ns": [
+            2136983,
+            2207741,
+            2123820,
+            2165780,
+            2125283,
+            2146150,
+            2129043,
+            2122358,
+            2268140,
+            2154697,
+            2110322
+          ],
+          "predicted_ms": 1.0479397533992771,
+          "predicted_compute_ms": 1.0479397533992771,
+          "predicted_memory_ms": 0.11306846571605553,
+          "predicted_dram_bytes": 1701884.0,
+          "level_hit_rates": {
+            "L1D": 0.0,
+            "L2": 0.7708333333333334,
+            "L3": 0.0
+          },
+          "model_exact": true,
+          "median_ns": 2136983
+        }
+      ],
+      "spearman_rho": -0.5222329678670935,
+      "winner_match": false,
+      "measured_winner": {
+        "tile_m": 1,
+        "tile_n": 64,
+        "tile_k": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "raster_order": "row_major",
+        "raster_group": 1
+      },
+      "predicted_winner": {
+        "tile_m": 4,
+        "tile_n": 64,
+        "tile_k": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "raster_order": "row_major",
+        "raster_group": 1
+      }
+    }
+  ],
+  "median_spearman_rho": -0.4061811972299616,
+  "winner_matches": 0,
+  "winner_trials": 3,
+  "promotion_threshold": "median rho > 0.25 and at least one exact winner",
+  "verdict": "reject_for_ranking",
+  "selector_changed": false
+}

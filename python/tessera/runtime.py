@@ -10213,6 +10213,13 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         ],
         "tessera_x86_avx512_softmax_f32": [c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_gemm_f32": [c_f32, c_f32, i64, i64, i64, c_f32],
+        "tessera_x86_avx512_gemm_f32_tiled": [
+            c_f32, c_f32, i64, i64, i64, c_f32, i64, i64, i64,
+        ],
+        "tessera_x86_avx512_es_low_rank_correction_f32": [
+            c_f32, ctypes.POINTER(ctypes.c_int64), ctypes.POINTER(ctypes.c_int64),
+            c_f32, i64, i64, i64, i64, i64, ctypes.c_float, ctypes.c_int32,
+        ],
         "tessera_x86_avx512_rope_f32": [c_f32, c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_alibi_f32": [c_f32, i64, i64, c_f32],
         "tessera_x86_avx512_pointwise_loss_f32": [c_f32, c_f32, i64, ctypes.c_int, ctypes.c_float, c_f32],
@@ -10405,6 +10412,15 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_kv_cache_append_f32": [c_f32, i64, i64, i64, c_f32, i64],
         "tessera_x86_kv_cache_read_f32": [c_f32, i64, i64, i64, i64, c_f32],
         "tessera_x86_kv_cache_prune_f32": [c_f32, i64, i64, i64, i64],
+        "tessera_x86_avx512_solver_ift_sqrt_f32": [
+            c_f32,
+            c_f32,
+            c_f32,
+            c_f32,
+            c_f32,
+            c_f32,
+            i64,
+        ],
     }
     for sym, argtypes in sigs.items():
         fn = getattr(lib, sym, None)
@@ -10412,6 +10428,8 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             fn.argtypes = argtypes
             fn.restype = None
     for sym in (
+        "tessera_x86_avx512_gemm_f32_tiled",
+        "tessera_x86_avx512_es_low_rank_correction_f32",
         "tessera_x86_fft_mixed_c2c_f32",
         "tessera_x86_fft_six_step_c2c_f32",
         "tessera_x86_fft_r2c_packed_f32",
@@ -19500,7 +19518,7 @@ def _execute_x86_compiled_bitwise(artifact: RuntimeArtifact, args: Any) -> Any:
 _REDUCE_BLOCKDIM = 256  # must match BD in GenerateROCMReduceKernel.cpp
 _rocm_reduce_hsaco_cache: dict[tuple[str, str], bytes] = {}
 _rocm_math_module_cache: dict[
-    tuple[str, str, str, str], tuple[ctypes.c_void_p, ctypes.c_void_p]
+    tuple[str, ...], tuple[ctypes.c_void_p, ctypes.c_void_p]
 ] = {}
 
 
@@ -19508,7 +19526,7 @@ def _rocm_math_cached_function(
     hip: Any,
     hsaco: bytes,
     symbol: bytes,
-    key: tuple[str, str, str, str],
+    key: tuple[str, ...],
 ) -> tuple[ctypes.c_void_p, ctypes.c_void_p]:
     """Retain one generated math module/function per exact physical contract."""
     cached = _rocm_math_module_cache.get(key)
@@ -27908,6 +27926,193 @@ def _execute_nvidia_conv2d_compiled(artifact: RuntimeArtifact, args: Any) -> Any
     )[0]
 
 
+_rocm_solver_ift_hsaco_cache: dict[tuple[str, str], bytes] = {}
+
+
+def _solver_ift_inputs(artifact: RuntimeArtifact, args: Any) -> tuple[Any, Any, Any, dict]:
+    import numpy as np
+
+    from .compiler.implicit_solver import build_solver_ift_contract
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    if names != ["parameter", "solution", "cotangent"]:
+        raise ValueError("solver IFT runtime requires parameter/solution/cotangent order")
+    values = _bind_launch_args(args, names)
+    arrays = tuple(np.asarray(values[name]) for name in names)
+    if any(value.dtype != np.float32 for value in arrays):
+        raise ValueError("solver IFT physical packages support f32 only")
+    if any(value.shape != arrays[0].shape for value in arrays[1:]):
+        raise ValueError("solver IFT operands must have identical shapes")
+    contract = dict(metadata.get("scheduled_solver_ift") or {})
+    runtime_target = metadata.get("target")
+    if runtime_target not in {"x86", "rocm"}:
+        raise ValueError(f"solver IFT runtime rejects target {runtime_target!r}")
+    target = "x86" if runtime_target == "x86" else "rocm_gfx1151"
+    expected = build_solver_ift_contract(target=target, shape=arrays[0].shape)
+    if contract != expected:
+        raise ValueError("solver IFT runtime rejected stale physical lineage")
+    return arrays[0], arrays[1], arrays[2], contract
+
+
+def _execute_x86_solver_ift(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    parameter, solution, cotangent, _ = _solver_ift_inputs(artifact, args)
+    n = int(parameter.size)
+    inputs = tuple(
+        np.ascontiguousarray(value, dtype=np.float32).reshape(-1)
+        for value in (parameter, solution, cotangent)
+    )
+    outputs = tuple(np.empty(n, dtype=np.float32) for _ in range(3))
+    lib = _load_x86_elementwise()
+    if lib is None:
+        raise _RocmCompiledUnavailable("libtessera_x86_elementwise.so not loadable")
+    c_f32 = ctypes.POINTER(ctypes.c_float)
+    lib.tessera_x86_avx512_solver_ift_sqrt_f32(
+        *(value.ctypes.data_as(c_f32) for value in inputs),
+        *(value.ctypes.data_as(c_f32) for value in outputs),
+        ctypes.c_int64(n),
+    )
+    return tuple(value.reshape(parameter.shape) for value in outputs)
+
+
+def _execute_x86_es_low_rank(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Execute the exact Zen 5 EGGROLL W2 f32 package."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    ops = list(metadata.get("ops") or [])
+    if names != ["x", "member_ids", "key"] or len(ops) != 1 or \
+            ops[0].get("op_name") != "tessera.es_low_rank_correction":
+        raise ValueError(
+            "x86 EGGROLL runtime requires x/member_ids/key and one "
+            "tessera.es_low_rank_correction operation"
+        )
+    values = _bind_launch_args(args, names)
+    x = np.ascontiguousarray(values["x"], dtype=np.float32)
+    members = np.ascontiguousarray(values["member_ids"], dtype=np.int64)
+    key = np.ascontiguousarray(values["key"], dtype=np.int64)
+    if x.ndim < 2 or members.ndim != 1 or members.shape[0] != x.shape[0] or \
+            key.shape != (2,):
+        raise ValueError("x86 EGGROLL operands violate the P/.../in member-key contract")
+    kwargs = dict(ops[0].get("kwargs") or {})
+    out_dim = int(kwargs.get("out_dim", 0))
+    rank = int(kwargs.get("rank", 0))
+    epoch = int(kwargs.get("epoch", 0))
+    sigma = float(kwargs.get("sigma", 0.0))
+    antithetic = bool(kwargs.get("antithetic", True))
+    if out_dim <= 0 or rank != 1 or epoch < 0 or not math.isfinite(sigma) or sigma <= 0:
+        raise ValueError("x86 EGGROLL runtime requires out_dim>0, rank=1, epoch>=0, sigma>0")
+    rows = math.prod(x.shape[1:-1]) if x.ndim > 2 else 1
+    output = np.empty((*x.shape[:-1], out_dim), dtype=np.float32)
+    library = _load_x86_elementwise()
+    if library is None or not hasattr(
+        library, "tessera_x86_avx512_es_low_rank_correction_f32"
+    ):
+        raise _RocmCompiledUnavailable("AVX-512 EGGROLL image is unavailable")
+    f32p = ctypes.POINTER(ctypes.c_float)
+    i64p = ctypes.POINTER(ctypes.c_int64)
+    status = library.tessera_x86_avx512_es_low_rank_correction_f32(
+        x.ctypes.data_as(f32p), members.ctypes.data_as(i64p),
+        key.ctypes.data_as(i64p), output.ctypes.data_as(f32p),
+        ctypes.c_int64(x.shape[0]), ctypes.c_int64(rows),
+        ctypes.c_int64(x.shape[-1]), ctypes.c_int64(out_dim),
+        ctypes.c_int64(epoch), ctypes.c_float(sigma),
+        ctypes.c_int32(1 if antithetic else 0),
+    )
+    if status != 0:
+        raise RuntimeError(f"AVX-512 EGGROLL package failed with status {status}")
+    return output
+
+
+def _execute_rocm_solver_ift(artifact: RuntimeArtifact, args: Any) -> Any:
+    import numpy as np
+
+    parameter, solution, cotangent, contract = _solver_ift_inputs(artifact, args)
+    n = int(parameter.size)
+    digest = str(contract["artifact_hash"])
+    residual_digest = str(contract["residual"]["digest"])
+    directive = (
+        'module {\n  "tessera_rocm.solver_ift"() '
+        f'{{name = "solver_ift", artifact_hash = "{digest}", '
+        f'residual_digest = "{residual_digest}", '
+        'residual_model = "diagonal_sqrt_v1", '
+        'linear_solver = "diagonal_matrix_free_v1", dtype = "f32"} '
+        ': () -> ()\n}\n'
+    )
+    chip = _rocm_chip()
+    if chip != "gfx1151":
+        raise ValueError(
+            f"solver IFT package is verified for gfx1151, not {chip or 'unknown'}"
+        )
+    hsaco = _build_rocm_family_hsaco(
+        "solver_ift",
+        directive,
+        _rocm_solver_ift_hsaco_cache,
+        (chip, digest),
+    )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise _RocmCompiledUnavailable("solver IFT requires a usable HIP runtime")
+    _, fn = _rocm_math_cached_function(
+        hip, hsaco, b"solver_ift", ("solver_ift", chip, digest)
+    )
+    host_inputs = tuple(
+        np.ascontiguousarray(value, dtype=np.float32).reshape(-1)
+        for value in (parameter, solution, cotangent)
+    )
+    host_outputs = tuple(np.empty(n, dtype=np.float32) for _ in range(3))
+    devices = tuple(ctypes.c_void_p() for _ in range(6))
+    for device in devices:
+        if hip.hipMalloc(ctypes.byref(device), 4 * n) != 0:
+            for allocated in devices:
+                if allocated.value:
+                    hip.hipFree(allocated)
+            raise RuntimeError("solver IFT hipMalloc failed")
+    try:
+        for host, device in zip(host_inputs, devices[:3]):
+            hip.hipMemcpy(
+                device, host.ctypes.data_as(ctypes.c_void_p), 4 * n, 1
+            )
+
+        def memref(device: ctypes.c_void_p) -> list[Any]:
+            return [
+                ctypes.c_void_p(device.value),
+                ctypes.c_void_p(device.value),
+                ctypes.c_int64(0),
+                ctypes.c_int64(n),
+                ctypes.c_int64(1),
+            ]
+
+        launch_args: list[Any] = []
+        for device in devices:
+            launch_args.extend(memref(device))
+        launch_args.append(ctypes.c_int64(n))
+        launch_array = (ctypes.c_void_p * len(launch_args))()
+        for index, value in enumerate(launch_args):
+            launch_array[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
+        block = int(contract["workgroup_size"])
+        grid = (n + block - 1) // block
+        rc = hip.hipModuleLaunchKernel(
+            fn, grid, 1, 1, block, 1, 1, 0, None, launch_array, None
+        )
+        if rc != 0:
+            raise RuntimeError(f"solver IFT kernel launch failed rc={rc}")
+        if hip.hipDeviceSynchronize() != 0:
+            raise RuntimeError("solver IFT device synchronization failed")
+        for host, device in zip(host_outputs, devices[3:]):
+            hip.hipMemcpy(
+                host.ctypes.data_as(ctypes.c_void_p), device, 4 * n, 2
+            )
+    finally:
+        for device in devices:
+            if device.value:
+                hip.hipFree(device)
+    return tuple(value.reshape(parameter.shape) for value in host_outputs)
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -27985,6 +28190,7 @@ def _executor_table():
         "rocm_scan_compiled": _execute_rocm_compiled_scan,
         "rocm_activation_compiled": _execute_rocm_compiled_activation,
         "rocm_unary_compiled": _execute_rocm_compiled_unary,
+        "rocm_solver_ift_compiled": _execute_rocm_solver_ift,
         "rocm_binary_compiled": _execute_rocm_compiled_binary,
         "rocm_compare_compiled": _execute_rocm_compiled_compare,
         "rocm_predicate_compiled": _execute_rocm_compiled_predicate,
@@ -28017,6 +28223,8 @@ def _executor_table():
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
         "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
+        "x86_solver_ift_compiled": _execute_x86_solver_ift,
+        "x86_es_low_rank_compiled": _execute_x86_es_low_rank,
         "x86_sgd_bwd_compiled": _execute_x86_compiled_sgd_backward,
         "x86_momentum_bwd_compiled": _execute_x86_compiled_momentum_backward,
         "x86_lion_bwd_compiled": _execute_x86_compiled_lion_backward,

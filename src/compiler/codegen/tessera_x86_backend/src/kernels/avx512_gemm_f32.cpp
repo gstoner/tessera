@@ -10,6 +10,7 @@
 // f32 accumulate; matches numpy matmul to a K-scaled tolerance.
 
 #include <immintrin.h>
+#include <algorithm>
 #include <cstdint>
 
 extern "C" void tessera_x86_avx512_gemm_f32(const float* A, const float* B,
@@ -36,4 +37,56 @@ extern "C" void tessera_x86_avx512_gemm_f32(const float* A, const float* B,
             _mm512_mask_storeu_ps(c + n, tail, acc);
         }
     }
+}
+
+// T1 evidence ABI: the same AVX-512 microkernel with explicit compiler-owned
+// M/N/K blocking.  This is intentionally separate from the promoted ABI until
+// measured rank correlation shows that the cache model can select among these
+// physically distinct loop nests.  BN is rounded to whole AVX-512 vectors;
+// ragged N remains mask-safe.
+extern "C" int tessera_x86_avx512_gemm_f32_tiled(
+    const float* A, const float* B, int64_t M, int64_t N, int64_t K, float* C,
+    int64_t BM, int64_t BN, int64_t BK) {
+    if (!A || !B || !C || M <= 0 || N <= 0 || K <= 0 || BM <= 0 || BN <= 0 ||
+        BK <= 0)
+        return 1;
+    BN = ((BN + 15) / 16) * 16;
+    for (int64_t m0 = 0; m0 < M; m0 += BM) {
+        const int64_t mEnd = std::min(m0 + BM, M);
+        for (int64_t n0 = 0; n0 < N; n0 += BN) {
+            const int64_t nEnd = std::min(n0 + BN, N);
+            for (int64_t m = m0; m < mEnd; ++m) {
+                const float* a = A + m * K;
+                float* c = C + m * N;
+                int64_t n = n0;
+                for (; n + 16 <= nEnd; n += 16) {
+                    __m512 acc = _mm512_setzero_ps();
+                    for (int64_t k0 = 0; k0 < K; k0 += BK) {
+                        const int64_t kEnd = std::min(k0 + BK, K);
+                        for (int64_t k = k0; k < kEnd; ++k)
+                            acc = _mm512_fmadd_ps(
+                                _mm512_set1_ps(a[k]),
+                                _mm512_loadu_ps(B + k * N + n), acc);
+                    }
+                    _mm512_storeu_ps(c + n, acc);
+                }
+                if (n < nEnd) {
+                    const unsigned width = static_cast<unsigned>(nEnd - n);
+                    const __mmask16 tail =
+                        width == 16 ? static_cast<__mmask16>(0xffffu)
+                                    : static_cast<__mmask16>((1u << width) - 1u);
+                    __m512 acc = _mm512_setzero_ps();
+                    for (int64_t k0 = 0; k0 < K; k0 += BK) {
+                        const int64_t kEnd = std::min(k0 + BK, K);
+                        for (int64_t k = k0; k < kEnd; ++k)
+                            acc = _mm512_fmadd_ps(
+                                _mm512_set1_ps(a[k]),
+                                _mm512_maskz_loadu_ps(tail, B + k * N + n), acc);
+                    }
+                    _mm512_mask_storeu_ps(c + n, tail, acc);
+                }
+            }
+        }
+    }
+    return 0;
 }

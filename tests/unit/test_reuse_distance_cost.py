@@ -4,8 +4,10 @@ import pytest
 
 from tessera.compiler.autotune_v2 import GEMMWorkload, TuningConfig
 from tessera.compiler.reuse_distance_cost import (
+    CacheLevel,
     dtype_storage_bits,
     estimate_gemm_reuse_distance,
+    estimate_gemm_reuse_distance_hierarchy,
 )
 
 
@@ -101,3 +103,41 @@ def test_sampling_is_deterministic_and_visible() -> None:
     assert not first.exact
     assert first.sampled_output_tiles == 64
     assert first.sampled_k_tiles == 4
+
+
+def test_cpu_hierarchy_reports_level_provenance_and_dram_traffic() -> None:
+    workload = GEMMWorkload(256, 256, 256, dtype="fp32")
+    config = TuningConfig(16, 64, 32)
+    estimate = estimate_gemm_reuse_distance_hierarchy(
+        workload,
+        config,
+        peak_tflops=1.6,
+        dram_bw_gbps=80.0,
+        cache_levels=(
+            CacheLevel("L1D", 32 * 1024, 600.0),
+            CacheLevel("L2", 1024 * 1024, 300.0),
+            CacheLevel("L3", 32 * 1024 * 1024, 150.0),
+        ),
+    )
+
+    assert estimate.method == "tile_reuse_distance_cpu_hierarchy_v1"
+    assert [level.name for level in estimate.levels] == ["L1D", "L2", "L3"]
+    assert estimate.dram_bytes > 0
+    assert estimate.memory_ms >= estimate.dram_ms
+    assert estimate.levels[1].hit_rate > 0.0
+
+
+def test_cpu_hierarchy_rejects_unordered_or_guessed_levels() -> None:
+    workload = GEMMWorkload(64, 64, 64, dtype="fp32")
+    config = TuningConfig(16, 16, 16)
+    with pytest.raises(ValueError, match="non-decreasing"):
+        estimate_gemm_reuse_distance_hierarchy(
+            workload,
+            config,
+            peak_tflops=1.0,
+            dram_bw_gbps=1.0,
+            cache_levels=(
+                CacheLevel("L2", 1024, 10.0),
+                CacheLevel("L1D", 512, 20.0),
+            ),
+        )

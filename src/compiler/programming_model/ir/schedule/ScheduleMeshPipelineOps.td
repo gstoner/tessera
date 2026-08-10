@@ -308,6 +308,64 @@ def Schedule_LionVJPOp : Op<ScheduleDialect, "lion_vjp", [Pure]> {
   let hasVerifier = 1;
 }
 
+// First executable AD-SOLVER-IFT-1 family.  The shared solver dialect owns the
+// general residual/linear-solve/residual-adjoint semantics; this operation
+// freezes one structurally verified physical specialization at the artifact
+// boundary.  All three results remain observable so evidence can prove that
+// the complete IFT chain executed rather than only the final closed form.
+def Schedule_SolverIFTOp : Op<ScheduleDialect, "solver_ift", [Pure]> {
+  let summary = "Content-addressed matrix-free implicit-function VJP";
+  let arguments = (ins AnyType:$parameter,
+                       AnyType:$solution,
+                       AnyType:$cotangent,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$lineage_payload,
+                       StrAttr:$arch,
+                       StrAttr:$residual_model,
+                       StrAttr:$residual_digest,
+                       StrAttr:$linear_solver,
+                       BoolAttr:$transpose,
+                       StrAttr:$wrt,
+                       F32Attr:$adjoint_scale,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       I64Attr:$workgroup_size);
+  let results = (outs AnyType:$residual,
+                      AnyType:$linear_solution,
+                      AnyType:$parameter_cotangent);
+  let assemblyFormat = "$parameter `,` $solution `,` $cotangent attr-dict `:` type($parameter) `,` type($solution) `,` type($cotangent) `->` type($residual) `,` type($linear_solution) `,` type($parameter_cotangent)";
+  let hasVerifier = 1;
+}
+
+// EGGROLL W2.  The hash binds the member-keyed RNG ABI as well as the
+// population/feature dimensions; a backend may not substitute a rank-keyed
+// stream or materialize a different factor layout after this boundary.
+def Schedule_ESLowRankCorrectionOp
+    : Op<ScheduleDialect, "es_low_rank_correction", [Pure]> {
+  let summary = "Content-addressed member-keyed ES rank-1 correction";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$lineage_payload,
+                       StrAttr:$arch,
+                       I64Attr:$population,
+                       I64Attr:$rows_per_member,
+                       I64Attr:$in_dim,
+                       I64Attr:$out_dim,
+                       I64Attr:$rank,
+                       I64Attr:$epoch,
+                       F32Attr:$sigma,
+                       BoolAttr:$antithetic,
+                       StrAttr:$score,
+                       StrAttr:$rng_algorithm,
+                       I64Attr:$rng_version,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       I64Attr:$workgroup_size);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
 def Schedule_AdafactorVJPOp : Op<ScheduleDialect, "adafactor_vjp", [Pure]> {
   let summary = "Content-addressed full or factored Adafactor VJP";
   let arguments = (ins Variadic<AnyType>:$inputs,

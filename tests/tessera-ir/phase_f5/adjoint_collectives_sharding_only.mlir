@@ -8,7 +8,7 @@
 // difference from the effect-gated path is visible downstream.
 
 module {
-  // CHECK: sym_name = "bwd_no_effect"
+  // CHECK-LABEL: func.func @bwd_no_effect
   func.func @bwd_no_effect(%A: tensor<4x8xf32>, %B: tensor<8x16xf32>)
       -> (tensor<4x16xf32>, tensor<4x8xf32>, tensor<8x16xf32>)
       attributes {

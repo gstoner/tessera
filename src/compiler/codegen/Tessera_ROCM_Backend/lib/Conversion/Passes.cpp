@@ -84,14 +84,14 @@ struct DeclareROCMPipelineContractPass
         "matmul_f32", "normalization", "optimizer", "ordering_sort",
         "position_alibi", "position_rope", "quant_dequant_gemm", "quant_fp",
         "quant_int4_pack", "reduction_arg", "rng_philox", "scan",
-        "spectral_dft", "matmul", "softmax", "reduction", "paged_kv", "attention",
+        "spectral_dft", "spectral_backward", "matmul", "softmax", "reduction", "paged_kv", "attention",
         "attention_backward", "moe_dispatch", "scalar_activation",
         "scalar_binary", "scalar_bitwise", "scalar_compare", "scalar_logical",
         "scalar_predicate", "scalar_unary", "scalar_where", "sequence_deltanet",
         "sequence_linear_attention", "sequence_recurrent_cell",
         "sequence_selective_ssm", "sequence_selective_ssm_backward",
         "solver_cholesky", "solver_lu", "solver_qr", "solver_svd",
-        "solver_triangular_solve", "sparse_block_attention", "sparse_block_topk",
+        "solver_triangular_solve", "solver_ift", "sparse_block_attention", "sparse_block_topk",
         "sparse_sddmm", "sparse_spmm"};
     if (llvm::find(families, family) == std::end(families)) {
       getOperation().emitError("unknown ROCm family plugin '") << family << "'";
@@ -239,6 +239,10 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
     pm.addPass(createGenerateROCMScanKernelPass());
   } else if (family == "spectral_dft") {
     pm.addPass(createGenerateROCMDftKernelPass());
+  } else if (family == "spectral_backward") {
+    pm.addPass(createGenerateROCMSpectralBackwardKernelPass());
+  } else if (family == "es_low_rank_correction") {
+    pm.addPass(createGenerateROCMESLowRankKernelPass());
   } else if (family == "matmul") {
     pm.addPass(configuredPass(createGenerateWMMAGemmKernelPass(),
                               Twine("via-tile=") + (viaTile ? "true" : "false") +
@@ -292,6 +296,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
     pm.addPass(createGenerateROCMSvdKernelPass());
   } else if (family == "solver_triangular_solve") {
     pm.addPass(createGenerateROCMTriSolveKernelPass());
+  } else if (family == "solver_ift") {
+    pm.addPass(createGenerateROCMSolverIFTKernelPass());
   } else if (family == "sparse_block_attention") {
     pm.addPass(createGenerateROCMBlockSparseAttnKernelPass());
   } else if (family == "sparse_block_topk") {
@@ -326,20 +332,25 @@ static void buildROCMExecutablePipeline(
   // producer. Every other family already arrives as canonical Tile IR and its
   // plugin runs after the Target-IR consumer.
   bool matmulPlugin = family == "matmul";
-  if (matmulPlugin && input != "graph")
+  if (matmulPlugin && input != "graph" && output == "binary")
     addFamilyGenerator(pm, family, input == "tile", opts.staging);
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
-  if (matmulPlugin && input == "graph")
+  if (matmulPlugin && input == "graph" && output == "binary")
     addFamilyGenerator(pm, family, false, opts.staging);
   pm.addPass(configuredPass(createLowerTileToROCMPass(),
                             Twine("arch=") + arch));
-  if (!matmulPlugin)
-    addFamilyGenerator(pm, family, false, opts.staging);
 
+  // Target output is the typed architecture boundary.  It must retain the
+  // tessera_rocm.* directive selected by TileToROCM; running the family
+  // generator here would silently return backend GPU IR while labelling it
+  // Target IR.  Binary output alone crosses into architecture codegen.
   if (output == "target")
     return;
+
+  if (!matmulPlugin)
+    addFamilyGenerator(pm, family, false, opts.staging);
 
   pm.addPass(createLowerKernelABIPass());
   // This ordering is architectural: executable global->LDS copies and their
@@ -447,6 +458,9 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMArgReduceKernelPass(); });
   registerPass([]() { return createGenerateROCMScanKernelPass(); });
   registerPass([]() { return createGenerateROCMUnaryKernelPass(); });
+  registerPass([]() { return createGenerateROCMSolverIFTKernelPass(); });
+  registerPass([]() { return createGenerateROCMSpectralBackwardKernelPass(); });
+  registerPass([]() { return createGenerateROCMESLowRankKernelPass(); });
   registerPass([]() { return createGenerateROCMControlForKernelPass(); });
   registerPass([]() { return createGenerateROCMControlForGemvKernelPass(); });
   registerPass([]() { return createGenerateROCMControlForNormKernelPass(); });

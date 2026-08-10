@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-09
 audit_role: reference
 scope: python/tessera/autodiff, src/compiler/ir/AdjointInterface.*, src/transforms/lib/Autodiff*.cpp, ActivationRematerializationPass, AdjointCollectiveInsertionPass, solvers/core NewtonAutodiff
 companions: AUTODIFF_UNIFICATION_PLAN.md (sequencing) · ../../spec/AUTODIFF_SPEC.md (normative surface) · RIEMANNIAN_OT_PLAN.md · ../domain/GA_EBM_ARCHITECTURE_REVIEW.md · DIFFERENTIABLE_PROGRAMMING_REVIEW.md (book delta)
@@ -28,8 +28,10 @@ not asserted here.
 **Companion delta review.**
 [`DIFFERENTIABLE_PROGRAMMING_REVIEW.md`](DIFFERENTIABLE_PROGRAMMING_REVIEW.md)
 reads Blondel & Roulet's *Elements of Differentiable Programming* against the
-same surface. It confirms A3/A4/A5/B1/B2/B4/B6/B8 independently and adds the
-findings this review does not cover: automatic linear transposition (one
+same surface. It independently motivated the original A3/A4/A5/B1/B2/B4/B6/B8
+findings; this review now records the landed A5/A6/B6 foundations and their
+remaining execution gaps. The book delta also adds findings this review does
+not cover: automatic linear transposition (one
 registry, not two), nonsmooth/Clarke selection as an undeclared semantic key,
 stochastic-computation-graph typing for the effect lattice, semirings, implicit
 differentiation (`custom_root`/IHVP/adjoint-state), Fenchel-Young losses, the
@@ -109,21 +111,22 @@ Three consequences follow directly:
 That is why `hvp` is finite differences (§B4) despite a 3.8k-line JVP engine
 sitting next to it. The rules exist; the substrate cannot compose them.
 
-### A3. The compiler's reverse pass rejects all control flow — by design
+### A3. The compiler's reverse pass rejects active control flow — by design
 
-[`AutodiffPass.cpp:118`](../../../src/transforms/lib/AutodiffPass.cpp#L118):
+[`AutodiffPass.cpp`](../../../src/transforms/lib/AutodiffPass.cpp):
 
 ```cpp
 if (op->getNumRegions() != 0) {
-  op->emitError() << "[AUTODIFF_NESTED_REGION] reverse-mode autodiff does "
-                     "not yet support ops with nested regions ('" ...
+  op->emitError() << "[AUTODIFF_NESTED_REGION] active reverse-mode path "
+                     "contains unsupported nested-region op ('" ...
   signalPassFailure();
 ```
 
-The pass collects only `func.getBody().front()` top-level ops and hard-fails on
-anything with a region. So `scf.for`, `scf.if`, `scf.while`, and Tessera's own
-`tessera.control_{for,while,scan}` (which exist in `TesseraOps.td:2633+`) are
-all undifferentiable in the compiler.
+Both reverse passes compute the backward-reachable active cone first. Inactive
+nested-region producers are legal and are neither cloned nor differentiated;
+an active nested region still fails closed. Consequently `scf.for`, `scf.if`,
+`scf.while`, and Tessera's own `tessera.control_{for,while,scan}` remain
+undifferentiable when they lie on the gradient path.
 
 The comment is honest about why — reverse-iterating a flat nested walk would
 interleave parent and child adjoints — and the restriction was correct as a
@@ -156,24 +159,28 @@ forward/backward boundary, and tangent computations fuse into the primal loop
 nest trivially. Reverse mode is the hard one and it is the one that got built
 first.
 
-### A5. No activity analysis
+### A5. Backward SSA activity is implemented; region and memory activity remain
 
-`AutodiffPass` walks every top-level op in reverse and builds an adjoint for
-each, then discovers at the end which arguments received cotangents. Nothing
-asks, up front, *which values are differentially active*.
+`AD-CORE-EFFECT-CONTROL-1` closed the original absence. Both
+`AutodiffPass` and `AutodiffPairedPass` compute the backward-reachable SSA cone
+from returned values, stamp each top-level operation active or inactive, skip
+inactive adjoint construction, consume registered Graph effects, and reject an
+active stochastic operation. Inactive stochastic and nested-region producers
+are legal. Direct negative tests cover the fail-closed paths.
 
 Activity analysis is the core of Enzyme's performance story — differentiating
 *optimized* IR with activity information yields a **4.5× geometric-mean speedup**
 over differentiating unoptimized IR on ADBench, and Enzyme "allocates memory to
 store only the values needed by the reverse pass."
 
-The pointed observation: **Tessera has strictly more information available for
-this analysis than Enzyme does.** The effect lattice (Decision #5), region
-privileges with read/write/reduce modes (Decision #2), static shapes, and
-declared dtypes are all present at Graph IR and all gone by the time LLVM IR
-exists. An activity analysis here should be *better* than Enzyme's, not absent.
+This is a real compiler activity analysis, but it is narrower than Enzyme's
+whole-program memory/alias activity. Tessera still does not differentiate an
+active region, propagate activity through region interfaces, or exploit
+read/write/reduce privileges for memory activity. The effect lattice, static
+shapes, and declared dtypes make that broader analysis a credible next step;
+they no longer justify calling activity entirely absent.
 
-### A6. The residual policy is one global constant, and it is not measured
+### A6. The measured residual-policy boundary exists; complete family packets remain open
 
 [`AutodiffPairedPass.cpp`](../../../src/transforms/lib/AutodiffPairedPass.cpp)
 header:
@@ -181,24 +188,23 @@ header:
 > Residual policy — RECOMPUTE_ALL (first cut). The backward function takes the
 > forward *inputs* as arguments and recomputes any forward intermediates it needs
 
-The doc is honest that a SAVE policy is "a future optimization the same ABI
-already accommodates" and correctly notes the shipped ROCm flash-attn backward
-recomputes softmax rather than saving the logsumexp. But the choice is made once,
-in a comment, for every op on every target.
+`recompute_all` remains the generic paired-pass default, which is honest for an
+artifact without evidence. It is no longer the only compiler policy. The
+execution-derived residual evaluator represents SAVE, RECOMPUTE, HYBRID, and
+TREEVERSE candidates per `(op, shape-bucket, dtype, target)`, measures complete
+backward work and unique retained bytes, and permits only exact-device evidence
+to stamp selector attributes consumed by `ActivationRematerializationPass`.
 
-**This is a missed fit with the compiler's own north star.** Decision #28 exists
-to pick, by *measurement*, among candidates per `(op, shape-bucket, dtype,
-target)`. Save-vs-recompute is exactly that kind of choice: it is a
-memory/FLOP tradeoff whose right answer is target-, shape-, and
-dtype-dependent (on a bandwidth-bound Apple GPU, recompute usually wins; on
-sm_120 with 100 KB of shared memory and a compute-bound GEMM, saving usually
-wins). The residual policy should be an **arbiter axis**, and today it is a
-constant.
+The remaining gap is execution breadth, not the decision boundary: complete
+backward packets are still required family by family, and estimated Treeverse
+envelopes cannot promote a policy. An unstamped generic artifact therefore
+continues to recompute rather than inventing a target verdict.
 
 **Contrast.** JAX exposes `jax.checkpoint(policy=...)` with saveable-value
-predicates (`dots_saveable`, `checkpoint_dots_with_no_batch_dims`, …). Enzyme
-decides per-value from analysis. Tessera has better machinery than either for
-making this decision empirically and does not use it.
+predicates (`dots_saveable`, `checkpoint_dots_with_no_batch_dims`, …), while
+Enzyme decides per-value from static analysis. Tessera's distinct mechanism is
+an exact-target measurement gate; the current open obligation is to populate
+that gate rather than claim fleet-wide selection from the infrastructure alone.
 
 ### A7. `custom_adjoint_call` puts a Python round-trip inside compiled IR
 
@@ -320,34 +326,40 @@ disjointness, and a tile IR where a colored Jacobian's structure maps directly
 onto tile scheduling. Sparsity detection is a dataflow analysis over exactly the
 information Tessera already computes.
 
-### B6. Checkpointing is greedy-interval, not Revolve — and cannot touch loops
+### B6. Treeverse candidates exist, but counted-loop execution is still absent
 
 `ActivationRematerializationPass` performs deterministic liveness-aware selection
 of the largest long-lived pure activation intervals until the estimated peak fits
 the budget. That is a sound greedy heuristic for a straight-line block.
 
-It is not the algorithm the literature settles on for loops. Revolve/treeverse
-binomial checkpointing gives optimal schedules under specific checkpoint-count
-and recomputation models; its memory/recompute tradeoff depends on the available
-checkpoint budget and cannot be summarized as simultaneous `O(log T)` memory
-and `O(log T)` total recompute for every `T`-step loop. And per A3, the pass cannot act
-inside a loop at all (`REMAT_NON_CLONABLE` on nested regions).
+The residual evaluator now generates balanced Treeverse candidate envelopes
+from measured per-step work, explicit state size, and memory budgets. Every such
+candidate is deliberately selector-ineligible until its complete backward
+executes. This is planning and pruning, not a Revolve implementation in the
+compiler. Per A3, `ActivationRematerializationPass` still cannot execute a
+checkpoint schedule inside an active loop (`REMAT_NON_CLONABLE` on nested
+regions).
 
-So the workloads with the worst activation-memory profile — long scans, diffusion
-trajectories, the `T = 2500` RNOT inner loop — get *no* checkpointing, while
-straight-line blocks that were never the bottleneck get a good greedy schedule.
+Thus long scans, diffusion trajectories, and the `T = 2500` RNOT inner loop can
+now be ranked as candidate envelopes, but they still receive no executable
+binomial checkpoint schedule. Straight-line blocks retain the working greedy
+implementation.
 
-### B7. Adjoints of collectives are real, and are a genuine lead worth naming
+### B7. Adjoints of collectives are real; the cross-IR proof boundary is the differentiator
 
 [`AdjointInterface.cpp:42-70`](../../../src/compiler/ir/AdjointInterface.cpp#L42):
 `AllReduce` is self-dual; `AllGather† = ReduceScatter`; `ReduceScatter† =
 AllGather` — correct, and `AdjointCollectiveInsertionPass` places them
 effect-aware, after `EffectAnnotationPass`, keyed on `tessera.effect = "memory"`.
 
-Most frameworks bolt distribution on *outside* AD (DDP hooks, FSDP wrappers).
-Having collective adjoints as first-class ops inside the differentiation
-interface is ahead of the common practice, and it should be stated as a lead
-rather than buried.
+Most framework training stacks bolt distribution on outside AD through hooks or
+wrappers. However, JAX also has primitive transposition rules for
+replication-inducing collectives, so the existence of a collective transpose is
+not a unique Tessera lead. Tessera's stronger claim is narrower: all four
+collectives retain registered Graph adjoints and typed Schedule→Tile→Target
+contracts with an exact-backend proof ledger. Native multi-rank NCCL/RCCL and
+MPI/OFI/SHMEM packets remain open and must land before calling that boundary
+complete.
 
 ### B8. Implicit-function-theorem differentiation is scaffolded, not absent
 
@@ -372,28 +384,34 @@ F.3's `J = −[D_yF]⁻¹[D_xF]` is the emitted residual/solve/adjoint chain.
 ## 3. Position against the state of the art
 
 Honest, per-capability. "Partial" is used where a real but incomplete
-implementation exists.
+implementation exists. Tessera counts are generated from the current ledger;
+external cells describe documented core capabilities checked on 2026-08-09,
+not ecosystem packages or a performance comparison.
 
 | Capability | Tessera | JAX | Enzyme / EnzymeMLIR | LAGrad |
 |---|---|---|---|---|
-| Reverse mode, straight-line | ✅ 32 native families | ✅ | ✅ | ✅ |
-| Reverse mode through structured control flow | ❌ hard error (A3) | ✅ | ✅ | ✅ (its thesis) |
-| Forward mode in the compiler | ❌ Python only (A4) | ✅ | ✅ | partial |
+| Reverse mode, straight-line | ✅ bounded: 51 native IR adjoints; 36 CPU-oracle and 29 exact-target proven | ✅ | ✅ | ✅ |
+| Reverse mode through structured control flow | ❌ active regions fail closed; inactive regions are pruned (A3) | partial — `cond`/`scan` and static loops; `while_loop` is forward-only | ✅ | ✅ stated scope |
+| Forward mode in the compiler | ❌ no general pass; solver-local JVP only (A4) | ✅ | ✅ | partial |
 | Higher-order (`grad∘grad`) | ❌ structurally blocked (A2) | ✅ | ✅ | — |
 | Exact HVP | ❌ finite differences (B4) | ✅ fwd-over-rev | ✅ | — |
 | `vmap` as a transform | ❌ Python loop (B3) | ✅ | n/a | n/a |
-| Activity analysis | ❌ (A5) | partial | ✅ (its edge) | ✅ |
-| AD after optimization | partial — Graph IR only | via XLA | ✅ (4.5× geomean) | ✅ |
-| Residual policy, per-target measured | ❌ one constant (A6) | ✅ policies | ✅ analysis | partial |
-| Revolve / binomial checkpointing | ❌ greedy, no loops (B6) | partial (manual) | partial | — |
+| Activity analysis | partial — backward SSA/effect activity complete; region/memory activity open (A5) | partial | ✅ core analysis | ✅ static analysis |
+| AD after optimization | partial — optimized Graph IR only | partial — AD on staged JAXPR, XLA downstream | ✅ (4.5× geomean) | ✅ |
+| Residual policy, per-target measured | partial — exact-device selector boundary landed; family packets open (A6) | policy-driven checkpointing, not measured selection | static analysis, not measured selection | partial static |
+| Revolve / binomial checkpointing | partial — measured-work candidates only; no loop execution (B6) | manual `checkpoint`/`remat`; no automatic Revolve selector | partial | — |
 | Sparsity detection + coloring | ❌ (B5) | ❌ | ❌ | partial (static) |
-| Collective adjoints as IR ops | ✅ **lead** (B7) | partial (outside AD) | ❌ | ❌ |
-| Manifold / geometric AD | partial (`autodiff/geometric/`) | ❌ | ❌ | ❌ |
-| Per-target device-verified backward proof | ✅ **lead** — ledger axes | ❌ | ❌ | ❌ |
+| Collective adjoints as IR ops | partial — four typed cross-IR contracts; native multi-rank proof open (B7) | ✅ primitive transpose rules | not established in reviewed core | not established in reviewed core |
+| Manifold / geometric AD | partial — Python oracle, no general compiler tangent transform | not a core JAX facility | not established in reviewed core | not established in reviewed core |
+| Per-target device-verified backward proof | ✅ 29 exact-target oracle-proven families with independent ledger axes | no comparable public proof ledger | no comparable public proof ledger | no comparable public proof ledger |
 
-Two real leads (collective adjoints; per-target backward *proof* discipline, which
-no other system even tracks), one partial lead (geometric AD), and six genuine
-gaps.
+The defensible Tessera distinction is its per-target backward proof discipline
+and the full cross-IR identity carried by collective adjoints—not the mere
+existence of collective transposes. Six material capability gaps remain:
+active structured-control differentiation, general compiler forward mode,
+higher-order composition, exact HVP, transformed `vmap`, and sparsity
+detection/coloring. Activity, residual selection, and Treeverse are partial
+foundations with explicit execution gaps rather than absent capabilities.
 
 ---
 
@@ -488,7 +506,7 @@ Maps to: unification-plan P0 (truthfulness). Independent of everything else.
 ### D2 — Forward mode in the compiler  *(~3 weeks)*
 
 `TangentInterface` in ODS + `--tessera-autodiff-forward` + `buildTangent` for the
-32 families that already have `buildAdjoint`. Forward mode needs no tape, no
+native families reported by the generated ledger. Forward mode needs no tape, no
 residual policy, and no liveness analysis, so it is a fraction of the reverse-mode
 work.
 
@@ -498,21 +516,23 @@ substrate for D6.
 
 Maps to: P5 (family expansion), running in parallel.
 
-### D3 — Activity analysis  *(~3 weeks)*
+### D3 — Activity analysis foundation complete; region/memory extension open
 
-`ActivityInterface` + a dataflow analysis over the effect lattice and region
-privileges. Compute the active set forward from the differentiated inputs and
-backward from the seeded outputs; intersect; skip adjoint construction outside it.
+The landed backward SSA analysis computes the active cone from seeded outputs,
+stamps activity, skips inactive adjoints, and enforces registered stochastic
+effects. The remaining extension is an `ActivityInterface` over region
+boundaries, aliasing, and read/write/reduce privileges so active structured
+control and memory effects can be differentiated rather than rejected.
 
 This is where the Enzyme-class speedup lives, and where Tessera's extra
 information (effects, privileges, static shapes) should let it do better than a
 system working on LLVM IR.
 
-Exit criterion worth stating: a fixture where an inactive branch's adjoint is
-**not emitted**, checked with `CHECK-NOT` — the same negative-fixture discipline
-proposed as Decision #10a in the [OT plan](RIEMANNIAN_OT_PLAN.md) §4a.
+The original exit criterion—an inactive region whose adjoint is **not emitted**,
+checked with `CHECK-NOT`—is complete. The next exit criterion is an active
+bounded region with a value-producing adjoint and effect-safe residual contract.
 
-Maps to: P2 (contract hardening).
+Maps to: P2 (foundation complete) and D4 (region extension).
 
 ### D4 — Structured control-flow adjoints  *(~6 weeks — hardest, highest value)*
 
@@ -528,19 +548,19 @@ also the precondition for D5's Revolve.
 
 Maps to: P5, and it is the correct next big rock after P4.
 
-### D5 — Residual policy as a measured arbiter axis, plus Revolve  *(~4 weeks, after D4)*
+### D5 — Measurement boundary and Treeverse candidates landed; execution open
 
-- Promote `tessera.autodiff.residual_policy` from a constant to a decision the
-  arbiter makes per `(op, shape-bucket, dtype, target)`, with SAVE / RECOMPUTE /
-  HYBRID candidates, measured — exactly the Decision #28 mechanism, applied to a
-  choice it was built for.
-- Add Revolve/treeverse binomial checkpointing for counted loops, replacing "no
-  checkpointing at all" (B6) with a schedule selected for the explicit memory
-  budget and recomputation objective.
+- **Landed:** execution-derived SAVE / RECOMPUTE / HYBRID selection per
+  `(op, shape-bucket, dtype, target)`, gated on complete exact-device backward
+  samples and retained-residual bytes.
+- **Landed as pruning only:** measured-step Treeverse candidates for explicit
+  memory budgets; estimates are selector-ineligible.
+- **Open after D4:** lower a selected binomial schedule into counted-loop
+  forward/backward execution and measure the complete backward before promotion.
 - Delete `EBMCheckpointInnerLoop`; register its op knowledge into
   `ActivationRematerializationPass` (A8).
 
-Maps to: P4/P6.
+Maps to: P4/P6; tracked by `AD-RESIDUAL-EVAL-1`.
 
 ### D6 — Higher-order, hosted on the geometric-algebra engine  *(~4 weeks — the differentiating move)*
 
@@ -593,26 +613,27 @@ Maps to: new capability.
 
 The shared IFT body landed on 2026-08-08: registered residual, matrix-free
 linear-solve, residual-JVP, and residual-adjoint values replace annotations.
-The remaining shared deliverable with [OT plan](RIEMANNIAN_OT_PLAN.md) R2 is a
-physical consumer plus compiled numerical proof; the two tracks still must not
-build this twice.
+The first bounded physical consumer now carries the diagonal-sqrt residual
+through content-addressed Schedule→Tile artifacts into AVX-512 and gfx1151
+packages, with compiled numerical packets. The remaining shared deliverable
+with [OT plan](RIEMANNIAN_OT_PLAN.md) R2 is general residual and iterative/Krylov
+solve consumption; the two tracks still must not build that mechanism twice.
 
 ### Sequencing
 
 ```
 D1 (1w) ──────────────────────────────────────────────────►  (independent)
-        D2 (3w) ──┬─► D6 (4w)          [needs GA item 7 for the cheap path]
-                  └─► D5 (4w)
-D3 (3w) ──────────┐
-D4 (6w) ──────────┴─► D5
-                      D7 (5w)          [needs D3's dataflow substrate]
-NewtonAutodiff (2w)   [shared with OT-plan R2]
+        D2 (3w) ──► D6 (4w)            [needs a generic finite-algebra substrate]
+D3 SSA foundation complete ──► D4 (6w) ──► bounded executable D5 Treeverse
+                           └──────────────► D7 (5w)
+D5 measurement boundary complete; exact family packets continue in parallel
+NewtonAutodiff shared IR complete ──► bounded x86/gfx1151 pilot ──► general solvers
 ```
 
-Critical path D2 → D4 → D5 ≈ 13 weeks; full set ≈ 28 weeks single-track.
-
-**If only three things happen: D1, D2, D4.** D1 makes the oracle honest, D2 is
-the cheapest large capability, D4 unblocks every workload with a loop.
+The historical estimates remain useful sizing only; global order is owned by
+`INTEGRATED_COMPILER_PLAN.md`. The next shared capability rocks here are D2 and
+D4, while architecture queues supply D5 family packets and physical solver
+consumers.
 
 ---
 
@@ -628,12 +649,15 @@ Four claims that would be true and defensible, with what each requires:
    do — it is that the Taylor algebra and the Clifford algebra are one code
    generator, so order-`k` derivatives get the same tuned kernels as
    `simdgroup_matrix` GA products.
-3. **"Collective adjoints are IR ops with per-target device-verified proof."**
-   Mostly already true (B7 + the ledger). Requires finishing the backward
-   distributed lane and stating it plainly, which no other system tracks at all.
+3. **"Collective adjoints retain one typed cross-IR identity with per-target
+   device-verified proof."** The first half is true (B7 + the ledger); JAX also
+   has collective transpose rules. The defensible claim requires finishing the
+   native multi-rank distributed lane on each target.
 4. **"Residual policy chosen by measurement per target, not by convention."**
-   Requires D5. Every other system either exposes a policy knob (JAX) or infers
-   from static analysis (Enzyme); none *measures* on the actual target and picks.
+   The D5 selection boundary is implemented. The claim becomes production-wide
+   only after exact-device complete-backward packets populate it across the
+   promoted family envelope. JAX exposes a policy knob and Enzyme uses static
+   analysis; neither is the same evidence contract.
 
 Claims 1 and 4 are the strongest because they are things the incumbents have
 structurally chosen not to do, not things they have done better.
@@ -654,8 +678,9 @@ structurally chosen not to do, not things they have done better.
 - **Do not let `custom_adjoint_call` normalize.** Three families today. Gate it
   out of `native_required` compiles before the number grows (A7).
 - **Do not report `device_verified` backward lanes as compiler AD.** The ledger
-  already keeps these axes separate and must keep doing so: 29 device-verified
-  backward lanes and 32 native IR adjoints are different, partly disjoint facts.
+  keeps native IR adjoints, CPU-oracle proof, runtime binding, and exact-target
+  device proof as separate, partly disjoint axes. Read their live counts from
+  the generated ledger rather than copying another snapshot here.
 - **Effort figures are engineering estimates** for a single track with no
   hardware-gated dependencies, not commitments. D4 is the one most likely to
   exceed its estimate.
@@ -667,8 +692,10 @@ structurally chosen not to do, not things they have done better.
 - [Enzyme: high-performance AD of LLVM and MLIR](https://github.com/EnzymeAD/Enzyme) · [enzyme.mit.edu](https://enzyme.mit.edu/) — AD on optimized IR, 4.5× geomean on ADBench, activity analysis, EnzymeMLIR op interfaces
 - ["Instead of Rewriting Foreign Code for Machine Learning, Automatically Synthesize Fast Gradients"](https://arxiv.org/pdf/2010.01709) — the post-optimization AD result
 - [LAGrad: Statically Optimized Differentiable Programming in MLIR (CC 2023)](https://dl.acm.org/doi/10.1145/3578360.3580259) — MLIR-level reverse mode exploiting high-level dialect semantics, sparsity, and structured control flow
+- [JAX structured control-flow documentation](https://docs.jax.dev/en/latest/control-flow.html) — reverse-mode support for `cond`, `scan`, and statically bounded loops; forward-only `lax.while_loop`
+- [JAX JEP 17111: efficient transposition of replication-inducing collectives](https://docs.jax.dev/en/latest/jep/17111-shmap-transpose.html) — primitive transpose rules for `psum` and `all_gather`
 - [An Illustrated Guide to Automatic Sparse Differentiation (ICLR 2025 blogpost)](https://iclr-blogposts.github.io/2025/blog/sparse-autodiff/) and ["Sparser, Better, Faster, Stronger"](https://arxiv.org/pdf/2501.17737) — sparsity detection + coloring; the observation that PyTorch/TF/JAX lack it
-- [Gradient checkpointing with `jax.checkpoint` / `jax.remat`](https://docs.jax.dev/en/latest/gradient-checkpointing.html) — saveable-value remat policies
+- [Gradient checkpointing with `jax.checkpoint` / `jax.remat`](https://docs.jax.dev/en/latest/notebooks/autodiff_remat.html) — saveable-value remat policies
 - [Treeverse / Revolve checkpointing](https://www.researchgate.net/publication/2290186_Treeverse_An_Implementation_of_Checkpointing_for_the_Reverse_or_Adjoint_Mode_of_Computational_Differentiation) and [divide-and-conquer checkpointing with no user annotation](https://openreview.net/forum?id=BkYYXJ9i-) — provably optimal binomial schedules
 - [Jet functors and Weil algebras in AD](https://arxiv.org/pdf/2510.14342) and [Collapsing Taylor Mode AD](https://arxiv.org/pdf/2505.13644) — higher-order AD over truncated polynomial algebras
 - [Dynamic Tensor Rematerialization](https://arxiv.org/pdf/2006.09616) — online remat, relevant to D5's fallback

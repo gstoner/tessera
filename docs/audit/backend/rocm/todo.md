@@ -7,15 +7,38 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **shared ES low-rank
-correction contract + fp32/s32 accumulation policy defined; ROCm emitter is
-follow-up required.** The Evolution-Strategies reference tier
-(`tessera.stdlib.es`) landed; the Graph-IR op `es_low_rank_correction` and its
-emitters are W2. ROCm is a lead performance target (Decision #28): a hand
-SGMV / WMMA(MFMA) low-rank correction stays a Tier-3 arbiter candidate. The
-`s32` lane maps to WMMA IU8 (gfx1151 16×16×16, no FP8 WMMA); member-keyed RNG
-(G2) and the fp32/s32 accumulation policy (I6 / Decision #32) apply. Contract:
+Cross-backend sync `X86-TYPED-FAMILY-PLUGIN-2026-08-09` — **x86 parity landed;
+ROCm Target-boundary regression repaired.** The shared executable-pipeline schema remains v1,
+and x86 now owns a closed semantic-family registry plus registered Target
+marker before its prebuilt AVX-512 image. ROCm retains its distinct
+Graph/Tile→`tessera_rocm`→ROCDL/HSACO pipeline, gfx1151 selectors, async-copy
+ordering, and exact-device evidence. `output=target` now lowers the scheduled
+matmul carrier to one `tessera_rocm.wmma_gemm` directive without creating a
+`gpu.module`; only `output=binary` runs the architecture generator. Aligned
+gfx1151 exact-device scheduled matmul passes across both boundaries. No x86
+schedule, ABI, or Zen 5 result transfers to gfx1151/gfx1200/gfx1250.
+
+Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **functional rank-1 fp32
+Graph → Schedule → Tile → ROCm consumption is exact-device verified on
+gfx1151.** The content-addressed artifact binds shape, epoch, sigma,
+antithetic/score policy, and the versioned SplitMix64/Philox4x32/Box–Muller
+member RNG. `tests/unit/test_rocm_es_low_rank_exec.py` compiles the artifact to
+HSACO, launches it through HIP, and compares it with the portable oracle. This
+contract now also admits an architecture-bound Zen 5 AVX-512 artifact, but its
+ABI, schedule, and timing packet do not transfer to gfx1151. ROCm's exact
+architecture check and selector evidence remain unchanged. This
+now uses a cooperative Wave32/LDS SGMV kernel: seed derivation occurs once per
+row and `x@B` is reduced once before output scaling. It is exact-device correct,
+with aligned-small and ragged 513×277 launch tests. The durable WSL packet
+`benchmarks/baselines/rocm_gfx1151_es_low_rank.json` records a 16×32×1024→1024
+case at 127,434 ns synchronized host-wall median and max absolute error
+1.91e-6. HIP events remain zero/unavailable, so the packet correctly retains
+the kernel for correctness but is selector-ineligible pending scalar/direct and
+packed-WMMA comparisons on a valid device clock. Rank>1 and the `s32` WMMA-IU8
+lane remain open. gfx1151 has no FP8 WMMA. Contract:
 `docs/audit/compiler/EGGROLL_SUPPORT_PLAN.md`.
+W4 scalar-gather/member reconstruction passes four-rank mock-mesh proof;
+native RCCL multi-rank execution and timing remain open.
 
 Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **three
 independent executable boundaries landed; exact-device packets open.** Zero-CU Copy
@@ -72,15 +95,27 @@ All-to-all divisibility, QoS/chunk bounds, mesh-axis topology, and native fp32
 storage now fail closed. gfx1151 still needs a real multi-GPU RCCL packet;
 single-GPU WSL cannot supply it. gfx1200/gfx1250 and selectors are unchanged.
 
-Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **shared typed IFT
-and measured-policy boundary landed; gfx1151 physical follow-up required.**
-`NewtonAutodiff` now emits registered residual → transposed matrix-free solve →
-residual-adjoint values and rejects missing/mismatched residual ABIs. The
-shared rematerialization pass consumes exact complete-backward work and unique
-retained-residual bytes; treeverse estimates remain pruning-only. Existing
-gfx1151 producer-recompute timings are not complete implicit-backward packets,
-and ROCm has no physical consumer for the new solver chain. No HIP image,
-selector, residual policy, or gfx1200/gfx1250 claim changes.
+Cross-backend sync `DIST-SHARD-ALIAS-1-2026-08-09` — **portable alias bridge
+landed; RCCL proof unchanged.** The public sharding inventory is no longer
+treated as nine ROCm kernels: three entries are compile-time placement/region
+contracts, four reductions lower to registered all-reduce records, and
+`broadcast_to_axis` lowers to all-gather. Those five aliases execute through
+the portable multi-rank runtime. `collective_permute` remains an explicit
+point-to-point gap and fails closed. Native RCCL launch/evidence, frontend
+capture, and gfx1151 multi-rank packets remain open; gfx1200/gfx1250 stay
+fail-closed.
+
+Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **bounded gfx1151
+physical pilot and correctness packet landed.** The diagonal-sqrt residual now
+lowers as one content-addressed `schedule.solver_ift` →
+`tile.solver_ift_kernel` → `tessera_rocm.solver_ift` package. Its generated HIP
+kernel executes residual, transposed diagonal matrix-free solve, and parameter
+adjoint. The committed [3×257 f32 packet](../../../../benchmarks/baselines/rocm_gfx1151_solver_ift_evidence.json)
+reports zero maximum error and 30
+complete-backward samples with 3,084 retained bytes. WSL synchronized-host
+timing is regression-only, not a performance promotion. General residuals,
+iterative/Krylov solvers, bare-metal timing, and gfx1200/gfx1250 remain open and
+fail closed.
 
 Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` — **shared
 effect/control parity and gfx1151 consumption validated; multi-rank transport
@@ -104,16 +139,16 @@ negative schedules, cache windows, seeds, or control bounds. Direct negative
 IR cases cover both dialects. No HIP ABI, gfx1151 schedule, selector, image, or
 exact-device evidence changes.
 
-Cross-backend sync `AD-TSOL-SPECTRAL-1-2026-08-08` — **shared adjoint carrier
-landed; native gfx1151 backward package open.** FFT/IFFT/RFFT/IRFFT/DCT compiler
-transposes and compound STFT/ISTFT/filter/convolution VJPs now retain explicit
-spectral identity. `gfx1151` receives one content-addressed, multi-output Tile
-carrier, but `lower-tile-to-rocm` deliberately rejects it until a native
-compound-backward package and exact-device numerical/performance packet land.
-Existing forward TSOL packages and evidence are unchanged; gfx1200/gfx1250
-remain fail-closed. The rebuilt host package passes 17 compiled FFT and 21
-compiled compound-spectral gfx1151 cases; those forward results do not promote
-the new backward carrier.
+Cross-backend sync `AD-TSOL-SPECTRAL-NATIVE-2026-08-09` — **bounded gfx1151
+backward packages and exact-device correctness landed; performance open.** The
+content-addressed multi-output carrier now lowers complex-f32 spectral-filter
+and unbroadcast last-axis full-f32 spectral-convolution adjoints into generated
+ROCm GPU modules. Both packages compile through ROCDL to hsaco and pass direct
+gfx1151 HIP-launch comparison for both gradient outputs; convolution preserves
+`backward`, `forward`, and `ortho` scaling selected before Tile IR. Native
+STFT/ISTFT backward, broader axes/dtypes/broadcasting, and a device-event
+performance packet remain open and fail closed. Existing forward TSOL packages
+are unchanged; gfx1200/gfx1250 remain fail-closed.
 
 Cross-backend sync `AD-CORE-LINEAR-1-2026-08-08` — **shared Graph-IR parity
 validated; existing gfx1151 packages unchanged.** Both compiler autodiff passes
@@ -585,6 +620,11 @@ implementation nor supplies its missing profiler evidence.
 Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **step-distance rejected;
 T1 reuse-distance follow-up required, owning host Strix Halo (Radeon 8060S,
 gfx1151).**
+
+The independent Zen 5 hierarchical T1 packet rejects ranking on x86 (median
+rho -0.4062, 0/3 winner matches). That result reinforces the no-retuning policy
+but does not close ROCm's separate gate: x86 L1D/L2/L3 inputs and blocked-loop
+candidates do not transfer to gfx1151 L0/L1/L2 or Wave32 schedules.
 
 **Correction that created this item.** `APPLE_AUDIT.md` originally scoped this
 calibration to Apple alone, stating that ROCm and NVIDIA kernels "cannot be

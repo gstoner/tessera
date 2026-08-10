@@ -861,6 +861,30 @@ def Tile_TrainingKernelOp : Tile_Op<"training_kernel"> {
   let hasVerifier = 1;
 }
 
+// Launch-level implicit-function VJP. Inputs are parameter, converged
+// solution, output cotangent, residual scratch, matrix-free solve scratch,
+// parameter cotangent, and element count. The residual model and solver policy
+// are fixed by the content hash; targets must fail closed on unknown models.
+def Tile_SolverIFTKernelOp : Tile_Op<"solver_ift_kernel"> {
+  let summary = "Launch-level typed residual/linear-solve/residual-adjoint chain";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Launch-level EGGROLL W2 correction. Inputs are x/member-ids/key/output
+// pointers followed by P, rows-per-member, in-dim, and out-dim. The RNG and
+// numeric identities are attributes covered by tessera.schedule_hash.
+def Tile_ESLowRankCorrectionKernelOp
+    : Tile_Op<"es_low_rank_correction_kernel"> {
+  let summary = "Launch-level typed member-keyed ES rank-1 correction";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Canonical logical-page gather. Inputs are physical pages, i32 page table,
 // output, and P/LP/page-size/H/D/start/token-count dimensions.
 def Tile_PagedKVReadKernelOp : Tile_Op<"paged_kv_read_kernel"> {

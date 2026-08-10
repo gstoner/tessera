@@ -98,6 +98,31 @@ class CollectiveDescriptor:
             ),
         )
 
+    @classmethod
+    def from_sharding_primitive(
+        cls,
+        name: str,
+        *,
+        tensor: str,
+        mesh_axis: str,
+        tensor_axis: int = 0,
+        world_size: int | None = None,
+        result: str | None = None,
+    ) -> "CollectiveDescriptor":
+        """Resolve a public S6 alias through the canonical Target contract."""
+        from .distributed_contracts import collective_record_for_primitive
+
+        return cls.from_target_record(
+            collective_record_for_primitive(
+                name,
+                tensor=tensor,
+                mesh_axis=mesh_axis,
+                tensor_axis=tensor_axis,
+                world_size=world_size,
+                result=result,
+            )
+        )
+
 
 @dataclass(frozen=True)
 class EmittedPipelineStep:

@@ -213,6 +213,36 @@ def Tessera_BatchedGemmOp : Op<
   let hasVerifier = 1;
 }
 
+// EGGROLL W2: fused, materialization-free low-rank population correction.
+// x[P,...,n] is corrected independently for member_ids[P] using factors
+// reconstructed from the rank-invariant (key, epoch, member-pair) stream.
+def Tessera_ESLowRankCorrectionOp : Op<
+  Tessera_Dialect, "es_low_rank_correction", [Pure]
+> {
+  let summary = "Member-keyed low-rank Evolution-Strategies correction";
+  let description = [{
+    Computes `sign * sigma / sqrt(rank) * (x @ B) @ transpose(A)` for each
+    population member. `A[out_dim, rank]` and `B[in_dim, rank]` are reconstructed
+    from the versioned ES member RNG contract using `(key, epoch, member/2)`;
+    device rank is deliberately absent. The initial physical bucket requires
+    rank=1 and Gaussian factors. `numeric_policy.accum` is load-bearing and must
+    select fp32 for floating storage or int32 for the future integer lane.
+  }];
+  let arguments = (ins TensorType:$x,
+                        TensorType:$member_ids,
+                        TensorType:$key,
+                        I64Attr:$out_dim,
+                        I64Attr:$rank,
+                        DefaultValuedAttr<I64Attr, "0">:$epoch,
+                        F64Attr:$sigma,
+                        DefaultValuedAttr<StrAttr, "\"gaussian\"">:$score,
+                        DefaultValuedAttr<BoolAttr, "true">:$antithetic,
+                        Tessera_NumericPolicyAttr:$numeric_policy);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // DeepGEMM-inspired grouped GEMM (MoE expert FFN) with the grouped-layout
 // contract as first-class IR attributes (2026-06).  `grouped_kind` selects the
 // family (dense / contiguous / masked / k_grouped); `grouped_alignment` is the

@@ -1,4 +1,4 @@
-// RUN: not %tessera_opt %s --tessera-autodiff-paired 2>&1 | FileCheck %s
+// RUN: not tessera-opt %s --tessera-autodiff-paired 2>&1 | FileCheck %s
 
 // A full FFT may accept a real forward input, but it is not complex-linear in
 // that input: its transpose must project a full-spectrum cotangent back to the

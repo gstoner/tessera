@@ -832,6 +832,50 @@ static FailureOr<std::string> spectralBackwardDigest(Operation *op) {
                      /*LowerCase=*/true);
 }
 
+static FailureOr<std::pair<std::string, std::string>>
+esLowRankContract(Operation *op, StringRef architecture) {
+  if (op->getName().getStringRef() != "tessera.es_low_rank_correction" ||
+      op->getNumOperands() != 3 || op->getNumResults() != 1)
+    return failure();
+  auto x = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto members = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+  auto key = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+  auto result = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  auto outDim = op->getAttrOfType<IntegerAttr>("out_dim");
+  auto rank = op->getAttrOfType<IntegerAttr>("rank");
+  auto sigma = op->getAttrOfType<FloatAttr>("sigma");
+  if (!x || !members || !key || !result || !x.hasStaticShape() ||
+      !members.hasStaticShape() || !key.hasStaticShape() ||
+      !result.hasStaticShape() || !x.getElementType().isF32() || !outDim ||
+      !rank || !sigma)
+    return failure();
+  int64_t rows = 1;
+  for (int64_t dim : x.getShape().drop_front().drop_back()) rows *= dim;
+  int64_t epoch = 0;
+  if (auto attr = op->getAttrOfType<IntegerAttr>("epoch")) epoch = attr.getInt();
+  bool antithetic = true;
+  if (auto attr = op->getAttrOfType<BoolAttr>("antithetic"))
+    antithetic = attr.getValue();
+  StringRef score = "gaussian";
+  if (auto attr = op->getAttrOfType<StringAttr>("score")) score = attr.getValue();
+  std::string sigmaText = std::to_string(sigma.getValueAsDouble());
+  std::string payload =
+      (Twine("schema=tessera.es_low_rank_correction.v1;arch=") + architecture +
+       ";" +
+       "population=" + Twine(x.getDimSize(0)) + ";rows_per_member=" +
+       Twine(rows) + ";in_dim=" + Twine(x.getShape().back()) + ";out_dim=" +
+       Twine(outDim.getInt()) + ";rank=" + Twine(rank.getInt()) + ";epoch=" +
+       Twine(epoch) + ";sigma=" + sigmaText +
+       ";antithetic=" + Twine(antithetic ? 1 : 0) + ";score=" + score +
+       ";rng=splitmix64-philox4x32-boxmuller;version=1;storage=f32;accum=f32;" +
+       "lineage=x/member_ids/key-read-only;correction-fresh")
+          .str();
+  std::string hash = llvm::toHex(
+      llvm::SHA256::hash(llvm::arrayRefFromStringRef(payload)),
+      /*LowerCase=*/true);
+  return std::make_pair(std::move(payload), std::move(hash));
+}
+
 struct AttentionSchedule {
   StringRef target;
   StringRef arch;
@@ -1569,6 +1613,93 @@ struct GraphToSchedulePass
       builder.create(artifactState);
     }
 
+    SmallVector<Operation *> esCorrections;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tessera.es_low_rank_correction")
+        esCorrections.push_back(op);
+    });
+    for (Operation *op : esCorrections) {
+      ModuleOp module = op->getParentOfType<ModuleOp>();
+      StringRef configuredArch = moduleString(module, "tessera.arch", "arch");
+      if (configuredArch != "gfx1151" && configuredArch != "zen5-avx512") {
+        op->emitError("EGGROLL W2 is fail-closed outside exact gfx1151 and Zen 5 AVX-512 profiles");
+        return signalPassFailure();
+      }
+      FailureOr<std::pair<std::string, std::string>> contract =
+          esLowRankContract(op, configuredArch);
+      if (failed(contract)) {
+        op->emitError("EGGROLL W2 requires static f32 rank-1 Graph operands");
+        return signalPassFailure();
+      }
+      auto x = cast<RankedTensorType>(op->getOperand(0).getType());
+      int64_t rows = 1;
+      for (int64_t dim : x.getShape().drop_front().drop_back()) rows *= dim;
+      auto integer = [&](StringRef name, int64_t fallback) {
+        auto attr = op->getAttrOfType<IntegerAttr>(name);
+        return attr ? attr.getInt() : fallback;
+      };
+      auto boolean = [&](StringRef name, bool fallback) {
+        auto attr = op->getAttrOfType<BoolAttr>(name);
+        return attr ? attr.getValue() : fallback;
+      };
+      op->setAttr("schedule.artifact_hash",
+                  builder.getStringAttr(contract->second));
+      builder.setInsertionPointAfter(op);
+      OperationState state(op->getLoc(), "schedule.es_low_rank_correction");
+      state.addOperands(op->getResult(0));
+      state.addTypes(op->getResult(0).getType());
+      state.addAttribute("artifact_hash", builder.getStringAttr(contract->second));
+      state.addAttribute("lineage_payload", builder.getStringAttr(contract->first));
+      state.addAttribute("arch", builder.getStringAttr(configuredArch));
+      state.addAttribute("population", builder.getI64IntegerAttr(x.getDimSize(0)));
+      state.addAttribute("rows_per_member", builder.getI64IntegerAttr(rows));
+      state.addAttribute("in_dim", builder.getI64IntegerAttr(x.getShape().back()));
+      state.addAttribute("out_dim",
+                         builder.getI64IntegerAttr(integer("out_dim", -1)));
+      state.addAttribute("rank", builder.getI64IntegerAttr(integer("rank", -1)));
+      state.addAttribute("epoch", builder.getI64IntegerAttr(integer("epoch", 0)));
+      state.addAttribute("sigma", builder.getF32FloatAttr(
+          static_cast<float>(op->getAttrOfType<FloatAttr>("sigma")
+                                 .getValueAsDouble())));
+      state.addAttribute("antithetic",
+                         builder.getBoolAttr(boolean("antithetic", true)));
+      state.addAttribute("score", builder.getStringAttr("gaussian"));
+      state.addAttribute("rng_algorithm", builder.getStringAttr(
+          "splitmix64-philox4x32-boxmuller"));
+      state.addAttribute("rng_version", builder.getI64IntegerAttr(1));
+      state.addAttribute("storage", builder.getStringAttr("f32"));
+      state.addAttribute("accum", builder.getStringAttr("f32"));
+      state.addAttribute("workgroup_size", builder.getI64IntegerAttr(
+          configuredArch == "gfx1151" ? 256 : 1));
+      Operation *scheduled = builder.create(state);
+      for (OpOperand &use :
+           llvm::make_early_inc_range(op->getResult(0).getUses()))
+        if (use.getOwner() != scheduled) use.set(scheduled->getResult(0));
+
+      builder.setInsertionPointAfter(scheduled);
+      OperationState artifactState(op->getLoc(), "schedule.artifact");
+      artifactState.addAttribute("hash", builder.getStringAttr(contract->second));
+      artifactState.addAttribute("arch", builder.getStringAttr(configuredArch));
+      artifactState.addAttribute(
+          "shape_key", builder.getStringAttr(
+              (Twine("family=es_low_rank_correction;p=") +
+               Twine(x.getDimSize(0)) + ";in=" + Twine(x.getShape().back()) +
+               ";out=" + Twine(integer("out_dim", -1)) + ";rank=1")
+                  .str()));
+      artifactState.addAttribute(
+          "tile", builder.getDictionaryAttr({
+                      builder.getNamedAttr(
+                          "workgroup_size",
+                          builder.getI64IntegerAttr(
+                              configuredArch == "gfx1151" ? 256 : 1)),
+                      builder.getNamedAttr("rng_version",
+                                           builder.getI64IntegerAttr(1)),
+                  }));
+      artifactState.addAttribute(
+          "numeric_policy", builder.getStringAttr("f32->f32;rank1"));
+      builder.create(artifactState);
+    }
+
     SmallVector<Operation *> attentions;
     mod.walk([&](Operation *op) {
       if (op->getName().getStringRef() == "tessera.flash_attn")
@@ -2136,6 +2267,85 @@ struct ScheduleToTilePass
                              "mutation_lineage"})
         if (Attribute attr = scheduled->getAttr(name))
           kernelState.addAttribute(name, attr);
+      auto kindAttr = scheduled->getAttrOfType<StringAttr>("kind");
+      auto axisAttr = scheduled->getAttrOfType<IntegerAttr>("axis");
+      if (!kindAttr || !axisAttr) {
+        scheduled->emitError(
+            "native compound adjoints require explicit kind and axis");
+        return signalPassFailure();
+      }
+      StringRef kind = kindAttr.getValue();
+      auto ranked = [](Type type) { return dyn_cast<RankedTensorType>(type); };
+      auto dyType = ranked(graph->getOperand(0).getType());
+      auto inputType = ranked(graph->getOperand(1).getType());
+      auto parameterType = ranked(graph->getOperand(2).getType());
+      if (!dyType || !inputType || !parameterType ||
+          dyType.getRank() != inputType.getRank() ||
+          inputType.getRank() != parameterType.getRank()) {
+        scheduled->emitError("native compound adjoints require equal-rank static operands");
+        return signalPassFailure();
+      }
+      int64_t axis = axisAttr.getInt();
+      if (axis < 0) axis += inputType.getRank();
+      if (axis != inputType.getRank() - 1) {
+        scheduled->emitError("initial native compound adjoints require the last axis");
+        return signalPassFailure();
+      }
+      int64_t inputLength = inputType.getDimSize(axis);
+      int64_t parameterLength = parameterType.getDimSize(axis);
+      int64_t cotangentLength = dyType.getDimSize(axis);
+      if (inputLength <= 0 || parameterLength <= 0 || cotangentLength <= 0) {
+        scheduled->emitError(
+            "initial native compound adjoints require positive static extents");
+        return signalPassFailure();
+      }
+      int64_t batch = inputType.getNumElements() / inputLength;
+      if (kind == "tessera.spectral_filter") {
+        auto complex = dyn_cast<ComplexType>(inputType.getElementType());
+        if (!complex || !complex.getElementType().isF32() ||
+            inputType != parameterType || inputType != dyType) {
+          scheduled->emitError("native spectral-filter adjoint requires identical complex<f32> tensors");
+          return signalPassFailure();
+        }
+        kernelState.addAttribute(
+            "elements", builder.getI64IntegerAttr(inputType.getNumElements()));
+      } else if (kind == "tessera.spectral_conv") {
+        if (!inputType.getElementType().isF32() ||
+            !parameterType.getElementType().isF32() ||
+            !dyType.getElementType().isF32() ||
+            cotangentLength != inputLength + parameterLength - 1 ||
+            parameterType.getNumElements() / parameterLength != batch ||
+            dyType.getNumElements() / cotangentLength != batch) {
+          scheduled->emitError("native spectral-conv adjoint requires unbroadcast batched f32 full convolution");
+          return signalPassFailure();
+        }
+        auto logicalLengthAttr =
+            scheduled->getAttrOfType<IntegerAttr>("logical_length");
+        auto normalizationAttr =
+            scheduled->getAttrOfType<StringAttr>("normalization");
+        if (!logicalLengthAttr || logicalLengthAttr.getInt() <= 0 ||
+            !normalizationAttr) {
+          scheduled->emitError(
+              "native spectral-conv adjoint requires logical_length and normalization");
+          return signalPassFailure();
+        }
+        int64_t logicalLength = logicalLengthAttr.getInt();
+        StringRef normalization = normalizationAttr.getValue();
+        double scale = normalization == "forward"
+                           ? 1.0 / logicalLength
+                           : normalization == "ortho"
+                                 ? 1.0 / std::sqrt(double(logicalLength))
+                                 : 1.0;
+        kernelState.addAttribute("batch", builder.getI64IntegerAttr(batch));
+        kernelState.addAttribute(
+            "cotangent_length", builder.getI64IntegerAttr(cotangentLength));
+        kernelState.addAttribute(
+            "input_length", builder.getI64IntegerAttr(inputLength));
+        kernelState.addAttribute(
+            "parameter_length", builder.getI64IntegerAttr(parameterLength));
+        kernelState.addAttribute(
+            "normalization_scale", builder.getF32FloatAttr(scale));
+      }
       kernelState.addAttribute("tessera.schedule_hash", hash);
       builder.create(kernelState);
 
@@ -2780,6 +2990,212 @@ struct ScheduleToTilePass
       scheduled.erase();
       if (graph->use_empty())
         graph->erase();
+      for (schedule::ArtifactOp artifact : matchingArtifacts)
+        artifact.erase();
+    }
+
+    SmallVector<schedule::ESLowRankCorrectionOp> scheduledES;
+    mod.walk([&](schedule::ESLowRankCorrectionOp op) {
+      scheduledES.push_back(op);
+    });
+    for (schedule::ESLowRankCorrectionOp scheduled : scheduledES) {
+      std::string payloadHash = llvm::toHex(
+          llvm::SHA256::hash(
+              llvm::arrayRefFromStringRef(scheduled.getLineagePayload())),
+          /*LowerCase=*/true);
+      if (payloadHash != scheduled.getArtifactHash()) {
+        scheduled.emitError("ES lineage payload does not match artifact_hash");
+        return signalPassFailure();
+      }
+      Operation *graph = scheduled.getSubject().getDefiningOp();
+      if (!graph || graph->getName().getStringRef() !=
+                        "tessera.es_low_rank_correction" ||
+          graph->getNumOperands() != 3) {
+        scheduled.emitError("requires the retained Graph ES correction");
+        return signalPassFailure();
+      }
+      SmallVector<schedule::ArtifactOp> matchingArtifacts;
+      mod.walk([&](schedule::ArtifactOp artifact) {
+        if (artifact.getHash() == scheduled.getArtifactHash())
+          matchingArtifacts.push_back(artifact);
+      });
+      if (matchingArtifacts.size() != 1) {
+        scheduled.emitError("requires exactly one matching schedule.artifact");
+        return signalPassFailure();
+      }
+      auto outputType =
+          dyn_cast<RankedTensorType>(scheduled.getScheduled().getType());
+      if (!outputType || !outputType.hasStaticShape() ||
+          !outputType.getElementType().isF32()) {
+        scheduled.emitError("initial ES lowering requires a static f32 result");
+        return signalPassFailure();
+      }
+
+      Location loc = scheduled.getLoc();
+      builder.setInsertionPoint(scheduled);
+      auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      auto toPointer = [&](Value tensor) -> FailureOr<Value> {
+        auto type = dyn_cast<RankedTensorType>(tensor.getType());
+        if (!type || !type.hasStaticShape()) return failure();
+        auto memref = MemRefType::get(type.getShape(), type.getElementType());
+        Value buffer = builder.create<bufferization::ToBufferOp>(loc, memref, tensor);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer = builder.create<arith::IndexCastOp>(
+            loc, builder.getI64Type(), index);
+        return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer)
+            .getResult();
+      };
+      SmallVector<Value> operands;
+      for (Value input : graph->getOperands()) {
+        FailureOr<Value> pointer = toPointer(input);
+        if (failed(pointer)) {
+          scheduled.emitError("requires static ranked x/member/key inputs");
+          return signalPassFailure();
+        }
+        operands.push_back(*pointer);
+      }
+      auto outputMemref =
+          MemRefType::get(outputType.getShape(), outputType.getElementType());
+      Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      Value outputIndex = builder.create<memref::ExtractAlignedPointerAsIndexOp>(
+          loc, outputBuffer);
+      Value outputInteger = builder.create<arith::IndexCastOp>(
+          loc, builder.getI64Type(), outputIndex);
+      operands.push_back(
+          builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger));
+      for (int64_t dimension :
+           {scheduled.getPopulation(), scheduled.getRowsPerMember(),
+            scheduled.getInDim(), scheduled.getOutDim()})
+        operands.push_back(
+            builder.create<arith::ConstantIntOp>(loc, dimension, 64));
+
+      OperationState kernelState(loc, "tile.es_low_rank_correction_kernel");
+      kernelState.addOperands(operands);
+      kernelState.addAttribute("population", scheduled.getPopulationAttr());
+      kernelState.addAttribute("rows_per_member",
+                               scheduled.getRowsPerMemberAttr());
+      kernelState.addAttribute("in_dim", scheduled.getInDimAttr());
+      kernelState.addAttribute("out_dim", scheduled.getOutDimAttr());
+      for (StringRef name : {"arch", "rank", "epoch", "sigma", "antithetic",
+                             "score", "rng_algorithm", "rng_version", "storage",
+                             "accum"})
+        kernelState.addAttribute(name, scheduled->getAttr(name));
+      kernelState.addAttribute("tessera.workgroup_size",
+                               scheduled.getWorkgroupSizeAttr());
+      kernelState.addAttribute("tessera.schedule_hash",
+                               scheduled.getArtifactHashAttr());
+      builder.create(kernelState);
+
+      Value result = builder.create<bufferization::ToTensorOp>(
+          loc, outputType, outputBuffer);
+      scheduled.getScheduled().replaceAllUsesWith(result);
+      scheduled.erase();
+      if (graph->use_empty()) graph->erase();
+      for (schedule::ArtifactOp artifact : matchingArtifacts) artifact.erase();
+    }
+
+    SmallVector<schedule::SolverIFTOp> scheduledIFTs;
+    mod.walk([&](schedule::SolverIFTOp op) { scheduledIFTs.push_back(op); });
+    for (schedule::SolverIFTOp scheduled : scheduledIFTs) {
+      std::string payloadHash = llvm::toHex(
+          llvm::SHA256::hash(
+              llvm::arrayRefFromStringRef(scheduled.getLineagePayload())),
+          /*LowerCase=*/true);
+      if (payloadHash != scheduled.getArtifactHash()) {
+        scheduled.emitError("solver IFT lineage payload does not match artifact_hash");
+        return signalPassFailure();
+      }
+      SmallVector<schedule::ArtifactOp> matchingArtifacts;
+      mod.walk([&](schedule::ArtifactOp artifact) {
+        if (artifact.getHash() == scheduled.getArtifactHash())
+          matchingArtifacts.push_back(artifact);
+      });
+      if (matchingArtifacts.size() != 1) {
+        scheduled.emitError("requires exactly one matching schedule.artifact");
+        return signalPassFailure();
+      }
+      auto tensorType =
+          dyn_cast<RankedTensorType>(scheduled.getParameter().getType());
+      if (!tensorType || !tensorType.hasStaticShape() ||
+          !tensorType.getElementType().isF32()) {
+        scheduled.emitError("initial solver IFT lowering requires static f32 tensors");
+        return signalPassFailure();
+      }
+      if (scheduled.getSolution().getType() != tensorType ||
+          scheduled.getCotangent().getType() != tensorType) {
+        scheduled.emitError("solver IFT operands must have one static f32 type");
+        return signalPassFailure();
+      }
+
+      Location loc = scheduled.getLoc();
+      builder.setInsertionPoint(scheduled);
+      auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      auto toPointer = [&](Value tensor) -> Value {
+        auto memrefType = MemRefType::get(
+            tensorType.getShape(), tensorType.getElementType());
+        Value buffer = builder.create<bufferization::ToBufferOp>(
+            loc, memrefType, tensor);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer = builder.create<arith::IndexCastOp>(
+            loc, builder.getI64Type(), index);
+        return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      };
+      auto allocatePointer = [&]() {
+        auto memrefType = MemRefType::get(
+            tensorType.getShape(), tensorType.getElementType());
+        Value buffer = builder.create<memref::AllocOp>(loc, memrefType);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer = builder.create<arith::IndexCastOp>(
+            loc, builder.getI64Type(), index);
+        Value pointer =
+            builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+        return std::make_pair(buffer, pointer);
+      };
+
+      SmallVector<Value> operands;
+      for (Value input : {scheduled.getParameter(), scheduled.getSolution(),
+                          scheduled.getCotangent()})
+        operands.push_back(toPointer(input));
+      SmallVector<Value> outputBuffers;
+      for (int i = 0; i < 3; ++i) {
+        auto [buffer, pointer] = allocatePointer();
+        outputBuffers.push_back(buffer);
+        operands.push_back(pointer);
+      }
+      operands.push_back(builder.create<arith::ConstantIntOp>(
+          loc, tensorType.getNumElements(), 64));
+
+      OperationState kernelState(loc, "tile.solver_ift_kernel");
+      kernelState.addOperands(operands);
+      kernelState.addAttribute("arch", scheduled.getArchAttr());
+      kernelState.addAttribute("residual_model",
+                               scheduled.getResidualModelAttr());
+      kernelState.addAttribute("residual_digest",
+                               scheduled.getResidualDigestAttr());
+      kernelState.addAttribute("linear_solver",
+                               scheduled.getLinearSolverAttr());
+      kernelState.addAttribute("transpose", scheduled.getTransposeAttr());
+      kernelState.addAttribute("wrt", scheduled.getWrtAttr());
+      kernelState.addAttribute("adjoint_scale",
+                               scheduled.getAdjointScaleAttr());
+      kernelState.addAttribute("storage", scheduled.getStorageAttr());
+      kernelState.addAttribute("accum", scheduled.getAccumAttr());
+      kernelState.addAttribute("tessera.workgroup_size",
+                               scheduled.getWorkgroupSizeAttr());
+      kernelState.addAttribute("tessera.schedule_hash",
+                               scheduled.getArtifactHashAttr());
+      builder.create(kernelState);
+
+      for (auto [result, buffer] :
+           llvm::zip_equal(scheduled.getResults(), outputBuffers)) {
+        Value tensor = builder.create<bufferization::ToTensorOp>(
+            loc, tensorType, buffer);
+        result.replaceAllUsesWith(tensor);
+      }
+      scheduled.erase();
       for (schedule::ArtifactOp artifact : matchingArtifacts)
         artifact.erase();
     }

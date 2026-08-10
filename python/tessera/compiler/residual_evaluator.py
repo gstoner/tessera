@@ -6,15 +6,16 @@ deliberately independent of TileSight and analytical target models.  Those may
 prune the candidate set, but only an execution-derived :class:`ResidualEvidence`
 is eligible to select a production policy.
 
-Treeverse plans are emitted as candidates, not verdicts.  Their estimated work
-is derived from a measured per-step cost, but the complete backward must still
-be run through :func:`measure_residual_candidate` before promotion.
+Treeverse plans begin as pruning-only candidates.  The bounded counted-region
+executor can replay a candidate's actual backward; only that execution-derived
+row can become selector eligible.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+import copy
 import statistics
 import time
 from typing import Any, Literal
@@ -72,8 +73,7 @@ class ResidualEvidence:
         """Attributes consumed by ActivationRematerializationPass."""
         if not self.selector_eligible:
             raise ValueError(
-                "only exact-device, execution-derived residual evidence may "
-                "stamp compiler selection attributes"
+                "only exact-device, execution-derived residual evidence may stamp compiler selection attributes"
             )
         return {
             "tessera.backward_work_ns": self.backward_median_ns,
@@ -94,6 +94,168 @@ class TreeverseCandidate:
     estimated_replayed_steps: int
     estimated_backward_work_ns: int
     selector_eligible: bool = False
+
+
+@dataclass(frozen=True)
+class TreeverseExecution:
+    """Observed execution of one candidate over a differentiable region."""
+
+    input_cotangent: Any
+    forward_steps: int
+    replayed_steps: int
+    backward_steps: int
+    checkpoint_indices: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class _BorrowedState:
+    """Marks the caller-owned initial state as non-retained residual memory."""
+
+    value: Any
+
+
+def _clone_state(value: Any) -> Any:
+    copier = getattr(value, "copy", None)
+    return copier() if callable(copier) else copy.deepcopy(value)
+
+
+def capture_treeverse_forward(
+    *,
+    candidate: TreeverseCandidate,
+    initial_state: Any,
+    forward_step: Callable[[int, Any], Any],
+    clone_state: Callable[[Any], Any] = _clone_state,
+) -> ForwardCapture:
+    """Execute the forward region and retain exactly the selected checkpoints."""
+    state = clone_state(initial_state)
+    checkpoints: dict[int, Any] = {}
+    selected = set(candidate.checkpoint_indices)
+    for index in range(candidate.steps):
+        state = forward_step(index, state)
+        if index + 1 in selected:
+            checkpoints[index + 1] = clone_state(state)
+    return ForwardCapture(
+        output=state,
+        residuals={
+            "candidate": candidate,
+            "borrowed_initial": _BorrowedState(initial_state),
+            "checkpoints": checkpoints,
+        },
+    )
+
+
+def execute_treeverse_region_adjoint(
+    *,
+    cotangent: Any,
+    residuals: Mapping[str, Any],
+    forward_step: Callable[[int, Any], Any],
+    backward_step: Callable[[int, Any, Any, Any], Any],
+    clone_state: Callable[[Any], Any] = _clone_state,
+) -> TreeverseExecution:
+    """Execute a counted-region adjoint with bounded checkpoint storage.
+
+    Each required primal is replayed from the closest retained checkpoint.
+    The implementation intentionally does not retain an entire segment: its
+    replay count therefore matches the candidate's triangular work envelope.
+    ``backward_step`` receives ``(index, state_before, state_after, cotangent)``.
+    """
+    candidate = residuals.get("candidate")
+    checkpoints = residuals.get("checkpoints")
+    borrowed = residuals.get("borrowed_initial")
+    if (
+        not isinstance(candidate, TreeverseCandidate)
+        or not isinstance(checkpoints, Mapping)
+        or not isinstance(borrowed, _BorrowedState)
+    ):
+        raise TypeError("treeverse residuals must come from capture_treeverse_forward")
+    if tuple(sorted(int(i) for i in checkpoints)) != candidate.checkpoint_indices:
+        raise ValueError("treeverse checkpoint identity does not match the candidate")
+    available_checkpoints = {0: borrowed.value, **checkpoints}
+
+    boundaries = (0, *candidate.checkpoint_indices, candidate.steps)
+    adjoint = cotangent
+    replayed = 0
+    backward_steps = 0
+    for segment in range(len(boundaries) - 2, -1, -1):
+        start, end = boundaries[segment], boundaries[segment + 1]
+        start_state = available_checkpoints.get(start)
+        if start_state is None:
+            raise ValueError(f"missing treeverse checkpoint at step {start}")
+        for index in range(end - 1, start - 1, -1):
+            state = clone_state(start_state)
+            for replay_index in range(start, index):
+                state = forward_step(replay_index, state)
+                replayed += 1
+            after = forward_step(index, state)
+            adjoint = backward_step(index, state, after, adjoint)
+            backward_steps += 1
+    if replayed != candidate.estimated_replayed_steps:
+        raise RuntimeError("executed treeverse replay count disagrees with its plan")
+    return TreeverseExecution(
+        input_cotangent=adjoint,
+        forward_steps=candidate.steps + replayed,
+        replayed_steps=replayed,
+        backward_steps=backward_steps,
+        checkpoint_indices=candidate.checkpoint_indices,
+    )
+
+
+def measure_treeverse_region_candidate(
+    *,
+    target: str,
+    operation: str,
+    shape_bucket: Sequence[int],
+    dtype: str,
+    candidate: TreeverseCandidate,
+    initial_state: Any,
+    forward_step: Callable[[int, Any], Any],
+    backward_step: Callable[[int, Any, Any, Any], Any],
+    cotangent: Any,
+    synchronize: Callable[[], None] | None = None,
+    warmup: int = 3,
+    repetitions: int = 20,
+    timing_domain: str = "synchronized_host_wall",
+    provenance: str,
+    exact_device: bool,
+) -> ResidualEvidence:
+    """Measure an actually executed treeverse region adjoint.
+
+    This is the promotion bridge missing from :func:`treeverse_candidates`:
+    estimated envelopes remain ineligible, while the returned evidence may
+    select only when it was executed on the exact target device.
+    """
+
+    def forward() -> ForwardCapture:
+        return capture_treeverse_forward(
+            candidate=candidate,
+            initial_state=initial_state,
+            forward_step=forward_step,
+        )
+
+    def backward(ct: Any, saved: Any) -> Any:
+        return execute_treeverse_region_adjoint(
+            cotangent=ct,
+            residuals=saved,
+            forward_step=forward_step,
+            backward_step=backward_step,
+        ).input_cotangent
+
+    return measure_residual_candidate(
+        target=target,
+        operation=operation,
+        shape_bucket=shape_bucket,
+        dtype=dtype,
+        policy="treeverse",
+        forward=forward,
+        backward=backward,
+        cotangent=cotangent,
+        synchronize=synchronize,
+        warmup=warmup,
+        repetitions=repetitions,
+        timing_domain=timing_domain,
+        provenance=provenance,
+        exact_device=exact_device,
+    )
 
 
 def _retained_bytes(value: Any, seen: set[int]) -> int:
@@ -188,26 +350,17 @@ def measure_residual_candidate(
     )
 
 
-def select_residual_policy(
-    evidence: Iterable[ResidualEvidence], *, memory_budget_bytes: int
-) -> ResidualEvidence:
+def select_residual_policy(evidence: Iterable[ResidualEvidence], *, memory_budget_bytes: int) -> ResidualEvidence:
     """Select the fastest eligible policy that fits the residual budget."""
     if memory_budget_bytes < 0:
         raise ValueError("memory_budget_bytes must be non-negative")
     rows = list(evidence)
     if not rows:
         raise ValueError("at least one residual candidate is required")
-    identity = {
-        (row.target, row.operation, row.shape_bucket, row.dtype) for row in rows
-    }
+    identity = {(row.target, row.operation, row.shape_bucket, row.dtype) for row in rows}
     if len(identity) != 1:
         raise ValueError("residual candidates must describe one exact workload")
-    eligible = [
-        row
-        for row in rows
-        if row.selector_eligible
-        and row.retained_residual_bytes <= memory_budget_bytes
-    ]
+    eligible = [row for row in rows if row.selector_eligible and row.retained_residual_bytes <= memory_budget_bytes]
     if not eligible:
         raise ValueError("no execution-derived residual policy fits the budget")
     return min(
@@ -221,7 +374,10 @@ def select_residual_policy(
 
 
 def treeverse_candidates(
-    *, steps: int, state_bytes: int, measured_step_work_ns: int,
+    *,
+    steps: int,
+    state_bytes: int,
+    measured_step_work_ns: int,
     memory_budgets: Iterable[int],
 ) -> tuple[TreeverseCandidate, ...]:
     """Generate checkpoint candidates from measured step work.
@@ -238,18 +394,13 @@ def treeverse_candidates(
             raise ValueError("memory budgets must be non-negative")
         slots = min(max(budget // state_bytes, 0), max(steps - 1, 0))
         if slots:
-            indices = tuple(
-                sorted({round(i * steps / (slots + 1)) for i in range(1, slots + 1)})
-            )
+            indices = tuple(sorted({round(i * steps / (slots + 1)) for i in range(1, slots + 1)}))
         else:
             indices = ()
         boundaries = (0, *indices, steps)
         replayed = sum(
             length * max(length - 1, 0) // 2
-            for length in (
-                boundaries[i + 1] - boundaries[i]
-                for i in range(len(boundaries) - 1)
-            )
+            for length in (boundaries[i + 1] - boundaries[i] for i in range(len(boundaries) - 1))
         )
         candidates.append(
             TreeverseCandidate(
@@ -258,8 +409,7 @@ def treeverse_candidates(
                 checkpoint_indices=indices,
                 retained_residual_bytes=len(indices) * state_bytes,
                 estimated_replayed_steps=replayed,
-                estimated_backward_work_ns=(steps + replayed)
-                * measured_step_work_ns,
+                estimated_backward_work_ns=(steps + replayed) * measured_step_work_ns,
             )
         )
     return tuple(candidates)
@@ -270,6 +420,10 @@ __all__ = [
     "ResidualEvidence",
     "ResidualPolicy",
     "TreeverseCandidate",
+    "TreeverseExecution",
+    "capture_treeverse_forward",
+    "execute_treeverse_region_adjoint",
+    "measure_treeverse_region_candidate",
     "measure_residual_candidate",
     "retained_residual_bytes",
     "select_residual_policy",

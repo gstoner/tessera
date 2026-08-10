@@ -65,6 +65,9 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
     {
         # Optimizer step ops without an Apple GPU lane.
         "adafactor", "nesterov",
+        # EGGROLL rank-1 correction has gfx1151 and Zen 5 packages; Metal owns
+        # a separate follow-up and must not inherit either physical schedule.
+        "es_low_rank_correction",
         # Distributed collectives (mock/host today; real NCCL/RCCL is Phase G/H).
         "all_gather", "all_reduce", "all_to_all", "reduce_scatter",
         # RNG / stochastic.

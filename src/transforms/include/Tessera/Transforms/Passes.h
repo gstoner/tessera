@@ -51,6 +51,8 @@ std::unique_ptr<mlir::Pass> createTilingPass(bool valueMode);
 // Options:
 //   --prefer-amx  prefer AMX over AVX-512 when both are available (default true)
 std::unique_ptr<mlir::Pass> createTileToX86Pass();
+std::unique_ptr<mlir::Pass> createTileToX86Pass(bool preferAMX,
+                                                llvm::StringRef architecture);
 
 // ── Phase 0 production spine — Graph IR → upstream linalg ─────────────────
 // Lowers total elementwise Tessera Graph IR ops (currently tessera.add) to

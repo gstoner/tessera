@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 287 |
+| ``complete`` | 288 |
 | ``runnable_reference`` | 4 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **325** |
+| **total** | **326** |
 
-## complete (287)
+## complete (288)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -194,6 +194,7 @@ each row into a single E2E tier.
 | ``batched_gemm`` | loop_nest | public | public | registered | fused | fused | ready | none |
 | ``dequant_grouped_gemm`` | loop_nest | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dequant_matmul`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
+| ``es_low_rank_correction`` | loop_nest | public | public | registered | fused | device_verified_jit | ready | none |
 | ``factorized_matmul`` | loop_nest | public | public | registered | fused | device_verified_jit | ready | none |
 | ``gemm`` | loop_nest | public | public | registered | fused | device_verified_abi | ready | benchmarked |
 | ``grouped_gemm`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |

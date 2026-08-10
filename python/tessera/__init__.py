@@ -239,6 +239,28 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def batched_gemm(A, B, epilogue=None):
         return gemm(A, B, epilogue=epilogue)
 
+    def es_low_rank_correction(
+        x, member_ids, key, *, out_dim, rank, sigma, epoch=0,
+        score="gaussian", antithetic=True, numeric_policy=None,
+    ):
+        """Member-keyed, materialization-free ES low-rank correction."""
+        from .rng import RNGKey
+        from .stdlib.es import low_rank_correction
+
+        if not isinstance(key, RNGKey):
+            state = np.asarray(key, dtype=np.uint64).reshape(-1)
+            if state.shape != (2,):
+                raise ValueError("key must be RNGKey or a two-element integer tensor")
+            key = RNGKey(seed_high=int(state[0]), seed_low=int(state[1]))
+        policy = {"storage": "fp32", "accum": "fp32"}
+        if numeric_policy is not None:
+            policy.update(dict(numeric_policy))
+        return low_rank_correction(
+            x, member_ids, key, out_dim=int(out_dim), rank=int(rank),
+            sigma=float(sigma), epoch=int(epoch), score=str(score),
+            antithetic=bool(antithetic), accum=str(policy.get("accum")),
+        )
+
     def einsum(spec: str, *tensors):
         tensors = tuple(t._data if hasattr(t, "_data") else t for t in tensors)
         return np.einsum(spec, *tensors)
@@ -4382,6 +4404,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "gemm": gemm,
         "matmul": matmul,
         "batched_gemm": batched_gemm,
+        "es_low_rank_correction": es_low_rank_correction,
         "einsum": einsum,
         "factorized_matmul": factorized_matmul,
         "grouped_gemm": grouped_gemm,
@@ -4973,6 +4996,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         gemm=gemm,
         matmul=matmul,
         batched_gemm=batched_gemm,
+        es_low_rank_correction=es_low_rank_correction,
         einsum=einsum,
         factorized_matmul=factorized_matmul,
         grouped_gemm=grouped_gemm,

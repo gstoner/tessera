@@ -1,10 +1,12 @@
 
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassOptions.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
 
@@ -138,6 +140,232 @@ static void addCUDA13PipelineForSM(
   }
 }
 
+namespace {
+
+constexpr StringLiteral kX86ExecutablePipeline = "tessera-x86-executable";
+
+struct X86ExecutablePipelineOptions
+    : public PassPipelineOptions<X86ExecutablePipelineOptions> {
+  Option<std::string> family{
+      *this, "family", llvm::cl::desc("registered x86 physical family plugin"),
+      llvm::cl::init("matmul")};
+  Option<std::string> input{
+      *this, "input", llvm::cl::desc("producer level: tile"),
+      llvm::cl::init("tile")};
+  Option<std::string> output{
+      *this, "output", llvm::cl::desc("terminal artifact level: target"),
+      llvm::cl::init("target")};
+  Option<std::string> arch{
+      *this, "arch", llvm::cl::desc("exact x86 architecture package"),
+      llvm::cl::init("x86_64_avx512")};
+};
+
+static bool isRegisteredX86Family(StringRef family) {
+  static constexpr StringLiteral families[] = {
+      "alibi", "argreduce", "attention", "attention_backward", "clifford",
+      "deltanet", "ebm", "elementwise", "es_low_rank_correction", "fft",
+      "kv_cache", "linalg",
+      "loss", "matmul", "moe", "movement", "norm", "optimizer",
+      "quantization", "reduction", "rng", "rope", "scan", "softmax",
+      "solver_ift", "sort", "sparse", "spectral_backward", "ssm"};
+  return llvm::is_contained(families, family);
+}
+
+static StringRef directCarrierForX86Family(StringRef family) {
+  if (family == "matmul")
+    return "tile.matmul_kernel";
+  if (family == "softmax")
+    return "tile.softmax_kernel";
+  if (family == "reduction")
+    return "tile.reduce_kernel";
+  if (family == "attention")
+    return "tile.attention_kernel";
+  if (family == "attention_backward")
+    return "tile.attention_backward_kernel";
+  if (family == "spectral_backward")
+    return "tile.spectral_backward_kernel";
+  if (family == "solver_ift")
+    return "tile.solver_ift_kernel";
+  if (family == "es_low_rank_correction")
+    return "tile.es_low_rank_correction_kernel";
+  if (family == "elementwise")
+    return "tile.elementwise_kernel";
+  if (family == "argreduce")
+    return "tile.argreduce_kernel";
+  if (family == "scan")
+    return "tile.scan_kernel";
+  if (family == "norm")
+    return "tile.norm_kernel";
+  if (family == "rope")
+    return "tile.rope_kernel";
+  if (family == "alibi")
+    return "tile.alibi_kernel";
+  return "tile.x86_abi_kernel";
+}
+
+static bool isX86FamilyCarrier(Operation *op) {
+  StringRef name = op->getName().getStringRef();
+  return name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
+         name == "tile.reduce_kernel" || name == "tile.attention_kernel" ||
+         name == "tile.attention_backward_kernel" ||
+         name == "tile.spectral_backward_kernel" ||
+         name == "tile.solver_ift_kernel" ||
+         name == "tile.es_low_rank_correction_kernel" ||
+         name == "tile.elementwise_kernel" ||
+         name == "tile.argreduce_kernel" || name == "tile.scan_kernel" ||
+         name == "tile.norm_kernel" || name == "tile.rope_kernel" ||
+         name == "tile.alibi_kernel" || name == "tile.x86_abi_kernel";
+}
+
+struct DeclareX86PipelineContractPass
+    : PassWrapper<DeclareX86PipelineContractPass, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(DeclareX86PipelineContractPass)
+
+  DeclareX86PipelineContractPass() = default;
+  DeclareX86PipelineContractPass(StringRef family, StringRef input,
+                                 StringRef output, StringRef arch)
+      : family(family.str()), input(input.str()), output(output.str()),
+        arch(arch.str()) {}
+  DeclareX86PipelineContractPass(const DeclareX86PipelineContractPass &other)
+      : PassWrapper(other), family(other.family), input(other.input),
+        output(other.output), arch(other.arch) {}
+
+  StringRef getArgument() const final { return "declare-x86-pipeline-contract"; }
+  StringRef getDescription() const final {
+    return "Validate and declare the x86 Tile producer, Target consumer, and native image plugin";
+  }
+
+  void runOnOperation() override {
+    ModuleOp module = getOperation();
+    if (!isRegisteredX86Family(family)) {
+      module.emitError("unknown x86 family plugin '") << family << "'";
+      return signalPassFailure();
+    }
+    if (input != "tile" || output != "target") {
+      module.emitError(kX86ExecutablePipeline)
+          << " currently requires input=tile and output=target";
+      return signalPassFailure();
+    }
+    if (arch != "x86_64_avx512" && arch != "x86_64_base") {
+      module.emitError(kX86ExecutablePipeline)
+          << ": architecture '" << arch << "' has no family-plugin profile";
+      return signalPassFailure();
+    }
+    if (arch == "x86_64_base" && family != "softmax" &&
+        family != "reduction") {
+      module.emitError(kX86ExecutablePipeline)
+          << ": x86_64_base exposes only softmax/reduction plugins";
+      return signalPassFailure();
+    }
+
+    StringRef expected = directCarrierForX86Family(family);
+    unsigned carriers = 0;
+    unsigned primaryCarriers = 0;
+    bool mismatch = false;
+    module.walk([&](Operation *op) {
+      if (!isX86FamilyCarrier(op))
+        return;
+      ++carriers;
+      StringRef carrier = op->getName().getStringRef();
+      bool backwardRecomputeCompanion =
+          family == "attention_backward" && carrier == "tile.attention_kernel";
+      if (carrier != expected && !backwardRecomputeCompanion) {
+        op->emitError("x86 family plugin '")
+            << family << "' cannot consume " << op->getName();
+        mismatch = true;
+        return;
+      }
+      if (carrier == expected)
+        ++primaryCarriers;
+      if (expected == "tile.x86_abi_kernel") {
+        auto carrierFamily = op->getAttrOfType<StringAttr>("family");
+        if (!carrierFamily || carrierFamily.getValue() != family) {
+          op->emitError("x86 ABI carrier family does not match configured plugin '")
+              << family << "'";
+          mismatch = true;
+        }
+      }
+    });
+    if (mismatch)
+      return signalPassFailure();
+    bool validCarrierCount = primaryCarriers == 1 &&
+        (family == "attention_backward" ? carriers <= 2 : carriers == 1);
+    if (!validCarrierCount) {
+      module.emitError(kX86ExecutablePipeline)
+          << " requires exactly one primary family carrier"
+          << (family == "attention_backward"
+                  ? " and at most one forward-recompute companion, found "
+                  : ", found ")
+          << carriers;
+      return signalPassFailure();
+    }
+
+    Builder builder(&getContext());
+    module->setAttr("tessera.pipeline.schema",
+                    builder.getStringAttr("tessera.executable_pipeline.v1"));
+    module->setAttr("tessera.pipeline.family", builder.getStringAttr(family));
+    module->setAttr("tessera.pipeline.tile_producer",
+                    builder.getStringAttr("content_addressed_tile"));
+    module->setAttr("tessera.pipeline.target_ir_consumer",
+                    builder.getStringAttr("tessera_x86"));
+    module->setAttr("tessera.pipeline.backend_codegen",
+                    builder.getStringAttr("prebuilt_native_shared_object"));
+    module->setAttr("tessera.pipeline.arch", builder.getStringAttr(arch));
+    module->setAttr("tessera.pipeline.output", builder.getStringAttr(output));
+  }
+
+  std::string family, input, output, arch;
+};
+
+struct VerifyX86ExecutablePass
+    : PassWrapper<VerifyX86ExecutablePass, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VerifyX86ExecutablePass)
+
+  StringRef getArgument() const final { return "verify-x86-executable"; }
+  StringRef getDescription() const final {
+    return "Reject surviving Tile carriers at the typed x86 Target boundary";
+  }
+
+  void runOnOperation() override {
+    bool invalid = false;
+    bool hasNativeCall = false;
+    bool hasTargetMarker = false;
+    getOperation().walk([&](Operation *op) {
+      if (isX86FamilyCarrier(op)) {
+        op->emitError("operation survived the strict x86 Target boundary");
+        invalid = true;
+      }
+      if (auto call = dyn_cast<func::CallOp>(op))
+        hasNativeCall |= call.getCallee().starts_with("tessera_x86_");
+      if (op->getName().getStringRef() == "tessera_x86.abi_call")
+        hasTargetMarker = true;
+    });
+    if (!hasNativeCall) {
+      getOperation().emitError(
+          "typed x86 family plugin produced no native ABI call");
+      invalid = true;
+    }
+    if (!hasTargetMarker) {
+      getOperation().emitError(
+          "typed x86 family plugin produced no tessera_x86 Target marker");
+      invalid = true;
+    }
+    if (invalid)
+      signalPassFailure();
+  }
+};
+
+static void buildX86ExecutablePipeline(
+    OpPassManager &pm, const X86ExecutablePipelineOptions &opts) {
+  pm.addPass(std::make_unique<DeclareX86PipelineContractPass>(
+      opts.family, opts.input, opts.output, opts.arch));
+  StringRef passArch = opts.arch == "x86_64_base" ? "base" : "avx512";
+  pm.addPass(createTileToX86Pass(/*preferAMX=*/false, passArch));
+  pm.addPass(std::make_unique<VerifyX86ExecutablePass>());
+}
+
+} // namespace
+
 void registerTesseraPasses() {
   // ── Phase 1 passes ────────────────────────────────────────────────────────
   ::mlir::registerPass([]() { return createCanonicalizeTesseraIRPass(); });
@@ -156,6 +384,10 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createEffectAnnotationPass(); });
   ::mlir::registerPass([]() { return createTilingPass(); });
   ::mlir::registerPass([]() { return createTileToX86Pass(); });
+  ::mlir::registerPass(
+      []() { return std::make_unique<DeclareX86PipelineContractPass>(); });
+  ::mlir::registerPass(
+      []() { return std::make_unique<VerifyX86ExecutablePass>(); });
 
   // ── Phase 0 production spine — Graph IR → upstream linalg ──────────────────
   ::mlir::registerPass([]() { return createTesseraToLinalgPass(); });
@@ -224,6 +456,12 @@ void registerTesseraPasses() {
         if (storageLegalizationEnabled(opts, "x86"))
           pm.addPass(createStorageLegalizePass("x86"));
       });
+
+  ::mlir::PassPipelineRegistration<X86ExecutablePipelineOptions>
+      x86Executable(
+          "tessera-x86-executable",
+          "Typed family-plugin x86 pipeline from Tile IR to native ABI Target IR",
+          buildX86ExecutablePipeline);
 
   // ── Phase 3 passes ────────────────────────────────────────────────────────
   ::mlir::registerPass([]() { return createTileIRLoweringPass(); });

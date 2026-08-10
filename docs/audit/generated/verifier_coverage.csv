@@ -69,6 +69,7 @@ src/compiler/ir/TesseraOps.td,EBMPartitionExactOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMRefinementOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMSelfVerifyOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMSphereLangevinStepOp,1,1,real
+src/compiler/ir/TesseraOps.td,ESLowRankCorrectionOp,1,1,real
 src/compiler/ir/TesseraOps.td,EqOp,1,1,real
 src/compiler/ir/TesseraOps.td,ExpandOp,1,1,real
 src/compiler/ir/TesseraOps.td,FFTOp,1,1,real

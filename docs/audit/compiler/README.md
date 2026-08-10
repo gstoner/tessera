@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-08
+last_updated: 2026-08-09
 audit_role: index
 ---
 
@@ -42,12 +42,13 @@ proof at every boundary:
 | Order | Owning item | Outcome |
 |---|---|---|
 | 1 | **AD-CORE-LINEAR-1 — complete** | `LinearTransposeInterface` owns transpose/reshape, broadcast/expand, structural views, and operand-wise matmul; both compiler autodiff passes and paired CPU numerical proofs consume it. |
-| 2 | **AD-TSOL-SPECTRAL-1 — compiler slice complete** | Explicit Graph spectral identity, FFT/IFFT/RFFT/IRFFT/DCT transposes, compound VJPs, and a content-addressed multi-output Schedule→Tile carrier are implemented. Native x86/gfx1151 compound-backward packages remain architecture-owned and fail closed. |
+| 2 | **AD-TSOL-SPECTRAL-1 — bounded native slice landed** | Explicit Graph spectral identity, FFT/IFFT/RFFT/IRFFT/DCT transposes, and compound VJPs are implemented. Complex-f32 spectral-filter and unbroadcast full-f32 spectral-convolution adjoints now have content-addressed native AVX-512 and gfx1151 consumers with exact-host/device numerical proof. Native STFT/ISTFT backward, broader axes/dtypes/broadcasting, and performance packets remain architecture-owned and fail closed. |
 | 3 | **GRAPH-VERIFY-SIGNED-1 — complete** | Graph and canonical-attention integer verifiers consume signed `IntegerAttr` values, with negative IR tests proving that MLIR 23 unsigned accessors cannot bypass legality. |
 | 4 | **AD-CORE-EFFECT-CONTROL-1 — complete** | Canonical `stop_gradient`, SSA activity, Graph effect propagation, active-stochastic rejection, and fail-closed active-region/residual behavior are compiler-owned and directly tested. |
-| 5 | **AD-SOLVER-IFT-1 — shared IR landed; physical consumers open** | `NewtonAutodiff` now requires a typed residual ABI and emits private value-producing VJP/JVP functions containing registered `tessera_solver.residual` → `linear_solve` → `residual_adjoint` chains. Missing or mismatched residual functions fail closed. Architecture-owned matrix-free solve/adjoint lowering and compiled numerical packets remain open; Python `custom_root` is still the oracle, not device proof. |
-| 6 | **AD-RESIDUAL-EVAL-1 — measurement boundary landed; packets/treeverse execution open** | The Evaluator measures complete backward samples and unique retained residual allocation, only exact-device evidence may stamp `tessera.backward_work_ns`/`tessera.residual.retained_bytes`, and rematerialization consumes both. Treeverse envelopes use measured step work for pruning but are explicitly promotion-ineligible until their complete backward executes. Exact family packets and region-adjoint/treeverse execution remain open. |
-| 7 | **E2E-REAL-6** | Delete duplicate Graph-to-backend authorities only after each migrated family has lineage, correctness, and architecture-owned evidence. |
+| 5 | **AD-SOLVER-IFT-1 — bounded physical pilot landed** | `NewtonAutodiff` emits the registered shared IFT chain. A content-addressed `schedule.solver_ift` → `tile.solver_ift_kernel` contract now carries the `R(theta,x)=x²-theta` pilot into one AVX-512 package and one gfx1151-generated package. Both execute residual → transposed matrix-free solve → parameter residual-adjoint and pass compiled numerical packets. Arbitrary residuals and iterative/Krylov solvers remain open and fail closed. |
+| 6 | **AD-RESIDUAL-EVAL-1 — executable bounded evaluator landed** | The Evaluator measures complete backward samples and unique retained residual allocation, and rematerialization consumes only eligible exact-device rows. Counted-region treeverse candidates now execute real checkpoint capture, replay, and backward callbacks; only those executed rows may promote. The solver packets provide the first complete-backward samples, while general MLIR region adjoints and broader family packets remain open. |
+| 7 | **DIST-SHARD-ALIAS-1 — bounded portable slice landed** | The nine public names are classified by ownership: three placement/region contracts, five exact aliases of registered collective Target IR, and one distinct point-to-point `collective_permute` gap. The five aliases execute through the deterministic multi-rank runtime; frontend capture, point-to-point Target IR, and native transport remain open. |
+| 8 | **E2E-REAL-6** | Delete duplicate Graph-to-backend authorities only after each migrated family has lineage, correctness, and architecture-owned evidence. |
 
 Hardware packets and backend-specific tuning are synchronized follow-ups to
 these slices, not blockers for landing shared contracts with honest fail-closed

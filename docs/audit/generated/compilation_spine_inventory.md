@@ -23,6 +23,6 @@ Level A is native/reference runtime execution, Level B is a typed compiler seam,
 | `rocm_gfx940` | `tessera-target-artifact` | `tessera-lower-to-rocm` | `declared_shared_builder` | `absent` | `partial` | `absent` | `rocm` |
 | `rocm_gfx942` | `tessera-target-artifact` | `tessera-lower-to-rocm` | `declared_shared_builder` | `absent` | `partial` | `absent` | `rocm` |
 | `rocm_gfx950` | `tessera-target-artifact` | `tessera-lower-to-rocm` | `declared_shared_builder` | `absent` | `partial` | `absent` | `rocm` |
-| `x86` | `tessera-lower-to-x86` | `tessera-lower-to-x86` | `declared_exact` | `native` | `partial` | `absent` | `x86` |
+| `x86` | `tessera-lower-to-x86` | `tessera-x86-executable` | `declared_exact` | `native` | `partial` | `partial` | `x86` |
 
 The canonical CSV companion retains target scope, runtime backend, and the complete resolution reason.

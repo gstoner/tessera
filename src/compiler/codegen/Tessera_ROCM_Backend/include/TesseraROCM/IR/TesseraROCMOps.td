@@ -252,6 +252,43 @@ def ROCM_SoftmaxOp : TesseraROCM_Op<"softmax"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_SolverIFTOp : TesseraROCM_Op<"solver_ift"> {
+  let summary = "Matrix-free residual/solve/residual-adjoint IFT kernel";
+  let description = [{
+    Expands one promoted, content-addressed implicit-function VJP package.  The
+    pilot residual is `R(theta,x)=x*x-theta`; the kernel writes the residual,
+    the transposed diagonal solve, and the parameter cotangent independently.
+    Unknown residual models are rejected before kernel materialization.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$residual_digest,
+                       DefaultValuedAttr<StrAttr, "\"diagonal_sqrt_v1\"">:$residual_model,
+                       DefaultValuedAttr<StrAttr, "\"diagonal_matrix_free_v1\"">:$linear_solver,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_SpectralBackwardOp : TesseraROCM_Op<"spectral_backward"> {
+  let summary = "Native content-addressed compound spectral adjoint";
+  let description = [{
+    Materializes the bounded gfx1151 physical consumer for complex64 spectral
+    filtering or unbroadcast full f32 spectral convolution. Dimensions and
+    normalization are selected before this Target-IR boundary; unsupported
+    compound kinds remain fail-closed.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$kind,
+                       DefaultValuedAttr<I64Attr, "0">:$elements,
+                       DefaultValuedAttr<I64Attr, "0">:$batch,
+                       DefaultValuedAttr<I64Attr, "0">:$cotangent_length,
+                       DefaultValuedAttr<I64Attr, "0">:$input_length,
+                       DefaultValuedAttr<I64Attr, "0">:$parameter_length,
+                       DefaultValuedAttr<F32Attr, "1.0">:$normalization_scale);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_WMMAOp : TesseraROCM_Op<"wmma"> {
   let summary = "RDNA WMMA matrix multiply-accumulate (16x16x16)";
   let description = [{
@@ -1090,6 +1127,31 @@ def ROCM_PhiloxKernelOp : TesseraROCM_Op<"philox"> {
       cbase_lo i32, cbase_hi i32)`.
   }];
   let arguments = (ins StrAttr:$name);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_ESLowRankCorrectionOp
+    : TesseraROCM_Op<"es_low_rank_correction"> {
+  let summary = "gfx1151 member-keyed rank-1 ES correction package";
+  let description = [{
+    Compiler directive expanded into a physical f32 kernel. The artifact hash
+    covers the population and feature dimensions, SplitMix64 member derivation,
+    Philox-4x32-10 Box--Muller transform, antithetic policy, and numeric policy.
+    Only gfx1151/rank-1 is admitted until exact-device evidence promotes another
+    profile.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       StrAttr:$artifact_hash,
+                       I64Attr:$population,
+                       I64Attr:$rows_per_member,
+                       I64Attr:$in_dim,
+                       I64Attr:$out_dim,
+                       I64Attr:$rank,
+                       I64Attr:$epoch,
+                       F32Attr:$sigma,
+                       BoolAttr:$antithetic,
+                       StrAttr:$rng_algorithm,
+                       I64Attr:$rng_version);
   let assemblyFormat = "attr-dict";
 }
 

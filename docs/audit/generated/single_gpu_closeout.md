@@ -13,7 +13,7 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 389 | backend_pathway_owned=374, multi_gpu_deferred=15 | backend_codegen=374, distributed_validation=15 |
+| `backend_kernel` | 390 | backend_pathway_owned=375, multi_gpu_deferred=15 | backend_codegen=375, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
 | `target_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
@@ -209,6 +209,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `logical_or` | logical | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `logical_xor` | logical | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `batched_gemm` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `es_low_rank_correction` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `factorized_matmul` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `gemm` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `grouped_gemm` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |

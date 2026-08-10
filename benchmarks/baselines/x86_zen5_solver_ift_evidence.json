@@ -1,0 +1,76 @@
+{
+  "architecture": "avx512",
+  "artifact_hash": "6e690c1d3b06115a75e8252357f2cf07492083ee699efa56bcca59f090be3bcb",
+  "device": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "dtype": "f32",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "linear_solver": "diagonal_matrix_free_v1",
+  "matrix_materialized": false,
+  "numerical": {
+    "max_abs_error_by_phase": {
+      "linear_solution": 0.0,
+      "parameter_cotangent": 0.0,
+      "residual": 4.5797787606716156e-07
+    },
+    "oracle": "numpy_diagonal_sqrt_ift",
+    "passed": true
+  },
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": true,
+    "reason": "native AVX-512 synchronized host timing"
+  },
+  "residual_model": "diagonal_sqrt_v1",
+  "retained_residual_bytes": 3084,
+  "schema": "tessera.solver_ift.evidence.v1",
+  "shape": [
+    3,
+    257
+  ],
+  "target": "x86",
+  "tessera_opt_sha256": "780adea5809126ce66a32a0e57c210d2a899153cb8950fc17e5c0865be30b18a",
+  "timing": {
+    "complete_backward": true,
+    "median_ns": 46023,
+    "minimum_ns": 38590,
+    "samples_ns": [
+      51829,
+      49403,
+      64722,
+      48449,
+      121817,
+      58438,
+      55296,
+      46023,
+      149910,
+      117180,
+      55058,
+      46218,
+      42501,
+      44993,
+      73573,
+      47583,
+      47789,
+      39760,
+      39598,
+      41840,
+      41028,
+      40616,
+      40140,
+      41179,
+      42068,
+      40010,
+      39317,
+      38590,
+      43661,
+      38623
+    ],
+    "source": "synchronized_host_wall",
+    "warmup": 5
+  },
+  "toolchain": "Ubuntu LLVM version 23.0.0",
+  "work_items": [
+    "AD-SOLVER-IFT-1",
+    "AD-RESIDUAL-EVAL-1"
+  ]
+}

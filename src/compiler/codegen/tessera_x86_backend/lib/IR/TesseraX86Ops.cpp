@@ -15,7 +15,7 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/TypeSwitch.h"
 
-#include "TesseraX86Dialect.h.inc"
+#include "TesseraX86Dialect.h"
 #define GET_TYPEDEF_CLASSES
 #include "TesseraX86Types.h.inc"
 #define GET_OP_CLASSES
@@ -30,6 +30,11 @@ using namespace mlir::tessera_x86;
 
 #define GET_OP_CLASSES
 #include "TesseraX86Ops.cpp.inc"
+
+void mlir::tessera_x86::registerTesseraX86Dialect(
+    ::mlir::DialectRegistry &registry) {
+  registry.insert<TesseraX86Dialect>();
+}
 
 void TesseraX86Dialect::initialize() {
   addTypes<

@@ -4,6 +4,7 @@
 #include "ROCMPhysicalWMMAPanel.h"
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
+#include "Tessera/Dialect/Tile/TileEpilogue.h"
 #include "TesseraROCMDialect.h.inc"
 #define GET_TYPEDEF_CLASSES
 #include "TesseraROCMTypes.h.inc"
@@ -1972,20 +1973,6 @@ struct LowerTileToROCMPass
 
   void runOnOperation() override {
     StringRef arch = archOpt;
-    Operation *unsupportedSpectralBackward = nullptr;
-    getOperation().walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tile.spectral_backward_kernel") {
-        unsupportedSpectralBackward = op;
-        return WalkResult::interrupt();
-      }
-      return WalkResult::advance();
-    });
-    if (unsupportedSpectralBackward) {
-      unsupportedSpectralBackward->emitError(
-          "ROCm compound spectral adjoint package is not implemented; refusing to preserve an unconsumed Tile launch");
-      signalPassFailure();
-      return;
-    }
     SmallVector<gpu::GPUFuncOp> typedGemmContracts;
     getOperation().walk([&](gpu::GPUFuncOp function) {
       if (function->hasAttr("tessera.rocm.typed_gfx11_gemm_contract"))
@@ -2095,6 +2082,9 @@ struct LowerTileToROCMPass
           name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
           name == "tile.attention_kernel" ||
           name == "tile.attention_backward_kernel" ||
+          name == "tile.spectral_backward_kernel" ||
+          name == "tile.solver_ift_kernel" ||
+          name == "tile.es_low_rank_correction_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
           name == "tile.moe_dispatch_kernel" ||
           name == "tile.async_copy" ||
@@ -2128,6 +2118,143 @@ struct LowerTileToROCMPass
           signalPassFailure();
           return;
         }
+        continue;
+      }
+
+      if (name == "tile.es_low_rank_correction_kernel") {
+        auto opArch = op->getAttrOfType<StringAttr>("arch");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        auto rng = op->getAttrOfType<StringAttr>("rng_algorithm");
+        auto version = op->getAttrOfType<IntegerAttr>("rng_version");
+        auto rank = op->getAttrOfType<IntegerAttr>("rank");
+        auto population = op->getAttrOfType<IntegerAttr>("population");
+        auto rows = op->getAttrOfType<IntegerAttr>("rows_per_member");
+        auto inDim = op->getAttrOfType<IntegerAttr>("in_dim");
+        auto outDim = op->getAttrOfType<IntegerAttr>("out_dim");
+        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+            !hash || hash.getValue().size() != 64 || !rng ||
+            rng.getValue() != "splitmix64-philox4x32-boxmuller" || !version ||
+            version.getInt() != 1 || !rank || rank.getInt() != 1 ||
+            !population || population.getInt() <= 0 || !rows ||
+            rows.getInt() <= 0 || !inDim || inDim.getInt() <= 0 || !outDim ||
+            outDim.getInt() <= 0 || op->getNumOperands() != 8) {
+          op->emitError("EGGROLL W2 ROCm requires the exact content-addressed gfx1151 rank-1 ABI");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm ES correction requires a symbol-owned launch envelope");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(),
+                             "tessera_rocm.es_low_rank_correction");
+        state.addAttribute("name", symbol);
+        state.addAttribute("artifact_hash", hash);
+        for (StringRef attr : {"population", "rows_per_member", "in_dim",
+                               "out_dim", "rank", "epoch", "sigma",
+                               "antithetic", "rng_algorithm", "rng_version"})
+          state.addAttribute(attr, op->getAttr(attr));
+        builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.spectral_backward_kernel") {
+        auto opArch = op->getAttrOfType<StringAttr>("arch");
+        auto kind = op->getAttrOfType<StringAttr>("kind");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+            !kind || !hash || hash.getValue().size() != 64 ||
+            op->getNumOperands() != 5) {
+          op->emitError("native ROCm spectral adjoint requires the content-addressed gfx1151 ABI");
+          signalPassFailure();
+          return;
+        }
+        if (kind.getValue() != "tessera.spectral_filter" &&
+            kind.getValue() != "tessera.spectral_conv") {
+          op->emitError("compound spectral adjoint kind has no gfx1151 native package");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm spectral adjoint requires a symbol-owned launch envelope");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.spectral_backward");
+        state.addAttribute("name", symbol);
+        state.addAttribute("artifact_hash", hash);
+        state.addAttribute("kind", kind);
+        for (StringRef attr : {"elements", "batch", "cotangent_length",
+                               "input_length", "parameter_length"})
+          state.addAttribute(
+              attr, op->getAttr(attr)
+                        ? op->getAttr(attr)
+                        : builder.getI64IntegerAttr(0));
+        state.addAttribute(
+            "normalization_scale",
+            op->getAttr("normalization_scale")
+                ? op->getAttr("normalization_scale")
+                : builder.getF32FloatAttr(1.0));
+        builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.solver_ift_kernel") {
+        auto model = op->getAttrOfType<StringAttr>("residual_model");
+        auto solver = op->getAttrOfType<StringAttr>("linear_solver");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        auto residualDigest =
+            op->getAttrOfType<StringAttr>("residual_digest");
+        auto opArch = op->getAttrOfType<StringAttr>("arch");
+        if (op->getNumOperands() != 7 || !model ||
+            model.getValue() != "diagonal_sqrt_v1" || !solver ||
+            solver.getValue() != "diagonal_matrix_free_v1" || !hash ||
+            !residualDigest || !opArch || opArch.getValue() != "gfx1151") {
+          op->emitError("AD-SOLVER-IFT-1 ROCm requires the promoted gfx1151 diagonal-sqrt contract");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm solver IFT requires a symbol-owned launch envelope");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.solver_ift");
+        state.addAttribute("name", symbol);
+        state.addAttribute("artifact_hash", hash);
+        state.addAttribute("residual_digest", residualDigest);
+        state.addAttribute("residual_model", model);
+        state.addAttribute("linear_solver", solver);
+        state.addAttribute("dtype", builder.getStringAttr("f32"));
+        builder.create(state);
+        op->erase();
         continue;
       }
 
@@ -2322,10 +2449,54 @@ struct LowerTileToROCMPass
       }
 
       if (name == "tile.matmul_kernel") {
-        op->emitError("ROCm tile.matmul_kernel pack/loop/epilogue materializer "
-                      "is not implemented for this target");
-        signalPassFailure();
-        return;
+        auto desc =
+            op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+        auto epilogue =
+            op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
+        auto parent = op->getParentOfType<func::FuncOp>();
+        if (!desc || !epilogue || !parent || desc.getFamily() != "wmma" ||
+            desc.getM() != 16 || desc.getN() != 16 || desc.getK() != 16 ||
+            desc.getAType() != desc.getBType() ||
+            (desc.getAType() != "f16" && desc.getAType() != "bf16") ||
+            desc.getAccType() != "f32") {
+          op->emitError("ROCm Target matmul requires the typed 16x16x16 "
+                        "f16/bf16-to-f32 WMMA contract");
+          signalPassFailure();
+          return;
+        }
+        auto macroM =
+            op->getAttrOfType<IntegerAttr>("tessera.macro_tile_m");
+        auto macroN =
+            op->getAttrOfType<IntegerAttr>("tessera.macro_tile_n");
+        if (!macroM || !macroN || macroM.getInt() <= 0 ||
+            macroN.getInt() <= 0 || macroM.getInt() % 16 != 0 ||
+            macroN.getInt() % 16 != 0) {
+          op->emitError("ROCm Target matmul requires positive 16-aligned "
+                        "macro-tile extents");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.wmma_gemm");
+        state.addAttribute("name", builder.getStringAttr(parent.getSymName()));
+        state.addAttribute("m", builder.getI64IntegerAttr(16));
+        state.addAttribute("n", builder.getI64IntegerAttr(16));
+        state.addAttribute("k", builder.getI64IntegerAttr(16));
+        state.addAttribute("mt",
+                           builder.getI64IntegerAttr(macroM.getInt() / 16));
+        state.addAttribute("nt",
+                           builder.getI64IntegerAttr(macroN.getInt() / 16));
+        state.addAttribute("dtype", builder.getStringAttr(desc.getAType()));
+        state.addAttribute("bias", builder.getBoolAttr(epilogue.getBias()));
+        state.addAttribute("activation",
+                           builder.getStringAttr(epilogue.getActivation()));
+        for (StringRef attrName : {"tessera.schedule_hash",
+                                   "tessera.raster_order",
+                                   "tessera.raster_group", "numeric_policy"})
+          if (Attribute attr = op->getAttr(attrName))
+            state.addAttribute(attrName, attr);
+        builder.create(state);
+        op->erase();
+        continue;
       }
 
       if (name == "tile.mma") {

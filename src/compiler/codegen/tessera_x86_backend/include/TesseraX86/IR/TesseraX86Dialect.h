@@ -17,9 +17,7 @@ namespace mlir {
 namespace tessera_x86 {
 
 /// Register the hardware-free x86 Target IR dialect (Decision #19 / W0.10).
-inline void registerTesseraX86Dialect(::mlir::DialectRegistry &registry) {
-  registry.insert<TesseraX86Dialect>();
-}
+void registerTesseraX86Dialect(::mlir::DialectRegistry &registry);
 
 }  // namespace tessera_x86
 }  // namespace mlir

@@ -43,8 +43,9 @@ def _module(op_name: str, shape: tuple[int, ...] = (3, 17)) -> GraphIRModule:
     )])
 
 
-def _fake_lower(tile_ir: str, symbol: str):
+def _fake_lower(tile_ir: str, symbol: str, family: str):
     assert "tile.elementwise_kernel" in tile_ir
+    assert family == "elementwise"
     return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-x86-e2e2", "compiler", "toolchain"
 
 

@@ -1,0 +1,76 @@
+{
+  "architecture": "gfx1151",
+  "artifact_hash": "0b8b90b41a1ba44783b63e4bcc5d10cbfd7dcd911a5278d79615ceb500ab365e",
+  "device": "gfx1151",
+  "dtype": "f32",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "linear_solver": "diagonal_matrix_free_v1",
+  "matrix_materialized": false,
+  "numerical": {
+    "max_abs_error_by_phase": {
+      "linear_solution": 0.0,
+      "parameter_cotangent": 0.0,
+      "residual": 0.0
+    },
+    "oracle": "numpy_diagonal_sqrt_ift",
+    "passed": true
+  },
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "WSL HIP host-wall timing is regression-only"
+  },
+  "residual_model": "diagonal_sqrt_v1",
+  "retained_residual_bytes": 3084,
+  "schema": "tessera.solver_ift.evidence.v1",
+  "shape": [
+    3,
+    257
+  ],
+  "target": "rocm_gfx1151",
+  "tessera_opt_sha256": "780adea5809126ce66a32a0e57c210d2a899153cb8950fc17e5c0865be30b18a",
+  "timing": {
+    "complete_backward": true,
+    "median_ns": 884721,
+    "minimum_ns": 848709,
+    "samples_ns": [
+      1174843,
+      955109,
+      902900,
+      852328,
+      1001944,
+      865773,
+      862350,
+      850399,
+      879001,
+      857441,
+      981577,
+      893919,
+      876552,
+      853661,
+      864429,
+      950710,
+      848709,
+      885685,
+      855665,
+      856206,
+      1041218,
+      902792,
+      861558,
+      919065,
+      915923,
+      884721,
+      857744,
+      865307,
+      890063,
+      888264
+    ],
+    "source": "synchronized_host_wall",
+    "warmup": 5
+  },
+  "toolchain": "Ubuntu LLVM version 23.0.0",
+  "work_items": [
+    "AD-SOLVER-IFT-1",
+    "AD-RESIDUAL-EVAL-1"
+  ]
+}

@@ -11,7 +11,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tessera import rng
+import tessera
+from tessera import optim, rng
+from tessera.compiler.es_rng_contract import (
+    ES_MEMBER_RNG_ALGORITHM,
+    ES_MEMBER_RNG_VERSION,
+    member_seed,
+)
 from tessera.stdlib import es
 
 
@@ -33,6 +39,21 @@ def test_A1_forward_identity(r):
                                              dtype="fp64")).T
         for p, mem in enumerate(members)])
     assert np.allclose(got, dense, atol=1e-10)
+
+
+def test_A1_graph_op_reference_is_the_explicit_correction():
+    key = rng.RNGKey.from_seed(123)
+    x = np.random.default_rng(10).standard_normal((4, 3, 8)).astype(np.float32)
+    members = np.array([8, 9, 14, 15], dtype=np.int64)
+    got = tessera.ops.es_low_rank_correction(
+        x, members, key, out_dim=6, rank=1, sigma=0.02, epoch=3,
+        numeric_policy={"storage": "fp32", "accum": "fp32"},
+    )
+    expected = np.empty((4, 3, 6), dtype=np.float32)
+    for p, member in enumerate(members):
+        A, B, sign = es.reconstruct_factors(key, int(member), 6, 8, 1, epoch=3)
+        expected[p] = sign * np.float32(0.02) * ((x[p] @ B) @ A.T)
+    np.testing.assert_array_equal(got, expected)
 
 
 @pytest.mark.parametrize("r", [1, 3])
@@ -76,6 +97,23 @@ def test_A4_rng_member_keyed_not_rank_keyed():           # G2
     assert off.max() < 0.4                                   # distinct directions ~uncorrelated
 
 
+def test_A4_physical_rng_contract_is_versioned_and_domain_separated():
+    key = rng.RNGKey(seed_high=0x0123456789ABCDEF, seed_low=0xFEDCBA9876543210)
+    assert ES_MEMBER_RNG_ALGORITHM == "splitmix64-philox4x32-boxmuller"
+    assert ES_MEMBER_RNG_VERSION == 1
+    seeds = {
+        member_seed(key, epoch=epoch, pair=pair)
+        for epoch in range(2) for pair in range(3)
+    }
+    assert len(seeds) == 6
+    # Golden vector: changing this requires an explicit ES RNG ABI bump.
+    assert member_seed(key, epoch=0, pair=0) == 0xA388BE70D4A996F1
+    with pytest.raises(ValueError, match="epoch"):
+        member_seed(key, epoch=-1, pair=0)
+    with pytest.raises(ValueError, match="pair"):
+        member_seed(key, epoch=0, pair=-1)
+
+
 def test_A5_accum_fp32_contract():                           # I6 / Decision #32
     key = rng.RNGKey.from_seed(5)
     members = list(range(4000))
@@ -115,6 +153,82 @@ def test_A_sigma_is_required_semantic():                     # G4
         es.low_rank_perturbation(key, 0, 8, 8, 1, sigma=None)
     with pytest.raises(ValueError):
         es.es_update(key, [0, 1], [1.0, -1.0], 8, 8, sigma=None, rank=1)
+
+
+def test_C1_es_pseudo_gradient_feeds_existing_adam_path():
+    key = rng.RNGKey.from_seed(31)
+    members = list(range(16))
+    fitness = np.linspace(-1.0, 1.0, len(members), dtype=np.float32)
+    pseudo_gradient = es.es_update(
+        key, members, fitness, 4, 3, sigma=0.02, rank=1
+    ).astype(np.float32)
+    params = np.arange(12, dtype=np.float32).reshape(4, 3) / 10.0
+
+    actual, state = optim.adam(
+        params, pseudo_gradient, lr=1.0e-2, beta1=0.0, beta2=0.0
+    )
+    expected = params - 1.0e-2 * pseudo_gradient / (
+        np.abs(pseudo_gradient) + 1.0e-8
+    )
+    np.testing.assert_allclose(actual, expected, rtol=1.0e-6, atol=1.0e-7)
+    assert state["step"] == 1 and set(state) == {"m", "v", "step"}
+
+
+def test_C1_moment_free_is_stateless_sign_threshold_update():
+    params = {
+        "weight": np.array([1.0, -2.0, 3.0, -4.0], dtype=np.float32),
+    }
+    pseudo_gradient = {
+        "weight": np.array([0.5, -0.2, 0.1, 0.0], dtype=np.float32),
+    }
+    actual = optim.moment_free(
+        params, pseudo_gradient, lr=0.25, threshold=0.15
+    )
+    np.testing.assert_array_equal(
+        actual["weight"],
+        np.array([0.75, -1.75, 3.0, -4.0], dtype=np.float32),
+    )
+    with pytest.raises(ValueError, match="threshold"):
+        optim.moment_free(params, pseudo_gradient, lr=0.25, threshold=-1.0)
+
+
+def test_W4_scalar_all_gather_reconstructs_one_identical_global_update():
+    from tessera.testing.mock_collective import MockRankGroup
+
+    world_size = 4
+    members = np.arange(16, dtype=np.int64)
+    scores = np.random.default_rng(51).standard_normal(16).astype(np.float32)
+    key = rng.RNGKey.from_seed(812)
+    group = MockRankGroup(n=world_size, mesh_axes={"dp": world_size})
+
+    def worker(worker_rank):
+        member_shard = np.array_split(members, world_size)[worker_rank.rank]
+        score_shard = np.array_split(scores, world_size)[worker_rank.rank]
+        return es.distributed_es_update(
+            worker_rank,
+            key,
+            member_shard,
+            score_shard,
+            6,
+            5,
+            sigma=0.02,
+            rank_size=1,
+            epoch=4,
+        )
+
+    results = group.run(worker)
+    expected = es.es_update(
+        key,
+        members,
+        es.fitness_shaping(scores),
+        6,
+        5,
+        sigma=0.02,
+        rank=1,
+        epoch=4,
+    )
+    for result in results:
+        np.testing.assert_array_equal(result, expected)
 
 
 # ================================================== FAMILY B — STATISTICAL

@@ -51,7 +51,7 @@ def test_followon_flat_packages_lower_to_stable_abi(
 ) -> None:
     monkeypatch.setattr(
         "tessera.compiler.x86_native._lower",
-        lambda tile_ir, symbol: (
+        lambda tile_ir, symbol, family: (
             f"module {{ func.call @{symbol}() : () -> () }}",
             b"\x7fELF-x86-e2e2-flat",
             "compiler",
@@ -75,7 +75,7 @@ def test_followon_flat_packages_lower_to_stable_abi(
 def test_measured_flat_followon_selector_policy(monkeypatch, op_name, shape, promoted) -> None:
     monkeypatch.setattr("tessera.compiler.x86_native.tools_available", lambda: True)
     if promoted:
-        def fake_lower(tile_ir: str, symbol: str):
+        def fake_lower(tile_ir: str, symbol: str, family: str):
             return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-flat", "compiler", "toolchain"
         monkeypatch.setattr("tessera.compiler.x86_native._lower", fake_lower)
     result = canonical_compile(_module(op_name, shape), target="x86", enable_tool_validation=False)

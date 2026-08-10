@@ -1,4 +1,4 @@
-// RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --tessera-tile-to-x86='prefer-amx=false architecture=avx512' %s | FileCheck %s
+// RUN: tessera-opt --pass-pipeline='builtin.module(tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-x86-executable{family=matmul input=tile output=target arch=x86_64_avx512})' %s | FileCheck %s
 
 module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
   func.func @x86_scheduled_matmul(

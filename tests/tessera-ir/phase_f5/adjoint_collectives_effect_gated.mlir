@@ -19,7 +19,7 @@
 // awaits each payload before rewriting the return.
 
 module {
-  // CHECK: sym_name = "bwd"
+  // CHECK-LABEL: func.func @bwd
   func.func @bwd(%A: tensor<4x8xf32> {tessera.effect = "memory"},
                  %B: tensor<8x16xf32> {tessera.effect = "write"},
                  %C: tensor<4x16xf32> {tessera.effect = "reduce_sum"})
@@ -43,7 +43,7 @@ module {
     // CHECK: %[[AR_F:.*]] = tessera_collective.all_reduce
     // CHECK-SAME: mesh_axis = "dp"
     // CHECK: %[[AR:.*]] = tessera_collective.await %[[AR_F]]
-    // CHECK: func.return %out, %[[RS]], %[[AG]], %[[AR]]
+    // CHECK: return %{{.*}}, %[[RS]], %[[AG]], %[[AR]]
     func.return %out, %dA, %dB, %dC
         : tensor<4x16xf32>, tensor<4x8xf32>, tensor<8x16xf32>, tensor<4x16xf32>
   }

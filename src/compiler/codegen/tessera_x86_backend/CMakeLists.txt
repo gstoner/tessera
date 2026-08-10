@@ -79,6 +79,7 @@ add_library(tessera_x86_backend
   src/kernels/avx512_policy_loss_f32.cpp
   src/kernels/avx512_fpquant_f32.cpp
   src/kernels/avx512_fft_f32.cpp
+  src/kernels/avx512_spectral_backward_f32.cpp
   src/kernels/avx512_sparse_f32.cpp
   src/kernels/avx512_ssm_f32.cpp
   src/kernels/avx512_ssm_bwd_f32.cpp
@@ -88,6 +89,8 @@ add_library(tessera_x86_backend
   src/kernels/avx512_svd_f32.cpp
   src/kernels/avx512_moe_f32.cpp
   src/kernels/avx512_optimizer_f32.cpp
+  src/kernels/avx512_solver_ift_f32.cpp
+  src/kernels/avx512_es_low_rank_f32.cpp
   src/kernels/avx512_predicate_f32.cpp
   src/kernels/kv_cache_f32.cpp
   src/kernels/epilogue.cpp
@@ -198,6 +201,7 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_policy_loss_f32.cpp
   src/kernels/avx512_fpquant_f32.cpp
   src/kernels/avx512_fft_f32.cpp
+  src/kernels/avx512_spectral_backward_f32.cpp
   src/kernels/avx512_sparse_f32.cpp
   src/kernels/avx512_ssm_f32.cpp
   src/kernels/avx512_ssm_bwd_f32.cpp
@@ -207,6 +211,8 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_svd_f32.cpp
   src/kernels/avx512_moe_f32.cpp
   src/kernels/avx512_optimizer_f32.cpp
+  src/kernels/avx512_solver_ift_f32.cpp
+  src/kernels/avx512_es_low_rank_f32.cpp
   src/kernels/avx512_predicate_f32.cpp
   src/kernels/kv_cache_f32.cpp
 )

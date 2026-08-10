@@ -8,14 +8,25 @@ last_updated: 2026-08-09
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
-Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **shared ES low-rank
-correction contract + fp32/s32 accumulation policy defined; NVIDIA emitter is
-follow-up required.** The Evolution-Strategies reference tier
-(`tessera.stdlib.es`) landed; the Graph-IR op `es_low_rank_correction` and its
-emitters are W2. NVIDIA is a lead performance target (Decision #28): a hand
-SGMV / `mma.sync` low-rank correction stays a Tier-3 arbiter candidate. The
-`s32` lane maps to native int8→s32 tensor cores; member-keyed RNG (G2) and the
-fp32/s32 accumulation policy (I6 / Decision #32) apply. Contract:
+Cross-backend sync `X86-TYPED-FAMILY-PLUGIN-2026-08-09` — **shared schema
+parity assessed; no CUDA physical change.** x86 now validates a closed Tile
+family and registered Target marker before selecting its prebuilt AVX-512
+image. NVIDIA may reuse the schema and fail-closed family discipline, but no
+x86 ABI call, schedule, package, or Zen 5 evidence transfers to SM90/SM120.
+The x86 backward-family allowance is narrowly one explicit forward-recompute
+companion, not a general multi-carrier escape hatch. The canonical NVVM/PTX
+image boundary remains NVIDIA-owned.
+
+Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **the shared Graph,
+Schedule, Tile, lineage, member-RNG-v1, and fp32 numeric-policy contract has
+landed; NVIDIA physical consumption is follow-up required.** gfx1151 owns the
+first GPU exact-device rank-1 proof and Zen 5 now owns an independent AVX-512
+fp32 package; neither is a portable SM schedule. NVIDIA remains a lead
+performance target: an SM-owned SGMV / `mma.sync` implementation and numerical
+packet are open. The `s32` lane maps to native int8→s32 tensor cores and remains
+a separate EGG expansion. W4 scalar-gather/member reconstruction passes
+mock-mesh proof; native NCCL multi-rank execution and a target packet remain
+open. Contract:
 `docs/audit/compiler/EGGROLL_SUPPORT_PLAN.md`.
 
 Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **shared
@@ -52,15 +63,21 @@ unsupported subgroup mesh axes, and native v1 forbids implicit non-fp32
 conversion. Exact multi-GPU NCCL correctness/performance remains required; no
 PTX selector or device claim changes.
 
-Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **shared typed IFT
-and measurement contracts available; CUDA consumers/evidence required.** The
-registered solver dialect now carries value-producing residual, matrix-free
-solve, residual-JVP, and residual-adjoint SSA chains with fail-closed residual
-ABI verification. Complete-backward timing and unique retained-residual bytes
-are eligible for policy selection only when executed on the exact target;
-treeverse estimates only prune. SM120 has no consumer or complete-backward
-packet for this chain, so no PTX package, selector, policy, or device claim
-changes.
+Cross-backend sync `DIST-SHARD-ALIAS-1-2026-08-09` — **shared alias mapping
+available; SM120 evidence open.** Five public reduction/broadcast aliases now
+resolve to the registered all-reduce/all-gather transport; three sharding
+entries remain compile-time placement/region contracts. `collective_permute`
+correctly remains a distinct point-to-point gap rather than being mislabeled
+as all-to-all. CUDA frontend capture and exact multi-GPU NCCL proof remain
+architecture-owned; no SM120 claim transfers from portable execution.
+
+Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **bounded x86/ROCm
+pilot landed; CUDA follow-up required.** The shared IFT chain now has a
+content-addressed Schedule→Tile physical contract, and counted-region treeverse
+can execute checkpoint replay before a row becomes eligible. SM120 has no
+consumer for the diagonal-sqrt pilot, no general iterative solver, and no
+complete-backward packet. This PR changes no PTX package, selector, policy, or
+device claim.
 
 Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` — **shared
 Graph/Tile/portable-Target contracts available; CUDA follow-up required.** Compiler activity,
@@ -84,6 +101,12 @@ FFT/RFFT/DCT transpose rules are target-independent and CPU-oracle proven.
 SM120 still needs its own Schedule→Tile/native compound-backward package and
 exact-device evidence; no CUDA support or performance claim follows from the
 x86/gfx1151 carrier.
+
+Cross-backend sync `AD-TSOL-SPECTRAL-NATIVE-2026-08-09` — **SM120 follow-up
+still required.** The bounded spectral-filter/convolution consumers and proof
+land only for AVX-512 and gfx1151. No PTX image, schedule, correctness, or
+performance evidence transfers to NVIDIA; its compound-backward path remains
+fail-closed until an architecture-owned package lands.
 
 Cross-backend sync `AD-CORE-LINEAR-1-2026-08-08` — **shared Graph-IR follow-up
 available; no CUDA physical claim.** Compiler-owned linear transposition now
@@ -399,6 +422,11 @@ NVIDIA selector or measurement result.
 
 Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **superseded by the terminal
 ROCm home-architecture rejection.** No NVIDIA arbiter-score adoption work remains.
+
+The independent Zen 5 hierarchical T1 packet now also rejects T1 for latency
+ranking (median rho -0.4062, 0/3 winner matches). Its x86 cache hierarchy,
+bandwidths, candidates, and verdict do not transfer to SM120; NVIDIA's own
+descriptor-complete correlation packet remains the only valid local decision.
 
 **Correction that created this item.** `APPLE_AUDIT.md` originally scoped this
 calibration to Apple alone, on the stated grounds that ROCm and NVIDIA kernels

@@ -104,7 +104,7 @@ def test_scheduled_artifact_rejects_graph_reentry() -> None:
 def test_x86_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
     artifact = _artifact(target="x86")
 
-    def fake_lower(tile_ir: str, symbol: str):
+    def fake_lower(tile_ir: str, symbol: str, family: str):
         assert tile_ir == artifact.tile_ir
         assert symbol == "tessera_x86_avx512_gemm_f32"
         return f"module {{ call @{symbol} }}", b"x86-image", "compiler", "toolchain"
@@ -161,8 +161,7 @@ def test_rocm_native_packaging_uses_typed_family_pipeline(monkeypatch) -> None:
         if "output=target" in pipeline:
             return (
                 'module attributes {tessera.pipeline.target_ir_consumer = '
-                '"tessera_rocm"} { gpu.module @kernels { '
-                '"tessera_rocm.test"() : () -> () } }'
+                '"tessera_rocm"} { "tessera_rocm.test"() : () -> () }'
             )
         return "module { gpu.binary @gfx1151 }"
 
@@ -205,7 +204,7 @@ def test_driver_records_adjacent_scheduled_matmul_lineage(monkeypatch, target: s
         monkeypatch.setattr(
             x86_native,
             "_lower",
-            lambda tile_ir, symbol: (
+            lambda tile_ir, symbol, family: (
                 f"module {{ call @{symbol} }}",
                 b"x86-image",
                 "compiler",

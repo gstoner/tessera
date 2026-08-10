@@ -4,16 +4,16 @@ Generated from `python/tessera/compiler/effect_audit.py`.  Don't edit by hand â€
 
 ## Headline
 
-- **319** ops in `OP_SPECS` carry an effect.
+- **320** ops in `OP_SPECS` carry an effect.
 - **0** mismatch the TSOL spec anchors (of 25 anchored ops).
 - **0** ops sit at the conservative `top` fallback level.
-- **22** ops declare deterministic-aware numeric policies.
+- **23** ops declare deterministic-aware numeric policies.
 
 ## Effect distribution
 
 | Effect level | Count | Description |
 |--------------|------:|-------------|
-| `pure` | 277 | No side effects; output depends only on inputs. |
+| `pure` | 278 | No side effects; output depends only on inputs. |
 | `random` | 4 | RNG-bearing; result varies across calls. |
 | `movement` | 2 | Explicit prefetch / async copy / wait. |
 | `state` | 29 | Reads or writes compiler-visible state (KV cache). |
@@ -34,13 +34,14 @@ _No ops at `top` â€” every op narrows to a specific lattice level._
 
 The TSOL spec promises `deterministic=True` flips ops to deterministic implementations.  Today's numeric-policy system (Sprint C2, 2026-05-11) attaches a `NumericPolicy` to 67 ops; the `deterministic` field controls per-op behavior.
 
-**22** ops declare deterministic-aware default policies:
+**23** ops declare deterministic-aware default policies:
 
 - `attn_compressed_blocks`
 - `attn_local_window_2d`
 - `attn_sliding_window`
 - `attn_top_k_blocks`
 - `deepseek_sparse_attention`
+- `es_low_rank_correction`
 - `flash_attn`
 - `gated_attention`
 - `gated_deltanet`

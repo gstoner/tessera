@@ -33,6 +33,8 @@ _SPECS = [
     OpSpec("gemm", "tessera.matmul", 2, 2, lowering="loop_nest"),
     OpSpec("matmul", "tessera.matmul", 2, 2, lowering="loop_nest"),
     OpSpec("batched_gemm", "tessera.batched_gemm", 2, 2, lowering="loop_nest"),
+    OpSpec("es_low_rank_correction", "tessera.es_low_rank_correction", 3, 3,
+           lowering="loop_nest", shape_rule="es_population_features"),
     OpSpec("einsum", "tessera.einsum", 1, 99, lowering="contraction"),
     OpSpec("factorized_matmul", "tessera.factorized_matmul", 2, 2, lowering="loop_nest"),
     OpSpec("grouped_gemm", "tessera.grouped_gemm", 3, 3, lowering="loop_nest"),
@@ -979,6 +981,7 @@ COMPUTE_FLOAT_DTYPE = "fp32"
 SHAPE_RULE_NAMES = frozenset({
     "same_as_first",
     "matmul_2d",
+    "es_population_features",
     "batched_gemm_3d",
     "transpose",
     "same_shape_bool",

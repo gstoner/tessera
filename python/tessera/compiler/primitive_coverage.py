@@ -479,6 +479,24 @@ _EXISTING_CATEGORIES: dict[str, str] = {
 #   - `backend_kernel` stays `partial` until each backend ships a real
 #     hardware kernel — that's Phase G/H work.
 _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
+    # EGGROLL W2 — an explicitly keyed, deterministic zeroth-order primitive.
+    # The generated correction is intentionally outside compiler AD: ES owns
+    # its estimator/update semantics and differentiating through the sampled
+    # factors would be a different algorithm. Native backend coverage remains
+    # partial until Apple/CUDA consumers land; exact gfx1151 and Zen 5 AVX-512
+    # correctness do not close the universal axis or transfer schedules.
+    "es_low_rank_correction": {
+        "math_semantics": "complete",
+        "dtype_layout_rule": "complete",
+        "vjp": "non_differentiable",
+        "jvp": "non_differentiable",
+        "transpose_rule": "no_linear_transpose",
+        "sharding_rule": "complete",
+        "masking_effect_rule": "complete",
+        "lowering_rule": "complete",
+        "backend_kernel": "partial",
+        "tests": "complete",
+    },
     # ── KV cache state-effect ops ────────────────────────────────────────
     # `append` concatenates K/V slices along the sequence axis;
     # `prune` drops oldest entries beyond the configured window. These are
@@ -2009,6 +2027,12 @@ _NUMERIC_POLICY_BY_NAME_FACTORIES: dict[str, "Callable[[], NumericPolicy]"] = {
     "depthwise_conv2d":  _matmul_policy,
     "qkv_projection":    _matmul_policy,
     "fused_epilogue":    _matmul_policy,
+    # EGGROLL low-rank correction: f32 storage/accumulation is the initial
+    # physical bucket. The optional EGG integer lane will require a separate
+    # saturating s32 policy rather than silently widening this contract.
+    "es_low_rank_correction": lambda: NumericPolicy(
+        storage="fp32", accum="fp32", deterministic=True
+    ),
     # Grouped GEMM / MoE expert FFN carry the same storage=bf16/accum=fp32
     # two-level-accumulation contract as dense matmul (low-precision storage,
     # fp32 accumulation — DeepGEMM's two-level accumulate).  The scale_layout

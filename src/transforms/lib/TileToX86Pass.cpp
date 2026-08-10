@@ -347,6 +347,10 @@ struct TileToX86PassImpl
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileToX86PassImpl)
 
   TileToX86PassImpl() = default;
+  TileToX86PassImpl(bool preferAMX, StringRef architecture) {
+    preferAMXOpt = preferAMX;
+    architectureOpt = architecture.str();
+  }
   TileToX86PassImpl(const TileToX86PassImpl &other)
       : PassWrapper(other) {}
 
@@ -376,19 +380,6 @@ struct TileToX86PassImpl
       getOperation().emitError("x86 architecture must be avx512 or base");
       return signalPassFailure();
     }
-    Operation *unsupportedSpectralBackward = nullptr;
-    getOperation().walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tile.spectral_backward_kernel") {
-        unsupportedSpectralBackward = op;
-        return WalkResult::interrupt();
-      }
-      return WalkResult::advance();
-    });
-    if (unsupportedSpectralBackward) {
-      unsupportedSpectralBackward->emitError(
-          "x86 compound spectral adjoint package is not implemented; refusing to preserve an unconsumed Tile launch");
-      return signalPassFailure();
-    }
     bool portableBase = architectureOpt == "base";
     RewritePatternSet patterns(&getContext());
     bool amx = preferAMXOpt;
@@ -416,6 +407,9 @@ struct TileToX86PassImpl
       if (name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
           name == "tile.reduce_kernel" || name == "tile.attention_kernel" ||
           name == "tile.attention_backward_kernel" ||
+          name == "tile.spectral_backward_kernel" ||
+          name == "tile.solver_ift_kernel" ||
+          name == "tile.es_low_rank_correction_kernel" ||
           name == "tile.elementwise_kernel" ||
           name == "tile.argreduce_kernel" || name == "tile.scan_kernel" ||
           name == "tile.norm_kernel" || name == "tile.rope_kernel" ||
@@ -457,6 +451,126 @@ struct TileToX86PassImpl
           opName != "tile.reduce_kernel") {
         op->emitError("x86 base architecture currently supports only softmax and reduction launch envelopes");
         return signalPassFailure();
+      }
+      if (opName == "tile.es_low_rank_correction_kernel") {
+        auto arch = op->getAttrOfType<StringAttr>("arch");
+        auto rank = op->getAttrOfType<IntegerAttr>("rank");
+        auto epoch = op->getAttrOfType<IntegerAttr>("epoch");
+        auto sigma = op->getAttrOfType<FloatAttr>("sigma");
+        auto antithetic = op->getAttrOfType<BoolAttr>("antithetic");
+        auto score = op->getAttrOfType<StringAttr>("score");
+        auto rng = op->getAttrOfType<StringAttr>("rng_algorithm");
+        auto version = op->getAttrOfType<IntegerAttr>("rng_version");
+        if (op->getNumOperands() != 8 || !arch ||
+            arch.getValue() != "zen5-avx512" || !rank || rank.getInt() != 1 ||
+            !epoch || epoch.getInt() < 0 || !sigma ||
+            !sigma.getValue().isFinite() || sigma.getValueAsDouble() <= 0.0 ||
+            !antithetic || !score || score.getValue() != "gaussian" || !rng ||
+            rng.getValue() != "splitmix64-philox4x32-boxmuller" || !version ||
+            version.getInt() != 1) {
+          op->emitError("x86 EGGROLL W2 requires the exact content-addressed Zen 5 f32 rank-1 contract");
+          return signalPassFailure();
+        }
+        StringRef symbol =
+            "tessera_x86_avx512_es_low_rank_correction_f32";
+        ensureExternalDecl(
+            module, symbol,
+            FunctionType::get(ctx,
+                              {ptrTy, ptrTy, ptrTy, ptrTy, i64Ty, i64Ty,
+                               i64Ty, i64Ty, i64Ty, f32Ty, i32Ty},
+                              {i32Ty}));
+        SmallVector<Value> operands(op->getOperands());
+        operands.push_back(builder.create<arith::ConstantIntOp>(
+            loc, epoch.getInt(), 64));
+        operands.push_back(
+            builder.create<arith::ConstantOp>(loc, f32Ty, sigma));
+        operands.push_back(builder.create<arith::ConstantIntOp>(
+            loc, antithetic.getValue() ? 1 : 0, 32));
+        builder.create<func::CallOp>(loc, symbol, TypeRange{i32Ty}, operands);
+        op->erase();
+        continue;
+      }
+      if (opName == "tile.spectral_backward_kernel") {
+        auto arch = op->getAttrOfType<StringAttr>("arch");
+        auto kind = op->getAttrOfType<StringAttr>("kind");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        if (op->getNumOperands() != 5 || !arch ||
+            arch.getValue() != "zen5-avx512" || !kind || !hash ||
+            hash.getValue().size() != 64) {
+          op->emitError("native x86 spectral adjoint requires the content-addressed Zen 5 AVX-512 ABI");
+          return signalPassFailure();
+        }
+        if (kind.getValue() == "tessera.spectral_filter") {
+          auto elements = op->getAttrOfType<IntegerAttr>("elements");
+          if (!elements || elements.getInt() <= 0) {
+            op->emitError("native x86 spectral-filter adjoint requires a positive element count");
+            return signalPassFailure();
+          }
+          StringRef symbol =
+              "tessera_x86_avx512_spectral_filter_bwd_c64";
+          ensureExternalDecl(module, symbol,
+                             FunctionType::get(
+                                 ctx, {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy,
+                                       i64Ty}, {}));
+          Value count = builder.create<arith::ConstantIntOp>(
+              loc, elements.getInt(), 64);
+          SmallVector<Value> operands(op->getOperands());
+          operands.push_back(count);
+          builder.create<func::CallOp>(loc, symbol, TypeRange{}, operands);
+        } else if (kind.getValue() == "tessera.spectral_conv") {
+          auto batch = op->getAttrOfType<IntegerAttr>("batch");
+          auto outputLength =
+              op->getAttrOfType<IntegerAttr>("cotangent_length");
+          auto inputLength = op->getAttrOfType<IntegerAttr>("input_length");
+          auto kernelLength =
+              op->getAttrOfType<IntegerAttr>("parameter_length");
+          auto scale = op->getAttrOfType<FloatAttr>("normalization_scale");
+          if (!batch || !outputLength || !inputLength || !kernelLength ||
+              !scale) {
+            op->emitError("native x86 spectral-conv adjoint contract is incomplete");
+            return signalPassFailure();
+          }
+          StringRef symbol = "tessera_x86_avx512_spectral_conv_bwd_f32";
+          ensureExternalDecl(
+              module, symbol,
+              FunctionType::get(ctx,
+                                {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy, i64Ty,
+                                 i64Ty, i64Ty, i64Ty, f32Ty}, {}));
+          SmallVector<Value> operands(op->getOperands());
+          for (IntegerAttr value :
+               {batch, outputLength, inputLength, kernelLength})
+            operands.push_back(builder.create<arith::ConstantIntOp>(
+                loc, value.getInt(), 64));
+          operands.push_back(builder.create<arith::ConstantOp>(loc, f32Ty,
+                                                               scale));
+          builder.create<func::CallOp>(loc, symbol, TypeRange{}, operands);
+        } else {
+          op->emitError("x86 compound spectral adjoint kind has no native package");
+          return signalPassFailure();
+        }
+        op->erase();
+        continue;
+      }
+      if (opName == "tile.solver_ift_kernel") {
+        auto arch = op->getAttrOfType<StringAttr>("arch");
+        auto model = op->getAttrOfType<StringAttr>("residual_model");
+        auto solver = op->getAttrOfType<StringAttr>("linear_solver");
+        auto transpose = op->getAttrOfType<BoolAttr>("transpose");
+        if (op->getNumOperands() != 7 || !arch || arch.getValue() != "avx512" ||
+            !model || model.getValue() != "diagonal_sqrt_v1" || !solver ||
+            solver.getValue() != "diagonal_matrix_free_v1" || !transpose ||
+            !transpose.getValue()) {
+          op->emitError("AD-SOLVER-IFT-1 x86 requires the promoted avx512 diagonal-sqrt contract");
+          return signalPassFailure();
+        }
+        StringRef symbol = "tessera_x86_avx512_solver_ift_sqrt_f32";
+        ensureExternalDecl(
+            module, symbol,
+            FunctionType::get(ctx, {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy, ptrTy,
+                                    i64Ty}, {}));
+        builder.create<func::CallOp>(loc, symbol, TypeRange{}, op->getOperands());
+        op->erase();
+        continue;
       }
       if (opName == "tile.argreduce_kernel" || opName == "tile.scan_kernel") {
         auto kind = op->getAttrOfType<StringAttr>("kind");
@@ -922,6 +1036,28 @@ struct TileToX86PassImpl
                      op->getOperand(3), op->getOperand(1), kindConstant});
       op->erase();
     }
+
+    // Keep the architecture-owned Target boundary visible.  The executable
+    // implementation remains the stable C ABI call, but every such call now
+    // has a registered tessera_x86 marker instead of disappearing into the
+    // generic func dialect.  This lets the family pipeline verify and hash the
+    // Target consumer without changing the native calling convention.
+    if (!getContext().getOrLoadDialect("tessera_x86")) {
+      module.emitError("tessera_x86 dialect is required by typed x86 lowering");
+      return signalPassFailure();
+    }
+    SmallVector<func::CallOp> nativeCalls;
+    module.walk([&](func::CallOp call) {
+      if (call.getCallee().starts_with("tessera_x86_"))
+        nativeCalls.push_back(call);
+    });
+    for (func::CallOp call : nativeCalls) {
+      OpBuilder builder(call);
+      OperationState state(call.getLoc(), "tessera_x86.abi_call");
+      state.addAttribute("symbol", builder.getStringAttr(call.getCallee()));
+      state.addAttribute("abi", builder.getStringAttr("tessera_x86_c"));
+      builder.create(state);
+    }
   }
 };
 
@@ -930,5 +1066,9 @@ struct TileToX86PassImpl
 namespace tessera {
 std::unique_ptr<Pass> createTileToX86Pass() {
   return std::make_unique<TileToX86PassImpl>();
+}
+std::unique_ptr<Pass> createTileToX86Pass(bool preferAMX,
+                                          llvm::StringRef architecture) {
+  return std::make_unique<TileToX86PassImpl>(preferAMX, architecture);
 }
 } // namespace tessera

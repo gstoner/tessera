@@ -110,8 +110,9 @@ out[p]= sign · (σ/√r) · (x[p] @ B) @ Aᵀ
    bit-identical `(A,B)`; the counter base carries **no rank term**. The two RNG
    axes coexist (rank-keyed device stream ⟂ member-keyed perturbation stream).
 2. **`σ` is a `σ√d`-regime semantic (G4).** `‖σE‖_F ~ σ√(mn)`; consistency needs
-   `σ√d = o(1)` (paper's `σ_d = o(d^{-1/2})`). `σ` fails closed and the verifier
-   emits a diagnostic when `σ√(mn)` leaves the validated band.
+   `σ√d = o(1)` (paper's `σ_d = o(d^{-1/2})`). `σ` is required, finite,
+   positive, and content-addressed. No universal dimension-dependent band is
+   claimed yet; a future selector may add one only from measured model evidence.
 3. **`accum = f32/s32` mandatory (I6 / Decision #32).** The update sums over a
    large population; bf16 accumulation loses the signal to cancellation
    (verified: >0.1% error, oracle A5).
@@ -145,8 +146,9 @@ noise floor at r=1 (~1% of the gradient norm) — which is why rank-1 works.
 
 Exact identities are **unit** oracles; statistical equivalence is an
 **expectation** oracle — conflating them (asserting the ES-limit as equality) is
-the G1 mistake. Both families are implemented and green (17/17 in
-`test_es_low_rank_correction.py`).
+the G1 mistake. Both families and the physical RNG identity are implemented in
+`tests/unit/test_es_reference.py`; the required operation/registry gates are
+part of the focused validation set.
 
 **Family A — EXACT (per-sample, any r):** A1 forward identity, A2 update
 three-forms, A3 rank (antithetic-aware), A4 RNG member-keying, A5 accum-fp32.
@@ -162,10 +164,10 @@ lane; tolerances `∝ 1/√samples`.
 
 | WS | Scope | Gate |
 |---|---|---|
-| **W1 — reference tier (host-free)** ✅ **LANDED** | `python/tessera/stdlib/es.py`: `low_rank_perturbation`, `population_forward`, `es_update`, `fitness_shaping`/`centered_rank`/`antithetic_sign` (reusing `rl.normalize_group_advantages`, O6). Member-keyed via `rng.RNGKey.fold_in` (G2 by construction). Oracles: `tests/unit/test_es_reference.py` (16/16 green; A1–A5 exact + G4 fail-closed, B1–B3 statistical). mypy clean. | oracles green ✅ |
-| **W2 — op + emitters** | `tessera.es_low_rank_correction` ODS + verifier + member-keyed RNG contract; Apple MSL emitter first (reference), then ROCm/CUDA where a hand SGMV/punica kernel is a Tier-3 arbiter candidate (Decision #28). Rank-1 bucket first (I3). | A-oracles on a real runner |
-| **W3 — moment-free update path (G3)** | ES estimator → pseudo-gradient → existing `optim.py` (Adam), **and** a moment-free sign-threshold optimizer (the 14B path). C1 verified. | C1 + optax parity |
-| **W4 — distributed (Phase G/H)** | coordinator-worker topology; scalar `all_gather` of fitnesses; member-keyed reconstruction on every worker. Base-3 ternary packing is optional (repo uses plain scalar all-gather). | multi-GPU box |
+| **W1 — reference tier (host-free)** ✅ **LANDED** | `python/tessera/stdlib/es.py`: perturbation, correction, population-forward, update, fitness shaping, centered rank, and antithetic sign. Physical reconstruction uses the versioned `splitmix64-philox4x32-boxmuller` member stream—not the unrelated host Philox-4x64/BLAKE2 stream. `tests/unit/test_es_reference.py` owns exact/statistical oracles and the RNG ABI vector. | oracles green ✅ |
+| **W2 — op + emitters** 🟡 **LANDING** | Shared Graph/Schedule/Tile ODS, verifiers, content-addressed lineage, required fp32 numeric policy, and terminal non-differentiable status have landed. The rank-1 fp32 ROCm emitter compiles to HSACO and is exact-device verified on gfx1151; its cooperative Wave32/LDS SGMV form hoists member RNG derivation and computes each row projection once. The Zen 5 AVX-512 consumer now executes the same architecture-bound contract through `runtime.launch`, caches O(in+out) factors, and has an exact-host packet including ragged dimensions. The integer VNNI lane is deliberately fail-closed until numeric policy carries quantization scales and saturating requantization. Still open: gfx1151 selector-grade device timing/direct-WMMA comparison, rank>1, s32, and Apple/NVIDIA consumers. | gfx1151 + Zen 5 rank-1 correctness ✅; performance/cross-backend open |
+| **W3 — moment-free update path (G3)** 🟡 **LANDING** | The factored ES estimator feeds the existing Adam implementation, and `optim.moment_free` supplies a stateless, decoupled-weight-decay-capable sign-threshold update with explicit validation. Host oracles prove the Adam formula and zero-slot ternary path. Compiler/native fusion and external optimizer parity remain open. | host formula/oracle ✅; physical fusion open |
+| **W4 — distributed (Phase G/H)** 🟡 **LANDING** | `distributed_es_update` all-gathers only member ids and scalar fitnesses, shapes globally, and reconstructs the identical rank-invariant update on every worker. The four-rank deterministic mock-mesh proof matches centralized execution exactly. Native NCCL/RCCL launcher and performance packets remain open; base-3 packing stays optional. | mock multi-rank correctness ✅; native packet open |
 
 **Non-goals:** the pure-integer EGG stack (bit-shift, saturating requantize,
 minGRU, L1-norm, LUTs) is a *separate optional demonstration track* — great for
@@ -188,18 +190,18 @@ operators, most of which pay off far beyond ES. Ranked by cross-cutting value.
 
 | # | Operator | Current state | Improvement | Also benefits |
 |---|---|---|---|---|
-| O1 | **`numeric_policy` carrier below Graph IR** | vanishes above the MMA; "no carrier below Graph IR" (Decision #29/#32 note) | thread storage/accum (int8→s32, bf16→f32) through the update op to codegen; boundary verifier fails on silent loss | **every quantized matmul** (int8/fp8/nvfp4), the entire quant lane — the #1 systemic win |
+| O1 | **`numeric_policy` carrier below Graph IR** | **ES fp32 carrier landed** through Schedule/Tile/ROCm and rehashed at every boundary; broader target totality remains partial | generalize the same fail-closed storage/accum verification to every quantized target op | **every quantized matmul** (int8/fp8/nvfp4), the entire quant lane — the #1 systemic win |
 | O2 | **saturating requantize** (int32→int8, clip [-127,127]) | MISSING (`ops.cast` floats only) | first-class `saturating_requantize(x_i32, scale) → i8`; it is also EGG's nonlinearity (`clipped_add`) | all int8 inference / QAT-free quantization, nano-egg, RWKV int8 distill |
-| O3 | **shared-operand batched GEMM** (`matmul`/`batched_gemm`) | `BatchedGemmOp` gates out broadcasting + transpose (`TesseraOps.td:198-201`) | a batched GEMM with one operand broadcast across the batch (population = N adapters, 1 base) | multi-LoRA serving (punica/SGMV), batched inference with shared weights, MoE |
+| O3 | **shared-operand batched GEMM** (`matmul`/`batched_gemm`) | Python plus x86/ROCm runtime lanes accept a shared rank-2 operand, but the canonical C++ Graph op still gates broadcasting and transpose | reconcile the Graph verifier/shape contract with the proven physical lanes, then carry it through typed Tile artifacts | multi-LoRA serving (punica/SGMV), batched inference with shared weights, MoE |
 
 ### P1 — strong secondary wins
 
 | # | Operator | Current state | Improvement | Also benefits |
 |---|---|---|---|---|
 | O4 | **bit-shift ops** (`shl`/`shr`) | MISSING (only bitwise and/or/xor/not) | elementwise `shift_left`/`shift_right` | fixed-point arithmetic, divide-by-pow2, any int quant codepath |
-| O5 | **`tessera_rng` member-keyed derivation** | `RNGStreamAssign` is rank-keyed (Decision #18) | a rank-**invariant**, member-keyed `fold_in` stream (orthogonal axis) | reproducible-across-workers noise: dropout replay, shared-seed sampling, deterministic aug |
-| O6 | **fitness/advantage shaping utility** | `normalize_group_advantages` is GRPO-specific (`rl.py:54`) | shared centered-rank / z-score / whitening utility for ES **and** RL | GRPO/PPO/CISPO + ES — converges RL and ES scoring |
-| O7 | **`optim.py` pseudo-gradient + moment-free** | 9 gradient-consuming optimizers; `.step(grads=None)` reads `.grad` | (a) accept an externally-supplied estimator gradient; (b) add a moment-free sign-threshold update (G3) | memory-constrained training generally (sign-SGD/Lion-like), not just ES |
+| O5 | **`tessera_rng` member-keyed derivation** | **LANDED:** versioned rank-invariant SplitMix64 → Philox4x32 stream keyed by epoch/member-pair; host and gfx1151 share a golden identity | extend the same ABI to Apple/NVIDIA/x86 emitters without mixing in device rank | reproducible-across-workers noise: dropout replay, shared-seed sampling, deterministic aug |
+| O6 | **fitness/advantage shaping utility** | **LANDED:** ES centered-rank plus z-score reuse of `normalize_group_advantages` | add whitening only if a consumer and numerical policy require it | GRPO/PPO/CISPO + ES — converges RL and ES scoring |
+| O7 | **`optim.py` pseudo-gradient + moment-free** | **LANDED at reference/composition tier:** ES output feeds Adam; stateless `moment_free` owns sign-threshold semantics | carry/fuse the composition physically after evidence, not by adding a redundant Graph op | memory-constrained training generally (sign-SGD/Lion-like), not just ES |
 
 ### P2 — enabling / track-aligned
 
@@ -208,7 +210,7 @@ operators, most of which pay off far beyond ES. Ranked by cross-cutting value.
 | O8 | **L1 / mean-abs norm** | RMS + mean-subtract only | mean-absolute norm (no sqrt) | int-friendly / low-precision normalization, EGG |
 | O9 | **minGRU facet** | GRU/LSTM only; no minGRU | minGRU on the `linear_recurrence` op (Track L) | recurrent-model family, EGG, RWKV |
 | O10 | **`exp2`/`log2` / first-class LUT** | gather/embedding as LUT vehicle only | `exp2`/`log2` ops or a first-class LUT op | int softmax, fixed-point activations, EGG fitness |
-| O11 | **scalar / sub-byte collective** | tensor-sized collectives only | scalar `all_gather`; optional base-3 ternary packing | any small-scalar reduction (metrics, losses, fitness), gradient-free distributed |
+| O11 | **scalar / sub-byte collective** | **plain scalar all-gather landed** with exact four-rank mock proof; native packet open | retain plain scalar transport first; base-3 ternary packing remains optional and evidence-gated | any small-scalar reduction (metrics, losses, fitness), gradient-free distributed |
 | O12 | **`GroupedGemmOp` contract reuse** | MoE-ragged only (`TesseraOps.td:223`) | reuse grouped-layout + `numeric_policy` + `scale_layout` for the population axis | unifies MoE expert-routing and ES population-routing under one contract |
 
 **Decision #23 hygiene.** vLLM `WorkerExtension`, Optax, and JAX PRNG in the

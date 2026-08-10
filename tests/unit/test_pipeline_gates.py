@@ -112,6 +112,15 @@ def test_rocm_matmul_first_failing_gate_is_toolchain():
     assert "hipcc" in result.detail
 
 
+def test_x86_eggroll_reaches_native_evidence_gates():
+    """The native x86 target must not be rejected as an unknown toolchain."""
+    results = pg.evaluate("x86", "es_low_rank_correction")
+    toolchain = next(row for row in results if row.gate == pg.GATE_TOOLCHAIN)
+    assert toolchain.status == pg.STATUS_PASS
+    assert "host C++ compiler" in toolchain.detail
+    assert all("unknown target" not in row.detail for row in results)
+
+
 def test_every_failing_gate_has_a_nonempty_detail():
     """No silent fails. The audit's whole point is that 'unsupported' must
     name *why*."""

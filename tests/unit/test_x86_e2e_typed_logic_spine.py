@@ -85,8 +85,9 @@ def test_contract_rejects_cross_family_dtype() -> None:
     assert not supports_elementwise(bitwise)
 
 
-def _fake_lower(tile_ir: str, symbol: str):
+def _fake_lower(tile_ir: str, symbol: str, family: str):
     assert "tile.elementwise_kernel" in tile_ir
+    assert family == "elementwise"
     return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-x86-e2e2-logic", "compiler", "toolchain"
 
 

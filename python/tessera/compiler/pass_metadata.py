@@ -96,6 +96,21 @@ class PassMetadata:
 
 REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
+        name="declare-x86-pipeline-contract",
+        cpp_class="DeclareX86PipelineContractPass",
+        summary=(
+            "Validates one closed x86 semantic-family plugin and stamps its "
+            "Tile producer, tessera_x86 Target consumer, exact architecture, "
+            "and prebuilt native-image boundary."
+        ),
+        input_dialects=("tile", "llvm", "arith"),
+        output_dialects=("tile", "llvm", "arith"),
+        required_attrs=("family",),
+        preserved_attrs=("tessera.pipeline.family", "tessera.pipeline.arch"),
+        pass_kind="verifier",
+        sprint="X86-TYPED-FAMILY-PLUGIN-1",
+    ),
+    PassMetadata(
         name="lower-tile-to-rocm",
         cpp_class="LowerTileToROCMPass",
         summary=(
@@ -748,6 +763,19 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         must_run_after=("tessera-layout-legality",),
         pass_kind="lowering",
         sprint="CORE-COMPILER-TRAINING-SPINE",
+    ),
+    PassMetadata(
+        name="verify-x86-executable",
+        cpp_class="VerifyX86ExecutablePass",
+        summary=(
+            "Rejects surviving Tile family carriers and x86 packages that "
+            "lack both a native ABI call and a registered tessera_x86 Target marker."
+        ),
+        input_dialects=("tessera_x86", "func", "llvm"),
+        output_dialects=("tessera_x86", "func", "llvm"),
+        required_attrs=("tessera.pipeline.family", "tessera.pipeline.arch"),
+        pass_kind="verifier",
+        sprint="X86-TYPED-FAMILY-PLUGIN-1",
     ),
 )
 

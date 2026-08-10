@@ -49,8 +49,11 @@ E2E-REAL-0:
    type. FFT/IFFT/RFFT/IRFFT/DCT transposes have paired CPU numerical proof;
    STFT/ISTFT/filter/convolution emit a content-addressed multi-output
    Schedule→Tile carrier. Real-input full FFT autodiff fails closed and directs
-   callers to the explicit packed-real `rfft` contract. Native x86/gfx1151 compound-backward packages remain
-   architecture-owned and fail closed rather than leaking an unconsumed Tile op.
+   callers to the explicit packed-real `rfft` contract. The first native
+   compound-backward slice now consumes complex-f32 spectral filter and
+   unbroadcast full-f32 spectral convolution on AVX-512 and gfx1151 without
+   returning to Graph IR. STFT/ISTFT backward, broader axes/dtypes/broadcasting,
+   and performance promotion remain architecture-owned and fail closed.
 3. **Completed foundation audit — GRAPH-VERIFY-SIGNED-1:** registered Graph and
    canonical-attention integer legality now reads the signed `IntegerAttr`
    spelling rather than MLIR 23's unsigned native value accessor. Negative
@@ -63,17 +66,19 @@ E2E-REAL-0:
    permit inactive regions, and fail closed for active regions or stopped
    residuals that cannot be replayed safely. Direct lit and paired CPU proof
    cover the legal and negative paths.
-5. **AD-SOLVER-IFT-1 — shared IR landed:** the registered solver dialect now
-   owns implicit, residual, matrix-free linear-solve, residual-JVP, and
-   residual-adjoint operations. `NewtonAutodiff` validates the residual symbol
-   ABI and emits private value-producing VJP/JVP functions; architecture-owned
-   solve/adjoint consumers and compiled numerical/device proof remain open.
-6. **AD-RESIDUAL-EVAL-1 — shared measurement boundary landed:** complete
-   backward samples and unique retained residual bytes can now stamp the Graph
-   rematerialization decision. Only exact-device execution rows are selector
-   eligible. Measured-step treeverse envelopes prune candidates but cannot
-   promote them; complete family packets and executable region adjoints remain
-   open.
+5. **AD-SOLVER-IFT-1 — bounded physical pilot landed:** the registered solver
+   dialect owns the general IFT semantics. The first content-addressed physical
+   contract carries `R(theta,x)=x²-theta` through Schedule and Tile into native
+   AVX-512 and compiler-generated gfx1151 packages. Both packages execute the
+   residual, transposed matrix-free solve, and residual adjoint and have
+   compiled numerical packets. Arbitrary residuals and iterative/Krylov
+   matrix-free solvers remain open and fail closed.
+6. **AD-RESIDUAL-EVAL-1 — bounded execution bridge landed:** complete backward
+   samples and unique retained residual bytes stamp Graph rematerialization
+   only from eligible evidence. Counted-region treeverse now executes exact
+   checkpoint capture, primal replay, and backward callbacks, converting an
+   estimated candidate into an eligible row only after complete execution.
+   General MLIR region adjoints and broader exact-family packets remain open.
 7. **E2E-REAL-6:** remove duplicate lowering authorities only after migrated
    families satisfy lineage, correctness, and architecture-owned evidence.
 8. **COLLECTIVE-NATIVE-FOUNDATION-1 — landing:** the C++ NCCL/RCCL adapters
@@ -129,10 +134,18 @@ producers also emit this registered future/await contract and rewire SSA users;
 no active compiler producer emits an unregistered collective pseudo-dialect.
 Native architecture transport,
 exact multi-rank execution, and performance proof stay open and
-architecture-owned. The remaining foundation queues are therefore
-nine planned distributed/sharding backend contracts,
-autodiff/sharding breadth, target-specific benchmark evidence, and the
-duplicate-authority deletion in E2E-REAL-6.
+architecture-owned. `DIST-SHARD-ALIAS-1` also removes the misleading "nine
+backend contracts" framing: `named_sharding` and `partition_spec` are
+compile-time metadata, `shard_map` is a compile-time region contract,
+`psum`/`pmean`/`pmax`/`pmin` map to registered all-reduce records, and
+`broadcast_to_axis` maps to all-gather. Those five aliases now execute through
+the portable two-rank runtime. `collective_permute` remains a distinct ordered
+point-to-point Target/runtime operation and fails closed rather than being
+mis-lowered as all-to-all. The remaining foundation queues are frontend
+capture of these aliases, point-to-point lowering, native NCCL/RCCL launcher
+binding and exact multi-rank evidence, broader compiler autodiff/sharding,
+target-specific benchmark packets, and duplicate-authority deletion in
+E2E-REAL-6.
 
 Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` also closes
 the actionable direct-test bucket: the five differentiable relaxations now
@@ -652,7 +665,7 @@ path was carrying.
 | W3.2 | **Superseded in delivery shape by E2E-REAL-0 through E2E-REAL-5.** Build and register a real Schedule dialect, preserve Graph SSA under schedule decisions, lower one scheduled matmul to the launch-level Tile ABI, make x86/ROCm packages consume that artifact, then migrate families. The Python spine is the differential oracle. This is three boundaries plus bufferization/package API work, not a 3-week convergence edit. | IR Stack §U3 + Target §X5 | re-estimate after the matmul vertical slice |
 | W3.3 | Split the Tile dialect by level: primitives stay `tile.*`; whole-kernel ops → Graph IR / `tessera.kernel.*`; domain ops → `tessera_ebm`; `svd`/`qr`/`cholesky`/`lu` → linalg solver | IR Stack §U4 | 2w |
 | W3.4 | Decompose `JitFn` (11 `_native_*_backward` → `emit/candidate.py` candidates behind `@f__bwd`); split `__init__.py`'s 315 nested defs into `tessera/ops/` | Frontend §U5–U6 | 3w |
-| W3.5 | **Shared IR landed 2026-08-08.** `NewtonAutodiff` validates an explicit residual function ABI and emits private, value-producing IFT VJP/JVP functions over registered `tessera_solver.residual`, matrix-free `linear_solve`, `residual_jvp`, and `residual_adjoint` operations. Invalid/missing residual contracts fail closed. Remaining: architecture-owned lowering/execution of those operations and compiled numerical/device packets. | Autodiff §B8 + OT R2 | landing |
+| W3.5 | **Shared IR plus bounded physical pilot landed.** `NewtonAutodiff` validates an explicit residual ABI and emits value-producing IFT VJP/JVP functions. The diagonal-sqrt pilot lowers through content-addressed Schedule→Tile artifacts into AVX-512 and gfx1151 packages with compiled numerical packets. Remaining: general residual bodies, iterative/Krylov solve implementations, and physical consumers on Apple/NVIDIA. | Autodiff §B8 + OT R2 | landing |
 | W3.6 | Batched operands in `ExpandProductTable`; connect `RotorSandwichFold`'s marker to a consumer | GA/EBM §1.3 | 2w |
 | W3.7 | **Define ROCm producer ownership per package family** across registered C++ generators, compatibility Target-IR text, and `emit/rocm_hip.py` candidates. Add differential gates and retire only producers proven duplicate; preserve C++ MLIR→ROCDL/HSACO as the canonical native spine | Target §X6 | 2w initial inventory/gate |
 

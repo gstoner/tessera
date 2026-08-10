@@ -229,9 +229,10 @@ inline void store_complex16(float* destination, __m512 real, __m512 imag) {
                      _mm512_permutex2var_ps(real, kIntHi, imag));
 }
 
-void execute_mixed_stage(const float* source, float* destination,
-                         const MixedStagePlan& stage) {
-    const int radix = stage.radix;
+template <int Radix>
+void execute_mixed_stage_codelet(const float* source, float* destination,
+                                 const MixedStagePlan& stage) {
+    static_assert(Radix >= 2 && Radix <= tessera::spectral::kMaxRadix);
     const int64_t length = stage.length;
     const int64_t groups = stage.groups;
     for (int64_t k = 0; k < groups; ++k) {
@@ -241,8 +242,8 @@ void execute_mixed_stage(const float* source, float* destination,
         // stages normally occur late in the shared plan, so this is their hot
         // path; early tiny-L stages use the scalar tail below.
         for (; j + 16 <= length; j += 16) {
-            __m512 value_re[17], value_im[17];
-            for (int q = 0; q < radix; ++q) {
+            __m512 value_re[Radix], value_im[Radix];
+            for (int q = 0; q < Radix; ++q) {
                 const int64_t input_index = k * length + j + q * length * groups;
                 __m512 xr, xi;
                 load_complex16(source + 2 * input_index, xr, xi);
@@ -252,11 +253,11 @@ void execute_mixed_stage(const float* source, float* destination,
                 value_re[q] = _mm512_fmsub_ps(xr, wr, _mm512_mul_ps(xi, wi));
                 value_im[q] = _mm512_fmadd_ps(xr, wi, _mm512_mul_ps(xi, wr));
             }
-            for (int p = 0; p < radix; ++p) {
+            for (int p = 0; p < Radix; ++p) {
                 __m512 acc_re = _mm512_setzero_ps();
                 __m512 acc_im = _mm512_setzero_ps();
-                for (int q = 0; q < radix; ++q) {
-                    const size_t coefficient = static_cast<size_t>(p) * radix + q;
+                for (int q = 0; q < Radix; ++q) {
+                    const size_t coefficient = static_cast<size_t>(p) * Radix + q;
                     const __m512 wr = _mm512_set1_ps(stage.dft_re[coefficient]);
                     const __m512 wi = _mm512_set1_ps(stage.dft_im[coefficient]);
                     acc_re = _mm512_add_ps(
@@ -266,13 +267,13 @@ void execute_mixed_stage(const float* source, float* destination,
                         acc_im, _mm512_fmadd_ps(value_re[q], wi,
                                                _mm512_mul_ps(value_im[q], wr)));
                 }
-                const int64_t output_index = k * (radix * length) + j + p * length;
+                const int64_t output_index = k * (Radix * length) + j + p * length;
                 store_complex16(destination + 2 * output_index, acc_re, acc_im);
             }
         }
         for (; j < length; ++j) {
-            float value_re[17], value_im[17];
-            for (int q = 0; q < radix; ++q) {
+            float value_re[Radix], value_im[Radix];
+            for (int q = 0; q < Radix; ++q) {
                 const int64_t input_index = k * length + j + q * length * groups;
                 const float xr = source[2 * input_index];
                 const float xi = source[2 * input_index + 1];
@@ -282,20 +283,42 @@ void execute_mixed_stage(const float* source, float* destination,
                 value_re[q] = xr * wr - xi * wi;
                 value_im[q] = xr * wi + xi * wr;
             }
-            for (int p = 0; p < radix; ++p) {
+            for (int p = 0; p < Radix; ++p) {
                 float acc_re = 0.0f, acc_im = 0.0f;
-                for (int q = 0; q < radix; ++q) {
-                    const size_t coefficient = static_cast<size_t>(p) * radix + q;
+                for (int q = 0; q < Radix; ++q) {
+                    const size_t coefficient = static_cast<size_t>(p) * Radix + q;
                     const float wr = stage.dft_re[coefficient];
                     const float wi = stage.dft_im[coefficient];
                     acc_re += value_re[q] * wr - value_im[q] * wi;
                     acc_im += value_re[q] * wi + value_im[q] * wr;
                 }
-                const int64_t output_index = k * (radix * length) + j + p * length;
+                const int64_t output_index = k * (Radix * length) + j + p * length;
                 destination[2 * output_index] = acc_re;
                 destination[2 * output_index + 1] = acc_im;
             }
         }
+    }
+}
+
+void execute_mixed_stage(const float* source, float* destination,
+                         const MixedStagePlan& stage) {
+    // Keep every radix admitted by the shared planner as a compile-time
+    // specialization.  The former runtime-radix loop prevented the compiler
+    // from unrolling the small DFT and left even common radix-3/5 stages as a
+    // branch-heavy generic matrix multiply.  Composite 9 and 15 are included
+    // because FFTPlan deliberately admits every odd divisor through 17.
+    switch (stage.radix) {
+    case 2: execute_mixed_stage_codelet<2>(source, destination, stage); return;
+    case 3: execute_mixed_stage_codelet<3>(source, destination, stage); return;
+    case 4: execute_mixed_stage_codelet<4>(source, destination, stage); return;
+    case 5: execute_mixed_stage_codelet<5>(source, destination, stage); return;
+    case 7: execute_mixed_stage_codelet<7>(source, destination, stage); return;
+    case 9: execute_mixed_stage_codelet<9>(source, destination, stage); return;
+    case 11: execute_mixed_stage_codelet<11>(source, destination, stage); return;
+    case 13: execute_mixed_stage_codelet<13>(source, destination, stage); return;
+    case 15: execute_mixed_stage_codelet<15>(source, destination, stage); return;
+    case 17: execute_mixed_stage_codelet<17>(source, destination, stage); return;
+    default: return; // Construction is fail-closed by mixed_execution_plan().
     }
 }
 

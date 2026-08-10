@@ -195,6 +195,18 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
         standalone_lit_parseable=True,
         sprint="AD-SOLVER-IFT-1",
     ),
+    DialectSpec(
+        name="tessera_x86",
+        target="TesseraX86IR",
+        header="src/compiler/codegen/tessera_x86_backend/include/TesseraX86/IR/TesseraX86Dialect.h",
+        cpp_dir="src/compiler/codegen/tessera_x86_backend/lib/IR",
+        register_fn="mlir::tessera_x86::registerTesseraX86Dialect",
+        cmake_flag="TESSERA_HAVE_X86_TARGET_IR",
+        eager_load_parent=None,
+        has_typedefs=True,
+        standalone_lit_parseable=True,
+        sprint="X86-TYPED-FAMILY-PLUGIN-1",
+    ),
     # Sprint 9 value-lane Tile IR dialect (src/compiler/ir), grown in the TIRx
     # review (C1/C3/C5) with first-class attributes: #tile.layout / #tile.swizzle
     # / #tile.barrier / #tile.pipeline_state / #tile.pipeline_depths. Built into

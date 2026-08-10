@@ -74,8 +74,9 @@ def test_cohort2_contract_and_package(monkeypatch, op_name, abi) -> None:
     module = _module(op_name)
     assert supports_cohort2(module)
 
-    def fake_lower(tile_ir: str, symbol: str):
+    def fake_lower(tile_ir: str, symbol: str, family: str):
         assert "tile." in tile_ir
+        assert family in {"alibi", "argreduce", "norm", "rope", "scan"}
         return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-x86-c2", "compiler", "toolchain"
 
     monkeypatch.setattr("tessera.compiler.x86_native._lower", fake_lower)

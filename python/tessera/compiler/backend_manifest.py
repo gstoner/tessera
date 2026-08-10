@@ -1328,6 +1328,23 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 # no standalone op row, so it is covered by the flash_attn row, not listed here.
 # ─────────────────────────────────────────────────────────────────────────────
 _ROCM_COMPILED: dict[str, dict[str, Any]] = {
+    "es_low_rank_correction": {
+        "dtypes": ("fp32",),
+        "feature_flags": ("explicit_rng", "eggroll", "rank1"),
+        "shape_envelope": (
+            "static x[P,...,in], member_ids[P], key[2], rank=1, fp32; "
+            "antithetic member pairs on exact gfx1151"
+        ),
+        "notes": (
+            "Content-addressed Graph -> Schedule -> Tile -> ROCm rank-1 "
+            "EGGROLL correction. The compiler-generated hsaco reconstructs "
+            "SplitMix64/Philox4x32/Box-Muller member factors and matches the "
+            "portable oracle on gfx1151. The cooperative SGMV implementation "
+            "derives each member seed once per row and reduces x@B once before "
+            "writing A-scaled outputs; WMMA/MFMA performance selection remains "
+            "open and must beat this architecture-owned baseline."
+        ),
+    },
     "spec_accept": {
         "dtypes": ("int32",),
         "feature_flags": ("control_flow", "speculative_decode"),
@@ -2388,6 +2405,10 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
         "tests/unit/test_rocm_fused_epilogue_launch_execute.py",
     ("matmul_softmax", "rocm"):
         "tests/unit/test_rocm_conformance_compositions.py",
+    ("es_low_rank_correction", "rocm"):
+        "tests/unit/test_rocm_es_low_rank_exec.py",
+    ("es_low_rank_correction", "x86"):
+        "tests/unit/test_x86_es_low_rank_exec.py",
     # rocm — Strix Halo (gfx1151 / gfx1100 WSL) RDNA WMMA. The shipped
     # `tessera_rocm_wmma_gemm_f16` C-ABI symbol (libtessera_rocm_gemm.so) is
     # dlopened and its f32<-f16 16x16x16 WMMA GEMM compared to a numpy
@@ -3166,6 +3187,19 @@ _ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
 #     manifest does not claim per-op C ABI runtime_symbol contracts.
 # ─────────────────────────────────────────────────────────────────────────────
 _X86_KERNELS: dict[str, dict[str, Any]] = {
+    "es_low_rank_correction": {
+        "status": _DEVICE_VERIFIED_JIT_STATUS,
+        "dtypes": ("fp32",),
+        "feature_flags": ("avx512", "explicit_rng", "eggroll", "rank1"),
+        "notes": (
+            "Content-addressed Graph -> Schedule -> Tile -> tessera_x86 "
+            "rank-1 EGGROLL correction. The Zen 5 AVX-512 package caches only "
+            "the O(in+out) member factors, never the perturbation matrix, and "
+            "matches the portable member-RNG-v1 oracle through runtime.launch. "
+            "VNNI remains fail-closed until an integer scale and saturating "
+            "requantization contract exists."
+        ),
+    },
     "matmul": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("bf16", "fp32", "fp64", "int8"),

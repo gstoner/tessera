@@ -52,13 +52,16 @@ import ml_dtypes
 import numpy as np
 
 from .. import rng as _rng
+from ..compiler.es_rng_contract import member_normal as _member_normal
 from ..dtype import canonicalize_dtype
 
 __all__ = [
     "reconstruct_factors",
     "low_rank_perturbation",
+    "low_rank_correction",
     "population_forward",
     "es_update",
+    "distributed_es_update",
     "fitness_shaping",
     "centered_rank",
     "antithetic_sign",
@@ -87,8 +90,13 @@ def reconstruct_factors(key, member: int, out_dim: int, in_dim: int, rank: int,
         raise ValueError(f"rank must be >= 1, got {rank}")
     pair = (member // 2) if antithetic else member
     sign = 1.0 if (not antithetic or member % 2 == 0) else -1.0
-    child = _as_key(key).fold_in(int(epoch)).fold_in(int(pair))
-    draw = _rng.normal(child, (in_dim + out_dim, rank), dtype="fp32")
+    # Physical ES has its own versioned, device-portable member-keyed stream.
+    # Do not use the general host RNG's BLAKE2 fold-in here: GPU emitters cannot
+    # reproduce NumPy Philox-4x64 and would otherwise disagree with this oracle.
+    draw = _member_normal(
+        _as_key(key), epoch=int(epoch), pair=int(pair),
+        shape=(in_dim + out_dim, rank),
+    )
     return draw[in_dim:], draw[:in_dim], sign          # A, B, sign
 
 
@@ -107,6 +115,58 @@ def low_rank_perturbation(key, member: int, out_dim: int, in_dim: int, rank: int
                                      epoch=epoch, antithetic=antithetic)
     E = sign * float(sigma) * (A @ B.T) / np.sqrt(rank)
     return E.astype(_np_storage(dtype))
+
+
+def low_rank_correction(
+    x: np.ndarray,
+    member_ids: Sequence[int] | np.ndarray,
+    key,
+    *,
+    out_dim: int,
+    rank: int,
+    sigma: float,
+    epoch: int = 0,
+    score: str = "gaussian",
+    antithetic: bool = True,
+    accum: str = "fp32",
+) -> np.ndarray:
+    """Reference for ``tessera.es_low_rank_correction``.
+
+    ``x`` is ``[P,...,n]`` and the result is ``[P,...,out_dim]``. Factors stay
+    implicit and are reconstructed through the physical member RNG contract.
+    This function intentionally returns only the correction; callers may add a
+    shared base GEMM independently.
+    """
+    values = np.asarray(x)
+    members = np.asarray(member_ids, dtype=np.int64)
+    if values.ndim < 2:
+        raise ValueError("x must have shape [P,...,n] with rank >= 2")
+    if members.ndim != 1 or members.shape[0] != values.shape[0]:
+        raise ValueError("member_ids must be rank-1 with length equal to x.shape[0]")
+    if out_dim <= 0 or rank != 1:
+        raise ValueError("initial physical bucket requires out_dim > 0 and rank == 1")
+    if sigma is None or not np.isfinite(sigma) or sigma <= 0:
+        raise ValueError("sigma must be finite and positive")
+    if epoch < 0:
+        raise ValueError("epoch must be non-negative")
+    if score != "gaussian":
+        raise ValueError("score must be 'gaussian'")
+    if accum not in ("fp32", "f32"):
+        raise ValueError("floating ES correction requires fp32 accumulation")
+
+    compute = values.astype(np.float32, copy=False)
+    result = np.empty((*values.shape[:-1], int(out_dim)), dtype=np.float32)
+    scale = np.float32(float(sigma) / np.sqrt(rank))
+    for population_index, member in enumerate(members):
+        A, B, sign = reconstruct_factors(
+            key, int(member), int(out_dim), values.shape[-1], rank,
+            epoch=epoch, antithetic=antithetic,
+        )
+        result[population_index] = (
+            np.float32(sign) * scale
+            * ((compute[population_index] @ B) @ A.T)
+        )
+    return result.astype(values.dtype, copy=False)
 
 
 def population_forward(x: np.ndarray, weight: np.ndarray, key,
@@ -170,6 +230,56 @@ def es_update(key, members: Sequence[int], fitness: np.ndarray,
     w = (f * s) / np.sqrt(rank) / P                    # per-member scalar
     # factored contraction over (member, rank) — the Ā B̄ᵀ form (Thm 2)
     return np.einsum('nir,njr->ij', w[:, None, None] * A, B)
+
+
+def distributed_es_update(
+    rank,
+    key,
+    local_members: Sequence[int] | np.ndarray,
+    local_scores: Sequence[float] | np.ndarray,
+    out_dim: int,
+    in_dim: int,
+    *,
+    sigma: float,
+    rank_size: int = 1,
+    epoch: int = 0,
+    antithetic: bool = True,
+    shaping: str = "zscore",
+    accum: str = "fp32",
+) -> np.ndarray:
+    """W4 scalar-collective ES update reconstructed identically per worker.
+
+    Workers exchange only member ids and scalar fitnesses.  Global shaping is
+    performed after the all-gathers, then each rank reconstructs the same
+    factors from ``(key, epoch, member_pair)`` and evaluates the factored
+    update locally.  No device rank enters the RNG identity and no perturbation
+    matrix crosses the transport.
+
+    ``rank`` is the existing collective rank contract (native NCCL/RCCL or the
+    deterministic mock rank used by host-free proofs).  Native performance and
+    launcher evidence remain backend-owned gates.
+    """
+    members = np.asarray(local_members, dtype=np.int64)
+    scores = np.asarray(local_scores, dtype=np.float32)
+    if members.ndim != 1 or scores.ndim != 1 or members.shape != scores.shape:
+        raise ValueError("local_members and local_scores must be equal-length rank-1 arrays")
+    if members.size == 0:
+        raise ValueError("each worker must own at least one population member")
+    gathered_members = np.asarray(rank.all_gather(members, axis=0), dtype=np.int64)
+    gathered_scores = np.asarray(rank.all_gather(scores, axis=0), dtype=np.float32)
+    shaped = fitness_shaping(gathered_scores, method=shaping)
+    return es_update(
+        key,
+        gathered_members.tolist(),
+        shaped,
+        out_dim,
+        in_dim,
+        sigma=sigma,
+        rank=rank_size,
+        epoch=epoch,
+        antithetic=antithetic,
+        accum=accum,
+    )
 
 
 # ------------------------------------------------------------- fitness shaping

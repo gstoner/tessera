@@ -170,6 +170,56 @@ def sgd(
     return new_params, {"master_params": new_master, "master_dtype": _normalize_dtype(master_dtype)}
 
 
+def moment_free(
+    params: Tree,
+    grads: Tree,
+    *,
+    lr: float,
+    threshold: float = 0.0,
+    weight_decay: float = 0.0,
+    compute_dtype: str = "fp32",
+    master_dtype: str | None = None,
+    cast_updates_to_param_dtype: bool = True,
+) -> Tree | tuple[Tree, dict[str, Any]]:
+    """Stateless sign-threshold update for zeroth-order pseudo-gradients.
+
+    Each element applies ``-lr * sign(g)`` only when ``abs(g) > threshold``.
+    There are no first- or second-moment slots; optional weight decay is
+    decoupled.  This is the EGGROLL W3 moment-free path and is deliberately a
+    composition of existing elementwise semantics rather than a new Graph op.
+    """
+    if not math.isfinite(float(lr)) or lr <= 0:
+        raise ValueError("lr must be finite and positive")
+    if not math.isfinite(float(threshold)) or threshold < 0:
+        raise ValueError("threshold must be finite and non-negative")
+    if not math.isfinite(float(weight_decay)) or weight_decay < 0:
+        raise ValueError("weight_decay must be finite and non-negative")
+    base_params = _master_tree(params, None, master_dtype)
+
+    def apply(p, g):
+        p_arr = _compute_array(p, compute_dtype)
+        grad = _compute_array(g, compute_dtype)
+        direction = np.where(np.abs(grad) > float(threshold), np.sign(grad), 0.0)
+        if weight_decay:
+            p_arr = p_arr * (1.0 - float(lr) * float(weight_decay))
+        return p_arr - float(lr) * direction
+
+    new_master = tree_map2(apply, base_params, grads)
+    new_params = tree_map2(
+        lambda p_new, p_orig: _cast_like_param(
+            p_new, p_orig, cast_updates_to_param_dtype
+        ),
+        new_master,
+        params,
+    )
+    if master_dtype is None:
+        return new_params
+    return new_params, {
+        "master_params": new_master,
+        "master_dtype": _normalize_dtype(master_dtype),
+    }
+
+
 def momentum(
     params: Tree,
     grads: Tree,
@@ -736,6 +786,7 @@ __all__ = [
     "lion",
     "momentum",
     "muon",
+    "moment_free",
     "nesterov",
     "polyak_avg",
     "polynomial_lr",

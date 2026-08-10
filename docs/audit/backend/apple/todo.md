@@ -8,14 +8,25 @@ last_updated: 2026-08-09
 
 # Apple compiler, exact-device, and performance plan
 
-Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **shared ES low-rank
-correction contract + fp32/s32 accumulation policy defined; Apple emitter is
-follow-up required.** The Evolution-Strategies reference tier
-(`tessera.stdlib.es`) landed; the Graph-IR op `es_low_rank_correction` and its
-emitters are W2. Apple owns the **reference-impl** MSL emitter first (rank-1
-bucket, `simdgroup_matrix`); member-keyed RNG (G2) and the fp32 accumulation lane
-(I6 / Decision #32) apply. The `s32` integer lane is the separate EGG track —
-**not applicable** to the float MSL path. Contract:
+Cross-backend sync `X86-TYPED-FAMILY-PLUGIN-2026-08-09` — **shared schema
+parity assessed; no Apple physical change.** x86 now validates a closed Tile
+family and registered Target marker before selecting its prebuilt AVX-512
+image. Apple may reuse the schema and fail-closed family discipline, but no
+x86 ABI call, schedule, package, or Zen 5 evidence transfers to Accelerate or
+Metal. The x86 backward-family allowance is narrowly one explicit forward
+recompute companion, not a general multi-carrier escape hatch. Apple CPU/GPU
+image production remains architecture-owned.
+
+Cross-backend sync `EGGROLL-ES-LOWRANK-2026-08-09` — **the shared Graph,
+Schedule, Tile, lineage, member-RNG-v1, and fp32 numeric-policy contract has
+landed; Apple physical consumption is follow-up required.** gfx1151 owns the
+first GPU exact-device rank-1 proof and Zen 5 now owns an independent AVX-512
+fp32 package, but neither architecture's schedule transfers to Metal. Apple
+still owns the reference MSL implementation (`simdgroup_matrix`) and its own
+numerical/performance packet. The `s32` integer lane is a separate EGG track and
+is **not applicable** to this float MSL path. W4 scalar-gather/member
+reconstruction passes mock-mesh proof; a native Metal communicator remains
+open. Contract:
 `docs/audit/compiler/EGGROLL_SUPPORT_PLAN.md`.
 
 Cross-backend sync `COLLECTIVE-RCCL-ADVANCED-LANES-2026-08-09` — **shared
@@ -47,14 +58,21 @@ executing them on the wrong communicator. Apple still needs a native Metal
 multi-rank adapter and exact-device packet; no selector or performance claim
 changes.
 
-Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **shared typed IFT
-and measurement contracts available; Metal consumers/evidence required.** The
-registered solver dialect owns value-producing residual, matrix-free solve,
-residual-JVP, and residual-adjoint operations, and malformed implicit residual
-ABIs fail closed. Complete-backward timing plus unique retained-residual bytes
-can drive rematerialization only from exact-device evidence; modeled treeverse
-rows are pruning-only. Apple has no Metal consumer or complete-backward packet
-for these contracts, so no package, selector, policy, or device claim changes.
+Cross-backend sync `DIST-SHARD-ALIAS-1-2026-08-09` — **shared alias mapping
+available; Metal transport unchanged.** Five public reduction/broadcast names
+now resolve to registered all-reduce/all-gather transport records, while the
+three sharding placement/region entries remain compile-time contracts.
+`collective_permute` is still a separate ordered point-to-point gap and fails
+closed. Apple needs its own frontend capture, communicator mapping, and exact
+multi-device packet; portable execution provides no Metal proof.
+
+Cross-backend sync `AD-SOLVER-RESIDUAL-EVAL-2026-08-08` — **bounded x86/ROCm
+pilot landed; Metal follow-up required.** The shared IFT chain now has a
+content-addressed Schedule→Tile physical contract, and counted-region treeverse
+can execute checkpoint replay before a row becomes eligible. Apple has no
+Metal consumer for the diagonal-sqrt pilot, no general iterative solver, and
+no complete-backward packet. This PR changes no Apple package, selector,
+policy, or device claim.
 
 Cross-backend sync `AD-CORE-EFFECT-CONTROL-COLLECTIVE-2026-08-08` — **shared
 Graph/Tile/portable-Target contracts available; Metal follow-up required.** Compiler activity,
@@ -78,6 +96,12 @@ packed-real/Hermitian identity, and DCT type now survive compiler autodiff, and
 the core FFT/RFFT/DCT transposes have CPU numerical proof. Apple has no physical
 consumer for the new compound-backward artifact; no Metal schedule, package,
 selector, or device evidence is claimed or transferred.
+
+Cross-backend sync `AD-TSOL-SPECTRAL-NATIVE-2026-08-09` — **follow-up still
+required.** The bounded spectral-filter/convolution native consumers added for
+AVX-512 and gfx1151 do not transfer a schedule or proof to Metal. Apple still
+requires its own compound-backward package, exact-device correctness, and
+performance evidence; unsupported compound kinds continue to fail closed.
 
 Cross-backend sync `AD-CORE-LINEAR-1-2026-08-08` — **shared Graph-IR parity
 validated; no Metal physical claim.** Compiler-owned linear transposition now
@@ -365,6 +389,11 @@ AVX-512 evidence and its shared-object loader do not transfer to Metal.
 
 Cross-backend sync `COSTMODEL-CALIB-2026-07-29` — **superseded by the terminal
 ROCm home-architecture rejection.** No Apple arbiter-score adoption work remains.
+
+The independent Zen 5 hierarchical T1 packet now also rejects T1 for latency
+ranking (median rho -0.4062, 0/3 winner matches). Its measured x86 L1D/L2/L3
+inputs do not define Apple SLC semantics and transfer no selector decision;
+Apple's evidence gate below remains architecture-owned.
 
 **Historical calibration result and current subject.** The original
 step-distance and bank-conflict metrics found in

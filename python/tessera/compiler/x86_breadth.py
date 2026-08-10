@@ -232,7 +232,9 @@ def package_abi(
     if missing or extra:
         raise ValueError(f"{key} buffer shape mismatch: missing={sorted(missing)}, extra={sorted(extra)}")
     tile_ir = emit_abi_tile_ir(spec, entry=f"tessera_tile_x86_{key}")
-    target_ir, payload, compiler, toolchain = _lower(tile_ir, spec.symbol)
+    target_ir, payload, compiler, toolchain = _lower(
+        tile_ir, spec.symbol, spec.family
+    )
     image = _image(
         target_ir=target_ir, payload=payload, compiler=compiler, toolchain=toolchain,
         pipeline_name=pipeline_name, symbol=spec.symbol, abi=spec.abi_id,

@@ -6,7 +6,7 @@ module {
       %dx: !llvm.ptr, %df: !llvm.ptr) {
     tile.spectral_backward_kernel %dy, %x, %filter, %dx, %df {
       target = "rocm", arch = "gfx1151",
-      kind = "tessera.spectral_filter", axis = -1 : i64,
+      kind = "tessera.stft", axis = -1 : i64,
       logical_length = 8 : i64, normalization = "backward",
       spectrum_layout = "full_complex", center = false, onesided = true,
       pad_mode = "constant",
@@ -20,4 +20,4 @@ module {
   }
 }
 
-// CHECK: error: ROCm compound spectral adjoint package is not implemented
+// CHECK: error: compound spectral adjoint kind has no gfx1151 native package

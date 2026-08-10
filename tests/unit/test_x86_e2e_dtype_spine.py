@@ -38,7 +38,7 @@ def _module(a_dtype: str, b_dtype: str, out_dtype: str, shape=(5, 7, 9)) -> Grap
 def test_dtype_matmul_packages_have_distinct_abis(monkeypatch, dtypes, abi) -> None:
     monkeypatch.setattr(
         "tessera.compiler.x86_native._lower",
-        lambda tile_ir, symbol: (
+        lambda tile_ir, symbol, family: (
             f"module {{ func.call @{symbol}() : () -> () }}",
             b"\x7fELF-x86-e2e2-dtype",
             "compiler",

@@ -654,11 +654,14 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             ("solver_qr", ("generate-rocm-qr-kernel",)),
             ("solver_svd", ("generate-rocm-svd-kernel",)),
             ("solver_triangular_solve", ("generate-rocm-tri-solve-kernel",)),
+            ("solver_ift", ("generate-rocm-solver-ift-kernel",)),
+            ("es_low_rank_correction", ("generate-rocm-es-low-rank-kernel",)),
             ("sparse_block_attention", ("generate-rocm-block-sparse-attn-kernel",)),
             ("sparse_block_topk", ("generate-rocm-block-sparse-topk-kernel",)),
             ("sparse_sddmm", ("generate-rocm-sddmm-kernel",)),
             ("sparse_spmm", ("generate-rocm-spmm-kernel",)),
             ("spectral_dft", ("generate-rocm-dft-kernel",)),
+            ("spectral_backward", ("generate-rocm-spectral-backward-kernel",)),
             ("softmax", ("generate-rocm-softmax-kernel",)),
         ),
         verifier_passes=("rocm-wave-lds-legality", "verify-rocm-executable"),
@@ -669,6 +672,38 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         phase="target",
         status="lit_verified",
         sprint="ROCM-E2E-SPINE",
+    ),
+    PipelineSpec(
+        name="tessera-x86-executable",
+        passes=(
+            "declare-x86-pipeline-contract",
+            "tessera-tile-to-x86",
+            "verify-x86-executable",
+        ),
+        required_dialects=("tile", "tessera_x86", "func", "llvm", "arith"),
+        targets=("x86", "x86_avx512"),
+        family_plugins=tuple(
+            (family, ("tessera-tile-to-x86",))
+            for family in (
+                "alibi", "argreduce", "attention", "attention_backward",
+                "clifford", "deltanet", "ebm", "elementwise",
+                "es_low_rank_correction", "fft",
+                "kv_cache", "linalg", "loss", "matmul", "moe", "movement",
+                "norm", "optimizer", "quantization", "reduction", "rng",
+                "rope", "scan", "softmax", "solver_ift", "sort", "sparse",
+                "spectral_backward", "ssm",
+            )
+        ),
+        verifier_passes=(
+            "declare-x86-pipeline-contract",
+            "verify-x86-executable",
+        ),
+        lit_fixtures=(
+            "tests/tessera-ir/phase2/x86_executable_pipeline.mlir",
+        ),
+        phase="target",
+        status="lit_verified",
+        sprint="X86-TYPED-FAMILY-PLUGIN-1",
     ),
 )
 
@@ -791,10 +826,10 @@ TARGET_PIPELINE_RESOLUTIONS: tuple[TargetPipelineResolution, ...] = (
         "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
     ),
     TargetPipelineResolution(
-        "x86", "tessera-lower-to-x86", "tessera-lower-to-x86",
+        "x86", "tessera-lower-to-x86", "tessera-x86-executable",
         "declared_exact", "host", "x86", "src/transforms/lib/Passes.cpp",
-        "partial", "absent",
-        "X86-E2E-1 emits typed softmax, reduction, rank-2 f32 matmul, and basic/extended f32 MHA C-ABI calls, then packages the stable AVX-512 shared object with canonical launch descriptors; other families remain executor-owned.",
+        "partial", "partial",
+        "The frontend retains tessera-lower-to-x86, while every promoted native package crosses the closed tessera-x86-executable family-plugin boundary from one Tile carrier to registered tessera_x86 Target identity and the stable AVX-512 shared image.",
     ),
 )
 

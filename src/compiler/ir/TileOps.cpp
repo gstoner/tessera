@@ -1989,6 +1989,71 @@ LogicalResult TrainingKernelOp::verify() {
   return success();
 }
 
+LogicalResult SolverIFTKernelOp::verify() {
+  if (getInputs().size() != 7)
+    return emitOpError("requires parameter/solution/cotangent/residual/linear-solution/parameter-cotangent/N");
+  for (Value pointer : getInputs().take_front(6))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("IFT phase buffers must be !llvm.ptr");
+  if (!getInputs().back().getType().isInteger(64))
+    return emitOpError("IFT element count must be i64");
+  auto model = getOperation()->getAttrOfType<StringAttr>("residual_model");
+  auto solver = getOperation()->getAttrOfType<StringAttr>("linear_solver");
+  auto transpose = getOperation()->getAttrOfType<BoolAttr>("transpose");
+  auto wrt = getOperation()->getAttrOfType<StringAttr>("wrt");
+  auto scale = getOperation()->getAttrOfType<FloatAttr>("adjoint_scale");
+  auto storage = getOperation()->getAttrOfType<StringAttr>("storage");
+  auto accum = getOperation()->getAttrOfType<StringAttr>("accum");
+  auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  auto residualDigest =
+      getOperation()->getAttrOfType<StringAttr>("residual_digest");
+  if (!model || model.getValue() != "diagonal_sqrt_v1" || !solver ||
+      solver.getValue() != "diagonal_matrix_free_v1" || !transpose ||
+      !transpose.getValue() || !wrt || wrt.getValue() != "parameter" ||
+      !scale || scale.getValueAsDouble() != -1.0)
+    return emitOpError("requires the canonical diagonal-sqrt transposed IFT chain");
+  if (!storage || storage.getValue() != "f32" || !accum ||
+      accum.getValue() != "f32")
+    return emitOpError("initial IFT package requires f32 storage/accumulation");
+  if (!hash || hash.getValue().size() != 64 || !residualDigest ||
+      residualDigest.getValue().size() != 64)
+    return emitOpError("requires schedule and residual lineage digests");
+  return success();
+}
+
+LogicalResult ESLowRankCorrectionKernelOp::verify() {
+  if (getInputs().size() != 8)
+    return emitOpError("requires x/member-ids/key/output pointers and P/rows/in/out dimensions");
+  for (Value pointer : getInputs().take_front(4))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("ES data operands must be !llvm.ptr");
+  for (Value dim : getInputs().drop_front(4))
+    if (!dim.getType().isInteger(64))
+      return emitOpError("ES launch dimensions must be i64");
+  auto requiredString = [&](StringRef name) -> StringRef {
+    auto attr = getOperation()->getAttrOfType<StringAttr>(name);
+    return attr ? attr.getValue() : StringRef();
+  };
+  auto rank = getOperation()->getAttrOfType<IntegerAttr>("rank");
+  auto epoch = getOperation()->getAttrOfType<IntegerAttr>("epoch");
+  auto version = getOperation()->getAttrOfType<IntegerAttr>("rng_version");
+  auto sigma = getOperation()->getAttrOfType<FloatAttr>("sigma");
+  auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  StringRef architecture = requiredString("arch");
+  if ((architecture != "gfx1151" && architecture != "zen5-avx512") ||
+      requiredString("score") != "gaussian" ||
+      requiredString("rng_algorithm") !=
+          "splitmix64-philox4x32-boxmuller" ||
+      requiredString("storage") != "f32" || requiredString("accum") != "f32" ||
+      !rank || rank.getInt() != 1 || !epoch || epoch.getInt() < 0 ||
+      !version || version.getInt() != 1 || !sigma ||
+      !sigma.getValue().isFinite() || sigma.getValueAsDouble() <= 0.0 ||
+      !hash || hash.getValue().size() != 64)
+    return emitOpError(
+        "requires the content-addressed gfx1151 or Zen 5 AVX-512 ES rank-1 contract");
+  return success();
+}
+
 LogicalResult PagedKVReadKernelOp::verify() {
   if (getInputs().size() != 10)
     return emitOpError(

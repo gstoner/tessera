@@ -1246,21 +1246,22 @@ def _compile_native_tile_ir(
     target_pipeline = config.pass_pipeline(output=ROCMOutputLevel.TARGET)
     native_pipeline = config.pass_pipeline(output=ROCMOutputLevel.BINARY)
     target_ir = _run_opt(tool, tile_ir, target_pipeline)
-    # At the Target-IR boundary the family plugin must consume Tile IR and
-    # materialize its typed tessera_rocm directive inside a physical GPU
-    # module.  The following binary pipeline owns conversion of that directive
-    # to ROCDL; rejecting it here would conflate Target IR with Backend IR.
+    # Target output stops after TileToROCM: Tile IR is consumed into one typed
+    # tessera_rocm directive, but the architecture generator has not yet
+    # produced GPU/ROCDL IR.  Binary output runs that generator and serialization.
+    # Keeping these boundaries distinct prevents a backend module from being
+    # mislabeled as Target IR.
     if 'tessera.pipeline.target_ir_consumer = "tessera_rocm"' not in target_ir:
         raise RuntimeError("ROCm native packaging lost its Target IR consumer identity")
-    if "gpu.module" not in target_ir:
-        raise RuntimeError(
-            f"ROCm native packaging did not physically consume {directive}"
-        )
     if directive not in target_ir:
         raise RuntimeError(
             f"ROCm native packaging did not materialize Target IR directive {directive}"
         )
-    if "tile." in target_ir:
+    if "gpu.module" in target_ir or "gpu.binary" in target_ir:
+        raise RuntimeError(
+            "ROCm Target IR crossed into backend GPU/binary codegen"
+        )
+    if re.search(r'(?m)^\s*(?:%[^=\n]+=\s*)?"?tile\.', target_ir):
         raise RuntimeError(
             "ROCm native packaging left source Tile IR unconsumed"
         )

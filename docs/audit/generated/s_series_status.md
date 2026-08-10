@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 0 | 488 |
-| `transpose_rule` | 0 | 488 |
-| `sharding_rule` | 43 | 445 |
-| `lowering_rule` | 0 | 488 |
-| `backend_kernel` | 389 | 99 |
+| `batching_rule` | 0 | 489 |
+| `transpose_rule` | 0 | 489 |
+| `sharding_rule` | 43 | 446 |
+| `lowering_rule` | 0 | 489 |
+| `backend_kernel` | 390 | 99 |
 
 ## Backend Proof By Target
 
@@ -26,15 +26,15 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 | Target | Declared | Exact-device verified | Implementation present | Reference | Open artifact/planned | Other | Missing target row |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `cpu` | 339 | 0 | 0 | 339 | 0 | 0 | 149 |
-| `x86` | 337 | 286 | 49 | 2 | 0 | 0 | 151 |
-| `apple_cpu` | 371 | 0 | 4 | 367 | 0 | 0 | 117 |
-| `apple_gpu` | 207 | 148 | 51 | 4 | 4 | 0 | 281 |
-| `rocm` | 345 | 343 | 0 | 2 | 0 | 0 | 143 |
-| `nvidia_sm80` | 68 | 0 | 0 | 0 | 68 | 0 | 420 |
-| `nvidia_sm90` | 100 | 0 | 0 | 2 | 98 | 0 | 388 |
-| `nvidia_sm100` | 68 | 0 | 0 | 0 | 68 | 0 | 420 |
-| `nvidia_sm120` | 92 | 31 | 0 | 0 | 61 | 0 | 396 |
+| `cpu` | 340 | 0 | 0 | 340 | 0 | 0 | 149 |
+| `x86` | 338 | 287 | 49 | 2 | 0 | 0 | 151 |
+| `apple_cpu` | 372 | 0 | 4 | 368 | 0 | 0 | 117 |
+| `apple_gpu` | 207 | 148 | 51 | 4 | 4 | 0 | 282 |
+| `rocm` | 346 | 344 | 0 | 2 | 0 | 0 | 143 |
+| `nvidia_sm80` | 68 | 0 | 0 | 0 | 68 | 0 | 421 |
+| `nvidia_sm90` | 100 | 0 | 0 | 2 | 98 | 0 | 389 |
+| `nvidia_sm100` | 68 | 0 | 0 | 0 | 68 | 0 | 421 |
+| `nvidia_sm120` | 92 | 31 | 0 | 0 | 61 | 0 | 397 |
 
 ## Per-category breakdown
 
@@ -74,7 +74,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `linalg_decomposition` | 4 | — | — | 4 | — | 4 |
 | other | `linalg_solver` | 2 | — | — | 2 | — | 2 |
 | other | `logical` | 8 | — | — | — | — | 8 |
-| other | `loop_nest` | 10 | — | — | 1 | — | 10 |
+| other | `loop_nest` | 11 | — | — | 1 | — | 11 |
 | other | `model_layer` | 4 | — | — | — | — | 4 |
 | other | `moe` | 1 | — | — | 1 | — | 1 |
 | other | `moe_transport` | 2 | — | — | 2 | — | 2 |
@@ -113,7 +113,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 0 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 280 | 0 | 0 | 23 | 228 |
+| other | 281 | 0 | 0 | 23 | 229 |
 
 ## Closure trajectory
 

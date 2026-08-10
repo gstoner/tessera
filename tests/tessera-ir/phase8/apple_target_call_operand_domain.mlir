@@ -1,4 +1,5 @@
 // RUN: not tessera-opt --split-input-file %s 2>&1 | FileCheck %s
+// REQUIRES: tessera-apple-backend
 //
 // W1.1 step 6 — the Apple runtime-call ops state their value domain.
 //

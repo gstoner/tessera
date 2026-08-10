@@ -12,7 +12,7 @@
 // operands F5 wraps in collectives.
 
 module {
-  // CHECK: sym_name = "train_step"
+  // CHECK-LABEL: func.func @train_step
   func.func @train_step(%A: tensor<4x8xf32> {tessera.effect = "memory"},
                         %B: tensor<8x16xf32> {tessera.effect = "memory"})
       -> tensor<4x16xf32>

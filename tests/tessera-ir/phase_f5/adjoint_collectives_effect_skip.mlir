@@ -10,7 +10,7 @@
 // the deliberate skip in the plan attribute.
 
 module {
-  // CHECK: sym_name = "bwd_gated"
+  // CHECK-LABEL: func.func @bwd_gated
   func.func @bwd_gated(%W: tensor<4x8xf32> {tessera.effect = "memory"},
                        %X: tensor<8x16xf32> {tessera.effect = "pure"})
       -> (tensor<4x16xf32>, tensor<4x8xf32>, tensor<8x16xf32>)

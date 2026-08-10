@@ -3,7 +3,7 @@ abs,6,0,1,6,0,bf16 f32,directly_tested,6 direct test references
 absolute,6,0,0,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 acos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 adafactor,13,0,0,13,0,fp32 fp64,directly_tested,13 direct test references
-adam,21,5,0,26,0,fp32 fp64,directly_tested,26 direct test references
+adam,22,5,1,27,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,27 direct test references
 adamw,15,5,0,20,0,fp32 fp64,directly_tested,20 direct test references
 adaptive_pool,6,0,0,6,0,,directly_tested,6 direct test references
 add,127,32,10,159,0,bf16 f16 f32 f64 fp16 fp32 int8,directly_tested,159 direct test references
@@ -176,6 +176,7 @@ eq,5,0,1,5,0,bf16 f32 fp16 fp32 fp4_e2m1 fp8_e4m3 int32 int64 int8,directly_test
 equiprob_band_partition,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 erf,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 erfc,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
+es_low_rank_correction,3,10,0,13,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,13 direct test references
 exp,12,0,2,12,0,bf16 f32 fp32,directly_tested,12 direct test references
 expand,6,8,0,14,0,,directly_tested,14 direct test references
 expm1,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
@@ -424,8 +425,8 @@ sparsemax,1,0,0,1,1,fp64,directly_tested,public forward plus simplex/sparsity an
 spec_accept,2,10,0,12,0,,directly_tested,12 direct test references
 spec_accept_sample,3,7,1,10,0,,directly_tested,10 direct test references
 spec_accept_tree_sample,2,6,0,8,0,,directly_tested,8 direct test references
-spectral_conv,20,4,1,24,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,24 direct test references
-spectral_filter,10,4,1,14,0,bf16 f16 f32 fp32,directly_tested,14 direct test references
+spectral_conv,21,5,1,26,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,26 direct test references
+spectral_filter,11,5,1,16,0,bf16 f16 f32 fp32,directly_tested,16 direct test references
 spectral_norm,5,0,0,5,0,fp16,directly_tested,5 direct test references
 split,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 spmm_coo,8,0,0,8,0,,directly_tested,8 direct test references

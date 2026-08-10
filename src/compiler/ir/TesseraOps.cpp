@@ -10,6 +10,7 @@
 #include "llvm/ADT/StringSwitch.h"
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <type_traits>
 
@@ -225,6 +226,60 @@ LogicalResult BatchedGemmOp::verify() {
     return emitOpError("result M must equal lhs M");
   if (!agree(resultType.getDimSize(2), rhsType.getDimSize(2)))
     return emitOpError("result N must equal rhs N");
+  return success();
+}
+
+LogicalResult ESLowRankCorrectionOp::verify() {
+  auto xType = dyn_cast<RankedTensorType>(getX().getType());
+  auto membersType = dyn_cast<RankedTensorType>(getMemberIds().getType());
+  auto keyType = dyn_cast<RankedTensorType>(getKey().getType());
+  auto resultType = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!xType || !membersType || !keyType || !resultType)
+    return emitOpError("requires ranked x, member_ids, key, and result tensors");
+  if (xType.getRank() < 2 || resultType.getRank() != xType.getRank())
+    return emitOpError(
+        "requires x[P,...,n] with rank >= 2 and a same-rank result");
+  if (membersType.getRank() != 1 || !membersType.getElementType().isInteger(64))
+    return emitOpError("requires member_ids to be a rank-1 i64 tensor");
+  if (keyType.getRank() != 1 || keyType.getDimSize(0) != 2 ||
+      !keyType.getElementType().isInteger(64))
+    return emitOpError("requires key to be tensor<2xi64>");
+  if (getOutDimAttr().getInt() <= 0)
+    return emitOpError("requires out_dim > 0");
+  if (getRank() != 1)
+    return emitOpError("initial physical bucket requires rank = 1");
+  if (getEpochAttr().getInt() < 0)
+    return emitOpError("requires epoch >= 0");
+  double sigma = getSigmaAttr().getValueAsDouble();
+  if (!std::isfinite(sigma) || sigma <= 0.0)
+    return emitOpError("requires finite sigma > 0");
+  if (getScore() != "gaussian")
+    return emitOpError("requires score = \"gaussian\"");
+
+  auto agree = [](int64_t a, int64_t b) {
+    return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
+  };
+  if (!agree(xType.getDimSize(0), membersType.getDimSize(0)))
+    return emitOpError("population extent P must match member_ids length");
+  for (int64_t dim = 0, end = xType.getRank() - 1; dim < end; ++dim)
+    if (!agree(xType.getDimSize(dim), resultType.getDimSize(dim)))
+      return emitOpError("result must preserve every x dimension except the "
+                         "last feature dimension");
+  if (!agree(resultType.getDimSize(resultType.getRank() - 1), getOutDim()))
+    return emitOpError("result last dimension must equal out_dim");
+  if (xType.getElementType() != resultType.getElementType())
+    return emitOpError("x and result element types must match");
+
+  auto numeric = getNumericPolicyAttr();
+  auto accum = dyn_cast_or_null<StringAttr>(numeric.get("accum"));
+  if (!accum)
+    return emitOpError("numeric_policy requires an 'accum' string");
+  bool integerLane = xType.getElementType().isIntOrIndex();
+  StringRef expectedAccum = integerLane ? "int32" : "fp32";
+  if (accum.getValue() != expectedAccum)
+    return emitOpError("numeric_policy.accum must be ")
+           << expectedAccum << " for the selected storage lane; got "
+           << accum.getValue();
   return success();
 }
 

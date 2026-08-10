@@ -469,6 +469,15 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 reason="x86 where stable ABI consumes bool condition storage and fp32 values",
                 dtypes=("fp32", "f32", "bool"),
             ),
+            **_ops(
+                "ready", ("tessera.es_low_rank_correction",),
+                reason=(
+                    "Zen 5 AVX-512 rank-1 EGGROLL package consumes the typed "
+                    "Schedule-to-Tile artifact with explicit member-RNG-v1 identity; "
+                    "the integer VNNI lane remains fail-closed"
+                ),
+                dtypes=("fp32", "f32"),
+            ),
         },
         supported_dtypes=tuple(sorted(x86_ready_storage_dtypes())) + ("f32",),
         features=(
@@ -723,11 +732,15 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             ),
             **_ops(
                 "ready",
-                ("tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft"),
+                (
+                    "tessera.fft", "tessera.ifft", "tessera.rfft",
+                    "tessera.irfft", "tessera.es_low_rank_correction",
+                ),
                 dtypes=("fp32",),
                 reason=(
-                    "Exact-device gfx1151 mixed-radix Stockham/Bluestein package "
-                    "executes through the strict rocm_fft_compiled runtime lane"
+                    "Exact-device gfx1151 compiler package with a checked "
+                    "numerical fixture; operation-specific manifests identify "
+                    "the FFT and EGGROLL execution boundaries"
                 ),
             ),
         },

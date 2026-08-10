@@ -1,0 +1,86 @@
+{
+  "algorithm": "cooperative_wave32_lds_sgmv_rank1",
+  "architecture": "gfx1151",
+  "artifact_hash": "eebfb3ec328c78d09f9f83d57c29d8cce3d0e6e21c0e415e3979b55478e1b1c0",
+  "dtype": {
+    "accum": "fp32",
+    "storage": "fp32"
+  },
+  "environment": {
+    "execution": "wsl",
+    "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "toolchain": "tessera-opt\n  build profile: full\n  features: collectives core-tessera-ir fa4-attn fa4-queue neighbors rocm-backend scaling-resilience solvers tpp x86-target-ir"
+  },
+  "hsaco_sha256": "2041741bc50d8dcf38a1856880e8173d142cbc10863a5343020cad3ee1d0fd2a",
+  "numerical": {
+    "max_abs_error": 1.9073486328125e-06,
+    "max_rel_error": 2.4150340323103592e-05,
+    "oracle": "tessera.stdlib.es.low_rank_correction",
+    "passed": true
+  },
+  "rng": "splitmix64-philox4x32-boxmuller.v1",
+  "schema": "tessera.eggroll.es_low_rank.gfx1151.v1",
+  "shape": {
+    "in_dim": 1024,
+    "out_dim": 1024,
+    "population": 16,
+    "rank": 1,
+    "rows_per_member": 32
+  },
+  "target": "rocm_gfx1151",
+  "tessera_opt_sha256": "256137fb927167ad082e8f5244fda5d5380870b085fb18accb8eed7b40c357b1",
+  "timing": {
+    "hip_event_ns": {
+      "median": null,
+      "reason": "HIP_EVENT_ZERO_OR_UNAVAILABLE",
+      "samples": [],
+      "source": "hip_event",
+      "valid": false
+    },
+    "host_wall_ns": {
+      "median": 127434.0,
+      "samples": [
+        173137,
+        145088,
+        141686,
+        180661,
+        133355,
+        129379,
+        126887,
+        259939,
+        124016,
+        128934,
+        124698,
+        126692,
+        132250,
+        134146,
+        124862,
+        125587,
+        125424,
+        124872,
+        124439,
+        127342,
+        126248,
+        127072,
+        127526,
+        194718,
+        126833,
+        129368,
+        127180,
+        126638,
+        127602,
+        133897
+      ],
+      "source": "synchronized_perf_counter"
+    },
+    "samples": 30,
+    "warmup": 10
+  },
+  "verdict": {
+    "correctness": "retain",
+    "performance": "pending_direct_and_packed_candidate_comparison",
+    "reason": "WSL evidence is regression-only; no scalar/direct or packed-WMMA comparison is bound to this packet",
+    "selector_eligible": false
+  },
+  "work_item": "EGGROLL-W2-ROCM"
+}

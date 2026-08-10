@@ -117,8 +117,9 @@ def test_breadth_carrier_has_explicit_abi_and_effects(key: str) -> None:
 def test_package_preserves_interleaved_c_abi_order(monkeypatch) -> None:
     spec = X86_BREADTH_ABIS["gather_f32"]
 
-    def fake_lower(tile_ir: str, symbol: str):
+    def fake_lower(tile_ir: str, symbol: str, family: str):
         assert symbol == spec.symbol
+        assert family == spec.family
         assert "!llvm.ptr, i64, !llvm.ptr, i64, !llvm.ptr" in tile_ir
         return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-breadth", "cc", "tc"
 
@@ -150,7 +151,7 @@ def test_graph_breadth_contract_is_isomorphic_and_packageable(monkeypatch, famil
     assert supports_graph_breadth(module)
     assert supports_promoted_graph_breadth(module)
 
-    def fake_lower(tile_ir: str, symbol: str):
+    def fake_lower(tile_ir: str, symbol: str, family: str):
         assert "tile.x86_abi_kernel" in tile_ir
         return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-graph", "cc", "tc"
 
@@ -173,7 +174,7 @@ def test_graph_breadth_rejects_composite_variants() -> None:
 
 @pytest.mark.parametrize("family", ["gather", "pointwise_loss", "cholesky", "tri_solve"])
 def test_canonical_selector_promotes_measured_graph_breadth(monkeypatch, family: str) -> None:
-    def fake_lower(tile_ir: str, symbol: str):
+    def fake_lower(tile_ir: str, symbol: str, family: str):
         return f"module {{ func.call @{symbol}() : () -> () }}", b"\x7fELF-graph", "cc", "tc"
 
     monkeypatch.setattr("tessera.compiler.x86_breadth._lower", fake_lower)

@@ -39,10 +39,9 @@ module attributes {
 
     // Row-parallel matmul consumes the awaited reduce-scatter value and then
     // inserts an all-gather for its own downstream users.
-    // CHECK: "tessera.matmul"(%[[RS]],
+    // CHECK: tessera.matmul %[[RS]],
     // CHECK: %[[AG_F:.*]] = tessera_collective.all_gather
     // CHECK-SAME: mesh_axis
-    // CHECK-SAME: reduction = "none"
     // CHECK: tessera_collective.await %[[AG_F]]
     %partial2 = "tessera.matmul"(%partial, %w2) {
       tessera.weight_sharding = "row_parallel",

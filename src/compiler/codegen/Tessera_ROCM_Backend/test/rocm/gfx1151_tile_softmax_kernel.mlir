@@ -1,5 +1,6 @@
 // RUN: %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality,lower-tile-to-rocm{arch=gfx1151})' %s | FileCheck %s --check-prefix=TARGET
 // RUN: %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality,lower-tile-to-rocm{arch=gfx1151},generate-rocm-softmax-kernel)' %s | FileCheck %s --check-prefix=GENERATED
+// RUN: %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(tessera-rocm-executable{family=softmax input=tile output=target arch=gfx1151})' %s | FileCheck %s --check-prefix=PIPELINE-TARGET
 
 module {
   llvm.func @tessera_tile_softmax_f32(
@@ -30,3 +31,8 @@ module {
 // GENERATED: arith.maximumf
 // GENERATED: math.exp
 // GENERATED: arith.divf
+
+// PIPELINE-TARGET: tessera.pipeline.output = "target"
+// PIPELINE-TARGET: tessera_rocm.softmax
+// PIPELINE-TARGET-NOT: {{^ *tile\.softmax_kernel}}
+// PIPELINE-TARGET-NOT: gpu.module

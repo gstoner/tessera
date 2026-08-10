@@ -177,6 +177,7 @@ logical_xor,logical,public,public,registered,complete,fused,device_verified_jit,
 batched_gemm,loop_nest,public,public,registered,complete,fused,fused,ready,none
 dequant_grouped_gemm,loop_nest,public,public,registered,complete,fused,device_verified_jit,ready,none
 dequant_matmul,loop_nest,public,public,registered,complete,fused,fused,ready,benchmarked
+es_low_rank_correction,loop_nest,public,public,registered,complete,fused,device_verified_jit,ready,none
 factorized_matmul,loop_nest,public,public,registered,complete,fused,device_verified_jit,ready,none
 gemm,loop_nest,public,public,registered,complete,fused,device_verified_abi,ready,benchmarked
 grouped_gemm,loop_nest,public,public,registered,complete,fused,fused,ready,benchmarked

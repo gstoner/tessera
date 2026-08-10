@@ -60,10 +60,8 @@ _LOCKED_REAL_OPS = (
     "AttnLocalWindow2DOp",
     # V6c (2026-05-22): per-SM tile_q / tile_kv ceilings on FA-4 op.
     "ScaledDotProductOp",
-    # V8 (2026-05-22): Queue dialect verifier closure.
-    "CreateOp",
-    "PushOp",
-    "PopOp",
+    # V8 (2026-05-22) Queue dialect sentinels (CreateOp/PushOp/PopOp) were
+    # removed 2026-08-10 with the tessera.queue dialect (Decisions #29/#31).
     # Sprint B (2026-06-04): attention-family + KV/MoE verifier hardening.
     "MultiHeadAttentionOp",
     "GQAAttentionOp",

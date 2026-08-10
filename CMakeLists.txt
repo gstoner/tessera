@@ -190,7 +190,6 @@ endif()
 set(TESSERA_COMPILER_FOUNDATION_DEPS
     TesseraIRTableGen
     TesseraAttnTableGen
-    TesseraQueueTableGen
     TesseraIR
     TesseraPasses
     tessera-opt

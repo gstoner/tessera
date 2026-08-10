@@ -106,6 +106,7 @@ states.
 | [`SEQUENCE_MIXER_THEORY.md`](SEQUENCE_MIXER_THEORY.md) | Sequence-mixer semantic model. |
 | [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) | Analytical-model research and candidate-pruning guidance. |
 | [`TILERT_ASSESSMENT.md`](TILERT_ASSESSMENT.md) | TileRT assessment; overlap-scheduling models and W6/T3/T4 composition-layer direction. |
+| [`STRIX_HALO_WORKLIST_2026-08-10.md`](STRIX_HALO_WORKLIST_2026-08-10.md) | Primary-box gates for the async-contract reconciliation (ROCm lit lane, full-target build). |
 | [`AMD_KERNEL_COMPILER_SURVEY.md`](AMD_KERNEL_COMPILER_SURVEY.md) | AMD compiler research survey; input to ROCm design, not ROCm evidence. |
 
 Documents under [`archive/`](archive/) are point-in-time evidence only. This

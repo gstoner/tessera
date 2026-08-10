@@ -68,7 +68,7 @@ Target IR    (tessera.nvgpu.wgmma.*, tessera.tma.*, x86 intrinsics)
 Tile IR is the layer at which:
 - Explicit shared memory allocation appears (`tile.alloc_shared`)
 - Warp roles are assigned (`tessera.schedule.warp {role="producer/consumer"}`)
-- Async copy stages are made explicit (`tile.async_copy {stage=N}`)
+- Async copies carry explicit completion edges (`!tile.async_token` SSA; legacy `stage`/`barrier_id` grouping keys as the declared envelope)
 - MMA operations are expressed (`tile.mma`)
 - Producer/consumer ordering is introduced as `!tile.pipeline_state` + `!tile.async_token` SSA chains (`tile.pipeline_init` / `tile.pipeline_advance`)
 - FlashAttention sub-operations appear (`tessera_attn.*`)
@@ -92,7 +92,7 @@ Tile IR ops carry attributes that encode hardware-relevant parameters:
 
 | Attribute | Type | Example | Meaning |
 |-----------|------|---------|---------|
-| `stage` | `i64` | `{stage = 0}` | Pipeline stage index for async copy double-buffering |
+| `stage` | `i64` | `{stage = 0}` | Optional legacy grouping key for async copy double-buffering; when present must be ≥ 0 |
 | `vector` | `i64` | `{vector = 16}` | Vector width in elements for async copy |
 | `swizzle` | `string` | `{swizzle = "xor"}` | Shared memory swizzle pattern for bank conflict elimination |
 | `order` | `string` | `{order = "tree"}` | Reduction tree order for deterministic results |
@@ -134,9 +134,27 @@ Allocates a buffer in shared memory. Must appear in the kernel preamble.
 
 ### 3.2 `tile.async_copy`
 
-Issues an asynchronous copy from global memory to shared memory. Semantics: the copy
-is initiated but not complete until the matching `tile.wait_async` with the same `stage`
-executes.
+Issues an asynchronous copy from global memory to shared memory. The op has one
+declared contract with two forms (reconciled 2026-08-10, Decisions #29/#31/#21a;
+ODS: `TileOps.td`, verifier: `AsyncCopyOp::verify` in `TileOps.cpp`):
+
+- **Typed token form (production).** The copy yields a `!tile.async_token`
+  result; consumers (`tile.wait_async`, `tile.mma`) take the token as an
+  operand, turning copy→consumer synchronization into an SSA def-use edge
+  checked by dataflow (the opt-in legality passes: `tessera-warpspec-legality`
+  on NV, `rocm-wave-lds-legality` on ROCm). This is what
+  `TileIRLoweringPass::emitAsyncCopy` emits.
+
+```mlir
+%smem, %tok = tile.async_copy %global_src into %smem_dst {vector = 16}
+    : memref<?x?xf16, 0> into memref<128x64xf16, 1>
+```
+
+- **Legacy grouping-key form (declared compatibility envelope).** Ordering is
+  expressed through optional attributes — `tile.barrier_id` / `tile.depends_on`
+  (load-bearing on the ROCm FIFO path) or an integer `stage` (consumed by the
+  Python spine and `TileBufferReusePass`). All keys are optional; a key-less op
+  fails safe as "matches anything".
 
 ```mlir
 tile.async_copy %global_src into %smem_dst {stage = 0, vector = 16}
@@ -144,7 +162,8 @@ tile.async_copy %global_src into %smem_dst {stage = 0, vector = 16}
 ```
 
 **Attributes:**
-- `stage` (required): pipeline stage index (0-based); used to interleave copies with compute
+- `stage` (optional grouping key): pipeline stage index; when present it must
+  be ≥ 0 (diagnostic `TILE_ASYNC_STAGE_NEGATIVE`)
 - `vector` (required for SM_90+): copy vector width in elements; must match TMA descriptor alignment
 
 **Lowering targets:**
@@ -152,22 +171,27 @@ tile.async_copy %global_src into %smem_dst {stage = 0, vector = 16}
 - Below SM_90: `tessera.cp_async.shared.global` → `cp.async.ca.shared.global` PTX
 
 **Verifier rules:**
-- `stage` must be ≥ 0
+- A present `stage` must be ≥ 0 (`TILE_ASYNC_STAGE_NEGATIVE`); absence is legal
+- At most one `!tile.async_token` result; when present, its consumers form the
+  synchronization edge
 - Source must be memory space 0 (global); destination must be memory space 1 (shared)
-- A `tile.wait_async {stage = N}` must dominate every use of any value written by `tile.async_copy {stage = N}` within the same block scope
 
 ### 3.3 `tile.wait_async`
 
-Waits for all in-flight `tile.async_copy` ops with the matching `stage` to complete.
-Acts as a barrier for the specified pipeline stage.
+Completes asynchronous copies. In the typed token form it waits on its
+`!tile.async_token` operands; in the legacy form it acts as a barrier for the
+copies matching its grouping keys (a key-less wait matches all outstanding
+copies).
 
 ```mlir
-tile.wait_async {stage = 0}
+tile.wait_async %tok : !tile.async_token   // typed token form (production)
+tile.wait_async {stage = 0}                // legacy grouping-key form
 ```
 
 **Verifier rules:**
-- Every `tile.async_copy {stage = N}` in the enclosing function must have a corresponding `tile.wait_async {stage = N}`
-- No `tile.wait_async` with a stage that has no corresponding `tile.async_copy` (dead barrier)
+- A present `stage` must be ≥ 0 (`TILE_ASYNC_STAGE_NEGATIVE`); absence is legal
+- Copy/wait pairing is checked by the opt-in legality passes over the SSA token
+  edges (or the ROCm FIFO model), not by a per-op stage-matching verifier
 
 ### 3.4 `tile.mma`
 
@@ -417,8 +441,8 @@ The Tile IR verifier enforces the following (normative):
 
 | Rule | Checked at |
 |------|-----------|
-| Every `tile.async_copy {stage=N}` has a matching `tile.wait_async {stage=N}` | Function level |
-| No `tile.wait_async` for a stage with no corresponding `tile.async_copy` | Function level |
+| A present `stage` on `tile.async_copy` / `tile.wait_async` is ≥ 0 (`TILE_ASYNC_STAGE_NEGATIVE`; the key is optional) | Op level |
+| Copy→consumer pairing via `!tile.async_token` SSA edges (opt-in legality passes) | Function level |
 | All `tile.alloc_shared` results are memory space 1 | Op level |
 | All `tessera.tcgen05.*` ops only appear when module `tessera.isa >= SM_100` | Module level |
 | `tile.pipeline_init` / `tile.pipeline_advance` only appear inside `tessera.schedule.warp` regions | Op level |

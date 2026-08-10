@@ -2662,3 +2662,16 @@ topology and N/2 child identity. **NVIDIA outcome: follow-up required on a
 CUDA-enabled host.** No NVVM/PTX/cubin consumer changed. NVIDIA must select its
 own real-transform plan and carry the exact v5 artifact through its physical
 package; Zen 5 and gfx1151 schedules, workspaces, and evidence do not transfer.
+
+## Cross-backend sync `TILE-SYNC-RECONCILE-2026-08-10`
+
+`tile.async_copy`/`tile.wait_async` now have one declared contract (ODS dual
+form, `TileOps.td`): typed `!tile.async_token` SSA is production; legacy
+grouping keys are the declared envelope, optional and conservative on absence.
+New shared diagnostic `TILE_ASYNC_STAGE_NEGATIVE`. **NVIDIA outcome: parity
+validated at the core-IR level.** The typed-token SSA edge is the NV warp-spec
+production model (`TileIRLoweringPass::emitAsyncCopy`,
+`tessera-warpspec-legality`); the previously contradictory required-stage
+verifier was the one rejecting production NV Tile IR, and
+`phase2/pm_verify_async_token.mlir` (red at baseline) now passes. No
+NV-device-lane (`tessera-nvidia-opt`) fixtures changed.

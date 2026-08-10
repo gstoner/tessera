@@ -81,6 +81,40 @@ live `programming_model/lib/PMPasses.cpp`, which actually registers
 `docs/spec/COMPILER_REFERENCE.md`, `PROJECT_STRUCTURE.md`, and
 `docs/context/knowledge_map.yaml` (+ regenerated context outputs).
 
+## tile.async_copy / tile.wait_async — one declared contract (2026-08-10)
+
+Found during the TileRT assessment trace: the two sync ops shipped with three
+simultaneous contracts. The ODS (`TileOps.td`) declared the W1.1 dual form
+(typed `!tile.async_token` SSA edge, legacy `tile.barrier_id`/`tile.depends_on`
+attrs); a name-dispatched verifier in the **unbuilt** `ScheduleOps.cpp` — and
+its live mirror in `PMV11VerifierPass` (`tessera-pm-verify`) — REQUIRED a
+`stage` attribute and memref operands; the Python spine
+(`tile_ir.py::_verify_async_copy`) required `stage >= 0` and `vector >= 1`.
+The production emitter (`TileIRLoweringPass::emitAsyncCopy`: tensor operand,
+tile + token results, no stage) satisfied only the first — running
+`tessera-pm-verify` over production Tile IR failed with `'stage' must be >= 0`.
+
+Resolution (Decisions #29/#31/#21a): the **ODS dual form is the single
+declared contract**, now stated in full in `TileOps.td` — typed token form is
+production; the legacy form is the declared compatibility envelope whose
+grouping keys (`barrier_id`/`depends_on` on ROCm, integer `stage` on the
+Python spine and `TileBufferReusePass`) are **optional and conservative on
+absence** (a key-less wait retires everything). `stage` is well-formedness-
+checked when present (`TILE_ASYNC_STAGE_NEGATIVE`, both ops, TileOps.cpp).
+The required-stage model was deleted from `ScheduleOps.cpp` (dead code — that
+file is not in any CMake target) and relaxed to when-present in
+`PMV11VerifierPass` and `tile_ir.py`. The dead stage-model *emitter*
+(`src/compiler/mlir/lib/Target/TesseraTargetIR.cpp`, also unbuilt) is now
+legal under the envelope and was left for the dead-code audit.
+
+Gates: `phase2/pm_verify_async_token.mlir` (red at baseline, green after —
+verified by rebuilding HEAD), negative-stage cases in
+`phase2/tile_async_token_invalid.mlir`, a legacy-stage positive in
+`phase2/tile_async_token.mlir`, and a no-key-verifies-clean unit test in
+`test_tile_ir.py`. Full `lit tests/tessera-ir/` failure set is unchanged vs.
+baseline on the Mac config (29 pre-existing ROCm/x86-lane fixtures that need
+the primary box's build).
+
 ## Collective async unification (2026-08-09)
 
 Cross-backend sync `COLLECTIVE-ASYNC-UNIFY-2026-08-09` removes the final active

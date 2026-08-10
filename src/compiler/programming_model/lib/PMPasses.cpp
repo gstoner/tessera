@@ -106,11 +106,17 @@ private:
       return success();
     }
 
-    // tile.async_copy
-    if (name == "tile.async_copy") {
-      auto stage = op->getAttrOfType<IntegerAttr>("stage");
-      if (!stage || stage.getInt() < 0)
-        return op->emitOpError("'stage' must be >= 0");
+    // tile.async_copy / tile.wait_async — `stage` is an OPTIONAL legacy-form
+    // grouping key under the declared contract (TileOps.td): the production
+    // dependency encoding is the `!tile.async_token` SSA edge, which carries no
+    // stage at all. Requiring the attribute here rejected the production
+    // TileIRLoweringPass output; only well-formedness is checked. The full
+    // contract (token placement, producer identity) is owned by the registered
+    // dialect's AsyncCopyOp/WaitAsyncOp verifiers in TileOps.cpp.
+    if (name == "tile.async_copy" || name == "tile.wait_async") {
+      if (auto stage = op->getAttrOfType<IntegerAttr>("stage");
+          stage && stage.getInt() < 0)
+        return op->emitOpError("'stage' must be >= 0 when present");
       return success();
     }
 

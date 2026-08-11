@@ -69,6 +69,24 @@ def _contracts() -> tuple[DerivativeProofContract, ...]:
             "matmul", ProofKind.DIRECTIONAL_AND_DUALITY,
             "d(A@B)=dA@B+A@dB", "legal contraction shapes"),
         DerivativeProofContract(
+            "spectral_filter", ProofKind.DIRECTIONAL_AND_DUALITY,
+            "d(X*H)=dX*H+X*dH",
+            "equal-shape complex spectra"),
+        DerivativeProofContract(
+            "spectral_conv", ProofKind.DIRECTIONAL_AND_DUALITY,
+            "d conv(x,w)=conv(dx,w)+conv(x,dw)",
+            "real floating tensors; legal full-convolution axis"),
+        DerivativeProofContract(
+            "stft", ProofKind.DIRECTIONAL_AND_DUALITY,
+            "d STFT(x,w)=STFT(dx,w)+STFT(x,dw) with fixed framing",
+            "real signal/window; fixed hop, axis, padding, and normalization"),
+        DerivativeProofContract(
+            "istft", ProofKind.LINEAR_IDENTITY,
+            "d_X ISTFT(X,w)=ISTFT(dX,w) for a fixed window",
+            "complex spectrum; fixed window, hop, axis, length, and normalization",
+            "active window products are rejected because overlap-add normalization "
+            "depends quadratically on the window"),
+        DerivativeProofContract(
             "tanh", ProofKind.DIRECTIONAL_AND_DUALITY,
             "dy=dx*(1-tanh(x)^2)", "finite floating inputs"),
         DerivativeProofContract(
@@ -116,8 +134,13 @@ def central_directional_difference(
     fn: Callable[..., np.ndarray], primals: Iterable[np.ndarray],
     tangents: Iterable[np.ndarray], *, step: float = 1.0e-3,
 ) -> np.ndarray:
-    xs = tuple(np.asarray(x, dtype=np.float64) for x in primals)
-    vs = tuple(np.asarray(v, dtype=np.float64) for v in tangents)
+    def proof_precision(value: np.ndarray) -> np.ndarray:
+        array = np.asarray(value)
+        dtype = np.complex128 if np.iscomplexobj(array) else np.float64
+        return np.asarray(array, dtype=dtype)
+
+    xs = tuple(proof_precision(x) for x in primals)
+    vs = tuple(proof_precision(v) for v in tangents)
     plus = fn(*(x + step * v for x, v in zip(xs, vs)))
     minus = fn(*(x - step * v for x, v in zip(xs, vs)))
     return (np.asarray(plus) - np.asarray(minus)) / (2.0 * step)

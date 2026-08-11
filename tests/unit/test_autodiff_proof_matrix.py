@@ -62,6 +62,61 @@ def test_fft_jvp_and_adjoint_duality_for_ortho_normalization():
     assert_forward_reverse_duality(tangent, w, (dx,), (cotangent,))
 
 
+def test_compound_spectral_product_contracts_are_explicit():
+    expected = {
+        "spectral_filter": ProofKind.DIRECTIONAL_AND_DUALITY,
+        "spectral_conv": ProofKind.DIRECTIONAL_AND_DUALITY,
+        "stft": ProofKind.DIRECTIONAL_AND_DUALITY,
+        "istft": ProofKind.LINEAR_IDENTITY,
+    }
+    assert {
+        name: DERIVATIVE_PROOF_MATRIX[name].kind for name in expected
+    } == expected
+    assert "active window products are rejected" in (
+        DERIVATIVE_PROOF_MATRIX["istft"].boundary_policy
+    )
+
+
+def test_spectral_filter_jvp_directional_and_dual_identity():
+    rng = np.random.default_rng(37)
+    x = rng.normal(size=9) + 1j * rng.normal(size=9)
+    h = rng.normal(size=9) + 1j * rng.normal(size=9)
+    dx = rng.normal(size=9) + 1j * rng.normal(size=9)
+    dh = rng.normal(size=9) + 1j * rng.normal(size=9)
+    w = rng.normal(size=9) + 1j * rng.normal(size=9)
+    tangent = dx * h + x * dh
+    finite = central_directional_difference(lambda a, b: a * b, (x, h), (dx, dh))
+    assert_directional_close(tangent, finite, rtol=1.0e-8, atol=1.0e-9)
+    assert_forward_reverse_duality(
+        tangent, w, (dx, dh), (w * np.conj(h), w * np.conj(x)),
+        rtol=1.0e-10, atol=1.0e-10,
+    )
+
+
+def test_istft_is_linear_only_in_spectrum_for_a_fixed_window():
+    rng = np.random.default_rng(39)
+    spectrum = rng.normal(size=(3, 5)) + 1j * rng.normal(size=(3, 5))
+    dspectrum = rng.normal(size=spectrum.shape) + 1j * rng.normal(size=spectrum.shape)
+    window = np.hanning(8)
+    hop = 4
+
+    def fixed_window_istft(value):
+        frames = np.fft.irfft(value, n=window.size, axis=-1)
+        output = np.zeros((value.shape[0] - 1) * hop + window.size)
+        weight = np.zeros_like(output)
+        for index, frame in enumerate(frames):
+            start = index * hop
+            output[start:start + window.size] += frame * window
+            weight[start:start + window.size] += window * window
+        return np.divide(output, weight, out=np.zeros_like(output), where=weight > 0)
+
+    actual = fixed_window_istft(dspectrum)
+    finite = central_directional_difference(
+        fixed_window_istft, (spectrum,), (dspectrum,), step=1.0e-4,
+    )
+    assert_directional_close(actual, finite, rtol=1.0e-8, atol=1.0e-9)
+
+
 def test_dropout_tangent_replays_exact_philox_mask():
     seed, counter, p = 77, 13, 0.25
     dx = np.linspace(-2.0, 2.0, 33, dtype=np.float32)

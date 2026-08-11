@@ -997,10 +997,10 @@ still required; the historical v5 selector packet is not relabeled as v6.
 
 `tile.async_copy`/`tile.wait_async` now have one declared contract (ODS dual
 form, `TileOps.td`); shared diagnostic `TILE_ASYNC_STAGE_NEGATIVE` added.
-**x86 outcome: not applicable, with one caveat.** The x86 lane lowers tiled
+**x86 outcome: core parity validated; the async-copy model is not applicable
+to physical x86 execution.** The x86 lane lowers tiled
 matmul through `TileToX86Pass` `func.call`s and emits no
 `tile.async_copy`/`tile.wait_async` — CPU lanes have no async-copy
-double-buffering stage model to reconcile. Caveat: the x86 lit fixtures under
-`tests/tessera-ir/` share the core Tile dialect build; they are among the 29
-Mac-environmental skips and re-verify with the primary-box full build
-(`STRIX_HALO_WORKLIST_2026-08-10.md`).
+double-buffering stage model to reconcile. PR #544's required build and unit
+lanes validated the shared Tile dialect on an x86 CI host. This transfers no
+AVX-512 schedule, Zen 5 performance result, or AMX evidence.

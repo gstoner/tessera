@@ -3230,10 +3230,18 @@ form, `TileOps.td`): typed `!tile.async_token` SSA is production; the legacy
 `tile.barrier_id`/`tile.depends_on`/`stage` grouping keys are the declared
 compatibility envelope, optional and conservative on absence. New shared
 diagnostic `TILE_ASYNC_STAGE_NEGATIVE` (a present `stage` must be >= 0).
-**ROCm outcome: follow-up required on the primary box.** The legacy attr
+**ROCm outcome: host-free compiler parity and exact gfx1151 correctness
+validated; performance policy unchanged.** The legacy attr
 envelope is load-bearing exactly on this backend's lanes (`TileToROCM.cpp`,
 `ROCMWaveLdsPipeline.cpp`, `GenerateWMMAGemmKernel.cpp`), and the new check
-now runs on every `tile.async_copy` those pipelines emit — but the Mac config
-builds no `tessera-rocm-opt`, so `check-tessera-rocm` and the ROCm-lane
-fixtures have not run against the change. Gates enumerated in
-`docs/audit/compiler/STRIX_HALO_WORKLIST_2026-08-10.md`.
+now runs on every `tile.async_copy` those pipelines emit. PR #544's required
+host-free LLVM/MLIR 23 ROCm compiler lane passed, closing dialect, verifier,
+and lowering parity. The follow-up WSL-visible gfx1151 run then passed the
+global→LDS round trip, five LDS-staged WMMA cases, five two-stage pipelined
+WMMA cases, and the bit-identical via-Tile/production comparison (**16/16**
+focused tests including four structural checks). The accompanying compiler
+benchmark remains explicitly `host_compiler_only`; no selector or device-
+performance promotion is inferred. The attributed Mac-only ROCm cases also
+passed in a **25/25** owning-WSL cohort. Full commands and provenance are
+recorded in the completed
+`docs/audit/compiler/archive/STRIX_HALO_WORKLIST_2026-08-10.md`.

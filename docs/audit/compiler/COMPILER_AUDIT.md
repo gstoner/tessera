@@ -128,14 +128,19 @@ file is not in any CMake target) and relaxed to when-present in
 (`src/compiler/mlir/lib/Target/TesseraTargetIR.cpp`, also unbuilt) is now
 legal under the envelope and was left for the dead-code audit.
 
-Gates: `phase2/pm_verify_async_token.mlir` (red at baseline, green after —
-verified by rebuilding HEAD), negative-stage cases in
+Gates: `phase2/pm_verify_async_token.mlir` (red at baseline, green after),
+negative-stage cases in
 `phase2/tile_async_token_invalid.mlir`, a legacy-stage positive in
 `phase2/tile_async_token.mlir`, and a no-key-verifies-clean unit test in
-`test_tile_ir.py`. Full `lit tests/tessera-ir/` failure set is unchanged vs.
-baseline on the Mac config (29 pre-existing ROCm/x86-lane fixtures that need
-the primary box's build). Remaining primary-box gates and follow-ups:
-[`STRIX_HALO_WORKLIST_2026-08-10.md`](STRIX_HALO_WORKLIST_2026-08-10.md).
+`test_tile_ir.py`. PR #544's required build, unit, audit, and host-free
+LLVM/MLIR 23 ROCm compiler lanes passed, closing shared parse/verifier/lowering
+parity. A follow-up WSL-visible gfx1151 run passed the global→LDS, LDS-staged
+WMMA, two-stage pipelined WMMA, and bit-identical via-Tile/production gates;
+its companion timing is explicitly host-compiler-only and makes no selector
+claim. The attributed Mac ROCm/gfx1151 failures passed as part of a **25/25**
+owning-WSL cohort, and PR #546 plus x86/ARM configure validation closed the
+example-build portability issue. The completed worklist is archived at
+[`archive/STRIX_HALO_WORKLIST_2026-08-10.md`](archive/STRIX_HALO_WORKLIST_2026-08-10.md).
 
 ## Collective async unification (2026-08-09)
 

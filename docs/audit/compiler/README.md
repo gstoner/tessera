@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-09
+last_updated: 2026-08-10
 audit_role: index
 ---
 
@@ -48,7 +48,10 @@ proof at every boundary:
 | 5 | **AD-SOLVER-IFT-1 — bounded physical pilot landed** | `NewtonAutodiff` emits the registered shared IFT chain. A content-addressed `schedule.solver_ift` → `tile.solver_ift_kernel` contract now carries the `R(theta,x)=x²-theta` pilot into one AVX-512 package and one gfx1151-generated package. Both execute residual → transposed matrix-free solve → parameter residual-adjoint and pass compiled numerical packets. Arbitrary residuals and iterative/Krylov solvers remain open and fail closed. |
 | 6 | **AD-RESIDUAL-EVAL-1 — executable bounded evaluator landed** | The Evaluator measures complete backward samples and unique retained residual allocation, and rematerialization consumes only eligible exact-device rows. Counted-region treeverse candidates now execute real checkpoint capture, replay, and backward callbacks; only those executed rows may promote. The solver packets provide the first complete-backward samples, while general MLIR region adjoints and broader family packets remain open. |
 | 7 | **DIST-SHARD-ALIAS-1 — bounded portable slice landed** | The nine public names are classified by ownership: three placement/region contracts, five exact aliases of registered collective Target IR, and one distinct point-to-point `collective_permute` gap. The five aliases execute through the deterministic multi-rank runtime; frontend capture, point-to-point Target IR, and native transport remain open. |
-| 8 | **E2E-REAL-6** | Delete duplicate Graph-to-backend authorities only after each migrated family has lineage, correctness, and architecture-owned evidence. |
+| 8 | **AD-FWD-PRODUCT-2 — bounded compiler foundation landed** | Public compilation requests carry forward/JVP mode, stable `wrt_indices`, and provenance; `TangentInterface` supplies direct straight-line rules with CPU IR oracles and unsupported active operations/regions fail closed. Native AVX-512, gfx1151, Metal, and CUDA JVP packages, broader tangent families, exact HVP/jacfwd products, and structured-region differentiation remain open. |
+| 9 | **TILE-SYNC-RECONCILE-2026-08-10 — compiler contract and gfx1151 correctness closed** | `tile.async_copy` and `tile.wait_async` share one declared dual-form contract; typed `!tile.async_token` SSA is production and legacy grouping keys are optional compatibility inputs. PR #544 closed required host-free compiler parity, and the follow-up gfx1151 global→LDS/LDS-WMMA/via-Tile cohort passed. Migration of remaining Python/stage-only carriers remains open; host-compiler timing makes no selector claim. |
+| 10 | **COMP-SCHED-OVERLAP-1 — next shared scheduling slice** | Preserve async/future lineage through Schedule→Tile, sink awaits to true SSA uses, record measured resource vectors, and only then build the prune-only composition model and MoE overlap consumer. Effects-from-traced-IR is required before movement not justified solely by explicit SSA. |
+| 11 | **E2E-REAL-6** | Delete duplicate Graph-to-backend authorities only after each migrated family has lineage, correctness, and architecture-owned evidence. |
 
 Hardware packets and backend-specific tuning are synchronized follow-ups to
 these slices, not blockers for landing shared contracts with honest fail-closed
@@ -106,14 +109,14 @@ states.
 | [`SEQUENCE_MIXER_THEORY.md`](SEQUENCE_MIXER_THEORY.md) | Sequence-mixer semantic model. |
 | [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) | Analytical-model research and candidate-pruning guidance. |
 | [`TILERT_ASSESSMENT.md`](TILERT_ASSESSMENT.md) | TileRT assessment; overlap-scheduling models and W6/T3/T4 composition-layer direction. |
-| [`STRIX_HALO_WORKLIST_2026-08-10.md`](STRIX_HALO_WORKLIST_2026-08-10.md) | Primary-box gates for the async-contract reconciliation (ROCm lit lane, full-target build). |
 | [`AMD_KERNEL_COMPILER_SURVEY.md`](AMD_KERNEL_COMPILER_SURVEY.md) | AMD compiler research survey; input to ROCm design, not ROCm evidence. |
 
 Documents under [`archive/`](archive/) are point-in-time evidence only. This
 includes the superseded
 [`STAGE_A_EMIT_PLAN.md`](archive/STAGE_A_EMIT_PLAN.md) and the completed
-[`WORKSTREAM_C_HANDOFF.md`](archive/WORKSTREAM_C_HANDOFF.md); neither is an
-active setup or execution guide.
+[`WORKSTREAM_C_HANDOFF.md`](archive/WORKSTREAM_C_HANDOFF.md), plus the completed
+[`STRIX_HALO_WORKLIST_2026-08-10.md`](archive/STRIX_HALO_WORKLIST_2026-08-10.md);
+none is an active setup or execution guide.
 
 ## Maintenance rule
 

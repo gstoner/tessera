@@ -6,9 +6,9 @@ Reference date for staleness: **2026-08-10**.
 
 ## Headline
 
-- **142** docs catalogued across the canonical doc tree.
-- **141** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **90** updated within the last 30 days.
+- **141** docs catalogued across the canonical doc tree.
+- **140** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **89** updated within the last 30 days.
 - **13** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -173,11 +173,10 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 8 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 14 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 2 | ✓ |
-| `compiler/README.md` | - | 2026-08-09 | 1 | ✓ |
+| `compiler/README.md` | - | 2026-08-10 | 0 | ✓ |
 | `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 2 | ✓ |
 | `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-08-08 | 2 | ✓ |
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 24 | ✓ |
-| `compiler/STRIX_HALO_WORKLIST_2026-08-10.md` | - | 2026-08-10 | 0 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 8 | ✓ |
 | `compiler/TILERT_ASSESSMENT.md` | - | 2026-08-10 | 0 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 11 | ✓ |

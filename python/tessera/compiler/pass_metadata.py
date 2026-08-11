@@ -427,6 +427,21 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="AD-CORE-EFFECT-CONTROL-1",
     ),
     PassMetadata(
+        name="tessera-await-sinking",
+        cpp_class="AwaitSinkingPass",
+        summary=(
+            "Sinks registered collective awaits to their first SSA consumer "
+            "only across operations proven memory-effect-free, with regions, "
+            "mutation, RNG, aliases, and ordered collectives as barriers."
+        ),
+        input_dialects=("tessera_collective", "func"),
+        output_dialects=("tessera_collective", "func"),
+        preserved_attrs=("tessera.effect",),
+        can_run_after=("tessera-adjoint-collective-insertion",),
+        pass_kind="transform",
+        sprint="COMP-SCHED-OVERLAP-1-R1-2026-08-10",
+    ),
+    PassMetadata(
         name="tessera-compute-legalize",
         cpp_class="ComputeLegalize",
         summary=(
@@ -464,9 +479,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-effect-annotate",
         cpp_class="EffectAnnotationPass",
         summary=(
-            "Walks the IR + annotates each func.func with "
-            "`tessera.effect = pure|random|memory|io|top` using the "
-            "EffectLattice."
+            "Derives each func.func effect from registered Graph contracts "
+            "and MLIR effect interfaces, propagating internal-call summaries "
+            "to a fixed point and failing closed for unknown behavior."
         ),
         input_dialects=("tessera",),
         output_dialects=("tessera",),

@@ -152,7 +152,7 @@ def test_rocm_matmul_names_toolchain_gate():
 # ---- Pure aggregator ----
 
 def test_module_is_pure_aggregator():
-    """``canonical.py`` must only depend on the four declared compiler
+    """``canonical.py`` must only depend on the declared compiler
     surfaces + stdlib. New compiler logic doesn't sneak in here — it lives
     in one of the four upstream modules first."""
     src = Path(cn.__file__).read_text()
@@ -178,6 +178,9 @@ def test_module_is_pure_aggregator():
         "tessera.compiler.graph_ir",
         "tessera.compiler.pipeline_gates",
         "tessera.compiler.op_catalog",
+        # Registered effect resolution is a shared Graph semantic, consumed by
+        # both compilation provenance and scheduling legality.
+        "tessera.compiler.effects",
         # Stdlib / typing.
         "__future__", "dataclasses", "pathlib", "typing",
     )

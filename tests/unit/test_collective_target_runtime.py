@@ -17,6 +17,7 @@ from tessera.compiler.collective_capabilities import (
 )
 from tessera.compiler.collective_target import (
     CollectiveTargetArtifact,
+    build_native_collective_product_artifact,
     lower_tile_collective_artifact,
     package_one_sided_target_artifact,
 )
@@ -68,6 +69,45 @@ def test_all_four_target_collectives_execute_on_functional_adapter() -> None:
         np.testing.assert_array_equal(value, np.arange(4, dtype=np.float32))
     np.testing.assert_array_equal(runtime.values("aa")[0], np.array([0, 1, 10, 11], np.float32))
     np.testing.assert_array_equal(runtime.values("aa")[1], np.array([2, 3, 12, 13], np.float32))
+
+
+def test_native_collective_product_requires_linear_hardware_transport() -> None:
+    contract = CollectiveExecutionContract(backend="rccl")
+    artifact = CollectiveTargetArtifact(
+        "rocm_gfx1151", (_record("all_reduce", "x", reduction="sum"),),
+        contract, "a" * 64,
+    )
+    product = build_native_collective_product_artifact(artifact)
+
+    class Status:
+        status = "hardware_runtime"
+
+    class FakeRCCL:
+        backend = "rccl"
+        world_size = 2
+        mesh_axes = {"dp": 2}
+
+        def status(self):
+            return Status()
+
+        def all_reduce(self, values, *, op="sum"):
+            total = values[0] + values[1]
+            return [total.copy(), total.copy()]
+
+    primal_runtime, tangent_runtime = product.execute(
+        adapter=FakeRCCL(),
+        primals={"x": [np.array([1.0]), np.array([2.0])]},
+        tangents={"x": [np.array([3.0]), np.array([5.0])]},
+    )
+    np.testing.assert_array_equal(primal_runtime.values("x")[0], [3.0])
+    np.testing.assert_array_equal(tangent_runtime.values("x")[0], [8.0])
+
+    nonlinear = CollectiveTargetArtifact(
+        "rocm_gfx1151", (_record("all_reduce", "x", reduction="max"),),
+        contract, "b" * 64,
+    )
+    with pytest.raises(ValueError, match="nonlinear"):
+        build_native_collective_product_artifact(nonlinear)
 
 
 def test_target_collective_rejects_runtime_topology_mismatch() -> None:

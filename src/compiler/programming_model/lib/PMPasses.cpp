@@ -3185,6 +3185,8 @@ struct ScheduleToTilePass
                                scheduled.getResidualDigestAttr());
       kernelState.addAttribute("linear_solver",
                                scheduled.getLinearSolverAttr());
+      kernelState.addAttribute("product_mode",
+                               scheduled.getProductModeAttr());
       kernelState.addAttribute("transpose", scheduled.getTransposeAttr());
       kernelState.addAttribute("wrt", scheduled.getWrtAttr());
       kernelState.addAttribute("adjoint_scale",

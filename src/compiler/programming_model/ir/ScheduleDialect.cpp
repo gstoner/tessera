@@ -470,9 +470,13 @@ LogicalResult SolverIFTOp::verify() {
   if (getArch() != "avx512" && getArch() != "gfx1151")
     return emitOpError("physical IFT is promoted only for avx512 and gfx1151");
   if (getResidualModel() != "diagonal_sqrt_v1" ||
-      getLinearSolver() != "diagonal_matrix_free_v1" || !getTranspose() ||
+      getLinearSolver() != "diagonal_matrix_free_v1" ||
       getWrt() != "parameter" || getAdjointScale().convertToDouble() != -1.0)
-    return emitOpError("requires the canonical diagonal-sqrt transposed IFT chain");
+    return emitOpError("requires the canonical diagonal-sqrt IFT chain");
+  if ((getProductMode() == "vjp" && !getTranspose()) ||
+      (getProductMode() == "jvp" && getTranspose()) ||
+      (getProductMode() != "vjp" && getProductMode() != "jvp"))
+    return emitOpError("requires vjp/transpose or jvp/non-transpose solver products");
   if (getStorage() != "f32" || getAccum() != "f32" ||
       getWorkgroupSize() <= 0)
     return emitOpError("requires f32 storage/accumulation and workgroup_size > 0");

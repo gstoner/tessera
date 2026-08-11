@@ -80,11 +80,14 @@ struct GenerateROCMSolverIFTKernelPass
       auto name = op->getAttrOfType<StringAttr>("name");
       auto model = op->getAttrOfType<StringAttr>("residual_model");
       auto solver = op->getAttrOfType<StringAttr>("linear_solver");
+      auto productMode = op->getAttrOfType<StringAttr>("product_mode");
       auto dtype = op->getAttrOfType<StringAttr>("dtype");
       auto hash = op->getAttrOfType<StringAttr>("artifact_hash");
       auto residualDigest = op->getAttrOfType<StringAttr>("residual_digest");
       if (!name || !model || model.getValue() != "diagonal_sqrt_v1" ||
           !solver || solver.getValue() != "diagonal_matrix_free_v1" ||
+          (productMode && productMode.getValue() != "jvp" &&
+                          productMode.getValue() != "vjp") ||
           !dtype || dtype.getValue() != "f32" || !hash ||
           hash.getValue().size() != 64 || !residualDigest ||
           residualDigest.getValue().size() != 64) {

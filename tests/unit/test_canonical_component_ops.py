@@ -238,7 +238,13 @@ def test_effect_summary_uses_op_catalog_effects():
     r = cn.canonical_compile(_stateful_metadata_module(), target="cpu")
     assert r.effects["summary"] == "state"
     assert r.effects["functions"][0]["ops"] == [
-        {"op": "flash_attn", "effect": "state"}
+        {
+            "op": "flash_attn",
+            "effect": "state",
+            "aliasing": "none",
+            "stochastic_identity": "none",
+            "mutation": "state",
+        }
     ]
 
 

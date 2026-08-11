@@ -161,6 +161,68 @@ class TestBayesianAutotuner:
 
         assert tuner.tune(max_trials=5) is measured
 
+    def test_measured_cost_row_carries_composition_only_resource_vector(self):
+        tuner = BayesianAutotuner(GEMMWorkload(
+            64, 96, 32,
+            dtype="fp32",
+            arch="gfx1151",
+            movement={
+                "prefetch": "lds",
+                "overlap": "compute",
+                "communication_bytes": 2048,
+                "queue_identity": "compute:gfx1151:7",
+                "resource_identity": "device:gfx1151:0/cu-mask:all",
+            },
+        ))
+        measured = TuningResult(
+            TuningConfig(32, 32, 32),
+            latency_ms=0.04,
+            tflops=1.0,
+            method="measured",
+            timing_provenance={
+                "source": "device_wall_clock",
+                "domain": "device",
+                "synchronized": True,
+            },
+        )
+        tuner._results.append(measured)
+        row = tuner.cost_measurements()[0]
+        vector = row["hot_path_metadata"]["resource_vector"]
+        assert vector["compute_time_ms"] == 0.04
+        assert vector["bytes_moved"] == 4 * (64 * 32 + 32 * 96 + 64 * 96)
+        assert vector["communication_bytes"] == 2048
+        assert vector["queue_identity"] == "compute:gfx1151:7"
+        assert vector["resource_identity"] == "device:gfx1151:0/cu-mask:all"
+        assert len(vector["artifact_digest"]) == 64
+        assert vector["timing_provenance"]["source"] == "device_wall_clock"
+        assert vector["usage"] == "composition_analysis_only"
+        assert vector["selector_authority"] == "latency_ms"
+
+    def test_analytical_cost_row_does_not_claim_measured_resource_vector(self):
+        tuner = self._tuner(M=64, N=64, K=64)
+        tuner.tune(max_trials=1)
+        row = tuner.cost_measurements()[0]
+        assert "hot_path_metadata" not in row
+
+    @pytest.mark.parametrize("value", [-1, 1.5, True, "1024"])
+    def test_measured_resource_vector_rejects_invalid_communication_bytes(
+        self, value
+    ):
+        tuner = BayesianAutotuner(GEMMWorkload(
+            64,
+            64,
+            64,
+            movement={"communication_bytes": value},
+        ))
+        tuner._results.append(TuningResult(
+            TuningConfig(32, 32, 32),
+            latency_ms=0.1,
+            tflops=1.0,
+            method="measured",
+        ))
+        with pytest.raises(ValueError, match="communication_bytes"):
+            tuner.cost_measurements()
+
     def test_smem_budget_enforced(self):
         """Configs exceeding smem budget should not be in results."""
         tuner = BayesianAutotuner(
@@ -232,6 +294,46 @@ class TestBayesianAutotuner:
 
 
 class TestBayesianAutotunerCache:
+    def test_measured_timing_provenance_round_trips_into_resource_vector(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            workload = GEMMWorkload(
+                M=64,
+                N=64,
+                K=32,
+                arch="gfx1151",
+                movement={"queue_identity": "compute:gfx1151:3"},
+            )
+            writer = BayesianAutotuner(workload)
+            writer._results.append(TuningResult(
+                TuningConfig(32, 32, 32),
+                latency_ms=0.05,
+                tflops=0.5,
+                method="measured",
+                timing_provenance={
+                    "source": "hip_event",
+                    "domain": "device",
+                    "synchronized": True,
+                },
+            ))
+            writer.save_to_cache(db_path)
+
+            reader = BayesianAutotuner(workload)
+            assert reader.warm_start_from_cache(db_path) == 1
+            assert reader.results[0].timing_provenance == {
+                "source": "hip_event",
+                "domain": "device",
+                "synchronized": True,
+            }
+            vector = reader.cost_measurements()[0]["hot_path_metadata"][
+                "resource_vector"
+            ]
+            assert vector["timing_provenance"]["source"] == "hip_event"
+            assert vector["queue_identity"] == "compute:gfx1151:3"
+        finally:
+            os.unlink(db_path)
+
     def test_save_and_warm_start(self):
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name

@@ -2221,6 +2221,7 @@ struct LowerTileToROCMPass
       if (name == "tile.solver_ift_kernel") {
         auto model = op->getAttrOfType<StringAttr>("residual_model");
         auto solver = op->getAttrOfType<StringAttr>("linear_solver");
+        auto productMode = op->getAttrOfType<StringAttr>("product_mode");
         auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
         auto residualDigest =
             op->getAttrOfType<StringAttr>("residual_digest");
@@ -2228,6 +2229,8 @@ struct LowerTileToROCMPass
         if (op->getNumOperands() != 7 || !model ||
             model.getValue() != "diagonal_sqrt_v1" || !solver ||
             solver.getValue() != "diagonal_matrix_free_v1" || !hash ||
+            !productMode ||
+            (productMode.getValue() != "jvp" && productMode.getValue() != "vjp") ||
             !residualDigest || !opArch || opArch.getValue() != "gfx1151") {
           op->emitError("AD-SOLVER-IFT-1 ROCm requires the promoted gfx1151 diagonal-sqrt contract");
           signalPassFailure();
@@ -2252,6 +2255,7 @@ struct LowerTileToROCMPass
         state.addAttribute("residual_digest", residualDigest);
         state.addAttribute("residual_model", model);
         state.addAttribute("linear_solver", solver);
+        state.addAttribute("product_mode", productMode);
         state.addAttribute("dtype", builder.getStringAttr("f32"));
         builder.create(state);
         op->erase();

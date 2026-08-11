@@ -324,6 +324,7 @@ def Schedule_SolverIFTOp : Op<ScheduleDialect, "solver_ift", [Pure]> {
                        StrAttr:$residual_model,
                        StrAttr:$residual_digest,
                        StrAttr:$linear_solver,
+                       DefaultValuedAttr<StrAttr, "\"vjp\"">:$product_mode,
                        BoolAttr:$transpose,
                        StrAttr:$wrt,
                        F32Attr:$adjoint_scale,

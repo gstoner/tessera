@@ -69,7 +69,7 @@ def test_native_tangents_are_compiler_grounded() -> None:
         "unsqueeze", "expand", "broadcast", "permute", "flatten", "view",
         "stop_gradient", "sigmoid", "tanh", "softmax", "reduce",
         "fft", "ifft", "rfft", "irfft", "dct", "dropout", "layer_norm",
-        "rmsnorm",
+        "rmsnorm", "stft", "istft", "spectral_filter", "spectral_conv",
         "es_low_rank_correction", "all_reduce", "reduce_scatter",
         "all_gather", "all_to_all",
     }

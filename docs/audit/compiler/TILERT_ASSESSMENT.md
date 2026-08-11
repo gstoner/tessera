@@ -249,9 +249,9 @@ representation that survives into IR.
 | # | Idea | Why | Lands in |
 |---|---|---|---|
 | **R1** | **Await-sinking as the first overlap pass** — sink E3's adjacent awaits to true SSA use sites | The 2026-08-09 unification made this a small, legal dataflow transform (typed futures, explicit lineage). It converts the overlap window from zero to "whatever independent work sits between dispatch and first use" — the cheapest possible B-reclaim, dense-model-safe, fully static (M4) | new pass after `tessera-lower-tile-collectives`; E9 §8 already names it |
-| **R2** | **Record resource vectors in the measured corpus** (M3 consequence) | Zero-schema-change: `benchmark_row.py` rejects unknown top-level keys but `hot_path_metadata` is the declared open slot (`benchmark_row.py:73-76`); Decision #12 harness rows have no central validator and an in-tree "additive is fine" precedent (`benchmark_rocm_wmma_gemm.py:192`). `bytes_moved` already exists analytically (E7); comm bytes lift from the Perfetto span into the record | autotune records + `hot_path_metadata` |
-| **R3** | **T3 cost module over Tile IR** — resource vectors (E7) × calibrated per-action times (E8) × legal-topological-order search | Already chartered by TILESIGHT §3.1; TileRT is the deployed evidence it pays. Prune-only, never promotion authority (same T2 discipline) | new cost-model module |
-| **R4** | **MoE dispatch/combine tile-granular overlap** as the worked dynamic example | M1 proves MoE is the max-bubble case; E6's threaded pipeline is the live scaffold; E2 supplies the producer/consumer correctness contract; Graham (M4) says a plain work queue suffices | extend `megamoe_forward_pipelined`; `comm_overlap.py` gets its first production consumer |
+| **R2 — landed 2026-08-10** | **Record resource vectors in the measured corpus** (M3 consequence) | Successful measured autotune rows carry validated `tessera.measured_resource_vector.v1` metadata in the declared `hot_path_metadata` slot. The vector binds compute time, dtype-correct bytes moved, communication bytes, queue/resource identity, timing provenance, and a content digest. Provenance round-trips through the tuning cache; analytical rows cannot claim measured vectors. `composition_analysis_only` and `selector_authority = latency_ms` make the non-selection contract machine-checkable | `autotune_v2.py` + `benchmark_row.py` |
+| **R3 — landed 2026-08-10** | **T3 cost module over Tile IR** — resource vectors (E7) × calibrated per-action times (E8) × legal-topological-order search | `composition_cost.py` owns validated actions/DAGs, calibration provenance, bounded deterministic order search, and compute/memory/communication lane simulation. It reproduces M3's scalar-order reversal. Only exhaustive clear losers may be pruned; bounded searches retain the candidate. Every estimate is promotion-ineligible and names scalar `latency_ms` as selector authority | `composition_cost.py` |
+| **R4 — bounded functional consumer landed 2026-08-10** | **MoE dispatch/combine chunk-granular overlap** as the worked dynamic example | `megamoe_overlap.py` emits a content-addressed action DAG with contiguous slices, capacity/workspace bounds, true-use edges, ordered collectives, and deterministic combines. `megamoe_forward_pipelined` consumes that exact plan and reports its digest and execution trace. R3 only prunes; measured scalar latency selects. Mock multi-rank execution proves numerical and bitwise-repeatable behavior; native transports and exact-device packets remain target-owned | `megamoe_overlap.py` + `distributed/moe.py` |
 
 ### Adapt
 
@@ -259,12 +259,10 @@ representation that survives into IR.
   rather than being re-derived from scalars. Adapt the `ScheduleStep` shape
   (immutable tuple + explicit clock, three builders behind one interface) —
   do not invent a second schedule datum (Decision #31).
-- **Decision #28 §4 amendment (proposed, not applied):** add to the arbiter's
-  record step — *"the record carries the candidate's resource vector
-  (compute-time, bytes-moved, comm-bytes) alongside measured latency; scalar
-  latency remains the selector until a composition layer consumes the
-  vectors."* One sentence, preserves current semantics, future-proofs the
-  corpus.
+- **Decision #28 §4 amendment (landed by R2):** the record carries the
+  candidate's resource vector alongside measured latency. R3 consumes that
+  vector for prune-only composition analysis; scalar measured latency remains
+  the selector, and no analytical estimate can promote a candidate.
 
 ### Skip
 
@@ -282,14 +280,12 @@ representation that survives into IR.
 
 ## 4. Prerequisites and gates (honest scoping)
 
-1. **W2.2 (effects from traced IR) is a hard prerequisite for any scheduler
-   beyond R1.** Fine-grained overlap is only sound with exact dependency/effect
-   facts; today's `EffectLattice` is AST-based and **fails open** (Decision #5
-   caveat, Decision #30) — an aliased RNG or memory op invisible to name
-   matching would be inferred pure and silently overlapped with its reader.
-   R1 is exempt only because it moves awaits along *explicit SSA edges* landed
-   by E3. `INTEGRATED_COMPILER_PLAN.md` already draws the `W2.2 → W6`
-   dependency edge (:760); this note adds the *why*.
+1. **W2.2 closed 2026-08-10.** Graph records now carry registered effect,
+   alias, mutation, and stochastic-identity semantics; unknown operations fail
+   closed, internal-call summaries reach a fixed point, and await sinking uses
+   the same MLIR semantic query. This removes the former aliased-RNG/name-match
+   hole. W2.1 remains necessary before a scheduler may synthesize arbitrary
+   memory-dependence edges; R3/R4 continue to consume explicit DAG edges only.
 2. **Multi-device overlap is unmeasurable on the current fleet** — no box has
    two GPUs; chunked transport adapters are mocks (E4). Cross-device rows are
    Phase G/H-gated. Measurable today: R1's window widening under the mock

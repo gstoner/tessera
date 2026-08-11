@@ -351,6 +351,10 @@ def _mlir_dtype(dtype: Optional[str]) -> str:
         "int32": "i32",
         "int64": "i64",
         "bool": "i1",
+        # Canonical Tessera dtype names remain complex64/complex128 in the
+        # registry; MLIR's builtin tensor element syntax is complex<f32/f64>.
+        "complex64": "complex<f32>",
+        "complex128": "complex<f64>",
     }
     return mapping.get(dtype or "", dtype or "?")
 
@@ -759,18 +763,23 @@ class IROp:
         if self.attrs:
             attr_parts.append(self.attrs)
         attr_parts.extend(f"{k} = {_format_attr_value(v)}" for k, v in self.kwargs.items())
-        # Carry the traced catalog effect into Graph IR.  Only non-pure effects
-        # need an explicit attribute; absence continues to mean pure.  C++
-        # autodiff consumes this derived fact, so aliased Python RNG calls do
-        # not need to be rediscovered from their source spelling.
+        # W2.2: carry registered semantics into Graph IR. Emit ``pure`` too:
+        # absence means "unregistered/unknown", never "probably pure".
         if "tessera.effect_kind" not in (self.attrs or "") and \
                 "tessera.effect_kind" not in self.kwargs:
             from .op_catalog import get_op_spec
             spec = get_op_spec(self.op_name)
-            if spec is not None and spec.effect != "pure":
+            if spec is not None:
                 attr_parts.append(
                     f'tessera.effect_kind = "{spec.effect}"'
                 )
+                if spec.aliasing != "none":
+                    attr_parts.append(f'tessera.aliasing = "{spec.aliasing}"')
+                if spec.stochastic_identity != "none":
+                    attr_parts.append(
+                        "tessera.stochastic_identity = "
+                        f'"{spec.stochastic_identity}"'
+                    )
         if (
             self.op_name == "tessera.rl.ppo_policy_loss"
             and "operandSegmentSizes" not in (self.attrs or "")
@@ -823,6 +832,17 @@ def _format_attr_value(value: Any) -> str:
         return "[" + ", ".join(_format_attr_value(v) for v in value) + "]"
     if isinstance(value, dict):
         return json.dumps(json.dumps(value, sort_keys=True))
+    if isinstance(value, float):
+        # MLIR requires a decimal point in scientific literals. Python's
+        # shortest representation spells small values as ``1e-05``, which is
+        # not accepted as a FloatAttr in a generic attribute dictionary.
+        rendered = repr(value)
+        if "e" in rendered.lower():
+            mantissa, exponent = rendered.lower().split("e", 1)
+            if "." not in mantissa:
+                mantissa += ".0"
+            return f"{mantissa}e{exponent}"
+        return rendered
     return repr(value)
 
 
@@ -1821,6 +1841,10 @@ class _OpExtractor(ast.NodeVisitor):
         if isinstance(node, ast.Call):
             op = self._try_map_call(node)
             if op is None:
+                self._unsupported(
+                    node,
+                    "call target is not a registered Graph operation",
+                )
                 return None
             # One SSA name per declared result. A multi-result op given a
             # single name would print `%v0 = ... -> (tK, tV)`, which is not
@@ -1997,6 +2021,15 @@ class _OpExtractor(ast.NodeVisitor):
                 kw_operands[kw.arg] = value_name
             else:
                 kwargs[kw.arg] = value_name or "?"
+
+        # The public ``sum`` spelling canonicalizes to the parameterized
+        # ``tessera.reduce`` ODS operation. Preserve the selected combiner;
+        # otherwise the Graph operation is both unverifiable (``kind`` is
+        # required) and semantically ambiguous to autodiff/lowering.
+        if mlir_name == "tessera.reduce" and "kind" not in kwargs:
+            surface = name.rsplit(".", 1)[-1]
+            if surface == "sum":
+                kwargs["kind"] = "sum"
 
         # Declared order first, so the operand list does not depend on the order
         # the caller happened to write the keywords. Anything undeclared is
@@ -3750,8 +3783,10 @@ def specialize_module_from_values(
             dtype = {
                 np.dtype(np.float16): "f16",
                 np.dtype(np.float32): "f32",
-                np.dtype(np.float64): "f64",
-                np.dtype(np.int32): "i32",
+                    np.dtype(np.float64): "f64",
+                    np.dtype(np.complex64): "complex64",
+                    np.dtype(np.complex128): "complex128",
+                    np.dtype(np.int32): "i32",
                 np.dtype(np.int64): "i64",
                 np.dtype(np.bool_): "i1",
             }.get(arr.dtype)

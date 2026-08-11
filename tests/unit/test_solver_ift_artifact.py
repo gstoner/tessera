@@ -32,6 +32,58 @@ def test_diagonal_sqrt_reference_exposes_all_ift_phases() -> None:
     np.testing.assert_array_equal(parameter_cotangent, linear_solution)
 
 
+def test_solver_forward_product_has_distinct_nontransposed_lineage() -> None:
+    vjp = build_solver_ift_contract(target="x86", shape=(17,))
+    jvp = build_solver_ift_contract(target="x86", shape=(17,), product_mode="jvp")
+    assert jvp["product_mode"] == "jvp"
+    assert jvp["linear_solve"]["transpose"] is False
+    assert jvp["artifact_hash"] != vjp["artifact_hash"]
+    with pytest.raises(ValueError, match="product_mode"):
+        build_solver_ift_contract(target="x86", shape=(17,), product_mode="hvp")
+
+
+@pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+def test_solver_forward_product_consumes_residual_jvp(target: str) -> None:
+    artifact = lower_scheduled_solver_ift(
+        target=target, shape=(17,), product_mode="jvp"
+    )
+    artifact.validate()
+    assert "tessera_solver.residual_jvp" in artifact.shared_solver_ir
+    assert 'product_mode = "jvp"' in artifact.schedule_ir
+    assert "transpose = false" in artifact.schedule_ir
+
+
+@pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
+def test_solver_forward_product_executes_parameter_tangent(target: str) -> None:
+    from tessera import runtime as rt
+
+    if find_tessera_opt() is None:
+        pytest.skip("production tessera-opt unavailable")
+    if target == "x86" and not rt._x86_elementwise_available():
+        pytest.skip("production x86 AVX-512 image unavailable")
+    if target == "rocm_gfx1151" and (
+        rt._rocm_chip() != "gfx1151" or not rt._rocm_wmma_runtime_available()
+    ):
+        pytest.skip("exact gfx1151 runtime unavailable")
+    parameter = np.linspace(0.5, 8.5, 257, dtype=np.float32)
+    solution = np.sqrt(parameter).astype(np.float32)
+    dparameter = np.linspace(-1.0, 1.0, 257, dtype=np.float32)
+    artifact = lower_scheduled_solver_ift(
+        target=target, shape=parameter.shape, product_mode="jvp"
+    )
+    result = rt.launch(
+        rt.RuntimeArtifact(metadata=artifact.runtime_metadata()),
+        (parameter, solution, dparameter),
+    )
+    assert result["ok"], result.get("reason")
+    residual, solution_tangent, parameter_product = result["output"]
+    np.testing.assert_allclose(residual, 0.0, atol=2e-6)
+    expected = dparameter / (2.0 * solution)
+    np.testing.assert_allclose(solution_tangent, expected, rtol=2e-6, atol=2e-6)
+    np.testing.assert_allclose(parameter_product, expected, rtol=2e-6, atol=2e-6)
+
+
 @pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
 def test_solver_ift_consumes_shared_chain_into_one_tile_artifact(target: str) -> None:

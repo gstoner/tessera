@@ -326,6 +326,57 @@ def test_single_chunk_overlaps_no_combine():
     assert s.num_chunks == 1 and s.overlapped_combines == 0
 
 
+def test_pipelined_runtime_consumes_content_addressed_plan_and_true_use_waits():
+    from tessera.compiler.megamoe_overlap import build_megamoe_overlap_plan
+
+    x, Wr, Wg, Wu, Wd = _inputs(404, T=32, E=8)
+    cfg = MoEConfig(num_experts=8, top_k=2, capacity_factor=8.0)
+    # Per-rank token count is 8. Explicit capacity 16 avoids drops and makes
+    # the live workspace calculation independent of routing imbalance.
+    plan = build_megamoe_overlap_plan(
+        plan_id="explicit_r4",
+        num_tokens=8,
+        num_chunks=4,
+        capacities=[16] * 4,
+        dispatch_buffer_bytes=[2 * 4 * 2 * 16 * 16 * 4] * 4,
+        pipeline_stages=2,
+        max_in_flight_chunks=2,
+    )
+    y1, dropped1, stats1 = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd,
+        world_size=4,
+        config=cfg,
+        num_chunks=4,
+        capacity=16,
+        pipeline_stages=2,
+        overlap_plan=plan,
+    )
+    y2, dropped2, stats2 = megamoe_layer_pipelined(
+        x, Wr, Wg, Wu, Wd,
+        world_size=4,
+        config=cfg,
+        num_chunks=4,
+        capacity=16,
+        pipeline_stages=2,
+        overlap_plan=plan,
+    )
+
+    assert dropped1 == dropped2 == 0
+    assert np.array_equal(y1, y2)
+    assert stats1.plan_digest == plan.artifact_digest == stats2.plan_digest
+    assert stats1.combine_order == (0, 1, 2, 3)
+    assert stats1.max_live_chunks == 2
+    assert stats1.max_live_dispatch_bytes == plan.max_live_dispatch_bytes
+    assert set(stats1.true_use_waits) == {
+        *(('dispatch:' + str(i), 'compute:' + str(i)) for i in range(4)),
+        *(('compute:' + str(i), 'combine:' + str(i)) for i in range(4)),
+    }
+    positions = {action: index for index, action in enumerate(stats1.action_order)}
+    for action, dependencies in plan.action_dependencies.items():
+        assert all(positions[dependency] < positions[action]
+                   for dependency in dependencies)
+
+
 @pytest.mark.performance
 def test_two_stage_hides_more_comm_than_one_stage():
     # The headline: the 2-stage pipeline hides the COMBINE comm too, so more

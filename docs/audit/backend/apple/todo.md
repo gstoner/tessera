@@ -3,10 +3,68 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-10
+last_updated: 2026-08-11
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `AD-FWD-FAMILY-2-2026-08-11` — **shared affine,
+compound-spectral, solver-product, and native-collective contracts landed;
+Metal consumption remains open.** Compound spectral Graph operations now own
+direct tangent interfaces, ISTFT window tangents fail closed, and solver
+artifacts distinguish JVP/non-transposed from VJP/transposed solves. No x86 or
+ROCm package or evidence transfers to Apple.
+
+Cross-backend sync `AD-FWD-NATIVE-1-2026-08-11` — **shared native-product
+lineage landed; Apple consumption is follow-up required.** The parent artifact
+schema binds paired-JVP IR to immutable ordered child packages and detects
+child substitution. This slice has no Metal executor or Mac evidence; Apple
+must add architecture-owned family products and exact-device packets before
+claiming native JVP execution.
+
+Cross-backend sync `COMP-EFFECTS-W2.2-2026-08-10` — **shared registered-effect
+analysis closed; no Metal evidence claim.** Canonical Graph records now carry
+effect, alias, mutation, and stochastic identity; Python and C++ consume the
+same fail-closed facts and internal calls reach a fixed point. Await sinking
+uses that shared query. This changes scheduling legality only; Apple still owns
+native overlap execution and Mac correctness/performance packets.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R4-2026-08-10` — **shared functional
+MegaMoE plan consumption landed; Metal transport/evidence remain open.** The
+content-addressed plan binds chunk slices, per-expert capacity, two-live-frame
+workspace limits, true-use dependencies, ordered collectives, and deterministic
+combine order. R3 only prunes complete measured plan records; scalar device
+latency selects. Mock multi-rank execution does not prove Metal overlap. Apple
+still needs native communicator/command-buffer integration and an independent
+Mac correctness/performance packet.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R3-2026-08-10` — **shared prune-only
+Tile action-DAG model landed; no Metal selection claim.** R3 validates explicit
+dependencies and calibration identity, searches legal orders, and composes
+compute/memory/communication lanes with queue serialization. Only exhaustive
+clear losers may be pruned; every estimate is promotion-ineligible and scalar
+measured latency remains authoritative. No x86/gfx1151 calibration transfers
+to Apple. Metal vectors and a Mac packet are required before an Apple DAG may
+use the model; R4 remains a separate production-consumer slice.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R2-2026-08-10` — **shared measured
+resource-vector schema landed; Apple evidence remains architecture-owned.**
+Successful measured autotune rows may record compute time, dtype-correct bytes
+moved, communication bytes, queue/resource identity, timing provenance, and
+the measured-candidate digest. Analytical rows cannot claim the vector, and
+scalar measured latency remains selector authority. No Metal timing or Mac
+resource identity is inferred from x86 or gfx1151; Apple harnesses must populate
+their own provenance before R3 composition analysis can consume it.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R1-2026-08-10` — **shared explicit
+async lineage and fail-closed await sinking landed; Metal consumption remains
+architecture-owned.** Python Schedule→Tile no longer emits internal
+`tessera.queue.*` compatibility markers: async copies produce named tokens and
+waits consume them. Collective awaits move only across operations proven
+memory-effect-free; mutation, RNG, aliases/casts, regions, and ordered
+collectives are barriers. No gfx1151 schedule or evidence transfers to Apple;
+Metal async-copy/collective overlap needs its own executable consumer and Mac
+packet.
 
 Cross-backend sync `AD-STOCHASTIC-RNG-1-2026-08-10` — **shared stochastic JVP
 contract available; Metal follow-up required.** Explicit key/counter Graph ops,

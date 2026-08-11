@@ -6,8 +6,7 @@ existing structural :class:`tile_ir.TileIRVerifier`.
 
 Coverage:
 
-  - ``async_copy`` / ``wait_async`` happens-before
-  - ``queue.create`` / ``push`` / ``pop`` / ``barrier`` happens-before
+  - explicit ``async_copy`` token / ``wait_async`` happens-before
   - canonical memory-space transition whitelist
   - source-span propagation through the diagnostic ``where`` field
   - the convenience :func:`assert_memory_model_ok` raise gate
@@ -40,34 +39,17 @@ def _module(*ops: TileOp, **fn_kwargs) -> TileIRModule:
     return TileIRModule(functions=[_fn(*ops, **fn_kwargs)])
 
 
-def _copy(*, stage: int = 0, **attrs) -> TileOp:
-    base = {"stage": stage, "vector": 4, "ordinal": 0,
+def _copy(*, token: str = "copy0", **attrs) -> TileOp:
+    base = {"vector": 4, "ordinal": 0,
             "source": "a", "result": "b"}
     base.update(attrs)
-    return TileOp("tile.async_copy", attrs=base)
+    return TileOp("tile.async_copy", attrs=base, result=token)
 
 
-def _wait(*, stage: int = 0, **attrs) -> TileOp:
-    base = {"stage": stage}
+def _wait(*, token: str = "copy0", **attrs) -> TileOp:
+    base = {}
     base.update(attrs)
-    return TileOp("tile.wait_async", attrs=base)
-
-
-def _queue_create(qid: int, depth: int = 2) -> TileOp:
-    return TileOp("tessera.queue.create",
-                  attrs={"queue_id": qid, "depth": depth})
-
-
-def _queue_push(qid: int) -> TileOp:
-    return TileOp("tessera.queue.push", attrs={"queue_id": qid})
-
-
-def _queue_pop(qid: int) -> TileOp:
-    return TileOp("tessera.queue.pop", attrs={"queue_id": qid})
-
-
-def _queue_barrier(qid: int) -> TileOp:
-    return TileOp("tessera.queue.barrier", attrs={"queue_id": qid})
+    return TileOp("tile.wait_async", attrs=base, operands=[f"%{token}"])
 
 
 # ---------------------------------------------------------------------------
@@ -98,16 +80,15 @@ def test_legal_async_copy_transitions_is_documented_set() -> None:
 # Positive paths
 # ---------------------------------------------------------------------------
 
-def test_copy_then_wait_at_same_stage_is_ok() -> None:
-    module = _module(_copy(stage=0), _wait(stage=0))
+def test_copy_then_wait_on_same_token_is_ok() -> None:
+    module = _module(_copy(token="copy0"), _wait(token="copy0"))
     assert verify_memory_model(module).ok
 
 
-def test_multiple_copies_then_one_wait_is_ok() -> None:
-    """Two async copies at stage 0 followed by a single wait — both
-    are tracked at the stage granularity, so one wait suffices."""
+def test_multiple_copies_have_independent_tokens() -> None:
     module = _module(
-        _copy(stage=0), _copy(stage=0), _wait(stage=0),
+        _copy(token="copy0"), _copy(token="copy1"),
+        _wait(token="copy0"), _wait(token="copy1"),
     )
     assert verify_memory_model(module).ok
 
@@ -115,34 +96,13 @@ def test_multiple_copies_then_one_wait_is_ok() -> None:
 def test_legal_memory_space_transitions_pass() -> None:
     for src, dst in LEGAL_ASYNC_COPY_TRANSITIONS:
         module = _module(
-            _copy(source_space=src, dest_space=dst, stage=0),
-            _wait(stage=0),
+            _copy(source_space=src, dest_space=dst),
+            _wait(),
         )
         result = verify_memory_model(module)
         assert result.ok, (
             f"legal transition {src} -> {dst} flagged: {result.format()}"
         )
-
-
-def test_queue_push_pop_round_trip_is_ok() -> None:
-    module = _module(
-        _queue_create(0, depth=2),
-        _queue_push(0),
-        _queue_pop(0),
-    )
-    assert verify_memory_model(module).ok
-
-
-def test_queue_barrier_after_push_is_ok_and_does_not_consume() -> None:
-    """barrier waits but doesn't decrement the outstanding counter,
-    so a subsequent ``pop`` is still permitted."""
-    module = _module(
-        _queue_create(0),
-        _queue_push(0),
-        _queue_barrier(0),
-        _queue_pop(0),
-    )
-    assert verify_memory_model(module).ok
 
 
 # ---------------------------------------------------------------------------
@@ -154,35 +114,18 @@ def _codes(module) -> list[str]:
 
 
 def test_wait_without_preceding_copy_is_an_error() -> None:
-    module = _module(_wait(stage=0))
+    module = _module(_wait(token="missing"))
     assert "MEM_WAIT_WITHOUT_COPY" in _codes(module)
 
 
-def test_wait_at_wrong_stage_is_an_error() -> None:
-    """A wait at stage 1 with copies only at stage 0 should fail."""
-    module = _module(_copy(stage=0), _wait(stage=1))
+def test_wait_on_wrong_token_is_an_error() -> None:
+    module = _module(_copy(token="copy0"), _wait(token="copy1"))
     assert "MEM_WAIT_WITHOUT_COPY" in _codes(module)
 
 
-def test_queue_push_without_create_is_an_error() -> None:
-    module = _module(_queue_push(7))
-    assert "MEM_QUEUE_PUSH_WITHOUT_CREATE" in _codes(module)
-
-
-def test_queue_pop_without_push_is_an_error() -> None:
-    module = _module(_queue_create(0), _queue_pop(0))
-    assert "MEM_QUEUE_POP_WITHOUT_PUSH" in _codes(module)
-
-
-def test_queue_pop_after_balanced_push_then_pop_fails() -> None:
-    """Two pops after one push: the second one is unmatched."""
-    module = _module(
-        _queue_create(0),
-        _queue_push(0),
-        _queue_pop(0),
-        _queue_pop(0),
-    )
-    assert "MEM_QUEUE_POP_WITHOUT_PUSH" in _codes(module)
+def test_duplicate_wait_is_an_error() -> None:
+    module = _module(_copy(), _wait(), _wait())
+    assert "MEM_DUPLICATE_WAIT" in _codes(module)
 
 
 def test_invalid_memory_space_is_an_error() -> None:
@@ -194,7 +137,7 @@ def test_illegal_memory_space_transition_is_an_error() -> None:
     """``shared`` → ``shared`` is normally a register copy at the
     instruction level — not an ``async_copy``."""
     module = _module(
-        _copy(source_space="shared", dest_space="shared", stage=0),
+        _copy(source_space="shared", dest_space="shared"),
     )
     assert "MEM_INVALID_ASYNC_COPY_TRANSITION" in _codes(module)
 
@@ -204,7 +147,7 @@ def test_illegal_memory_space_transition_is_an_error() -> None:
 # ---------------------------------------------------------------------------
 
 def test_source_span_attrs_propagate_to_diagnostic_where() -> None:
-    module = _module(_wait(stage=0, loc_line=42, loc_col=7))
+    module = _module(_wait(token="missing", loc_line=42, loc_col=7))
     diagnostics = verify_memory_model(module).diagnostics
     assert any(
         d.code == "MEM_WAIT_WITHOUT_COPY" and d.where == {"loc_line": 42, "loc_col": 7}
@@ -217,12 +160,12 @@ def test_source_span_attrs_propagate_to_diagnostic_where() -> None:
 # ---------------------------------------------------------------------------
 
 def test_assert_memory_model_ok_passes_for_clean_program() -> None:
-    module = _module(_copy(stage=0), _wait(stage=0))
+    module = _module(_copy(), _wait())
     assert_memory_model_ok(module)  # no raise
 
 
 def test_assert_memory_model_ok_raises_for_invalid_program() -> None:
-    module = _module(_wait(stage=0))
+    module = _module(_wait(token="missing"))
     with pytest.raises(MemoryModelVerificationError, match="MEM_WAIT_WITHOUT_COPY"):
         assert_memory_model_ok(module)
 
@@ -234,8 +177,8 @@ def test_assert_memory_model_ok_raises_for_invalid_program() -> None:
 def test_state_does_not_leak_between_functions() -> None:
     """A copy in function A must not satisfy a wait in function B."""
     module = TileIRModule(functions=[
-        TileFunction("a", body=[_copy(stage=0)], target="apple_gpu"),
-        TileFunction("b", body=[_wait(stage=0)], target="apple_gpu"),
+        TileFunction("a", body=[_copy()], target="apple_gpu"),
+        TileFunction("b", body=[_wait()], target="apple_gpu"),
     ])
     assert "MEM_WAIT_WITHOUT_COPY" in _codes(module)
 

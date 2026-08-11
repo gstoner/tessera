@@ -11094,6 +11094,248 @@ def _execute_x86_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) ->
     return tuple(grads)
 
 
+def _execute_compiled_norm_jvp(
+    artifact: RuntimeArtifact, args: Any, *, target: str
+) -> tuple[Any, Any]:
+    """Execute the affine normalization product through target-owned lanes.
+
+    The row projection is the established non-affine normalization kernel;
+    affine product terms are dispatched through the target binary kernels.
+    Broadcasting only materializes channel vectors into launch buffers and
+    performs no host arithmetic.
+    """
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    if metadata.get("autodiff_phase") != "forward":
+        raise ValueError("normalization JVP requires autodiff_phase='forward'")
+    names = [str(name) for name in metadata.get("arg_names", [])]
+    values = _bind_launch_args(args, names)
+    op = dict((metadata.get("ops") or [])[0])
+    operands = [str(name) for name in op.get("operands", [])]
+    wrt = tuple(int(index) for index in metadata.get("wrt_indices", ()))
+    if not operands or 0 not in wrt:
+        raise ValueError("normalization JVP requires an active data operand")
+    primals = [_as_numpy(values[name]) for name in operands]
+    tangents = {
+        index: _as_numpy(values[f"tangent_{index}"]) for index in wrt
+    }
+    x = primals[0]
+    if any(tangents[index].shape != primals[index].shape for index in wrt):
+        raise ValueError("normalization tangent shapes must match their primals")
+    execution_kind = "native_cpu" if target == "x86" else "native_gpu"
+    execution_mode = "cpu_avx512" if target == "x86" else "hip_runtime"
+    forward_metadata = {
+        "target": target,
+        "compiler_path": f"{target}_norm_compiled",
+        "executable": True,
+        "execution_kind": execution_kind,
+        "execution_mode": execution_mode,
+        "arg_names": operands,
+        "ops": [op],
+    }
+    forward_fn = (
+        _execute_x86_compiled_norm if target == "x86"
+        else _execute_rocm_compiled_norm
+    )
+    primal = forward_fn(RuntimeArtifact(metadata=forward_metadata), tuple(primals))
+
+    nonaffine_op = {**op, "operands": [operands[0]]}
+    backward_metadata = {
+        "target": target,
+        "compiler_path": (
+            f"{target}_layer_norm_bwd_compiled"
+            if op["op_name"] == "tessera.layer_norm"
+            else f"{target}_rmsnorm_bwd_compiled"
+        ),
+        "executable": True,
+        "execution_kind": execution_kind,
+        "execution_mode": execution_mode,
+        "autodiff_phase": "backward",
+        "out_cotangent": "dy",
+        "arg_names": [operands[0], "dy"],
+        "ops": [nonaffine_op],
+    }
+    backward_fn = (
+        _execute_x86_compiled_norm_backward if target == "x86"
+        else _execute_rocm_compiled_norm_backward
+    )
+    projected = backward_fn(
+        RuntimeArtifact(metadata=backward_metadata), (x, tangents[0])
+    )[0]
+    normalized = forward_fn(
+        RuntimeArtifact(metadata={**forward_metadata, "arg_names": [operands[0]],
+                                  "ops": [nonaffine_op]}), (x,)
+    )
+
+    binary_fn = (
+        _execute_x86_compiled_binary if target == "x86"
+        else _execute_rocm_compiled_binary
+    )
+
+    def binary(kind: str, lhs: Any, rhs: Any) -> Any:
+        child = {
+            "target": target,
+            "compiler_path": f"{target}_binary_compiled",
+            "arg_names": ["a", "b"],
+            "ops": [{"op_name": f"tessera.{kind}", "result": "o",
+                     "operands": ["a", "b"], "kwargs": {}}],
+        }
+        return binary_fn(RuntimeArtifact(metadata=child), (lhs, rhs))
+
+    tangent = projected
+    if len(primals) >= 2:
+        gamma = np.ascontiguousarray(np.broadcast_to(primals[1], x.shape))
+        tangent = binary("mul", projected, gamma)
+        if 1 in tangents:
+            dgamma = np.ascontiguousarray(np.broadcast_to(tangents[1], x.shape))
+            tangent = binary("add", tangent, binary("mul", normalized, dgamma))
+    if len(primals) >= 3 and 2 in tangents:
+        dbeta = np.ascontiguousarray(np.broadcast_to(tangents[2], x.shape))
+        tangent = binary("add", tangent, dbeta)
+    return primal, tangent
+
+
+def _execute_x86_compiled_norm_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_compiled_norm_jvp(artifact, args, target="x86")
+
+
+def _execute_rocm_compiled_norm_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_compiled_norm_jvp(artifact, args, target="rocm")
+
+
+def _execute_compiled_spectral_jvp(
+    artifact: RuntimeArtifact, args: Any, *, target: str
+) -> tuple[Any, Any]:
+    """Execute a bilinear/fixed-parameter compound spectral product."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    names = [str(name) for name in metadata.get("arg_names", [])]
+    values = _bind_launch_args(args, names)
+    primal_names = [str(name) for name in metadata.get("primal_names", [])]
+    wrt = tuple(int(index) for index in metadata.get("wrt_indices", ()))
+    contract = metadata.get("scheduled_spectral")
+    if not primal_names or not isinstance(contract, dict):
+        raise ValueError("compound spectral JVP lacks its scheduled child")
+    op_name = str(contract.get("op_name", ""))
+    if op_name == "tessera.istft" and any(index != 0 for index in wrt):
+        raise ValueError("ISTFT window products are nonlinear and fail closed")
+    primals = [_as_numpy(values[name]) for name in primal_names]
+    spectral_fn = (
+        _execute_x86_compiled_spectral if target == "x86"
+        else _execute_rocm_compiled_spectral
+    )
+
+    def spectral(operands: list[Any]) -> Any:
+        child = {
+            "target": target,
+            "compiler_path": f"{target}_spectral_compiled",
+            "arg_names": [f"operand_{index}" for index in range(len(operands))],
+            "scheduled_spectral": contract,
+        }
+        return spectral_fn(RuntimeArtifact(metadata=child), tuple(operands))
+
+    primal = spectral(primals)
+    terms: list[Any] = []
+    for index in wrt:
+        term_inputs = list(primals)
+        term_inputs[index] = _as_numpy(values[f"tangent_{index}"])
+        terms.append(spectral(term_inputs))
+    if not terms:
+        raise ValueError("compound spectral JVP requires an active input")
+    tangent = terms[0]
+    binary_fn = (
+        _execute_x86_compiled_binary if target == "x86"
+        else _execute_rocm_compiled_binary
+    )
+    for term in terms[1:]:
+        complex_output = np.iscomplexobj(tangent)
+        lhs = np.ascontiguousarray(tangent)
+        rhs = np.ascontiguousarray(term)
+        if complex_output:
+            lhs = lhs.view(np.float32).reshape(lhs.shape + (2,))
+            rhs = rhs.view(np.float32).reshape(rhs.shape + (2,))
+        child = RuntimeArtifact(metadata={
+            "target": target,
+            "compiler_path": f"{target}_binary_compiled",
+            "arg_names": ["a", "b"],
+            "ops": [{"op_name": "tessera.add", "result": "o",
+                     "operands": ["a", "b"], "kwargs": {}}],
+        })
+        tangent = binary_fn(child, (lhs, rhs))
+        if complex_output:
+            tangent = np.ascontiguousarray(tangent).view(np.complex64).reshape(term.shape)
+    return primal, tangent
+
+
+def _execute_x86_compiled_spectral_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_compiled_spectral_jvp(artifact, args, target="x86")
+
+
+def _execute_rocm_compiled_spectral_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_compiled_spectral_jvp(artifact, args, target="rocm")
+
+
+def _execute_native_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Execute one content-addressed primal/tangent product package.
+
+    Child dispatch is resolved through the same execution matrix as a top-level
+    launch.  The parent contract fixes ordering and inputs, so this routine
+    cannot route back through Graph IR or select a backend implementation at
+    runtime.
+    """
+    from .compiler.native_jvp import NativeJVPArtifact, child_digest
+
+    metadata = artifact.metadata or {}
+    raw = metadata.get("native_jvp")
+    if not isinstance(raw, dict):
+        raise ValueError("native JVP executor requires a native_jvp contract")
+    package = NativeJVPArtifact(raw)
+    package.validate()
+    names = [str(name) for name in raw.get("arg_names", [])]
+    values = _bind_launch_args(args, names)
+    products: dict[str, Any] = {}
+    for step in raw["steps"]:
+        child_metadata = step.get("child_metadata")
+        if not isinstance(child_metadata, dict):
+            raise ValueError("native JVP step lacks child runtime metadata")
+        if child_digest(child_metadata) != step.get("child_digest"):
+            raise ValueError("native JVP child package digest mismatch")
+        row = _exec_row_for_metadata(child_metadata)
+        if row is None or not row.executable or row.executor_id is None:
+            raise ValueError("native JVP child has no executable matrix row")
+        executor = _executor_table().get(row.executor_id)
+        if executor is None or executor is _execute_native_jvp:
+            raise ValueError("native JVP child executor is invalid or recursive")
+        inputs: list[Any] = []
+        for binding in step.get("inputs", []):
+            if binding in values:
+                inputs.append(values[binding])
+            elif binding in products:
+                inputs.append(products[binding])
+            else:
+                raise ValueError(f"native JVP step references unknown input {binding!r}")
+        output = executor(RuntimeArtifact(metadata=child_metadata), tuple(inputs))
+        named_outputs = step.get("outputs")
+        if named_outputs is not None:
+            if not isinstance(output, (tuple, list)) or len(output) != len(named_outputs):
+                raise ValueError("native JVP child named-output contract is invalid")
+            for name, value in zip(named_outputs, output):
+                products[str(name)] = value
+            continue
+        selector = int(step.get("output_index", -1))
+        if selector >= 0:
+            if not isinstance(output, (tuple, list)) or selector >= len(output):
+                raise ValueError("native JVP child output selector is invalid")
+            output = output[selector]
+        products[str(step["id"])] = output
+    try:
+        return products["primal"], products["tangent"]
+    except KeyError as exc:
+        raise ValueError("native JVP package must produce primal and tangent") from exc
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Composed normalization (P5) — group_norm / instance_norm / weight_norm built
 # on the existing device lanes (no new kernels): group/instance normalize is a
@@ -28158,7 +28400,10 @@ def _solver_ift_inputs(artifact: RuntimeArtifact, args: Any) -> tuple[Any, Any, 
     if runtime_target not in {"x86", "rocm"}:
         raise ValueError(f"solver IFT runtime rejects target {runtime_target!r}")
     target = "x86" if runtime_target == "x86" else "rocm_gfx1151"
-    expected = build_solver_ift_contract(target=target, shape=arrays[0].shape)
+    product_mode = str(contract.get("product_mode", "vjp"))
+    expected = build_solver_ift_contract(
+        target=target, shape=arrays[0].shape, product_mode=product_mode
+    )
     if contract != expected:
         raise ValueError("solver IFT runtime rejected stale physical lineage")
     return arrays[0], arrays[1], arrays[2], contract
@@ -28394,6 +28639,9 @@ def _executor_table():
         "rocm_softmax_compiled": _execute_rocm_compiled_softmax,
         "rocm_norm_compiled": _execute_rocm_compiled_norm,
         "rocm_norm_bwd_compiled": _execute_rocm_compiled_norm_backward,
+        "rocm_norm_jvp_compiled": _execute_rocm_compiled_norm_jvp,
+        "rocm_spectral_jvp_compiled": _execute_rocm_compiled_spectral_jvp,
+        "rocm_jvp_compiled": _execute_native_jvp,
         "rocm_reduce_compiled": _execute_rocm_compiled_reduce,
         "rocm_argreduce_compiled": _execute_rocm_compiled_argreduce,
         "rocm_scan_compiled": _execute_rocm_compiled_scan,
@@ -28418,6 +28666,9 @@ def _executor_table():
         "x86_binary_math_compiled": _execute_x86_compiled_binary_math,
         "x86_norm_compiled": _execute_x86_compiled_norm,
         "x86_norm_bwd_compiled": _execute_x86_compiled_norm_backward,
+        "x86_norm_jvp_compiled": _execute_x86_compiled_norm_jvp,
+        "x86_spectral_jvp_compiled": _execute_x86_compiled_spectral_jvp,
+        "x86_jvp_compiled": _execute_native_jvp,
         "x86_softmax_compiled": _execute_x86_compiled_softmax,
         "x86_matmul_family_compiled": _execute_x86_compiled_matmul_family,
         "x86_rope_compiled": _execute_x86_compiled_rope,

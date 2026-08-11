@@ -3,10 +3,68 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-10
+last_updated: 2026-08-11
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `AD-FWD-FAMILY-2-2026-08-11` — **shared affine,
+compound-spectral, solver-product, and native-collective contracts landed;
+SM120 consumption remains open.** Compound spectral Graph operations now own
+direct tangent interfaces, ISTFT window tangents fail closed, and solver
+artifacts distinguish JVP/non-transposed from VJP/transposed solves. The
+multi-rank product accepts only a live NCCL hardware adapter, but no SM120
+correctness/performance packet is claimed by this shared-contract slice.
+
+Cross-backend sync `AD-FWD-NATIVE-1-2026-08-11` — **shared native-product
+lineage landed; SM120 consumption is follow-up required.** The parent artifact
+schema binds paired-JVP IR to immutable ordered child packages and detects
+child substitution. Only x86/AVX-512 and ROCm/gfx1151 are executable in this
+slice; no schedule or evidence transfers to CUDA. SM120 needs family-owned
+product packages and exact-device numerical/performance packets before a
+native JVP matrix row may be added.
+
+Cross-backend sync `COMP-EFFECTS-W2.2-2026-08-10` — **shared registered-effect
+analysis closed; no CUDA evidence claim.** Canonical Graph records now carry
+effect, alias, mutation, and stochastic identity; Python and C++ consume the
+same fail-closed facts and internal calls reach a fixed point. Await sinking
+uses that shared query. This changes scheduling legality only; SM120 still owns
+native overlap execution and exact-device correctness/performance packets.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R4-2026-08-10` — **shared functional
+MegaMoE plan consumption landed; NCCL/SM120 evidence remain open.** The
+content-addressed plan binds chunk slices, per-expert capacity, two-live-frame
+workspace limits, true-use dependencies, ordered collectives, and deterministic
+combine order. R3 only prunes complete measured plan records; scalar CUDA-event
+latency selects. Mock multi-rank execution transfers no performance claim.
+SM120 still needs native NCCL stream/event binding and exact-device packets.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R3-2026-08-10` — **shared prune-only
+Tile action-DAG model landed; no CUDA selection claim.** R3 validates explicit
+dependencies and calibration identity, searches legal orders, and composes
+compute/memory/communication lanes with queue serialization. Only exhaustive
+clear losers may be pruned; every estimate is promotion-ineligible and scalar
+measured latency remains authoritative. SM120 needs its own calibrated vectors
+and exact-device packet before using this analysis; R4 production consumption
+does not transfer from another backend.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R2-2026-08-10` — **shared measured
+resource-vector schema landed; CUDA evidence remains architecture-owned.**
+Successful measured autotune rows may record compute time, dtype-correct bytes
+moved, communication bytes, queue/resource identity, timing provenance, and
+the measured-candidate digest. Analytical rows cannot claim the vector, and
+scalar measured latency remains selector authority. No gfx1151 or x86 timing,
+queue, or resource identity transfers to SM120; CUDA event/activity providers
+must populate their own provenance before R3 composition analysis can use it.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R1-2026-08-10` — **shared explicit
+async lineage and fail-closed await sinking landed; CUDA consumption remains
+architecture-owned.** Python Schedule→Tile no longer emits internal
+`tessera.queue.*` compatibility markers: async copies produce named tokens and
+waits consume them. Collective awaits move only across operations proven
+memory-effect-free; mutation, RNG, aliases/casts, regions, and ordered
+collectives are barriers. Existing typed CUDA token lowering is unchanged;
+SM120 needs independent executable overlap and exact-device proof.
 
 Cross-backend sync `AD-STOCHASTIC-RNG-1-2026-08-10` — **shared stochastic JVP
 contract available; CUDA follow-up required.** Explicit key/counter Graph ops,

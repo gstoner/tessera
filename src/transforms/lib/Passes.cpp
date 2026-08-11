@@ -473,6 +473,7 @@ void registerTesseraPasses() {
 
   // ── Phase 4 passes ────────────────────────────────────────────────────────
   ::mlir::registerPass([]() { return createGPUCollectiveInsertionPass(); });
+  ::mlir::registerPass([]() { return createAwaitSinkingPass(); });
   ::mlir::registerPass([]() { return createPipelineStageInsertionPass(); });
   // 2026-06-23: real pipeline-stage partitioning + 1F1B schedule proof.
   ::mlir::registerPass([]() { return createPipelineStagePartitionPass(); });
@@ -617,6 +618,7 @@ void registerTesseraPasses() {
         pm.addPass(createAutodiffPass());
         pm.addPass(createActivationRematerializationPass());
         pm.addPass(createAdjointCollectiveInsertionPass());
+        pm.addPass(createAwaitSinkingPass());
       });
 
   // Full Phase 3 GPU lowering chain: Graph IR → SM_90 PTX.

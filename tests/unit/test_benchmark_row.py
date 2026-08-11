@@ -12,10 +12,12 @@ import pytest
 
 from tessera.compiler.benchmark_row import (
     BenchmarkRow,
+    MeasuredResourceVector,
     NATIVE_MODES,
     NON_NATIVE_BACKENDS,
     OPTIONAL_BENCHMARK_FIELDS,
     REQUIRED_BENCHMARK_FIELDS,
+    selector_latency_ms,
     validate_benchmark_row,
 )
 from tessera.compiler.canonical import (
@@ -109,6 +111,64 @@ def test_validate_accepts_native_claim_with_plan_hash_proof() -> None:
     row["mode"] = "jit_compiled"
     row["plan_hash"] = "abc123"
     validate_benchmark_row(row)
+
+
+def _resource_vector(*, compute_time_ms: float = 0.05) -> dict:
+    return MeasuredResourceVector(
+        compute_time_ms=compute_time_ms,
+        bytes_moved=4096,
+        communication_bytes=1024,
+        queue_identity="compute:gfx1151:0",
+        resource_identity="sha256:" + "b" * 64,
+        timing_provenance={
+            "source": "hip_event",
+            "domain": "device",
+            "synchronized": True,
+        },
+        artifact_digest="a" * 64,
+    ).as_dict()
+
+
+def test_validate_accepts_measured_resource_vector_in_open_metadata_slot() -> None:
+    row = _minimal_python_ref_row()
+    row["hot_path_metadata"] = {"resource_vector": _resource_vector()}
+    validate_benchmark_row(row)
+
+
+def test_resource_vector_is_composition_only_and_cannot_replace_latency() -> None:
+    row = _minimal_python_ref_row()
+    row["latency_ms"] = 2.0
+    row["hot_path_metadata"] = {
+        "resource_vector": _resource_vector(compute_time_ms=0.001)
+    }
+    assert selector_latency_ms(row) == 2.0
+    assert row["hot_path_metadata"]["resource_vector"]["usage"] == (
+        "composition_analysis_only"
+    )
+    assert row["hot_path_metadata"]["resource_vector"][
+        "selector_authority"
+    ] == "latency_ms"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("compute_time_ms", 0.0, "positive and finite"),
+        ("bytes_moved", -1, "non-negative integer"),
+        ("communication_bytes", 1.5, "non-negative integer"),
+        ("artifact_digest", "short", "64 lowercase hex"),
+        ("selector_authority", "compute_time_ms", "scalar latency"),
+    ],
+)
+def test_resource_vector_rejects_invalid_or_selector_shaping_fields(
+    field: str, value: object, message: str
+) -> None:
+    row = _minimal_python_ref_row()
+    vector = _resource_vector()
+    vector[field] = value
+    row["hot_path_metadata"] = {"resource_vector": vector}
+    with pytest.raises(ValueError, match=message):
+        validate_benchmark_row(row)
 
 
 # ---------------------------------------------------------------------------

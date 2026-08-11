@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-10
+last_updated: 2026-08-11
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,69 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `AD-FWD-FAMILY-2-2026-08-11` — **affine normalization,
+compound spectral, and matrix-free solver products execute on AVX-512.** The
+multi-active product ABI carries named child outputs. Affine LayerNorm binds
+data/scale/bias tangents to AVX-512 norm and binary lanes; spectral-filter JVP
+executes both bilinear terms through the typed TSOL artifact; and the solver
+artifact carries residual-JVP/non-transposed-solve lineage distinct from VJP.
+All three pass numerical tests on the WSL-visible Zen 5 CPU. The native
+multi-rank collective product requires a live NCCL hardware adapter and world
+size >= 2; clean bare-metal Zen 5 timing and native process-transport evidence
+remain open.
+
+Cross-backend sync `AD-FWD-NATIVE-1-2026-08-11` — **the first native AVX-512
+JVP package is executable; clean-host promotion remains open.** The
+content-addressed parent binds compiler-emitted paired JVP IR to ordered native
+child packages without Graph redispatch. Sum, non-affine RMSNorm, and packed
+RFFT primal/tangent products pass independent formulas on this Zen 5 WSL host
+(**3/3**). The packet records architecture and artifact lineage, but it is not
+a clean bare-metal timing packet. Broader products and process-collective
+hardware evidence remain architecture-owned.
+
+Cross-backend sync `COMP-EFFECTS-W2.2-2026-08-10` — **shared registered-effect
+analysis closed; AVX-512 remains a no-async path.** Canonical Graph records now
+carry effect, alias, mutation, and stochastic identity; Python and C++ consume
+the same fail-closed facts and internal calls reach a fixed point. Await
+sinking remains a proven x86 no-op. Native process transport and Zen 5 overlap
+evidence remain x86-owned.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R4-2026-08-10` — **shared functional
+MegaMoE plan consumption landed; native CPU transport remains open.** The
+content-addressed plan binds chunk slices, per-expert capacity, two-live-frame
+workspace limits, true-use dependencies, ordered collectives, and deterministic
+combine order. R3 only prunes complete measured records; scalar clean-host
+latency selects. Mock multi-rank execution is not MPI/OFI/SHMEM proof. x86
+still needs native transport integration plus Zen 5 correctness/performance
+evidence with stable affinity.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R3-2026-08-10` — **shared prune-only
+Tile action-DAG model landed; no AVX-512 selection claim.** R3 validates
+explicit dependencies and calibration identity, searches legal orders, and
+composes compute/memory/communication lanes with queue serialization. Only
+exhaustive clear losers may be pruned; every estimate is promotion-ineligible
+and scalar measured latency remains authoritative. WSL timing and blocked PMU
+access do not become calibration evidence; clean Zen 5 vectors remain required
+before architecture-owned composition analysis or R4 transport overlap.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R2-2026-08-10` — **shared measured
+resource-vector schema landed; Zen 5 evidence remains architecture-owned.**
+Successful measured autotune rows may record compute time, dtype-correct bytes
+moved, communication bytes, queue/resource identity, timing provenance, and
+the measured-candidate digest. Analytical rows cannot claim the vector, and
+scalar measured latency remains selector authority. The contract does not
+upgrade WSL wall-clock or blocked PMU observations; clean-host AVX-512 timing,
+affinity, and resource identity remain required before R3 composition use.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R1-2026-08-10` — **shared explicit
+async lineage landed; x86 is a proven no-op path.** Python Schedule→Tile no
+longer emits internal `tessera.queue.*` markers, and the registered collective
+await pass sinks only across operations proven memory-effect-free. Mutation,
+RNG, aliases/casts, regions, and ordered collectives remain barriers. A direct
+no-async function test records zero moved awaits; no AVX-512 package, ABI, or
+performance claim changes. Future MPI/OFI/SHMEM overlap remains separately
+architecture-owned.
 
 Cross-backend sync `AD-STOCHASTIC-RNG-1-2026-08-10` — **native x86 base RNG
 transforms landed; clean Zen 5 packet remains required.** Explicit key/counter

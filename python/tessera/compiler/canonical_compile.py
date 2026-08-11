@@ -57,6 +57,7 @@ from tessera.compiler.driver import (
 )
 from tessera.compiler.graph_ir import GraphIRModule
 from tessera.compiler.op_catalog import get_op_spec, normalize_op_name
+from tessera.compiler.effects import registered_op_effect
 
 
 # --- CompileResult --------------------------------------------------------
@@ -529,13 +530,7 @@ def _type_metadata(ir_type: Any, *, layout: str | None = None) -> dict[str, Any]
 
 
 def _op_effect(op_name: str, kwargs: Mapping[str, Any]) -> str:
-    explicit = kwargs.get("effect")
-    if isinstance(explicit, str) and explicit in _EFFECT_RANK:
-        return explicit
-    spec = get_op_spec(op_name)
-    if spec is not None:
-        return spec.effect
-    return "pure"
+    return registered_op_effect(op_name, kwargs).name
 
 
 def _lowering_family(op_name: str) -> str:
@@ -630,10 +625,20 @@ def _derive_effects(module: GraphIRModule) -> dict[str, Any]:
         op_effects: list[dict[str, str]] = []
         for op in fn.body:
             effect = _op_effect(op.op_name, op.kwargs)
-            op_effects.append({
+            spec = get_op_spec(op.op_name)
+            record = {
                 "op": _canonical_op_name(op.op_name),
                 "effect": effect,
-            })
+                "aliasing": spec.aliasing if spec is not None else "unknown",
+                "stochastic_identity": (
+                    spec.stochastic_identity if spec is not None else "unknown"
+                ),
+                "mutation": (
+                    effect if effect in {"state", "memory", "io", "top"}
+                    else "none"
+                ),
+            }
+            op_effects.append(record)
             fn_effect = _join_effect(fn_effect, effect)
         module_effect = _join_effect(module_effect, fn_effect)
         functions.append({

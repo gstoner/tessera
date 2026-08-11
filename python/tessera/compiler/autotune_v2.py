@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from ..telemetry import make_event
+from .benchmark_row import MeasuredResourceVector
 from .reuse_distance_cost import estimate_gemm_reuse_distance
 from .rounding import RTNE
 from .tile_rasterization import RASTER_ORDER_CHOICES
@@ -178,6 +179,7 @@ class TuningResult:
     status: str = "ok"
     reason: str = ""
     method: str = "reuse_distance"
+    timing_provenance: Mapping[str, Any] = field(default_factory=dict)
 
     def __repr__(self) -> str:
         suffix = f", status={self.status!r}" if self.status != "ok" else ""
@@ -351,6 +353,7 @@ class BayesianAutotuner:
                 "method": "'roofline'",
                 "raster_order": "'row_major'",
                 "raster_group": "1",
+                "timing_provenance_json": "'{}'",
             }
             select_cols = [
                 "tile_m", "tile_n", "tile_k", "num_warps", "num_stages",
@@ -403,6 +406,7 @@ class BayesianAutotuner:
                         status=str(row[9]),
                         reason=str(row[10]),
                         method=str(row[11]),
+                        timing_provenance=json.loads(str(row[14])),
                     )
                     self._results.append(res)
                     self._consider_best(res)
@@ -430,8 +434,8 @@ class BayesianAutotuner:
                         M, N, K, dtype, arch, layout, movement_json,
                         tile_m, tile_n, tile_k, num_warps, num_stages,
                         latency_ms, tflops, sampled_at, trial_id, status, reason, method,
-                        raster_order, raster_group
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        raster_order, raster_group, timing_provenance_json
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         self.workload.M, self.workload.N,
@@ -443,6 +447,7 @@ class BayesianAutotuner:
                         r.latency_ms, r.tflops,
                         r.sampled_at, r.trial_id, r.status, r.reason, r.method,
                         r.config.raster_order, r.config.raster_group,
+                        json.dumps(dict(r.timing_provenance), sort_keys=True),
                     ),
                 )
             conn.commit()
@@ -785,19 +790,19 @@ class BayesianAutotuner:
     def cost_measurements(self) -> List[Dict[str, Any]]:
         """Return autotuner measurements for learned surrogate training."""
         rows: List[Dict[str, Any]] = []
-        bytes_moved = 2.0 * (
+        bytes_moved = _dtype_bytes(self.workload.dtype) * (
             self.workload.M * self.workload.K
             + self.workload.K * self.workload.N
             + self.workload.M * self.workload.N
         )
         flops = float(self.workload.flops())
         for r in self._results:
-            rows.append({
+            row: Dict[str, Any] = {
                 "M": float(self.workload.M),
                 "N": float(self.workload.N),
                 "K": float(self.workload.K),
                 "flops": flops,
-                "bytes_moved": bytes_moved,
+                "bytes_moved": float(bytes_moved),
                 "tile_m": float(r.config.tile_m),
                 "tile_n": float(r.config.tile_n),
                 "tile_k": float(r.config.tile_k),
@@ -806,7 +811,35 @@ class BayesianAutotuner:
                 "latency_ms": float(r.latency_ms),
                 "tflops": float(r.tflops),
                 "status": r.status,
-            })
+            }
+            if r.status == "ok" and r.method == "measured":
+                provenance = dict(r.timing_provenance) or {
+                    "source": "legacy_measured_result",
+                    "domain": "unspecified",
+                    "synchronized": False,
+                    "eligible_for_promotion": False,
+                }
+                vector = MeasuredResourceVector(
+                    compute_time_ms=float(r.latency_ms),
+                    bytes_moved=bytes_moved,
+                    communication_bytes=_movement_nonnegative_int(
+                        self.workload.movement, "communication_bytes"
+                    ),
+                    queue_identity=str(
+                        self.workload.movement.get(
+                            "queue_identity", f"compute:{self.workload.arch}"
+                        )
+                    ),
+                    resource_identity=_resource_identity(self.workload, r),
+                    timing_provenance=provenance,
+                    artifact_digest=_measurement_artifact_digest(
+                        self.workload, r
+                    ),
+                )
+                row["hot_path_metadata"] = {
+                    "resource_vector": vector.as_dict()
+                }
+            rows.append(row)
         return rows
 
     @staticmethod
@@ -844,7 +877,8 @@ def _ensure_cache_schema(conn: sqlite3.Connection) -> None:
             reason TEXT DEFAULT '',
             method TEXT DEFAULT 'roofline',
             raster_order TEXT DEFAULT 'row_major',
-            raster_group INT DEFAULT 1
+            raster_group INT DEFAULT 1,
+            timing_provenance_json TEXT DEFAULT '{}'
         )
         """
     )
@@ -862,10 +896,64 @@ def _ensure_cache_schema(conn: sqlite3.Connection) -> None:
         # which is what they actually measured.
         "raster_order": "TEXT DEFAULT 'row_major'",
         "raster_group": "INT DEFAULT 1",
+        "timing_provenance_json": "TEXT DEFAULT '{}'",
     }
     for name, ddl in additions.items():
         if name not in columns:
             conn.execute(f"ALTER TABLE tuning_results ADD COLUMN {name} {ddl}")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_tuning_lookup ON tuning_results(M, N, K, dtype, arch, layout)"
+    )
+
+
+def _dtype_bytes(dtype: str) -> int:
+    return {
+        "fp32": 4,
+        "bf16": 2,
+        "fp16": 2,
+        "fp8": 1,
+        "fp8_e4m3": 1,
+        "fp8_e5m2": 1,
+        "fp6_e2m3": 1,
+        "fp6_e3m2": 1,
+        "fp4_e2m1": 1,
+        "nvfp4": 1,
+        "int8": 1,
+    }[dtype]
+
+
+def _movement_nonnegative_int(movement: Mapping[str, object], name: str) -> int:
+    value = movement.get(name, 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"movement {name} must be a non-negative integer")
+    return value
+
+
+def _measurement_payload(workload: GEMMWorkload, result: TuningResult) -> dict[str, Any]:
+    return {
+        "op": "matmul",
+        "arch": workload.arch,
+        "shape": [workload.M, workload.N, workload.K],
+        "dtype": workload.dtype,
+        "layout": workload.layout,
+        "movement": dict(workload.movement),
+        "config": result.config.to_dict(),
+    }
+
+
+def _measurement_artifact_digest(
+    workload: GEMMWorkload, result: TuningResult
+) -> str:
+    raw = json.dumps(
+        _measurement_payload(workload, result),
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _resource_identity(workload: GEMMWorkload, result: TuningResult) -> str:
+    del result
+    return str(
+        workload.movement.get("resource_identity", f"target:{workload.arch}")
     )

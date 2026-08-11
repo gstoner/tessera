@@ -1,181 +1,127 @@
-
-// EffectAnnotationPass.cpp
+//===- EffectAnnotationPass.cpp - registered Graph effect analysis --------===//
 //
-// Infers the side-effect class of each func.func in the module by walking its
-// body ops, then attaches a semantic effect summary as a function attribute.
+// W2.2 derives function effects from canonical operation contracts and MLIR
+// interfaces. It never guesses from operation-name substrings. Internal call
+// summaries reach a fixed point; external calls and unknown operations fail
+// closed. The resulting function attribute is consumed by differentiation,
+// collective insertion, and scheduling legality.
 //
-// Effect lattice (least → most permissive):
-//   pure (0) < random (1) < movement (2) < state (3)
-//            < collective (4) < memory (5) < io (6)
-//
-// Inference rules:
-//   tessera.flash_attn  with dropout_p != 0.0   → random
-//   tessera.dropout                              → random
-//   tessera.copy                                 → memory
-//   schedule.prefetch / schedule.async_copy      → movement
-//   tessera.kv_cache.* / tessera.ring.*          → state
-//   tessera_collective.* / tessera.all_reduce    → collective
-//   any arg  tessera.effect = "write"|"reduce_*" → memory
-//   func.call to an external non-tessera func    → io
-//   everything else                              → pure
-//
-// Validation:
-//   If a func already carries  tessera.effect = "pure"  AND the body infers
-//   a higher effect level, the pass emits an error and signals failure.
-//   This enforces the  @jit(deterministic=True)  contract from Phase 1.
+//===----------------------------------------------------------------------===//
 
 #include "Tessera/Transforms/Passes.h"
+#include "Tessera/Transforms/SemanticEffects.h"
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
-#include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 
 using namespace mlir;
 
 namespace {
 
-enum class EffectLevel : int {
-  Pure = 0,
-  Random = 1,
-  Movement = 2,
-  State = 3,
-  Collective = 4,
-  Memory = 5,
-  IO = 6
+using tessera::SemanticEffectLevel;
+
+struct FunctionFacts {
+  SemanticEffectLevel local = SemanticEffectLevel::Pure;
+  SmallVector<func::FuncOp> callees;
 };
-
-static EffectLevel maxEffect(EffectLevel a, EffectLevel b) {
-  return (static_cast<int>(a) >= static_cast<int>(b)) ? a : b;
-}
-
-static StringRef effectStr(EffectLevel e) {
-  switch (e) {
-  case EffectLevel::Pure:   return "pure";
-  case EffectLevel::Random: return "random";
-  case EffectLevel::Movement: return "movement";
-  case EffectLevel::State: return "state";
-  case EffectLevel::Collective: return "collective";
-  case EffectLevel::Memory: return "memory";
-  case EffectLevel::IO:     return "io";
-  }
-  return "pure";
-}
-
-static EffectLevel parseEffectStr(StringRef s) {
-  if (s == "random") return EffectLevel::Random;
-  if (s == "movement") return EffectLevel::Movement;
-  if (s == "state") return EffectLevel::State;
-  if (s == "collective") return EffectLevel::Collective;
-  if (s == "memory") return EffectLevel::Memory;
-  if (s == "io")     return EffectLevel::IO;
-  return EffectLevel::Pure;
-}
 
 struct EffectAnnotation
     : public PassWrapper<EffectAnnotation, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EffectAnnotation)
 
-  StringRef getArgument()    const override { return "tessera-effect-annotation"; }
+  StringRef getArgument() const override { return "tessera-effect-annotation"; }
   StringRef getDescription() const override {
-    return "Infer and annotate tessera.effect on each func.func";
-  }
-
-  // Infer the effect of a single op (not recursive).
-  static EffectLevel inferOpEffect(Operation *op) {
-    StringRef name = op->getName().getStringRef();
-
-    // flash_attn with non-zero dropout is non-deterministic.
-    if (name == "tessera.flash_attn") {
-      if (auto dp = op->getAttrOfType<FloatAttr>("dropout_p"))
-        if (dp.getValueAsDouble() != 0.0)
-          return EffectLevel::Random;
-      return EffectLevel::Pure;
-    }
-
-    if (name == "tessera.dropout")
-      return EffectLevel::Random;
-
-    // Explicit copy/store has memory side-effects.
-    if (name == "tessera.copy") return EffectLevel::Memory;
-
-    if (name == "schedule.prefetch" || name == "schedule.async_copy" ||
-        name == "schedule.await_movement" || name == "tile.async_copy" ||
-        name == "tile.wait_async")
-      return EffectLevel::Movement;
-
-    if (name.starts_with("tessera.kv_cache.") ||
-        name.starts_with("tessera.ring.") ||
-        name.starts_with("cache.") || name.starts_with("ring."))
-      return EffectLevel::State;
-
-    if (name == "tessera.all_reduce" ||
-        name == "tessera.reduce_scatter" ||
-        name == "tessera.all_gather" ||
-        name.starts_with("tessera_collective.") ||
-        name.starts_with("collective."))
-      return EffectLevel::Collective;
-
-    if (name == "rng.uniform" || name.starts_with("tessera.rng.") ||
-        name == "tessera.rng_uniform" ||
-        name == "tessera.rng_normal")
-      return EffectLevel::Random;
-
-    // External function calls (not tessera.*) raise the level to IO.
-    if (name == "func.call") {
-      if (auto calleeAttr = op->getAttrOfType<FlatSymbolRefAttr>("callee")) {
-        StringRef callee = calleeAttr.getValue();
-        if (!callee.starts_with("tessera"))
-          return EffectLevel::IO;
-      }
-      return EffectLevel::Memory;
-    }
-
-    return EffectLevel::Pure;
+    return "Derive function effects from registered Graph semantics and MLIR "
+           "operation interfaces";
   }
 
   void runOnOperation() override {
-    ModuleOp mod = getOperation();
+    ModuleOp module = getOperation();
+    SymbolTable symbols(module);
+    DenseMap<Operation *, FunctionFacts> facts;
+    DenseMap<Operation *, SemanticEffectLevel> summaries;
 
-    mod.walk([&](func::FuncOp func) {
-      // Read the pre-existing annotation (set by @jit decorator).
-      StringRef priorStr;
-      if (auto ea = func->getAttrOfType<StringAttr>("tessera.effect"))
-        priorStr = ea.getValue();
-
-      // Infer from argument region annotations.
-      EffectLevel inferred = EffectLevel::Pure;
-      for (unsigned i = 0; i < func.getNumArguments(); ++i) {
-        auto ea = func.getArgAttrOfType<StringAttr>(i, "tessera.effect");
-        if (!ea) continue;
-        StringRef mode = ea.getValue();
+    for (func::FuncOp function : module.getOps<func::FuncOp>()) {
+      FunctionFacts functionFacts;
+      for (unsigned index = 0; index < function.getNumArguments(); ++index) {
+        auto attr = function.getArgAttrOfType<StringAttr>(index, "tessera.effect");
+        if (!attr)
+          continue;
+        StringRef mode = attr.getValue();
         if (mode == "write" || mode.starts_with("reduce_"))
-          inferred = maxEffect(inferred, EffectLevel::Memory);
+          functionFacts.local = tessera::joinSemanticEffects(
+              functionFacts.local, SemanticEffectLevel::Memory);
       }
 
-      // Walk every op in the function body.
-      func.walk([&](Operation *op) {
-        inferred = maxEffect(inferred, inferOpEffect(op));
+      function.walk([&](Operation *op) {
+        if (op == function.getOperation())
+          return;
+        if (auto call = dyn_cast<func::CallOp>(op)) {
+          if (auto callee = symbols.lookup<func::FuncOp>(call.getCallee())) {
+            if (callee.isDeclaration())
+              functionFacts.local = tessera::joinSemanticEffects(
+                  functionFacts.local, SemanticEffectLevel::IO);
+            else
+              functionFacts.callees.push_back(callee);
+          } else
+            functionFacts.local = tessera::joinSemanticEffects(
+                functionFacts.local, SemanticEffectLevel::IO);
+          return;
+        }
+        functionFacts.local = tessera::joinSemanticEffects(
+            functionFacts.local, tessera::getRegisteredSemanticEffect(op));
       });
+      summaries[function.getOperation()] = functionFacts.local;
+      facts[function.getOperation()] = std::move(functionFacts);
+    }
 
-      // Validate against a "pure" declaration contract.
-      if (priorStr == "pure" && inferred > EffectLevel::Pure) {
-        func.emitError()
-            << "function '" << func.getName()
-            << "' is declared deterministic/pure but body contains "
-            << effectStr(inferred) << " effects";
+    // Monotone finite lattice: at most seven promotions per function. This
+    // handles recursion and call cycles without relying on source order.
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (auto &entry : facts) {
+        SemanticEffectLevel next = entry.second.local;
+        for (func::FuncOp callee : entry.second.callees)
+          next = tessera::joinSemanticEffects(
+              next, summaries.lookup(callee.getOperation()));
+        if (next != summaries.lookup(entry.first)) {
+          summaries[entry.first] = next;
+          changed = true;
+        }
+      }
+    }
+
+    for (func::FuncOp function : module.getOps<func::FuncOp>()) {
+      SemanticEffectLevel inferred = summaries.lookup(function.getOperation());
+      StringRef prior;
+      if (auto attr = function->getAttrOfType<StringAttr>("tessera.effect"))
+        prior = attr.getValue();
+
+      if (prior == "pure" && inferred != SemanticEffectLevel::Pure) {
+        function.emitError()
+            << "function '" << function.getName()
+            << "' is declared deterministic/pure but registered Graph IR "
+               "contains "
+            << tessera::stringifySemanticEffect(inferred) << " effects";
         signalPassFailure();
-        return;
+        continue;
       }
 
-      // If the function was already annotated with a higher effect level
-      // (e.g. from a callee analysis earlier in the pipeline), keep it.
-      EffectLevel prior =
-          priorStr.empty() ? EffectLevel::Pure : parseEffectStr(priorStr);
-      EffectLevel final_ = maxEffect(prior, inferred);
-
-      func->setAttr("tessera.effect",
-                    StringAttr::get(func.getContext(), effectStr(final_)));
-    });
+      SemanticEffectLevel declared = SemanticEffectLevel::Pure;
+      if (!prior.empty() && !tessera::parseSemanticEffect(prior, declared))
+        declared = SemanticEffectLevel::Top;
+      SemanticEffectLevel finalEffect =
+          tessera::joinSemanticEffects(declared, inferred);
+      function->setAttr(
+          "tessera.effect",
+          StringAttr::get(function.getContext(),
+                          tessera::stringifySemanticEffect(finalEffect)));
+    }
   }
 };
 

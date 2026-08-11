@@ -493,6 +493,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "transposed matrix-free diagonal solve, and "
                             "parameter-residual adjoint in one typed package; "
                             "content-addressed f32 contract",
+    "rocm_jvp_compiled": "gfx1151 content-addressed forward-product package; "
+                            "executes compiler-bound primal and tangent child "
+                            "Tile packages without returning to Graph IR",
+    "rocm_norm_jvp_compiled": "gfx1151 affine normalization forward product "
+                            "over generated row-projection and binary HIP lanes",
+    "rocm_spectral_jvp_compiled": "gfx1151 compound spectral product-rule "
+                            "package over typed TSOL and generated binary lanes",
     "rocm_binary_compiled": "AMD GPU RDNA flat 2-operand elementwise binary-"
                             "arithmetic kernel the Tessera compiler GENERATES "
                             "(generate-rocm-binary-kernel -> ROCDL -> hsaco, in-"
@@ -669,6 +676,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_solver_ift_compiled": "x86 AVX-512 residual, transposed matrix-free "
                             "diagonal solve, and parameter-residual adjoint in "
                             "one typed content-addressed f32 package",
+    "x86_jvp_compiled": "Zen 5 AVX-512 content-addressed forward-product "
+                            "package; executes compiler-bound primal and "
+                            "tangent child packages without Graph redispatch",
+    "x86_norm_jvp_compiled": "Zen 5 affine normalization forward product "
+                            "over AVX-512 row-projection and binary lanes",
+    "x86_spectral_jvp_compiled": "Zen 5 compound spectral product-rule "
+                            "package over typed TSOL and AVX-512 binary lanes",
     "x86_es_low_rank_compiled": "x86 AVX-512 rank-1 EGGROLL correction with "
                             "explicit member-RNG-v1 identity and O(in+out) "
                             "cached factors. f32",
@@ -1705,6 +1719,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "and bounded digest-keyed workspace are package-owned. f32, "
                "matches np.fft.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_spectral_jvp_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_spectral_jvp_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_spectral_jvp_compiled", runtime_status="success",
+        reason="AVX-512 compound spectral product package executes product-rule "
+               "children and combines their tangent terms on the binary lane.",
+        execution_mode="cpu_avx512", direction="forward",
+        op_family="spectral"),
     ("x86", "x86_sparse_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_sparse_compiled",
         execution_kind="native_cpu", executable=True,
@@ -2050,6 +2072,21 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "_layernorm_f32; AVX-512 horizontal reduce, eps from kwargs). The "
                "CPU analog of the ROCm warp-shuffle norm lane. f32, numpy 2e-5.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_jvp_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_jvp_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_jvp_compiled", runtime_status="success",
+        reason="A content-addressed parent product executes exact AVX-512 "
+               "primal/tangent child packages in compiler-fixed order.",
+        execution_mode="cpu_avx512", direction="forward"),
+    ("x86", "x86_norm_jvp_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_norm_jvp_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_norm_jvp_compiled", runtime_status="success",
+        reason="The affine normalization product composes the AVX-512 row "
+               "projection and binary lanes under one compiler-owned ABI.",
+        execution_mode="cpu_avx512", direction="forward",
+        op_family="normalization"),
     ("x86", "x86_rmsnorm_bwd_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_rmsnorm_bwd_compiled",
         execution_kind="native_cpu", executable=True,
@@ -2498,6 +2535,21 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "loads + launches it. Handles tessera.rmsnorm(_safe) + "
                "tessera.layer_norm by op name.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_jvp_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_jvp_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_jvp_compiled", runtime_status="success",
+        reason="A gfx1151-only content-addressed product executes exact HIP "
+               "primal/tangent child packages in compiler-fixed order.",
+        execution_mode="hip_runtime", direction="forward"),
+    ("rocm", "rocm_norm_jvp_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_norm_jvp_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_norm_jvp_compiled", runtime_status="success",
+        reason="The gfx1151 affine normalization product composes generated "
+               "row-projection and binary HIP kernels under one product ABI.",
+        execution_mode="hip_runtime", direction="forward",
+        op_family="normalization"),
     ("rocm", "rocm_rmsnorm_bwd_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_rmsnorm_bwd_compiled",
         execution_kind="native_gpu", executable=True,
@@ -2794,6 +2846,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "conversion around f32 device accumulation. The public "
                "host-pointer ABI stages inputs/output. Matches np.fft.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_spectral_jvp_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_spectral_jvp_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_spectral_jvp_compiled", runtime_status="success",
+        reason="gfx1151 compound spectral product package executes typed TSOL "
+               "children and combines their tangent terms on generated HIP lanes.",
+        execution_mode="hip_runtime", direction="forward",
+        op_family="spectral"),
     ("rocm", "rocm_sparse_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_sparse_compiled",
         execution_kind="native_gpu", executable=True,

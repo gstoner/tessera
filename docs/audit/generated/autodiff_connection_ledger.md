@@ -22,7 +22,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 - `ir_adjoint = native`: **51** (adam, adam_w, add, all_gather, all_reduce, all_to_all, binary_cross_entropy_loss, broadcast, cross_entropy_loss, dct, expand, fft, flatten, gelu, huber_loss, ifft, irfft, istft, j_s_divergence_loss, k_l_divergence_loss, layer_norm, mae_loss, matmul, momentum, mse_loss, mul, nesterov, permute, reduce, reduce_scatter, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, tanh, transpose, unsqueeze, view)
 - `ir_adjoint = placeholder` (Python round-trip, not native): **3** (log_softmax, sin, softplus)
 - `ir_adjoint = mixed` (kind-aware native + placeholder): **0**
-- `ir_tangent = native`: **31** (add, all_gather, all_reduce, all_to_all, broadcast, dct, dropout, es_low_rank_correction, expand, fft, flatten, ifft, irfft, layer_norm, matmul, mul, permute, reduce, reduce_scatter, reshape, rfft, rmsnorm, sigmoid, softmax, squeeze, stop_gradient, sub, tanh, transpose, unsqueeze, view)
+- `ir_tangent = native`: **35** (add, all_gather, all_reduce, all_to_all, broadcast, dct, dropout, es_low_rank_correction, expand, fft, flatten, ifft, irfft, istft, layer_norm, matmul, mul, permute, reduce, reduce_scatter, reshape, rfft, rmsnorm, sigmoid, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, sub, tanh, transpose, unsqueeze, view)
 - forward JVP IR **oracle-verified on CPU**: **12** (fft, ifft, irfft, layer_norm, matmul, mul, reduce, rfft, rmsnorm, sigmoid, softmax, tanh)
 - backward IR **oracle-verified on CPU** (interpreted): **36** (add, amax, amin, broadcast, dct, expand, fft, flatten, gelu, huber_loss, ifft, irfft, layer_norm, mae_loss, matmul, max, mean, min, mse_loss, mul, permute, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, squeeze, sum, tanh, transpose, unsqueeze, view)
 - backward `target_lowered` on any exact target: **29**
@@ -204,7 +204,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `instance_norm` | normalization | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `interpolate` | vision | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `irfft` | spectral | yes | native | native | cpu | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; fwd_cpu_ir_oracle=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
-| `istft` | spectral | yes | native | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | native compiler adjoint |
+| `istft` | spectral | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
 | `js_divergence` | loss | yes | none | none | — | — | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | — | nvidia_sm120=save_inputs | nvidia_sm120=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+llvm23+sm120] | native backward executes on nvidia_sm120 (Phase 4) |
 | `kimi_delta_attention` | attention | yes | none | none | — | — | rocm_gfx1151 | rocm_gfx1151,x86_avx512 | rocm_gfx1151,x86_avx512 | rocm_gfx1151 | x86_avx512 | rocm_gfx1151=save_fp32_state_trajectory; x86_avx512=resident_fp32_state_and_chunk_summaries | rocm_gfx1151=dedicated; x86_avx512=dedicated | python_reference=python-unit-registry; device[rocm_gfx1151=LLVM/MLIR 23; ROCm 7.14; gfx1151]; device[x86_avx512=clang 23 -mavx512f; x86_64 AVX-512] | native backward executes on rocm_gfx1151, x86_avx512 (Phase 4) |
 | `kl_divergence` | loss | yes | none | none | — | — | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | nvidia_sm120 | — | nvidia_sm120=save_inputs | nvidia_sm120=dedicated | python_reference=python-unit-registry; device[nvidia_sm120=cuda13.3+llvm23+sm120] | native backward executes on nvidia_sm120 (Phase 4) |
@@ -333,8 +333,8 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `softmax_safe` | stable_reduction | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `softplus` | elementwise | yes | placeholder | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | custom_adjoint_call → Python VJP (not native IR) |
 | `sparsemax` | normalization | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `spectral_conv` | spectral | yes | native | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | native compiler adjoint |
-| `spectral_filter` | spectral | yes | native | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | native compiler adjoint |
+| `spectral_conv` | spectral | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
+| `spectral_filter` | spectral | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
 | `spectral_norm` | normalization | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `split` | tensor_algebra | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `spmm_coo` | sparse | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
@@ -343,7 +343,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `squeeze` | tensor_algebra | yes | native | native | — | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `stack` | tensor_algebra | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `std` | reduction | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
-| `stft` | spectral | yes | native | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core | native compiler adjoint |
+| `stft` | spectral | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
 | `stop_gradient` | layout_transform | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
 | `sub` | elementwise | yes | none | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_tangent=llvm23-core |  |
 | `sum` | stable_reduction | yes | native | none | — | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint (static extent required for mean) |

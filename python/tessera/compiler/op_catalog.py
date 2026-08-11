@@ -24,6 +24,11 @@ class OpSpec:
     # mean "no rule". An op whose lowering kind has no declared default is
     # `unclassified`, which is a real, counted status -- not a silent fallback.
     shape_rule: str = ""
+    # W2.2 scheduling semantics that are not represented by the scalar effect
+    # lattice.  These travel with traced Graph IR so consumers never infer
+    # aliasing or random-sample identity from Python or MLIR operation names.
+    aliasing: str = "none"
+    stochastic_identity: str = "none"
 
     def valid_arity(self, arity: int) -> bool:
         return self.min_arity <= arity <= self.max_arity
@@ -109,7 +114,8 @@ _SPECS = [
     OpSpec("stop_gradient", "tessera.stop_gradient", 1, 1,
            lowering="layout_transform", shape_rule="same_as_first"),
     OpSpec("cast", "tessera.cast", 1, 1, lowering="layout_transform"),
-    OpSpec("dropout", "tessera.dropout", 1, 1, effect="random", lowering="random_mask"),
+    OpSpec("dropout", "tessera.dropout", 1, 1, effect="random", lowering="random_mask",
+           stochastic_identity="seed_counter"),
     OpSpec("qkv_projection", "tessera.qkv_projection", 2, 2, lowering="projection"),
     OpSpec("flash_attn", "tessera.flash_attn", 3, 4, effect="state", lowering="attention"),
     # Variable-length (packed-sequence) SDPA — Cosmos-3 "two-way flat attention"
@@ -188,12 +194,16 @@ _SPECS = [
     OpSpec("reduce_scatter", "tessera.reduce_scatter", 1, 1, effect="collective", lowering="collective"),
     OpSpec("all_gather", "tessera.all_gather", 1, 1, effect="collective", lowering="collective"),
     OpSpec("all_to_all", "tessera.all_to_all", 1, 1, effect="collective", lowering="collective"),
-    OpSpec("rng_uniform", "tessera.rng_uniform", 0, 0, effect="random", lowering="random_source"),
-    OpSpec("rng_normal", "tessera.rng_normal", 0, 0, effect="random", lowering="random_source"),
+    OpSpec("rng_uniform", "tessera.rng_uniform", 0, 0, effect="random", lowering="random_source",
+           stochastic_identity="implicit_stream"),
+    OpSpec("rng_normal", "tessera.rng_normal", 0, 0, effect="random", lowering="random_source",
+           stochastic_identity="implicit_stream"),
     OpSpec("rng_philox_uniform", "tessera.rng_philox_uniform", 2, 2,
-           effect="pure", lowering="random_source", shape_rule="from_shape_attr"),
+           effect="pure", lowering="random_source", shape_rule="from_shape_attr",
+           stochastic_identity="key_counter"),
     OpSpec("rng_philox_normal", "tessera.rng_philox_normal", 2, 2,
-           effect="pure", lowering="random_source", shape_rule="from_shape_attr"),
+           effect="pure", lowering="random_source", shape_rule="from_shape_attr",
+           stochastic_identity="key_counter"),
     OpSpec("fused_epilogue", "tessera.fused_epilogue", 1, 3, lowering="fused_epilogue"),
     OpSpec("fft", "tessera.fft", 1, 1, lowering="spectral"),
     OpSpec("ifft", "tessera.ifft", 1, 1, lowering="spectral"),
@@ -348,14 +358,14 @@ _SPECS = [
     # S2 — tensor algebra and functional indexing. Most shape parameters are
     # kwargs in the Python surface, so arity only counts differentiable tensor
     # operands / sequence operands.
-    OpSpec("reshape", "tessera.reshape", 1, 1, lowering="layout_transform"),
-    OpSpec("view", "tessera.view", 1, 1, lowering="layout_transform"),
-    OpSpec("flatten", "tessera.flatten", 1, 1, lowering="layout_transform"),
-    OpSpec("squeeze", "tessera.squeeze", 1, 1, lowering="layout_transform"),
-    OpSpec("unsqueeze", "tessera.unsqueeze", 1, 1, lowering="layout_transform"),
-    OpSpec("permute", "tessera.permute", 1, 1, lowering="layout_transform"),
-    OpSpec("broadcast", "tessera.broadcast", 1, 1, lowering="layout_transform"),
-    OpSpec("expand", "tessera.expand", 1, 1, lowering="layout_transform"),
+    OpSpec("reshape", "tessera.reshape", 1, 1, lowering="layout_transform", aliasing="operand_0"),
+    OpSpec("view", "tessera.view", 1, 1, lowering="layout_transform", aliasing="operand_0"),
+    OpSpec("flatten", "tessera.flatten", 1, 1, lowering="layout_transform", aliasing="operand_0"),
+    OpSpec("squeeze", "tessera.squeeze", 1, 1, lowering="layout_transform", aliasing="operand_0"),
+    OpSpec("unsqueeze", "tessera.unsqueeze", 1, 1, lowering="layout_transform", aliasing="operand_0"),
+    OpSpec("permute", "tessera.permute", 1, 1, lowering="layout_transform", aliasing="operand_0"),
+    OpSpec("broadcast", "tessera.broadcast", 1, 1, lowering="layout_transform", aliasing="operand_0"),
+    OpSpec("expand", "tessera.expand", 1, 1, lowering="layout_transform", aliasing="operand_0"),
     # cat/stack are variadic: ``cat([a, b, …], axis)`` flattens its tensor list
     # into N≥1 operands (the AST/runtime frontends expand the list), so the spec
     # accepts a range rather than a fixed arity-1.

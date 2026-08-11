@@ -102,11 +102,8 @@ def test_reparameterizable_op_table_is_subset_of_distributions():
 
 # ── the Decision #5 fix: derive from IR, not the AST ─────────────────────────
 
-def test_ir_analysis_catches_aliased_rng_that_ast_walker_misses():
-    """EffectLattice walks the Python source AST and matches dotted call names,
-    so RNG reached through an alias contributes Effect.pure — fail open. The IR
-    analysis sees the op by its canonical name and flags it. This is the
-    substrate for a fail-closed deterministic=True gate (Decision #30)."""
+def test_ir_analysis_catches_aliased_rng_without_name_inference():
+    """Unresolved source aliases fail closed; traced IR supplies the proof."""
     from tessera.compiler.effects import EffectLattice, Effect
 
     # A Python function that samples through an alias, defeating name matching.
@@ -118,11 +115,8 @@ def test_ir_analysis_catches_aliased_rng_that_ast_walker_misses():
     def tessera_normal_alias(x):  # stand-in bound name
         return x
 
-    ast_effect = EffectLattice().infer(f)
-    # The AST walker does not recognize `sampler(...)` as random → fails open,
-    # inferring pure for a function that samples. (This is the documented
-    # Decision #5 hole, asserted here so the contrast is concrete.)
-    assert ast_effect == Effect.pure
+    source_effect = EffectLattice().infer(f)
+    assert source_effect == Effect.top
 
     # The equivalent trace, however, records the op by its canonical name.
     body = [

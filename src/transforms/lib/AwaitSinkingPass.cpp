@@ -9,7 +9,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Transforms/Passes.h"
-#include "Tessera/Transforms/SemanticEffects.h"
+#include "Tessera/Transforms/GraphDataflow.h"
 
 #include "tessera/Dialect/Collective/IR/CollectiveDialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -32,6 +32,11 @@ struct AwaitSinkingPass
 
   void runOnOperation() override {
     func::FuncOp fn = getOperation();
+    tessera::GraphDataflowAnalysis dataflow(fn);
+    if (failed(dataflow.run())) {
+      fn.emitError() << "tessera-await-sinking: Graph IR dataflow analysis failed";
+      return signalPassFailure();
+    }
     SmallVector<Operation *> awaits;
     fn.walk([&](Operation *op) {
       if (isa<tessera::collective::AwaitOp>(op))
@@ -59,7 +64,7 @@ struct AwaitSinkingPass
       bool safe = true;
       for (Operation *cursor = await->getNextNode(); cursor != firstUser;
            cursor = cursor->getNextNode()) {
-        if (!cursor || tessera::isSemanticSchedulingBarrier(cursor)) {
+        if (!cursor || !dataflow.canMoveAcross(await, cursor)) {
           safe = false;
           break;
         }
@@ -69,6 +74,13 @@ struct AwaitSinkingPass
 
       await->moveBefore(firstUser);
       ++moved;
+      // Program-point liveness and dependence state is invalid after motion.
+      // Recompute before considering another await; stale facts fail closed.
+      if (failed(dataflow.recompute())) {
+        fn.emitError() << "tessera-await-sinking: failed to recompute Graph IR "
+                          "dataflow after mutation";
+        return signalPassFailure();
+      }
     }
 
     fn->setAttr("tessera.await_sinking.moved",

@@ -7,6 +7,14 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `COMP-GRAPH-DATAFLOW-W2.1-2026-08-11` — **shared
+analysis substrate landed; existing gfx1151 evidence remains valid.** Graph IR
+now has one fail-closed, invalidatable shape/alias/liveness/memory-dependence/
+activity analysis with C++ and Python query surfaces. Reverse AD and await
+sinking consume it and recompute after mutation. This changes legality
+infrastructure only: it adds no gfx1151 performance claim, transfers no
+schedule to gfx1200/gfx1250, and leaves both architectures fail-closed.
+
 Cross-backend sync `AD-FWD-FAMILY-2-2026-08-11` — **affine normalization,
 compound spectral, and matrix-free solver products execute on exact gfx1151.**
 The product ABI now accepts multiple active operands and named child outputs.

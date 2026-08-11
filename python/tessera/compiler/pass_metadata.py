@@ -508,6 +508,27 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="COLLECTIVE-ASYNC-UNIFY-2026-08-09",
     ),
     PassMetadata(
+        name="tessera-graph-dataflow",
+        cpp_class="GraphDataflowAnnotationPass",
+        summary=(
+            "Materializes the W2.1 fail-closed Graph shape, alias, liveness, "
+            "and activity product snapshot for inspection and Python parity."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "func"),
+        preserved_attrs=(
+            "tessera.dataflow.shape",
+            "tessera.dataflow.alias_roots",
+            "tessera.dataflow.aliases_operands",
+            "tessera.dataflow.live",
+            "tessera.dataflow.activity",
+            "tessera.dataflow.schema_version",
+        ),
+        diagnostic_codes=(),
+        pass_kind="transform",
+        sprint="COMP-GRAPH-DATAFLOW-W2.1-2026-08-11",
+    ),
+    PassMetadata(
         name="tessera-layout-legality",
         cpp_class="LayoutLegalityPass",
         summary=(

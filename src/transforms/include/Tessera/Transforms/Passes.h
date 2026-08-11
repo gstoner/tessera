@@ -34,6 +34,11 @@ std::unique_ptr<mlir::Pass> createDistributionLoweringPass();
 // contains any higher effect.
 std::unique_ptr<mlir::Pass> createEffectAnnotationPass();
 
+// W2.1 — materialize the shared Graph dataflow snapshot for inspection and
+// Python/tooling parity. Production clients query GraphDataflowAnalysis
+// directly; this pass is an observability/testing boundary.
+std::unique_ptr<mlir::Pass> createGraphDataflowAnnotationPass();
+
 // TilingPass — tiles tessera.matmul ops (inside schedule.mesh.region bodies)
 // into scf.for loop nests over M and N tiles using tensor.extract/insert_slice.
 // Options:

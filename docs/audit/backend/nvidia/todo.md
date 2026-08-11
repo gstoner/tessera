@@ -8,6 +8,14 @@ last_updated: 2026-08-11
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `COMP-GRAPH-DATAFLOW-W2.1-2026-08-11` — **shared
+analysis substrate landed; CUDA behavior and evidence are unchanged.** Graph
+IR now has one fail-closed, invalidatable shape/alias/liveness/memory-
+dependence/activity analysis with C++ and Python query surfaces. Reverse AD and
+await sinking consume it. This is target-independent legality infrastructure;
+it transfers no SM120 schedule or performance evidence. Region-aware clients
+and native CUDA overlap proof remain separately owned.
+
 Cross-backend sync `AD-FWD-FAMILY-2-2026-08-11` — **shared affine,
 compound-spectral, solver-product, and native-collective contracts landed;
 SM120 consumption remains open.** Compound spectral Graph operations now own

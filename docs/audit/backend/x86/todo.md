@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `COMP-GRAPH-DATAFLOW-W2.1-2026-08-11` — **shared
+analysis substrate landed; AVX-512 remains the proven no-async path.** Graph IR
+now has one fail-closed, invalidatable shape/alias/liveness/memory-dependence/
+activity analysis with C++ and Python query surfaces. Reverse AD and await
+sinking consume it. No physical x86 schedule changes, and clean Zen 5 overlap
+or performance evidence remains architecture-owned.
+
 Cross-backend sync `AD-FWD-FAMILY-2-2026-08-11` — **affine normalization,
 compound spectral, and matrix-free solver products execute on AVX-512.** The
 multi-active product ABI carries named child outputs. Affine LayerNorm binds

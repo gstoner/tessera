@@ -2404,6 +2404,29 @@ def Tessera_STFTOp : Tessera_SpectralCompoundOp<
   "stft", "Short-time Fourier transform with explicit window policy">;
 def Tessera_ISTFTOp : Tessera_SpectralCompoundOp<
   "istft", "Inverse short-time Fourier transform with overlap-add policy">;
+
+// Compiler-internal exact product for ISTFT.  This cannot be represented as
+// two ordinary ISTFT calls because the window-energy denominator is nonlinear
+// in the window.  The op carries both primal operands and both tangent
+// operands so Schedule/Tile lowering can preserve one quotient-rule artifact.
+def Tessera_ISTFTJvpOp : Op<Tessera_Dialect, "istft_jvp", [Pure]> {
+  let summary = "Exact ISTFT spectrum/window forward product";
+  let arguments = (ins TensorType:$spectrum, TensorType:$window,
+                       TensorType:$spectrum_tangent,
+                       TensorType:$window_tangent,
+                       OptionalAttr<I64Attr>:$axis,
+                       OptionalAttr<I64Attr>:$logical_length,
+                       DefaultValuedAttr<StrAttr, "\"backward\"">:$normalization,
+                       DefaultValuedAttr<StrAttr, "\"half_spectrum_nyquist_explicit\"">:$spectrum_layout,
+                       OptionalAttr<I64Attr>:$hop,
+                       DefaultValuedAttr<BoolAttr, "false">:$center,
+                       DefaultValuedAttr<BoolAttr, "true">:$onesided,
+                       DefaultValuedAttr<StrAttr, "\"constant\"">:$pad_mode,
+                       OptionalAttr<I64Attr>:$output_length);
+  let results = (outs TensorType:$tangent);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
 def Tessera_SpectralFilterOp : Tessera_SpectralCompoundOp<
   "spectral_filter", "Pointwise complex spectral filter">;
 

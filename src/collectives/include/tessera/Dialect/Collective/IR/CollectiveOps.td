@@ -42,6 +42,20 @@ def AllGatherOp : TargetCollectiveOp<
 def AllToAllOp : TargetCollectiveOp<
     "all_to_all", "Exchange equal tensor partitions across ranks">;
 
+def CollectivePermuteOp : TesseraCollectiveOp<"collective_permute",
+    [MemoryEffects<[MemWrite, MemRead]>]> {
+  let summary = "Send each listed source rank to one listed destination rank";
+  let arguments = (ins AnyType:$input, StrAttr:$mesh_axis,
+                       DenseI64ArrayAttr:$source_peers,
+                       DenseI64ArrayAttr:$target_peers,
+                       OptionalAttr<I64Attr>:$world_size,
+                       OptionalAttr<StrAttr>:$dtype,
+                       OptionalAttr<I64Attr>:$chunk_bytes);
+  let results = (outs Tessera_FutureType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Rank-local registered-window and one-sided Target operations
 //===----------------------------------------------------------------------===//

@@ -31,8 +31,10 @@ unparseable vocabulary whose claimed producer never emits it;
 `CollectiveScheduler`/`ChunkPlanner` exist only as names in comments and docs.
 W2.2 is now closed: traced Graph records carry registered effects, aliasing,
 mutation class, and stochastic identity; the C++ fixed-point analysis and await
-sinking share that source and unknown behavior fails closed. W2.1 remains the
-gate for synthesizing arbitrary memory-dependence edges beyond explicit DAGs.
+sinking share that source and unknown behavior fails closed. W2.1 now provides
+the shared invalidatable shape/alias/liveness/memory-dependence/activity
+product; future Graph-derived action-DAG producers can query it instead of
+inventing a second legality model.
 R4 now supplies the first bounded functional overlap consumer: MegaMoE executes
 the content-addressed chunk/action plan with capacity limits, true-use waits,
 ordered collectives, and deterministic combines. Native transport and target
@@ -176,10 +178,12 @@ NCCL/RCCL/Metal/x86 process transport packets and performance remain open.
 `AD-CORE-EFFECT-CONTROL-1` is complete at the shared compiler boundary.
 `tessera.stop_gradient` is registered in the public catalog and Graph dialect;
 both autodiff passes compute backward SSA activity, propagate registered Graph
-effects, reject active stochastic operations, ignore inactive regions, and
-fail closed on active regions or stopped values whose residuals cannot be
-safely replayed. Direct lit negatives and the paired CPU oracle cover these
-contracts.
+effects, reject active stochastic operations, and ignore inactive regions. The
+paired pass now differentiates effect-safe single-block `scf.if`, counted
+`scf.for`, and canonical bounded `scf.while`; unsupported region forms and
+stopped values whose residuals cannot be safely replayed fail closed. Direct
+lit negatives cover the region contract; numerical execution of emitted region
+backwards remains the W4 promotion gate.
 
 The four collectives now lower as exact `tile.all_reduce`,
 `tile.reduce_scatter`, `tile.all_gather`, and `tile.all_to_all` ODS operations
@@ -405,7 +409,7 @@ Two facts make the transition cheaper than it looks:
 
 | IR level | Real today | Dispatcher / stub | Primary gap to close |
 |---|---|---|---|
-| **Python `@jit`** | Decoration-time constraints plus Graph-record effect analysis; concrete tracing closes alias/dispatch stochastic identity; honest fallback gating (won't let eager Python masquerade as compiled). | General interprocedural shape/value analysis and folding between emission and execution remain thin; untraceable calls fail closed as unknown. | Component-aware multi-op metadata and registered effect/alias/stochastic contracts **landed**; fusion dispatch is authoritative. Remaining: W2.1 dataflow and broader folding. |
+| **Python `@jit`** | Decoration-time constraints plus Graph-record effect analysis; concrete tracing closes alias/dispatch stochastic identity; honest fallback gating (won't let eager Python masquerade as compiled). W2.1 adds a digest-invalidated Python shape/alias/liveness/activity query mirror. | Interprocedural value folding between emission and execution remains thin; untraceable calls fail closed as unknown. | Component-aware multi-op metadata, registered effect/alias/stochastic contracts, and the W2.1 shared dataflow substrate **landed**; fusion dispatch is authoritative. Remaining: broader folding and region-aware clients. |
 | **Graph IR** | 132 ops, 107 real verifiers; 5 canon patterns; real fusion passes (SwiGLU/MLA/NSA). 101/109 ops are `[Pure]` (CSE/DCE-eligible *today*). | **Folders/canonicalizers landed (2026-06-22):** `add`/`sub`/`mul`/`div`/`cast`/`reshape` folders + `matmul`/`transpose`/`reshape` canonicalizers (8 ops — `reshape` carries an identity fold + a `reshape(reshape(x))` chain-collapse, both guarding the optional `dim_names` symbolic-dim annotations), wired into the `tessera_jit` CPU `canonicalize→cse` pipeline (`graph_ir_folders.mlir`); `LayoutAssignmentPass` landed (seed→propagate→insert `cast{layout}`, `test_layout_assignment.py`). **Per-op effect interfaces landed (2026-06-22):** all 23 non-pure ops carry an explicit `MemoryEffectsOpInterface` — deterministic value ops (`adam`/`adamw`/`momentum`/`adafactor`/`lion`, `arch.ste_one_hot`/`weighted_sum`/`switch`/`mixed`) are `[Pure]`; random (`dropout`/`arch.gumbel_softmax`/`arch.hard_concrete`), stateful (`kv_cache.*`/`ring.create`/`arch.parameter`), collective (`all_reduce`/`reduce_scatter`/`all_gather`) and MoE-transport ops carry `MemWrite`/`MemRead`, so generic CSE/DCE is sound and precise across them (`graph_ir_op_effects.mlir`). `LayoutAssignmentPass` is wired into the named x86/GPU/CUDA-13 pipelines. x86 and NVIDIA default it on because their Graph-cast materializers consume the markers immediately; Apple and ROCm retain architecture-owned opt-in boundaries until their complete physical consumer envelopes are proven. **Phase 1 closed (2026-06-22)** — effect interfaces, target-scoped LayoutAssignment wiring, and reshape folder coverage all landed. ~5 passes are attribute-stamp-only. | Add folders opportunistically as new algebraic identities surface; ~5 attribute-stamp-only passes could gain real bodies. |
 | **Schedule IR** | DistributionLowering performs structural wiring and collective insertion. `PipelineStagePartition` emits `tessera.pp_stage`; insertion rewires send/recv SSA; `PipelineScheduleLegality` proves the contract and materializes unique-clock `tessera.pipeline_steps` across warmup, steady, and cooldown. The shared runtime executes those steps in compiler order, overlaps selected backward collectives on an independent transport executor, joins them before completion, and binds typed collective descriptors to explicit OptimizerShard replicated/rank-local ownership transitions. All four descriptors also survive Tile into the registered asynchronous `tessera_collective` Target queue and its content-addressed runtime package. | The portable Target/runtime path is proven with deterministic adapters, but no backend has supplied a real multi-rank CUDA, ROCm, Metal, or x86 process packet. Collective placement and overlap remain runtime machinery rather than a complete middle-end optimization pass. | Land architecture-owned multi-rank NCCL/RCCL/Metal/x86 process execution and exact-device evidence; then promote placement/overlap policy into the middle end. |
 | **Tile IR (FA-4)** | `#tile.layout` is attached to real views/copies/fragments; SSA buffer, pipeline, TMA, mbarrier, TMEM, and TCGen05 vocabulary is registered. Canonical GEMM has explicit M/N/K loops; its ROCm consumer now requires planned buffer/token/pipeline-state SSA ownership and has exact gfx1151 register/LDS comparison proof. FlashAttention has explicit rank-4 batch/query-head distribution into a KV `scf.for` carrying `(acc,m,l,producer,consumer,boundary)` with typed slice coordinates and ragged extents. ROCm consumes that shared forward recurrence and its deterministic tensor-valued backward workspace/reduction loops directly. NVIDIA, shared legality fixtures, and ROCm LDS consumers are free of name-based buffer identity. | The direct NVIDIA execution consumer of the shared attention loop remains open. Deprecated `#tile.buffer_ref` is parser-visible only for migration diagnostics and archived IR. SM100 TCGen05/TMEM has structural proof only. | Finish the direct NVIDIA distributed-attention consumer; exact SM100 TCGen05/TMEM. |

@@ -164,9 +164,13 @@ Constraints operate over concrete bindings when available. Purely symbolic
 constraints are preserved in module metadata and rechecked when a later pass
 specializes the dimensions.
 
-The implementation may use an affine/Presburger subset. Products are allowed
-only for derived dimension declarations and are expected to be fully resolved
-before Tile IR lowering.
+The Python shape API canonicalizes integer-affine expressions (addition,
+subtraction, constants, and integer scaling) separately from `DimProduct`.
+Variable-by-variable products are nonlinear, not Presburger facts; they are
+allowed only for derived declarations and must have complete runtime/static
+witnesses before legality-sensitive lowering. Such clients call
+`ShapeConstraintGraph.require_proven()`, whose three-valued proof result treats
+an unresolved constraint as `unknown`, never as success.
 
 ---
 
@@ -503,8 +507,8 @@ items:**
    is declared — existing V5/V6a/V6b functions keep working
    unchanged.
 
-   **Sprint V3a closure (2026-05-22):** Affine reasoning for
-   non-product bindings landed.  The binding parser now accepts
+   **Sprint V3a closure (2026-05-22):** Concrete sum-of-products witness
+   checking landed.  The binding parser accepts
    sum-of-products RHSes such as `D = H * Dh + K` and bare-symbol
    terms such as `Total = A + B + C`.  Multi-term bindings render
    `value of RHS (sum of products) = N`; single-term bindings keep
@@ -525,21 +529,23 @@ items:**
    (1 caller-callee match + 1 mismatch + 1 ret_dim_names propagation
    + 1 backward-compat no-callee-decl).
 
-   **Sprint V3c closure (2026-05-22):** SSA flow through `scf.for`
-   and `scf.if` region bodies landed.  For `scf.for`, iter_args
+   **Sprint V3c + W4 extension (2026-08-11):** SSA flow through `scf.for`,
+   `scf.if`, and `scf.while` region bodies landed.  For `scf.for`, iter_args
    inherit dim-names from init operands, the body is walked
    recursively, and the `scf.yield` operands must match the
    iter_args' names (loop must be name-invariant) ⇒
    `SYMDIM_LOOP_YIELD_MISMATCH` on conflict.  For `scf.if`, both
    branches' yields must agree ⇒ `SYMDIM_IF_BRANCH_MISMATCH` on
-   conflict; the scf.if result inherits the (matching) yield names.
+   conflict; the scf.if result inherits the (matching) yield names. While
+   condition/after boundaries enforce the same carried-state identity.
    Lit fixture: `tests/tessera-ir/phase2/sprint_v3c_scf_propagation.mlir`
-   (scf.for invariant + scf.for yield mismatch + scf.if branches
-   agree + scf.if branches disagree).
+   (for/if/while positive and mismatch cases).
 
-   **Status: V1 + V2-flow + V3a + V3b + V3c all shipped.  Further
-   affine/Presburger reasoning beyond sum-of-products (subtraction,
-   parens, integer literals) remains as backlog.**
+   **Status:** canonical Python integer-affine expressions and fail-closed
+   three-valued witness queries are shipped. The MLIR string carrier still
+   requires replacement by typed Presburger constraints; unresolved
+   cross-equation proof remains backlog. Sum-of-products checking is concrete
+   nonlinear witness validation and is not described as Presburger reasoning.
 3. **`LayoutLegalityPass` skeleton + first rule.** **Sprint V2
    closure (2026-05-22):** `src/transforms/lib/LayoutLegalityPass.cpp`
    ships with the canonical 8-name layout accept-set

@@ -420,13 +420,13 @@ llvm::SmallVector<mlir::Value> SpectralConvOp::buildTangent(
 
 llvm::SmallVector<mlir::Value> ISTFTOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
-  // ISTFT is linear in its spectrum for a fixed window.  It is not linear in
-  // the window because overlap-add normalization depends quadratically on it;
-  // keep that parameter product fail-closed until it has a dedicated rule.
-  if (tangents.size() != 2 || !tangents[0] || tangents[1])
+  if (tangents.size() != 2 || !tangents[0] || !tangents[1])
     return {};
-  return {cloneTangentWithOperands(
-      getOperation(), {tangents[0], getParameter()}, builder)};
+  mlir::OperationState state(getLoc(), ISTFTJvpOp::getOperationName());
+  state.addOperands({getX(), getParameter(), tangents[0], tangents[1]});
+  state.addTypes(getY().getType());
+  state.addAttributes((*this)->getAttrs());
+  return {builder.create(state)->getResult(0)};
 }
 
 llvm::SmallVector<mlir::Value> StopGradientOp::buildTangent(

@@ -38,8 +38,8 @@
 //     on each SSA value, propagate through ops without explicit per-op
 //     annotations.
 //   * Cross-function symbol-table tracking (inter-procedural).
-//   * Affine / Presburger reasoning beyond simple products (handle
-//     `D = H * Dh + K`-style constraints).
+//   * Typed affine / Presburger reasoning. `D = H * Dh + K` is nonlinear
+//     when both factors are symbolic and remains concrete-witness-only.
 //   * Integration into the named lowering pipelines so the check runs
 //     automatically after DistributionLoweringPass.
 //
@@ -74,7 +74,7 @@ namespace {
 // ─────────────────────────────────────────────────────────────────────────
 
 // Sprint V3a (2026-05-22): widened Binding shape from a single
-// product to a sum-of-products (affine form).
+// product to a sum-of-products concrete-witness form.
 //
 // V1 (V5) only accepted bindings of the form "D = H * Dh" — a
 // single product term.  V3a extends this to
@@ -492,7 +492,7 @@ struct SymbolicDimEquality
     return names;
   }
 
-  // ── Sprint V3c (2026-05-22) — scf.for / scf.if region propagation ────
+  // ── Structured-region symbolic-name propagation ───────────────────────
   //
   // scf.for body block:  args = [induction_var, iter_args...]
   //   - iter_args[i] inherits the caller-side init operand's dim-names
@@ -641,6 +641,67 @@ struct SymbolicDimEquality
       for (unsigned i = 0, e = forOp.getNumResults(); i < e; ++i) {
         if (i < expectedNames.size() && expectedNames[i])
           valueDims[forOp.getResult(i)] = *expectedNames[i];
+      }
+
+    } else if (auto whileOp = dyn_cast<scf::WhileOp>(op)) {
+      // A while state must preserve its symbolic identity around both region
+      // boundaries.  Seed before args from the initial state, carry those
+      // facts through scf.condition into the after args, and require the
+      // after yield to return the same names. Unknown names stay unknown;
+      // known disagreement fails closed.
+      SmallVector<std::optional<DimNameList>, 4> expectedNames;
+      Block &before = whileOp.getBefore().front();
+      for (auto [argument, init] :
+           llvm::zip_equal(before.getArguments(), whileOp.getInits())) {
+        auto it = valueDims.find(init);
+        if (it == valueDims.end()) {
+          expectedNames.push_back(std::nullopt);
+          continue;
+        }
+        DimNameList names = it->second;
+        valueDims[argument] = names;
+        expectedNames.push_back(std::move(names));
+      }
+      if (propagateThroughBlock(before, valueDims, symtab))
+        failed = true;
+
+      auto condition = dyn_cast<scf::ConditionOp>(before.getTerminator());
+      Block &after = whileOp.getAfter().front();
+      if (!condition || condition.getArgs().size() != after.getNumArguments())
+        return true;
+      for (auto [index, pair] :
+           llvm::enumerate(llvm::zip_equal(condition.getArgs(),
+                                           after.getArguments()))) {
+        Value forwarded = std::get<0>(pair);
+        BlockArgument argument = std::get<1>(pair);
+        auto it = valueDims.find(forwarded);
+        if (it != valueDims.end())
+          valueDims[argument] = it->second;
+        if (index < expectedNames.size() && expectedNames[index] &&
+            it != valueDims.end() && it->second != *expectedNames[index]) {
+          condition.emitOpError(
+              "SYMDIM_LOOP_YIELD_MISMATCH: scf.while condition operand ")
+              << index << " changes the carried state's dim-names";
+          failed = true;
+        }
+      }
+      if (propagateThroughBlock(after, valueDims, symtab))
+        failed = true;
+      auto yield = dyn_cast<scf::YieldOp>(after.getTerminator());
+      if (!yield || yield.getNumOperands() != expectedNames.size())
+        return true;
+      for (unsigned i = 0, e = yield.getNumOperands(); i < e; ++i) {
+        auto it = valueDims.find(yield.getOperand(i));
+        if (expectedNames[i] && it != valueDims.end() &&
+            it->second != *expectedNames[i]) {
+          yield.emitOpError(
+              "SYMDIM_LOOP_YIELD_MISMATCH: scf.while yield operand ")
+              << i << " dim-names disagree with the corresponding carried "
+                      "state's dim-names";
+          failed = true;
+        }
+        if (expectedNames[i])
+          valueDims[whileOp.getResult(i)] = *expectedNames[i];
       }
 
     } else if (auto ifOp = dyn_cast<scf::IfOp>(op)) {

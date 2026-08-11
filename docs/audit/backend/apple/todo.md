@@ -8,10 +8,57 @@ last_updated: 2026-08-11
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `AD-SOLVER-ISTFT-PHYSICAL-2026-08-11` — **shared product
+contracts landed; Metal consumption remains open.** Graph IR now has an exact
+`tessera.istft_jvp` carrier for spectrum and window tangents, and the general
+solver parent binds residual plus solution/parameter JVP/VJP child identities
+under a true-residual GMRES policy. The shared compiler now derives those five
+children for typed pointwise, sum/mean, rank-2 matmul, bounded-dynamic/
+mixed-storage, distinct parameter-space, and statically counted-region residual
+Graphs. Pure scalar `if`/bounded-`while` predicates now have explicit
+compare/select replay in the shared child contract. Only AVX-512 and gfx1151
+have physical children and expanded-family packets. Apple needs Metal
+spectral-product children, solver
+children, and an independent Mac correctness/performance packet; no schedule
+or evidence transfers.
+
+Cross-backend sync `E2E-REAL-6-JVP-SOLVER-2026-08-11` — **shared frontend and
+family-plugin boundary landed; Metal remains follow-up required.** Native
+forward-product specialization now originates in tracer-produced canonical
+Graph IR, and explicit family plugins own reduction, normalization, FFT, and
+compound-spectral planning outside `JitFn`. General solver contracts bind exact
+residual/JVP/VJP identities and can execute matrix-free reference products
+without finite differences. This adds no Apple family plugin, native package,
+or Mac evidence; the AST lane remains for unmigrated families.
+
+Cross-backend sync `AD-FWD-DIST-3-2026-08-11` — **shared exact JVP and
+structured-region products landed; Metal remains follow-up required.** Public
+JVP/jacfwd now use registered tangent rules without a finite-difference
+fallback, and compiler forward mode carries primal/tangent state together
+through bounded SCF. Typed `collective_permute` now owns its peer map and
+executes in portable and NCCL/RCCL runtimes. This adds no Metal JVP package,
+subgroup communicator, native transport, or Mac evidence.
+
+Cross-backend sync `W4-SOLVER-REGION-2026-08-11` — **shared bounded-region
+adjoints and general matrix-free solver policy landed; Metal consumption is
+follow-up required.** Portable tracing now emits bounded SCF, and the paired
+compiler differentiates effect-safe single-block `if`, counted `for`, and
+canonical bounded `while` with implicit captures. General residual execution
+uses restarted GMRES/CG policy in shared IR. This adds no Metal region executor,
+solver package, checkpoint packet, or performance claim.
+
+Cross-backend sync `COMP-GRAPH-DATAFLOW-W2.1-2026-08-11` — **shared
+analysis substrate landed; Metal behavior and evidence are unchanged.** Graph
+IR now has one fail-closed, invalidatable shape/alias/liveness/memory-
+dependence/activity analysis with C++ and Python query surfaces. Reverse AD and
+await sinking consume it. This is target-independent legality infrastructure;
+it transfers no schedule or performance claim to Apple. Region-aware clients
+and Metal overlap proof remain separately owned.
+
 Cross-backend sync `AD-FWD-FAMILY-2-2026-08-11` — **shared affine,
 compound-spectral, solver-product, and native-collective contracts landed;
 Metal consumption remains open.** Compound spectral Graph operations now own
-direct tangent interfaces, ISTFT window tangents fail closed, and solver
+direct tangent interfaces, including an exact ISTFT window-product carrier, and solver
 artifacts distinguish JVP/non-transposed from VJP/transposed solves. No x86 or
 ROCm package or evidence transfers to Apple.
 

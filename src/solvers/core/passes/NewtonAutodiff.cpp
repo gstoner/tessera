@@ -133,6 +133,44 @@ struct NewtonAutodiffPass
         return;
       }
 
+      StringRef linearSolver = "gmres";
+      if (auto solver = implicit->getAttrOfType<StringAttr>("linear_solver"))
+        linearSolver = solver.getValue();
+      if (linearSolver != "gmres" && linearSolver != "cg") {
+        implicit->emitError()
+            << "linear_solver must be 'gmres' for a general residual or 'cg' "
+               "for a proven SPD solution Jacobian";
+        signalPassFailure();
+        return;
+      }
+      auto jacobianStructure = residualFn->getAttrOfType<StringAttr>(
+          "tessera.solver.jacobian_structure");
+      if (linearSolver == "cg" &&
+          (!jacobianStructure || jacobianStructure.getValue() != "spd")) {
+        implicit->emitError()
+            << "linear_solver='cg' requires residual function attribute "
+               "tessera.solver.jacobian_structure = 'spd'";
+        signalPassFailure();
+        return;
+      }
+      double tolerance = 1.0e-6;
+      if (auto attr = implicit->getAttrOfType<FloatAttr>("tolerance"))
+        tolerance = attr.getValueAsDouble();
+      int64_t maxIterations = 256;
+      if (auto attr = implicit->getAttrOfType<IntegerAttr>("max_iterations"))
+        maxIterations = attr.getInt();
+      int64_t restart = 32;
+      if (auto attr = implicit->getAttrOfType<IntegerAttr>("restart"))
+        restart = attr.getInt();
+      if (!(tolerance > 0.0) || maxIterations <= 0 || restart <= 0 ||
+          restart > maxIterations) {
+        implicit->emitError()
+            << "iterative solve requires tolerance > 0, max_iterations > 0, "
+               "and 0 < restart <= max_iterations";
+        signalPassFailure();
+        return;
+      }
+
       std::string baseName =
           (parent.getSymName() + "__implicit_" + Twine(ordinal++)).str();
       std::string vjpName = baseName + "_vjp";
@@ -151,6 +189,8 @@ struct NewtonAutodiffPass
       vjp->setAttr("tessera.solver.ift_role",
                    StringAttr::get(ctx, "implicit_vjp"));
       vjp->setAttr("tessera.solver.residual", residualRef);
+      vjp->setAttr("tessera.solver.linear_solver",
+                   StringAttr::get(ctx, linearSolver));
       Block *entry = vjp.addEntryBlock();
       OpBuilder builder = OpBuilder::atBlockBegin(entry);
 
@@ -176,7 +216,16 @@ struct NewtonAutodiffPass
           builder.getNamedAttr("residual", residualRef),
           builder.getNamedAttr("transpose", builder.getBoolAttr(true)),
           builder.getNamedAttr("linearization",
-                               builder.getStringAttr("solution"))};
+                               builder.getStringAttr("solution")),
+          builder.getNamedAttr("algorithm",
+                               builder.getStringAttr(linearSolver)),
+          builder.getNamedAttr("tolerance",
+                               builder.getF64FloatAttr(tolerance)),
+          builder.getNamedAttr("max_iterations",
+                               builder.getI64IntegerAttr(maxIterations)),
+          builder.getNamedAttr("restart",
+                               builder.getI64IntegerAttr(restart)),
+          builder.getNamedAttr("matrix_free", builder.getBoolAttr(true))};
       Operation *lambda = createSolverOp(
           builder, implicit->getLoc(), "tessera_solver.linear_solve",
           solveInputs, solutionTypes, solveAttrs);
@@ -217,6 +266,8 @@ struct NewtonAutodiffPass
         jvp->setAttr("tessera.solver.ift_role",
                      StringAttr::get(ctx, "implicit_jvp"));
         jvp->setAttr("tessera.solver.residual", residualRef);
+        jvp->setAttr("tessera.solver.linear_solver",
+                     StringAttr::get(ctx, linearSolver));
         Block *jvpEntry = jvp.addEntryBlock();
         OpBuilder jvpBuilder = OpBuilder::atBlockBegin(jvpEntry);
         ValueRange jvpParameters =
@@ -250,7 +301,18 @@ struct NewtonAutodiffPass
              jvpBuilder.getNamedAttr("rhs_scale",
                                      jvpBuilder.getF64FloatAttr(-1.0)),
              jvpBuilder.getNamedAttr(
-                 "linearization", jvpBuilder.getStringAttr("solution"))});
+                 "linearization", jvpBuilder.getStringAttr("solution")),
+             jvpBuilder.getNamedAttr("algorithm",
+                                     jvpBuilder.getStringAttr(linearSolver)),
+             jvpBuilder.getNamedAttr("tolerance",
+                                     jvpBuilder.getF64FloatAttr(tolerance)),
+             jvpBuilder.getNamedAttr(
+                 "max_iterations",
+                 jvpBuilder.getI64IntegerAttr(maxIterations)),
+             jvpBuilder.getNamedAttr("restart",
+                                     jvpBuilder.getI64IntegerAttr(restart)),
+             jvpBuilder.getNamedAttr("matrix_free",
+                                     jvpBuilder.getBoolAttr(true))});
         func::ReturnOp::create(jvpBuilder, implicit->getLoc(),
                                solutionTangent->getResults());
         symbols.insert(jvp);

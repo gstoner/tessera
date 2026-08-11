@@ -32,7 +32,8 @@ struct LowerTileCollectivesPass
     module.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
       if (name == "tile.all_reduce" || name == "tile.reduce_scatter" ||
-          name == "tile.all_gather" || name == "tile.all_to_all")
+          name == "tile.all_gather" || name == "tile.all_to_all" ||
+          name == "tile.collective_permute")
         work.push_back(op);
     });
 
@@ -45,12 +46,13 @@ struct LowerTileCollectivesPass
       auto meshAxis = op->getAttrOfType<StringAttr>("mesh_axis");
       auto tensorAxis = op->getAttrOfType<IntegerAttr>("tensor_axis");
       auto reduction = op->getAttrOfType<StringAttr>("reduction");
-      if (!meshAxis || !tensorAxis || !reduction) {
+      bool permute = op->getName().getStringRef() == "tile.collective_permute";
+      if (!meshAxis || (!permute && (!tensorAxis || !reduction))) {
         op->emitError(
             "collective Target lowering requires mesh_axis, tensor_axis, and reduction");
         return signalPassFailure();
       }
-      int64_t normalizedAxis = tensorAxis.getInt();
+      int64_t normalizedAxis = permute ? 0 : tensorAxis.getInt();
       if (normalizedAxis < 0) {
         auto shaped = dyn_cast<ShapedType>(op->getOperand(0).getType());
         if (!shaped || !shaped.hasRank() || normalizedAxis < -shaped.getRank()) {
@@ -70,9 +72,14 @@ struct LowerTileCollectivesPass
       dispatchState.addOperands(op->getOperand(0));
       dispatchState.addTypes(FutureType::get(op->getContext(), outputType));
       dispatchState.addAttribute("mesh_axis", meshAxis);
-      dispatchState.addAttribute("tensor_axis",
-                                 builder.getI64IntegerAttr(normalizedAxis));
-      dispatchState.addAttribute("reduction", reduction);
+      if (permute) {
+        dispatchState.addAttribute("source_peers", op->getAttr("source_peers"));
+        dispatchState.addAttribute("target_peers", op->getAttr("target_peers"));
+      } else {
+        dispatchState.addAttribute("tensor_axis",
+                                   builder.getI64IntegerAttr(normalizedAxis));
+        dispatchState.addAttribute("reduction", reduction);
+      }
       if (Attribute worldSize = op->getAttr("world_size"))
         dispatchState.addAttribute("world_size", worldSize);
       if (Attribute dtype = op->getAttr("dtype"))

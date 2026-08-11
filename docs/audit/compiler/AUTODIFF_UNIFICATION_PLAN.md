@@ -76,7 +76,9 @@ compiler autodiff passes compute backward SSA activity before transforming the
 program, stamp active/inactive state, and consume the registered Graph effect
 kind. An active random effect is rejected with
 `AUTODIFF_STOCHASTIC_EFFECT`; an inactive stochastic or nested-region producer
-is legal. Active nested regions fail closed, and the paired pass rejects a
+is legal. The paired pass now admits effect-safe single-block `scf.if`, counted
+`scf.for`, and canonical bounded `scf.while` through
+`RegionAdjointInterface`; other active nested regions fail closed. It rejects a
 stopped intermediate requiring an unavailable residual with
 `AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED` rather than replaying state or
 randomness.
@@ -121,17 +123,20 @@ unbounded family checklist:
    and dropout masking natively; Philox words are bit exact and transcendental
    transforms are bounded to one f32 ULP. A content-addressed native-product
    ABI now binds the paired-IR digest and immutable child-package digests.
-   Sum, RMSNorm, affine LayerNorm, packed RFFT, spectral-filter, and the
-   diagonal matrix-free solver product execute on AVX-512 and gfx1151. The
-   multi-active ABI binds named child outputs; compound spectral rules apply
-   the product rule, and ISTFT window tangents reject. Native collective
+   Sum, RMSNorm, affine LayerNorm, packed RFFT, spectral-filter, and general
+   matrix-free solver products execute on AVX-512 and gfx1151. The multi-active
+   ABI binds named child outputs; compound spectral rules apply the product
+   rule, and `tessera.istft_jvp` explicitly differentiates overlap-add and its
+   window-energy denominator on both targets. Native collective
    products require a live multi-rank NCCL/RCCL adapter and reject nonlinear
    reductions. Remaining work is native transport evidence, broader
    solver/spectral and loss/optimizer expansion, Apple/CUDA consumption, and
    independent performance evidence.
-3. **AD-REGION-1.** Add region activity plus `RegionAdjointInterface` and
-   `RegionTangentInterface`; execute bounded `if`, `for`, and `scan` derivatives
-   before admitting `while`. Effects, aliasing, and stochastic legality remain
+3. **AD-REGION-1 — bounded core landed.** Region activity,
+   `RegionAdjointInterface`, and compiler-owned tangent construction now execute
+   single-block `scf.if`, positive-step `scf.for`, and canonical bounded
+   `scf.while`. Primal and tangent state share one control path. General
+   multi-block regions, `scan`, and effectful/stochastic region products remain
    fail-closed.
 4. **AD-TREEVERSE-1.** Turn measured counted-region candidates into an
    executable checkpoint/replay schedule and report actual backward work plus
@@ -694,7 +699,7 @@ once Phase 0 lands.
 | 3 | matmul→tanh/sigmoid→loss — backward native on CPU | ✅ paired-pass output launches through MLIR/LLVM JIT on `cpu_x86_64`; direct gradient oracle proof landed 2026-07-12 |
 | 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **complete** 2026-07-12 via A1–A4; aliases share their dedicated implementation, matmul is an explicit two-GEMM composition, and residual policy is structured per target. |
 | 5 | Closed operation-family expansion | 🟡 live family and target truth is generated; native losses/optimizers, spectral transforms, bounded compound spectral backward, and bounded IFT packages have advanced beyond the older normalization-only summary. Apple/NVIDIA physical promotion and remaining family rows stay open. |
-| D2 | General compiler forward mode | 🟡 `TangentInterface`, paired JVP pass, fail-closed legality, public provenance, multi-active `wrt` ABI, and 35 straight-line rules have landed. Content-addressed normalization, core/compound spectral, and diagonal solver products execute on AVX-512 and gfx1151; native collective products are gated to live NCCL/RCCL multi-rank adapters. Broader solvers, native transport evidence, Apple/CUDA packages, regions, higher-order composition, and clean performance packets remain open. |
+| D2 | General compiler forward mode | 🟡 `TangentInterface`, paired JVP pass, fail-closed legality, public provenance, multi-active `wrt` ABI, and direct rules have landed. Public `jvp`/`jacfwd` use those rules without finite-difference substitution. Compiler forward mode carries primal/tangent state through bounded `if`/`for`/`while`. Content-addressed normalization, core/compound spectral, generated typed solver, and exact ISTFT-window products execute through bounded packages; solver child generation covers reduction, rank-2 reduced-storage matmul, bounded-dynamic/mixed-storage, distinct parameter-space, counted regions, and digest-bound pure scalar predicate replay. Expanded-family AVX-512/gfx1151 WSL correctness packets are committed. Typed `collective_permute` plus bulk products reach NCCL/RCCL launcher contracts. Exact HVP, broader/non-pure predicate support, broader ISTFT policies, subgroup/process transport, Apple/CUDA packages, and clean performance packets remain open. |
 | 6 | NVIDIA sm_120 Flash Attention backward promotion | ✅ first CUDA family: f32/fp16 storage, f32 VJP accumulation, MHA/GQA/MQA aliases, mask/bias/soft-cap derivatives; exact `nvidia_sm120` `device_verified_jit` proof with recompute-all residual policy. |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand

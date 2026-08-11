@@ -11,6 +11,8 @@ add_library(TesseraPasses
   # Phase 2 lowering chain
   DistributionLoweringPass.cpp
   SemanticEffects.cpp
+  GraphDataflow.cpp
+  RegionAdjointInterface.cpp
   EffectAnnotationPass.cpp
   TilingPass.cpp
   TileToX86Pass.cpp
@@ -122,6 +124,7 @@ target_link_libraries(TesseraPasses
     TesseraIR
     TesseraCollectiveDialect
     MLIRIR
+    MLIRAnalysis
     MLIRPass
     MLIRParser
     MLIRSupport

@@ -1199,7 +1199,13 @@ class GraphIRVerifier:
             for operand in op.operands
             if value_types.get(operand) is not None
         ]
-        legality = check_op_legality(op.op_name, operand_contracts, target=target)
+        result_type = op.inferred_type or _parse_mlir_tensor_type(op.result_type or "")
+        legality = check_op_legality(
+            op.op_name,
+            operand_contracts,
+            target=target,
+            result=_tensor_contract_for(result_type),
+        )
         for diag in legality.diagnostics:
             if diag.code in {
                 "LEGALITY_COLLECTIVE_EFFECT",

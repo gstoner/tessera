@@ -4909,10 +4909,11 @@ def vjp_dct(dout, x, *, axis=-1, type=2, norm="backward", normalization=None, **
         )
     grad_moved = do_moved @ basis.T
     active_norm = normalization or norm
+    logical_length = 2 * (N - 1) if dct_type == 1 else 2 * N
     if active_norm == "forward":
-        grad_moved /= float(N)
+        grad_moved /= float(logical_length)
     elif active_norm == "ortho":
-        grad_moved /= np.sqrt(float(N))
+        grad_moved /= np.sqrt(float(logical_length))
     elif active_norm != "backward":
         raise ValueError("dct VJP normalization must be backward, forward, or ortho")
     return (np.moveaxis(grad_moved, -1, axis_idx),)

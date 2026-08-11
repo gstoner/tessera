@@ -12,10 +12,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from functools import reduce
 from operator import mul
-from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence, Union
 
 
-DimLike = Union[int, "Dim", "DimProduct"]
+DimLike = Union[int, "Dim", "AffineDimExpr", "DimProduct"]
 
 
 class ShapeSystemError(ValueError):
@@ -35,11 +35,25 @@ class Dim:
         if self.value is not None and self.value <= 0:
             raise ValueError("concrete dimensions must be positive")
 
-    def __mul__(self, other: DimLike) -> "DimProduct":
+    def __add__(self, other: DimLike) -> "AffineDimExpr":
+        return _as_affine(self) + other
+
+    def __radd__(self, other: DimLike) -> "AffineDimExpr":
+        return _as_affine(other) + self
+
+    def __sub__(self, other: DimLike) -> "AffineDimExpr":
+        return _as_affine(self) - other
+
+    def __rsub__(self, other: DimLike) -> "AffineDimExpr":
+        return _as_affine(other) - self
+
+    def __mul__(self, other: DimLike) -> Union["AffineDimExpr", "DimProduct"]:
+        if isinstance(other, int):
+            return _as_affine(self) * other
         return DimProduct((self, other))
 
-    def __rmul__(self, other: DimLike) -> "DimProduct":
-        return DimProduct((other, self))
+    def __rmul__(self, other: DimLike) -> Union["AffineDimExpr", "DimProduct"]:
+        return self * other
 
     def eval(self, bindings: Mapping[str, int]) -> Optional[int]:
         if self.value is not None:
@@ -48,6 +62,74 @@ class Dim:
 
     def __str__(self) -> str:
         return f"{self.name}={self.value}" if self.value is not None else self.name
+
+
+@dataclass(frozen=True)
+class AffineDimExpr:
+    """Canonical integer-affine dimension expression.
+
+    Coefficients are sorted and zero terms are removed, so structurally equal
+    expressions have one identity. Variable-by-variable products deliberately
+    remain :class:`DimProduct`: they are nonlinear and cannot be admitted to a
+    Presburger proof merely because all runtime witnesses happen to be known.
+    """
+
+    coefficients: tuple[tuple[str, int], ...] = ()
+    constant: int = 0
+
+    def __post_init__(self) -> None:
+        merged: dict[str, int] = {}
+        for name, coefficient in self.coefficients:
+            if not name or any(ch.isspace() for ch in name):
+                raise ValueError("affine dimension names must be non-empty and contain no whitespace")
+            merged[name] = merged.get(name, 0) + int(coefficient)
+        object.__setattr__(
+            self,
+            "coefficients",
+            tuple(sorted((name, value) for name, value in merged.items() if value)),
+        )
+        object.__setattr__(self, "constant", int(self.constant))
+
+    def __add__(self, other: DimLike) -> "AffineDimExpr":
+        rhs = _as_affine(other)
+        return AffineDimExpr((*self.coefficients, *rhs.coefficients), self.constant + rhs.constant)
+
+    def __radd__(self, other: DimLike) -> "AffineDimExpr":
+        return self + other
+
+    def __sub__(self, other: DimLike) -> "AffineDimExpr":
+        return self + (-_as_affine(other))
+
+    def __rsub__(self, other: DimLike) -> "AffineDimExpr":
+        return _as_affine(other) - self
+
+    def __neg__(self) -> "AffineDimExpr":
+        return AffineDimExpr(tuple((name, -value) for name, value in self.coefficients), -self.constant)
+
+    def __mul__(self, other: DimLike) -> Union["AffineDimExpr", "DimProduct"]:
+        if isinstance(other, int):
+            return AffineDimExpr(
+                tuple((name, coefficient * other) for name, coefficient in self.coefficients),
+                self.constant * other,
+            )
+        return DimProduct((self, other))
+
+    def __rmul__(self, other: DimLike) -> Union["AffineDimExpr", "DimProduct"]:
+        return self * other
+
+    def eval(self, bindings: Mapping[str, int]) -> Optional[int]:
+        total = self.constant
+        for name, coefficient in self.coefficients:
+            if name not in bindings:
+                return None
+            total += coefficient * int(bindings[name])
+        return total
+
+    def __str__(self) -> str:
+        parts = [f"{coefficient}*{name}" for name, coefficient in self.coefficients]
+        if self.constant or not parts:
+            parts.append(str(self.constant))
+        return " + ".join(parts).replace("+ -", "- ")
 
 
 @dataclass(frozen=True)
@@ -137,6 +219,14 @@ class ShapeDiagnostic:
 
 
 @dataclass(frozen=True)
+class ShapeProof:
+    """Three-valued result used by legality-sensitive compiler decisions."""
+
+    status: Literal["proven", "violated", "unknown"]
+    diagnostic: Optional[ShapeDiagnostic] = None
+
+
+@dataclass(frozen=True)
 class ScheduleFeasibility:
     """Result of checking a schedule knob against a shape dimension."""
 
@@ -158,20 +248,38 @@ class ShapeConstraintGraph:
 
     def __init__(self) -> None:
         self._constraints: list[Callable[[Mapping[str, int]], Optional[ShapeDiagnostic]]] = []
+        self._proofs: list[Callable[[Mapping[str, int]], ShapeProof]] = []
 
     def equal(self, lhs: DimLike, rhs: DimLike) -> "ShapeConstraintGraph":
-        def check(bindings: Mapping[str, int]) -> Optional[ShapeDiagnostic]:
+        def prove(bindings: Mapping[str, int]) -> ShapeProof:
             lv = _eval_dim(lhs, bindings)
             rv = _eval_dim(rhs, bindings)
-            if lv is None or rv is None or lv == rv:
-                return None
-            return ShapeDiagnostic(
-                "shape-equal",
-                f"dimension equality failed: {_dim_label(lhs)}={lv} != {_dim_label(rhs)}={rv}",
-                f"make {_dim_label(lhs)} and {_dim_label(rhs)} equal",
+            if lv is None or rv is None:
+                return ShapeProof(
+                    "unknown",
+                    ShapeDiagnostic(
+                        "shape-proof-unknown",
+                        f"cannot prove {_dim_label(lhs)} == {_dim_label(rhs)} without complete witnesses",
+                        "provide bounds/runtime witnesses before legality-sensitive motion",
+                    ),
+                )
+            if lv == rv:
+                return ShapeProof("proven")
+            return ShapeProof(
+                "violated",
+                ShapeDiagnostic(
+                    "shape-equal",
+                    f"dimension equality failed: {_dim_label(lhs)}={lv} != {_dim_label(rhs)}={rv}",
+                    f"make {_dim_label(lhs)} and {_dim_label(rhs)} equal",
+                ),
             )
 
+        def check(bindings: Mapping[str, int]) -> Optional[ShapeDiagnostic]:
+            proof = prove(bindings)
+            return proof.diagnostic if proof.status == "violated" else None
+
         self._constraints.append(check)
+        self._proofs.append(prove)
         return self
 
     def derived(self, target: DimLike, expr: DimLike) -> "ShapeConstraintGraph":
@@ -181,39 +289,85 @@ class ShapeConstraintGraph:
         if divisor <= 0:
             raise ValueError("divisor must be positive")
 
-        def check(bindings: Mapping[str, int]) -> Optional[ShapeDiagnostic]:
+        def prove(bindings: Mapping[str, int]) -> ShapeProof:
             value = _eval_dim(dim, bindings)
-            if value is None or value % divisor == 0:
-                return None
+            if value is None:
+                return ShapeProof(
+                    "unknown",
+                    ShapeDiagnostic(
+                        "shape-proof-unknown",
+                        f"cannot prove {_dim_label(dim)} divisible by {divisor}",
+                        "provide a runtime witness or a proven affine divisibility fact",
+                    ),
+                )
+            if value % divisor == 0:
+                return ShapeProof("proven")
             padded = next_multiple(value, divisor)
-            return ShapeDiagnostic(
-                "shape-divisible",
-                f"{_dim_label(dim)}={value} is not divisible by {divisor}",
-                f"pad {_dim_label(dim)} to {padded} or choose a compatible tile/mesh axis",
+            return ShapeProof(
+                "violated",
+                ShapeDiagnostic(
+                    "shape-divisible",
+                    f"{_dim_label(dim)}={value} is not divisible by {divisor}",
+                    f"pad {_dim_label(dim)} to {padded} or choose a compatible tile/mesh axis",
+                ),
             )
 
+        def check(bindings: Mapping[str, int]) -> Optional[ShapeDiagnostic]:
+            proof = prove(bindings)
+            return proof.diagnostic if proof.status == "violated" else None
+
         self._constraints.append(check)
+        self._proofs.append(prove)
         return self
 
     def range(self, dim: DimLike, lo: int, hi: int) -> "ShapeConstraintGraph":
         if lo > hi:
             raise ValueError("range lower bound must be <= upper bound")
 
-        def check(bindings: Mapping[str, int]) -> Optional[ShapeDiagnostic]:
+        def prove(bindings: Mapping[str, int]) -> ShapeProof:
             value = _eval_dim(dim, bindings)
-            if value is None or lo <= value <= hi:
-                return None
-            return ShapeDiagnostic(
-                "shape-range",
-                f"{_dim_label(dim)}={value} is outside [{lo}, {hi}]",
-                f"constrain {_dim_label(dim)} to [{lo}, {hi}]",
+            if value is None:
+                return ShapeProof(
+                    "unknown",
+                    ShapeDiagnostic(
+                        "shape-proof-unknown",
+                        f"cannot prove {_dim_label(dim)} lies in [{lo}, {hi}]",
+                        "provide a runtime witness or a proven affine bound",
+                    ),
+                )
+            if lo <= value <= hi:
+                return ShapeProof("proven")
+            return ShapeProof(
+                "violated",
+                ShapeDiagnostic(
+                    "shape-range",
+                    f"{_dim_label(dim)}={value} is outside [{lo}, {hi}]",
+                    f"constrain {_dim_label(dim)} to [{lo}, {hi}]",
+                ),
             )
 
+        def check(bindings: Mapping[str, int]) -> Optional[ShapeDiagnostic]:
+            proof = prove(bindings)
+            return proof.diagnostic if proof.status == "violated" else None
+
         self._constraints.append(check)
+        self._proofs.append(prove)
         return self
 
     def check_all(self, bindings: Mapping[str, int]) -> list[ShapeDiagnostic]:
         return [d for c in self._constraints if (d := c(bindings)) is not None]
+
+    def proofs(self, bindings: Mapping[str, int]) -> tuple[ShapeProof, ...]:
+        """Return proven/violated/unknown results without treating unknown as success."""
+        return tuple(prove(bindings) for prove in self._proofs)
+
+    def require_proven(self, bindings: Mapping[str, int]) -> None:
+        """Fail closed unless every constraint is proven by concrete witnesses."""
+        for proof in self.proofs(bindings):
+            if proof.status != "proven":
+                assert proof.diagnostic is not None
+                suffix = f" suggestion: {proof.diagnostic.suggestion}" if proof.diagnostic.suggestion else ""
+                raise ShapeSystemError(f"{proof.diagnostic.code}: {proof.diagnostic.message}{suffix}")
 
     def raise_if_errors(self, bindings: Mapping[str, int]) -> None:
         errors = self.check_all(bindings)
@@ -279,9 +433,7 @@ def matmul_shape(lhs: Sequence[DimLike], rhs: Sequence[DimLike]) -> tuple[DimLik
     if len(L) < 2 or len(R) < 2:
         raise ShapeSystemError(f"matmul requires rank >= 2; got {L} x {R}")
     if not dims_compatible(L[-1], R[-2]):
-        raise ShapeSystemError(
-            f"matmul inner dimensions differ: {_dim_label(L[-1])} vs {_dim_label(R[-2])}"
-        )
+        raise ShapeSystemError(f"matmul inner dimensions differ: {_dim_label(L[-1])} vs {_dim_label(R[-2])}")
     return broadcast_shape(L[:-2], R[:-2]) + (L[-2], R[-1])
 
 
@@ -356,9 +508,7 @@ def dims_compatible(lhs: DimLike, rhs: DimLike) -> bool:
     if isinstance(lhs, int) and isinstance(rhs, int):
         return lhs == rhs
     if isinstance(lhs, Dim) and isinstance(rhs, Dim):
-        return lhs.name == rhs.name or (
-            lhs.value is not None and rhs.value is not None and lhs.value == rhs.value
-        )
+        return lhs.name == rhs.name or (lhs.value is not None and rhs.value is not None and lhs.value == rhs.value)
     return str(lhs) == str(rhs)
 
 
@@ -379,7 +529,7 @@ def _is_one(dim_value: DimLike) -> bool:
 def _eval_dim(dim_value: DimLike, bindings: Mapping[str, int]) -> Optional[int]:
     if isinstance(dim_value, int):
         return dim_value
-    if isinstance(dim_value, (Dim, DimProduct)):
+    if isinstance(dim_value, (Dim, AffineDimExpr, DimProduct)):
         return dim_value.eval(bindings)
     return None  # type: ignore[unreachable]
 
@@ -395,6 +545,18 @@ def _dim_label(dim_value: DimLike) -> str:
     return str(dim_value)
 
 
+def _as_affine(dim_value: DimLike) -> AffineDimExpr:
+    if isinstance(dim_value, AffineDimExpr):
+        return dim_value
+    if isinstance(dim_value, int):
+        return AffineDimExpr(constant=dim_value)
+    if isinstance(dim_value, Dim):
+        if dim_value.value is not None:
+            return AffineDimExpr(constant=dim_value.value)
+        return AffineDimExpr(((dim_value.name, 1),))
+    raise TypeError(f"nonlinear dimension expression {dim_value!s} is not affine")
+
+
 def _resolve_dim_ref(dims: Sequence[DimLike], ref: Union[str, int]) -> Optional[DimLike]:
     if isinstance(ref, int):
         if -len(dims) <= ref < len(dims):
@@ -408,6 +570,7 @@ def _resolve_dim_ref(dims: Sequence[DimLike], ref: Union[str, int]) -> Optional[
 
 __all__ = [
     "Dim",
+    "AffineDimExpr",
     "DimProduct",
     "Layout",
     "RuntimeShapeWitness",
@@ -415,6 +578,7 @@ __all__ = [
     "Shape",
     "ShapeConstraintGraph",
     "ShapeDiagnostic",
+    "ShapeProof",
     "ShapeShard",
     "ShapeSystemError",
     "broadcast_shape",

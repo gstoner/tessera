@@ -4907,6 +4907,16 @@ LogicalResult ISTFTOp::verify() {
   return verifySpectralCompound(getOperation(), getX(), getParameter(), getAxis(),
                                 "istft");
 }
+LogicalResult ISTFTJvpOp::verify() {
+  if (failed(verifySpectralCompound(getOperation(), getSpectrum(), getWindow(),
+                                    getAxis(), "istft")))
+    return failure();
+  if (getSpectrum().getType() != getSpectrumTangent().getType())
+    return emitOpError("spectrum tangent type must match the primal spectrum");
+  if (getWindow().getType() != getWindowTangent().getType())
+    return emitOpError("window tangent type must match the primal window");
+  return success();
+}
 LogicalResult SpectralFilterOp::verify() {
   if (failed(verifySpectralCompound(getOperation(), getX(), getParameter(),
                                     getAxis(), "spectral_filter")))

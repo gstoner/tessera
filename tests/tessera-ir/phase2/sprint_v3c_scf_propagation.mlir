@@ -110,3 +110,47 @@ func.func @scf_if_branches_disagree(
   }
   return %r : tensor<4x4xf32>
 }
+
+// -----
+
+// CHECK-LABEL: func.func @scf_while_invariant
+func.func @scf_while_invariant(%x: tensor<4x8xf32>) -> tensor<4x8xf32>
+    attributes {tessera.arg_dim_names = [["B", "D"]]} {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c3 = arith.constant 3 : index
+  %count, %result = scf.while (%i = %c0, %state = %x)
+      : (index, tensor<4x8xf32>) -> (index, tensor<4x8xf32>) {
+    %continue = arith.cmpi slt, %i, %c3 : index
+    scf.condition(%continue) %i, %state : index, tensor<4x8xf32>
+  } do {
+  ^bb0(%i: index, %state: tensor<4x8xf32>):
+    %next = arith.addi %i, %c1 : index
+    scf.yield %next, %state : index, tensor<4x8xf32>
+  }
+  return %result : tensor<4x8xf32>
+}
+
+// -----
+
+func.func @scf_while_yield_mismatch(%x: tensor<4x4xf32>) -> tensor<4x4xf32>
+    attributes {tessera.arg_dim_names = [["B", "D"]]} {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c3 = arith.constant 3 : index
+  %count, %result = scf.while (%i = %c0, %state = %x)
+      : (index, tensor<4x4xf32>) -> (index, tensor<4x4xf32>) {
+    %continue = arith.cmpi slt, %i, %c3 : index
+    scf.condition(%continue) %i, %state : index, tensor<4x4xf32>
+  } do {
+  ^bb0(%i: index, %state: tensor<4x4xf32>):
+    %next = arith.addi %i, %c1 : index
+    %transposed = "tessera.transpose"(%state) {
+      tessera.dim_names_in = ["B", "D"],
+      tessera.dim_names_out = ["D", "B"]
+    } : (tensor<4x4xf32>) -> tensor<4x4xf32>
+    // expected-error @+1 {{SYMDIM_LOOP_YIELD_MISMATCH: scf.while yield operand 1 dim-names disagree with the corresponding carried state's dim-names}}
+    scf.yield %next, %transposed : index, tensor<4x4xf32>
+  }
+  return %result : tensor<4x4xf32>
+}

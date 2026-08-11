@@ -1375,10 +1375,11 @@ def _dct_reference(
         )
     moved = np.moveaxis(x, axis_index, -1).astype(np.float64)
     result = moved @ basis
+    logical_length = 2 * (n - 1) if dct_type == 1 else 2 * n
     if normalization == "forward":
-        result /= float(n)
+        result /= float(logical_length)
     elif normalization == "ortho":
-        result /= np.sqrt(float(n))
+        result /= np.sqrt(float(logical_length))
     return np.moveaxis(result, -1, axis_index)
 
 

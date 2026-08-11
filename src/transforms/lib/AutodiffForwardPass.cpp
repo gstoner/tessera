@@ -4,6 +4,7 @@
 #include "Tessera/IR/TesseraOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
@@ -47,8 +48,371 @@ static mlir::Value buildStaticZero(mlir::OpBuilder &builder,
         .create<mlir::arith::ConstantOp>(loc,
                                          builder.getFloatAttr(floatType, 0.0))
         .getResult();
+  if (auto integerType = mlir::dyn_cast<mlir::IntegerType>(type))
+    return builder
+        .create<mlir::arith::ConstantOp>(
+            loc, builder.getIntegerAttr(integerType, 0))
+        .getResult();
+  if (mlir::isa<mlir::IndexType>(type))
+    return builder.create<mlir::arith::ConstantIndexOp>(loc, 0).getResult();
   return {};
 }
+
+struct ForwardState {
+  mlir::IRMapping primals;
+  llvm::DenseMap<mlir::Value, mlir::Value> tangents;
+  llvm::SmallDenseSet<mlir::Value> active;
+};
+
+/// Build primal and tangent SSA together. Structured control flow must not be
+/// cloned once for the primal and again for the tangent: doing so duplicates
+/// effects and can select a different stochastic/control path. This builder
+/// instead extends each admitted SCF op with tangent-carried results.
+class RegionTangentBuilder {
+ public:
+  mlir::LogicalResult buildOperation(mlir::Operation &operation,
+                                     mlir::OpBuilder &builder,
+                                     ForwardState &state) {
+    if (auto ifOp = mlir::dyn_cast<mlir::scf::IfOp>(&operation))
+      return buildIf(ifOp, builder, state);
+    if (auto forOp = mlir::dyn_cast<mlir::scf::ForOp>(&operation))
+      return buildFor(forOp, builder, state);
+    if (auto whileOp = mlir::dyn_cast<mlir::scf::WhileOp>(&operation))
+      return buildWhile(whileOp, builder, state);
+    if (operation.getNumRegions() != 0) {
+      operation.emitError(
+          "tessera-autodiff-forward: unsupported active nested region; "
+          "expected scf.if, scf.for, or canonical scf.while");
+      return mlir::failure();
+    }
+    return buildLeaf(operation, builder, state);
+  }
+
+ private:
+  mlir::Value tangentOrZero(mlir::Value source, mlir::Value primal,
+                            mlir::OpBuilder &builder) {
+    auto found = current_->tangents.find(source);
+    if (found != current_->tangents.end() && found->second)
+      return found->second;
+    return buildStaticZero(builder, source.getLoc(), primal.getType());
+  }
+
+  mlir::LogicalResult buildLeaf(mlir::Operation &operation,
+                                mlir::OpBuilder &builder,
+                                ForwardState &state) {
+    mlir::Operation *primal = builder.clone(operation, state.primals);
+    for (auto [source, cloned] :
+         llvm::zip(operation.getResults(), primal->getResults()))
+      state.primals.map(source, cloned);
+
+    bool active = false;
+    llvm::SmallVector<mlir::Value> inputTangents;
+    ForwardState *saved = current_;
+    current_ = &state;
+    for (mlir::Value operand : operation.getOperands()) {
+      mlir::Value mapped = state.primals.lookupOrDefault(operand);
+      auto found = state.tangents.find(operand);
+      if (found != state.tangents.end())
+        inputTangents.push_back(found->second);
+      else
+        inputTangents.push_back(tangentOrZero(operand, mapped, builder));
+      active |= state.active.contains(operand);
+    }
+    current_ = saved;
+
+    llvm::SmallVector<mlir::Value> resultTangents;
+    if (active) {
+      if (!isAllowedStochasticTangent(primal)) {
+        operation.emitError(
+            "tessera-autodiff-forward: active stochastic operation requires "
+            "explicit constant_noise replay or a pathwise/score-function "
+            "operation");
+        return mlir::failure();
+      }
+      auto tangent = mlir::dyn_cast<TangentInterface>(primal);
+      if (!tangent) {
+        operation.emitError(
+            "tessera-autodiff-forward: active operation has no "
+            "TangentInterface");
+        return mlir::failure();
+      }
+      resultTangents = tangent.buildTangent(builder, inputTangents);
+      if (resultTangents.size() != operation.getNumResults()) {
+        operation.emitError(
+            "tessera-autodiff-forward: TangentInterface rejected the active "
+            "operand combination or returned the wrong result arity");
+        return mlir::failure();
+      }
+    } else {
+      resultTangents.resize(operation.getNumResults());
+    }
+    for (auto [source, tangent] :
+         llvm::zip(operation.getResults(), resultTangents)) {
+      if (!tangent && active) {
+        operation.emitError(
+            "tessera-autodiff-forward: cannot materialize a result tangent");
+        return mlir::failure();
+      }
+      state.tangents[source] = tangent;
+      if (active && !mlir::isa<StopGradientOp>(primal))
+        state.active.insert(source);
+    }
+    return mlir::success();
+  }
+
+  mlir::LogicalResult buildBlock(mlir::Block &source, mlir::Block &target,
+                                 mlir::OpBuilder &builder,
+                                 ForwardState &state,
+                                 mlir::Operation *terminator) {
+    mlir::OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&target);
+    for (mlir::Operation &nested : source.without_terminator())
+      if (mlir::failed(buildOperation(nested, builder, state)))
+        return mlir::failure();
+
+    llvm::SmallVector<mlir::Value> yields;
+    for (mlir::Value operand : terminator->getOperands())
+      yields.push_back(state.primals.lookupOrDefault(operand));
+    ForwardState *saved = current_;
+    current_ = &state;
+    for (mlir::Value operand : terminator->getOperands()) {
+      mlir::Value primal = state.primals.lookupOrDefault(operand);
+      mlir::Value tangent = tangentOrZero(operand, primal, builder);
+      if (!tangent)
+        return mlir::failure();
+      yields.push_back(tangent);
+    }
+    current_ = saved;
+    mlir::scf::YieldOp::create(builder, terminator->getLoc(), yields);
+    return mlir::success();
+  }
+
+  mlir::LogicalResult buildIf(mlir::scf::IfOp source,
+                              mlir::OpBuilder &builder,
+                              ForwardState &state) {
+    if (source.getElseRegion().empty()) {
+      source.emitError(
+          "tessera-autodiff-forward: result-bearing scf.if requires an else "
+          "region");
+      return mlir::failure();
+    }
+    llvm::SmallVector<mlir::Type> resultTypes(source.getResultTypes());
+    resultTypes.append(source.getResultTypes().begin(),
+                       source.getResultTypes().end());
+    auto combined = mlir::scf::IfOp::create(
+        builder, source.getLoc(), resultTypes,
+        state.primals.lookupOrDefault(source.getCondition()),
+        /*withElseRegion=*/true);
+
+    bool resultActive = false;
+    auto buildBranch = [&](mlir::Region &sourceRegion,
+                           mlir::Block *target) -> mlir::LogicalResult {
+      ForwardState branch = state;
+      auto yield = mlir::dyn_cast<mlir::scf::YieldOp>(
+          sourceRegion.front().getTerminator());
+      if (!yield || mlir::failed(buildBlock(sourceRegion.front(), *target,
+                                            builder, branch, yield)))
+        return mlir::failure();
+      for (mlir::Value operand : yield.getOperands())
+        resultActive |= branch.active.contains(operand);
+      return mlir::success();
+    };
+    if (mlir::failed(buildBranch(source.getThenRegion(), combined.thenBlock())) ||
+        mlir::failed(buildBranch(source.getElseRegion(), combined.elseBlock()))) {
+      combined.erase();
+      return mlir::failure();
+    }
+    unsigned count = source.getNumResults();
+    for (unsigned index = 0; index < count; ++index) {
+      state.primals.map(source.getResult(index), combined.getResult(index));
+      state.tangents[source.getResult(index)] =
+          combined.getResult(index + count);
+      if (resultActive)
+        state.active.insert(source.getResult(index));
+    }
+    return mlir::success();
+  }
+
+  mlir::LogicalResult buildFor(mlir::scf::ForOp source,
+                               mlir::OpBuilder &builder,
+                               ForwardState &state) {
+    llvm::APInt step;
+    if (!source.getRegion().hasOneBlock() ||
+        !mlir::matchPattern(source.getStep(), mlir::m_ConstantInt(&step)) ||
+        !step.isStrictlyPositive()) {
+      source.emitError(
+          "tessera-autodiff-forward: scf.for requires one block and a positive "
+          "constant step");
+      return mlir::failure();
+    }
+    llvm::SmallVector<mlir::Value> inits;
+    for (mlir::Value init : source.getInitArgs())
+      inits.push_back(state.primals.lookupOrDefault(init));
+    ForwardState *saved = current_;
+    current_ = &state;
+    for (mlir::Value init : source.getInitArgs()) {
+      mlir::Value primal = state.primals.lookupOrDefault(init);
+      mlir::Value tangent = tangentOrZero(init, primal, builder);
+      if (!tangent)
+        return mlir::failure();
+      inits.push_back(tangent);
+    }
+    current_ = saved;
+    auto combined = mlir::scf::ForOp::create(
+        builder, source.getLoc(),
+        state.primals.lookupOrDefault(source.getLowerBound()),
+        state.primals.lookupOrDefault(source.getUpperBound()),
+        state.primals.lookupOrDefault(source.getStep()), inits);
+
+    ForwardState bodyState = state;
+    bodyState.primals.map(source.getInductionVar(),
+                          combined.getInductionVar());
+    unsigned count = source.getInitArgs().size();
+    for (unsigned index = 0; index < count; ++index) {
+      mlir::Value sourceArg = source.getRegionIterArg(index);
+      bodyState.primals.map(sourceArg, combined.getRegionIterArg(index));
+      if (state.active.contains(source.getInitArgs()[index])) {
+        bodyState.tangents[sourceArg] =
+            combined.getRegionIterArg(index + count);
+        bodyState.active.insert(sourceArg);
+      } else {
+        bodyState.tangents[sourceArg] = mlir::Value{};
+      }
+    }
+    auto yield = mlir::cast<mlir::scf::YieldOp>(
+        source.getRegion().front().getTerminator());
+    if (mlir::failed(buildBlock(source.getRegion().front(),
+                                *combined.getBody(), builder, bodyState,
+                                yield))) {
+      combined.erase();
+      return mlir::failure();
+    }
+    for (unsigned index = 0; index < count; ++index) {
+      state.primals.map(source.getResult(index), combined.getResult(index));
+      state.tangents[source.getResult(index)] =
+          combined.getResult(index + count);
+      if (bodyState.active.contains(yield.getOperand(index)))
+        state.active.insert(source.getResult(index));
+    }
+    return mlir::success();
+  }
+
+  mlir::LogicalResult buildWhile(mlir::scf::WhileOp source,
+                                 mlir::OpBuilder &builder,
+                                 ForwardState &state) {
+    if (!source.getBefore().hasOneBlock() ||
+        !source.getAfter().hasOneBlock()) {
+      source.emitError(
+          "tessera-autodiff-forward: scf.while requires one before and one "
+          "after block");
+      return mlir::failure();
+    }
+    llvm::SmallVector<mlir::Value> inits;
+    llvm::SmallVector<mlir::Type> types(source.getResultTypes());
+    for (mlir::Value init : source.getInits())
+      inits.push_back(state.primals.lookupOrDefault(init));
+    ForwardState *saved = current_;
+    current_ = &state;
+    for (mlir::Value init : source.getInits()) {
+      mlir::Value primal = state.primals.lookupOrDefault(init);
+      mlir::Value tangent = tangentOrZero(init, primal, builder);
+      if (!tangent)
+        return mlir::failure();
+      inits.push_back(tangent);
+      types.push_back(init.getType());
+    }
+    current_ = saved;
+    auto combined = mlir::scf::WhileOp::create(builder, source.getLoc(), types,
+                                               inits);
+    llvm::SmallVector<mlir::Location> locations(types.size(), source.getLoc());
+
+    auto buildBefore = [&]() -> mlir::LogicalResult {
+      mlir::Block *target = builder.createBlock(&combined.getBefore());
+      target->addArguments(types, locations);
+      ForwardState beforeState = state;
+      unsigned count = source.getInits().size();
+      for (unsigned index = 0; index < count; ++index) {
+        mlir::Value sourceArg = source.getBefore().front().getArgument(index);
+        beforeState.primals.map(sourceArg, target->getArgument(index));
+        if (state.active.contains(source.getInits()[index])) {
+          beforeState.tangents[sourceArg] = target->getArgument(index + count);
+          beforeState.active.insert(sourceArg);
+        } else {
+          beforeState.tangents[sourceArg] = mlir::Value{};
+        }
+      }
+      mlir::OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(target);
+      for (mlir::Operation &nested :
+           source.getBefore().front().without_terminator())
+        if (mlir::failed(buildOperation(nested, builder, beforeState)))
+          return mlir::failure();
+      auto condition = mlir::dyn_cast<mlir::scf::ConditionOp>(
+          source.getBefore().front().getTerminator());
+      if (!condition)
+        return mlir::failure();
+      llvm::SmallVector<mlir::Value> forwarded;
+      for (mlir::Value value : condition.getArgs())
+        forwarded.push_back(beforeState.primals.lookupOrDefault(value));
+      ForwardState *old = current_;
+      current_ = &beforeState;
+      for (mlir::Value value : condition.getArgs()) {
+        mlir::Value primal = beforeState.primals.lookupOrDefault(value);
+        mlir::Value tangent = tangentOrZero(value, primal, builder);
+        if (!tangent)
+          return mlir::failure();
+        forwarded.push_back(tangent);
+      }
+      current_ = old;
+      mlir::scf::ConditionOp::create(
+          builder, condition.getLoc(),
+          beforeState.primals.lookupOrDefault(condition.getCondition()),
+          forwarded);
+      return mlir::success();
+    };
+
+    auto buildAfter = [&]() -> mlir::LogicalResult {
+      mlir::Block *target = builder.createBlock(&combined.getAfter());
+      target->addArguments(types, locations);
+      ForwardState afterState = state;
+      unsigned count = source.getInits().size();
+      for (unsigned index = 0; index < count; ++index) {
+        mlir::Value sourceArg = source.getAfter().front().getArgument(index);
+        afterState.primals.map(sourceArg, target->getArgument(index));
+        if (state.active.contains(source.getInits()[index])) {
+          afterState.tangents[sourceArg] = target->getArgument(index + count);
+          afterState.active.insert(sourceArg);
+        } else {
+          afterState.tangents[sourceArg] = mlir::Value{};
+        }
+      }
+      auto yield = mlir::dyn_cast<mlir::scf::YieldOp>(
+          source.getAfter().front().getTerminator());
+      return yield ? buildBlock(source.getAfter().front(), *target, builder,
+                                afterState, yield)
+                   : mlir::failure();
+    };
+    if (mlir::failed(buildBefore()) || mlir::failed(buildAfter())) {
+      combined.erase();
+      return mlir::failure();
+    }
+    // createBlock() moves the builder into the new region. Restore the outer
+    // insertion point so following function operations are not accidentally
+    // appended to the while body.
+    builder.setInsertionPointAfter(combined);
+    unsigned count = source.getNumResults();
+    for (unsigned index = 0; index < count; ++index) {
+      state.primals.map(source.getResult(index), combined.getResult(index));
+      state.tangents[source.getResult(index)] =
+          combined.getResult(index + count);
+      if (state.active.contains(source.getInits()[index]))
+        state.active.insert(source.getResult(index));
+    }
+    return mlir::success();
+  }
+
+  ForwardState *current_ = nullptr;
+};
 
 class AutodiffForwardPass
     : public mlir::PassWrapper<AutodiffForwardPass,
@@ -63,7 +427,8 @@ class AutodiffForwardPass
     return "Emit a paired Graph IR JVP through TangentInterface";
   }
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect>();
+    registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
+                    mlir::scf::SCFDialect>();
   }
 
   void runOnOperation() override {
@@ -82,11 +447,16 @@ class AutodiffForwardPass
       }
       for (mlir::Type type : forward.getArgumentTypes()) {
         auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(type);
-        if (!tensor || !tensor.hasStaticShape() ||
-            !mlir::isa<mlir::FloatType, mlir::IntegerType,
-                       mlir::ComplexType>(
-                tensor.getElementType())) {
-          forward.emitError("tessera-autodiff-forward: first cut requires static ranked floating, complex, or integer tensor arguments");
+        bool admissibleTensor =
+            tensor && tensor.hasStaticShape() &&
+            mlir::isa<mlir::FloatType, mlir::IntegerType, mlir::ComplexType>(
+                tensor.getElementType());
+        bool controlScalar =
+            mlir::isa<mlir::IntegerType, mlir::IndexType>(type);
+        if (!admissibleTensor && !controlScalar) {
+          forward.emitError(
+              "tessera-autodiff-forward: requires static ranked numeric "
+              "tensors plus nondifferentiable integer/index control scalars");
           return signalPassFailure();
         }
       }
@@ -110,9 +480,10 @@ class AutodiffForwardPass
             return signalPassFailure();
           }
           unsigned index = static_cast<unsigned>(indexAttr.getInt());
-          auto tensor = mlir::cast<mlir::RankedTensorType>(
+          auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(
               forward.getArgumentTypes()[index]);
-          if (!mlir::isa<mlir::FloatType, mlir::ComplexType>(
+          if (!tensor ||
+              !mlir::isa<mlir::FloatType, mlir::ComplexType>(
                   tensor.getElementType())) {
             forward.emitError(
                 "tessera-autodiff-forward: wrt_indices may select only floating or complex tensor arguments");
@@ -132,9 +503,10 @@ class AutodiffForwardPass
         }
       } else {
         for (unsigned index = 0; index < forward.getNumArguments(); ++index) {
-          auto tensor = mlir::cast<mlir::RankedTensorType>(
+          auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(
               forward.getArgumentTypes()[index]);
-          if (!mlir::isa<mlir::FloatType, mlir::ComplexType>(
+          if (!tensor ||
+              !mlir::isa<mlir::FloatType, mlir::ComplexType>(
                   tensor.getElementType()))
             continue;
           wrtIndices.push_back(index);
@@ -164,94 +536,40 @@ class AutodiffForwardPass
       mlir::Block *body = jvp.addEntryBlock();
       mlir::OpBuilder builder(body, body->begin());
 
-      mlir::IRMapping primalMap;
-      llvm::DenseMap<mlir::Value, mlir::Value> tangentMap;
-      llvm::SmallDenseSet<mlir::Value> activeValues;
+      ForwardState state;
       unsigned argumentCount = forward.getNumArguments();
       unsigned tangentIndex = argumentCount;
       for (auto [index, argument] : llvm::enumerate(forward.getArguments())) {
-        primalMap.map(argument, body->getArgument(index));
+        state.primals.map(argument, body->getArgument(index));
         if (wrtSet.contains(index)) {
-          tangentMap[argument] = body->getArgument(tangentIndex++);
-          activeValues.insert(argument);
+          state.tangents[argument] = body->getArgument(tangentIndex++);
+          state.active.insert(argument);
         } else {
-          tangentMap[argument] = mlir::Value{};
+          state.tangents[argument] = mlir::Value{};
         }
       }
 
       auto originalReturn = mlir::cast<mlir::func::ReturnOp>(
           forward.getBody().front().getTerminator());
+      RegionTangentBuilder tangentBuilder;
       for (mlir::Operation &operation : forward.getBody().front()) {
         if (mlir::isa<mlir::func::ReturnOp>(operation))
           break;
-        if (operation.getNumRegions() != 0) {
-          operation.emitError("tessera-autodiff-forward: active nested regions require RegionTangentInterface");
+        if (mlir::failed(
+                tangentBuilder.buildOperation(operation, builder, state)))
           return signalPassFailure();
-        }
-
-        mlir::Operation *primal = builder.clone(operation, primalMap);
-        for (auto [source, cloned] :
-             llvm::zip(operation.getResults(), primal->getResults()))
-          primalMap.map(source, cloned);
-
-        bool active = false;
-        llvm::SmallVector<mlir::Value> inputTangents;
-        for (mlir::Value operand : operation.getOperands()) {
-          auto found = tangentMap.find(operand);
-          if (found != tangentMap.end()) {
-            inputTangents.push_back(found->second);
-            active |= activeValues.contains(operand);
-          } else {
-            mlir::Value zero = buildStaticZero(
-                builder, operation.getLoc(), primalMap.lookup(operand).getType());
-            inputTangents.push_back(zero);
-          }
-        }
-
-        llvm::SmallVector<mlir::Value> resultTangents;
-        if (active) {
-          if (!isAllowedStochasticTangent(primal)) {
-            operation.emitError(
-                "tessera-autodiff-forward: active stochastic operation requires explicit constant_noise replay or a pathwise/score-function operation");
-            return signalPassFailure();
-          }
-          auto tangent = mlir::dyn_cast<TangentInterface>(primal);
-          if (!tangent) {
-            operation.emitError("tessera-autodiff-forward: active operation has no TangentInterface");
-            return signalPassFailure();
-          }
-          resultTangents = tangent.buildTangent(builder, inputTangents);
-          if (resultTangents.size() != operation.getNumResults()) {
-            operation.emitError(
-                "tessera-autodiff-forward: TangentInterface rejected the active "
-                "operand combination or returned the wrong result arity");
-            return signalPassFailure();
-          }
-        } else {
-          resultTangents.resize(operation.getNumResults());
-        }
-        for (auto [source, tangent] :
-             llvm::zip(operation.getResults(), resultTangents)) {
-          if (!tangent && active) {
-            operation.emitError("tessera-autodiff-forward: cannot materialize a result tangent");
-            return signalPassFailure();
-          }
-          tangentMap[source] = tangent;
-          if (active && !mlir::isa<StopGradientOp>(primal))
-            activeValues.insert(source);
-        }
       }
 
       llvm::SmallVector<mlir::Value> returns;
       for (mlir::Value result : originalReturn.getOperands())
-        returns.push_back(primalMap.lookup(result));
+        returns.push_back(state.primals.lookup(result));
       for (mlir::Value result : originalReturn.getOperands()) {
-        auto tangent = tangentMap.find(result);
+        auto tangent = state.tangents.find(result);
         mlir::Value value =
-            tangent == tangentMap.end() ? mlir::Value{} : tangent->second;
+            tangent == state.tangents.end() ? mlir::Value{} : tangent->second;
         if (!value)
           value = buildStaticZero(builder, forward.getLoc(),
-                                  primalMap.lookup(result).getType());
+                                  state.primals.lookup(result).getType());
         if (!value) {
           forward.emitError(
               "tessera-autodiff-forward: cannot materialize return tangent");

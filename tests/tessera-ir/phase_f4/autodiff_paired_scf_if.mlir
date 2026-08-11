@@ -1,0 +1,30 @@
+// RUN: tessera-opt --tessera-autodiff-paired %s | FileCheck %s
+//
+// W4.3: implicit SCF captures are returned by RegionAdjointInterface as
+// explicit (primal, cotangent) pairs. The backward must replay only the taken
+// branch and merge the captured %x cotangent with an scf.if.
+
+module {
+  func.func @branch(%pred: i1, %x: tensor<4xf32>) -> tensor<4xf32>
+      attributes {tessera.autodiff = "reverse"} {
+    %out = scf.if %pred -> tensor<4xf32> {
+      %square = "tessera.mul"(%x, %x) :
+          (tensor<4xf32>, tensor<4xf32>) -> tensor<4xf32>
+      scf.yield %square : tensor<4xf32>
+    } else {
+      %double = "tessera.add"(%x, %x) :
+          (tensor<4xf32>, tensor<4xf32>) -> tensor<4xf32>
+      scf.yield %double : tensor<4xf32>
+    }
+    return %out : tensor<4xf32>
+  }
+
+  // CHECK-LABEL: func.func @branch__bwd
+  // Recomputed primal branch followed by the branch-selecting pullback.
+  // CHECK: %[[PRIMAL:.+]] = scf.if
+  // CHECK: %[[DX:.+]] = scf.if
+  // CHECK: tessera.mul
+  // CHECK: arith.addf
+  // The predicate remains nondifferentiable; %x receives the region capture.
+  // CHECK: return {{.*}}, %[[DX]] : i1, tensor<4xf32>
+}

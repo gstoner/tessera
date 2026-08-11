@@ -58,6 +58,39 @@ def test_derived_dimension_constraint_models_head_splitting():
     assert errors[0].code == "shape-equal"
 
 
+def test_affine_dimensions_have_canonical_identity_and_exact_witnesses():
+    N, M = ts.sym("N M")
+    lhs = 2 * N + M - 7
+    rhs = M + N + N - 7
+
+    assert lhs == rhs
+    assert lhs.eval({"N": 8, "M": 3}) == 12
+
+
+def test_legality_sensitive_shape_proof_fails_closed_on_unknown() -> None:
+    N = ts.dim("N")
+    graph = ShapeConstraintGraph().range(N, 1, 4096).divisible(N, 16)
+
+    # Diagnostic-only checking preserves the public API's deferred-witness
+    # behavior, while compiler legality queries must use require_proven().
+    assert graph.check_all({}) == []
+    assert [proof.status for proof in graph.proofs({})] == ["unknown", "unknown"]
+    with pytest.raises(ShapeSystemError, match="shape-proof-unknown"):
+        graph.require_proven({})
+    graph.require_proven({"N": 128})
+
+
+def test_nonlinear_product_remains_outside_affine_proof_identity() -> None:
+    H, Dh = ts.sym("H Dh")
+    nonlinear = H * Dh
+    affine = 4 * H + 2
+
+    assert nonlinear.eval({"H": 8, "Dh": 64}) == 512
+    assert affine.eval({"H": 8}) == 34
+    with pytest.raises(TypeError, match="not affine"):
+        _ = affine + nonlinear
+
+
 def test_reshape_validates_element_count_when_bindings_are_known():
     B, T, H, Dh, D = ts.sym("B T H Dh D")
 

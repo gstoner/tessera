@@ -382,6 +382,7 @@ void registerTesseraPasses() {
   // ── Phase 2 passes ────────────────────────────────────────────────────────
   ::mlir::registerPass([]() { return createDistributionLoweringPass(); });
   ::mlir::registerPass([]() { return createEffectAnnotationPass(); });
+  ::mlir::registerPass([]() { return createGraphDataflowAnnotationPass(); });
   ::mlir::registerPass([]() { return createTilingPass(); });
   ::mlir::registerPass([]() { return createTileToX86Pass(); });
   ::mlir::registerPass(

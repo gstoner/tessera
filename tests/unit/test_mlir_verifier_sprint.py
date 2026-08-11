@@ -618,9 +618,9 @@ def test_sprint_v3c_lit_fixture_shape() -> None:
     assert "SYMDIM_IF_BRANCH_MISMATCH" in text, (
         "V3c lit fixture must lock the if-branch diagnostic code"
     )
-    # 2 negative cases (scf.for yield mismatch + scf.if branch mismatch).
-    assert text.count("// expected-error @+1") == 2, (
-        "V3c lit fixture should have exactly 2 expected-error cases"
+    # Three negative cases: for-yield, if-branch, and while-carried-state.
+    assert text.count("// expected-error @+1") == 3, (
+        "V3c lit fixture should have exactly 3 expected-error cases"
     )
 
 

@@ -14,7 +14,7 @@ row can become selector eligible.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import copy
 import statistics
 import time
@@ -46,6 +46,9 @@ class ResidualEvidence:
     timing_domain: str
     provenance: str
     exact_device: bool
+    forward_steps: int = 0
+    replayed_steps: int = 0
+    backward_steps: int = 0
 
     @property
     def backward_median_ns(self) -> int:
@@ -80,6 +83,30 @@ class ResidualEvidence:
             "tessera.residual.retained_bytes": self.retained_residual_bytes,
             "tessera.autodiff.residual_policy": self.policy,
             "tessera.residual.evidence_provenance": self.provenance,
+            "tessera.residual.forward_steps": self.forward_steps,
+            "tessera.residual.replayed_steps": self.replayed_steps,
+            "tessera.residual.backward_steps": self.backward_steps,
+        }
+
+    def evidence_record(self) -> dict[str, object]:
+        """Return a stable, serializable row for benchmark packets."""
+        return {
+            "target": self.target,
+            "operation": self.operation,
+            "shape_bucket": list(self.shape_bucket),
+            "dtype": self.dtype,
+            "policy": self.policy,
+            "retained_residual_bytes": self.retained_residual_bytes,
+            "backward_samples_ns": list(self.backward_samples_ns),
+            "backward_median_ns": self.backward_median_ns,
+            "backward_p95_ns": self.backward_p95_ns,
+            "forward_steps": self.forward_steps,
+            "replayed_steps": self.replayed_steps,
+            "backward_steps": self.backward_steps,
+            "timing_domain": self.timing_domain,
+            "provenance": self.provenance,
+            "exact_device": self.exact_device,
+            "selector_eligible": self.selector_eligible,
         }
 
 
@@ -232,20 +259,31 @@ def measure_treeverse_region_candidate(
             forward_step=forward_step,
         )
 
+    executions: list[TreeverseExecution] = []
+
     def backward(ct: Any, saved: Any) -> Any:
-        return execute_treeverse_region_adjoint(
+        execution = execute_treeverse_region_adjoint(
             cotangent=ct,
             residuals=saved,
             forward_step=forward_step,
             backward_step=backward_step,
-        ).input_cotangent
+        )
+        executions.append(execution)
+        return execution.input_cotangent
 
-    return measure_residual_candidate(
+    if not candidate.checkpoint_indices:
+        executed_policy: ResidualPolicy = "recompute"
+    elif candidate.checkpoint_slots >= max(candidate.steps - 1, 0):
+        executed_policy = "save"
+    else:
+        executed_policy = "hybrid"
+
+    evidence = measure_residual_candidate(
         target=target,
         operation=operation,
         shape_bucket=shape_bucket,
         dtype=dtype,
-        policy="treeverse",
+        policy=executed_policy,
         forward=forward,
         backward=backward,
         cotangent=cotangent,
@@ -255,6 +293,76 @@ def measure_treeverse_region_candidate(
         timing_domain=timing_domain,
         provenance=provenance,
         exact_device=exact_device,
+    )
+    if not executions:
+        raise RuntimeError("treeverse measurement did not execute a backward")
+    work = executions[-1]
+    if any(
+        (row.forward_steps, row.replayed_steps, row.backward_steps)
+        != (work.forward_steps, work.replayed_steps, work.backward_steps)
+        for row in executions
+    ):
+        raise RuntimeError("treeverse execution work changed between samples")
+    return replace(
+        evidence,
+        forward_steps=work.forward_steps,
+        replayed_steps=work.replayed_steps,
+        backward_steps=work.backward_steps,
+    )
+
+
+def measure_counted_region_policy_cohort(
+    *,
+    target: str,
+    operation: str,
+    shape_bucket: Sequence[int],
+    dtype: str,
+    steps: int,
+    state_bytes: int,
+    measured_step_work_ns: int,
+    memory_budgets: Iterable[int],
+    initial_state: Any,
+    forward_step: Callable[[int, Any], Any],
+    backward_step: Callable[[int, Any, Any, Any], Any],
+    cotangent: Any,
+    synchronize: Callable[[], None] | None = None,
+    warmup: int = 3,
+    repetitions: int = 20,
+    timing_domain: str = "synchronized_host_wall",
+    provenance: str,
+    exact_device: bool,
+) -> tuple[ResidualEvidence, ...]:
+    """Execute the SAVE/RECOMPUTE/HYBRID checkpoint cohort.
+
+    The candidate generator only prunes checkpoint placements. Every returned
+    row comes from a complete backward execution, is labelled by the policy it
+    actually implements, and carries exact replay/backward work counters.
+    """
+    candidates = treeverse_candidates(
+        steps=steps,
+        state_bytes=state_bytes,
+        measured_step_work_ns=measured_step_work_ns,
+        memory_budgets=memory_budgets,
+    )
+    return tuple(
+        measure_treeverse_region_candidate(
+            target=target,
+            operation=operation,
+            shape_bucket=shape_bucket,
+            dtype=dtype,
+            candidate=candidate,
+            initial_state=initial_state,
+            forward_step=forward_step,
+            backward_step=backward_step,
+            cotangent=cotangent,
+            synchronize=synchronize,
+            warmup=warmup,
+            repetitions=repetitions,
+            timing_domain=timing_domain,
+            provenance=provenance,
+            exact_device=exact_device,
+        )
+        for candidate in candidates
     )
 
 
@@ -424,6 +532,7 @@ __all__ = [
     "capture_treeverse_forward",
     "execute_treeverse_region_adjoint",
     "measure_treeverse_region_candidate",
+    "measure_counted_region_policy_cohort",
     "measure_residual_candidate",
     "retained_residual_bytes",
     "select_residual_policy",

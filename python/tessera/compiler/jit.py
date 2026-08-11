@@ -848,24 +848,57 @@ class JitFn:
             raise TesseraJitError("specialized_autodiff_ir requires autodiff=...")
         return self._specialized_autodiff_module(args, kwargs).to_mlir()
 
-    def compiled_jvp_ir(self, *args: Any, **kwargs: Any) -> str:
-        """Return the compiler-emitted paired JVP Graph IR for this signature.
+    def _traced_autodiff_module(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> GraphIRModule:
+        """Trace one concrete signature into the canonical Graph IR authority.
 
-        This is an IR-transformed product ABI, not a native-execution claim.
-        The returned ``@f__jvp`` takes all primals followed by tangents for the
-        requested ``wrt`` indices and returns primals followed by output
-        tangents. Missing tools or an unsupported active op fail closed.
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes.  Native forward products are the first
+        cohort: their derivative and physical package now bind the same traced
+        module instead of consulting decoration-time AST Graph IR.
         """
-        request = self.differentiation_request
-        if request is None or request.mode != "forward":
-            raise TesseraJitError(
-                "compiled_jvp_ir requires @jit(autodiff='forward' or 'jvp')"
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        signature = tuple(
+            (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cache = getattr(self, "_traced_autodiff_specializations", None)
+        if cache is None:
+            cache = {}
+            self._traced_autodiff_specializations = cache
+        cached = cache.get(signature)
+        if cached is not None:
+            return cached
+        try:
+            traced = trace(self._fn, *ordered)
+            source_hash = self.graph_ir.functions[0].source_hash or hashlib.sha256(
+                self._fn.__qualname__.encode("utf-8")
+            ).hexdigest()
+            module = to_graph_ir_module(
+                traced, name=self.graph_ir.functions[0].name, source_hash=source_hash
             )
+            if self.differentiation_request is not None:
+                intent = self.differentiation_request.module_intent_attrs()
+                module.module_attrs.update(intent)
+                module.functions[0].fn_attrs.update(intent)
+        except Exception as exc:
+            raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
+        cache[signature] = module
+        return module
+
+    def _compile_jvp_module(self, module: GraphIRModule) -> str:
+        """Run the sole compiler forward transform for an already-owned module."""
         import re
         import subprocess
         from .. import _jit_boundary as _jb
 
-        module = self._specialized_autodiff_module(args, kwargs)
         opt = _jb._find_tessera_opt()
         if opt is None:
             raise TesseraJitError("tessera-opt not built; cannot emit paired JVP")
@@ -885,6 +918,22 @@ class JitFn:
             )
         return transformed.stdout
 
+    def compiled_jvp_ir(self, *args: Any, **kwargs: Any) -> str:
+        """Return the compiler-emitted paired JVP Graph IR for this signature.
+
+        This is an IR-transformed product ABI, not a native-execution claim.
+        The returned ``@f__jvp`` takes all primals followed by tangents for the
+        requested ``wrt`` indices and returns primals followed by output
+        tangents. Missing tools or an unsupported active op fail closed.
+        """
+        request = self.differentiation_request
+        if request is None or request.mode != "forward":
+            raise TesseraJitError(
+                "compiled_jvp_ir requires @jit(autodiff='forward' or 'jvp')"
+            )
+        module = self._specialized_autodiff_module(args, kwargs)
+        return self._compile_jvp_module(module)
+
     def native_jvp(
         self, *args: Any, tangents: Any, **kwargs: Any
     ) -> tuple[Any, Any]:
@@ -897,7 +946,8 @@ class JitFn:
         """
         import numpy as np
         from tessera.runtime import RuntimeArtifact, launch
-        from .native_jvp import build_native_jvp_artifact, child_digest
+        from .native_jvp import build_native_jvp_artifact
+        from .native_jvp_plugins import plan_native_jvp_family
 
         request = self.differentiation_request
         if request is None or request.mode != "forward":
@@ -918,13 +968,11 @@ class JitFn:
         for index, tangent in tangent_inputs.items():
             if index >= len(primal_inputs) or primal_inputs[index].shape != tangent.shape:
                 raise TesseraJitError("native JVP primal and tangent shapes must match")
-        primal_input = primal_inputs[0]
-
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        traced_module = self._traced_autodiff_module(args, kwargs)
+        graph_ops = [op for fn in traced_module.functions for op in fn.body]
         if len(graph_ops) != 1:
             raise TesseraJitError("native JVP currently requires a single Graph operation")
         source = graph_ops[0]
-        bare = source.op_name.removeprefix("tessera.")
         target = normalize_target_kind(self.target)
         if target not in {"x86", "rocm"}:
             raise TesseraJitError("native JVP is currently packaged for x86 and ROCm only")
@@ -940,148 +988,18 @@ class JitFn:
             architecture = "gfx1151"
             execution_mode = "hip_runtime"
 
-        child_steps: list[dict[str, Any]] = []
-
-        def add_step(
-            step_id: str,
-            child_metadata: dict[str, Any],
-            inputs: list[str],
-            *,
-            output_index: int = -1,
-            outputs: list[str] | None = None,
-        ) -> None:
-            step = {
-                "id": step_id,
-                "child_digest": child_digest(child_metadata),
-                "child_metadata": child_metadata,
-                "inputs": inputs,
-                "output_index": output_index,
-            }
-            if outputs is not None:
-                step["outputs"] = outputs
-            child_steps.append(step)
-
-        if bare in {"reduce", "sum", "mean"}:
-            if len(primal_inputs) != 1 or request.wrt_indices != (0,):
-                raise TesseraJitError("native reduction JVP requires one active input")
-            reduce_kind = str(source.kwargs.get("kind", bare))
-            if reduce_kind not in {"sum", "mean"}:
-                raise TesseraJitError(
-                    f"native reduction JVP requires sum or mean; got {reduce_kind!r}"
-                )
-            child = {
-                "target": target,
-                "compiler_path": f"{target}_reduce_compiled",
-                "executable": True,
-                "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
-                "execution_mode": execution_mode,
-                "arg_names": ["x"],
-                "ops": [{
-                    "op_name": f"tessera.{reduce_kind}",
-                    "result": source.result,
-                    "operands": ["x"],
-                    "kwargs": {
-                        key: value for key, value in source.kwargs.items()
-                        if key != "kind"
-                    },
-                }],
-            }
-            add_step("primal", child, ["primal_0"])
-            add_step("tangent", child, ["tangent_0"])
-            family = "reduce"
-        elif bare in {"fft", "ifft", "rfft", "irfft"}:
-            if len(primal_inputs) != 1 or request.wrt_indices != (0,):
-                raise TesseraJitError("native FFT JVP requires one active input")
-            from .scheduled_fft import lower_scheduled_fft
-
-            scheduled = lower_scheduled_fft(
-                target="x86" if target == "x86" else "rocm_gfx1151",
-                op_name=source.op_name,
-                input_shape=tuple(int(dim) for dim in primal_input.shape),
-                axis=int(source.kwargs.get("axis", -1)),
-                n=source.kwargs.get("n", source.kwargs.get("logical_length")),
-                normalization=str(source.kwargs.get("normalization", "backward")),
-                hermitian_weight=str(source.kwargs.get("hermitian_weight", "none")),
+        try:
+            family_plan = plan_native_jvp_family(
+                source=source,
+                primal_inputs=primal_inputs,
+                wrt_indices=request.wrt_indices,
+                target=target,
+                architecture=architecture,
+                execution_mode=execution_mode,
             )
-            child = {
-                "target": target,
-                "compiler_path": f"{target}_fft_compiled",
-                "executable": True,
-                "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
-                "execution_mode": execution_mode,
-                "arg_names": ["x"],
-                "scheduled_fft": scheduled.to_metadata(),
-            }
-            add_step("primal", child, ["primal_0"])
-            add_step("tangent", child, ["tangent_0"])
-            family = "spectral"
-        elif bare in {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
-            if not request.wrt_indices or 0 not in request.wrt_indices:
-                raise TesseraJitError("normalization JVP requires an active data input")
-            operand_names = [f"primal_{index}" for index in range(len(primal_inputs))]
-            child_arg_names = operand_names + [
-                f"tangent_{index}" for index in request.wrt_indices
-            ]
-            product = {
-                "target": target,
-                "compiler_path": f"{target}_norm_jvp_compiled",
-                "executable": True,
-                "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
-                "execution_mode": execution_mode,
-                "autodiff_phase": "forward",
-                "wrt_indices": list(request.wrt_indices),
-                "arg_names": child_arg_names,
-                "ops": [{"op_name": source.op_name, "result": source.result,
-                         "operands": operand_names, "kwargs": dict(source.kwargs)}],
-            }
-            add_step("normalization_product", product, child_arg_names,
-                     outputs=["primal", "tangent"])
-            family = "normalization"
-        elif bare in {"spectral_filter", "spectral_conv", "stft", "istft"}:
-            from .scheduled_spectral import lower_scheduled_spectral
-
-            if len(primal_inputs) != 2:
-                raise TesseraJitError(f"native {bare} JVP requires two operands")
-            if bare == "istft" and request.wrt_indices != (0,):
-                raise TesseraJitError(
-                    "native ISTFT JVP supports an active spectrum with a fixed "
-                    "window; window tangents fail closed"
-                )
-            scheduled_spectral = lower_scheduled_spectral(
-                target="x86" if target == "x86" else "rocm_gfx1151",
-                op_name=source.op_name,
-                input_shapes=tuple(
-                    tuple(int(dim) for dim in value.shape)
-                    for value in primal_inputs
-                ),
-                axis=int(source.kwargs.get("axis", -1)),
-                hop=source.kwargs.get("hop"),
-                normalization=str(source.kwargs.get("normalization", "backward")),
-            )
-            operand_names = ["primal_0", "primal_1"]
-            child_arg_names = operand_names + [
-                f"tangent_{index}" for index in request.wrt_indices
-            ]
-            product = {
-                "target": target,
-                "compiler_path": f"{target}_spectral_jvp_compiled",
-                "executable": True,
-                "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
-                "execution_mode": execution_mode,
-                "autodiff_phase": "forward",
-                "arg_names": child_arg_names,
-                "primal_names": operand_names,
-                "wrt_indices": list(request.wrt_indices),
-                "scheduled_spectral": scheduled_spectral.to_metadata(),
-            }
-            add_step("spectral_product", product, child_arg_names,
-                     outputs=["primal", "tangent"])
-            family = "spectral_compound"
-        else:
-            raise TesseraJitError(
-                f"no native {target} JVP package exists for {bare!r}; "
-                "the compiler IR transform remains available"
-            )
+        except ValueError as exc:
+            raise TesseraJitError(str(exc)) from exc
+        family = family_plan.family
 
         launch_names = tuple(f"primal_{index}" for index in range(len(primal_inputs))) + tuple(
             f"tangent_{index}" for index in request.wrt_indices
@@ -1103,15 +1021,16 @@ class JitFn:
             self._native_jvp_packages = package_cache
         package = package_cache.get(package_key)
         if package is None:
-            paired_ir = self.compiled_jvp_ir(*args, **kwargs)
+            paired_ir = self._compile_jvp_module(traced_module)
             package = build_native_jvp_artifact(
                 target=target,
                 architecture=architecture,
                 family=family,
+                source_graph_ir=traced_module.to_mlir(),
                 paired_jvp_ir=paired_ir,
                 wrt_indices=request.wrt_indices,
                 arg_names=launch_names,
-                steps=child_steps,
+                steps=family_plan.steps,
             )
             package_cache[package_key] = package
         result = launch(
@@ -1129,6 +1048,8 @@ class JitFn:
             "evidence_target": "x86_avx512" if target == "x86" else "rocm_gfx1151",
             "artifact_hash": package.artifact_hash,
             "paired_jvp_ir_digest": package.contract["paired_jvp_ir_digest"],
+            "source_graph_ir_digest": package.contract["source_graph_ir_digest"],
+            "frontend_authority": "tracer",
             "family": family,
         }
         primal, tangent = result["output"]

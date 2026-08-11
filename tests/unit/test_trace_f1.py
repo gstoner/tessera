@@ -21,6 +21,7 @@ from tessera.compiler.trace import (
     Tracer,
     register_shape_rule,
     run_traced,
+    to_graph_ir_module,
     to_graphfn,
     trace,
 )
@@ -45,6 +46,21 @@ def test_trace_records_op_list_by_running():
     tf = trace(f, np.zeros((2, 8), np.float32), np.zeros((8, 8), np.float32))
     assert [op.op_name for op in tf.body] == ["tessera.matmul", "tessera.silu"]
     assert len(tf.args) == 2 and tf.outputs == ["v1"]
+
+
+def test_trace_promotes_directly_to_canonical_graph_ir_authority():
+    def f(x, w):
+        return ts.ops.silu(ts.ops.matmul(x, w))
+
+    traced = trace(f, np.zeros((2, 8), np.float32), np.zeros((8, 8), np.float32))
+    module = to_graph_ir_module(traced, name="f", source_hash="a" * 64)
+    assert module.module_attrs["tessera.frontend.authority"] == '"tracer"'
+    assert module.functions[0].fn_attrs["tessera.frontend.authority"] == '"tracer"'
+    assert module.functions[0].return_values == ["%v1"]
+    assert [op.op_name for op in module.functions[0].body] == [
+        "tessera.matmul", "tessera.silu"
+    ]
+    assert module.verify().ok
 
 
 def test_trace_residual_cross_reference():
@@ -75,6 +91,32 @@ def test_trace_broadcast_add_shape():
 
     tf = trace(f, np.zeros((4, 8), np.float32), np.zeros((1, 8), np.float32))
     assert tf.body[-1].result_type == "tensor<4x8xf32>"
+
+
+def test_trace_lifts_tensor_keywords_in_signature_order():
+    def f(x, gamma, beta):
+        return ts.ops.layer_norm(x, beta=beta, gamma=gamma, eps=1e-5)
+
+    tf = trace(
+        f,
+        np.zeros((2, 8), np.float32),
+        np.ones((8,), np.float32),
+        np.zeros((8,), np.float32),
+    )
+    op = tf.body[-1]
+    assert op.operands == ["%a0", "%a1", "%a2"]
+    assert "gamma" not in op.kwargs and "beta" not in op.kwargs
+
+
+def test_trace_stamps_canonical_packed_spectral_identity_and_complex_dtype():
+    def f(x):
+        return ts.ops.rfft(x, axis=-1)
+
+    op = trace(f, np.zeros((2, 8), np.float32)).body[-1]
+    assert op.result_type == "tensor<2x5xcomplex<f32>>"
+    assert op.kwargs["spectrum_layout"] == "half_spectrum_nyquist_explicit"
+    assert op.kwargs["logical_length"] == 8
+    assert op.kwargs["normalization"] == "backward"
 
 
 def test_trace_non_tracer_positional_raises():

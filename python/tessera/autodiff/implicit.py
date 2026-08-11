@@ -15,11 +15,12 @@ no unrolling of the solver, and constant memory regardless of solver iterations
 (§10.4). The adjoint-state method (§10.5) is the same identity specialized to a
 constrained objective ``L(x*(w), w)`` with ``c(x*, w) = 0``.
 
-Both need a linear solve accessed only through matvecs. This module ships a
-matrix-free conjugate-gradient solver (Algorithm 8.1) for the SPD case and a
-dense fallback for the general case, matching the CG/GMRES vocabulary the
-compiler already names in ``compiler/solver_config.py`` (Decision #23: reference
-vocabulary, reimplemented here — no SciPy dependency).
+Both need a linear solve accessed only through matvecs. This module ships
+restarted GMRES for general square systems and conjugate gradient (Algorithm
+8.1) for the SPD case. A dense solve remains an explicit small-system oracle,
+not the default execution path. The implementation matches the CG/GMRES
+vocabulary the compiler names in ``compiler/solver_config.py`` without a SciPy
+dependency.
 
 This is the numpy reference lane, consistent with the rest of ``autodiff/``. It
 unblocks second-order optimizers (IHVP → Newton / natural gradient), energy /
@@ -30,6 +31,7 @@ fixed point before.
 from __future__ import annotations
 
 import functools
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Sequence
 
 import numpy as np
@@ -37,6 +39,9 @@ import numpy as np
 __all__ = [
     "TesseraImplicitDiffError",
     "cg_solve",
+    "gmres_solve",
+    "LinearSolveInfo",
+    "ResidualLinearization",
     "ihvp",
     "root_vjp",
     "root_jvp",
@@ -47,6 +52,155 @@ __all__ = [
 
 class TesseraImplicitDiffError(RuntimeError):
     """Raised on a non-convergent solve or a malformed implicit-diff request."""
+
+
+@dataclass(frozen=True)
+class LinearSolveInfo:
+    """Measured convergence record for a matrix-free linear solve."""
+
+    algorithm: str
+    iterations: int
+    restarts: int
+    matvecs: int
+    residual_norm: float
+    rhs_norm: float
+    converged: bool
+    product_source: str = "numerical_oracle"
+
+
+@dataclass(frozen=True)
+class ResidualLinearization:
+    """Exact matrix-free residual products supplied by compiler-owned AD.
+
+    The four actions are deliberately separate: an implementation may lower
+    forward and transposed products to different target packages, and no dense
+    Jacobian is implied.  ``root_jvp``/``root_vjp`` retain finite differences
+    only as the explicit NumPy oracle when this carrier is absent.
+    """
+
+    residual_shape: tuple[int, ...]
+    solution_jvp: Callable[[np.ndarray], np.ndarray]
+    solution_vjp: Callable[[np.ndarray], np.ndarray]
+    parameter_jvp: Callable[[int, np.ndarray], np.ndarray]
+    parameter_vjp: Callable[[int, np.ndarray], np.ndarray]
+    provenance: str = "compiler_graph_products"
+
+
+def gmres_solve(
+    matvec: Callable[[np.ndarray], np.ndarray],
+    b: np.ndarray,
+    *,
+    x0: np.ndarray | None = None,
+    tol: float = 1e-8,
+    maxiter: int | None = None,
+    restart: int | None = None,
+    return_info: bool = False,
+) -> np.ndarray | tuple[np.ndarray, LinearSolveInfo]:
+    """Solve a general square linear system with restarted matrix-free GMRES.
+
+    Arnoldi uses modified Gram--Schmidt plus one selective reorthogonalization
+    pass. Convergence is decided from the *true* residual after each candidate,
+    not only the Hessenberg least-squares estimate. This keeps the reference
+    reliable for non-normal residual Jacobians and exposes the work counters
+    needed by AD-RESIDUAL-EVAL-1.
+    """
+
+    rhs = np.asarray(b, dtype=np.float64)
+    shape = rhs.shape
+    flat_rhs = rhs.reshape(-1)
+    n = flat_rhs.size
+    if n == 0:
+        raise TesseraImplicitDiffError("GMRES requires a non-empty right-hand side")
+    if tol <= 0.0:
+        raise ValueError("GMRES tolerance must be positive")
+    limit = int(maxiter) if maxiter is not None else 10 * n
+    width = int(restart) if restart is not None else min(32, n)
+    if limit <= 0 or width <= 0:
+        raise ValueError("GMRES maxiter and restart must be positive")
+    width = min(width, n, limit)
+    x = np.zeros(n, dtype=np.float64) if x0 is None else np.asarray(x0, dtype=np.float64).reshape(-1).copy()
+    if x.size != n:
+        raise TesseraImplicitDiffError("GMRES x0 shape does not match b")
+
+    matvecs = 0
+
+    def apply(v: np.ndarray) -> np.ndarray:
+        nonlocal matvecs
+        out = np.asarray(matvec(v.reshape(shape)), dtype=np.float64).reshape(-1)
+        matvecs += 1
+        if out.size != n:
+            raise TesseraImplicitDiffError(f"GMRES matvec returned {out.size} values, expected {n}")
+        if not np.all(np.isfinite(out)):
+            raise TesseraImplicitDiffError("GMRES matvec produced non-finite values")
+        return out
+
+    rhs_norm = float(np.linalg.norm(flat_rhs))
+    threshold = tol * max(1.0, rhs_norm)
+    iterations = 0
+    restarts = 0
+    residual = flat_rhs - apply(x)
+    residual_norm = float(np.linalg.norm(residual))
+    if residual_norm <= threshold:
+        info = LinearSolveInfo("gmres", 0, 0, matvecs, residual_norm, rhs_norm, True)
+        result = x.reshape(shape)
+        return (result, info) if return_info else result
+
+    while iterations < limit:
+        beta = float(np.linalg.norm(residual))
+        basis = np.zeros((width + 1, n), dtype=np.float64)
+        hessenberg = np.zeros((width + 1, width), dtype=np.float64)
+        basis[0] = residual / beta
+        cycle_x = x.copy()
+        cycle_width = min(width, limit - iterations)
+        for column in range(cycle_width):
+            w = apply(basis[column])
+            # Modified Gram--Schmidt.
+            for row in range(column + 1):
+                coeff = float(np.dot(basis[row], w))
+                hessenberg[row, column] += coeff
+                w -= coeff * basis[row]
+            # Daniel--Gragg--Kaufman--Stewart-style reorthogonalization:
+            # a second MGS pass is cheap at these reference sizes and prevents
+            # loss of orthogonality from producing optimistic residuals.
+            for row in range(column + 1):
+                correction = float(np.dot(basis[row], w))
+                hessenberg[row, column] += correction
+                w -= correction * basis[row]
+            h_next = float(np.linalg.norm(w))
+            hessenberg[column + 1, column] = h_next
+            if h_next > np.finfo(np.float64).eps:
+                basis[column + 1] = w / h_next
+
+            e1 = np.zeros(column + 2, dtype=np.float64)
+            e1[0] = beta
+            least_squares, *_ = np.linalg.lstsq(hessenberg[: column + 2, : column + 1], e1, rcond=None)
+            candidate = cycle_x + basis[: column + 1].T @ least_squares
+            true_residual = flat_rhs - apply(candidate)
+            iterations += 1
+            residual_norm = float(np.linalg.norm(true_residual))
+            if residual_norm <= threshold:
+                info = LinearSolveInfo(
+                    "gmres",
+                    iterations,
+                    restarts,
+                    matvecs,
+                    residual_norm,
+                    rhs_norm,
+                    True,
+                )
+                result = candidate.reshape(shape)
+                return (result, info) if return_info else result
+            if h_next <= np.finfo(np.float64).eps:
+                raise TesseraImplicitDiffError("GMRES Arnoldi breakdown before reaching the true-residual tolerance")
+            x = candidate
+            residual = true_residual
+        restarts += 1
+
+    info = LinearSolveInfo("gmres", iterations, restarts, matvecs, residual_norm, rhs_norm, False)
+    raise TesseraImplicitDiffError(
+        f"GMRES did not converge to tol={tol} in {limit} iterations "
+        f"(true residual {info.residual_norm:.3e}, {matvecs} matvecs)"
+    )
 
 
 # ── Matrix-free conjugate gradient (Blondel & Roulet Algorithm 8.1) ──────────
@@ -68,9 +222,7 @@ def cg_solve(
     n = b.size
     shape = b.shape
     x = np.zeros_like(b) if x0 is None else np.asarray(x0, dtype=np.float64).copy()
-    r: np.ndarray = np.asarray(
-        b - np.asarray(matvec(x), dtype=np.float64), dtype=np.float64
-    )
+    r: np.ndarray = np.asarray(b - np.asarray(matvec(x), dtype=np.float64), dtype=np.float64)
     p: np.ndarray = np.array(r, dtype=np.float64, copy=True)
     rs_old: float = float(np.sum(r * r))
     if rs_old <= tol * tol:
@@ -80,9 +232,7 @@ def cg_solve(
         Ap = np.asarray(matvec(p), dtype=np.float64)
         pAp = float(np.vdot(p, Ap).real)
         if pAp == 0.0:
-            raise TesseraImplicitDiffError(
-                "CG breakdown: pᵀAp = 0 (A may not be positive-definite)"
-            )
+            raise TesseraImplicitDiffError("CG breakdown: pᵀAp = 0 (A may not be positive-definite)")
         alpha = rs_old / pAp
         x = x + alpha * p
         r = r - alpha * Ap
@@ -92,8 +242,7 @@ def cg_solve(
         p = r + (rs_new / rs_old) * p
         rs_old = rs_new
     raise TesseraImplicitDiffError(
-        f"CG did not converge to tol={tol} in {limit} iterations "
-        f"(residual {np.sqrt(rs_old):.3e})"
+        f"CG did not converge to tol={tol} in {limit} iterations (residual {np.sqrt(rs_old):.3e})"
     )
 
 
@@ -155,20 +304,23 @@ def _partial_jacobian_matvecs(
         v = np.asarray(v, dtype=np.float64).reshape(a.shape)
         return ((_perturbed(eps * v) - _perturbed(-eps * v)) / (2 * eps)).reshape(-1)
 
-    # Jᵀ via the definition ⟨J v, r⟩ = ⟨v, Jᵀ r⟩: build columns only when needed.
-    # For the modest sizes of the reference lane, materialize J once for rmatvec.
+    # Jᵀ via the definition ⟨J v, r⟩ = ⟨v, Jᵀ r⟩. Evaluate one basis column at
+    # a time so the general matrix-free path remains O(n) memory; callers that
+    # explicitly request the dense oracle materialize it themselves.
     n_in = a.size
     n_out = int(np.prod(out_shape)) if out_shape else 1
 
     def rmatvec(r: np.ndarray) -> np.ndarray:
         r = np.asarray(r, dtype=np.float64).reshape(-1)
-        cols = np.empty((n_out, n_in), dtype=np.float64)
+        if r.size != n_out:
+            raise TesseraImplicitDiffError(f"residual cotangent has {r.size} values, expected {n_out}")
+        result = np.empty(n_in, dtype=np.float64)
         basis = np.zeros(n_in, dtype=np.float64)
         for j in range(n_in):
             basis[j] = 1.0
-            cols[:, j] = matvec(basis)
+            result[j] = float(np.dot(matvec(basis), r))
             basis[j] = 0.0
-        return cols.T @ r  # Jᵀ r
+        return result
 
     return matvec, rmatvec, out_shape, a.shape
 
@@ -182,42 +334,72 @@ def root_vjp(
     *,
     argnums: int | Sequence[int] = 0,
     eps: float = 1e-6,
+    linear_solver: str = "gmres",
+    tol: float = 1e-8,
+    maxiter: int | None = None,
+    restart: int | None = None,
+    linearization: ResidualLinearization | None = None,
+    return_solve_info: bool = False,
 ) -> Any:
     """VJP of an implicit root ``x*(params)`` with ``F(x*, params) = 0``.
 
     Given the solution ``x*`` and an output cotangent ``u = ∂L/∂x*``, returns
     ``∂L/∂params[argnum]`` for each requested ``argnum`` (a single array if
     ``argnums`` is an int). Implements ``Aᵀ r = u`` then ``-Bᵀ r`` where
-    ``A = ∂_x F``, ``B = ∂_param F`` (§10.4). The solve is dense here (robust for
-    the reference lane); ``A`` need not be symmetric.
+    ``A = ∂_x F``, ``B = ∂_param F`` (§10.4). The default restarted GMRES solve
+    is matrix-free and ``A`` need not be symmetric; ``linear_solver="dense"``
+    is an explicit small-system oracle.
     """
     x = np.asarray(solution, dtype=np.float64)
     full_args = [x, *(np.asarray(p, dtype=np.float64) for p in params)]
     u = np.asarray(cotangent, dtype=np.float64).reshape(-1)
 
-    # A = ∂₁F(x*, params): dense Jacobian in x (arg 0 of F).
-    A_matvec, _A_rmatvec, out_shape, _ = _partial_jacobian_matvecs(
-        F, full_args, 0, eps=eps
-    )
-    n = x.size
-    A = np.empty((int(np.prod(out_shape)) if out_shape else 1, n), dtype=np.float64)
-    basis = np.zeros(n, dtype=np.float64)
-    for j in range(n):
-        basis[j] = 1.0
-        A[:, j] = A_matvec(basis)
-        basis[j] = 0.0
-    if A.shape[0] != A.shape[1]:
-        raise TesseraImplicitDiffError(
-            f"root_vjp expects square ∂_xF (got {A.shape}); F must map to the "
-            f"solution space"
+    # A = ∂₁F(x*, params), exposed as matrix-free forward/transposed actions.
+    if linearization is None:
+        A_matvec, A_rmatvec, out_shape, _ = _partial_jacobian_matvecs(
+            F, full_args, 0, eps=eps
         )
-    try:
-        r = np.linalg.solve(A.T, u)
-    except np.linalg.LinAlgError as exc:
+        product_source = "numerical_oracle"
+    else:
+        A_matvec = linearization.solution_jvp
+        A_rmatvec = linearization.solution_vjp
+        out_shape = linearization.residual_shape
+        product_source = linearization.provenance
+    n = x.size
+    n_out = int(np.prod(out_shape)) if out_shape else 1
+    if n_out != n:
         raise TesseraImplicitDiffError(
-            "∂_xF is singular at the solution; the implicit function theorem "
-            "does not apply here"
-        ) from exc
+            f"root_vjp expects square ∂_xF (got {(n_out, n)}); F must map to the solution space"
+        )
+    if linear_solver == "gmres":
+        r, solve_info = gmres_solve(
+            A_rmatvec,
+            u,
+            tol=tol,
+            maxiter=maxiter,
+            restart=restart,
+            return_info=True,
+        )
+    elif linear_solver == "dense":
+        A = np.column_stack([A_matvec(np.eye(n, dtype=np.float64)[j]) for j in range(n)])
+        try:
+            r = np.linalg.solve(A.T, u)
+        except np.linalg.LinAlgError as exc:
+            raise TesseraImplicitDiffError(
+                "∂_xF is singular at the solution; the implicit function theorem does not apply here"
+            ) from exc
+        true_residual = A.T @ r - u
+        solve_info = LinearSolveInfo(
+            "dense",
+            1,
+            0,
+            n,
+            float(np.linalg.norm(true_residual)),
+            float(np.linalg.norm(u)),
+            True,
+        )
+    else:
+        raise ValueError("linear_solver must be 'gmres' or 'dense'")
 
     if isinstance(argnums, int):
         single = True
@@ -228,12 +410,19 @@ def root_vjp(
     grads = []
     for an in idxs:
         # B = ∂_{param an} F ; param an is F-argument (an + 1).
-        _B_matvec, B_rmatvec, _os, param_shape = _partial_jacobian_matvecs(
-            F, full_args, an + 1, eps=eps
-        )
-        grad = -B_rmatvec(r).reshape(param_shape)
+        if linearization is None:
+            _B_matvec, B_rmatvec, _os, param_shape = _partial_jacobian_matvecs(
+                F, full_args, an + 1, eps=eps
+            )
+            product = B_rmatvec(r)
+        else:
+            param_shape = full_args[an + 1].shape
+            product = linearization.parameter_vjp(an, r)
+        grad = -np.asarray(product, dtype=np.float64).reshape(param_shape)
         grads.append(grad)
-    return grads[0] if single else tuple(grads)
+    solve_info = replace(solve_info, product_source=product_source)
+    result = grads[0] if single else tuple(grads)
+    return (result, solve_info) if return_solve_info else result
 
 
 def root_jvp(
@@ -243,7 +432,13 @@ def root_jvp(
     tangents: Sequence[np.ndarray | None],
     *,
     eps: float = 1e-6,
-) -> np.ndarray:
+    linear_solver: str = "gmres",
+    tol: float = 1e-8,
+    maxiter: int | None = None,
+    restart: int | None = None,
+    linearization: ResidualLinearization | None = None,
+    return_solve_info: bool = False,
+) -> np.ndarray | tuple[np.ndarray, LinearSolveInfo]:
     """JVP of an implicit root: solve ``A t = -Σ Bᵢ vᵢ`` (§10.4).
 
     ``tangents`` are the input directions for each param (``None`` to skip).
@@ -251,32 +446,64 @@ def root_jvp(
     """
     x = np.asarray(solution, dtype=np.float64)
     full_args = [x, *(np.asarray(p, dtype=np.float64) for p in params)]
-    A_matvec, _A_rmatvec, out_shape, _ = _partial_jacobian_matvecs(
-        F, full_args, 0, eps=eps
-    )
+    if linearization is None:
+        A_matvec, _A_rmatvec, out_shape, _ = _partial_jacobian_matvecs(
+            F, full_args, 0, eps=eps
+        )
+        product_source = "numerical_oracle"
+    else:
+        A_matvec = linearization.solution_jvp
+        out_shape = linearization.residual_shape
+        product_source = linearization.provenance
     n = x.size
-    A = np.empty((int(np.prod(out_shape)) if out_shape else 1, n), dtype=np.float64)
-    basis = np.zeros(n, dtype=np.float64)
-    for j in range(n):
-        basis[j] = 1.0
-        A[:, j] = A_matvec(basis)
-        basis[j] = 0.0
+    n_out = int(np.prod(out_shape)) if out_shape else 1
+    if n_out != n:
+        raise TesseraImplicitDiffError(f"root_jvp expects square ∂_xF (got {(n_out, n)})")
 
     rhs = np.zeros(n, dtype=np.float64)
     for i, v in enumerate(tangents):
         if v is None:
             continue
-        Bi_matvec, _rm, _os, _ps = _partial_jacobian_matvecs(
-            F, full_args, i + 1, eps=eps
+        if linearization is None:
+            Bi_matvec, _rm, _os, _ps = _partial_jacobian_matvecs(
+                F, full_args, i + 1, eps=eps
+            )
+            product = Bi_matvec(np.asarray(v, dtype=np.float64))
+        else:
+            product = linearization.parameter_jvp(
+                i, np.asarray(v, dtype=np.float64)
+            )
+        rhs = rhs - np.asarray(product, dtype=np.float64).reshape(-1)
+    if linear_solver == "gmres":
+        t, solve_info = gmres_solve(
+            A_matvec,
+            rhs,
+            tol=tol,
+            maxiter=maxiter,
+            restart=restart,
+            return_info=True,
         )
-        rhs = rhs - Bi_matvec(np.asarray(v, dtype=np.float64))
-    try:
-        t = np.linalg.solve(A, rhs)
-    except np.linalg.LinAlgError as exc:
-        raise TesseraImplicitDiffError(
-            "∂_xF is singular at the solution; IFT does not apply"
-        ) from exc
-    return t.reshape(x.shape)
+    elif linear_solver == "dense":
+        A = np.column_stack([A_matvec(np.eye(n, dtype=np.float64)[j]) for j in range(n)])
+        try:
+            t = np.linalg.solve(A, rhs)
+        except np.linalg.LinAlgError as exc:
+            raise TesseraImplicitDiffError("∂_xF is singular at the solution; IFT does not apply") from exc
+        true_residual = A @ t - rhs
+        solve_info = LinearSolveInfo(
+            "dense",
+            1,
+            0,
+            n,
+            float(np.linalg.norm(true_residual)),
+            float(np.linalg.norm(rhs)),
+            True,
+        )
+    else:
+        raise ValueError("linear_solver must be 'gmres' or 'dense'")
+    solve_info = replace(solve_info, product_source=product_source)
+    result = t.reshape(x.shape)
+    return (result, solve_info) if return_solve_info else result
 
 
 def custom_root(
@@ -308,9 +535,7 @@ def custom_root(
         selected_argnums = (argnums,) if isinstance(argnums, int) else tuple(argnums)
 
         def vjp(solution, params, cotangent):
-            return root_vjp(
-                optimality, solution, params, cotangent, argnums=argnums, eps=eps
-            )
+            return root_vjp(optimality, solution, params, cotangent, argnums=argnums, eps=eps)
 
         def jvp(solution, params, tangents):
             return root_jvp(optimality, solution, params, tangents, eps=eps)
@@ -342,16 +567,13 @@ def custom_root(
                     eps=eps,
                 )
                 return tuple(
-                    selected_grads[selected_argnums.index(i)]
-                    if i in selected_argnums else None
+                    selected_grads[selected_argnums.index(i)] if i in selected_argnums else None
                     for i in range(len(forward_params))
                 )
 
             from .tape import record_custom_vjp_call
 
-            return record_custom_vjp_call(
-                op_name, forward, implicit_vjp, *params
-            )
+            return record_custom_vjp_call(op_name, forward, implicit_vjp, *params)
 
         wrapped.vjp = vjp  # type: ignore[attr-defined]
         wrapped.jvp = jvp  # type: ignore[attr-defined]
@@ -369,7 +591,11 @@ def adjoint_state_grad(
     w: np.ndarray,
     *,
     eps: float = 1e-6,
-) -> np.ndarray:
+    tol: float = 1e-8,
+    maxiter: int | None = None,
+    restart: int | None = None,
+    return_solve_info: bool = False,
+) -> np.ndarray | tuple[np.ndarray, LinearSolveInfo]:
     """Gradient of ``L(s*(w), w)`` s.t. ``c(s*(w), w) = 0`` (adjoint state).
 
     Solves the adjoint system ``∂₁cᵀ r = -∇₁L`` then returns
@@ -385,8 +611,10 @@ def adjoint_state_grad(
         it = np.nditer(arr, flags=["multi_index"])
         while not it.finished:
             idx = it.multi_index
-            hi = arr.copy(); hi[idx] += eps
-            lo = arr.copy(); lo[idx] -= eps
+            hi = arr.copy()
+            hi[idx] += eps
+            lo = arr.copy()
+            lo[idx] -= eps
             if which == 0:
                 g[idx] = (f(hi, other) - f(lo, other)) / (2 * eps)
             else:
@@ -397,24 +625,21 @@ def adjoint_state_grad(
     grad1_L = _grad_fd(L, s, w, 0)
     grad2_L = _grad_fd(L, w, s, 1)
 
-    # ∂₁c and ∂₂c as dense Jacobians via finite differences.
-    _m1, rmat1, _os1, _ps1 = _partial_jacobian_matvecs(c, [s, w], 0, eps=eps)
+    # ∂₁cᵀ and ∂₂cᵀ stay matrix-free. The residual-state Jacobian must be
+    # square for the IFT adjoint system; arbitrary nonlinear residual bodies
+    # are supported through their products rather than dense materialization.
+    _m1, rmat1, out_shape, _ps1 = _partial_jacobian_matvecs(c, [s, w], 0, eps=eps)
     _m2, rmat2, _os2, _ps2 = _partial_jacobian_matvecs(c, [s, w], 1, eps=eps)
-
-    # Build ∂₁c to solve the (small) adjoint system directly.
-    n = s.size
-    c0 = np.asarray(c(s, w), dtype=np.float64)
-    m = c0.size
-    dcds = np.empty((m, n), dtype=np.float64)
-    basis = np.zeros(n, dtype=np.float64)
-    for j in range(n):
-        basis[j] = 1.0
-        dcds[:, j] = _m1(basis)
-        basis[j] = 0.0
-    try:
-        r = np.linalg.solve(dcds.T, -grad1_L.reshape(-1))
-    except np.linalg.LinAlgError as exc:
-        raise TesseraImplicitDiffError(
-            "∂₁c is singular at the state; adjoint system unsolvable"
-        ) from exc
-    return (grad2_L.reshape(-1) + rmat2(r)).reshape(w.shape)
+    residual_size = int(np.prod(out_shape)) if out_shape else 1
+    if residual_size != s.size:
+        raise TesseraImplicitDiffError(f"adjoint_state_grad expects square ∂₁c (got {(residual_size, s.size)})")
+    r, solve_info = gmres_solve(
+        rmat1,
+        -grad1_L.reshape(-1),
+        tol=tol,
+        maxiter=maxiter,
+        restart=restart,
+        return_info=True,
+    )
+    result = (grad2_L.reshape(-1) + rmat2(r)).reshape(w.shape)
+    return (result, solve_info) if return_solve_info else result

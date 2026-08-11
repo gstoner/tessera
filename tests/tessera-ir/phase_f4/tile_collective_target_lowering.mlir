@@ -2,7 +2,7 @@
 
 module {
   func.func @collectives(%x8: tensor<8xf32>, %x4: tensor<4xf32>)
-      -> (tensor<8xf32>, tensor<4xf32>, tensor<8xf32>, tensor<8xf32>) {
+      -> (tensor<8xf32>, tensor<4xf32>, tensor<8xf32>, tensor<8xf32>, tensor<8xf32>) {
     %r = "tile.all_reduce"(%x8) {
       mesh_axis = "dp", tensor_axis = 0 : i64, reduction = "sum",
       world_size = 2 : i64
@@ -19,8 +19,12 @@ module {
       mesh_axis = "dp", tensor_axis = 0 : i64, reduction = "none",
       world_size = 2 : i64
     } : (tensor<8xf32>) -> tensor<8xf32>
-    return %r, %s, %g, %a : tensor<8xf32>, tensor<4xf32>,
-                                 tensor<8xf32>, tensor<8xf32>
+    %p = "tile.collective_permute"(%x8) {
+      mesh_axis = "dp", source_peers = array<i64: 0, 1>,
+      target_peers = array<i64: 1, 0>, world_size = 2 : i64
+    } : (tensor<8xf32>) -> tensor<8xf32>
+    return %r, %s, %g, %a, %p : tensor<8xf32>, tensor<4xf32>,
+                                     tensor<8xf32>, tensor<8xf32>, tensor<8xf32>
   }
 }
 
@@ -39,6 +43,10 @@ module {
 // CHECK: %[[G:.*]] = tessera_collective.await %[[G_FUTURE]]
 // CHECK: %[[A_FUTURE:.*]] = tessera_collective.all_to_all
 // CHECK: %[[A:.*]] = tessera_collective.await %[[A_FUTURE]]
+// CHECK: %[[P_FUTURE:.*]] = tessera_collective.collective_permute
+// CHECK-SAME: source_peers = array<i64: 0, 1>
+// CHECK-SAME: target_peers = array<i64: 1, 0>
+// CHECK: %[[P:.*]] = tessera_collective.await %[[P_FUTURE]]
 // CHECK-NOT: tile.all_
 // CHECK-NOT: tile.reduce_scatter
-// CHECK: return %[[R]], %[[S]], %[[G]], %[[A]]
+// CHECK: return %[[R]], %[[S]], %[[G]], %[[A]], %[[P]]

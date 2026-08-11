@@ -108,10 +108,12 @@ Three consequences follow directly:
 3. **Therefore `grad(grad(f))` cannot work.** Higher-order differentiation is
    blocked by the data structure, not by missing rules.
 
-That is why `hvp` is finite differences (§B4) despite a 3.8k-line JVP engine
-sitting next to it. The rules exist; the substrate cannot compose them.
+That is why `hvp` remains finite differences (§B4) even though public `jvp` and
+`jacfwd` now execute registered tangent rules exactly. First-order forward mode
+is no longer the blocker; the identity-keyed reverse tape still cannot expose a
+differentiable gradient program for forward-over-reverse composition.
 
-### A3. The compiler's reverse pass rejects active control flow — by design
+### A3. Bounded SCF reverse and forward mode exist; general regions fail closed
 
 [`AutodiffPass.cpp`](../../../src/transforms/lib/AutodiffPass.cpp):
 
@@ -122,11 +124,13 @@ if (op->getNumRegions() != 0) {
   signalPassFailure();
 ```
 
-Both reverse passes compute the backward-reachable active cone first. Inactive
-nested-region producers are legal and are neither cloned nor differentiated;
-an active nested region still fails closed. Consequently `scf.for`, `scf.if`,
-`scf.while`, and Tessera's own `tessera.control_{for,while,scan}` remain
-undifferentiable when they lie on the gradient path.
+Both reverse passes compute the backward-reachable active cone first. The paired
+pass now delegates active `scf.if`, positive-step counted `scf.for`, and the
+tracer's canonical bounded `scf.while` to `RegionAdjointInterface`. It returns
+cotangents for implicit captures, reverses loop order, and replays pure primal
+prefixes under the current recompute-all policy. Noncanonical while forms,
+effectful replay, multi-block regions, and `tessera.control_scan` remain
+fail-closed; inactive regions are still pruned.
 
 The comment is honest about why — reverse-iterating a flat nested walk would
 interleave parent and child adjoints — and the restriction was correct as a
@@ -160,9 +164,10 @@ matrix-free solver product pass natively on AVX-512 and gfx1151.
 The x86 result is WSL correctness rather than a clean timing packet;
 gfx1200/gfx1250 remain fail-closed. Native collective product execution is
 gated to a live multi-rank NCCL/RCCL adapter; its hardware packet is open.
-Active structured regions, broader spectral/solver products, Apple/CUDA,
-compiler `jacfwd`, exact forward-over-reverse HVP, and Taylor/jet composition
-remain open.
+Bounded `scf.if`/positive-step `scf.for`/canonical `scf.while` forward products
+and exact public `jacfwd` are now live. Broader spectral/solver products,
+general or effectful regions, Apple/CUDA packages, exact forward-over-reverse
+HVP, and Taylor/jet composition remain open.
 
 ### A5. Backward SSA activity is implemented; region and memory activity remain
 
@@ -179,11 +184,10 @@ over differentiating unoptimized IR on ADBench, and Enzyme "allocates memory to
 store only the values needed by the reverse pass."
 
 This is a real compiler activity analysis, but it is narrower than Enzyme's
-whole-program memory/alias activity. Tessera still does not differentiate an
-active region, propagate activity through region interfaces, or exploit
-read/write/reduce privileges for memory activity. The effect lattice, static
-shapes, and declared dtypes make that broader analysis a credible next step;
-they no longer justify calling activity entirely absent.
+whole-program memory/alias activity. Active structured operations now propagate
+activity to explicit operands and implicit captures, while their interface owns
+internal block activity. Tessera still does not exploit read/write/reduce
+privileges for whole-program memory activity.
 
 ### A6. The measured residual-policy boundary exists; complete family packets remain open
 
@@ -399,15 +403,15 @@ not ecosystem packages or a performance comparison.
 | Capability | Tessera | JAX | Enzyme / EnzymeMLIR | LAGrad |
 |---|---|---|---|---|
 | Reverse mode, straight-line | ✅ bounded: 51 native IR adjoints; 36 CPU-oracle and 29 exact-target proven | ✅ | ✅ | ✅ |
-| Reverse mode through structured control flow | ❌ active regions fail closed; inactive regions are pruned (A3) | partial — `cond`/`scan` and static loops; `while_loop` is forward-only | ✅ | ✅ stated scope |
-| Forward mode in the compiler | partial — public paired Graph JVP ABI, 35 native tangent families, and native x86/gfx1151 products for normalization, spectral, and diagonal solver families; regions, higher-order composition, broader packages, and native collective evidence remain open | ✅ | ✅ | partial |
+| Reverse mode through structured control flow | partial — paired reverse supports single-block `scf.if`, counted `scf.for`, and canonical bounded `scf.while`; general/effectful regions fail closed (A3) | partial — `cond`/`scan` and static loops; `while_loop` is forward-only | ✅ | ✅ stated scope |
+| Forward mode in the compiler | partial — public paired Graph JVP ABI, exact `jacfwd`, 35 native tangent families, bounded `if`/`for`/`while`, and native x86/gfx1151 products for normalization, spectral, and diagonal solver families; general regions, higher-order composition, broader packages, and native collective evidence remain open | ✅ | ✅ | partial |
 | Higher-order (`grad∘grad`) | ❌ structurally blocked (A2) | ✅ | ✅ | — |
 | Exact HVP | ❌ finite differences (B4) | ✅ fwd-over-rev | ✅ | — |
 | `vmap` as a transform | ❌ Python loop (B3) | ✅ | n/a | n/a |
 | Activity analysis | partial — backward SSA/effect activity complete; region/memory activity open (A5) | partial | ✅ core analysis | ✅ static analysis |
 | AD after optimization | partial — optimized Graph IR only | partial — AD on staged JAXPR, XLA downstream | ✅ (4.5× geomean) | ✅ |
 | Residual policy, per-target measured | partial — exact-device selector boundary landed; family packets open (A6) | policy-driven checkpointing, not measured selection | static analysis, not measured selection | partial static |
-| Revolve / binomial checkpointing | partial — measured-work candidates only; no loop execution (B6) | manual `checkpoint`/`remat`; no automatic Revolve selector | partial | — |
+| Revolve / binomial checkpointing | partial — counted-region SAVE/RECOMPUTE/HYBRID candidates execute with measured work; selected plans are not yet lowered into MLIR (B6) | manual `checkpoint`/`remat`; no automatic Revolve selector | partial | — |
 | Sparsity detection + coloring | ❌ (B5) | ❌ | ❌ | partial (static) |
 | Collective adjoints as IR ops | partial — four typed cross-IR contracts; native multi-rank proof open (B7) | ✅ primitive transpose rules | not established in reviewed core | not established in reviewed core |
 | Manifold / geometric AD | partial — Python oracle, no general compiler tangent transform | not a core JAX facility | not established in reviewed core | not established in reviewed core |
@@ -415,11 +419,12 @@ not ecosystem packages or a performance comparison.
 
 The defensible Tessera distinction is its per-target backward proof discipline
 and the full cross-IR identity carried by collective adjoints—not the mere
-existence of collective transposes. Five capabilities remain absent: active
-structured-control differentiation, higher-order composition, exact HVP,
-transformed `vmap`, and sparsity detection/coloring. General compiler forward
-mode, activity, residual selection, and Treeverse are partial foundations with
-explicit coverage or execution gaps rather than absent capabilities.
+existence of collective transposes. Four capabilities remain absent:
+higher-order composition, exact HVP, transformed `vmap`, and sparsity
+detection/coloring. Structured-control differentiation, general compiler
+forward mode, activity, residual selection, and Treeverse are partial
+foundations with explicit coverage or execution gaps rather than absent
+capabilities.
 
 ---
 
@@ -533,42 +538,43 @@ packets cover sum, non-affine RMSNorm, and packed RFFT.
 
 Still required for D2 closure: broader compound spectral and solver families,
 native collective, loss, and optimizer products; direct oracle rows for every
-advertised family; region tangents; Apple/CUDA consumption; and clean target
-performance evidence. Forward
-mode needs no reverse tape or residual policy, but it does require activity and
-effect legality once it crosses regions or memory.
+advertised family; general/effectful region tangents; Apple/CUDA consumption;
+and clean target performance evidence. Forward mode needs no reverse tape or
+residual policy, but it does require activity and effect legality once it
+crosses regions or memory.
 
-Immediately unlocks: compiler `jacfwd`, exact HVP via forward-over-reverse,
-tangent-space ops for the [manifold work](RIEMANNIAN_OT_PLAN.md), and the
-substrate for D6.
+Already unlocked: exact compiler-owned public `jacfwd`. The remaining closure
+unlocks exact HVP via forward-over-reverse, tangent-space ops for the
+[manifold work](RIEMANNIAN_OT_PLAN.md), and the substrate for D6.
 
 Maps to: P5 (family expansion), running in parallel.
 
-### D3 — Activity analysis foundation complete; region/memory extension open
+### D3 — Activity and structured-region propagation complete; memory extension open
 
 The landed backward SSA analysis computes the active cone from seeded outputs,
 stamps activity, skips inactive adjoints, and enforces registered stochastic
-effects. The remaining extension is an `ActivityInterface` over region
-boundaries, aliasing, and read/write/reduce privileges so active structured
-control and memory effects can be differentiated rather than rejected.
+effects. Structured operations propagate activity through explicit operands
+and implicit captures into `RegionAdjointInterface`. The remaining extension is
+whole-program memory activity over aliasing and read/write/reduce privileges.
 
 This is where the Enzyme-class speedup lives, and where Tessera's extra
 information (effects, privileges, static shapes) should let it do better than a
 system working on LLVM IR.
 
-The original exit criterion—an inactive region whose adjoint is **not emitted**,
-checked with `CHECK-NOT`—is complete. The next exit criterion is an active
-bounded region with a value-producing adjoint and effect-safe residual contract.
+The original inactive-region criterion and the active bounded-region structural
+criterion are complete. The next exit criterion is execution of the emitted
+region backward with numerical oracle agreement and a selected residual policy.
 
 Maps to: P2 (foundation complete) and D4 (region extension).
 
 ### D4 — Structured control-flow adjoints  *(~6 weeks — hardest, highest value)*
 
-`RegionAdjointInterface` and reverse-mode over `scf.for` / `scf.if` / `scf.while`
-and `tessera.control_{for,while,scan}`. The standard construction: reverse a
-counted loop by running the adjoint loop backward over a saved or recomputed
-trajectory; reverse `if` by taping the predicate; reverse `while` by taping the
-trip count.
+`RegionAdjointInterface` now implements reverse mode over single-block
+`scf.for` / `scf.if` / canonical bounded `scf.while`. The current construction
+recomputes pure prefixes, reuses the executed branch predicate, and carries the
+actual while trip count. Remaining work is native/CPU numerical execution,
+measured checkpoint-plan lowering, multi-block regions, and
+`tessera.control_scan`.
 
 Everything with a loop is blocked on this: SSM/linear-attention scans, diffusion
 samplers, solver iterations, the EBM Langevin loop, the RNOT `c`-transform. It is
@@ -641,11 +647,23 @@ Maps to: new capability.
 
 The shared IFT body landed on 2026-08-08: registered residual, matrix-free
 linear-solve, residual-JVP, and residual-adjoint values replace annotations.
-The first bounded physical consumer now carries the diagonal-sqrt residual
-through content-addressed Schedule→Tile artifacts into AVX-512 and gfx1151
-packages, with compiled numerical packets. The remaining shared deliverable
-with [OT plan](RIEMANNIAN_OT_PLAN.md) R2 is general residual and iterative/Krylov
-solve consumption; the two tracks still must not build that mechanism twice.
+The diagonal-sqrt residual still has the first monolithic Schedule→Tile
+specialization. A second content-addressed physical parent now binds arbitrary
+compiled residual and solution/parameter JVP/VJP children and executes
+restarted GMRES on AVX-512 and gfx1151. The compiler now generates all five
+children from verified typed Graphs containing pointwise operations, sum/mean,
+rank-2 matmul/transpose, distinct parameter and solution spaces, bounded
+dynamic dimensions, explicit mixed-storage widening, and statically bounded
+`control_for`. Pure scalar `if` and bounded `while` additionally become
+explicit compare/select SSA; primal and product children recompute the same
+digest-bound predicate. Reverse reduction products explicitly unbroadcast
+cotangents. Thirty-sample AVX-512 and gfx1151 WSL correctness packets cover the
+nonlinear baseline plus reduction, reduced-storage matmul, bounded-dynamic
+mixed storage, both predicate regions, and ISTFT window products without a
+dense Jacobian. The remaining shared deliverable with
+[OT plan](RIEMANNIAN_OT_PLAN.md) R2 is broader/non-pure predicate legality and
+iterative/Krylov selector-grade performance proof; the two tracks still must
+not build that mechanism twice.
 
 ### Sequencing
 

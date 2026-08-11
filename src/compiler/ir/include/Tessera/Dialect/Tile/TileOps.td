@@ -226,6 +226,18 @@ def Tile_AllGatherOp : Tile_CollectiveOp<
 def Tile_AllToAllOp : Tile_CollectiveOp<
     "all_to_all", "Exchange equal tensor-axis partitions across a mesh axis">;
 
+def Tile_CollectivePermuteOp : Tile_Op<
+    "collective_permute", [MemoryEffects<[MemWrite]>]> {
+  let summary = "Send each listed source rank to one listed destination rank";
+  let arguments = (ins AnyType:$input, StrAttr:$mesh_axis,
+                       DenseI64ArrayAttr:$source_peers,
+                       DenseI64ArrayAttr:$target_peers,
+                       OptionalAttr<I64Attr>:$world_size);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $output)";
+  let hasVerifier = 1;
+}
+
 // Target-neutral SSA vocabulary for asynchronous tensor movement. Availability
 // and physical lowering remain target owned: NVIDIA maps these to TMA and
 // mbarrier on supporting architectures, while other backends may reject or

@@ -52,6 +52,7 @@
 // TesseraOps includes the generated AdjointInterface declaration and provides
 // CustomAdjointCallOp for the dynamic cotangent seed below.
 #include "Tessera/IR/TesseraOps.h"
+#include "Tessera/Transforms/GraphDataflow.h"
 
 namespace tessera {
 
@@ -64,23 +65,6 @@ constexpr const char *kAutodiffPhase = "tessera.autodiff.phase";
 /// Track per-Value cotangents. Map keys are forward Values; map values are
 /// the Value of the cotangent emitted into the backward IR.
 using CotangentMap = llvm::DenseMap<mlir::Value, mlir::Value>;
-
-using ActiveOpSet = llvm::SmallPtrSet<mlir::Operation *, 32>;
-
-ActiveOpSet computeActiveOps(mlir::ValueRange outputs) {
-  ActiveOpSet active;
-  llvm::SmallVector<mlir::Value> worklist(outputs.begin(), outputs.end());
-  while (!worklist.empty()) {
-    mlir::Value value = worklist.pop_back_val();
-    mlir::Operation *producer = value.getDefiningOp();
-    if (!producer || !active.insert(producer).second)
-      continue;
-    if (producer->getName().getStringRef() == "tessera.stop_gradient")
-      continue;
-    worklist.append(producer->operand_begin(), producer->operand_end());
-  }
-  return active;
-}
 
 bool hasStochasticEffect(mlir::Operation *op) {
   if (auto effect =
@@ -176,7 +160,13 @@ public:
       return signalPassFailure();
     }
     mlir::Value lossValue = returnOp.getOperand(0);
-    ActiveOpSet activeOps = computeActiveOps(mlir::ValueRange{lossValue});
+    GraphDataflowAnalysis dataflow(func);
+    if (mlir::failed(dataflow.run())) {
+      func.emitError() << "tessera-autodiff: Graph IR dataflow analysis failed";
+      return signalPassFailure();
+    }
+    GraphDataflowAnalysis::ActiveOpSet activeOps =
+        dataflow.computeActivity(mlir::ValueRange{lossValue});
     mlir::Builder activityBuilder(&getContext());
     for (mlir::Operation *op : forwardOps)
       op->setAttr("tessera.autodiff.activity",

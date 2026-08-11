@@ -28,6 +28,10 @@ module {
   // CHECK-SAME: linearization = "solution"
   // CHECK-SAME: residual = @sqrt_residual
   // CHECK-SAME: transpose = true
+  // CHECK-SAME: algorithm = "gmres"
+  // CHECK-SAME: matrix_free = true
+  // CHECK-SAME: max_iterations = 256
+  // CHECK-SAME: restart = 32
   // CHECK: %[[DTHETA:.*]] = "tessera_solver.residual_adjoint"(%arg0, %arg1, %[[LAMBDA]])
   // CHECK-SAME: residual = @sqrt_residual
   // CHECK-SAME: scale = -1.000000e+00
@@ -41,5 +45,7 @@ module {
   // CHECK: %[[DX:.*]] = "tessera_solver.linear_solve"(%arg0, %arg1, %[[JR]], %[[RHS]])
   // CHECK-SAME: rhs_scale = -1.000000e+00
   // CHECK-SAME: transpose = false
+  // CHECK-SAME: algorithm = "gmres"
+  // CHECK-SAME: matrix_free = true
   // CHECK: return %[[DX]] : tensor<4xf32>
 }

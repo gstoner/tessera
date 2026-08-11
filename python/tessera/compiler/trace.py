@@ -17,15 +17,19 @@ wiring (F3–F5) build on this.
 from __future__ import annotations
 
 import contextlib
+import inspect
 import os
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple
 
 import numpy as np
 
 from . import _trace_hook
 from .graph_ir import IROp
 from .op_catalog import graph_name_for
+
+if TYPE_CHECKING:
+    from .graph_ir import GraphIRModule
 
 # ── abstract value ────────────────────────────────────────────────────────── #
 
@@ -135,8 +139,9 @@ def _infer_shape(name: str, in_shapes: List[Tuple[int, ...]], kw: dict
 
 
 def _ty(shape: Tuple[int, ...], dtype: str) -> str:
-    dims = "x".join(str(d) for d in shape) if shape else ""
-    return f"tensor<{dims}x{dtype}>" if dims else f"tensor<{dtype}>"
+    from .graph_ir import tensor_ir_type
+
+    return str(tensor_ir_type(tuple(str(dim) for dim in shape), dtype))
 
 
 @dataclass
@@ -170,6 +175,8 @@ class TraceBuilder:
         # IR (one SSA ref per tensor) and shape inference.
         tracer_args: List[Tracer] = []
         call_args: List[Any] = []
+        call_kwargs = dict(kwargs)
+        ir_kwargs = dict(kwargs)
         for a in args:
             if isinstance(a, Tracer):
                 tracer_args.append(a)
@@ -186,6 +193,25 @@ class TraceBuilder:
                     f"trace: op {name!r} got a non-Tracer positional operand "
                     f"({type(a).__name__}); tensor inputs must be traced values "
                     "(pass constants as keyword args)")
+        # Tensor-valued keyword operands are dataflow, not attributes. Preserve
+        # the Python signature's parameter order so ``gamma=``/``beta=`` and
+        # similar optional operands cannot change the ODS operand ABI merely by
+        # changing call-site keyword order.
+        try:
+            parameter_order = tuple(inspect.signature(original).parameters)
+        except (TypeError, ValueError):
+            parameter_order = tuple(kwargs)
+        ordered_keys = [key for key in parameter_order if key in kwargs]
+        ordered_keys.extend(key for key in kwargs if key not in ordered_keys)
+        for key in ordered_keys:
+            item = kwargs[key]
+            if isinstance(item, Tracer):
+                tracer_args.append(item)
+                ir_kwargs.pop(key, None)
+            elif (isinstance(item, (list, tuple)) and item
+                  and all(isinstance(value, Tracer) for value in item)):
+                tracer_args.extend(item)
+                ir_kwargs.pop(key, None)
         ssa = self._fresh()
         # F6 concrete tracing: when every input carries a concrete value, run the
         # real numpy op to get the result's shape/dtype (works for ANY op, no
@@ -196,7 +222,16 @@ class TraceBuilder:
                 if isinstance(x, Tracer):
                     return x.value
                 return [t.value for t in x]  # variadic group
-            out = original(*[_concrete(x) for x in call_args], **kwargs)
+            concrete_kwargs = {
+                key: _concrete(item)
+                if isinstance(item, Tracer) or (
+                    isinstance(item, (list, tuple)) and item
+                    and all(isinstance(value, Tracer) for value in item)
+                )
+                else item
+                for key, item in call_kwargs.items()
+            }
+            out = original(*[_concrete(x) for x in call_args], **concrete_kwargs)
             if isinstance(out, tuple):
                 raise TesseraTraceError(
                     f"trace: multi-output op {name!r} is not supported (F6+)")
@@ -205,16 +240,24 @@ class TraceBuilder:
             dtype = _np_dtype_to_elem(out.dtype)
             value: Any = out
         else:
-            out_shape = _infer_shape(name, [t.shape for t in tracer_args], kwargs)
+            out_shape = _infer_shape(name, [t.shape for t in tracer_args], ir_kwargs)
             dtype = tracer_args[0].dtype if tracer_args else "fp32"
             value = None
+        if graph_name == "tessera.reduce" and name in {"sum", "mean"}:
+            ir_kwargs.setdefault("kind", name)
+        from .graph_ir import _canonicalize_spectral_attrs, tensor_ir_type
+        operand_ir_types = [
+            tensor_ir_type(tuple(str(dim) for dim in item.shape), item.dtype)
+            for item in tracer_args
+        ]
+        _canonicalize_spectral_attrs(graph_name, operand_ir_types, ir_kwargs)
         self.body.append(IROp(
             result=ssa,
             op_name=graph_name,
             operands=[f"%{t.ssa}" for t in tracer_args],
             operand_types=[_ty(t.shape, t.dtype) for t in tracer_args],
             result_type=_ty(out_shape, dtype),
-            kwargs=dict(kwargs),
+            kwargs=ir_kwargs,
         ))
         return Tracer(out_shape, dtype, ssa, value)
 
@@ -410,6 +453,12 @@ def _np_dtype_to_elem(dt) -> str:
         return "bf16"
     if name in ("float16", "half"):
         return "f16"
+    if name == "complex64":
+        return "complex64"
+    if name == "complex128":
+        return "complex128"
+    if name == "float64":
+        return "f64"
     return "f32"
 
 
@@ -438,6 +487,59 @@ def trace(fn: Callable, *example_specs: Any) -> TracedFunction:
                 f"{type(o).__name__}")
     tb.set_outputs([o.ssa for o in outs])
     return tb.finish()
+
+
+def to_graph_ir_module(
+    traced: TracedFunction,
+    *,
+    name: str = "traced",
+    source_hash: str | None = None,
+) -> "GraphIRModule":
+    """Promote a trace directly to the canonical Graph IR object model.
+
+    This is the production frontend boundary.  It intentionally does not replay
+    through ``GraphFn`` or rebuild operations from Python names, so operand SSA,
+    registered effects, stochastic identity, and region bodies retain the
+    identity recorded by the tracer.
+    """
+    from .graph_ir import GraphIRFunction, GraphIRModule, IRArg, IRType, tensor_ir_type
+
+    result_types: list[IRType] = []
+    by_result = {
+        result: op
+        for op in traced.body
+        for result in op.result_names
+    }
+    for output in traced.outputs:
+        operation = by_result.get(output)
+        if operation is None or not operation.result_type:
+            raise TesseraTraceError(
+                f"trace output %{output} has no typed Graph IR definition"
+            )
+        result_types.append(IRType(operation.result_type))
+    function = GraphIRFunction(
+        name=name,
+        args=[
+            IRArg(ssa, tensor_ir_type(tuple(str(dim) for dim in shape), dtype))
+            for ssa, shape, dtype in traced.args
+        ],
+        result_types=result_types,
+        body=list(traced.body),
+        fn_attrs={"tessera.frontend.authority": '"tracer"'},
+        return_values=[f"%{output}" for output in traced.outputs],
+        source_hash=source_hash,
+    )
+    module = GraphIRModule(
+        functions=[function],
+        module_attrs={
+            "tessera.ir.version": '"1.0"',
+            "tessera.frontend.authority": '"tracer"',
+        },
+    )
+    verification = module.verify()
+    if not verification.ok:
+        raise TesseraTraceError(verification.format())
+    return module
 
 
 # ── Layer 2 (straight-line) — traced graph_ir → executable GraphFn ────────── #

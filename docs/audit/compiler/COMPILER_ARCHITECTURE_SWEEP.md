@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-02
+last_updated: 2026-08-11
 audit_role: reference
 scope: effects, shape system, fusion region formation, distributed planning, canonicalization, autotuner
 companions: AUTODIFF_ARCHITECTURE_REVIEW.md · ../domain/GA_EBM_ARCHITECTURE_REVIEW.md · RIEMANNIAN_OT_PLAN.md
@@ -33,7 +33,7 @@ one-off.
 |---|---|---|
 | **L1** | **Semantic metadata is carried but never consumed.** The information the compiler needs is computed, validated, attached — and then no pass reads it. | `manifold` attr reaches no backend; `MultivectorSpec.grades` discarded by `geometric_product`; `batching_rule` axis closed across 480 primitives while `vmap` is a Python loop |
 | **L2** | **Two disconnected compilers.** A Python fast path with hand-written kernels beside an MLIR pass that marks or annotates, with no connection. | GA `rotor_sandwich` (Python symbol vs `RotorSandwichFold` marker); the Apple synthesizer vs the MLIR lane (CLAUDE.md's own framing); the Python AD tape vs `AutodiffPass` |
-| **L3** | **Syntactic checks where a real analysis belongs.** A pass pattern-matches on op names or presence instead of computing a dataflow fact. | `CheckpointInnerLoop` (no liveness); `AutodiffPass` (no activity analysis) |
+| **L3** | **Syntactic checks where a real analysis belongs.** A pass pattern-matches on op names or presence instead of computing a dataflow fact. | Historical findings: `CheckpointInnerLoop` had no liveness and `AutodiffPass` had no activity analysis. W2.1 closed the shared substrate and migrated straight-line AD activity on 2026-08-11; region-aware clients remain. |
 | **L4** | **Fails open on a semantic key.** Absence or ambiguity yields a plausible default instead of an error. | `manifold` → `"euclidean"` with a warning; the first-order-correct Euclidean fallback that converges and lies |
 | **L5** | **A constant where a measured decision belongs.** A tradeoff whose right answer is target/shape/dtype-dependent is fixed in a comment. | residual policy `RECOMPUTE_ALL`; `checkpoint_budget = 4`; the GA v1 allow-list welding `ExpandProductTable`'s lowering strategy to `dim ≤ 16` |
 
@@ -279,11 +279,12 @@ backward variants, `AnalysisManager` for caching and invalidation, and
 seven partial, hand-rolled, mutually-inconsistent substitutes, several of which
 fail open.
 
-**The single highest-leverage architectural move is to stand up one Graph IR
-dataflow-analysis layer and re-home effects, shapes, activity, liveness, fusion
-legality, and sharding onto it.** Not as a big-bang rewrite — as a framework plus
-one migrated client (effects, F1), after which each subsequent analysis is a
-transfer function rather than a subsystem.
+**W2.1 landed this shared Graph IR dataflow-analysis layer on 2026-08-11.** It
+now owns fail-closed shape/alias facts, liveness, memory-dependence queries, and
+straight-line activity; reverse AD and await sinking are its first production
+clients. Effects landed immediately beforehand in W2.2. Fusion legality,
+sharding, symbolic constraints, and region-aware activity remain client or
+domain-lattice migrations rather than reasons to create another framework.
 
 Three properties it must have, each learned from a specific failure above:
 
@@ -321,10 +322,10 @@ commitments.
 
 | # | Item | Source | Effort |
 |---|---|---|---|
-| 8 | Stand up the Graph IR dataflow-analysis framework (MLIR `DataFlowSolver`, fail-closed, invalidated, Python-queryable) | §3 | 3w |
+| 8 | **Completed 2026-08-11:** Graph IR dataflow-analysis framework (MLIR `DataFlowSolver`, fail-closed, invalidatable, Python-queryable) | §3 | done |
 | 9 | **Completed 2026-08-10:** registered Graph effects, reconciled fixed-point `EffectAnnotationPass`, and retired AST walker | F1 | done |
 | 10 | Replace `Dim`/`DimProduct` with `AffineExpr` + `presburger`; make `dims_compatible` and `check_schedule_tile` constraint queries | F2 | 3w |
-| 11 | Activity analysis for AD, as a client of #8 | Autodiff D3 | 2w |
+| 11 | **Straight-line client completed 2026-08-11:** activity analysis for AD; region-aware activity remains under structured differentiation | Autodiff D3 | landing |
 
 ### Tier 2 — Differentiation capability  *(~13 weeks, critical path)*
 

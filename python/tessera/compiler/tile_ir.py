@@ -21,11 +21,19 @@ TILE_MEMORY_OPS = {"tile.async_copy", "tile.wait_async"}
 # Pure-metadata marker ops carried into Tile IR to explain placement / layout /
 # the schedule plan. They emit NO compute — Target lowering filters them (and
 # recurses into tile.mesh.region bodies). See _lower_schedule_ops / target_ir.
-TILE_METADATA_OPS = {"tile.mesh.define", "tile.layout", "tile.placement",
-                     "tile.artifact", "tile.mesh.region", "tile.debug_artifact"}
+TILE_METADATA_OPS = {
+    "tile.mesh.define",
+    "tile.layout",
+    "tile.placement",
+    "tile.artifact",
+    "tile.mesh.region",
+    "tile.debug_artifact",
+}
 ATTN_OPS = {
-    "tessera_attn.scaled_dot_product", "tessera_attn.online_softmax",
-    "tessera_attn.lse_save", "tessera_attn.attend_v",
+    "tessera_attn.scaled_dot_product",
+    "tessera_attn.online_softmax",
+    "tessera_attn.lse_save",
+    "tessera_attn.attend_v",
     "tessera_attn.msa_kv_outer_sparse",
 }
 TILE_COLLECTIVE_OPS = {
@@ -33,6 +41,7 @@ TILE_COLLECTIVE_OPS = {
     "tile.reduce_scatter",
     "tile.all_gather",
     "tile.all_to_all",
+    "tile.collective_permute",
 }
 
 
@@ -98,12 +107,12 @@ class TileOp:
         operands = ", ".join(self.operands)
         attr_text = _format_attr_dict(self.attrs)
         if self.body:
-            lines = [f"{indent}{result_text}\"{self.op_name}\"({operands}) ({{"]
+            lines = [f'{indent}{result_text}"{self.op_name}"({operands}) ({{']
             for child in self.body:
                 lines.append(child.to_mlir(indent + "  "))
             lines.append(f"{indent}}}) {attr_text} : () -> ()")
             return "\n".join(lines)
-        return f"{indent}{result_text}\"{self.op_name}\"({operands}) {attr_text} : () -> ()"
+        return f'{indent}{result_text}"{self.op_name}"({operands}) {attr_text} : () -> ()'
 
 
 @dataclass
@@ -124,10 +133,12 @@ class TileFunction:
     attrs: dict[str, Any] = field(default_factory=dict)
 
     def to_mlir(self, indent: str = "  ") -> str:
-        lines = [f"{indent}\"tessera.tile.func\"() ({{"]
+        lines = [f'{indent}"tessera.tile.func"() ({{']
         for op in self.body:
             lines.append(op.to_mlir(indent + "  "))
-        lines.append(f"{indent}}}) {{sym_name = {json.dumps(self.name)}, target = {json.dumps(self.target)}}} : () -> ()")
+        lines.append(
+            f"{indent}}}) {{sym_name = {json.dumps(self.name)}, target = {json.dumps(self.target)}}} : () -> ()"
+        )
         return "\n".join(lines)
 
 
@@ -177,25 +188,31 @@ class TileIRVerifier:
                 self._verify_async_copy(op, diagnostics)
                 if op.result:
                     if op.result in tokens:
-                        diagnostics.append(TileIRDiagnostic(
-                            "error", f"duplicate async token %{op.result}",
-                            "TILE_IR_DUP_ASYNC_TOKEN"))
+                        diagnostics.append(
+                            TileIRDiagnostic("error", f"duplicate async token %{op.result}", "TILE_IR_DUP_ASYNC_TOKEN")
+                        )
                     tokens.add(op.result)
             elif op.op_name == "tile.wait_async":
                 if len(op.operands) != 1:
-                    diagnostics.append(TileIRDiagnostic(
-                        "error", "wait_async requires exactly one async token operand",
-                        "TILE_IR_WAIT_TOKEN"))
+                    diagnostics.append(
+                        TileIRDiagnostic(
+                            "error", "wait_async requires exactly one async token operand", "TILE_IR_WAIT_TOKEN"
+                        )
+                    )
                 else:
                     token = op.operands[0].removeprefix("%")
                     if token not in tokens:
-                        diagnostics.append(TileIRDiagnostic(
-                            "error", f"wait_async references undefined token %{token}",
-                            "TILE_IR_WAIT_UNKNOWN_TOKEN"))
+                        diagnostics.append(
+                            TileIRDiagnostic(
+                                "error", f"wait_async references undefined token %{token}", "TILE_IR_WAIT_UNKNOWN_TOKEN"
+                            )
+                        )
                     elif token in waited_tokens:
-                        diagnostics.append(TileIRDiagnostic(
-                            "error", f"async token %{token} is awaited more than once",
-                            "TILE_IR_WAIT_DUP_TOKEN"))
+                        diagnostics.append(
+                            TileIRDiagnostic(
+                                "error", f"async token %{token} is awaited more than once", "TILE_IR_WAIT_DUP_TOKEN"
+                            )
+                        )
                     waited_tokens.add(token)
             elif op.op_name in {"tile.matmul", "tile.mma"}:
                 self._require_attrs(op, diagnostics, "source", "result", "ordinal")
@@ -204,56 +221,88 @@ class TileIRVerifier:
             elif op.op_name in TILE_COLLECTIVE_OPS:
                 self._verify_collective(op, diagnostics)
             elif op.op_name == "tile.kv_cache.read":
-                self._require_attrs(
-                    op, diagnostics, "source", "result", "ordinal",
-                    "effect", "access", "storage")
+                self._require_attrs(op, diagnostics, "source", "result", "ordinal", "effect", "access", "storage")
             elif op.op_name == "tessera_attn.online_softmax":
                 if not op.attrs.get("policy"):
-                    diagnostics.append(TileIRDiagnostic("error", "online_softmax requires policy", "TILE_IR_ATTN_POLICY"))
+                    diagnostics.append(
+                        TileIRDiagnostic("error", "online_softmax requires policy", "TILE_IR_ATTN_POLICY")
+                    )
             elif op.op_name.startswith("tessera.queue."):
-                diagnostics.append(TileIRDiagnostic(
-                    "error", f"legacy compatibility op {op.op_name} is forbidden; use async token SSA lineage",
-                    "TILE_IR_LEGACY_QUEUE"))
+                diagnostics.append(
+                    TileIRDiagnostic(
+                        "error",
+                        f"legacy compatibility op {op.op_name} is forbidden; use async token SSA lineage",
+                        "TILE_IR_LEGACY_QUEUE",
+                    )
+                )
             self._verify_ops(op.body, diagnostics, tokens, waited_tokens)
 
     def _verify_async_copy(self, op: TileOp, diagnostics: list[TileIRDiagnostic]) -> None:
         if not op.result:
-            diagnostics.append(TileIRDiagnostic(
-                "error", "async_copy requires an explicit token result",
-                "TILE_IR_ASYNC_TOKEN"))
+            diagnostics.append(
+                TileIRDiagnostic("error", "async_copy requires an explicit token result", "TILE_IR_ASYNC_TOKEN")
+            )
         if "vector" in op.attrs and int(op.attrs["vector"]) < 1:
-            diagnostics.append(TileIRDiagnostic("error", "async_copy vector must be >= 1 when present", "TILE_IR_ASYNC_VECTOR"))
+            diagnostics.append(
+                TileIRDiagnostic("error", "async_copy vector must be >= 1 when present", "TILE_IR_ASYNC_VECTOR")
+            )
 
     def _verify_collective(self, op: TileOp, diagnostics: list[TileIRDiagnostic]) -> None:
         self._require_attrs(
-            op, diagnostics, "source", "result", "ordinal", "kind",
-            "mesh_axis", "tensor_axis", "effect")
+            op, diagnostics, "source", "result", "ordinal", "kind", "mesh_axis", "tensor_axis", "effect"
+        )
         if op.attrs.get("effect") != "collective":
-            diagnostics.append(TileIRDiagnostic(
-                "error", f"{op.op_name} effect must be collective",
-                "TILE_IR_COLLECTIVE_EFFECT"))
+            diagnostics.append(
+                TileIRDiagnostic("error", f"{op.op_name} effect must be collective", "TILE_IR_COLLECTIVE_EFFECT")
+            )
         if not str(op.attrs.get("mesh_axis", "")):
-            diagnostics.append(TileIRDiagnostic(
-                "error", f"{op.op_name} mesh_axis must be non-empty",
-                "TILE_IR_COLLECTIVE_MESH_AXIS"))
+            diagnostics.append(
+                TileIRDiagnostic("error", f"{op.op_name} mesh_axis must be non-empty", "TILE_IR_COLLECTIVE_MESH_AXIS")
+            )
         if not isinstance(op.attrs.get("tensor_axis"), int):
-            diagnostics.append(TileIRDiagnostic(
-                "error", f"{op.op_name} tensor_axis must be an integer",
-                "TILE_IR_COLLECTIVE_TENSOR_AXIS"))
+            diagnostics.append(
+                TileIRDiagnostic(
+                    "error", f"{op.op_name} tensor_axis must be an integer", "TILE_IR_COLLECTIVE_TENSOR_AXIS"
+                )
+            )
         elif int(op.attrs["tensor_axis"]) < 0:
-            diagnostics.append(TileIRDiagnostic(
-                "error", f"{op.op_name} tensor_axis must be non-negative",
-                "TILE_IR_COLLECTIVE_TENSOR_AXIS"))
-        if op.op_name in {"tile.all_reduce", "tile.reduce_scatter"} and \
-                op.attrs.get("reduction") not in {"sum", "mean", "max", "min", "prod"}:
-            diagnostics.append(TileIRDiagnostic(
-                "error", f"{op.op_name} has unsupported reduction",
-                "TILE_IR_COLLECTIVE_REDUCTION"))
+            diagnostics.append(
+                TileIRDiagnostic(
+                    "error", f"{op.op_name} tensor_axis must be non-negative", "TILE_IR_COLLECTIVE_TENSOR_AXIS"
+                )
+            )
+        if op.op_name in {"tile.all_reduce", "tile.reduce_scatter"} and op.attrs.get("reduction") not in {
+            "sum",
+            "mean",
+            "max",
+            "min",
+            "prod",
+        }:
+            diagnostics.append(
+                TileIRDiagnostic("error", f"{op.op_name} has unsupported reduction", "TILE_IR_COLLECTIVE_REDUCTION")
+            )
+        if op.op_name == "tile.collective_permute":
+            sources = tuple(op.attrs.get("source_peers", ()))
+            targets = tuple(op.attrs.get("target_peers", ()))
+            if not sources or len(sources) != len(targets):
+                diagnostics.append(
+                    TileIRDiagnostic(
+                        "error", "collective_permute requires equal non-empty peer maps", "TILE_IR_COLLECTIVE_PEERS"
+                    )
+                )
+            elif len(set(sources)) != len(sources) or len(set(targets)) != len(targets):
+                diagnostics.append(
+                    TileIRDiagnostic(
+                        "error", "collective_permute sources and targets must be unique", "TILE_IR_COLLECTIVE_PEERS"
+                    )
+                )
 
     def _require_attrs(self, op: TileOp, diagnostics: list[TileIRDiagnostic], *attrs: str) -> None:
         missing = [attr for attr in attrs if attr not in op.attrs]
         if missing:
-            diagnostics.append(TileIRDiagnostic("error", f"{op.op_name} missing attrs: {', '.join(missing)}", "TILE_IR_MISSING_ATTR"))
+            diagnostics.append(
+                TileIRDiagnostic("error", f"{op.op_name} missing attrs: {', '.join(missing)}", "TILE_IR_MISSING_ATTR")
+            )
 
 
 def lower_schedule_to_tile_ir(schedule_module: ScheduleIRModule, *, target_kind: str = "cpu") -> TileIRModule:
@@ -301,74 +350,91 @@ def _lower_schedule_ops(ops: list[ScheduleOp]) -> list[TileOp]:
             lowered.append(_tile_compute_op(op))
             continue
         if op.op_name == "schedule.attn.kv_outer_sparse":
-            lowered.append(TileOp("tessera_attn.msa_kv_outer_sparse", {
-                **dict(op.attrs),
-                "lowering": "attention",
-                "selected_block_layout": op.attrs.get("block_ids_layout", "B,Hkv,Sq,top_k"),
-            }))
+            lowered.append(
+                TileOp(
+                    "tessera_attn.msa_kv_outer_sparse",
+                    {
+                        **dict(op.attrs),
+                        "lowering": "attention",
+                        "selected_block_layout": op.attrs.get("block_ids_layout", "B,Hkv,Sq,top_k"),
+                    },
+                )
+            )
             continue
         if op.op_name.startswith("schedule.media."):
-            lowered.append(TileOp(
-                "tile." + op.op_name.removeprefix("schedule."),
-                {
-                    **dict(op.attrs),
-                    "lowering": "multimodal_contract",
-                    "resource": _media_resource_estimate(str(op.attrs.get("source", ""))),
-                },
-                operands=list(op.operands),
-                result=op.result,
-            ))
+            lowered.append(
+                TileOp(
+                    "tile." + op.op_name.removeprefix("schedule."),
+                    {
+                        **dict(op.attrs),
+                        "lowering": "multimodal_contract",
+                        "resource": _media_resource_estimate(str(op.attrs.get("source", ""))),
+                    },
+                    operands=list(op.operands),
+                    result=op.result,
+                )
+            )
             continue
         if op.op_name.startswith("schedule.jepa."):
-            lowered.append(TileOp(
-                "tile." + op.op_name.removeprefix("schedule."),
-                {
-                    **dict(op.attrs),
-                    "lowering": "latent_prediction_contract",
-                    "resource": _jepa_resource_estimate(str(op.attrs.get("source", ""))),
-                },
-                operands=list(op.operands),
-                result=op.result,
-            ))
+            lowered.append(
+                TileOp(
+                    "tile." + op.op_name.removeprefix("schedule."),
+                    {
+                        **dict(op.attrs),
+                        "lowering": "latent_prediction_contract",
+                        "resource": _jepa_resource_estimate(str(op.attrs.get("source", ""))),
+                    },
+                    operands=list(op.operands),
+                    result=op.result,
+                )
+            )
             continue
         if op.op_name == "schedule.elementwise":
             lowered.append(_elementwise_op(op))
             continue
         if op.op_name == "schedule.state.read":
-            lowered.append(TileOp(
-                "tile.kv_cache.read",
-                {
-                    **dict(op.attrs),
-                    "storage": "paged",
-                    "lowering": "state_read",
-                    "resource": {
-                        "shared_memory_bytes": 0,
-                        "register_estimate": 16,
-                        "async_copy_bytes": 0,
-                        "queue_depth": 0,
-                        "barrier_count": 0,
+            lowered.append(
+                TileOp(
+                    "tile.kv_cache.read",
+                    {
+                        **dict(op.attrs),
+                        "storage": "paged",
+                        "lowering": "state_read",
+                        "resource": {
+                            "shared_memory_bytes": 0,
+                            "register_estimate": 16,
+                            "async_copy_bytes": 0,
+                            "queue_depth": 0,
+                            "barrier_count": 0,
+                        },
                     },
-                },
-                operands=list(op.operands),
-                result=op.result,
-            ))
+                    operands=list(op.operands),
+                    result=op.result,
+                )
+            )
             continue
         if op.op_name == "schedule.prefetch":
             token = _async_token_name(op)
             lowered.append(TileOp("tile.async_copy", _copy_attrs(op), result=token))
             # A standalone prefetch has no nested compute region in which to
             # hide latency. Retire it explicitly at the artifact boundary.
-            lowered.append(TileOp("tile.wait_async", {"source": op.attrs.get("source", "schedule.prefetch")}, operands=[f"%{token}"]))
+            lowered.append(
+                TileOp(
+                    "tile.wait_async", {"source": op.attrs.get("source", "schedule.prefetch")}, operands=[f"%{token}"]
+                )
+            )
             continue
         if op.op_name == "schedule.collective":
             kind = str(op.attrs.get("kind", ""))
             tile_name = f"tile.{kind}"
-            lowered.append(TileOp(
-                tile_name,
-                dict(op.attrs),
-                operands=list(op.operands),
-                result=op.result,
-            ))
+            lowered.append(
+                TileOp(
+                    tile_name,
+                    dict(op.attrs),
+                    operands=list(op.operands),
+                    result=op.result,
+                )
+            )
             continue
         if op.op_name == "schedule.marker":
             marker = op.attrs.get("marker")
@@ -388,19 +454,40 @@ def _lower_pipeline_region(op: ScheduleOp) -> list[TileOp]:
     ordinal = int(attrs.get("ordinal", 0))
     token = f"pipeline_async_{ordinal}"
     lowered = [
-        TileOp("tile.async_copy", {
-            "source": source, "result": result, "ordinal": ordinal,
-            "vector": 16, "overlap": "compute",
-        }, result=token),
+        TileOp(
+            "tile.async_copy",
+            {
+                "source": source,
+                "result": result,
+                "ordinal": ordinal,
+                "vector": 16,
+                "overlap": "compute",
+            },
+            result=token,
+        ),
     ]
     if source == "tessera.flash_attn" or attrs.get("schedule") == "fa4":
-        lowered.extend([
-            TileOp("tile.wait_async", {"source": source}, operands=[f"%{token}"]),
-            TileOp("tessera_attn.scaled_dot_product", {"source": source, "result": result, "ordinal": ordinal, "causal": bool(attrs.get("causal", True))}, operands=[f"%{token}", *list(op.operands)], result=op.result),
-            TileOp("tessera_attn.online_softmax", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0), "policy": "safe"}),
-            TileOp("tessera_attn.lse_save", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0)}),
-            TileOp("tessera_attn.attend_v", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0)}),
-        ])
+        lowered.extend(
+            [
+                TileOp("tile.wait_async", {"source": source}, operands=[f"%{token}"]),
+                TileOp(
+                    "tessera_attn.scaled_dot_product",
+                    {"source": source, "result": result, "ordinal": ordinal, "causal": bool(attrs.get("causal", True))},
+                    operands=[f"%{token}", *list(op.operands)],
+                    result=op.result,
+                ),
+                TileOp(
+                    "tessera_attn.online_softmax",
+                    {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0), "policy": "safe"},
+                ),
+                TileOp(
+                    "tessera_attn.lse_save", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0)}
+                ),
+                TileOp(
+                    "tessera_attn.attend_v", {"source": source, "result": result, "ordinal": attrs.get("ordinal", 0)}
+                ),
+            ]
+        )
     else:
         lowered.append(TileOp("tile.wait_async", {"source": source}, operands=[f"%{token}"]))
     lowered.append(TileOp("tile.debug_barrier", {"scope": "warpgroup", "source": source, "ordinal": ordinal}))
@@ -421,8 +508,7 @@ def _tile_compute_op(op: ScheduleOp) -> TileOp:
     attrs = {**dict(op.attrs), "lowering": _lowering_kind(source), "vectorize": True}
     if tile_name == "tile.matmul":
         attrs.update(_mma_resource_estimate(attrs))
-    return TileOp(
-        tile_name, attrs, operands=list(op.operands), result=op.result)
+    return TileOp(tile_name, attrs, operands=list(op.operands), result=op.result)
 
 
 def _elementwise_op(op: ScheduleOp) -> TileOp:
@@ -486,29 +572,77 @@ def _mma_resource_estimate(attrs: dict[str, Any]) -> dict[str, Any]:
 
 def _elementwise_resource_estimate(source: str) -> dict[str, Any]:
     if source in {"tessera.softmax", "tessera.softmax_safe", "tessera.reduce"}:
-        return {"shared_memory_bytes": 1024, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 1}
-    return {"shared_memory_bytes": 0, "register_estimate": 16, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+        return {
+            "shared_memory_bytes": 1024,
+            "register_estimate": 24,
+            "async_copy_bytes": 0,
+            "queue_depth": 0,
+            "barrier_count": 1,
+        }
+    return {
+        "shared_memory_bytes": 0,
+        "register_estimate": 16,
+        "async_copy_bytes": 0,
+        "queue_depth": 0,
+        "barrier_count": 0,
+    }
 
 
 def _media_resource_estimate(source: str) -> dict[str, Any]:
     if source in {"tessera.patch_embed", "tessera.media_project"}:
-        return {"shared_memory_bytes": 4096, "register_estimate": 48, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+        return {
+            "shared_memory_bytes": 4096,
+            "register_estimate": 48,
+            "async_copy_bytes": 0,
+            "queue_depth": 0,
+            "barrier_count": 0,
+        }
     if source == "tessera.splice_embeddings":
-        return {"shared_memory_bytes": 0, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
-    return {"shared_memory_bytes": 1024, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+        return {
+            "shared_memory_bytes": 0,
+            "register_estimate": 24,
+            "async_copy_bytes": 0,
+            "queue_depth": 0,
+            "barrier_count": 0,
+        }
+    return {
+        "shared_memory_bytes": 1024,
+        "register_estimate": 24,
+        "async_copy_bytes": 0,
+        "queue_depth": 0,
+        "barrier_count": 0,
+    }
 
 
 def _jepa_resource_estimate(source: str) -> dict[str, Any]:
     if source in {"tessera.jepa.mask_blocks_2d", "tessera.jepa.mask_tubes_3d"}:
-        return {"shared_memory_bytes": 0, "register_estimate": 16, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+        return {
+            "shared_memory_bytes": 0,
+            "register_estimate": 16,
+            "async_copy_bytes": 0,
+            "queue_depth": 0,
+            "barrier_count": 0,
+        }
     if source in {
         "tessera.jepa.latent_predict",
         "tessera.jepa.l2_loss",
         "tessera.jepa.selective_decode",
         "tessera.jepa.train_step",
     }:
-        return {"shared_memory_bytes": 1024, "register_estimate": 32, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 1}
-    return {"shared_memory_bytes": 0, "register_estimate": 24, "async_copy_bytes": 0, "queue_depth": 0, "barrier_count": 0}
+        return {
+            "shared_memory_bytes": 1024,
+            "register_estimate": 32,
+            "async_copy_bytes": 0,
+            "queue_depth": 0,
+            "barrier_count": 1,
+        }
+    return {
+        "shared_memory_bytes": 0,
+        "register_estimate": 24,
+        "async_copy_bytes": 0,
+        "queue_depth": 0,
+        "barrier_count": 0,
+    }
 
 
 def _lowering_kind(op_name: str) -> str:

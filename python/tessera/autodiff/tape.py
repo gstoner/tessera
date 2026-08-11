@@ -37,7 +37,8 @@ class TesseraAutodiffError(RuntimeError):
 @dataclass(frozen=True)
 class InputDesc:
     """Describes one forward-call input: its underlying numpy buffer + Parameter origin."""
-    param: Any   # Parameter | None — typed loosely to avoid import cycle
+
+    param: Any  # Parameter | None — typed loosely to avoid import cycle
     array_id: int
     array: np.ndarray
     is_literal: bool = False  # True for python-scalar operands (non-differentiable)
@@ -211,18 +212,14 @@ class Tape:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-_ACTIVE_TAPE: contextvars.ContextVar[Tape | None] = contextvars.ContextVar(
-    "_tessera_autodiff_tape", default=None
-)
+_ACTIVE_TAPE: contextvars.ContextVar[Tape | None] = contextvars.ContextVar("_tessera_autodiff_tape", default=None)
 
 # Opt-in primitive-execution counter (R1 / Baur–Strassen oracle). When a box is
 # bound, every actual `tessera.ops.<name>` *execution* (not a tracer record)
 # bumps it. Used to measure the cost ratio between a plain forward and a full
 # gradient/Jacobian — a ratio far above the Baur–Strassen constant flags an
 # implementation that re-runs the forward pass (the jacrev/jacfwd defect B1/B2).
-_EXEC_COUNT: contextvars.ContextVar[list | None] = contextvars.ContextVar(
-    "_tessera_exec_count", default=None
-)
+_EXEC_COUNT: contextvars.ContextVar[list | None] = contextvars.ContextVar("_tessera_exec_count", default=None)
 
 
 @contextmanager
@@ -292,8 +289,7 @@ def record_custom_vjp_call(
     out = forward(*forward_args, **kwargs)
     if not isinstance(out, (np.ndarray, np.generic)):
         raise TesseraAutodiffError(
-            f"custom VJP call {name!r} must return an ndarray or numpy scalar; "
-            f"got {type(out).__name__}"
+            f"custom VJP call {name!r} must return an ndarray or numpy scalar; got {type(out).__name__}"
         )
     active.record(name, tuple(array_descs), dict(kwargs), out, vjp_fn)
     return out
@@ -306,6 +302,7 @@ def record_custom_vjp_call(
 
 def _parameter_class():
     from ..nn.module import Parameter
+
     return Parameter
 
 
@@ -417,6 +414,15 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
         if _tracer is not None:
             return _tracer.record_op(name, original, args, kwargs)
 
+        # Compiler/public forward mode uses the same canonical op wrapper as
+        # reverse mode. Keeping this hook here avoids global monkey-patching and
+        # makes nested thread/async contexts safe through ContextVar ownership.
+        from .jvp import active_jvp_trace
+
+        _jvp_trace = active_jvp_trace()
+        if _jvp_trace is not None:
+            return _jvp_trace.record_op(name, original, args, kwargs)
+
         # R1 cost oracle: count this primitive execution if a counter is bound.
         _exec_box = _EXEC_COUNT.get()
         if _exec_box is not None:
@@ -512,25 +518,22 @@ def _autocast_args(args, dtype: str):
     """
     if dtype.startswith(("fp8_", "fp6_", "fp4_")) or dtype == "nvfp4":
         from .. import ops as _ops  # noqa: WPS433
+
         # Pick the matching quantize op + extract the bare format suffix.
         if dtype.startswith("fp8_"):
-            quantize = getattr(_ops.quantize_fp8, "__wrapped__",
-                               _ops.quantize_fp8)
-            fmt = dtype[len("fp8_"):]
+            quantize = getattr(_ops.quantize_fp8, "__wrapped__", _ops.quantize_fp8)
+            fmt = dtype[len("fp8_") :]
             kwargs = {"format": fmt}
         elif dtype.startswith("fp6_"):
-            quantize = getattr(_ops.quantize_fp6, "__wrapped__",
-                               _ops.quantize_fp6)
-            fmt = dtype[len("fp6_"):]
+            quantize = getattr(_ops.quantize_fp6, "__wrapped__", _ops.quantize_fp6)
+            fmt = dtype[len("fp6_") :]
             kwargs = {"format": fmt}
         elif dtype.startswith("fp4_"):
-            quantize = getattr(_ops.quantize_fp4, "__wrapped__",
-                               _ops.quantize_fp4)
-            fmt = dtype[len("fp4_"):]
+            quantize = getattr(_ops.quantize_fp4, "__wrapped__", _ops.quantize_fp4)
+            fmt = dtype[len("fp4_") :]
             kwargs = {"format": fmt}
         else:  # nvfp4
-            quantize = getattr(_ops.quantize_nvfp4, "__wrapped__",
-                               _ops.quantize_nvfp4)
+            quantize = getattr(_ops.quantize_nvfp4, "__wrapped__", _ops.quantize_nvfp4)
             kwargs = {}  # default block_size
 
         out = []

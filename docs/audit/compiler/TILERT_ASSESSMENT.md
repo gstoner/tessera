@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-10
+last_updated: 2026-08-11
 audit_role: reference
 ---
 
@@ -280,12 +280,14 @@ representation that survives into IR.
 
 ## 4. Prerequisites and gates (honest scoping)
 
-1. **W2.2 closed 2026-08-10.** Graph records now carry registered effect,
+1. **W2.1 and W2.2 are closed.** Graph records carry registered effect,
    alias, mutation, and stochastic-identity semantics; unknown operations fail
    closed, internal-call summaries reach a fixed point, and await sinking uses
-   the same MLIR semantic query. This removes the former aliased-RNG/name-match
-   hole. W2.1 remains necessary before a scheduler may synthesize arbitrary
-   memory-dependence edges; R3/R4 continue to consume explicit DAG edges only.
+   the shared fail-closed shape/alias/liveness/memory-dependence/activity
+   analysis. This removes the former aliased-RNG/name-match hole and supplies
+   the legality query substrate. R3/R4 continue to consume explicit DAG edges;
+   automatic edge synthesis in future Graph-derived Tile DAG producers remains
+   a client integration, not missing analysis infrastructure.
 2. **Multi-device overlap is unmeasurable on the current fleet** — no box has
    two GPUs; chunked transport adapters are mocks (E4). Cross-device rows are
    Phase G/H-gated. Measurable today: R1's window widening under the mock

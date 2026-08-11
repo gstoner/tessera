@@ -384,6 +384,51 @@ TESSERA_COLLECTIVE_TANGENT(AllToAllOp)
 
 #undef TESSERA_COLLECTIVE_TANGENT
 
+static llvm::SmallVector<mlir::Value> buildBilinearSpectralTangent(
+    mlir::Operation *source, mlir::OpBuilder &builder,
+    mlir::ValueRange tangents) {
+  if (tangents.size() != 2)
+    return {};
+  mlir::Value result;
+  if (tangents[0])
+    result = cloneTangentWithOperands(
+        source, {tangents[0], source->getOperand(1)}, builder);
+  if (tangents[1]) {
+    mlir::Value parameterTerm = cloneTangentWithOperands(
+        source, {source->getOperand(0), tangents[1]}, builder);
+    result = addIfPresent(builder, source->getLoc(), source->getResult(0).getType(),
+                          result, parameterTerm);
+  }
+  return result ? llvm::SmallVector<mlir::Value>{result}
+                : llvm::SmallVector<mlir::Value>{};
+}
+
+llvm::SmallVector<mlir::Value> STFTOp::buildTangent(
+    mlir::OpBuilder &builder, mlir::ValueRange tangents) {
+  return buildBilinearSpectralTangent(getOperation(), builder, tangents);
+}
+
+llvm::SmallVector<mlir::Value> SpectralFilterOp::buildTangent(
+    mlir::OpBuilder &builder, mlir::ValueRange tangents) {
+  return buildBilinearSpectralTangent(getOperation(), builder, tangents);
+}
+
+llvm::SmallVector<mlir::Value> SpectralConvOp::buildTangent(
+    mlir::OpBuilder &builder, mlir::ValueRange tangents) {
+  return buildBilinearSpectralTangent(getOperation(), builder, tangents);
+}
+
+llvm::SmallVector<mlir::Value> ISTFTOp::buildTangent(
+    mlir::OpBuilder &builder, mlir::ValueRange tangents) {
+  // ISTFT is linear in its spectrum for a fixed window.  It is not linear in
+  // the window because overlap-add normalization depends quadratically on it;
+  // keep that parameter product fail-closed until it has a dedicated rule.
+  if (tangents.size() != 2 || !tangents[0] || tangents[1])
+    return {};
+  return {cloneTangentWithOperands(
+      getOperation(), {tangents[0], getParameter()}, builder)};
+}
+
 llvm::SmallVector<mlir::Value> StopGradientOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
   if (tangents.size() != 1)

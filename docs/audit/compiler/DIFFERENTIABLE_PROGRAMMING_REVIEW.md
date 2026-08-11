@@ -154,10 +154,10 @@ only input where a wrong selection and a right one differ).
 
 ### C3. Stochastic computation graphs give the effect lattice its missing structure (§11.5)
 
-Decision #5 already admits `EffectLattice` walks the Python source AST and
-**fails open** — an RNG call reached through an alias, local, or helper is
-inferred `pure`, so `@jit(deterministic=True)` passes on a nondeterministic
-function.
+At review time Decision #5 admitted `EffectLattice` walked the Python source
+AST and failed open. **W2.2 closed this on 2026-08-10:** registered Graph
+effects and the concrete trace certificate now detect aliased/local/helper RNG,
+while unresolved operations fail closed.
 
 **Book result.** A stochastic program is a DAG with two node kinds —
 **function nodes** and **distribution nodes** — where a node's output is a

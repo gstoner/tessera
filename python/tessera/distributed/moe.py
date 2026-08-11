@@ -29,8 +29,11 @@ import functools
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional
 import numpy as np
+
+if TYPE_CHECKING:
+    from ..compiler.megamoe_overlap import MegaMoEOverlapPlan
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -753,6 +756,12 @@ class PipelineStats(NamedTuple):
     all_offloaded: bool
     pipeline_stages: int = 1
     overlapped_combines: int = 0
+    plan_digest: str = ""
+    action_order: tuple[str, ...] = ()
+    true_use_waits: tuple[tuple[str, str], ...] = ()
+    combine_order: tuple[int, ...] = ()
+    max_live_chunks: int = 0
+    max_live_dispatch_bytes: int = 0
 
 
 def megamoe_forward_pipelined(
@@ -769,6 +778,8 @@ def megamoe_forward_pipelined(
     quant=None,
     comm_latency_s: float = 0.0,
     pipeline_stages: int = 2,
+    overlap_plan: "MegaMoEOverlapPlan | None" = None,
+    workspace_capacity_bytes: int | None = None,
 ) -> "tuple[MegaMoEResult, PipelineStats]":
     """Async-pipelined expert-parallel forward — REAL comm/compute overlap.
 
@@ -816,18 +827,60 @@ def megamoe_forward_pipelined(
     lu = np.asarray(local_W_up, dtype=np.float32)
     ld = np.asarray(local_W_down, dtype=np.float32)
 
-    nc = max(1, min(int(num_chunks), Tl))
-    chunks = [c for c in np.array_split(np.arange(Tl), nc) if c.size]
-    nc = len(chunks)
-
     def _cap(n: int) -> int:
         return int(capacity) if capacity is not None \
             else expert_capacity(n, E, R, top_k, config.capacity_factor)
 
-    def dispatch_phase(idx: np.ndarray) -> dict:
+    if overlap_plan is None:
+        from ..compiler.megamoe_overlap import build_megamoe_overlap_plan
+
+        requested_chunks = max(1, min(int(num_chunks), Tl))
+        q, remainder = divmod(Tl, requested_chunks)
+        chunk_sizes = [
+            q + (1 if index < remainder else 0)
+            for index in range(requested_chunks)
+        ]
+        capacities = [_cap(size) for size in chunk_sizes]
+        buffer_bytes = [2 * R * Ep * cap * K * 4 for cap in capacities]
+        overlap_plan = build_megamoe_overlap_plan(
+            plan_id=f"megamoe_{requested_chunks}c_{pipeline_stages}s",
+            num_tokens=Tl,
+            num_chunks=requested_chunks,
+            capacities=capacities,
+            dispatch_buffer_bytes=buffer_bytes,
+            pipeline_stages=pipeline_stages,
+            max_in_flight_chunks=2,
+            workspace_capacity_bytes=workspace_capacity_bytes,
+        )
+    else:
+        if overlap_plan.num_tokens != Tl:
+            raise ValueError(
+                "megamoe_forward_pipelined: overlap plan token count "
+                f"{overlap_plan.num_tokens} does not match local tokens {Tl}"
+            )
+        if overlap_plan.pipeline_stages != pipeline_stages:
+            raise ValueError(
+                "megamoe_forward_pipelined: pipeline_stages conflicts with "
+                "the executable overlap plan"
+            )
+        if (
+            workspace_capacity_bytes is not None
+            and overlap_plan.max_live_dispatch_bytes > workspace_capacity_bytes
+        ):
+            raise ValueError(
+                "megamoe_forward_pipelined: overlap plan exceeds runtime "
+                "workspace capacity"
+            )
+    nc = overlap_plan.num_chunks
+    chunks = [
+        np.arange(chunk.start, chunk.stop, dtype=np.int64)
+        for chunk in overlap_plan.chunks
+    ]
+
+    def dispatch_phase(chunk_index: int, idx: np.ndarray) -> dict:
         xb = x_local[idx]
         nb = int(xb.shape[0])
-        C = _cap(nb)
+        C = overlap_plan.chunks[chunk_index].expert_capacity
         scores = np.asarray(_ops.gemm(xb, Wr), dtype=np.float32)
         route = route_tokens(scores, config, capacity=nb * top_k + 1)
         assign, weights = route.assignment, route.weights.astype(np.float32)
@@ -889,19 +942,55 @@ def megamoe_forward_pipelined(
     overlapped_combines = 0
     defer = pipeline_stages >= 2
     pending: Optional[tuple] = None      # (chunk_idx, frame, out) awaiting combine
+    action_order: list[str] = []
+    true_use_waits: list[tuple[str, str]] = []
+    combine_order: list[int] = []
+    max_live_chunks = 0
 
-    frames[0] = dispatch_phase(chunks[0])
+    def note_live_frames() -> None:
+        nonlocal max_live_chunks
+        live = sum(frame is not None for frame in frames)
+        max_live_chunks = max(max_live_chunks, live)
+        if live > overlap_plan.max_in_flight_chunks:
+            raise RuntimeError(
+                "MegaMoE runtime exceeded planned live-chunk capacity"
+            )
+
+    def run_combine(chunk_index: int, frame: dict, out: np.ndarray) -> None:
+        expected = len(combine_order)
+        if chunk_index != expected:
+            raise RuntimeError(
+                f"MegaMoE combine order must be deterministic; expected "
+                f"{expected}, got {chunk_index}"
+            )
+        true_use_waits.append(
+            (f"compute:{chunk_index}", f"combine:{chunk_index}")
+        )
+        action_order.append(f"combine:{chunk_index}")
+        pieces[chunk_index] = combine_phase(frame, out)
+        combine_order.append(chunk_index)
+        frames[chunk_index] = None
+
+    frames[0] = dispatch_phase(0, chunks[0])
+    action_order.append("dispatch:0")
+    note_live_frames()
     for c in range(nc):
         frame = frames[c]
+        if frame is None:
+            raise RuntimeError(f"MegaMoE dispatch frame {c} was not produced")
+        true_use_waits.append((f"dispatch:{c}", f"compute:{c}"))
+        action_order.append(f"compute:{c}")
         ac = _AsyncCompute(functools.partial(compute_phase, frame))   # GPU async
         # --- CPU work issued while compute(c) is in flight on the GPU ---
-        if c + 1 < nc:
-            frames[c + 1] = dispatch_phase(chunks[c + 1])        # dispatch(c+1) ∥ compute(c)
         if defer and pending is not None:
             pc, pf, po = pending                                 # combine(c-1) ∥ compute(c)
-            pieces[pc] = combine_phase(pf, po)
+            run_combine(pc, pf, po)
             overlapped_combines += 1
             pending = None
+        if c + 1 < nc:
+            frames[c + 1] = dispatch_phase(c + 1, chunks[c + 1])
+            action_order.append(f"dispatch:{c + 1}")
+            note_live_frames()
         # --- synchronize compute(c) ---
         out_c = ac.wait()
         compute_ids.append(ac.thread_ident)
@@ -910,18 +999,29 @@ def megamoe_forward_pipelined(
         if defer:
             pending = (c, frame, out_c)                          # defer combine(c)
         else:
-            pieces[c] = combine_phase(frame, out_c)              # combine(c) exposed (1-stage)
+            run_combine(c, frame, out_c)                         # combine(c) exposed (1-stage)
 
     if defer and pending is not None:                            # drain the last combine
         pc, pf, po = pending
-        pieces[pc] = combine_phase(pf, po)
+        run_combine(pc, pf, po)
+
+    if tuple(combine_order) != overlap_plan.deterministic_combine_order:
+        raise RuntimeError(
+            "MegaMoE runtime did not execute the planned combine order"
+        )
 
     y_local = np.concatenate(pieces, axis=0) if pieces else x_local[:0]
     result = MegaMoEResult(y_local=y_local, n_dropped=total_drop, capacity=last_cap)
     stats = PipelineStats(
         num_chunks=nc, compute_thread_ids=compute_ids, main_thread_id=main_id,
         all_offloaded=all(tid is not None and tid != main_id for tid in compute_ids),
-        pipeline_stages=pipeline_stages, overlapped_combines=overlapped_combines)
+        pipeline_stages=pipeline_stages, overlapped_combines=overlapped_combines,
+        plan_digest=overlap_plan.artifact_digest,
+        action_order=tuple(action_order),
+        true_use_waits=tuple(true_use_waits),
+        combine_order=tuple(combine_order),
+        max_live_chunks=max_live_chunks,
+        max_live_dispatch_bytes=overlap_plan.max_live_dispatch_bytes)
     return result, stats
 
 
@@ -939,6 +1039,8 @@ def megamoe_layer_pipelined(
     quant=None,
     comm_latency_s: float = 0.0,
     pipeline_stages: int = 2,
+    overlap_plan: "MegaMoEOverlapPlan | None" = None,
+    workspace_capacity_bytes: int | None = None,
 ):
     """Async-pipelined :func:`megamoe_layer` — returns ``(y, n_dropped, stats)``
     with rank 0's :class:`PipelineStats`. Real wall-clock comm/compute overlap;
@@ -976,7 +1078,9 @@ def megamoe_layer_pipelined(
             Wg[r * Ep:(r + 1) * Ep], Wu[r * Ep:(r + 1) * Ep],
             Wd[r * Ep:(r + 1) * Ep],
             config=config, num_chunks=num_chunks, capacity=capacity, quant=quant,
-            comm_latency_s=comm_latency_s, pipeline_stages=pipeline_stages)
+            comm_latency_s=comm_latency_s, pipeline_stages=pipeline_stages,
+            overlap_plan=overlap_plan,
+            workspace_capacity_bytes=workspace_capacity_bytes)
 
     results = MockRankGroup(n=world_size).run(worker)
     y = np.concatenate([res.y_local for res, _ in results], axis=0)

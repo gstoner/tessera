@@ -30,7 +30,7 @@ def test_effect_lattice_infers_state_for_a_cache_committing_region():
         return x + 1
 
     def committing_region(cache, n):
-        return cache_commit(cache, n)  # noqa: F821 — name resolved by the AST walk
+        return cache_commit(cache, n)  # noqa: F821 — canonical Graph op name
 
     def rolling_region(cache, n):
         return cache_rollback(cache, n)  # noqa: F821

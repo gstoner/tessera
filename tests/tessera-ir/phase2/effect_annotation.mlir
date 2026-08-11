@@ -25,6 +25,10 @@
 // CHECK-LABEL: func.func @canonical_rng_normal
 // CHECK-SAME:  tessera.effect = "random"
 
+// ── Test 7: internal call summaries reach a fixed point ──────────────────
+// CHECK-LABEL: func.func @indirect_rng
+// CHECK-SAME:  tessera.effect = "random"
+
 module attributes {tessera.ir.version = "1.0"} {
 
   func.func @pure_gemm(
@@ -49,7 +53,8 @@ module attributes {tessera.ir.version = "1.0"} {
       %V: tensor<8x64x64xbf16>
   ) -> tensor<8x64x64xf32> {
     %O = "tessera.flash_attn"(%Q, %K, %V) <{operandSegmentSizes = array<i32: 1, 1, 1, 0>}>
-             {head_dim = 64 : i64, dropout_p = 0.1 : f64, causal = false}
+             {head_dim = 64 : i64, dropout_p = 0.1 : f64, causal = false,
+              tessera.effect_kind = "random", tessera.stochastic_identity = "seed_counter"}
              : (tensor<8x64x64xbf16>, tensor<8x64x64xbf16>, tensor<8x64x64xbf16>)
              -> tensor<8x64x64xf32>
     return %O : tensor<8x64x64xf32>
@@ -67,14 +72,28 @@ module attributes {tessera.ir.version = "1.0"} {
   }
 
   func.func @canonical_rng() -> tensor<8xf32> {
-    %sample = "tessera.rng_uniform"() {shape = [8], seed = 7 : i64}
+    %sample = "tessera.rng_uniform"() {shape = [8], seed = 7 : i64,
+        tessera.effect_kind = "random", tessera.stochastic_identity = "implicit_stream"}
         : () -> tensor<8xf32>
     return %sample : tensor<8xf32>
   }
 
   func.func @canonical_rng_normal() -> tensor<8xf32> {
-    %sample = "tessera.rng_normal"() {shape = [8], seed = 11 : i64}
+    %sample = "tessera.rng_normal"() {shape = [8], seed = 11 : i64,
+        tessera.effect_kind = "random", tessera.stochastic_identity = "implicit_stream"}
         : () -> tensor<8xf32>
+    return %sample : tensor<8xf32>
+  }
+
+  func.func @random_helper() -> tensor<8xf32> {
+    %sample = "tessera.rng_uniform"() {shape = [8], seed = 13 : i64,
+        tessera.effect_kind = "random", tessera.stochastic_identity = "implicit_stream"}
+        : () -> tensor<8xf32>
+    return %sample : tensor<8xf32>
+  }
+
+  func.func @indirect_rng() -> tensor<8xf32> {
+    %sample = func.call @random_helper() : () -> tensor<8xf32>
     return %sample : tensor<8xf32>
   }
 }

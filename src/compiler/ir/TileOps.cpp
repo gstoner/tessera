@@ -2022,6 +2022,7 @@ LogicalResult SolverIFTKernelOp::verify() {
     return emitOpError("IFT element count must be i64");
   auto model = getOperation()->getAttrOfType<StringAttr>("residual_model");
   auto solver = getOperation()->getAttrOfType<StringAttr>("linear_solver");
+  auto productMode = getOperation()->getAttrOfType<StringAttr>("product_mode");
   auto transpose = getOperation()->getAttrOfType<BoolAttr>("transpose");
   auto wrt = getOperation()->getAttrOfType<StringAttr>("wrt");
   auto scale = getOperation()->getAttrOfType<FloatAttr>("adjoint_scale");
@@ -2031,10 +2032,14 @@ LogicalResult SolverIFTKernelOp::verify() {
   auto residualDigest =
       getOperation()->getAttrOfType<StringAttr>("residual_digest");
   if (!model || model.getValue() != "diagonal_sqrt_v1" || !solver ||
-      solver.getValue() != "diagonal_matrix_free_v1" || !transpose ||
-      !transpose.getValue() || !wrt || wrt.getValue() != "parameter" ||
+      solver.getValue() != "diagonal_matrix_free_v1" || !productMode ||
+      !transpose || !wrt || wrt.getValue() != "parameter" ||
       !scale || scale.getValueAsDouble() != -1.0)
-    return emitOpError("requires the canonical diagonal-sqrt transposed IFT chain");
+    return emitOpError("requires the canonical diagonal-sqrt IFT chain");
+  if ((productMode.getValue() == "vjp" && !transpose.getValue()) ||
+      (productMode.getValue() == "jvp" && transpose.getValue()) ||
+      (productMode.getValue() != "vjp" && productMode.getValue() != "jvp"))
+    return emitOpError("requires vjp/transpose or jvp/non-transpose solver products");
   if (!storage || storage.getValue() != "f32" || !accum ||
       accum.getValue() != "f32")
     return emitOpError("initial IFT package requires f32 storage/accumulation");

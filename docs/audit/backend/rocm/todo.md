@@ -1,11 +1,83 @@
 ---
-last_updated: 2026-08-10
+last_updated: 2026-08-11
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `AD-FWD-FAMILY-2-2026-08-11` — **affine normalization,
+compound spectral, and matrix-free solver products execute on exact gfx1151.**
+The product ABI now accepts multiple active operands and named child outputs.
+Affine LayerNorm carries data/scale/bias tangents through generated norm and
+binary HIP lanes; the spectral-filter product executes both bilinear terms
+through the typed TSOL artifact; and `schedule.solver_ift` distinguishes the
+compiler-emitted residual JVP plus non-transposed solve from the VJP chain.
+All three exact-device numerical tests pass. The native multi-rank collective
+product contract is also software-complete and requires an available RCCL
+hardware adapter with world size >= 2; an actual multi-GPU RCCL packet remains
+the evidence gate. gfx1200/gfx1250 remain fail-closed.
+
+Cross-backend sync `AD-FWD-NATIVE-1-2026-08-11` — **the first native gfx1151
+JVP package is executable and exact-device proven.** A content-addressed parent
+binds the compiler-emitted paired-JVP digest to ordered physical child
+packages; launch never returns to Graph IR. gfx1151 sum, non-affine RMSNorm,
+and packed RFFT primal/tangent products pass independent NumPy formulas on the
+WSL-visible device (**3/3**). Child substitution and parent tampering fail
+closed. This is a correctness packet, not timing promotion. Additional
+normalization/spectral/solver families and the native RCCL evidence packet
+remain follow-ups. gfx1200/gfx1250 are rejected by the package
+contract and remain fail-closed pending their own profiles and evidence.
+
+Cross-backend sync `COMP-EFFECTS-W2.2-2026-08-10` — **shared registered-effect
+analysis closed; no gfx1151 performance claim.** Canonical Graph records now
+carry effect, alias, mutation, and stochastic identity; Python and C++ consume
+the same fail-closed facts and internal calls reach a fixed point. Await
+sinking uses that shared query. Existing gfx1151 async correctness remains
+valid; RCCL overlap performance and exact-device packets remain ROCm-owned.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R4-2026-08-10` — **shared functional
+MegaMoE plan consumption landed; RCCL/gfx1151 performance remains open.** The
+runtime consumes a content-addressed plan carrying chunk slices, per-expert
+capacity, a two-live-frame workspace limit, true-use dependencies, ordered
+collectives, and deterministic combines. R3 only prunes complete measured
+records; valid device-event/activity latency must select. Mock multi-rank proof
+does not establish RCCL overlap, and WSL timing is promotion-ineligible.
+gfx1151 needs native RCCL stream/event binding and a packet; gfx1200/gfx1250
+remain fail-closed.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R3-2026-08-10` — **shared prune-only
+Tile action-DAG model landed; gfx1151 promotion policy is unchanged.** The
+model validates explicit dependencies and calibration identity, searches legal
+orders, and composes compute/memory/communication lanes with queue
+serialization. Only exhaustive clear losers may be pruned; every estimate is
+promotion-ineligible and scalar measured latency remains authoritative. WSL
+rows lacking valid HIP/activity calibration cannot become promotion evidence;
+gfx1200/gfx1250 remain fail-closed. R4 must bind the model to an executable
+ROCm overlap consumer and obtain architecture-owned measurements.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R2-2026-08-10` — **shared measured
+resource-vector schema landed; gfx1151 providers can populate it without
+changing selector authority.** Successful measured rows carry compute time,
+dtype-correct bytes moved, communication bytes, queue/resource identity,
+timing provenance, and the measured-candidate digest; the tuning cache retains
+provenance across warm starts. Analytical rows cannot claim the vector and
+scalar measured latency remains authoritative. Existing HIP/device-clock and
+ROCprofiler eligibility rules still govern promotion; gfx1200/gfx1250 remain
+fail-closed and need independent providers and packets.
+
+Cross-backend sync `COMP-SCHED-OVERLAP-1-R1-2026-08-10` — **shared explicit
+lineage is executable and gfx1151 parity is retained.** Python Schedule→Tile
+async copies now produce named tokens consumed by waits; internal
+`tessera.queue.*` compatibility markers are rejected. Registered collective
+await sinking crosses only operations proven memory-effect-free and stops at
+mutation, RNG, alias/cast, region, or ordered-collective barriers. Host LLVM /
+MLIR 23 builds and the new/legacy collective lit tests pass. The WSL-visible
+gfx1151 cohort remains **16/16**: four structural checks plus global→LDS,
+five LDS-WMMA, five two-stage pipeline, and bit-identical via-Tile/production
+execution. This is correctness retention, not a new performance promotion;
+gfx1200/gfx1250 remain fail-closed.
 
 Cross-backend sync `AD-STOCHASTIC-RNG-1-2026-08-10` — **gfx1151 base RNG
 transforms are native and exact-device proven.** Explicit key/counter Graph ops,

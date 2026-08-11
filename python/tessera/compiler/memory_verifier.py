@@ -5,17 +5,13 @@ Tessera's memory model claims live in
 verifiers.  The existing :class:`tessera.compiler.tile_ir.TileIRVerifier`
 checks structural validity (``async_copy.stage >= 0``,
 ``queue.create.depth >= 1``, duplicate queues, etc.) but **not**
-ordering claims like "every ``wait_async`` for stage S happens
-after at least one ``async_copy`` at stage S" or "every
-``queue.pop`` happens after a matching ``queue.push``".
+ordering claims like "every ``wait_async`` consumes a token produced by a
+preceding ``async_copy``".
 
 M4 adds those ordering checks as a second pass that walks a
 :class:`TileIRModule` and emits diagnostics for:
 
-  - ``wait_async`` with no preceding ``async_copy`` at the same stage.
-  - ``queue.pop`` / ``queue.barrier`` with no preceding ``queue.push``
-    on the same queue.
-  - ``queue.push`` with no ``queue.create`` already in scope.
+  - ``wait_async`` with no preceding token-producing ``async_copy``.
   - ``async_copy`` whose ``source`` / ``dest`` memory-space attrs
     name an illegal transition (e.g., ``shared`` → ``shared``,
     which would normally be a register copy).
@@ -151,18 +147,12 @@ class _MemoryStateTracker:
     """Per-function happens-before state."""
 
     __slots__ = (
-        "issued_copy_stages", "open_queues", "queue_outstanding",
-        "diagnostics",
+        "issued_tokens", "waited_tokens", "diagnostics",
     )
 
     def __init__(self) -> None:
-        # Stages with at least one outstanding async_copy.
-        self.issued_copy_stages: set[int] = set()
-        # Queues that have been ``queue.create``d in this scope.
-        self.open_queues: set[int] = set()
-        # Per-queue count of unmatched ``push`` events.  Negative
-        # means more pops than pushes (an error).
-        self.queue_outstanding: dict[int, int] = {}
+        self.issued_tokens: set[str] = set()
+        self.waited_tokens: set[str] = set()
         self.diagnostics: list[MemoryModelDiagnostic] = []
 
 
@@ -174,8 +164,8 @@ def _location(op: TileOp) -> Optional[dict]:
 
 
 def _verify_async_copy(op: TileOp, state: _MemoryStateTracker) -> None:
-    stage = int(op.attrs.get("stage", 0))
-    state.issued_copy_stages.add(stage)
+    if op.result:
+        state.issued_tokens.add(op.result)
     src = op.attrs.get("source_space")
     dst = op.attrs.get("dest_space")
     if src is None or dst is None:
@@ -208,76 +198,35 @@ def _verify_async_copy(op: TileOp, state: _MemoryStateTracker) -> None:
 
 
 def _verify_wait_async(op: TileOp, state: _MemoryStateTracker) -> None:
-    stage = int(op.attrs.get("stage", 0))
-    if stage not in state.issued_copy_stages:
+    if len(op.operands) != 1:
         state.diagnostics.append(MemoryModelDiagnostic(
             severity="error",
-            message=(
-                f"wait_async(stage={stage}) has no preceding async_copy "
-                f"at the same stage; observed stages={sorted(state.issued_copy_stages)}"
-            ),
+            message="wait_async requires exactly one token operand",
             code="MEM_WAIT_WITHOUT_COPY",
             op_name=op.op_name,
             where=_location(op),
         ))
         return
-    # wait consumes one outstanding copy for that stage.  We use a
-    # set rather than a count so this stays cheap; subsequent waits
-    # for the same stage are still allowed (multiple consumers).
-
-
-def _verify_queue_create(op: TileOp, state: _MemoryStateTracker) -> None:
-    queue_id = int(op.attrs.get("queue_id", -1))
-    if queue_id < 0:
-        return  # structural error handled by TileIRVerifier
-    state.open_queues.add(queue_id)
-    state.queue_outstanding.setdefault(queue_id, 0)
-
-
-def _verify_queue_push(op: TileOp, state: _MemoryStateTracker) -> None:
-    queue_id = int(op.attrs.get("queue_id", -1))
-    if queue_id < 0:
-        return
-    if queue_id not in state.open_queues:
+    token = op.operands[0].removeprefix("%")
+    if token not in state.issued_tokens:
         state.diagnostics.append(MemoryModelDiagnostic(
             severity="error",
-            message=f"queue.push references queue {queue_id} that was not created in scope",
-            code="MEM_QUEUE_PUSH_WITHOUT_CREATE",
+            message=f"wait_async token %{token} has no preceding async_copy",
+            code="MEM_WAIT_WITHOUT_COPY",
             op_name=op.op_name,
             where=_location(op),
         ))
         return
-    state.queue_outstanding[queue_id] = state.queue_outstanding.get(queue_id, 0) + 1
-
-
-def _verify_queue_pop_or_barrier(op: TileOp, state: _MemoryStateTracker) -> None:
-    queue_id = int(op.attrs.get("queue_id", -1))
-    if queue_id < 0:
-        return
-    if queue_id not in state.open_queues:
+    if token in state.waited_tokens:
         state.diagnostics.append(MemoryModelDiagnostic(
             severity="error",
-            message=f"{op.op_name} references queue {queue_id} that was not created in scope",
-            code="MEM_QUEUE_OP_WITHOUT_CREATE",
+            message=f"async token %{token} is awaited more than once",
+            code="MEM_DUPLICATE_WAIT",
             op_name=op.op_name,
             where=_location(op),
         ))
         return
-    if state.queue_outstanding.get(queue_id, 0) <= 0:
-        state.diagnostics.append(MemoryModelDiagnostic(
-            severity="error",
-            message=(
-                f"{op.op_name}(queue_id={queue_id}) has no preceding "
-                "queue.push in scope (would block indefinitely)"
-            ),
-            code="MEM_QUEUE_POP_WITHOUT_PUSH",
-            op_name=op.op_name,
-            where=_location(op),
-        ))
-        return
-    if op.op_name == "tessera.queue.pop":
-        state.queue_outstanding[queue_id] -= 1
-    # `barrier` waits but does not consume — leave the count alone.
+    state.waited_tokens.add(token)
 
 
 def _verify_atomic(
@@ -386,12 +335,6 @@ def _walk(
             _verify_async_copy(op, state)
         elif op.op_name == "tile.wait_async":
             _verify_wait_async(op, state)
-        elif op.op_name == "tessera.queue.create":
-            _verify_queue_create(op, state)
-        elif op.op_name == "tessera.queue.push":
-            _verify_queue_push(op, state)
-        elif op.op_name in {"tessera.queue.pop", "tessera.queue.barrier"}:
-            _verify_queue_pop_or_barrier(op, state)
         elif op.op_name in {"tile.atomic", "tessera.atomic", "atomic"}:
             _verify_atomic(op, state, deterministic=deterministic)
         elif op.op_name in {"tile.fence", "tessera.fence", "fence.device"}:

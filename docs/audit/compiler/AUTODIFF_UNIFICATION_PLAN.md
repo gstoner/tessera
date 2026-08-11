@@ -101,7 +101,7 @@ unbounded family checklist:
    active operations and nested regions fail closed. The generated ledger now
    exposes `ir_tangent` and `fwd_cpu_ir_oracle`; Python JVP registration is not
    compiler proof.
-2. **AD-FWD-PRODUCT-2 / AD-STOCHASTIC-RNG-1 — landing.** Public `autodiff="forward"` and `"jvp"`
+2. **AD-FWD-PRODUCT-2 / AD-STOCHASTIC-RNG-1 / AD-FWD-NATIVE-1 — landing.** Public `autodiff="forward"` and `"jvp"`
    requests now canonicalize to one forward intent. A mode-neutral
    differentiation provenance facet coexists with the reverse-only compatibility
    field, so a Graph JVP can never be reported as native backward execution.
@@ -119,9 +119,16 @@ unbounded family checklist:
    (`constant_noise`, `pathwise`, `score_function`, or reject) close the prior
    implicit-RNG gap. x86 and gfx1151 now execute uniform scaling, Box–Muller,
    and dropout masking natively; Philox words are bit exact and transcendental
-   transforms are bounded to one f32 ULP. Remaining work in this milestone is
-   compound spectral/solver and loss/optimizer tangent expansion plus
-   independently proven target JVP packages.
+   transforms are bounded to one f32 ULP. A content-addressed native-product
+   ABI now binds the paired-IR digest and immutable child-package digests.
+   Sum, RMSNorm, affine LayerNorm, packed RFFT, spectral-filter, and the
+   diagonal matrix-free solver product execute on AVX-512 and gfx1151. The
+   multi-active ABI binds named child outputs; compound spectral rules apply
+   the product rule, and ISTFT window tangents reject. Native collective
+   products require a live multi-rank NCCL/RCCL adapter and reject nonlinear
+   reductions. Remaining work is native transport evidence, broader
+   solver/spectral and loss/optimizer expansion, Apple/CUDA consumption, and
+   independent performance evidence.
 3. **AD-REGION-1.** Add region activity plus `RegionAdjointInterface` and
    `RegionTangentInterface`; execute bounded `if`, `for`, and `scan` derivatives
    before admitting `while`. Effects, aliasing, and stochastic legality remain
@@ -141,9 +148,9 @@ unbounded family checklist:
    after generated ledger totality, structured-control execution, exact HVP,
    and independent backend evidence gates pass.
 
-Architecture-owned packages remain a parallel promotion queue. A shared Graph
-JVP does not transfer an AVX-512, gfx1151, Metal, or CUDA schedule or hardware
-claim.
+Architecture-owned packages remain a parallel promotion queue. The first
+AVX-512/gfx1151 rows do not transfer a schedule or hardware claim to Metal,
+CUDA, gfx1200, or gfx1250.
 
 ---
 
@@ -687,7 +694,7 @@ once Phase 0 lands.
 | 3 | matmul→tanh/sigmoid→loss — backward native on CPU | ✅ paired-pass output launches through MLIR/LLVM JIT on `cpu_x86_64`; direct gradient oracle proof landed 2026-07-12 |
 | 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **complete** 2026-07-12 via A1–A4; aliases share their dedicated implementation, matmul is an explicit two-GEMM composition, and residual policy is structured per target. |
 | 5 | Closed operation-family expansion | 🟡 live family and target truth is generated; native losses/optimizers, spectral transforms, bounded compound spectral backward, and bounded IFT packages have advanced beyond the older normalization-only summary. Apple/NVIDIA physical promotion and remaining family rows stay open. |
-| D2 | General compiler forward mode | 🟡 `TangentInterface`, paired JVP pass, fail-closed legality, mode-neutral public request/provenance, `wrt`-indexed product ABI, ledger axes, and numerical matmul/mul/tanh/sigmoid CPU proof have landed. Broad family rules, regions, and target packages remain open. |
+| D2 | General compiler forward mode | 🟡 `TangentInterface`, paired JVP pass, fail-closed legality, public provenance, multi-active `wrt` ABI, and 35 straight-line rules have landed. Content-addressed normalization, core/compound spectral, and diagonal solver products execute on AVX-512 and gfx1151; native collective products are gated to live NCCL/RCCL multi-rank adapters. Broader solvers, native transport evidence, Apple/CUDA packages, regions, higher-order composition, and clean performance packets remain open. |
 | 6 | NVIDIA sm_120 Flash Attention backward promotion | ✅ first CUDA family: f32/fp16 storage, f32 VJP accumulation, MHA/GQA/MQA aliases, mask/bias/soft-cap derivatives; exact `nvidia_sm120` `device_verified_jit` proof with recompute-all residual policy. |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand

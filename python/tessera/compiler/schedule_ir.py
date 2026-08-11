@@ -418,11 +418,17 @@ def _lower_graph_ops(
                     "flops": _matmul_flops(op),
                     "bytes_moved": _matmul_bytes(op),
                 },
+                operands=list(op.operands),
+                result=op.result,
+                source_op=op,
             ))
         elif op_name in CONV2D_OPS:
             scheduled.append(ScheduleOp(
                 "schedule.tile",
                 {**_base_attrs(op, idx), "tile_h": 16, "tile_w": 16, "tile_c": 32},
+                operands=list(op.operands),
+                result=op.result,
+                source_op=op,
             ))
         elif op_name == "tessera.flash_attn":
             scheduled.append(_flash_attention_pipeline(op, idx))
@@ -452,11 +458,17 @@ def _lower_graph_ops(
                 source_op=op,
             ))
         elif op_name in ROPE_OPS:
-            scheduled.append(ScheduleOp("schedule.elementwise", {**_base_attrs(op, idx), "vectorize": True, "pattern": "rotary_pairs"}))
+            scheduled.append(ScheduleOp(
+                "schedule.elementwise",
+                {**_base_attrs(op, idx), "vectorize": True, "pattern": "rotary_pairs"},
+                operands=list(op.operands), result=op.result, source_op=op))
         elif op_name.startswith("tessera.scf.") or op_name in {"tessera.barrier", "tessera.assert"}:
             scheduled.append(ScheduleOp("schedule.marker", {**_base_attrs(op, idx), **op.kwargs, "marker": op_name}))
         elif op.result is not None:
-            scheduled.append(ScheduleOp("schedule.elementwise", {**_base_attrs(op, idx), "vectorize": True}))
+            scheduled.append(ScheduleOp(
+                "schedule.elementwise",
+                {**_base_attrs(op, idx), "vectorize": True},
+                operands=list(op.operands), result=op.result, source_op=op))
         operand_names = [operand.removeprefix("%") for operand in op.operands]
         if operand_names:
             scheduled.append(ScheduleOp("schedule.layout", {"operands": operand_names, "layout": "row_major", "ordinal": idx}))
@@ -549,6 +561,9 @@ def _flash_attention_pipeline(op: IROp, ordinal: int) -> ScheduleOp:
             ),
             ScheduleOp("schedule.yield"),
         ],
+        operands=list(op.operands),
+        result=op.result,
+        source_op=op,
     )
 
 
@@ -592,6 +607,9 @@ def _sequence_mixer_pipeline(op: IROp, ordinal: int) -> ScheduleOp:
             ),
             ScheduleOp("schedule.yield"),
         ],
+        operands=list(op.operands),
+        result=op.result,
+        source_op=op,
     )
 
 

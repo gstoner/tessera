@@ -2381,7 +2381,8 @@ def Tessera_DCTOp : Tessera_SpectralUnaryOp<"dct", "Discrete cosine transform"> 
 
 class Tessera_SpectralCompoundOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
-  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = summaryText;
   let arguments = (ins TensorType:$x, TensorType:$parameter,
@@ -2408,7 +2409,8 @@ def Tessera_SpectralFilterOp : Tessera_SpectralCompoundOp<
 
 def Tessera_SpectralConvOp : Op<
   Tessera_Dialect, "spectral_conv",
-  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>]
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Reference spectral convolution semantic op";
   let arguments = (ins TensorType:$x, TensorType:$filter,

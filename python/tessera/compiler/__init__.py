@@ -12,6 +12,7 @@ Components:
     target_ir.py    — Tile IR → CPU/NVIDIA/Apple/ROCm Target IR lowering
     capabilities.py — shared target/op/runtime capability registry
     schedule_planner.py — legality/cost/search schedule planning contracts
+    composition_cost.py — prune-only measured Tile action-DAG analysis
     jit.py          — @jit and @kernel decorators that drive the pipeline
 
 Build order for Phase 1:
@@ -92,6 +93,22 @@ from .primitive_coverage import (
 )
 from .legality import LegalityDiagnostic, LegalityResult, TensorContract, check_op_legality
 from .schedule_planner import ScheduleCandidate, SchedulePlanner, SelectedSchedule, schedule_cache_key
+from .composition_cost import (
+    CompositionCalibration,
+    CompositionCandidate,
+    CompositionEstimate,
+    CompositionPruningResult,
+    TileAction,
+    estimate_composition,
+    prune_composition_candidates,
+)
+from .megamoe_overlap import (
+    MegaMoEChunk,
+    MegaMoEOverlapPlan,
+    build_megamoe_overlap_plan,
+    composition_candidate_for_megamoe_plan,
+    prune_megamoe_overlap_plans,
+)
 from .gpu_smoke import SmokeResult, run_matmul_smoke
 from .jit import jit, TesseraJitError
 from .driver import CompileArtifactBundle, CompileRequest, CompileTraceEvent, compile_graph_module

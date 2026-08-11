@@ -1,0 +1,44 @@
+{
+  "architecture": "gfx1151",
+  "correctness_promotion_eligible": true,
+  "dtype": "f32",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "processor": "x86_64",
+  "rows": [
+    {
+      "artifact_hash": "09ba22371d4d90fff455b083258289f33cd427d67353fe924a5c629ecff17025",
+      "family": "sum",
+      "host_wall_ns_samples": [1166914, 1143273, 1030604, 1009803, 1467296],
+      "max_abs_error_primal": 9.5367431640625e-07,
+      "max_abs_error_tangent": 9.5367431640625e-07,
+      "paired_jvp_ir_digest": "c34ccca49ce013c0b719792e011d84d6f0f4cb294d710f2cfd98499137638e36"
+    },
+    {
+      "artifact_hash": "8e130fd4203fb88b87a1ac329a60a78412e87ecc3be7dd00b96e9f26f7a22aff",
+      "family": "rmsnorm",
+      "host_wall_ns_samples": [5737784, 5051477, 5368878, 5136368, 5013063],
+      "max_abs_error_primal": 2.384185791015625e-07,
+      "max_abs_error_tangent": 2.384185791015625e-07,
+      "paired_jvp_ir_digest": "1699ac8ec225644b89bfd4f6397b7eb6ec7ec94759f5a5efdf09f9597a310ca0"
+    },
+    {
+      "artifact_hash": "ea63b8db2c6c3646db42ae80c23a9b14d10958592ae8e821fe4ac27aa2b2a573",
+      "family": "rfft",
+      "host_wall_ns_samples": [1390083, 1157343, 1017789, 1079403, 969067],
+      "max_abs_error_primal": 3.0157830224197824e-06,
+      "max_abs_error_tangent": 3.84438408218557e-06,
+      "paired_jvp_ir_digest": "4ef7016e675b34c70e8c57af0fe3f11a48a1edba16b8bf2b1b2d5bf2ac30b78f"
+    }
+  ],
+  "schema": "tessera.native_jvp.evidence.v1",
+  "shape": [7, 64],
+  "target": "rocm",
+  "timing_domain": "synchronized_parent_package_host_wall",
+  "timing_promotion_eligible": false,
+  "toolchain": {
+    "build_directory": "build-rocm-7.14-llvm23-clean",
+    "tessera_opt": "build-rocm-7.14-llvm23-clean/tools/tessera-opt/tessera-opt",
+    "tessera_opt_sha256": "586b8feacc14be92d863ec99ee48712779e87222a30d57cf953120ba39599a41"
+  },
+  "warm_state": true
+}

@@ -222,7 +222,9 @@ class AutodiffForwardPass
           }
           resultTangents = tangent.buildTangent(builder, inputTangents);
           if (resultTangents.size() != operation.getNumResults()) {
-            operation.emitError("tessera-autodiff-forward: TangentInterface returned the wrong result arity");
+            operation.emitError(
+                "tessera-autodiff-forward: TangentInterface rejected the active "
+                "operand combination or returned the wrong result arity");
             return signalPassFailure();
           }
         } else {

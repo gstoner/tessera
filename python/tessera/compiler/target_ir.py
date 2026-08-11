@@ -1039,10 +1039,7 @@ def _apple_gpu_module_fusion_kind(tile_module: TileIRModule) -> str | None:
     compute_ops = [
         op for op in flat_ops
         if op.op_name not in {"tile.debug_artifact", "tile.debug_barrier"}
-        and not (
-            op.op_name.startswith("tessera.queue.")
-            or op.op_name in {"tile.async_copy", "tile.wait_async"}
-        )
+        and op.op_name not in {"tile.async_copy", "tile.wait_async"}
     ]
     if not compute_ops:
         return None
@@ -1153,10 +1150,7 @@ def _apple_gpu_module_is_mps_runtime(tile_module: TileIRModule) -> bool:
     compute_ops = [
         op for op in flat_ops
         if op.op_name not in {"tile.debug_artifact", "tile.debug_barrier"}
-        and not (
-            op.op_name.startswith("tessera.queue.")
-            or op.op_name in {"tile.async_copy", "tile.wait_async"}
-        )
+        and op.op_name not in {"tile.async_copy", "tile.wait_async"}
     ]
     if not compute_ops:
         return False
@@ -1223,7 +1217,7 @@ def _lower_tile_ops(
     # path must emit exactly one func.call site, so we suppress duplicates.
     #
     # The dedup key is only consumed when the op actually produces a runtime
-    # emission. Filter ops (tile.async_copy, tessera.queue.*, tile.wait_async,
+    # emission. Filter ops (tile.async_copy, tile.wait_async,
     # debug_barriers) carry the same source/ordinal but emit nothing — if we
     # consumed the key for them, the real compute op would be skipped.
     seen_runtime_keys: set[tuple[str, object]] = set()
@@ -1413,7 +1407,7 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
         return [
             *_rocm_async_copy_pair(base),
         ]
-    if op.op_name.startswith("tessera.queue.") or op.op_name == "tile.wait_async":
+    if op.op_name == "tile.wait_async":
         return []
     return [
         TargetOp("tessera_rocm.elementwise", {**base, "arch": "gfx90a"}),
@@ -1424,7 +1418,7 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
 def _lower_cpu_op(op: TileOp) -> list[TargetOp]:
     if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
         return []
-    if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
+    if op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
@@ -1456,7 +1450,7 @@ def _lower_cpu_op(op: TileOp) -> list[TargetOp]:
 def _lower_x86_op(op: TileOp) -> list[TargetOp]:
     if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
         return []
-    if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
+    if op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
@@ -1489,7 +1483,7 @@ def _lower_x86_op(op: TileOp) -> list[TargetOp]:
 def _lower_nvidia_op(op: TileOp, *, target_kind: str) -> list[TargetOp]:
     if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
         return []
-    if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
+    if op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
@@ -1709,7 +1703,7 @@ def _lower_apple_cpu_op(op: TileOp) -> list[TargetOp]:
         return [TargetOp("tessera_apple.cpu.vector_reduce", {**base, "framework": "Accelerate", "abi": "vDSP", "dtype": "f32"})]
     if source == "tessera.rope":
         return [TargetOp("tessera_apple.cpu.vector_op", {**base, "framework": "Accelerate", "abi": "vecLib", "pattern": "rotary_pairs", "dtype": "f32"})]
-    if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
+    if op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
     return [TargetOp("tessera_apple.cpu.vector_op", {**base, "framework": "Accelerate", "abi": "vecLib", "dtype": "f32"})]
 
@@ -1734,7 +1728,7 @@ def _lower_apple_gpu_op(op: TileOp, *, mps_runtime: bool = False) -> list[Target
             "severity": "unsupported",
             "reason": "KV-cache mutation target lowering is not implemented for Apple GPU",
         })]
-    if op.op_name.startswith("tessera.queue.") or op.op_name in {"tile.async_copy", "tile.wait_async"}:
+    if op.op_name in {"tile.async_copy", "tile.wait_async"}:
         return []
     # Phase 8.3 MPS runtime path: a single-matmul module is lowered to
     # mps_matmul + mps_dispatch with execution_mode="metal_runtime". Phase

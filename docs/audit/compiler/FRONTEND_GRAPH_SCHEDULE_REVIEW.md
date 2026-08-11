@@ -19,6 +19,12 @@ if-chain that defaults to the wrong answer.
 
 Status truth stays with the generated dashboards (Decision #26).
 
+**2026-08-10 status correction:** E3/U7 is complete. `_EffectVisitor` has been
+removed; emitted/traced Graph operations carry registered effect, alias, and
+stochastic-identity contracts consumed by Python and C++. The pipeline diagram
+below is the review-time snapshot and is retained to explain the original
+finding, not current status.
+
 ---
 
 ## 0. The pipeline as documented vs as built
@@ -353,7 +359,7 @@ be explicitly scoped to declarations, not semantics.
 |---|---|---|---|
 | **E1** | U2 — one shape-rule registry on `OpSpec`; fail closed; auto-flip coverage | 2w | no op reaches `operand_types[0]` |
 | **E2** | U1 — differential harness (trace vs AST over the op catalog), then promote the tracer to default per target | 4w | byte-identical or explained IR for every catalog op |
-| **E3** | U7 — derive effects from traced IR; retire `_EffectVisitor`; correct Decision #5 | 2w | aliased/indirect RNG call is detected |
+| **E3** | **Completed 2026-08-10:** U7 — registered traced-IR effects, `_EffectVisitor` retired, indirect RNG proven | done | aliased/indirect RNG call is detected |
 | **E4** | U5 + U6 — decompose `JitFn` and `__init__.py` | 3w | no target string in `jit.py` |
 | **E5** | U4 — dedicated `GraphToSchedulePass` source/header; lit fixtures; retire the Python duplicate | 2w | one Graph→Schedule implementation |
 | **E6** | U3 — cost-model-driven scheduling at Schedule IR | 5w | tile sizes chosen by measurement, not config |

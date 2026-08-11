@@ -7,7 +7,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **491** ops in `primitive_coverage` registry.
-- **4935** total Python-test references, **1237** total lit-fixture references.
+- **4953** total Python-test references, **1250** total lit-fixture references.
 - **78** ops have **zero** references in either test surface.
 - **123** ops have ≤1 reference ("thinly tested").
 - **166** ops have ≥10 references ("well tested").
@@ -20,17 +20,17 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `matmul` |  469 |  273 |  742 |  21 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  129 |   73 |  202 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `softmax` |  147 |   48 |  195 |  31 | `bf16`, `f16`, `f32`, `f64` … |
-| `add` |  127 |   34 |  161 |  10 | `bf16`, `f16`, `f32`, `f64` … |
+| `add` |  128 |   35 |  163 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  115 |   37 |  152 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |  106 |   17 |  123 |   8 | `bf16`, `f16`, `f32`, `f64` … |
+| `rmsnorm` |  105 |   18 |  123 |   6 | `bf16`, `f16`, `f32`, `f64` … |
 | `mul` |  102 |   19 |  121 |   8 | `bf16`, `f16`, `f32`, `f64` … |
-| `rmsnorm` |  103 |   18 |  121 |   6 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   87 |    8 |   95 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `cast` |   24 |   61 |   85 |   1 | `bf16`, `fp16`, `fp32`, `int8` |
 | `gemm` |   83 |    2 |   85 |   8 | `bf16`, `f16`, `f32`, `fp16` … |
 | `gelu` |   58 |   23 |   81 |   1 | `bf16`, `f16`, `f32`, `f64` … |
 | `selective_ssm` |   71 |   10 |   81 |   3 | `bf16`, `f16`, `fp16`, `fp32` |
-| `layer_norm` |   60 |   16 |   76 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
+| `layer_norm` |   62 |   16 |   78 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
 | `transpose` |   32 |   40 |   72 |   0 | `bf16`, `f16`, `f32`, `fp16` … |
 | `attn_local_window_2d` |   36 |   25 |   61 |   1 | `fp16`, `fp32` |
 | `cholesky` |   28 |   30 |   58 |   0 | `bf16`, `f16`, `f32`, `fp16` … |

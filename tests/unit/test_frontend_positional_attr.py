@@ -22,7 +22,7 @@ def test_top_k_positional_scalar_lowers_to_attribute():
 
     g = _graph(f)
     # one operand (%x), k as an attribute — not a "%?" operand
-    assert "tessera.top_k(%x) {k = 5}" in g
+    assert 'tessera.top_k(%x) {k = 5, tessera.effect_kind = "pure"}' in g
     assert "%?" not in g
 
 
@@ -34,8 +34,9 @@ def test_top_k_positional_matches_keyword_form():
         return ts.ops.top_k(x, k=5)
 
     gp, gk = _graph(pos), _graph(kw)
-    assert "tessera.top_k(%x) {k = 5}" in gp
-    assert "tessera.top_k(%x) {k = 5}" in gk
+    expected = 'tessera.top_k(%x) {k = 5, tessera.effect_kind = "pure"}'
+    assert expected in gp
+    assert expected in gk
 
 
 def test_tensor_arg_ops_still_emit_operands():
@@ -65,7 +66,7 @@ def test_positional_scalar_resolves_from_closure_variable():
     def f(x):
         return ts.ops.top_k(x, k)
 
-    assert "tessera.top_k(%x) {k = 7}" in _graph(f)
+    assert 'tessera.top_k(%x) {k = 7, tessera.effect_kind = "pure"}' in _graph(f)
 
 
 _GLOBAL_K = 4
@@ -75,4 +76,4 @@ def test_positional_scalar_resolves_from_module_global():
     def f(x):
         return ts.ops.top_k(x, _GLOBAL_K)
 
-    assert "tessera.top_k(%x) {k = 4}" in _graph(f)
+    assert 'tessera.top_k(%x) {k = 4, tessera.effect_kind = "pure"}' in _graph(f)

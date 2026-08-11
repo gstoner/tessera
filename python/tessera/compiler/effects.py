@@ -9,22 +9,21 @@ also decorated with seed=N.
 Lattice order (least → most permissive):
     pure < random < movement < state < collective < memory < io < top
 
-The EffectLattice walks a function's call graph (in Phase 1: inspects the
-function body's AST for known Tessera op calls) and infers the effect level.
+The EffectLattice consumes canonical Graph-IR operation records. Python call
+spellings are deliberately irrelevant: aliases and dispatch must be resolved
+by Graph emission or concrete tracing before effects are trusted.
 
 Reference: CLAUDE.md §Key Design Contracts — Effect Lattice
            src/programming_model/docs/Tessera_Programming_Model_v1_1_Plan_20250917_212640.md §1.2
 """
 
 from __future__ import annotations
-import ast
 import enum
 import inspect
-import textwrap
 import weakref
-from typing import Callable, Dict, FrozenSet, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
 
-from .op_catalog import OP_SPECS
+from .op_catalog import OP_SPECS, get_op_spec
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -127,8 +126,8 @@ class Effect(enum.IntEnum):
 # Known op → effect mappings
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Maps known tessera op names to the effect they introduce.
-# Phase 1: conservative static table. Phase 2: derive from op ODS attributes.
+# Compatibility view of the canonical catalog for public-name lookup.
+# Inference itself consumes emitted/traced Graph operation records.
 _OP_EFFECTS: Dict[str, Effect] = {
     name: Effect[spec.effect]
     for name, spec in OP_SPECS.items()
@@ -155,64 +154,37 @@ _OP_EFFECTS.update({
     "barrier": Effect.collective,
 })
 
-# Attribute / module paths that signal random (numpy, torch, etc.)
-_RANDOM_ATTR_PATTERNS: FrozenSet[str] = frozenset({
-    "np.random",
-    "numpy.random",
-    "torch.rand",
-    "torch.randn",
-    "random.random",
-    "random.randint",
-})
+def registered_op_effect(
+    op_name: str, attrs: Mapping[str, Any] | None = None,
+) -> Effect:
+    """Return the effect declared by a canonical Graph operation record.
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# AST walker for Phase 1 effect inference
-# ─────────────────────────────────────────────────────────────────────────────
-
-class _EffectVisitor(ast.NodeVisitor):
+    Unknown operations fail closed as ``top``. An explicit traced
+    ``tessera.effect_kind`` may refine a custom operation; otherwise the
+    canonical operation catalog is authoritative.
     """
-    Walks a function's AST and collects the effects of all tessera op calls
-    and any random library calls.
+    attrs = attrs or {}
+    explicit = attrs.get("tessera.effect_kind", attrs.get("effect"))
+    if isinstance(explicit, str) and explicit in Effect.__members__:
+        return Effect[explicit]
+    spec = get_op_spec(op_name)
+    if spec is not None:
+        return Effect[spec.effect]
+    bare = op_name.rsplit(".", 1)[-1]
+    return _OP_EFFECTS.get(bare, Effect.top)
 
-    Phase 1 scope: only inspects `tessera.ops.<name>`, `ops.<name>`, and
-    known random patterns. Full inter-procedural analysis is Phase 2.
-    """
 
-    def __init__(self) -> None:
-        self.inferred: Effect = Effect.pure
-        self.offending_ops: List[str] = []
-
-    def _record(self, op_name: str, effect: Effect) -> None:
+def infer_graph_effects(body: Iterable[Any]) -> tuple[Effect, List[str]]:
+    """Join registered effects across IROp-like traced Graph records."""
+    inferred = Effect.pure
+    offending: List[str] = []
+    for op in body:
+        name = str(getattr(op, "op_name", ""))
+        effect = registered_op_effect(name, getattr(op, "kwargs", None))
+        inferred = inferred.join(effect)
         if effect > Effect.pure:
-            self.offending_ops.append(op_name)
-        self.inferred = self.inferred.join(effect)
-
-    def visit_Call(self, node: ast.Call) -> None:
-        op_name = self._resolve_call_name(node)
-        if op_name:
-            # Check tessera.ops.<name> or ops.<name>
-            bare = op_name.split(".")[-1]
-            if bare in _OP_EFFECTS:
-                self._record(op_name, _OP_EFFECTS[bare])
-            # Check random library patterns
-            for pat in _RANDOM_ATTR_PATTERNS:
-                if op_name.startswith(pat):
-                    self._record(op_name, Effect.random)
-                    break
-        self.generic_visit(node)
-
-    @staticmethod
-    def _resolve_call_name(node: ast.Call) -> Optional[str]:
-        """Extract the dotted name of a call, e.g. 'tessera.ops.gemm'."""
-        func = node.func
-        parts = []
-        while isinstance(func, ast.Attribute):
-            parts.append(func.attr)
-            func = func.value
-        if isinstance(func, ast.Name):
-            parts.append(func.id)
-        return ".".join(reversed(parts)) if parts else None
+            offending.append(name or "<unregistered-op>")
+    return inferred, offending
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -223,8 +195,8 @@ class EffectLattice:
     """
     Infers and validates the effect level of a Tessera function.
 
-    Phase 1: AST-based single-function analysis.
-    Phase 2: full inter-procedural dataflow over the Graph IR call graph.
+    Effects are inferred from emitted/traced Graph operations. The former AST
+    call-name visitor was retired because aliases could make it fail open.
 
     Usage:
         lattice = EffectLattice()
@@ -245,7 +217,7 @@ class EffectLattice:
 
     def infer(self, fn: Callable, source_text: Optional[str] = None) -> Effect:
         """
-        Infer the effect level of fn by walking its AST.
+        Infer the effect level from the function's emitted Graph IR.
 
         Returns:
             Effect — the inferred effect level
@@ -264,18 +236,23 @@ class EffectLattice:
                     return cached
 
         try:
+            from .graph_ir import GraphIRBuilder
+
             source = source_text if source_text is not None else inspect.getsource(fn)
-            source = textwrap.dedent(source)
-            tree = ast.parse(source)
-        except (OSError, TypeError, SyntaxError):
-            # Cannot inspect — conservative fallback
+            builder = GraphIRBuilder()
+            builder.lower(fn, source_text=source)
+            if any(d.severity in {"warning", "error"} for d in builder.diagnostics):
+                result = Effect.top
+                if use_cache:
+                    self._cache[fn] = result
+                return result
+            body = [op for graph_fn in builder.module().functions
+                    for op in graph_fn.body]
+            result, _ = infer_graph_effects(body)
+        except Exception:
             if use_cache:
                 self._cache[fn] = Effect.top
             return Effect.top
-
-        visitor = _EffectVisitor()
-        visitor.visit(tree)
-        result = visitor.inferred
         if use_cache:
             self._cache[fn] = result
         return result
@@ -288,15 +265,18 @@ class EffectLattice:
             (Effect, List[str]) — effect level and offending ops
         """
         try:
-            source = source_text if source_text is not None else inspect.getsource(fn)
-            source = textwrap.dedent(source)
-            tree = ast.parse(source)
-        except (OSError, TypeError, SyntaxError):
-            return Effect.top, ["<uninspectable>"]
+            from .graph_ir import GraphIRBuilder
 
-        visitor = _EffectVisitor()
-        visitor.visit(tree)
-        return visitor.inferred, visitor.offending_ops
+            source = source_text if source_text is not None else inspect.getsource(fn)
+            builder = GraphIRBuilder()
+            builder.lower(fn, source_text=source)
+            if any(d.severity in {"warning", "error"} for d in builder.diagnostics):
+                return Effect.top, ["<untraceable-graph>"]
+            body = [op for graph_fn in builder.module().functions
+                    for op in graph_fn.body]
+            return infer_graph_effects(body)
+        except Exception:
+            return Effect.top, ["<untraceable-graph>"]
 
     def check_deterministic(
         self,
@@ -337,8 +317,7 @@ class EffectLattice:
 
         random_ops = [
             op for op in offending_ops
-            if op.split(".")[-1] in {"dropout", "randn", "rand", "bernoulli", "normal"}
-            or any(op.startswith(pat) for pat in _RANDOM_ATTR_PATTERNS)
+            if registered_op_effect(op) == Effect.random
         ]
         if random_ops and seed is None:
             raise TesseraEffectError(

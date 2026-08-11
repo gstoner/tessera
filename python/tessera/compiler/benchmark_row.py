@@ -26,6 +26,7 @@ guarantee — :func:`validate_benchmark_row` rejects rows that claim
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
@@ -85,6 +86,99 @@ NATIVE_MODES: frozenset[str] = frozenset({
 NON_NATIVE_BACKENDS: frozenset[str] = frozenset({
     "python_ref", "reference", "numpy",
 })
+
+RESOURCE_VECTOR_SCHEMA = "tessera.measured_resource_vector.v1"
+RESOURCE_VECTOR_USAGE = "composition_analysis_only"
+SCALAR_SELECTOR_AUTHORITY = "latency_ms"
+
+
+@dataclass(frozen=True)
+class MeasuredResourceVector:
+    """Measured work/resource evidence carried beside scalar latency.
+
+    This vector is deliberately not a selector score. It exists so a later
+    composition layer can reason about overlap and shared-resource pressure
+    while the measured top-level ``latency_ms`` remains authoritative.
+    """
+
+    compute_time_ms: float
+    bytes_moved: int
+    communication_bytes: int
+    queue_identity: str
+    resource_identity: str
+    timing_provenance: Mapping[str, Any]
+    artifact_digest: str
+
+    def as_dict(self) -> dict[str, Any]:
+        payload = {
+            "schema": RESOURCE_VECTOR_SCHEMA,
+            "usage": RESOURCE_VECTOR_USAGE,
+            "selector_authority": SCALAR_SELECTOR_AUTHORITY,
+            "compute_time_ms": self.compute_time_ms,
+            "bytes_moved": self.bytes_moved,
+            "communication_bytes": self.communication_bytes,
+            "queue_identity": self.queue_identity,
+            "resource_identity": self.resource_identity,
+            "timing_provenance": dict(self.timing_provenance),
+            "artifact_digest": self.artifact_digest,
+        }
+        validate_resource_vector(payload)
+        return payload
+
+
+def validate_resource_vector(payload: Mapping[str, Any]) -> None:
+    required = {
+        "schema", "usage", "selector_authority", "compute_time_ms",
+        "bytes_moved", "communication_bytes", "queue_identity",
+        "resource_identity", "timing_provenance", "artifact_digest",
+    }
+    if set(payload) != required:
+        raise ValueError(
+            "resource vector fields must exactly match the v1 contract"
+        )
+    if payload["schema"] != RESOURCE_VECTOR_SCHEMA:
+        raise ValueError("resource vector has unsupported schema")
+    if payload["usage"] != RESOURCE_VECTOR_USAGE:
+        raise ValueError("resource vector must be composition-analysis only")
+    if payload["selector_authority"] != SCALAR_SELECTOR_AUTHORITY:
+        raise ValueError("resource vector cannot replace scalar latency authority")
+    compute_time = payload["compute_time_ms"]
+    if isinstance(compute_time, bool) or not isinstance(compute_time, (int, float)):
+        raise ValueError("resource vector compute_time_ms must be numeric")
+    if not math.isfinite(float(compute_time)) or float(compute_time) <= 0.0:
+        raise ValueError("resource vector compute_time_ms must be positive and finite")
+    for field_name in ("bytes_moved", "communication_bytes"):
+        value = payload[field_name]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"resource vector {field_name} must be a non-negative integer")
+    for field_name in ("queue_identity", "resource_identity"):
+        if not isinstance(payload[field_name], str) or not payload[field_name]:
+            raise ValueError(f"resource vector {field_name} must be non-empty")
+    provenance = payload["timing_provenance"]
+    if not isinstance(provenance, Mapping):
+        raise ValueError("resource vector timing_provenance must be a mapping")
+    for field_name in ("source", "domain"):
+        if not isinstance(provenance.get(field_name), str) or not provenance[field_name]:
+            raise ValueError(f"timing_provenance requires non-empty {field_name}")
+    digest = payload["artifact_digest"]
+    if (
+        not isinstance(digest, str)
+        or len(digest) != 64
+        or any(char not in "0123456789abcdef" for char in digest)
+    ):
+        raise ValueError("resource vector artifact_digest must be 64 lowercase hex characters")
+
+
+def selector_latency_ms(row: Mapping[str, Any]) -> float:
+    """Return the sole benchmark selector score, ignoring resource vectors."""
+
+    latency = row.get(SCALAR_SELECTOR_AUTHORITY)
+    if isinstance(latency, bool) or not isinstance(latency, (int, float)):
+        raise ValueError("benchmark selector requires numeric latency_ms")
+    value = float(latency)
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError("benchmark selector requires finite non-negative latency_ms")
+    return value
 
 
 @dataclass(frozen=True)
@@ -309,6 +403,16 @@ def validate_benchmark_row(row: Mapping[str, Any]) -> None:
             f"benchmark row has unknown fields: {sorted(unknown)} "
             f"(canonical set: {sorted(allowed)})"
         )
+    selector_latency_ms(row)
+    hot_path = row.get("hot_path_metadata")
+    if hot_path is not None:
+        if not isinstance(hot_path, Mapping):
+            raise ValueError("hot_path_metadata must be a mapping")
+        resource_vector = hot_path.get("resource_vector")
+        if resource_vector is not None:
+            if not isinstance(resource_vector, Mapping):
+                raise ValueError("hot_path_metadata.resource_vector must be a mapping")
+            validate_resource_vector(resource_vector)
     backend = row["backend"]
     mode = row["mode"]
     if backend not in NON_NATIVE_BACKENDS and mode in NATIVE_MODES:
@@ -332,5 +436,11 @@ __all__ = [
     "OPTIONAL_BENCHMARK_FIELDS",
     "NATIVE_MODES",
     "NON_NATIVE_BACKENDS",
+    "RESOURCE_VECTOR_SCHEMA",
+    "RESOURCE_VECTOR_USAGE",
+    "SCALAR_SELECTOR_AUTHORITY",
+    "MeasuredResourceVector",
+    "validate_resource_vector",
+    "selector_latency_ms",
     "validate_benchmark_row",
 ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, cast
 
 from .collective_capabilities import CollectiveExecutionContract
 from .pipeline_runtime import (
@@ -19,6 +19,7 @@ from .tile_ir import TILE_COLLECTIVE_OPS, TILE_METADATA_OPS, TileIRModule, TileO
 
 
 _SCHEMA = "tessera.collective.target.v2"
+_PRODUCT_SCHEMA = "tessera.collective.product.v1"
 
 
 def _walk(ops: Iterable[TileOp]) -> Iterable[TileOp]:
@@ -127,6 +128,67 @@ class CollectiveTargetArtifact:
         return execute_target_collectives(
             self.records, adapter=adapter, tensors=tensors
         )
+
+
+@dataclass(frozen=True)
+class NativeCollectiveProductArtifact:
+    """A linear primal/tangent pair over one exact native transport queue."""
+
+    collective: CollectiveTargetArtifact
+    digest: str
+
+    def execute(
+        self,
+        *,
+        adapter: Any,
+        primals: Mapping[str, Iterable[Any]],
+        tangents: Mapping[str, Iterable[Any]],
+    ) -> tuple[CollectiveTransportRuntime, CollectiveTransportRuntime]:
+        backend = str(getattr(adapter, "backend", ""))
+        world_size = int(getattr(adapter, "world_size", 0))
+        if backend != self.collective.execution.backend or backend not in {"nccl", "rccl"}:
+            raise RuntimeError("native collective product requires its bound NCCL/RCCL adapter")
+        if world_size < 2:
+            raise RuntimeError("native collective product requires multiple ranks")
+        status_query = getattr(adapter, "status", None)
+        if not callable(status_query) or getattr(status_query(), "status", "") != "hardware_runtime":
+            raise RuntimeError("native collective product requires an available hardware runtime")
+        primal_runtime = self.collective.execute(adapter=adapter, tensors=primals)
+        tangent_runtime = self.collective.execute(adapter=adapter, tensors=tangents)
+        return (
+            cast(CollectiveTransportRuntime, primal_runtime),
+            cast(CollectiveTransportRuntime, tangent_runtime),
+        )
+
+
+def build_native_collective_product_artifact(
+    collective: CollectiveTargetArtifact,
+) -> NativeCollectiveProductArtifact:
+    """Seal the JVP of a native multi-rank linear collective artifact."""
+    if collective.execution.backend not in {"nccl", "rccl"}:
+        raise ValueError("native collective products require an NCCL/RCCL artifact")
+    if not collective.records:
+        raise ValueError("native collective product requires transport records")
+    for record in collective.records:
+        world_size = int(record.get("world_size", 0))
+        if world_size < 2:
+            raise ValueError("native collective product records require world_size >= 2")
+        reduction = str(record.get("reduction", "none"))
+        if reduction not in {"none", "sum", "mean"}:
+            raise ValueError(
+                f"collective reduction {reduction!r} is nonlinear and has no JVP"
+            )
+    payload = {
+        "schema": _PRODUCT_SCHEMA,
+        "collective_digest": collective.digest,
+        "backend": collective.execution.backend,
+        "target": collective.target,
+        "linearity": "same_transport_on_primal_and_tangent",
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return NativeCollectiveProductArtifact(collective, digest)
 
 
 def package_one_sided_target_artifact(
@@ -284,6 +346,8 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
 
 __all__ = [
     "CollectiveTargetArtifact",
+    "NativeCollectiveProductArtifact",
+    "build_native_collective_product_artifact",
     "lower_tile_collective_artifact",
     "package_one_sided_target_artifact",
 ]

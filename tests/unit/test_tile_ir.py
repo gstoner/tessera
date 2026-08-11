@@ -20,58 +20,47 @@ from tessera.compiler.tile_ir import (
 )
 
 
-def test_tile_ir_renders_core_tile_attention_and_queue_ops():
+def test_tile_ir_renders_core_tile_attention_with_explicit_async_lineage():
     module = TileIRModule(functions=[
         TileFunction(
             "fa4",
             body=[
-                TileOp("tessera.queue.create", {"queue_id": 0, "depth": 2}),
-                TileOp("tile.async_copy", {"source": "tessera.flash_attn", "result": "O", "ordinal": 0, "stage": 0, "vector": 16}),
-                TileOp("tessera.queue.push", {"queue_id": 0, "stage": 0}),
-                TileOp("tessera.queue.pop", {"queue_id": 0, "stage": 0}),
+                TileOp("tile.async_copy", {"source": "tessera.flash_attn", "result": "O", "ordinal": 0, "vector": 16}, result="copy0"),
+                TileOp("tile.wait_async", {}, operands=["%copy0"]),
                 TileOp("tessera_attn.online_softmax", {"source": "tessera.flash_attn", "result": "O", "ordinal": 0, "policy": "safe"}),
-                TileOp("tile.wait_async", {"stage": 0}),
-                TileOp("tessera.queue.barrier", {"queue_id": 0, "scope": "warpgroup"}),
             ],
         )
     ])
     assert module.verify().ok
     text = module.to_mlir()
-    assert "tessera.queue.create" in text
     assert "tile.async_copy" in text
-    assert "tessera.queue.push" in text
-    assert "tessera.queue.pop" in text
+    assert "%copy0" in text
     assert "tessera_attn.online_softmax" in text
     assert "tile.wait_async" in text
-    assert "tessera.queue.barrier" in text
+    assert "tessera.queue" not in text
 
 
-def test_tile_ir_async_ops_verify_without_optional_grouping_keys():
-    """Declared contract (TileOps.td, reconciled 2026-08-10): `stage`/`vector`
-    are OPTIONAL grouping/scheduling keys on tile.async_copy / tile.wait_async.
-    The production C++ lane carries the dependency as a !tile.async_token SSA
-    edge with no stage at all; a key-less op is legal and reads conservatively
-    (a stageless wait retires everything outstanding). Requiring the keys here
-    was the Python copy of the deleted ScheduleOps.cpp stage-model verifier."""
+def test_tile_ir_async_ops_require_explicit_token_lineage():
     module = TileIRModule(functions=[
         TileFunction(
             "bare",
             body=[
-                TileOp("tile.async_copy", {"source": "tessera.matmul", "result": "A"}),
-                TileOp("tile.wait_async", {}),
+                TileOp("tile.async_copy", {"source": "tessera.matmul", "result": "A"}, result="copy0"),
+                TileOp("tile.wait_async", {}, operands=["%copy0"]),
             ],
         )
     ])
     assert module.verify().ok
 
 
-def test_tile_ir_verifier_rejects_bad_async_queue_and_attention_contracts():
+def test_tile_ir_verifier_rejects_bad_async_lineage_and_attention_contracts():
     module = TileIRModule(functions=[
         TileFunction(
             "bad",
             body=[
-                TileOp("tile.async_copy", {"stage": -1, "vector": 0}),
+                TileOp("tile.async_copy", {"vector": 0}),
                 TileOp("tessera.queue.pop", {"queue_id": 7}),
+                TileOp("tile.wait_async", {}, operands=["%missing"]),
                 TileOp("tessera_attn.online_softmax", {"source": "tessera.flash_attn"}),
             ],
         )
@@ -79,9 +68,10 @@ def test_tile_ir_verifier_rejects_bad_async_queue_and_attention_contracts():
     result = module.verify()
     assert not result.ok
     text = result.format()
-    assert "TILE_IR_ASYNC_STAGE" in text
+    assert "TILE_IR_ASYNC_TOKEN" in text
     assert "TILE_IR_ASYNC_VECTOR" in text
-    assert "TILE_IR_UNDEFINED_QUEUE" in text
+    assert "TILE_IR_LEGACY_QUEUE" in text
+    assert "TILE_IR_WAIT_UNKNOWN_TOKEN" in text
     assert "TILE_IR_ATTN_POLICY" in text
 
 
@@ -90,8 +80,8 @@ def test_lower_schedule_to_tile_ir_materializes_matmul_and_prefetch():
         ScheduleFunction(
             "main",
             body=[
-                ScheduleOp("schedule.tile", {"source": "tessera.matmul", "result": "C", "ordinal": 0, "tile_m": 64, "tile_n": 32, "tile_k": 16}),
-                ScheduleOp("schedule.prefetch", {"source": "tessera.kv_cache.append", "result": "Cache", "ordinal": 1, "into": "shared", "overlap": "compute"}),
+                ScheduleOp("schedule.tile", {"source": "tessera.matmul", "result": "C", "ordinal": 0, "tile_m": 64, "tile_n": 32, "tile_k": 16}, operands=["%A", "%B"], result="C"),
+                ScheduleOp("schedule.prefetch", {"source": "tessera.kv_cache.append", "result": "Cache", "ordinal": 1, "into": "shared", "overlap": "compute"}, operands=["%Cache"], result="Cache"),
             ],
         )
     ])
@@ -104,6 +94,9 @@ def test_lower_schedule_to_tile_ir_materializes_matmul_and_prefetch():
     assert "tensor_core_mma" in text
     assert "shared_memory_bytes" in text
     assert "register_estimate" in text
+    assert "%C = \"tile.matmul\"(%A, %B)" in text
+    assert "%async_1 = \"tile.async_copy\"" in text
+    assert "\"tile.wait_async\"(%async_1)" in text
 
 
 def test_graph_schedule_tile_preserves_four_typed_collective_contracts():
@@ -157,10 +150,10 @@ def test_schedule_debug_artifact_and_barrier_marker_reach_tile_ir():
     text = tile.to_mlir()
     assert "tile.debug_artifact" in text
     assert "tile.debug_barrier" in text
-    assert "tessera.queue.barrier" in text
+    assert "tessera.queue" not in text
 
 
-def test_frontend_graph_schedule_tile_pipeline_for_flash_attention_has_fa4_and_queues():
+def test_frontend_graph_schedule_tile_pipeline_for_flash_attention_has_fa4_token_lineage():
     graph = lower_text_to_graph_ir("""
     module demo {
       func main(Q: tensor<?xfp32>, K: tensor<?xfp32>, V: tensor<?xfp32>) -> tensor<?xfp32> {
@@ -174,9 +167,8 @@ def test_frontend_graph_schedule_tile_pipeline_for_flash_attention_has_fa4_and_q
     assert tile.verify().ok
     text = tile.to_mlir()
     assert "tile.async_copy" in text
-    assert "tessera.queue.create" in text
-    assert "tessera.queue.push" in text
-    assert "tessera.queue.pop" in text
+    assert "tessera.queue" not in text
+    assert "%pipeline_async_0" in text
     assert "tessera_attn.scaled_dot_product" in text
     assert "tessera_attn.online_softmax" in text
     assert "tessera_attn.lse_save" in text
@@ -187,9 +179,9 @@ def test_frontend_graph_schedule_tile_pipeline_for_flash_attention_has_fa4_and_q
 
 def test_tile_ir_to_mlir_blocks_invalid_module():
     module = TileIRModule(functions=[
-        TileFunction("bad", body=[TileOp("tile.wait_async", {"stage": -1})])
+        TileFunction("bad", body=[TileOp("tile.wait_async", {})])
     ])
-    with pytest.raises(TileIRVerificationError, match="TILE_IR_WAIT_STAGE"):
+    with pytest.raises(TileIRVerificationError, match="TILE_IR_WAIT_TOKEN"):
         module.to_mlir()
 
 

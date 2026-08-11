@@ -137,6 +137,11 @@ std::unique_ptr<mlir::Pass> createNVFlashAttnKernelEmitterPass(int sm = 90);
 //   --tp-axis  mesh axis for tensor parallelism (default "tp")
 std::unique_ptr<mlir::Pass> createGPUCollectiveInsertionPass();
 
+// COMP-SCHED-OVERLAP-1 / W5.2a — sink explicit collective awaits to the
+// first SSA consumer while treating mutation, RNG, aliases, regions, and
+// ordered collectives as fail-closed barriers.
+std::unique_ptr<mlir::Pass> createAwaitSinkingPass();
+
 // PipelineStageInsertionPass — partitions the IR into 1F1B pipeline stages
 // and inserts tessera.pipeline.send / tessera.pipeline.recv ops at boundaries.
 // Options:

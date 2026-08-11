@@ -10,6 +10,7 @@ add_library(TesseraPasses
 
   # Phase 2 lowering chain
   DistributionLoweringPass.cpp
+  SemanticEffects.cpp
   EffectAnnotationPass.cpp
   TilingPass.cpp
   TileToX86Pass.cpp
@@ -30,6 +31,7 @@ add_library(TesseraPasses
 
   # Phase 4 distributed training
   GPUCollectiveInsertionPass.cpp
+  AwaitSinkingPass.cpp
   PipelineStageInsertionPass.cpp
 
   # Phase F4 autodiff (reverse-mode via AdjointInterface).

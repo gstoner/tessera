@@ -145,7 +145,7 @@ cache-and-analysis approach. Structured control flow is where MLIR-level AD is
 
 `TangentInterface`, `--tessera-autodiff-forward`, and the public
 `autodiff="forward"`/`"jvp"` request now emit a typed paired Graph function.
-Thirty-one families have compiler-owned rules. Direct execution of emitted JVP
+Thirty-five families have compiler-owned rules. Direct execution of emitted JVP
 IR covers matmul/mul, tanh/sigmoid, sum/mean reduction, softmax,
 LayerNorm/RMSNorm, and FFT/IFFT/RFFT/IRFFT; a separate property harness records
 the algebraic identity, valid domain, boundary policy, directional derivative,
@@ -153,12 +153,16 @@ and forward/reverse duality obligations. Fixed-key EGGROLL and seeded Philox
 dropout have replay/linearity proofs rather than invalid smooth finite
 differences.
 
-This is still partial: active structured regions fail closed, compound
-spectral/solver native JVP packages and independently proven target execution
-remain open, and compiler `jacfwd`, exact forward-over-reverse HVP, and
-Taylor/jet composition are not exposed. Forward mode avoids a reverse tape, but
-it still needs region activity, effect legality, and target lowering before it
-can close those capabilities.
+This is still partial, but target execution is no longer absent. A
+content-addressed product binds the paired-IR digest to physical children, and
+sum, RMSNorm, affine LayerNorm, packed RFFT, spectral-filter, and the diagonal
+matrix-free solver product pass natively on AVX-512 and gfx1151.
+The x86 result is WSL correctness rather than a clean timing packet;
+gfx1200/gfx1250 remain fail-closed. Native collective product execution is
+gated to a live multi-rank NCCL/RCCL adapter; its hardware packet is open.
+Active structured regions, broader spectral/solver products, Apple/CUDA,
+compiler `jacfwd`, exact forward-over-reverse HVP, and Taylor/jet composition
+remain open.
 
 ### A5. Backward SSA activity is implemented; region and memory activity remain
 
@@ -396,7 +400,7 @@ not ecosystem packages or a performance comparison.
 |---|---|---|---|---|
 | Reverse mode, straight-line | ✅ bounded: 51 native IR adjoints; 36 CPU-oracle and 29 exact-target proven | ✅ | ✅ | ✅ |
 | Reverse mode through structured control flow | ❌ active regions fail closed; inactive regions are pruned (A3) | partial — `cond`/`scan` and static loops; `while_loop` is forward-only | ✅ | ✅ stated scope |
-| Forward mode in the compiler | partial — public paired Graph JVP ABI, 31 native tangent families, and direct CPU-oracle proof for algebra, reduction/normalization, and core spectral transforms; regions, higher-order composition, and target packages open | ✅ | ✅ | partial |
+| Forward mode in the compiler | partial — public paired Graph JVP ABI, 35 native tangent families, and native x86/gfx1151 products for normalization, spectral, and diagonal solver families; regions, higher-order composition, broader packages, and native collective evidence remain open | ✅ | ✅ | partial |
 | Higher-order (`grad∘grad`) | ❌ structurally blocked (A2) | ✅ | ✅ | — |
 | Exact HVP | ❌ finite differences (B4) | ✅ fwd-over-rev | ✅ | — |
 | `vmap` as a transform | ❌ Python loop (B3) | ✅ | n/a | n/a |
@@ -509,7 +513,8 @@ Maps to: unification-plan P0 (truthfulness). Independent of everything else.
 
 ### D2 — Forward mode in the compiler  *(landing)*
 
-The AD-FWD-CORE-1 foundation and AD-FWD-PRODUCT-2 public boundary are
+The AD-FWD-CORE-1 foundation, AD-FWD-PRODUCT-2 public boundary, and bounded
+AD-FWD-NATIVE-1 product are
 implemented: ODS `TangentInterface`,
 `--tessera-autodiff-forward`, a paired JVP function contract, fail-closed active
 operation/region legality, and 31 native rules spanning algebra, structural
@@ -522,11 +527,14 @@ mode-neutral provenance facet and a `wrt`-indexed paired ABI through
 `compiled_jvp_ir()`; reverse compatibility fields cannot accidentally report a
 JVP as backward execution. Tanh and sigmoid have direct compiler JVP proofs.
 The generated ledger reports `ir_tangent` separately from Python JVP
-availability.
+availability. The native parent is tamper-evident and executes compiler-fixed
+child packages without Graph redispatch; exact gfx1151 and WSL Zen 5 numerical
+packets cover sum, non-affine RMSNorm, and packed RFFT.
 
-Still required for D2 closure: remaining compound spectral, solver, loss, and
-optimizer tangents; direct oracle rows for every advertised family; region
-tangents; and independently proven target consumption. Forward
+Still required for D2 closure: broader compound spectral and solver families,
+native collective, loss, and optimizer products; direct oracle rows for every
+advertised family; region tangents; Apple/CUDA consumption; and clean target
+performance evidence. Forward
 mode needs no reverse tape or residual policy, but it does require activity and
 effect legality once it crosses regions or memory.
 

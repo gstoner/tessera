@@ -47,6 +47,12 @@ Ranked by leverage. Each names its shape from §1.
 
 **This is the highest-leverage finding in the sweep.**
 
+**Resolved by W2.2 on 2026-08-10.** `_EffectVisitor` is deleted. Canonical
+Graph records carry registered effect, alias, mutation, and stochastic identity;
+the C++ pass consumes the same contracts and propagates internal calls to a
+fixed point. The following excerpt is retained as historical evidence of the
+removed implementation.
+
 [`effects.py:173`](../../../python/tessera/compiler/effects.py#L173):
 
 ```python
@@ -316,7 +322,7 @@ commitments.
 | # | Item | Source | Effort |
 |---|---|---|---|
 | 8 | Stand up the Graph IR dataflow-analysis framework (MLIR `DataFlowSolver`, fail-closed, invalidated, Python-queryable) | §3 | 3w |
-| 9 | Re-home effects onto it; reconcile with `EffectAnnotationPass`; retire the AST walker | F1 | 2w |
+| 9 | **Completed 2026-08-10:** registered Graph effects, reconciled fixed-point `EffectAnnotationPass`, and retired AST walker | F1 | done |
 | 10 | Replace `Dim`/`DimProduct` with `AffineExpr` + `presburger`; make `dims_compatible` and `check_schedule_tile` constraint queries | F2 | 3w |
 | 11 | Activity analysis for AD, as a client of #8 | Autodiff D3 | 2w |
 

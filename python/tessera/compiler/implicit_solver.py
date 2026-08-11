@@ -39,7 +39,9 @@ def _residual_source(tensor_type: str) -> str:
   }}"""
 
 
-def build_solver_ift_contract(*, target: str, shape: Sequence[int]) -> dict[str, Any]:
+def build_solver_ift_contract(
+    *, target: str, shape: Sequence[int], product_mode: str = "vjp"
+) -> dict[str, Any]:
     if target not in {"x86", "rocm_gfx1151"}:
         raise ValueError(
             "solver IFT physical packages support x86 and rocm_gfx1151; unmeasured architectures fail closed"
@@ -47,6 +49,8 @@ def build_solver_ift_contract(*, target: str, shape: Sequence[int]) -> dict[str,
     normalized = tuple(int(dim) for dim in shape)
     if not normalized or any(dim <= 0 for dim in normalized):
         raise ValueError("solver IFT requires a positive static shape")
+    if product_mode not in {"jvp", "vjp"}:
+        raise ValueError("solver IFT product_mode must be jvp or vjp")
     architecture = "avx512" if target == "x86" else "gfx1151"
     tensor_type = "tensor<" + "x".join(map(str, normalized)) + "xf32>"
     residual_identity = {
@@ -69,13 +73,15 @@ def build_solver_ift_contract(*, target: str, shape: Sequence[int]) -> dict[str,
         "linear_solve": {
             "algorithm": _LINEAR_SOLVER,
             "operator": "dR_dx",
-            "transpose": True,
+            "transpose": product_mode == "vjp",
             "materializes_matrix": False,
         },
         "residual_adjoint": {"wrt": "parameter", "scale": -1.0},
         "phase_outputs": ["residual", "linear_solution", "parameter_cotangent"],
         "workgroup_size": 1 if target == "x86" else 256,
     }
+    if product_mode == "jvp":
+        body["product_mode"] = "jvp"
     return {**body, "artifact_hash": _digest(body)}
 
 
@@ -88,6 +94,7 @@ class ScheduledSolverIFTArtifact:
     shared_solver_ir: str
     schedule_ir: str
     tile_ir: str
+    product_mode: str = "vjp"
 
     @property
     def artifact_hash(self) -> str:
@@ -105,18 +112,24 @@ class ScheduledSolverIFTArtifact:
         }
 
     def validate(self) -> None:
-        expected = build_solver_ift_contract(target=self.target, shape=self.shape)
+        expected = build_solver_ift_contract(
+            target=self.target, shape=self.shape, product_mode=self.product_mode
+        )
         if self.contract != expected:
             raise ValueError("solver IFT artifact contract is stale")
         for marker in (
             "tessera_solver.residual",
             "tessera_solver.linear_solve",
             "tessera_solver.residual_adjoint",
-            "transpose = true",
-            'wrt = "parameters"',
         ):
             if marker not in self.shared_solver_ir:
                 raise ValueError(f"shared solver IFT chain lost {marker}")
+        mode_marker = (
+            'tessera_solver.residual_adjoint' if self.product_mode == "vjp"
+            else 'tessera_solver.residual_jvp'
+        )
+        if mode_marker not in self.shared_solver_ir:
+            raise ValueError(f"shared solver product lost {mode_marker}")
         if self.schedule_ir.count("schedule.solver_ift") != 1:
             raise ValueError("solver IFT requires one typed Schedule operation")
         if self.tile_ir.count("tile.solver_ift_kernel") != 1:
@@ -127,8 +140,12 @@ class ScheduledSolverIFTArtifact:
             raise ValueError("solver IFT Tile artifact has stale lineage")
 
 
-def lower_scheduled_solver_ift(*, target: str, shape: Sequence[int]) -> ScheduledSolverIFTArtifact:
-    contract = build_solver_ift_contract(target=target, shape=shape)
+def lower_scheduled_solver_ift(
+    *, target: str, shape: Sequence[int], product_mode: str = "vjp"
+) -> ScheduledSolverIFTArtifact:
+    contract = build_solver_ift_contract(
+        target=target, shape=shape, product_mode=product_mode
+    )
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("scheduled solver IFT requires production tessera-opt")
@@ -143,7 +160,12 @@ def lower_scheduled_solver_ift(*, target: str, shape: Sequence[int]) -> Schedule
   }}
 }}
 """
-    shared_solver_ir = run_tessera_opt(tool, shared_input, "--tessera-newton-autodiff")
+    solver_option = (
+        "--tessera-newton-autodiff=generate-jvp=true"
+        if product_mode == "jvp"
+        else "--tessera-newton-autodiff"
+    )
+    shared_solver_ir = run_tessera_opt(tool, shared_input, solver_option)
 
     digest = str(contract["artifact_hash"])
     residual_digest = str(contract["residual"]["digest"])
@@ -152,9 +174,10 @@ def lower_scheduled_solver_ift(*, target: str, shape: Sequence[int]) -> Schedule
     architecture = str(contract["architecture"])
     compiler_target = "x86" if target == "x86" else "rocm"
     workgroup = int(contract["workgroup_size"])
+    transpose = "true" if product_mode == "vjp" else "false"
     schedule_ir = f'''module attributes {{tessera.target = "{compiler_target}", tessera.arch = "{architecture}"}} {{
   func.func @tessera_solver_ift(%theta: {tensor_type}, %x: {tensor_type}, %cotangent: {tensor_type}) -> ({tensor_type}, {tensor_type}, {tensor_type}) {{
-    %phases:3 = schedule.solver_ift %theta, %x, %cotangent {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", residual_model = "{_RESIDUAL_MODEL}", residual_digest = "{residual_digest}", linear_solver = "{_LINEAR_SOLVER}", transpose = true, wrt = "parameter", adjoint_scale = -1.0 : f32, storage = "f32", accum = "f32", workgroup_size = {workgroup} : i64}} : {tensor_type}, {tensor_type}, {tensor_type} -> {tensor_type}, {tensor_type}, {tensor_type}
+    %phases:3 = schedule.solver_ift %theta, %x, %cotangent {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", residual_model = "{_RESIDUAL_MODEL}", residual_digest = "{residual_digest}", linear_solver = "{_LINEAR_SOLVER}", product_mode = "{product_mode}", transpose = {transpose}, wrt = "parameter", adjoint_scale = -1.0 : f32, storage = "f32", accum = "f32", workgroup_size = {workgroup} : i64}} : {tensor_type}, {tensor_type}, {tensor_type} -> {tensor_type}, {tensor_type}, {tensor_type}
     schedule.artifact {{hash = "{digest}", arch = "{architecture}", shape_key = "family=solver_ift;model={_RESIDUAL_MODEL};shape={"x".join(map(str, normalized))};storage=f32", numeric_policy = "f32;matrix_free;transpose;scale=-1"}}
     return %phases#0, %phases#1, %phases#2 : {tensor_type}, {tensor_type}, {tensor_type}
   }}
@@ -169,6 +192,7 @@ def lower_scheduled_solver_ift(*, target: str, shape: Sequence[int]) -> Schedule
         shared_solver_ir=shared_solver_ir,
         schedule_ir=schedule_ir,
         tile_ir=tile_ir,
+        product_mode=product_mode,
     )
     artifact.validate()
     return artifact

@@ -4,11 +4,9 @@ Motivation (from the *Elements of Differentiable Programming* review). A program
 with randomness is a DAG of two node kinds — **function nodes** and
 **distribution nodes** — and a node's output is a random variable iff its set of
 random parents is non-empty (Blondel & Roulet §11.5). That is a *derivable*
-forward-dataflow property, and deriving it fixes the fail-open hole in Decision
-#5: ``EffectLattice`` walks the Python **source AST** and matches dotted call
-names, so an RNG call reached through an alias, a local, a helper, ``getattr``,
-or a dict dispatch is invisible — the op contributes ``Effect.pure`` and a
-non-deterministic function passes ``@jit(deterministic=True)``.
+forward-dataflow property. W2.2 retired the former source-name walker; this
+module supplies the concrete trace certificate that additionally resolves an
+RNG reached through an alias, local, helper, ``getattr``, or dict dispatch.
 
 This module derives the same fact from the **traced IR** instead. Every op is
 present in the trace by its canonical ``op_name`` regardless of how the Python

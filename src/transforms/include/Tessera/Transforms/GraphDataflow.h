@@ -64,7 +64,9 @@ public:
                      mlir::Operation *across) const;
 
   /// Reverse activity from explicit result roots. `tessera.stop_gradient`
-  /// remains active itself but blocks propagation to its operand.
+  /// remains active itself but blocks propagation to its operand. Structured
+  /// operations propagate to explicit operands while internal block activity
+  /// remains a RegionAdjointInterface concern.
   ActiveOpSet computeActivity(mlir::ValueRange roots) const;
 
 private:

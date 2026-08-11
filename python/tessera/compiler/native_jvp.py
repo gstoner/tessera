@@ -16,7 +16,7 @@ import json
 from typing import Any, Mapping, Sequence
 
 
-_SCHEMA = "tessera.native_jvp.v1"
+_SCHEMA = "tessera.native_jvp.v2"
 _TARGET_ARCHITECTURES = {
     "x86": "zen5_avx512",
     "rocm": "gfx1151",
@@ -89,6 +89,7 @@ def build_native_jvp_artifact(
     target: str,
     architecture: str,
     family: str,
+    source_graph_ir: str,
     paired_jvp_ir: str,
     wrt_indices: Sequence[int],
     arg_names: Sequence[str],
@@ -105,6 +106,8 @@ def build_native_jvp_artifact(
             "native JVP packages support only zen5_avx512 and gfx1151; "
             "gfx1200/gfx1250 and other unmeasured architectures fail closed"
         )
+    if not source_graph_ir or 'tessera.frontend.authority = "tracer"' not in source_graph_ir:
+        raise ValueError("native JVP package requires tracer-owned source Graph IR")
     if not paired_jvp_ir or "__jvp" not in paired_jvp_ir:
         raise ValueError("native JVP package requires compiler-emitted paired JVP IR")
     normalized_steps = [dict(step) for step in steps]
@@ -113,6 +116,7 @@ def build_native_jvp_artifact(
         "target": target,
         "architecture": architecture,
         "family": str(family),
+        "source_graph_ir_digest": _digest_text(source_graph_ir),
         "paired_jvp_ir_digest": _digest_text(paired_jvp_ir),
         "wrt_indices": [int(index) for index in wrt_indices],
         "arg_names": [str(name) for name in arg_names],

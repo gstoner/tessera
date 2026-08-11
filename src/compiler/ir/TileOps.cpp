@@ -13,6 +13,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 
 using namespace mlir;
@@ -1630,6 +1631,30 @@ LogicalResult AllToAllOp::verify() {
   return verifyCollective(getOperation(), getInput(), getOutput(),
                           /*scalesAxis=*/false, /*multiply=*/false,
                           /*requiresReduction=*/false);
+}
+
+LogicalResult CollectivePermuteOp::verify() {
+  if (getInput().getType() != getOutput().getType())
+    return emitOpError("must preserve the payload type");
+  if (getMeshAxis().empty())
+    return emitOpError("requires a non-empty mesh_axis");
+  auto sources = getSourcePeers();
+  auto targets = getTargetPeers();
+  if (sources.empty() || sources.size() != targets.size())
+    return emitOpError("requires equal non-empty source and target peer maps");
+  llvm::SmallDenseSet<int64_t> seenSources;
+  llvm::SmallDenseSet<int64_t> seenTargets;
+  int64_t worldSize = getWorldSize().value_or(0);
+  if (worldSize && worldSize < 2)
+    return emitOpError("world_size must be at least two when present");
+  for (auto [source, target] : llvm::zip_equal(sources, targets)) {
+    if (source < 0 || target < 0 || (worldSize &&
+        (source >= worldSize || target >= worldSize)))
+      return emitOpError("peer is outside the communicator");
+    if (!seenSources.insert(source).second || !seenTargets.insert(target).second)
+      return emitOpError("source and target peers must each be unique");
+  }
+  return success();
 }
 
 static LogicalResult verifyPointerAndI64Tail(Operation *op, ValueRange inputs,

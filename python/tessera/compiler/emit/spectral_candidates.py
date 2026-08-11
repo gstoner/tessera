@@ -248,6 +248,14 @@ def _configure_amd_lib(lib: ctypes.CDLL) -> ctypes.CDLL:
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
                 ctypes.c_int, ctypes.c_int, ctypes.c_float,
             ]
+            if hasattr(lib, "ts_istft_jvp_plan_hostptr_batch_amd"):
+                lib.ts_istft_jvp_plan_hostptr_batch_amd.restype = ctypes.c_int
+                lib.ts_istft_jvp_plan_hostptr_batch_amd.argtypes = [
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                    ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float,
+                ]
             if not hasattr(lib, "ts_dct_plan_hostptr_batch_storage_amd"):
                 return lib
             lib.ts_dct_plan_hostptr_batch_storage_amd.restype = ctypes.c_int
@@ -750,6 +758,69 @@ def run_rocm_spectral_composite(
             f"ROCm spectral package produced shape {out.shape}, expected {output_shape}"
         )
     return out
+
+
+def run_rocm_istft_jvp(
+    metadata: dict[str, Any], spectrum: np.ndarray, window: np.ndarray,
+    spectrum_tangent: np.ndarray | None, window_tangent: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Execute the packed-real gfx1151 ISTFT quotient-rule product."""
+    from tessera.compiler.scheduled_spectral import (
+        spectral_output_scale,
+        validate_scheduled_spectral_metadata,
+    )
+
+    values = [np.asarray(spectrum), np.asarray(window)]
+    contract = validate_scheduled_spectral_metadata(
+        metadata, input_shapes=[value.shape for value in values]
+    )
+    if contract["op_name"] != "tessera.istft":
+        raise ValueError("ROCm ISTFT JVP requires an ISTFT child artifact")
+    if contract["storage"] != "f32" or int(contract["window_length"]) & 1:
+        raise ValueError("ROCm ISTFT window JVP currently requires even-length f32")
+    axis = int(contract["axis"])
+    spectrum = np.ascontiguousarray(spectrum, np.complex64)
+    window = np.ascontiguousarray(window, np.float32)
+    dwindow = np.ascontiguousarray(window_tangent, np.float32)
+    dinput = (
+        np.ascontiguousarray(spectrum_tangent, np.complex64)
+        if spectrum_tangent is not None else None
+    )
+    if axis != spectrum.ndim - 1 or window.ndim != 1:
+        raise ValueError(
+            "ROCm ISTFT window JVP requires the packed spectrum axis last "
+            "and a rank-one window"
+        )
+    lib = _amd_composite_lib()
+    if lib is None or not hasattr(lib, "ts_istft_jvp_plan_hostptr_batch_amd"):
+        raise RuntimeError("ROCm ISTFT window-JVP package is unavailable")
+    if (not hasattr(lib, "ts_spectral_composite_arch_amd") or
+            lib.ts_spectral_composite_arch_amd() != b"gfx1151"):
+        raise RuntimeError("ROCm ISTFT window-JVP architecture mismatch")
+    children = list(contract["child_ffts"])
+    _, inverse = _rocm_plan(
+        int(children[0]["physical_length"]), 1,
+        str(children[0]["schedule_digest"]),
+    )
+    composite_plan = _rocm_composite_plan(dict(contract), lib)
+    output_shape = tuple(int(dim) for dim in contract["output_shape"])
+    primal = np.empty(output_shape, np.float32)
+    tangent = np.empty(output_shape, np.float32)
+    frames = int(contract["frames"])
+    batch = int(spectrum.size // (frames * spectrum.shape[-1]))
+    rc = lib.ts_istft_jvp_plan_hostptr_batch_amd(
+        composite_plan, inverse, _cptr(spectrum), _cptr(window),
+        _cptr(dinput) if dinput is not None else None, _cptr(dwindow),
+        _cptr(primal), _cptr(tangent), batch, frames,
+        int(contract["window_length"]), int(contract["hop"]),
+        spectral_output_scale(
+            "tessera.istft", str(contract["normalization"]),
+            int(contract["window_length"]),
+        ),
+    )
+    if rc != 0:
+        raise RuntimeError(f"ROCm ISTFT window-JVP package failed rc={rc}")
+    return primal, tangent
 
 
 # --- candidates --------------------------------------------------------------

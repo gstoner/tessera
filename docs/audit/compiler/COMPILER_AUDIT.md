@@ -178,10 +178,12 @@ NCCL/RCCL/Metal/x86 process transport packets and performance remain open.
 `AD-CORE-EFFECT-CONTROL-1` is complete at the shared compiler boundary.
 `tessera.stop_gradient` is registered in the public catalog and Graph dialect;
 both autodiff passes compute backward SSA activity, propagate registered Graph
-effects, reject active stochastic operations, ignore inactive regions, and
-fail closed on active regions or stopped values whose residuals cannot be
-safely replayed. Direct lit negatives and the paired CPU oracle cover these
-contracts.
+effects, reject active stochastic operations, and ignore inactive regions. The
+paired pass now differentiates effect-safe single-block `scf.if`, counted
+`scf.for`, and canonical bounded `scf.while`; unsupported region forms and
+stopped values whose residuals cannot be safely replayed fail closed. Direct
+lit negatives cover the region contract; numerical execution of emitted region
+backwards remains the W4 promotion gate.
 
 The four collectives now lower as exact `tile.all_reduce`,
 `tile.reduce_scatter`, `tile.all_gather`, and `tile.all_to_all` ODS operations

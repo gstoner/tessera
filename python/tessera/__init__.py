@@ -51,11 +51,13 @@ from . import diffusion_guidance
 from . import apple_gpu_ops  # noqa: F401
 from .core import Tensor, Module
 from .shape import (
+    AffineDimExpr,
     Dim,
     Layout,
     RuntimeShapeWitness,
     Shape,
     ShapeConstraintGraph,
+    ShapeProof,
     ShapeShard,
     ShapeSystemError,
     broadcast_shape,
@@ -2644,10 +2646,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
                 / float(4 * n)
             )
         result = moved.astype(np.float64) @ basis
+        logical_length = 2 * (n - 1) if dct_type == 1 else 2 * n
         if norm == "forward":
-            result /= float(n)
+            result /= float(logical_length)
         elif norm == "ortho":
-            result /= np.sqrt(float(n))
+            result /= np.sqrt(float(logical_length))
         want = x.dtype if x.dtype.kind == "f" else np.dtype("float32")
         return np.moveaxis(result, -1, axis_idx).astype(want, copy=False)
 

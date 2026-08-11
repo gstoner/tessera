@@ -86,7 +86,7 @@ def check_op_legality(
     attrs = attrs or {}
 
     _check_tensor_contracts(op, operands, result, diagnostics)
-    _check_capability(op, target_name, operands, diagnostics)
+    _check_capability(op, target_name, operands, result, diagnostics)
     if op in {"tessera.matmul", "tessera.gemm"}:
         _check_matmul(op, operands, diagnostics)
     elif op in {"tessera.softmax", "tessera.softmax_safe"}:
@@ -138,10 +138,22 @@ def _check_capability(
     op: str,
     target: str,
     operands: Sequence[TensorContract],
+    result: TensorContract | None,
     diagnostics: list[LegalityDiagnostic],
 ) -> None:
-    dtype = next((operand.dtype for operand in operands if operand.dtype), None)
-    rank = next((operand.rank for operand in operands if operand.rank is not None), None)
+    # A control_if's first explicit operand is its i1 predicate, not its payload.
+    # Capability rows describe the carried/result tensor family, so querying by
+    # the predicate incorrectly rejects every bool-predicate floating branch.
+    dtype = (
+        result.dtype
+        if op == "tessera.control_if" and result is not None and result.dtype
+        else next((operand.dtype for operand in operands if operand.dtype), None)
+    )
+    rank = (
+        result.rank
+        if op == "tessera.control_if" and result is not None
+        else next((operand.rank for operand in operands if operand.rank is not None), None)
+    )
     cap = supports_op(target, op, dtype=dtype, rank=rank)
     if not cap.supported:
         diagnostics.append(LegalityDiagnostic(

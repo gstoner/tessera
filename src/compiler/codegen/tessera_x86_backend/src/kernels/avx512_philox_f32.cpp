@@ -65,7 +65,14 @@ extern "C" void tessera_x86_philox_uniform_range_f32(
     float* out) {
     tessera_x86_philox_uniform_f32(seed, counter_base, n, out);
     const float width = high - low;
-    for (int64_t i = 0; i < n; ++i) out[i] = low + width * out[i];
+    for (int64_t i = 0; i < n; ++i) {
+        // The canonical ABI is two f32 operations, matching rng_device.py.
+        // Keep the multiply as an observable f32 rounding point so -ffp-
+        // contract cannot silently turn the range map into an FMA and break
+        // bit-exact keyed replay.
+        volatile float scaled = width * out[i];
+        out[i] = low + scaled;
+    }
 }
 
 extern "C" void tessera_x86_philox_normal_f32(

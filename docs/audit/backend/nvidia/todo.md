@@ -8,6 +8,44 @@ last_updated: 2026-08-11
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `AD-SOLVER-ISTFT-PHYSICAL-2026-08-11` — **shared product
+contracts landed; SM120 consumption remains open.** Graph IR now represents
+the exact ISTFT spectrum/window product, and the general solver parent binds
+residual plus solution/parameter JVP/VJP children under restarted GMRES with a
+true-residual gate. The shared compiler now derives those five children for
+typed pointwise, sum/mean, rank-2 matmul, bounded-dynamic/mixed-storage,
+distinct parameter-space, and statically counted-region residual Graphs.
+Pure scalar `if`/bounded-`while` predicates now have explicit compare/select
+replay in the shared child contract. The AVX-512 and gfx1151 packages and
+packets do not transfer to CUDA. NVIDIA still needs PTX children and independent SM120 correctness and
+performance evidence.
+
+Cross-backend sync `E2E-REAL-6-JVP-SOLVER-2026-08-11` — **shared frontend and
+family-plugin boundary landed; SM120 remains follow-up required.** Native
+forward-product specialization now originates in tracer-produced canonical
+Graph IR, and explicit family plugins own reduction, normalization, FFT, and
+compound-spectral planning outside `JitFn`. General solver contracts bind exact
+residual/JVP/VJP identities and can execute matrix-free reference products
+without finite differences. This adds no CUDA family plugin, native package,
+or SM120 evidence; the AST lane remains for unmigrated families.
+
+Cross-backend sync `AD-FWD-DIST-3-2026-08-11` — **shared exact JVP,
+structured-region products, and typed point-to-point transport landed; SM120
+evidence remains open.** Public JVP/jacfwd no longer substitutes finite
+differences. Compiler forward mode carries primal/tangent state through bounded
+SCF. `collective_permute` reaches the existing one-process/multi-device NCCL
+launcher as grouped send/receive with an explicit peer map. SM120 still needs
+architecture-owned JVP packages, subgroup communicators, and exact multi-GPU
+correctness/performance packets.
+
+Cross-backend sync `W4-SOLVER-REGION-2026-08-11` — **shared bounded-region
+adjoints and general matrix-free solver policy landed; CUDA consumption is
+follow-up required.** Portable tracing now emits bounded SCF, and the paired
+compiler differentiates effect-safe single-block `if`, counted `for`, and
+canonical bounded `while` with implicit captures. General residual execution
+uses restarted GMRES/CG policy in shared IR. This adds no SM120 region executor,
+solver package, checkpoint packet, or performance claim.
+
 Cross-backend sync `COMP-GRAPH-DATAFLOW-W2.1-2026-08-11` — **shared
 analysis substrate landed; CUDA behavior and evidence are unchanged.** Graph
 IR now has one fail-closed, invalidatable shape/alias/liveness/memory-
@@ -19,7 +57,7 @@ and native CUDA overlap proof remain separately owned.
 Cross-backend sync `AD-FWD-FAMILY-2-2026-08-11` — **shared affine,
 compound-spectral, solver-product, and native-collective contracts landed;
 SM120 consumption remains open.** Compound spectral Graph operations now own
-direct tangent interfaces, ISTFT window tangents fail closed, and solver
+direct tangent interfaces, including an exact ISTFT window-product carrier, and solver
 artifacts distinguish JVP/non-transposed from VJP/transposed solves. The
 multi-rank product accepts only a live NCCL hardware adapter, but no SM120
 correctness/performance packet is claimed by this shared-contract slice.

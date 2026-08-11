@@ -283,6 +283,34 @@ __global__ void overlapAddReal(const float *framesIn, const float *window,
   output[i] = (sum / (weight > 1.0e-12f ? weight : 1.0e-12f)) * scale;
 }
 
+__global__ void overlapAddJvpReal(
+    const float *framesIn, const float *dframesIn, const float *window,
+    const float *dwindow, float *primal, float *tangent, int batch,
+    int frames, int win, int hop, int samples, float scale) {
+  size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  size_t total = size_t(batch) * samples;
+  if (i >= total) return;
+  int batchIndex = int(i / size_t(samples));
+  int sample = int(i % size_t(samples));
+  float numerator = 0.0f, denominator = 0.0f;
+  float dnumerator = 0.0f, ddenominator = 0.0f;
+  for (int frame = 0; frame < frames; ++frame) {
+    int local = sample - frame * hop;
+    if (local < 0 || local >= win) continue;
+    size_t at = (size_t(batchIndex) * frames + frame) * win + local;
+    float w = window[local], dw = dwindow ? dwindow[local] : 0.0f;
+    numerator += framesIn[at] * w;
+    denominator += w * w;
+    dnumerator += (dframesIn ? dframesIn[at] * w : 0.0f) +
+                  framesIn[at] * dw;
+    ddenominator += 2.0f * w * dw;
+  }
+  float safe = denominator > 1.0e-12f ? denominator : 1.0e-12f;
+  primal[i] = numerator / safe * scale;
+  tangent[i] =
+      (dnumerator / safe - numerator * ddenominator / (safe * safe)) * scale;
+}
+
 template <typename T> bool allocate(T **pointer, size_t elements) {
   return hipMalloc(pointer, elements * sizeof(T)) == hipSuccess;
 }
@@ -814,6 +842,70 @@ extern "C" int ts_istft_plan_hostptr_batch_amd(
                        frames, win, hop, samples, outputScale);
   }
   return syncAndCopy(outputHost, output, outputCount * sizeof(float));
+}
+
+extern "C" int ts_istft_jvp_plan_hostptr_batch_amd(
+    void *opaque, void *inversePlan, const float2 *inputHost,
+    const float *windowHost, const float2 *dinputHost,
+    const float *dwindowHost, float *primalHost, float *tangentHost, int batch,
+    int frames, int win, int hop, float outputScale) {
+  CompositePlan *plan = static_cast<CompositePlan *>(opaque);
+  if (!plan || !inversePlan || !inputHost || !windowHost || !dwindowHost ||
+      !primalHost || !tangentHost || batch <= 0 || frames <= 0 || win <= 0 ||
+      (win & 1) || hop <= 0 ||
+      ts_fft_plan_length_amd(inversePlan) != win / 2)
+    return 120;
+  int rows = batch * frames, bins = win / 2 + 1;
+  int samples = (frames - 1) * hop + win;
+  size_t halfCount = size_t(rows) * bins;
+  size_t frameCount = size_t(rows) * win;
+  size_t outputCount = size_t(batch) * samples;
+  float2 *input = nullptr, *dinput = nullptr;
+  float *window = nullptr, *dwindow = nullptr;
+  float *timeFrames = nullptr, *dtimeFrames = nullptr;
+  float *primal = nullptr, *tangent = nullptr;
+  if (!allocate(&input, halfCount) ||
+      (dinputHost && !allocate(&dinput, halfCount)) ||
+      !allocate(&window, size_t(win)) || !allocate(&dwindow, size_t(win)) ||
+      !allocate(&timeFrames, frameCount) ||
+      (dinputHost && !allocate(&dtimeFrames, frameCount)) ||
+      !allocate(&primal, outputCount) || !allocate(&tangent, outputCount)) {
+    release(input, dinput, window, dwindow, timeFrames, dtimeFrames, primal,
+            tangent);
+    return 121;
+  }
+  int rc = 0;
+  if (hipMemcpy(input, inputHost, halfCount * sizeof(float2),
+                hipMemcpyHostToDevice) != hipSuccess ||
+      (dinputHost &&
+       hipMemcpy(dinput, dinputHost, halfCount * sizeof(float2),
+                 hipMemcpyHostToDevice) != hipSuccess) ||
+      hipMemcpy(window, windowHost, size_t(win) * sizeof(float),
+                hipMemcpyHostToDevice) != hipSuccess ||
+      hipMemcpy(dwindow, dwindowHost, size_t(win) * sizeof(float),
+                hipMemcpyHostToDevice) != hipSuccess) {
+    rc = 122;
+  } else if ((rc = ts_fft_plan_execute_c2r_packed_device_batch_amd(
+                  inversePlan, input, timeFrames, rows, win, 0)) != 0) {
+  } else if (dinputHost &&
+             (rc = ts_fft_plan_execute_c2r_packed_device_batch_amd(
+                  inversePlan, dinput, dtimeFrames, rows, win, 0)) != 0) {
+  } else {
+    hipLaunchKernelGGL(
+        overlapAddJvpReal,
+        dim3((outputCount + kThreads - 1) / kThreads), dim3(kThreads), 0, 0,
+        timeFrames, dtimeFrames, window, dwindow, primal, tangent, batch,
+        frames, win, hop, samples, outputScale);
+    if (hipDeviceSynchronize() != hipSuccess ||
+        hipMemcpy(primalHost, primal, outputCount * sizeof(float),
+                  hipMemcpyDeviceToHost) != hipSuccess ||
+        hipMemcpy(tangentHost, tangent, outputCount * sizeof(float),
+                  hipMemcpyDeviceToHost) != hipSuccess)
+      rc = 123;
+  }
+  release(input, dinput, window, dwindow, timeFrames, dtimeFrames, primal,
+          tangent);
+  return rc;
 }
 
 namespace {

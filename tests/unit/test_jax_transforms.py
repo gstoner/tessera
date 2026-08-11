@@ -150,6 +150,21 @@ class TestJVP:
         d0 = s0 + x[0] * s0 * (1 - s0)
         np.testing.assert_allclose(tangent, [d0, 0.0], atol=1e-4)
 
+    def test_jvp_executes_primal_once_and_uses_registered_product(self):
+        calls = 0
+
+        def f(x):
+            nonlocal calls
+            calls += 1
+            return ts.ops.mul(x, x)
+
+        x = np.array([1.0e8, -3.0], dtype=np.float64)
+        v = np.array([2.0, 4.0], dtype=np.float64)
+        primal, tangent = ts.autodiff.jvp(f, x, v)
+        assert calls == 1
+        np.testing.assert_array_equal(primal, x * x)
+        np.testing.assert_array_equal(tangent, 2.0 * x * v)
+
     def test_register_jvp_returns_named_callable(self):
         from tessera.autodiff.jvp import register_jvp, get_jvp
 
@@ -166,6 +181,40 @@ class TestJVP:
 
 
 class TestCompositions:
+    def test_istft_window_jvp_matches_centered_difference(self):
+        from tessera.autodiff.jvp import get_jvp
+
+        rng = np.random.default_rng(411)
+        spectrum = (
+            rng.normal(size=(3, 5)) + 1j * rng.normal(size=(3, 5))
+        ).astype(np.complex128)
+        window = np.hanning(8) + 0.25
+        dspectrum = (
+            rng.normal(size=spectrum.shape) + 1j * rng.normal(size=spectrum.shape)
+        )
+        dwindow = rng.normal(size=window.shape)
+        rule = get_jvp("istft")
+        assert rule is not None
+        primal, tangent = rule(
+            (spectrum, window), (dspectrum, dwindow), n_fft=8, hop=4
+        )
+        eps = 1.0e-6
+        plus, _ = rule(
+            (spectrum + eps * dspectrum, window + eps * dwindow),
+            (np.zeros_like(dspectrum), np.zeros_like(dwindow)),
+            n_fft=8,
+            hop=4,
+        )
+        minus, _ = rule(
+            (spectrum - eps * dspectrum, window - eps * dwindow),
+            (np.zeros_like(dspectrum), np.zeros_like(dwindow)),
+            n_fft=8,
+            hop=4,
+        )
+        np.testing.assert_allclose(tangent, (plus - minus) / (2 * eps),
+                                   rtol=2e-6, atol=2e-6)
+        assert primal.shape == tangent.shape
+
     def test_vmap_of_grad_per_sample_gradient(self):
         """``vmap(grad(f))`` is the canonical way to get per-sample
         gradients in JAX-style code. Verified against the analytical

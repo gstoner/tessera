@@ -10340,6 +10340,10 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
             ctypes.c_char_p, c_f32, c_f32, c_f32, i64, i64, i64, i64,
             ctypes.c_float,
         ],
+        "tessera_x86_istft_jvp_f32": [
+            ctypes.c_char_p, c_f32, c_f32, c_f32, c_f32, c_f32, c_f32,
+            i64, i64, i64, i64, ctypes.c_float,
+        ],
         "tessera_x86_dct_storage": [
             ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, i64, i64,
             ctypes.c_int, ctypes.c_int, ctypes.c_float,
@@ -10454,6 +10458,7 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         "tessera_x86_spectral_conv_f32",
         "tessera_x86_stft_f32",
         "tessera_x86_istft_f32",
+        "tessera_x86_istft_jvp_f32",
         "tessera_x86_dct_storage",
         "tessera_x86_spectral_conv_storage",
         "tessera_x86_stft_storage",
@@ -11209,6 +11214,7 @@ def _execute_compiled_spectral_jvp(
 ) -> tuple[Any, Any]:
     """Execute a bilinear/fixed-parameter compound spectral product."""
     import numpy as np
+    from .compiler.scheduled_spectral import spectral_output_scale
 
     metadata = artifact.metadata or {}
     names = [str(name) for name in metadata.get("arg_names", [])]
@@ -11219,8 +11225,6 @@ def _execute_compiled_spectral_jvp(
     if not primal_names or not isinstance(contract, dict):
         raise ValueError("compound spectral JVP lacks its scheduled child")
     op_name = str(contract.get("op_name", ""))
-    if op_name == "tessera.istft" and any(index != 0 for index in wrt):
-        raise ValueError("ISTFT window products are nonlinear and fail closed")
     primals = [_as_numpy(values[name]) for name in primal_names]
     spectral_fn = (
         _execute_x86_compiled_spectral if target == "x86"
@@ -11235,6 +11239,54 @@ def _execute_compiled_spectral_jvp(
             "scheduled_spectral": contract,
         }
         return spectral_fn(RuntimeArtifact(metadata=child), tuple(operands))
+
+    if op_name == "tessera.istft" and 1 in wrt:
+        axis = int(contract["axis"])
+        spectrum = np.ascontiguousarray(primals[0], np.complex64)
+        window = np.ascontiguousarray(primals[1], np.float32)
+        if axis != spectrum.ndim - 1 or window.ndim != 1:
+            raise ValueError(
+                "x86 ISTFT window JVP currently requires the packed spectrum "
+                "axis last and a rank-one window"
+            )
+        dinput = (
+            np.ascontiguousarray(_as_numpy(values["tangent_0"]), np.complex64)
+            if 0 in wrt else None
+        )
+        dwindow = np.ascontiguousarray(
+            _as_numpy(values["tangent_1"]), np.float32
+        )
+        if target == "rocm":
+            from .compiler.emit.spectral_candidates import run_rocm_istft_jvp
+
+            return run_rocm_istft_jvp(
+                contract, spectrum, window, dinput, dwindow
+            )
+        output_shape = tuple(int(dim) for dim in contract["output_shape"])
+        primal = np.empty(output_shape, np.float32)
+        tangent = np.empty(output_shape, np.float32)
+        lib = _load_x86_elementwise()
+        if lib is None or not hasattr(lib, "tessera_x86_istft_jvp_f32"):
+            raise RuntimeError("x86 ISTFT window-JVP package is unavailable")
+        pointer = ctypes.POINTER(ctypes.c_float)
+
+        def ptr(value: Any) -> Any:
+            return value.ctypes.data_as(pointer) if value is not None else None
+
+        frames = int(contract["frames"])
+        batch = int(spectrum.size // (frames * spectrum.shape[-1]))
+        rc = lib.tessera_x86_istft_jvp_f32(
+            str(contract["schedule_digest"]).encode("ascii"), ptr(spectrum),
+            ptr(window), ptr(dinput), ptr(dwindow), ptr(primal), ptr(tangent),
+            batch, frames, int(contract["window_length"]),
+            int(contract["hop"]),
+            float(spectral_output_scale(
+                op_name, str(contract["normalization"]), int(contract["window_length"])
+            )),
+        )
+        if rc != 0:
+            raise RuntimeError(f"x86 ISTFT window-JVP package failed rc={rc}")
+        return primal, tangent
 
     primal = spectral(primals)
     terms: list[Any] = []
@@ -28567,6 +28619,462 @@ def _execute_rocm_solver_ift(artifact: RuntimeArtifact, args: Any) -> Any:
     return tuple(value.reshape(parameter.shape) for value in host_outputs)
 
 
+def _execute_solver_residual_program(
+    artifact: RuntimeArtifact, args: Any, *, target: str
+) -> Any:
+    """Execute compiler-generated residual SSA through native scalar lanes."""
+    import hashlib
+    import json
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    program = dict(metadata.get("solver_residual_program") or {})
+    if program.get("schema") != "tessera.solver.residual_program.v1":
+        raise ValueError("solver residual child rejected an unknown program schema")
+    body = {key: value for key, value in program.items() if key != "program_digest"}
+    digest = hashlib.sha256(json.dumps(
+        body, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")).hexdigest()
+    if digest != program.get("program_digest"):
+        raise ValueError("solver residual child rejected stale program lineage")
+    names = [str(name) for name in metadata.get("arg_names") or []]
+    if names != [str(name) for name in program.get("arg_names") or []]:
+        raise ValueError("solver residual child argument lineage mismatch")
+    values = {
+        name: np.ascontiguousarray(value, dtype=np.float32)
+        for name, value in _bind_launch_args(args, names).items()
+    }
+    if not values:
+        raise ValueError("solver residual child requires at least one argument")
+    template = next(iter(values.values()))
+
+    for step in program.get("steps") or []:
+        step_id = str(step.get("id", ""))
+        if not step_id or step_id in values:
+            raise ValueError("solver residual child has an invalid SSA result")
+        kind = step.get("kind")
+        if kind == "constant":
+            constant_value = float(step.get("value"))
+            if not np.isfinite(constant_value):
+                raise ValueError("solver residual constants must be finite")
+            values[step_id] = np.asarray(constant_value, dtype=np.float32)
+            continue
+        if kind != "op":
+            raise ValueError(f"solver residual child has unknown step kind {kind!r}")
+        op_name = str(step.get("op_name", ""))
+        kwargs = dict(step.get("kwargs") or {})
+        input_names = [str(name) for name in step.get("inputs") or []]
+        if any(name not in values for name in input_names):
+            raise ValueError("solver residual child references an unknown SSA input")
+        operands = tuple(values[name] for name in input_names)
+        if op_name == "tessera.zeros_like":
+            if len(operands) != 1:
+                raise ValueError("solver zeros_like requires one operand")
+            values[step_id] = np.zeros_like(operands[0], dtype=np.float32)
+            continue
+        if op_name in {
+            "tessera.equal", "tessera.not_equal", "tessera.less",
+            "tessera.less_equal", "tessera.greater", "tessera.greater_equal",
+        }:
+            if len(operands) != 2:
+                raise ValueError("solver comparison requires two operands")
+            if kwargs.get("derivative_boundary") != "reject_equal":
+                raise ValueError(
+                    "solver predicate comparison requires an explicit derivative-boundary policy"
+                )
+            common_shape = np.broadcast_shapes(operands[0].shape, operands[1].shape)
+            compared = tuple(
+                np.ascontiguousarray(np.broadcast_to(value, common_shape))
+                for value in operands
+            )
+            if np.any(np.equal(compared[0], compared[1])):
+                raise ValueError(
+                    "solver predicate derivative is undefined at an equality boundary"
+                )
+            executor = (
+                _execute_x86_compiled_compare if target == "x86"
+                else _execute_rocm_compiled_compare
+            )
+            child = RuntimeArtifact(metadata={
+                "target": target,
+                "compiler_path": f"{target}_compare_compiled",
+                "arg_names": ["a0", "a1"],
+                "ops": [{
+                    "op_name": op_name, "result": "out",
+                    "operands": ["a0", "a1"], "kwargs": {},
+                }],
+            })
+            values[step_id] = np.ascontiguousarray(
+                executor(child, compared), dtype=np.bool_
+            )
+            continue
+        if op_name == "tessera.where":
+            if len(operands) != 3 or kwargs.get("predicate_replay") != "pure_recompute":
+                raise ValueError("solver where requires digest-bound predicate replay")
+            common_shape = np.broadcast_shapes(
+                operands[0].shape, operands[1].shape, operands[2].shape
+            )
+            predicate = np.ascontiguousarray(
+                np.broadcast_to(operands[0], common_shape), dtype=np.bool_
+            )
+            branches = tuple(
+                np.ascontiguousarray(np.broadcast_to(value, common_shape), dtype=np.float32)
+                for value in operands[1:]
+            )
+            executor = (
+                _execute_x86_compiled_where if target == "x86"
+                else _execute_rocm_compiled_where
+            )
+            child = RuntimeArtifact(metadata={
+                "target": target,
+                "compiler_path": f"{target}_where_compiled",
+                "arg_names": ["predicate", "then", "else"],
+                "ops": [{
+                    "op_name": op_name, "result": "out",
+                    "operands": ["predicate", "then", "else"], "kwargs": {},
+                }],
+            })
+            values[step_id] = np.ascontiguousarray(
+                executor(child, (predicate, *branches)), dtype=np.float32
+            )
+            continue
+        if op_name == "tessera.transpose":
+            if len(operands) != 1:
+                raise ValueError("solver transpose requires one operand")
+            axes = kwargs.get("axes")
+            values[step_id] = np.ascontiguousarray(
+                np.transpose(operands[0], None if axes is None else tuple(axes)),
+                dtype=np.float32,
+            )
+            continue
+        if op_name == "tessera.broadcast_like":
+            if len(operands) != 2:
+                raise ValueError("solver broadcast_like requires value and shape witness")
+            values[step_id] = np.ascontiguousarray(
+                np.broadcast_to(operands[0], operands[1].shape), dtype=np.float32
+            )
+            continue
+        if op_name == "tessera.unbroadcast_like":
+            if len(operands) != 2:
+                raise ValueError("solver unbroadcast_like requires value and shape witness")
+            broadcasted, witness = operands
+            target_shape = witness.shape
+            if len(target_shape) > broadcasted.ndim:
+                raise ValueError("solver unbroadcast_like cannot increase rank")
+            padded = (1,) * (broadcasted.ndim - len(target_shape)) + target_shape
+            axes = tuple(
+                index for index, (source, target_extent) in enumerate(zip(broadcasted.shape, padded))
+                if target_extent == 1 and source != 1
+            )
+            if any(
+                target_extent not in {1, source}
+                for source, target_extent in zip(broadcasted.shape, padded)
+            ):
+                raise ValueError("solver unbroadcast_like shapes are incompatible")
+            reduced = (
+                broadcasted.sum(axis=axes, keepdims=True)
+                if axes else broadcasted
+            )
+            values[step_id] = np.ascontiguousarray(
+                reduced.reshape(target_shape), dtype=np.float32
+            )
+            continue
+        if op_name == "tessera.mean_adjoint":
+            if len(operands) != 2:
+                raise ValueError("solver mean_adjoint requires value and shape witness")
+            axis = kwargs.get("axis")
+            axes = tuple(range(operands[1].ndim)) if axis is None else (
+                (int(axis),) if isinstance(axis, int) else tuple(int(a) for a in axis)
+            )
+            extent = 1
+            for axis_value in axes:
+                extent *= int(operands[1].shape[axis_value])
+            values[step_id] = np.ascontiguousarray(
+                operands[0] / np.float32(extent), dtype=np.float32
+            )
+            continue
+        if op_name in {"tessera.matmul", "tessera.gemm"}:
+            if len(operands) != 2 or any(value.ndim != 2 for value in operands):
+                raise ValueError("solver matmul requires two rank-2 operands")
+            storage = str(kwargs.get("storage", "f32"))
+            accumulation = str(kwargs.get("accumulation", "f32"))
+            if accumulation != "f32" or storage not in {"f32", "f16", "bf16"}:
+                raise ValueError(
+                    "solver matmul requires f32 accumulation and f32/f16/bf16 storage"
+                )
+            if target == "x86":
+                # The AVX-512 package owns an f32 microkernel. Reduced-precision
+                # Graph storage is widened at this explicit physical boundary.
+                physical_operands = tuple(
+                    np.ascontiguousarray(value, dtype=np.float32) for value in operands
+                )
+                result = _x86_gemm_2d(*physical_operands)
+            else:
+                # gfx1151 has no f32 WMMA. Preserve the Graph storage contract
+                # through every primal/product matmul instead of accidentally
+                # feeding widened solver values to the reduced-precision ABI.
+                if storage == "f32":
+                    raise ValueError(
+                        "gfx1151 solver matmul requires f16 or bf16 storage with f32 accumulation"
+                    )
+                storage_dtype = (
+                    np.float16 if storage == "f16" else _bfloat16_dtype()
+                )
+                if storage_dtype is None:
+                    raise ValueError("gfx1151 solver matmul requires NumPy bfloat16 support")
+                physical_operands = tuple(
+                    np.ascontiguousarray(value, dtype=storage_dtype) for value in operands
+                )
+                result = _rocm_wmma_gemm_2d(*physical_operands)
+            values[step_id] = np.ascontiguousarray(result, dtype=np.float32)
+            continue
+        if op_name in {"tessera.sum", "tessera.mean"}:
+            if len(operands) != 1:
+                raise ValueError("solver reduction requires one operand")
+            executor = (
+                _execute_x86_compiled_reduce if target == "x86"
+                else _execute_rocm_compiled_reduce
+            )
+            child = RuntimeArtifact(metadata={
+                "target": target,
+                "compiler_path": f"{target}_reduce_compiled",
+                "arg_names": ["a0"],
+                "ops": [{
+                    "op_name": op_name, "result": "out",
+                    "operands": ["a0"], "kwargs": kwargs,
+                }],
+            })
+            values[step_id] = np.ascontiguousarray(
+                executor(child, operands), dtype=np.float32
+            )
+            continue
+        if len(operands) == 2:
+            try:
+                common_shape = np.broadcast_shapes(operands[0].shape, operands[1].shape)
+            except ValueError as exc:
+                raise ValueError("solver binary operands are not broadcast-compatible") from exc
+            operands = tuple(
+                np.ascontiguousarray(np.broadcast_to(value, common_shape), dtype=np.float32)
+                for value in operands
+            )
+            executor = (
+                _execute_x86_compiled_binary if target == "x86"
+                else _execute_rocm_compiled_binary
+            )
+            compiler_path = f"{target}_binary_compiled"
+        elif len(operands) == 1 and target == "x86":
+            if op_name in _X86_UNARY_OPS:
+                executor = _execute_x86_compiled_unary
+                compiler_path = "x86_unary_compiled"
+            elif op_name in _X86_TRANSCENDENTAL_OPS:
+                executor = _execute_x86_compiled_transcendental
+                compiler_path = "x86_transcendental_compiled"
+            else:
+                raise ValueError(f"x86 solver residual has no native unary lane for {op_name}")
+        elif len(operands) == 1 and target == "rocm":
+            if op_name not in _ROCM_UNARY_OPS:
+                raise ValueError(f"ROCm solver residual has no native unary lane for {op_name}")
+            executor = _execute_rocm_compiled_unary
+            compiler_path = "rocm_unary_compiled"
+        else:
+            raise ValueError("solver residual child supports unary and binary operations")
+        child = RuntimeArtifact(metadata={
+            "target": target,
+            "compiler_path": compiler_path,
+            "arg_names": [f"a{index}" for index in range(len(operands))],
+            "ops": [{
+                "op_name": op_name, "result": "out",
+                "operands": [f"a{index}" for index in range(len(operands))],
+                "kwargs": kwargs,
+            }],
+        })
+        output = np.ascontiguousarray(executor(child, operands), dtype=np.float32)
+        values[step_id] = output
+    output_name = str(program.get("output", ""))
+    if output_name not in values:
+        raise ValueError("solver residual child output is undefined")
+    return values[output_name]
+
+
+def _execute_x86_solver_residual_program(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_solver_residual_program(artifact, args, target="x86")
+
+
+def _execute_rocm_solver_residual_program(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_solver_residual_program(artifact, args, target="rocm")
+
+
+def _execute_physical_general_solver(
+    artifact: RuntimeArtifact, args: Any, *, target: str
+) -> Any:
+    """Execute a digest-bound matrix-free solver over native child packages."""
+    import hashlib
+    import json
+    import numpy as np
+
+    from .autodiff.implicit import gmres_solve
+
+    metadata = artifact.metadata or {}
+    names = list(metadata.get("arg_names") or [])
+    if names != ["parameter", "solution", "product"]:
+        raise ValueError("general solver requires parameter/solution/product order")
+    values = _bind_launch_args(args, names)
+    parameter_input = np.asarray(values["parameter"])
+    solution_input = np.asarray(values["solution"])
+    product_input = np.asarray(values["product"])
+    parameter = np.ascontiguousarray(parameter_input, dtype=np.float32)
+    solution = np.ascontiguousarray(solution_input, dtype=np.float32)
+    product = np.ascontiguousarray(product_input, dtype=np.float32)
+    contract = dict(metadata.get("physical_general_solver") or {})
+    if contract.get("schema") != "tessera.solver_product.physical.v1":
+        raise ValueError("general solver rejected an unknown physical schema")
+
+    def digest_of(value: Any) -> str:
+        return hashlib.sha256(
+            json.dumps(value, sort_keys=True, separators=(",", ":"),
+                       allow_nan=False).encode("utf-8")
+        ).hexdigest()
+
+    body = {key: value for key, value in contract.items() if key != "artifact_hash"}
+    if digest_of(body) != contract.get("artifact_hash"):
+        raise ValueError("general solver rejected stale parent lineage")
+    expected_target = "x86" if target == "x86" else "rocm_gfx1151"
+    if contract.get("target") != expected_target:
+        raise ValueError("general solver target lineage mismatch")
+    value_contract = dict(contract.get("value_contract") or {})
+    if value_contract:
+        bounds = tuple(int(dim) for dim in value_contract.get("shape_bounds") or ())
+        if len(bounds) != solution.ndim or any(
+            extent <= 0 or extent > bound
+            for extent, bound in zip(solution.shape, bounds)
+        ):
+            raise ValueError("general solver runtime shape exceeds its bounded-dynamic contract")
+        parameter_bounds = tuple(
+            int(dim) for dim in value_contract.get("parameter_shape_bounds") or bounds
+        )
+        if len(parameter_bounds) != parameter.ndim or any(
+            extent <= 0 or extent > bound
+            for extent, bound in zip(parameter.shape, parameter_bounds)
+        ):
+            raise ValueError("general solver parameter shape exceeds its bounded-dynamic contract")
+        mode = str(contract.get("product_mode"))
+        expected_product_shape = parameter.shape if mode == "jvp" else solution.shape
+        if product.shape != expected_product_shape:
+            raise ValueError(
+                f"general solver {mode} product must have shape {expected_product_shape}"
+            )
+        storage = dict(value_contract.get("storage_dtypes") or {})
+        def dtype_name(value: Any) -> str:
+            name = str(value.dtype)
+            return {"float32": "f32", "float16": "f16", "bfloat16": "bf16"}.get(name, name)
+        if storage.get("parameter") not in {None, dtype_name(parameter_input)}:
+            raise ValueError("general solver parameter storage dtype violates its contract")
+        if storage.get("solution") not in {None, dtype_name(solution_input)}:
+            raise ValueError("general solver solution storage dtype violates its contract")
+        if storage.get("product") not in {None, dtype_name(product_input)}:
+            raise ValueError("general solver product dtype violates its contract")
+    children = dict(contract.get("children") or {})
+    required = {
+        "residual", "solution_jvp", "solution_vjp", "parameter_jvp",
+        "parameter_vjp",
+    }
+    if set(children) != required:
+        raise ValueError("general solver child set is incomplete")
+    zeros = np.zeros_like(solution)
+    ones = np.ones_like(solution)
+
+    def child(role: str, vector: Any | None = None) -> np.ndarray:
+        record = dict(children[role])
+        child_body = {
+            "metadata": record.get("metadata"),
+            "bindings": record.get("bindings"),
+        }
+        if digest_of(child_body) != record.get("digest"):
+            raise ValueError(f"general solver rejected stale {role} child")
+        resolved = {
+            "parameter": parameter,
+            "solution": solution,
+            "vector": np.ascontiguousarray(
+                zeros if vector is None else vector, dtype=np.float32
+            ),
+            "zero": zeros,
+            "one": ones,
+            "minus_one": -ones,
+        }
+        operands = tuple(resolved[name] for name in record["bindings"])
+        result = launch(RuntimeArtifact(metadata=dict(record["metadata"])), operands)
+        if not result.get("ok"):
+            raise RuntimeError(
+                f"general solver {role} child failed: {result.get('reason')}"
+            )
+        output = result["output"]
+        if isinstance(output, tuple):
+            if len(output) != 1:
+                raise ValueError(f"general solver {role} child must have one result")
+            output = output[0]
+        array = np.ascontiguousarray(output, dtype=np.float32)
+        expected_shape = parameter.shape if role == "parameter_vjp" else solution.shape
+        if array.shape != expected_shape:
+            raise ValueError(
+                f"general solver {role} child produced {array.shape}, expected {expected_shape}"
+            )
+        return array
+
+    residual = child("residual")
+    convergence = dict(contract.get("convergence") or {})
+    tolerance = float(convergence.get("tolerance", 0.0))
+    max_iterations = int(convergence.get("max_iterations", 0))
+    restart = int(convergence.get("restart", 0))
+    mode = str(contract.get("product_mode"))
+    if mode == "jvp":
+        parameter_term = child("parameter_jvp", product)
+        action = lambda vector: child(
+            "solution_jvp", vector.reshape(solution.shape)
+        ).reshape(-1)
+        linear, info = gmres_solve(
+            action, -parameter_term.reshape(-1), tol=tolerance,
+            maxiter=max_iterations, restart=restart, return_info=True,
+        )
+        parameter_product = -parameter_term
+    elif mode == "vjp":
+        action = lambda vector: child(
+            "solution_vjp", vector.reshape(solution.shape)
+        ).reshape(-1)
+        linear, info = gmres_solve(
+            action, product.reshape(-1), tol=tolerance,
+            maxiter=max_iterations, restart=restart, return_info=True,
+        )
+        parameter_product = -child(
+            "parameter_vjp", linear.reshape(solution.shape)
+        )
+    else:
+        raise ValueError("general solver product mode must be jvp or vjp")
+    if not info.converged:
+        raise RuntimeError(
+            "general solver failed its true-residual convergence policy: "
+            f"{info.residual_norm}"
+        )
+    metadata["last_solve"] = {
+        "iterations": info.iterations,
+        "matvecs": info.matvecs,
+        "final_residual_norm": info.residual_norm,
+        "converged": info.converged,
+    }
+    return (
+        residual,
+        linear.reshape(solution.shape).astype(np.float32),
+        parameter_product,
+    )
+
+
+def _execute_x86_physical_general_solver(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_physical_general_solver(artifact, args, target="x86")
+
+
+def _execute_rocm_physical_general_solver(artifact: RuntimeArtifact, args: Any) -> Any:
+    return _execute_physical_general_solver(artifact, args, target="rocm")
+
+
 def _executor_table():
     # Lazily resolved: these symbols are defined later in this file.
     return {
@@ -28648,6 +29156,8 @@ def _executor_table():
         "rocm_activation_compiled": _execute_rocm_compiled_activation,
         "rocm_unary_compiled": _execute_rocm_compiled_unary,
         "rocm_solver_ift_compiled": _execute_rocm_solver_ift,
+        "rocm_general_solver_compiled": _execute_rocm_physical_general_solver,
+        "rocm_solver_graph_compiled": _execute_rocm_solver_residual_program,
         "rocm_binary_compiled": _execute_rocm_compiled_binary,
         "rocm_compare_compiled": _execute_rocm_compiled_compare,
         "rocm_predicate_compiled": _execute_rocm_compiled_predicate,
@@ -28684,6 +29194,8 @@ def _executor_table():
         "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
         "x86_solver_ift_compiled": _execute_x86_solver_ift,
+        "x86_general_solver_compiled": _execute_x86_physical_general_solver,
+        "x86_solver_graph_compiled": _execute_x86_solver_residual_program,
         "x86_es_low_rank_compiled": _execute_x86_es_low_rank,
         "x86_sgd_bwd_compiled": _execute_x86_compiled_sgd_backward,
         "x86_momentum_bwd_compiled": _execute_x86_compiled_momentum_backward,

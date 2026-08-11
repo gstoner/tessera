@@ -7,6 +7,72 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `AD-SOLVER-ISTFT-PHYSICAL-2026-08-11` — **bounded general-
+residual and exact ISTFT-window products execute on gfx1151.** The general
+solver parent binds five immutable native children (residual, solution JVP/VJP,
+and parameter JVP/VJP) and runs restarted GMRES with a true-residual check.
+The compiler now derives all five children from a verified typed residual Graph.
+Pointwise, sum/mean, rank-2 matmul, transpose, distinct parameter/solution
+spaces, bounded-dynamic dimensions, mixed f16/bf16 storage with explicit f32
+widening, and statically bounded `control_for` are represented in the
+content-addressed child program. Pure scalar predicates now also lower
+data-dependent `if` and bounded `while` to digest-bound compare/select SSA;
+each primal and product child recomputes the same predicate and never depends
+on a host callback or an untracked tape. Exact gfx1151 proof covers nonlinear
+`R=x*x+sin(x)-theta` without materializing a Jacobian.
+`tessera.istft_jvp` now carries the nonlinear
+window product explicitly, and the packed-real gfx1151 package differentiates
+both overlap-add numerator and window-energy denominator. The committed WSL
+packet records 30 warmed samples, cold start, child resources, artifact
+digests, and numerical error for nonlinear, reduction, f16-storage matmul,
+bounded-dynamic mixed-storage, data-dependent `if`, data-dependent `while`, and
+ISTFT-window products (maximum error 1.28e-4). Its
+host-wall medians are regression-only: device-clock calibration and a clean
+bare-metal packet remain required. A fresh native gfx1151 clock probe confirms
+`wall_clock64` is valid on this gfx11.5 device, while HIP events remain zero and
+ROCprofiler activity is unavailable under WSL; the sample is retain/regression
+evidence, not selector evidence. Odd-window/low-precision ISTFT products,
+gfx1200, and gfx1250 remain fail-closed.
+
+Cross-backend sync `E2E-REAL-6-JVP-SOLVER-2026-08-11` — **the first duplicate-
+authority cohort is landing.** Native forward-product specialization now binds
+tracer-produced canonical Graph IR and dispatches through explicit family
+plugins outside `JitFn`. Scheduled gfx1151 attention backward now consumes its
+content-addressed Tile artifact directly; it no longer reconstructs Graph IR to
+re-enter the Graph-owned packager. General solver contracts now bind and
+execute exact residual/JVP/VJP child packages. The typed residual compiler now
+derives those children automatically for pointwise, reduction, rank-2 matmul,
+bounded-dynamic/mixed-storage, and counted-region programs; architecture-owned
+packets for that expanded envelope remain open. Existing diagonal-sqrt and attention
+packets do not transfer to new solver families. The six-case native forward-product cohort,
+including DCT-IV with corrected logical-length normalization, passes on the
+WSL-visible gfx1151; this is correctness, not selector-grade timing.
+gfx1200/gfx1250 remain fail-closed.
+
+Cross-backend sync `AD-FWD-DIST-3-2026-08-11` — **shared exact JVP,
+structured-region products, and typed point-to-point RCCL execution landed;
+gfx1151 multi-rank evidence remains open.** Public JVP/jacfwd use registered
+tangent products without finite differences, and compiler forward mode carries
+primal/tangent state through bounded SCF. `collective_permute` reaches the
+one-process/multi-device RCCL launcher as grouped send/receive with explicit
+peer-map validation. A second visible GPU, subgroup communicator construction,
+and exact RCCL correctness/performance packets remain required. LSA, GIN/RMA,
+Copy Engine, and gfx1250 DDA retain their independent gates.
+
+Cross-backend sync `W4-SOLVER-REGION-2026-08-11` — **shared bounded-region
+adjoints and general matrix-free solver policy landed; gfx1151 physical proof
+now has a bounded child-composite proof.** Portable tracing now emits bounded SCF, and the paired compiler
+differentiates effect-safe single-block `if`, counted `for`, and canonical
+bounded `while` with implicit captures. General residual execution uses
+restarted GMRES/CG policy and exposes convergence work; counted-region evidence
+executes SAVE/RECOMPUTE/HYBRID cohorts. gfx1151 retains the monolithic
+diagonal-sqrt pilot and now executes digest-bound general residual children
+through the matrix-free parent. Typed reduction/matmul and statically
+counted-region lowering is now shared software; pure scalar predicate-bearing
+residuals and the expanded-family WSL correctness packet are now closed.
+Selected-checkpoint lowering and selector-grade bare-metal packets remain open;
+gfx1200/gfx1250 stay fail-closed.
+
 Cross-backend sync `COMP-GRAPH-DATAFLOW-W2.1-2026-08-11` — **shared
 analysis substrate landed; existing gfx1151 evidence remains valid.** Graph IR
 now has one fail-closed, invalidatable shape/alias/liveness/memory-dependence/

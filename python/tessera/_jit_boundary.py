@@ -44,20 +44,21 @@ def _find_tessera_opt():
     if _TESSERA_OPT_PATH != "unset":
         return _TESSERA_OPT_PATH
     import shutil
+
     cands = []
     for name in ("TESSERA_OPT", "TESSERA_OPT_BIN"):
         if env := os.environ.get(name):
             cands.append(env)
     root = _repo_root()
     if sys.platform == "darwin":
-        cands.append(os.path.join(
-            root, "build-apple/tools/tessera-opt/tessera-opt"))
+        cands.append(os.path.join(root, "build-apple/tools/tessera-opt/tessera-opt"))
     cands.append(os.path.join(root, "build/tools/tessera-opt/tessera-opt"))
     which = shutil.which("tessera-opt")
     if which:
         cands.append(which)
     _TESSERA_OPT_PATH = next((p for p in cands if p and os.path.exists(p)), None)
     return _TESSERA_OPT_PATH
+
 
 LAST_EXECUTION_BACKEND = "mlir_llvm_jit"
 
@@ -93,12 +94,13 @@ def _find_dylib() -> str | None:
         # The Apple build carries the configured LLVM/MLIR toolchain. Prefer it
         # over a generic `build/` dylib that may retain an obsolete Homebrew
         # install name such as /opt/homebrew/opt/llvm@23/lib/libLLVM.dylib.
-        pats.append(os.path.join(
-            repo, "build-apple", "tools", "tessera-jit", "libtessera_jit.*"))
-    pats.extend([
-        os.path.join(repo, "build", "tools", "tessera-jit", "libtessera_jit.*"),
-        os.path.join(repo, "build*", "tools", "tessera-jit", "libtessera_jit.*"),
-    ])
+        pats.append(os.path.join(repo, "build-apple", "tools", "tessera-jit", "libtessera_jit.*"))
+    pats.extend(
+        [
+            os.path.join(repo, "build", "tools", "tessera-jit", "libtessera_jit.*"),
+            os.path.join(repo, "build*", "tools", "tessera-jit", "libtessera_jit.*"),
+        ]
+    )
     for pat in pats:
         hits = sorted(glob.glob(pat))
         if hits:
@@ -112,10 +114,7 @@ def _load() -> ctypes.CDLL:
         return _LIB
     path = _find_dylib()
     if path is None:
-        raise TesseraJitError(
-            "libtessera_jit not built; run "
-            "`ninja -C build tessera_jit` (or set TESSERA_JIT_LIB)"
-        )
+        raise TesseraJitError("libtessera_jit not built; run `ninja -C build tessera_jit` (or set TESSERA_JIT_LIB)")
     try:
         lib = ctypes.CDLL(path)
     except OSError as exc:
@@ -193,9 +192,7 @@ def _dtype_entry(arr: np.ndarray):
     for tag, (np_dt, ct_dt, mlir) in _DTYPE_TABLE.items():
         if arr.dtype == np_dt:
             return tag, ct_dt, mlir
-    raise TesseraJitError(
-        f"Phase 1 boundary supports {sorted(_DTYPE_TABLE)} only (got {arr.dtype})"
-    )
+    raise TesseraJitError(f"Phase 1 boundary supports {sorted(_DTYPE_TABLE)} only (got {arr.dtype})")
 
 
 def _resolve_elem(arrays: Sequence[np.ndarray]) -> tuple[str, Any]:
@@ -213,9 +210,7 @@ def _resolve_elem(arrays: Sequence[np.ndarray]) -> tuple[str, Any]:
     for _tag, (np_dt, _ct, mlir) in _DTYPE_TABLE.items():
         if dt == np_dt:
             return mlir, np_dt
-    raise TesseraJitError(
-        f"unsupported dtype {dt}; supported: {sorted(_DTYPE_TABLE)}"
-    )
+    raise TesseraJitError(f"unsupported dtype {dt}; supported: {sorted(_DTYPE_TABLE)}")
 
 
 def _descriptor_struct(rank: int, elem_ct: Any) -> type:
@@ -259,8 +254,7 @@ def _make_descriptor(arr: np.ndarray, elem_ct: Any = None):
     """
     if not arr.flags.c_contiguous:
         raise TesseraJitError(
-            "boundary buffers must be C-contiguous (§12.4); "
-            "caller must materialize a contiguous copy"
+            "boundary buffers must be C-contiguous (§12.4); caller must materialize a contiguous copy"
         )
     if elem_ct is None:
         _, elem_ct, _ = _dtype_entry(arr)
@@ -289,9 +283,7 @@ def _build_packed_args(descriptors):
     Returns ``(packed, keepalive)`` where ``keepalive`` must outlive the call.
     """
     n = len(descriptors)
-    packed = (ctypes.c_void_p * n)(
-        *[ctypes.addressof(d) for d in descriptors]
-    )
+    packed = (ctypes.c_void_p * n)(*[ctypes.addressof(d) for d in descriptors])
     keepalive: list[Any] = [descriptors, packed]
     return packed, keepalive
 
@@ -452,9 +444,7 @@ def invoke(
     outs = list(out) if isinstance(out, (list, tuple)) else [out]
     descs = [_make_descriptor(a) for a in (*arrays, *outs)]
     packed, _keepalive = _build_packed_args(descs)
-    rc = lib.tessera_jit_invoke(
-        handle, symbol.encode("utf-8"), packed, len(descs)
-    )
+    rc = lib.tessera_jit_invoke(handle, symbol.encode("utf-8"), packed, len(descs))
     if rc != 0:
         raise TesseraJitError(lib.tessera_jit_last_error().decode("utf-8", "replace"))
 
@@ -476,9 +466,7 @@ def _jit_binary(op_name: str, sym: str, a: np.ndarray, b: np.ndarray) -> np.ndar
     b = np.asarray(b)
     elem, _npdt = _resolve_elem([a, b])  # f32 or bf16; rejects mixed/unsupported
     if a.shape != b.shape:
-        raise TesseraJitError(
-            f"elementwise requires equal shapes (got {a.shape}, {b.shape})"
-        )
+        raise TesseraJitError(f"elementwise requires equal shapes (got {a.shape}, {b.shape})")
     if a.ndim < 1:
         raise TesseraJitError("Phase 1 boundary requires rank>=1")
     a = np.ascontiguousarray(a)
@@ -526,9 +514,7 @@ def jit_select(cond: np.ndarray, a: np.ndarray, b: np.ndarray) -> np.ndarray:
     b = np.asarray(b)
     elem, _ = _resolve_elem([cond, a, b])
     if not (cond.shape == a.shape == b.shape):
-        raise TesseraJitError(
-            f"select needs equal shapes ({cond.shape},{a.shape},{b.shape})"
-        )
+        raise TesseraJitError(f"select needs equal shapes ({cond.shape},{a.shape},{b.shape})")
     cond, a, b = map(np.ascontiguousarray, (cond, a, b))
     t = "tensor<" + "x".join(str(s) for s in a.shape) + f"x{elem}>"
     sym = "tessera_jit_select"
@@ -554,9 +540,7 @@ def jit_write_row(buffer: np.ndarray, value: np.ndarray, row: int) -> np.ndarray
     value = np.asarray(value)
     elem, _ = _resolve_elem([buffer, value])
     if buffer.ndim != 2 or value.shape != (1, buffer.shape[1]):
-        raise TesseraJitError(
-            f"write_row: buffer (T,D), value (1,D); got {buffer.shape},{value.shape}"
-        )
+        raise TesseraJitError(f"write_row: buffer (T,D), value (1,D); got {buffer.shape},{value.shape}")
     if not (0 <= row < buffer.shape[0]):
         raise TesseraJitError(f"row {row} out of range for {buffer.shape}")
     buffer = np.ascontiguousarray(buffer)
@@ -579,9 +563,7 @@ def jit_write_row(buffer: np.ndarray, value: np.ndarray, row: int) -> np.ndarray
         destroy(handle)
 
 
-def jit_masked_fill(
-    x: np.ndarray, mask: np.ndarray, value: float = -1e9
-) -> np.ndarray:
+def jit_masked_fill(x: np.ndarray, mask: np.ndarray, value: float = -1e9) -> np.ndarray:
     """Production-lane masked fill: mask != 0 ? x : value (f32).
 
     The attention-masking primitive: ``masked_fill(scores, causal_mask, -1e9)``
@@ -659,16 +641,13 @@ def jit_matmul(
     b = np.asarray(b)
     elem, npdt = _resolve_elem([a, b])
     if a.ndim != 2 or b.ndim != 2:
-        raise TesseraJitError(
-            f"Phase 1 jit_matmul is rank-2 only (got {a.shape}, {b.shape})"
-        )
+        raise TesseraJitError(f"Phase 1 jit_matmul is rank-2 only (got {a.shape}, {b.shape})")
     # Logical (M,K) for a and (K,N) for b after honoring the transpose flags.
     M, Ka = (a.shape[1], a.shape[0]) if transpose_a else (a.shape[0], a.shape[1])
     Kb, N = (b.shape[1], b.shape[0]) if transpose_b else (b.shape[0], b.shape[1])
     if Ka != Kb:
         raise TesseraJitError(
-            f"matmul contracting mismatch: a={a.shape} (tA={transpose_a}) "
-            f"b={b.shape} (tB={transpose_b})"
+            f"matmul contracting mismatch: a={a.shape} (tA={transpose_a}) b={b.shape} (tB={transpose_b})"
         )
     M, N = int(M), int(N)
     a = np.ascontiguousarray(a)
@@ -709,10 +688,7 @@ def jit_transpose(a: np.ndarray) -> np.ndarray:
     to = f"tensor<{N}x{M}x{elem}>"
     sym = "tessera_jit_transpose"
     mlir = (
-        f"func.func @{sym}(%x: {ti}) -> {to} {{\n"
-        f"  %0 = tessera.transpose %x : ({ti}) -> {to}\n"
-        f"  return %0 : {to}\n"
-        f"}}\n"
+        f"func.func @{sym}(%x: {ti}) -> {to} {{\n  %0 = tessera.transpose %x : ({ti}) -> {to}\n  return %0 : {to}\n}}\n"
     )
     handle = compile_module(mlir)
     try:
@@ -777,8 +753,7 @@ def jit_reduce(a: np.ndarray, axis: int, kind: str) -> np.ndarray:
         raise TesseraJitError(f"reduce kind must be one of {sorted(_REDUCE_KINDS)}")
     if a.ndim < 2:
         raise TesseraJitError(
-            f"Phase 1 jit_reduce requires rank>=2 (got rank {a.ndim}); "
-            "rank-0 results have no boundary descriptor yet"
+            f"Phase 1 jit_reduce requires rank>=2 (got rank {a.ndim}); rank-0 results have no boundary descriptor yet"
         )
     ax = axis + a.ndim if axis < 0 else axis
     if ax < 0 or ax >= a.ndim:
@@ -878,12 +853,7 @@ def _jit_unary(op_name: str, sym: str, a: np.ndarray) -> np.ndarray:
         raise TesseraJitError("Phase 1 unary requires rank>=1")
     a = np.ascontiguousarray(a)
     t = "tensor<" + "x".join(str(s) for s in a.shape) + f"x{elem}>"
-    mlir = (
-        f"func.func @{sym}(%x: {t}) -> {t} {{\n"
-        f"  %0 = {op_name} %x : ({t}) -> {t}\n"
-        f"  return %0 : {t}\n"
-        f"}}\n"
-    )
+    mlir = f"func.func @{sym}(%x: {t}) -> {t} {{\n  %0 = {op_name} %x : ({t}) -> {t}\n  return %0 : {t}\n}}\n"
     handle = compile_module(mlir)
     try:
         out = np.empty_like(a)
@@ -930,8 +900,7 @@ def jit_gelu(a: np.ndarray) -> np.ndarray:
 # already supports this (markCInterface + the DPS rewrite walk every function);
 # GraphFn is just the Python surface to express the graph.
 
-_ELEM_TO_NP: dict[str, Any] = {
-    "f32": np.float32, "f64": np.float64, "f16": np.float16}
+_ELEM_TO_NP: dict[str, Any] = {"f32": np.float32, "f64": np.float64, "f16": np.float16}
 if _BF16 is not None:
     _ELEM_TO_NP["bf16"] = _BF16
 
@@ -939,20 +908,17 @@ if _BF16 is not None:
 def _i32_array(xs) -> str:
     """MLIR ``DenseI32ArrayAttr`` text. Empty must be ``array<i32>`` (no colon)."""
     xs = list(xs)
-    return "array<i32: " + ", ".join(str(int(x)) for x in xs) + ">" if xs \
-        else "array<i32>"
+    return "array<i32: " + ", ".join(str(int(x)) for x in xs) + ">" if xs else "array<i32>"
 
 
 def _f32_array(xs) -> str:
     xs = list(xs)
-    return "array<f32: " + ", ".join(f"{x:.9e}" for x in xs) + ">" if xs \
-        else "array<f32>"
+    return "array<f32: " + ", ".join(f"{x:.9e}" for x in xs) + ">" if xs else "array<f32>"
 
 
 def _i64_array(xs) -> str:
     xs = list(xs)
-    return "array<i64: " + ", ".join(str(int(x)) for x in xs) + ">" if xs \
-        else "array<i64>"
+    return "array<i64: " + ", ".join(str(int(x)) for x in xs) + ">" if xs else "array<i64>"
 
 
 class _Val:
@@ -1045,10 +1011,7 @@ class GraphFn:
         in_types = ", ".join(self._t(o.shape) for o in ins)
         in_ssas = ", ".join(o.ssa for o in ins)
         attr_str = (" {" + ", ".join(attrs) + "}") if attrs else ""
-        self._scopes[-1].append(
-            f"  {res} = {op} {in_ssas}{attr_str} : "
-            f"({in_types}) -> {self._t(tuple(out_shape))}"
-        )
+        self._scopes[-1].append(f"  {res} = {op} {in_ssas}{attr_str} : ({in_types}) -> {self._t(tuple(out_shape))}")
         out = _Val(res, tuple(out_shape))
         self._ops.append(_GraphOp(op, ins, out, meta or {}))
         return out
@@ -1090,14 +1053,20 @@ class GraphFn:
     def softmax(self, a, axis: int = -1):
         ax = axis + len(a.shape) if axis < 0 else axis
         return self._emit(
-            "tessera.softmax", [a], a.shape, [f"axis = {ax} : i64"],
+            "tessera.softmax",
+            [a],
+            a.shape,
+            [f"axis = {ax} : i64"],
             meta={"axis": ax, "rank": len(a.shape)},
         )
 
     def rmsnorm(self, a, gamma=None, eps: float = 1e-5):
         operands = [a] + ([gamma] if gamma is not None else [])
         return self._emit(
-            "tessera.rmsnorm", operands, a.shape, [f"eps = {eps:.9e} : f64"],
+            "tessera.rmsnorm",
+            operands,
+            a.shape,
+            [f"eps = {eps:.9e} : f64"],
             meta={"eps": float(eps)},
         )
 
@@ -1110,7 +1079,10 @@ class GraphFn:
         if beta is not None:
             operands.append(beta)
         return self._emit(
-            "tessera.layer_norm", operands, a.shape, [f"eps = {eps:.9e} : f64"],
+            "tessera.layer_norm",
+            operands,
+            a.shape,
+            [f"eps = {eps:.9e} : f64"],
             meta={"eps": float(eps)},
         )
 
@@ -1132,7 +1104,10 @@ class GraphFn:
         if transpose_b:
             attrs.append("transposeB = true")
         return self._emit(
-            "tessera.matmul", [a, b], (M, N), attrs or None,
+            "tessera.matmul",
+            [a, b],
+            (M, N),
+            attrs or None,
             meta={"ta": bool(transpose_a), "tb": bool(transpose_b)},
         )
 
@@ -1144,9 +1119,7 @@ class GraphFn:
     def masked_fill(self, x, mask, value: float = -1e9):
         if x.shape != mask.shape:
             raise TesseraJitError("GraphFn.masked_fill shape mismatch")
-        return self._emit(
-            "tessera.masked_fill", [x, mask], x.shape, [f"value = {value:.9e} : f64"]
-        )
+        return self._emit("tessera.masked_fill", [x, mask], x.shape, [f"value = {value:.9e} : f64"])
 
     def bmm(self, a, b):
         if len(a.shape) != 3 or len(b.shape) != 3:
@@ -1196,10 +1169,7 @@ class GraphFn:
             }
         else:
             self._loop = {"_unsupported": "more than one for_loop"}
-        cur.append(
-            f"  {res} = scf.for {iv} = {lb} to {ub} step {st} "
-            f"iter_args({carry} = {init.ssa}) -> {T} {{"
-        )
+        cur.append(f"  {res} = scf.for {iv} = {lb} to {ub} step {st} iter_args({carry} = {init.ssa}) -> {T} {{")
         cur.extend(body_lines)
         cur.append(f"    scf.yield {nxt.ssa} : {T}")
         cur.append("  }")
@@ -1260,25 +1230,74 @@ class GraphFn:
     def while_loop(self, max_iters: int, cond, body, init: _Val):
         """Bounded ``while``: for up to ``max_iters`` steps, while
         ``cond(carry) > 0`` keep updating ``carry = body(carry)``; return the
-        final carry. Lowers to an MPSGraph ``forLoop`` + select-masking on the
-        apple_gpu lane (MPSGraph's native ``while`` is unstable) — once the
-        predicate goes false the carry freezes. ``cond(carry) -> _Val`` (the
-        predicate source; ``> 0`` means continue), ``body(carry) -> _Val`` (the
-        next carry, same shape). v1: apple_gpu only (no CPU scf.while lane), f32,
-        init must be a function arg."""
-        if self._target != "apple_gpu":
-            raise TesseraJitError("while_loop is apple_gpu-only (no CPU scf.while lane)")
+        final carry. The canonical compiler lane emits a bounded ``scf.while``
+        with an explicit iteration counter. Apple may still select its
+        MPSGraph ``forLoop`` + select-masking physical implementation; that
+        architecture choice no longer changes the shared Graph/SCF contract.
+        ``cond(carry) -> _Val`` supplies a tensor predicate (``> 0`` means
+        continue) and ``body(carry) -> _Val`` supplies the next carry."""
+        if int(max_iters) < 0:
+            raise TesseraJitError("while_loop max_iters must be non-negative")
         self._has_control_flow = True
         self._idx += 1
-        carry_ssa = f"%wcarry{self._idx}"
+        ordinal = self._idx
+        carry_ssa = f"%wcarry{ordinal}"
         cv = _Val(carry_ssa, init.shape)
+        self._scopes.append([])
         body_start = len(self._ops)
         nxt = body(cv)
+        body_lines = self._scopes.pop()
         if nxt.shape != init.shape:
             raise TesseraJitError("while_loop body must preserve the carry shape")
+        self._scopes.append([])
         cond_start = len(self._ops)
         pred = cond(cv)
+        cond_lines = self._scopes.pop()
+        if pred.shape != (1,):
+            raise TesseraJitError("while_loop cond must return a shape-(1,) tensor")
         res = self._fresh()
+
+        cur = self._scopes[-1]
+        T = self._t(init.shape)
+        PT = self._t((1,))
+        c0 = f"%wc0_{ordinal}"
+        c1 = f"%wc1_{ordinal}"
+        cmax = f"%wcmax_{ordinal}"
+        count = f"%wcount{ordinal}"
+        wi = f"%wi{ordinal}"
+        within = f"%wwithin{ordinal}"
+        cont = f"%wcont{ordinal}"
+        pidx = f"%wpidx{ordinal}"
+        pscalar = f"%wpscalar{ordinal}"
+        pzero = f"%wpzero{ordinal}"
+        pbool = f"%wpbool{ordinal}"
+        false_value = f"%wfalse{ordinal}"
+        next_i = f"%wnext_i{ordinal}"
+        cur.append(f"  {c0} = arith.constant 0 : index")
+        cur.append(f"  {c1} = arith.constant 1 : index")
+        cur.append(f"  {cmax} = arith.constant {int(max_iters)} : index")
+        cur.append(
+            f"  {count}, {res} = scf.while ({wi} = {c0}, {carry_ssa} = {init.ssa}) : (index, {T}) -> (index, {T}) {{"
+        )
+        cur.append(f"  {within} = arith.cmpi ult, {wi}, {cmax} : index")
+        cur.append(f"  {cont} = scf.if {within} -> i1 {{")
+        cur.extend(cond_lines)
+        cur.append(f"  {pidx} = arith.constant 0 : index")
+        cur.append(f"  {pscalar} = tensor.extract {pred.ssa}[{pidx}] : {PT}")
+        cur.append(f"  {pzero} = arith.constant 0.0 : {self._elem}")
+        cur.append(f"  {pbool} = arith.cmpf ogt, {pscalar}, {pzero} : {self._elem}")
+        cur.append(f"  scf.yield {pbool} : i1")
+        cur.append("  } else {")
+        cur.append(f"  {false_value} = arith.constant false")
+        cur.append(f"  scf.yield {false_value} : i1")
+        cur.append("  }")
+        cur.append(f"  scf.condition({cont}) {wi}, {carry_ssa} : index, {T}")
+        cur.append("  } do {")
+        cur.append(f"  ^bb0({wi}: index, {carry_ssa}: {T}):")
+        cur.extend(body_lines)
+        cur.append(f"  {next_i} = arith.addi {wi}, {c1} : index")
+        cur.append(f"  scf.yield {next_i}, {nxt.ssa} : index, {T}")
+        cur.append("  }")
         if self._while is None:
             self._while = {
                 "max_iters": int(max_iters),
@@ -1319,11 +1338,16 @@ class GraphFn:
         res_c, res_y = self._fresh(), self._fresh()
         if self._scan is None:
             self._scan = {
-                "trip": int(trip), "carry_ssa": carry_ssa, "xt_ssa": xt_ssa,
-                "xs_ssa": xs.ssa, "init_ssa": init.ssa,
-                "next_carry_ssa": nxt.ssa, "y_ssa": y.ssa,
+                "trip": int(trip),
+                "carry_ssa": carry_ssa,
+                "xt_ssa": xt_ssa,
+                "xs_ssa": xs.ssa,
+                "init_ssa": init.ssa,
+                "next_carry_ssa": nxt.ssa,
+                "y_ssa": y.ssa,
                 "body_ops": list(self._ops[body_start:]),
-                "carry_shape": tuple(init.shape), "x_shape": x_inner,
+                "carry_shape": tuple(init.shape),
+                "x_shape": x_inner,
                 "y_shape": tuple(y.shape),
             }
         else:
@@ -1337,49 +1361,63 @@ class GraphFn:
         ids: consts 0..nc-1, carry = nc, x_t = nc+1, body op j = nc+2+j."""
         sc = self._scan
         if "_unsupported" in sc:
-            raise TesseraJitError(
-                f"apple_gpu GraphFn scan: {sc['_unsupported']} not supported (v1)")
+            raise TesseraJitError(f"apple_gpu GraphFn scan: {sc['_unsupported']} not supported (v1)")
         if self._elem != "f32":
             raise TesseraJitError("apple_gpu GraphFn scan is f32-only (v1)")
         consts = [(ssa, sh) for (ssa, sh) in self._args if ssa != sc["xs_ssa"]]
         arg_index = {ssa: k for k, (ssa, _sh) in enumerate(consts)}
         if sc["init_ssa"] not in arg_index:
-            raise TesseraJitError(
-                "apple_gpu GraphFn scan: the carry init must be a function arg (v1)")
+            raise TesseraJitError("apple_gpu GraphFn scan: the carry init must be a function arg (v1)")
         nc = len(consts)
         idof = dict(arg_index)
         idof[sc["carry_ssa"]] = nc
         idof[sc["xt_ssa"]] = nc + 1
-        body_ops, idof = self._serialize_branch(
-            sc["body_ops"], idof, nc + 2, "scan body")
+        body_ops, idof = self._serialize_branch(sc["body_ops"], idof, nc + 2, "scan body")
         carry_out_id = idof.get(sc["next_carry_ssa"])
         y_out_id = idof.get(sc["y_ssa"])
         if carry_out_id is None or y_out_id is None:
-            raise TesseraJitError(
-                "apple_gpu GraphFn scan: a body output is not in scope")
-        return (consts, arg_index[sc["init_ssa"]], body_ops, carry_out_id,
-                y_out_id, sc["carry_shape"], sc["x_shape"], sc["y_shape"],
-                sc["trip"])
+            raise TesseraJitError("apple_gpu GraphFn scan: a body output is not in scope")
+        return (
+            consts,
+            arg_index[sc["init_ssa"]],
+            body_ops,
+            carry_out_id,
+            y_out_id,
+            sc["carry_shape"],
+            sc["x_shape"],
+            sc["y_shape"],
+            sc["trip"],
+        )
 
     def _run_apple_gpu_scan(self, arrays):
         from tessera import apple_mlpkg as mp
 
-        (consts, carry_arg_index, body_ops, carry_out_id, y_out_id, carry_shape,
-         x_shape, y_shape, trip) = self._serialize_scan_spec()
+        (consts, carry_arg_index, body_ops, carry_out_id, y_out_id, carry_shape, x_shape, y_shape, trip) = (
+            self._serialize_scan_spec()
+        )
         if len(arrays) != len(self._args):
-            raise TesseraJitError(
-                f"expected {len(self._args)} args, got {len(arrays)}")
-        by_ssa = {ssa: np.ascontiguousarray(np.asarray(a, dtype=np.float32))
-                  for (ssa, _sh), a in zip(self._args, arrays)}
+            raise TesseraJitError(f"expected {len(self._args)} args, got {len(arrays)}")
+        by_ssa = {
+            ssa: np.ascontiguousarray(np.asarray(a, dtype=np.float32)) for (ssa, _sh), a in zip(self._args, arrays)
+        }
         xs = by_ssa[self._scan["xs_ssa"]]
         const_arrays = [by_ssa[ssa] for (ssa, _sh) in consts]
         const_shapes = [tuple(sh) for (_ssa, sh) in consts]
         res = mp.run_graph_scan_f32(
-            const_arrays, const_shapes, carry_arg_index, xs, trip, x_shape,
-            body_ops, carry_out_id, y_out_id, carry_shape, y_shape)
+            const_arrays,
+            const_shapes,
+            carry_arg_index,
+            xs,
+            trip,
+            x_shape,
+            body_ops,
+            carry_out_id,
+            y_out_id,
+            carry_shape,
+            y_shape,
+        )
         if res is None:
-            raise TesseraJitError(
-                "apple_gpu GraphFn scan dispatch failed / runtime unavailable")
+            raise TesseraJitError("apple_gpu GraphFn scan dispatch failed / runtime unavailable")
         self._last_dispatch = ["scan"]  # one MPSGraph forLoop + gather/scatter
         carry, ys = res
         return carry.copy(), ys.copy()
@@ -1389,9 +1427,7 @@ class GraphFn:
         (1,D). Returns the updated buffer (thread it for the next step)."""
         if len(buffer.shape) != 2 or value.shape != (1, buffer.shape[1]):
             raise TesseraJitError("write_row: buffer (T,D), value (1,D)")
-        return self._emit(
-            "tessera.write_row", [buffer, value], buffer.shape, [f"row = {int(row)} : i64"]
-        )
+        return self._emit("tessera.write_row", [buffer, value], buffer.shape, [f"row = {int(row)} : i64"])
 
     def ret(self, *vals: _Val):
         """Set the function result(s). One or more values (multi-result → the
@@ -1409,10 +1445,7 @@ class GraphFn:
         ret_ssas = ", ".join(r.ssa for r in self._rets)
         body = "\n".join(self._lines)
         return (
-            f"func.func @{self._name}({arg_decl}) -> {rt} {{\n"
-            f"{body}\n"
-            f"  return {ret_ssas} : {', '.join(rtypes)}\n"
-            f"}}\n"
+            f"func.func @{self._name}({arg_decl}) -> {rt} {{\n{body}\n  return {ret_ssas} : {', '.join(rtypes)}\n}}\n"
         )
 
     def run(self, *arrays: np.ndarray):
@@ -1426,8 +1459,7 @@ class GraphFn:
         collapsed to single fused Metal kernels."""
         if self._target == "apple_gpu":
             if sum(x is not None for x in (self._loop, self._cond, self._while)) > 1:
-                raise TesseraJitError(
-                    "apple_gpu GraphFn: mixing for_loop/cond/while is not supported (v1)")
+                raise TesseraJitError("apple_gpu GraphFn: mixing for_loop/cond/while is not supported (v1)")
             if self._loop is not None:
                 return self._run_apple_gpu_loop(arrays)
             if self._cond is not None:
@@ -1438,16 +1470,12 @@ class GraphFn:
         if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
         if len(arrays) != len(self._args):
-            raise TesseraJitError(
-                f"expected {len(self._args)} args, got {len(arrays)}"
-            )
+            raise TesseraJitError(f"expected {len(self._args)} args, got {len(arrays)}")
         npdt = _ELEM_TO_NP[self._elem]
         ins = [np.ascontiguousarray(np.asarray(a)) for a in arrays]
         for a, (_ssa, sh) in zip(ins, self._args):
             if a.dtype != npdt or tuple(a.shape) != sh:
-                raise TesseraJitError(
-                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want {npdt}{sh}"
-                )
+                raise TesseraJitError(f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want {npdt}{sh}")
         handle = compile_module(self.build())
         try:
             outs = [np.empty(r.shape, dtype=npdt) for r in self._rets]
@@ -1479,29 +1507,22 @@ class GraphFn:
         emit (`_emit_control_for_mlir`)."""
         loop = self._loop
         if "_unsupported" in loop:
-            raise TesseraJitError(
-                f"apple_gpu GraphFn loop: {loop['_unsupported']} not supported (v1)")
+            raise TesseraJitError(f"apple_gpu GraphFn loop: {loop['_unsupported']} not supported (v1)")
         if self._elem not in ("f32", "f16", "bf16"):
-            raise TesseraJitError(
-                f"apple_gpu GraphFn loop supports f32/f16/bf16, got {self._elem!r}")
+            raise TesseraJitError(f"apple_gpu GraphFn loop supports f32/f16/bf16, got {self._elem!r}")
         if len(self._rets) != 1 or self._rets[0].ssa != loop["result_ssa"]:
-            raise TesseraJitError(
-                "apple_gpu GraphFn loop must return exactly the loop result")
+            raise TesseraJitError("apple_gpu GraphFn loop must return exactly the loop result")
         arg_index = {ssa: k for k, (ssa, _sh) in enumerate(self._args)}
         if loop["init_ssa"] not in arg_index:
-            raise TesseraJitError(
-                "apple_gpu GraphFn loop: the init carry must be a function arg (v1)")
+            raise TesseraJitError("apple_gpu GraphFn loop: the init carry must be a function arg (v1)")
         n_args = len(self._args)
         idof = dict(arg_index)
         idof[loop["carry_ssa"]] = n_args  # carry id sits right after the args
-        body_ops, idof = self._serialize_branch(
-            loop["body_ops"], idof, n_args + 1, "loop body")
+        body_ops, idof = self._serialize_branch(loop["body_ops"], idof, n_args + 1, "loop body")
         body_out_id = idof.get(loop["next_carry_ssa"])
         if body_out_id is None:
-            raise TesseraJitError(
-                "apple_gpu GraphFn loop: next carry is not produced by the body")
-        return (arg_index[loop["init_ssa"]], loop["trip"], body_ops, body_out_id,
-                loop["carry_shape"])
+            raise TesseraJitError("apple_gpu GraphFn loop: next carry is not produced by the body")
+        return (arg_index[loop["init_ssa"]], loop["trip"], body_ops, body_out_id, loop["carry_shape"])
 
     def _loop_elem_np(self):
         """numpy dtype the loop's args must carry, per the GraphFn ``_elem``."""
@@ -1512,11 +1533,10 @@ class GraphFn:
         if self._elem == "bf16":
             if _ml_dtypes is None:
                 raise TesseraJitError(
-                    "apple_gpu GraphFn bf16 loop needs the ml_dtypes package "
-                    "(pip install '.[ml_dtypes]')")
+                    "apple_gpu GraphFn bf16 loop needs the ml_dtypes package (pip install '.[ml_dtypes]')"
+                )
             return _ml_dtypes.bfloat16
-        raise TesseraJitError(
-            f"apple_gpu GraphFn loop supports f32/f16/bf16, got {self._elem!r}")
+        raise TesseraJitError(f"apple_gpu GraphFn loop supports f32/f16/bf16, got {self._elem!r}")
 
     def _coerce_loop_args(self, arrays):
         """Validate args against the declared ``_elem`` + recorded shapes and
@@ -1526,15 +1546,14 @@ class GraphFn:
         ``_finalize_loop_out``, so a bf16 loop computes in f32 with an f32 carry)."""
         want = self._loop_elem_np()
         if len(arrays) != len(self._args):
-            raise TesseraJitError(
-                f"expected {len(self._args)} args, got {len(arrays)}")
+            raise TesseraJitError(f"expected {len(self._args)} args, got {len(arrays)}")
         ins = []
         for (_ssa, sh), arr in zip(self._args, arrays):
             a = np.ascontiguousarray(np.asarray(arr))
             if a.dtype != want or tuple(a.shape) != sh:
                 raise TesseraJitError(
-                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
-                    f"want {np.dtype(want).name}{sh}")
+                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want {np.dtype(want).name}{sh}"
+                )
             # f32 + native f16 pass through; bf16 host-upcasts to f32.
             ins.append(a if want in (np.float32, np.float16) else a.astype(np.float32))
         return ins
@@ -1550,17 +1569,13 @@ class GraphFn:
 
         # Serialize first (elem/loop-shape checks) so a bad elem is reported
         # before the per-arg dtype check; bf16 is host-upcast in _coerce_loop_args.
-        carry_arg_index, trip, body_ops, body_out_id, carry_shape = \
-            self._serialize_loop_spec()
+        carry_arg_index, trip, body_ops, body_out_id, carry_shape = self._serialize_loop_spec()
         ins = self._coerce_loop_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
         run = mp.run_graph_loop_f16 if self._elem == "f16" else mp.run_graph_loop_f32
-        out = run(
-            ins, arg_shapes, carry_arg_index, trip, body_ops, body_out_id,
-            carry_shape)
+        out = run(ins, arg_shapes, carry_arg_index, trip, body_ops, body_out_id, carry_shape)
         if out is None:
-            raise TesseraJitError(
-                "apple_gpu GraphFn loop dispatch failed / runtime unavailable")
+            raise TesseraJitError("apple_gpu GraphFn loop dispatch failed / runtime unavailable")
         self._last_dispatch = ["forloop"]  # one MPSGraph forLoop dispatch
         return self._finalize_loop_out(out.copy())
 
@@ -1575,18 +1590,14 @@ class GraphFn:
     def _emit_control_for_mlir(self) -> str:
         from tessera.apple_mlpkg import GRAPH_OP
 
-        carry_arg_index, trip, body_ops, body_out_id, carry_shape = \
-            self._serialize_loop_spec()
+        carry_arg_index, trip, body_ops, body_out_id, carry_shape = self._serialize_loop_spec()
         codes, i0, i1, ia, fa = [], [], [], [], []
         for o in body_ops:
             codes.append(GRAPH_OP[o["op"]])
             i0.append(int(o["in0"]))
             i1.append(int(o.get("in1", -1)))
-            ia.append((1 if o.get("transpose_a") else 0)
-                      | (2 if o.get("transpose_b") else 0))
+            ia.append((1 if o.get("transpose_a") else 0) | (2 if o.get("transpose_b") else 0))
             fa.append(float(o.get("eps", 1e-5)))
-
-
 
         arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
         operand_ssas = ", ".join(s for s, _ in self._args)
@@ -1596,14 +1607,19 @@ class GraphFn:
             f"carry_arg_index = {carry_arg_index} : i64, "
             f"body_opcodes = {_i32_array(codes)}, body_in0 = {_i32_array(i0)}, "
             f"body_in1 = {_i32_array(i1)}, body_iattr = {_i32_array(ia)}, "
-            f"body_fattr = {_f32_array(fa)}, body_out_id = {body_out_id} : i64")
-        op = (f'  %r = "tessera.control_for"({operand_ssas}) '
-              f"{{body = @loop_body, start = 0 : i64, stop = {trip} : i64, "
-              f"step = 1 : i64, {payload}}} "
-              f": ({in_types}) -> {out_ty}")
-        return (f"func.func private @loop_body({out_ty}) -> {out_ty}\n"
-                f"func.func @graph({arg_decl}) -> {out_ty} {{\n"
-                f"{op}\n  return %r : {out_ty}\n}}\n")
+            f"body_fattr = {_f32_array(fa)}, body_out_id = {body_out_id} : i64"
+        )
+        op = (
+            f'  %r = "tessera.control_for"({operand_ssas}) '
+            f"{{body = @loop_body, start = 0 : i64, stop = {trip} : i64, "
+            f"step = 1 : i64, {payload}}} "
+            f": ({in_types}) -> {out_ty}"
+        )
+        return (
+            f"func.func private @loop_body({out_ty}) -> {out_ty}\n"
+            f"func.func @graph({arg_decl}) -> {out_ty} {{\n"
+            f"{op}\n  return %r : {out_ty}\n}}\n"
+        )
 
     def run_via_target_ir(self, *arrays: np.ndarray):
         """Emit `tessera.control_for`, lower it through tessera-opt to
@@ -1614,22 +1630,18 @@ class GraphFn:
         from tessera import apple_mlpkg as mp
 
         if self._target != "apple_gpu" or self._loop is None:
-            raise TesseraJitError(
-                "run_via_target_ir requires an apple_gpu for_loop graph")
+            raise TesseraJitError("run_via_target_ir requires an apple_gpu for_loop graph")
         mlir = self._emit_control_for_mlir()  # serialize + elem check first
         ins = self._coerce_loop_args(arrays)
         opt = _find_tessera_opt()
         if opt is None:
             raise TesseraJitError("tessera-opt binary not found (build it first)")
-        proc = subprocess.run(
-            [opt, "--tessera-control-for-to-apple_gpu"],
-            input=mlir, capture_output=True, text=True)
+        proc = subprocess.run([opt, "--tessera-control-for-to-apple_gpu"], input=mlir, capture_output=True, text=True)
         if proc.returncode != 0:
             raise TesseraJitError(f"tessera-opt lowering failed: {proc.stderr}")
         out = mp.execute_control_loop_mlir(proc.stdout, ins)
         if out is None:
-            raise TesseraJitError(
-                "control_loop execution failed (op/payload absent or runtime down)")
+            raise TesseraJitError("control_loop execution failed (op/payload absent or runtime down)")
         self._last_dispatch = ["control_loop"]
         return self._finalize_loop_out(out.copy())
 
@@ -1651,19 +1663,14 @@ class GraphFn:
             codes.append(GRAPH_OP[o["op"]])
             i0.append(int(o["in0"]))
             i1.append(int(o.get("in1", -1)))
-            ia.append((1 if o.get("transpose_a") else 0)
-                      | (2 if o.get("transpose_b") else 0))
+            ia.append((1 if o.get("transpose_a") else 0) | (2 if o.get("transpose_b") else 0))
             fa.append(float(o.get("eps", 1e-5)))
         return codes, i0, i1, ia, fa
 
     def _emit_control_if_mlir(self) -> str:
-        (flag_arg_index, then_ops, then_out_id, else_ops, else_out_id,
-         out_shape) = self._serialize_cond_spec()
+        (flag_arg_index, then_ops, then_out_id, else_ops, else_out_id, out_shape) = self._serialize_cond_spec()
         tc, ti0, ti1, tia, tfa = self._encode_branch(then_ops)
         ec, ei0, ei1, eia, efa = self._encode_branch(else_ops)
-
-
-
 
         arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
         operand_ssas = ", ".join(s for s, _ in self._args)
@@ -1677,14 +1684,19 @@ class GraphFn:
             f"else_opcodes = {_i32_array(ec)}, else_in0 = {_i32_array(ei0)}, "
             f"else_in1 = {_i32_array(ei1)}, else_iattr = {_i32_array(eia)}, "
             f"else_fattr = {_f32_array(efa)}, else_out_id = {else_out_id} : i64, "
-            f"out_shape = {_i64_array(out_shape)}")
-        op = (f'  %r = "tessera.control_if"({operand_ssas}) '
-              f"{{then_branch = @then_body, else_branch = @else_body, {payload}}} "
-              f": ({in_types}) -> {out_ty}")
-        return (f"func.func private @then_body({out_ty}) -> {out_ty}\n"
-                f"func.func private @else_body({out_ty}) -> {out_ty}\n"
-                f"func.func @graph({arg_decl}) -> {out_ty} {{\n"
-                f"{op}\n  return %r : {out_ty}\n}}\n")
+            f"out_shape = {_i64_array(out_shape)}"
+        )
+        op = (
+            f'  %r = "tessera.control_if"({operand_ssas}) '
+            f"{{then_branch = @then_body, else_branch = @else_body, {payload}}} "
+            f": ({in_types}) -> {out_ty}"
+        )
+        return (
+            f"func.func private @then_body({out_ty}) -> {out_ty}\n"
+            f"func.func private @else_body({out_ty}) -> {out_ty}\n"
+            f"func.func @graph({arg_decl}) -> {out_ty} {{\n"
+            f"{op}\n  return %r : {out_ty}\n}}\n"
+        )
 
     def run_cond_via_target_ir(self, *arrays: np.ndarray):
         """Emit `tessera.control_if`, lower it through tessera-opt to
@@ -1695,22 +1707,18 @@ class GraphFn:
         from tessera import apple_mlpkg as mp
 
         if self._target != "apple_gpu" or self._cond is None:
-            raise TesseraJitError(
-                "run_cond_via_target_ir requires an apple_gpu cond graph")
+            raise TesseraJitError("run_cond_via_target_ir requires an apple_gpu cond graph")
         mlir = self._emit_control_if_mlir()  # serialize + elem check first
         ins = self._coerce_loop_args(arrays)
         opt = _find_tessera_opt()
         if opt is None:
             raise TesseraJitError("tessera-opt binary not found (build it first)")
-        proc = subprocess.run(
-            [opt, "--tessera-control-if-to-apple_gpu"],
-            input=mlir, capture_output=True, text=True)
+        proc = subprocess.run([opt, "--tessera-control-if-to-apple_gpu"], input=mlir, capture_output=True, text=True)
         if proc.returncode != 0:
             raise TesseraJitError(f"tessera-opt lowering failed: {proc.stderr}")
         out = mp.execute_control_if_mlir(proc.stdout, ins)
         if out is None:
-            raise TesseraJitError(
-                "control_if execution failed (op/payload absent or runtime down)")
+            raise TesseraJitError("control_if execution failed (op/payload absent or runtime down)")
         self._last_dispatch = ["control_if"]
         return self._finalize_loop_out(out.copy())
 
@@ -1723,12 +1731,11 @@ class GraphFn:
     # (`tessera_apple_gpu_run_graph_while_f32`).
 
     def _emit_control_while_mlir(self) -> str:
-        (carry_arg_index, max_iters, body_ops, body_out_id, cond_ops,
-         cond_out_id, carry_shape) = self._serialize_while_spec()
+        (carry_arg_index, max_iters, body_ops, body_out_id, cond_ops, cond_out_id, carry_shape) = (
+            self._serialize_while_spec()
+        )
         bc, bi0, bi1, bia, bfa = self._encode_branch(body_ops)
         cc, ci0, ci1, cia, cfa = self._encode_branch(cond_ops)
-
-
 
         arg_decl = ", ".join(f"{s}: {self._t(sh)}" for s, sh in self._args)
         operand_ssas = ", ".join(s for s, _ in self._args)
@@ -1742,14 +1749,19 @@ class GraphFn:
             f"body_fattr = {_f32_array(bfa)}, body_out_id = {body_out_id} : i64, "
             f"cond_opcodes = {_i32_array(cc)}, cond_in0 = {_i32_array(ci0)}, "
             f"cond_in1 = {_i32_array(ci1)}, cond_iattr = {_i32_array(cia)}, "
-            f"cond_fattr = {_f32_array(cfa)}, cond_out_id = {cond_out_id} : i64")
-        op = (f'  %r = "tessera.control_while"({operand_ssas}) '
-              f"{{body = @while_body, cond = @while_cond, {payload}}} "
-              f": ({in_types}) -> {out_ty}")
-        return (f"func.func private @while_body({out_ty}) -> {out_ty}\n"
-                f"func.func private @while_cond({out_ty}) -> {out_ty}\n"
-                f"func.func @graph({arg_decl}) -> {out_ty} {{\n"
-                f"{op}\n  return %r : {out_ty}\n}}\n")
+            f"cond_fattr = {_f32_array(cfa)}, cond_out_id = {cond_out_id} : i64"
+        )
+        op = (
+            f'  %r = "tessera.control_while"({operand_ssas}) '
+            f"{{body = @while_body, cond = @while_cond, {payload}}} "
+            f": ({in_types}) -> {out_ty}"
+        )
+        return (
+            f"func.func private @while_body({out_ty}) -> {out_ty}\n"
+            f"func.func private @while_cond({out_ty}) -> {out_ty}\n"
+            f"func.func @graph({arg_decl}) -> {out_ty} {{\n"
+            f"{op}\n  return %r : {out_ty}\n}}\n"
+        )
 
     def run_while_via_target_ir(self, *arrays: np.ndarray):
         """Emit `tessera.control_while`, lower it through tessera-opt to
@@ -1760,22 +1772,18 @@ class GraphFn:
         from tessera import apple_mlpkg as mp
 
         if self._target != "apple_gpu" or self._while is None:
-            raise TesseraJitError(
-                "run_while_via_target_ir requires an apple_gpu while graph")
+            raise TesseraJitError("run_while_via_target_ir requires an apple_gpu while graph")
         mlir = self._emit_control_while_mlir()  # serialize + elem check first
         ins = self._coerce_loop_args(arrays)
         opt = _find_tessera_opt()
         if opt is None:
             raise TesseraJitError("tessera-opt binary not found (build it first)")
-        proc = subprocess.run(
-            [opt, "--tessera-control-while-to-apple_gpu"],
-            input=mlir, capture_output=True, text=True)
+        proc = subprocess.run([opt, "--tessera-control-while-to-apple_gpu"], input=mlir, capture_output=True, text=True)
         if proc.returncode != 0:
             raise TesseraJitError(f"tessera-opt lowering failed: {proc.stderr}")
         out = mp.execute_control_while_mlir(proc.stdout, ins)
         if out is None:
-            raise TesseraJitError(
-                "control_while execution failed (op/payload absent or runtime down)")
+            raise TesseraJitError("control_while execution failed (op/payload absent or runtime down)")
         self._last_dispatch = ["control_while"]
         return self._finalize_loop_out(out.copy())
 
@@ -1790,8 +1798,7 @@ class GraphFn:
         for j, op in enumerate(ops):
             name = self._MLPKG_OP.get(op.op)
             if name is None:
-                raise TesseraJitError(
-                    f"apple_gpu GraphFn {what} cannot express op {op.op!r}")
+                raise TesseraJitError(f"apple_gpu GraphFn {what} cannot express op {op.op!r}")
             entry: dict = {"op": name}
             try:
                 entry["in0"] = idof[op.ins[0].ssa]
@@ -1803,14 +1810,14 @@ class GraphFn:
                     entry["in1"] = idof[op.ins[1].ssa]
                 elif name == "softmax":
                     if op.meta.get("axis") != op.meta.get("rank", 0) - 1:
-                        raise TesseraJitError(
-                            f"apple_gpu GraphFn {what} softmax is last-axis only")
+                        raise TesseraJitError(f"apple_gpu GraphFn {what} softmax is last-axis only")
                 elif name in ("rmsnorm", "layer_norm"):
                     entry["eps"] = float(op.meta.get("eps", 1e-5))
             except KeyError:
                 raise TesseraJitError(
                     f"apple_gpu GraphFn {what} references a value not in scope "
-                    "(v1: only function args, the carry, and earlier body ops)")
+                    "(v1: only function args, the carry, and earlier body ops)"
+                )
             idof[op.out.ssa] = base + j
             out.append(entry)
         return out, idof
@@ -1829,45 +1836,33 @@ class GraphFn:
         Target-IR emit (`_emit_control_if_mlir`)."""
         cond = self._cond
         if "_unsupported" in cond:
-            raise TesseraJitError(
-                f"apple_gpu GraphFn cond: {cond['_unsupported']} not supported (v1)")
+            raise TesseraJitError(f"apple_gpu GraphFn cond: {cond['_unsupported']} not supported (v1)")
         if self._elem not in ("f32", "f16", "bf16"):
-            raise TesseraJitError(
-                f"apple_gpu GraphFn cond supports f32/f16/bf16, got {self._elem!r}")
+            raise TesseraJitError(f"apple_gpu GraphFn cond supports f32/f16/bf16, got {self._elem!r}")
         if len(self._rets) != 1 or self._rets[0].ssa != cond["result_ssa"]:
-            raise TesseraJitError(
-                "apple_gpu GraphFn cond must return exactly the cond result")
+            raise TesseraJitError("apple_gpu GraphFn cond must return exactly the cond result")
         arg_index = {ssa: k for k, (ssa, _sh) in enumerate(self._args)}
         if cond["flag_ssa"] not in arg_index:
-            raise TesseraJitError(
-                "apple_gpu GraphFn cond: the flag must be a function arg (v1)")
+            raise TesseraJitError("apple_gpu GraphFn cond: the flag must be a function arg (v1)")
         n_args = len(self._args)
-        then_ops, tlocal = self._serialize_branch(
-            cond["then_ops"], arg_index, n_args, "cond then-branch")
-        else_ops, elocal = self._serialize_branch(
-            cond["else_ops"], arg_index, n_args, "cond else-branch")
+        then_ops, tlocal = self._serialize_branch(cond["then_ops"], arg_index, n_args, "cond then-branch")
+        else_ops, elocal = self._serialize_branch(cond["else_ops"], arg_index, n_args, "cond else-branch")
         then_out_id = tlocal.get(cond["then_out_ssa"])
         else_out_id = elocal.get(cond["else_out_ssa"])
         if then_out_id is None or else_out_id is None:
-            raise TesseraJitError(
-                "apple_gpu GraphFn cond: a branch result is not in scope")
-        return (arg_index[cond["flag_ssa"]], then_ops, then_out_id, else_ops,
-                else_out_id, cond["out_shape"])
+            raise TesseraJitError("apple_gpu GraphFn cond: a branch result is not in scope")
+        return (arg_index[cond["flag_ssa"]], then_ops, then_out_id, else_ops, else_out_id, cond["out_shape"])
 
     def _run_apple_gpu_cond(self, arrays):
         from tessera import apple_mlpkg as mp
 
-        flag_arg_index, then_ops, then_out_id, else_ops, else_out_id, out_shape = \
-            self._serialize_cond_spec()
+        flag_arg_index, then_ops, then_out_id, else_ops, else_out_id, out_shape = self._serialize_cond_spec()
         ins = self._coerce_loop_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
         run = mp.run_graph_cond_f16 if self._elem == "f16" else mp.run_graph_cond_f32
-        out = run(
-            ins, arg_shapes, flag_arg_index,
-            then_ops, then_out_id, else_ops, else_out_id, out_shape)
+        out = run(ins, arg_shapes, flag_arg_index, then_ops, then_out_id, else_ops, else_out_id, out_shape)
         if out is None:
-            raise TesseraJitError(
-                "apple_gpu GraphFn cond dispatch failed / runtime unavailable")
+            raise TesseraJitError("apple_gpu GraphFn cond dispatch failed / runtime unavailable")
         self._last_dispatch = ["cond"]  # one MPSGraph if dispatch
         return self._finalize_loop_out(out.copy())
 
@@ -1885,47 +1880,47 @@ class GraphFn:
         (`_emit_control_while_mlir`)."""
         wl = self._while
         if "_unsupported" in wl:
-            raise TesseraJitError(
-                f"apple_gpu GraphFn while: {wl['_unsupported']} not supported (v1)")
+            raise TesseraJitError(f"apple_gpu GraphFn while: {wl['_unsupported']} not supported (v1)")
         if self._elem not in ("f32", "f16", "bf16"):
-            raise TesseraJitError(
-                f"apple_gpu GraphFn while supports f32/f16/bf16, got {self._elem!r}")
+            raise TesseraJitError(f"apple_gpu GraphFn while supports f32/f16/bf16, got {self._elem!r}")
         if len(self._rets) != 1 or self._rets[0].ssa != wl["result_ssa"]:
-            raise TesseraJitError(
-                "apple_gpu GraphFn while must return exactly the while result")
+            raise TesseraJitError("apple_gpu GraphFn while must return exactly the while result")
         arg_index = {ssa: k for k, (ssa, _sh) in enumerate(self._args)}
         if wl["init_ssa"] not in arg_index:
-            raise TesseraJitError(
-                "apple_gpu GraphFn while: the init carry must be a function arg (v1)")
+            raise TesseraJitError("apple_gpu GraphFn while: the init carry must be a function arg (v1)")
         n_args = len(self._args)
         idof0 = dict(arg_index)
         idof0[wl["carry_ssa"]] = n_args
-        body_ops, blocal = self._serialize_branch(
-            wl["body_ops"], idof0, n_args + 1, "while body")
-        cond_ops, clocal = self._serialize_branch(
-            wl["cond_ops"], idof0, n_args + 1, "while cond")
+        body_ops, blocal = self._serialize_branch(wl["body_ops"], idof0, n_args + 1, "while body")
+        cond_ops, clocal = self._serialize_branch(wl["cond_ops"], idof0, n_args + 1, "while cond")
         body_out_id = blocal.get(wl["next_carry_ssa"])
         cond_out_id = clocal.get(wl["pred_ssa"])
         if body_out_id is None or cond_out_id is None:
-            raise TesseraJitError(
-                "apple_gpu GraphFn while: body/cond output is not in scope")
-        return (arg_index[wl["init_ssa"]], wl["max_iters"], body_ops, body_out_id,
-                cond_ops, cond_out_id, wl["carry_shape"])
+            raise TesseraJitError("apple_gpu GraphFn while: body/cond output is not in scope")
+        return (
+            arg_index[wl["init_ssa"]],
+            wl["max_iters"],
+            body_ops,
+            body_out_id,
+            cond_ops,
+            cond_out_id,
+            wl["carry_shape"],
+        )
 
     def _run_apple_gpu_while(self, arrays):
         from tessera import apple_mlpkg as mp
 
-        (carry_arg_index, max_iters, body_ops, body_out_id, cond_ops, cond_out_id,
-         carry_shape) = self._serialize_while_spec()
+        (carry_arg_index, max_iters, body_ops, body_out_id, cond_ops, cond_out_id, carry_shape) = (
+            self._serialize_while_spec()
+        )
         ins = self._coerce_loop_args(arrays)
         arg_shapes = [tuple(sh) for (_ssa, sh) in self._args]
         run = mp.run_graph_while_f16 if self._elem == "f16" else mp.run_graph_while_f32
         out = run(
-            ins, arg_shapes, carry_arg_index, max_iters,
-            body_ops, body_out_id, cond_ops, cond_out_id, carry_shape)
+            ins, arg_shapes, carry_arg_index, max_iters, body_ops, body_out_id, cond_ops, cond_out_id, carry_shape
+        )
         if out is None:
-            raise TesseraJitError(
-                "apple_gpu GraphFn while dispatch failed / runtime unavailable")
+            raise TesseraJitError("apple_gpu GraphFn while dispatch failed / runtime unavailable")
         self._last_dispatch = ["while"]  # one MPSGraph forLoop+select dispatch
         return self._finalize_loop_out(out.copy())
 
@@ -1941,12 +1936,17 @@ class GraphFn:
 
     _MLPKG_OP = {
         "tessera.matmul": "matmul",
-        "tessera.add": "add", "tessera.sub": "sub",
-        "tessera.mul": "mul", "tessera.div": "div",
+        "tessera.add": "add",
+        "tessera.sub": "sub",
+        "tessera.mul": "mul",
+        "tessera.div": "div",
         "tessera.softmax": "softmax",
-        "tessera.rmsnorm": "rmsnorm", "tessera.layer_norm": "layer_norm",
-        "tessera.silu": "silu", "tessera.relu": "relu",
-        "tessera.sigmoid": "sigmoid", "tessera.tanh": "tanh",
+        "tessera.rmsnorm": "rmsnorm",
+        "tessera.layer_norm": "layer_norm",
+        "tessera.silu": "silu",
+        "tessera.relu": "relu",
+        "tessera.sigmoid": "sigmoid",
+        "tessera.tanh": "tanh",
         "tessera.gelu": "gelu",
     }
 
@@ -1968,7 +1968,8 @@ class GraphFn:
             if name is None:
                 raise TesseraJitError(
                     f"run_mlpkg cannot express op {op.op!r} (whole-graph lane "
-                    "supports matmul/elementwise/softmax/norms/activations)")
+                    "supports matmul/elementwise/softmax/norms/activations)"
+                )
             entry: dict = {"op": name, "in0": idof[op.ins[0].ssa]}
             if name == "matmul":
                 entry["in1"] = idof[op.ins[1].ssa]
@@ -1991,6 +1992,7 @@ class GraphFn:
             return self._mlpkg_pipe, self._mlpkg_out_shape
         import os
         import tempfile
+
         arg_shapes, ops, output_id, out_shape = self._serialize_mlpkg()
         d = tempfile.mkdtemp(prefix="tessera_mlpkg_")
         pkg = os.path.join(d, "graph.mtlpackage")  # loader needs the extension
@@ -2000,13 +2002,11 @@ class GraphFn:
         # package internally — still f32-accumulate). The C `io_bf16=1` boundary
         # capability stays for when bf16 bindings are reflectable.
         if not mp.author_graph_package(pkg, arg_shapes, ops, output_id):
-            raise TesseraJitError(
-                f"mlpkg author_graph failed (err={mp.last_error_kind()})")
+            raise TesseraJitError(f"mlpkg author_graph failed (err={mp.last_error_kind()})")
         fn = mp.first_function_name(pkg) or "main"
         pipe = mp.compile_mlpackage(pkg, function_name=fn)
         if pipe is None:
-            raise TesseraJitError(
-                f"mlpkg compile failed (err={mp.last_error_kind()})")
+            raise TesseraJitError(f"mlpkg compile failed (err={mp.last_error_kind()})")
         if not pipe.prepare_tensors():
             raise TesseraJitError("mlpkg prepare_tensors failed")
         self._mlpkg_dir = d
@@ -2031,17 +2031,14 @@ class GraphFn:
         if len(self._rets) != 1:
             raise TesseraJitError("run_mlpkg supports exactly one return value")
         if len(arrays) != len(self._args):
-            raise TesseraJitError(
-                f"expected {len(self._args)} args, got {len(arrays)}")
+            raise TesseraJitError(f"expected {len(self._args)} args, got {len(arrays)}")
         npdt = _ELEM_TO_NP[self._elem]
         is_bf16 = self._elem == "bf16"
         ins = []
         for (ssa, sh), arr in zip(self._args, arrays):
             a = np.ascontiguousarray(np.asarray(arr))
             if a.dtype != npdt or tuple(a.shape) != sh:
-                raise TesseraJitError(
-                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
-                    f"want {npdt}{sh}")
+                raise TesseraJitError(f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want {npdt}{sh}")
             # f32 package: upcast bf16 inputs at the boundary (bf16 rounding of the
             # caller's data is preserved; compute is f32; output rounds back).
             ins.append(a.astype(np.float32) if is_bf16 else a)
@@ -2070,6 +2067,7 @@ class GraphFn:
         d = self._mlpkg_dir
         if d:
             import shutil
+
             shutil.rmtree(d, ignore_errors=True)
             self._mlpkg_dir = None
 
@@ -2091,12 +2089,10 @@ class GraphFn:
         if not self._rets:
             raise TesseraJitError("GraphFn has no return value (call ret())")
         if self._elem not in ("f32", "f16", "bf16"):
-            raise TesseraJitError(
-                f"apple_gpu GraphFn supports f32/bf16, not {self._elem!r}")
+            raise TesseraJitError(f"apple_gpu GraphFn supports f32/bf16, not {self._elem!r}")
         if self._has_control_flow:
             raise TesseraJitError(
-                "apple_gpu GraphFn does not support scf control flow yet "
-                "(Sprint 3.3 is straight-line tensor algebra)"
+                "apple_gpu GraphFn does not support scf control flow yet (Sprint 3.3 is straight-line tensor algebra)"
             )
         if len(arrays) != len(self._args):
             raise TesseraJitError(f"expected {len(self._args)} args, got {len(arrays)}")
@@ -2105,9 +2101,7 @@ class GraphFn:
         for (ssa, sh), arr in zip(self._args, arrays):
             a = np.ascontiguousarray(np.asarray(arr))
             if a.dtype != npdt or tuple(a.shape) != sh:
-                raise TesseraJitError(
-                    f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, "
-                    f"want {npdt}{sh}")
+                raise TesseraJitError(f"arg dtype/shape mismatch: got {a.dtype}{a.shape}, want {npdt}{sh}")
             env[ssa] = a
         self._last_dispatch = []
         for node in self._fuse_for_gpu():
@@ -2150,11 +2144,7 @@ class GraphFn:
             return (idx, ops[idx]) if idx is not None else None
 
         def plain_matmul(op):
-            return (
-                op.op == "tessera.matmul"
-                and not op.meta.get("ta", False)
-                and not op.meta.get("tb", False)
-            )
+            return op.op == "tessera.matmul" and not op.meta.get("ta", False) and not op.meta.get("tb", False)
 
         fused_at: dict[int, _GraphOp] = {}
         consumed: set[int] = set()
@@ -2186,15 +2176,11 @@ class GraphFn:
             gmi, gmop = gm
             if gmop.ins[0].ssa != uop.ins[0].ssa:  # gate & up share X
                 continue
-            if any(lone(s) is None for s in
-                   (gmop.out.ssa, gop.out.ssa, uop.out.ssa, op.out.ssa)):
+            if any(lone(s) is None for s in (gmop.out.ssa, gop.out.ssa, uop.out.ssa, op.out.ssa)):
                 continue
             members = [gmi, gi, ui, i, di]
             anchor = min(members)
-            fused_at[anchor] = _GraphOp(
-                "__swiglu__",
-                [gmop.ins[0], gmop.ins[1], uop.ins[1], down.ins[1]],
-                down.out, {})
+            fused_at[anchor] = _GraphOp("__swiglu__", [gmop.ins[0], gmop.ins[1], uop.ins[1], down.ins[1]], down.out, {})
             consumed.update(m for m in members if m != anchor)
 
         # ── Pass 1a: QKV-concat — ≥2 plain matmuls sharing one input X fuse to
@@ -2208,9 +2194,7 @@ class GraphFn:
         for i, op in enumerate(ops):
             if i in consumed or i in fused_at:
                 continue
-            if (op.op == "tessera.matmul"
-                    and not op.meta.get("ta", False)
-                    and not op.meta.get("tb", False)):
+            if op.op == "tessera.matmul" and not op.meta.get("ta", False) and not op.meta.get("tb", False):
                 groups.setdefault(op.ins[0].ssa, []).append(i)
         for x_ssa, members in groups.items():
             if len(members) < 2:
@@ -2222,11 +2206,7 @@ class GraphFn:
             # whose weight is produced at/after the anchor — e.g. matmul(x, x@x),
             # where the weight is the group's own output (a circular dependency
             # that would reference an SSA name never bound in env).
-            members = [
-                mi for mi in members
-                if (lambda wp: wp is None or wp < anchor)(
-                    producer.get(ops[mi].ins[1].ssa))
-            ]
+            members = [mi for mi in members if (lambda wp: wp is None or wp < anchor)(producer.get(ops[mi].ins[1].ssa))]
             if len(members) < 2:
                 continue
             outs = [ops[mi].out for mi in members]
@@ -2234,15 +2214,18 @@ class GraphFn:
             meta = {"splits": [int(o.shape[1]) for o in outs], "outs": outs}
             x_val = ops[anchor].ins[0]
             xp = prod(x_ssa)  # fold a single-use pre-norm of X into the concat
-            if (xp is not None and xp[1].op == "tessera.rmsnorm"
-                    and x_ssa not in returned
-                    and xp[0] not in fused_at and xp[0] not in consumed
-                    and len(consumers.get(x_ssa, [])) == len(members)):
+            if (
+                xp is not None
+                and xp[1].op == "tessera.rmsnorm"
+                and x_ssa not in returned
+                and xp[0] not in fused_at
+                and xp[0] not in consumed
+                and len(consumers.get(x_ssa, [])) == len(members)
+            ):
                 meta["prenorm_eps"] = xp[1].meta.get("eps", 1e-5)
                 x_val = xp[1].ins[0]
                 consumed.add(xp[0])
-            fused_at[anchor] = _GraphOp(
-                "__qkv_concat__", [x_val] + weights, ops[anchor].out, meta)
+            fused_at[anchor] = _GraphOp("__qkv_concat__", [x_val] + weights, ops[anchor].out, meta)
             consumed.update(m for m in members if m != anchor)
 
         # ── Pass 1b: pre-norm + projection (rmsnorm → matmul) ────────────────
@@ -2257,8 +2240,8 @@ class GraphFn:
             if not plain_matmul(mm) or mpos != 0:
                 continue
             fused_at[i] = _GraphOp(
-                "__rmsnorm_matmul__", [op.ins[0], mm.ins[1]], mm.out,
-                {"eps": op.meta.get("eps", 1e-5)})
+                "__rmsnorm_matmul__", [op.ins[0], mm.ins[1]], mm.out, {"eps": op.meta.get("eps", 1e-5)}
+            )
             consumed.add(mi)
 
         # ── Pass 2: attention / matmul-chain, skipping SwiGLU-claimed ops ────
@@ -2275,33 +2258,31 @@ class GraphFn:
                 "b_t": op.meta.get("tb", False),
             }
             is_last_axis_softmax = (
-                cons.op == "tessera.softmax"
-                and cons.meta.get("axis") == cons.meta.get("rank", 0) - 1
+                cons.op == "tessera.softmax" and cons.meta.get("axis") == cons.meta.get("rank", 0) - 1
             )
             if is_last_axis_softmax:
                 c2 = lone(cons.out.ssa)
                 if c2 is not None and c2[0] not in consumed and c2[0] not in fused_at:
                     c2i, c2pos = c2
                     m2 = ops[c2i]
-                    if m2.op == "tessera.matmul" and c2pos == 0 \
-                            and not m2.meta.get("ta", False):
+                    if m2.op == "tessera.matmul" and c2pos == 0 and not m2.meta.get("ta", False):
                         fused_at[i] = _GraphOp(
                             "__attention__",
                             [op.ins[0], op.ins[1], m2.ins[1]],
-                            m2.out, {**base, "c_t": m2.meta.get("tb", False)})
+                            m2.out,
+                            {**base, "c_t": m2.meta.get("tb", False)},
+                        )
                         consumed.update((ci, c2i))
                         continue
-                fused_at[i] = _GraphOp(
-                    "__matmul_softmax__", [op.ins[0], op.ins[1]], cons.out, base)
+                fused_at[i] = _GraphOp("__matmul_softmax__", [op.ins[0], op.ins[1]], cons.out, base)
                 consumed.add(ci)
             elif cons.op == "tessera.gelu":
-                fused_at[i] = _GraphOp(
-                    "__matmul_gelu__", [op.ins[0], op.ins[1]], cons.out, base)
+                fused_at[i] = _GraphOp("__matmul_gelu__", [op.ins[0], op.ins[1]], cons.out, base)
                 consumed.add(ci)
             elif cons.op == "tessera.rmsnorm":
                 fused_at[i] = _GraphOp(
-                    "__matmul_rmsnorm__", [op.ins[0], op.ins[1]], cons.out,
-                    {**base, "eps": cons.meta.get("eps", 1e-5)})
+                    "__matmul_rmsnorm__", [op.ins[0], op.ins[1]], cons.out, {**base, "eps": cons.meta.get("eps", 1e-5)}
+                )
                 consumed.add(ci)
 
         # ── Emit in original order ───────────────────────────────────────────
@@ -2323,8 +2304,7 @@ class GraphFn:
         op, m = node.op, node.meta
         if op == "__qkv_concat__":
             x = val(node.ins[0])
-            wcat = np.ascontiguousarray(
-                np.concatenate([val(w) for w in node.ins[1:]], axis=1))
+            wcat = np.ascontiguousarray(np.concatenate([val(w) for w in node.ins[1:]], axis=1))
             if "prenorm_eps" in m:
                 self._last_dispatch.append("qkv_concat_prenorm")
                 full = agb.gpu_rmsnorm_matmul(x, wcat, eps=m["prenorm_eps"])
@@ -2333,18 +2313,15 @@ class GraphFn:
                 full = agb.gpu_matmul(x, wcat)
             cols, off = [], 0
             for n in m["splits"]:
-                cols.append(np.ascontiguousarray(full[:, off:off + n]))
+                cols.append(np.ascontiguousarray(full[:, off : off + n]))
                 off += n
             return cols
         if op == "__rmsnorm_matmul__":
             self._last_dispatch.append("rmsnorm_matmul")
-            return agb.gpu_rmsnorm_matmul(
-                val(node.ins[0]), val(node.ins[1]), eps=m.get("eps", 1e-5))
+            return agb.gpu_rmsnorm_matmul(val(node.ins[0]), val(node.ins[1]), eps=m.get("eps", 1e-5))
         if op == "__swiglu__":
             self._last_dispatch.append("swiglu")
-            return agb.gpu_swiglu(
-                val(node.ins[0]), val(node.ins[1]),
-                val(node.ins[2]), val(node.ins[3]))
+            return agb.gpu_swiglu(val(node.ins[0]), val(node.ins[1]), val(node.ins[2]), val(node.ins[3]))
         if op == "__attention__":
             self._last_dispatch.append("matmul_softmax_matmul")
             return agb.gpu_attention(
@@ -2354,22 +2331,18 @@ class GraphFn:
             )
         if op == "__matmul_softmax__":
             self._last_dispatch.append("matmul_softmax")
-            return agb.gpu_matmul_softmax(
-                tr(val(node.ins[0]), m["a_t"]), tr(val(node.ins[1]), m["b_t"]))
+            return agb.gpu_matmul_softmax(tr(val(node.ins[0]), m["a_t"]), tr(val(node.ins[1]), m["b_t"]))
         if op == "__matmul_gelu__":
             self._last_dispatch.append("matmul_gelu")
-            return agb.gpu_matmul_gelu(
-                tr(val(node.ins[0]), m["a_t"]), tr(val(node.ins[1]), m["b_t"]))
+            return agb.gpu_matmul_gelu(tr(val(node.ins[0]), m["a_t"]), tr(val(node.ins[1]), m["b_t"]))
         if op == "__matmul_rmsnorm__":
             self._last_dispatch.append("matmul_rmsnorm")
             return agb.gpu_matmul_rmsnorm(
-                tr(val(node.ins[0]), m["a_t"]), tr(val(node.ins[1]), m["b_t"]),
-                eps=m.get("eps", 1e-5))
+                tr(val(node.ins[0]), m["a_t"]), tr(val(node.ins[1]), m["b_t"]), eps=m.get("eps", 1e-5)
+            )
         if op == "tessera.matmul":
             self._last_dispatch.append("matmul")
-            return agb.gpu_matmul(
-                tr(val(node.ins[0]), m.get("ta", False)),
-                tr(val(node.ins[1]), m.get("tb", False)))
+            return agb.gpu_matmul(tr(val(node.ins[0]), m.get("ta", False)), tr(val(node.ins[1]), m.get("tb", False)))
         if op == "tessera.softmax":
             if m.get("axis") != m.get("rank", 0) - 1:
                 raise TesseraJitError("apple_gpu softmax is last-axis only")
@@ -2475,23 +2448,31 @@ def jit_fori_loop(
     # Infer the element type from the carry: f16 builds a native-f16 GraphFn
     # (Phase-H H2 → run_graph_loop_f16); bf16 builds a bf16 GraphFn (host-upcast
     # to f32, downcast out — Phase B); else f32.
-    elem = ("f16" if init_arr.dtype == np.float16
-            else "bf16" if (_ml_dtypes is not None
-                            and init_arr.dtype == _ml_dtypes.bfloat16)
-            else "f32")
+    elem = (
+        "f16"
+        if init_arr.dtype == np.float16
+        else "bf16"
+        if (_ml_dtypes is not None and init_arr.dtype == _ml_dtypes.bfloat16)
+        else "f32"
+    )
     g = build_fori_loop(
-        int(trip), body,
+        int(trip),
+        body,
         init_shape=init_arr.shape,
         const_shapes=[c.shape for c in const_arrs],
-        target=target, name=name, elem=elem,
+        target=target,
+        name=name,
+        elem=elem,
     )
     arrays = [init_arr, *const_arrs]
     if target == "apple_gpu":
         # f16 routes natively through the direct lane (run_graph_loop_f16); the
         # Target-IR path records the f32 symbol, so f16 uses the direct run.
-        use_ir = False if elem == "f16" else (
-            (_find_tessera_opt() is not None) if via_target_ir is None
-            else bool(via_target_ir))
+        use_ir = (
+            False
+            if elem == "f16"
+            else ((_find_tessera_opt() is not None) if via_target_ir is None else bool(via_target_ir))
+        )
         return g.run_via_target_ir(*arrays) if use_ir else g.run(*arrays)
     return g.run(*arrays)
 
@@ -2516,9 +2497,9 @@ def build_while_loop(
     g = GraphFn(name=name, elem=elem, target="apple_gpu")
     carry = g.arg(tuple(init_shape))
     consts = [g.arg(tuple(s)) for s in const_shapes]
-    out = g.while_loop(int(max_iters),
-                       cond=lambda c: cond(g, c, *consts),
-                       body=lambda c: body(g, c, *consts), init=carry)
+    out = g.while_loop(
+        int(max_iters), cond=lambda c: cond(g, c, *consts), body=lambda c: body(g, c, *consts), init=carry
+    )
     g.ret(out)
     return g
 
@@ -2547,21 +2528,29 @@ def jit_while_loop(
     """
     init_arr = np.asarray(init)
     const_arrs = [np.asarray(c) for c in consts]
-    elem = ("f16" if init_arr.dtype == np.float16
-            else "bf16" if (_ml_dtypes is not None
-                            and init_arr.dtype == _ml_dtypes.bfloat16)
-            else "f32")
+    elem = (
+        "f16"
+        if init_arr.dtype == np.float16
+        else "bf16"
+        if (_ml_dtypes is not None and init_arr.dtype == _ml_dtypes.bfloat16)
+        else "f32"
+    )
     g = build_while_loop(
-        int(max_iters), cond, body,
+        int(max_iters),
+        cond,
+        body,
         init_shape=init_arr.shape,
         const_shapes=[c.shape for c in const_arrs],
-        name=name, elem=elem,
+        name=name,
+        elem=elem,
     )
     arrays = [init_arr, *const_arrs]
     # f16 routes natively through the direct lane (run_graph_while_f16).
-    use_ir = False if elem == "f16" else (
-        (_find_tessera_opt() is not None) if via_target_ir is None
-        else bool(via_target_ir))
+    use_ir = (
+        False
+        if elem == "f16"
+        else ((_find_tessera_opt() is not None) if via_target_ir is None else bool(via_target_ir))
+    )
     return g.run_while_via_target_ir(*arrays) if use_ir else g.run(*arrays)
 
 
@@ -2584,8 +2573,7 @@ def build_scan(
     carry = g.arg(tuple(init_shape))
     xs = g.arg((int(trip), *tuple(x_shape)))
     consts = [g.arg(tuple(s)) for s in const_shapes]
-    g.scan(int(trip), init=carry, xs=xs,
-           body=lambda c, xt: body(g, c, xt, *consts))
+    g.scan(int(trip), init=carry, xs=xs, body=lambda c, xt: body(g, c, xt, *consts))
     return g
 
 
@@ -2608,9 +2596,12 @@ def jit_scan(
     xs_arr = np.asarray(xs)
     const_arrs = [np.asarray(c) for c in consts]
     g = build_scan(
-        int(trip), body,
-        init_shape=init_arr.shape, x_shape=tuple(xs_arr.shape[1:]),
-        const_shapes=[c.shape for c in const_arrs], name=name,
+        int(trip),
+        body,
+        init_shape=init_arr.shape,
+        x_shape=tuple(xs_arr.shape[1:]),
+        const_shapes=[c.shape for c in const_arrs],
+        name=name,
     )
     arrays = [init_arr, xs_arr, *const_arrs]  # order matches build_scan's args
     return g._run_apple_gpu_scan(arrays)
@@ -2626,6 +2617,7 @@ def jit_scan(
 # reference interpreter. Unsupported ops raise UnsupportedJitOp so the caller can
 # fall back to numpy (correctness preserved).
 
+
 class UnsupportedJitOp(Exception):
     """A graph op (or shape/dtype) the tessera_jit GraphFn lane can't build."""
 
@@ -2633,21 +2625,29 @@ class UnsupportedJitOp(Exception):
 # tessera op-name → GraphFn method. Mirrors the op set TesseraToLinalgPass
 # lowers; ops outside this map fall back to the numpy reference path.
 _JIT_GRAPH_OPS: dict[str, str] = {
-    "tessera.matmul": "matmul", "tessera.gemm": "matmul",
-    "tessera.add": "add", "tessera.sub": "sub",
-    "tessera.mul": "mul", "tessera.div": "div",
-    "tessera.relu": "relu", "tessera.sigmoid": "sigmoid", "tessera.tanh": "tanh",
-    "tessera.silu": "silu", "tessera.gelu": "gelu",
-    "tessera.softmax": "softmax", "tessera.rmsnorm": "rmsnorm",
-    "tessera.layer_norm": "layer_norm", "tessera.transpose": "transpose",
-    "tessera.select": "select", "tessera.masked_fill": "masked_fill",
+    "tessera.matmul": "matmul",
+    "tessera.gemm": "matmul",
+    "tessera.add": "add",
+    "tessera.sub": "sub",
+    "tessera.mul": "mul",
+    "tessera.div": "div",
+    "tessera.relu": "relu",
+    "tessera.sigmoid": "sigmoid",
+    "tessera.tanh": "tanh",
+    "tessera.silu": "silu",
+    "tessera.gelu": "gelu",
+    "tessera.softmax": "softmax",
+    "tessera.rmsnorm": "rmsnorm",
+    "tessera.layer_norm": "layer_norm",
+    "tessera.transpose": "transpose",
+    "tessera.select": "select",
+    "tessera.masked_fill": "masked_fill",
 }
 
 
 def graph_ops_supported(ops) -> bool:
     """True iff every op in the list maps to a GraphFn builder method."""
-    return bool(ops) and all(
-        str(op.get("op_name", "")) in _JIT_GRAPH_OPS for op in ops)
+    return bool(ops) and all(str(op.get("op_name", "")) in _JIT_GRAPH_OPS for op in ops)
 
 
 def run_graph_ops(arg_names, ops, output_name, arrays, *, elem: str = "f32"):
@@ -2696,8 +2696,7 @@ def run_graph_ops(arg_names, ops, output_name, arrays, *, elem: str = "f32"):
             elif method in ("rmsnorm", "layer_norm"):
                 out = getattr(g, method)(ins[0], eps=float(kwargs.get("eps", 1e-5)))
             elif method == "masked_fill":
-                out = g.masked_fill(ins[0], ins[1],
-                                    value=float(kwargs.get("value", -1e9)))
+                out = g.masked_fill(ins[0], ins[1], value=float(kwargs.get("value", -1e9)))
             else:
                 out = getattr(g, method)(*ins)
             env[_strip(result)] = out

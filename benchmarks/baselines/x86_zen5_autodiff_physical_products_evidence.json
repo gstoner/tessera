@@ -1,0 +1,540 @@
+{
+  "architecture": "zen5_avx512",
+  "device": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "host_clean": false,
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "WSL or unasserted clean-host timing is regression-only"
+  },
+  "rows": [
+    {
+      "artifact_digest": "9dfe3030c0b0ba66c8613ac31a86c9cc181916c036c0444a23f5deb41b3d41f0",
+      "dtype": "f32",
+      "name": "generated_nonlinear_residual_vjp",
+      "numerical": {
+        "max_abs_error": 2.3245811462402344e-06,
+        "passed": true
+      },
+      "resources": {
+        "children_generated_from_graph": true,
+        "last_solve": {
+          "converged": true,
+          "final_residual_norm": 1.5871608176509568e-05,
+          "iterations": 6,
+          "matvecs": 13
+        },
+        "matrix_materialized": false,
+        "physical_children": 5,
+        "residual_expression": "x*x+sin(x)-theta",
+        "solver": "restarted_gmres"
+      },
+      "timing": {
+        "cache_state": "warmed_after_explicit_cold_sample",
+        "clock": "time.perf_counter_ns",
+        "cold_sample_ns": 38847162,
+        "device_clock": {
+          "valid": false,
+          "value": null
+        },
+        "median_ns": 5648838,
+        "minimum_ns": 5416389,
+        "samples_ns": [
+          5757321,
+          5548727,
+          5715661,
+          5742580,
+          5733714,
+          5588252,
+          5501744,
+          5687115,
+          5652430,
+          5580255,
+          5531424,
+          5416389,
+          5722944,
+          5774251,
+          5655225,
+          5565745,
+          5495418,
+          5645246,
+          5490117,
+          6072885,
+          5739181,
+          5706410,
+          5613312,
+          5724627,
+          5537408,
+          5435431,
+          5718985,
+          5742943,
+          5513965,
+          5615655
+        ],
+        "source": "synchronized_host_wall",
+        "submission_completion": "runtime package returns after target synchronization",
+        "warmup": 5
+      }
+    },
+    {
+      "artifact_digest": "afaf1fe23419d884c8bbf3d275a1a4be09c14d7db68dc1f6216871f4dfd90bbf",
+      "dtype": "f32",
+      "name": "generated_reduction_residual_vjp",
+      "numerical": {
+        "max_abs_error": 1.1920928955078125e-07,
+        "passed": true
+      },
+      "resources": {
+        "children_generated_from_graph": true,
+        "family": "sum_mean_broadcast",
+        "last_solve": {
+          "converged": true,
+          "final_residual_norm": 5.026826537497362e-07,
+          "iterations": 2,
+          "matvecs": 5
+        },
+        "matrix_materialized": false,
+        "physical_children": 5,
+        "predicate_replay": {
+          "derivative_boundary": "reject_equal",
+          "policy": "pure_recompute",
+          "selection_count": 0
+        },
+        "shape": [
+          8,
+          16
+        ],
+        "solver": "restarted_gmres"
+      },
+      "timing": {
+        "cache_state": "warmed_after_explicit_cold_sample",
+        "clock": "time.perf_counter_ns",
+        "cold_sample_ns": 7416843,
+        "device_clock": {
+          "valid": false,
+          "value": null
+        },
+        "median_ns": 1834497,
+        "minimum_ns": 1667112,
+        "samples_ns": [
+          2070725,
+          1869832,
+          1727747,
+          2010398,
+          1890964,
+          1730035,
+          1951830,
+          1727230,
+          1874243,
+          1853562,
+          1701599,
+          1939454,
+          1812881,
+          1667112,
+          1958991,
+          1829943,
+          1822837,
+          1764555,
+          1731135,
+          1921150,
+          1912591,
+          1939267,
+          1716296,
+          1784753,
+          1891316,
+          1807084,
+          1802111,
+          1839052,
+          1711268,
+          1982764
+        ],
+        "source": "synchronized_host_wall",
+        "submission_completion": "runtime package returns after target synchronization",
+        "warmup": 5
+      }
+    },
+    {
+      "artifact_digest": "eca63d156eb7be60afd31294cf579d4dcf17c1124b8b6579ffbb19f009b0495e",
+      "dtype": "f16_storage_f32_accumulation",
+      "name": "generated_matmul_residual_vjp",
+      "numerical": {
+        "max_abs_error": 0.0,
+        "passed": true
+      },
+      "resources": {
+        "accumulation": "f32",
+        "children_generated_from_graph": true,
+        "family": "rank2_matmul",
+        "last_solve": {
+          "converged": true,
+          "final_residual_norm": 0.0,
+          "iterations": 1,
+          "matvecs": 3
+        },
+        "matrix_materialized": false,
+        "physical_children": 5,
+        "predicate_replay": {
+          "derivative_boundary": "reject_equal",
+          "policy": "pure_recompute",
+          "selection_count": 0
+        },
+        "shape": [
+          16,
+          16
+        ],
+        "solver": "restarted_gmres",
+        "storage": "f16"
+      },
+      "timing": {
+        "cache_state": "warmed_after_explicit_cold_sample",
+        "clock": "time.perf_counter_ns",
+        "cold_sample_ns": 1369930,
+        "device_clock": {
+          "valid": false,
+          "value": null
+        },
+        "median_ns": 1169806,
+        "minimum_ns": 992916,
+        "samples_ns": [
+          1393416,
+          1165582,
+          1137212,
+          1130029,
+          1294719,
+          1177584,
+          1129676,
+          1252025,
+          1364023,
+          1148740,
+          1154615,
+          1205878,
+          1187573,
+          1124638,
+          1114440,
+          1158377,
+          1344596,
+          1174031,
+          1145165,
+          1154252,
+          1186836,
+          1154549,
+          992916,
+          1124077,
+          1278020,
+          1216856,
+          1195570,
+          1138389,
+          1211917,
+          1237010
+        ],
+        "source": "synchronized_host_wall",
+        "submission_completion": "runtime package returns after target synchronization",
+        "warmup": 5
+      }
+    },
+    {
+      "artifact_digest": "b481a5c3e3a20d33c70422c51b6c3ddc1275388ba3fa8db726bdb1797a16fc6c",
+      "dtype": "f16_parameter_f32_compute",
+      "name": "generated_dynamic_mixed_residual_vjp",
+      "numerical": {
+        "max_abs_error": 0.0,
+        "passed": true
+      },
+      "resources": {
+        "accumulation": "f32",
+        "children_generated_from_graph": true,
+        "family": "bounded_dynamic_mixed_storage",
+        "last_solve": {
+          "converged": true,
+          "final_residual_norm": 0.0,
+          "iterations": 1,
+          "matvecs": 3
+        },
+        "matrix_materialized": false,
+        "parameter_storage": "f16",
+        "physical_children": 5,
+        "predicate_replay": {
+          "derivative_boundary": "reject_equal",
+          "policy": "pure_recompute",
+          "selection_count": 0
+        },
+        "runtime_shape": [
+          17,
+          31
+        ],
+        "shape_bounds": [
+          32,
+          64
+        ],
+        "solver": "restarted_gmres"
+      },
+      "timing": {
+        "cache_state": "warmed_after_explicit_cold_sample",
+        "clock": "time.perf_counter_ns",
+        "cold_sample_ns": 904109,
+        "device_clock": {
+          "valid": false,
+          "value": null
+        },
+        "median_ns": 845822,
+        "minimum_ns": 703501,
+        "samples_ns": [
+          881337,
+          885859,
+          758933,
+          934800,
+          846146,
+          872537,
+          846553,
+          878939,
+          845498,
+          1027315,
+          809393,
+          835300,
+          895957,
+          825311,
+          759692,
+          898278,
+          845013,
+          808007,
+          723401,
+          908234,
+          832824,
+          939938,
+          795631,
+          786149,
+          846443,
+          838424,
+          719826,
+          1059382,
+          846718,
+          703501
+        ],
+        "source": "synchronized_host_wall",
+        "submission_completion": "runtime package returns after target synchronization",
+        "warmup": 5
+      }
+    },
+    {
+      "artifact_digest": "2119318aaa86dda010c3564697be76532c089cff95e639ac3599270438bf70e8",
+      "dtype": "f32",
+      "name": "generated_control_if_residual_vjp",
+      "numerical": {
+        "max_abs_error": 0.0,
+        "passed": true
+      },
+      "resources": {
+        "children_generated_from_graph": true,
+        "family": "data_dependent_if",
+        "last_solve": {
+          "converged": true,
+          "final_residual_norm": 0.0,
+          "iterations": 1,
+          "matvecs": 3
+        },
+        "matrix_materialized": false,
+        "physical_children": 5,
+        "predicate": "mean(x)>mean(theta)",
+        "predicate_replay": {
+          "derivative_boundary": "reject_equal",
+          "policy": "pure_recompute",
+          "selection_count": 3
+        },
+        "solver": "restarted_gmres"
+      },
+      "timing": {
+        "cache_state": "warmed_after_explicit_cold_sample",
+        "clock": "time.perf_counter_ns",
+        "cold_sample_ns": 3022148,
+        "device_clock": {
+          "valid": false,
+          "value": null
+        },
+        "median_ns": 2552140,
+        "minimum_ns": 2384804,
+        "samples_ns": [
+          2577435,
+          2473568,
+          2563421,
+          2424154,
+          2672987,
+          2451951,
+          2541101,
+          2384804,
+          2714702,
+          2416002,
+          3380547,
+          2659930,
+          2417178,
+          2586633,
+          2529165,
+          2567392,
+          2500641,
+          2420060,
+          2614685,
+          2539879,
+          2449862,
+          2613199,
+          2524709,
+          2563180,
+          2639204,
+          2602583,
+          2511708,
+          2453139,
+          2570671,
+          2585257
+        ],
+        "source": "synchronized_host_wall",
+        "submission_completion": "runtime package returns after target synchronization",
+        "warmup": 5
+      }
+    },
+    {
+      "artifact_digest": "6780b0d524a50e263c8f3896c8e27df20d4384b30a6c08da5813637d3268379e",
+      "dtype": "f32",
+      "name": "generated_control_while_residual_vjp",
+      "numerical": {
+        "max_abs_error": 0.0,
+        "passed": true
+      },
+      "resources": {
+        "children_generated_from_graph": true,
+        "executed_iterations": 4,
+        "family": "data_dependent_while",
+        "last_solve": {
+          "converged": true,
+          "final_residual_norm": 5.025967505643454e-07,
+          "iterations": 1,
+          "matvecs": 3
+        },
+        "matrix_materialized": false,
+        "max_iterations": 6,
+        "physical_children": 5,
+        "predicate": "mean(carry)<mean(theta)",
+        "predicate_replay": {
+          "derivative_boundary": "reject_equal",
+          "policy": "pure_recompute",
+          "selection_count": 18
+        },
+        "solver": "restarted_gmres"
+      },
+      "timing": {
+        "cache_state": "warmed_after_explicit_cold_sample",
+        "clock": "time.perf_counter_ns",
+        "cold_sample_ns": 7945236,
+        "device_clock": {
+          "valid": false,
+          "value": null
+        },
+        "median_ns": 7743445,
+        "minimum_ns": 7576385,
+        "samples_ns": [
+          7790610,
+          7634050,
+          7796453,
+          7709822,
+          7665963,
+          7751812,
+          7794846,
+          7697656,
+          7776981,
+          8740152,
+          7795716,
+          7616053,
+          7889671,
+          8032317,
+          8211825,
+          7885821,
+          7652212,
+          7849739,
+          7665831,
+          7765628,
+          7684983,
+          7698206,
+          7593182,
+          7622841,
+          7782184,
+          7711517,
+          7674752,
+          7743297,
+          7576385,
+          7743594
+        ],
+        "source": "synchronized_host_wall",
+        "submission_completion": "runtime package returns after target synchronization",
+        "warmup": 5
+      }
+    },
+    {
+      "artifact_digest": "f56dff2fdb4e89e99f9c790d72116f45c0b12260afed0df74b3be4051e97fd16",
+      "dtype": "f32",
+      "name": "istft_spectrum_window_jvp",
+      "numerical": {
+        "max_abs_error": 1.0889039927519661e-06,
+        "passed": true
+      },
+      "resources": {
+        "inverse_fft_products": 2,
+        "overlap_add_products": 1,
+        "window_energy_derivative": true,
+        "workspace_policy": "thread_local_cached"
+      },
+      "timing": {
+        "cache_state": "warmed_after_explicit_cold_sample",
+        "clock": "time.perf_counter_ns",
+        "cold_sample_ns": 91167772,
+        "device_clock": {
+          "valid": false,
+          "value": null
+        },
+        "median_ns": 256188,
+        "minimum_ns": 220804,
+        "samples_ns": [
+          312913,
+          268525,
+          368389,
+          308139,
+          254664,
+          247283,
+          227658,
+          291451,
+          258878,
+          281055,
+          271880,
+          307633,
+          257712,
+          229022,
+          223961,
+          232642,
+          224501,
+          220804,
+          305235,
+          251188,
+          240573,
+          230452,
+          333880,
+          274421,
+          234391,
+          229891,
+          273288,
+          305686,
+          242498,
+          234203
+        ],
+        "source": "synchronized_host_wall",
+        "submission_completion": "runtime package returns after target synchronization",
+        "warmup": 5
+      }
+    }
+  ],
+  "schema": "tessera.autodiff_physical_products.evidence.v1",
+  "target": "x86",
+  "tessera_opt_sha256": "9afdb8a3cac1ea132bb3eb74f23fb8d71c25093b21f3096f33eb841c996265d2",
+  "toolchain": "Ubuntu LLVM version 23.0.0",
+  "work_items": [
+    "AD-SOLVER-IFT-1",
+    "AD-FWD-NATIVE-1"
+  ],
+  "wsl": true
+}

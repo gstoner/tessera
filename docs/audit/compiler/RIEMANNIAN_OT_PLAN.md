@@ -164,7 +164,7 @@ twelve contract axes are closed.**
 | Paper concept | Needed | Today |
 |---|---|---|
 | envelope theorem at the argmin | general `stop_gradient` primitive | **shared compiler barrier landed.** Canonical Graph `stop_gradient` carries explicit activity semantics; model migration remains consumer work. |
-| IFT Jacobian `−(D_yF)⁻¹ D_xF` | `custom_root` / implicit-diff VJP | **shared IR and bounded physical pilot landed.** `NewtonAutodiff.cpp` validates the residual ABI and emits registered residual → transposed matrix-free solve → negative residual-adjoint values. The diagonal-sqrt family executes through AVX-512 and gfx1151 packages with compiled proof. R2 must extend this path to its residual and iterative solve, not build a parallel mechanism. |
+| IFT Jacobian `−(D_yF)⁻¹ D_xF` | `custom_root` / implicit-diff VJP | **shared IR and physical child-composite landed.** `NewtonAutodiff.cpp` validates the residual ABI and emits residual → transposed matrix-free solve → negative residual-adjoint values. Alongside the diagonal-sqrt specialization, a content-addressed parent now executes immutable residual and solution/parameter JVP/VJP children through restarted GMRES on AVX-512 and gfx1151. R2 must produce its physical children through this path and collect a nonlinear packet, not build a parallel mechanism. |
 | `log|det J|` | `slogdet` | **missing.** No `det`, no `logdet`, no `slogdet` in the catalog |
 | `[D_yF]⁻¹ [D_xF]` (dense `p×p`) | general `linalg.solve` | **partial.** `tri_solve` and `cholesky_solve` exist; `D_yF` is neither triangular nor SPD in general |
 | JVP/VJP against `p` basis vectors | batched JVP over a basis | `autodiff/jvp.py` exists; batched-over-basis is untested for this shape |

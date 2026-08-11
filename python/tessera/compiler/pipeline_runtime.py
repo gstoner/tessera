@@ -31,9 +31,10 @@ class CollectiveDescriptor:
     result_tensor: str | None = None
     dtype: str | None = None
     chunk_bytes: int | None = None
+    peer_pairs: tuple[tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
-        if self.kind not in {"all_reduce", "reduce_scatter", "all_gather", "all_to_all"}:
+        if self.kind not in {"all_reduce", "reduce_scatter", "all_gather", "all_to_all", "collective_permute"}:
             raise ValueError(f"unsupported collective kind {self.kind!r}")
         if not self.tensor:
             raise ValueError("collective tensor identity must be non-empty")
@@ -59,6 +60,21 @@ class CollectiveDescriptor:
             raise ValueError("collective dtype must be non-empty when present")
         if self.chunk_bytes is not None and self.chunk_bytes <= 0:
             raise ValueError("collective chunk_bytes must be positive when present")
+        if self.kind == "collective_permute":
+            sources = tuple(source for source, _ in self.peer_pairs)
+            targets = tuple(target for _, target in self.peer_pairs)
+            if not self.peer_pairs:
+                raise ValueError("collective_permute requires a non-empty peer map")
+            if len(set(sources)) != len(sources) or len(set(targets)) != len(targets):
+                raise ValueError("collective_permute peer sources and targets must be unique")
+            if any(peer < 0 for pair in self.peer_pairs for peer in pair):
+                raise ValueError("collective_permute peers must be non-negative")
+            if self.world_size is not None and any(
+                peer >= self.world_size for pair in self.peer_pairs for peer in pair
+            ):
+                raise ValueError("collective_permute peer is outside world_size")
+        elif self.peer_pairs:
+            raise ValueError("peer_pairs are valid only for collective_permute")
 
     @classmethod
     def from_target_record(cls, row: Mapping[str, Any]) -> "CollectiveDescriptor":
@@ -78,6 +94,10 @@ class CollectiveDescriptor:
         normalize = reduction == "mean"
         if reduction in {"none", "mean"}:
             reduction = "sum"
+        source_peers = tuple(int(peer) for peer in row.get("source_peers", ()))
+        target_peers = tuple(int(peer) for peer in row.get("target_peers", ()))
+        if len(source_peers) != len(target_peers):
+            raise ValueError("collective_permute source/target peer maps differ in length")
         return cls(
             kind=kind,
             tensor=str(row["tensor"]),
@@ -91,11 +111,8 @@ class CollectiveDescriptor:
             result_tensor=str(row.get("output", row["tensor"])),
             normalize=normalize,
             dtype=None if row.get("dtype") is None else str(row["dtype"]),
-            chunk_bytes=(
-                None
-                if row.get("chunk_bytes") is None
-                else int(row["chunk_bytes"])
-            ),
+            chunk_bytes=(None if row.get("chunk_bytes") is None else int(row["chunk_bytes"])),
+            peer_pairs=tuple(zip(source_peers, target_peers)),
         )
 
     @classmethod
@@ -179,10 +196,7 @@ class OptimizerShardTransport:
             mesh_axes = getattr(self.adapter, "mesh_axes", None)
             if descriptor.mesh_axis != "default" and isinstance(mesh_axes, Mapping):
                 if descriptor.mesh_axis not in mesh_axes:
-                    raise RuntimeError(
-                        f"{descriptor.tensor} references unknown mesh axis "
-                        f"{descriptor.mesh_axis!r}"
-                    )
+                    raise RuntimeError(f"{descriptor.tensor} references unknown mesh axis {descriptor.mesh_axis!r}")
                 mesh_world_size = int(mesh_axes[descriptor.mesh_axis])
                 if mesh_world_size != adapter_world_size:
                     raise RuntimeError(
@@ -190,10 +204,7 @@ class OptimizerShardTransport:
                         f"axis {descriptor.mesh_axis!r} spans {mesh_world_size}; "
                         "subgroup transport is not implemented"
                     )
-                if (
-                    descriptor.world_size is not None
-                    and descriptor.world_size != mesh_world_size
-                ):
+                if descriptor.world_size is not None and descriptor.world_size != mesh_world_size:
                     raise RuntimeError(
                         f"{descriptor.tensor} targets world_size={descriptor.world_size}, "
                         f"but mesh axis {descriptor.mesh_axis!r} owns {mesh_world_size} ranks"
@@ -207,46 +218,31 @@ class OptimizerShardTransport:
             ownership = self._ownership[source_tensor]
             if descriptor.kind == "reduce_scatter":
                 if descriptor.optimizer_shard and ownership != "replicated":
-                    raise RuntimeError(
-                        f"{descriptor.tensor} must be replicated before OptimizerShard reduce-scatter"
-                    )
-                outputs = self.adapter.reduce_scatter(
-                    values, axis=descriptor.axis, op=descriptor.op
-                )
+                    raise RuntimeError(f"{descriptor.tensor} must be replicated before OptimizerShard reduce-scatter")
+                outputs = self.adapter.reduce_scatter(values, axis=descriptor.axis, op=descriptor.op)
                 result_ownership = "rank_local"
             elif descriptor.kind == "all_gather":
                 if descriptor.optimizer_shard and ownership != "rank_local":
-                    raise RuntimeError(
-                        f"{descriptor.tensor} must be rank-local before OptimizerShard all-gather"
-                    )
+                    raise RuntimeError(f"{descriptor.tensor} must be rank-local before OptimizerShard all-gather")
                 outputs = self.adapter.all_gather(values, axis=descriptor.axis)
                 result_ownership = "replicated"
             elif descriptor.kind == "all_reduce":
                 outputs = self.adapter.all_reduce(values, op=descriptor.op)
                 result_ownership = "replicated"
-            else:
+            elif descriptor.kind == "all_to_all":
                 outputs = self.adapter.all_to_all(
                     values,
-                    scatter_axis=(
-                        descriptor.axis
-                        if descriptor.scatter_axis is None
-                        else descriptor.scatter_axis
-                    ),
-                    gather_axis=(
-                        descriptor.axis
-                        if descriptor.gather_axis is None
-                        else descriptor.gather_axis
-                    ),
+                    scatter_axis=(descriptor.axis if descriptor.scatter_axis is None else descriptor.scatter_axis),
+                    gather_axis=(descriptor.axis if descriptor.gather_axis is None else descriptor.gather_axis),
                 )
+                result_ownership = "rank_local"
+            else:
+                outputs = self.adapter.collective_permute(values, pairs=descriptor.peer_pairs)
                 result_ownership = "rank_local"
             if descriptor.normalize:
                 if descriptor.kind not in {"all_reduce", "reduce_scatter"}:
-                    raise RuntimeError(
-                        "normalization is valid only for reducing collectives"
-                    )
-                outputs = [
-                    value / float(self.adapter.world_size) for value in outputs
-                ]
+                    raise RuntimeError("normalization is valid only for reducing collectives")
+                outputs = [value / float(self.adapter.world_size) for value in outputs]
             self._values[result_tensor] = list(outputs)
             self._ownership[result_tensor] = result_ownership
 
@@ -275,8 +271,11 @@ class OneSidedDescriptor:
 
     def __post_init__(self) -> None:
         kinds = {
-            "window.register", "window.deregister", "put_signal",
-            "signal", "wait_signal",
+            "window.register",
+            "window.deregister",
+            "put_signal",
+            "signal",
+            "wait_signal",
         }
         if self.kind not in kinds:
             raise ValueError(f"unsupported one-sided operation {self.kind!r}")
@@ -285,23 +284,17 @@ class OneSidedDescriptor:
                 raise ValueError(f"{self.kind} requires a window identity")
         if self.kind == "window.register":
             if not self.buffer or self.bytes <= 0:
-                raise ValueError(
-                    "window.register requires a buffer and positive byte extent"
-                )
+                raise ValueError("window.register requires a buffer and positive byte extent")
         if self.kind == "put_signal":
             if not self.source or self.count <= 0:
-                raise ValueError(
-                    "put_signal requires a source and positive element count"
-                )
+                raise ValueError("put_signal requires a source and positive element count")
             if self.dtype not in {"f32", "f16", "bf16", "i8"}:
                 raise ValueError("put_signal dtype must be f32|f16|bf16|i8")
             if self.peer_window_offset < 0:
                 raise ValueError("put_signal window offset must be non-negative")
         if self.kind in {"put_signal", "signal", "wait_signal"}:
             if self.peer < 0 or self.signal_index < 0 or self.context < 0:
-                raise ValueError(
-                    "one-sided peer, signal index, and context must be non-negative"
-                )
+                raise ValueError("one-sided peer, signal index, and context must be non-negative")
         if self.kind == "wait_signal" and self.operation_count <= 0:
             raise ValueError("wait_signal operation count must be positive")
 
@@ -310,9 +303,7 @@ class OneSidedDescriptor:
         op_name = str(row.get("op", ""))
         prefix = "tessera_collective."
         if not op_name.startswith(prefix):
-            raise ValueError(
-                "one-sided target record requires tessera_collective.* op"
-            )
+            raise ValueError("one-sided target record requires tessera_collective.* op")
         return cls(
             kind=op_name.removeprefix(prefix),
             window=str(row.get("window", "")),
@@ -341,18 +332,12 @@ class OneSidedTransportRuntime:
     def execute(self, descriptor: OneSidedDescriptor) -> None:
         if descriptor.kind == "window.register":
             if descriptor.window in self.windows:
-                raise RuntimeError(
-                    f"one-sided window {descriptor.window!r} is already registered"
-                )
+                raise RuntimeError(f"one-sided window {descriptor.window!r} is already registered")
             if descriptor.buffer not in self.buffers:
-                raise KeyError(
-                    f"no runtime buffer named {descriptor.buffer!r}"
-                )
+                raise KeyError(f"no runtime buffer named {descriptor.buffer!r}")
             register = getattr(self.adapter, "register_symmetric_window", None)
             if not callable(register):
-                raise RuntimeError(
-                    "one-sided adapter does not implement window registration"
-                )
+                raise RuntimeError("one-sided adapter does not implement window registration")
             self.windows[descriptor.window] = register(
                 self.buffers[descriptor.buffer],
                 descriptor.bytes,
@@ -361,32 +346,22 @@ class OneSidedTransportRuntime:
             return
         if descriptor.kind == "window.deregister":
             if descriptor.window not in self.windows:
-                raise RuntimeError(
-                    f"one-sided window {descriptor.window!r} is not registered"
-                )
+                raise RuntimeError(f"one-sided window {descriptor.window!r} is not registered")
             window = self.windows.pop(descriptor.window)
             close = getattr(window, "close", None)
             if callable(close):
                 close()
                 return
-            deregister = getattr(
-                self.adapter, "deregister_symmetric_window", None
-            )
+            deregister = getattr(self.adapter, "deregister_symmetric_window", None)
             if not callable(deregister):
-                raise RuntimeError(
-                    "one-sided adapter cannot deregister its window handle"
-                )
+                raise RuntimeError("one-sided adapter cannot deregister its window handle")
             deregister(window)
             return
         if descriptor.kind == "put_signal":
             if descriptor.window not in self.windows:
-                raise RuntimeError(
-                    f"one-sided window {descriptor.window!r} is not registered"
-                )
+                raise RuntimeError(f"one-sided window {descriptor.window!r} is not registered")
             if descriptor.source not in self.buffers:
-                raise KeyError(
-                    f"no runtime buffer named {descriptor.source!r}"
-                )
+                raise KeyError(f"no runtime buffer named {descriptor.source!r}")
             put = getattr(self.adapter, "put_signal", None)
             if not callable(put):
                 raise RuntimeError("one-sided adapter does not implement put_signal")
@@ -424,9 +399,7 @@ class OneSidedTransportRuntime:
     def finish(self) -> None:
         if self.windows:
             names = ", ".join(sorted(self.windows))
-            raise RuntimeError(
-                f"one-sided artifact leaked registered windows: {names}"
-            )
+            raise RuntimeError(f"one-sided artifact leaked registered windows: {names}")
 
 
 def execute_one_sided_target_records(
@@ -455,27 +428,13 @@ def _parse_collectives(row: Mapping[str, Any]) -> tuple[CollectiveDescriptor, ..
             optimizer_shard=bool(item.get("optimizer_shard", False)),
             normalize=bool(item.get("normalize", False)),
             mesh_axis=str(item.get("mesh_axis", "default")),
-            world_size=(
-                None if item.get("world_size") is None else int(item["world_size"])
-            ),
-            scatter_axis=(
-                None if item.get("scatter_axis") is None else int(item["scatter_axis"])
-            ),
-            gather_axis=(
-                None if item.get("gather_axis") is None else int(item["gather_axis"])
-            ),
-            source_tensor=(
-                None if item.get("input") is None else str(item["input"])
-            ),
-            result_tensor=(
-                None if item.get("output") is None else str(item["output"])
-            ),
+            world_size=(None if item.get("world_size") is None else int(item["world_size"])),
+            scatter_axis=(None if item.get("scatter_axis") is None else int(item["scatter_axis"])),
+            gather_axis=(None if item.get("gather_axis") is None else int(item["gather_axis"])),
+            source_tensor=(None if item.get("input") is None else str(item["input"])),
+            result_tensor=(None if item.get("output") is None else str(item["output"])),
             dtype=None if item.get("dtype") is None else str(item["dtype"]),
-            chunk_bytes=(
-                None
-                if item.get("chunk_bytes") is None
-                else int(item["chunk_bytes"])
-            ),
+            chunk_bytes=(None if item.get("chunk_bytes") is None else int(item["chunk_bytes"])),
         )
         for item in raw
     )
@@ -563,9 +522,7 @@ def execute_pipeline_steps(
             run_stage(step)
             if run_collective is not None and should_launch(step):
                 futures.append(transport.submit(run_collective, step))
-                peak = max(
-                    peak, sum(1 for future in futures if not future.done())
-                )
+                peak = max(peak, sum(1 for future in futures if not future.done()))
         for future in futures:
             future.result()
     return PipelineRuntimeResult(

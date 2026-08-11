@@ -11,6 +11,11 @@ from tessera.compiler.native_jvp import (
     build_native_jvp_artifact,
     child_digest,
 )
+from tessera.compiler.native_jvp_plugins import (
+    native_jvp_plugin_owners,
+    plan_native_jvp_family,
+)
+from tessera.compiler.graph_ir import IROp
 from tessera.compiler.graph_ir import _format_attr_value, tensor_ir_type
 
 
@@ -43,6 +48,7 @@ def _package() -> NativeJVPArtifact:
         target="x86",
         architecture="zen5_avx512",
         family="reduce",
+        source_graph_ir='module attributes {tessera.frontend.authority = "tracer"} {}',
         paired_jvp_ir="func.func @f__jvp()",
         wrt_indices=(0,),
         arg_names=("primal_input", "tangent_input"),
@@ -69,12 +75,25 @@ def test_canonical_complex_dtype_uses_builtin_mlir_element_syntax():
     assert str(ty) == "tensor<4xcomplex<f32>>"
 
 
+def test_native_jvp_rejects_nontracer_graph_authority():
+    child = _reduce_child()
+    with pytest.raises(ValueError, match="tracer-owned"):
+        build_native_jvp_artifact(
+            target="x86", architecture="zen5_avx512", family="reduce",
+            source_graph_ir="module {}", paired_jvp_ir="func.func @f__jvp()",
+            wrt_indices=(0,), arg_names=("x",),
+            steps=({"id": "primal", "child_digest": child_digest(child),
+                    "child_metadata": child, "inputs": ["x"]},),
+        )
+
+
 @pytest.mark.parametrize("architecture", ["gfx1200", "gfx1250", "unknown"])
 def test_rocm_native_jvp_fails_closed_without_gfx1151_proof(architecture: str):
     child = _reduce_child()
     with pytest.raises(ValueError, match="fail closed"):
         build_native_jvp_artifact(
             target="rocm", architecture=architecture, family="reduce",
+            source_graph_ir='module attributes {tessera.frontend.authority = "tracer"} {}',
             paired_jvp_ir="func.func @f__jvp()", wrt_indices=(0,),
             arg_names=("primal_input", "tangent_input"),
             steps=({"id": "primal", "child_digest": child_digest(child),
@@ -120,3 +139,29 @@ def test_runtime_rejects_child_metadata_substitution():
     )
     assert not result["ok"]
     assert "child package digest mismatch" in result["reason"]
+
+
+def test_native_jvp_families_have_one_explicit_plugin_owner():
+    owners = native_jvp_plugin_owners()
+    assert owners["fft"] == "_plan_fft"
+    assert owners["dct"] == "_plan_dct"
+    assert owners["spectral_conv"] == "_plan_compound_spectral"
+    assert owners["layer_norm"] == "_plan_normalization"
+    assert len(owners) == len(set(owners))
+
+
+def test_jvp_plugin_produces_digest_bound_plan_outside_jitfn():
+    source = IROp(
+        result="out", op_name="tessera.sum", operands=["%x"],
+        operand_types=["tensor<2x3xf32>"], result_type="tensor<2xf32>",
+        kwargs={"axis": -1},
+    )
+    plan = plan_native_jvp_family(
+        source=source,
+        primal_inputs=(np.ones((2, 3), dtype=np.float32),),
+        wrt_indices=(0,), target="x86", architecture="zen5_avx512",
+        execution_mode="cpu_avx512",
+    )
+    assert plan.family == "reduce"
+    assert [step["id"] for step in plan.steps] == ["primal", "tangent"]
+    assert all(len(step["child_digest"]) == 64 for step in plan.steps)

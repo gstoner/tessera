@@ -238,6 +238,14 @@ struct CollectiveAdapter {
   virtual void all_to_all(const void* send_buf, void* recv_buf,
                            size_t shard_bytes, const CollectiveSpec& spec) = 0;
 
+  /// Ordered point-to-point permutation. Sources and targets must each be
+  /// unique; unmatched destinations receive zero. Every rank calls this with
+  /// the same canonical peer map.
+  virtual void collective_permute(
+      const void *send_buf, void *recv_buf, size_t count,
+      const std::vector<std::pair<int, int>> &peer_pairs,
+      const CollectiveSpec &spec) = 0;
+
   /// Low-level async chunk submission (called by ExecRuntime::submit,
   /// Execution.h).
   /// On completion, cb() is invoked on an unspecified thread.
@@ -348,6 +356,40 @@ struct NCCLAdapter : CollectiveAdapter {
     synchronize();
 #else
     _mock_all_to_all(send_buf, recv_buf, shard_bytes, spec);
+#endif
+  }
+
+  void collective_permute(
+      const void *send_buf, void *recv_buf, size_t count,
+      const std::vector<std::pair<int, int>> &peer_pairs,
+      const CollectiveSpec &spec) override {
+#ifdef TESSERA_HAS_NCCL
+    requireReady();
+    const cudaError_t zeroResult = cudaMemsetAsync(
+        recv_buf, 0, count * wireDTypeBytes(spec.wire_dtype), stream_);
+    if (zeroResult != cudaSuccess)
+      throw std::runtime_error(
+          std::string("CUDA collective_permute zero fill: ") +
+          cudaGetErrorString(zeroResult));
+    checkNccl(ncclGroupStart(), "collective_permute group start");
+    for (auto [source, target] : peer_pairs) {
+      if (source == spec.local_rank)
+        checkNccl(ncclSend(send_buf, count, toNcclDType(spec.wire_dtype), target,
+                           comm_, stream_),
+                  "collective_permute send");
+      if (target == spec.local_rank)
+        checkNccl(ncclRecv(recv_buf, count, toNcclDType(spec.wire_dtype), source,
+                           comm_, stream_),
+                  "collective_permute receive");
+    }
+    checkNccl(ncclGroupEnd(), "collective_permute group end");
+    synchronize();
+#else
+    std::memset(recv_buf, 0, count * wireDTypeBytes(spec.wire_dtype));
+    for (auto [source, target] : peer_pairs)
+      if (source == spec.local_rank && target == spec.local_rank)
+        std::memcpy(recv_buf, send_buf,
+                    count * wireDTypeBytes(spec.wire_dtype));
 #endif
   }
 
@@ -642,6 +684,40 @@ struct RCCLAdapter : CollectiveAdapter {
     size_t offset = (size_t)spec.local_rank * shard_bytes;
     std::memcpy(static_cast<char*>(recv_buf) + offset,
                 static_cast<const char*>(send_buf) + offset, shard_bytes);
+#endif
+  }
+
+  void collective_permute(
+      const void *send_buf, void *recv_buf, size_t count,
+      const std::vector<std::pair<int, int>> &peer_pairs,
+      const CollectiveSpec &spec) override {
+#ifdef TESSERA_HAS_RCCL
+    requireReady();
+    const hipError_t zeroResult = hipMemsetAsync(
+        recv_buf, 0, count * wireDTypeBytes(spec.wire_dtype), stream_);
+    if (zeroResult != hipSuccess)
+      throw std::runtime_error(
+          std::string("HIP collective_permute zero fill: ") +
+          hipGetErrorString(zeroResult));
+    checkRccl(ncclGroupStart(), "collective_permute group start");
+    for (auto [source, target] : peer_pairs) {
+      if (source == spec.local_rank)
+        checkRccl(ncclSend(send_buf, count, toRcclDType(spec.wire_dtype), target,
+                           comm_, stream_),
+                  "collective_permute send");
+      if (target == spec.local_rank)
+        checkRccl(ncclRecv(recv_buf, count, toRcclDType(spec.wire_dtype), source,
+                           comm_, stream_),
+                  "collective_permute receive");
+    }
+    checkRccl(ncclGroupEnd(), "collective_permute group end");
+    synchronize();
+#else
+    std::memset(recv_buf, 0, count * wireDTypeBytes(spec.wire_dtype));
+    for (auto [source, target] : peer_pairs)
+      if (source == spec.local_rank && target == spec.local_rank)
+        std::memcpy(recv_buf, send_buf,
+                    count * wireDTypeBytes(spec.wire_dtype));
 #endif
   }
 

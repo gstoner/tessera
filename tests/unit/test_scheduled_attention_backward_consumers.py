@@ -139,10 +139,16 @@ def test_zen5_scheduled_attention_backward_exact_mha_gqa_mqa(
 
 @_needs_opt
 @pytest.mark.compiler_rocm
-def test_gfx1151_scheduled_attention_backward_packages_exact_tile_program() -> None:
+def test_gfx1151_scheduled_attention_backward_packages_exact_tile_program(monkeypatch) -> None:
+    import tessera.compiler.rocm_native as rocm_native
+
     artifact = lower_scheduled_attention_backward(
         _module(1, 4, 2, 17, 19, 16), target="rocm_gfx1151"
     )
+    def reject_graph_reentry(_module):
+        raise AssertionError("scheduled Tile packaging re-entered Graph classification")
+
+    monkeypatch.setattr(rocm_native, "_attention_backward_contract", reject_graph_reentry)
     program = package_rocm(artifact, pipeline_name="tessera-lower-to-rocm")
     assert len(program.descriptors) == 5
     assert program.descriptors[0].provenance["tile_ir_digest"] == artifact.tile_digest

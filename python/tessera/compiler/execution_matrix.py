@@ -369,6 +369,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "direct-intrinsic subset sub/div/maximum/minimum "
                             "(NaN-propagating max/min), 16 f32 lanes/__m512. `pow` "
                             "is transcendental → numpy-reference. f32 only",
+    "x86_solver_graph_compiled": "Compiler-generated straight-line residual, "
+                            "JVP, or VJP SSA program composed exclusively from "
+                            "native AVX-512 unary/binary packages; static "
+                            "shape-preserving f32 and content-addressed",
     "x86_predicate_compiled": "x86 CPU unary predicate (isnan / isinf / "
                             "isfinite) — the hand-written AVX-512 kernel "
                             "(tessera_x86_avx512_predicate_f32; mask -> 0/1 "
@@ -493,6 +497,14 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "transposed matrix-free diagonal solve, and "
                             "parameter-residual adjoint in one typed package; "
                             "content-addressed f32 contract",
+    "rocm_general_solver_compiled": "gfx1151 content-addressed matrix-free "
+                            "solver parent over immutable residual and "
+                            "solution/parameter JVP/VJP native children; "
+                            "restarted GMRES with true-residual checks",
+    "rocm_solver_graph_compiled": "Compiler-generated straight-line residual, "
+                            "JVP, or VJP SSA program composed exclusively from "
+                            "native gfx1151 unary/binary packages; static "
+                            "shape-preserving f32 and content-addressed",
     "rocm_jvp_compiled": "gfx1151 content-addressed forward-product package; "
                             "executes compiler-bound primal and tangent child "
                             "Tile packages without returning to Graph IR",
@@ -676,6 +688,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "x86_solver_ift_compiled": "x86 AVX-512 residual, transposed matrix-free "
                             "diagonal solve, and parameter-residual adjoint in "
                             "one typed content-addressed f32 package",
+    "x86_general_solver_compiled": "x86 AVX-512 content-addressed matrix-free "
+                            "solver parent over immutable residual and "
+                            "solution/parameter JVP/VJP native children; "
+                            "restarted GMRES with true-residual checks",
     "x86_jvp_compiled": "Zen 5 AVX-512 content-addressed forward-product "
                             "package; executes compiler-bound primal and "
                             "tangent child packages without Graph redispatch",
@@ -1767,6 +1783,27 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         evidence_target="x86_avx512",
         proof_build="build-rocm-7.14-llvm23-clean",
         numerical_fixture="tests/unit/test_solver_ift_artifact.py"),
+    ("x86", "x86_general_solver_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_general_solver_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_general_solver_compiled", runtime_status="success",
+        reason="A content-addressed matrix-free solver parent invokes exact "
+               "AVX-512 residual and JVP/VJP child packages under restarted "
+               "GMRES with a true-residual convergence check.",
+        execution_mode="cpu_avx512", direction="forward_backward",
+        op_family="solver_ift", device_proof="host_verified_abi",
+        evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_solver_ift_artifact.py"),
+    ("x86", "x86_solver_graph_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_solver_graph_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_solver_graph_compiled", runtime_status="success",
+        reason="Compiler-generated residual/JVP/VJP SSA executes only through "
+               "registered AVX-512 pointwise children and never re-enters Graph IR.",
+        execution_mode="cpu_avx512", direction="forward_backward",
+        op_family="solver_ift", device_proof="host_verified_abi",
+        evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_solver_ift_artifact.py"),
     ("x86", "x86_es_low_rank_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_es_low_rank_compiled",
         execution_kind="native_cpu", executable=True,
@@ -2654,6 +2691,27 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         op_family="solver_ift", device_proof="device_verified_abi",
         evidence_target="rocm_gfx1151",
         proof_build="build-rocm-7.14-llvm23-clean",
+        numerical_fixture="tests/unit/test_solver_ift_artifact.py"),
+    ("rocm", "rocm_general_solver_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_general_solver_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_general_solver_compiled", runtime_status="success",
+        reason="A content-addressed matrix-free solver parent invokes exact "
+               "gfx1151 residual and JVP/VJP child packages under restarted "
+               "GMRES with a true-residual convergence check.",
+        execution_mode="hip_runtime", direction="forward_backward",
+        op_family="solver_ift", device_proof="device_verified_abi",
+        evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_solver_ift_artifact.py"),
+    ("rocm", "rocm_solver_graph_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_solver_graph_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_solver_graph_compiled", runtime_status="success",
+        reason="Compiler-generated residual/JVP/VJP SSA executes only through "
+               "registered gfx1151 pointwise children and never re-enters Graph IR.",
+        execution_mode="hip_runtime", direction="forward_backward",
+        op_family="solver_ift", device_proof="device_verified_abi",
+        evidence_target="rocm_gfx1151",
         numerical_fixture="tests/unit/test_solver_ift_artifact.py"),
     # Binary arithmetic — flat 2-operand elementwise.
     ("rocm", "rocm_binary_compiled"): ExecutionRow(

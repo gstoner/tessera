@@ -956,14 +956,10 @@ extern "C" int tessera_x86_stft_f32(
     return 0;
 }
 
-extern "C" int tessera_x86_istft_f32(
-    const char* digest, const float* input, const float* window, float* output,
-    int64_t batch, int64_t frames, int64_t win, int64_t hop,
-    float output_scale) {
-    if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
-        frames <= 0 || win <= 0 || hop <= 0) return 1;
-    const int64_t rows = batch * frames, bins = win / 2 + 1;
-    const int64_t samples = (frames - 1) * hop + win;
+static int tessera_x86_istft_frames_f32(
+    const char* digest, const float* input, float* frames_out,
+    int64_t rows, int64_t win) {
+    const int64_t bins = win / 2 + 1;
     if (win & 1) {
         auto fullOwner = spectral_workspace(
             digest, "istft_odd_full", static_cast<size_t>(2 * rows * win));
@@ -982,25 +978,26 @@ extern "C" int tessera_x86_istft_f32(
             }
         }
         if (execute_any_fft(full.data(), rows, win, true, digest)) return 2;
-        for (int64_t row = 0; row < batch; ++row)
-            for (int64_t sample = 0; sample < samples; ++sample) {
-                float sum = 0.0f, weight = 0.0f;
-                for (int64_t frame = 0; frame < frames; ++frame) {
-                    const int64_t local = sample - frame * hop;
-                    if (local < 0 || local >= win) continue;
-                    const float w = window[local];
-                    sum += full[2 * ((row * frames + frame) * win + local)] * w;
-                    weight += w * w;
-                }
-                output[row * samples + sample] =
-                    (sum / std::max(weight, 1.0e-12f)) * output_scale;
-            }
+        for (int64_t i = 0; i < rows * win; ++i)
+            frames_out[i] = full[2 * i];
         return 0;
     }
+    return tessera_x86_fft_c2r_packed_f32(
+        digest, input, frames_out, rows, win);
+}
+
+extern "C" int tessera_x86_istft_f32(
+    const char* digest, const float* input, const float* window, float* output,
+    int64_t batch, int64_t frames, int64_t win, int64_t hop,
+    float output_scale) {
+    if (!valid_digest(digest) || !input || !window || !output || batch <= 0 ||
+        frames <= 0 || win <= 0 || hop <= 0) return 1;
+    const int64_t rows = batch * frames;
+    const int64_t samples = (frames - 1) * hop + win;
     auto framesOwner = spectral_workspace(
         digest, "istft_frames_real", static_cast<size_t>(rows * win));
     std::vector<float>& framed = *framesOwner;
-    if (tessera_x86_fft_c2r_packed_f32(
+    if (tessera_x86_istft_frames_f32(
             digest, input, framed.data(), rows, win)) return 2;
     for (int64_t row = 0; row < batch; ++row)
         for (int64_t sample = 0; sample < samples; ++sample) {
@@ -1015,6 +1012,58 @@ extern "C" int tessera_x86_istft_f32(
             output[row * samples + sample] =
                 (sum / std::max(weight, 1.0e-12f)) * output_scale;
         }
+    return 0;
+}
+
+// Exact forward product for ISTFT with both spectrum and window active.
+// If a tangent pointer is null, its contribution is zero.  The window term
+// differentiates both the overlap-add numerator and its quadratic window-
+// energy denominator; composing two ordinary ISTFT calls is not equivalent.
+extern "C" int tessera_x86_istft_jvp_f32(
+    const char* digest, const float* input, const float* window,
+    const float* dinput, const float* dwindow, float* primal, float* tangent,
+    int64_t batch, int64_t frames, int64_t win, int64_t hop,
+    float output_scale) {
+    if (!valid_digest(digest) || !input || !window || !primal || !tangent ||
+        batch <= 0 || frames <= 0 || win <= 0 || hop <= 0 ||
+        (!dinput && !dwindow)) return 1;
+    const int64_t rows = batch * frames;
+    const int64_t samples = (frames - 1) * hop + win;
+    auto baseOwner = spectral_workspace(
+        digest, "istft_jvp_base", static_cast<size_t>(rows * win));
+    std::vector<float>& base = *baseOwner;
+    if (tessera_x86_istft_frames_f32(
+            digest, input, base.data(), rows, win)) return 2;
+    std::vector<float> dframes;
+    if (dinput) {
+        dframes.resize(static_cast<size_t>(rows * win));
+        if (tessera_x86_istft_frames_f32(
+                digest, dinput, dframes.data(), rows, win)) return 3;
+    }
+    for (int64_t row = 0; row < batch; ++row) {
+        for (int64_t sample = 0; sample < samples; ++sample) {
+            float numerator = 0.0f, denominator = 0.0f;
+            float dnumerator = 0.0f, ddenominator = 0.0f;
+            for (int64_t frame = 0; frame < frames; ++frame) {
+                const int64_t local = sample - frame * hop;
+                if (local < 0 || local >= win) continue;
+                const int64_t at = (row * frames + frame) * win + local;
+                const float w = window[local];
+                const float dw = dwindow ? dwindow[local] : 0.0f;
+                numerator += base[at] * w;
+                denominator += w * w;
+                dnumerator += (dinput ? dframes[at] * w : 0.0f) +
+                              base[at] * dw;
+                ddenominator += 2.0f * w * dw;
+            }
+            const float safe = std::max(denominator, 1.0e-12f);
+            const int64_t out = row * samples + sample;
+            primal[out] = numerator / safe * output_scale;
+            tangent[out] =
+                (dnumerator / safe - numerator * ddenominator / (safe * safe)) *
+                output_scale;
+        }
+    }
     return 0;
 }
 

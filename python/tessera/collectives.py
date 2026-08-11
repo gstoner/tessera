@@ -25,7 +25,10 @@ COLLECTIVE_STATUSES = {"mock", "single_process", "backend_unavailable", "hardwar
 
 
 def _communicator_capability_snapshot(
-    *, backend: str, topology: dict[str, Any], version_code: int,
+    *,
+    backend: str,
+    topology: dict[str, Any],
+    version_code: int,
     ranks: list[dict[str, Any]],
 ) -> dict[str, Any]:
     world_size = int(topology["world_size"])
@@ -84,13 +87,11 @@ class CollectiveTopology:
         }
 
 
-def collective_topology(*, backend: str, world_size: int,
-                        device_ordinals: tuple[int, ...] | None = None,
-                        cta_policy: str = "default") -> CollectiveTopology:
+def collective_topology(
+    *, backend: str, world_size: int, device_ordinals: tuple[int, ...] | None = None, cta_policy: str = "default"
+) -> CollectiveTopology:
     devices = tuple(range(world_size)) if device_ordinals is None else tuple(device_ordinals)
-    return CollectiveTopology(
-        backend, int(world_size), devices, tuple(range(int(world_size))), cta_policy
-    )
+    return CollectiveTopology(backend, int(world_size), devices, tuple(range(int(world_size))), cta_policy)
 
 
 def _native_probe(topology: CollectiveTopology) -> tuple[bool, str]:
@@ -99,23 +100,16 @@ def _native_probe(topology: CollectiveTopology) -> tuple[bool, str]:
     runtime_name = ctypes.util.find_library(runtime_library)
     runtime_label = "CUDA" if topology.backend == "nccl" else "HIP"
     if not collective_name or not runtime_name:
-        return False, (
-            f"{topology.backend} and {runtime_label} runtime libraries must both be loadable"
-        )
+        return False, (f"{topology.backend} and {runtime_label} runtime libraries must both be loadable")
     runtime = ctypes.CDLL(runtime_name)
     count = ctypes.c_int()
-    get_count = (
-        runtime.cudaGetDeviceCount
-        if topology.backend == "nccl"
-        else runtime.hipGetDeviceCount
-    )
+    get_count = runtime.cudaGetDeviceCount if topology.backend == "nccl" else runtime.hipGetDeviceCount
     if get_count(ctypes.byref(count)) != 0:
         return False, f"{runtime_label} device enumeration failed"
     highest = max(topology.device_ordinals)
     if count.value <= highest:
         return False, (
-            f"topology requires {runtime_label} device ordinal {highest}, "
-            f"but only {count.value} device(s) are visible"
+            f"topology requires {runtime_label} device ordinal {highest}, but only {count.value} device(s) are visible"
         )
     return True, ""
 
@@ -193,6 +187,7 @@ class _NCCLExecutor:
         self._malloc = getattr(self.cuda, f"{prefix}Malloc")
         self._free = getattr(self.cuda, f"{prefix}Free")
         self._memcpy = getattr(self.cuda, f"{prefix}Memcpy")
+        self._memset = getattr(self.cuda, f"{prefix}Memset")
         self._stream_create = getattr(self.cuda, f"{prefix}StreamCreate")
         self._stream_synchronize = getattr(self.cuda, f"{prefix}StreamSynchronize")
         self._stream_destroy = getattr(self.cuda, f"{prefix}StreamDestroy")
@@ -200,11 +195,11 @@ class _NCCLExecutor:
         self._malloc.argtypes = [ctypes.POINTER(void_p), ctypes.c_size_t]
         self._free.argtypes = [void_p]
         self._memcpy.argtypes = [void_p, void_p, ctypes.c_size_t, ctypes.c_int]
+        self._memset.argtypes = [void_p, ctypes.c_int, ctypes.c_size_t]
         self._stream_create.argtypes = [ctypes.POINTER(void_p)]
         self._stream_synchronize.argtypes = [void_p]
         self._stream_destroy.argtypes = [void_p]
-        self.nccl.ncclCommInitAll.argtypes = [ctypes.POINTER(void_p), ctypes.c_int,
-                                             ctypes.POINTER(ctypes.c_int)]
+        self.nccl.ncclCommInitAll.argtypes = [ctypes.POINTER(void_p), ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
         self.nccl.ncclCommDestroy.argtypes = [void_p]
         self._version_code = ctypes.c_int()
         self.nccl.ncclGetVersion.argtypes = [ctypes.POINTER(ctypes.c_int)]
@@ -219,12 +214,8 @@ class _NCCLExecutor:
         if topology.cta_policy == "zero":
             self._symmetric_alloc = getattr(self.nccl, "ncclMemAlloc", None)
             self._symmetric_free = getattr(self.nccl, "ncclMemFree", None)
-            self._window_register = getattr(
-                self.nccl, "ncclCommWindowRegister", None
-            )
-            self._window_deregister = getattr(
-                self.nccl, "ncclCommWindowDeregister", None
-            )
+            self._window_register = getattr(self.nccl, "ncclCommWindowRegister", None)
+            self._window_deregister = getattr(self.nccl, "ncclCommWindowDeregister", None)
             if not all(
                 (
                     self._symmetric_alloc,
@@ -233,39 +224,41 @@ class _NCCLExecutor:
                     self._window_deregister,
                 )
             ):
-                raise RuntimeError(
-                    "zero-CTA communicator requires RCCL symmetric-memory APIs"
-                )
+                raise RuntimeError("zero-CTA communicator requires RCCL symmetric-memory APIs")
             assert self._symmetric_alloc is not None
             assert self._symmetric_free is not None
             assert self._window_register is not None
             assert self._window_deregister is not None
-            self._symmetric_alloc.argtypes = [
-                ctypes.POINTER(void_p), ctypes.c_size_t
-            ]
+            self._symmetric_alloc.argtypes = [ctypes.POINTER(void_p), ctypes.c_size_t]
             self._symmetric_free.argtypes = [void_p]
             self._window_register.argtypes = [
-                void_p, void_p, ctypes.c_size_t, ctypes.POINTER(void_p),
+                void_p,
+                void_p,
+                ctypes.c_size_t,
+                ctypes.POINTER(void_p),
                 ctypes.c_int,
             ]
             self._window_deregister.argtypes = [void_p, void_p]
         for name in ("ncclAllReduce", "ncclReduceScatter"):
-            getattr(self.nccl, name).argtypes = [void_p, void_p, ctypes.c_size_t,
-                ctypes.c_int, ctypes.c_int, void_p, void_p]
-        self.nccl.ncclAllGather.argtypes = [void_p, void_p, ctypes.c_size_t,
-            ctypes.c_int, void_p, void_p]
+            getattr(self.nccl, name).argtypes = [
+                void_p,
+                void_p,
+                ctypes.c_size_t,
+                ctypes.c_int,
+                ctypes.c_int,
+                void_p,
+                void_p,
+            ]
+        self.nccl.ncclAllGather.argtypes = [void_p, void_p, ctypes.c_size_t, ctypes.c_int, void_p, void_p]
         for name in ("ncclSend", "ncclRecv"):
-            getattr(self.nccl, name).argtypes = [void_p, ctypes.c_size_t,
-                ctypes.c_int, ctypes.c_int, void_p, void_p]
+            getattr(self.nccl, name).argtypes = [void_p, ctypes.c_size_t, ctypes.c_int, ctypes.c_int, void_p, void_p]
         self.comms = (ctypes.c_void_p * topology.world_size)()
         devices = (ctypes.c_int * topology.world_size)(*topology.device_ordinals)
         if topology.cta_policy == "zero":
             self._init_rank_configured_communicators()
         else:
             self._check_nccl(
-                self.nccl.ncclCommInitAll(
-                    self.comms, topology.world_size, devices
-                ),
+                self.nccl.ncclCommInitAll(self.comms, topology.world_size, devices),
                 "communicator init",
             )
         self._communicator_property_error = ""
@@ -274,13 +267,14 @@ class _NCCLExecutor:
     def _init_rank_configured_communicators(self) -> None:
         self.nccl.ncclGetUniqueId.argtypes = [ctypes.POINTER(self._UniqueId)]
         self.nccl.ncclCommInitRankConfig.argtypes = [
-            ctypes.POINTER(ctypes.c_void_p), ctypes.c_int, self._UniqueId,
-            ctypes.c_int, ctypes.POINTER(self._Config),
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.c_int,
+            self._UniqueId,
+            ctypes.c_int,
+            ctypes.POINTER(self._Config),
         ]
         unique_id = self._UniqueId()
-        self._check_nccl(
-            self.nccl.ncclGetUniqueId(ctypes.byref(unique_id)), "unique ID query"
-        )
+        self._check_nccl(self.nccl.ncclGetUniqueId(ctypes.byref(unique_id)), "unique ID query")
         undefined = -(2**31)
 
         def initialize(rank: int) -> tuple[int, int, int | None]:
@@ -301,8 +295,11 @@ class _NCCLExecutor:
             communicator = ctypes.c_void_p()
             rc = int(
                 self.nccl.ncclCommInitRankConfig(
-                    ctypes.byref(communicator), self.topology.world_size,
-                    unique_id, rank, ctypes.byref(config),
+                    ctypes.byref(communicator),
+                    self.topology.world_size,
+                    unique_id,
+                    rank,
+                    ctypes.byref(config),
                 )
             )
             return rank, rc, communicator.value
@@ -316,9 +313,7 @@ class _NCCLExecutor:
     def _query_communicator_properties(self) -> dict[str, Any] | None:
         query = getattr(self.nccl, "ncclCommQueryProperties", None)
         if query is None:
-            self._communicator_property_error = (
-                f"{self._collective_label} communicator property query is unavailable"
-            )
+            self._communicator_property_error = f"{self._collective_label} communicator property query is unavailable"
             return None
         query.argtypes = [ctypes.c_void_p, ctypes.POINTER(self._CommProperties)]
         rows: list[dict[str, Any]] = []
@@ -372,10 +367,7 @@ class _NCCLExecutor:
         if rc:
             self.nccl.ncclGetErrorString.restype = ctypes.c_char_p
             detail = self.nccl.ncclGetErrorString(rc)
-            raise RuntimeError(
-                f"{self._collective_label} {where} failed: "
-                f"{(detail or b'unknown').decode()}"
-            )
+            raise RuntimeError(f"{self._collective_label} {where} failed: {(detail or b'unknown').decode()}")
 
     def _register_symmetric_windows(
         self,
@@ -396,15 +388,21 @@ class _NCCLExecutor:
             receive_window = ctypes.c_void_p()
             self._check_nccl(
                 window_register(
-                    self.comms[rank], sends[rank], send_bytes,
-                    ctypes.byref(send_window), 0x01,
+                    self.comms[rank],
+                    sends[rank],
+                    send_bytes,
+                    ctypes.byref(send_window),
+                    0x01,
                 ),
                 "send-window registration",
             )
             self._check_nccl(
                 window_register(
-                    self.comms[rank], recvs[rank], receive_bytes,
-                    ctypes.byref(receive_window), 0x01,
+                    self.comms[rank],
+                    recvs[rank],
+                    receive_bytes,
+                    ctypes.byref(receive_window),
+                    0x01,
                 ),
                 "receive-window registration",
             )
@@ -420,7 +418,9 @@ class _NCCLExecutor:
         streams: list[ctypes.c_void_p] = []
         for rank, (array, output_shape) in enumerate(zip(arrays, output_shapes)):
             self._check_device(self._set_device(self.topology.device_ordinals[rank]), "set device")
-            send = ctypes.c_void_p(); recv = ctypes.c_void_p(); stream = ctypes.c_void_p()
+            send = ctypes.c_void_p()
+            recv = ctypes.c_void_p()
+            stream = ctypes.c_void_p()
             if self._symmetric_alloc is not None:
                 self._check_nccl(
                     self._symmetric_alloc(ctypes.byref(send), array.nbytes),
@@ -443,13 +443,19 @@ class _NCCLExecutor:
                     "receive allocation",
                 )
             self._check_device(self._stream_create(ctypes.byref(stream)), "stream creation")
-            self._check_device(self._memcpy(send, ctypes.c_void_p(array.ctypes.data), array.nbytes, self._H2D), "host-to-device copy")
-            sends.append(send); recvs.append(recv); streams.append(stream)
+            self._check_device(
+                self._memcpy(send, ctypes.c_void_p(array.ctypes.data), array.nbytes, self._H2D), "host-to-device copy"
+            )
+            sends.append(send)
+            recvs.append(recv)
+            streams.append(stream)
         send_windows: list[ctypes.c_void_p] = []
         receive_windows: list[ctypes.c_void_p] = []
         if self._window_register is not None:
             send_windows, receive_windows = self._register_symmetric_windows(
-                sends, recvs, arrays[0].nbytes,
+                sends,
+                recvs,
+                arrays[0].nbytes,
                 int(np.prod(output_shapes[0], dtype=np.int64)) * 4,
             )
         return sends, recvs, streams, send_windows, receive_windows
@@ -460,15 +466,17 @@ class _NCCLExecutor:
             self._check_device(self._set_device(self.topology.device_ordinals[rank]), "set device")
             self._check_device(self._stream_synchronize(streams[rank]), "stream synchronization")
             output = np.empty(shape, np.float32)
-            self._check_device(self._memcpy(ctypes.c_void_p(output.ctypes.data), recvs[rank], output.nbytes, self._D2H), "device-to-host copy")
+            self._check_device(
+                self._memcpy(ctypes.c_void_p(output.ctypes.data), recvs[rank], output.nbytes, self._D2H),
+                "device-to-host copy",
+            )
             outputs.append(output)
         return outputs
 
-    def _cleanup(
-        self, sends, recvs, streams, send_windows, receive_windows
-    ) -> None:
+    def _cleanup(self, sends, recvs, streams, send_windows, receive_windows) -> None:
         window_deregister = self._window_deregister
         if window_deregister is not None:
+
             def deregister(rank: int) -> None:
                 self._check_device(
                     self._set_device(self.topology.device_ordinals[rank]),
@@ -476,16 +484,12 @@ class _NCCLExecutor:
                 )
                 if send_windows[rank]:
                     self._check_nccl(
-                        window_deregister(
-                            self.comms[rank], send_windows[rank]
-                        ),
+                        window_deregister(self.comms[rank], send_windows[rank]),
                         "send-window deregistration",
                     )
                 if receive_windows[rank]:
                     self._check_nccl(
-                        window_deregister(
-                            self.comms[rank], receive_windows[rank]
-                        ),
+                        window_deregister(self.comms[rank], receive_windows[rank]),
                         "receive-window deregistration",
                     )
 
@@ -495,28 +499,33 @@ class _NCCLExecutor:
             self._set_device(self.topology.device_ordinals[rank])
             if self._symmetric_free is not None:
                 if sends[rank]:
-                    self._check_nccl(
-                        self._symmetric_free(sends[rank]), "symmetric send free"
-                    )
+                    self._check_nccl(self._symmetric_free(sends[rank]), "symmetric send free")
                 if recvs[rank]:
                     self._check_nccl(
                         self._symmetric_free(recvs[rank]),
                         "symmetric receive free",
                     )
             else:
-                if sends[rank]: self._free(sends[rank])
-                if recvs[rank]: self._free(recvs[rank])
-            if streams[rank]: self._stream_destroy(streams[rank])
+                if sends[rank]:
+                    self._free(sends[rank])
+                if recvs[rank]:
+                    self._free(recvs[rank])
+            if streams[rank]:
+                self._stream_destroy(streams[rank])
 
-    def run(self, kind: str, values: list[Any], *, op: str = "sum") -> list[np.ndarray]:
+    def run(
+        self,
+        kind: str,
+        values: list[Any],
+        *,
+        op: str = "sum",
+        peer_pairs: tuple[tuple[int, int], ...] = (),
+    ) -> list[np.ndarray]:
         if op != "sum":
             raise ValueError("native collective v1 executor supports sum reductions only")
         source_arrays = [np.asarray(value) for value in values]
         if any(array.dtype != np.float32 for array in source_arrays):
-            raise ValueError(
-                "native collective v1 supports fp32 storage only; implicit dtype "
-                "conversion is forbidden"
-            )
+            raise ValueError("native collective v1 supports fp32 storage only; implicit dtype conversion is forbidden")
         arrays = [np.ascontiguousarray(value) for value in source_arrays]
         if any(array.shape != arrays[0].shape for array in arrays):
             raise ValueError("collective rank inputs must have identical shapes")
@@ -529,23 +538,46 @@ class _NCCLExecutor:
             output_shapes = [(arrays[0].shape[0] // world,) + arrays[0].shape[1:]] * world
         else:
             output_shapes = [arrays[0].shape] * world
-        sends, recvs, streams, send_windows, receive_windows = self._allocate(
-            arrays, output_shapes
-        )
+        sends, recvs, streams, send_windows, receive_windows = self._allocate(arrays, output_shapes)
         try:
+            if kind == "collective_permute":
+                for rank in range(world):
+                    self._check_device(
+                        self._set_device(self.topology.device_ordinals[rank]),
+                        "set device for collective_permute zero fill",
+                    )
+                    self._check_device(
+                        self._memset(recvs[rank], 0, arrays[rank].nbytes),
+                        "collective_permute zero fill",
+                    )
             self._check_nccl(self.nccl.ncclGroupStart(), "group start")
             if kind == "all_reduce":
                 count = arrays[0].size
                 for rank in range(world):
-                    self._check_nccl(self.nccl.ncclAllReduce(sends[rank], recvs[rank], count, self._F32, self._SUM, self.comms[rank], streams[rank]), "all_reduce")
+                    self._check_nccl(
+                        self.nccl.ncclAllReduce(
+                            sends[rank], recvs[rank], count, self._F32, self._SUM, self.comms[rank], streams[rank]
+                        ),
+                        "all_reduce",
+                    )
             elif kind == "all_gather":
                 count = arrays[0].size
                 for rank in range(world):
-                    self._check_nccl(self.nccl.ncclAllGather(sends[rank], recvs[rank], count, self._F32, self.comms[rank], streams[rank]), "all_gather")
+                    self._check_nccl(
+                        self.nccl.ncclAllGather(
+                            sends[rank], recvs[rank], count, self._F32, self.comms[rank], streams[rank]
+                        ),
+                        "all_gather",
+                    )
             elif kind == "reduce_scatter":
                 count = arrays[0].size // world
                 for rank in range(world):
-                    self._check_nccl(self.nccl.ncclReduceScatter(sends[rank], recvs[rank], count, self._F32, self._SUM, self.comms[rank], streams[rank]), "reduce_scatter")
+                    self._check_nccl(
+                        self.nccl.ncclReduceScatter(
+                            sends[rank], recvs[rank], count, self._F32, self._SUM, self.comms[rank], streams[rank]
+                        ),
+                        "reduce_scatter",
+                    )
             elif kind == "all_to_all":
                 if arrays[0].ndim < 1 or arrays[0].shape[0] % world:
                     raise ValueError("all_to_all scatter axis 0 must divide evenly across ranks")
@@ -555,16 +587,45 @@ class _NCCLExecutor:
                     for peer in range(world):
                         send = ctypes.c_void_p(sends[source].value + peer * stride)
                         recv = ctypes.c_void_p(recvs[source].value + peer * stride)
-                        self._check_nccl(self.nccl.ncclSend(send, count, self._F32, peer, self.comms[source], streams[source]), "send")
-                        self._check_nccl(self.nccl.ncclRecv(recv, count, self._F32, peer, self.comms[source], streams[source]), "receive")
+                        self._check_nccl(
+                            self.nccl.ncclSend(send, count, self._F32, peer, self.comms[source], streams[source]),
+                            "send",
+                        )
+                        self._check_nccl(
+                            self.nccl.ncclRecv(recv, count, self._F32, peer, self.comms[source], streams[source]),
+                            "receive",
+                        )
+            elif kind == "collective_permute":
+                count = arrays[0].size
+                for source, target in peer_pairs:
+                    self._check_nccl(
+                        self.nccl.ncclSend(
+                            sends[source],
+                            count,
+                            self._F32,
+                            target,
+                            self.comms[source],
+                            streams[source],
+                        ),
+                        "collective_permute send",
+                    )
+                    self._check_nccl(
+                        self.nccl.ncclRecv(
+                            recvs[target],
+                            count,
+                            self._F32,
+                            source,
+                            self.comms[target],
+                            streams[target],
+                        ),
+                        "collective_permute receive",
+                    )
             else:
                 raise ValueError(f"unsupported native collective {kind!r}")
             self._check_nccl(self.nccl.ncclGroupEnd(), "group end")
             return self._finish(recvs, streams, output_shapes)
         finally:
-            self._cleanup(
-                sends, recvs, streams, send_windows, receive_windows
-            )
+            self._cleanup(sends, recvs, streams, send_windows, receive_windows)
 
     def close(self) -> None:
         for comm in self.comms:
@@ -596,25 +657,33 @@ class CollectiveBackendStatus:
 class CollectiveAdapter:
     """Small collective adapter with explicit backend status."""
 
-    def __init__(self, *, backend: str = "mock", world_size: int = 1, mesh_axes: dict[str, int] | None = None,
-                 device_ordinals: tuple[int, ...] | None = None,
-                 cta_policy: str = "default") -> None:
+    def __init__(
+        self,
+        *,
+        backend: str = "mock",
+        world_size: int = 1,
+        mesh_axes: dict[str, int] | None = None,
+        device_ordinals: tuple[int, ...] | None = None,
+        cta_policy: str = "default",
+    ) -> None:
         self.backend = backend
         self.world_size = int(world_size)
         if self.world_size < 1:
             raise ValueError("collective adapter world_size must be positive")
         self.mesh_axes = dict(mesh_axes or {"dp": self.world_size})
-        if not self.mesh_axes or any(
-            not str(axis) or int(size) < 1 for axis, size in self.mesh_axes.items()
-        ):
+        if not self.mesh_axes or any(not str(axis) or int(size) < 1 for axis, size in self.mesh_axes.items()):
             raise ValueError("collective mesh axes require non-empty names and positive sizes")
         if self.backend == "mock" and self.world_size > 1:
             self._group: MockRankGroup | None = MockRankGroup(self.world_size, self.mesh_axes)
         else:
             self._group = None
-        self._topology = (collective_topology(backend=backend, world_size=self.world_size,
-                          device_ordinals=device_ordinals, cta_policy=cta_policy)
-                          if backend in {"nccl", "rccl"} and self.world_size > 1 else None)
+        self._topology = (
+            collective_topology(
+                backend=backend, world_size=self.world_size, device_ordinals=device_ordinals, cta_policy=cta_policy
+            )
+            if backend in {"nccl", "rccl"} and self.world_size > 1
+            else None
+        )
         self._native: _NCCLExecutor | None = None
 
     def status(self) -> CollectiveBackendStatus:
@@ -628,16 +697,17 @@ class CollectiveAdapter:
                 self.backend,
                 "hardware_runtime" if ready else "backend_unavailable",
                 reason=(
-                    ""
-                    if ready
-                    else f"{self.backend} native collective runtime is not wired on this host: {reason}"
+                    "" if ready else f"{self.backend} native collective runtime is not wired on this host: {reason}"
                 ),
                 world_size=self.world_size,
             )
         if self.backend == "mpi":
-            return CollectiveBackendStatus(self.backend, "backend_unavailable",
+            return CollectiveBackendStatus(
+                self.backend,
+                "backend_unavailable",
                 reason=f"{self.backend} native collective runtime is not wired on this host",
-                world_size=self.world_size)
+                world_size=self.world_size,
+            )
         return CollectiveBackendStatus(
             self.backend,
             "backend_unavailable",
@@ -652,13 +722,15 @@ class CollectiveAdapter:
 
     def reduce_scatter(self, values, *, axis: int = 0, op: str = "sum"):
         if self.backend in {"nccl", "rccl"} and self.world_size > 1:
-            if axis != 0: raise ValueError("NCCL reduce_scatter v1 requires axis=0")
+            if axis != 0:
+                raise ValueError("NCCL reduce_scatter v1 requires axis=0")
             return self._run_native("reduce_scatter", values, op=op)
         return self._run(lambda rank, value: rank.reduce_scatter(value, axis=axis, op=op), values)
 
     def all_gather(self, values, *, axis: int = 0):
         if self.backend in {"nccl", "rccl"} and self.world_size > 1:
-            if axis != 0: raise ValueError("NCCL all_gather v1 requires axis=0")
+            if axis != 0:
+                raise ValueError("NCCL all_gather v1 requires axis=0")
             return self._run_native("all_gather", values)
         return self._run(lambda rank, value: rank.all_gather(value, axis=axis), values)
 
@@ -667,16 +739,53 @@ class CollectiveAdapter:
             if scatter_axis != 0 or gather_axis != 0:
                 raise ValueError("NCCL all_to_all v1 requires scatter_axis=gather_axis=0")
             return self._run_native("all_to_all", values)
-        return self._run(lambda rank, value: rank.all_to_all(value, scatter_axis=scatter_axis, gather_axis=gather_axis), values)
+        return self._run(
+            lambda rank, value: rank.all_to_all(value, scatter_axis=scatter_axis, gather_axis=gather_axis), values
+        )
 
-    def _run_native(self, kind: str, values, *, op: str = "sum"):
+    def collective_permute(self, values, *, pairs: tuple[tuple[int, int], ...]):
+        sources = tuple(int(source) for source, _ in pairs)
+        targets = tuple(int(target) for _, target in pairs)
+        if not pairs:
+            raise ValueError("collective_permute requires a non-empty peer map")
+        if len(set(sources)) != len(sources) or len(set(targets)) != len(targets):
+            raise ValueError("collective_permute sources and targets must be unique")
+        if any(peer < 0 or peer >= self.world_size for peer in (*sources, *targets)):
+            raise ValueError("collective_permute peer is outside the communicator")
+        per_rank = _per_rank_values(values, self.world_size)
+        if self.backend in {"nccl", "rccl"} and self.world_size > 1:
+            return self._run_native("collective_permute", per_rank, peer_pairs=tuple(pairs))
+        status = self.status()
+        if status.status == "backend_unavailable":
+            raise RuntimeError(status.reason)
+        arrays = [np.asarray(value) for value in per_rank]
+        if any(array.shape != arrays[0].shape for array in arrays):
+            raise ValueError("collective_permute rank inputs must have identical shapes")
+        outputs = [np.zeros_like(arrays[0]) for _ in range(self.world_size)]
+        for source, target in pairs:
+            outputs[target] = np.array(arrays[source], copy=True)
+        return outputs
+
+    def _run_native(
+        self,
+        kind: str,
+        values,
+        *,
+        op: str = "sum",
+        peer_pairs: tuple[tuple[int, int], ...] = (),
+    ):
         status = self.status()
         if not status.available:
             raise RuntimeError(status.reason)
         assert self._topology is not None
         if self._native is None:
             self._native = _NCCLExecutor(self._topology)
-        return self._native.run(kind, _per_rank_values(values, self.world_size), op=op)
+        return self._native.run(
+            kind,
+            _per_rank_values(values, self.world_size),
+            op=op,
+            peer_pairs=peer_pairs,
+        )
 
     def close(self) -> None:
         if self._native is not None:
@@ -708,11 +817,21 @@ class CollectiveAdapter:
         return self._group.run(lambda rank: fn(rank, np.asarray(per_rank[rank.rank])))
 
 
-def adapter(*, backend: str = "mock", world_size: int = 1, mesh_axes: dict[str, int] | None = None,
-            device_ordinals: tuple[int, ...] | None = None,
-            cta_policy: str = "default") -> CollectiveAdapter:
-    return CollectiveAdapter(backend=backend, world_size=world_size, mesh_axes=mesh_axes,
-                             device_ordinals=device_ordinals, cta_policy=cta_policy)
+def adapter(
+    *,
+    backend: str = "mock",
+    world_size: int = 1,
+    mesh_axes: dict[str, int] | None = None,
+    device_ordinals: tuple[int, ...] | None = None,
+    cta_policy: str = "default",
+) -> CollectiveAdapter:
+    return CollectiveAdapter(
+        backend=backend,
+        world_size=world_size,
+        mesh_axes=mesh_axes,
+        device_ordinals=device_ordinals,
+        cta_policy=cta_policy,
+    )
 
 
 def query_backend(backend: str = "mock", *, world_size: int = 1) -> dict[str, Any]:

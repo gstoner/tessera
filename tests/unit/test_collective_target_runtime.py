@@ -110,6 +110,45 @@ def test_native_collective_product_requires_linear_hardware_transport() -> None:
         build_native_collective_product_artifact(nonlinear)
 
 
+def test_native_collective_permute_product_reuses_exact_peer_map() -> None:
+    contract = CollectiveExecutionContract(backend="rccl")
+    record = {
+        **_record("collective_permute", "x"),
+        "source_peers": [0, 1],
+        "target_peers": [1, 0],
+    }
+    artifact = CollectiveTargetArtifact(
+        "rocm_gfx1151", (record,), contract, "c" * 64
+    )
+    product = build_native_collective_product_artifact(artifact)
+
+    class Status:
+        status = "hardware_runtime"
+
+    class FakeRCCL:
+        backend = "rccl"
+        world_size = 2
+        mesh_axes = {"dp": 2}
+        calls: list[tuple[tuple[int, int], ...]] = []
+
+        def status(self):
+            return Status()
+
+        def collective_permute(self, values, *, pairs):
+            self.calls.append(pairs)
+            return [values[1].copy(), values[0].copy()]
+
+    adapter = FakeRCCL()
+    primal_runtime, tangent_runtime = product.execute(
+        adapter=adapter,
+        primals={"x": [np.array([1.0]), np.array([2.0])]},
+        tangents={"x": [np.array([3.0]), np.array([5.0])]},
+    )
+    assert adapter.calls == [((0, 1), (1, 0)), ((0, 1), (1, 0))]
+    np.testing.assert_array_equal(primal_runtime.values("x")[0], [2.0])
+    np.testing.assert_array_equal(tangent_runtime.values("x")[0], [5.0])
+
+
 def test_target_collective_rejects_runtime_topology_mismatch() -> None:
     adapter = collectives.adapter(backend="single_process", world_size=1)
     with pytest.raises(RuntimeError, match="targets world_size=2"):

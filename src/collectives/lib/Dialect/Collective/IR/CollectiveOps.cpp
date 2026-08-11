@@ -3,6 +3,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -126,6 +127,33 @@ LogicalResult AllToAllOp::verify() {
   if (!ShapedType::isDynamic(extent) && extent % worldSize.getInt() != 0)
     return emitOpError(
         "exchange axis extent must divide evenly by world_size");
+  return success();
+}
+
+LogicalResult CollectivePermuteOp::verify() {
+  auto payload = shapedPayload(getResult().getType());
+  auto input = shapedPayload(getInput().getType());
+  if (payload && input && payload != input)
+    return emitOpError("must preserve the payload type");
+  if (getMeshAxis().empty())
+    return emitOpError("requires a non-empty mesh_axis");
+  auto sources = getSourcePeers();
+  auto targets = getTargetPeers();
+  if (sources.empty() || sources.size() != targets.size())
+    return emitOpError("requires equal non-empty source and target peer maps");
+  llvm::SmallDenseSet<int64_t> seenSources;
+  llvm::SmallDenseSet<int64_t> seenTargets;
+  int64_t worldSize = getWorldSize().value_or(0);
+  if (worldSize && worldSize < 2)
+    return emitOpError("world_size must be at least two when present");
+  for (auto [source, target] : llvm::zip_equal(sources, targets)) {
+    if (source < 0 || target < 0 ||
+        (worldSize && (source >= worldSize || target >= worldSize)))
+      return emitOpError("peer is outside the communicator");
+    if (!seenSources.insert(source).second ||
+        !seenTargets.insert(target).second)
+      return emitOpError("source and target peers must each be unique");
+  }
   return success();
 }
 

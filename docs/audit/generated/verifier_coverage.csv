@@ -88,6 +88,7 @@ src/compiler/ir/TesseraOps.td,HuberLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,HybridAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,IFFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,IRFFTOp,1,1,real
+src/compiler/ir/TesseraOps.td,ISTFTJvpOp,1,1,real
 src/compiler/ir/TesseraOps.td,ISTFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,JSDivergenceLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,KLDivergenceLossOp,1,1,real

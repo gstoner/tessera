@@ -50,33 +50,21 @@ class CollectiveTargetArtifact:
         self, *, adapter: Any, tensors: Mapping[str, Iterable[Any]]
     ) -> CollectiveTransportRuntime | OneSidedTransportRuntime:
         if self.execution.initiation != "host_collective":
-            snapshot_query = getattr(
-                adapter, "communicator_capability_snapshot", None
-            )
+            snapshot_query = getattr(adapter, "communicator_capability_snapshot", None)
             if not callable(snapshot_query):
-                raise RuntimeError(
-                    "advanced collective artifact requires communicator properties"
-                )
+                raise RuntimeError("advanced collective artifact requires communicator properties")
             snapshot = snapshot_query()
             runtime_digest = str(snapshot.get("digest", ""))
             if runtime_digest != self.execution.capability_digest:
-                raise RuntimeError(
-                    "collective communicator capability digest mismatch"
-                )
+                raise RuntimeError("collective communicator capability digest mismatch")
             rows = list(snapshot.get("ranks", ()))
             topology = dict(snapshot.get("topology", {}))
             lane = self.execution.transport_lane
             if lane == "copy_engine":
                 if topology.get("cta_policy") != "zero":
-                    raise RuntimeError(
-                        "Copy Engine artifact requires a zero-CTA communicator"
-                    )
-                if not rows or not all(
-                    bool(row.get("device_api_support", False)) for row in rows
-                ):
-                    raise RuntimeError(
-                        "Copy Engine artifact requires symmetric device API support"
-                    )
+                    raise RuntimeError("Copy Engine artifact requires a zero-CTA communicator")
+                if not rows or not all(bool(row.get("device_api_support", False)) for row in rows):
+                    raise RuntimeError("Copy Engine artifact requires symmetric device API support")
             elif lane == "gin_rma":
                 one_sided_ops = {
                     "tessera_collective.window.register",
@@ -85,49 +73,26 @@ class CollectiveTargetArtifact:
                     "tessera_collective.signal",
                     "tessera_collective.wait_signal",
                 }
-                if not self.records or any(
-                    str(record.get("op")) not in one_sided_ops
-                    for record in self.records
-                ):
-                    raise RuntimeError(
-                        "GIN/RMA requires explicit one-sided target records"
-                    )
+                if not self.records or any(str(record.get("op")) not in one_sided_ops for record in self.records):
+                    raise RuntimeError("GIN/RMA requires explicit one-sided target records")
                 if not rows or not all(
-                    bool(row.get("host_rma_support", False))
-                    and int(row.get("gin_type", 0)) != 0
-                    for row in rows
+                    bool(row.get("host_rma_support", False)) and int(row.get("gin_type", 0)) != 0 for row in rows
                 ):
-                    raise RuntimeError(
-                        "GIN/RMA artifact requires host RMA and a nonzero GIN type"
-                    )
+                    raise RuntimeError("GIN/RMA artifact requires host RMA and a nonzero GIN type")
                 for record in self.records:
                     descriptor = OneSidedDescriptor.from_target_record(record)
-                    if (
-                        descriptor.kind in {
-                            "put_signal", "signal", "wait_signal"
-                        }
-                        and descriptor.peer >= len(rows)
-                    ):
+                    if descriptor.kind in {"put_signal", "signal", "wait_signal"} and descriptor.peer >= len(rows):
                         raise RuntimeError(
-                            f"one-sided peer {descriptor.peer} is outside the "
-                            f"{len(rows)}-rank communicator"
+                            f"one-sided peer {descriptor.peer} is outside the {len(rows)}-rank communicator"
                         )
-                return execute_one_sided_target_records(
-                    self.records, adapter=adapter, buffers=tensors
-                )
+                return execute_one_sided_target_records(self.records, adapter=adapter, buffers=tensors)
             elif lane == "gfx1250_dda":
                 evidence_query = getattr(adapter, "selector_evidence_digest", None)
                 if not callable(evidence_query):
-                    raise RuntimeError(
-                        "gfx1250 DDA artifact requires selector evidence"
-                    )
+                    raise RuntimeError("gfx1250 DDA artifact requires selector evidence")
                 if str(evidence_query()) != self.execution.selector_evidence_digest:
-                    raise RuntimeError(
-                        "gfx1250 DDA selector evidence digest mismatch"
-                    )
-        return execute_target_collectives(
-            self.records, adapter=adapter, tensors=tensors
-        )
+                    raise RuntimeError("gfx1250 DDA selector evidence digest mismatch")
+        return execute_target_collectives(self.records, adapter=adapter, tensors=tensors)
 
 
 @dataclass(frozen=True)
@@ -175,9 +140,7 @@ def build_native_collective_product_artifact(
             raise ValueError("native collective product records require world_size >= 2")
         reduction = str(record.get("reduction", "none"))
         if reduction not in {"none", "sum", "mean"}:
-            raise ValueError(
-                f"collective reduction {reduction!r} is nonlinear and has no JVP"
-            )
+            raise ValueError(f"collective reduction {reduction!r} is nonlinear and has no JVP")
     payload = {
         "schema": _PRODUCT_SCHEMA,
         "collective_digest": collective.digest,
@@ -185,9 +148,7 @@ def build_native_collective_product_artifact(
         "target": collective.target,
         "linearity": "same_transport_on_primal_and_tangent",
     }
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return NativeCollectiveProductArtifact(collective, digest)
 
 
@@ -208,24 +169,16 @@ def package_one_sided_target_artifact(
         descriptor = OneSidedDescriptor.from_target_record(record)
         if descriptor.kind == "window.register":
             if not descriptor.strict_ordering:
-                raise ValueError(
-                    "GIN/RMA window registration requires strict ordering"
-                )
+                raise ValueError("GIN/RMA window registration requires strict ordering")
             if descriptor.window in live_windows:
-                raise ValueError(
-                    f"one-sided window {descriptor.window!r} is registered twice"
-                )
+                raise ValueError(f"one-sided window {descriptor.window!r} is registered twice")
             live_windows.add(descriptor.window)
         elif descriptor.kind == "window.deregister":
             if descriptor.window not in live_windows:
-                raise ValueError(
-                    f"one-sided window {descriptor.window!r} is not live"
-                )
+                raise ValueError(f"one-sided window {descriptor.window!r} is not live")
             live_windows.remove(descriptor.window)
         elif descriptor.kind == "put_signal" and descriptor.window not in live_windows:
-            raise ValueError(
-                f"put_signal references unregistered window {descriptor.window!r}"
-            )
+            raise ValueError(f"put_signal references unregistered window {descriptor.window!r}")
     if live_windows:
         names = ", ".join(sorted(live_windows))
         raise ValueError(f"one-sided artifact leaks registered windows: {names}")
@@ -235,9 +188,7 @@ def package_one_sided_target_artifact(
         "execution": execution.to_dict(),
         "collectives": normalized,
     }
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return CollectiveTargetArtifact(target, normalized, execution, digest)
 
 
@@ -252,32 +203,16 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
     target = next(iter(targets), str(module.attrs.get("target", "cpu")))
     execution = CollectiveExecutionContract(
         backend=str(module.attrs.get("collective.backend", "portable")),
-        initiation=str(
-            module.attrs.get("collective.initiation", "host_collective")
-        ),
-        transport_lane=str(
-            module.attrs.get("collective.transport_lane", "standard")
-        ),
+        initiation=str(module.attrs.get("collective.initiation", "host_collective")),
+        transport_lane=str(module.attrs.get("collective.transport_lane", "standard")),
         target_arch=str(module.attrs.get("collective.target_arch", "unbound")),
-        window_registration=str(
-            module.attrs.get("collective.window_registration", "none")
-        ),
+        window_registration=str(module.attrs.get("collective.window_registration", "none")),
         ordering=str(module.attrs.get("collective.ordering", "default")),
-        graph_capture_compatible=bool(
-            module.attrs.get("collective.graph_capture_compatible", True)
-        ),
-        capability_digest=str(
-            module.attrs.get("collective.capability_digest", "unbound")
-        ),
-        selector_evidence_digest=str(
-            module.attrs.get("collective.selector_evidence_digest", "unbound")
-        ),
-        backend_version=str(
-            module.attrs.get("collective.backend_version", "unbound")
-        ),
-        source_revision=str(
-            module.attrs.get("collective.source_revision", "unbound")
-        ),
+        graph_capture_compatible=bool(module.attrs.get("collective.graph_capture_compatible", True)),
+        capability_digest=str(module.attrs.get("collective.capability_digest", "unbound")),
+        selector_evidence_digest=str(module.attrs.get("collective.selector_evidence_digest", "unbound")),
+        backend_version=str(module.attrs.get("collective.backend_version", "unbound")),
+        source_revision=str(module.attrs.get("collective.source_revision", "unbound")),
     )
     records: list[dict[str, Any]] = []
     for function in module.functions:
@@ -303,20 +238,10 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
                     "mesh_axis": str(op.attrs["mesh_axis"]),
                     "tensor_axis": int(op.attrs["tensor_axis"]),
                     "reduction": reduction,
+                    **({"world_size": int(op.attrs["world_size"])} if op.attrs.get("world_size") is not None else {}),
+                    **({"dtype": str(op.attrs["dtype"])} if op.attrs.get("dtype") is not None else {}),
                     **(
-                        {"world_size": int(op.attrs["world_size"])}
-                        if op.attrs.get("world_size") is not None
-                        else {}
-                    ),
-                    **(
-                        {"dtype": str(op.attrs["dtype"])}
-                        if op.attrs.get("dtype") is not None
-                        else {}
-                    ),
-                    **(
-                        {"chunk_bytes": int(op.attrs["chunk_bytes"])}
-                        if op.attrs.get("chunk_bytes") is not None
-                        else {}
+                        {"chunk_bytes": int(op.attrs["chunk_bytes"])} if op.attrs.get("chunk_bytes") is not None else {}
                     ),
                     **(
                         {"scatter_axis": int(op.attrs["scatter_axis"])}
@@ -324,8 +249,14 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
                         else {}
                     ),
                     **(
-                        {"gather_axis": int(op.attrs["gather_axis"])}
-                        if op.attrs.get("gather_axis") is not None
+                        {"gather_axis": int(op.attrs["gather_axis"])} if op.attrs.get("gather_axis") is not None else {}
+                    ),
+                    **(
+                        {
+                            "source_peers": list(op.attrs["source_peers"]),
+                            "target_peers": list(op.attrs["target_peers"]),
+                        }
+                        if op.op_name == "tile.collective_permute"
                         else {}
                     ),
                 }
@@ -338,9 +269,7 @@ def lower_tile_collective_artifact(module: TileIRModule) -> CollectiveTargetArti
         "execution": execution.to_dict(),
         "collectives": records,
     }
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return CollectiveTargetArtifact(target, tuple(records), execution, digest)
 
 

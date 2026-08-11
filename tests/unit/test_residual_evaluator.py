@@ -8,6 +8,7 @@ from tessera.compiler.residual_evaluator import (
     ResidualEvidence,
     capture_treeverse_forward,
     execute_treeverse_region_adjoint,
+    measure_counted_region_policy_cohort,
     measure_treeverse_region_candidate,
     measure_residual_candidate,
     retained_residual_bytes,
@@ -158,6 +159,46 @@ def test_executed_treeverse_can_select_only_with_exact_device_provenance() -> No
         provenance="zen5_exact_device",
         exact_device=True,
     )
-    assert row.policy == "treeverse"
+    assert row.policy == "hybrid"
     assert row.retained_residual_bytes == candidate.retained_residual_bytes
+    assert row.forward_steps == candidate.steps + candidate.estimated_replayed_steps
+    assert row.replayed_steps == candidate.estimated_replayed_steps
+    assert row.backward_steps == candidate.steps
+    assert row.evidence_record()["policy"] == "hybrid"
     assert row.selector_eligible
+
+
+def test_counted_region_executes_save_recompute_hybrid_cohort() -> None:
+    initial = np.array([0.25, 0.5], dtype=np.float32)
+
+    def forward_step(index, state):
+        return state * np.float32(1.1 + 0.05 * index)
+
+    def backward_step(index, before, after, cotangent):
+        del before, after
+        return cotangent * np.float32(1.1 + 0.05 * index)
+
+    rows = measure_counted_region_policy_cohort(
+        target="x86",
+        operation="test.affine_counted_region",
+        shape_bucket=initial.shape,
+        dtype="f32",
+        steps=5,
+        state_bytes=initial.nbytes,
+        measured_step_work_ns=10,
+        memory_budgets=(0, initial.nbytes * 2, initial.nbytes * 5),
+        initial_state=initial,
+        forward_step=forward_step,
+        backward_step=backward_step,
+        cotangent=np.ones_like(initial),
+        warmup=0,
+        repetitions=1,
+        provenance="host_functional_packet",
+        exact_device=False,
+    )
+
+    assert [row.policy for row in rows] == ["recompute", "hybrid", "save"]
+    assert rows[0].replayed_steps > rows[1].replayed_steps > rows[2].replayed_steps
+    assert rows[0].retained_residual_bytes < rows[1].retained_residual_bytes < rows[2].retained_residual_bytes
+    assert all(row.backward_steps == 5 for row in rows)
+    assert not any(row.selector_eligible for row in rows)

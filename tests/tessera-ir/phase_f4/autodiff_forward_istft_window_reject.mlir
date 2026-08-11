@@ -1,4 +1,4 @@
-// RUN: not tessera-opt %s --tessera-autodiff-forward 2>&1 | FileCheck %s
+// RUN: tessera-opt %s --tessera-autodiff-forward | FileCheck %s
 
 module {
   func.func @istft_active_window(
@@ -13,4 +13,6 @@ module {
   }
 }
 
-// CHECK: TangentInterface rejected the active operand combination
+// CHECK-LABEL: func.func private @istft_active_window__jvp(
+// CHECK: tessera.istft_jvp
+// CHECK-SAME: tensor<3x5xcomplex<f32>>, tensor<8xf32>, tensor<3x5xcomplex<f32>>, tensor<8xf32>

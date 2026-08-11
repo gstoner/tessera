@@ -410,7 +410,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="AutodiffPairedPass",
         summary=(
             "Emits paired forward and backward functions under the explicit "
-            "recompute-all residual policy."
+            "recompute-all residual policy, including effect-safe region "
+            "adjoints for scf.if, counted scf.for, and canonical bounded "
+            "scf.while."
         ),
         input_dialects=("tessera", "func", "arith"),
         output_dialects=("tessera", "func", "arith"),
@@ -424,7 +426,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "AUTODIFF_STOP_GRADIENT_RESIDUAL_REQUIRED",
         ),
         pass_kind="transform",
-        sprint="AD-CORE-EFFECT-CONTROL-1",
+        sprint="W4-STRUCTURED-AD-2026-08-11",
     ),
     PassMetadata(
         name="tessera-await-sinking",
@@ -566,7 +568,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         summary=(
             "Validates the implicit residual function ABI and emits private "
             "value-producing IFT VJP/JVP functions over registered residual, "
-            "matrix-free solve, and residual-adjoint operations."
+            "matrix-free iterative GMRES/CG solve, and residual-adjoint "
+            "operations with explicit convergence policy."
         ),
         input_dialects=("tessera_solver", "func"),
         output_dialects=("tessera_solver", "func"),
@@ -704,9 +707,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         summary=(
             "Verifies function-level `tessera.dim_bindings` equations + "
             "per-op dim-name contracts (reshape / transpose / matmul), "
-            "with SSA-value propagation, sum-of-products affine "
-            "reasoning, interprocedural cross-checks via func.call, "
-            "and scf.for/scf.if region recursion."
+            "with SSA-value propagation, concrete sum-of-products witness "
+            "checking, interprocedural cross-checks via func.call, and "
+            "scf.for/scf.if/scf.while region recursion."
         ),
         input_dialects=("tessera", "func", "scf"),
         output_dialects=("tessera", "func", "scf"),

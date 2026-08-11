@@ -32,6 +32,7 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/TypeUtilities.h"
@@ -42,6 +43,9 @@
 
 #include "Tessera/AdjointInterface.h.inc"
 #include "Tessera/LinearTransposeInterface.h.inc"
+#include "Tessera/Transforms/GraphDataflow.h"
+#include "Tessera/Transforms/RegionAdjointInterface.h"
+#include "Tessera/Transforms/SemanticEffects.h"
 
 namespace tessera {
 
@@ -50,30 +54,8 @@ namespace {
 constexpr const char *kAutodiffMarker = "tessera.autodiff";
 
 using CotangentMap = llvm::DenseMap<mlir::Value, mlir::Value>;
-using ActiveOpSet = llvm::SmallPtrSet<mlir::Operation *, 32>;
-
-ActiveOpSet computeActiveOps(mlir::ValueRange outputs) {
-  ActiveOpSet active;
-  llvm::SmallVector<mlir::Value> worklist(outputs.begin(), outputs.end());
-  while (!worklist.empty()) {
-    mlir::Value value = worklist.pop_back_val();
-    mlir::Operation *producer = value.getDefiningOp();
-    if (!producer || !active.insert(producer).second)
-      continue;
-    if (producer->getName().getStringRef() == "tessera.stop_gradient")
-      continue;
-    worklist.append(producer->operand_begin(), producer->operand_end());
-  }
-  return active;
-}
-
 bool hasStochasticEffect(mlir::Operation *op) {
-  if (auto effect =
-          op->getAttrOfType<mlir::StringAttr>("tessera.effect_kind"))
-    return effect.getValue() == "random";
-  llvm::StringRef name = op->getName().getStringRef();
-  return name == "tessera.dropout" || name == "tessera.arch.gumbel_softmax" ||
-         name == "tessera.arch.hard_concrete";
+  return getRegisteredSemanticEffect(op) == SemanticEffectLevel::Random;
 }
 
 void eraseStopGradientBarriers(mlir::func::FuncOp func) {
@@ -125,7 +107,8 @@ public:
            "policy). Phase 2 of AUTODIFF_UNIFICATION_PLAN.md.";
   }
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
-    registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect>();
+    registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
+                    mlir::scf::SCFDialect>();
   }
 
   void runOnOperation() override {
@@ -159,7 +142,14 @@ private:
       fwd.emitError() << "[AUTODIFF_PAIRED] forward has no return terminator";
       return mlir::failure();
     }
-    ActiveOpSet activeOps = computeActiveOps(returnOp.getOperands());
+    GraphDataflowAnalysis dataflow(fwd);
+    if (mlir::failed(dataflow.run())) {
+      fwd.emitError()
+          << "[AUTODIFF_PAIRED] Graph IR dataflow analysis failed";
+      return mlir::failure();
+    }
+    GraphDataflowAnalysis::ActiveOpSet activeOps =
+        dataflow.computeActivity(returnOp.getOperands());
 
     // Collect only the backward-reachable forward cone. Inactive side
     // computations and inactive nested regions are neither cloned nor rejected.
@@ -174,7 +164,8 @@ private:
                                                 : "inactive"));
       if (!activeOps.contains(op))
         continue;
-      if (op->getNumRegions() != 0) {
+      if (op->getNumRegions() != 0 &&
+          !RegionAdjointInterface::supports(op)) {
         op->emitError() << "[AUTODIFF_NESTED_REGION] active paired reverse-mode "
                            "path contains unsupported nested-region op ('"
                         << op->getName().getStringRef() << "')";
@@ -278,45 +269,8 @@ private:
       if (!any)
         continue;
 
-      llvm::SmallVector<mlir::Value> inCotans;
-      if (auto adj = mlir::dyn_cast<AdjointInterface>(op)) {
-        if (!adj.isDifferentiable()) {
-          op->emitError() << "[AUTODIFF_PAIRED] op " << op->getName()
-                          << " declares AdjointInterface but isDifferentiable() "
-                             "is false";
-          return mlir::failure();
-        }
-        inCotans = adj.buildAdjoint(builder, outCotans);
-      } else if (auto linear =
-                     mlir::dyn_cast<LinearTransposeInterface>(op)) {
-        inCotans = linear.buildLinearTranspose(builder, outCotans);
-        for (auto [index, cotangent] : llvm::enumerate(inCotans)) {
-          if (cotangent && !linear.isLinearInOperand(index)) {
-            op->emitError()
-                << "[AUTODIFF_PAIRED] LinearTransposeInterface produced a "
-                   "cotangent for non-linear operand "
-                << index;
-            return mlir::failure();
-          }
-        }
-      } else {
-        if (op->getNumOperands() > 0) {
-          op->emitError() << "[AUTODIFF_OP_NOT_DIFFERENTIABLE] op "
-                          << op->getName()
-                          << " is on the gradient path but implements neither "
-                             "AdjointInterface nor LinearTransposeInterface";
-          return mlir::failure();
-        }
-        continue;
-      }
-      if (inCotans.size() != op->getNumOperands()) {
-        op->emitError() << "[AUTODIFF_PAIRED] derivative interface returned "
-                        << inCotans.size() << " cotangents, expected "
-                        << op->getNumOperands();
+      if (failed(differentiateOperation(op, outCotans, builder, cotan)))
         return mlir::failure();
-      }
-      for (auto [operand, g] : llvm::zip(op->getOperands(), inCotans))
-        accumulateCotangent(builder, cotan, operand, g);
     }
 
     // Return input cotangents (zero-splat for inputs off the gradient path so
@@ -352,6 +306,174 @@ private:
                  builder.getStringAttr("recompute_all"));
     eraseStopGradientBarriers(bwd);
     eraseStopGradientBarriers(fwd);
+    return mlir::success();
+  }
+
+  mlir::Value buildZeroLike(mlir::OpBuilder &builder, mlir::Value primal) {
+    mlir::Type type = primal.getType();
+    mlir::Type elementType = mlir::getElementTypeOrSelf(type);
+    mlir::TypedAttr zero = llvm::isa<mlir::FloatType>(elementType)
+                               ? mlir::TypedAttr(
+                                     mlir::FloatAttr::get(elementType, 0.0))
+                               : mlir::TypedAttr(
+                                     mlir::IntegerAttr::get(elementType, 0));
+    if (auto shaped = llvm::dyn_cast<mlir::ShapedType>(type);
+        shaped && shaped.hasStaticShape()) {
+      return builder
+          .create<mlir::arith::ConstantOp>(
+              primal.getLoc(), mlir::DenseElementsAttr::get(shaped, zero))
+          .getResult();
+    }
+    if (!llvm::isa<mlir::ShapedType>(type))
+      return builder
+          .create<mlir::arith::ConstantOp>(primal.getLoc(), zero)
+          .getResult();
+
+    mlir::OperationState state(primal.getLoc(),
+                               "tessera.custom_adjoint_call");
+    state.addOperands(primal);
+    state.addTypes(type);
+    state.addAttribute("name", builder.getStringAttr("zeros_like"));
+    return builder.create(state)->getResult(0);
+  }
+
+  mlir::LogicalResult buildRegionPullback(
+      mlir::Region &region, mlir::ValueRange outputCotangents,
+      mlir::ValueRange blockArgumentValues,
+      llvm::ArrayRef<mlir::Value> captures, mlir::OpBuilder &builder,
+      llvm::SmallVectorImpl<mlir::Value> &blockArgumentCotangents,
+      llvm::SmallVectorImpl<mlir::Value> &captureCotangents) {
+    if (!region.hasOneBlock() ||
+        region.front().getNumArguments() != blockArgumentValues.size())
+      return mlir::failure();
+    auto yield = mlir::dyn_cast<mlir::scf::YieldOp>(
+        region.front().getTerminator());
+    if (!yield || yield.getNumOperands() != outputCotangents.size())
+      return mlir::failure();
+
+    mlir::IRMapping mapping;
+    for (auto [argument, value] : llvm::zip_equal(
+             region.front().getArguments(), blockArgumentValues))
+      mapping.map(argument, value);
+    for (mlir::Value capture : captures)
+      mapping.map(capture, capture);
+    llvm::SmallVector<mlir::Operation *> clones;
+    for (mlir::Operation &source : region.front().without_terminator())
+      clones.push_back(builder.clone(source, mapping));
+
+    CotangentMap cotangents;
+    for (auto [yielded, seed] :
+         llvm::zip_equal(yield.getOperands(), outputCotangents))
+      if (seed)
+        accumulateCotangent(builder, cotangents,
+                            mapping.lookupOrDefault(yielded), seed);
+
+    for (mlir::Operation *clone : llvm::reverse(clones)) {
+      llvm::SmallVector<mlir::Value> resultCotangents;
+      bool active = false;
+      for (mlir::Value result : clone->getResults()) {
+        mlir::Value cotangent = cotangents.lookup(result);
+        resultCotangents.push_back(cotangent);
+        active |= static_cast<bool>(cotangent);
+      }
+      if (active && failed(differentiateOperation(
+                        clone, resultCotangents, builder, cotangents)))
+        return mlir::failure();
+    }
+
+    for (auto [argument, value] : llvm::zip_equal(
+             region.front().getArguments(), blockArgumentValues)) {
+      if (!llvm::isa<mlir::FloatType>(
+              mlir::getElementTypeOrSelf(argument.getType()))) {
+        blockArgumentCotangents.push_back({});
+        continue;
+      }
+      mlir::Value cotangent = cotangents.lookup(value);
+      blockArgumentCotangents.push_back(
+          cotangent ? cotangent : buildZeroLike(builder, value));
+    }
+    for (mlir::Value capture : captures) {
+      mlir::Value cotangent = cotangents.lookup(capture);
+      captureCotangents.push_back(cotangent ? cotangent
+                                            : buildZeroLike(builder, capture));
+    }
+    return mlir::success();
+  }
+
+  mlir::LogicalResult differentiateOperation(
+      mlir::Operation *op, mlir::ValueRange outputCotangents,
+      mlir::OpBuilder &builder, CotangentMap &cotangents) {
+    if (op->getNumRegions() != 0) {
+      if (!RegionAdjointInterface::supports(op)) {
+        op->emitError() << "[AUTODIFF_NESTED_REGION] no registered "
+                           "RegionAdjointInterface model for "
+                        << op->getName();
+        return mlir::failure();
+      }
+      llvm::SmallVector<RegionCotangent> regionCotangents;
+      auto callback = [&](mlir::Region &region, mlir::ValueRange seeds,
+                          mlir::ValueRange blockArgumentValues,
+                          llvm::ArrayRef<mlir::Value> captures,
+                          mlir::OpBuilder &nestedBuilder,
+                          llvm::SmallVectorImpl<mlir::Value> &blockResults,
+                          llvm::SmallVectorImpl<mlir::Value> &results) {
+        return buildRegionPullback(region, seeds, blockArgumentValues,
+                                   captures, nestedBuilder, blockResults,
+                                   results);
+      };
+      if (failed(RegionAdjointInterface::buildAdjoint(
+              op, builder, outputCotangents, callback, regionCotangents))) {
+        op->emitError() << "[AUTODIFF_REGION_ADJOINT] structured pullback "
+                           "construction failed";
+        return mlir::failure();
+      }
+      for (const RegionCotangent &entry : regionCotangents)
+        accumulateCotangent(builder, cotangents, entry.primal,
+                            entry.cotangent);
+      return mlir::success();
+    }
+
+    llvm::SmallVector<mlir::Value> inputCotangents;
+    if (auto adjoint = mlir::dyn_cast<AdjointInterface>(op)) {
+      if (!adjoint.isDifferentiable()) {
+        op->emitError() << "[AUTODIFF_PAIRED] op " << op->getName()
+                        << " declares AdjointInterface but isDifferentiable() "
+                           "is false";
+        return mlir::failure();
+      }
+      inputCotangents = adjoint.buildAdjoint(builder, outputCotangents);
+    } else if (auto linear =
+                   mlir::dyn_cast<LinearTransposeInterface>(op)) {
+      inputCotangents =
+          linear.buildLinearTranspose(builder, outputCotangents);
+      for (auto [index, cotangent] : llvm::enumerate(inputCotangents)) {
+        if (cotangent && !linear.isLinearInOperand(index)) {
+          op->emitError()
+              << "[AUTODIFF_PAIRED] LinearTransposeInterface produced a "
+                 "cotangent for non-linear operand "
+              << index;
+          return mlir::failure();
+        }
+      }
+    } else {
+      if (op->getNumOperands() > 0) {
+        op->emitError() << "[AUTODIFF_OP_NOT_DIFFERENTIABLE] op "
+                        << op->getName()
+                        << " is on the gradient path but implements neither "
+                           "AdjointInterface nor LinearTransposeInterface";
+        return mlir::failure();
+      }
+      return mlir::success();
+    }
+    if (inputCotangents.size() != op->getNumOperands()) {
+      op->emitError() << "[AUTODIFF_PAIRED] derivative interface returned "
+                      << inputCotangents.size() << " cotangents, expected "
+                      << op->getNumOperands();
+      return mlir::failure();
+    }
+    for (auto [operand, cotangent] :
+         llvm::zip_equal(op->getOperands(), inputCotangents))
+      accumulateCotangent(builder, cotangents, operand, cotangent);
     return mlir::success();
   }
 };

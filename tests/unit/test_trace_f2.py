@@ -16,7 +16,7 @@ import pytest
 import tessera as ts
 from tessera import _apple_gpu_backend as agb
 from tessera import _jit_boundary as jb
-from tessera.compiler.trace import TesseraTraceError, run_traced, trace
+from tessera.compiler.trace import TesseraTraceError, run_traced, to_graphfn, trace
 
 _GPU = agb.is_available() and jb.is_available()
 gpu = pytest.mark.hardware_apple_gpu
@@ -29,8 +29,7 @@ def _silu(z):
 # --- trace shape (no runtime) ----------------------------------------------- #
 def test_fori_loop_traces_to_control_for():
     def f(x, w):
-        return ts.control.fori_loop(
-            0, 4, lambda i, c: ts.ops.silu(ts.ops.matmul(c, w)), x)
+        return ts.control.fori_loop(0, 4, lambda i, c: ts.ops.silu(ts.ops.matmul(c, w)), x)
 
     tf = trace(f, np.zeros((1, 8), np.float32), np.zeros((8, 8), np.float32))
     assert [op.op_name for op in tf.body] == ["tessera.control_for"]
@@ -41,13 +40,9 @@ def test_fori_loop_traces_to_control_for():
 
 def test_cond_traces_to_control_if():
     def f(flag, x, w):
-        return ts.control.cond(
-            flag,
-            lambda: ts.ops.silu(ts.ops.matmul(x, w)),
-            lambda: ts.ops.relu(ts.ops.matmul(x, w)))
+        return ts.control.cond(flag, lambda: ts.ops.silu(ts.ops.matmul(x, w)), lambda: ts.ops.relu(ts.ops.matmul(x, w)))
 
-    tf = trace(f, np.zeros((1,), np.float32), np.zeros((1, 8), np.float32),
-               np.zeros((8, 8), np.float32))
+    tf = trace(f, np.zeros((1,), np.float32), np.zeros((1, 8), np.float32), np.zeros((8, 8), np.float32))
     assert [op.op_name for op in tf.body] == ["tessera.control_if"]
     assert tf.body[0].kwargs["_then_body"][-1].op_name == "tessera.silu"
     assert tf.body[0].kwargs["_else_body"][-1].op_name == "tessera.relu"
@@ -55,19 +50,29 @@ def test_cond_traces_to_control_if():
 
 def test_while_traces_to_control_while():
     def f(x, w, thr):
-        return ts.control.while_loop(
-            lambda c: thr, lambda c: ts.ops.matmul(c, w), x, max_steps=3)
+        return ts.control.while_loop(lambda c: thr, lambda c: ts.ops.matmul(c, w), x, max_steps=3)
 
-    tf = trace(f, np.zeros((1, 4), np.float32), np.zeros((4, 4), np.float32),
-               np.zeros((1,), np.float32))
+    tf = trace(f, np.zeros((1, 4), np.float32), np.zeros((4, 4), np.float32), np.zeros((1,), np.float32))
     assert [op.op_name for op in tf.body] == ["tessera.control_while"]
     assert tf.body[0].kwargs["_max_iters"] == 3
 
 
+def test_traced_while_emits_portable_bounded_scf_on_cpu():
+    def f(x, w, thr):
+        return ts.control.while_loop(lambda c: thr, lambda c: ts.ops.matmul(c, w), x, max_steps=3)
+
+    tf = trace(f, np.zeros((1, 4), np.float32), np.zeros((4, 4), np.float32), np.ones((1,), np.float32))
+    text = to_graphfn(tf, target="cpu").build()
+
+    assert "scf.while" in text
+    assert "scf.condition" in text
+    assert "arith.cmpi ult" in text
+    assert "apple_gpu-only" not in text
+
+
 def test_traced_while_requires_max_steps():
     def f(x, w):
-        return ts.control.while_loop(
-            lambda c: c, lambda c: ts.ops.matmul(c, w), x)  # no max_steps
+        return ts.control.while_loop(lambda c: c, lambda c: ts.ops.matmul(c, w), x)  # no max_steps
 
     with pytest.raises(TesseraTraceError, match="max_steps"):
         trace(f, np.zeros((1, 4), np.float32), np.zeros((4, 4), np.float32))
@@ -87,8 +92,7 @@ def test_traced_fori_loop_executes():
     w = (rng.standard_normal((8, 8)) / 3).astype(np.float32)
 
     def f(x, w):
-        return ts.control.fori_loop(
-            0, 4, lambda i, c: ts.ops.silu(ts.ops.matmul(c, w)), x)
+        return ts.control.fori_loop(0, 4, lambda i, c: ts.ops.silu(ts.ops.matmul(c, w)), x)
 
     out = run_traced(f, x, w)
     ref = x.copy()
@@ -105,10 +109,7 @@ def test_traced_cond_executes(flagv):
     w = (rng.standard_normal((8, 8)) / 3).astype(np.float32)
 
     def f(flag, x, w):
-        return ts.control.cond(
-            flag,
-            lambda: ts.ops.silu(ts.ops.matmul(x, w)),
-            lambda: ts.ops.relu(ts.ops.matmul(x, w)))
+        return ts.control.cond(flag, lambda: ts.ops.silu(ts.ops.matmul(x, w)), lambda: ts.ops.relu(ts.ops.matmul(x, w)))
 
     out = run_traced(f, np.array([flagv], np.float32), x, w)
     z = x @ w
@@ -123,8 +124,7 @@ def test_traced_while_executes():
     w = (rng.standard_normal((4, 4)) / 2).astype(np.float32)
 
     def f(x, w, thr):
-        return ts.control.while_loop(
-            lambda c: thr, lambda c: ts.ops.matmul(c, w), x, max_steps=3)
+        return ts.control.while_loop(lambda c: thr, lambda c: ts.ops.matmul(c, w), x, max_steps=3)
 
     out = run_traced(f, x, w, np.array([1.0], np.float32))
     ref = x.copy()

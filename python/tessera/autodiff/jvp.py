@@ -28,8 +28,10 @@ Custom JVPs register via :func:`register_jvp` (mirroring
 
 from __future__ import annotations
 
+import contextvars
+from dataclasses import dataclass, field
 import math
-from typing import Callable, Dict, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 import numpy as np
 
@@ -42,6 +44,76 @@ from .tape import TesseraAutodiffError
 
 
 _JVPS: Dict[str, Callable] = {}
+
+
+def _forward_value(value: Any) -> Any:
+    """Expose the ndarray owned by Tensor/Parameter-like public wrappers."""
+    if hasattr(value, "_data") and not isinstance(value, np.ndarray):
+        inner = value._data
+        if hasattr(inner, "_data") and isinstance(inner._data, np.ndarray):
+            return inner._data
+        if isinstance(inner, np.ndarray):
+            return inner
+    return value
+
+
+@dataclass
+class _JVPTrace:
+    tangents: dict[int, np.ndarray] = field(default_factory=dict)
+
+    def bind(self, primal: Any, tangent: Any) -> None:
+        value = _forward_value(primal)
+        self.tangents[id(value)] = np.asarray(tangent)
+
+    def record_op(
+        self,
+        name: str,
+        original: Callable,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> Any:
+        primals = tuple(_forward_value(arg) for arg in args)
+        tangent_inputs: list[Any] = []
+        active = False
+        for primal in primals:
+            tangent = self.tangents.get(id(primal))
+            if tangent is not None:
+                active = True
+                tangent_inputs.append(tangent)
+            elif isinstance(primal, (np.ndarray, np.generic, int, float)) and not isinstance(primal, bool):
+                tangent_inputs.append(np.zeros_like(np.asarray(primal), dtype=np.float64))
+            else:
+                tangent_inputs.append(None)
+        if not active:
+            return original(*primals, **kwargs)
+        rule = get_jvp(name)
+        if rule is None:
+            raise TesseraAutodiffError(f"op {name!r} has no exact JVP rule on the active tangent path")
+
+        # JVP rules may call public Tessera operations to implement a compound
+        # rule. Those calls are internal to this rule and must not recursively
+        # enter the outer trace.
+        token = _ACTIVE_JVP.set(None)
+        try:
+            primal_out, tangent_out = rule(primals, tuple(tangent_inputs), **kwargs)
+        finally:
+            _ACTIVE_JVP.reset(token)
+        if isinstance(primal_out, tuple):
+            if not isinstance(tangent_out, tuple) or len(tangent_out) != len(primal_out):
+                raise TesseraAutodiffError(f"JVP for {name!r} returned incompatible tuple tangent output")
+            for primal, tangent in zip(primal_out, tangent_out):
+                self.bind(primal, tangent)
+        else:
+            self.bind(primal_out, tangent_out)
+        return primal_out
+
+
+_ACTIVE_JVP: contextvars.ContextVar[_JVPTrace | None] = contextvars.ContextVar("_tessera_active_jvp", default=None)
+
+
+def active_jvp_trace() -> _JVPTrace | None:
+    """Internal hook consumed by the canonical op wrapper."""
+    return _ACTIVE_JVP.get()
 
 
 def register_jvp(name: str, fn: Callable) -> None:
@@ -60,6 +132,7 @@ def _jvp(name: str):
             raise ValueError(f"duplicate JVP registration for {name!r} (already bound to {_JVPS[name].__name__})")
         _JVPS[name] = fn
         return fn
+
     return deco
 
 
@@ -175,7 +248,7 @@ def jvp_gelu(primals, tangents, **_):
     (x,) = primals
     (dx,) = tangents
     k = math.sqrt(2.0 / math.pi)
-    inner = k * (x + 0.044715 * x ** 3)
+    inner = k * (x + 0.044715 * x**3)
     t = np.tanh(inner)
     primal_out = x * 0.5 * (1.0 + t)
     dinner_dx = k * (1.0 + 3.0 * 0.044715 * x * x)
@@ -206,6 +279,7 @@ def jvp_clamp(primals, tangents, *, min_val=None, max_val=None, **_):
 @_jvp("rope")
 def jvp_rope(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.rope, "__wrapped__", _ops.rope)
     return _numeric_jvp_rule(lambda x, theta: fn(x, theta, **kwargs), primals, tangents)
 
@@ -213,6 +287,7 @@ def jvp_rope(primals, tangents, **kwargs):
 @_jvp("ntk_rope")
 def jvp_ntk_rope(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.ntk_rope, "__wrapped__", _ops.ntk_rope)
     return _numeric_jvp_rule(lambda x, theta: fn(x, theta, **kwargs), primals, tangents)
 
@@ -240,6 +315,7 @@ def jvp_latent_matmul(primals, tangents, **_):
 
 def _jvp_quantize_with(fn_name, primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     x = primals[0]
     dx = tangents[0]
     fn = getattr(_ops, fn_name)
@@ -272,9 +348,7 @@ def jvp_reduce(primals, tangents, *, op="sum", axis=None, keepdims=False, **_):
     (x,) = primals
     (dx,) = tangents
     if op != "sum":
-        raise TesseraAutodiffError(
-            f"jvp for reduce op={op!r} not registered (only 'sum' in v1)"
-        )
+        raise TesseraAutodiffError(f"jvp for reduce op={op!r} not registered (only 'sum' in v1)")
     return (
         np.sum(x, axis=axis, keepdims=keepdims),
         np.sum(dx, axis=axis, keepdims=keepdims),
@@ -322,7 +396,9 @@ def _tree_add_scaled(tree, tangent, scale: float):
                 out[key] = _tree_add_scaled(value, tangent.get(key) if isinstance(tangent, dict) else None, scale)
         return out
     if isinstance(tree, tuple):
-        return tuple(_tree_add_scaled(v, tangent[i] if tangent is not None else None, scale) for i, v in enumerate(tree))
+        return tuple(
+            _tree_add_scaled(v, tangent[i] if tangent is not None else None, scale) for i, v in enumerate(tree)
+        )
     if isinstance(tree, list):
         return [_tree_add_scaled(v, tangent[i] if tangent is not None else None, scale) for i, v in enumerate(tree)]
     return np.asarray(tree) + scale * np.asarray(tangent)
@@ -337,9 +413,8 @@ def jvp_linear_general(primals, tangents, *, axis=-1, **_):
     axes = (axis,) if isinstance(axis, int) else tuple(axis)
     axes = tuple(ax if ax >= 0 else x.ndim + ax for ax in axes)
     y = np.tensordot(x, W, axes=(axes, tuple(range(len(axes)))))
-    dy = (
-        np.tensordot(dx, W, axes=(axes, tuple(range(len(axes)))))
-        + np.tensordot(x, dW, axes=(axes, tuple(range(len(axes)))))
+    dy = np.tensordot(dx, W, axes=(axes, tuple(range(len(axes))))) + np.tensordot(
+        x, dW, axes=(axes, tuple(range(len(axes))))
     )
     if bias is not None:
         y = y + bias
@@ -351,6 +426,7 @@ def jvp_linear_general(primals, tangents, *, axis=-1, **_):
 @_jvp("flash_attn")
 def jvp_flash_attn(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.flash_attn, "__wrapped__", _ops.flash_attn)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -358,6 +434,7 @@ def jvp_flash_attn(primals, tangents, **kwargs):
 @_jvp("linear_attn")
 def jvp_linear_attn(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.linear_attn, "__wrapped__", _ops.linear_attn)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -365,6 +442,7 @@ def jvp_linear_attn(primals, tangents, **kwargs):
 @_jvp("linear_attn_state")
 def jvp_linear_attn_state(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.linear_attn_state, "__wrapped__", _ops.linear_attn_state)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -372,6 +450,7 @@ def jvp_linear_attn_state(primals, tangents, **kwargs):
 @_jvp("mla_decode_fused")
 def jvp_mla_decode_fused(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.mla_decode_fused, "__wrapped__", _ops.mla_decode_fused)
     return _numeric_jvp_rule(lambda x, wd, wk, wv, q: fn(x, wd, wk, wv, q, **kwargs), primals, tangents)
 
@@ -379,6 +458,7 @@ def jvp_mla_decode_fused(primals, tangents, **kwargs):
 @_jvp("alibi")
 def jvp_alibi(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.alibi, "__wrapped__", _ops.alibi)
     primal = fn(**kwargs) if not primals else fn(*primals, **kwargs)
     return primal, np.zeros_like(np.asarray(primal))
@@ -387,6 +467,7 @@ def jvp_alibi(primals, tangents, **kwargs):
 @_jvp("multi_head_attention")
 def jvp_multi_head_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.multi_head_attention, "__wrapped__", _ops.multi_head_attention)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -394,6 +475,7 @@ def jvp_multi_head_attention(primals, tangents, **kwargs):
 @_jvp("gqa_attention")
 def jvp_gqa_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.gqa_attention, "__wrapped__", _ops.gqa_attention)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -401,6 +483,7 @@ def jvp_gqa_attention(primals, tangents, **kwargs):
 @_jvp("mqa_attention")
 def jvp_mqa_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.mqa_attention, "__wrapped__", _ops.mqa_attention)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -408,6 +491,7 @@ def jvp_mqa_attention(primals, tangents, **kwargs):
 @_jvp("mla_decode")
 def jvp_mla_decode(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.mla_decode, "__wrapped__", _ops.mla_decode)
     return _numeric_jvp_rule(lambda *args: fn(*args, **kwargs), primals, tangents)
 
@@ -415,6 +499,7 @@ def jvp_mla_decode(primals, tangents, **kwargs):
 @_jvp("attn_sliding_window")
 def jvp_attn_sliding_window(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.attn_sliding_window, "__wrapped__", _ops.attn_sliding_window)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -424,17 +509,23 @@ def jvp_attn_local_window_2d(primals, tangents, **kwargs):
     """Gap 4 (2026-05-20): JVP for 2D local-window attention via the
     numeric forward-mode rule (matches the 1D sliding-window pattern)."""
     from tessera import ops as _ops
+
     fn = getattr(
-        _ops.attn_local_window_2d, "__wrapped__", _ops.attn_local_window_2d,
+        _ops.attn_local_window_2d,
+        "__wrapped__",
+        _ops.attn_local_window_2d,
     )
     return _numeric_jvp_rule(
-        lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents,
+        lambda q, k, v: fn(q, k, v, **kwargs),
+        primals,
+        tangents,
     )
 
 
 @_jvp("attn_compressed_blocks")
 def jvp_attn_compressed_blocks(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.attn_compressed_blocks, "__wrapped__", _ops.attn_compressed_blocks)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -442,6 +533,7 @@ def jvp_attn_compressed_blocks(primals, tangents, **kwargs):
 @_jvp("attn_top_k_blocks")
 def jvp_attn_top_k_blocks(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.attn_top_k_blocks, "__wrapped__", _ops.attn_top_k_blocks)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -449,6 +541,7 @@ def jvp_attn_top_k_blocks(primals, tangents, **kwargs):
 @_jvp("power_attn")
 def jvp_power_attn(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.power_attn, "__wrapped__", _ops.power_attn)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -456,6 +549,7 @@ def jvp_power_attn(primals, tangents, **kwargs):
 @_jvp("retention")
 def jvp_retention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.retention, "__wrapped__", _ops.retention)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -463,6 +557,7 @@ def jvp_retention(primals, tangents, **kwargs):
 @_jvp("lightning_attention")
 def jvp_lightning_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.lightning_attention, "__wrapped__", _ops.lightning_attention)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals[:3], tangents[:3])
 
@@ -470,6 +565,7 @@ def jvp_lightning_attention(primals, tangents, **kwargs):
 @_jvp("gated_attention")
 def jvp_gated_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.gated_attention, "__wrapped__", _ops.gated_attention)
     return _numeric_jvp_rule(lambda q, k, v, gate: fn(q, k, v, gate, **kwargs), primals, tangents)
 
@@ -477,6 +573,7 @@ def jvp_gated_attention(primals, tangents, **kwargs):
 @_jvp("deepseek_sparse_attention")
 def jvp_deepseek_sparse_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.deepseek_sparse_attention, "__wrapped__", _ops.deepseek_sparse_attention)
     if len(primals) == 3:
         return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
@@ -486,6 +583,7 @@ def jvp_deepseek_sparse_attention(primals, tangents, **kwargs):
 @_jvp("msa_index_scores")
 def jvp_msa_index_scores(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.msa_index_scores, "__wrapped__", _ops.msa_index_scores)
     kwargs = {k: v for k, v in kwargs.items() if k != "_output_index"}
     return _numeric_jvp_rule(lambda q, k: fn(q, k, **kwargs), primals[:2], tangents[:2])
@@ -494,6 +592,7 @@ def jvp_msa_index_scores(primals, tangents, **kwargs):
 @_jvp("msa_sparse_attention")
 def jvp_msa_sparse_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.msa_sparse_attention, "__wrapped__", _ops.msa_sparse_attention)
     kwargs = {k: v for k, v in kwargs.items() if k not in ("_output_index", "return_debug")}
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals[:3], tangents[:3])
@@ -518,6 +617,7 @@ def jvp_memory_index_score(primals, tangents, *, scale=None, **_):
 @_jvp("lookahead_sparse_attention")
 def jvp_lookahead_sparse_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.lookahead_sparse_attention, "__wrapped__", _ops.lookahead_sparse_attention)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
 
@@ -525,6 +625,7 @@ def jvp_lookahead_sparse_attention(primals, tangents, **kwargs):
 @_jvp("gated_deltanet")
 def jvp_gated_deltanet(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.gated_deltanet, "__wrapped__", _ops.gated_deltanet)
     return _numeric_jvp_rule(lambda *args: fn(*args, **kwargs), primals, tangents)
 
@@ -532,6 +633,7 @@ def jvp_gated_deltanet(primals, tangents, **kwargs):
 @_jvp("kimi_delta_attention")
 def jvp_kimi_delta_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.kimi_delta_attention, "__wrapped__", _ops.kimi_delta_attention)
     return _numeric_jvp_rule(lambda *args: fn(*args, **kwargs), primals, tangents)
 
@@ -539,6 +641,7 @@ def jvp_kimi_delta_attention(primals, tangents, **kwargs):
 @_jvp("modified_delta_attention")
 def jvp_modified_delta_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.modified_delta_attention, "__wrapped__", _ops.modified_delta_attention)
     return _numeric_jvp_rule(lambda *args: fn(*args, **kwargs), primals, tangents)
 
@@ -546,6 +649,7 @@ def jvp_modified_delta_attention(primals, tangents, **kwargs):
 @_jvp("hybrid_attention")
 def jvp_hybrid_attention(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.hybrid_attention, "__wrapped__", _ops.hybrid_attention)
     return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals[:3], tangents[:3])
 
@@ -553,6 +657,7 @@ def jvp_hybrid_attention(primals, tangents, **kwargs):
 @_jvp("moe")
 def jvp_moe(primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops.moe, "__wrapped__", _ops.moe)
     return _numeric_jvp_rule(lambda x, experts: fn(x, experts, **kwargs), primals, tangents)
 
@@ -641,8 +746,7 @@ def jvp_binary_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
 
 
 @_jvp("asymmetric_bce")
-def jvp_asymmetric_bce(primals, tangents, *, pos_weight=1.0, neg_weight=1.0,
-                       reduction="mean", **_):
+def jvp_asymmetric_bce(primals, tangents, *, pos_weight=1.0, neg_weight=1.0, reduction="mean", **_):
     logits, targets = primals
     dlogits, dtargets = tangents
     z = np.asarray(logits, dtype=np.float64)
@@ -670,7 +774,7 @@ def jvp_z_loss(primals, tangents, *, reduction="mean", **_):
     softmax = e / denom
     lse = m[..., 0] + np.log(denom[..., 0])
     loss = lse * lse
-    tangent = 2.0 * lse * np.sum(softmax * dz, axis=-1)        # d(lse²) = 2·lse·(softmax·dz)
+    tangent = 2.0 * lse * np.sum(softmax * dz, axis=-1)  # d(lse²) = 2·lse·(softmax·dz)
     return _reduce_loss(loss, tangent, reduction)
 
 
@@ -682,7 +786,7 @@ def jvp_load_balance_loss(primals, tangents, *, assignment=None, reduction="mean
     n_experts = p.shape[-1]
     idx = np.argmax(p, axis=-1) if assignment is None else np.asarray(assignment, dtype=np.int64)
     f = np.eye(n_experts, dtype=np.float64)[idx].mean(axis=-2)  # (.., E)
-    P = p.mean(axis=-2)                                         # (.., E)
+    P = p.mean(axis=-2)  # (.., E)
     aux = n_experts * np.sum(f * P, axis=-1)
     tangent = n_experts * np.sum(f * np.asarray(dp).mean(axis=-2), axis=-1)
     return _reduce_loss(aux, tangent, reduction)
@@ -698,6 +802,7 @@ def jvp_load_balance_loss(primals, tangents, *, assignment=None, reduction="mean
 @_jvp("clifford_geometric_product")
 def jvp_clifford_geometric_product(primals, tangents, **_):
     from .. import _clifford_ops as C
+
     a, b = primals
     da, db = tangents
     gp = C.clifford_geometric_product
@@ -709,6 +814,7 @@ def jvp_clifford_geometric_product(primals, tangents, **_):
 @_jvp("clifford_wedge")
 def jvp_clifford_wedge(primals, tangents, **_):
     from .. import _clifford_ops as C
+
     a, b = primals
     da, db = tangents
     out = np.asarray(C.clifford_wedge(a, b), dtype=np.float64)
@@ -719,6 +825,7 @@ def jvp_clifford_wedge(primals, tangents, **_):
 @_jvp("clifford_left_contraction")
 def jvp_clifford_left_contraction(primals, tangents, **_):
     from .. import _clifford_ops as C
+
     a, b = primals
     da, db = tangents
     op = C.clifford_left_contraction
@@ -730,6 +837,7 @@ def jvp_clifford_left_contraction(primals, tangents, **_):
 @_jvp("clifford_inner")
 def jvp_clifford_inner(primals, tangents, **_):
     from .. import _clifford_ops as C
+
     a, b = primals
     da, db = tangents
     out = np.asarray(C.clifford_inner(a, b), dtype=np.float64)
@@ -740,6 +848,7 @@ def jvp_clifford_inner(primals, tangents, **_):
 @_jvp("clifford_rotor_sandwich")
 def jvp_clifford_rotor_sandwich(primals, tangents, **_):
     from .. import _clifford_ops as C
+
     gp = C.clifford_geometric_product
     rev = C.clifford_reverse
     R, x = primals
@@ -755,16 +864,20 @@ def jvp_clifford_rotor_sandwich(primals, tangents, **_):
 def jvp_clifford_hodge_star(primals, tangents, **_):
     # Linear map → tangent is the op applied to the tangent.
     from .. import _clifford_ops as C
+
     a = primals[0]
     da = tangents[0]
-    return (np.asarray(C.clifford_hodge_star(a), dtype=np.float64),
-            np.asarray(C.clifford_hodge_star(da), dtype=np.float64))
+    return (
+        np.asarray(C.clifford_hodge_star(a), dtype=np.float64),
+        np.asarray(C.clifford_hodge_star(da), dtype=np.float64),
+    )
 
 
 # Differential-form field operators are linear ⇒ tangent = op(tangent).
 @_jvp("clifford_ext_deriv")
 def jvp_clifford_ext_deriv(primals, tangents, *, spacing=None, **_):
     from .. import _clifford_ops as C
+
     out = np.asarray(C.clifford_ext_deriv(primals[0], spacing=spacing), dtype=np.float64)
     tan = np.asarray(C.clifford_ext_deriv(tangents[0], spacing=spacing), dtype=np.float64)
     return out, tan
@@ -773,6 +886,7 @@ def jvp_clifford_ext_deriv(primals, tangents, *, spacing=None, **_):
 @_jvp("clifford_vec_deriv")
 def jvp_clifford_vec_deriv(primals, tangents, *, spacing=None, **_):
     from .. import _clifford_ops as C
+
     out = np.asarray(C.clifford_vec_deriv(primals[0], spacing=spacing), dtype=np.float64)
     tan = np.asarray(C.clifford_vec_deriv(tangents[0], spacing=spacing), dtype=np.float64)
     return out, tan
@@ -781,6 +895,7 @@ def jvp_clifford_vec_deriv(primals, tangents, *, spacing=None, **_):
 @_jvp("clifford_codiff")
 def jvp_clifford_codiff(primals, tangents, *, spacing=None, **_):
     from .. import _clifford_ops as C
+
     out = np.asarray(C.clifford_codiff(primals[0], spacing=spacing), dtype=np.float64)
     tan = np.asarray(C.clifford_codiff(tangents[0], spacing=spacing), dtype=np.float64)
     return out, tan
@@ -789,24 +904,34 @@ def jvp_clifford_codiff(primals, tangents, *, spacing=None, **_):
 @_jvp("clifford_reverse")
 def jvp_clifford_reverse(primals, tangents, **_):
     from .. import _clifford_ops as C
-    return np.asarray(C.clifford_reverse(primals[0]), dtype=np.float64), np.asarray(C.clifford_reverse(tangents[0]), dtype=np.float64)
+
+    return np.asarray(C.clifford_reverse(primals[0]), dtype=np.float64), np.asarray(
+        C.clifford_reverse(tangents[0]), dtype=np.float64
+    )
 
 
 @_jvp("clifford_grade_involution")
 def jvp_clifford_grade_involution(primals, tangents, **_):
     from .. import _clifford_ops as C
-    return np.asarray(C.clifford_grade_involution(primals[0]), dtype=np.float64), np.asarray(C.clifford_grade_involution(tangents[0]), dtype=np.float64)
+
+    return np.asarray(C.clifford_grade_involution(primals[0]), dtype=np.float64), np.asarray(
+        C.clifford_grade_involution(tangents[0]), dtype=np.float64
+    )
 
 
 @_jvp("clifford_conjugate")
 def jvp_clifford_conjugate(primals, tangents, **_):
     from .. import _clifford_ops as C
-    return np.asarray(C.clifford_conjugate(primals[0]), dtype=np.float64), np.asarray(C.clifford_conjugate(tangents[0]), dtype=np.float64)
+
+    return np.asarray(C.clifford_conjugate(primals[0]), dtype=np.float64), np.asarray(
+        C.clifford_conjugate(tangents[0]), dtype=np.float64
+    )
 
 
 @_jvp("clifford_grade_projection")
 def jvp_clifford_grade_projection(primals, tangents, *, grade=None, k=None, **_):
     from .. import _clifford_ops as C
+
     a = primals[0]
     da = tangents[0]
     g = grade if grade is not None else k
@@ -823,6 +948,7 @@ _CLIFFORD_BIVECTOR_IDX = (3, 5, 6)
 
 def _clifford_exp_powers(a64, n_terms):
     from .. import _clifford_ops as C
+
     gp = C.clifford_geometric_product
     p0 = np.zeros_like(a64)
     p0[..., 0] = 1.0
@@ -836,6 +962,7 @@ def _clifford_exp_powers(a64, n_terms):
 def jvp_clifford_exp(primals, tangents, **_):
     # d exp(a)[da] = Σ_n (1/n!) Σ_{k<n} aᵏ·da·aⁿ⁻¹⁻ᵏ (validated vs FD).
     from .. import _clifford_ops as C
+
     gp = C.clifford_geometric_product
     a = np.asarray(primals[0], dtype=np.float64)
     da = np.asarray(tangents[0], dtype=np.float64)
@@ -854,6 +981,7 @@ def jvp_clifford_exp(primals, tangents, **_):
 def jvp_clifford_log(primals, tangents, **_):
     # Cl(3,0) closed-form rotor log (θ/2)·B̂ over the scalar+bivector subspace.
     from .. import _clifford_ops as C
+
     a = np.asarray(primals[0], dtype=np.float64)
     da = np.asarray(tangents[0], dtype=np.float64)
     s = a[..., 0]
@@ -876,6 +1004,7 @@ def jvp_clifford_log(primals, tangents, **_):
 @_jvp("clifford_norm_squared")
 def jvp_clifford_norm_squared(primals, tangents, **_):
     from .. import _clifford_ops as C
+
     a = np.asarray(primals[0], dtype=np.float64)
     da = np.asarray(tangents[0], dtype=np.float64)
     g = np.array([float(C.clifford_norm_squared(np.eye(8)[i])) for i in range(8)], dtype=np.float64)
@@ -887,6 +1016,7 @@ def jvp_clifford_norm_squared(primals, tangents, **_):
 @_jvp("clifford_norm")
 def jvp_clifford_norm(primals, tangents, **_):
     from .. import _clifford_ops as C
+
     a = np.asarray(primals[0], dtype=np.float64)
     da = np.asarray(tangents[0], dtype=np.float64)
     g = np.array([float(C.clifford_norm_squared(np.eye(8)[i])) for i in range(8)], dtype=np.float64)
@@ -961,6 +1091,7 @@ def jvp_ebm_inner_step(primals, tangents, *, eta, noise_scale=0.0, **_):
 @_jvp("cross_entropy_loss")
 def jvp_cross_entropy_loss(primals, tangents, *, reduction="mean", **_):
     from tessera import losses as ts_losses
+
     logits, targets = primals
     dlogits = tangents[0]
     primal = ts_losses.cross_entropy_loss(logits, targets, reduction=reduction)
@@ -992,6 +1123,7 @@ def jvp_vlb_loss(primals, tangents, *, reduction="mean", **_):
 # EBM4 — energy-based-model training loss JVPs.
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @_jvp("contrastive_divergence_loss")
 def jvp_contrastive_divergence_loss(primals, tangents, *, reduction="mean", **_):
     e_pos, e_neg = primals
@@ -1014,7 +1146,7 @@ def jvp_implicit_score_matching_loss(primals, tangents, *, reduction="mean", **_
     ds = np.asarray(dscore, dtype=np.float64)
     d = np.asarray(div, dtype=np.float64)
     dd = np.asarray(ddiv, dtype=np.float64)
-    per_sample = 0.5 * (s ** 2).sum(axis=-1) + d
+    per_sample = 0.5 * (s**2).sum(axis=-1) + d
     per_sample_tan = (s * ds).sum(axis=-1) + dd
     return _reduce_loss(per_sample, per_sample_tan, reduction)
 
@@ -1029,7 +1161,7 @@ def jvp_denoising_score_matching_loss(primals, tangents, *, reduction="mean", **
     sig2 = float(sigma) ** 2
     target = -(yn - yc) / sig2
     diff = s - target
-    per_sample = 0.5 * (diff ** 2).sum(axis=-1)
+    per_sample = 0.5 * (diff**2).sum(axis=-1)
     ds_arr = np.asarray(dscore, dtype=np.float64)
     dyc_arr = np.asarray(dyc, dtype=np.float64)
     dyn_arr = np.asarray(dyn, dtype=np.float64)
@@ -1043,29 +1175,37 @@ def jvp_denoising_score_matching_loss(primals, tangents, *, reduction="mean", **
 @_jvp("normalize_group_advantages")
 def jvp_normalize_group_advantages(primals, tangents, **kwargs):
     from tessera import rl as ts_rl
+
     return _numeric_jvp_rule(lambda r: ts_rl.normalize_group_advantages(r, **kwargs), primals, tangents)
 
 
 @_jvp("ppo_policy_loss")
 def jvp_ppo_policy_loss(primals, tangents, **kwargs):
     from tessera import rl as ts_rl
+
     return _numeric_jvp_rule(lambda ln, lo, adv: ts_rl.ppo_policy_loss(ln, lo, adv, **kwargs), primals, tangents)
 
 
 @_jvp("grpo_policy_loss")
 def jvp_grpo_policy_loss(primals, tangents, **kwargs):
     from tessera import rl as ts_rl
+
     if len(primals) == 2:
         return _numeric_jvp_rule(lambda ln, lo: ts_rl.grpo_policy_loss(ln, lo, **kwargs), primals, tangents)
-    return _numeric_jvp_rule(lambda ln, lo, rewards: ts_rl.grpo_policy_loss(ln, lo, rewards, **kwargs), primals, tangents)
+    return _numeric_jvp_rule(
+        lambda ln, lo, rewards: ts_rl.grpo_policy_loss(ln, lo, rewards, **kwargs), primals, tangents
+    )
 
 
 @_jvp("cispo_policy_loss")
 def jvp_cispo_policy_loss(primals, tangents, **kwargs):
     from tessera import rl as ts_rl
+
     if len(primals) == 2:
         return _numeric_jvp_rule(lambda ln, lo: ts_rl.cispo_policy_loss(ln, lo, **kwargs), primals, tangents)
-    return _numeric_jvp_rule(lambda ln, lo, rewards: ts_rl.cispo_policy_loss(ln, lo, rewards, **kwargs), primals, tangents)
+    return _numeric_jvp_rule(
+        lambda ln, lo, rewards: ts_rl.cispo_policy_loss(ln, lo, rewards, **kwargs), primals, tangents
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1085,8 +1225,7 @@ def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
 
 
 @_jvp("focal_loss")
-def jvp_focal_loss(primals, tangents, *, gamma=2.0, alpha=None,
-                   reduction="mean", **_):
+def jvp_focal_loss(primals, tangents, *, gamma=2.0, alpha=None, reduction="mean", **_):
     logits, targets = primals
     dlogits = tangents[0]
     logits_arr = np.asarray(logits).astype(np.float64, copy=False)
@@ -1103,15 +1242,9 @@ def jvp_focal_loss(primals, tangents, *, gamma=2.0, alpha=None,
 
     # dpt/dlogits via softmax Jacobian, applied to `dlogits` tangent.
     flat_dlogits = np.asarray(dlogits).astype(np.float64).reshape(flat_p.shape)
-    dpt = pt * (
-        flat_dlogits[rng, idx]
-        - np.sum(flat_p * flat_dlogits, axis=-1)
-    )
+    dpt = pt * (flat_dlogits[rng, idx] - np.sum(flat_p * flat_dlogits, axis=-1))
     one_minus_pt = 1.0 - pt
-    dL_dpt = (
-        gamma * np.power(one_minus_pt, gamma - 1.0) * np.log(pt)
-        - np.power(one_minus_pt, gamma) / pt
-    )
+    dL_dpt = gamma * np.power(one_minus_pt, gamma - 1.0) * np.log(pt) - np.power(one_minus_pt, gamma) / pt
     if alpha is not None:
         dL_dpt = float(alpha) * dL_dpt
     tangent = (dL_dpt * dpt).reshape(targets_arr.shape)
@@ -1119,16 +1252,14 @@ def jvp_focal_loss(primals, tangents, *, gamma=2.0, alpha=None,
 
 
 @_jvp("label_smoothed_cross_entropy")
-def jvp_label_smoothed_cross_entropy(primals, tangents, *, smoothing=0.1,
-                                     reduction="mean", **_):
+def jvp_label_smoothed_cross_entropy(primals, tangents, *, smoothing=0.1, reduction="mean", **_):
     logits, targets = primals
     dlogits = tangents[0]
     logits_arr = np.asarray(logits).astype(np.float64, copy=False)
     targets_arr = np.asarray(targets).astype(np.int64)
     n_classes = logits_arr.shape[-1]
     smooth = float(smoothing)
-    one_hot = np.full(targets_arr.shape + (n_classes,),
-                      smooth / max(1, n_classes - 1), dtype=np.float64)
+    one_hot = np.full(targets_arr.shape + (n_classes,), smooth / max(1, n_classes - 1), dtype=np.float64)
     np.put_along_axis(one_hot, targets_arr[..., None], 1.0 - smooth, axis=-1)
 
     sm = _softmax(logits_arr, axis=-1)
@@ -1155,8 +1286,7 @@ def jvp_kl_divergence(primals, tangents, *, reduction="mean", **_):
     # d/dp_log [ exp(p_log)*(p_log - log_q) ] = p*(p_log - log_q + 1)
     # d/dq    [ -exp(p_log) * log_q ]         = -p / q
     tangent = np.sum(
-        p * (p_log - log_q + 1.0) * dp_log
-        - (p / np.maximum(q, 1e-12)) * dq,
+        p * (p_log - log_q + 1.0) * dp_log - (p / np.maximum(q, 1e-12)) * dq,
         axis=-1,
     )
     return _reduce_loss(loss, tangent, reduction)
@@ -1177,8 +1307,8 @@ def jvp_triplet_loss(primals, tangents, *, margin=1.0, reduction="mean", **_):
 
     safe_ap = np.maximum(d_ap, 1e-12)
     safe_an = np.maximum(d_an, 1e-12)
-    diff_ap = (a - p)
-    diff_an = (a - n)
+    diff_ap = a - p
+    diff_an = a - n
     # d ||a-p|| / d a = (a-p)/||a-p||
     tan_ap = np.sum(diff_ap * (da - dp), axis=-1) / safe_ap
     tan_an = np.sum(diff_an * (da - dn), axis=-1) / safe_an
@@ -1187,8 +1317,7 @@ def jvp_triplet_loss(primals, tangents, *, margin=1.0, reduction="mean", **_):
 
 
 @_jvp("contrastive_loss")
-def jvp_contrastive_loss(primals, tangents, *, margin=1.0,
-                         reduction="mean", **_):
+def jvp_contrastive_loss(primals, tangents, *, margin=1.0, reduction="mean", **_):
     a, b, t = primals
     da, db, _dt = tangents
     a = np.asarray(a, dtype=np.float64)
@@ -1208,8 +1337,7 @@ def jvp_contrastive_loss(primals, tangents, *, margin=1.0,
 
 
 @_jvp("cosine_embedding_loss")
-def jvp_cosine_embedding_loss(primals, tangents, *, margin=0.0,
-                              reduction="mean", **_):
+def jvp_cosine_embedding_loss(primals, tangents, *, margin=0.0, reduction="mean", **_):
     a, b, t = primals
     da, db, _dt = tangents
     a = np.asarray(a, dtype=np.float64)
@@ -1234,17 +1362,13 @@ def jvp_cosine_embedding_loss(primals, tangents, *, margin=0.0,
     dot_b_a_db = np.sum(a * db, axis=-1)
     safe_na2 = np.maximum(na * na, 1e-12)
     safe_nb2 = np.maximum(nb * nb, 1e-12)
-    dcos = (
-        (dot_a_b_da / denom - cos * dot_a_da / safe_na2)
-        + (dot_b_a_db / denom - cos * dot_b_db / safe_nb2)
-    )
+    dcos = (dot_a_b_da / denom - cos * dot_a_da / safe_na2) + (dot_b_a_db / denom - cos * dot_b_db / safe_nb2)
     tangent = dL_dcos * dcos
     return _reduce_loss(loss, tangent, reduction)
 
 
 @_jvp("info_nce_loss")
-def jvp_info_nce_loss(primals, tangents, *, temperature=0.1,
-                      reduction="mean", **_):
+def jvp_info_nce_loss(primals, tangents, *, temperature=0.1, reduction="mean", **_):
     q, p, n = (np.asarray(t, dtype=np.float64) for t in primals)
     dq, dp, dn = (np.asarray(t, dtype=np.float64) for t in tangents)
     pos = np.sum(q * p, axis=-1, keepdims=True)
@@ -1258,9 +1382,7 @@ def jvp_info_nce_loss(primals, tangents, *, temperature=0.1,
 
     # Tangent of the logits.
     dpos = (np.sum(dq * p + q * dp, axis=-1, keepdims=True)) / float(temperature)
-    dneg = (
-        np.einsum("bd,bkd->bk", dq, n) + np.einsum("bd,bkd->bk", q, dn)
-    ) / float(temperature)
+    dneg = (np.einsum("bd,bkd->bk", dq, n) + np.einsum("bd,bkd->bk", q, dn)) / float(temperature)
     dlogits = np.concatenate([dpos, dneg], axis=-1)
     # d log_sm = dlogits - sum(sm * dlogits)
     dlog_sm = dlogits - np.sum(sm * dlogits, axis=-1, keepdims=True)
@@ -1383,8 +1505,7 @@ def jvp_max_pool(primals, tangents, *, stride=None, padding=0, **_):
     ph, pw = _pair(padding)
     n, c, h, w = x_arr.shape
     if ph or pw:
-        padded = np.pad(x_arr, ((0, 0), (0, 0), (ph, ph), (pw, pw)),
-                        constant_values=-np.inf)
+        padded = np.pad(x_arr, ((0, 0), (0, 0), (ph, ph), (pw, pw)), constant_values=-np.inf)
         padded_dx = np.pad(dx_arr, ((0, 0), (0, 0), (ph, ph), (pw, pw)))
     else:
         padded, padded_dx = x_arr, dx_arr
@@ -1394,8 +1515,8 @@ def jvp_max_pool(primals, tangents, *, stride=None, padding=0, **_):
     dy = np.zeros_like(y)
     for i in range(out_h):
         for j in range(out_w):
-            window = padded[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
-            window_dx = padded_dx[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
+            window = padded[:, :, i * sh : i * sh + kh, j * sw : j * sw + kw]
+            window_dx = padded_dx[:, :, i * sh : i * sh + kh, j * sw : j * sw + kw]
             y[:, :, i, j] = window.max(axis=(2, 3))
             flat = window.reshape(n, c, -1)
             dx_flat = window_dx.reshape(n, c, -1)
@@ -1410,8 +1531,7 @@ def jvp_max_pool(primals, tangents, *, stride=None, padding=0, **_):
 
 
 @_jvp("conv1d")
-def jvp_conv1d(primals, tangents, *, stride=1, padding=0, dilation=1,
-               groups=1, **_):
+def jvp_conv1d(primals, tangents, *, stride=1, padding=0, dilation=1, groups=1, **_):
     """Forward-mode for Conv1d.
 
     Conv1d is bilinear in (x, W), so the tangent decomposes as
@@ -1434,10 +1554,7 @@ def jvp_conv1d(primals, tangents, *, stride=1, padding=0, dilation=1,
 
     kw = dict(stride=stride, padding=padding, dilation=dilation, groups=groups)
     y = _conv1d_forward_fp64(x, w, **kw)
-    dy = (
-        _conv1d_forward_fp64(dx, w, **kw)
-        + _conv1d_forward_fp64(x, dW, **kw)
-    )
+    dy = _conv1d_forward_fp64(dx, w, **kw) + _conv1d_forward_fp64(x, dW, **kw)
     if bias is not None:
         y = y + np.asarray(bias, dtype=np.float64).reshape(1, -1, 1)
         if dbias is not None:
@@ -1467,8 +1584,8 @@ def jvp_avg_pool(primals, tangents, *, stride=None, padding=0, **_):
     dy = np.zeros_like(y)
     for i in range(out_h):
         for j in range(out_w):
-            window = padded[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
-            window_dx = padded_dx[:, :, i * sh:i * sh + kh, j * sw:j * sw + kw]
+            window = padded[:, :, i * sh : i * sh + kh, j * sw : j * sw + kw]
+            window_dx = padded_dx[:, :, i * sh : i * sh + kh, j * sw : j * sw + kw]
             y[:, :, i, j] = window.mean(axis=(2, 3))
             dy[:, :, i, j] = window_dx.mean(axis=(2, 3))
     return y, dy
@@ -1485,32 +1602,40 @@ def jvp_avg_pool(primals, tangents, *, stride=None, padding=0, **_):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def jvp(fn: Callable, primals, tangents) -> Tuple[np.ndarray, np.ndarray]:
+def jvp(fn: Callable, primals, tangents) -> Tuple[Any, Any]:
     """Compute ``(fn(primals), fn'(primals) @ tangents)`` via forward-mode.
 
-    For now we run ``fn`` twice — once with the primal value, once via
-    central finite difference — and return the analytical pair when the
-    function is composed only of ops we have JVP rules for, else fall
-    back to FD. The cleaner "tape-based dual number" path is a perf
-    follow-up; correctness here matches FD at fp64.
-
-    The simple implementation: build a temporary forward-mode tape that
-    intercepts each ``ops.*`` call and propagates a tangent alongside
-    the primal. If we find a matching JVP rule, use it; else fall back
-    to FD on that single op.
-
-    For ``jacfwd``'s usage pattern (sweep one-hot tangents over the
-    input dim), what matters is correctness + speed-relative-to-jacrev,
-    and FD is enough to validate correctness at scale.
+    The canonical op wrapper propagates primal/tangent pairs through registered
+    JVP rules in one execution. An active operation without a rule fails closed;
+    this API never silently substitutes a finite-difference product.
     """
-    primals = np.asarray(primals, dtype=np.float64)
-    tangents = np.asarray(tangents, dtype=np.float64)
-    eps = 1e-6
-    primal_out = np.asarray(fn(primals), dtype=np.float64)
-    plus = np.asarray(fn(primals + eps * tangents), dtype=np.float64)
-    minus = np.asarray(fn(primals - eps * tangents), dtype=np.float64)
-    tangent_out = (plus - minus) / (2 * eps)
-    return primal_out, tangent_out
+    primal_values = primals if isinstance(primals, tuple) else (primals,)
+    tangent_values = tangents if isinstance(tangents, tuple) else (tangents,)
+    if len(primal_values) != len(tangent_values):
+        raise ValueError("primals and tangents must have matching arity")
+    converted = tuple(np.asarray(value) for value in primal_values)
+    trace = _JVPTrace()
+    for primal, tangent in zip(converted, tangent_values):
+        tangent_array = np.asarray(tangent)
+        if tangent_array.shape != primal.shape:
+            raise ValueError("primal and tangent shapes must match")
+        trace.bind(primal, tangent_array)
+    token = _ACTIVE_JVP.set(trace)
+    try:
+        primal_out = fn(*converted) if isinstance(primals, tuple) else fn(converted[0])
+    finally:
+        _ACTIVE_JVP.reset(token)
+    if isinstance(primal_out, tuple):
+        tuple_tangents = tuple(
+            trace.tangents.get(id(_forward_value(value))) for value in primal_out
+        )
+        if any(value is None for value in tuple_tangents):
+            raise TesseraAutodiffError("function output has no active tangent path")
+        return primal_out, tuple_tangents
+    scalar_tangent = trace.tangents.get(id(_forward_value(primal_out)))
+    if scalar_tangent is None:
+        scalar_tangent = np.zeros_like(np.asarray(primal_out), dtype=np.float64)
+    return np.asarray(primal_out), scalar_tangent
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1555,8 +1680,12 @@ def jvp_ctc_loss(primals, tangents, *, blank=0, reduction="mean", **_):
     dlog_probs = np.asarray(tangents[0], dtype=np.float64)
 
     primal = ts_losses.ctc_loss(
-        log_probs, targets, input_lengths, target_lengths,
-        blank=blank, reduction=reduction,
+        log_probs,
+        targets,
+        input_lengths,
+        target_lengths,
+        blank=blank,
+        reduction=reduction,
     )
 
     # Raw per-batch gradient: with reduction='sum' and dout=1.0 the per-batch
@@ -1565,8 +1694,13 @@ def jvp_ctc_loss(primals, tangents, *, blank=0, reduction="mean", **_):
     if ctc_vjp is None:
         raise RuntimeError("ctc_loss VJP is not registered")
     grad_lp_raw, *_ = ctc_vjp(
-        1.0, log_probs, targets, input_lengths, target_lengths,
-        blank=blank, reduction="sum",
+        1.0,
+        log_probs,
+        targets,
+        input_lengths,
+        target_lengths,
+        blank=blank,
+        reduction="sum",
     )
 
     # Per-batch dot product: contract over time (axis 0) and vocab (axis 2).
@@ -1617,8 +1751,7 @@ def jvp_wasserstein_distance(primals, tangents, *, reduction="mean", **_):
 
 
 @_jvp("nt_xent_loss")
-def jvp_nt_xent_loss(primals, tangents, *, temperature=0.5,
-                     reduction="mean", **_):
+def jvp_nt_xent_loss(primals, tangents, *, temperature=0.5, reduction="mean", **_):
     """Forward-mode NT-Xent.
 
     Pushes `dz` through L2-normalize → Gram → masked log_softmax → positive
@@ -1734,8 +1867,9 @@ def jvp_momentum(primals, tangents, *, lr, momentum=0.9, **_):
     dstate = tangents[2] if len(tangents) > 2 else None
 
     velocity = state["velocity"] if state is not None and "velocity" in state else np.zeros_like(np.asarray(params))
-    dvelocity = (dstate["velocity"] if (dstate is not None and "velocity" in dstate)
-                 else np.zeros_like(np.asarray(params)))
+    dvelocity = (
+        dstate["velocity"] if (dstate is not None and "velocity" in dstate) else np.zeros_like(np.asarray(params))
+    )
     new_velocity = float(momentum) * np.asarray(velocity) + np.asarray(grads)
     d_new_velocity = float(momentum) * np.asarray(dvelocity) + np.asarray(dgrads)
     new_params = np.asarray(params) - float(lr) * new_velocity
@@ -1751,8 +1885,9 @@ def jvp_nesterov(primals, tangents, *, lr, momentum=0.9, **_):
     dstate = tangents[2] if len(tangents) > 2 else None
 
     velocity = state["velocity"] if state is not None and "velocity" in state else np.zeros_like(np.asarray(params))
-    dvelocity = (dstate["velocity"] if (dstate is not None and "velocity" in dstate)
-                 else np.zeros_like(np.asarray(params)))
+    dvelocity = (
+        dstate["velocity"] if (dstate is not None and "velocity" in dstate) else np.zeros_like(np.asarray(params))
+    )
     m = float(momentum)
     new_velocity = m * np.asarray(velocity) + np.asarray(grads)
     look_ahead = np.asarray(grads) + m * new_velocity
@@ -1764,8 +1899,7 @@ def jvp_nesterov(primals, tangents, *, lr, momentum=0.9, **_):
 
 
 @_jvp("adam")
-def jvp_adam(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999,
-             eps=1e-8, step=1, **_):
+def jvp_adam(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, step=1, **_):
     param, grad, moment1, moment2 = (np.asarray(x, dtype=np.float64) for x in primals)
     dparam, dgrad, dmoment1, dmoment2 = (np.asarray(x, dtype=np.float64) for x in tangents)
     b1, b2 = float(beta1), float(beta2)
@@ -1796,8 +1930,7 @@ def jvp_adam(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999,
 
 
 @_jvp("adamw")
-def jvp_adamw(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999,
-              eps=1e-8, weight_decay=0.0, **_):
+def jvp_adamw(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8, weight_decay=0.0, **_):
     params, grads = primals[0], primals[1]
     state = primals[2] if len(primals) > 2 else None
     dparams, dgrads = tangents[0], tangents[1]
@@ -1828,8 +1961,8 @@ def jvp_adamw(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999,
     v_new = b2 * v_prev + (1.0 - b2) * g * g
     dm_new = b1 * dm_prev + (1.0 - b1) * dg
     dv_new = b2 * dv_prev + (1.0 - b2) * 2.0 * g * dg
-    bc1 = 1.0 - b1 ** step
-    bc2 = 1.0 - b2 ** step
+    bc1 = 1.0 - b1**step
+    bc2 = 1.0 - b2**step
     m_hat = m_new / bc1
     v_hat = v_new / bc2
     dm_hat = dm_new / bc1
@@ -1847,8 +1980,7 @@ def jvp_adamw(primals, tangents, *, lr=1e-3, beta1=0.9, beta2=0.999,
 
 
 @_jvp("lion")
-def jvp_lion(primals, tangents, *, lr=1e-4, beta1=0.9, beta2=0.99,
-             weight_decay=0.0, **_):
+def jvp_lion(primals, tangents, *, lr=1e-4, beta1=0.9, beta2=0.99, weight_decay=0.0, **_):
     params, grads = primals[0], primals[1]
     state = primals[2] if len(primals) > 2 else None
     dparams, dgrads = tangents[0], tangents[1]
@@ -1948,13 +2080,13 @@ def jvp_memory_read(primals, tangents, *, top_k=1, normalize=True, **_):
     N = keys.shape[0]
     k = min(int(top_k), N)
 
-    scores = query @ keys.T                                      # (B, N)
+    scores = query @ keys.T  # (B, N)
     dscores = dquery @ keys.T + query @ dkeys.T
 
     partition = np.argpartition(-scores, kth=k - 1, axis=-1)[:, :k]
     top_scores = np.take_along_axis(scores, partition, axis=-1)
     order = np.argsort(-top_scores, axis=-1)
-    indices = np.take_along_axis(partition, order, axis=-1)      # (B, k)
+    indices = np.take_along_axis(partition, order, axis=-1)  # (B, k)
     top_scores = np.take_along_axis(top_scores, order, axis=-1)
     dtop_scores = np.take_along_axis(dscores, indices, axis=-1)
 
@@ -1969,7 +2101,7 @@ def jvp_memory_read(primals, tangents, *, top_k=1, normalize=True, **_):
         weights = np.ones_like(top_scores) / k
         dweights = np.zeros_like(top_scores)
 
-    gathered = values[indices]                                   # (B, k, *value_shape)
+    gathered = values[indices]  # (B, k, *value_shape)
     dgathered = dvalues[indices]
     value_dims = tuple(range(2, gathered.ndim))
     weights_b = weights.reshape(B, k, *([1] * len(value_dims)))
@@ -1978,15 +2110,13 @@ def jvp_memory_read(primals, tangents, *, top_k=1, normalize=True, **_):
     dread = np.sum(gathered * dweights_b + dgathered * weights_b, axis=1)
 
     if single_query:
-        result = MemoryReadResult(values=read[0], indices=indices[0],
-                                  weights=weights[0], scores=top_scores[0])
-        tangent = MemoryReadResult(values=dread[0], indices=np.zeros_like(indices[0]),
-                                   weights=dweights[0], scores=dtop_scores[0])
+        result = MemoryReadResult(values=read[0], indices=indices[0], weights=weights[0], scores=top_scores[0])
+        tangent = MemoryReadResult(
+            values=dread[0], indices=np.zeros_like(indices[0]), weights=dweights[0], scores=dtop_scores[0]
+        )
     else:
-        result = MemoryReadResult(values=read, indices=indices,
-                                  weights=weights, scores=top_scores)
-        tangent = MemoryReadResult(values=dread, indices=np.zeros_like(indices),
-                                   weights=dweights, scores=dtop_scores)
+        result = MemoryReadResult(values=read, indices=indices, weights=weights, scores=top_scores)
+        tangent = MemoryReadResult(values=dread, indices=np.zeros_like(indices), weights=dweights, scores=dtop_scores)
     return result, tangent
 
 
@@ -2014,11 +2144,11 @@ def _cumextrema_jvp(x, dx, axis, comparator):
     tangent = np.zeros_like(primal)
     L = x_perm.shape[-1]
     for i in range(L):
-        prefix = x_perm[..., :i + 1]
-        running = primal[..., i:i + 1]
+        prefix = x_perm[..., : i + 1]
+        running = primal[..., i : i + 1]
         mask = (prefix == running).astype(np.float64)
         counts = mask.sum(axis=-1, keepdims=True)
-        tangent[..., i] = np.sum(dx_perm[..., :i + 1] * mask, axis=-1) / counts.squeeze(-1)
+        tangent[..., i] = np.sum(dx_perm[..., : i + 1] * mask, axis=-1) / counts.squeeze(-1)
     return np.moveaxis(primal, -1, axis), np.moveaxis(tangent, -1, axis)
 
 
@@ -2049,45 +2179,54 @@ def jvp_cummin(primals, tangents, *, axis=-1, **_):
 
 def _register_unary_elementwise_jvp(name: str, forward, derivative) -> None:
     """Register a JVP for a unary pointwise op: tangent = f'(x) * v."""
+
     @_jvp(name)
     def _jvp_impl(primals, tangents, **_):
         x = np.asarray(primals[0], dtype=np.float64)
         dx = np.asarray(tangents[0], dtype=np.float64)
         return np.asarray(forward(x)), derivative(x) * dx
+
     return _jvp_impl
 
 
 # --- Unary pointwise (elementwise + scalar_math + numeric_helper) ----------
-_register_unary_elementwise_jvp("exp",      np.exp,                       np.exp)
-_register_unary_elementwise_jvp("log",      np.log,                       lambda x: 1.0 / x)
-_register_unary_elementwise_jvp("log1p",    np.log1p,                     lambda x: 1.0 / (1.0 + x))
-_register_unary_elementwise_jvp("expm1",    np.expm1,                     np.exp)
-_register_unary_elementwise_jvp("sqrt",     np.sqrt,                      lambda x: 0.5 / np.maximum(np.sqrt(x), 1e-12))
-_register_unary_elementwise_jvp("rsqrt",    lambda x: 1.0 / np.sqrt(x),  lambda x: -0.5 / np.maximum(x ** 1.5, 1e-12))
-_register_unary_elementwise_jvp("cos",      np.cos,                       lambda x: -np.sin(x))
-_register_unary_elementwise_jvp("tan",      np.tan,                       lambda x: 1.0 / (np.cos(x) ** 2))
-_register_unary_elementwise_jvp("sinh",     np.sinh,                      np.cosh)
-_register_unary_elementwise_jvp("cosh",     np.cosh,                      np.sinh)
-_register_unary_elementwise_jvp("asin",     np.arcsin,                    lambda x: 1.0 / np.sqrt(np.maximum(1.0 - x * x, 1e-12)))
-_register_unary_elementwise_jvp("acos",     np.arccos,                    lambda x: -1.0 / np.sqrt(np.maximum(1.0 - x * x, 1e-12)))
-_register_unary_elementwise_jvp("atan",     np.arctan,                    lambda x: 1.0 / (1.0 + x * x))
-_register_unary_elementwise_jvp("erf",      lambda x: np.vectorize(__import__("math").erf)(x),
-                                lambda x: (2.0 / np.sqrt(np.pi)) * np.exp(-x * x))
-_register_unary_elementwise_jvp("erfc",     lambda x: np.vectorize(__import__("math").erfc)(x),
-                                lambda x: -(2.0 / np.sqrt(np.pi)) * np.exp(-x * x))
-_register_unary_elementwise_jvp("lgamma",   lambda x: np.vectorize(__import__("math").lgamma)(x),
-                                lambda x: np.vectorize(lambda v: __import__("scipy.special").special.digamma(v) if False else 0.0)(x))  # placeholder
-_register_unary_elementwise_jvp("digamma",  lambda x: x,                  lambda x: np.ones_like(x))  # placeholder
-_register_unary_elementwise_jvp("reciprocal", lambda x: 1.0 / x,          lambda x: -1.0 / (x * x))
-_register_unary_elementwise_jvp("softplus",
-                                lambda x: np.maximum(x, 0) + np.log1p(np.exp(-np.abs(x))),
-                                lambda x: 1.0 / (1.0 + np.exp(-x)))
-_register_unary_elementwise_jvp("sigmoid_safe",
-                                lambda x: np.where(x >= 0, 1.0 / (1.0 + np.exp(-np.abs(x))),
-                                                   np.exp(-np.abs(x)) / (1.0 + np.exp(-np.abs(x)))),
-                                lambda x: (lambda s: s * (1.0 - s))(np.where(x >= 0, 1.0 / (1.0 + np.exp(-np.abs(x))),
-                                                                              np.exp(-np.abs(x)) / (1.0 + np.exp(-np.abs(x))))))
-_register_unary_elementwise_jvp("absolute", np.abs,                       np.sign)
+_register_unary_elementwise_jvp("exp", np.exp, np.exp)
+_register_unary_elementwise_jvp("log", np.log, lambda x: 1.0 / x)
+_register_unary_elementwise_jvp("log1p", np.log1p, lambda x: 1.0 / (1.0 + x))
+_register_unary_elementwise_jvp("expm1", np.expm1, np.exp)
+_register_unary_elementwise_jvp("sqrt", np.sqrt, lambda x: 0.5 / np.maximum(np.sqrt(x), 1e-12))
+_register_unary_elementwise_jvp("rsqrt", lambda x: 1.0 / np.sqrt(x), lambda x: -0.5 / np.maximum(x**1.5, 1e-12))
+_register_unary_elementwise_jvp("cos", np.cos, lambda x: -np.sin(x))
+_register_unary_elementwise_jvp("tan", np.tan, lambda x: 1.0 / (np.cos(x) ** 2))
+_register_unary_elementwise_jvp("sinh", np.sinh, np.cosh)
+_register_unary_elementwise_jvp("cosh", np.cosh, np.sinh)
+_register_unary_elementwise_jvp("asin", np.arcsin, lambda x: 1.0 / np.sqrt(np.maximum(1.0 - x * x, 1e-12)))
+_register_unary_elementwise_jvp("acos", np.arccos, lambda x: -1.0 / np.sqrt(np.maximum(1.0 - x * x, 1e-12)))
+_register_unary_elementwise_jvp("atan", np.arctan, lambda x: 1.0 / (1.0 + x * x))
+_register_unary_elementwise_jvp(
+    "erf", lambda x: np.vectorize(__import__("math").erf)(x), lambda x: (2.0 / np.sqrt(np.pi)) * np.exp(-x * x)
+)
+_register_unary_elementwise_jvp(
+    "erfc", lambda x: np.vectorize(__import__("math").erfc)(x), lambda x: -(2.0 / np.sqrt(np.pi)) * np.exp(-x * x)
+)
+_register_unary_elementwise_jvp(
+    "lgamma",
+    lambda x: np.vectorize(__import__("math").lgamma)(x),
+    lambda x: np.vectorize(lambda v: __import__("scipy.special").special.digamma(v) if False else 0.0)(x),
+)  # placeholder
+_register_unary_elementwise_jvp("digamma", lambda x: x, lambda x: np.ones_like(x))  # placeholder
+_register_unary_elementwise_jvp("reciprocal", lambda x: 1.0 / x, lambda x: -1.0 / (x * x))
+_register_unary_elementwise_jvp(
+    "softplus", lambda x: np.maximum(x, 0) + np.log1p(np.exp(-np.abs(x))), lambda x: 1.0 / (1.0 + np.exp(-x))
+)
+_register_unary_elementwise_jvp(
+    "sigmoid_safe",
+    lambda x: np.where(x >= 0, 1.0 / (1.0 + np.exp(-np.abs(x))), np.exp(-np.abs(x)) / (1.0 + np.exp(-np.abs(x)))),
+    lambda x: (lambda s: s * (1.0 - s))(
+        np.where(x >= 0, 1.0 / (1.0 + np.exp(-np.abs(x))), np.exp(-np.abs(x)) / (1.0 + np.exp(-np.abs(x))))
+    ),
+)
+_register_unary_elementwise_jvp("absolute", np.abs, np.sign)
 
 
 # --- Binary pointwise (need both tangents) --------------------------------
@@ -2096,13 +2235,19 @@ _register_unary_elementwise_jvp("absolute", np.abs,                       np.sig
 @_jvp("sub")
 def jvp_sub(primals, tangents, *, scalar=None, **_):
     x = np.asarray(primals[0], dtype=np.float64)
-    y = (np.asarray(primals[1], dtype=np.float64) if len(primals) > 1 and primals[1] is not None
-         else float(scalar) if scalar is not None else None)
+    y = (
+        np.asarray(primals[1], dtype=np.float64)
+        if len(primals) > 1 and primals[1] is not None
+        else float(scalar)
+        if scalar is not None
+        else None
+    )
     dx = np.asarray(tangents[0], dtype=np.float64)
     if y is None:
         return x, dx
-    dy = (np.asarray(tangents[1], dtype=np.float64) if len(tangents) > 1 and tangents[1] is not None
-          else np.zeros_like(x))
+    dy = (
+        np.asarray(tangents[1], dtype=np.float64) if len(tangents) > 1 and tangents[1] is not None else np.zeros_like(x)
+    )
     return x - y, dx - dy
 
 
@@ -2168,9 +2313,7 @@ def jvp_where(primals, tangents, **_):
     _dc, dx, dy = tangents[:3]
     c = np.asarray(cond)
     out = np.where(c, np.asarray(x, dtype=np.float64), np.asarray(y, dtype=np.float64))
-    tangent = np.where(c,
-                       np.asarray(dx, dtype=np.float64),
-                       np.asarray(dy, dtype=np.float64))
+    tangent = np.where(c, np.asarray(dx, dtype=np.float64), np.asarray(dy, dtype=np.float64))
     return out, tangent
 
 
@@ -2222,7 +2365,9 @@ def jvp_amax(primals, tangents, *, axis=None, keepdims=False, **_):
     m = np.max(x, axis=axis, keepdims=True)
     mask = (x == m).astype(np.float64)
     counts = mask.sum(axis=axis, keepdims=True)
-    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(counts.squeeze() if not keepdims and axis is not None else counts, 1.0)
+    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(
+        counts.squeeze() if not keepdims and axis is not None else counts, 1.0
+    )
     return np.max(x, axis=axis, keepdims=keepdims), tan
 
 
@@ -2233,7 +2378,9 @@ def jvp_amin(primals, tangents, *, axis=None, keepdims=False, **_):
     m = np.min(x, axis=axis, keepdims=True)
     mask = (x == m).astype(np.float64)
     counts = mask.sum(axis=axis, keepdims=True)
-    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(counts.squeeze() if not keepdims and axis is not None else counts, 1.0)
+    tan = np.sum(mask * dx, axis=axis, keepdims=keepdims) / np.maximum(
+        counts.squeeze() if not keepdims and axis is not None else counts, 1.0
+    )
     return np.min(x, axis=axis, keepdims=keepdims), tan
 
 
@@ -2269,8 +2416,7 @@ def jvp_std(primals, tangents, *, axis=None, keepdims=False, ddof=0, **_):
     x = np.asarray(primals[0], dtype=np.float64)
     dx = np.asarray(tangents[0], dtype=np.float64)
     sigma = np.std(x, axis=axis, keepdims=keepdims, ddof=ddof)
-    primal_var, tan_var = jvp_var((primals[0],), (tangents[0],),
-                                   axis=axis, keepdims=keepdims, ddof=ddof)
+    primal_var, tan_var = jvp_var((primals[0],), (tangents[0],), axis=axis, keepdims=keepdims, ddof=ddof)
     return sigma, tan_var / (2.0 * np.maximum(sigma, 1e-12))
 
 
@@ -2316,6 +2462,7 @@ def jvp_log_softmax(primals, tangents, *, axis=-1, **_):
 
 # ── Collectives — linear, so JVP = forward(tangent) ───────────────────────
 
+
 @_jvp("all_reduce")
 def jvp_all_reduce(primals, tangents, *, op="sum", axis_name=None, **_):
     x = np.asarray(primals[0], dtype=np.float64)
@@ -2335,18 +2482,17 @@ def jvp_all_gather(primals, tangents, *, axis_name=None, axis=0, **_):
 
 
 @_jvp("all_to_all")
-def jvp_all_to_all(primals, tangents, *, axis_name=None, split_axis=0,
-                    concat_axis=0, **_):
+def jvp_all_to_all(primals, tangents, *, axis_name=None, split_axis=0, concat_axis=0, **_):
     return np.asarray(primals[0]), np.asarray(tangents[0])
 
 
 @_jvp("reduce_scatter")
-def jvp_reduce_scatter(primals, tangents, *, op="sum", axis_name=None,
-                        axis=0, **_):
+def jvp_reduce_scatter(primals, tangents, *, op="sum", axis_name=None, axis=0, **_):
     return np.asarray(primals[0]), np.asarray(tangents[0])
 
 
 # ── Recurrent cells — forward + tangent of activation chain ────────────────
+
 
 @_jvp("simple_rnn_cell")
 def jvp_simple_rnn_cell(primals, tangents, *, activation="tanh", **_):
@@ -2406,6 +2552,7 @@ def jvp_gru_cell(primals, tangents, **_):
 
 # ── Quantization STE — pass tangent through ────────────────────────────────
 
+
 def _ste_quant_jvp_unary(primals, tangents):
     x = np.asarray(primals[0], dtype=np.float64)
     dx = np.asarray(tangents[0], dtype=np.float64)
@@ -2423,25 +2570,31 @@ def _ste_dequant_jvp(primals, tangents, scale_arg_idx=1):
 
 
 for _name in ("quantize_fp4", "quantize_fp6", "quantize_nvfp4"):
+
     def _make(_n=_name):
         @_jvp(_n)
         def _impl(primals, tangents, **_):
             return _ste_quant_jvp_unary(primals, tangents)
+
         return _impl
+
     _make()
 
-for _name in ("dequantize_fp4", "dequantize_fp6", "dequantize_nvfp4",
-              "dequantize_int4"):
+for _name in ("dequantize_fp4", "dequantize_fp6", "dequantize_nvfp4", "dequantize_int4"):
+
     def _make(_n=_name):
         @_jvp(_n)
         def _impl(primals, tangents, **_):
             return _ste_dequant_jvp(primals, tangents)
+
         return _impl
+
     _make()
 del _name
 
 
 # ── Spectral family — linear in primal input ───────────────────────────────
+
 
 @_jvp("fft")
 def jvp_fft(primals, tangents, *, axis=-1, axes=None, **_):
@@ -2486,8 +2639,7 @@ def jvp_stft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
 
     def _stft(sig):
         sig = np.asarray(sig, dtype=np.float64)
-        win = (np.asarray(window, dtype=np.float64)
-               if window is not None else np.ones(n_fft, dtype=np.float64))
+        win = np.asarray(window, dtype=np.float64) if window is not None else np.ones(n_fft, dtype=np.float64)
         frames = sliding_window_view(sig, n_fft, axis=-1)[..., ::hop, :]
         return np.fft.rfft(frames * win, axis=-1)
 
@@ -2496,26 +2648,59 @@ def jvp_stft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
 
 @_jvp("istft")
 def jvp_istft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
-    """Inverse STFT is linear in the STFT frames — JVP = iSTFT(tangent)."""
+    """Exact ISTFT product, including the overlap-add window quotient.
 
-    def _istft(frames):
-        frames = np.asarray(frames, dtype=np.complex128)
-        win = (np.asarray(window, dtype=np.float64)
-               if window is not None else np.ones(n_fft, dtype=np.float64))
-        n_frames = frames.shape[-2]
-        out_len = (n_frames - 1) * hop + n_fft
-        out = np.zeros(frames.shape[:-2] + (out_len,), dtype=np.float64)
-        for t in range(n_frames):
-            out[..., t * hop:t * hop + n_fft] += (
-                np.fft.irfft(frames[..., t, :], n=n_fft) * win
-            )
-        return out
-
-    return _istft(primals[0]), _istft(tangents[0])
+    ISTFT is linear in its spectrum only while the window is fixed.  For an
+    active window both the overlap-add numerator and the quadratic window-
+    energy denominator contribute to the tangent.
+    """
+    frames = np.asarray(primals[0], dtype=np.complex128)
+    dframes = np.asarray(tangents[0], dtype=np.complex128)
+    win = (
+        np.asarray(primals[1], dtype=np.float64)
+        if len(primals) > 1
+        else np.asarray(window, dtype=np.float64)
+        if window is not None
+        else np.ones(n_fft, dtype=np.float64)
+    )
+    dwin = (
+        np.asarray(tangents[1], dtype=np.float64)
+        if len(tangents) > 1 and tangents[1] is not None
+        else np.zeros_like(win)
+    )
+    if win.ndim != 1 or dwin.shape != win.shape:
+        raise ValueError("ISTFT JVP requires matching rank-one window/tangent")
+    n_fft = int(win.shape[0])
+    time_frames = np.fft.irfft(frames, n=n_fft, axis=-1)
+    dtime_frames = np.fft.irfft(dframes, n=n_fft, axis=-1)
+    n_frames = frames.shape[-2]
+    out_len = (n_frames - 1) * hop + n_fft
+    prefix = frames.shape[:-2]
+    numerator = np.zeros(prefix + (out_len,), dtype=np.float64)
+    dnumerator = np.zeros_like(numerator)
+    denominator = np.zeros((out_len,), dtype=np.float64)
+    ddenominator = np.zeros_like(denominator)
+    for frame in range(n_frames):
+        start = frame * hop
+        sl = slice(start, start + n_fft)
+        numerator[..., sl] += time_frames[..., frame, :] * win
+        dnumerator[..., sl] += (
+            dtime_frames[..., frame, :] * win
+            + time_frames[..., frame, :] * dwin
+        )
+        denominator[sl] += win * win
+        ddenominator[sl] += 2.0 * win * dwin
+    safe = np.maximum(denominator, 1.0e-12)
+    primal = numerator / safe
+    tangent = dnumerator / safe - numerator * ddenominator / (safe * safe)
+    return primal, tangent
 
 
 @_jvp("dct")
-def jvp_dct(primals, tangents, *, axis=-1, type=2, **_):
+def jvp_dct(
+    primals, tangents, *, axis=-1, type=2, norm="backward",
+    normalization=None, **_,
+):
     """The selected DCT is linear, so its JVP uses the same basis."""
     dct_type = int(type)
     if dct_type not in {1, 2, 3, 4}:
@@ -2535,20 +2720,25 @@ def jvp_dct(primals, tangents, *, axis=-1, type=2, **_):
         basis[0, :] = 1.0
         basis[-1, :] = (-1.0) ** frequency
     elif dct_type == 2:
-        basis = 2.0 * np.cos(
-            np.pi * np.outer(2 * source + 1, frequency) / (2 * N)
-        )
+        basis = 2.0 * np.cos(np.pi * np.outer(2 * source + 1, frequency) / (2 * N))
     elif dct_type == 3:
-        basis = 2.0 * np.cos(
-            np.pi * np.outer(source, 2 * frequency + 1) / (2 * N)
-        )
+        basis = 2.0 * np.cos(np.pi * np.outer(source, 2 * frequency + 1) / (2 * N))
         basis[0, :] = 1.0
     else:
-        basis = 2.0 * np.cos(
-            np.pi * np.outer(2 * source + 1, 2 * frequency + 1) / (4 * N)
-        )
+        basis = 2.0 * np.cos(np.pi * np.outer(2 * source + 1, 2 * frequency + 1) / (4 * N))
     out = x_moved @ basis
     dout = dx_moved @ basis
+    active_norm = normalization or norm
+    logical_length = 2 * (N - 1) if dct_type == 1 else 2 * N
+    if active_norm == "forward":
+        out /= float(logical_length)
+        dout /= float(logical_length)
+    elif active_norm == "ortho":
+        scale = np.sqrt(float(logical_length))
+        out /= scale
+        dout /= scale
+    elif active_norm != "backward":
+        raise ValueError("dct JVP normalization must be backward, forward, or ortho")
     return np.moveaxis(out, -1, axis_idx), np.moveaxis(dout, -1, axis_idx)
 
 
@@ -2557,17 +2747,18 @@ def jvp_spectral_filter(primals, tangents, **_):
     x = np.asarray(primals[0], dtype=np.float64)
     dx = np.asarray(tangents[0], dtype=np.float64)
     f = np.asarray(primals[1], dtype=np.float64)
-    df = (np.asarray(tangents[1], dtype=np.float64)
-          if len(tangents) > 1 and tangents[1] is not None
-          else np.zeros_like(f))
+    df = (
+        np.asarray(tangents[1], dtype=np.float64) if len(tangents) > 1 and tangents[1] is not None else np.zeros_like(f)
+    )
     spectrum = np.fft.rfft(x, axis=-1)
     dspectrum = np.fft.rfft(dx, axis=-1)
-    f_truncated = f[..., :spectrum.shape[-1]]
-    df_truncated = df[..., :spectrum.shape[-1]]
+    f_truncated = f[..., : spectrum.shape[-1]]
+    df_truncated = df[..., : spectrum.shape[-1]]
     out = np.fft.irfft(spectrum * f_truncated, n=x.shape[-1], axis=-1)
     dout = np.fft.irfft(
         dspectrum * f_truncated + spectrum * df_truncated,
-        n=x.shape[-1], axis=-1,
+        n=x.shape[-1],
+        axis=-1,
     )
     return out, dout
 
@@ -2589,6 +2780,7 @@ def jvp_spectral_conv(primals, tangents, **_):
 
 
 # ── Sparse matmul — linear in the dense operand ────────────────────────────
+
 
 @_jvp("spmm_coo")
 def jvp_spmm_coo(primals, tangents, **_):
@@ -2628,6 +2820,7 @@ def jvp_bsmm(primals, tangents, **_):
 
 
 # ── Linalg — closed-form JVPs (forward-mode duals of the VJPs above) ───────
+
 
 @_jvp("tri_solve")
 def jvp_tri_solve(primals, tangents, *, upper=False, **_):
@@ -2682,6 +2875,7 @@ def jvp_svd(primals, tangents, **_):
 
 
 # ── bidirectional_scan placeholder ─────────────────────────────────────────
+
 
 @_jvp("bidirectional_scan")
 def jvp_bidirectional_scan(primals, tangents, **_):
@@ -2738,7 +2932,7 @@ def jvp_flatten(primals, tangents, *, start_axis=0, end_axis=-1, **_):
     ndim = x_arr.ndim
     s = start_axis if start_axis >= 0 else ndim + start_axis
     e = end_axis if end_axis >= 0 else ndim + end_axis
-    new_shape = x_arr.shape[:s] + (int(np.prod(x_arr.shape[s:e + 1])),) + x_arr.shape[e + 1:]
+    new_shape = x_arr.shape[:s] + (int(np.prod(x_arr.shape[s : e + 1])),) + x_arr.shape[e + 1 :]
     return x_arr.reshape(new_shape), np.asarray(dx).reshape(new_shape)
 
 
@@ -2820,8 +3014,7 @@ def jvp_chunk(primals, tangents, *, chunks=None, axis=0, **_):
 
 
 @_jvp("pad")
-def jvp_pad(primals, tangents, *, pad_width=None, mode="constant",
-            constant_values=0, **_):
+def jvp_pad(primals, tangents, *, pad_width=None, mode="constant", constant_values=0, **_):
     (x,) = primals
     (dx,) = tangents
     return (
@@ -2863,10 +3056,7 @@ def jvp_flip(primals, tangents, *, axis=None, **_):
 
 
 def _make_slice(start_indices, slice_sizes):
-    return tuple(
-        slice(int(s), int(s) + int(z))
-        for s, z in zip(start_indices, slice_sizes)
-    )
+    return tuple(slice(int(s), int(s) + int(z)) for s, z in zip(start_indices, slice_sizes))
 
 
 @_jvp("slice")
@@ -2941,17 +3131,14 @@ def jvp_scatter(primals, tangents, *, axis=0, **_):
     dx, _, dupdates = tangents
     idx = np.asarray(indices, dtype=np.int64)
     primal_out = np.array(np.asarray(x), copy=True)
-    np.put_along_axis(
-        np.moveaxis(primal_out, axis, 0), idx, np.asarray(updates), axis=0
-    ) if False else None
+    np.put_along_axis(np.moveaxis(primal_out, axis, 0), idx, np.asarray(updates), axis=0) if False else None
     # Fallback general path via index assignment:
     tan_out = np.array(np.asarray(dx), copy=True)
     ax = axis if axis >= 0 else primal_out.ndim + axis
     p_m = np.moveaxis(primal_out, ax, 0)
     t_m = np.moveaxis(tan_out, ax, 0)
     p_m[idx] = np.asarray(updates)
-    t_m[idx] = (np.asarray(dupdates) if dupdates is not None
-                else np.zeros_like(np.asarray(updates)))
+    t_m[idx] = np.asarray(dupdates) if dupdates is not None else np.zeros_like(np.asarray(updates))
     primal_out = np.moveaxis(p_m, 0, ax)
     tan_out = np.moveaxis(t_m, 0, ax)
     return primal_out, tan_out
@@ -2983,9 +3170,7 @@ def jvp_scatter_add(primals, tangents, *, axis=0, **_):
 @_jvp("scatter_reduce")
 def jvp_scatter_reduce(primals, tangents, *, axis=0, reduce="sum", **_):
     if reduce != "sum":
-        raise NotImplementedError(
-            "scatter_reduce JVP implemented for reduce='sum' only"
-        )
+        raise NotImplementedError("scatter_reduce JVP implemented for reduce='sum' only")
     return jvp_scatter_add(primals, tangents, axis=axis)
 
 
@@ -3023,8 +3208,7 @@ def jvp_masked_scatter(primals, tangents, **_):
         return out
 
     primal_out = _splice(x, src.reshape(-1))
-    dsrc_flat = (np.zeros(src.size, dtype=np.result_type(x, src))
-                 if dsource is None else np.asarray(dsource).reshape(-1))
+    dsrc_flat = np.zeros(src.size, dtype=np.result_type(x, src)) if dsource is None else np.asarray(dsource).reshape(-1)
     dx_base = np.zeros_like(x) if dx is None else np.asarray(dx)
     tan_out = _splice(dx_base, dsrc_flat)
     return primal_out, tan_out
@@ -3033,9 +3217,11 @@ def jvp_masked_scatter(primals, tangents, **_):
 # ── VLM image preprocessing pack — all linear in x ───────────────────────────
 
 
-def _jvp_resample(primals, tangents, *, mode="bilinear", align_corners=False,
-                  layout="nchw", size=None, scale_factor=None, **_):
+def _jvp_resample(
+    primals, tangents, *, mode="bilinear", align_corners=False, layout="nchw", size=None, scale_factor=None, **_
+):
     from tessera import _image_ops as _img
+
     (x,), (dx,) = primals, tangents
     x = np.asarray(x)
     nchw, restore = _img.img_canon(x, layout)
@@ -3043,8 +3229,7 @@ def _jvp_resample(primals, tangents, *, mode="bilinear", align_corners=False,
     if size is not None:
         out_hw = (int(size[0]), int(size[1]))
     elif scale_factor is not None:
-        out_hw = (int(round(h * float(scale_factor))),
-                  int(round(w * float(scale_factor))))
+        out_hw = (int(round(h * float(scale_factor))), int(round(w * float(scale_factor))))
     else:  # image_resize int/tuple `size` path arrives as size=...; handled above
         out_hw = (h, w)
     primal_out = restore(_img.resample_nchw(nchw, out_hw, mode, align_corners))
@@ -3059,9 +3244,9 @@ def jvp_interpolate(primals, tangents, **kw):
 
 
 @_jvp("image_resize")
-def jvp_image_resize(primals, tangents, *, size, mode="bilinear",
-                     align_corners=False, layout="nchw", **_):
+def jvp_image_resize(primals, tangents, *, size, mode="bilinear", align_corners=False, layout="nchw", **_):
     from tessera import _image_ops as _img
+
     (x,), (dx,) = primals, tangents
     x = np.asarray(x)
     nchw, restore = _img.img_canon(x, layout)
@@ -3080,17 +3265,17 @@ def jvp_image_resize(primals, tangents, *, size, mode="bilinear",
 @_jvp("center_crop")
 def jvp_center_crop(primals, tangents, *, size, layout="nchw", **_):
     from tessera import _image_ops as _img
+
     (x,), (dx,) = primals, tangents
     x = np.asarray(x)
     nchw, restore = _img.img_canon(x, layout)
     _, _, h, w = nchw.shape
-    ch, cw = (int(size), int(size)) if not isinstance(size, (tuple, list)) \
-        else (int(size[0]), int(size[1]))
+    ch, cw = (int(size), int(size)) if not isinstance(size, (tuple, list)) else (int(size[0]), int(size[1]))
     top, left = _img.center_crop_bounds(h, w, ch, cw)
 
     def _crop(arr):
         a, _ = _img.img_canon(arr, layout)
-        return restore(a[:, :, top:top + ch, left:left + cw])
+        return restore(a[:, :, top : top + ch, left : left + cw])
 
     primal_out = _crop(x)
     tan_out = _crop(np.zeros_like(x) if dx is None else np.asarray(dx))
@@ -3100,6 +3285,7 @@ def jvp_center_crop(primals, tangents, *, size, layout="nchw", **_):
 @_jvp("image_normalize")
 def jvp_image_normalize(primals, tangents, *, mean, std, layout="nchw", **_):
     from tessera import _image_ops as _img
+
     (x,), (dx,) = primals, tangents
     x = np.asarray(x, dtype=np.float64)
     nchw, restore = _img.img_canon(x, layout)
@@ -3120,6 +3306,7 @@ def jvp_image_normalize(primals, tangents, *, mean, std, layout="nchw", **_):
 @_jvp("patchify")
 def jvp_patchify(primals, tangents, *, patch_size, layout="nchw", **_):
     from tessera import _image_ops as _img
+
     (x,), (dx,) = primals, tangents
     x = np.asarray(x)
     nchw, _ = _img.img_canon(x, layout)
@@ -3168,10 +3355,8 @@ def jvp_mrope_2d(primals, tangents, *, sections, **_):
     positions = np.asarray(positions)
     inv_freq = np.asarray(inv_freq).reshape(-1)
     hd2 = x.shape[-1] // 2
-    axis_of_pair = np.concatenate(
-        [np.full(int(s), a, dtype=np.int64) for a, s in enumerate(sections)]
-    )
-    angle = (positions[axis_of_pair] * inv_freq[:, None]).T   # (S, Hd2)
+    axis_of_pair = np.concatenate([np.full(int(s), a, dtype=np.int64) for a, s in enumerate(sections)])
+    angle = (positions[axis_of_pair] * inv_freq[:, None]).T  # (S, Hd2)
     cos = np.cos(angle)
     sin = np.sin(angle)
 
@@ -3194,6 +3379,7 @@ def jvp_mrope_2d(primals, tangents, *, sections, **_):
 @_jvp("pixel_unshuffle")
 def jvp_pixel_unshuffle(primals, tangents, *, downscale_factor, layout="nchw", **_):
     from tessera import _image_ops as _img
+
     (x,), (dx,) = primals, tangents
     x = np.asarray(x)
     r = int(downscale_factor)
@@ -3208,6 +3394,7 @@ def jvp_pixel_unshuffle(primals, tangents, *, downscale_factor, layout="nchw", *
 @_jvp("pixel_shuffle")
 def jvp_pixel_shuffle(primals, tangents, *, upscale_factor, layout="nchw", **_):
     from tessera import _image_ops as _img
+
     (x,), (dx,) = primals, tangents
     x = np.asarray(x)
     r = int(upscale_factor)
@@ -3224,8 +3411,7 @@ def jvp_cross_attention(primals, tangents, *, scale=None, mask=None, **_):
     """Forward-mode through scaled-dot-product attention (softmax is nonlinear,
     so the tangent threads through its Jacobian)."""
     q, k, v = (np.asarray(p, dtype=np.float64) for p in primals)
-    dq, dk, dv = (None if t is None else np.asarray(t, dtype=np.float64)
-                  for t in tangents)
+    dq, dk, dv = (None if t is None else np.asarray(t, dtype=np.float64) for t in tangents)
     dq = np.zeros_like(q) if dq is None else dq
     dk = np.zeros_like(k) if dk is None else dk
     dv = np.zeros_like(v) if dv is None else dv
@@ -3239,8 +3425,7 @@ def jvp_cross_attention(primals, tangents, *, scale=None, mask=None, **_):
     p = e / np.sum(e, axis=-1, keepdims=True)
     primal_out = np.matmul(p, v)
     # tangent of scores
-    ds = (np.matmul(dq, np.swapaxes(k, -1, -2))
-          + np.matmul(q, np.swapaxes(dk, -1, -2))) * sc
+    ds = (np.matmul(dq, np.swapaxes(k, -1, -2)) + np.matmul(q, np.swapaxes(dk, -1, -2))) * sc
     # tangent of softmax: dp = p * (ds - sum(p*ds))
     dp = p * (ds - np.sum(p * ds, axis=-1, keepdims=True))
     tan_out = np.matmul(dp, v) + np.matmul(p, dv)
@@ -3259,6 +3444,7 @@ def jvp_mor_router(primals, tangents, **kwargs):
     output is non-linear in the routing input — fall back to numeric JVP
     when the op is exercised through jacfwd, otherwise pass through."""
     from tessera import ops as _ops
+
     fn = getattr(_ops, "mor_router", None)
     if fn is None:
         # Pass-through reference: assume routing weights are linear in x.
@@ -3282,9 +3468,7 @@ def jvp_mor_scatter(primals, tangents, **kwargs):
 def jvp_clip(primals, tangents, *, min_val=None, max_val=None, **_):
     (x,) = primals
     (dx,) = tangents
-    y = np.clip(np.asarray(x),
-                -np.inf if min_val is None else min_val,
-                np.inf if max_val is None else max_val)
+    y = np.clip(np.asarray(x), -np.inf if min_val is None else min_val, np.inf if max_val is None else max_val)
     mask = np.ones_like(np.asarray(x), dtype=np.asarray(x).dtype)
     if min_val is not None:
         mask = mask * (np.asarray(x) > min_val)
@@ -3370,7 +3554,7 @@ def jvp_rmsnorm(primals, tangents, *, eps=1e-6, **_):
     (dx,) = tangents
     x_arr = np.asarray(x, dtype=np.float64)
     dx_arr = np.asarray(dx, dtype=np.float64)
-    ms = (x_arr ** 2).mean(axis=-1, keepdims=True)
+    ms = (x_arr**2).mean(axis=-1, keepdims=True)
     inv = 1.0 / np.sqrt(ms + eps)
     y = x_arr * inv
     dms = 2.0 * (x_arr * dx_arr).mean(axis=-1, keepdims=True)
@@ -3390,6 +3574,7 @@ def jvp_weight_norm(primals, tangents, *, axis=-1, eps=1e-12, **_):
     numeric rule for now — the closed form is straightforward but the
     reference op accepts variable signatures."""
     from tessera import ops as _ops
+
     fn = getattr(_ops, "weight_norm", None)
     if fn is None:
         (v,) = primals
@@ -3472,6 +3657,7 @@ def jvp_online_softmax_state(primals, tangents, **_):
 
 def _conv_via_op(op_name, primals, tangents, **kwargs):
     from tessera import ops as _ops
+
     fn = getattr(_ops, op_name, None)
     if fn is None:
         raise TesseraAutodiffError(f"JVP for {op_name} requires tessera.ops.{op_name}")
@@ -3616,11 +3802,11 @@ def jvp_grouped_gemm(primals, tangents, **_):
     for e in range(wa.shape[0]):
         n = int(gs[e])
         if n:
-            primal[off:off + n] = xa[off:off + n] @ wa[e]
+            primal[off : off + n] = xa[off : off + n] @ wa[e]
             if dx is not None:
-                tan[off:off + n] += np.asarray(dx, dtype=np.float64)[off:off + n] @ wa[e]
+                tan[off : off + n] += np.asarray(dx, dtype=np.float64)[off : off + n] @ wa[e]
             if dw is not None:
-                tan[off:off + n] += xa[off:off + n] @ np.asarray(dw, dtype=np.float64)[e]
+                tan[off : off + n] += xa[off : off + n] @ np.asarray(dw, dtype=np.float64)[e]
         off += n
     return primal, tan
 
@@ -3715,8 +3901,7 @@ def jvp_muon(primals, tangents, **kwargs):
 
 
 @_jvp("selective_ssm")
-def jvp_selective_ssm(primals, tangents, *, gate=None, state=None,
-                      chunk_size=128, **_):
+def jvp_selective_ssm(primals, tangents, *, gate=None, state=None, chunk_size=128, **_):
     x, A, B, C, delta = primals[:5]
     dx, dA, dB, dC, ddelta = tangents[:5]
 
@@ -3726,15 +3911,14 @@ def jvp_selective_ssm(primals, tangents, *, gate=None, state=None,
     C_arr = np.asarray(C, dtype=np.float64)
     delta_arr = np.asarray(delta, dtype=np.float64)
 
-    dx_arr = (np.zeros_like(x_arr) if dx is None
-              else np.asarray(dx, dtype=np.float64))
-    dB_arr = (np.zeros_like(B_arr) if dB is None
-              else np.asarray(dB, dtype=np.float64))
-    dC_arr = (np.zeros_like(C_arr) if dC is None
-              else np.asarray(dC, dtype=np.float64))
-    ddelta_arr = (np.zeros_like(delta_arr) if ddelta is None
-                  else np.asarray(delta_arr, dtype=np.float64) * 0
-                  + np.asarray(ddelta, dtype=np.float64))
+    dx_arr = np.zeros_like(x_arr) if dx is None else np.asarray(dx, dtype=np.float64)
+    dB_arr = np.zeros_like(B_arr) if dB is None else np.asarray(dB, dtype=np.float64)
+    dC_arr = np.zeros_like(C_arr) if dC is None else np.asarray(dC, dtype=np.float64)
+    ddelta_arr = (
+        np.zeros_like(delta_arr)
+        if ddelta is None
+        else np.asarray(delta_arr, dtype=np.float64) * 0 + np.asarray(ddelta, dtype=np.float64)
+    )
 
     Bsz, S, D = x_arr.shape
     N = B_arr.shape[2]
@@ -3749,8 +3933,7 @@ def jvp_selective_ssm(primals, tangents, *, gate=None, state=None,
             dA2d = np.broadcast_to(dA_arr[:, None], (D, N)).copy()
     else:
         A2d = A_arr
-        dA2d = (np.zeros_like(A2d) if dA is None
-                else np.asarray(dA, dtype=np.float64))
+        dA2d = np.zeros_like(A2d) if dA is None else np.asarray(dA, dtype=np.float64)
 
     # Initial state + tangent.
     if state is not None:
@@ -3766,41 +3949,33 @@ def jvp_selective_ssm(primals, tangents, *, gate=None, state=None,
 
     for t in range(S):
         # Forward-mode through the recurrence at step t.
-        delta_t = delta_arr[:, t, :]                 # (B, D)
-        ddelta_t = ddelta_arr[:, t, :]               # (B, D)
-        Bt = B_arr[:, t, :]                          # (B, N)
-        dBt = dB_arr[:, t, :]                        # (B, N)
-        Ct = C_arr[:, t, :]                          # (B, N)
-        dCt = dC_arr[:, t, :]                        # (B, N)
+        delta_t = delta_arr[:, t, :]  # (B, D)
+        ddelta_t = ddelta_arr[:, t, :]  # (B, D)
+        Bt = B_arr[:, t, :]  # (B, N)
+        dBt = dB_arr[:, t, :]  # (B, N)
+        Ct = C_arr[:, t, :]  # (B, N)
+        dCt = dC_arr[:, t, :]  # (B, N)
 
         # z = delta_t * A2d  (B, D, N) — broadcast
         z = delta_t[:, :, None] * A2d[None, :, :]
         dz = ddelta_t[:, :, None] * A2d[None, :, :] + delta_t[:, :, None] * dA2d[None, :, :]
 
-        A_bar = np.exp(z)                            # (B, D, N)
-        dA_bar = A_bar * dz                          # (B, D, N)
+        A_bar = np.exp(z)  # (B, D, N)
+        dA_bar = A_bar * dz  # (B, D, N)
 
-        B_bar = delta_t[:, :, None] * Bt[:, None, :]     # (B, D, N)
+        B_bar = delta_t[:, :, None] * Bt[:, None, :]  # (B, D, N)
         dB_bar = ddelta_t[:, :, None] * Bt[:, None, :] + delta_t[:, :, None] * dBt[:, None, :]
 
         # h_curr = A_bar * h_prev + B_bar * x_t   where x_t has shape (B, D)
-        x_t = x_arr[:, t, :]                         # (B, D)
-        dx_t = dx_arr[:, t, :]                       # (B, D)
+        x_t = x_arr[:, t, :]  # (B, D)
+        dx_t = dx_arr[:, t, :]  # (B, D)
 
         h_curr = A_bar * h_prev + B_bar * x_t[:, :, None]
-        dh_curr = (
-            dA_bar * h_prev
-            + A_bar * dh_prev
-            + dB_bar * x_t[:, :, None]
-            + B_bar * dx_t[:, :, None]
-        )
+        dh_curr = dA_bar * h_prev + A_bar * dh_prev + dB_bar * x_t[:, :, None] + B_bar * dx_t[:, :, None]
 
         # y[t,d] = sum_n C[t,n] * h_curr[d,n]
         y[:, t, :] = np.einsum("bn,bdn->bd", Ct, h_curr)
-        dy[:, t, :] = (
-            np.einsum("bn,bdn->bd", dCt, h_curr)
-            + np.einsum("bn,bdn->bd", Ct, dh_curr)
-        )
+        dy[:, t, :] = np.einsum("bn,bdn->bd", dCt, h_curr) + np.einsum("bn,bdn->bd", Ct, dh_curr)
 
         h_prev = h_curr
         dh_prev = dh_curr

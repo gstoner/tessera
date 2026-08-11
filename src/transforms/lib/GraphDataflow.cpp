@@ -13,7 +13,9 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Interfaces/ViewLikeInterface.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/STLExtras.h"
 
 #include <algorithm>
@@ -372,11 +374,17 @@ GraphDataflowAnalysis::computeActivity(ValueRange roots) const {
       continue;
     if (producer->getName().getStringRef() == "tessera.stop_gradient")
       continue;
-    // Activity through an unknown region is represented by the parent op; its
-    // internal activity cannot be proven until region adjoints land.
-    if (producer->getNumRegions() != 0)
-      continue;
+    // Activity inside an unknown region is represented by the parent op, but
+    // the parent's explicit SSA operands (bounds, predicates, iter-inits) are
+    // and implicit captures are still required to replay the structured
+    // operation. Do not drop their producer cone merely because internal block
+    // activity is not yet known.
     worklist.append(producer->operand_begin(), producer->operand_end());
+    for (Region &region : producer->getRegions()) {
+      llvm::SetVector<Value> captures;
+      getUsedValuesDefinedAbove(region, region, captures);
+      worklist.append(captures.begin(), captures.end());
+    }
   }
   return active;
 }

@@ -12,6 +12,7 @@ add_library(TesseraPasses
   DistributionLoweringPass.cpp
   SemanticEffects.cpp
   GraphDataflow.cpp
+  RegionAdjointInterface.cpp
   EffectAnnotationPass.cpp
   TilingPass.cpp
   TileToX86Pass.cpp

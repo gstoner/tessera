@@ -10,7 +10,9 @@ import pytest
 
 from tessera.autodiff.implicit import (
     TesseraImplicitDiffError,
+    ResidualLinearization,
     cg_solve,
+    gmres_solve,
     ihvp,
     root_vjp,
     root_jvp,
@@ -20,6 +22,7 @@ from tessera.autodiff.implicit import (
 
 
 # ── conjugate gradient ───────────────────────────────────────────────────────
+
 
 def test_cg_solves_spd_system():
     rng = np.random.default_rng(0)
@@ -38,10 +41,38 @@ def test_cg_raises_on_nonconvergence():
         cg_solve(lambda v: A @ v, np.array([1.0, 1.0]), tol=1e-14, maxiter=1)
 
 
+def test_restarted_gmres_solves_nonsymmetric_system_and_reports_true_work():
+    A = np.array(
+        [
+            [4.0, 3.0, 0.0, 0.0],
+            [-1.0, 4.0, 2.0, 0.0],
+            [0.0, -2.0, 4.0, 1.0],
+            [0.0, 0.0, -1.0, 3.0],
+        ]
+    )
+    b = np.array([1.0, -2.0, 3.0, 0.5])
+
+    x, info = gmres_solve(lambda v: A @ v, b, restart=2, maxiter=40, return_info=True)
+
+    np.testing.assert_allclose(x, np.linalg.solve(A, b), atol=1e-7)
+    assert info.converged
+    assert info.iterations > 0
+    assert info.restarts > 0
+    assert info.matvecs >= info.iterations + 1
+    assert info.residual_norm == pytest.approx(np.linalg.norm(b - A @ x))
+
+
+def test_gmres_fails_closed_on_arnoldi_breakdown():
+    with pytest.raises(TesseraImplicitDiffError, match="breakdown"):
+        gmres_solve(lambda v: np.zeros_like(v), np.ones(3), maxiter=3)
+
+
 # ── inverse-Hessian vector product ───────────────────────────────────────────
+
 
 def test_ihvp_matches_dense_inverse_for_quadratic():
     from tessera import ops
+
     rng = np.random.default_rng(1)
     n = 5
     d = rng.uniform(1.0, 4.0, size=n)  # positive diagonal → SPD Hessian 2·diag(d)
@@ -58,6 +89,7 @@ def test_ihvp_matches_dense_inverse_for_quadratic():
 
 
 # ── custom_root: scalar sqrt via x² - θ = 0 ─────────────────────────────────
+
 
 def test_root_vjp_scalar_sqrt():
     # x*(θ) = √θ, so ∂x*/∂θ = 1/(2√θ). VJP with u=1 returns exactly that.
@@ -82,6 +114,74 @@ def test_root_jvp_matches_vjp_duality():
     t = root_jvp(F, xstar, (theta,), (v,))
     # dx* = (∂x*/∂θ) v = v / (2√θ)
     np.testing.assert_allclose(t, v / (2 * xstar), atol=1e-5)
+
+
+def test_general_root_products_expose_matrix_free_solver_work() -> None:
+    A = np.array([[3.0, 2.0], [-1.0, 4.0]])
+    theta = np.array([2.0, -3.0])
+    solution = np.linalg.solve(A, theta)
+
+    def residual(x, parameter):
+        return A @ x - parameter
+
+    vjp, vjp_info = root_vjp(
+        residual,
+        solution,
+        (theta,),
+        np.array([0.5, -1.0]),
+        return_solve_info=True,
+    )
+    jvp, jvp_info = root_jvp(
+        residual,
+        solution,
+        (theta,),
+        (np.array([1.0, 2.0]),),
+        return_solve_info=True,
+    )
+
+    np.testing.assert_allclose(vjp, np.linalg.solve(A.T, [0.5, -1.0]), atol=1e-6)
+    np.testing.assert_allclose(jvp, np.linalg.solve(A, [1.0, 2.0]), atol=1e-6)
+    for info in (vjp_info, jvp_info):
+        assert info.algorithm == "gmres"
+        assert info.converged
+        assert info.matvecs >= info.iterations + 1
+        assert info.residual_norm <= 1e-7
+
+
+def test_general_root_products_consume_exact_compiler_linearization() -> None:
+    A = np.array([[4.0, -1.0], [2.0, 3.0]])
+    B = np.array([[1.0, 2.0], [-2.0, 1.0]])
+    theta = np.array([0.5, -1.5])
+    solution = np.linalg.solve(A, -B @ theta)
+
+    def must_not_run(*_args):
+        raise AssertionError("finite-difference residual oracle was re-entered")
+
+    products = ResidualLinearization(
+        residual_shape=(2,),
+        solution_jvp=lambda direction: A @ direction,
+        solution_vjp=lambda cotangent: A.T @ cotangent,
+        parameter_jvp=lambda index, direction: B @ direction,
+        parameter_vjp=lambda index, cotangent: B.T @ cotangent,
+        provenance="paired_graph_ir:sha256:test",
+    )
+    direction = np.array([1.0, -0.25])
+    cotangent = np.array([0.75, 2.0])
+    tangent, jvp_info = root_jvp(
+        must_not_run, solution, (theta,), (direction,),
+        linearization=products, return_solve_info=True,
+    )
+    gradient, vjp_info = root_vjp(
+        must_not_run, solution, (theta,), cotangent,
+        linearization=products, return_solve_info=True,
+    )
+
+    np.testing.assert_allclose(tangent, -np.linalg.solve(A, B @ direction), atol=1e-8)
+    np.testing.assert_allclose(
+        gradient, -B.T @ np.linalg.solve(A.T, cotangent), atol=1e-8
+    )
+    assert jvp_info.product_source == "paired_graph_ir:sha256:test"
+    assert vjp_info.product_source == "paired_graph_ir:sha256:test"
 
 
 def test_custom_root_decorator_linear_system():
@@ -136,6 +236,7 @@ def test_root_vjp_reports_singular_jacobian():
 
 # ── adjoint-state method ─────────────────────────────────────────────────────
 
+
 def test_adjoint_state_matches_finite_difference():
     # Constraint c(s, w) = s - w²  ⇒  s*(w) = w².  Objective L = sum(s²).
     # Reduced objective h(w) = sum(w⁴), so ∇h = 4 w³.
@@ -148,8 +249,9 @@ def test_adjoint_state_matches_finite_difference():
     def c(s, ww):
         return s - ww * ww
 
-    g = adjoint_state_grad(L, c, s_star, w)
+    g, info = adjoint_state_grad(L, c, s_star, w, return_solve_info=True)
     np.testing.assert_allclose(g, 4.0 * w**3, atol=1e-4)
+    assert info.algorithm == "gmres" and info.converged
 
 
 def test_adjoint_state_linear_constraint():

@@ -14,9 +14,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_committed_gfx1151_multiclock_packet_is_truthful_wsl_evidence() -> None:
     packet = json.loads(
-        (ROOT / "benchmarks/baselines/rocm_gfx1151_multiclock_probe_2026_08_06.json").read_text(encoding="utf-8")
+        (ROOT / "benchmarks/baselines/rocm_gfx1151_multiclock_probe_2026_08_11.json").read_text(encoding="utf-8")
     )
     validate_timing_sample(packet)
+    assert packet["sample_id"] == "gfx1151-wsl-expanded-solver-2026-08-11"
     assert packet["target"] == "rocm_gfx1151"
     assert packet["execution_environment"] == "wsl2"
     assert packet["clocks"]["host_wall_ns"]["valid"] is True

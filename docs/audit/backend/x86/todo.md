@@ -9,6 +9,64 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `AD-SOLVER-ISTFT-PHYSICAL-2026-08-11` — **bounded general-
+residual and exact ISTFT-window products execute on AVX-512.** A content-
+addressed solver parent binds five native child packages and performs restarted
+GMRES with a true-residual check. The compiler now derives all five packages
+from a verified typed residual Graph. Pointwise, sum/mean, rank-2 matmul,
+transpose, distinct parameter/solution spaces, bounded-dynamic dimensions,
+mixed f16/bf16 storage with explicit f32 widening, and statically bounded
+`control_for` are represented in the content-addressed child program. Pure
+scalar predicates also lower data-dependent `if` and bounded `while` to
+digest-bound compare/select SSA with deterministic recomputation in every
+primal and product child; the nonlinear
+`R=x*x+sin(x)-theta` proof executes without a dense Jacobian. The new
+`tessera.istft_jvp` carrier reaches one AVX-512 package
+that reuses packed inverse frames and differentiates both overlap-add numerator
+and quadratic window-energy normalization. The committed 30-sample WSL packet
+records cold/warm state, resources, device/toolchain identity, artifact
+digests, and numerical error for nonlinear, reduction, reduced-storage matmul,
+bounded-dynamic mixed-storage, data-dependent `if`, data-dependent `while`, and
+ISTFT-window products (maximum error 2.33e-6). Timing remains
+regression-only because this is not a clean bare-metal run and has no
+independent device clock. Odd/low-precision ISTFT products and the clean Zen 5
+selector packet remain open.
+
+Cross-backend sync `E2E-REAL-6-JVP-SOLVER-2026-08-11` — **the first frontend/
+family-plugin cohort is landing.** Native forward-product specialization now
+binds tracer-produced canonical Graph IR and dispatches through explicit family
+plugins outside `JitFn`. General solver contracts bind exact residual/JVP/VJP
+identities and support exact matrix-free reference actions without numerical
+re-entry. The six-case AVX-512 native forward-product cohort, including DCT-IV
+with corrected logical-length normalization, passes on this Zen 5 WSL host.
+General residual child-composite packages now execute and the typed residual
+compiler derives all five children automatically for pointwise, reduction,
+rank-2 matmul, bounded-dynamic/mixed-storage, and counted-region programs.
+Architecture-owned packets for that expanded envelope and a clean bare-metal packet remain open. The AST lane stays available
+for unmigrated families until their differential gates close.
+
+Cross-backend sync `AD-FWD-DIST-3-2026-08-11` — **shared exact JVP and
+structured-region products landed; CPU process transport remains open.** Public
+JVP/jacfwd no longer substitutes finite differences, and compiler forward mode
+carries primal/tangent state through bounded SCF. The typed
+`collective_permute` contract executes in the portable runtime, but it does not
+constitute MPI/OFI/SHMEM execution. x86 still needs subgroup-aware process
+launch plus a clean multi-rank Zen 5 correctness/performance packet.
+
+Cross-backend sync `W4-SOLVER-REGION-2026-08-11` — **shared bounded-region
+adjoints and general matrix-free solver policy landed; AVX-512 now has a
+bounded child-composite proof.** Portable tracing now emits bounded SCF, and the paired compiler
+differentiates effect-safe single-block `if`, counted `for`, and canonical
+bounded `while` with implicit captures. General residual execution uses
+restarted GMRES/CG policy and exposes convergence work; counted-region evidence
+executes SAVE/RECOMPUTE/HYBRID cohorts. The monolithic diagonal-sqrt pilot is
+retained, while the general parent now consumes compiler-derived, digest-bound
+nonlinear product children. Typed reduction/matmul and statically counted-region
+lowering is now shared software; pure scalar predicate-bearing residuals and
+the expanded-family WSL correctness packet are now closed. Selected-checkpoint
+lowering and a clean Zen 5 selector packet remain open; AMX is
+unaffected.
+
 Cross-backend sync `COMP-GRAPH-DATAFLOW-W2.1-2026-08-11` — **shared
 analysis substrate landed; AVX-512 remains the proven no-async path.** Graph IR
 now has one fail-closed, invalidatable shape/alias/liveness/memory-dependence/

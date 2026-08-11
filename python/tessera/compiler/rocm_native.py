@@ -2170,62 +2170,86 @@ def package_attention(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
     return ROCMNativePackage(tile_ir, target_ir, backend_ir, image, descriptor)
 
 
+_GRAPH_LSE_CHECKPOINT_REQUESTS = {"auto", "saved", "recompute"}
+
+
+def _select_graph_lse_checkpoint(requested: str, sq: int, sk: int) -> str:
+    if requested == "auto":
+        return "saved" if max(sq, sk) >= 128 else "recompute"
+    return requested
+
+
 def package_attention_backward(
-    module: GraphIRModule,
+    module: GraphIRModule | None,
     *,
     pipeline_name: str,
     _scheduled_artifact: ScheduledAttentionBackwardArtifact | None = None,
 ) -> ROCMNativeProgram:
-    """Package the gfx1151 forward-recompute + split/reduced VJP program."""
-    contract = _attention_backward_contract(module)
-    if contract is None:
-        raise ValueError(
-            "gfx1151 optimized attention backward requires static rank-4 "
-            "f16/bf16 dO/Q/K/V, fp32 dQ/dK/dV, D == Dv divisible by 16, "
-            "compatible MHA/GQA heads, deterministic dropout replay, "
-            "and a supported causal/window policy"
+    """Package a Graph-owned or scheduled gfx1151 attention VJP.
+
+    The scheduled lane consumes its content-addressed artifact directly.  It
+    must not reconstruct a Graph module merely to re-enter the older package
+    producer; doing so would create a second Graph-to-backend authority.
+    """
+    if _scheduled_artifact is not None:
+        artifact = _scheduled_artifact
+        artifact.validate()
+        if artifact.target != "rocm" or artifact.architecture != "gfx1151":
+            raise ValueError("scheduled ROCm attention backward requires gfx1151")
+        dtype = artifact.dtype
+        names = artifact.input_names
+        bias_name = artifact.bias_name
+        result_names = tuple(f"%{name}" for name in artifact.output_names)
+        dims = artifact.dims
+        scale = artifact.scale
+        causal = artifact.causal
+        window_left = artifact.window_left
+        window_right = artifact.window_right
+        softcap = artifact.softcap
+        dropout_p = artifact.dropout_p
+        dropout_seed = artifact.dropout_seed
+        checkpoint_policy = artifact.lse_checkpoint_policy
+        selected_checkpoint = artifact.lse_checkpoint_selection
+    else:
+        if module is None:
+            raise ValueError("Graph-owned attention backward packaging requires a module")
+        contract = _attention_backward_contract(module)
+        if contract is None:
+            raise ValueError(
+                "gfx1151 optimized attention backward requires static rank-4 "
+                "f16/bf16 dO/Q/K/V, fp32 dQ/dK/dV, D == Dv divisible by 16, "
+                "compatible MHA/GQA heads, deterministic dropout replay, "
+                "and a supported causal/window policy"
+            )
+        (
+            dtype, names, bias_name, result_names, dims, scale, causal,
+            window_left, window_right, softcap, dropout_p, dropout_seed,
+        ) = contract
+        requested_checkpoint = module.functions[0].body[0].kwargs.get(
+            "lse_checkpoint", "auto"
         )
-    (
-        dtype,
-        names,
-        bias_name,
-        result_names,
-        dims,
-        scale,
-        causal,
-        window_left,
-        window_right,
-        softcap,
-        dropout_p,
-        dropout_seed,
-    ) = contract
+        checkpoint_policy = requested_checkpoint
+        selected_checkpoint = _select_graph_lse_checkpoint(
+            requested_checkpoint, dims[3], dims[4]
+        )
     do_name, q_name, k_name, v_name = names
     dq_name, dk_name, dv_name = (name.removeprefix("%") for name in result_names)
     storage = {"fp16": "f16", "bf16": "bf16"}[dtype]
     b, hq, hkv, sq, sk, d, dv = dims
-    requested_checkpoint = module.functions[0].body[0].kwargs.get("lse_checkpoint", "auto")
-    if requested_checkpoint not in {"auto", "saved", "recompute"}:
+    if (
+        _scheduled_artifact is None
+        and requested_checkpoint not in _GRAPH_LSE_CHECKPOINT_REQUESTS
+    ):
         raise ValueError(
             "gfx1151 attention backward lse_checkpoint must be 'auto', "
             f"'saved', or 'recompute'; got {requested_checkpoint!r}"
         )
     # Exact gfx1151 host-wall sweeps show a stable saved-LSE win at 128x128 and
     # 256x256 for both f16 and bf16, while shorter lengths are mixed.
-    selected_checkpoint = (
-        "saved"
-        if requested_checkpoint == "auto" and max(sq, sk) >= 128
-        else "recompute"
-        if requested_checkpoint == "auto"
-        else requested_checkpoint
-    )
     save_lse = selected_checkpoint == "saved"
     if _scheduled_artifact is not None:
-        artifact = _scheduled_artifact
-        artifact.validate()
         if (
-            artifact.target != "rocm"
-            or artifact.architecture != "gfx1151"
-            or artifact.storage != storage
+            artifact.storage != storage
             or artifact.dims != dims
             or artifact.input_names != names
             or artifact.bias_name != bias_name
@@ -2512,7 +2536,7 @@ def package_attention_backward(
         "workspace_bytes": workspace.bytes,
         "workspace_contract": "canonical_attention_backward_split_v1",
         "lse_checkpoint": selected_checkpoint,
-        "lse_checkpoint_policy": requested_checkpoint,
+        "lse_checkpoint_policy": checkpoint_policy,
         "source_ir_kind": "canonical_attention_tensor_program",
         "split_count": shared_workspace.split_count,
         "reduction_order": list(shared_workspace.reduction_order),
@@ -2581,60 +2605,11 @@ def package_scheduled_attention_backward(
     pipeline_name: str,
 ) -> ROCMNativeProgram:
     """Package the exact E2E-REAL-5B Tile program without Graph lowering."""
-    from .graph_ir import GraphIRFunction, IRArg, IROp, IRType
-
     artifact.validate()
     if artifact.target != "rocm" or artifact.architecture != "gfx1151":
         raise ValueError("scheduled ROCm attention backward requires gfx1151")
-    b, hq, hkv, sq, sk, d, dv = artifact.dims
-    element = {"fp16": "f16", "bf16": "bf16"}[artifact.dtype]
-
-    def tensor(shape: tuple[int, ...], dtype: str, spelling: str) -> IRType:
-        return IRType(
-            f"tensor<{'x'.join(map(str, shape))}x{spelling}>",
-            tuple(map(str, shape)), dtype,
-        )
-
-    do_type = tensor((b, hq, sq, dv), artifact.dtype, element)
-    q_type = tensor((b, hq, sq, d), artifact.dtype, element)
-    k_type = tensor((b, hkv, sk, d), artifact.dtype, element)
-    v_type = tensor((b, hkv, sk, dv), artifact.dtype, element)
-    bias_type = tensor((b, hq, sq, sk), "fp32", "f32")
-    dq_type = tensor((b, hq, sq, d), "fp32", "f32")
-    dk_type = tensor((b, hkv, sk, d), "fp32", "f32")
-    dv_type = tensor((b, hkv, sk, dv), "fp32", "f32")
-    input_types = (do_type, q_type, k_type, v_type)
-    args = [
-        IRArg(name, ir_type)
-        for name, ir_type in zip(artifact.input_names, input_types, strict=True)
-    ]
-    operands = [f"%{name}" for name in artifact.input_names]
-    operand_types = [str(value) for value in input_types]
-    if artifact.bias_name is not None:
-        args.append(IRArg(artifact.bias_name, bias_type))
-        operands.append(f"%{artifact.bias_name}")
-        operand_types.append(str(bias_type))
-    operation = IROp(
-        result=",".join(artifact.output_names),
-        op_name="tessera.flash_attn_bwd",
-        operands=operands,
-        operand_types=operand_types,
-        kwargs={
-            "scale": artifact.scale, "causal": artifact.causal,
-            "window": (artifact.window_left, artifact.window_right),
-            "softcap": artifact.softcap, "dropout_p": artifact.dropout_p,
-            "dropout_seed": artifact.dropout_seed,
-            "lse_checkpoint": artifact.lse_checkpoint_selection,
-            "route": "deterministic_direct", "deterministic": True,
-        },
-    )
-    module = GraphIRModule(functions=[GraphIRFunction(
-        name=artifact.function_name, args=args,
-        result_types=[dq_type, dk_type, dv_type], body=[operation],
-        return_values=[f"%{name}" for name in artifact.output_names],
-    )])
     return package_attention_backward(
-        module, pipeline_name=pipeline_name, _scheduled_artifact=artifact
+        None, pipeline_name=pipeline_name, _scheduled_artifact=artifact
     )
 
 

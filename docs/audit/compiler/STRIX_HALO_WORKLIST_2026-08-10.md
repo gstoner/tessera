@@ -45,16 +45,28 @@ python3 -m pytest tests/unit/test_rocm_ssa_lds_pipeline_benchmark.py -v
 
 ## 3. Cross-check the Mac pytest failures against this environment
 
-The full `-m "not slow"` sweep on the Mac (rebased tree, post
-`TesseraAppleRuntimeShared` rebuild) ended **16 failed / 13686 passed /
-3478 skipped**. The two identified so far are
-`test_solver_ift_artifact.py::test_solver_ift_tile_artifacts_reach_architecture_owned_lowering`
-and
-`test_stdlib_dspark_perf.py::test_ds2_runtime_launch_overhead_is_bounded_against_ds1_oracle`
-— neither touches the async contract, but the triage is incomplete (full list
-pending; update this section when it lands). Run the same sweep here to
-separate environment-dependent failures (Metal perf bounds, Mac-skipped
-x86/ROCm lanes) from real regressions on main.
+**Triage completed 2026-08-10 (PR #544 integration run) — no longer a
+blocker, but worth a confirming sweep here.** The full `-m "not slow"` sweep on
+the Mac over the integrated tree ended **16 failed / 14064 passed / 3071
+skipped**, and every failure was attributed:
+
+- **11 reproduce identically with `origin/main`'s `python/tessera` + `tests/unit`
+  checked out**, so they are Mac host-state, not regressions:
+  `test_apple_gpu_spectral`, `test_apple_gpu_delta_erase_routing`,
+  `test_apple_legacy_retune_benchmark` (Apple-GPU numerics / live-host ledger),
+  the four `test_lit_env_overrides` cases, `test_rocm_pipeline_tile_lowering`
+  (×3), `test_scheduled_attention_backward_consumers`, and
+  `test_solver_ift_artifact` — the last five being exactly the gfx1151/ROCm
+  lanes this box owns.
+- **5 are load-induced timing flakes**, all `*_perf_baseline_is_bounded`-style
+  wall-clock bounds (`test_rocm_{dequant_gemm,mla_decode_step,moe_transport,
+  sparse_attn}_compiled`, `test_stdlib_dspark_perf::test_ds2_*`). They fail
+  under full-suite parallel load and **pass on re-run in isolation**.
+
+What this box adds: the 5 ROCm/gfx1151 entries in the first bucket are
+Mac-environmental *there* but should be **green here**. If any of them is red
+on this box, it is a real regression — that is the signal to look for, not the
+raw failure count.
 
 ## 4. `examples/optimization` x86-intrinsics targets break `ninja -C build` on ARM
 
@@ -66,13 +78,16 @@ gate the two example targets on `CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64"`
 in `examples/optimization/CMakeLists.txt`. The fix is writable anywhere; the
 "x86 still builds them" verification belongs here.
 
-## 5. Confirm main's lit health after the PR #543 fixture fix
+## 5. Confirm main's lit health after the PR #543/#544 fixture fix
 
-`phase2/effect_annotation.mlir` is red on main itself: PR #543's
-`@canonical_rng` uses `"tessera.rng_uniform"`, an op no ODS declares, and the
-tessera Graph dialect rejects unknown ops. A fix session was spawned
-(2026-08-10); once it lands, re-run `check-tessera-ir` here so the full-build
-config confirms it — a Mac pass alone leaves the ROCm-registered parse path
+**Resolved 2026-08-10 by PR #544 — re-confirm here only.**
+`phase2/effect_annotation.mlir` was red on main because PR #543's
+`@canonical_rng` used `"tessera.rng_uniform"`, an op no ODS declared, and the
+tessera Graph dialect rejects unknown ops. PR #544 landed
+`Tessera_RNGUniformOp` / `Tessera_RNGNormalOp` in `TesseraOps.td` with real
+verifiers plus a negative fixture (`phase2/rng_stateful_invalid.mlir`); both
+pass on the Mac. Re-run `check-tessera-ir` here so the full-build config
+confirms it — a Mac pass alone leaves the ROCm-registered parse path
 unchecked.
 
 ## Explicitly NOT this box's work

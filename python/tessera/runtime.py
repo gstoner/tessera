@@ -11296,14 +11296,17 @@ def _execute_compiled_spectral_jvp(
         terms.append(spectral(term_inputs))
     if not terms:
         raise ValueError("compound spectral JVP requires an active input")
-    tangent = terms[0]
+    # Compound products may begin in real storage and become complex after the
+    # packed spectral epilogue.  Keep this accumulator explicitly dtype-polymorphic
+    # instead of letting mypy freeze it to the first ndarray's scalar dtype.
+    tangent_accumulator: Any = terms[0]
     binary_fn = (
         _execute_x86_compiled_binary if target == "x86"
         else _execute_rocm_compiled_binary
     )
     for term in terms[1:]:
-        complex_output = np.iscomplexobj(tangent)
-        lhs = np.ascontiguousarray(tangent)
+        complex_output = np.iscomplexobj(tangent_accumulator)
+        lhs = np.ascontiguousarray(tangent_accumulator)
         rhs = np.ascontiguousarray(term)
         if complex_output:
             lhs = lhs.view(np.float32).reshape(lhs.shape + (2,))
@@ -11315,10 +11318,14 @@ def _execute_compiled_spectral_jvp(
             "ops": [{"op_name": "tessera.add", "result": "o",
                      "operands": ["a", "b"], "kwargs": {}}],
         })
-        tangent = binary_fn(child, (lhs, rhs))
+        tangent_accumulator = binary_fn(child, (lhs, rhs))
         if complex_output:
-            tangent = np.ascontiguousarray(tangent).view(np.complex64).reshape(term.shape)
-    return primal, tangent
+            tangent_accumulator = (
+                np.ascontiguousarray(tangent_accumulator)
+                .view(np.complex64)
+                .reshape(term.shape)
+            )
+    return primal, tangent_accumulator
 
 
 def _execute_x86_compiled_spectral_jvp(artifact: RuntimeArtifact, args: Any) -> Any:

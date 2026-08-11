@@ -233,23 +233,27 @@ before the WGMMA and TMA passes run. This creates the double-buffering structure
 
 ```mlir
 // After WarpSpecializationPass
-tessera.schedule.warp {role = "producer", id = 0} {
+tessera.schedule.warp {tile.warp_role = "producer", tile.pipeline = "pipe0"} {
     // Warps 0-1: issue TMA async loads
-    tile.async_copy %Q_global, %Q_shared {stage = 0, vector = 16}
-    tile.async_copy %K_global, %K_shared {stage = 0, vector = 16}
-    tessera.queue.push %barrier_queue, %tok
+    %ps = tile.pipeline_init {depth = 2, stage = 0, phase = 0, role = "producer"} : !tile.pipeline_state
+    %q_tile, %tok_q = tile.async_copy %Q_global, %Q_shared {stage = 0, vector = 16}
+    %k_tile, %tok_k = tile.async_copy %K_global, %K_shared {stage = 0, vector = 16}
+    %ps1 = tile.pipeline_advance %ps, %tok_q, %tok_k : !tile.pipeline_state
 }
 
-tessera.schedule.warp {role = "consumer", id = 1} {
+tessera.schedule.warp {tile.warp_role = "consumer", tile.pipeline = "pipe0"} {
     // Warps 2-3: wait for data, run WGMMA
-    %tok = tessera.queue.pop %barrier_queue
-    tile.mbarrier.try_wait %bar, %tok
-    tile.mma %fragA, %fragB, %fragC {m = 64, n = 256, k = 32, accum = "fp32"}
+    %ps = tile.pipeline_init {depth = 2, stage = 0, phase = 1, role = "consumer"} : !tile.pipeline_state
+    %acc = tile.mma %fragA, %fragB, %fragC {m = 64, n = 256, k = 32, accum = "fp32"}
+    %ps1 = tile.pipeline_advance %ps, %acc : !tile.pipeline_state
 }
 ```
 
 Producer and consumer roles use separate register files and barrier slots.
-The `tessera.queue.*` ops are hard boundaries — not advisory annotations.
+The `!tile.pipeline_state` + `!tile.async_token` SSA chains are hard
+boundaries — not advisory annotations. (Earlier revisions of this guide showed
+`tessera.queue.push/pop` here; the `tessera.queue` MLIR dialect was deleted
+2026-08-10 under Decisions #29/#31 and was never what the pass emitted.)
 
 ---
 

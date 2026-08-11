@@ -112,9 +112,10 @@ endif()
 # The FA-4 targets are part of the default source build, but they are not part
 # of the hardware-free NVIDIA/ROCm artifact driver.  Treating their mere target
 # existence as driver intent made the documented lean backend configuration
-# self-conflicting: fa4-attn/fa4-queue were linked and then (correctly) rejected
-# as registrations the lean arm cannot install.  Full drivers still own both
-# dialects; lean drivers exclude them before feature accounting/linking.
+# self-conflicting: fa4-attn (and, before its 2026-08-10 deletion, fa4-queue)
+# were linked and then (correctly) rejected as registrations the lean arm
+# cannot install.  Full drivers still own the Attn dialect; lean drivers
+# exclude it before feature accounting/linking.
 if(TARGET TesseraAttnDialect AND NOT TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
   tessera_opt_feature(fa4-attn TESSERA_HAVE_FA4_ATTN)
   target_include_directories(tessera-opt PRIVATE
@@ -122,19 +123,6 @@ if(TARGET TesseraAttnDialect AND NOT TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
     ${CMAKE_BINARY_DIR}/src/compiler/tile_opt_fa4
   )
   target_link_libraries(tessera-opt PRIVATE TesseraAttnDialect)
-endif()
-
-# Sprint V8 (2026-05-22): link the FA-4 tile-queue dialect into
-# tessera-opt so `tessera.queue.create / push / pop` ops + the
-# `!tessera.queue.tile_queue` / `!tessera.queue.token` types are
-# recognized at parse time.  Mirrors the V7 Attn pattern above.
-if(TARGET TesseraQueueDialect AND NOT TESSERA_OPT_LEAN_ARTIFACT_DRIVER)
-  tessera_opt_feature(fa4-queue TESSERA_HAVE_FA4_QUEUE)
-  target_include_directories(tessera-opt PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/compiler/tile_opt_fa4/include
-    ${CMAKE_BINARY_DIR}/src/compiler/tile_opt_fa4
-  )
-  target_link_libraries(tessera-opt PRIVATE TesseraQueueDialect)
 endif()
 
 # W0.10 (2026-08-02): link the hardware-free x86 Target IR dialect so

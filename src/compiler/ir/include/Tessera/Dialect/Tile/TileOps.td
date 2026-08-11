@@ -513,16 +513,37 @@ def Tile_ControlScanOp  : Tile_ControlOp<"control_scan">;
 def Tile_AsyncCopyOp : Tile_Op<"async_copy"> {
   let summary = "Asynchronous global→shared/LDS tile copy";
   let description = [{
-    Dual-form during migration, mirroring `tile.mma` (W1.1):
+    THE DECLARED CONTRACT (single source of truth — reconciled 2026-08-10;
+    `AsyncCopyOp::verify`/`WaitAsyncOp::verify` in TileOps.cpp are the only
+    verifiers of these ops). One op, two dependency encodings, mirroring
+    `tile.mma`'s W1.1 dual form:
 
-      * **Typed form** -- the op returns a `!tile.async_token` that a
-        `tile.wait_async` consumes, so the copy/wait dependency lives in SSA
-        def-use instead of program order. This is the model the token type was
-        declared for, and it matches `tessera_rocm.async_copy`, which already
-        yields a `!tessera_rocm.token` threaded into its `wait`.
-      * **Legacy form** -- no token result; ordering is carried by
-        `tile.barrier_id` / `tile.depends_on` (still load-bearing on ROCm).
-        Accepted unchanged so the ten existing producers keep working.
+      * **Typed form (production)** -- the op returns a `!tile.async_token`
+        (last result) that `tile.wait_async` / `tile.mma` consume, so the
+        copy/wait dependency lives in SSA def-use instead of program order.
+        Convention: one source operand, staged tile + token as results
+        (`TileIRLoweringPass::emitAsyncCopy`); a token-only result list is also
+        legal. Matches `tessera_rocm.async_copy`, which already yields a
+        `!tessera_rocm.token` threaded into its `wait`.
+      * **Legacy form (declared compatibility envelope)** -- no token result;
+        the dependency is carried outside SSA by grouping keys:
+        `tile.barrier_id` / `tile.depends_on` (the ROCm wave-LDS FIFO lane,
+        still load-bearing there) or an integer `stage` (the Python reference
+        spine's encoding; consumed conservatively by `TileBufferReusePass`,
+        which treats a key-less copy/wait as matching anything — the
+        lifetime-extending choice, so absence fails safe).
+
+    All attributes are OPTIONAL at this level; when present they must be well
+    formed (`stage` >= 0 — enforced by the verifier). `tile_rows` /
+    `tile_cols` / `tile.layout` are performance keys read by
+    `AsyncCopyLoweringPass` with declared defaults; they never change what the
+    copy means. Operand types are deliberately open: the value lane stages
+    tensors, the ROCm lane memrefs/buffers.
+
+    What is deliberately NOT the contract: a *required* `stage` or
+    memref-only operands. That model (formerly a second name-dispatched
+    verifier in `ScheduleOps.cpp`, deleted) had no in-tree producer and
+    rejected the production emitter's output.
 
     Until W1.1's producer migration completes, absence of a token is NOT an
     error. What the verifier does enforce is that a copy which *claims* the
@@ -538,10 +559,14 @@ def Tile_AsyncCopyOp : Tile_Op<"async_copy"> {
 def Tile_WaitAsyncOp : Tile_Op<"wait_async"> {
   let summary = "Wait on outstanding asynchronous tile copies";
   let description = [{
-    The consumer half of the typed `tile.async_copy` form. A
-    `!tile.async_token` operand must be produced by a `tile.async_copy` -- a
-    wait on a token from anywhere else is a dependency the backend cannot
-    honor. Waits with no token operand keep the legacy program-order meaning.
+    The consumer half of `tile.async_copy`, under the same single contract
+    (see that op's description). Typed form: every `!tile.async_token` operand
+    must be produced by a `tile.async_copy` -- a wait on a token from anywhere
+    else is a dependency the backend cannot honor. Legacy form: no token
+    operand; the wait retires copies matched by its grouping key
+    (`tile.barrier_id` on ROCm, `stage` on the Python spine), and a key-less
+    wait retires everything outstanding -- the conservative reading every
+    consumer implements. `stage`, when present, must be >= 0.
   }];
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$outputs);

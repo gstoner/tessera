@@ -83,7 +83,11 @@ Python compiler constructs them from verified object models:
   directives, `schedule.mesh.region`, `schedule.pipeline.region`, stages, and
   yields.
 - **Tile IR:** `TileIRModule` lowers scheduled work to `tile.*`,
-  `tessera_attn.*` FA-4 helpers, and `tessera.queue.*` barriers.
+  `tessera_attn.*` FA-4 helpers, and `tessera.queue.*` barriers. (The
+  `tessera.queue.{create,push,pop,barrier}` ops here are the Python tile IR
+  reference spine's *textual* vocabulary — `python/tessera/compiler/tile_ir.py`,
+  with `queue_id`/`depth` attributes — not an MLIR dialect; the `tessera.queue`
+  MLIR dialect was deleted 2026-08-10, Decisions #29/#31.)
 - **Target IR:** `TargetIRModule` lowers Tile IR into verified CPU/x86,
   NVIDIA/CUDA, Apple CPU/GPU, and ROCm hardware-free target artifacts.
 

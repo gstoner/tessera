@@ -156,8 +156,10 @@ src/compiler/ir/TesseraOps.td,RLGRPOPolicyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,RLNormalizeGroupAdvantagesOp,1,1,real
 src/compiler/ir/TesseraOps.td,RLPPOPolicyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,RMSNormSafeOp,1,1,real
+src/compiler/ir/TesseraOps.td,RNGNormalOp,1,1,real
 src/compiler/ir/TesseraOps.td,RNGPhiloxNormalOp,1,1,real
 src/compiler/ir/TesseraOps.td,RNGPhiloxUniformOp,1,1,real
+src/compiler/ir/TesseraOps.td,RNGUniformOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReduceBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReduceOp,1,1,real
 src/compiler/ir/TesseraOps.td,ReduceScatterOp,1,1,real
@@ -221,6 +223,3 @@ src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,ScaledDotProductO
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,ScoreBiasOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,SoftcapOp,1,1,real
 src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td,StreamingUpdateOp,1,1,real
-src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td,CreateOp,1,1,real
-src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td,PopOp,1,1,real
-src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td,PushOp,1,1,real

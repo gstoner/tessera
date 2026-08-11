@@ -2294,6 +2294,38 @@ def Tessera_RNGPhiloxNormalOp : Tessera_PhiloxRNGOp<
                        DefaultValuedAttr<StrAttr, "\"pathwise\"">:$estimator);
 }
 
+// Implicit-stream stateful RNG — the canonical `rng_uniform` / `rng_normal`
+// spellings accepted by op_catalog.py with effect="random". Unlike the keyed
+// Philox ops above, these draw from the runtime-assigned stream
+// (Decision #18): two textually identical ops yield different samples. They
+// therefore carry no Pure trait and remain conservatively side-effecting so
+// they are never CSE'd, cloned, or rematerialized. EffectAnnotationPass
+// classifies them as "random".
+class Tessera_StatefulRNGOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic
+> {
+  let summary = summaryText;
+  let results = (outs TensorType:$sample);
+  let assemblyFormat = "attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_RNGUniformOp : Tessera_StatefulRNGOp<
+  "rng_uniform", "Implicit-stream uniform random source"> {
+  let arguments = (ins I64ArrayAttr:$shape,
+                       OptionalAttr<I64Attr>:$seed,
+                       DefaultValuedAttr<F64Attr, "0.0">:$low,
+                       DefaultValuedAttr<F64Attr, "1.0">:$high);
+}
+
+def Tessera_RNGNormalOp : Tessera_StatefulRNGOp<
+  "rng_normal", "Implicit-stream normal random source"> {
+  let arguments = (ins I64ArrayAttr:$shape,
+                       OptionalAttr<I64Attr>:$seed,
+                       DefaultValuedAttr<F64Attr, "0.0">:$mean,
+                       DefaultValuedAttr<F64Attr, "1.0">:$stddev);
+}
+
 class Tessera_CollectiveOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
   [MemoryEffects<[MemWrite]>,

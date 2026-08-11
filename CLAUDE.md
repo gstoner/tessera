@@ -146,7 +146,7 @@ Per-phase deliverables and the open-work priority queue live in
 | `compiler/tessera_neighbors/` | Halo/stencil neighbor-exchange dialect (Phase 7) |
 | `transforms/lib/*.cpp` | Pass bodies — Canonicalize/Verify/Migrate (P1), Distribution/Effect/Tiling/TileToX86 (P2), TileIRLowering/WarpSpec/AsyncCopy/WGMMA/TMA (P3), Collective/PipelineStage (P4), `AttentionFamilyPasses.cpp` (reasoning-model attention) |
 | `solvers/` | Core (11 passes), linalg, scaling-resilience, spectral (6 pass bodies + `ts-spectral-opt`), TPP (7 passes + `tpp-space-time`) |
-| `collectives/` | `CollectiveOps.td`, `NCCLAdapter`/`RCCLAdapter` (+ mock paths), `ChunkPlanner`, `CollectiveScheduler` |
+| `collectives/` | `CollectiveOps.td`, `NCCLAdapter`/`RCCLAdapter` (+ mock paths), `ExecRuntime` chunk submit + `TokenLimiter`; the overlap scheduler is an unimplemented draft (`src/collectives/docs/Tessera_Collectives_Overlap_Design.md` §4) |
 | `runtime/src/` | `tessera_runtime.cpp` (C ABI) + CUDA/HIP/CPU backends (real calls) |
 
 ### Tools (`tools/`)

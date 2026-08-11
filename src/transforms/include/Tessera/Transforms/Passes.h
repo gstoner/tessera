@@ -73,7 +73,7 @@ std::unique_ptr<mlir::Pass> createTrainingStepFusionPass();
 //   2. tessera-canonicalize          — fuse/simplify Graph IR patterns
 //   3. tessera-distribution-lowering — tessera.shard → schedule.mesh.*
 //   4. tessera-tile-ir-lowering      — schedule.mesh.region → tile.* + attn.*
-//   5. tessera-warp-specialization   — warp role assignment + queue barriers
+//   5. tessera-warp-specialization   — warp role assignment + pipeline-state SSA
 //   6. tessera-async-copy-lowering   — tile.async_copy → TMA / cp.async
 //   7. tessera-nvwgmma-lowering      — tile.mma → wgmma.mma_async PTX
 //   8. tessera-nvtma-descriptor      — TMA descriptor hoisting + mbarrier init
@@ -91,7 +91,8 @@ std::unique_ptr<mlir::Pass> createTrainingStepFusionPass();
 std::unique_ptr<mlir::Pass> createTileIRLoweringPass(int sm = 90);
 
 // WarpSpecializationPass — assigns producer/consumer warp roles to tile IR ops
-// inside schedule.mesh.region bodies and inserts tessera.queue barriers.
+// inside schedule.mesh.region bodies and threads `!tile.pipeline_state` +
+// `!tile.async_token` SSA chains between the roles.
 std::unique_ptr<mlir::Pass> createWarpSpecializationPass();
 
 // AsyncCopyLoweringPass — lowers tile.async_copy + tile.wait_async to

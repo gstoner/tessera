@@ -386,7 +386,11 @@ the lowering pipeline based on the structure of the kernel:
 
 - `tile.async_copy {stage=N}` / `tile.wait_async {stage=N}` — explicit double-buffering
 - `tile.barrier` — warp-level barrier within a CTA
-- `tessera.queue.push` / `tessera.queue.pop` — producer/consumer token ordering
+- `tile.pipeline_init` / `tile.pipeline_advance` (`!tile.pipeline_state` +
+  `!tile.async_token` SSA) — producer/consumer ordering. (The Python tile IR
+  reference spine renders this handoff as textual `tessera.queue.*` ops with
+  `queue_id`/`depth` attributes; the `tessera.queue` MLIR dialect itself was
+  deleted 2026-08-10, Decisions #29/#31.)
 
 ### 7.2 Inter-rank Synchronization
 

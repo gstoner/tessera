@@ -34,3 +34,24 @@ func.func @typed_copy_without_operands() {
   tile.wait_async %tok : (!tile.async_token) -> ()
   return
 }
+
+// -----
+
+// `stage` is an OPTIONAL legacy-form grouping key (declared contract,
+// reconciled 2026-08-10) — but a present key must be well formed. A negative
+// stage would silently break the legacy lane's copy/wait matching
+// (TileBufferReusePass keys lifetimes on it), so it fails closed here.
+func.func @negative_stage_on_async_copy(%a: memref<128xf16>) {
+  // CHECK: error: 'tile.async_copy' op TILE_ASYNC_STAGE_NEGATIVE
+  "tile.async_copy"(%a) {stage = -1 : i64} : (memref<128xf16>) -> ()
+  return
+}
+
+// -----
+
+// Same rule on the wait side.
+func.func @negative_stage_on_wait_async() {
+  // CHECK: error: 'tile.wait_async' op TILE_ASYNC_STAGE_NEGATIVE
+  "tile.wait_async"() {stage = -2 : i64} : () -> ()
+  return
+}

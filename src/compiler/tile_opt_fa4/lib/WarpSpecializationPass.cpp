@@ -1,12 +1,14 @@
 //===- WarpSpecializationPass.cpp — Phase 3 ──────────────────────────────===//
 //
-// Assigns warp roles (producer / consumer) inside tile IR regions and inserts
-// tessera.queue barriers between them.
+// Assigns warp roles (producer / consumer) inside tile IR regions and
+// synchronizes them through `!tile.pipeline_state` + `!tile.async_token`
+// SSA chains (tile.pipeline_init / tile.pipeline_advance).
 //
 // Structural rules:
 //   1. tile.async_copy ops → emitted in the PRODUCER warp region.
 //   2. tile.mma + tessera_attn.* ops → emitted in the CONSUMER warp region.
-//   3. A tessera.queue.create / push / pop triple separates the two regions.
+//   3. Each warp region owns a `tile.pipeline_init` state value; cross-role
+//      ordering flows through `tile.pipeline_advance` dependencies.
 //
 // This models the SM_90 Hopper warp-specialization programming model where:
 //   - Producer warps issue TMA loads (cp.async.bulk.tensor) and signal mbarrier
@@ -14,16 +16,20 @@
 //
 // Output IR structure:
 //
-//   schedule.warp {role = "producer"} {
-//     tile.async_copy(...)
-//     %q = tessera.queue.create
-//     tessera.queue.push %q, %tile
+//   schedule.warp {tile.warp_role = "producer", tile.pipeline = ...} {
+//     %ps = tile.pipeline_init {role = "producer", ...}
+//     %tok = tile.async_copy(...)
+//     %ps' = tile.pipeline_advance %ps, %tok
 //   }
-//   schedule.warp {role = "consumer"} {
-//     %q  = tessera.queue.create
-//     %t  = tessera.queue.pop %q, %dep
-//     tile.mma(%t, ...)
+//   schedule.warp {tile.warp_role = "consumer", tile.pipeline = ...} {
+//     %ps = tile.pipeline_init {role = "consumer", ...}
+//     tile.mma(...)
+//     %ps' = tile.pipeline_advance %ps, ...
 //   }
+//
+// (An earlier draft of this header described a tessera.queue.create/push/pop
+// mechanism this pass never emitted; the queue dialect was deleted 2026-08-10
+// under Decisions #29/#31.)
 //
 // Registration: --tessera-warp-specialization
 //===----------------------------------------------------------------------===//
@@ -198,7 +204,8 @@ struct WarpSpecializationPass
     return "tessera-warp-specialization";
   }
   StringRef getDescription() const override {
-    return "Assign producer/consumer warp roles; insert tessera.queue barriers";
+    return "Assign producer/consumer warp roles; thread !tile.pipeline_state "
+           "SSA chains between them";
   }
   // C3 join: the pass constructs typed buffer and !tile.pipeline_state SSA
   // values, so the Tile dialect must be loaded.

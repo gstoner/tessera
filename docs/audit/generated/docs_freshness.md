@@ -6,9 +6,9 @@ Reference date for staleness: **2026-08-10**.
 
 ## Headline
 
-- **140** docs catalogued across the canonical doc tree.
-- **139** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **87** updated within the last 30 days.
+- **142** docs catalogued across the canonical doc tree.
+- **141** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **90** updated within the last 30 days.
 - **13** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -42,7 +42,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 23 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 80 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-07-13 | 28 | ✓ |
-| `TILE_IR.md` | Normative | 2026-05-22 | 80 | ✓ |
+| `TILE_IR.md` | Normative | 2026-08-10 | 0 | ✓ |
 | `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 8 | ✓ |
 | `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 67 | ✓ |
 
@@ -162,7 +162,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-09 | 1 | ✓ |
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-10 | 0 | ✓ |
 | `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-02 | 8 | ✓ |
-| `compiler/COMPILER_AUDIT.md` | - | 2026-08-09 | 1 | ✓ |
+| `compiler/COMPILER_AUDIT.md` | - | 2026-08-10 | 0 | ✓ |
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 2 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 13 | ✓ |
 | `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-08-08 | 2 | ✓ |
@@ -177,7 +177,9 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 2 | ✓ |
 | `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-08-08 | 2 | ✓ |
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 24 | ✓ |
+| `compiler/STRIX_HALO_WORKLIST_2026-08-10.md` | - | 2026-08-10 | 0 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 8 | ✓ |
+| `compiler/TILERT_ASSESSMENT.md` | - | 2026-08-10 | 0 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 11 | ✓ |
 | `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-04 | 6 | ✓ |
 | `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 8 | ✓ |

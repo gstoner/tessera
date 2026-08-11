@@ -616,7 +616,15 @@ tile.wait_async
 
 #### Purpose
 
-Assigns producer/consumer warp roles to the FA-4 Tile IR ops. Inserts `tessera.queue` barriers between producer (async data mover) and consumer (MMA compute) roles. This is required for the WGMMA warp specialization model on SM_90+.
+Assigns producer/consumer warp roles to the FA-4 Tile IR ops and synchronizes
+the roles through `!tile.pipeline_state` + `!tile.async_token` SSA chains
+(`tile.pipeline_init` / `tile.pipeline_advance`). This is required for the
+WGMMA warp specialization model on SM_90+.
+
+> **Spec correction (2026-08-10).** Earlier revisions of this section claimed
+> the pass inserts `tessera.queue.create/push/pop` ops. It never did; the
+> `tessera.queue` MLIR dialect was deleted under Decisions #29/#31. The
+> pipeline-state SSA contract below is what the pass actually emits.
 
 #### Input IR contract
 
@@ -624,8 +632,11 @@ Assigns producer/consumer warp roles to the FA-4 Tile IR ops. Inserts `tessera.q
 
 #### Output IR contract
 
-- Function body split into `tessera.schedule.warp {role="producer"}` and `tessera.schedule.warp {role="consumer"}` regions.
-- `tessera.queue.create`, `tessera.queue.push`, `tessera.queue.pop` ops inserted at producer/consumer boundaries.
+- Function body split into `tessera.schedule.warp` regions stamped with
+  `tile.warp_role = "producer"` / `"consumer"` and a shared `tile.pipeline` id.
+- Each warp region owns a `tile.pipeline_init` SSA value
+  (`!tile.pipeline_state`, with `depth`/`stage`/`phase`/`role` attributes);
+  cross-role ordering flows through `tile.pipeline_advance` operands.
 - `tile.async_copy` and `tile.wait_async` ops enclosed in the `producer` region.
 - `tessera_attn.*` compute ops and `tile.mma` ops enclosed in the `consumer` region.
 
@@ -644,15 +655,15 @@ tile.wait_async
 
 **After:**
 ```mlir
-%q = tessera.queue.create : !tessera.queue.type
-tessera.schedule.warp {role = "producer"} {
-  %q_tile = tile.async_copy %Q {tile_rows = 64, tile_cols = 64}
-  tile.wait_async
-  %tok = tessera.queue.push %q, %q_tile : ...
+tessera.schedule.warp {tile.warp_role = "producer", tile.pipeline = "pipe0"} {
+  %ps = tile.pipeline_init {depth = 2, stage = 0, phase = 0, role = "producer"} : !tile.pipeline_state
+  %q_tile, %tok = tile.async_copy %Q {tile_rows = 64, tile_cols = 64}
+  %ps1 = tile.pipeline_advance %ps, %tok : !tile.pipeline_state
 }
-tessera.schedule.warp {role = "consumer"} {
-  %q_tile = tessera.queue.pop %q, %dep_tok : ...
+tessera.schedule.warp {tile.warp_role = "consumer", tile.pipeline = "pipe0"} {
+  %ps = tile.pipeline_init {depth = 2, stage = 0, phase = 1, role = "consumer"} : !tile.pipeline_state
   %scores = tessera_attn.scaled_dot_product %q_tile, %k_tile scale = 0.125 : ...
+  %ps1 = tile.pipeline_advance %ps, %scores : !tile.pipeline_state
 }
 ```
 

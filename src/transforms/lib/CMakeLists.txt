@@ -136,7 +136,6 @@ target_link_libraries(TesseraPasses
     MLIRBufferizationTransforms
     # Phase 3 dialect dependencies
     TesseraAttnDialect
-    TesseraQueueDialect
     MLIRNVVMDialect
     MLIRGPUDialect
 )

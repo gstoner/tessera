@@ -246,7 +246,7 @@ reference.
 | Canonical path               | Promoted from                                    | Rationale |
 |------------------------------|--------------------------------------------------|-----------|
 | `src/compiler/ir`            | `src/ir`                                         | Core Tessera IR grouped under compiler infrastructure |
-| `src/compiler/mlir`          | `src/mlir`                                       | MLIR dialect integration grouped under compiler infrastructure |
+| `src/compiler/mlir`          | `src/mlir`                                       | Now holds only the shared Tile→Target lowering helpers (`include/Tessera/Common/Lowering.h`, Workstream A1); the never-built plugin/registration scaffold was deleted 2026-08-10 (Decision #31) |
 | `src/compiler/programming_model` | `src/tessera_pm_v1_1_memory_parallel`        | Programming-model IR grouped under compiler infrastructure |
 | `src/compiler/tessera_neighbors` | `src/tessera-neighbors`                      | Neighbor topology/halo lowering grouped under compiler infrastructure |
 | `src/compiler/tile_opt_fa4`  | `src/Tile_Optimization_FA4 /…/v1_3`              | FA-4 tile optimization grouped under compiler infrastructure |

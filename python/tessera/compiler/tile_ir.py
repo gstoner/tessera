@@ -169,8 +169,13 @@ class TileIRVerifier:
             if op.op_name == "tile.async_copy":
                 self._verify_async_copy(op, diagnostics)
             elif op.op_name == "tile.wait_async":
-                if int(op.attrs.get("stage", -1)) < 0:
-                    diagnostics.append(TileIRDiagnostic("error", "wait_async stage must be >= 0", "TILE_IR_WAIT_STAGE"))
+                # `stage` is an optional grouping key (declared contract:
+                # TileOps.td). A key-less wait retires everything outstanding —
+                # the conservative reading TileBufferReusePass and
+                # memory_verifier already implement — so absence is legal;
+                # a present key must be well formed.
+                if "stage" in op.attrs and int(op.attrs["stage"]) < 0:
+                    diagnostics.append(TileIRDiagnostic("error", "wait_async stage must be >= 0 when present", "TILE_IR_WAIT_STAGE"))
             elif op.op_name in {"tile.matmul", "tile.mma"}:
                 self._require_attrs(op, diagnostics, "source", "result", "ordinal")
             elif op.op_name == "tile.reduce":
@@ -202,10 +207,17 @@ class TileIRVerifier:
             self._verify_ops(op.body, diagnostics, queues)
 
     def _verify_async_copy(self, op: TileOp, diagnostics: list[TileIRDiagnostic]) -> None:
-        if int(op.attrs.get("stage", -1)) < 0:
-            diagnostics.append(TileIRDiagnostic("error", "async_copy stage must be >= 0", "TILE_IR_ASYNC_STAGE"))
-        if int(op.attrs.get("vector", 0)) < 1:
-            diagnostics.append(TileIRDiagnostic("error", "async_copy vector must be >= 1", "TILE_IR_ASYNC_VECTOR"))
+        # Aligned with the declared contract in TileOps.td (2026-08-10): the
+        # Python spine's `stage`/`vector` are this lane's OPTIONAL scheduling
+        # keys, not required semantics — the C++ production lane encodes the
+        # copy/wait dependency as a `!tile.async_token` SSA edge and carries no
+        # stage at all. `_copy_attrs` still always emits both, and the
+        # memory-model verifier defaults a missing stage to 0 (the conservative
+        # pairing), so absence is legal; a present key must be well formed.
+        if "stage" in op.attrs and int(op.attrs["stage"]) < 0:
+            diagnostics.append(TileIRDiagnostic("error", "async_copy stage must be >= 0 when present", "TILE_IR_ASYNC_STAGE"))
+        if "vector" in op.attrs and int(op.attrs["vector"]) < 1:
+            diagnostics.append(TileIRDiagnostic("error", "async_copy vector must be >= 1 when present", "TILE_IR_ASYNC_VECTOR"))
 
     def _verify_collective(self, op: TileOp, diagnostics: list[TileIRDiagnostic]) -> None:
         self._require_attrs(

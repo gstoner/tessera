@@ -1,6 +1,7 @@
 """Arch-4 (2026-05-22) — Tessera MLIR dialect registration manifest.
 
-V7 (tessera.attn, 2026-05-22) and V8 (tessera.queue, 2026-05-22) shipped
+V7 (tessera.attn, 2026-05-22) and V8 (tessera.queue, 2026-05-22 —
+dialect deleted 2026-08-10, Decisions #29/#31) shipped
 the same 5-step ritual:
 
   1. ODS .td file declaring the dialect.
@@ -30,9 +31,12 @@ five touchpoints stay consistent.  The drift gate at
     files; the drift gate makes the missing touchpoint show up
     immediately.
 
-Today's coverage includes the core Graph/Tile dialects, attention/queue,
+Today's coverage includes the core Graph/Tile dialects, attention,
 portable collective Target IR, NVIDIA/ROCm Target IR, and the registered
-``tessera_solver`` dialect.
+``tessera_solver`` dialect.  The V8 ``tessera.queue`` dialect was deleted
+2026-08-10 (Decisions #29/#31: zero producers/consumers, dotted-name type
+syntax unparseable in standalone lit IR); the queue vocabulary survives
+only in the Python tile IR spine (``tile_ir.py``, ``memory_verifier.py``).
 """
 
 from __future__ import annotations
@@ -53,7 +57,7 @@ class DialectSpec:
     name
         MLIR dialect namespace string (the ``let name = ...`` value in
         the .td file).  Examples: ``"tessera"``, ``"tessera.attn"``,
-        ``"tessera.queue"``, ``"tessera_apple"``, ``"tpp"``.
+        ``"tessera_apple"``, ``"tpp"``.
     target
         CMake target name (the ``add_mlir_library(...)`` first arg).
     header
@@ -68,21 +72,21 @@ class DialectSpec:
         registration in ``tessera-opt``.  ``None`` for the root
         ``tessera`` dialect which uses ``TESSERA_HAVE_CORE_TESSERA_IR``.
     eager_load_parent
-        For dotted-name dialects (``"tessera.attn"``,
-        ``"tessera.queue"``): the parent dialect that anchors the
+        For dotted-name dialects (``"tessera.attn"``): the parent
+        dialect that anchors the
         :class:`DialectExtension` eager-load.  ``None`` for root
         dialects and for single-segment dialect names that don't need
         the trick.
     has_typedefs
         Informational — does the dialect declare any ``TypeDef``s?
         Useful context for whether standalone-lit IR fixtures need to
-        spell types out (which today is blocked by an MLIR parser
-        limitation for dotted names with types — see Queue note).
+        spell types out (dotted dialect names with TypeDefs hit an MLIR
+        parser limitation — the reason the V8 queue dialect could never
+        be lit-exercised and was ultimately deleted).
     standalone_lit_parseable
         Whether IR using this dialect's ops + types can parse from
-        a standalone lit fixture.  ``False`` for ``tessera.queue``
-        today because of the dotted-dialect-with-types MLIR parser
-        limitation.  Documented in ``QueueVerifiers.cpp``.
+        a standalone lit fixture.  ``False`` entries must carry a
+        documented blocker note.
     sprint
         Which sprint introduced the dialect registration, for
         archaeological context.
@@ -129,24 +133,8 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
         standalone_lit_parseable=True,
         sprint="V7",
     ),
-    DialectSpec(
-        name="tessera.queue",
-        target="TesseraQueueDialect",
-        header="src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/QueueDialect.h",
-        cpp_dir="src/compiler/tile_opt_fa4/lib/Dialect/Queue",
-        register_fn="tessera::queue::registerQueueDialect",
-        cmake_flag="TESSERA_HAVE_FA4_QUEUE",
-        eager_load_parent="tessera",
-        has_typedefs=True,
-        # NOTE: dotted dialect name + TypeDefs hits an MLIR parser
-        # limitation — `!tessera.queue.tile_queue` parses as dialect
-        # `tessera` + type `queue.tile_queue`.  Verifiers run when the
-        # dialect is loaded programmatically (FA-4 lowering pipeline)
-        # but standalone lit IR can't reference the types directly.
-        # Documented in QueueVerifiers.cpp.
-        standalone_lit_parseable=False,
-        sprint="V8",
-    ),
+    # The V8 `tessera.queue` DialectSpec was removed 2026-08-10 with the
+    # dialect itself (Decisions #29/#31).
     DialectSpec(
         name="tessera_collective",
         target="TesseraCollectiveDialect",

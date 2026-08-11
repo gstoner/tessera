@@ -3222,3 +3222,18 @@ Schedule→Tile and exact-device FFT/TSOL tests pass. This is a correctness and
 launch-count retain verdict only. Fresh bare-metal gfx1151 device-event timing
 and application-kernel instrumentation comparison remain required before
 performance promotion. gfx1200/gfx1250 stay fail-closed.
+
+## Cross-backend sync `TILE-SYNC-RECONCILE-2026-08-10`
+
+`tile.async_copy`/`tile.wait_async` now have one declared contract (ODS dual
+form, `TileOps.td`): typed `!tile.async_token` SSA is production; the legacy
+`tile.barrier_id`/`tile.depends_on`/`stage` grouping keys are the declared
+compatibility envelope, optional and conservative on absence. New shared
+diagnostic `TILE_ASYNC_STAGE_NEGATIVE` (a present `stage` must be >= 0).
+**ROCm outcome: follow-up required on the primary box.** The legacy attr
+envelope is load-bearing exactly on this backend's lanes (`TileToROCM.cpp`,
+`ROCMWaveLdsPipeline.cpp`, `GenerateWMMAGemmKernel.cpp`), and the new check
+now runs on every `tile.async_copy` those pipelines emit — but the Mac config
+builds no `tessera-rocm-opt`, so `check-tessera-rocm` and the ROCm-lane
+fixtures have not run against the change. Gates enumerated in
+`docs/audit/compiler/STRIX_HALO_WORKLIST_2026-08-10.md`.

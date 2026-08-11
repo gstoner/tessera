@@ -46,6 +46,25 @@ def test_tile_ir_renders_core_tile_attention_and_queue_ops():
     assert "tessera.queue.barrier" in text
 
 
+def test_tile_ir_async_ops_verify_without_optional_grouping_keys():
+    """Declared contract (TileOps.td, reconciled 2026-08-10): `stage`/`vector`
+    are OPTIONAL grouping/scheduling keys on tile.async_copy / tile.wait_async.
+    The production C++ lane carries the dependency as a !tile.async_token SSA
+    edge with no stage at all; a key-less op is legal and reads conservatively
+    (a stageless wait retires everything outstanding). Requiring the keys here
+    was the Python copy of the deleted ScheduleOps.cpp stage-model verifier."""
+    module = TileIRModule(functions=[
+        TileFunction(
+            "bare",
+            body=[
+                TileOp("tile.async_copy", {"source": "tessera.matmul", "result": "A"}),
+                TileOp("tile.wait_async", {}),
+            ],
+        )
+    ])
+    assert module.verify().ok
+
+
 def test_tile_ir_verifier_rejects_bad_async_queue_and_attention_contracts():
     module = TileIRModule(functions=[
         TileFunction(

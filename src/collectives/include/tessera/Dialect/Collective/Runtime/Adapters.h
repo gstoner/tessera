@@ -4,7 +4,9 @@
 // CollectiveAdapter: common interface implemented by NCCLAdapter (NVIDIA) and
 // RCCLAdapter (AMD ROCm).  Both adapters expose the four canonical collectives
 // (all_reduce, reduce_scatter, all_gather, all_to_all) plus a low-level
-// chunk-async path used by the CollectiveScheduler.
+// chunk-async path driven by ExecRuntime::submit (Execution.h). A richer
+// overlap scheduler on top of that path is unimplemented — see the draft in
+// src/collectives/docs/Tessera_Collectives_Overlap_Design.md §4.
 //
 // When built without NCCL/RCCL (CPU-only mode, tests), both adapters fall
 // back to the in-memory mock path: all operations complete synchronously on
@@ -236,7 +238,8 @@ struct CollectiveAdapter {
   virtual void all_to_all(const void* send_buf, void* recv_buf,
                            size_t shard_bytes, const CollectiveSpec& spec) = 0;
 
-  /// Low-level async chunk submission (used by CollectiveScheduler).
+  /// Low-level async chunk submission (called by ExecRuntime::submit,
+  /// Execution.h).
   /// On completion, cb() is invoked on an unspecified thread.
   virtual void submitChunkAsync(const void* buf, size_t bytes,
                                 int device, int stream,

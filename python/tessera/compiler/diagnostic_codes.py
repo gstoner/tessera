@@ -1,7 +1,7 @@
 """Arch-1 (2026-05-22) — Central registry of Tessera diagnostic codes.
 
-Before this sprint, diagnostic codes (e.g., ``SYMDIM_BINDING_VIOLATION``,
-``QUEUE_PUSH_QUEUE_PROVENANCE``) were defined only at the C++ ``emitOpError``
+Before this sprint, diagnostic codes (e.g., ``SYMDIM_BINDING_VIOLATION``)
+were defined only at the C++ ``emitOpError``
 site.  Discovering them required ``grep`` across ``src/``; their meaning lived
 in the surrounding code comments and in sprint-specific lit fixtures.
 
@@ -823,6 +823,23 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="IRContractLegality",
     ),
 
+    # ── async_copy/wait_async single-contract reconciliation (2026-08-10) ──
+    DiagnosticCode(
+        code="TILE_ASYNC_STAGE_NEGATIVE",
+        pass_origin="AsyncCopyOp::verify / WaitAsyncOp::verify",
+        severity="error",
+        summary=(
+            "`stage` on tile.async_copy / tile.wait_async is an optional "
+            "legacy-form grouping key, but when present it must be >= 0."
+        ),
+        fix_hint=(
+            "Drop the `stage` attribute (typed !tile.async_token SSA form) "
+            "or set it to a non-negative stage index."
+        ),
+        spec="docs/spec/TILE_IR.md",
+        sprint="TILE-SYNC-RECONCILE-2026-08-10",
+    ),
+
     # ── W1.1 step 3 — pointer-backed Tile address contracts ────────────────
     DiagnosticCode(
         code="TILE_VIEW_POINTER_ARITY",
@@ -1248,96 +1265,12 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="CF0",
     ),
 
-    # ── Queue dialect verifiers (V8) ─────────────────────────────────────
-    DiagnosticCode(
-        code="QUEUE_CREATE_OPERAND_COUNT",
-        pass_origin="Queue.CreateOp::verify",
-        severity="error",
-        summary=(
-            "`tessera.queue.create` must have zero operands; future TD "
-            "revisions that accidentally add one are caught at the IR layer."
-        ),
-        fix_hint=(
-            "Remove the extra operand or align Queue.td with the canonical "
-            "zero-operand contract."
-        ),
-        spec=None,
-        sprint="V8",
-    ),
-    DiagnosticCode(
-        code="QUEUE_POP_QUEUE_PROVENANCE",
-        pass_origin="Queue.PopOp::verify",
-        severity="error",
-        summary=(
-            "The queue handle operand of a `tessera.queue.pop` is not "
-            "defined by a `tessera.queue.create` — data-flow malformed."
-        ),
-        fix_hint=(
-            "Ensure the queue handle traces back to a `tessera.queue.create` "
-            "op (not a function argument, not a block argument)."
-        ),
-        spec=None,
-        sprint="V8",
-    ),
-    DiagnosticCode(
-        code="QUEUE_POP_TILE_TYPE",
-        pass_origin="Queue.PopOp::verify",
-        severity="error",
-        summary=(
-            "The result of a `tessera.queue.pop` is neither a ranked tensor "
-            "nor a memref — the TD's `AnyType` was too permissive."
-        ),
-        fix_hint=(
-            "Constrain the result type to a ranked tensor or memref shape."
-        ),
-        spec=None,
-        sprint="V8",
-    ),
-    DiagnosticCode(
-        code="QUEUE_POP_TOKEN_PROVENANCE",
-        pass_origin="Queue.PopOp::verify",
-        severity="error",
-        summary=(
-            "The dependency token operand of a `tessera.queue.pop` is not "
-            "defined by a `tessera.queue.push` — the token must come from a "
-            "matching push."
-        ),
-        fix_hint=(
-            "Wire the dep token from a preceding `tessera.queue.push`; "
-            "function-argument tokens are not legal in FA-4 IR."
-        ),
-        spec=None,
-        sprint="V8",
-    ),
-    DiagnosticCode(
-        code="QUEUE_PUSH_QUEUE_PROVENANCE",
-        pass_origin="Queue.PushOp::verify",
-        severity="error",
-        summary=(
-            "The queue handle operand of a `tessera.queue.push` is not "
-            "defined by a `tessera.queue.create`."
-        ),
-        fix_hint=(
-            "Trace the queue handle back to a `tessera.queue.create` op."
-        ),
-        spec=None,
-        sprint="V8",
-    ),
-    DiagnosticCode(
-        code="QUEUE_PUSH_TILE_TYPE",
-        pass_origin="Queue.PushOp::verify",
-        severity="error",
-        summary=(
-            "The tile operand of `tessera.queue.push` is neither a ranked "
-            "tensor nor a memref."
-        ),
-        fix_hint=(
-            "Pass a tile-shaped value (ranked tensor / memref) — scalars "
-            "and opaque tokens are not legal queue payloads."
-        ),
-        spec=None,
-        sprint="V8",
-    ),
+    # ── Queue dialect verifiers (V8) — REMOVED 2026-08-10 ────────────────
+    # The six QUEUE_* codes were deleted with the `tessera.queue` MLIR
+    # dialect (Decisions #29/#31): the verifiers that emitted them had zero
+    # producers and the dotted type syntax was unparseable in lit IR.  The
+    # live Python tile IR queue vocabulary reports through TILE_IR_* /
+    # MEM_* codes instead (tile_ir.py, memory_verifier.py).
 
     # ── SymbolicDimEqualityPass family (V5 + V2-flow + V3a + V3b + V3c) ──
     DiagnosticCode(

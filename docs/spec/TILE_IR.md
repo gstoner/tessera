@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Tile IR op set and dialect semantics; defers Schedule IR and Target IR details to docs/spec/TARGET_IR_SPEC.md
-last_updated: 2026-05-22
+last_updated: 2026-08-10
 ---
 
 # Tessera Tile IR Specification (Normative)
@@ -39,9 +39,13 @@ question. Resolution:
   `src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/`. Architecture Decision
   #21 (unsupported lowering must emit a stable diagnostic) covers the
   "lower with honest gating" contract for TMEM today.
-- **FA-4 Attn + Queue dialects** are normative Tile IR layers (see
-  `src/compiler/tile_opt_fa4/include/tessera/Dialect/{Attn,Queue}/`)
-  and remain lit-testable. The 4/4 FA-4 lit fixtures pass.
+- **The FA-4 Attn dialect** is a normative Tile IR layer (see
+  `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/`)
+  and remains lit-testable. The 4/4 FA-4 lit fixtures pass.
+- **The `tessera.queue` MLIR dialect was deleted 2026-08-10** (Decisions
+  #29/#31) — see §5 for the disposition. Producer/consumer synchronization
+  is expressed through `!tile.pipeline_state` + `!tile.async_token` SSA
+  chains instead (§5, §7).
 
 ---
 
@@ -55,7 +59,7 @@ ROCm, Apple).
 Schedule IR  (schedule.* dialect)
      │
      ▼  TileIRLoweringPass
-Tile IR      (tile.* + tessera_attn.* + tessera.queue.* + tessera.tcgen05.*)
+Tile IR      (tile.* + tessera_attn.* + tessera.tcgen05.*)
      │
      ▼  NVWGMMALoweringPass / TileToX86Pass / ...
 Target IR    (tessera.nvgpu.wgmma.*, tessera.tma.*, x86 intrinsics)
@@ -64,9 +68,9 @@ Target IR    (tessera.nvgpu.wgmma.*, tessera.tma.*, x86 intrinsics)
 Tile IR is the layer at which:
 - Explicit shared memory allocation appears (`tile.alloc_shared`)
 - Warp roles are assigned (`tessera.schedule.warp {role="producer/consumer"}`)
-- Async copy stages are made explicit (`tile.async_copy {stage=N}`)
+- Async copies carry explicit completion edges (`!tile.async_token` SSA; legacy `stage`/`barrier_id` grouping keys as the declared envelope)
 - MMA operations are expressed (`tile.mma`)
-- Producer/consumer ordering tokens are introduced (`tessera.queue.*`)
+- Producer/consumer ordering is introduced as `!tile.pipeline_state` + `!tile.async_token` SSA chains (`tile.pipeline_init` / `tile.pipeline_advance`)
 - FlashAttention sub-operations appear (`tessera_attn.*`)
 
 Tile IR is **backend-agnostic**. Target-specific intrinsics are in Target IR.
@@ -88,7 +92,7 @@ Tile IR ops carry attributes that encode hardware-relevant parameters:
 
 | Attribute | Type | Example | Meaning |
 |-----------|------|---------|---------|
-| `stage` | `i64` | `{stage = 0}` | Pipeline stage index for async copy double-buffering |
+| `stage` | `i64` | `{stage = 0}` | Optional legacy grouping key for async copy double-buffering; when present must be ≥ 0 |
 | `vector` | `i64` | `{vector = 16}` | Vector width in elements for async copy |
 | `swizzle` | `string` | `{swizzle = "xor"}` | Shared memory swizzle pattern for bank conflict elimination |
 | `order` | `string` | `{order = "tree"}` | Reduction tree order for deterministic results |
@@ -130,9 +134,27 @@ Allocates a buffer in shared memory. Must appear in the kernel preamble.
 
 ### 3.2 `tile.async_copy`
 
-Issues an asynchronous copy from global memory to shared memory. Semantics: the copy
-is initiated but not complete until the matching `tile.wait_async` with the same `stage`
-executes.
+Issues an asynchronous copy from global memory to shared memory. The op has one
+declared contract with two forms (reconciled 2026-08-10, Decisions #29/#31/#21a;
+ODS: `TileOps.td`, verifier: `AsyncCopyOp::verify` in `TileOps.cpp`):
+
+- **Typed token form (production).** The copy yields a `!tile.async_token`
+  result; consumers (`tile.wait_async`, `tile.mma`) take the token as an
+  operand, turning copy→consumer synchronization into an SSA def-use edge
+  checked by dataflow (the opt-in legality passes: `tessera-warpspec-legality`
+  on NV, `rocm-wave-lds-legality` on ROCm). This is what
+  `TileIRLoweringPass::emitAsyncCopy` emits.
+
+```mlir
+%smem, %tok = tile.async_copy %global_src into %smem_dst {vector = 16}
+    : memref<?x?xf16, 0> into memref<128x64xf16, 1>
+```
+
+- **Legacy grouping-key form (declared compatibility envelope).** Ordering is
+  expressed through optional attributes — `tile.barrier_id` / `tile.depends_on`
+  (load-bearing on the ROCm FIFO path) or an integer `stage` (consumed by the
+  Python spine and `TileBufferReusePass`). All keys are optional; a key-less op
+  fails safe as "matches anything".
 
 ```mlir
 tile.async_copy %global_src into %smem_dst {stage = 0, vector = 16}
@@ -140,7 +162,8 @@ tile.async_copy %global_src into %smem_dst {stage = 0, vector = 16}
 ```
 
 **Attributes:**
-- `stage` (required): pipeline stage index (0-based); used to interleave copies with compute
+- `stage` (optional grouping key): pipeline stage index; when present it must
+  be ≥ 0 (diagnostic `TILE_ASYNC_STAGE_NEGATIVE`)
 - `vector` (required for SM_90+): copy vector width in elements; must match TMA descriptor alignment
 
 **Lowering targets:**
@@ -148,22 +171,27 @@ tile.async_copy %global_src into %smem_dst {stage = 0, vector = 16}
 - Below SM_90: `tessera.cp_async.shared.global` → `cp.async.ca.shared.global` PTX
 
 **Verifier rules:**
-- `stage` must be ≥ 0
+- A present `stage` must be ≥ 0 (`TILE_ASYNC_STAGE_NEGATIVE`); absence is legal
+- At most one `!tile.async_token` result; when present, its consumers form the
+  synchronization edge
 - Source must be memory space 0 (global); destination must be memory space 1 (shared)
-- A `tile.wait_async {stage = N}` must dominate every use of any value written by `tile.async_copy {stage = N}` within the same block scope
 
 ### 3.3 `tile.wait_async`
 
-Waits for all in-flight `tile.async_copy` ops with the matching `stage` to complete.
-Acts as a barrier for the specified pipeline stage.
+Completes asynchronous copies. In the typed token form it waits on its
+`!tile.async_token` operands; in the legacy form it acts as a barrier for the
+copies matching its grouping keys (a key-less wait matches all outstanding
+copies).
 
 ```mlir
-tile.wait_async {stage = 0}
+tile.wait_async %tok : !tile.async_token   // typed token form (production)
+tile.wait_async {stage = 0}                // legacy grouping-key form
 ```
 
 **Verifier rules:**
-- Every `tile.async_copy {stage = N}` in the enclosing function must have a corresponding `tile.wait_async {stage = N}`
-- No `tile.wait_async` with a stage that has no corresponding `tile.async_copy` (dead barrier)
+- A present `stage` must be ≥ 0 (`TILE_ASYNC_STAGE_NEGATIVE`); absence is legal
+- Copy/wait pairing is checked by the opt-in legality passes over the SSA token
+  edges (or the ROCm FIFO model), not by a per-op stage-matching verifier
 
 ### 3.4 `tile.mma`
 
@@ -208,7 +236,8 @@ tile.barrier
 ```
 
 **Verifier rules:** Must not appear inside a warp-role region tagged `role="producer"` or
-`role="consumer"` in isolation — producer/consumer synchronization uses queue tokens instead.
+`role="consumer"` in isolation — producer/consumer synchronization uses
+`!tile.pipeline_state` SSA chains instead (§7).
 
 ---
 
@@ -303,64 +332,29 @@ Save and load the per-row log-sum-exp tensor for use in backward passes (Phase 5
 
 ---
 
-## 5. `tessera.queue.*` — Tile Queue Dialect
+## 5. `tessera.queue` MLIR Dialect — DELETED (2026-08-10)
 
-The `tessera.queue` dialect implements **producer/consumer token ordering** for warp
-specialization. It is inserted by `WarpSpecializationPass` to coordinate asynchronous
-data movement between producer and consumer warps.
+The `tessera.queue` MLIR dialect (ops `create`/`push`/`pop`, types
+`!tessera.queue.type` / `!tessera.queue.token`) was deleted under Decisions
+#29/#31: no pass ever produced or consumed its ops, and the dotted-name type
+syntax could not be parsed from standalone lit IR. Earlier revisions of this
+section specified it as the warp-specialization synchronization mechanism;
+that was never what `WarpSpecializationPass` emitted.
 
-### 5.1 Dialect Definition
+The normative producer/consumer synchronization mechanism is **pipeline-state
+SSA**: `WarpSpecializationPass` stamps `tessera.schedule.warp` regions with
+`tile.warp_role` attributes and threads `!tile.pipeline_state` +
+`!tile.async_token` SSA chains through them (`tile.pipeline_init` /
+`tile.pipeline_advance`) — see §7 and `LOWERING_PIPELINE_SPEC.md` §3.7.
 
-```
-Dialect name: tessera.queue
-C++ namespace: ::tessera::queue
-Source: src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td
-```
-
-### 5.2 Types
-
-| Type | Description |
-|------|-------------|
-| `tessera.queue.TileQueueType` | Opaque handle to a tile queue (FIFO of tile-sized buffers) |
-| `tessera.queue.TokenType` | Opaque ordering token produced by `push`, consumed by `pop` |
-
-### 5.3 `tessera.queue.create`
-
-Creates a tile queue. Exactly one `create` must appear per producer/consumer pair in the
-warp specialization pattern.
-
-```mlir
-%q = tessera.queue.create : !tessera.queue.TileQueueType
-```
-
-### 5.4 `tessera.queue.push`
-
-Pushes a tile into the queue and returns an ordering token. The producer warp calls this
-after completing a `tile.async_copy` + `tile.wait_async` sequence.
-
-```mlir
-%token = tessera.queue.push %q, %tile
-    : !tessera.queue.TileQueueType, memref<128x64xf16, 1>
-    -> !tessera.queue.TokenType
-```
-
-### 5.5 `tessera.queue.pop`
-
-Pops a tile from the queue. Blocks until the token produced by the matching `push` is
-available. The consumer warp calls this before performing `tile.mma`.
-
-```mlir
-%tile_out = tessera.queue.pop %q, %dep_token
-    : !tessera.queue.TileQueueType, !tessera.queue.TokenType
-    -> memref<128x64xf16, 1>
-```
-
-### 5.6 Queue Semantics
-
-- Queues are single-producer, single-consumer (SPSC)
-- `push` and `pop` are matched by position: the Nth `push` token feeds the Nth `pop`
-- A `pop` that is not fed by a reachable `push` is a verifier error
-- Queue ops are only valid inside a `tessera.schedule.warp` region
+The queue *vocabulary* survives only in the **Python tile IR reference
+spine**: `lower_schedule_to_tile_ir` (`python/tessera/compiler/tile_ir.py`)
+emits textual `tessera.queue.{create,push,pop,barrier}` ops with
+`queue_id`/`depth`/`stage`/`scope` attributes, verified by `tile_ir.py` and
+`memory_verifier.py`. Those textual ops are a Python-side reference contract,
+not an MLIR dialect. Any MLIR revival must use a parseable single-segment
+dialect name and ship a real producer plus a passing fixture (see
+`tests/unit/test_mlir_verifier_sprint.py::test_queue_mlir_dialect_stays_deleted`).
 
 ---
 
@@ -409,29 +403,35 @@ tessera.tcgen05.commit %acc_tmem into %smem_out
 
 ## 7. Warp Specialization Regions
 
-`WarpSpecializationPass` wraps warp-role-specific code in `tessera.schedule.warp` regions.
+`WarpSpecializationPass` wraps warp-role-specific code in `tessera.schedule.warp`
+regions stamped with `tile.warp_role` and a shared `tile.pipeline` id, and
+synchronizes the roles through `!tile.pipeline_state` + `!tile.async_token`
+SSA chains.
 
 ```mlir
-tessera.schedule.warp {role = "producer"} {
+tessera.schedule.warp {tile.warp_role = "producer", tile.pipeline = "pipe0"} {
   // Async copy logic — producer warps only
-  tile.async_copy %src into %smem {stage = 0, vector = 16}
-  tile.wait_async {stage = 0}
-  %tok = tessera.queue.push %q, %smem
+  %ps = tile.pipeline_init {depth = 2, stage = 0, phase = 0, role = "producer"} : !tile.pipeline_state
+  %smem, %tok = tile.async_copy %src into %smem_buf {stage = 0, vector = 16}
+  %ps1 = tile.pipeline_advance %ps, %tok : !tile.pipeline_state
 }
 
-tessera.schedule.warp {role = "consumer"} {
+tessera.schedule.warp {tile.warp_role = "consumer", tile.pipeline = "pipe0"} {
   // MMA logic — consumer warps only
-  %tile = tessera.queue.pop %q, %tok
-  %acc  = tile.mma %tile, %weight, %acc_init
+  %ps = tile.pipeline_init {depth = 2, stage = 0, phase = 1, role = "consumer"} : !tile.pipeline_state
+  %acc = tile.mma %smem, %weight, %acc_init
+  %ps1 = tile.pipeline_advance %ps, %acc : !tile.pipeline_state
 }
 ```
 
 **Verifier rules:**
 - `tessera.schedule.warp` regions must not be nested
-- A function may contain at most one producer region and one consumer region per queue
+- A function may contain at most one producer region and one consumer region
+  per `tile.pipeline` id
 - generic `tile.barrier` is legacy spelling; active code uses `tile.mbarrier.*`
-  for transactional barriers and queue tokens for producer/consumer handoff
-- All `tessera.queue.*` ops must be inside a `tessera.schedule.warp` region
+  for transactional barriers and pipeline-state SSA for producer/consumer handoff
+- `tile.pipeline_init` / `tile.pipeline_advance` must be inside a
+  `tessera.schedule.warp` region
 
 ---
 
@@ -441,11 +441,11 @@ The Tile IR verifier enforces the following (normative):
 
 | Rule | Checked at |
 |------|-----------|
-| Every `tile.async_copy {stage=N}` has a matching `tile.wait_async {stage=N}` | Function level |
-| No `tile.wait_async` for a stage with no corresponding `tile.async_copy` | Function level |
+| A present `stage` on `tile.async_copy` / `tile.wait_async` is ≥ 0 (`TILE_ASYNC_STAGE_NEGATIVE`; the key is optional) | Op level |
+| Copy→consumer pairing via `!tile.async_token` SSA edges (opt-in legality passes) | Function level |
 | All `tile.alloc_shared` results are memory space 1 | Op level |
 | All `tessera.tcgen05.*` ops only appear when module `tessera.isa >= SM_100` | Module level |
-| `tessera.queue.*` ops only appear inside `tessera.schedule.warp` regions | Op level |
+| `tile.pipeline_init` / `tile.pipeline_advance` only appear inside `tessera.schedule.warp` regions | Op level |
 | `tile.mma` input dimensions match hardware alignment requirements | Op level |
 | `tessera_attn.online_softmax` LSE shape matches Q-tile row count | Op level |
 | Producer and consumer warp regions are not nested | Region level |
@@ -472,10 +472,10 @@ metadata cannot represent the same information.
 | `tile.mma` | Phase 3 | ✅ Complete |
 | `tile.reduce` | Phase 3 | ✅ Complete |
 | `tile.mbarrier.*` | Phase 3 | implemented / lit-testable |
-| `tile.barrier` | legacy note | planned alias only; prefer `tile.mbarrier.*` or queue tokens |
+| `tile.barrier` | legacy note | planned alias only; prefer `tile.mbarrier.*` or pipeline-state SSA |
 | `tile.debug_artifact` / `tile.debug_barrier` | developer tooling | metadata-only markers; elided before Target IR |
 | `tessera_attn.*` (FA-4 ops) | Phase 3 | ✅ Complete |
-| `tessera.queue.*` (warp specialization) | Phase 3 | ✅ Complete |
+| `tessera.queue` MLIR dialect | Phase 3 | ❌ deleted 2026-08-10 (Decisions #29/#31); warp-spec sync is pipeline-state SSA; textual queue vocabulary lives in the Python tile IR spine only |
 | `tessera.tcgen05.*` (TMEM / SM_100) | Phase 3 (ODS defined) | stubbed / lit-testable until real Blackwell PTX operands land |
 | Collective ops (`tile.comm`) | distributed extension | planned / adapter-gated; see collective lowering and validation docs |
 | ROCm MFMA Tile IR path | backend extension | planned / scaffolded in ROCm Target IR |

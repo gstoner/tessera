@@ -3065,3 +3065,14 @@ topology and N/2 child identity. **Apple outcome: follow-up required on the
 owning Mac.** No MSL/metallib or Accelerate consumer changed. Apple must choose
 an architecture-owned real-transform plan and consume the exact v5 artifact;
 x86/gfx1151 physical choices and evidence do not transfer.
+
+## Cross-backend sync `TILE-SYNC-RECONCILE-2026-08-10`
+
+`tile.async_copy`/`tile.wait_async` now have one declared contract (ODS dual
+form, `TileOps.td`); the Python spine's `stage`/`vector` checks are now
+optional-when-present (`tile_ir.py`). New shared diagnostic
+`TILE_ASYNC_STAGE_NEGATIVE`. **Apple outcome: parity validated on the owning
+Mac.** Apple lanes consume the Python tile IR spine and the runtime
+`func.call` lowering, not the C++ stage-model verifier that changed; the
+spine relaxation is covered by the on-box unit suite (`test_tile_ir.py`
+no-key-verifies-clean case). No MSL/MPS consumer changed.

@@ -3998,6 +3998,40 @@ LogicalResult RNGPhiloxNormalOp::verify() {
                          true);
 }
 
+static LogicalResult verifyStatefulRNG(Operation *op, ArrayAttr shape,
+                                       Value sample) {
+  auto sampleTy = dyn_cast<RankedTensorType>(sample.getType());
+  if (!sampleTy || !isa<FloatType>(sampleTy.getElementType()))
+    return op->emitOpError("sample must be a ranked floating tensor");
+  SmallVector<int64_t> dims;
+  for (Attribute a : shape) {
+    auto ia = dyn_cast<IntegerAttr>(a);
+    if (!ia || ia.getInt() < 0)
+      return op->emitOpError(
+          "shape must contain only non-negative integers");
+    dims.push_back(ia.getInt());
+  }
+  if (!llvm::equal(dims, sampleTy.getShape()))
+    return op->emitOpError("shape attribute must match the result type shape");
+  return success();
+}
+
+LogicalResult RNGUniformOp::verify() {
+  if (!std::isfinite(getLow().convertToDouble()) ||
+      !std::isfinite(getHigh().convertToDouble()) ||
+      !(getLow().convertToDouble() < getHigh().convertToDouble()))
+    return emitOpError("requires finite low < high");
+  return verifyStatefulRNG(getOperation(), getShape(), getSample());
+}
+
+LogicalResult RNGNormalOp::verify() {
+  if (!std::isfinite(getMean().convertToDouble()) ||
+      !std::isfinite(getStddev().convertToDouble()) ||
+      !(getStddev().convertToDouble() > 0.0))
+    return emitOpError("requires finite mean and stddev > 0");
+  return verifyStatefulRNG(getOperation(), getShape(), getSample());
+}
+
 static LogicalResult verifyCollectiveOp(Operation *op, Value input,
                                         Value output, StringRef name) {
   if (auto axis = op->getAttrOfType<StringAttr>("axis"))

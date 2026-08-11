@@ -117,7 +117,7 @@ This document specifies four dialect layers that together constitute the Target 
 
 1. **Schedule dialect** — mesh and pipeline region structure (Schedule IR layer)
 2. **`tessera.attn` dialect** — FA-4 FlashAttention ops (Tile IR layer, Phase 3)
-3. **`tessera.queue` dialect** — tile queue synchronisation (Tile IR layer, Phase 3)
+3. **`tessera.queue` dialect** — DELETED 2026-08-10, Decisions #29/#31 (§4 records the disposition)
 4. **`tile.*` ops** — generic tile async copy and MMA primitives (Tile IR layer)
 5. **`tessera_nvidia` dialect** — hardware-free Hopper/Blackwell Target IR contracts
 6. **`tessera.cpu`, `tessera_rocm`, and `tessera_apple` contracts** — hardware-free CPU/x86, AMD, and Apple Target IR contracts, with execution determined by an exact target/runtime row
@@ -553,91 +553,22 @@ $scores q_off = $q_offset kv_off = $kv_offset attr-dict
 
 ---
 
-## 4. `tessera.queue` Dialect — Tile Queue Synchronisation
+## 4. `tessera.queue` Dialect — DELETED (2026-08-10)
 
-**TableGen:** `src/compiler/tile_opt_fa4/include/tessera/Dialect/Queue/Queue.td` (v1.3)
-**Dialect name:** `tessera.queue`
-**C++ namespace:** `::tessera::queue`
-**Phase:** 3
+The Sprint V8 `tessera.queue` MLIR dialect (ops `create`/`push`/`pop`, types
+`!tessera.queue.type` / `!tessera.queue.token`) was deleted under Decisions
+#29/#31: no pass ever produced or consumed its ops (`WarpSpecializationPass`
+synchronizes warp roles through `!tile.pipeline_state` + `!tile.async_token`
+SSA chains instead — see `LOWERING_PIPELINE_SPEC.md` §3.7), and the
+dotted-name type syntax could not be parsed from standalone lit IR.
 
-The queue dialect provides the barrier primitives used by `WarpSpecializationPass` to synchronise producer warps (which prefetch tiles via TMA) and consumer warps (which run WGMMA compute). Queues are opaque handles; their physical implementation is SM-specific (mbarriers on SM_90).
-
----
-
-### 4.1 Types
-
-#### `!tessera.queue.type`
-
-Opaque tile-queue handle. Created by `tessera.queue.create`, consumed by `tessera.queue.push` and `tessera.queue.pop`.
-
-#### `!tessera.queue.token`
-
-Opaque ordering token. Produced by `tessera.queue.push`, consumed by `tessera.queue.pop` to express ordering.
-
----
-
-### 4.2 `tessera.queue.create`
-
-Creates a new tile queue. Must appear before any `push` or `pop` that uses it.
-
-**Results:**
-
-| Result | Type | Description |
-|--------|------|-------------|
-| `$q` | `!tessera.queue.type` | New queue handle. |
-
-**MLIR text:**
-```mlir
-%q = tessera.queue.create : !tessera.queue.type
-```
-
----
-
-### 4.3 `tessera.queue.push`
-
-Pushes a tile into the queue from the producer warp. Returns an ordering token consumed by the matching `pop`.
-
-**Arguments:**
-
-| Arg | Type | Description |
-|-----|------|-------------|
-| `$q` | `!tessera.queue.type` | Queue to push into. |
-| `$tile` | `AnyType` | Tile value to enqueue. |
-
-**Results:**
-
-| Result | Type | Description |
-|--------|------|-------------|
-| `$t` | `!tessera.queue.token` | Ordering token. |
-
-**MLIR text:**
-```mlir
-%tok = tessera.queue.push %q, %q_tile : !tessera.queue.type, tensor<64x64xbf16>
-```
-
----
-
-### 4.4 `tessera.queue.pop`
-
-Pops a tile from the queue in the consumer warp. Blocks until the producer has pushed the corresponding tile (via the token dependency).
-
-**Arguments:**
-
-| Arg | Type | Description |
-|-----|------|-------------|
-| `$q` | `!tessera.queue.type` | Queue to pop from. |
-| `$dep` | `!tessera.queue.token` | Token from the matching `push`. Expresses producer→consumer ordering. |
-
-**Results:**
-
-| Result | Type | Description |
-|--------|------|-------------|
-| `$tile` | `AnyType` | The dequeued tile value. Same type as the pushed tile. |
-
-**MLIR text:**
-```mlir
-%q_tile = tessera.queue.pop %q, %tok : !tessera.queue.type, !tessera.queue.token -> tensor<64x64xbf16>
-```
+The queue *vocabulary* survives only in the Python tile IR reference spine:
+`lower_schedule_to_tile_ir` emits textual
+`tessera.queue.{create,push,pop,barrier}` ops with `queue_id`/`depth`/`stage`
+attributes, verified by `tile_ir.py` and `memory_verifier.py`. Any MLIR
+revival must use a parseable single-segment dialect name and ship a real
+producer plus a passing fixture (see
+`tests/unit/test_mlir_verifier_sprint.py::test_queue_mlir_dialect_stays_deleted`).
 
 ---
 

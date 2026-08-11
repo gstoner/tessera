@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-09
+last_updated: 2026-08-10
 audit_role: theme
 ---
 
@@ -7,6 +7,135 @@ audit_role: theme
 
 This document consolidates the compiler audit material that previously lived in
 multiple root audit documents and compiler archive files.
+
+## TileRT assessment — composition scheduling direction (2026-08-10)
+
+[`TILERT_ASSESSMENT.md`](TILERT_ASSESSMENT.md) assesses TileRT (tile-ai's
+closed low-latency inference runtime) as external validation of the W6 /
+TileSight-T3/T4 overlap-scheduling direction, with four analytic results: the
+bubble decomposition proving MoE is the max-bubble target, a hard ≤3× (batch-1
+≤2×) overlap-speedup ceiling that shows TileRT's own 3–4× claim is composite,
+a counterexample proving scalar-latency arbitration mis-selects kernels once
+any composition layer exists (→ record resource vectors in autotune records
+now, via the open `hot_path_metadata` slot — zero schema change), and a
+static-first/dynamic-only-under-variance scheduling rule with an explicit
+determinism constraint. The trace behind it found the connective tissue absent
+but the parts built: `comm_overlap.py` (contract, zero production consumers),
+the 2026-08-09 typed futures (awaits still adjacent to dispatch — window
+zero), `pipeline_planner.ScheduleStep` (discarded at the IR boundary), and the
+threaded MegaMoE pipeline. Negative findings: `tessera.queue` is dead
+unparseable vocabulary whose claimed producer never emits it;
+`CollectiveScheduler`/`ChunkPlanner` exist only as names in comments and docs.
+Direction only — no status rows changed. W2.2 is a named hard prerequisite for
+any scheduler beyond await-sinking.
+
+## `tessera.queue` MLIR dialect deleted (2026-08-10)
+
+Decision #29/#31 disposition, per the TileRT assessment's §2.1 negative
+finding: the Sprint V8 `tessera.queue` MLIR dialect (3 ops, 2 types, 6
+diagnostic codes) had **zero producers and zero consumers** — no C++ code ever
+constructed a queue op, plugin registration was commented out, and the
+dotted-name type syntax (`!tessera.queue.tile_queue`) was unparseable in
+standalone lit IR, so its one fixture could never pass. The
+warp-specialization boundary's production synchronization mechanism is
+`!tile.pipeline_state` + `!tile.async_token` SSA chains; `WarpSpecializationPass`
+comments claiming queue-triple emission were corrected at the same time.
+
+Deleted: the dialect (`Queue.td`, `QueueOps.cpp`, `QueueVerifiers.cpp`,
+headers, CMake targets, `tessera-opt` registration/feature `fa4-queue`), the
+orphaned Python twin `compiler/queue_dialect.py`, the unpassable
+`queue_show.mlir` fixture, the six `QUEUE_*` diagnostic codes, and the
+`dialects_manifest.py` row. **Kept, untouched:** the live Python tile IR
+queue vocabulary — `lower_schedule_to_tile_ir` emits
+`tessera.queue.{create,push,pop,barrier}` strings, `tile_ir.py` +
+`memory_verifier.py` verify them (happens-before), and they feed the
+`queue_depth` resource records. A stays-deleted gate lives in
+`tests/unit/test_mlir_verifier_sprint.py::test_queue_mlir_dialect_stays_deleted`;
+any revival must ship a parseable single-segment name, a real producer, and a
+passing fixture.
+
+## Dead verifier/plugin surfaces deleted (2026-08-10)
+
+Two C++ surfaces compiled by no CMake target were resolved per Decision #31
+(delete, not consume) after checking provenance: both landed together in the
+April 2026 scaffold commit `8fbc4eb` ("Compiler backend update") as a planned
+central `registerTesseraAll` registration entry that `tessera-opt` never
+adopted — the real drivers register through
+`src/compiler/ir/TesseraDialect.cpp::registerTesseraDialects`, a live function
+the dead plugin *also* declared under the same name (a latent symbol collision
+had it ever been linked).
+
+**Deleted:**
+- `src/compiler/programming_model/ir/ScheduleOps.cpp` — whole file. Its
+  `verifyProgrammingModelOp` dispatcher had zero callers;
+  `PMPasses.cpp::PMV11VerifierPass` (built into `TesseraPM`) is the single
+  production implementation of the `schedule.`/`cache.`/`tile.` structural
+  checks. Because the file was never compiled, none of its extra checks
+  (schedule.prefetch/async_copy/artifact, cache.*, tile.alloc_shared/reduce)
+  were ever enforced, so deletion loses nothing that was live — and several of
+  its contracts had drifted (no mbarrier arch gate; laxer mbarrier semantics
+  than PMV11's release/acq_rel/seq_cst). Note: this tree (main @ `af27ed8`)
+  still carried the `tile.async_copy`/`tile.wait_async` entries; the
+  whole-file deletion subsumes the async-contract reconciliation's partial
+  removal.
+- `src/compiler/mlir/` scaffold: `TesseraMLIRPlugin.cpp`,
+  `include/Tessera/TesseraMLIRPlugin.h`, `lib/Graph/TesseraGraphIR.cpp`,
+  `lib/Schedule/TesseraScheduleIR.cpp`, `lib/Target/TesseraTargetIR.cpp`
+  (unbuilt `emitAsyncCopy`/`verifyTargetOp` with zero callers — distinct from
+  the live `emitAsyncCopy` in `TileIRLoweringPass.cpp`).
+
+**Retained — the directory is NOT wholly dead:**
+`src/compiler/mlir/include/Tessera/Common/Lowering.h` is the Workstream A1
+shared Tile→Target lowering helper (`tessera::common::extractPtr`/
+`ensureExternalDecl`/fusion-call skeleton), consumed by
+`src/transforms/lib/TileToX86Pass.cpp` and the Apple backend via the root
+`CMakeLists.txt` `include_directories(src/compiler/mlir/include)`. That is its
+named consumer; it stays.
+
+**Drift-gate fallout fixed in `tests/unit/test_pipeline_registry.py`:** the
+`_PASS_REGISTRATION_FILES` scan had been treating the never-compiled plugin as
+C++ pipeline truth — `tessera-neighbors-pipeline` and `tessera-full-pipeline`
+existed *only* there and are now removed from `_KNOWN_UNTRACKED_PIPELINES`;
+the stale path to the long-deleted `PassPipelinesPM11.cpp` is replaced by the
+live `programming_model/lib/PMPasses.cpp`, which actually registers
+`tessera-pm-{verify,legalize}-pipeline`. Stale doc pointers updated in
+`docs/spec/COMPILER_REFERENCE.md`, `PROJECT_STRUCTURE.md`, and
+`docs/context/knowledge_map.yaml` (+ regenerated context outputs).
+
+## tile.async_copy / tile.wait_async — one declared contract (2026-08-10)
+
+Found during the TileRT assessment trace: the two sync ops shipped with three
+simultaneous contracts. The ODS (`TileOps.td`) declared the W1.1 dual form
+(typed `!tile.async_token` SSA edge, legacy `tile.barrier_id`/`tile.depends_on`
+attrs); a name-dispatched verifier in the **unbuilt** `ScheduleOps.cpp` — and
+its live mirror in `PMV11VerifierPass` (`tessera-pm-verify`) — REQUIRED a
+`stage` attribute and memref operands; the Python spine
+(`tile_ir.py::_verify_async_copy`) required `stage >= 0` and `vector >= 1`.
+The production emitter (`TileIRLoweringPass::emitAsyncCopy`: tensor operand,
+tile + token results, no stage) satisfied only the first — running
+`tessera-pm-verify` over production Tile IR failed with `'stage' must be >= 0`.
+
+Resolution (Decisions #29/#31/#21a): the **ODS dual form is the single
+declared contract**, now stated in full in `TileOps.td` — typed token form is
+production; the legacy form is the declared compatibility envelope whose
+grouping keys (`barrier_id`/`depends_on` on ROCm, integer `stage` on the
+Python spine and `TileBufferReusePass`) are **optional and conservative on
+absence** (a key-less wait retires everything). `stage` is well-formedness-
+checked when present (`TILE_ASYNC_STAGE_NEGATIVE`, both ops, TileOps.cpp).
+The required-stage model was deleted from `ScheduleOps.cpp` (dead code — that
+file is not in any CMake target) and relaxed to when-present in
+`PMV11VerifierPass` and `tile_ir.py`. The dead stage-model *emitter*
+(`src/compiler/mlir/lib/Target/TesseraTargetIR.cpp`, also unbuilt) is now
+legal under the envelope and was left for the dead-code audit.
+
+Gates: `phase2/pm_verify_async_token.mlir` (red at baseline, green after —
+verified by rebuilding HEAD), negative-stage cases in
+`phase2/tile_async_token_invalid.mlir`, a legacy-stage positive in
+`phase2/tile_async_token.mlir`, and a no-key-verifies-clean unit test in
+`test_tile_ir.py`. Full `lit tests/tessera-ir/` failure set is unchanged vs.
+baseline on the Mac config (29 pre-existing ROCm/x86-lane fixtures that need
+the primary box's build). Remaining primary-box gates and follow-ups:
+[`STRIX_HALO_WORKLIST_2026-08-10.md`](STRIX_HALO_WORKLIST_2026-08-10.md).
 
 ## Collective async unification (2026-08-09)
 

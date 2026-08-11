@@ -6,7 +6,9 @@ audit_role: reference
 # TileRT assessment — tile-granular composition scheduling, with proofs
 
 **Date:** 2026-08-10 · **Status:** assessment + design note (direction, not status
-truth — Decision #26) · **Charter:** W6 ([`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) §8),
+truth — Decision #26) · **Charter:** the composition layer in
+[`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) §8
+(not the integrated plan's autodiff W6),
 TileSight T3/T4 ([`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) §3.1), and
 [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) §I ("promote comm/compute
 overlap from runtime machinery to a scheduled pass").
@@ -303,17 +305,22 @@ representation that survives into IR.
 
 ## 5. Cleanups this trace surfaced (independent of the design)
 
-1. **`tessera.queue` disposition** — dead vocabulary with lying comments and an
-   unparseable type. Either revive minimally (single-segment `tessera_queue`
-   rename per its own follow-up note, fold in `queue_dialect.py`'s attribute
-   set, one passing fixture, one producer) *if* R4's work queue wants an IR
-   carrier — or delete the dialect, the Python twin, and the comment claims
-   (Decisions #29/#31). Deciding is cheap; leaving it is the documented
-   worse-than-missing state.
-2. **Phantom `CollectiveScheduler`/`ChunkPlanner` names** in `Adapters.h`,
-   `moe.py:218`, CLAUDE.md's `src/collectives/` row, and the API reference —
-   rename to point at E9's draft or the real `ExecRuntime`.
-3. **Dual `tile.async_copy` contracts** (§2.1) — reconcile ODS, the
-   programming-model verifier, the C++ emitter, and the Python spine to one
-   declared contract (W1.1 territory).
-4. **`tile_scheduler.h` misnomer** — rename to `thread_pool.h` or document.
+Disposition after PR #544:
+
+1. **`tessera.queue` MLIR dialect — deleted.** The unparseable dead dialect and
+   orphan Python dialect module are gone. Internal Python pipeline markers
+   remain a compatibility carrier and must migrate to explicit Schedule/action
+   DAG plus token lineage under `COMP-SCHED-OVERLAP-1`; they are not evidence
+   that the deleted dialect is live.
+2. **Phantom `CollectiveScheduler`/`ChunkPlanner` names — corrected.** Live
+   documentation now points to the real runtime/planner surfaces.
+3. **Dual `tile.async_copy` contracts — reconciled.** ODS is authoritative:
+   typed `!tile.async_token` is production, while stage/barrier grouping keys
+   are optional compatibility inputs. Remaining work is producer migration,
+   not another contract decision.
+4. **`tile_scheduler.h` misnomer — corrected/documented.** It no longer serves
+   as evidence of a production tile scheduler.
+
+The executable follow-ons R1–R4 are bound to the integrated plan as
+`COMP-SCHED-OVERLAP-1`, rows W5.2a–W5.2d. This assessment remains rationale,
+not a competing work queue.

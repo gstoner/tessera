@@ -34,6 +34,8 @@ runtime can import it without a cycle.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from typing import Any, Callable
 
 import numpy as np
@@ -112,6 +114,176 @@ class PackedQuantTensor:
 
     def storage_bytes(self) -> int:
         return int(self.codes.nbytes + self.scales.nbytes)
+
+
+@dataclass(frozen=True)
+class PackedWeightBytes:
+    """Immutable checkpoint-byte operand for fused model-weight consumers.
+
+    Unlike :class:`PackedQuantTensor`, this carrier never represents FP8 codes
+    as fp32 grid values. ``codes`` is always the physical byte stream consumed
+    by the target package and ``scales`` remains a distinct typed operand.  The
+    content digest covers bytes, scales, logical shape, and packing policy so a
+    package cannot silently substitute a different checkpoint tensor.
+    """
+
+    codes: np.ndarray
+    scales: np.ndarray
+    scheme: QuantScheme
+    shape: tuple[int, int]
+    code_layout: str
+    content_digest: str
+
+    def validate(self) -> None:
+        k, n = self.shape
+        if k <= 0 or n <= 0:
+            raise ValueError("packed weight logical shape must be positive rank-2")
+        if self.codes.dtype != np.uint8 or not self.codes.flags.c_contiguous:
+            raise ValueError("packed weight codes must be contiguous physical bytes")
+        if self.scheme.dtype == "int4" and k % 2:
+            raise ValueError("INT4 output-major nibble packing requires even K")
+        expected = k * n // 2 if self.scheme.dtype == "int4" else k * n
+        if int(self.codes.size) != expected:
+            raise ValueError(
+                f"packed {self.scheme.dtype} weight needs {expected} code bytes; "
+                f"got {self.codes.size}"
+            )
+        group = self.scheme.group_size if self.scheme.group_size is not None else k
+        if k % group:
+            raise ValueError(f"K={k} must be divisible by group_size={group}")
+        if self.scales.dtype != np.float32 or not self.scales.flags.c_contiguous:
+            raise ValueError("packed weight scales must be contiguous fp32")
+        expected_scales = (k // group, n)
+        if self.scales.shape != expected_scales:
+            raise ValueError(
+                f"packed weight scales must be {expected_scales}; got {self.scales.shape}"
+            )
+        expected_layout = "n_major_k_nibbles" if self.scheme.dtype == "int4" else "k_major_n_bytes"
+        if self.code_layout != expected_layout:
+            raise ValueError(
+                f"{self.scheme.dtype} packed weight requires {expected_layout!r} layout"
+            )
+        if self.content_digest != _packed_weight_digest(
+            self.codes, self.scales, self.scheme, self.shape, self.code_layout
+        ):
+            raise ValueError("packed weight byte operand has stale content identity")
+
+    def descriptor(self) -> dict[str, Any]:
+        """Typed, content-addressed ABI carried by Schedule/Tile packages."""
+        self.validate()
+        return {
+            "schema": "tessera.packed_weight_operand.v1",
+            "logical_shape": list(self.shape),
+            "storage_dtype": self.scheme.dtype,
+            "codes_dtype": "uint8",
+            "codes_layout": self.code_layout,
+            "codes_bytes": int(self.codes.nbytes),
+            "scales_dtype": "fp32",
+            "scales_shape": list(self.scales.shape),
+            "group_axis": self.scheme.axis,
+            "group_size": self.scheme.group_size,
+            "accumulator_dtype": "fp32",
+            "full_weight_materialization": "prohibited",
+            "content_digest": self.content_digest,
+        }
+
+    def reference_tensor(self) -> PackedQuantTensor:
+        """Explicit oracle conversion; production physical paths must not call it."""
+        k, n = self.shape
+        if self.scheme.dtype == "int4":
+            codes: np.ndarray = self.codes.reshape(n, (k + 1) // 2)
+        elif self.scheme.dtype == "int8":
+            codes = self.codes.view(np.int8).reshape(k, n)
+        else:
+            codes = _decode_fp8_bytes(self.codes, self.scheme.dtype).reshape(k, n)
+        return PackedQuantTensor(codes, self.scales, self.scheme, self.shape)
+
+
+def _packed_weight_digest(
+    codes: np.ndarray,
+    scales: np.ndarray,
+    scheme: QuantScheme,
+    shape: tuple[int, int],
+    code_layout: str,
+) -> str:
+    header = json.dumps(
+        {
+            "schema": "tessera.packed_weight_operand.v1",
+            "shape": list(shape),
+            "dtype": scheme.dtype,
+            "axis": scheme.axis,
+            "group_size": scheme.group_size,
+            "symmetric": scheme.symmetric,
+            "code_layout": code_layout,
+            "scale_shape": list(scales.shape),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    digest = hashlib.sha256()
+    digest.update(header)
+    digest.update(codes.tobytes(order="C"))
+    digest.update(scales.tobytes(order="C"))
+    return digest.hexdigest()
+
+
+def ingest_packed_weight_bytes(
+    codes: Any,
+    scales: Any,
+    *,
+    dtype: str,
+    shape: tuple[int, int],
+    group_size: int | None,
+    code_layout: str | None = None,
+) -> PackedWeightBytes:
+    """Validate checkpoint bytes without constructing a logical/full weight.
+
+    INT4 bytes are output-major nibble pairs ``[N, ceil(K/2)]``. INT8 and FP8
+    bytes are contraction-major ``[K, N]``. The returned arrays are immutable,
+    preventing their digest-bound package identity from changing after upload.
+    """
+    scheme = QuantScheme(dtype=dtype, axis=0, group_size=group_size)
+    physical = np.array(codes, dtype=np.uint8, order="C", copy=True).reshape(-1)
+    scale_values = np.array(scales, dtype=np.float32, order="C", copy=True)
+    layout = code_layout or (
+        "n_major_k_nibbles" if dtype == "int4" else "k_major_n_bytes"
+    )
+    physical.setflags(write=False)
+    scale_values.setflags(write=False)
+    digest = _packed_weight_digest(physical, scale_values, scheme, shape, layout)
+    logical_shape = (int(shape[0]), int(shape[1]))
+    operand = PackedWeightBytes(
+        physical, scale_values, scheme, logical_shape, layout, digest
+    )
+    operand.validate()
+    return operand
+
+
+def _decode_fp8_bytes(codes: np.ndarray, dtype: str) -> np.ndarray:
+    """Decode E4M3FN/E5M2 bytes for the explicit numerical oracle only."""
+    raw = np.asarray(codes, dtype=np.uint8)
+    sign = np.where((raw & 0x80) != 0, -1.0, 1.0)
+    if dtype == "fp8_e4m3":
+        exponent = ((raw >> 3) & 0xF).astype(np.int16)
+        mantissa = (raw & 0x7).astype(np.float32)
+        normal = np.ldexp(1.0 + mantissa / 8.0, exponent - 7)
+        subnormal = np.ldexp(mantissa / 8.0, -6)
+        value = np.where(exponent == 0, subnormal, normal)
+        value = np.where((exponent == 0xF) & (mantissa == 7), np.nan, value)
+    elif dtype == "fp8_e5m2":
+        exponent = ((raw >> 2) & 0x1F).astype(np.int16)
+        mantissa = (raw & 0x3).astype(np.float32)
+        normal = np.ldexp(1.0 + mantissa / 4.0, exponent - 15)
+        subnormal = np.ldexp(mantissa / 4.0, -14)
+        value = np.where(exponent == 0, subnormal, normal)
+        value = np.where(
+            exponent == 0x1F,
+            np.where(mantissa == 0, np.inf, np.nan),
+            value,
+        )
+    else:
+        raise ValueError(f"byte decoder does not support {dtype!r}")
+    return np.asarray(sign * value, dtype=np.float32)
 
 
 # ── packing helpers (genuine int4 nibble packing) ───────────────────────────
@@ -343,9 +515,11 @@ __all__ = [
     "QUANT_WEIGHT_DTYPES",
     "QuantScheme",
     "PackedQuantTensor",
+    "PackedWeightBytes",
     "pack_int4",
     "unpack_int4",
     "quantize_weight",
+    "ingest_packed_weight_bytes",
     "unit_codes_and_scales",
     "dequant_matmul",
     "dequant_grouped_gemm",

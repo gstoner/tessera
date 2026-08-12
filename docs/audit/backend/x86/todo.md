@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-11
+last_updated: 2026-08-12
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,52 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `MODEL-FUSED-PHYS-1-2026-08-12` — **MiniMax MSA now owns a
+digest-bound AVX-512 package; clean Zen 5 evidence remains open.** The package
+binds Graph, Schedule, Tile, and Target identities and executes the declared
+`x86_msa_compiled` lane without legacy Graph `ops` metadata or runtime
+resynthesis. Structural and differential execution tests pass in WSL, but this
+host cannot provide the required clean AVX-512 timing packet. DeepSeek MLA/DSA
+remain separate family migrations.
+
+Cross-backend sync `MODEL-WEIGHT-PHYS-1-2026-08-12` — **shared physical-byte
+weight ABI landed; AVX-512/VNNI consumption remains follow-up required.** The
+content-addressed carrier preserves INT4/FP8 checkpoint bytes and separate fp32
+scales while prohibiting full-weight materialization. This slice adds no x86
+packed-byte GEMM package and transfers no gfx1151 evidence. x86 still needs an
+architecture-owned AVX-512/VNNI physical consumer and a clean Zen 5 packet.
+
+Cross-backend sync `W4-PRESBURGER-SHARD-2026-08-12` — **shared typed shape and
+placement analyses landed; AVX-512/MPI physical follow-up remains open.** The
+C++ compiler consumes coefficient-vector integer-affine and exact
+modular/divisibility constraints with MLIR Presburger analysis. Shared placement
+propagation now distinguishes replicated, tiled, partial-reduction, and unknown
+states; catalog pointwise/reduction/collective rules feed an explicit fail-closed
+reshard planner. Lowered `control_scan` has shared JVP/VJP products under
+`recompute_all`; saved checkpoint policies remain rejected. No MPI/OFI/SHMEM
+reshard materialization, native region product, or clean Zen 5 packet was added.
+
+Cross-backend sync `E2E-AUTH-DAG-2026-08-12` — **shared reduction and
+normalization product authority landed; exact AVX-512 rerun is blocked.**
+Reduction now requires exact `schedule.reduce → tile.reduce_kernel → native
+descriptor` children, and normalization owns a content-addressed composite
+Schedule/Tile action program. Mandatory tracer/AST differential gates cover
+pure native JVPs and VJPs. This WSL process cannot load the production AVX-512
+shared image, so it cannot refresh the Zen 5 packet; no ROCm result transfers.
+A clean bare-metal Zen 5 run with that image and calibrated timing remains the
+architecture-owned gate.
+
+Cross-backend sync `E2E-AUTH-DAG-2026-08-11` — **shared frontend authority and
+automatic dependence-edge contracts landed; AVX-512 physical evidence is
+unchanged.** Pure straight-line tensor signatures now cache tracer-owned Graph
+IR and can be differentially certified against the retained AST candidate.
+Native-JVP plugins declare Graph/Schedule/Tile/AVX-512 disposition and own parent
+package construction; compatibility gaps are explicit. W2.1 facts now generate conservative Tile action-DAG
+edges with reason and analysis digests. The existing JVP children remain the
+physical implementation; this slice adds no selector promotion. Carrying the
+generated edges through x86 family pipelines and a clean Zen 5 calibrated
+packet remain follow-up; the no-async path stays valid.
 
 Cross-backend sync `AD-SOLVER-ISTFT-PHYSICAL-2026-08-11` — **bounded general-
 residual and exact ISTFT-window products execute on AVX-512.** A content-

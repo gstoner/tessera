@@ -225,6 +225,10 @@ def _canonicalize_spectral_attrs(
 # `f(Q, scores=s, top_k=2)` and `f(Q, top_k=2, scores=s)` would emit different
 # IR for the same program. The declared tuple pins the position.
 _KEYWORD_OPERANDS: Dict[str, tuple[str, ...]] = {
+    # Affine normalization has a fixed ABI: data, scale, bias. Alphabetical
+    # fallback used to silently swap beta/gamma in the legacy candidate.
+    "tessera.layer_norm": ("gamma", "beta"),
+    "tessera.rmsnorm": ("gamma",),
     # NSA branch 3: per-block scores (B, H, S_q, num_blocks), unwrapped and
     # `np.asarray`d by the reference exactly like Q/K/V. A real operand.
     "tessera.attn_top_k_blocks": ("scores",),

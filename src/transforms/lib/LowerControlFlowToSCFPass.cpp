@@ -36,6 +36,7 @@
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SmallVector.h"
@@ -57,8 +58,8 @@ struct LowerControlFlowToSCF
     return "tessera-control-flow-to-scf";
   }
   StringRef getDescription() const override {
-    return "CF2: lower tessera.control_{for,if,while} to scf.{for,if,while} "
-           "(state in iter_args / branch+loop bodies kept as func.calls), the "
+    return "CF2: lower tessera.control_{for,if,while,scan} to structured SCF "
+           "(state in iter_args; scan bodies inlined for differentiation), the "
            "portable hardware-free step of the CUDA/ROCm control-flow path.";
   }
 
@@ -366,6 +367,111 @@ struct LowerControlFlowToSCF
     return Outcome::Lowered;
   }
 
+  // tessera.control_scan -> one scf.for carrying both recurrent state and the
+  // stacked output tensor.  The body function is inlined so region JVP/VJP
+  // sees the actual differentiable operations rather than an opaque func.call.
+  Outcome lowerControlScan(Operation *op) {
+    if (op->getNumOperands() < 2 || op->getNumResults() != 2 ||
+        op->getAttr("body_opcodes"))
+      return Outcome::Skipped;
+    auto bodySym = op->getAttrOfType<FlatSymbolRefAttr>("body");
+    auto tripAttr = op->getAttrOfType<IntegerAttr>("trip");
+    auto checkpointPolicy = op->getAttrOfType<StringAttr>(
+        "tessera.autodiff.checkpoint_policy");
+    if (checkpointPolicy && checkpointPolicy.getValue() != "recompute_all") {
+      op->emitError()
+          << "control_scan checkpoint policy '" << checkpointPolicy.getValue()
+          << "' is not executable in the C++ region adjoint; expected "
+             "'recompute_all' until saved residual ABI lowering lands";
+      signalPassFailure();
+      return Outcome::Malformed;
+    }
+    auto bodyFn = dyn_cast_or_null<func::FuncOp>(
+        bodySym ? SymbolTable::lookupNearestSymbolFrom(op, bodySym) : nullptr);
+    if (!bodySym || !tripAttr || tripAttr.getInt() <= 0 || !bodyFn ||
+        bodyFn.isDeclaration() || !bodyFn.getBody().hasOneBlock())
+      return Outcome::Skipped;
+
+    auto xsType = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+    auto ysType = dyn_cast<RankedTensorType>(op->getResult(1).getType());
+    if (!xsType || !ysType || !xsType.hasStaticShape() ||
+        !ysType.hasStaticShape() || xsType.getRank() < 1 ||
+        ysType.getRank() < 1 || xsType.getDimSize(0) != tripAttr.getInt() ||
+        ysType.getDimSize(0) != tripAttr.getInt())
+      return Outcome::Skipped;
+
+    SmallVector<Type> expectedInputs{op->getOperand(0).getType()};
+    auto xtType = RankedTensorType::get(xsType.getShape().drop_front(),
+                                        xsType.getElementType(),
+                                        xsType.getEncoding());
+    expectedInputs.push_back(xtType);
+    for (Value capture : op->getOperands().drop_front(2))
+      expectedInputs.push_back(capture.getType());
+    auto yType = RankedTensorType::get(ysType.getShape().drop_front(),
+                                       ysType.getElementType(),
+                                       ysType.getEncoding());
+    if (TypeRange(bodyFn.getArgumentTypes()) != TypeRange(expectedInputs) ||
+        bodyFn.getNumResults() != 2 ||
+        bodyFn.getResultTypes()[0] != op->getResult(0).getType() ||
+        bodyFn.getResultTypes()[1] != yType)
+      return Outcome::Skipped;
+    auto bodyReturn = dyn_cast<func::ReturnOp>(
+        bodyFn.getBody().front().getTerminator());
+    if (!bodyReturn || bodyReturn.getNumOperands() != 2)
+      return Outcome::Skipped;
+
+    OpBuilder b(op);
+    Location loc = op->getLoc();
+    Value empty = tensor::EmptyOp::create(
+        b, loc, ysType.getShape(), ysType.getElementType());
+    Value lb = arith::ConstantIndexOp::create(b, loc, 0);
+    Value ub = arith::ConstantIndexOp::create(b, loc, tripAttr.getInt());
+    Value step = arith::ConstantIndexOp::create(b, loc, 1);
+    auto loop = scf::ForOp::create(
+        b, loc, lb, ub, step, ValueRange{op->getOperand(0), empty});
+    loop->setAttr("tessera.autodiff.checkpoint_policy",
+                  b.getStringAttr("recompute_all"));
+    {
+      OpBuilder::InsertionGuard guard(b);
+      b.setInsertionPointToStart(loop.getBody());
+      SmallVector<OpFoldResult> xOffsets{loop.getInductionVar()};
+      SmallVector<OpFoldResult> xSizes{b.getIndexAttr(1)};
+      SmallVector<OpFoldResult> xStrides(xsType.getRank(), b.getIndexAttr(1));
+      for (int64_t dim : xsType.getShape().drop_front()) {
+        xOffsets.push_back(b.getIndexAttr(0));
+        xSizes.push_back(b.getIndexAttr(dim));
+      }
+      Value xt = tensor::ExtractSliceOp::create(
+          b, loc, xtType, op->getOperand(1), xOffsets, xSizes, xStrides);
+
+      IRMapping mapping;
+      mapping.map(bodyFn.getArgument(0), loop.getRegionIterArg(0));
+      mapping.map(bodyFn.getArgument(1), xt);
+      for (auto [argument, capture] : llvm::zip_equal(
+               bodyFn.getArguments().drop_front(2),
+               op->getOperands().drop_front(2)))
+        mapping.map(argument, capture);
+      for (Operation &nested : bodyFn.getBody().front().without_terminator())
+        b.clone(nested, mapping);
+      Value nextCarry = mapping.lookupOrDefault(bodyReturn.getOperand(0));
+      Value y = mapping.lookupOrDefault(bodyReturn.getOperand(1));
+
+      SmallVector<OpFoldResult> yOffsets{loop.getInductionVar()};
+      SmallVector<OpFoldResult> ySizes{b.getIndexAttr(1)};
+      SmallVector<OpFoldResult> yStrides(ysType.getRank(), b.getIndexAttr(1));
+      for (int64_t dim : ysType.getShape().drop_front()) {
+        yOffsets.push_back(b.getIndexAttr(0));
+        ySizes.push_back(b.getIndexAttr(dim));
+      }
+      Value nextYs = tensor::InsertSliceOp::create(
+          b, loc, y, loop.getRegionIterArg(1), yOffsets, ySizes, yStrides);
+      scf::YieldOp::create(b, loc, ValueRange{nextCarry, nextYs});
+    }
+    op->replaceAllUsesWith(loop.getResults());
+    op->erase();
+    return Outcome::Lowered;
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
     // Collect first (we erase ops as we lower them).
@@ -373,7 +479,7 @@ struct LowerControlFlowToSCF
     module.walk([&](Operation *op) {
       StringRef nm = op->getName().getStringRef();
       if (nm == "tessera.control_for" || nm == "tessera.control_if" ||
-          nm == "tessera.control_while")
+          nm == "tessera.control_while" || nm == "tessera.control_scan")
         ctrl.push_back(op);
     });
     for (Operation *op : ctrl) {
@@ -383,8 +489,10 @@ struct LowerControlFlowToSCF
         r = lowerControlFor(op);
       else if (nm == "tessera.control_if")
         r = lowerControlIf(op);
-      else
+      else if (nm == "tessera.control_while")
         r = lowerControlWhile(op);
+      else
+        r = lowerControlScan(op);
       // Skipped (e.g. the executable-payload form) is intentional and silent —
       // the op is left for the CF0 guard / the CF3/CF4 payload decoder.
       if (r == Outcome::Malformed)

@@ -54,6 +54,8 @@
 #include "Tessera/Transforms/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Analysis/Presburger/IntegerRelation.h"
+#include "mlir/Analysis/Presburger/PresburgerSpace.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -62,6 +64,8 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/STLExtras.h"
 
 #include <optional>
 
@@ -193,6 +197,102 @@ static SmallVector<Binding, 4> readBindings(func::FuncOp fn) {
         out.push_back(*parsed);
   }
   return out;
+}
+
+// W4.2 (2026-08-12): consume a typed coefficient-vector carrier instead of
+// reparsing expression strings.  A row represents
+//   sum(coefficients[i] * symbols[i]) + constant {==,>=} 0.
+// The legacy tessera.dim_bindings parser remains a compatibility verifier
+// while producers migrate; it is not used to construct this Presburger set.
+static LogicalResult checkTypedPresburger(func::FuncOp fn) {
+  auto carrier =
+      fn->getAttrOfType<DictionaryAttr>("tessera.presburger_constraints");
+  if (!carrier)
+    return success();
+
+  auto malformed = [&](Twine detail) {
+    fn.emitOpError("SYMDIM_PRESBURGER_MALFORMED: ") << detail;
+    return failure();
+  };
+  auto version = carrier.getAs<IntegerAttr>("version");
+  auto symbolsAttr = carrier.getAs<ArrayAttr>("symbols");
+  auto constraintsAttr = carrier.getAs<ArrayAttr>("constraints");
+  if (!version || version.getInt() != 1 || !symbolsAttr ||
+      symbolsAttr.empty() || !constraintsAttr || constraintsAttr.empty())
+    return malformed("expected version 1 with non-empty symbols and constraints");
+
+  SmallVector<std::string> symbols;
+  llvm::StringSet<> uniqueSymbols;
+  for (Attribute attr : symbolsAttr) {
+    auto symbol = dyn_cast<StringAttr>(attr);
+    if (!symbol || symbol.getValue().empty() ||
+        !uniqueSymbols.insert(symbol.getValue()).second)
+      return malformed("symbols must be unique, non-empty strings");
+    symbols.push_back(symbol.str());
+  }
+
+  unsigned modularRows = 0;
+  for (Attribute attr : constraintsAttr) {
+    if (auto constraint = dyn_cast<DictionaryAttr>(attr))
+      if (auto relation = constraint.getAs<StringAttr>("relation"))
+        modularRows += relation == "mod";
+  }
+  presburger::IntegerPolyhedron set(presburger::PresburgerSpace::getSetSpace(
+      symbols.size(), /*numSymbols=*/0, modularRows));
+  unsigned modularIndex = 0;
+  for (Attribute attr : constraintsAttr) {
+    auto constraint = dyn_cast<DictionaryAttr>(attr);
+    if (!constraint)
+      return malformed("every constraint must be a dictionary");
+    auto relation = constraint.getAs<StringAttr>("relation");
+    auto coefficients = constraint.getAs<DenseI64ArrayAttr>("coefficients");
+    auto constant = constraint.getAs<IntegerAttr>("constant");
+    if (!relation || !coefficients || !constant ||
+        coefficients.size() != static_cast<int64_t>(symbols.size()))
+      return malformed("constraint rows require relation, total coefficients, and constant");
+    SmallVector<int64_t> row(set.getNumVars() + 1, 0);
+    llvm::copy(coefficients.asArrayRef(), row.begin());
+    row.back() = constant.getInt();
+    if (relation == "eq")
+      set.addEquality(row);
+    else if (relation == "ge")
+      set.addInequality(row);
+    else if (relation == "mod") {
+      auto modulus = constraint.getAs<IntegerAttr>("modulus");
+      auto remainder = constraint.getAs<IntegerAttr>("remainder");
+      if (!modulus || modulus.getInt() < 2 || !remainder ||
+          remainder.getInt() < 0 || remainder.getInt() >= modulus.getInt())
+        return malformed(
+            "mod rows require modulus >= 2 and 0 <= remainder < modulus");
+      // expr == remainder (mod modulus) iff there exists integer q such that
+      // expr - remainder - modulus*q == 0.
+      row[symbols.size() + modularIndex++] = -modulus.getInt();
+      row.back() -= remainder.getInt();
+      set.addEquality(row);
+    }
+    else
+      return malformed("constraint relation must be 'eq', 'ge', or 'mod'");
+  }
+
+  // Concrete witnesses restrict the same integer set rather than selecting a
+  // separate ad-hoc evaluation path.
+  auto sizes = readDimSizes(fn);
+  for (auto [index, symbol] : llvm::enumerate(symbols)) {
+    auto witness = sizes.find(symbol);
+    if (witness == sizes.end())
+      continue;
+    SmallVector<int64_t> equality(set.getNumVars() + 1, 0);
+    equality[index] = 1;
+    equality.back() = -witness->second;
+    set.addEquality(equality);
+  }
+  if (set.isIntegerEmpty()) {
+    fn.emitOpError(
+        "SYMDIM_PRESBURGER_UNSATISFIABLE: typed affine constraints have no "
+        "integer solution under the available dimension witnesses");
+    return failure();
+  }
+  return success();
 }
 
 // Read an op-level dim-name list attribute.  Returns nullopt when
@@ -790,6 +890,8 @@ struct SymbolicDimEquality
     getOperation().walk([&](func::FuncOp fn) {
       auto sizes = readDimSizes(fn);
       auto bindings = readBindings(fn);
+      if (failed(checkTypedPresburger(fn)))
+        anyFailure = true;
       // Function-level binding equation check.
       if (failed(checkBindings(fn, bindings, sizes)))
         anyFailure = true;

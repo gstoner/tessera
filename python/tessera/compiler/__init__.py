@@ -27,6 +27,22 @@ from .constraints import ConstraintSolver, Divisible, Range, Equal, TesseraConst
 from .effects import EffectLattice, Effect, TesseraEffectError
 from .graph_ir import GraphIRConstructionContext, KVCacheSpec, NumericPolicy, construct_mlir_module
 from .graph_dataflow import GraphDataflow, ValueFact, analyze_graph_dataflow
+from .presburger import (
+    PRESBURGER_SCHEMA,
+    PresburgerConstraint,
+    PresburgerSystem,
+    attach_presburger_system,
+    presburger_system_from_constraints,
+)
+from .sharding_propagation import (
+    Placement,
+    PlacementConflict,
+    ReshardAction,
+    ReshardPlan,
+    ShardingPropagationResult,
+    plan_explicit_reshards,
+    propagate_sharding,
+)
 from .schedule_ir import ScheduleIRModule, ScheduleFunction, ScheduleOp, lower_graph_to_schedule_ir
 from .tile_ir import TileIRModule, TileFunction, TileOp, lower_schedule_to_tile_ir
 from .collective_target import (
@@ -57,6 +73,7 @@ from .native_artifact import (
     WorkspaceRequirement,
 )
 from .scheduled_matmul import ScheduledMatmulArtifact, lower_scheduled_matmul
+from .model_attention import ModelAttentionPackage, build_msa_physical_package
 from .nvidia_math_contract import (
     CUDA_MATH_CONTRACT_VERSION,
     CudaMathContract,
@@ -96,12 +113,17 @@ from .primitive_coverage import (
 from .legality import LegalityDiagnostic, LegalityResult, TensorContract, check_op_legality
 from .schedule_planner import ScheduleCandidate, SchedulePlanner, SelectedSchedule, schedule_cache_key
 from .composition_cost import (
+    ActionDAGParity,
     CompositionCalibration,
     CompositionCandidate,
     CompositionEstimate,
     CompositionPruningResult,
+    InferredActionDAG,
+    InferredDependency,
     TileAction,
+    compare_inferred_action_dag,
     estimate_composition,
+    infer_action_dag,
     prune_composition_candidates,
 )
 from .megamoe_overlap import (
@@ -350,6 +372,8 @@ __all__ = [
     "NativeImageArtifact",
     "ScheduledMatmulArtifact",
     "lower_scheduled_matmul",
+    "ModelAttentionPackage",
+    "build_msa_physical_package",
     "OrderingSemantics",
     "ResourceRecord",
     "ScalarArgument",

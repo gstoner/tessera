@@ -12,6 +12,7 @@ from tessera.compiler.native_jvp import (
     child_digest,
 )
 from tessera.compiler.native_jvp_plugins import (
+    native_jvp_plugin_declarations,
     native_jvp_plugin_owners,
     plan_native_jvp_family,
 )
@@ -63,6 +64,24 @@ def test_native_jvp_contract_is_content_addressed_and_tamper_evident():
     stale["family"] = "spectral"
     with pytest.raises(ValueError, match="stale content identity"):
         NativeJVPArtifact(stale).validate()
+
+
+def test_family_plugins_declare_the_complete_compiler_spine():
+    declarations = native_jvp_plugin_declarations()
+    assert set(declarations) == set(native_jvp_plugin_owners())
+    for op_name, declaration in declarations.items():
+        declaration.validate()
+        assert f"tessera.{op_name}" in declaration.graph_consumers
+        if declaration.migration_state in {"canonical", "canonical_composite"}:
+            assert declaration.schedule_consumer is not None
+            assert declaration.schedule_consumer.startswith("schedule.")
+            assert declaration.tile_consumer is not None
+            assert declaration.tile_consumer.startswith("tile.")
+        else:
+            assert declaration.migration_state == "compatibility"
+            assert declaration.schedule_consumer is None
+            assert declaration.tile_consumer is None
+        assert set(declaration.target_consumers) == {"x86", "rocm"}
 
 
 def test_graph_float_attributes_use_mlir_scientific_syntax():
@@ -165,3 +184,29 @@ def test_jvp_plugin_produces_digest_bound_plan_outside_jitfn():
     assert plan.family == "reduce"
     assert [step["id"] for step in plan.steps] == ["primal", "tangent"]
     assert all(len(step["child_digest"]) == 64 for step in plan.steps)
+
+
+def test_normalization_plugin_emits_typed_composite_without_graph_metadata():
+    source = IROp(
+        result="out", op_name="tessera.layer_norm",
+        operands=["%x", "%gamma", "%beta"],
+        operand_types=["tensor<2x8xf32>", "tensor<8xf32>", "tensor<8xf32>"],
+        result_type="tensor<2x8xf32>", kwargs={"eps": 1.0e-5},
+    )
+    values = (
+        np.ones((2, 8), np.float32), np.ones(8, np.float32),
+        np.zeros(8, np.float32),
+    )
+    plan = plan_native_jvp_family(
+        source=source, primal_inputs=values, wrt_indices=(0, 1, 2),
+        target="rocm", architecture="gfx1151", execution_mode="hip_runtime",
+    )
+    child = plan.steps[0]["child_metadata"]
+    assert "ops" not in child
+    contract = child["scheduled_normalization_jvp"]
+    assert contract["schema"] == "tessera.normalization_jvp_schedule.v1"
+    assert len(contract["schedule_digest"]) == 64
+    assert [action["id"] for action in contract["actions"]] == [
+        "primal_normalization", "tangent_projection", "normalized_operand",
+        "affine_projection", "affine_tangent", "bias_tangent",
+    ]

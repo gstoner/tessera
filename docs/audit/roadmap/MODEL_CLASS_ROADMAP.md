@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-11
+last_updated: 2026-08-12
 audit_role: plan
 plan_state: landing
 ---
@@ -73,12 +73,23 @@ Milestone sections below may mention context, but closure should be tracked here
 
 Execution order:
 
-1. **MODEL-WEIGHT-PHYS-1:** ingest packed INT4/FP8 checkpoint bytes and scales
-   directly into typed device-resident operands; prohibit full-weight
-   materialization on the fused lane.
-2. **MODEL-FUSED-PHYS-1:** make DeepSeek MLA/DSA and MiniMax MSA consume their
-   content-addressed Schedule→Tile artifacts through architecture-owned
-   packages, with composed/reference paths retained as differential oracles.
+1. **MODEL-WEIGHT-PHYS-1 (landing):** the shared v1 operand now ingests genuine
+   INT4/FP8 checkpoint bytes plus an independent fp32 scale tensor, validates
+   physical layout/extent, and binds both to one content digest with full-weight
+   materialization prohibited. gfx1151 has an exact-architecture persistent
+   device lease: INT4 codes and scales upload once and the fused kernel reuses
+   their pointers. The exact-device WSL packet passes the numerical oracle and
+   records kernel/weight digests; timing is regression-only. RDNA 3.5 correctly
+   rejects FP8/BF8. NVIDIA FP8, Apple byte-packed, x86 VNNI, and model-loader
+   integration remain architecture-owned closure work.
+2. **MODEL-FUSED-PHYS-1 (landing):** MiniMax MSA now owns a v1
+   content-addressed Graph→Schedule→Tile→Target package on x86/AVX-512 and
+   gfx1151. The runtime validates all four parent digests and consumes the
+   package launch contract without carrying or reconstructing legacy Graph
+   `ops`; the exact gfx1151 execution matches the independent MSA oracle.
+   DeepSeek MLA/DSA still need family-specific artifacts—the three-branch DSA
+   computation must not be mislabeled as the MSA KV-outer contract—and clean
+   selector-grade packets remain open on both architectures.
 3. **MODEL-DIST-E2E-1:** execute full-scale expert routing and model shards over
    native transport, then collect correctness, resource, and selector-grade
    performance packets. Artifact construction and mock meshes do not close it.
@@ -86,10 +97,16 @@ Execution order:
 | ID | Status | Area | Open item / closure evidence | Close condition / acceptance |
 |----|--------|------|------------------------------|------------------------------|
 | O1 | Open | DeepSeek physical attention | MLA absorption and DSA sparse attention have shared semantic/composed foundations, but fused physical ownership is incomplete across target plans. | Each promoted architecture consumes the exact Schedule→Tile parent, matches the composed oracle for prefill/decode, and wins an architecture-owned performance ratchet. |
-| O2 | Open | MiniMax-M3 MSA physical path | KV-outer sparse MSA has graph/artifact coverage, while native physical consumption remains architecture-dependent and incomplete. | `tessera_attn.msa_kv_outer_sparse` launches through a digest-bound package with dense-equivalence, prefill/decode coverage, and exact-target timing provenance. |
+| O2 | Landing | MiniMax-M3 MSA physical path | x86/AVX-512 and gfx1151 consume a digest-bound `tessera_attn.msa_kv_outer_sparse` package without Graph redispatch; gfx1151 has an exact-device numerical execution. | Add prefill/decode and dense-equivalence packets with clean target timing provenance; add independent packages on Apple/NVIDIA rather than transferring x86/ROCm evidence. |
 | O11 | Open | Quantized model-weight runtime bridge | INT4/FP8 packed dequant kernels are landed, but some model-family full-weight runtime paths still use synthetic/reference weights. | Frontier model configs can load quantized weight fixtures into runtime-compatible typed weights and hit the fused dequant path in model-level tests. |
 | O12 | Open | Quantized packed-byte fused-kernel memory path | The fused dequant-GEMM kernel exists, but native packed-byte INT4 nibble / FP8 operands still need the full no-materialization memory path. | Fused dequant kernels consume packed-byte operands directly, preserve separate scale operands, avoid full-weight materialization, and pass parity/perf ratchets. |
 | O13 | Open | Distributed/full-scale execution | Full-scale execution, distributed MoE, and NVIDIA FP8/sparse performance remain hardware-gated. | Hardware-backed CI or reproducible artifact gate covers full-scale launch metadata, distributed routing, and target-specific performance/regression thresholds. |
+
+The generated 43 sharding gaps, four reference-only Target rows, 123 missing
+direct-test proofs, and 229 benchmark gaps are triage inventories. They identify
+coverage debt but are not 399 equally urgent compiler implementations. This
+roadmap orders work by dependency: physical weight ABI first, fused model-family
+packages second, and native full-scale distribution third.
 
 ## What M0–M2 landed (2026-06-14)
 

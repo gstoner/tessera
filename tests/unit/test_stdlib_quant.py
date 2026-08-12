@@ -73,6 +73,74 @@ def test_int4_packs_smaller_than_int8():
     assert b4 < b8
 
 
+def test_ingest_int4_checkpoint_bytes_is_digest_bound_and_never_full_weight():
+    codes = np.array([[0x10, 0x32], [0x54, 0x76]], dtype=np.uint8)
+    scales = np.ones((2, 2), dtype=np.float32)
+    operand = q.ingest_packed_weight_bytes(
+        codes, scales, dtype="int4", shape=(4, 2), group_size=2
+    )
+    descriptor = operand.descriptor()
+    assert descriptor["codes_dtype"] == "uint8"
+    assert descriptor["codes_layout"] == "n_major_k_nibbles"
+    assert descriptor["full_weight_materialization"] == "prohibited"
+    assert descriptor["content_digest"] == operand.content_digest
+    assert not operand.codes.flags.writeable
+    assert not operand.scales.flags.writeable
+
+    changed = q.ingest_packed_weight_bytes(
+        np.array([[0x10, 0x33], [0x54, 0x76]], dtype=np.uint8),
+        scales,
+        dtype="int4",
+        shape=(4, 2),
+        group_size=2,
+    )
+    assert changed.content_digest != operand.content_digest
+
+
+@pytest.mark.parametrize(
+    "dtype,codes,expected",
+    [
+        ("fp8_e4m3", [0x38, 0x40], [1.0, 2.0]),
+        ("fp8_e5m2", [0x3C, 0x40], [1.0, 2.0]),
+    ],
+)
+def test_ingest_fp8_checkpoint_bytes_preserves_physical_storage(
+    dtype, codes, expected
+):
+    operand = q.ingest_packed_weight_bytes(
+        np.array(codes, dtype=np.uint8),
+        np.ones((1, 1), dtype=np.float32),
+        dtype=dtype,
+        shape=(2, 1),
+        group_size=2,
+    )
+    assert operand.codes.nbytes == 2
+    assert operand.descriptor()["storage_dtype"] == dtype
+    np.testing.assert_array_equal(
+        operand.reference_tensor().codes.reshape(-1),
+        np.array(expected, dtype=np.float32),
+    )
+
+
+def test_ingest_packed_weight_rejects_wrong_byte_and_scale_extents():
+    with pytest.raises(ValueError, match="code bytes"):
+        q.ingest_packed_weight_bytes(
+            np.zeros(3, dtype=np.uint8),
+            np.ones((2, 2), dtype=np.float32),
+            dtype="int4",
+            shape=(4, 2),
+            group_size=2,
+        )
+    with pytest.raises(ValueError, match="scales must be"):
+        q.ingest_packed_weight_bytes(
+            np.zeros(4, dtype=np.uint8),
+            np.ones((1, 2), dtype=np.float32),
+            dtype="int4",
+            shape=(4, 2),
+            group_size=2,
+        )
+
+
 # ── scale-layout contract ─────────────────────────────────────────────────────
 def test_scale_layout_contract():
     per_chan = q.QuantScheme("int4", group_size=None).scale_layout

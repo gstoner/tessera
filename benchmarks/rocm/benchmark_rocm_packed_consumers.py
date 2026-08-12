@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
 import json
 from pathlib import Path
+import platform
 import statistics
+import subprocess
 import time
 from typing import Any, Callable
 
@@ -182,9 +185,13 @@ def record(warmup: int = 5, reps: int = 30) -> dict[str, object]:
         "ops": [{"op_name": "tessera.dequant_matmul"}],
     })
 
-    median, p95, result = _measure(
-        lambda: rt.launch(artifact, (x, packed)), warmup, reps
-    )
+    resident_weight = rt.upload_rocm_packed_weight(packed)
+    try:
+        median, p95, result = _measure(
+            lambda: rt.launch(artifact, (x, resident_weight)), warmup, reps
+        )
+    finally:
+        resident_weight.close()
     if not result.get("ok") or result.get("execution_kind") != "native_gpu":
         raise RuntimeError(f"packed dequant-GEMM did not execute on gfx1151: {result}")
     expected_weight = np.empty((k, n), dtype=np.float32)
@@ -240,8 +247,22 @@ def record(warmup: int = 5, reps: int = 30) -> dict[str, object]:
     expected_cache[byte_offset:byte_offset + packed_update.size] = packed_update
     np.testing.assert_array_equal(updated_cache, expected_cache)
     return {
-        "schema": "tessera.rocm.packed-consumers.v1",
+        "schema": "tessera.rocm.packed-consumers.v2",
         "target": "gfx1151",
+        "work_item": "MODEL-WEIGHT-PHYS-1",
+        "host": platform.platform(),
+        "wsl": "microsoft" in platform.release().lower(),
+        "toolchain": subprocess.run(
+            ["/opt/rocm/bin/hipcc", "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.splitlines()[0],
+        "kernel_image_sha256": hashlib.sha256(
+            rt._rocm_dequant_gemm_hsaco()
+        ).hexdigest(),
+        "evidence_eligibility": "correctness_and_regression_only",
+        "promotion_blocker": "bare-metal calibrated device timing unavailable under WSL",
         "packing": "signed_twos_complement_low_nibble_first",
         "rows": [{
             "producer_route": "compiled_gfx1151_int4_pack",
@@ -250,6 +271,10 @@ def record(warmup: int = 5, reps: int = 30) -> dict[str, object]:
             "shape": [m, k, n],
             "logical_code_bytes": int(codes.nbytes),
             "packed_code_bytes": int(packed.codes.nbytes),
+            "weight_content_digest": resident_weight.content_digest,
+            "weight_residency": "persistent_device",
+            "weight_upload_timing": "excluded_one_time_model_load",
+            "full_weight_materialization": "prohibited",
             "host_unpack_or_repack": False,
             "execution_kind": result["execution_kind"],
             "numerical_oracle": "groupwise_dequant_then_f32_matmul",

@@ -272,7 +272,8 @@ def test_native_avx512_jvp_matches_oracle(compiled):
 @pytest.mark.parametrize("compiled", [_rocm_sum, _rocm_rmsnorm, _rocm_rfft, _rocm_dct4])
 def test_native_gfx1151_jvp_matches_oracle(compiled):
     from tessera import runtime
-    if runtime._tessera_opt_path() is None or not runtime._rocm_wmma_runtime_available():
+    hip = runtime._load_hip_for_launch()
+    if runtime._tessera_opt_path() is None or hip is None or hip.hipInit(0) != 0:
         pytest.skip("ROCm compiler or device unavailable")
     if runtime._rocm_chip() != "gfx1151":
         pytest.skip("exact gfx1151 required")

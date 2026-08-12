@@ -1372,6 +1372,36 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="V5",
     ),
     DiagnosticCode(
+        code="SYMDIM_PRESBURGER_MALFORMED",
+        pass_origin="SymbolicDimEqualityPass",
+        severity="error",
+        summary=(
+            "The typed `tessera.presburger_constraints` carrier has an "
+            "unsupported version or malformed symbol/coefficient rows."
+        ),
+        fix_hint=(
+            "Regenerate the carrier through `PresburgerSystem`; every row "
+            "must have one coefficient per unique symbol."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="W4.2-2026-08-12",
+    ),
+    DiagnosticCode(
+        code="SYMDIM_PRESBURGER_UNSATISFIABLE",
+        pass_origin="SymbolicDimEqualityPass",
+        severity="error",
+        summary=(
+            "The typed integer-affine shape constraints have no integer "
+            "solution under the available dimension witnesses."
+        ),
+        fix_hint=(
+            "Correct the affine constraint rows or the concrete values in "
+            "`tessera.dim_sizes`; nonlinear relations require a separate guard."
+        ),
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="W4.2-2026-08-12",
+    ),
+    DiagnosticCode(
         code="SYMDIM_RESHAPE_VIOLATION",
         pass_origin="SymbolicDimEqualityPass",
         severity="error",

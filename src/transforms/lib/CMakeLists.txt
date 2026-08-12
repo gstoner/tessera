@@ -125,6 +125,7 @@ target_link_libraries(TesseraPasses
     TesseraCollectiveDialect
     MLIRIR
     MLIRAnalysis
+    MLIRPresburger
     MLIRPass
     MLIRParser
     MLIRSupport

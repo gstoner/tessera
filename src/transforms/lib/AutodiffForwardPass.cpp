@@ -5,6 +5,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
@@ -129,14 +130,33 @@ class RegionTangentBuilder {
             "operation");
         return mlir::failure();
       }
-      auto tangent = mlir::dyn_cast<TangentInterface>(primal);
-      if (!tangent) {
+      if (mlir::isa<mlir::tensor::ExtractSliceOp,
+                    mlir::tensor::InsertSliceOp>(primal)) {
+        llvm::SmallVector<mlir::Value> operands(primal->getOperands());
+        if (mlir::isa<mlir::tensor::ExtractSliceOp>(primal)) {
+          if (inputTangents.empty() || !inputTangents[0])
+            return mlir::failure();
+          operands[0] = inputTangents[0];
+        } else {
+          if (inputTangents.size() < 2 || !inputTangents[0] ||
+              !inputTangents[1])
+            return mlir::failure();
+          operands[0] = inputTangents[0];
+          operands[1] = inputTangents[1];
+        }
+        mlir::OperationState tangentState(primal->getLoc(), primal->getName());
+        tangentState.addOperands(operands);
+        tangentState.addTypes(primal->getResultTypes());
+        tangentState.addAttributes(primal->getAttrs());
+        resultTangents.push_back(builder.create(tangentState)->getResult(0));
+      } else if (auto tangent = mlir::dyn_cast<TangentInterface>(primal)) {
+        resultTangents = tangent.buildTangent(builder, inputTangents);
+      } else {
         operation.emitError(
             "tessera-autodiff-forward: active operation has no "
             "TangentInterface");
         return mlir::failure();
       }
-      resultTangents = tangent.buildTangent(builder, inputTangents);
       if (resultTangents.size() != operation.getNumResults()) {
         operation.emitError(
             "tessera-autodiff-forward: TangentInterface rejected the active "
@@ -271,12 +291,15 @@ class RegionTangentBuilder {
     for (unsigned index = 0; index < count; ++index) {
       mlir::Value sourceArg = source.getRegionIterArg(index);
       bodyState.primals.map(sourceArg, combined.getRegionIterArg(index));
+      // Every differentiable loop-carried value has a real tangent iter_arg,
+      // even when its initial tangent is zero.  A later body operation may
+      // activate that value (control_scan's initially-empty stacked output is
+      // the canonical example), so dropping the mapping here loses tangent
+      // state across iterations.
+      bodyState.tangents[sourceArg] =
+          combined.getRegionIterArg(index + count);
       if (state.active.contains(source.getInitArgs()[index])) {
-        bodyState.tangents[sourceArg] =
-            combined.getRegionIterArg(index + count);
         bodyState.active.insert(sourceArg);
-      } else {
-        bodyState.tangents[sourceArg] = mlir::Value{};
       }
     }
     auto yield = mlir::cast<mlir::scf::YieldOp>(
@@ -428,7 +451,7 @@ class AutodiffForwardPass
   }
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
-                    mlir::scf::SCFDialect>();
+                    mlir::scf::SCFDialect, mlir::tensor::TensorDialect>();
   }
 
   void runOnOperation() override {

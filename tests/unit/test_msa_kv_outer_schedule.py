@@ -101,16 +101,17 @@ def test_msa_kv_outer_sparse_reaches_rocm_target_ir():
             block_size=64, top_k_blocks=8, num_attention_heads=8,
             num_kv_heads=2, head_dim=128, mode="decode", tile_q=1, tile_kv=128,
         ),
-        target_kind="rocm",
+        target_kind="rocm_gfx1151",
     )
-    tile = lower_schedule_to_tile_ir(schedule, target_kind="rocm")
+    tile = lower_schedule_to_tile_ir(schedule, target_kind="rocm_gfx1151")
     assert tile.verify().ok
     assert "tessera_attn.msa_kv_outer_sparse" in tile.to_mlir()
 
-    target = lower_tile_to_target_ir(tile, target_kind="rocm")
+    target = lower_tile_to_target_ir(tile, target_kind="rocm_gfx1151")
     assert target.verify().ok
     text = target.to_mlir()
     assert "tessera_rocm.msa_block_sparse" in text
+    assert 'arch = "gfx1151"' in text
     assert 'kernel = "msa_kv_outer_sparse"' in text
     assert 'status = "device_verified_jit"' in text
     assert 'runtime_lane = "rocm_sparse_attn_compiled"' in text
@@ -131,17 +132,16 @@ def test_msa_kv_outer_sparse_reaches_x86_target_ir():
             block_size=64, top_k_blocks=8, num_attention_heads=8,
             num_kv_heads=2, head_dim=128, mode="decode", tile_q=1, tile_kv=128,
         ),
-        target_kind="cpu",
+        target_kind="x86",
     )
-    tile = lower_schedule_to_tile_ir(schedule, target_kind="cpu")
+    tile = lower_schedule_to_tile_ir(schedule, target_kind="x86")
     assert tile.verify().ok
     assert "tessera_attn.msa_kv_outer_sparse" in tile.to_mlir()
 
-    target = lower_tile_to_target_ir(tile, target_kind="cpu")
+    target = lower_tile_to_target_ir(tile, target_kind="x86")
     assert target.verify().ok
     text = target.to_mlir()
-    assert "tessera.cpu.msa_block_sparse" in text
-    assert 'kernel = "msa_kv_outer_sparse"' in text
+    assert "tessera_x86.kernel" in text
     assert 'status = "device_verified_jit"' in text
     assert 'runtime_lane = "x86_msa_compiled"' in text
     assert 'block_ids_layout = "B,Hkv,Sq,top_k"' in text

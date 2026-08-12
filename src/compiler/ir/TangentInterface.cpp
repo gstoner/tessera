@@ -12,13 +12,10 @@ static mlir::Value buildZeroLike(mlir::OpBuilder &builder, mlir::Location loc,
   auto shaped = mlir::dyn_cast<mlir::ShapedType>(type);
   if (!shaped || !shaped.hasStaticShape())
     return {};
-  mlir::Attribute zero;
-  if (auto element = mlir::dyn_cast<mlir::FloatType>(shaped.getElementType()))
-    zero = builder.getFloatAttr(element, 0.0);
-  else if (auto element =
-               mlir::dyn_cast<mlir::IntegerType>(shaped.getElementType()))
-    zero = builder.getIntegerAttr(element, 0);
-  else
+  // getZeroAttr also covers complex element types, which are required when an
+  // ISTFT product activates only the window operand.
+  mlir::Attribute zero = builder.getZeroAttr(shaped.getElementType());
+  if (!zero)
     return {};
   return builder
       .create<mlir::arith::ConstantOp>(
@@ -420,10 +417,18 @@ llvm::SmallVector<mlir::Value> SpectralConvOp::buildTangent(
 
 llvm::SmallVector<mlir::Value> ISTFTOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
-  if (tangents.size() != 2 || !tangents[0] || !tangents[1])
+  if (tangents.size() != 2 || (!tangents[0] && !tangents[1]))
+    return {};
+  mlir::Value spectrumTangent =
+      tangents[0] ? tangents[0]
+                  : buildZeroLike(builder, getLoc(), getX().getType());
+  mlir::Value windowTangent =
+      tangents[1] ? tangents[1]
+                  : buildZeroLike(builder, getLoc(), getParameter().getType());
+  if (!spectrumTangent || !windowTangent)
     return {};
   mlir::OperationState state(getLoc(), ISTFTJvpOp::getOperationName());
-  state.addOperands({getX(), getParameter(), tangents[0], tangents[1]});
+  state.addOperands({getX(), getParameter(), spectrumTangent, windowTangent});
   state.addTypes(getY().getType());
   state.addAttributes((*this)->getAttrs());
   return {builder.create(state)->getResult(0)};

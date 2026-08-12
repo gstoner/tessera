@@ -80,9 +80,9 @@ identify the owning work-item ID.
 
 When a change affects shared IR, ABI, dtype/op registration, diagnostics,
 numerical policy, test infrastructure, benchmark schemas, or runtime contracts,
-the same PR must assess all three backends and update each affected plan. Record
-the sibling-backend outcome as follow-up required, parity validated, or not
-applicable with an architecture-specific reason.
+the same PR must assess all four backends above and update each affected plan.
+Record the sibling-backend outcome as follow-up required, parity validated, or
+not applicable with an architecture-specific reason.
 
 Use PRs as synchronization points. Every cross-backend PR must name its owning
 item, shared contracts changed, backend-plan updates, validation performed, and
@@ -93,7 +93,7 @@ Never transfer physical schedules between architectures or mark sibling work
 complete without exact-device evidence from that backend's required host. A
 shared-contract PR may land with host-free tests and plan updates before its
 linked exact-device follow-ups; do not hold unrelated backend work in one giant
-multi-hardware PR. After a coordinating PR merges, reread all three plans before
+multi-hardware PR. After a coordinating PR merges, reread all four plans before
 selecting the next architecture action.
 
 ## RDNA ISA data archive

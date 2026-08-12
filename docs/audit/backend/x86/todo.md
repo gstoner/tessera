@@ -9,6 +9,34 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **owning x86 item,
+landing; host-free lit coverage restored, no Zen 5 evidence added.** The
+`Validate / lit` lane was dead from 2026-08-11 to 2026-08-12 (pytest collection
+aborted on a missing `ml_dtypes`, fixed in #554). The first green-collection run
+discovered 367 fixtures, passed 318, and failed 27 — all from one cause: the
+lane's `tessera-opt` was configured with `TESSERA_BUILD_APPLE_BACKEND=ON` only,
+so `TesseraX86IR` never existed and `tessera_x86` went unregistered
+(``error: Dialect `tessera_x86' not found for custom op
+'tessera_x86.amx_tile_zero'``). x86 Target IR has therefore had **zero CI lit
+coverage since the W0.10 dialect landed (2026-08-02)** — Decision #19's
+"lit-testable hardware-free layer" was asserted but never exercised on CI.
+
+This PR adds `-DTESSERA_BUILD_X86_BACKEND=ON` to that configure, recovering:
+`phase2/x86_target_ir{,_invalid}.mlir` (including the negative fixture Decision
+#19 requires), `phase2/tile_to_x86.mlir`, `phase2/tile_x86{,_base}_e2e.mlir`,
+`phase2/x86_executable_pipeline.mlir`, `phase2/x86_kv_cache_lowering.mlir`,
+`phase2/e2e_matmul_scheduled_x86_consumer.mlir`, and the x86 half of
+`phase_f4/{es_low_rank_correction,spectral_backward}_x86_native.mlir`.
+
+Scope limits, stated explicitly: this is **host-free IR/registration coverage
+only**. It adds no AVX-512 physical consumer, no Zen 5 timing packet, and no
+AMX evidence (no AMX hardware exists in the fleet; that lane stays
+capability-gated). The flag does not gate on `CMAKE_SYSTEM_PROCESSOR`
+(`src/CMakeLists.txt:44`), so it builds the dialect on the runner without
+requiring AMX/AVX-512 at build time. Green-on-CI is the acceptance evidence;
+if any recovered fixture fails, it is a real x86 defect that this lane was
+previously hiding and it outranks the CI change.
+
 Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
 The shared Block AttnRes numerical-policy, balanced-partition, VJP, and
 softmax-merge oracle contracts apply to x86. This PR adds no AVX-512 physical

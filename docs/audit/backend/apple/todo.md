@@ -8,6 +8,35 @@ last_updated: 2026-08-12
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **parity validated;
+no Apple change required.** The `Validate / lit` lane was dead from 2026-08-11
+to 2026-08-12 (pytest collection aborted on a missing `ml_dtypes`, fixed in
+#554); the first green-collection run failed 27 of 367 fixtures because
+`tessera-opt` registered neither `tessera_x86` nor `tessera_rocm`. Apple was
+**unaffected**: the lane already configures `-DTESSERA_BUILD_APPLE_BACKEND=ON`,
+`tessera_apple` appears in the driver's available-dialect list, and no
+`phase8` Apple fixture is in the failure set.
+
+**Apple is incompatible with the lean artifact driver — do not plan around
+co-enabling them.** An earlier revision of this entry claimed Apple "survives
+configurations that drop core/x86" because its linkage is gated only on
+`TARGET TesseraApple` (`tools/tessera-opt/CMakeLists.txt:187`) with no lean
+check. The linkage observation is true but the conclusion was wrong: Apple
+registers the `apple-backend` feature (`:188`), the lean permitted set is
+`core-tessera-ir collectives nvidia-backend rocm-backend` (`:250`), and any
+feature outside it raises `FATAL_ERROR` (`:259-273`). So a HIP-less ROCm or
+CUDA-less NVIDIA configure **plus** Apple does not yield an Apple-capable lean
+driver — it fails to configure at all. Any future attempt to widen the lit lane
+to ROCm must therefore build a *separate* driver, not add flags to the Apple
+one.
+
+One Apple-relevant caution carried from this investigation: Apple was the sole
+backend wired into the lit configure, which is why its portable Target-IR
+coverage looked healthier than its siblings' for the last ten days. Read that
+as "the others were dark", not as Apple parity headroom — the Apple GPU op
+envelope is still runtime-delivered (see the `apple_gpu_runtime.mm` note in
+`CLAUDE.md`), and nothing here changes that.
+
 Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
 The shared Block AttnRes plan establishes portable balanced-partition,
 epsilon-qualified numeric, VJP, and softmax-merge oracle contracts. This PR

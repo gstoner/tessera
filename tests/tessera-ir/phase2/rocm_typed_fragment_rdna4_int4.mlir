@@ -1,3 +1,4 @@
+// REQUIRES: tessera-rocm-backend
 // RUN: tessera-opt %s --lower-tile-to-rocm=arch=gfx1200 | FileCheck %s
 //
 // W1.1 step 0 — the accumulator's input dtype is SEARCHED, not assumed.

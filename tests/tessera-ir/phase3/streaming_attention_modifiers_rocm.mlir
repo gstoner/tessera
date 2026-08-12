@@ -1,3 +1,4 @@
+// REQUIRES: tessera-rocm-backend
 // The direct shared recurrence carries per-head bias and softcap into the
 // gfx1151 physical adapter; the adapter selects AMD scheduling without
 // reconstructing score semantics.

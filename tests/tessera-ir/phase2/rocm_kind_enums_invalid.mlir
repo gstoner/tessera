@@ -1,3 +1,4 @@
+// REQUIRES: tessera-rocm-backend
 // RUN: not tessera-opt --split-input-file %s 2>&1 | FileCheck %s
 //
 // W1.1b — the three `$kind` ops now fail CLOSED (Decision #21a).

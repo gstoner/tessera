@@ -19,7 +19,7 @@ with a real executable oracle (:func:`verify_split_k_equivalence`): the partial-
 products, reduced, must equal the dense product (up to float reassociation). That
 correctness is provable on CPU / Apple GPU **now**, before any NVIDIA/AMD run.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (matmul opt ladder).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (matmul opt ladder).
 """
 
 from __future__ import annotations

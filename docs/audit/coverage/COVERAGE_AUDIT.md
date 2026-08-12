@@ -1,178 +1,112 @@
 ---
-last_updated: 2026-06-21
+last_updated: 2026-08-11
 audit_role: theme
 ---
 
 # Coverage Audit
 
-This document consolidates primitive, op, example, KV-cache, and coverage audit
-material.
+This page explains how to interpret Tessera's coverage evidence. It does not
+own counts or per-operation status. Current values come from the generated
+dashboards:
 
-> **Counts live in `docs/audit/generated/`, never in this prose.** Per
-> Decision #25/#26, every numeric coverage claim is owned by a drift-gated
-> generated dashboard. This page states *qualitative* status and **links** to
-> the dashboard that holds the live number — it does not copy counts (a copied
-> number silently goes stale). When you need a figure, read the linked
-> dashboard.
+- [`compiler_progress.md`](../generated/compiler_progress.md) — phase and
+  integration rollup;
+- [`support_table.md`](../generated/support_table.md) — per-operation
+  API→Graph→Schedule→Tile→Target→runtime state;
+- [`s_series_status.md`](../generated/s_series_status.md) — primitive contract
+  axes and exact-target backend proof;
+- [`test_coverage.md`](../generated/test_coverage.md) — direct, family,
+  structural, and hardware-gated evidence;
+- [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) —
+  paths that actually launch;
+- [`single_gpu_closeout.md`](../generated/single_gpu_closeout.md) — ownership
+  classification for the remaining rows.
 
-## Finished
+## Closed foundation
 
-- **Partial-op uplift closed the legacy partial rows.** E2E op coverage now
-  shows no `partial` / `planned` rows — see
-  [`generated/e2e_op_coverage.md`](../generated/e2e_op_coverage.md).
-- **E2E op pipeline is native-complete or runnable-reference end to end** (no
-  partial/planned tail). Live native-complete / runnable-reference split:
-  [`generated/e2e_op_coverage.md`](../generated/e2e_op_coverage.md).
-- **`lowering_rule` is closed project-wide** (0 open across all S-series
-  categories) — see [`generated/s_series_status.md`](../generated/s_series_status.md).
-- **No actionable direct-test-debt** (`needs_direct_test = 0`) — see
-  [`generated/test_coverage.md`](../generated/test_coverage.md)
-  for the full classification (covered-by-family / structural-only /
-  hardware-gated breakdown).
-- Advanced examples largely moved from missing APIs to backend/hardware proof.
-- KV-cache coverage has explicit target diagnostics and historical matrices.
-- **Manifold Langevin backend coverage (2026-06-02):** the EBM/manifold
-  Langevin ops moved off `backend_kernel=planned` — `ebm_sphere_langevin_step`
-  + `ebm_bivector_langevin_step` are now `partial` with a **real fused Apple
-  GPU kernel** (sphere: dedicated MSL; bivector: the affine `ebm_langevin_step`
-  kernel on grade-2 coeffs), and the two chain wrappers
-  (`*_langevin_sample`) are `partial` via their numpy reference. See
-  [`generated/s_series_status.md`](../generated/s_series_status.md) /
-  [`generated/apple_target_map.md`](../generated/apple_target_map.md). (Their
-  *distributed-mesh* axis stays Phase-G-gated — see the `hardware_gated` row in
-  [`generated/test_coverage.md`](../generated/test_coverage.md);
-  single-device kernel ≠ multi-GPU mesh.)
+The compiler-facing API, frontend-capture, Graph-registration, Schedule-IR,
+Tile-IR, runtime-readiness, verifier, batching, transpose, and lowering axes are
+closed in the current generated rollup. These are regression gates, not active
+implementation programs.
 
-## Still Open
+`Graph IR registered` does not mean every registry entry is a device operation.
+Host APIs, runtime-only surfaces, and explicit `not_applicable` dispositions are
+tracked separately. Likewise, a registry-level `backend_kernel=partial` does
+not erase exact-target proof already earned by x86, Apple, ROCm, or NVIDIA.
 
-- **Backend-kernel proof is now reported per architecture.** The raw
-  registry-level `backend_kernel` axis remains conservative for compatibility,
-  but it is no longer the completion signal for ROCm/x86/Apple/NVIDIA. Read the
-  **Backend Proof By Target** table in
-  [`generated/s_series_status.md`](../generated/s_series_status.md): native proof
-  comes from `device_verified_abi`, `device_verified_jit`, `fused`, or `packaged`
-  `BackendKernelEntry` rows on that target.
-- **Long-tail transform axes** — `lowering_rule` is closed; `batching_rule` and
-  `transpose_rule` have only a small reopened tail, while `sharding_rule` is the
-  remaining substantive increment (2026-06-02).
-  `batching_rule` closed for the textbook-batchable families (collective /
-  recurrent / state_space / linalg decomposition+solver / sparse /
-  segment_reduce) — only the genuinely mesh-aware ones (moe / moe_transport /
-  kv-cache state) stay partial. `transpose_rule` closed to **zero open** on the
-  linear-vs-nonlinear principle: linear maps (sparse spmm/sddmm/bsmm,
-  moe_transport gather/scatter adjoints, segment_reduce, tri_solve, avg_pool)
-  are `complete`; nonlinear families (optimizers, recurrent cells, linalg
-  decomposition, ebm energy/sampling, moe routing, max/min/adaptive pool) are
-  `not_applicable` (their backward is the registered VJP, not a linear
-  transpose). `sharding_rule` remains largely Phase-G-mesh-pending. Live open
-  counts + per-category breakdown:
-  [`generated/s_series_status.md`](../generated/s_series_status.md).
-- **Hardware-gated tests** remain for a small set of EBM/manifold Langevin ops
-  — see the `hardware_gated` row in
-  [`generated/test_coverage.md`](../generated/test_coverage.md).
+## Active queues
 
-### VLM coverage gap (2026-06-21)
+### Target and distributed closure
 
-Audit of the registry against the broader VLM landscape (LLaVA, Qwen2-VL /
-Qwen2.5-VL, Flamingo / BLIP-2, Idefics3 / SmolVLM, Fuyu / encoder-free Gemma-4 —
-the last surfaced by HF's *Train Your Own Encoder-Free VLM in $100*). Headline:
-**the heavy vision compute already ships; the VLM-specific connector /
-preprocessing / fusion layer was entirely untracked.** A VLM forward pass is
-already expressible through existing ops — `conv2d`/`conv3d` (ViT/SigLIP patch
-stem, apple_gpu `device_verified_abi`), `flash_attn` / `multi_head_attention` /
-`gqa_attention`, `varlen_sdpa` (the knapsack / `cu_seqlens` sequence packing the
-encoder-free post relies on), `attn_local_window_2d` (Qwen2-VL window attn),
-`gated_attention` (Flamingo-style gated x-attn), `layer_norm` / `rmsnorm`,
-`linear_general` / `lora_linear`, and `cross_entropy_loss` with `ignore_index`
-masking for image/pad tokens. The gap is the **glue**, not the math.
+The four reference Target-IR rows are `all_gather`, `all_reduce`, `all_to_all`,
+and `reduce_scatter`. Their Schedule and Tile contracts are complete; native
+multi-rank transport and exact-device packets are the missing proof. They must
+not be treated as single-GPU compiler gaps.
 
-**P0 — landed as `partial` (Python reference + autodiff; 2026-06-21).** Each
-ships a numpy reference on `tessera.ops.*`, a registered VJP **and** JVP
-(`vjp`/`jvp` axes `complete`), and tape integration; Graph IR lowering +
-backend kernels remain the open axes (`lowering_rule` / `backend_kernel`). A new
-`vlm` model-family groups them — filter `render_markdown()` from
-`tessera.compiler.primitive_coverage` to the `vlm` family, or see the drift-gated
-[`generated/test_coverage.md`](../generated/test_coverage.md) /
-[`.csv`](../generated/test_coverage.csv). (Note: `generated/support_table.md` is
-an *existing-op* surface whose "Family" column is the primitive *category*, not
-the model-family.) Tests: `tests/unit/test_vlm_primitives.py` (forward numerics
-+ finite-difference VJP/JVP + tape end-to-end). Shared resample/layout helpers:
-`python/tessera/_image_ops.py`.
+The live sharding queue is classified by the generated dashboard rather than
+copied here. Its ownership groups are:
 
-- `masked_scatter` (`indexing`) — modality fusion: overwrite the embeddings at a
-  boolean image-placeholder mask with the projected patch embeddings
-  (`combined[mask] = image_embd`). The single most VLM-defining op; previously
-  only `masked_fill` (scalar) and index `scatter` existed, not the tensor-source
-  variant. Supports the VLM `(B,S)`-mask-over-`(B,S,D)` partial-indexing pattern
-  and `torch.masked_scatter` flatten semantics.
-- `image_resize`, `center_crop`, `image_normalize` (`vision`) — the three-step
-  standard preprocessing transform (resize shorter side → center crop →
-  per-channel affine). No pixel ops existed; the `data` category is
-  dataset-plumbing only.
-- `interpolate` (`vision`) — bilinear/nearest resample for variable-resolution
-  inputs (NaViT / dynamic-res Qwen2-VL) and positional-embedding-table
-  interpolation; shares the (exact, transpose-of-resample) VJP with
-  `image_resize`.
+- one local compiler case, `factorized_matmul`, needs layout/shard metadata
+  preservation proof;
+- `moe_dispatch` and `moe_combine` require real multi-rank transport;
+- the attention, EBM, solver, sparse, spectral, state-space, and
+  state-update rows need domain-specific propagation rules and mock-mesh or
+  native evidence.
 
-**P1 — patch embedder, landed as `partial` (2026-06-21).** Two atomic
-primitives with numpy reference + registered VJP/JVP:
+### Target-specific backend proof
 
-- `patchify` (`layout_transform`) — `(B,C,H,W) → (B,nh*nw,C*P*P)` reshape/permute
-  (the article's recipe); standalone + differentiable (VJP = inverse permute),
-  layout-aware (nchw/nhwc/chw/hwc).
-- `factorized_pos_emb` (`position_encoding`) — `pos[i,j] = row[i] + col[j]` over
-  the patch grid, the exact Gemma-4 embedder trick (8× fewer params than a full
-  table); differentiable through both tables, unused table rows get zero grad.
+Backend promotion is architecture-owned. The registry's conservative
+`backend_kernel` axis is a routing surface, not an all-up compiler veto. Only
+exact-target `device_verified_jit` or `device_verified_abi` evidence closes a
+hardware pathway. `fused` or `packaged` establishes implementation ownership;
+`artifact_only` establishes compilation only.
 
-  *Pre-existing-op note:* the registry tour missed that
-  `tessera.ops.patch_embed` (NHWC patchify + optional projection) and
-  `tessera.ops.patch_merge` (Qwen-style token merge) **already ship** in
-  `__init__.py` — but were absent from the coverage registry (untracked). The
-  new ops sit alongside `patch_embed` rather than replacing it; the Gemma
-  embedder composes `patchify → matmul → factorized_pos_emb` and is verified
-  differentiable end-to-end through the tape
-  (`test_gemma_embedder_composition_tape`). Registering the existing
-  `patch_embed` / `patch_merge` / `video_frame_sample` ops in the coverage
-  registry is follow-up tracked under P2/next-work.
+### Autodiff and structured programs
 
-**P1 — `mrope_2d` landed as `partial` (2026-06-21).** Multimodal M-RoPE
-(`rotary_embedding`): rotary split into temporal/height/width sections by a
-per-axis `positions` tensor and `sections` partition (Qwen2-VL); reduces exactly
-to `rope` for a single section (test-pinned), norm-preserving, VJP+JVP
-registered. Only the backend-kernel axis remains.
+Planned VJP/JVP rows are transformation work, not missing forward execution.
+Prioritize model-facing spectral, solver, collective, and structured-region
+products. Bounded `if`, counted `for`, canonical bounded `while`, and forward
+`control_scan` already exist. General CFG recovery, multi-block regions,
+Presburger shape proof, scan adjoints, and lowering selected checkpoint plans
+into the generated region adjoint remain open.
 
-**P2 — landed as `partial` (2026-06-21).**
+### Evidence quality
 
-- `pixel_unshuffle` / `pixel_shuffle` (`layout_transform`) — space-to-depth /
-  depth-to-space token reduction (Idefics3 / InternVL); exact inverses
-  (roundtrip test-pinned), VJP = the inverse rearrange, JVP registered.
-- `cross_attention` (`attention`) — scaled-dot-product attention where the query
-  attends to a separate K/V source (Flamingo / BLIP-2 / Q-Former). Real
-  reference SDPA with a hand-written analytic VJP **and** JVP (forward-mode
-  through the softmax Jacobian), both finite-difference-pinned.
-- `perceiver_resampler` (`attention`) — learned latents cross-attend to a
-  variable-length feature sequence, compressing it to `len(latents)` tokens. A
-  composite over `cross_attention`, differentiable through the tape
-  (verified by `test_perceiver_resampler_compresses_and_is_differentiable`).
+Structural-only rows and missing benchmark inventory are proof queues, not
+automatically implementation queues. Add direct numerical fixtures where the
+operation has meaningful value semantics. Add performance packets only for
+native/fused paths whose selection or promotion depends on timing. Host-only
+metadata constructors, serialization, and structural transforms should not be
+forced into artificial kernel benchmarks.
 
-The P0/P1 rows are `partial` (Python reference + autodiff complete; Graph IR
-lowering + backend kernel are the open axes). Live status:
-[`generated/test_coverage.md`](../generated/test_coverage.md).
+## VLM status
 
-## Next Work
+The June VLM connector audit is historical. Its useful result was the addition
+of explicit preprocessing, modality-splice, position, resampling, and
+cross-attention vocabulary. Those operations now have canonical Graph
+dispositions and the project-wide `lowering_rule` axis is closed.
 
-1. Treat generated dashboards as the only count authority.
-2. Close backend-kernel proof through platform backend work.
-3. Prioritize remaining batching/transpose/sharding gaps by model impact.
-4. Keep KV-cache status tied to runtime/conformance proof, not only Graph IR
-   lowering.
-5. Update example status only when generated support/e2e dashboards agree.
-6. Promote the VLM P0 rows off `planned` (Python reference → Graph IR lowering →
-   backend kernel), then register the P1/P2 VLM connector ops (`patch_embed`,
-   factorized 2D pos-emb, `mrope_2d`, `pixel_shuffle`/`pixel_unshuffle`,
-   `cross_attention` / `perceiver_resampler` contracts).
+The remaining VLM work is physical and model-level:
 
-## Source Material Consolidated
+- exact-target backend promotion for connector and attention families;
+- native fused paths only where measured against the composed implementation;
+- full checkpoint/processor/model execution with architecture-owned evidence;
+- distributed placement for variable-length media and cache state.
+
+Do not reopen a generic "VLM Graph lowering" project from the historical P0/P1
+labels. Select concrete rows from the generated support and backend tables.
+
+## Reading rules
+
+1. Start with `compiler_progress.md` for the phase containing a gap.
+2. Use `support_table.csv` to identify the operation and first incomplete layer.
+3. Use `s_series_status.md` and the backend plan for exact-target ownership.
+4. Use `test_coverage.csv`, benchmark packets, and runtime provenance to decide
+   whether the missing item is implementation, correctness evidence, or
+   performance evidence.
+5. Never copy generated totals into authored plans.
+
+## Source material consolidated
 
 - `archive/advanced_examples_capability_gap.md`
 - `archive/kv_cache_coverage_matrix.md`

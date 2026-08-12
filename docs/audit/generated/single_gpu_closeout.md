@@ -4,8 +4,9 @@
 > Do not edit by hand. The canonical machine-readable artifact is
 > `single_gpu_closeout.csv`.
 
-This dashboard classifies the open rows targeted by
-`docs/audit/roadmap/SINGLE_GPU_CLOSEOUT_PLAN.md`. It is a triage
+This dashboard classifies software and evidence rows for the active
+compiler/backend owners. The historical operating plan is archived at
+`docs/audit/roadmap/archive/SINGLE_GPU_CLOSEOUT_PLAN.md`. This is a triage
 view only; status truth remains in the support, primitive, verifier,
 test, ABI, and surface dashboards.
 

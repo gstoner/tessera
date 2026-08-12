@@ -27,7 +27,7 @@ Megatron rules implemented:
     ``Y = all_gather_0(X_r @ W)``. Backward: ``dW = all_reduce(X_rᵀ @ dY_r)``,
     ``dX_r = dY_r @ Wᵀ`` (local).
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream E).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream E).
 """
 
 from __future__ import annotations

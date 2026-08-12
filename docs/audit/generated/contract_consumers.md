@@ -3,7 +3,7 @@
 
 # Contract Consumers (generated)
 
-The contract-pass plan's meta-gap tracker: each typed contract paired with the compiler pass obligated to consume it. `status` is **probed live** — `live` when the consumer exists in the tree, `declared` when only the contract does. A workstream landing its consumer flips its row automatically. Canonical artifact: `contract_consumers.csv`. See `docs/audit/roadmap/CONTRACT_PASS_PLAN.md`.
+Each typed contract is paired with the compiler pass obligated to consume it. `status` is **probed live** — `live` when the consumer exists in the tree, `declared` when only the contract does. A workstream landing its consumer flips its row automatically. Canonical artifact: `contract_consumers.csv`. Historical design: `docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md`.
 
 **Status:** live=6 · declared=0 · none=0 (of 6)
 

@@ -1,10 +1,13 @@
 ---
-last_updated: 2026-07-14
-audit_role: plan
-plan_state: open
+last_updated: 2026-08-11
+audit_role: reference
 ---
 
 # S-series gap-closure plan + planned fused-kernel inventory
+
+> **Archived 2026-08-11.** The compiler-foundation cohort and the x86/gfx1151
+> enablement sweep are historical. Remaining operation and target proof is
+> selected from generated queues and the architecture `todo.md` plans.
 
 > **Scope:** drive the remaining S-series primitives to **real, on-device-validated
 > execution on the two devices this repo can prove on today — x86 AVX-512 and

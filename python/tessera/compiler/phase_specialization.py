@@ -21,7 +21,7 @@ This module makes it one:
     single full ``forward`` (the schedule split is semantics-preserving — the same
     invariant as Workstream A's residency-invariance).
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream B).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream B).
 """
 
 from __future__ import annotations

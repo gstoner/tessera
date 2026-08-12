@@ -6,9 +6,9 @@ Reference date for staleness: **2026-08-11**.
 
 ## Headline
 
-- **141** docs catalogued across the canonical doc tree.
-- **140** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **88** updated within the last 30 days.
+- **135** docs catalogued across the canonical doc tree.
+- **134** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **90** updated within the last 30 days.
 - **13** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -28,7 +28,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `CLIFFORD_SPEC.md` | - | 2026-05-17 | 86 | ✓ |
 | `COMPILER_REFERENCE.md` | Normative | 2026-06-25 | 47 | ✓ |
 | `CONFORMANCE.md` | Normative | 2026-06-11 | 61 | ✓ |
-| `CONTROL_FLOW_CONTRACT.md` | - | 2026-06-30 | 42 | ✓ |
+| `CONTROL_FLOW_CONTRACT.md` | - | 2026-08-11 | 0 | ✓ |
 | `EBM_SPEC.md` | - | 2026-05-16 | 87 | ✓ |
 | `GA_EBM_EXECUTION_STATUS.md` | - | 2026-07-18 | 24 | ✓ |
 | `GRAPH_IR_SPEC.md` | Normative | 2026-07-14 | 28 | ✓ |
@@ -133,7 +133,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `MASTER_AUDIT.md` | - | 2026-08-08 | 3 | ✓ |
+| `MASTER_AUDIT.md` | - | 2026-08-11 | 0 | ✓ |
 | `README.md` | - | 2026-08-08 | 3 | ✓ |
 | `backend/BACKEND_AUDIT.md` | - | 2026-07-31 | 11 | ✓ |
 | `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-07-27 | 15 | ✓ |
@@ -182,15 +182,9 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 12 | ✓ |
 | `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-04 | 7 | ✓ |
 | `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 9 | ✓ |
-| `coverage/COVERAGE_AUDIT.md` | - | 2026-06-21 | 51 | ✓ |
+| `coverage/COVERAGE_AUDIT.md` | - | 2026-08-11 | 0 | ✓ |
 | `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 61 | ✓ |
 | `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-08-02 | 9 | ✓ |
 | `roadmap/CF_CROSS_ELEMENT_PLAN.md` | - | 2026-06-30 | 42 | ✓ |
-| `roadmap/CONTRACT_PASS_PLAN.md` | - | 2026-06-20 | 52 | ✓ |
-| `roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md` | - | 2026-06-30 | 42 | ✓ |
-| `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-06-26 | 46 | ✓ |
-| `roadmap/REPLAYSSM_PLAN.md` | - | 2026-07-14 | 28 | ✓ |
-| `roadmap/ROADMAP_AUDIT.md` | - | 2026-07-11 | 31 | ✓ |
-| `roadmap/SINGLE_GPU_CLOSEOUT_PLAN.md` | - | 2026-06-30 | 42 | ✓ |
-| `roadmap/S_SERIES_ENABLEMENT_MAP.md` | - | 2026-06-27 | 45 | ✓ |
-| `roadmap/S_SERIES_GAP_CLOSURE_PLAN.md` | - | 2026-07-14 | 28 | ✓ |
+| `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-08-11 | 0 | ✓ |
+| `roadmap/ROADMAP_AUDIT.md` | - | 2026-08-11 | 0 | ✓ |

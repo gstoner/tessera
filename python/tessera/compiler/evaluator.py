@@ -475,7 +475,7 @@ def opt_level_equivalence(
 # and (2) the prefetch/residency *schedule* must not change numerics — a
 # miscompiled PagedAttentionLoweringPass that, say, gathered a stale page would
 # diverge here. Reuses the cross-path classifier so it speaks the evaluator's
-# vocabulary. See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream A).
+# vocabulary. See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream A).
 
 
 def paged_kv_equivalence(

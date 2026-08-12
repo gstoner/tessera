@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-06-26
+last_updated: 2026-08-11
 audit_role: plan
 plan_state: landing
 ---
@@ -15,8 +15,8 @@ plan_state: landing
 > build, and scaled image+video decode-after-prefill gates are now closed;
 > JEPA training/selective-decode graph contracts are closed as compiler-visible
 > artifact lowerings.
-> Remaining work is aggregated in **Open Closure Backlog** below.
-> Last updated: 2026-06-19.
+> Remaining work is aggregated in **Open Closure Backlog** below. Closed O3–O10
+> rows are historical and no longer remain in the active table.
 
 ## Goal & definition of done
 
@@ -71,18 +71,22 @@ flips to `complete` only when an oracle independently re-derives it.
 This is the single aggregate list of known opens from the model-class track.
 Milestone sections below may mention context, but closure should be tracked here.
 
+Execution order:
+
+1. **MODEL-WEIGHT-PHYS-1:** ingest packed INT4/FP8 checkpoint bytes and scales
+   directly into typed device-resident operands; prohibit full-weight
+   materialization on the fused lane.
+2. **MODEL-FUSED-PHYS-1:** make DeepSeek MLA/DSA and MiniMax MSA consume their
+   content-addressed Schedule→Tile artifacts through architecture-owned
+   packages, with composed/reference paths retained as differential oracles.
+3. **MODEL-DIST-E2E-1:** execute full-scale expert routing and model shards over
+   native transport, then collect correctness, resource, and selector-grade
+   performance packets. Artifact construction and mock meshes do not close it.
+
 | ID | Status | Area | Open item / closure evidence | Close condition / acceptance |
 |----|--------|------|------------------------------|------------------------------|
-| O1 | Open | Attention kernels | Fused MSL attention kernels for MLA absorb / DSA block-sparse paths remain open; current Apple GPU support is composed over existing matmul lanes. | Single fused Apple GPU kernel path lands with parity vs numpy/reference and a perf ratchet that beats the composed path on representative scaled configs. |
-| O2 | Open | MiniMax-M3 MSA backend | Native NVIDIA CUDA/H800/Blackwell KV-outer sparse MSA kernel is still artifact-only. Current Target IR intentionally emits `status = "artifact_only"`. | `tessera_attn.msa_kv_outer_sparse` lowers to a native executable backend kernel with dense-equivalence oracle, decode/prefill coverage, and target-specific lit/runtime gates. |
-| O3 | Closed | Full text checkpoint materialization | `load_text_runtime_weights(_from_safetensors)` maps full scaled text-tower HF tensor names into typed `ModelWeights`; `test_full_scaled_text_safetensors_materialize_runtime_weights` covers realistic sharded HF-style fixtures and selected runtime layout parity. | Full text-tower tensor-name map loads at least one realistic sharded HF-style fixture into typed runtime weights; selected layer outputs match the synthetic/reference loader layout expectations. |
-| O4 | Closed | Tokenizer parity | `HFTokenizerAdapter` wraps `tokenizers.Tokenizer`, preserves image/video specials and chat templates, and `test_hf_tokenizer_roundtrips_specials_and_chat_template` checks token IDs against upstream tokenizer output. | HF tokenizer path can round-trip fixture prompts, special image/video tokens, and chat templates with token IDs matching upstream tokenizer output. |
-| O5 | Closed | HF processor fixture parity | `test_processor_fixture_reproduces_pixels_and_video_frame_sampling` imports an HF-style processor fixture and verifies resize/rescale/normalize plus deterministic frame sampling against exact expected arrays. | `processor_config.json` / image processor fixtures reproduce resize/rescale/normalize/frame-sampling outputs within a defined numeric tolerance. |
-| O6 | Closed | Full vision/projector checkpoint aliases | `load_vision_runtime_weights` resolves observed vision/projector aliases and `test_vision_projector_aliases_load_with_precise_diagnostics` verifies alias acceptance plus precise missing-key diagnostics. | Loader accepts observed upstream MiniMax-M3 vision/projector key aliases and rejects ambiguous/missing aliases with precise diagnostics. |
-| O7 | Closed | Native/fused vision tower lowering | Media graph ops now cover preprocess/frame sample/patch embed/patch merge/project/splice and lower as named Schedule/Tile/Target contract kernels; reference tower parity remains covered by raw media execution tests. | Full multimodal graph lowers through native/composed backend kernels for patch/project/splice surfaces with parity against the reference tower. |
-| O8 | Closed | Full MiniMax multimodal execution at production geometry | `build_multimodal_graph` builds full production image+video shape contracts; `test_raw_image_and_video_prefill_can_continue_decode` covers scaled raw image+video prompts end-to-end with cached decode after multimodal prefill. | Full MiniMax-M3 image+text and video+text graph builds at production dimensions, and a scaled execution gate covers image and video prompts end-to-end with decode after multimodal prefill. |
-| O9 | Closed | JEPA native training lowering | `tessera.jepa.train_step` lowers through Schedule/Tile/Target as a compiler-visible stateful training artifact; reference tests prove deterministic mask RNG, EMA update semantics, and latent-loss parity. | JEPA training step lowers as a compiler-visible stateful training graph with mask RNG determinism, EMA update semantics, and latent-loss parity against the reference. |
-| O10 | Closed | VL-JEPA selective decoder integration | `tessera.jepa.selective_decode` lowers as an optional conditional decode artifact with latent-score gating and retrieval/classification/decode branch attrs; reference tests prove the decoder branch can be skipped. | Conditional/selective decoder graph compiles with latent-score gating, retrieval/classification/decode branches, and tests proving decoder invocation is data-dependent and optional. |
+| O1 | Open | DeepSeek physical attention | MLA absorption and DSA sparse attention have shared semantic/composed foundations, but fused physical ownership is incomplete across target plans. | Each promoted architecture consumes the exact Schedule→Tile parent, matches the composed oracle for prefill/decode, and wins an architecture-owned performance ratchet. |
+| O2 | Open | MiniMax-M3 MSA physical path | KV-outer sparse MSA has graph/artifact coverage, while native physical consumption remains architecture-dependent and incomplete. | `tessera_attn.msa_kv_outer_sparse` launches through a digest-bound package with dense-equivalence, prefill/decode coverage, and exact-target timing provenance. |
 | O11 | Open | Quantized model-weight runtime bridge | INT4/FP8 packed dequant kernels are landed, but some model-family full-weight runtime paths still use synthetic/reference weights. | Frontier model configs can load quantized weight fixtures into runtime-compatible typed weights and hit the fused dequant path in model-level tests. |
 | O12 | Open | Quantized packed-byte fused-kernel memory path | The fused dequant-GEMM kernel exists, but native packed-byte INT4 nibble / FP8 operands still need the full no-materialization memory path. | Fused dequant kernels consume packed-byte operands directly, preserve separate scale operands, avoid full-weight materialization, and pass parity/perf ratchets. |
 | O13 | Open | Distributed/full-scale execution | Full-scale execution, distributed MoE, and NVIDIA FP8/sparse performance remain hardware-gated. | Hardware-backed CI or reproducible artifact gate covers full-scale launch metadata, distributed routing, and target-specific performance/regression thresholds. |

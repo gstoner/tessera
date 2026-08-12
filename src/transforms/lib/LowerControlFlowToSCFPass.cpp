@@ -1,6 +1,6 @@
 // LowerControlFlowToSCFPass.cpp — CF2 control-flow → scf lowering
 //
-// CF2 of docs/audit/roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md and
+// CF2 of docs/audit/roadmap/archive/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md and
 // docs/spec/CONTROL_FLOW_CONTRACT.md. The first portable, hardware-free step of
 // the CUDA/ROCm control-flow path: lower the Graph IR bounded loop
 // `tessera.control_for` to a standard `scf.for` carrying its state in

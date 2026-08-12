@@ -4,7 +4,7 @@ Proves the migration is an exact fp factorization, the W8A8 direct-consume path
 matches fp16 within int8 tolerance, the operands stay int8 (anti-fallback), and
 migrating outliers into weights beats naive activation quantization.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream D).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream D).
 """
 
 from __future__ import annotations

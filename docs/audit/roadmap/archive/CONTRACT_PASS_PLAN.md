@@ -1,10 +1,13 @@
 ---
-last_updated: 2026-06-20
-audit_role: plan
-plan_state: landing
+last_updated: 2026-08-11
+audit_role: reference
 ---
 
 # Contract-Consuming Pass Plan
+
+> **Archived 2026-08-11.** Every registered contract-consumer row is live. The
+> generated contract-consumer dashboard remains the regression authority; new
+> contract consumption belongs to the integrated compiler plan.
 
 > Status: active (started 2026-06-19). Turns the 8-item KV/attention/quant/TP/multimodal
 > audit into a sequenced engineering plan. Theme: close the recurring meta-gap where a

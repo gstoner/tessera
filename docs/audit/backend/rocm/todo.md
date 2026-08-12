@@ -1251,7 +1251,7 @@ This is the working ROCm implementation queue. It consolidates the open actions
 from [`ROCM_AUDIT.md`](ROCM_AUDIT.md), the portable Tile fragment work in
 [`tile_fragment_abi.md`](../../../architecture/proposals/tile_fragment_abi.md),
 the serving work in
-[`REPLAYSSM_PLAN.md`](../../roadmap/REPLAYSSM_PLAN.md), and the generated exact-
+[`REPLAYSSM_PLAN.md`](../../roadmap/archive/REPLAYSSM_PLAN.md), and the generated exact-
 target status in [`rocm_target_map.md`](../../generated/rocm_target_map.md).
 
 The generated target map and runtime/conformance dashboards remain the status

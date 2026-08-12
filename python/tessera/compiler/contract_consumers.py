@@ -17,7 +17,7 @@ drift gate (``scripts/check_generated_docs.sh``) then forces the committed doc t
 match. That is the whole point: "we have the field" vs "a pass consumes it"
 becomes a number nobody can fake.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Phase 0).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md for the original Phase 0.
 """
 
 from __future__ import annotations
@@ -163,12 +163,12 @@ def render_markdown() -> str:
         "",
         "# Contract Consumers (generated)",
         "",
-        "The contract-pass plan's meta-gap tracker: each typed contract paired with "
-        "the compiler pass obligated to consume it. `status` is **probed live** — "
+        "Each typed contract is paired with the compiler pass obligated to consume "
+        "it. `status` is **probed live** — "
         "`live` when the consumer exists in the tree, `declared` when only the "
         "contract does. A workstream landing its consumer flips its row "
-        "automatically. Canonical artifact: `contract_consumers.csv`. See "
-        "`docs/audit/roadmap/CONTRACT_PASS_PLAN.md`.",
+        "automatically. Canonical artifact: `contract_consumers.csv`. Historical design: "
+        "`docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md`.",
         "",
         f"**Status:** live={counts['live']} · declared={counts['declared']} · "
         f"none={counts['none']} (of {len(CONSUMERS)})",

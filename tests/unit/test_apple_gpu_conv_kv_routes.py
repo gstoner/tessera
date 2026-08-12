@@ -18,7 +18,7 @@ What IS landed and tested here:
   * ``apple_gpu_kv_cache_read`` returns a device-resident (DeviceTensor) slice
     view on unified memory, provenance-gated on ``DeviceTensor.is_metal()``.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (#11/#17).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (#11/#17).
 """
 
 from __future__ import annotations

@@ -5,7 +5,7 @@ A tiny single-layer causal-attention LM exercises the phase contract end to end:
 cache through Workstream A's ``paged_attention``, and the oracle proves the split
 equals a monolithic ``forward`` — the schedule separation is semantics-preserving.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream B).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream B).
 """
 
 from __future__ import annotations

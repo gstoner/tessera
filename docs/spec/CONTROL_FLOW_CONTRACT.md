@@ -1,8 +1,8 @@
 ---
 status: Normative (CF0 slice)
 classification: Spec
-authority: CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md CF0
-last_updated: 2026-06-30
+authority: INTEGRATED_COMPILER_PLAN.md W4; this file owns the semantic contract
+last_updated: 2026-08-11
 ---
 
 <!-- CF1 (2026-06-29): trace-time carry/branch dtype contract + verifier lit
@@ -20,8 +20,10 @@ last_updated: 2026-06-30
 
 # Control-Flow Contract (CF0)
 
-> **Status:** CF0 of `docs/audit/roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md`.
-> Closes the semantic envelope of `tessera.control.{scan, fori_loop, while_loop,
+> **Status:** the original CF0 plan is
+> [archived](../audit/roadmap/archive/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md);
+> active structured-execution work is W4 in the integrated compiler plan.
+> This specification closes the semantic envelope of `tessera.control.{scan, fori_loop, while_loop,
 > cond}` **before** any new backend (CUDA/ROCm) control-flow codegen lands.
 > This document is descriptive of the code as it exists, not aspirational —
 > every claim below is grounded in a named source.

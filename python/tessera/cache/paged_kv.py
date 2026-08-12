@@ -18,7 +18,7 @@ implementation detail rather than an ABI. ``PagedKVState`` is that ABI: a
 The contiguous handle satisfies it degenerately (one tier, all-resident, one
 block per page); the tiered/MLA substrates satisfy it directly. The
 PagedAttentionLoweringPass (next slice) reads this protocol to insert
-prefetch → gather → dequant stages — see ``docs/audit/roadmap/CONTRACT_PASS_PLAN.md``.
+prefetch → gather → dequant stages — see ``docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md``.
 
 This module is the *contract*. It is deliberately non-invasive: rather than edit
 the two large cache classes, :func:`as_paged_kv_state` wraps either one in a thin

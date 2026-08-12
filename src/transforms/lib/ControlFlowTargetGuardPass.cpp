@@ -1,6 +1,6 @@
 // ControlFlowTargetGuardPass.cpp — CF0 unsupported-control-flow diagnostic
 //
-// CF0 of docs/audit/roadmap/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md and
+// CF0 of docs/audit/roadmap/archive/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md and
 // the contract in docs/spec/CONTROL_FLOW_CONTRACT.md §5.
 //
 // The Graph IR control-flow ops (`tessera.control_for` / `control_if` /

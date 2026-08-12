@@ -1,11 +1,14 @@
 ---
-last_updated: 2026-06-30
-audit_role: plan
-plan_state: open
+last_updated: 2026-08-11
+audit_role: reference
 scope: single_gpu
 ---
 
 # Single-GPU Compiler Closeout Plan
+
+> **Archived 2026-08-11.** The generated single-GPU triage remains live, but
+> active compiler sequencing is owned by `compiler/INTEGRATED_COMPILER_PLAN.md`
+> and architecture promotion is owned by backend `todo.md` plans.
 
 This plan is the operating queue for closing every item that can be honestly
 closed on one GPU, without letting multi-rank, unavailable-silicon, or

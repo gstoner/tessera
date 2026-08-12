@@ -5,7 +5,7 @@ walks (vision_prefill / video_prefill / splice); (2) the first-class encoder-fre
 ops (patch/coordinate/audio projection) compose into a forward that equals running
 the named walks in sequence.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream F).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream F).
 """
 
 from __future__ import annotations

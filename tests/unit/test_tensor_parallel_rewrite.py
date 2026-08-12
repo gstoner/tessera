@@ -5,7 +5,7 @@ is forward-correct AND that the sharded backward gradients, recombined, equal th
 single-rank gradients (the specific gap P2 named). Runs over real MockRankGroup
 threads exercising the collectives.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream E).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream E).
 """
 
 from __future__ import annotations

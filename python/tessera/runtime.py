@@ -33725,7 +33725,7 @@ def _apple_gpu_dispatch_selective_ssm(operands: Any, kwargs: Any, np: Any) -> An
     # decode kernel (Track-R) when it's faster than the bmm chunked path — this
     # is how the block kernel becomes reachable from the enveloped
     # `selective_ssm` graph op (the decode-loop handle stays separate by
-    # design).  A shape sweep (docs/audit/roadmap/REPLAYSSM_PLAN.md) showed the
+    # design).  A shape sweep (docs/audit/roadmap/archive/REPLAYSSM_PLAN.md) showed the
     # block kernel wins for larger work (batched, large T, or large state) and
     # loses only for tiny shapes, so the default is a **size heuristic**:
     # block when ``B*D >= 256`` (enough threads) or ``T >= 128`` (amortizes the

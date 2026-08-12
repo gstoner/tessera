@@ -1,11 +1,14 @@
 ---
-last_updated: 2026-06-27
-audit_role: plan
-plan_state: open
+last_updated: 2026-08-11
+audit_role: reference
 authority: Companion enablement map for `docs/audit/roadmap/ROADMAP_AUDIT.md`
 ---
 
 # S-Series Primitive Enablement Map
+
+> **Archived 2026-08-11.** This is the historical enablement taxonomy. Live
+> primitive state comes from generated dashboards; active work is routed by the
+> integrated compiler and backend plans.
 
 > This is a **taxonomy and prioritization guide**, not a status dashboard.
 > The generated sources of truth are

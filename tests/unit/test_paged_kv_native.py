@@ -10,7 +10,7 @@ The Metal path is skipped (not failed) when the runtime isn't loadable, so the
 suite stays green off-Apple — but the provenance gate means a fallback can never
 masquerade as a native pass.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream A follow-on).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream A follow-on).
 """
 
 from __future__ import annotations

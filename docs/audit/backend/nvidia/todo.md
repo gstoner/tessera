@@ -8,6 +8,27 @@ last_updated: 2026-08-12
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **not applicable to
+NVIDIA, by existing architecture.** The `Validate / lit` lane was dead from
+2026-08-11 to 2026-08-12 (pytest collection aborted on a missing `ml_dtypes`,
+fixed in #554); the first green-collection run failed 27 of 367 fixtures on
+unregistered `tessera_x86` / `tessera_rocm` dialects. No NVIDIA fixture is in
+the failure set and this PR changes nothing for NVIDIA: the NVIDIA dialect is
+off by default and its fixtures run under the separate `tessera-nvidia-opt`
+driver (`%tnv`), not the `tessera-opt` binary this lane builds — the same
+separation `test_target_ir_contract.py` already records as NVIDIA's documented
+skip under Decision #19.
+
+Architecture-specific reason this stays not-applicable rather than
+follow-up-required: adding `TESSERA_BUILD_NVIDIA_BACKEND=ON` to the shared lane
+would be actively harmful. With `ENABLE_CUDA` off — the only option on a
+CUDA-less runner — `tools/tessera-opt/CMakeLists.txt:95-96` forces
+`TESSERA_OPT_LEAN_ARTIFACT_DRIVER`, dropping core `TesseraIR`/`TesseraPasses`
+and the x86 Target IR. That is the same trap documented for ROCm under this
+sync key; NVIDIA's separate driver is the existing, correct answer. Revisit
+only if a CUDA-capable runner joins CI, which would also be the point at which
+sm_120 exact-device evidence becomes schedulable.
+
 Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
 The shared Block AttnRes plan establishes portable balanced-partition,
 epsilon-qualified numeric, VJP, and softmax-merge oracle contracts. This PR

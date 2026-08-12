@@ -7,6 +7,62 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **owning ROCm item,
+follow-up required; ROCm `tessera-ir` lit fixtures remain uncovered in CI.**
+The `Validate / lit` lane was dead from 2026-08-11 to 2026-08-12 (pytest
+collection aborted on a missing `ml_dtypes`, fixed in #554), and the first
+green-collection run exposed that the lane's `tessera-opt` registers neither
+`tessera_x86` nor `tessera_rocm`: 27 of 367 fixtures failed with
+``Dialect `tessera_rocm'/`tessera_x86' not found``. This PR restores the x86
+half only. **ROCm cannot be added to that binary on a HIP-less runner**:
+`tools/tessera-opt/CMakeLists.txt:95` forces `TESSERA_OPT_LEAN_ARTIFACT_DRIVER`
+when `TESSERA_BUILD_ROCM_BACKEND=ON` with `ENABLE_HIP`/`ENABLE_CUDA` off, and
+the lean arm drops core `TesseraIR`/`TesseraPasses` plus the x86 Target IR
+(`:133` gates on `NOT lean`). Enabling it would trade ~12 ROCm fixtures for a
+larger core+x86 regression. This is a CI coverage gap, **not** a ROCm compiler
+defect, and it transfers no gfx1151 evidence.
+
+Uncovered fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
+**not** covered by the existing `check-tessera-rocm` / `tessera-rocm-opt` lane):
+`phase2/rocm_fragment_{ragged_bounds,strided_k}.mlir`,
+`phase2/rocm_kind_enums_invalid.mlir`,
+`phase2/rocm_semantic_attrs{,_reduction}_invalid.mlir`,
+`phase2/rocm_typed_fragment_{composition,composition_invalid,rdna4_int4}.mlir`,
+`phase2/e2e_matmul_scheduled_rocm_consumer.mlir`,
+`phase3/streaming_attention_modifiers_rocm.mlir`,
+`phase_f4/{es_low_rank_correction,spectral_backward}_rocm_native.mlir`.
+
+**Instructions — ROCm host (Strix Halo / gfx1151), host-free, no device needed:**
+
+1. Reproduce the CI binary's blindness locally. A stock `tessera-opt` built
+   without the ROCm flag must fail these fixtures the same way; confirm the
+   error is dialect registration, not fixture rot:
+   ```
+   cmake -S . -B build-noro -G Ninja -DTESSERA_BUILD_APPLE_BACKEND=ON \
+     -DTESSERA_BUILD_X86_BACKEND=ON \
+     -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
+   ninja -C build-noro tessera-opt
+   ```
+2. Confirm the fixtures pass in a full ROCm build (HIP present ⇒ lean arm not
+   taken ⇒ core + ROCm co-registered), which is the canonical configure in
+   `CLAUDE.md`:
+   ```
+   cmake -S . -B build -G Ninja -DTESSERA_ENABLE_HIP=ON \
+     -DTESSERA_BUILD_ROCM_BACKEND=ON -DCMAKE_PREFIX_PATH=/opt/rocm/core \
+     -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
+   ninja -C build tessera-opt && lit tests/tessera-ir/phase2 -v
+   ```
+   If any fixture fails **there**, it is a real ROCm defect and outranks the CI
+   gap — file it as its own item before touching CI.
+3. Choose and own the CI recovery. Preferred: a second configure+build in the
+   `lit` job producing a lean ROCm `tessera-opt` that runs only the ROCm-tagged
+   fixtures (mirrors how `rocm compiler (host-free LLVM/MLIR 23)` already builds
+   a separate driver). Alternative: relax the `:95` lean condition so a
+   HIP-less ROCm build keeps core+x86 registration — larger blast radius,
+   needs its own Decision-#19/#31 review, do not attempt as a drive-by.
+4. Do not mark this parity-validated from the x86 result; ROCm needs its own
+   green fixture run recorded here with the build configuration used.
+
 Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **owning ROCm item,
 landing.** The shared Block AttnRes plan fixes a quotient/remainder block
 partition, epsilon-qualified RMS key semantics, fp32 logit/softmax/accumulator

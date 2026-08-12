@@ -334,6 +334,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DTESSERA_BUILD_EXAMPLES=ON \
             -DTESSERA_BUILD_APPLE_BACKEND=ON \
+            -DTESSERA_BUILD_X86_BACKEND=ON \
             -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
             -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
           # The Apple Target-IR dialect + lowering passes are portable MLIR
@@ -341,6 +342,20 @@ jobs:
           # portable C++ stub), so tessera-opt registers the
           # tessera-lower-to-apple_* pipelines and the phase8 Apple lit
           # fixtures run instead of failing on an unregistered pipeline.
+          #
+          # X86_BACKEND is ON for the same reason: without it `TesseraX86IR`
+          # never exists, tessera-opt does not register `tessera_x86`, and every
+          # phase2 x86 fixture dies with "Dialect `tessera_x86' not found".
+          #
+          # ROCM_BACKEND is deliberately NOT set here. On a HIP-less runner
+          # `TESSERA_BUILD_ROCM_BACKEND=ON` (with ENABLE_HIP/ENABLE_CUDA off)
+          # forces TESSERA_OPT_LEAN_ARTIFACT_DRIVER — see
+          # tools/tessera-opt/CMakeLists.txt:95 — which drops core TesseraIR /
+          # TesseraPasses AND the x86 Target IR (gated on `NOT lean` at :133).
+          # Enabling it here would trade ~12 rocm fixtures for a far larger set
+          # of core+x86 failures. The `tessera-ir` rocm_*.mlir fixtures need a
+          # separate lean driver or a HIP host; tracked as
+          # CI-LIT-BACKEND-DIALECTS-2026-08-12 in docs/audit/backend/rocm/todo.md.
           cmake --build build --target tessera-opt tessera-translate-mlir
 
       - name: Run MLIR tool proof tests

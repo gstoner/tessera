@@ -15,9 +15,20 @@ to 2026-08-12 (pytest collection aborted on a missing `ml_dtypes`, fixed in
 `tessera-opt` registered neither `tessera_x86` nor `tessera_rocm`. Apple was
 **unaffected**: the lane already configures `-DTESSERA_BUILD_APPLE_BACKEND=ON`,
 `tessera_apple` appears in the driver's available-dialect list, and no
-`phase8` Apple fixture is in the failure set. Apple's linkage is gated only on
-`TARGET TesseraApple` (`tools/tessera-opt/CMakeLists.txt:187`), not on the lean
-artifact driver, so it survives configurations that drop core/x86.
+`phase8` Apple fixture is in the failure set.
+
+**Apple is incompatible with the lean artifact driver — do not plan around
+co-enabling them.** An earlier revision of this entry claimed Apple "survives
+configurations that drop core/x86" because its linkage is gated only on
+`TARGET TesseraApple` (`tools/tessera-opt/CMakeLists.txt:187`) with no lean
+check. The linkage observation is true but the conclusion was wrong: Apple
+registers the `apple-backend` feature (`:188`), the lean permitted set is
+`core-tessera-ir collectives nvidia-backend rocm-backend` (`:250`), and any
+feature outside it raises `FATAL_ERROR` (`:259-273`). So a HIP-less ROCm or
+CUDA-less NVIDIA configure **plus** Apple does not yield an Apple-capable lean
+driver — it fails to configure at all. Any future attempt to widen the lit lane
+to ROCm must therefore build a *separate* driver, not add flags to the Apple
+one.
 
 One Apple-relevant caution carried from this investigation: Apple was the sole
 backend wired into the lit configure, which is why its portable Target-IR

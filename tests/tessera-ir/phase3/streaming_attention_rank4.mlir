@@ -1,3 +1,4 @@
+// REQUIRES: tessera-rocm-backend
 // Canonical rank-4 attention distribution.
 //
 // Batch and query-head distribution are explicit scf.for loops. GQA maps each

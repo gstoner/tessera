@@ -1,3 +1,4 @@
+// REQUIRES: tessera-rocm-backend
 // RUN: not tessera-opt --split-input-file %s 2>&1 | FileCheck %s
 //
 // W1.1b — semantic string attributes state their legal set and fail closed.

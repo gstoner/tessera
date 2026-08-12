@@ -22,7 +22,17 @@ the lean arm drops core `TesseraIR`/`TesseraPasses` plus the x86 Target IR
 larger core+x86 regression. This is a CI coverage gap, **not** a ROCm compiler
 defect, and it transfers no gfx1151 evidence.
 
-Uncovered fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
+**These 13 fixtures are now `// REQUIRES: tessera-rocm-backend`.** They were the
+only ROCm-driven fixtures in `tests/tessera-ir/` missing the gate their siblings
+already carry (`phase3/streaming_attention_backward_rocm{,_invalid,_nobias}.mlir`
+have had it all along), so in a ROCm-less driver they hard-failed instead of
+reporting UNSUPPORTED. The gate is derived, not asserted: `lit.cfg.py:126`
+probes `tessera-opt --help` for `tessera-lower-to-rocm`, which is present
+exactly when `TesseraROCMIR`/`TesseraROCMConversion` are linked. In a
+ROCm-enabled build they run as before — **the gate hides nothing on a host that
+can execute them**, which is why the coverage obligation below still stands.
+
+Gated fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
 **not** covered by the existing `check-tessera-rocm` / `tessera-rocm-opt` lane):
 `phase2/rocm_fragment_{ragged_bounds,strided_k}.mlir`,
 `phase2/rocm_kind_enums_invalid.mlir`,
@@ -34,9 +44,16 @@ Uncovered fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
 
 **Instructions — ROCm host (Strix Halo / gfx1151), host-free, no device needed:**
 
+0. **Treat the `REQUIRES` gate as a debt marker, not a resolution.** On the
+   Strix Halo box these fixtures must actually RUN — a lit summary showing
+   them UNSUPPORTED there means the ROCm build is misconfigured, not that the
+   work is done. Assert the feature is live before trusting a green run:
+   `./build/tools/tessera-opt/tessera-opt --help | grep tessera-lower-to-rocm`.
+
 1. Reproduce the CI binary's blindness locally. A stock `tessera-opt` built
-   without the ROCm flag must fail these fixtures the same way; confirm the
-   error is dialect registration, not fixture rot:
+   without the ROCm flag must now report these fixtures UNSUPPORTED (before the
+   gate they hard-failed); confirm the driver genuinely lacks the dialect
+   rather than the fixtures having rotted:
    ```
    cmake -S . -B build-noro -G Ninja -DTESSERA_BUILD_APPLE_BACKEND=ON \
      -DTESSERA_BUILD_X86_BACKEND=ON \

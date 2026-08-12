@@ -1,3 +1,4 @@
+// REQUIRES: tessera-rocm-backend
 // RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --lower-tile-to-rocm='arch=gfx1151' --generate-rocm-es-low-rank-kernel %s | FileCheck %s
 
 module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {

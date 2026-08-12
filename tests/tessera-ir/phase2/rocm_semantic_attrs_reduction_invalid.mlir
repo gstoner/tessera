@@ -1,3 +1,4 @@
+// REQUIRES: tessera-rocm-backend
 // RUN: not tessera-opt %s 2>&1 | FileCheck %s
 //
 // W1.1b — `reduction` selects WHAT THE KERNEL COMPUTES, so an unknown policy

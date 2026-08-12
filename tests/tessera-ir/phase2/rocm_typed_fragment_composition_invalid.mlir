@@ -1,3 +1,4 @@
+// REQUIRES: tessera-rocm-backend
 // RUN: not tessera-opt %s --split-input-file --lower-tile-to-rocm=arch=gfx1151 \
 // RUN:   2>&1 | FileCheck %s
 //

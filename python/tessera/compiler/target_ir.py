@@ -24,8 +24,17 @@ APPLE_GPU_TARGET = "apple_gpu"
 CPU_TARGET = "cpu"
 X86_TARGET = "x86"
 ROCM_TARGET = "rocm"
+ROCM_GFX1151_TARGET = "rocm_gfx1151"
+ROCM_TARGETS = {ROCM_TARGET, ROCM_GFX1151_TARGET}
 NVIDIA_TARGETS = {"nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120"}
-SUPPORTED_TARGETS = {APPLE_CPU_TARGET, APPLE_GPU_TARGET, CPU_TARGET, X86_TARGET, ROCM_TARGET, *NVIDIA_TARGETS}
+SUPPORTED_TARGETS = {
+    APPLE_CPU_TARGET,
+    APPLE_GPU_TARGET,
+    CPU_TARGET,
+    X86_TARGET,
+    *ROCM_TARGETS,
+    *NVIDIA_TARGETS,
+}
 MEDIA_SOURCES = {
     "tessera.image_preprocess",
     "tessera.video_frame_sample",
@@ -787,7 +796,7 @@ class TargetIRVerifier:
                 self._verify_cpu_op(op, diagnostics)
             elif target == X86_TARGET:
                 self._verify_x86_op(op, diagnostics)
-            elif target == ROCM_TARGET:
+            elif target in ROCM_TARGETS:
                 self._verify_rocm_op(op, diagnostics)
             elif target in NVIDIA_TARGETS:
                 self._verify_nvidia_op(op, diagnostics)
@@ -931,8 +940,17 @@ def lower_tile_to_target_ir(tile_module: TileIRModule, *, target_kind: str) -> T
         })
     elif target_kind in NVIDIA_TARGETS:
         attrs.update({"arch": _nvidia_arch(target_kind), "target_features": {"family": "nvidia", "tensor_cores": True, "device_timers": False}})
-    elif target_kind == ROCM_TARGET:
-        attrs.update({"arch": "gfx90a", "target_features": {"family": "rocm", "mfma": True, "device_timers": False}})
+    elif target_kind in ROCM_TARGETS:
+        rocm_arch = "gfx1151" if target_kind == ROCM_GFX1151_TARGET else "gfx90a"
+        rocm_features: dict[str, Any] = {
+            "family": "rocm",
+            "device_timers": False,
+        }
+        rocm_features["wmma" if rocm_arch == "gfx1151" else "mfma"] = True
+        attrs.update({
+            "arch": rocm_arch,
+            "target_features": rocm_features,
+        })
     elif target_kind == APPLE_CPU_TARGET:
         attrs.update({"arch": "arm64-apple-silicon", "execution_mode": "cpu_accelerate", "target_features": {"family": "apple", "accelerate": True, "device_timers": False}})
     else:
@@ -1222,8 +1240,9 @@ def _lower_tile_ops(
     # consumed the key for them, the real compute op would be skipped.
     seen_runtime_keys: set[tuple[str, object]] = set()
     for tile_op in _flatten_tile_ops(ops):
-        if target_kind == ROCM_TARGET:
-            lowered.extend(_lower_rocm_op(tile_op))
+        if target_kind in ROCM_TARGETS:
+            rocm_arch = "gfx1151" if target_kind == ROCM_GFX1151_TARGET else "gfx90a"
+            lowered.extend(_lower_rocm_op(tile_op, arch=rocm_arch))
         elif target_kind == APPLE_CPU_TARGET:
             lowered.extend(_lower_apple_cpu_op(tile_op))
         elif target_kind == APPLE_GPU_TARGET:
@@ -1296,7 +1315,7 @@ def _rocm_async_copy_pair(base: dict[str, Any]) -> list[TargetOp]:
     ]
 
 
-def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
+def _lower_rocm_op(op: TileOp, *, arch: str) -> list[TargetOp]:
     if op.op_name in {"tile.debug_artifact", "tile.debug_barrier"}:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
@@ -1334,7 +1353,7 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
         return [
             TargetOp(
                 "tessera_rocm.mfma",
-                {**base, "arch": "gfx90a", "shape": "m16n16k16", "accum": "f32"},
+                {**base, "arch": arch, "shape": "m16n16k16", "accum": "f32"},
                 operands=[f"%mfma_a_{n}", f"%mfma_b_{n}", f"%mfma_acc_{n}"],
                 result=f"mfma_res_{n}",
                 operand_types=[frag_a, frag_a, frag_acc],
@@ -1354,7 +1373,9 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
         return [TargetOp("tessera_rocm.grouped_gemm", {
             **base,
             "name": "grouped_gemm",
-            "arch": "gfx1151",
+            # Preserve the legacy ``rocm`` route's established gfx1151
+            # ownership while the exact target spelling becomes canonical.
+            "arch": "gfx1151" if arch == "gfx90a" else arch,
             "status": "device_verified_jit",
             "runtime_lane": "rocm_moe_transport_compiled",
             "argument_layout": "device_offsets[E+1]",
@@ -1369,9 +1390,9 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
         # selected-block KV-outer contract for IR-level parity with CUDA.
         return [TargetOp("tessera_rocm.msa_block_sparse", {
             **base,
-            "arch": "gfx90a",
+            "arch": arch,
             "kernel": "msa_kv_outer_sparse",
-            "status": "device_verified_jit",
+            "status": "device_verified_jit" if arch == "gfx1151" else "artifact_only",
             "runtime_lane": "rocm_sparse_attn_compiled",
             "mode": op.attrs.get("mode", "prefill"),
             "block_ids_layout": op.attrs.get("selected_block_layout", "B,Hkv,Sq,top_k"),
@@ -1390,7 +1411,7 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
     if source == "tessera.kv_cache.read" or op.op_name == "tile.kv_cache.read":
         return [TargetOp("tessera_rocm.kv_cache_read", {
             **base,
-            "arch": "gfx1151",
+            "arch": "gfx1151" if arch == "gfx90a" else arch,
             "kernel": "kv_cache_read",
             "status": "device_verified_jit",
             "runtime_lane": "rocm_kv_cache_compiled",
@@ -1410,7 +1431,7 @@ def _lower_rocm_op(op: TileOp) -> list[TargetOp]:
     if op.op_name == "tile.wait_async":
         return []
     return [
-        TargetOp("tessera_rocm.elementwise", {**base, "arch": "gfx90a"}),
+        TargetOp("tessera_rocm.elementwise", {**base, "arch": arch}),
         *_rocm_async_copy_pair(base),
     ]
 
@@ -1454,6 +1475,23 @@ def _lower_x86_op(op: TileOp) -> list[TargetOp]:
         return []
     source = str(op.attrs.get("source", _source_from_tile_op(op)))
     base = _base_attrs(op)
+    if op.op_name == "tessera_attn.msa_kv_outer_sparse" or source == "tessera.msa_sparse_attention":
+        return [TargetOp("tessera_x86.kernel", {
+            **base,
+            "abi": "libtessera_x86_msa_f32",
+            "arch": "zen5_avx512",
+            "kernel": "msa_kv_outer_sparse",
+            "status": "device_verified_jit",
+            "runtime_lane": "x86_msa_compiled",
+            "mode": op.attrs.get("mode", "prefill"),
+            "block_ids_layout": op.attrs.get(
+                "selected_block_layout", "B,Hkv,Sq,top_k"
+            ),
+            "gqa_group_size": int(op.attrs.get("gqa_group_size", 1)),
+            "tile_q": int(op.attrs.get("tile_q", 64)),
+            "tile_kv": int(op.attrs.get("tile_kv", 128)),
+            "kv_traversal": "kv_outer",
+        })]
     if source == "tessera.kv_cache.read" or op.op_name == "tile.kv_cache.read":
         return [TargetOp("tessera_x86.kv_cache_read", {
             **base,
@@ -1983,7 +2021,7 @@ def _probe_op_name_for_target(target: str) -> str:
         return "tessera_apple.cpu.profiler_probe"
     if target == APPLE_GPU_TARGET:
         return "tessera_apple.gpu.profiler_probe"
-    if target == ROCM_TARGET:
+    if target in ROCM_TARGETS:
         return "tessera_rocm.profiler_probe"
     if target in NVIDIA_TARGETS:
         return "tessera_nvidia.profiler_probe"
@@ -2043,6 +2081,7 @@ def _x86_runtime_lane(source: str) -> str | None:
         "tessera.softmax": "x86_softmax_compiled",
         "tessera.softmax_safe": "x86_softmax_compiled",
         "tessera.flash_attn": "x86_flash_attn_compiled",
+        "tessera.msa_sparse_attention": "x86_msa_compiled",
         "tessera.conv2d": "x86_conv_compiled",
         "tessera.conv2d_nhwc": "x86_conv_compiled",
         "tessera.relu": "x86_binary_compiled",

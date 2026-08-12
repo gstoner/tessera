@@ -1,11 +1,66 @@
 ---
-last_updated: 2026-08-11
+last_updated: 2026-08-12
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `MODEL-FUSED-PHYS-1-2026-08-12` — **MiniMax MSA now
+consumes an exact digest-bound package on gfx1151; DeepSeek remains open.** The
+package binds Graph, Schedule, Tile, and Target digests and its runtime launch
+contract; launch validates that lineage and executes `rocm_sparse_attn_compiled`
+without legacy Graph `ops` metadata or Graph-to-backend reconstruction. An
+exact gfx1151 execution matches the independent MSA oracle. This does not close
+DeepSeek MLA/DSA, prefill/decode performance packets, or selector promotion;
+gfx1200/gfx1250 remain fail-closed.
+
+Cross-backend sync `MODEL-WEIGHT-PHYS-1-2026-08-12` — **persistent packed
+INT4 model operands execute on gfx1151; FP8 remains correctly unavailable.**
+The shared model-weight ABI now carries immutable physical checkpoint bytes and
+separate fp32 scales under one content digest and prohibits full-weight
+materialization. gfx1151 uploads codes/scales once into two typed device leases;
+the fused dequant-GEMM consumes those pointers across launches. The local
+gfx1151 packet passes the groupwise fp32 oracle with no unpack/repack and records
+weight/kernel digests. WSL host-wall timing is regression-only. gfx1151 rejects
+FP8/BF8 by ISA contract; gfx1200/gfx1250 remain fail-closed pending independent
+profiles, packages, and evidence.
+
+Cross-backend sync `W4-PRESBURGER-SHARD-2026-08-12` — **shared typed shape and
+placement analyses landed; gfx1151 physical follow-up remains open.** The C++
+compiler consumes coefficient-vector integer-affine and exact modular/divisibility
+constraints with MLIR Presburger analysis. Shared placement propagation now
+distinguishes replicated, tiled, partial-reduction, and unknown states; catalog
+pointwise/reduction/collective rules feed an explicit fail-closed reshard planner.
+Lowered `control_scan` has shared JVP/VJP products under `recompute_all`; saved
+checkpoint policies remain rejected. No RCCL reshard materialization, native
+region product, or new bare-metal packet was added; gfx1200/gfx1250 remain
+fail-closed.
+
+Cross-backend sync `E2E-AUTH-DAG-2026-08-12` — **reduction and normalization
+forward-product authority closed on gfx1151; calibrated promotion remains
+open.** Reduction now launches two exact `schedule.reduce → tile.reduce_kernel
+→ gfx1151 descriptor` children. Normalization consumes a content-addressed
+composite Schedule/Tile action program and reconstructs no Graph operation at
+runtime. Mandatory tracer/AST differential gates cover all pure native JVPs
+and VJPs; the beta/gamma AST operand-order defect was fixed. The committed v2
+packet records ten samples plus source/paired/Schedule/Tile/parent digests and
+passes exact-device correctness. WSL supplies synchronized host wall only:
+device-clock calibration and ROCprofiler activity are absent, so timing is
+regression-only and selector promotion remains open. gfx1200/gfx1250 remain
+fail-closed.
+
+Cross-backend sync `E2E-AUTH-DAG-2026-08-11` — **shared frontend authority and
+automatic dependence-edge contracts landed; gfx1151 physical evidence is
+unchanged.** Pure straight-line tensor signatures now cache tracer-owned Graph
+IR and can be differentially certified against the retained AST candidate.
+Native-JVP plugins declare Graph/Schedule/Tile/gfx1151 disposition and own parent
+package construction; compatibility gaps are explicit. W2.1 facts now generate conservative Tile action-DAG
+edges with reason and analysis digests. The existing JVP children remain the
+physical implementation; this slice adds no selector promotion. Carrying the
+generated edges through ROCm family pipelines and a bare-metal calibrated
+packet remain follow-up. gfx1200/gfx1250 remain fail-closed.
 
 Cross-backend sync `AD-SOLVER-ISTFT-PHYSICAL-2026-08-11` — **bounded general-
 residual and exact ISTFT-window products execute on gfx1151.** The general

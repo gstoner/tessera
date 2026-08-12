@@ -59,6 +59,10 @@ def _kw_cast_fn(x):
     return ops.cast(x, dtype="bf16")
 
 
+def _kw_affine_norm_fn(x, gamma, beta):
+    return ops.layer_norm(x, beta=beta, gamma=gamma, eps=1e-5)
+
+
 def _emit(fn) -> str:
     b = GraphIRBuilder()
     b.lower(fn)
@@ -99,6 +103,12 @@ def test_keyword_operand_order_is_declared_not_call_site():
     assert a.split(")")[0] == b.split(")")[0], (
         f"operand list depends on keyword order:\n  {a}\n  {b}"
     )
+
+
+def test_affine_normalization_preserves_data_scale_bias_abi_order():
+    line = _op_line(_emit(_kw_affine_norm_fn), "tessera.layer_norm")
+    head = line.split(")")[0]
+    assert head.index("%x") < head.index("%gamma") < head.index("%beta"), line
 
 
 def test_varlen_cu_seqlens_reach_the_operand_list():

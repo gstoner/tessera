@@ -443,6 +443,14 @@ class JitFn:
         # SHA-256 over the artifact JSON inside `RuntimeArtifact.artifact_hash`.
         self._cached_artifact: Optional["RuntimeArtifact"] = None
         self._autodiff_specializations: Dict[Any, GraphIRModule] = {}
+        # E2E-REAL-6: concrete tensor signatures are tracer-owned by default.
+        # The decoration-time AST module remains a named candidate until a
+        # family differential certificate permits its deletion.
+        self._traced_frontend_specializations: Dict[Any, GraphIRModule] = {}
+        self.frontend_authority: str = "pending_concrete_trace"
+        self.frontend_authority_error: Optional[str] = None
+        self.last_frontend_differential: Optional[Any] = None
+        self._frontend_differential_certificates: Dict[Any, Any] = {}
         self.last_backward_execution: Optional[Dict[str, Any]] = None
         functools.update_wrapper(self, fn)
 
@@ -655,6 +663,7 @@ class JitFn:
         """
         self._enforce_call_time_constraints(args, kwargs)
         self._enforce_call_time_stochastic_certificate(args, kwargs)
+        self._establish_tracer_authority(args, kwargs)
         if self.differentiation_request is not None:
             self._specialized_autodiff_module(args, kwargs)
         try:
@@ -838,7 +847,13 @@ class JitFn:
         if cached is not None:
             return cached
         values = dict(zip(self.arg_names, ordered))
-        specialized = specialize_module_from_values(self.graph_ir, values)
+        if ordered and all(isinstance(value, np.ndarray) for value in ordered):
+            try:
+                specialized = self._trace_frontend_capture(args, kwargs)[0]
+            except TesseraJitError:
+                specialized = specialize_module_from_values(self.graph_ir, values)
+        else:
+            specialized = specialize_module_from_values(self.graph_ir, values)
         self._autodiff_specializations[signature] = specialized
         return specialized
 
@@ -848,15 +863,19 @@ class JitFn:
             raise TesseraJitError("specialized_autodiff_ir requires autodiff=...")
         return self._specialized_autodiff_module(args, kwargs).to_mlir()
 
-    def _traced_autodiff_module(
-        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
-    ) -> GraphIRModule:
-        """Trace one concrete signature into the canonical Graph IR authority.
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
 
         E2E-REAL-6 migrates families at this boundary before deleting their AST
-        or backend resynthesis lanes.  Native forward products are the first
-        cohort: their derivative and physical package now bind the same traced
-        module instead of consulting decoration-time AST Graph IR.
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
         """
         import hashlib
         import numpy as np
@@ -869,13 +888,9 @@ class JitFn:
             (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
             for value in ordered
         )
-        cache = getattr(self, "_traced_autodiff_specializations", None)
-        if cache is None:
-            cache = {}
-            self._traced_autodiff_specializations = cache
-        cached = cache.get(signature)
-        if cached is not None:
-            return cached
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
         try:
             traced = trace(self._fn, *ordered)
             source_hash = self.graph_ir.functions[0].source_hash or hashlib.sha256(
@@ -890,16 +905,100 @@ class JitFn:
                 module.functions[0].fn_attrs.update(intent)
         except Exception as exc:
             raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
-        cache[signature] = module
-        return module
+        self._traced_frontend_specializations[signature] = module
+        return module, traced
+
+    def _traced_autodiff_module(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> GraphIRModule:
+        """Compatibility name for the tracer-owned compiler specialization."""
+        return self._trace_frontend_capture(args, kwargs)[0]
+
+    def _establish_tracer_authority(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> None:
+        """Make tracing the default capture for ordinary concrete tensor calls.
+
+        Unmigrated execution candidates may continue when tracing cannot yet
+        represent a signature, but the fallback is explicit and inspectable;
+        no compiler client may mistake the AST module for tracer authority.
+        """
+        import numpy as np
+        from .effects import Effect, infer_graph_effects
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or not ordered or not all(
+            isinstance(value, np.ndarray) for value in ordered
+        ):
+            self.frontend_authority = "legacy_candidate_non_tensor_signature"
+            return
+        effect, _ = infer_graph_effects(self.graph_ir.functions[0].body)
+        if effect != Effect.pure:
+            self.frontend_authority = "legacy_candidate_effectful_signature"
+            return
+        try:
+            self._trace_frontend_capture(args, kwargs)
+        except TesseraJitError as exc:
+            self.frontend_authority = "legacy_candidate_unmigrated"
+            self.frontend_authority_error = str(exc)
+            return
+        self.frontend_authority = "tracer"
+        self.frontend_authority_error = None
+
+    def frontend_differential(
+        self, *args: Any, rtol: float = 1e-5, atol: float = 1e-6, **kwargs: Any
+    ) -> Any:
+        """Prove AST-candidate/tracer parity for one pure tensor signature."""
+        import numpy as np
+        from .frontend_authority import certify_frontends
+        from .graph_ir import specialize_module_from_values
+
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("frontend differential requires every argument")
+        if not all(isinstance(value, np.ndarray) for value in ordered):
+            raise TesseraJitError("frontend differential requires tensor arguments")
+        signature = tuple(
+            (str(value.dtype), tuple(int(dim) for dim in value.shape))
+            for value in ordered
+        )
+        cached = self._frontend_differential_certificates.get(signature)
+        if cached is not None:
+            self.last_frontend_differential = cached
+            return cached
+        tracer_module, traced = self._trace_frontend_capture(
+            args, kwargs, require_outputs=True
+        )
+        assert traced is not None
+        if not traced.output_values or any(value is None for value in traced.output_values):
+            raise TesseraJitError("tracer produced no concrete differential outputs")
+        legacy_module = specialize_module_from_values(
+            self.graph_ir, dict(zip(self.arg_names, ordered))
+        )
+        legacy_result = self._fn(*args, **kwargs)
+        legacy_outputs = legacy_result if isinstance(legacy_result, tuple) else (legacy_result,)
+        try:
+            certificate = certify_frontends(
+                legacy_module=legacy_module,
+                tracer_module=tracer_module,
+                legacy_outputs=legacy_outputs,
+                tracer_outputs=traced.output_values,
+                rtol=rtol,
+                atol=atol,
+            )
+        except ValueError as exc:
+            raise TesseraJitError(str(exc)) from exc
+        self.last_frontend_differential = certificate
+        self._frontend_differential_certificates[signature] = certificate
+        return certificate
 
     def _compile_jvp_module(self, module: GraphIRModule) -> str:
         """Run the sole compiler forward transform for an already-owned module."""
         import re
         import subprocess
-        from .. import _jit_boundary as _jb
+        from .scheduled_matmul import find_tessera_opt
 
-        opt = _jb._find_tessera_opt()
+        opt = find_tessera_opt()
         if opt is None:
             raise TesseraJitError("tessera-opt not built; cannot emit paired JVP")
         graph_text = re.sub(
@@ -946,8 +1045,7 @@ class JitFn:
         """
         import numpy as np
         from tessera.runtime import RuntimeArtifact, launch
-        from .native_jvp import build_native_jvp_artifact
-        from .native_jvp_plugins import plan_native_jvp_family
+        from .native_jvp_plugins import build_native_jvp_family_artifact
 
         request = self.differentiation_request
         if request is None or request.mode != "forward":
@@ -960,6 +1058,7 @@ class JitFn:
         tangent_values = tangents if isinstance(tangents, (tuple, list)) else (tangents,)
         if len(tangent_values) != len(request.wrt_indices):
             raise TesseraJitError("native_jvp requires one tangent per active input")
+        self.frontend_differential(*args, **kwargs)
         primal_inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
         tangent_inputs = {
             index: np.ascontiguousarray(np.asarray(value))
@@ -988,19 +1087,6 @@ class JitFn:
             architecture = "gfx1151"
             execution_mode = "hip_runtime"
 
-        try:
-            family_plan = plan_native_jvp_family(
-                source=source,
-                primal_inputs=primal_inputs,
-                wrt_indices=request.wrt_indices,
-                target=target,
-                architecture=architecture,
-                execution_mode=execution_mode,
-            )
-        except ValueError as exc:
-            raise TesseraJitError(str(exc)) from exc
-        family = family_plan.family
-
         launch_names = tuple(f"primal_{index}" for index in range(len(primal_inputs))) + tuple(
             f"tangent_{index}" for index in request.wrt_indices
         )
@@ -1010,7 +1096,7 @@ class JitFn:
         package_key = (
             target,
             architecture,
-            family,
+            source.op_name,
             tuple((str(value.dtype), tuple(int(dim) for dim in value.shape)) for value in primal_inputs),
             tuple((index, str(tangent_inputs[index].dtype)) for index in request.wrt_indices),
             repr(sorted(source.kwargs.items())),
@@ -1022,17 +1108,22 @@ class JitFn:
         package = package_cache.get(package_key)
         if package is None:
             paired_ir = self._compile_jvp_module(traced_module)
-            package = build_native_jvp_artifact(
-                target=target,
-                architecture=architecture,
-                family=family,
-                source_graph_ir=traced_module.to_mlir(),
-                paired_jvp_ir=paired_ir,
-                wrt_indices=request.wrt_indices,
-                arg_names=launch_names,
-                steps=family_plan.steps,
-            )
+            try:
+                _, package = build_native_jvp_family_artifact(
+                    source=source,
+                    primal_inputs=primal_inputs,
+                    target=target,
+                    architecture=architecture,
+                    execution_mode=execution_mode,
+                    source_graph_ir=traced_module.to_mlir(),
+                    paired_jvp_ir=paired_ir,
+                    wrt_indices=request.wrt_indices,
+                    arg_names=launch_names,
+                )
+            except ValueError as exc:
+                raise TesseraJitError(str(exc)) from exc
             package_cache[package_key] = package
+        family = str(package.contract["family"])
         result = launch(
             RuntimeArtifact(metadata=package.runtime_metadata()),
             launch_values,
@@ -1049,6 +1140,8 @@ class JitFn:
             "artifact_hash": package.artifact_hash,
             "paired_jvp_ir_digest": package.contract["paired_jvp_ir_digest"],
             "source_graph_ir_digest": package.contract["source_graph_ir_digest"],
+            "schedule_program_digest": package.contract["schedule_program"]["digest"],
+            "tile_program_digest": package.contract["tile_program"]["digest"],
             "frontend_authority": "tracer",
             "family": family,
         }
@@ -1071,6 +1164,14 @@ class JitFn:
                 "native_backward requires @jit(autodiff='reverse'); "
                 "forward requests use compiled_jvp_ir"
             )
+        from .effects import Effect, infer_graph_effects
+
+        source_module = self._specialized_autodiff_module(args, kwargs)
+        source_effect, _ = infer_graph_effects(
+            op for function in source_module.functions for op in function.body
+        )
+        if source_effect == Effect.pure:
+            self.frontend_differential(*args, **kwargs)
         target_kind = normalize_target_kind(self.target)
         if target_kind == "rocm":
             return self._native_rocm_backward(
@@ -1079,7 +1180,10 @@ class JitFn:
             return self._native_nvidia_backward(
                 args, kwargs, out_cotangents=out_cotangents)
         if target_kind == "x86":
-            graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+            graph_ops = [
+                op for fn in self._specialized_autodiff_module(args, kwargs).functions
+                for op in fn.body
+            ]
             if (
                 len(graph_ops) == 1
                 and graph_ops[0].op_name.removeprefix("tessera.") == "sgd"
@@ -1408,7 +1512,10 @@ class JitFn:
         if len(cotangents) != 1:
             raise TesseraJitError("normalization backward requires one output cotangent")
         dy = np.ascontiguousarray(np.asarray(cotangents[0]))
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [
+            op for fn in self._specialized_autodiff_module(args, kwargs).functions
+            for op in fn.body
+        ]
         if len(graph_ops) != 1:
             raise TesseraJitError(
                 "compiled normalization backward requires a single-op graph"
@@ -1503,7 +1610,10 @@ class JitFn:
         if len(cotangents) != 1:
             raise TesseraJitError("SGD backward requires one output cotangent")
         dy = np.ascontiguousarray(np.asarray(cotangents[0]), dtype=np.float32)
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [
+            op for fn in self._specialized_autodiff_module(args, kwargs).functions
+            for op in fn.body
+        ]
         if len(graph_ops) != 1:
             raise TesseraJitError("compiled SGD backward requires a single-op graph")
         path = f"{target}_sgd_bwd_compiled"
@@ -1577,7 +1687,7 @@ class JitFn:
         if len(cotangents) != 2:
             raise TesseraJitError(
                 "momentum backward requires parameter and velocity cotangents")
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         if len(graph_ops) != 1:
             raise TesseraJitError(
                 "compiled momentum backward requires a single-op graph")
@@ -1662,7 +1772,7 @@ class JitFn:
                 "Adam backward requires parameter, moment1, and moment2 "
                 "output cotangents"
             )
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         if len(graph_ops) != 1:
             raise TesseraJitError(
                 "compiled Adam backward requires a single-op graph"
@@ -1768,7 +1878,7 @@ class JitFn:
             raise TesseraJitError(
                 "ROCm Adafactor backward requires one parameter cotangent"
             )
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         if len(graph_ops) != 1 or graph_ops[0].op_name.removeprefix(
             "tessera."
         ) != "adafactor":
@@ -1858,7 +1968,7 @@ class JitFn:
             raise TesseraJitError(
                 "Lion backward requires parameter and moment output cotangents"
             )
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         if len(graph_ops) != 1 or (
             graph_ops[0].op_name.removeprefix("tessera.") != "lion"
         ):
@@ -1961,7 +2071,7 @@ class JitFn:
                 "regression-loss backward requires one output cotangent"
             )
         dy = np.ascontiguousarray(np.asarray(cotangents[0]))
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         if len(graph_ops) != 1:
             raise TesseraJitError(
                 "compiled regression-loss backward requires a single-op graph"
@@ -2064,7 +2174,7 @@ class JitFn:
             raise TesseraJitError(
                 "ROCm distribution backward requires one output cotangent"
             )
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         if len(graph_ops) != 1:
             raise TesseraJitError(
                 "compiled distribution backward requires a single-op graph"
@@ -2168,7 +2278,7 @@ class JitFn:
         if len(cotangents) != 1:
             raise TesseraJitError("BCE backward requires one output cotangent")
         dy = np.ascontiguousarray(np.asarray(cotangents[0]))
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         if len(graph_ops) != 1:
             raise TesseraJitError(
                 "compiled BCE backward requires a single-op graph"
@@ -2260,7 +2370,7 @@ class JitFn:
             else (out_cotangents,))
         if len(cotangents) != 1:
             raise TesseraJitError("class loss backward requires one cotangent")
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         source_op = graph_ops[0]
         source_kwargs = dict(source_op.kwargs)
         if "smoothing" in source_kwargs:
@@ -2320,7 +2430,7 @@ class JitFn:
         out_cotangents: Any,
     ) -> tuple[Any, ...]:
         """Bind shared paired adjoints to the verified SM120 PTX packages."""
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         ops = {op.op_name.removeprefix("tessera.") for op in graph_ops}
         if len(graph_ops) != 1:
             raise TesseraJitError(
@@ -2502,7 +2612,7 @@ class JitFn:
             raise TesseraJitError(
                 "sequence-mixer backward requires one output cotangent"
             )
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         if len(graph_ops) != 1:
             raise TesseraJitError(
                 "typed sequence-mixer backward requires one Graph operation"
@@ -2599,7 +2709,7 @@ class JitFn:
         cots = out_cotangents if isinstance(out_cotangents, (tuple, list)) \
             else (out_cotangents,)
         cotangents = [np.ascontiguousarray(np.asarray(value)) for value in cots]
-        graph_ops = [op for fn in self.graph_ir.functions for op in fn.body]
+        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         ops = {op.op_name.removeprefix("tessera.") for op in graph_ops}
 
         if len(graph_ops) == 1 and ops <= {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
@@ -3684,6 +3794,7 @@ def _jit_emit_graph_ir(
     seed: Optional[int],
     cpu_tile: Tuple[int, int, int],
     inferred_effect: Any,
+    constraints: Sequence[Constraint],
     skip_graph_ir: bool,
 ) -> _GraphIREmission:
     """@jit Step 6: emit Graph IR (with the process-local cache), build the
@@ -3746,6 +3857,14 @@ def _jit_emit_graph_ir(
                 "JIT_SOURCE_PROVIDED",
                 f"using {source_origin} source for AST lowering",
             ))
+        from .presburger import (
+            attach_presburger_system,
+            presburger_system_from_constraints,
+        )
+        presburger = presburger_system_from_constraints(constraints)
+        if presburger is not None:
+            for graph_function in module.functions:
+                attach_presburger_system(graph_function, presburger)
         compile_bundle = compile_graph_module(
             module,
             source_origin=source_origin,
@@ -3953,6 +4072,7 @@ def jit(
             seed=seed,
             cpu_tile=cpu_tile,
             inferred_effect=inferred_effect,
+            constraints=solver.constraints,
             skip_graph_ir=_skip_graph_ir,
         )
         module = emission.module

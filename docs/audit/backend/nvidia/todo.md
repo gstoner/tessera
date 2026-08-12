@@ -3,10 +3,51 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-11
+last_updated: 2026-08-12
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `MODEL-FUSED-PHYS-1-2026-08-12` — **shared MiniMax MSA
+package lineage landed; SM120 consumption remains follow-up required.** x86
+and gfx1151 now consume exact digest-bound MSA artifacts without Graph
+redispatch. No CUDA package or SM120 evidence was added, and those schedules do
+not transfer. NVIDIA must bind the same parent-digest contract to its canonical
+NVVM/PTX package; DeepSeek MLA/DSA remain independently open.
+
+Cross-backend sync `MODEL-WEIGHT-PHYS-1-2026-08-12` — **shared physical-byte
+weight ABI landed; SM120 FP8/INT4 consumption remains follow-up required.** The
+carrier preserves genuine checkpoint bytes and separate fp32 scales under a
+content digest and forbids full-weight materialization. No CUDA package or
+SM120 packet was added, and gfx1151 INT4 evidence does not transfer. NVIDIA
+must bind this ABI to its architecture-owned FP8/INT4 package and exact-device
+performance proof.
+
+Cross-backend sync `W4-PRESBURGER-SHARD-2026-08-12` — **shared analysis
+contracts landed; SM120 consumption remains follow-up required.** Graph IR now
+carries typed integer-affine plus exact modular/divisibility constraints into
+the C++ Presburger consumer. The shared sharding layer has a fail-closed
+replicated/tiled/partial-reduction fixed point and explicit reshard planner;
+lowered `control_scan` owns shared recompute-all JVP/VJP products. This adds no
+CUDA region product, reshard lowering, NCCL packet, or SM120 evidence; other
+architecture results do not transfer.
+
+Cross-backend sync `E2E-AUTH-DAG-2026-08-12` — **shared native-product v3 and
+automatic dependency consumption landed; SM120 remains follow-up required.**
+Reduction and normalization now have truthful Schedule/Tile product carriers,
+native JVP/VJP paths require cached tracer/AST differential proof for pure
+programs, and Graph-derived R3 candidates consume compiler-generated edges.
+No CUDA product child, physical dependency consumer, or SM120 packet was
+added; x86/gfx1151 evidence does not transfer.
+
+Cross-backend sync `E2E-AUTH-DAG-2026-08-11` — **shared frontend authority and
+automatic dependence-edge contracts landed; SM120 remains follow-up
+required.** Pure straight-line tensor signatures now cache tracer-owned Graph
+IR and can be differentially certified against the retained AST candidate.
+Native-JVP plugins declare their Graph/Schedule/Tile/Target disposition and own
+package construction; compatibility gaps are explicit. W2.1 facts now generate conservative Tile action-DAG
+edges with reason and analysis digests. This adds no CUDA family package,
+edge-consuming physical pipeline, selector promotion, or SM120 evidence.
 
 Cross-backend sync `AD-SOLVER-ISTFT-PHYSICAL-2026-08-11` — **shared product
 contracts landed; SM120 consumption remains open.** Graph IR now represents

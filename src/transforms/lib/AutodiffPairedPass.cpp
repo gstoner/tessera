@@ -33,6 +33,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/TypeUtilities.h"
@@ -108,7 +109,7 @@ public:
   }
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
-                    mlir::scf::SCFDialect>();
+                    mlir::scf::SCFDialect, mlir::tensor::TensorDialect>();
   }
 
   void runOnOperation() override {
@@ -430,6 +431,45 @@ private:
       for (const RegionCotangent &entry : regionCotangents)
         accumulateCotangent(builder, cotangents, entry.primal,
                             entry.cotangent);
+      return mlir::success();
+    }
+
+    // These tensor slice operations are introduced by control_scan lowering.
+    // Keep their linear transpose here instead of teaching the Tessera
+    // operation interface about foreign-dialect operations.  extract_slice^T
+    // scatters into a zero source; insert_slice^T gathers the overwritten
+    // source region and masks that region out of the destination cotangent.
+    if (auto extract = mlir::dyn_cast<mlir::tensor::ExtractSliceOp>(op)) {
+      if (outputCotangents.size() != 1 || !outputCotangents.front())
+        return mlir::failure();
+      mlir::Value sourceZero = buildZeroLike(builder, extract.getSource());
+      mlir::Value sourceCotangent =
+          mlir::tensor::InsertSliceOp::create(
+              builder, op->getLoc(), outputCotangents.front(), sourceZero,
+              extract.getMixedOffsets(), extract.getMixedSizes(),
+              extract.getMixedStrides());
+      accumulateCotangent(builder, cotangents, extract.getSource(),
+                          sourceCotangent);
+      return mlir::success();
+    }
+    if (auto insert = mlir::dyn_cast<mlir::tensor::InsertSliceOp>(op)) {
+      if (outputCotangents.size() != 1 || !outputCotangents.front())
+        return mlir::failure();
+      mlir::Value sourceCotangent =
+          mlir::tensor::ExtractSliceOp::create(
+              builder, op->getLoc(), insert.getSourceType(),
+              outputCotangents.front(), insert.getMixedOffsets(),
+              insert.getMixedSizes(), insert.getMixedStrides());
+      mlir::Value sourceZero = buildZeroLike(builder, insert.getSource());
+      mlir::Value destinationCotangent =
+          mlir::tensor::InsertSliceOp::create(
+              builder, op->getLoc(), sourceZero, outputCotangents.front(),
+              insert.getMixedOffsets(), insert.getMixedSizes(),
+              insert.getMixedStrides());
+      accumulateCotangent(builder, cotangents, insert.getSource(),
+                          sourceCotangent);
+      accumulateCotangent(builder, cotangents, insert.getDest(),
+                          destinationCotangent);
       return mlir::success();
     }
 

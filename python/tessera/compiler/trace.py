@@ -65,6 +65,7 @@ class TracedFunction:
     args: List[Tuple[str, Tuple[int, ...], str]]  # (ssa, shape, dtype)
     body: List[IROp]
     outputs: List[str]                            # output SSA names
+    output_values: Tuple[Any, ...] = field(default=(), compare=False, repr=False)
 
 
 # ── shape rules (executable subset; widened in F6) ────────────────────────── #
@@ -429,9 +430,9 @@ class TraceBuilder:
     def set_outputs(self, outs: List[str]) -> None:
         self.outputs = list(outs)
 
-    def finish(self) -> TracedFunction:
+    def finish(self, output_values: Tuple[Any, ...] = ()) -> TracedFunction:
         return TracedFunction(args=list(self.args), body=list(self.body),
-                              outputs=list(self.outputs))
+                              outputs=list(self.outputs), output_values=output_values)
 
 
 # ── trace entry points ────────────────────────────────────────────────────── #
@@ -486,7 +487,7 @@ def trace(fn: Callable, *example_specs: Any) -> TracedFunction:
                 "trace: function must return Tracer value(s); got "
                 f"{type(o).__name__}")
     tb.set_outputs([o.ssa for o in outs])
-    return tb.finish()
+    return tb.finish(tuple(o.value for o in outs))
 
 
 def to_graph_ir_module(

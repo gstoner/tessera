@@ -16,7 +16,7 @@ import json
 from typing import Any, Mapping, Sequence
 
 
-_SCHEMA = "tessera.native_jvp.v2"
+_SCHEMA = "tessera.native_jvp.v3"
 _TARGET_ARCHITECTURES = {
     "x86": "zen5_avx512",
     "rocm": "gfx1151",
@@ -62,6 +62,19 @@ class NativeJVPArtifact:
         for step in steps:
             if not isinstance(step.get("child_digest"), str) or len(step["child_digest"]) != 64:
                 raise ValueError("native JVP launch step lacks a child artifact digest")
+            has_metadata = isinstance(step.get("child_metadata"), dict)
+            has_artifact = isinstance(step.get("child_artifact"), dict)
+            if has_metadata == has_artifact:
+                raise ValueError(
+                    "native JVP step requires exactly one metadata or descriptor child"
+                )
+            dependencies = step.get("depends_on", [])
+            if not isinstance(dependencies, list) or any(
+                not isinstance(item, str) or item not in ids for item in dependencies
+            ):
+                raise ValueError("native JVP step has invalid dependencies")
+            if any(ids.index(item) >= ids.index(str(step["id"])) for item in dependencies):
+                raise ValueError("native JVP dependencies must precede their consumer")
             outputs = step.get("outputs")
             if outputs is not None and (
                 not isinstance(outputs, list)
@@ -69,6 +82,20 @@ class NativeJVPArtifact:
                 or any(not isinstance(name, str) or not name for name in outputs)
             ):
                 raise ValueError("native JVP step outputs must be named")
+        schedule = body.get("schedule_program")
+        tile = body.get("tile_program")
+        if not isinstance(schedule, dict) or not isinstance(tile, dict):
+            raise ValueError("native JVP artifact requires Schedule and Tile programs")
+        schedule_body = dict(schedule)
+        schedule_digest = str(schedule_body.pop("digest", ""))
+        if schedule_digest != _digest(schedule_body):
+            raise ValueError("native JVP Schedule program has stale identity")
+        tile_body = dict(tile)
+        tile_digest = str(tile_body.pop("digest", ""))
+        if tile_digest != _digest(tile_body):
+            raise ValueError("native JVP Tile program has stale identity")
+        if tile_body.get("schedule_digest") != schedule_digest:
+            raise ValueError("native JVP Tile program has stale Schedule lineage")
 
     def runtime_metadata(self) -> dict[str, Any]:
         self.validate()
@@ -94,6 +121,9 @@ def build_native_jvp_artifact(
     wrt_indices: Sequence[int],
     arg_names: Sequence[str],
     steps: Sequence[Mapping[str, Any]],
+    consumer_declaration: Mapping[str, Any] | None = None,
+    schedule_program: Mapping[str, Any] | None = None,
+    tile_program: Mapping[str, Any] | None = None,
 ) -> NativeJVPArtifact:
     """Bind a compiler JVP product to exact physical child packages.
 
@@ -111,6 +141,31 @@ def build_native_jvp_artifact(
     if not paired_jvp_ir or "__jvp" not in paired_jvp_ir:
         raise ValueError("native JVP package requires compiler-emitted paired JVP IR")
     normalized_steps = [dict(step) for step in steps]
+    schedule_body = dict(schedule_program or {
+        "schema": "tessera.native_jvp_schedule.v1",
+        "family": str(family),
+        "actions": [
+            {
+                "id": str(step["id"]),
+                "depends_on": list(step.get("depends_on", [])),
+            }
+            for step in normalized_steps
+        ],
+    })
+    schedule_body.pop("digest", None)
+    normalized_schedule = {**schedule_body, "digest": _digest(schedule_body)}
+    tile_body = dict(tile_program or {
+        "schema": "tessera.native_jvp_tile.v1",
+        "family": str(family),
+        "schedule_digest": normalized_schedule["digest"],
+        "actions": [
+            {"id": str(step["id"]), "child_digest": str(step["child_digest"])}
+            for step in normalized_steps
+        ],
+    })
+    tile_body.pop("digest", None)
+    tile_body["schedule_digest"] = normalized_schedule["digest"]
+    normalized_tile = {**tile_body, "digest": _digest(tile_body)}
     body: dict[str, Any] = {
         "schema": _SCHEMA,
         "target": target,
@@ -122,7 +177,11 @@ def build_native_jvp_artifact(
         "arg_names": [str(name) for name in arg_names],
         "output_order": ["primal", "tangent"],
         "steps": normalized_steps,
+        "schedule_program": normalized_schedule,
+        "tile_program": normalized_tile,
     }
+    if consumer_declaration is not None:
+        body["consumer_declaration"] = dict(consumer_declaration)
     artifact = NativeJVPArtifact({**body, "artifact_hash": _digest(body)})
     artifact.validate()
     return artifact

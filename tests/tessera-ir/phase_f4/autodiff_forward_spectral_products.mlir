@@ -33,5 +33,6 @@ module {
 // CHECK: return %[[P]], %[[SUM]]
 // CHECK-LABEL: func.func private @istft_fixed_window__jvp(
 // CHECK: %[[IP:.*]] = tessera.istft %{{.*}}, %{{.*}}
-// CHECK: %[[DI:.*]] = tessera.istft %{{.*}}, %{{.*}}
+// CHECK: %[[ZW:.*]] = arith.constant dense<0.000000e+00> : tensor<8xf32>
+// CHECK: %[[DI:.*]] = tessera.istft_jvp %{{.*}}, %{{.*}}, %{{.*}}, %[[ZW]]
 // CHECK: return %[[IP]], %[[DI]]

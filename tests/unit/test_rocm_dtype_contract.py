@@ -133,6 +133,20 @@ def test_fp8_and_bf8_have_explicit_target_and_runtime_rejection() -> None:
         assert not readiness.runtime_operations
 
 
+def test_gfx1151_packed_weight_upload_rejects_physical_fp8_bytes() -> None:
+    from tessera.stdlib.quant import ingest_packed_weight_bytes
+
+    packed = ingest_packed_weight_bytes(
+        np.array([0x38, 0x40], dtype=np.uint8),
+        np.ones((1, 1), dtype=np.float32),
+        dtype="fp8_e4m3",
+        shape=(2, 1),
+        group_size=2,
+    )
+    with pytest.raises(ValueError, match="fail-closed on RDNA 3.5"):
+        rt.upload_rocm_packed_weight(packed)
+
+
 @pytest.mark.parametrize("storage", ("fp8_e4m3", "fp8_e5m2"))
 def test_gfx1151_runtime_builder_rejects_fp8_and_bf8_by_name(storage: str) -> None:
     with pytest.raises(ValueError, match="ROCM_TILE_UNSUPPORTED_DTYPE"):

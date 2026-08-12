@@ -1501,6 +1501,8 @@ def _execute_rocm_dequant_gemm_reference(artifact: RuntimeArtifact, args: Any) -
                 "native_gpu",
             )
         except _RocmCompiledUnavailable:
+            if isinstance(values.get("packed_w"), RocmPackedWeightDeviceOperand):
+                raise
             pass
         try:
             return (
@@ -1543,6 +1545,155 @@ def _rocm_dequant_gemm_hsaco() -> bytes:
     )
 
 
+class RocmPackedWeightDeviceOperand:
+    """Owned gfx1151 lease for digest-bound packed codes and scale operands.
+
+    The lease uploads each immutable checkpoint operand exactly once. Kernels
+    receive the two device pointers independently and cannot request or observe
+    a materialized fp32 weight. Call :meth:`close` deterministically when the
+    owning model package is released.
+    """
+
+    def __init__(
+        self,
+        *,
+        hip: Any,
+        codes_pointer: ctypes.c_void_p,
+        scales_pointer: ctypes.c_void_p,
+        descriptor: Mapping[str, Any],
+        scheme: Any,
+        shape: tuple[int, int],
+    ) -> None:
+        self._hip = hip
+        self._codes_pointer = codes_pointer
+        self._scales_pointer = scales_pointer
+        self.descriptor = dict(descriptor)
+        self.scheme = scheme
+        self.shape = shape
+        self._closed = False
+
+    @property
+    def content_digest(self) -> str:
+        return str(self.descriptor["content_digest"])
+
+    @property
+    def codes_pointer(self) -> ctypes.c_void_p:
+        self._guard()
+        return self._codes_pointer
+
+    @property
+    def scales_pointer(self) -> ctypes.c_void_p:
+        self._guard()
+        return self._scales_pointer
+
+    def _guard(self) -> None:
+        if self._closed:
+            raise RuntimeError("ROCm packed-weight device operand is closed")
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._hip.hipFree(self._codes_pointer)
+        self._hip.hipFree(self._scales_pointer)
+        self._codes_pointer = ctypes.c_void_p()
+        self._scales_pointer = ctypes.c_void_p()
+
+    def __enter__(self) -> "RocmPackedWeightDeviceOperand":
+        self._guard()
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+def upload_rocm_packed_weight(weight: Any) -> RocmPackedWeightDeviceOperand:
+    """Upload a physical-byte model weight to one exact gfx1151 HIP device.
+
+    FP8/BF8 fail closed here: gfx1151 is RDNA 3.5 and has no FP8/BF8 WMMA.
+    Their byte ABI remains portable for architecture-owned NVIDIA/RDNA4
+    packages, but it is never mislabeled as executable on this target.
+    """
+    import numpy as np
+    from .stdlib.quant import PackedQuantTensor, PackedWeightBytes, ingest_packed_weight_bytes
+
+    if isinstance(weight, PackedQuantTensor):
+        scheme = weight.scheme
+        if scheme.dtype == "int4":
+            code_bytes = np.ascontiguousarray(weight.codes, dtype=np.uint8)
+        elif scheme.dtype == "int8":
+            code_bytes = np.ascontiguousarray(weight.codes, dtype=np.int8).view(np.uint8)
+        else:
+            raise ValueError(
+                "gfx1151 packed-weight upload supports INT4/INT8 only; FP8/BF8 "
+                "remain fail-closed on RDNA 3.5"
+            )
+        weight = ingest_packed_weight_bytes(
+            code_bytes,
+            weight.scales,
+            dtype=scheme.dtype,
+            shape=(int(weight.shape[0]), int(weight.shape[1])),
+            group_size=scheme.group_size,
+        )
+    if not isinstance(weight, PackedWeightBytes):
+        raise TypeError("ROCm packed-weight upload requires PackedWeightBytes")
+    weight.validate()
+    if weight.scheme.dtype not in {"int4", "int8"}:
+        raise ValueError(
+            "gfx1151 packed-weight upload supports INT4/INT8 only; FP8/BF8 "
+            "remain fail-closed on RDNA 3.5"
+        )
+    chip = _rocm_chip()
+    if chip != "gfx1151":
+        raise ValueError(
+            f"packed-weight device package is proven only for gfx1151; got {chip!r}"
+        )
+    hip = _load_hip_for_launch()
+    if hip is None or hip.hipInit(0) != 0:
+        raise RuntimeError("ROCm packed-weight upload requires a usable HIP context")
+    codes = np.ascontiguousarray(weight.codes, dtype=np.uint8)
+    scales = np.ascontiguousarray(weight.scales, dtype=np.float32)
+    d_codes = ctypes.c_void_p()
+    d_scales = ctypes.c_void_p()
+    if hip.hipMalloc(ctypes.byref(d_codes), max(int(codes.nbytes), 1)) != 0:
+        raise RuntimeError("ROCm packed-weight code allocation failed")
+    try:
+        if hip.hipMalloc(ctypes.byref(d_scales), max(int(scales.nbytes), 4)) != 0:
+            raise RuntimeError("ROCm packed-weight scale allocation failed")
+        if hip.hipMemcpy(
+            d_codes, codes.ctypes.data_as(ctypes.c_void_p), codes.nbytes, 1
+        ) != 0 or hip.hipMemcpy(
+            d_scales, scales.ctypes.data_as(ctypes.c_void_p), scales.nbytes, 1
+        ) != 0:
+            raise RuntimeError("ROCm packed-weight upload failed")
+    except Exception:
+        hip.hipFree(d_codes)
+        if d_scales.value:
+            hip.hipFree(d_scales)
+        raise
+    descriptor = weight.descriptor()
+    descriptor.update({
+        "target": "rocm",
+        "architecture": "gfx1151",
+        "residency": "device",
+        "operand_count": 2,
+    })
+    return RocmPackedWeightDeviceOperand(
+        hip=hip,
+        codes_pointer=d_codes,
+        scales_pointer=d_scales,
+        descriptor=descriptor,
+        scheme=weight.scheme,
+        shape=weight.shape,
+    )
+
+
 def _rocm_dequant_matmul_native(x: Any, packed_w: Any, np: Any) -> Any:
     """Run DK4 packed int4/int8 dequantize-into-GEMM on ROCm. f32 accumulate."""
     scheme = packed_w.scheme
@@ -1558,15 +1709,24 @@ def _rocm_dequant_matmul_native(x: Any, packed_w: Any, np: Any) -> Any:
     g = int(scheme.group_size if scheme.group_size is not None else K)
     if K % g != 0:
         raise ValueError(f"dequant_matmul: K={K} must be divisible by group_size={g}")
-    if scheme.dtype == "int4":
-        codes = np.ascontiguousarray(np.asarray(packed_w.codes, dtype=np.uint8)).view(np.int8)
-        mode = 4
+    resident = isinstance(packed_w, RocmPackedWeightDeviceOperand)
+    mode = 4 if scheme.dtype == "int4" else 8
+    codes = None
+    scales = None
+    if resident:
+        packed_w._guard()
+        if packed_w.descriptor.get("architecture") != "gfx1151":
+            raise ValueError("ROCm packed-weight operand architecture mismatch")
+        if packed_w.descriptor.get("full_weight_materialization") != "prohibited":
+            raise ValueError("ROCm packed-weight operand permits unsafe materialization")
     else:
-        codes = np.ascontiguousarray(np.asarray(packed_w.codes, dtype=np.int8))
-        mode = 8
-    scales = np.ascontiguousarray(np.asarray(packed_w.scales, dtype=np.float32))
-    if scales.shape != (K // g, N):
-        raise ValueError(f"scales must be ({K // g}, {N}); got {scales.shape}")
+        if scheme.dtype == "int4":
+            codes = np.ascontiguousarray(np.asarray(packed_w.codes, dtype=np.uint8)).view(np.int8)
+        else:
+            codes = np.ascontiguousarray(np.asarray(packed_w.codes, dtype=np.int8))
+        scales = np.ascontiguousarray(np.asarray(packed_w.scales, dtype=np.float32))
+        if scales.shape != (K // g, N):
+            raise ValueError(f"scales must be ({K // g}, {N}); got {scales.shape}")
 
     hsaco = _rocm_dequant_gemm_hsaco()
     hip = _load_hip_for_launch()
@@ -1579,16 +1739,25 @@ def _rocm_dequant_matmul_native(x: Any, packed_w: Any, np: Any) -> Any:
     try:
         d_x = _rocm_dev_in(hip, xa.reshape(-1), 4 * xa.size)
         devs.append(d_x)
-        d_c = _rocm_dev_in(hip, codes.reshape(-1), codes.size)
-        devs.append(d_c)
-        d_s = _rocm_dev_in(hip, scales.reshape(-1), 4 * scales.size)
-        devs.append(d_s)
+        if resident:
+            d_c = packed_w.codes_pointer
+            d_s = packed_w.scales_pointer
+            code_elements = int(packed_w.descriptor["codes_bytes"])
+            scale_elements = (K // g) * N
+        else:
+            assert codes is not None and scales is not None
+            d_c = _rocm_dev_in(hip, codes.reshape(-1), codes.size)
+            devs.append(d_c)
+            d_s = _rocm_dev_in(hip, scales.reshape(-1), 4 * scales.size)
+            devs.append(d_s)
+            code_elements = int(codes.size)
+            scale_elements = int(scales.size)
         d_o = _rocm_dev_in(hip, out.reshape(-1), 4 * out.size)
         devs.append(d_o)
         _rocm_sparse_launch(
             hsaco,
             b"dq",
-            [(d_x, xa.size), (d_c, codes.size), (d_s, scales.size), (d_o, out.size)],
+            [(d_x, xa.size), (d_c, code_elements), (d_s, scale_elements), (d_o, out.size)],
             [M, K, N, g, mode],
             M * N,
         )
@@ -7914,6 +8083,35 @@ def _execute_x86_compiled_nsa(artifact: RuntimeArtifact, args: Any) -> Any:
 _X86_MSA_OPS = ("tessera.msa_sparse_attention",)
 
 
+def _bound_model_attention_launch(
+    artifact: RuntimeArtifact, *, expected_lane: str
+) -> tuple[list[str], dict[str, Any]] | None:
+    metadata = artifact.metadata or {}
+    contract = metadata.get("model_attention_package")
+    if contract is None:
+        return None
+    if not isinstance(contract, Mapping):
+        raise ValueError("model-attention runtime contract must be a mapping")
+    from .compiler.model_attention import validate_model_attention_contract
+
+    validate_model_attention_contract(
+        contract,
+        graph_ir=artifact.graph_ir,
+        schedule_ir=artifact.schedule_ir,
+        tile_ir=artifact.tile_ir,
+        target_ir=artifact.target_ir,
+    )
+    if contract.get("runtime_lane") != expected_lane:
+        raise ValueError("model-attention package runtime lane mismatch")
+    launch = contract.get("launch_contract")
+    if not isinstance(launch, Mapping):
+        raise ValueError("model-attention package launch contract is missing")
+    operands = launch.get("operands")
+    if not isinstance(operands, list) or any(not isinstance(name, str) for name in operands):
+        raise ValueError("model-attention package operands are invalid")
+    return operands, dict(launch.get("kwargs") or {})
+
+
 def _x86_msa_compute(operands: list, kwargs: dict, np: Any) -> Any:
     from tessera.stdlib import attention as _attn
 
@@ -7980,6 +8178,16 @@ def _execute_x86_compiled_msa(artifact: RuntimeArtifact, args: Any) -> Any:
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
+    bound = _bound_model_attention_launch(
+        artifact, expected_lane="x86_msa_compiled"
+    )
+    if bound is not None:
+        operand_names, kwargs = bound
+        if len(operand_names) < 3:
+            raise ValueError("msa_sparse_attention requires Q, K, V operands")
+        values = _bind_launch_args(args, arg_names)
+        operands = [_as_numpy(values[name]) for name in operand_names]
+        return _x86_msa_compute(operands, kwargs, np)
     ops = list(metadata.get("ops") or [])
     op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
     if len(ops) != 1 or op_name not in _X86_MSA_OPS:
@@ -11116,9 +11324,20 @@ def _execute_compiled_norm_jvp(
         raise ValueError("normalization JVP requires autodiff_phase='forward'")
     names = [str(name) for name in metadata.get("arg_names", [])]
     values = _bind_launch_args(args, names)
-    op = dict((metadata.get("ops") or [])[0])
-    operands = [str(name) for name in op.get("operands", [])]
-    wrt = tuple(int(index) for index in metadata.get("wrt_indices", ()))
+    contract = metadata.get("scheduled_normalization_jvp")
+    if not isinstance(contract, dict):
+        raise ValueError("normalization JVP requires its typed Schedule program")
+    from .compiler.native_jvp import child_digest
+
+    contract_body = dict(contract)
+    digest = str(contract_body.pop("schedule_digest", ""))
+    if digest != child_digest(contract_body):
+        raise ValueError("normalization JVP Schedule program has stale identity")
+    kind = str(contract.get("kind", ""))
+    if kind not in {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
+        raise ValueError("normalization JVP Schedule program has an invalid kind")
+    operands = [str(name) for name in contract.get("primal_names", [])]
+    wrt = tuple(int(index) for index in contract.get("wrt_indices", ()))
     if not operands or 0 not in wrt:
         raise ValueError("normalization JVP requires an active data operand")
     primals = [_as_numpy(values[name]) for name in operands]
@@ -11130,6 +11349,12 @@ def _execute_compiled_norm_jvp(
         raise ValueError("normalization tangent shapes must match their primals")
     execution_kind = "native_cpu" if target == "x86" else "native_gpu"
     execution_mode = "cpu_avx512" if target == "x86" else "hip_runtime"
+    op = {
+        "op_name": f"tessera.{kind}",
+        "result": "normalized",
+        "operands": operands,
+        "kwargs": {"eps": float(contract["epsilon"])},
+    }
     forward_metadata = {
         "target": target,
         "compiler_path": f"{target}_norm_compiled",
@@ -11344,6 +11569,7 @@ def _execute_native_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
     cannot route back through Graph IR or select a backend implementation at
     runtime.
     """
+    import numpy as np
     from .compiler.native_jvp import NativeJVPArtifact, child_digest
 
     metadata = artifact.metadata or {}
@@ -11356,6 +11582,45 @@ def _execute_native_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
     values = _bind_launch_args(args, names)
     products: dict[str, Any] = {}
     for step in raw["steps"]:
+        dependencies = [str(item) for item in step.get("depends_on", [])]
+        missing_dependencies = [item for item in dependencies if item not in products]
+        if missing_dependencies:
+            raise ValueError(
+                "native JVP step has unsatisfied dependencies: "
+                + ", ".join(missing_dependencies)
+            )
+        child_artifact = step.get("child_artifact")
+        if isinstance(child_artifact, dict):
+            if child_digest(child_artifact) != step.get("child_digest"):
+                raise ValueError("native JVP descriptor child digest mismatch")
+            descriptor_contract = step.get("descriptor_invocation")
+            if not isinstance(descriptor_contract, dict):
+                raise ValueError("native JVP descriptor child lacks invocation contract")
+            bindings = list(step.get("inputs", []))
+            if len(bindings) != 1 or bindings[0] not in values:
+                raise ValueError("native JVP reduction descriptor requires one bound input")
+            output_shape = tuple(
+                int(dim) for dim in descriptor_contract.get("output_shape", [])
+            )
+            output = np.empty(
+                output_shape, dtype=np.dtype(descriptor_contract.get("output_dtype", "float32"))
+            )
+            launch_args = {
+                str(descriptor_contract["input"]): values[bindings[0]],
+                str(descriptor_contract["output"]): output,
+                **{
+                    str(name): value
+                    for name, value in dict(descriptor_contract.get("scalars", {})).items()
+                },
+            }
+            child_result = launch(RuntimeArtifact.from_dict(child_artifact), launch_args)
+            if not child_result.get("ok"):
+                raise ValueError(
+                    "native JVP descriptor child failed: "
+                    + str(child_result.get("reason"))
+                )
+            products[str(step["id"])] = output
+            continue
         child_metadata = step.get("child_metadata")
         if not isinstance(child_metadata, dict):
             raise ValueError("native JVP step lacks child runtime metadata")
@@ -24767,7 +25032,24 @@ def _execute_rocm_compiled_sparse_attention(artifact: RuntimeArtifact, args: Any
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
+    bound = _bound_model_attention_launch(
+        artifact, expected_lane="rocm_sparse_attn_compiled"
+    )
+    ops: list[dict[str, Any]]
+    if bound is not None:
+        bound_names, bound_kwargs = bound
+        ops = [{
+            "op_name": "tessera.msa_sparse_attention",
+            "operands": bound_names,
+            "kwargs": bound_kwargs,
+        }]
+    else:
+        raw_ops = metadata.get("ops") or []
+        if not isinstance(raw_ops, list) or any(
+            not isinstance(candidate, dict) for candidate in raw_ops
+        ):
+            raise ValueError("sparse-attention artifact ops must be dictionaries")
+        ops = list(raw_ops)
     op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
     handled = (
         "tessera.msa_sparse_attention",

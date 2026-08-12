@@ -1,0 +1,103 @@
+{
+  "architecture": "gfx1151",
+  "correctness_promotion_eligible": true,
+  "dtype": "f32",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "processor": "x86_64",
+  "rows": [
+    {
+      "artifact_hash": "52621f30a7b787496087cc9ff0fca3522697a772fa0eec84f6302f167b9f7122",
+      "cold_parent_package_ns": 983627856,
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu",
+      "execution_mode": "hip_runtime",
+      "family": "sum",
+      "host_wall_ns_samples": [
+        5600845,
+        4978136,
+        4989215,
+        5111395,
+        4754701,
+        4828626,
+        4773002,
+        4795023,
+        4724490,
+        4849537
+      ],
+      "max_abs_error_primal": 9.5367431640625e-07,
+      "max_abs_error_tangent": 9.5367431640625e-07,
+      "paired_jvp_ir_digest": "62ab585fb6d98a4d3422aeb587c47eef2e002c4dc8d34db56dc051fb2e2b3ba7",
+      "schedule_program_digest": "24c6fcca6546140bd5b738968db40af994c6232d0bd100c5af701aa1876fa389",
+      "tile_program_digest": "9e7747b0535e14edaf1f0f89ec423f76517e21603134329146ed7e14218a481a"
+    },
+    {
+      "artifact_hash": "92eb242f6a72640092d3c281267b9ceb893cb80ca76715a5ff44d733b85e23d1",
+      "cold_parent_package_ns": 168318974,
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu",
+      "execution_mode": "hip_runtime",
+      "family": "rmsnorm",
+      "host_wall_ns_samples": [
+        6726446,
+        6236525,
+        6168091,
+        6217404,
+        6072494,
+        6296600,
+        6448308,
+        6092516,
+        7168934,
+        6118178
+      ],
+      "max_abs_error_primal": 2.384185791015625e-07,
+      "max_abs_error_tangent": 2.384185791015625e-07,
+      "paired_jvp_ir_digest": "89f800fcb43ad3b837154be37b240266c27e4d7d047666ac9682ae87952c76fe",
+      "schedule_program_digest": "9184611217140ac58f67c5bbaf9f9b22d531d1bac4058dc0b331b23f258f2cb6",
+      "tile_program_digest": "5ed3fc072c6b7baf6e2b476f37994c40e932a535417f676c3f752cfb1e0c50ee"
+    },
+    {
+      "artifact_hash": "850cc02148942e7954520a37968eafc11286f8262a3210f105b67018bbabe3b3",
+      "cold_parent_package_ns": 82646251,
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu",
+      "execution_mode": "hip_runtime",
+      "family": "rfft",
+      "host_wall_ns_samples": [
+        1277521,
+        1150083,
+        1112000,
+        1053907,
+        1122262,
+        1136091,
+        1068268,
+        1067737,
+        1075109,
+        1040886
+      ],
+      "max_abs_error_primal": 2.86102294921875e-06,
+      "max_abs_error_tangent": 4.69630140287336e-06,
+      "paired_jvp_ir_digest": "52b3871bd124c6318b3fc8f82f3c0904aae0ed9ce78b2e4580a8446e23a972eb",
+      "schedule_program_digest": "6ff0ae2d914930953ecd86ffa7dd18e7bab20c3fa956f6406d8d85f77d6a1d67",
+      "tile_program_digest": "c02e9874fa842ba0479e97dda53ff00e2962c1f7647c0cb4e527cb839db23e89"
+    }
+  ],
+  "schema": "tessera.native_jvp.evidence.v2",
+  "shape": [
+    7,
+    64
+  ],
+  "target": "rocm",
+  "timing": {
+    "device_clock_calibrated": false,
+    "profiler_activity_available": false,
+    "provenance": "time.perf_counter_ns around completed parent launch",
+    "source": "synchronized_parent_package_host_wall"
+  },
+  "timing_promotion_eligible": false,
+  "toolchain": {
+    "build_directory": "build-rocm",
+    "tessera_opt": "build-rocm/tools/tessera-opt/tessera-opt",
+    "tessera_opt_sha256": "8d3484c265d7164d1dd42f7550d384461533ed0172ec074d6d09142ac9e10e91"
+  },
+  "warm_state": true
+}

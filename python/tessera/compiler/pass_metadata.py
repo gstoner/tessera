@@ -471,7 +471,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         input_dialects=("tessera",),
         output_dialects=("tessera", "schedule.mesh"),
         required_attrs=(),
-        preserved_attrs=("tessera.dim_bindings", "tessera.arg_dim_names"),
+        preserved_attrs=(
+            "tessera.presburger_constraints", "tessera.presburger_digest",
+            "tessera.dim_bindings", "tessera.arg_dim_names",
+        ),
         diagnostic_codes=(),
         must_run_after=("tessera-effect-annotate",),
         pass_kind="transform",
@@ -487,8 +490,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         ),
         input_dialects=("tessera",),
         output_dialects=("tessera",),
-        preserved_attrs=("tessera.dim_bindings", "tessera.arg_dim_names",
-                         "tessera.dim_sizes"),
+        preserved_attrs=(
+            "tessera.presburger_constraints", "tessera.presburger_digest",
+            "tessera.dim_bindings", "tessera.arg_dim_names",
+            "tessera.dim_sizes",
+        ),
         diagnostic_codes=(),
         pass_kind="transform",
         sprint="Phase 2",
@@ -504,7 +510,10 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         input_dialects=("tessera", "func"),
         output_dialects=("tessera", "tessera_collective", "func"),
         required_attrs=("tessera.weight_sharding",),
-        preserved_attrs=("tessera.dim_bindings", "tessera.arg_dim_names"),
+        preserved_attrs=(
+            "tessera.presburger_constraints", "tessera.presburger_digest",
+            "tessera.dim_bindings", "tessera.arg_dim_names",
+        ),
         must_run_after=("tessera-effect-annotate",),
         pass_kind="transform",
         sprint="COLLECTIVE-ASYNC-UNIFY-2026-08-09",
@@ -705,7 +714,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-symdim-equality",
         cpp_class="SymbolicDimEquality",
         summary=(
-            "Verifies function-level `tessera.dim_bindings` equations + "
+            "Consumes typed coefficient-vector `tessera.presburger_constraints` "
+            "through MLIR integer Presburger analysis; verifies compatibility "
+            "`tessera.dim_bindings` equations + "
             "per-op dim-name contracts (reshape / transpose / matmul), "
             "with SSA-value propagation, concrete sum-of-products witness "
             "checking, interprocedural cross-checks via func.call, and "
@@ -719,6 +730,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "tessera.arg_dim_names",
         ),
         preserved_attrs=(
+            "tessera.presburger_constraints",
+            "tessera.presburger_digest",
             "tessera.dim_bindings",
             "tessera.dim_sizes",
             "tessera.arg_dim_names",
@@ -730,6 +743,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "SYMDIM_IF_BRANCH_MISMATCH",
             "SYMDIM_LOOP_YIELD_MISMATCH",
             "SYMDIM_MATMUL_CONTRACT_VIOLATION",
+            "SYMDIM_PRESBURGER_MALFORMED",
+            "SYMDIM_PRESBURGER_UNSATISFIABLE",
             "SYMDIM_RESHAPE_VIOLATION",
             "SYMDIM_TRANSPOSE_VIOLATION",
         ),

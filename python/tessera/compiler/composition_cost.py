@@ -18,6 +18,10 @@ from .benchmark_row import (
     SCALAR_SELECTOR_AUTHORITY,
     validate_resource_vector,
 )
+from .effects import Effect, registered_op_effect
+from .graph_dataflow import analyze_graph_dataflow
+from .graph_ir import GraphIRFunction, IROp
+from .op_catalog import get_op_spec
 
 
 COMPOSITION_MODEL = "tessera.tile_action_dag_cost.v1"
@@ -83,6 +87,182 @@ class TileAction:
 
 
 @dataclass(frozen=True)
+class InferredDependency:
+    """One compiler-derived action edge and every reason supporting it."""
+
+    predecessor: str
+    successor: str
+    reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class InferredActionDAG:
+    """Fail-closed result of lowering Graph dataflow into Tile dependencies."""
+
+    actions: tuple[TileAction, ...]
+    dependencies: tuple[InferredDependency, ...]
+    graph_analysis_digest: str
+
+
+@dataclass(frozen=True)
+class ActionDAGParity:
+    """Generated-edge coverage of an existing hand-authored R3 fixture."""
+
+    missing_reference_edges: tuple[tuple[str, str], ...]
+    additional_conservative_edges: tuple[tuple[str, str], ...]
+
+    @property
+    def conservative(self) -> bool:
+        return not self.missing_reference_edges
+
+    @property
+    def exact(self) -> bool:
+        return self.conservative and not self.additional_conservative_edges
+
+
+def infer_action_dag(
+    function: GraphIRFunction,
+    resource_vectors: Sequence[Mapping[str, Any]],
+    *,
+    action_ids: Sequence[str] | None = None,
+) -> InferredActionDAG:
+    """Generate legal Tile action edges from registered Graph semantics.
+
+    The construction is intentionally conservative. Unknown effects, nested
+    region boundaries, stochastic identities, ordered collectives, aliases,
+    and memory dependence serialize against surrounding actions. Pure,
+    independent SSA subgraphs remain reorderable. This makes the R3 model a
+    consumer of W2.1 facts instead of accepting an unsafe hand-authored DAG.
+    """
+
+    ops = tuple(function.body)
+    if len(resource_vectors) != len(ops):
+        raise ValueError("resource vector count must match Graph operation count")
+    ids = tuple(action_ids or tuple(f"graph_action_{i}" for i in range(len(ops))))
+    if len(ids) != len(ops) or len(set(ids)) != len(ids) or any(not item for item in ids):
+        raise ValueError("action_ids must be unique, non-empty, and total over Graph ops")
+
+    analysis = analyze_graph_dataflow(function)
+    if not analysis.valid or not analysis.digest:
+        raise ValueError("Graph dataflow analysis is stale or unavailable")
+    producer: dict[str, int] = {}
+    for index, op in enumerate(ops):
+        for result in op.result_names:
+            producer[_ssa(result)] = index
+
+    reasons: dict[tuple[int, int], set[str]] = {}
+
+    def add(before: int, after: int, reason: str) -> None:
+        if before != after:
+            reasons.setdefault((before, after), set()).add(reason)
+
+    for index, op in enumerate(ops):
+        for operand in op.operands:
+            before = producer.get(_ssa(operand))
+            if before is not None:
+                add(before, index, "ssa_value_flow")
+
+        current_barriers = _barrier_reasons(op)
+        current_unknown = _unknown_dataflow_reasons(analysis, op)
+        for before in range(index):
+            previous = ops[before]
+            for reason in current_barriers:
+                add(before, index, reason)
+            for reason in _barrier_reasons(previous):
+                add(before, index, reason)
+            for reason in current_unknown:
+                add(before, index, reason)
+            for reason in _unknown_dataflow_reasons(analysis, previous):
+                add(before, index, reason)
+            if analysis.has_memory_dependence(previous, op):
+                add(before, index, "memory_dependence")
+            if _may_share_alias(analysis, previous, op):
+                add(before, index, "alias_set")
+
+    dependencies = tuple(
+        InferredDependency(ids[before], ids[after], tuple(sorted(edge_reasons)))
+        for (before, after), edge_reasons in sorted(reasons.items())
+    )
+    predecessors: dict[int, list[str]] = {index: [] for index in range(len(ops))}
+    for (before, after) in reasons:
+        predecessors[after].append(ids[before])
+    actions = tuple(
+        TileAction(ids[index], resource_vectors[index], tuple(predecessors[index]))
+        for index in range(len(ops))
+    )
+    return InferredActionDAG(actions, dependencies, analysis.digest)
+
+
+def compare_inferred_action_dag(
+    inferred: InferredActionDAG,
+    reference_actions: Sequence[TileAction],
+) -> ActionDAGParity:
+    """Compare generated dependencies with a reference without weakening it."""
+
+    generated_ids = {action.action_id for action in inferred.actions}
+    reference_ids = {action.action_id for action in reference_actions}
+    if generated_ids != reference_ids:
+        raise ValueError(
+            "generated/reference action identities differ: "
+            f"missing={sorted(reference_ids - generated_ids)}, "
+            f"extra={sorted(generated_ids - reference_ids)}"
+        )
+    generated = {
+        (dependency.predecessor, dependency.successor)
+        for dependency in inferred.dependencies
+    }
+    reference = {
+        (predecessor, action.action_id)
+        for action in reference_actions
+        for predecessor in action.depends_on
+    }
+    return ActionDAGParity(
+        tuple(sorted(reference - generated)),
+        tuple(sorted(generated - reference)),
+    )
+
+
+def _ssa(name: str) -> str:
+    return str(name).strip().lstrip("%")
+
+
+def _barrier_reasons(op: IROp) -> tuple[str, ...]:
+    effect = registered_op_effect(op.op_name, op.kwargs)
+    spec = get_op_spec(op.op_name)
+    result: set[str] = set()
+    if effect == Effect.top:
+        result.add("unregistered_effect")
+    if effect == Effect.random or (
+        spec is not None and spec.stochastic_identity != "none"
+    ) or op.kwargs.get("tessera.stochastic_identity") not in (None, "none"):
+        result.add("stochastic_identity")
+    if effect == Effect.collective and op.kwargs.get("ordered", True):
+        result.add("ordered_collective")
+    if effect in {Effect.state, Effect.memory, Effect.io}:
+        result.add("mutation_or_effect")
+    if op.op_name.startswith(("tessera.scf.", "scf.")) or any(
+        key in op.kwargs for key in ("region", "regions", "body", "then_region", "else_region")
+    ):
+        result.add("region_boundary")
+    return tuple(sorted(result))
+
+
+def _may_share_alias(analysis: Any, lhs: IROp, rhs: IROp) -> bool:
+    lhs_values = tuple(lhs.operands) + tuple(lhs.result_names)
+    rhs_values = tuple(rhs.operands) + tuple(rhs.result_names)
+    return any(analysis.may_alias(left, right) for left in lhs_values for right in rhs_values)
+
+
+def _unknown_dataflow_reasons(analysis: Any, op: IROp) -> tuple[str, ...]:
+    """Make unknown alias information an explicit fail-closed edge reason."""
+
+    values = tuple(op.operands) + tuple(op.result_names)
+    if any(analysis.fact(value).alias_roots is None for value in values):
+        return ("unknown_alias_fact",)
+    return ()
+
+
+@dataclass(frozen=True)
 class CompositionCandidate:
     candidate_id: str
     actions: tuple[TileAction, ...]
@@ -91,6 +271,21 @@ class CompositionCandidate:
         if not self.candidate_id:
             raise ValueError("composition candidate_id must be non-empty")
         _validate_dag(self.actions)
+
+    @classmethod
+    def from_graph(
+        cls,
+        candidate_id: str,
+        function: GraphIRFunction,
+        resource_vectors: Sequence[Mapping[str, Any]],
+        *,
+        action_ids: Sequence[str] | None = None,
+    ) -> tuple["CompositionCandidate", InferredActionDAG]:
+        """Construct the R3 candidate from W2.1 facts, never handwritten edges."""
+        inferred = infer_action_dag(
+            function, resource_vectors, action_ids=action_ids
+        )
+        return cls(candidate_id, inferred.actions), inferred
 
 
 @dataclass(frozen=True)
@@ -304,11 +499,14 @@ def _require_digest(value: str, label: str) -> None:
 
 __all__ = [
     "COMPOSITION_MODEL",
+    "ActionDAGParity",
     "CompositionCalibration",
     "CompositionCandidate",
     "CompositionEstimate",
     "CompositionPruningResult",
     "TileAction",
+    "compare_inferred_action_dag",
     "estimate_composition",
+    "infer_action_dag",
     "prune_composition_candidates",
 ]

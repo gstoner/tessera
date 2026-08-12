@@ -14,9 +14,12 @@ from tessera.compiler.composition_cost import (
     CompositionCalibration,
     CompositionCandidate,
     TileAction,
+    compare_inferred_action_dag,
     estimate_composition,
+    infer_action_dag,
     prune_composition_candidates,
 )
+from tessera.compiler.graph_ir import GraphIRFunction, IRArg, IROp, tensor_ir_type
 
 
 def _digest(char: str) -> str:
@@ -204,6 +207,128 @@ def test_r3_consumes_the_r2_autotune_record_without_schema_translation():
     assert estimate.predicted_makespan_ms >= 0.05
     assert estimate.selector_authority == "latency_ms"
     assert not estimate.eligible_for_promotion
+
+
+def _graph_op(result: str, name: str, operands: list[str], **kwargs) -> IROp:
+    ty = tensor_ir_type(("4",), "fp32")
+    return IROp(
+        result=result,
+        op_name=name,
+        operands=operands,
+        operand_types=[str(ty)] * len(operands),
+        result_type=str(ty),
+        inferred_type=ty,
+        kwargs=kwargs,
+    )
+
+
+def _vector(char: str) -> dict:
+    return _action(char, compute_ms=1.0, digest_char=char).resource_vector
+
+
+def test_w5_2e_infers_ssa_edges_but_preserves_pure_parallelism():
+    ty = tensor_ir_type(("4",), "fp32")
+    left = _graph_op("left", "tessera.add", ["%x", "%x"])
+    right = _graph_op("right", "tessera.mul", ["%y", "%y"])
+    joined = _graph_op("out", "tessera.add", ["%left", "%right"])
+    fn = GraphIRFunction(
+        "f",
+        args=[IRArg("x", ty), IRArg("y", ty)],
+        result_types=[ty],
+        body=[left, right, joined],
+        return_values=["%out"],
+    )
+
+    inferred = infer_action_dag(
+        fn, (_vector("a"), _vector("b"), _vector("c")),
+        action_ids=("left", "right", "joined"),
+    )
+
+    assert inferred.actions[0].depends_on == ()
+    assert inferred.actions[1].depends_on == ()
+    assert set(inferred.actions[2].depends_on) == {"left", "right"}
+    assert all("ssa_value_flow" in edge.reasons for edge in inferred.dependencies)
+    assert len(inferred.graph_analysis_digest) == 64
+
+    candidate, consumed = CompositionCandidate.from_graph(
+        "physical_family", fn, (_vector("a"), _vector("b"), _vector("c")),
+        action_ids=("left", "right", "joined"),
+    )
+    assert candidate.actions == consumed.actions
+    assert set(candidate.actions[-1].depends_on) == {"left", "right"}
+
+    reference = (
+        _action("left", compute_ms=1.0),
+        _action("right", compute_ms=1.0),
+        _action("joined", compute_ms=1.0, depends_on=("left", "right")),
+    )
+    parity = compare_inferred_action_dag(inferred, reference)
+    assert parity.exact
+
+
+def test_w5_2e_unknown_alias_facts_add_conservative_reference_edges():
+    ty = tensor_ir_type(("4",), "fp32")
+    left = _graph_op("left", "tessera.add", ["%x", "%x"])
+    unknown = _graph_op("opaque", "tessera.unknown_external", ["%hidden"])
+    right = _graph_op("right", "tessera.mul", ["%y", "%y"])
+    fn = GraphIRFunction(
+        "f",
+        args=[IRArg("x", ty), IRArg("y", ty)],
+        result_types=[ty],
+        body=[left, unknown, right],
+        return_values=["%right"],
+    )
+    inferred = infer_action_dag(
+        fn,
+        (_vector("a"), _vector("b"), _vector("c")),
+        action_ids=("left", "opaque", "right"),
+    )
+    reference = (
+        _action("left", compute_ms=1.0),
+        _action("opaque", compute_ms=1.0, depends_on=("left",)),
+        _action("right", compute_ms=1.0, depends_on=("opaque",)),
+    )
+    parity = compare_inferred_action_dag(inferred, reference)
+    assert parity.conservative
+    assert parity.exact
+    assert any(
+        "unknown_alias_fact" in edge.reasons for edge in inferred.dependencies
+    )
+
+
+@pytest.mark.parametrize(
+    ("op_name", "kwargs", "reason"),
+    [
+        ("tessera.randn", {"tessera.stochastic_identity": "seed_counter"},
+         "stochastic_identity"),
+        ("tessera.all_reduce", {}, "ordered_collective"),
+        ("tessera.scf.if.begin", {"region": "then"}, "region_boundary"),
+        ("tessera.unknown_external", {}, "unregistered_effect"),
+    ],
+)
+def test_w5_2e_fail_closed_barriers_serialize_surrounding_actions(
+    op_name: str, kwargs: dict, reason: str
+):
+    ty = tensor_ir_type(("4",), "fp32")
+    before = _graph_op("before", "tessera.add", ["%x", "%x"])
+    barrier = _graph_op("barrier", op_name, ["%y"], **kwargs)
+    after = _graph_op("after", "tessera.mul", ["%z", "%z"])
+    fn = GraphIRFunction(
+        "f",
+        args=[IRArg("x", ty), IRArg("y", ty), IRArg("z", ty)],
+        result_types=[ty], body=[before, barrier, after],
+        return_values=["%after"],
+    )
+    inferred = infer_action_dag(
+        fn, (_vector("a"), _vector("b"), _vector("c")),
+        action_ids=("before", "barrier", "after"),
+    )
+    edge_reasons = {
+        (edge.predecessor, edge.successor): set(edge.reasons)
+        for edge in inferred.dependencies
+    }
+    assert reason in edge_reasons[("before", "barrier")]
+    assert reason in edge_reasons[("barrier", "after")]
 
 
 @pytest.mark.parametrize("margin", [-0.1, float("nan"), float("inf")])

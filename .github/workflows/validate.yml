@@ -315,7 +315,12 @@ jobs:
             echo "mlir=true" >> "$GITHUB_OUTPUT"
             python -m pip install --upgrade pip
             python -m pip install -e . --no-deps
-            python -m pip install lit FileCheck pytest numpy pyyaml
+            # The pytest step below imports `tessera`, which eagerly pulls in
+            # stdlib/es.py (-> ml_dtypes). Install the same dep set as every
+            # other job instead of a hand-rolled short list, or collection
+            # fails before a single MLIR proof test runs.
+            # shellcheck disable=SC2086
+            python -m pip install $TESSERA_CI_PY_DEPS lit FileCheck
           else
             echo "mlir=false" >> "$GITHUB_OUTPUT"
             echo "::warning ::MLIR 23 CMake package absent — skipping the lit lane build/tests"

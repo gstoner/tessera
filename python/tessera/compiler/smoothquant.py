@@ -21,7 +21,7 @@ int8 × int8 → int32 accumulation + rescale, never dequantize-to-fp-then-GEMM.
 (:func:`verify_w8a8`) checks parity vs fp16 *and* asserts the operands stayed int8
 (the anti-fallback invariant).
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream D).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream D).
 """
 
 from __future__ import annotations

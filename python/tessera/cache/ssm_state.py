@@ -6,7 +6,7 @@ models (Mamba-2 / SSD).  It is the SSM analogue of ``KVCacheHandle`` /
 mutation, ``clone()`` / ``checkpoint()`` / ``restore()`` round-trip.
 
 The idea (ReplaySSM, Dao AI Lab 2026 — see
-``docs/audit/roadmap/REPLAYSSM_PLAN.md``): instead of writing the full
+``docs/audit/roadmap/archive/REPLAYSSM_PLAN.md``): instead of writing the full
 recurrent state ``S`` of shape ``(B, D, N)`` to memory every decode token (the
 *summary route*), keep a **checkpoint state** ``S0`` plus a small **ring buffer**
 of recent per-token inputs ``(delta, x, b)`` and reconstruct outputs on demand

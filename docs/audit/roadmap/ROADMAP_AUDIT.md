@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-07-11
+last_updated: 2026-08-11
 audit_role: theme
 ---
 
@@ -28,16 +28,31 @@ planning material.
 
 ## Still Open
 
-- Roadmap docs should no longer be used as status truth.
-- Deferred items need to be reattached to the canonical theme that owns the
-  proof.
-- Long historical sprint documents should not compete with generated
-  dashboards or theme audits.
-- **Block-local training (DiffusionBlocks, arXiv:2506.14202):** decoupled-stage
-  pipeline scheduling + decoupled-block memory accounting landed as
-  hardware-free, test-gated planner/checkpoint modes; real block-parallel device
-  execution and training-loop integration are still open. See
-  the *Decoupled-stage pipeline* design note appended below.
+The remaining roadmap is narrower than the historical sprint plans imply:
+
+1. **E2E-REAL-6 compiler authority.** Promote the tracer to the sole general
+   frontend, move family planning out of `JitFn`, require every physical package
+   to consume its content-addressed Schedule/Tile parent, and delete retained
+   Graph-to-backend reconstruction only after differential and exact-target
+   proof. The first native-JVP and scheduled-attention cohorts have landed; this
+   is not yet a whole-compiler closeout.
+2. **General structured programs.** Bounded `if`, counted `for`, canonical
+   bounded `while`, and forward `control_scan` are real. Open work is general
+   source-CFG recovery, multi-block regions, a typed Presburger carrier,
+   region-level scan products, and lowering measured SAVE/RECOMPUTE/HYBRID
+   choices into generated adjoints.
+3. **Distributed execution and propagation.** The core collective Target rows
+   remain reference until native multi-rank transport executes. The generated
+   domain-sharding queue needs local-layout, propagation, mock-mesh, or native
+   multi-rank proof; it is not one undifferentiated kernel backlog.
+4. **Measured architecture promotion.** Clean target clocks, resource vectors,
+   and exact-device packets remain prerequisites for selector changes. Evidence
+   does not transfer between x86, Apple, ROCm, and NVIDIA architectures.
+5. **Tiled SSD.** The shared Tile schedule described below is still absent even
+   though existing sequence-mixer runtime lanes execute.
+6. **Block-local training.** Decoupled scheduling and memory accounting landed
+   as hardware-free scaffolding. Real block-parallel placement, local-objective
+   verification, and trainer integration remain open; see the design note below.
 
 ## Standalone Compiler Roadmap Baseline
 
@@ -82,21 +97,43 @@ Mamba, Hyena, Linformer, cosFormer, Griffin, Megalodon, JEPA, and Titans/Atlas.
 
 | Need | Owner | Live evidence |
 |---|---|---|
-| S-series native execution and structural gaps | [`S_SERIES_GAP_CLOSURE_PLAN.md`](S_SERIES_GAP_CLOSURE_PLAN.md) | [`s_series_status.md`](../generated/s_series_status.md) and [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) |
-| One-device compiler closeout, promotion evidence, and audited surfaces | [`SINGLE_GPU_CLOSEOUT_PLAN.md`](SINGLE_GPU_CLOSEOUT_PLAN.md) | its generated single-GPU queue plus the generated dashboards it names |
-| Shared lowering, backend plugins, arbitration, and measured promotion | [`../compiler/COMPILER_REFACTOR_PLAN.md`](../compiler/COMPILER_REFACTOR_PLAN.md) plus the applicable backend plan | [`runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) and evaluator verdicts |
-| Cross-surface counts and current open work | generated dashboards and [`../MASTER_AUDIT.md`](../MASTER_AUDIT.md) | generated files only |
+| Compiler sequencing and authority consolidation | [`../compiler/README.md`](../compiler/README.md) then [`../compiler/INTEGRATED_COMPILER_PLAN.md`](../compiler/INTEGRATED_COMPILER_PLAN.md) | [`../generated/compiler_progress.md`](../generated/compiler_progress.md) |
+| Per-operation phase state | generated support and single-GPU triage | [`../generated/support_table.md`](../generated/support_table.md) and [`../generated/single_gpu_closeout.md`](../generated/single_gpu_closeout.md) |
+| Primitive transform/sharding contracts | integrated compiler plan plus the domain owner | [`../generated/s_series_status.md`](../generated/s_series_status.md) |
+| Executable runtime and ABI evidence | applicable backend `todo.md` | [`../generated/runtime_execution_matrix.md`](../generated/runtime_execution_matrix.md) and [`../generated/runtime_abi.md`](../generated/runtime_abi.md) |
+| Apple exact-device work | [`../backend/apple/todo.md`](../backend/apple/todo.md) | Apple target map and packets |
+| NVIDIA exact-device work | [`../backend/nvidia/todo.md`](../backend/nvidia/todo.md) | NVIDIA target maps and packets |
+| ROCm exact-device work | [`../backend/rocm/todo.md`](../backend/rocm/todo.md) | ROCm target map and packets |
+| x86/AVX-512 and AMX work | [`../backend/x86/todo.md`](../backend/x86/todo.md) | x86 target map and packets |
+| Cross-surface narrative | [`../MASTER_AUDIT.md`](../MASTER_AUDIT.md) | generated files remain count authority |
 
-Keep this document as a routing and decision-provenance hub. Archive a roadmap
-fragment only when its decision is captured by an owner above; do not duplicate
-status counts or runtime claims here.
+Keep this document as a routing and decision-provenance hub. Historical
+S-series, contract-pass, ReplaySSM, and single-GPU closeout plans must not remain
+active owners after their implementation boundary has closed. Archive a roadmap
+fragment once its durable decision and any genuine follow-up have been routed to
+the owners above; do not duplicate status counts or runtime claims here.
 
-## Deferred — tiled SSD schedule design
+Archived in this cleanup:
 
-- **Tiled fused SSD (Mamba-2) as a Tile-IR schedule** — decided 2026-06-07,
-  deferred. SSD is matmul-dominant by construction, so its fusion belongs at
+- [`archive/CONTRACT_PASS_PLAN.md`](archive/CONTRACT_PASS_PLAN.md) — all
+  registered consumers are live;
+- [`archive/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md`](archive/CONTROL_FLOW_AND_DEEPSEEK_ACCELERATION_PLAN.md)
+  — structured execution and model physical closure now have separate owners;
+- [`archive/REPLAYSSM_PLAN.md`](archive/REPLAYSSM_PLAN.md) — the serving ABI is
+  complete; it remains an oracle/candidate for tiled SSD;
+- [`archive/SINGLE_GPU_CLOSEOUT_PLAN.md`](archive/SINGLE_GPU_CLOSEOUT_PLAN.md) —
+  its generated triage survives under current compiler/backend ownership;
+- [`archive/S_SERIES_ENABLEMENT_MAP.md`](archive/S_SERIES_ENABLEMENT_MAP.md) and
+  [`archive/S_SERIES_GAP_CLOSURE_PLAN.md`](archive/S_SERIES_GAP_CLOSURE_PLAN.md)
+  — historical taxonomy and enablement execution.
+
+## Active design — tiled SSD Schedule→Tile family
+
+- **Tiled fused SSD (Mamba-2) as a Schedule→Tile family** — activated
+  2026-08-11. SSD is matmul-dominant by construction, so its fusion belongs at
   Tile IR as a tiled GEMM schedule with the matmul intrinsic selected per backend
-  (`simdgroup_matrix` / WGMMA / MFMA), **not** as a one-off Apple Metal kernel.
+  (`simdgroup_matrix` / WGMMA / WMMA/MFMA / AVX-512), **not** as a one-off
+  backend kernel.
   The current Apple `selective_ssm` (chunked-parallel, 3 MPS-`bmm` + host) stays
   as the functional reference; the naive per-channel Apple fused kernel is an
   explicit anti-pattern (loses the cross-channel gram sharing → slower than the

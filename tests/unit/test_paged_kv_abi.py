@@ -6,7 +6,7 @@ can consume. The metamorphic test is the seed of A's evaluator oracle: a paged
 state and a contiguous state holding the same logical sequence must gather
 bit-identical K/V.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream A).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream A).
 """
 
 from __future__ import annotations

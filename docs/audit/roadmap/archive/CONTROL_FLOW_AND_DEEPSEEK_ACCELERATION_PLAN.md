@@ -1,10 +1,14 @@
 ---
-last_updated: 2026-06-30
-audit_role: plan
-plan_state: open
+last_updated: 2026-08-11
+audit_role: reference
 ---
 
 # Control-Flow and DeepSeek Acceleration Plan
+
+> **Archived 2026-08-11.** Its portable control-flow foundation and bounded
+> target slices landed. General structured execution is owned by W4 in the
+> integrated compiler plan; DeepSeek/MiniMax physical closure is owned by the
+> model-class roadmap and backend plans.
 
 ## Goal
 

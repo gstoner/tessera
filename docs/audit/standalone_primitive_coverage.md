@@ -1,8 +1,8 @@
 ---
 status: Informative
 classification: Audit Dashboard
-authority: Companion dashboard for `docs/audit/roadmap/ROADMAP_AUDIT.md` S1
-last_updated: 2026-08-08 (generated registry and compiler-foundation truth)
+authority: Generated primitive-contract and compiler-foundation dashboard
+last_updated: 2026-08-11 (generated registry and compiler-foundation truth)
 ---
 
 # Standalone Primitive Coverage
@@ -137,39 +137,21 @@ The registry tags primitives by the model families they unblock:
 - Ling-style MLA + Lightning hybrid attention
 - reasoning RL post-training loops
 
-## S0 Scope Decision (2026-05-10)
+## Current interpretation
 
-The data pipeline is **in scope** (S15). Tessera owns its own dataset,
-batching, sharding-of-data, and tokenization surfaces. `tf.data`,
-`torch.utils.data`, `grain`, `tiktoken`, `tokenizers`, and `sentencepiece`
-are reference vocabularies only — nothing in the runtime imports them.
+The original S0 scope decision and S1 registry-construction narrative have
+moved to
+[`roadmap/archive/standalone_s0_s1_history.md`](roadmap/archive/standalone_s0_s1_history.md).
+They explain why the surface exists, but they are not current status.
 
-The training step is **in scope** (S10 optimizers, S11 losses, S12
-checkpointing). Custom-primitive authoring is **in scope** (S13). AOT export
-and persistent compilation cache are **in scope** (S14).
+Today this document has two jobs:
 
-## Current S1 Result
+1. define the primitive-contract vocabulary and model-family taxonomy; and
+2. embed generated registry/compiler summaries without competing with
+   `generated/compiler_progress.md`.
 
-S1 is complete when the registry and tests exist, not when every primitive is
-implemented. The current result is intentionally a mixed dashboard:
-
-- Existing Tessera operators are imported from `OP_SPECS` as partial coverage
-  entries; the registry now consults `tessera.autodiff.vjp._VJPS` and
-  `tessera.autodiff.jvp._JVPS` so any op with a registered VJP/JVP correctly
-  shows `complete`.
-- All currently tracked standalone compiler primitives have at least a
-  Python-reference surface; none remain falsely listed as planned.
-- The snapshot includes lowering/backend gates so reference-only primitives are
-  visually distinct from Graph IR-lowered primitives.
-- Reasoning-model support now appears as first-class registry coverage for
-  RoPE/MLA/NSA, MoE dispatch/combine, quantization STE, optimizers, and
-  PPO/GRPO/CISPO helpers.
-- Missing contract axes remain visible until each primitive has semantics,
-  transform rules, lowering, backend coverage, and tests.
-
-The generated table below is a checked-in snapshot of the registry output for
-the high-risk S1 entries and milestone sentinels. Tests compare these rows to
-`render_markdown(...)` so the dashboard cannot drift silently.
+The sentinel table below remains drift-gated. It is intentionally small and
+demonstrates how to read a primitive row; it is not an S1 completion report.
 
 <!-- BEGIN GENERATED PRIMITIVE COVERAGE SNAPSHOT -->
 | Primitive | Category | Status | Existing op | Lowering gate | Backend gate | Missing contracts | Model families |

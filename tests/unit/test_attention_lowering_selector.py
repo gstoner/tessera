@@ -5,7 +5,7 @@ feasibility, and reproduces the old materialized→online→reference behavior a
 scored decision. Page-staging bytes from a Workstream-A PagedKVState enter the
 score.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream C).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream C).
 """
 
 from __future__ import annotations

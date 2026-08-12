@@ -1,4 +1,4 @@
-"""P0 of the S-series closure plan (docs/audit/roadmap/S_SERIES_GAP_CLOSURE_PLAN.md):
+"""P0 of the S-series closure plan (docs/audit/roadmap/archive/S_SERIES_GAP_CLOSURE_PLAN.md):
 pin the honest `backend_kernel` disposition for the Tier-0 structural ops and the
 Tier-1 transport ops, so future edits can't silently regress them.
 

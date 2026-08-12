@@ -1,10 +1,13 @@
 ---
-last_updated: 2026-07-14
-audit_role: plan
-plan_state: landing
+last_updated: 2026-08-11
+audit_role: reference
 ---
 
 # ReplaySSM — SSM decode-state ABI plan
+
+> **Archived 2026-08-11.** The cross-backend ReplaySSM serving contract is
+> complete. Tiled SSD is a new shared Schedule→Tile project; architecture
+> expansion and device evidence belong to backend plans.
 
 > **Status:** Phases 0–6 + 5-bench + block-decode + f16/bf16 + big-GDN +
 > size-heuristic prefill default ✅ (2026-06-15) — Track-R complete on Apple.

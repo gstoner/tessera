@@ -4,7 +4,7 @@ Locks the meta-gap tracker: every contract-pass-plan workstream has a row, statu
 is probed live (not hand-asserted), and the landed workstreams (A, B) report
 `live`. As C/D/E/F land, their rows flip and these expectations tighten.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Phase 0).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Phase 0).
 """
 
 from __future__ import annotations

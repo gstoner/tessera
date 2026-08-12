@@ -19,7 +19,7 @@ This module supplies both:
     :class:`EncoderFreeVLM` whose named walks recompose into the monolithic
     forward — proven numerically by :func:`verify_walk_parity`.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (Workstream F).
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (Workstream F).
 """
 
 from __future__ import annotations

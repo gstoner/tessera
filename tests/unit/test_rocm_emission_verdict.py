@@ -5,7 +5,7 @@ AMDGCN (v_wmma_*) on this host. This wires that into the Evaluator's rung ladder
 via `rocm_emission_verdict`, parallel to `nvidia_emission_verdict` — so AMD's
 genuine rung-4 (ASSEMBLES) progress is scored, not invisible.
 
-See docs/audit/roadmap/CONTRACT_PASS_PLAN.md (#15) and EVALUATOR_PLAN.md §2.
+See docs/audit/roadmap/archive/CONTRACT_PASS_PLAN.md (#15) and EVALUATOR_PLAN.md §2.
 """
 
 from __future__ import annotations

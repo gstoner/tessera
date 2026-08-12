@@ -86,7 +86,16 @@ build the symmetric coefficient matrix `A` (`A_ii = a_{2e_i}`,
 LDLᵀ with symmetric pivoting; congruence preserves inertia (Sylvester). Then:
 definite ⇒ elliptic; Lorentzian `min(n₊,n₋)=1` ⇒ hyperbolic *relative to a
 declared covector*; `min(n₊,n₋)≥2` ⇒ ultrahyperbolic (no well-posed IVP in any
-direction); `n₀ ≥ 1` ⇒ degenerate, go to P4. Coefficients arrive as IEEE
+direction); `n₀ ≥ 1` ⇒ degenerate, go to P4.
+
+**The declared covector must be validated, not merely present.** A Lorentzian
+form is hyperbolic only with respect to a covector in the minority cone, so
+`time_axis` is checked against the form: non-characteristic (`A[t][t] ≠ 0`) and
+definite once that axis is deleted. Accepting any non-null `time_axis` is
+wrong — for `diag(1,1,-1)` the covector `e₀` gives `q(ξ + τe₀) = 1 + τ²`, which
+has no real roots, so the Cauchy problem is not well posed in that direction
+even though the form is Lorentzian. Only `e₂` qualifies. Verified in
+`test_hyperbolic_requires_a_covector_that_is_actually_timelike`. Coefficients arrive as IEEE
 doubles, i.e. exact dyadic rationals, so **there is no epsilon anywhere in this
 decision**. Verified across six matrices including the zero-diagonal `xy`-form
 (`test_second_order_classification_is_exact`).
@@ -227,8 +236,17 @@ assume-identity branch.
 decide by Sturm sequence over exact rationals; multi-level via Jury table plus a
 mandatory discriminant/simple-root refinement (P7); systems via normality or an
 `I − G*G ⪰ 0` minor chain (P8); multi-dimensional separable stencils directly,
-non-separable via Bernstein positivity with adaptive subdivision (sound; UNKNOWN
-on budget exhaustion, never "stable").
+non-separable via Bernstein positivity with adaptive subdivision.
+
+**Every path fails closed on budget exhaustion.** An interval that is still
+unresolved when subdivision runs out is UNKNOWN, and UNKNOWN must be raised or
+surfaced — never collapsed into "nonnegative". Subdivision is driven by root
+*counts*, never by evaluating a fixed grid: a negative dip narrower than the
+grid is invisible to sampling, and two roots `2⁻⁹⁹` apart are enough to produce
+one. That is the same P9 failure mode wearing a different hat, and it is
+regression-tested by
+`test_exact_decider_finds_a_narrow_negative_dip_between_close_roots` and
+`test_decider_refuses_rather_than_guessing_when_budget_is_exhausted`.
 
 **A4 — Emit the bound.** Factor out the ubiquitous `(1−c)` roots, then: degree
 ≤1 in `c` ⇒ endpoints suffice (this closes advection–diffusion in closed form);

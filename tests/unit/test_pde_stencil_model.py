@@ -166,35 +166,59 @@ def count_distinct_roots(p: Poly, a: Fraction, b: Fraction) -> int:
     return _sign_changes(chain, a) - _sign_changes(chain, b)
 
 
-def nonneg_on(
-    p: Poly, a: Fraction, b: Fraction, depth: int = 24
-) -> tuple[bool, Fraction | None]:
-    """Decide p(x) >= 0 for all x in [a, b], exactly.
+class StabilityUndecided(RuntimeError):
+    """The exact decider could not resolve an interval within its budget.
 
-    Returns (True, None) when p is nonnegative on the interval, else
-    (False, witness) with an exact rational witness where p is negative.
-    Sound in BOTH directions -- this is what a PROVEN_STABLE verdict may cite,
-    unlike sampling (see `test_endpoint_sampling_cannot_prove_stable`).
+    Raised, never returned: an unresolved interval is UNKNOWN, and UNKNOWN must
+    fail closed (Decision #30 -- unprovable is unsafe). Reporting "nonnegative"
+    on budget exhaustion is the fail-open pattern this whole module exists to
+    make impossible.
+    """
+
+
+def nonneg_on(
+    p: Poly, a: Fraction, b: Fraction, max_depth: int = 256
+) -> tuple[bool, Fraction | None]:
+    """Decide p(x) >= 0 for all x in [a, b], exactly. Sound in BOTH directions.
+
+    Returns (True, None) when nonnegativity is PROVED, else (False, witness)
+    with an exact rational witness where p is negative. Raises
+    StabilityUndecided rather than ever reporting a verdict it did not prove.
+
+    Bisection is driven by Sturm root COUNTS, never by sampling a grid. An
+    interval is resolved only when it provably contains no sign change:
+
+      * no root in (lo, hi]        -> p has constant sign; p(lo) >= 0 decides it.
+      * exactly one root, p(lo) > 0 -> p is nonzero either side of that root, so
+        its sign there equals p(lo) > 0 and p(hi) >= 0 respectively.
+
+    Everything else subdivides. That matters: a narrow negative dip between two
+    close roots is invisible to any fixed sample grid, but a bisection split
+    point eventually lands *inside* the dip and is returned as the witness (see
+    `test_exact_decider_finds_a_narrow_negative_dip_between_close_roots`).
     """
 
     def rec(lo: Fraction, hi: Fraction, d: int) -> Fraction | None:
-        for x in (lo, hi):
-            if poly_eval(p, x) < 0:
-                return x
-        # No roots in (lo, hi] => constant sign there; one interior probe decides.
-        if count_distinct_roots(p, lo, hi) == 0:
-            m = (lo + hi) / 2
-            return m if poly_eval(p, m) < 0 else None
+        v_lo, v_hi = poly_eval(p, lo), poly_eval(p, hi)
+        if v_lo < 0:
+            return lo
+        if v_hi < 0:
+            return hi
+        n = count_distinct_roots(p, lo, hi)
+        if n == 0:
+            return None  # no zero in (lo, hi] => constant sign, and p(lo) >= 0
+        if n == 1 and v_lo > 0:
+            return None  # single root; p is strictly positive on both sides
         if d == 0:
-            for i in range(1, 32):
-                x = lo + (hi - lo) * Fraction(i, 32)
-                if poly_eval(p, x) < 0:
-                    return x
-            return None
+            raise StabilityUndecided(
+                f"unresolved interval [{lo}, {hi}] still contains {n} distinct "
+                "roots at the depth limit; refusing to report nonnegative "
+                "without a proof"
+            )
         m = (lo + hi) / 2
         return rec(lo, m, d - 1) or rec(m, hi, d - 1)
 
-    w = rec(a, b, depth)
+    w = rec(a, b, max_depth)
     return (w is None, w)
 
 
@@ -374,6 +398,21 @@ def classify_second_order(a: list[list[Fraction]], time_axis: int | None = None)
     if zero == 0 and min(pos, neg) == 1:
         if time_axis is None:
             return "unknown"  # hyperbolicity is relative to a covector
+        # A Lorentzian form is hyperbolic only w.r.t. a covector in the
+        # minority cone. Declaring *a* time_axis is not declaring a VALID one:
+        # for diag(1,1,-1) the covector e0 gives q(xi + tau*N) = 1 + tau^2,
+        # which has no real roots. So validate the declared axis against the
+        # form -- non-characteristic, and definite once that axis is removed.
+        if a[time_axis][time_axis] == 0:
+            return "unknown"  # characteristic direction: p_2(theta) = 0
+        reduced = [
+            [a[i][j] for j in range(n) if j != time_axis]
+            for i in range(n)
+            if i != time_axis
+        ]
+        r_pos, r_neg, r_zero = exact_inertia(reduced)
+        if r_zero != 0 or not (r_pos == n - 1 or r_neg == n - 1):
+            return "unknown"  # declared axis is spacelike for this form
         return "hyperbolic"
     if zero == 0 and min(pos, neg) >= 2:
         return "ultrahyperbolic"
@@ -644,6 +683,44 @@ def test_endpoint_sampling_cannot_prove_stable() -> None:
     assert abs(worst) < 1e-2, "peak should be at c ~ 0, i.e. theta ~ pi/2"
 
 
+def _close_root_dip() -> Poly:
+    """(c - (1/3 - 2^-100)) * (c - (1/3 + 2^-100)): negative only on a
+    2^-99-wide interval around 1/3, and positive everywhere else on [-1, 1]."""
+    eps = Fraction(1, 2**100)
+    third = Fraction(1, 3)
+    return poly_mul(poly(-(third - eps), 1), poly(-(third + eps), 1))
+
+
+def test_exact_decider_finds_a_narrow_negative_dip_between_close_roots() -> None:
+    """A negative dip narrower than any fixed sample grid must still be found.
+
+    Two roots 2^-99 apart with p < 0 strictly between them. A grid-sampling
+    fallback steps straight over the dip and would report "nonnegative" -- the
+    exact fail-open bug this module exists to prevent. Bisection on Sturm root
+    COUNTS keeps subdividing while roots remain, so a split point eventually
+    lands inside the dip and becomes the witness.
+    """
+    p = _close_root_dip()
+    ok, witness = nonneg_on(p, MINUS_ONE, ONE)
+    assert not ok, "a genuine negative dip must never be reported nonnegative"
+    assert witness is not None and poly_eval(p, witness) < 0
+
+    # The old 31-point fallback grid sees nothing wrong -- that is the point.
+    grid = [MINUS_ONE + (ONE - MINUS_ONE) * Fraction(i, 32) for i in range(33)]
+    assert all(poly_eval(p, x) >= 0 for x in grid)
+
+
+def test_decider_refuses_rather_than_guessing_when_budget_is_exhausted() -> None:
+    """Budget exhaustion is UNKNOWN and fails closed -- never "nonnegative".
+
+    At a shallow depth the two roots cannot be separated, so the decider must
+    raise instead of returning a verdict it has not proved (Decision #30).
+    """
+    p = _close_root_dip()
+    with pytest.raises(StabilityUndecided):
+        nonneg_on(p, MINUS_ONE, ONE, max_depth=8)
+
+
 def test_rk4_imaginary_axis_bound() -> None:
     """E.7: |R_RK4(iy)|^2 - 1 = y^6(y^2 - 8)/576, so RK4 advection needs a <= 2*sqrt(2).
 
@@ -804,6 +881,50 @@ def test_second_order_classification_is_exact(
     """I.2: for m = 2 the inertia of the coefficient matrix decides completely."""
     a = [[Fraction(v) for v in row] for row in matrix]
     assert classify_second_order(a, time_axis) == expected
+
+
+def test_hyperbolic_requires_a_covector_that_is_actually_timelike() -> None:
+    """diag(1,1,-1) is Lorentzian, but e0 and e1 are SPACELIKE for it.
+
+    Hyperbolicity is relative to a covector, so a declared `time_axis` must be
+    checked against the form rather than merely being present. Along N = e0 and
+    xi = e1 the characteristic polynomial is q(xi + tau*N) = 1 + tau^2, which
+    has no real roots -- verified below -- so the Cauchy problem is not well
+    posed in that direction. Only e2, in the one-dimensional negative cone,
+    qualifies.
+    """
+    a = [
+        [Fraction(1), Fraction(0), Fraction(0)],
+        [Fraction(0), Fraction(1), Fraction(0)],
+        [Fraction(0), Fraction(0), Fraction(-1)],
+    ]
+    assert exact_inertia(a) == (2, 1, 0)  # Lorentzian: min(pos, neg) == 1
+    assert classify_second_order(a, time_axis=0) == "unknown"
+    assert classify_second_order(a, time_axis=1) == "unknown"
+    assert classify_second_order(a, time_axis=2) == "hyperbolic"
+
+    # The refutation, computed rather than asserted: q(xi + tau*e0) = 1 + tau^2.
+    def q(x: tuple[float, float, float]) -> float:
+        return x[0] ** 2 + x[1] ** 2 - x[2] ** 2
+
+    for tau in (-3.0, -1.0, 0.0, 1.0, 3.0):
+        assert q((tau, 1.0, 0.0)) == pytest.approx(1.0 + tau * tau)
+    assert min(q((t, 1.0, 0.0)) for t in np.linspace(-50.0, 50.0, 20001)) > 0.0
+
+    # ... whereas along N = e2 the roots are real (tau = +-1).
+    assert q((1.0, 0.0, 1.0)) == 0.0 and q((1.0, 0.0, -1.0)) == 0.0
+
+
+def test_characteristic_time_axis_is_refused() -> None:
+    """A declared axis with p_2(theta) = 0 is characteristic, not timelike."""
+    a = [
+        [Fraction(0), Fraction(1), Fraction(0)],
+        [Fraction(1), Fraction(0), Fraction(0)],
+        [Fraction(0), Fraction(0), Fraction(-1)],
+    ]
+    assert exact_inertia(a) == (1, 2, 0)  # Lorentzian
+    assert a[0][0] == 0  # e0 is characteristic
+    assert classify_second_order(a, time_axis=0) == "unknown"
 
 
 def test_inertia_handles_the_zero_diagonal_case() -> None:

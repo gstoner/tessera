@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
+The shared Block AttnRes numerical-policy, balanced-partition, VJP, and
+softmax-merge oracle contracts apply to x86. This PR adds no AVX-512 physical
+consumer or Zen 5 evidence. After the gfx1151 contract is proven, x86 must own
+its vectorized stats-attention/merge package and independent correctness and
+performance packet; ROCm schedules and evidence do not transfer.
+
 Cross-backend sync `MODEL-FUSED-PHYS-1-2026-08-12` — **MiniMax MSA now owns a
 digest-bound AVX-512 package; clean Zen 5 evidence remains open.** The package
 binds Graph, Schedule, Tile, and Target identities and executes the declared

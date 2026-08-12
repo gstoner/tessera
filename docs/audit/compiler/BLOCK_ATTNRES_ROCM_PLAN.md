@@ -1,8 +1,15 @@
 ---
 last_updated: 2026-08-12
+audit_role: plan
+plan_state: landing
 ---
 
 # Block AttnRes — Model, Algorithms, and a ROCm-First Execution Plan
+
+> **Routing:** start at [`README.md`](README.md). This document owns the Block
+> AttnRes mathematical contract and ROCm-first acceptance criteria; global
+> sequencing remains owned by
+> [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md).
 
 **Status:** plan (2026-08-12). **Source paper:** Attention Residuals, arXiv 2603.15031
 (Kimi Team / MoonshotAI). Official repo ships no code; no faithful public
@@ -36,11 +43,15 @@ axis.
 
 - `d` — model width. `L` — number of **sub-layers** (each self-attention and
   each MLP counts as one; a transformer block contributes 2).
-- Partition `{1..L} = B_1 ⊔ … ⊔ B_N` into contiguous blocks. With
-  `S = ⌈L/N⌉`: `B_n = {(n−1)S+1, …, min(nS, L)}`; the last block may be short
+- Partition `{1..L} = B_1 ⊔ … ⊔ B_N` into contiguous, nonempty blocks, requiring
+  `1 ≤ N ≤ L`. Let `(q,r) = divmod(L,N)` and define boundaries
+  `a_n = (n−1)q + min(n−1,r) + 1` and
+  `z_n = nq + min(n,r)`, so `B_n = {a_n,…,z_n}`. The first `r` blocks have
+  `q+1` sub-layers and the rest have `q`; define `S = max_n |B_n| = ⌈L/N⌉`.
   **[GAP-1: the paper says only "the last block contains the remaining
-  layers"; we fix the ceiling convention so every block except possibly the
-  last has exactly S sub-layers]**. Write `n(l)` for the block containing `l`.
+  layers"; quotient/remainder balancing gives exactly `N` nonempty blocks and
+  avoids an empty tail when `L` is not divisible by `N`.]** Write `n(l)` for
+  the block containing `l`.
 - `x ∈ R^d` — token embedding. `h_l ∈ R^d` — input to sub-layer `l`.
   `f_l` — sub-layer transform **without any internal residual**; its output is
   `v_l = f_l(Norm_l(h_l))` where `Norm_l` is the usual PreNorm RMSNorm (this
@@ -73,9 +84,12 @@ Properties (each load-bearing later; all except P1/P5/P6 machine-checked):
 - **P2 (uniformity at init).** `w = 0 ⇒ α_j = 1/m ⇒ A_0(V) = mean(V)` — the
   **average**, not the residual **sum**. Standard residual is *not* the init
   point. Tests must assert uniform `α`, not equality with `Σ v_j`.
-- **P3 (key scale-invariance).** `k̂(c·v) = k̂(v)` for `c > 0`: rescaling a
-  source changes its value contribution linearly but leaves its *weight*
-  unchanged. No source buys attention with magnitude.
+- **P3 (epsilon-qualified key scale response).** For `c > 0`, key *direction*
+  is invariant, while fixed `ε` makes its norm only asymptotically invariant:
+  `k̂(c v) = v / √(‖v‖²/d + ε/c²)`. Thus `k̂(c v) → k̂(v)` only when
+  `‖v‖²/d ≫ max(ε, ε/c²)` (or exactly when `ε=0`/`c=1`). Near the epsilon
+  floor, rescaling legitimately changes logits and weights; kernels and tests
+  must preserve this behavior rather than claiming exact scale invariance.
 - **P4 (gain absorption).** A key-norm gain is absorbable into `w` — the
   operator's only per-layer degree of freedom is one `d`-vector.
 - **P5 (temperature).** `|s_j| ≤ ‖w‖√d`: the learned query norm is a per-layer
@@ -387,7 +401,7 @@ inside existing seams:
 | `two_phase == naive` (A4 vs A2, per block) | Lemma I.6 end-to-end | metamorphic, exact-to-fp |
 | random partition trees → identical `(o,m,ℓ) → h` | reassociability | metamorphic |
 | `w=0 ⇒ α uniform ⇒ h = mean(V)` | P2 | unit |
-| source rescale leaves `α` unchanged | P3 | property |
+| source rescale preserves key direction; fixed-`ε` magnitude/weight response matches the exact formula, including near-zero sources | P3 | property |
 | key-norm gain vs `g⊙w` identical | P4 | property |
 | analytic VJP vs finite differences / traced decomposition | (11)–(13) | differential |
 | limits `N=L` ≡ Full; first-of-block excludes partial | I.3 / GAP-2 | unit |

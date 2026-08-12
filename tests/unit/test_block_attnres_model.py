@@ -32,6 +32,14 @@ def _khat(v: np.ndarray) -> np.ndarray:
     return v / _rms(v)
 
 
+def balanced_block_sizes(num_layers: int, num_blocks: int) -> list[int]:
+    """GAP-1: quotient/remainder partition into exactly N nonempty blocks."""
+    if num_layers <= 0 or not 1 <= num_blocks <= num_layers:
+        raise ValueError("require 1 <= num_blocks <= num_layers")
+    quotient, remainder = divmod(num_layers, num_blocks)
+    return [quotient + (index < remainder) for index in range(num_blocks)]
+
+
 def depth_attn(w: np.ndarray, V: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """A1: depth-attention operator over sources V[m, d] with query w[d].
 
@@ -172,13 +180,36 @@ def test_p2_zero_query_gives_uniform_average(sources: np.ndarray) -> None:
     np.testing.assert_allclose(h, sources.mean(axis=0), atol=1e-12)
 
 
-def test_p3_weights_invariant_under_source_rescale(rng: np.random.Generator, sources: np.ndarray) -> None:
+def test_p3_epsilon_qualified_scale_response(
+    rng: np.random.Generator, sources: np.ndarray
+) -> None:
     w = rng.normal(size=D)
-    _, a1, _ = depth_attn(w, sources)
-    scaled = sources.copy()
-    scaled[2] *= 7.0
-    _, a2, _ = depth_attn(w, scaled)
-    np.testing.assert_allclose(a1, a2, atol=1e-6)
+    near_zero = sources.copy()
+    near_zero[2] = rng.normal(size=D) * np.sqrt(EPS) * 0.1
+    _, a1, k1 = depth_attn(w, near_zero)
+    scale = 7.0
+    scaled = near_zero.copy()
+    scaled[2] *= scale
+    _, a2, k2 = depth_attn(w, scaled)
+
+    # Positive scaling preserves direction, not norm, under fixed epsilon.
+    np.testing.assert_allclose(
+        k1[2] / np.linalg.norm(k1[2]),
+        k2[2] / np.linalg.norm(k2[2]),
+        atol=1e-12,
+    )
+    mean_square = float(np.mean(near_zero[2] ** 2))
+    expected = near_zero[2] / np.sqrt(mean_square + EPS / scale**2)
+    np.testing.assert_allclose(k2[2], expected, atol=1e-12)
+    assert np.max(np.abs(a2 - a1)) > 1e-4
+
+
+def test_gap1_balanced_partition_has_no_empty_tail() -> None:
+    assert balanced_block_sizes(10, 6) == [2, 2, 2, 2, 1, 1]
+    assert balanced_block_sizes(6, 6) == [1] * 6
+    assert balanced_block_sizes(6, 1) == [6]
+    with pytest.raises(ValueError, match="1 <= num_blocks <= num_layers"):
+        balanced_block_sizes(5, 6)
 
 
 def test_p4_key_norm_gain_absorbed_into_query(rng: np.random.Generator, sources: np.ndarray) -> None:

@@ -37,6 +37,21 @@ requiring AMX/AVX-512 at build time. Green-on-CI is the acceptance evidence;
 if any recovered fixture fails, it is a real x86 defect that this lane was
 previously hiding and it outranks the CI change.
 
+**Sequencing note — x86 and ROCm share one host, so schedule them together.**
+Strix Halo is Zen 5 + gfx1151 in a single box: it is the fleet's x86 host and
+its ROCm host at once. Because `TESSERA_ENABLE_HIP=ON` avoids the `:95` lean
+condition, one configure there carries core + ROCm + x86 in a single
+`tessera-opt` — the only fleet configuration that runs both fixture families in
+one `lit` invocation. Whoever picks up the ROCm side of
+`CI-LIT-BACKEND-DIALECTS-2026-08-12` should add `-DTESSERA_BUILD_X86_BACKEND=ON`
+and close the x86 host-side verification in the same session rather than
+scheduling a second visit to the same machine; the procedure lives in
+`docs/audit/backend/rocm/todo.md` under this sync key. Two caveats that do not
+change: the box runs under WSL2, so host-wall timing there stays
+**regression-only** and does not satisfy the clean AVX-512 timing packet still
+open above; and Zen 5 has AVX-512 but **no AMX**, so nothing on this host can
+retire the AMX lane.
+
 Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
 The shared Block AttnRes numerical-policy, balanced-partition, VJP, and
 softmax-merge oracle contracts apply to x86. This PR adds no AVX-512 physical

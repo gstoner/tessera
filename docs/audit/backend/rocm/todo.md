@@ -62,15 +62,24 @@ Gated fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
    ```
 2. Confirm the fixtures pass in a full ROCm build (HIP present ⇒ lean arm not
    taken ⇒ core + ROCm co-registered), which is the canonical configure in
-   `CLAUDE.md`:
+   `CLAUDE.md`. **Add the x86 backend to the same build**: Strix Halo is the
+   fleet's x86 host as well as its ROCm host (Zen 5 + gfx1151 in one box), and
+   with `ENABLE_HIP=ON` the `:95` lean condition is not met, so one driver can
+   carry core + ROCm + x86 together. That makes this the only configuration in
+   the fleet that runs **both** fixture families in a single `lit` invocation —
+   the CI lane structurally cannot, which is the whole reason this item exists:
    ```
    cmake -S . -B build -G Ninja -DTESSERA_ENABLE_HIP=ON \
-     -DTESSERA_BUILD_ROCM_BACKEND=ON -DCMAKE_PREFIX_PATH=/opt/rocm/core \
+     -DTESSERA_BUILD_ROCM_BACKEND=ON -DTESSERA_BUILD_X86_BACKEND=ON \
+     -DCMAKE_PREFIX_PATH=/opt/rocm/core \
      -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
-   ninja -C build tessera-opt && lit tests/tessera-ir/phase2 -v
+   ninja -C build tessera-opt
+   ./build/tools/tessera-opt/tessera-opt --help | grep -E 'tessera-lower-to-(rocm|x86)'   # both, per step 0
+   lit tests/tessera-ir/ -v
    ```
-   If any fixture fails **there**, it is a real ROCm defect and outranks the CI
-   gap — file it as its own item before touching CI.
+   Expect **zero** UNSUPPORTED among the 13 gated fixtures here. If any fixture
+   fails **there**, it is a real ROCm (or x86) defect and outranks the CI gap —
+   file it as its own item before touching CI.
 3. Choose and own the CI recovery. Preferred: a second configure+build in the
    `lit` job producing a lean ROCm `tessera-opt` that runs only the ROCm-tagged
    fixtures (mirrors how `rocm compiler (host-free LLVM/MLIR 23)` already builds

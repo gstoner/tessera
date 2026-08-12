@@ -8,6 +8,14 @@ last_updated: 2026-08-12
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
+The shared Block AttnRes plan establishes portable balanced-partition,
+epsilon-qualified numeric, VJP, and softmax-merge oracle contracts. This PR
+adds no SM120 package or CUDA evidence. NVIDIA must later provide its own
+stats-attention/merge Target consumer and exact-device packet; the small depth
+shapes do not by themselves justify tensor-core lowering, and ROCm proof does
+not transfer.
+
 Cross-backend sync `MODEL-FUSED-PHYS-1-2026-08-12` — **shared MiniMax MSA
 package lineage landed; SM120 consumption remains follow-up required.** x86
 and gfx1151 now consume exact digest-bound MSA artifacts without Graph

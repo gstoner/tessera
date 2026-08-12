@@ -8,6 +8,13 @@ last_updated: 2026-08-12
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
+The shared Block AttnRes plan establishes portable balanced-partition,
+epsilon-qualified numeric, VJP, and softmax-merge oracle contracts. This PR
+adds no MSL package or Mac evidence. Apple must later bind those contracts to
+its own stats-attention/merge physical consumer and independent correctness
+packet; no gfx1151 result transfers.
+
 Cross-backend sync `MODEL-FUSED-PHYS-1-2026-08-12` — **shared MiniMax MSA
 package lineage landed; Metal consumption remains follow-up required.** x86
 and gfx1151 now execute digest-bound MSA artifacts without Graph redispatch.

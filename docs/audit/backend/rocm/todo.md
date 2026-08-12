@@ -7,6 +7,15 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **owning ROCm item,
+landing.** The shared Block AttnRes plan fixes a quotient/remainder block
+partition, epsilon-qualified RMS key semantics, fp32 logit/softmax/accumulator
+policy, and a dependency-free numerical/VJP/softmax-merge oracle. gfx1151 owns
+the first physical follow-up: registered Graph/Schedule/Tile/Target contracts,
+stats-attention plus merge kernels, exact-device correctness, and a benchmark
+packet. This planning/oracle slice adds no native ROCm support claim;
+gfx1200/gfx1250 remain fail-closed.
+
 Cross-backend sync `MODEL-FUSED-PHYS-1-2026-08-12` — **MiniMax MSA now
 consumes an exact digest-bound package on gfx1151; DeepSeek remains open.** The
 package binds Graph, Schedule, Tile, and Target digests and its runtime launch

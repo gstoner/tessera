@@ -9,6 +9,68 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+## P0 — `TesseraX86Dialect` segfaults on load (`X86-DIALECT-LOAD-CRASH-2026-08-12`)
+
+**The x86 Target IR dialect has never successfully loaded.** With
+`TESSERA_BUILD_X86_BACKEND=ON` (PR #555), `tessera-opt` no longer reports
+``Dialect `tessera_x86' not found`` — it **crashes** during dialect
+initialization, before parsing a single op. Run 31648897366, all 14 x86
+fixtures, 13 with an identical backtrace:
+
+```
+Stack dump:
+1.  MLIR Parser: custom op parser 'builtin.module'
+2.  MLIR Parser: custom op parser 'func.func'
+ #4 mlir::Dialect::addType<mlir::tessera_x86::TileType>()
+ #5 MLIRContext::getOrLoadDialect<mlir::tessera_x86::TesseraX86Dialect>()
+ #9 OperationParser::parseCustomOperationName()
+```
+
+The crash is inside `initialize()` registering `TileType`, so **every claim
+that depends on the dialect being loadable is unproven**, including the
+Decision #19 statement that the `!tessera_x86.tile` verifier "rejects a tile
+dot-product whose operands never came from a tile load". That verifier has
+never executed. This went undetected because CI never built the dialect
+(2026-08-02 → 2026-08-12) — the CI gap and this defect share a cause: nothing
+exercised the code.
+
+**Two hypotheses, neither confirmed — do not fix before deciding between
+them:**
+
+1. **Missing/mismatched `MLIR_DEFINE_EXPLICIT_TYPE_ID` for `TileType`, or the
+   generated types `.cpp.inc` not compiled into `TesseraX86IR`.** The classic
+   cause of a null TypeID at `addType`. Would mean the dialect is broken
+   everywhere.
+2. **Shared-library TypeID collision.** CI links `libLLVM.so.23.1` (shared),
+   which surfaces ODR/TypeID problems a static build hides. Would mean the
+   dialect works in some configurations and not CI's — and that any local
+   "it works here" is not evidence.
+
+Diagnosing 1 vs 2 changes the fix, so a backtrace alone is not enough.
+
+**Reproduce on Strix Halo** — x86 Linux with the same apt LLVM 23 as CI, so it
+reproduces CI's shared-`libLLVM` conditions (an arm64 Mac does not, and may not
+even compile the backend subdirectory):
+
+```
+cmake -S . -B build-x86 -G Ninja -DTESSERA_BUILD_X86_BACKEND=ON \
+  -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
+ninja -C build-x86 tessera-opt
+./build-x86/tools/tessera-opt/tessera-opt tests/tessera-ir/phase2/x86_target_ir.mlir
+```
+
+Acceptance: `phase2/x86_target_ir.mlir` **and** its negative sibling
+`x86_target_ir_invalid.mlir` both pass — the negative one is the actual proof
+that the tile-provenance verifier runs, which is the whole point of the
+Decision #19 fixture pair. Ship a regression guard that loads the dialect
+directly, so a load-time crash can never again require a full lit run to
+notice.
+
+**This P0 outranks the CI bookkeeping below.** A crashing dialect is a compiler
+defect; the lane coverage gap is what let it hide.
+
+---
+
 Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **owning x86 item,
 landing; host-free lit coverage restored, no Zen 5 evidence added.** The
 `Validate / lit` lane was dead from 2026-08-11 to 2026-08-12 (pytest collection

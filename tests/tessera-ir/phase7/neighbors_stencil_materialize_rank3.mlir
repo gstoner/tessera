@@ -31,8 +31,8 @@ func.func @test_materialize_rank3_periodic_7pt(%arg0: tensor<?x?x?xf32>) -> tens
               dense<[0, -1, 0]> : tensor<3xi64>,
               dense<[0, 0, 1]>  : tensor<3xi64>,
               dense<[0, 0, -1]> : tensor<3xi64>],
-      bc = "periodic"
-  } : () -> index
+      bc = "periodic", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1, 1, 1]
@@ -70,8 +70,8 @@ func.func @test_materialize_rank3_mixed_bc(%arg0: tensor<?x?x?xf32>) -> tensor<?
       taps = [dense<[0, 0, 0]> : tensor<3xi64>,
               dense<[1, 0, 0]> : tensor<3xi64>,
               dense<[-1, 0, 0]> : tensor<3xi64>],
-      bc = "dirichlet(0.0),periodic,periodic"
-  } : () -> index
+      bc = "dirichlet(0.0),periodic,periodic", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1, 1, 1]
@@ -104,8 +104,8 @@ func.func @test_materialize_rank4_periodic(%arg0: tensor<?x?x?x?xf32>) -> tensor
       taps = [dense<[0, 0, 0, 0]> : tensor<4xi64>,
               dense<[1, 0, 0, 0]> : tensor<4xi64>,
               dense<[0, 1, 0, 0]> : tensor<4xi64>],
-      bc = "periodic"
-  } : () -> index
+      bc = "periodic", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1, 1, 1, 1]

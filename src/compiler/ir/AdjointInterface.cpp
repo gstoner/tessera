@@ -39,6 +39,19 @@ llvm::SmallVector<mlir::Value> StopGradientOp::buildAdjoint(
   return {mlir::Value()};
 }
 
+llvm::SmallVector<mlir::Value> DepthAttnOp::buildAdjoint(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  if (outputCotangents.size() != 1 || !outputCotangents[0])
+    return {mlir::Value(), mlir::Value()};
+  mlir::OperationState state(getLoc(), "tessera.depth_attn_vjp");
+  state.addOperands({outputCotangents[0], getQuery(), getSources()});
+  state.addTypes({getQuery().getType(), getSources().getType()});
+  state.addAttribute("eps", getEpsAttr());
+  state.addAttribute("numeric_policy", getNumericPolicyAttr());
+  mlir::Operation *product = builder.create(state);
+  return {product->getResult(0), product->getResult(1)};
+}
+
 static llvm::SmallVector<mlir::Value> buildCompoundSpectralAdjoint(
     mlir::Operation *op, llvm::StringRef kind, mlir::ValueRange primals,
     mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {

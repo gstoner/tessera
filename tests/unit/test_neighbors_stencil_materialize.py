@@ -66,6 +66,7 @@ def test_pass_emits_loop_primitives() -> None:
         "arith::XOrIOp",       # invert in-bounds to oob
         "arith::AddIOp",       # raw index = base + delta
         "arith::AddFOp",       # tap accumulation
+        "arith::MulFOp",       # explicit coefficient application
         "arith::SelectOp",     # BC value-side selects
         "arith::ConstantOp",   # BC float constants
     )
@@ -178,3 +179,6 @@ def test_materialize_pass_runs_against_lit_fixture() -> None:
     # Every materialized loop must reach a tensor.insert / tensor.extract.
     assert "tensor.extract" in out
     assert "tensor.insert" in out
+    # The 5-point fixture is a real Laplacian, not an implicit unit-tap sum.
+    assert "arith.mulf" in out
+    assert "-4.000000e+00" in out

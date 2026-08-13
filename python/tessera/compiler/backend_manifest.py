@@ -5218,9 +5218,13 @@ _SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset({
     "edm_precondition", "factorized_pos_emb", "masked_scatter",
     "memory_read", "mrope_2d", "online_softmax_state", "perceiver_resampler",
     "spectral_norm",
+    # BLOCK-ATTNRES-1 Phase 1-3 — CPU reference owner plus explicit planned
+    # target lanes. Typed Graph/AD contracts are real; native packages are not.
+    "attn_with_stats", "depth_attn", "softmax_merge", "softmax_finalize",
 })
 
 _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES: Mapping[str, tuple[str, ...]] = {
+    "depth_attn": ("fp32",),
     "dequantize_int4": ("fp32",),
     "dequantize_int8": ("fp32", "int8"),
     "fake_quantize": ("fp32",),

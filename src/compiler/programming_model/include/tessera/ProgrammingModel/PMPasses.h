@@ -13,15 +13,14 @@
 //                                  ordering, pipeline micro-batch counts,
 //                                  async-copy stages, knob arity).
 //
-//   createGraphToSchedulePass()    REAL FOR ONE BOUNDED SLICE. Creates a
-//                                  content-addressed schedule.matmul SSA edge
-//                                  for static rank-2 x86 f32 and ROCm f16/f32
-//                                  Graph matmul. Other contracts fail closed.
+//   createGraphToSchedulePass()    REAL FOR REGISTERED BOUNDED FAMILIES.
+//                                  Creates content-addressed Schedule SSA edges
+//                                  from retained Graph producers. Unsupported
+//                                  shapes, policies, and targets fail closed.
 //
-//   createScheduleToTilePass()     REAL FOR THE SAME SLICE. Atomically consumes
-//                                  schedule.matmul and its Graph producer,
-//                                  materializes A/B/D/M/N/K, and emits one
-//                                  typed launch-level tile.matmul_kernel.
+//   createScheduleToTilePass()     REAL FOR THE SAME REGISTERED FAMILIES.
+//                                  Revalidates Graph lineage and policy hashes,
+//                                  then emits typed launch-level Tile carriers.
 //
 // Decision #29 (a declaration must have a consumer) and Decision #31 (one
 // implementation per boundary) both bear on the two skeletons: they register
@@ -47,10 +46,10 @@ namespace tessera {
 /// Verifies all Programming Model v1.1 ops. This is a real verifier.
 std::unique_ptr<mlir::Pass> createPMV11VerifierPass();
 
-/// Build the bounded mixed-level static-matmul Schedule SSA contract.
+/// Build registered content-addressed Graph-to-Schedule SSA contracts.
 std::unique_ptr<mlir::Pass> createGraphToSchedulePass();
 
-/// Consume that contract into the six-operand launch-level Tile matmul ABI.
+/// Consume registered Schedule contracts into launch-level Tile ABIs.
 std::unique_ptr<mlir::Pass> createScheduleToTilePass();
 
 /// Registers PM v1.1 dialects for `tessera-opt` parsing.
@@ -59,7 +58,7 @@ void registerPMPipelinesV11(mlir::DialectRegistry &registry);
 /// Verify-only pipeline: verifier + CSE + canonicalize. No lowering.
 void buildPMV11VerifyPipeline(mlir::OpPassManager &pm);
 
-/// Verifier + bounded Graph/Schedule-to-Tile static-matmul lowering.
+/// Verifier + registered bounded Graph/Schedule-to-Tile lowering.
 void buildPMV11LegalizePipeline(mlir::OpPassManager &pm);
 
 /// Registers the passes and pipelines with the global MLIR pass registry.

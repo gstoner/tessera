@@ -41,23 +41,64 @@ _CPU_SRC = (_REPO_ROOT / "src" / "solvers" / "tpp" / "lib" / "TargetHooks"
 
 
 # --- region + reference ------------------------------------------------------
+def central_difference_taps(
+    accuracy_order: int,
+    derivative_order: int,
+    spacing: float,
+) -> tuple[tuple[int, ...], tuple[float, ...]]:
+    """Return physical central-difference taps for a one-dimensional axis.
+
+    The returned coefficient contract is exactly the one consumed by
+    ``tessera.neighbors.stencil.define``: coefficients include the dimensional
+    factor ``spacing ** -derivative_order``.  Keeping derivative order distinct
+    from accuracy order prevents the common error of dividing a Laplacian by
+    ``h`` instead of ``h**2``.
+    """
+    h = float(spacing)
+    if not np.isfinite(h) or h <= 0.0:
+        raise ValueError("spacing must be finite and positive")
+    key = (int(derivative_order), int(accuracy_order))
+    numerators: dict[
+        tuple[int, int], tuple[tuple[int, ...], tuple[float, ...], float]
+    ] = {
+        (1, 2): ((-1, 1), (-1.0, 1.0), 2.0),
+        (1, 4): ((-2, -1, 1, 2), (1.0, -8.0, 8.0, -1.0), 12.0),
+        (2, 2): ((-1, 0, 1), (1.0, -2.0, 1.0), 1.0),
+        (2, 4): ((-2, -1, 0, 1, 2),
+                 (-1.0, 16.0, -30.0, 16.0, -1.0), 12.0),
+    }
+    if key not in numerators:
+        raise ValueError(
+            "supported (derivative_order, accuracy_order) pairs are "
+            "(1,2), (1,4), (2,2), and (2,4)"
+        )
+    offsets, weights, denominator = numerators[key]
+    scale = denominator * (h ** derivative_order)
+    return offsets, tuple(weight / scale for weight in weights)
+
+
 class StencilGradRegion:
     """A periodic central-difference gradient of a 2-D field along ``axis`` with
-    accuracy ``order`` (2 or 4), unit grid spacing — the semantics of ``tpp.grad``
+    accuracy ``order`` (2 or 4), explicit per-axis grid spacing — the semantics of ``tpp.grad``
     after halo-infer + a local ``tpp.halo.exchange``."""
 
-    def __init__(self, nx: int, ny: int, axis: int = 0, order: int = 2):
+    def __init__(self, nx: int, ny: int, axis: int = 0, order: int = 2,
+                 spacing: tuple[float, float] = (1.0, 1.0)):
         self.nx, self.ny, self.axis, self.order = int(nx), int(ny), int(axis), int(order)
+        self.spacing = tuple(float(h) for h in spacing)
+        if len(self.spacing) != 2 or any(not np.isfinite(h) or h <= 0.0
+                                         for h in self.spacing):
+            raise ValueError("spacing must contain two finite positive values")
 
     def reference(self, f: np.ndarray) -> np.ndarray:
         f = np.asarray(f, np.float32)
-        a = self.axis
-        if self.order >= 4:
-            g = (-np.roll(f, -2, a) + 8.0 * np.roll(f, -1, a)
-                 - 8.0 * np.roll(f, 1, a) + np.roll(f, 2, a)) / 12.0
-        else:
-            g = (np.roll(f, -1, a) - np.roll(f, 1, a)) * 0.5
-        return g.astype(np.float32)
+        offsets, coeffs = central_difference_taps(
+            self.order, 1, self.spacing[self.axis]
+        )
+        g = np.zeros_like(f, dtype=np.float32)
+        for offset, coeff in zip(offsets, coeffs, strict=True):
+            g += np.float32(coeff) * np.roll(f, -offset, axis=self.axis)
+        return g
 
     def probe_input(self, seed: int) -> np.ndarray:
         rng = np.random.default_rng(seed)
@@ -94,7 +135,7 @@ def _cpu_lib() -> ctypes.CDLL | None:
             lib.ts_stencil_grad_cpu.restype = None
             lib.ts_stencil_grad_cpu.argtypes = [
                 ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
-                ctypes.c_int, ctypes.c_int]
+                ctypes.c_int, ctypes.c_int, ctypes.c_float]
         except Exception:
             lib = None
     _lib.append(lib)
@@ -127,7 +168,8 @@ class CpuStencilGradCandidate(Candidate):
             fin = np.ascontiguousarray(f, np.float32)
             out = np.empty((region.nx, region.ny), np.float32)
             lib.ts_stencil_grad_cpu(_cptr(fin), _cptr(out), region.nx,
-                                    region.ny, region.axis, region.order)
+                                    region.ny, region.axis, region.order,
+                                    region.spacing[region.axis])
             return out, "cpu_stencil_grad"
         except Exception:
             return region.reference(f), "reference"

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-12
+last_updated: 2026-08-13
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -113,14 +113,44 @@ Gated fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
 4. Do not mark this parity-validated from the x86 result; ROCm needs its own
    green fixture run recorded here with the build configuration used.
 
-Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **owning ROCm item,
-landing.** The shared Block AttnRes plan fixes a quotient/remainder block
+Current host-free compiler validation: **57/57 ROCm backend lit tests pass**
+after adding the Block AttnRes Target-record/generator fixture. Older counts in
+historical evidence entries below describe their named packet, not the current
+suite total.
+
+Cross-backend sync `CI-LIT-DEPS-2026-08-12` — **parity validated; no physical
+follow-up required.** PR 554 made the shared opt-in MLIR lit lane install the
+workflow-owned Python dependency set before `lit`/FileCheck collection. This is
+backend-neutral test infrastructure, changes no compiler/runtime contract, and
+requires no ROCm package or exact-device evidence.
+
+Cross-backend sync `PDE-STENCIL-FOUNDATION-1-2026-08-12` — **owning physical
+follow-up required.** Shared IR now carries explicit finite tap coefficients
+and required scheme/order/per-axis spacing, and unavailable AMD Target symbols
+are truthfully artifact-only. ROCm owns the first typed stencil+halo consumer
+and exact gfx1151 correctness/performance packet. gfx1200/gfx1250 remain
+fail-closed and no CPU evidence transfers.
+
+Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **gfx1151 Phase 5
+physical package retained; selector promotion remains open.** The shared Block AttnRes plan fixes a quotient/remainder block
 partition, epsilon-qualified RMS key semantics, fp32 logit/softmax/accumulator
-policy, and a dependency-free numerical/VJP/softmax-merge oracle. gfx1151 owns
-the first physical follow-up: registered Graph/Schedule/Tile/Target contracts,
-stats-attention plus merge kernels, exact-device correctness, and a benchmark
-packet. This planning/oracle slice adds no native ROCm support claim;
-gfx1200/gfx1250 remain fail-closed.
+policy, and a dependency-free numerical/VJP/softmax-merge oracle. Phase 1 now
+ships public fp32 stats/merge/finalize references, and Phase 2 ships the faithful
+direct/two-phase stdlib recurrence. Phase 3 now owns typed statistics and
+`depth_attn` Graph contracts plus compiler-native VJP/JVP product nodes. Phase 4
+now owns one content-addressed `schedule.depth_attention` →
+`tile.depth_attention_kernel` artifact; the hash binds its static shape,
+epsilon, all-f32 numerical policy, source tile, workgroup, and exact
+statistics/merge recurrences. Phase 5 now lowers that artifact into the typed
+`tessera_rocm.depth_attention` record and a fused gfx1151 statistics-attention,
+associative merge, and finalize kernel. Compiler-owned packaging and the
+runtime descriptor consume the exact artifact without Graph re-entry. Three
+exact-device shapes pass the independent fp32 oracle with maximum absolute
+error `1.96e-5`; the packet records content digests and synchronized WSL
+operation-total samples. Those samples include allocation, module load, copies,
+and synchronization, so the physical package is retained but remains
+selector-ineligible until bare-metal HIP-event or ROCprofiler timing is
+recorded. gfx1200/gfx1250 remain fail-closed. No AVX-512 claim transfers.
 
 Cross-backend sync `MODEL-FUSED-PHYS-1-2026-08-12` — **MiniMax MSA now
 consumes an exact digest-bound package on gfx1151; DeepSeek remains open.** The

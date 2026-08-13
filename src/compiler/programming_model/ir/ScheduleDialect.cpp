@@ -375,6 +375,27 @@ LogicalResult AttentionOp::verify() {
   return success();
 }
 
+LogicalResult DepthAttentionOp::verify() {
+  if (failed(verifyContentAddressedKernel(
+          *this, getSubject(), getScheduled(), getArtifactHash(), getArch(),
+          getStorage(), getAccum(), getWorkgroupSize())))
+    return failure();
+  if (getStorage() != "f32" || getSoftmax() != "f32" ||
+      getAccum() != "f32")
+    return emitOpError("initial physical boundary requires f32 storage, softmax, and accumulation");
+  if (!getEps().isFinite() || getEps().convertToDouble() <= 0.0)
+    return emitOpError("requires finite eps > 0");
+  if (getSourceCount() <= 0 || getRows() <= 0 || getWidth() <= 0 ||
+      getSourceTile() <= 0)
+    return emitOpError("requires positive source_count, rows, width, and source_tile");
+  if (getStatisticsRecurrence() != "rms_key_online_softmax_stats_v1" ||
+      getMergeRecurrence() != "max_shifted_pairwise_merge_v1")
+    return emitOpError("requires canonical depth-attention statistics and merge recurrences");
+  if (!getReassociable())
+    return emitOpError("requires the proven reassociable merge contract");
+  return success();
+}
+
 LogicalResult AttentionBackwardOp::verify() {
   if (getDqSubject().getType() != getDqScheduled().getType() ||
       getDkSubject().getType() != getDkScheduled().getType() ||

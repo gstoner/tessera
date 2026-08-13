@@ -84,7 +84,8 @@ struct DeclareROCMPipelineContractPass
         "matmul_f32", "normalization", "optimizer", "ordering_sort",
         "position_alibi", "position_rope", "quant_dequant_gemm", "quant_fp",
         "quant_int4_pack", "reduction_arg", "rng_philox", "scan",
-        "spectral_dft", "spectral_backward", "matmul", "softmax", "reduction", "paged_kv", "attention",
+        "spectral_dft", "spectral_backward", "matmul", "softmax",
+        "depth_attention", "reduction", "paged_kv", "attention",
         "attention_backward", "moe_dispatch", "scalar_activation",
         "scalar_binary", "scalar_bitwise", "scalar_compare", "scalar_logical",
         "scalar_predicate", "scalar_unary", "scalar_where", "sequence_deltanet",
@@ -249,6 +250,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
                                   " canonical-staging=" + staging));
   } else if (family == "softmax") {
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
+  } else if (family == "depth_attention") {
+    pm.addPass(createGenerateROCMDepthAttentionKernelPass());
   } else if (family == "reduction") {
     pm.addPass(createGenerateROCMReduceKernelPass());
   } else if (family == "paged_kv") {
@@ -401,6 +404,7 @@ void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
   // ROCM-E2E-1/-2 wire only families with typed producers and descriptor
   // consumers. Unrelated standalone generators remain outside this pipeline.
   pm.addPass(createGenerateROCMSoftmaxKernelPass());
+  pm.addPass(createGenerateROCMDepthAttentionKernelPass());
   pm.addPass(createGenerateROCMReduceKernelPass());
   pm.addPass(createGenerateROCMPagedKVReadKernelPass());
   pm.addPass(createLowerKernelABIPass());
@@ -452,6 +456,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMBlockSparseAttnKernelPass(); });
   registerPass([]() { return createGenerateROCMBlockSparseTopKKernelPass(); });
   registerPass([]() { return createGenerateROCMSoftmaxKernelPass(); });
+  registerPass([]() { return createGenerateROCMDepthAttentionKernelPass(); });
   registerPass([]() { return createGenerateROCMNormKernelPass(); });
   registerPass([]() { return createGenerateROCMReduceKernelPass(); });
   registerPass([]() { return createGenerateROCMPagedKVReadKernelPass(); });

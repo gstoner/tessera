@@ -250,6 +250,25 @@ def test_scoped_compiler_plans_defer_global_order_to_integrated_plan() -> None:
     )
 
 
+def test_pde_graph_theory_findings_route_to_existing_authorities() -> None:
+    """The PDE literature review must not become a parallel compiler queue."""
+    pde = (_AUDIT / "compiler/PDE_STENCIL_CAPABILITY_PLAN.md").read_text(
+        encoding="utf-8"
+    )
+    integrated = (_AUDIT / "compiler/INTEGRATED_COMPILER_PLAN.md").read_text(
+        encoding="utf-8"
+    )
+    models = (_AUDIT / "roadmap/MODEL_CLASS_ROADMAP.md").read_text(
+        encoding="utf-8"
+    )
+    assert "W5.2g" in pde and "W5.4" in pde
+    assert "MODEL-ROUTE-CERT-1" in pde
+    assert "Shared `python/tessera/testing` infrastructure" in pde
+    assert "| W5.2g |" in integrated
+    assert "conflict-free collective scheduler" in integrated
+    assert "MODEL-ROUTE-CERT-1" in models
+
+
 # ── lifecycle enforcement ──────────────────────────────────────────────────
 
 

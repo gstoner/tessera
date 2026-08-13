@@ -871,6 +871,19 @@ def Tile_AttentionKernelOp : Tile_Op<"attention_kernel"> {
   let hasVerifier = 1;
 }
 
+// Launch-level BLOCK-ATTNRES-1 depth-attention envelope. Inputs are query,
+// sources, output, source_count, rows, and width.  The two recurrence strings
+// freeze the statistics and associative merge algorithms chosen in Schedule
+// IR, so a target consumer may tune their physical realization but cannot
+// replace the mathematics after the content-addressed boundary.
+def Tile_DepthAttentionKernelOp : Tile_Op<"depth_attention_kernel"> {
+  let summary = "Launch-level typed depth-attention statistics/merge program";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Launch-level scaled dot-product attention VJP envelope. Inputs are dO, Q,
 // K, V, optional dense f32 bias, optional saved f32 row_lse, dQ, dK, dV,
 // followed by B, Hq, Hkv, Sq, Sk, D, and Dv. The deterministic-direct compatibility route assigns one output

@@ -5629,6 +5629,14 @@ def vjp_online_softmax_state(dout, *primals, **_):
     )
 
 
+@_vjp("depth_attn")
+def vjp_depth_attn(dout, query, sources, *, eps=1.0e-6, **_):
+    """Compiler-contract analytic product for Block AttnRes depth attention."""
+    from .._block_attnres_ops import depth_attn_vjp
+
+    return depth_attn_vjp(dout, query, sources, eps=eps)
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Arch-7 (2026-05-22) — family-subpackage import hook.
 #

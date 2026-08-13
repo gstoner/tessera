@@ -159,6 +159,18 @@ def jvp_matmul(primals, tangents, **kwargs):
     return jvp_gemm(primals, tangents, **kwargs)
 
 
+@_jvp("depth_attn")
+def jvp_depth_attn(primals, tangents, *, eps=1.0e-6, **_):
+    """Exact directional product for the canonical depth-attention op."""
+    from .._block_attnres_ops import depth_attn_jvp
+
+    query, sources = primals
+    query_tangent, sources_tangent = tangents
+    return depth_attn_jvp(
+        query, sources, query_tangent, sources_tangent, eps=eps
+    )
+
+
 @_jvp("dequant_matmul")
 def jvp_dequant_matmul(primals, tangents, **kwargs):
     """``y = x @ dequant(w)`` — STE forward-mode: identical to the GEMM JVP on

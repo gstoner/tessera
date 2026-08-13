@@ -52,6 +52,41 @@ static int64_t countTaps(Operation *stencilDef) {
   return taps ? static_cast<int64_t>(taps.size()) : 0;
 }
 
+static LogicalResult validateStencilDefinition(Operation *op) {
+  auto taps = op->getAttrOfType<ArrayAttr>("taps");
+  if (!taps || taps.empty())
+    return op->emitError("stencil.define requires a non-empty 'taps' array");
+  auto coeffs = op->getAttrOfType<ArrayAttr>("coeffs");
+  if (!coeffs || coeffs.empty())
+    return op->emitError(
+        "stencil.define requires explicit non-empty 'coeffs' array");
+  if (taps.size() != coeffs.size())
+    return op->emitError("stencil.define requires one coefficient per tap; got ")
+           << taps.size() << " taps and " << coeffs.size()
+           << " coefficients";
+  int64_t tapRank = -1;
+  for (auto [index, raw] : llvm::enumerate(taps)) {
+    auto tap = dyn_cast<DenseIntElementsAttr>(raw);
+    if (!tap || tap.getType().getRank() != 1 || tap.empty())
+      return op->emitError("stencil.define tap ") << index
+             << " must be a non-empty rank-1 dense integer vector";
+    int64_t rank = tap.getNumElements();
+    if (tapRank < 0)
+      tapRank = rank;
+    else if (rank != tapRank)
+      return op->emitError("stencil.define tap ") << index << " has rank "
+             << rank << ", expected " << tapRank;
+  }
+  for (auto [index, raw] : llvm::enumerate(coeffs)) {
+    auto coeff = dyn_cast<FloatAttr>(raw);
+    if (!coeff || !coeff.getType().isF64() ||
+        !coeff.getValue().isFinite())
+      return op->emitError("stencil.define coefficient ")
+             << index << " must be a finite canonical f64 value";
+  }
+  return success();
+}
+
 static StringRef exchangePolicy(Operation *applyOp) {
   // If the enclosing pipeline.config says "eager" use that; default "lazy".
   // Walk up to see if there's a sibling pipeline.config in the same block.
@@ -86,6 +121,18 @@ struct StencilLowerPass
     ModuleOp mod = getOperation();
     MLIRContext *ctx = mod.getContext();
     OpBuilder builder(ctx);
+
+    bool invalidDefinition = false;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() ==
+              "tessera.neighbors.stencil.define" &&
+          failed(validateStencilDefinition(op)))
+        invalidDefinition = true;
+    });
+    if (invalidDefinition) {
+      signalPassFailure();
+      return;
+    }
 
     mod.walk([&](Operation *op) -> WalkResult {
       if (op->getName().getStringRef() !=

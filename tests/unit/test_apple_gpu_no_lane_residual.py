@@ -80,6 +80,9 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         # Apple-specific physical lowering and exact-device proof land.
         "sparsemax", "entmax15", "soft_top_k", "gumbel_softmax",
         "perturbed_argmax",
+        # Block AttnRes Phase 3 closes shared Graph and AD semantics only.
+        # Apple owns a later Metal consumer and independent device packet.
+        "depth_attn",
         # Low-precision quantize/dequantize + pack/unpack (macOS-27.0 MTLTensor
         # gated; see microscaling.py).
         "dequant_grouped_gemm", "dequant_matmul", "dequantize_fp4",

@@ -80,9 +80,18 @@ def NeighborReadOp : Op<Tessera_Neighbors_Dialect, "neighbor.read", []> {
 
 def StencilDefineOp : Op<Tessera_Neighbors_Dialect, "stencil.define", []> {
   let summary = "Define a stencil taps/coeffs object with BC";
-  let arguments = (ins ArrayAttr:$taps, OptionalAttr<StrAttr>:$bc);
+  let description = [{
+    `taps` and `coeffs` are parallel, non-empty arrays.  Every tap owns one
+    explicit canonical f64 coefficient; implicit unit coefficients are
+    intentionally illegal because they cannot represent derivative or PDE
+    discretizations faithfully.  Coefficients are physical coefficients: a
+    derivative of multi-order alpha must already include
+    `1 / product_d(spacing[d] ** alpha[d])`.
+  }];
+  let arguments = (ins ArrayAttr:$taps, F64ArrayAttr:$coeffs,
+                       OptionalAttr<StrAttr>:$bc);
   let results = (outs AnyType:$stencil);
-  let assemblyFormat = "`taps` `=` $taps (`,` `bc` `=` $bc)? attr-dict";
+  let assemblyFormat = "`taps` `=` $taps `,` `coeffs` `=` $coeffs (`,` `bc` `=` $bc)? attr-dict";
 }
 
 def StencilApplyOp : Op<Tessera_Neighbors_Dialect, "stencil.apply", []> {

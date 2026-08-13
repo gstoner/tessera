@@ -6,17 +6,21 @@
 // candidate runs and F4-gates against a numpy central-difference reference, so
 // the Target-IR symbol the pass names has a real, verified implementation.
 //
-// Convention: unit grid spacing, periodic boundary (the wrap the local
-// `tpp.halo.exchange` denotes).  Central difference of accuracy `order`:
-//   order 2:  d/dx f[i] = (f[i+1] - f[i-1]) / 2
-//   order 4:  d/dx f[i] = (-f[i+2] + 8 f[i+1] - 8 f[i-1] + f[i-2]) / 12
+// Convention: explicit positive grid spacing, periodic boundary (the wrap the
+// local `tpp.halo.exchange` denotes).  Central difference of accuracy `order`:
+//   order 2:  d/dx f[i] = (f[i+1] - f[i-1]) / (2 h)
+//   order 4:  d/dx f[i] = (-f[i+2] + 8 f[i+1] - 8 f[i-1] + f[i-2]) / (12 h)
 // which matches, elementwise, the roll-based numpy reference in
 // python/tessera/compiler/emit/tpp_candidates.py.
 //
 //===----------------------------------------------------------------------===//
 
 extern "C" void ts_stencil_grad_cpu(const float *in, float *out, int nx,
-                                    int ny, int axis, int order) {
+                                    int ny, int axis, int order,
+                                    float spacing) {
+  if (!in || !out || nx <= 0 || ny <= 0 || axis < 0 || axis > 1 ||
+      spacing <= 0.0f)
+    return;
   auto idx = [ny](int i, int j) { return i * ny + j; };
   int n = (axis == 0) ? nx : ny; // extent along the differentiated axis
   for (int i = 0; i < nx; ++i) {
@@ -30,9 +34,10 @@ extern "C" void ts_stencil_grad_cpu(const float *in, float *out, int nx,
       };
       float g;
       if (order >= 4)
-        g = (-at(2) + 8.0f * at(1) - 8.0f * at(-1) + at(-2)) / 12.0f;
+        g = (-at(2) + 8.0f * at(1) - 8.0f * at(-1) + at(-2)) /
+            (12.0f * spacing);
       else
-        g = (at(1) - at(-1)) * 0.5f;
+        g = (at(1) - at(-1)) * (0.5f / spacing);
       out[idx(i, j)] = g;
     }
   }

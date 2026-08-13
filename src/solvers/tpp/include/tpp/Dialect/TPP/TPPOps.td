@@ -15,15 +15,26 @@ def TPP_BCEnforceOp : Op<TPP_Dialect, "bc.enforce", [Pure]> {
 }
 
 def TPP_GradOp : Op<TPP_Dialect, "grad", [Pure]> {
-  let summary = "Gradient of a field";
-  let arguments = (ins AnyType:$x);
+  let summary = "Gradient of a field with explicit discretization semantics";
+  let description = [{
+    `scheme`, `order`, and per-axis positive `spacing` are semantic keys, not
+    tuning hints. `-tpp-legalize-space-time` rejects their absence rather than
+    manufacturing a centered unit-grid discretization.
+  }];
+  let arguments = (ins AnyType:$x, OptionalAttr<StrAttr>:$scheme,
+                       OptionalAttr<I64Attr>:$order,
+                       OptionalAttr<F64ArrayAttr>:$spacing,
+                       OptionalAttr<I64Attr>:$axis);
   let results   = (outs AnyType:$y);
   let assemblyFormat = "$x attr-dict `:` type($x) `->` type($y)";
 }
 
 def TPP_StencilApplyOp : Op<TPP_Dialect, "stencil.apply", [Pure]> {
-  let summary = "Apply a stencil kernel with a given radius/order";
-  let arguments = (ins AnyType:$x, AnyType:$kernel);
+  let summary = "Apply a stencil kernel with explicit discretization semantics";
+  let arguments = (ins AnyType:$x, AnyType:$kernel,
+                       OptionalAttr<StrAttr>:$scheme,
+                       OptionalAttr<I64Attr>:$order,
+                       OptionalAttr<F64ArrayAttr>:$spacing);
   let results   = (outs AnyType:$y);
   let assemblyFormat = "$x `,` $kernel attr-dict `:` type($x) `,` type($kernel) `->` type($y)";
 }

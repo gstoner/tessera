@@ -69,6 +69,7 @@ func.func @t(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {{
   %s = "tessera.neighbors.stencil.define"() {{
       taps = [dense<[0, 0]> : tensor<2xi64>,
               dense<[1, 0]> : tensor<2xi64>],
+      coeffs = [1.0 : f64, 1.0 : f64],
       bc = "{escaped}"
   }} : () -> index
   %h = "tessera.neighbors.halo.region"(%arg0) {{ halo.width = [1, 1] }} : (tensor<?x?xf32>) -> tensor<?x?xf32>

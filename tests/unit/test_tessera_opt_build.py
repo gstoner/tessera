@@ -128,7 +128,7 @@ def test_tpp_space_time_pipeline_runs(tmp_path: Path) -> None:
     src.write_text(
         '''
         func.func @halo_example(%x: tensor<32x32xf32>) -> tensor<32x32xf32> {
-          %y = "tpp.grad"(%x) : (tensor<32x32xf32>) -> tensor<32x32xf32>
+          %y = "tpp.grad"(%x) {scheme = "central", order = 2 : i64, spacing = [1.0 : f64, 1.0 : f64]} : (tensor<32x32xf32>) -> tensor<32x32xf32>
           return %y : tensor<32x32xf32>
         }
         ''',
@@ -335,8 +335,8 @@ def test_halo_infer_pass_annotates_stencil_apply(tmp_path: Path) -> None:
           %st = "tessera.neighbors.stencil.define"() {
               taps = [dense<[0, 0]> : tensor<2xi64>,
                       dense<[1, 0]> : tensor<2xi64>,
-                      dense<[0, 1]> : tensor<2xi64>]
-          } : () -> index
+                      dense<[0, 1]> : tensor<2xi64>], coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64]
+              } : () -> index
           %o = "tessera.neighbors.stencil.apply"(%st, %arg0, %topo)
               : (index, tensor<?x?xf32>, !tessera.neighbors.topology)
                 -> tensor<?x?xf32>

@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-12
+last_updated: 2026-08-13
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -36,11 +36,26 @@ coverage looked healthier than its siblings' for the last ten days. Read that
 as "the others were dark", not as Apple parity headroom — the Apple GPU op
 envelope is still runtime-delivered (see the `apple_gpu_runtime.mm` note in
 `CLAUDE.md`), and nothing here changes that.
+Cross-backend sync `CI-LIT-DEPS-2026-08-12` — **parity validated; no physical
+follow-up required.** PR 554 made the shared opt-in MLIR lit lane install the
+workflow-owned Python dependency set before `lit`/FileCheck collection. This is
+backend-neutral test infrastructure, changes no compiler/runtime contract, and
+requires no Apple package or device evidence.
+
+Cross-backend sync `PDE-STENCIL-FOUNDATION-1-2026-08-12` — **shared semantic
+parity validated; Metal physical follow-up required.** Neighbors now requires
+explicit tap coefficients, and TPP requires scheme/order/per-axis spacing.
+Unavailable Target symbols are artifact-only. This adds no MSL stencil/halo
+consumer or Mac packet; Apple must bind the contract to an architecture-owned
+package before any execution claim.
 
 Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
 The shared Block AttnRes plan establishes portable balanced-partition,
 epsilon-qualified numeric, VJP, and softmax-merge oracle contracts. This PR
-adds no MSL package or Mac evidence. Apple must later bind those contracts to
+adds Phase-1 stats/merge/finalize references, the Phase-2 stdlib recurrence,
+Phase-3 typed Graph/VJP/JVP contracts, and the Phase-4 content-addressed
+Schedule→Tile artifact. It adds no MSL package or Mac evidence. Apple must
+later bind those contracts to
 its own stats-attention/merge physical consumer and independent correctness
 packet; no gfx1151 result transfers.
 

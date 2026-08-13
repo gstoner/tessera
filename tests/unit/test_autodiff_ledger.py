@@ -52,7 +52,7 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
             "k_l_divergence_loss", "j_s_divergence_loss",
             "momentum", "nesterov", "adam", "adam_w",
             "fft", "ifft", "rfft", "irfft", "dct", "stft", "istft",
-            "spectral_filter", "spectral_conv", "stop_gradient",
+            "spectral_filter", "spectral_conv", "stop_gradient", "depth_attn",
     }, (
         f"native adjoint set drifted: {sorted(native)} — a buildAdjoint that "
         "emits a CustomAdjointCallOp is a Python round-trip, not native"
@@ -71,7 +71,7 @@ def test_native_tangents_are_compiler_grounded() -> None:
         "fft", "ifft", "rfft", "irfft", "dct", "dropout", "layer_norm",
         "rmsnorm", "stft", "istft", "spectral_filter", "spectral_conv",
         "es_low_rank_correction", "all_reduce", "reduce_scatter",
-        "all_gather", "all_to_all",
+        "all_gather", "all_to_all", "depth_attn",
     }
     assert autodiff_request.COMPILER_FORWARD_FAMILIES == native
 

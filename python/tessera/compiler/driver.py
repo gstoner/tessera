@@ -488,13 +488,26 @@ def compile_graph_module(
     scheduled_matmul_artifact = None
     scheduled_kernel_artifact = None
     scheduled_attention_artifact = None
+    scheduled_depth_attention_artifact = None
     if bool(options.get("package_native", False)) and target_kind in {
         "x86",
         "rocm_gfx1151",
     }:
         from . import scheduled_matmul
 
-        if scheduled_matmul.supports_scheduled_matmul(module, target=target_kind):
+        from . import scheduled_depth_attention
+
+        if target_kind == "rocm_gfx1151" and scheduled_depth_attention.supports_scheduled_depth_attention(
+            module, target=target_kind
+        ):
+            scheduled_depth_attention_artifact = (
+                scheduled_depth_attention.lower_scheduled_depth_attention(
+                    module,
+                    target=target_kind,
+                )
+            )
+            graph_text = scheduled_depth_attention_artifact.graph_ir
+        elif scheduled_matmul.supports_scheduled_matmul(module, target=target_kind):
             scheduled_matmul_artifact = scheduled_matmul.lower_scheduled_matmul(
                 module,
                 target=target_kind,
@@ -580,6 +593,7 @@ def compile_graph_module(
             if scheduled_matmul_artifact is not None
             or scheduled_kernel_artifact is not None
             or scheduled_attention_artifact is not None
+            or scheduled_depth_attention_artifact is not None
             else "graph-ir-renderer"
         ),
         representation="mlir",
@@ -728,7 +742,21 @@ def compile_graph_module(
             (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
         )
         package_start = time.perf_counter()
-        if scheduled_matmul_artifact is not None:
+        if scheduled_depth_attention_artifact is not None:
+            package_kind = "depth_attention"
+            rocm_package = rocm_native.package_scheduled_depth_attention(
+                scheduled_depth_attention_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_depth_attention_artifact.schedule_ir,
+                rocm_package.tile_ir,
+                target_kind,
+                rocm_package.target_ir,
+                rocm_package.backend_ir,
+            )
+        elif scheduled_matmul_artifact is not None:
             package_kind = "matmul"
             rocm_package = rocm_native.package_scheduled_matmul(
                 scheduled_matmul_artifact,

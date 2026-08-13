@@ -1844,6 +1844,47 @@ LogicalResult AttentionKernelOp::verify() {
   return success();
 }
 
+LogicalResult DepthAttentionKernelOp::verify() {
+  if (getInputs().size() != 6)
+    return emitOpError(
+        "expects query, sources, output, source_count, rows, and width operands");
+  for (Value pointer : getInputs().take_front(3))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("query, sources, and output must be !llvm.ptr");
+  for (Value extent : getInputs().drop_front(3))
+    if (!extent.getType().isInteger(64))
+      return emitOpError("source_count, rows, and width must be i64");
+  auto requiredString = [&](StringRef name) -> StringRef {
+    auto attr = getOperation()->getAttrOfType<StringAttr>(name);
+    return attr ? attr.getValue() : StringRef();
+  };
+  if (requiredString("storage") != "f32" ||
+      requiredString("softmax") != "f32" ||
+      requiredString("accum") != "f32")
+    return emitOpError("initial physical boundary requires all-f32 numeric policy");
+  if (requiredString("arch") != "gfx1151" &&
+      requiredString("arch") != "zen5-avx512")
+    return emitOpError("requires an exact owned architecture profile");
+  auto eps = getOperation()->getAttrOfType<FloatAttr>("eps");
+  auto sourceTile = getOperation()->getAttrOfType<IntegerAttr>("source_tile");
+  auto workgroup =
+      getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
+  auto hash = getOperation()->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  auto reassociable =
+      getOperation()->getAttrOfType<BoolAttr>("reassociable");
+  if (!eps || !eps.getValue().isFinite() || eps.getValueAsDouble() <= 0.0 ||
+      !sourceTile || sourceTile.getInt() <= 0 || !workgroup ||
+      workgroup.getInt() <= 0 || !hash || hash.getValue().size() != 64 ||
+      !reassociable || !reassociable.getValue())
+    return emitOpError("requires complete epsilon, tiling, reassociation, and schedule identity");
+  if (requiredString("statistics_recurrence") !=
+          "rms_key_online_softmax_stats_v1" ||
+      requiredString("merge_recurrence") !=
+          "max_shifted_pairwise_merge_v1")
+    return emitOpError("requires canonical depth-attention recurrences");
+  return success();
+}
+
 LogicalResult AttentionBackwardKernelOp::verify() {
   auto bias = getOperation()->getAttrOfType<BoolAttr>("bias");
   bool hasBias = bias && bias.getValue();

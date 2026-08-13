@@ -93,6 +93,13 @@ Execution order:
 3. **MODEL-DIST-E2E-1:** execute full-scale expert routing and model shards over
    native transport, then collect correctness, resource, and selector-grade
    performance packets. Artifact construction and mock meshes do not close it.
+4. **MODEL-ROUTE-CERT-1:** replace opaque MoE capacity drops with a
+   Hall/König defect certificate that names the violating token set, reachable
+   expert set, and exact deficit. Preserve the current greedy router where each
+   token-slot has only one candidate—the max-flow oracle proves no placement
+   gain there—and use the certificate/oracle to admit overflow redirect only
+   when candidate sets provide a real choice. The PDE review supplies the
+   graph-theory oracle; this roadmap owns production routing semantics.
 
 | ID | Status | Area | Open item / closure evidence | Close condition / acceptance |
 |----|--------|------|------------------------------|------------------------------|
@@ -101,6 +108,7 @@ Execution order:
 | O11 | Open | Quantized model-weight runtime bridge | INT4/FP8 packed dequant kernels are landed, but some model-family full-weight runtime paths still use synthetic/reference weights. | Frontier model configs can load quantized weight fixtures into runtime-compatible typed weights and hit the fused dequant path in model-level tests. |
 | O12 | Open | Quantized packed-byte fused-kernel memory path | The fused dequant-GEMM kernel exists, but native packed-byte INT4 nibble / FP8 operands still need the full no-materialization memory path. | Fused dequant kernels consume packed-byte operands directly, preserve separate scale operands, avoid full-weight materialization, and pass parity/perf ratchets. |
 | O13 | Open | Distributed/full-scale execution | Full-scale execution, distributed MoE, and NVIDIA FP8/sparse performance remain hardware-gated. | Hardware-backed CI or reproducible artifact gate covers full-scale launch metadata, distributed routing, and target-specific performance/regression thresholds. |
+| O14 | Open | MoE routing defect certificates | Capacity failure currently lacks a production Hall/König witness, and overflow redirect has no certified candidate-set contract. | Routing emits a stable registered diagnostic containing the violating and reachable sets plus exact deficit; exhaustive/max-flow test oracles prove the certificate and show zero claimed gain for single-candidate routing. |
 
 The generated 43 sharding gaps, four reference-only Target rows, 123 missing
 direct-test proofs, and 229 benchmark gaps are triage inventories. They identify

@@ -75,6 +75,7 @@ dct,spectral,yes,native,native,,cpu,,,,,,python_reference=python-unit-registry;i
 ddpm_noise_pred_loss,loss,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 deepseek_sparse_attention,attention,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 denoising_score_matching_loss,loss,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
+depth_attn,attention,yes,native,native,,,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core,native compiler adjoint,,
 depthwise_conv1d,stencil,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 dequant_matmul,quantization,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 dequantize_fp4,quantize,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,

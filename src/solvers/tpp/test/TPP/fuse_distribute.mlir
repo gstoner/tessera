@@ -6,8 +6,8 @@
 
 module attributes {tessera.mesh.axes = ["x", "y"]} {
   func.func @grads(%h: tensor<64x64xf32>) -> (tensor<64x64xf32>, tensor<64x64xf32>) {
-    %hx = "tpp.grad"(%h) { axis = 0 : i64 } : (tensor<64x64xf32>) -> tensor<64x64xf32>
-    %hy = "tpp.grad"(%h) { axis = 1 : i64 } : (tensor<64x64xf32>) -> tensor<64x64xf32>
+    %hx = "tpp.grad"(%h) {axis = 0 : i64, scheme = "central", order = 2 : i64, spacing = [1.0 : f64, 1.0 : f64]} : (tensor<64x64xf32>) -> tensor<64x64xf32>
+    %hy = "tpp.grad"(%h) {axis = 1 : i64, scheme = "central", order = 2 : i64, spacing = [1.0 : f64, 1.0 : f64]} : (tensor<64x64xf32>) -> tensor<64x64xf32>
     return %hx, %hy : tensor<64x64xf32>, tensor<64x64xf32>
   }
 }

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-12
+last_updated: 2026-08-13
 audit_role: plan
 plan_state: landing
 ---
@@ -319,8 +319,8 @@ fusion. Per-device state: `(N+1)·(T/P)·d`.
 | Op | Signature | Role |
 |---|---|---|
 | `tessera.softmax_merge` | `(o₁,m₁,ℓ₁,o₂,m₂,ℓ₂) → (o,m,ℓ)`, elementwise | **The** new primitive. Named consumers (Decision #29): two-phase schedule, sharded prefill, ring/context-parallel attention, split-KV decode. Carries the associative+commutative trait (= the `reassociable` facet as an op trait). |
-| `tessera.flash_attn_stats` | `flash_attn` + results `(m, ℓ)` (equiv. `lse = m + log ℓ`) | An attr `return_stats` on `FlashAttnOp` growing its results. FA-4 Tile IR already carries LSE as a backward checkpoint (`attn.lse.save/load`; see `LSE_CHECKPOINT_CONTRACT.md`) — this promotes it to a first-class forward value. |
-| `tessera.depth_attn` | `(V[m,B,T,d], w[d]) → h[B,T,d]`, attr `sources: m` (symbolic, `bucket` policy) | Thin op with a **canonical decomposition** (A1). The decomposition is the declared oracle with a differential test; any fused kernel is an arbiter candidate (Decision #31). |
+| `tessera.attn_with_stats` | `(w[d], V[m,...,d]) → (o[...,d], m[...], ℓ[...])` | First-class max-shifted forward state. FA-4 LSE remains a separate token-attention checkpoint contract; depth attention carries both `m` and `ℓ` so arbitrary partitions can merge without losing the exact state identity. |
+| `tessera.depth_attn` | `(w[d], V[m,...,d]) → h[...,d]` | Thin op with a **canonical decomposition** (A1). Static all-f32 shapes now cross the exact Schedule→Tile boundary; dynamic/bucketed and reduced-storage variants remain explicit follow-ups. |
 
 Contracts: `numeric_policy = {storage: bf16, softmax: fp32, accum: fp32}`
 carried as an attribute and boundary-verified (Decision #32 — survive or record
@@ -368,9 +368,21 @@ inside existing seams:
    residual-mechanism I/O vs the `(N/S+5)d` model; `op = "depth_attn"`,
    `backend = "rocm"`.
 
-### III.4 Schedule IR (after the ROCm lane executes)
+### III.4 Schedule IR and the physical boundary
 
-1. **Query hoisting (Phase 1).** `depth_attn`'s query is a parameter ⇒
+The first boundary is landed before target kernels: one
+`schedule.depth_attention` consumes the retained Graph result and one
+`tile.depth_attention_kernel` owns the launch ABI. The content digest covers
+architecture, source count, flattened row count, width, epsilon, all three
+numeric-policy tiers, source tile, workgroup size, the statistics recurrence,
+the merge recurrence, and reassociability. Schedule→Tile recomputes that digest
+from the retained Graph operation and fails on mutation. gfx1200/gfx1250 and
+reduced storage remain fail-closed; the artifact is not a Target execution
+claim.
+
+The later scheduling transformations remain:
+
+1. **Query hoisting.** `depth_attn`'s query is a parameter ⇒
    loop-invariant w.r.t. the sub-layer loop. A schedule transform batches the
    S per-layer ops of a block into one `flash_attn_stats` + per-layer
    `softmax_merge` (A4). Legality is *derived* from the reassociable trait
@@ -417,14 +429,22 @@ verification reuses the same reference functions.
 | Phase | Deliverable | Where it runs |
 |---|---|---|
 | 0 *(this PR)* | Model doc + numpy contract tests (VJP, merge lemma, P2–P4) | any box |
-| 1 | `softmax_merge` + numpy `ATTN_WITH_STATS` reference in `tessera.ops`; metamorphic tests | any box |
-| 2 | `stdlib/attn_res.py` (A1/A2/A4), zero-init, GAP-2/3 semantics + fidelity tests → **first faithful public Block AttnRes** | any box |
-| 3 | `depth_attn` Graph IR op + registered VJP + catalog/coverage rows + differential autodiff test | any box |
-| 4 | ROCm stats-attention + merge kernels; Target IR fixtures (`check-tessera-rocm`); F4 hardware verify; benchmark row | **Strix Halo** |
-| 5 | Schedule transforms (hoisting, liveness annotation + negative fixture); Apple parity; pipeline/TP integration | Strix Halo / Mac |
+| 1 **(landed 2026-08-12)** | `softmax_merge` + numpy `ATTN_WITH_STATS` reference in `tessera.ops`; metamorphic tests | any box |
+| 2 **(landed 2026-08-12)** | `stdlib/attn_res.py` (A1/A2/A4), zero-init, GAP-2/3 semantics + fidelity tests → **first faithful public Block AttnRes** | any box |
+| 3 **(landed 2026-08-13)** | Typed `attn_with_stats`/`softmax_merge`/`softmax_finalize`/`depth_attn` Graph IR contracts; compiler-owned typed VJP/JVP products; catalog/coverage rows; direct decomposition-versus-analytic product tests | any box |
+| 4 **(landed 2026-08-13)** | Content-addressed `schedule.depth_attention` → `tile.depth_attention_kernel`; retained Graph lineage; digest/policy tamper rejection; exact x86/gfx1151 profiles with gfx1200/gfx1250 fail-closed | any compiler host |
+| 5 **(landed 2026-08-13)** | Typed `tessera_rocm.depth_attention` record; gfx1151 statistics-attention plus associative merge/finalize kernel; content-addressed HSACO package/runtime consumption; exact-device correctness and WSL operation-total timing packet | **Strix Halo** |
+| 6 | Independent AVX-512 package and clean Zen 5 packet; later Apple/NVIDIA packages | architecture-owned hosts |
+| 7 | Query hoisting, liveness annotation + negative fixture, and pipeline/TP integration | architecture-owned hosts |
 
-Phases 0–3 are pure Python and land the entire mathematical contract; 4 makes
-it execute on gfx1151; 5 makes it scale.
+Phases 0–4 establish the shared mathematical and compiler-artifact contract.
+Phase 5 is the first physical execution claim. Its committed packet covers
+three shapes through the exact descriptor/HSACO path and retains the physical
+package on numerical evidence. The timings include allocation, module load,
+copies, and synchronization under WSL and are therefore regression evidence,
+not selector-grade promotion evidence; calibrated HIP-event or ROCprofiler
+activity timing on bare-metal gfx1151 remains open. Later phases cannot inherit
+this schedule or evidence on another architecture.
 
 ---
 

@@ -5,8 +5,8 @@
 // could not be constructed or lit-tested independently of that driver (W0.6).
 //
 // See PMPasses.h for the maturity contract: the verifier is general, while the
-// two lowering passes are real only for the bounded E2E-REAL-2 static-matmul
-// contract and fail closed outside it.
+// two lowering passes are real only for explicitly registered bounded family
+// contracts and fail closed outside them.
 //
 //===----------------------------------------------------------------------===//
 
@@ -916,6 +916,99 @@ struct AttentionSchedule {
   StringRef backwardLseSelection;
 };
 
+struct DepthAttentionSchedule {
+  StringRef target;
+  StringRef arch;
+  StringRef storage;
+  StringRef softmax = "f32";
+  StringRef accum = "f32";
+  int64_t sourceCount;
+  int64_t rows;
+  int64_t width;
+  double eps;
+  int64_t sourceTile;
+  int64_t workgroupSize;
+  StringRef statisticsRecurrence = "rms_key_online_softmax_stats_v1";
+  StringRef mergeRecurrence = "max_shifted_pairwise_merge_v1";
+  bool reassociable = true;
+};
+
+static FailureOr<DepthAttentionSchedule>
+getDepthAttentionSchedule(Operation *op) {
+  ModuleOp module = op->getParentOfType<ModuleOp>();
+  if (!module || op->getName().getStringRef() != "tessera.depth_attn" ||
+      op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return failure();
+  auto query = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto sources = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+  auto output = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!query || !sources || !output || !query.hasStaticShape() ||
+      !sources.hasStaticShape() || !output.hasStaticShape() ||
+      query.getRank() != 1 || sources.getRank() < 2 ||
+      output.getRank() != sources.getRank() - 1 ||
+      query.getElementType() != sources.getElementType() ||
+      output.getElementType() != sources.getElementType() ||
+      query.getDimSize(0) != sources.getShape().back() ||
+      output.getShape() != sources.getShape().drop_front())
+    return failure();
+
+  DepthAttentionSchedule schedule;
+  schedule.target = moduleString(module, "tessera.target", "target");
+  schedule.arch = moduleString(module, "tessera.arch", "arch");
+  bool x86 = schedule.target == "x86" &&
+             (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
+  bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
+  if (!x86 && !rocm)
+    return failure();
+  schedule.storage = storageName(sources.getElementType());
+  // Phase 4 freezes a portable all-f32 artifact. Reduced storage becomes a
+  // separate evidence-backed contract rather than an implicit target choice.
+  if (schedule.storage != "f32")
+    return failure();
+  auto eps = op->getAttrOfType<FloatAttr>("eps");
+  auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+  if (!eps || !eps.getValue().isFinite() || eps.getValueAsDouble() <= 0.0 ||
+      !policy)
+    return failure();
+  auto policyString = [&](StringRef name) -> StringRef {
+    auto value = dyn_cast_or_null<StringAttr>(policy.get(name));
+    return value ? value.getValue() : StringRef();
+  };
+  if (policyString("storage") != "fp32" ||
+      policyString("softmax") != "fp32" ||
+      policyString("accum") != "fp32")
+    return failure();
+  schedule.sourceCount = sources.getDimSize(0);
+  schedule.width = sources.getShape().back();
+  schedule.rows = 1;
+  for (int64_t dim : sources.getShape().drop_front().drop_back())
+    schedule.rows *= dim;
+  if (schedule.sourceCount <= 0 || schedule.rows <= 0 || schedule.width <= 0)
+    return failure();
+  schedule.eps = eps.getValueAsDouble();
+  schedule.sourceTile = std::min<int64_t>(schedule.sourceCount, 16);
+  schedule.workgroupSize = rocm ? 256 : 1;
+  return schedule;
+}
+
+static std::string
+depthAttentionScheduleDigest(const DepthAttentionSchedule &schedule) {
+  std::string payload =
+      (Twine("schema=tessera.depth_attention.schedule.v1;target=") +
+       schedule.target + ";arch=" + schedule.arch + ";sources=" +
+       Twine(schedule.sourceCount) + ";rows=" + Twine(schedule.rows) +
+       ";width=" + Twine(schedule.width) + ";storage=" + schedule.storage +
+       ";softmax=" + schedule.softmax + ";accum=" + schedule.accum +
+       ";eps=" + std::to_string(schedule.eps) + ";source_tile=" +
+       Twine(schedule.sourceTile) + ";workgroup=" +
+       Twine(schedule.workgroupSize) + ";statistics=" +
+       schedule.statisticsRecurrence + ";merge=" + schedule.mergeRecurrence +
+       ";reassociable=1")
+          .str();
+  return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(payload)),
+                     /*LowerCase=*/true);
+}
+
 static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   ModuleOp module = op->getParentOfType<ModuleOp>();
   if (!module || op->getName().getStringRef() != "tessera.flash_attn" ||
@@ -1708,6 +1801,75 @@ struct GraphToSchedulePass
       builder.create(artifactState);
     }
 
+    SmallVector<Operation *> depthAttentions;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tessera.depth_attn")
+        depthAttentions.push_back(op);
+    });
+    for (Operation *op : depthAttentions) {
+      FailureOr<DepthAttentionSchedule> selected =
+          getDepthAttentionSchedule(op);
+      if (failed(selected)) {
+        op->emitError(
+            "BLOCK-ATTNRES-1 Graph->Schedule requires a static all-f32 "
+            "depth-attention contract on gfx1151 or Zen 5 AVX-512");
+        return signalPassFailure();
+      }
+      std::string digest = depthAttentionScheduleDigest(*selected);
+      op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
+      builder.setInsertionPointAfter(op);
+      auto scheduledOp = builder.create<schedule::DepthAttentionOp>(
+          op->getLoc(), op->getResult(0).getType(), op->getResult(0),
+          builder.getStringAttr(digest), builder.getStringAttr(selected->arch),
+          builder.getStringAttr(selected->storage),
+          builder.getStringAttr(selected->softmax),
+          builder.getStringAttr(selected->accum),
+          builder.getF64FloatAttr(selected->eps),
+          builder.getI64IntegerAttr(selected->sourceCount),
+          builder.getI64IntegerAttr(selected->rows),
+          builder.getI64IntegerAttr(selected->width),
+          builder.getI64IntegerAttr(selected->sourceTile),
+          builder.getI64IntegerAttr(selected->workgroupSize),
+          builder.getStringAttr(selected->statisticsRecurrence),
+          builder.getStringAttr(selected->mergeRecurrence),
+          builder.getBoolAttr(selected->reassociable));
+      Operation *scheduled = scheduledOp.getOperation();
+      for (OpOperand &use :
+           llvm::make_early_inc_range(op->getResult(0).getUses()))
+        if (use.getOwner() != scheduled)
+          use.set(scheduled->getResult(0));
+
+      builder.setInsertionPointAfter(scheduled);
+      OperationState artifactState(op->getLoc(), "schedule.artifact");
+      artifactState.addAttribute("hash", builder.getStringAttr(digest));
+      artifactState.addAttribute("arch", builder.getStringAttr(selected->arch));
+      artifactState.addAttribute(
+          "shape_key",
+          builder.getStringAttr(
+              (Twine("family=depth_attention;sources=") +
+               Twine(selected->sourceCount) + ";rows=" +
+               Twine(selected->rows) + ";width=" + Twine(selected->width) +
+               ";storage=" + selected->storage)
+                  .str()));
+      artifactState.addAttribute(
+          "tile", builder.getDictionaryAttr({
+                      builder.getNamedAttr(
+                          "source_tile",
+                          builder.getI64IntegerAttr(selected->sourceTile)),
+                      builder.getNamedAttr(
+                          "workgroup_size",
+                          builder.getI64IntegerAttr(selected->workgroupSize)),
+                  }));
+      artifactState.addAttribute(
+          "numeric_policy",
+          builder.getStringAttr(
+              (Twine(selected->storage) + "->" + selected->softmax + "->" +
+               selected->accum + ";eps=" + std::to_string(selected->eps) +
+               ";merge=" + selected->mergeRecurrence)
+                  .str()));
+      builder.create(artifactState);
+    }
+
     SmallVector<Operation *> attentions;
     mod.walk([&](Operation *op) {
       if (op->getName().getStringRef() == "tessera.flash_attn")
@@ -1906,8 +2068,8 @@ struct ScheduleToTilePass
 
   StringRef getArgument() const override { return "tessera-schedule-to-tile"; }
   StringRef getDescription() const override {
-    return "Consume bounded schedule.matmul plus its Graph producer and emit "
-           "one six-operand launch-level tile.matmul_kernel";
+    return "Revalidate registered content-addressed Schedule decisions against "
+           "retained Graph producers and emit launch-level Tile carriers";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
@@ -2628,6 +2790,133 @@ struct ScheduleToTilePass
       scheduled->erase();
       if (graph->use_empty()) graph->erase();
       for (schedule::ArtifactOp artifact : matchingArtifacts) artifact.erase();
+    }
+
+    SmallVector<schedule::DepthAttentionOp> scheduledDepthAttentions;
+    mod.walk([&](schedule::DepthAttentionOp op) {
+      scheduledDepthAttentions.push_back(op);
+    });
+    for (schedule::DepthAttentionOp scheduled : scheduledDepthAttentions) {
+      Operation *graph = scheduled.getSubject().getDefiningOp();
+      if (!graph || graph->getName().getStringRef() != "tessera.depth_attn") {
+        scheduled.emitError(
+            "BLOCK-ATTNRES-1 requires the retained Graph depth-attention result");
+        return signalPassFailure();
+      }
+      FailureOr<DepthAttentionSchedule> selected =
+          getDepthAttentionSchedule(graph);
+      if (failed(selected) || depthAttentionScheduleDigest(*selected) !=
+                                  scheduled.getArtifactHash()) {
+        scheduled.emitError(
+            "scheduled decision does not match the retained Graph depth-attention contract");
+        return signalPassFailure();
+      }
+      bool altered =
+          scheduled.getArch() != selected->arch ||
+          scheduled.getStorage() != selected->storage ||
+          scheduled.getSoftmax() != selected->softmax ||
+          scheduled.getAccum() != selected->accum ||
+          scheduled.getEps().convertToDouble() != selected->eps ||
+          static_cast<int64_t>(scheduled.getSourceCount()) !=
+              selected->sourceCount ||
+          static_cast<int64_t>(scheduled.getRows()) != selected->rows ||
+          static_cast<int64_t>(scheduled.getWidth()) != selected->width ||
+          static_cast<int64_t>(scheduled.getSourceTile()) !=
+              selected->sourceTile ||
+          static_cast<int64_t>(scheduled.getWorkgroupSize()) !=
+              selected->workgroupSize ||
+          scheduled.getStatisticsRecurrence() !=
+              selected->statisticsRecurrence ||
+          scheduled.getMergeRecurrence() != selected->mergeRecurrence ||
+          scheduled.getReassociable() != selected->reassociable;
+      if (altered) {
+        scheduled.emitError(
+            "scheduled depth-attention policy was altered after hashing");
+        return signalPassFailure();
+      }
+      auto graphDigest =
+          graph->getAttrOfType<StringAttr>("schedule.artifact_hash");
+      SmallVector<schedule::ArtifactOp> matchingArtifacts;
+      mod.walk([&](schedule::ArtifactOp artifact) {
+        if (artifact.getHash() == scheduled.getArtifactHash())
+          matchingArtifacts.push_back(artifact);
+      });
+      if (!graphDigest ||
+          graphDigest.getValue() != scheduled.getArtifactHash() ||
+          matchingArtifacts.size() != 1) {
+        scheduled.emitError(
+            "requires exactly one matching Graph hash and schedule.artifact");
+        return signalPassFailure();
+      }
+
+      Location loc = scheduled.getLoc();
+      builder.setInsertionPoint(scheduled);
+      auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      auto toPointer = [&](Value tensor) -> Value {
+        auto type = cast<RankedTensorType>(tensor.getType());
+        auto memrefType = MemRefType::get(type.getShape(), type.getElementType());
+        Value buffer = builder.create<bufferization::ToBufferOp>(
+            loc, memrefType, tensor);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer = builder.create<arith::IndexCastOp>(
+            loc, builder.getI64Type(), index);
+        return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      };
+      SmallVector<Value> operands = {toPointer(graph->getOperand(0)),
+                                     toPointer(graph->getOperand(1))};
+      auto outputType = cast<RankedTensorType>(graph->getResult(0).getType());
+      auto outputMemref =
+          MemRefType::get(outputType.getShape(), outputType.getElementType());
+      Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      Value outputIndex =
+          builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      Value outputInteger = builder.create<arith::IndexCastOp>(
+          loc, builder.getI64Type(), outputIndex);
+      operands.push_back(
+          builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger));
+      for (int64_t extent :
+           {selected->sourceCount, selected->rows, selected->width})
+        operands.push_back(
+            builder.create<arith::ConstantIntOp>(loc, extent, 64));
+
+      OperationState kernelState(loc, "tile.depth_attention_kernel");
+      kernelState.addOperands(operands);
+      kernelState.addAttribute("storage",
+                               builder.getStringAttr(selected->storage));
+      kernelState.addAttribute("arch", builder.getStringAttr(selected->arch));
+      kernelState.addAttribute("softmax",
+                               builder.getStringAttr(selected->softmax));
+      kernelState.addAttribute("accum",
+                               builder.getStringAttr(selected->accum));
+      kernelState.addAttribute("eps",
+                               builder.getF64FloatAttr(selected->eps));
+      kernelState.addAttribute(
+          "source_tile", builder.getI64IntegerAttr(selected->sourceTile));
+      kernelState.addAttribute(
+          "tessera.workgroup_size",
+          builder.getI64IntegerAttr(selected->workgroupSize));
+      kernelState.addAttribute(
+          "statistics_recurrence",
+          builder.getStringAttr(selected->statisticsRecurrence));
+      kernelState.addAttribute(
+          "merge_recurrence",
+          builder.getStringAttr(selected->mergeRecurrence));
+      kernelState.addAttribute("reassociable",
+                               builder.getBoolAttr(selected->reassociable));
+      kernelState.addAttribute(
+          "tessera.schedule_hash",
+          builder.getStringAttr(scheduled.getArtifactHash()));
+      builder.create(kernelState);
+
+      Value result = builder.create<bufferization::ToTensorOp>(
+          loc, outputType, outputBuffer);
+      scheduled.getScheduled().replaceAllUsesWith(result);
+      scheduled.erase();
+      if (graph->use_empty())
+        graph->erase();
+      for (schedule::ArtifactOp artifact : matchingArtifacts)
+        artifact.erase();
     }
 
     SmallVector<schedule::AttentionOp> scheduledAttentions;

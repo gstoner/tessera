@@ -44,8 +44,8 @@ func.func @grid_ai_core_block(
                 dense<[-1, 0]> : tensor<2xi64>,
                 dense<[0, 1]>  : tensor<2xi64>,
                 dense<[0, -1]> : tensor<2xi64>],
-        bc = "periodic"
-    } : () -> index
+        bc = "periodic", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64]
+        } : () -> index
 
     %h = "tessera.neighbors.halo.region"(%field) {
         halo.width = [1, 1]

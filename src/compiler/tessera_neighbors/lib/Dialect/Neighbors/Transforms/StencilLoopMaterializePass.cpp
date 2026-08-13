@@ -193,6 +193,13 @@ struct StencilLoopMaterializePass
       op->emitWarning() << "stencil.define has no taps; skipping";
       return;
     }
+    auto coeffsAttr = stencilDef->getAttrOfType<ArrayAttr>("coeffs");
+    if (!coeffsAttr || coeffsAttr.size() != tapsAttr.size()) {
+      op->emitError() << "stencil.define must carry one explicit coefficient "
+                         "per tap";
+      signalPassFailure();
+      return;
+    }
 
     Value field = op->getOperand(1);
     auto fieldTy = llvm::dyn_cast<RankedTensorType>(field.getType());
@@ -245,7 +252,7 @@ struct StencilLoopMaterializePass
     SmallVector<Value> ivs;
     Value rootResult = buildNest(b, loc, /*axis=*/0, rank, ivs, initT,
                                   field, floatTy, Ns, modes, bcConsts,
-                                  tapsAttr, zero, oneI);
+                                  tapsAttr, coeffsAttr, zero, oneI);
 
     // ---- Replace stencil.apply with the loop result ----
     op->getResult(0).replaceAllUsesWith(rootResult);
@@ -259,6 +266,8 @@ struct StencilLoopMaterializePass
         outerFor->setAttr("stencil.halo_width", a);
       if (auto a = op->getAttrOfType<IntegerAttr>("stencil.tap_count"))
         outerFor->setAttr("stencil.tap_count", a);
+      outerFor->setAttr("stencil.coeff_count",
+                        b.getI64IntegerAttr(coeffsAttr.size()));
     }
     op->erase();
   }
@@ -279,12 +288,13 @@ struct StencilLoopMaterializePass
                   ArrayRef<StringRef> modes,
                   ArrayRef<Value> bcConsts,
                   ArrayAttr tapsAttr,
+                  ArrayAttr coeffsAttr,
                   Value zero, Value oneI) {
     if (axis == rank) {
       // Leaf: compute one output element and tensor.insert it.
       Value sumVal = f32Const(b, loc, floatTy, 0.0);
       Value zeroF  = sumVal;
-      for (Attribute tapAttr : tapsAttr) {
+      for (auto [tapAttr, coeffAttr] : llvm::zip(tapsAttr, coeffsAttr)) {
         auto denseTap = llvm::dyn_cast<DenseIntElementsAttr>(tapAttr);
         if (!denseTap) continue;
         auto vals = denseTap.getValues<int64_t>();
@@ -330,7 +340,13 @@ struct StencilLoopMaterializePass
               loc, fixups[a].dirichletOOB, bcConsts[a], tapVal);
         }
 
-        sumVal = b.create<arith::AddFOp>(loc, sumVal, tapVal);
+        auto coeff = llvm::dyn_cast<FloatAttr>(coeffAttr);
+        if (!coeff)
+          continue; // The op verifier rejects this before the pass runs.
+        Value scaled = b.create<arith::MulFOp>(
+            loc, tapVal,
+            f32Const(b, loc, floatTy, coeff.getValueAsDouble()));
+        sumVal = b.create<arith::AddFOp>(loc, sumVal, scaled);
       }
 
       Value updated = b.create<tensor::InsertOp>(loc, sumVal, acc,
@@ -350,13 +366,13 @@ struct StencilLoopMaterializePass
       // Recursion bottoms out in the leaf, which emits its own scf.yield
       // inside this body.
       buildNest(body, loc, axis + 1, rank, ivs, innerAcc, field, floatTy,
-                Ns, modes, bcConsts, tapsAttr, zero, oneI);
+                Ns, modes, bcConsts, tapsAttr, coeffsAttr, zero, oneI);
     } else {
       // The recursive call creates a nested scf.for whose single result
       // we must yield from this body.
       Value nested = buildNest(body, loc, axis + 1, rank, ivs, innerAcc,
                                  field, floatTy, Ns, modes, bcConsts,
-                                 tapsAttr, zero, oneI);
+                                 tapsAttr, coeffsAttr, zero, oneI);
       body.create<scf::YieldOp>(loc, ValueRange{nested});
     }
     ivs.pop_back();

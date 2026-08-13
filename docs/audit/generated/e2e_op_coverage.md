@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 290 |
-| ``runnable_reference`` | 4 |
+| ``runnable_reference`` | 5 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **328** |
+| **total** | **329** |
 
 ## complete (290)
 
@@ -326,10 +326,11 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (4)
+## runnable_reference (5)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
+| ``depth_attn`` | attention | public | public | registered | partial | reference | ready | none |
 | ``all_gather`` | collective | public | public | registered | complete | reference | ready | benchmarked |
 | ``all_reduce`` | collective | public | public | registered | complete | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | complete | reference | ready | benchmarked |

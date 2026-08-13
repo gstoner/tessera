@@ -13,6 +13,9 @@ See ``docs/audit/roadmap/MODEL_CLASS_ROADMAP.md`` for the milestone map.
 
 from __future__ import annotations
 
-from . import attention, delta_rule, dspark, es, hybrid, moe, quant
+from . import attention, attn_res, delta_rule, dspark, es, hybrid, moe, quant
 
-__all__ = ["quant", "moe", "dspark", "attention", "delta_rule", "hybrid", "es"]
+__all__ = [
+    "quant", "moe", "dspark", "attention", "attn_res", "delta_rule",
+    "hybrid", "es",
+]

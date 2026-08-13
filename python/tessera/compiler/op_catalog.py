@@ -67,6 +67,8 @@ _SPECS = [
     OpSpec("layer_norm", "tessera.layer_norm", 1, 3, lowering="normalization"),
     OpSpec("softmax", "tessera.softmax", 1, 1, lowering="stable_reduction"),
     OpSpec("softmax_safe", "tessera.softmax_safe", 1, 1, lowering="stable_reduction"),
+    OpSpec("depth_attn", "tessera.depth_attn", 2, 2, lowering="attention",
+           shape_rule="depth_attention"),
     # Differentiable discrete-choice relaxations. These are Graph-IR-visible
     # Python-reference operations; target execution remains explicitly
     # unsupported until a backend registers a physical lowering.
@@ -994,6 +996,7 @@ COMPUTE_FLOAT_DTYPE = "fp32"
 #: with no implementation (or vice versa) is a drift-gated error.
 SHAPE_RULE_NAMES = frozenset({
     "same_as_first",
+    "depth_attention",
     "matmul_2d",
     "es_population_features",
     "batched_gemm_3d",

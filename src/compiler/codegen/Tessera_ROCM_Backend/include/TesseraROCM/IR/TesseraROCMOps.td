@@ -252,6 +252,29 @@ def ROCM_SoftmaxOp : TesseraROCM_Op<"softmax"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_DepthAttentionOp : TesseraROCM_Op<"depth_attention"> {
+  let summary = "Content-addressed gfx1151 depth-attention statistics/merge kernel";
+  let description = [{
+    Owns the BLOCK-ATTNRES-1 physical ABI after Schedule→Tile. The generated
+    kernel computes RMS-normalized source keys, max-shifted statistics for each
+    source tile, and the declared pairwise softmax-state merge before finalize.
+    Static shape, epsilon, numeric policy, and recurrence identity are covered
+    by `artifact_hash`; unsupported architectures never reach this record.
+  }];
+  let arguments = (ins StrAttr:$name,
+                       StrAttr:$arch,
+                       StrAttr:$artifact_hash,
+                       F64Attr:$eps,
+                       I64Attr:$source_count,
+                       I64Attr:$rows,
+                       I64Attr:$width,
+                       I64Attr:$source_tile,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
+                       StrAttr:$statistics_recurrence,
+                       StrAttr:$merge_recurrence);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_SolverIFTOp : TesseraROCM_Op<"solver_ift"> {
   let summary = "Matrix-free residual/solve/residual-adjoint IFT kernel";
   let description = [{

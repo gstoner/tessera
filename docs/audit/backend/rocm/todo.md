@@ -47,8 +47,10 @@ Gated fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
 0. **Treat the `REQUIRES` gate as a debt marker, not a resolution.** On the
    Strix Halo box these fixtures must actually RUN — a lit summary showing
    them UNSUPPORTED there means the ROCm build is misconfigured, not that the
-   work is done. Assert the feature is live before trusting a green run:
-   `./build/tools/tessera-opt/tessera-opt --help | grep tessera-lower-to-rocm`.
+   work is done. Assert the feature is live before trusting a green run, from
+   the build ledger rather than the pipeline list (see the probe table in step
+   2 for why the distinction bites):
+   `./build/tools/tessera-opt/tessera-opt --tessera-build-info | grep -qw rocm-backend`.
 
 1. Reproduce the CI binary's blindness locally. A stock `tessera-opt` built
    without the ROCm flag must now report these fixtures UNSUPPORTED (before the
@@ -74,9 +76,31 @@ Gated fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
      -DCMAKE_PREFIX_PATH=/opt/rocm/core \
      -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
    ninja -C build tessera-opt
-   ./build/tools/tessera-opt/tessera-opt --help | grep -E 'tessera-lower-to-(rocm|x86)'   # both, per step 0
+   # Preflight: assert BOTH dialects are linked, independently. Two required
+   # checks, not one alternation — `grep -E 'a|b'` exits 0 on either match.
+   INFO=$(./build/tools/tessera-opt/tessera-opt --tessera-build-info)
+   grep -qw rocm-backend  <<<"$INFO" || { echo "ROCm dialect NOT linked"; exit 1; }
+   grep -qw x86-target-ir <<<"$INFO" || { echo "x86 dialect NOT linked";  exit 1; }
    lit tests/tessera-ir/ -v
    ```
+   **Probe the feature ledger, never the pipeline list.** `--tessera-build-info`
+   prints `TESSERA_OPT_BUILD_FEATURES`, which is generated from the CMake
+   feature ledger and so cannot drift from what was linked
+   (`tools/tessera-opt/tessera-opt.cpp:309-328`). Pipeline names are **not** a
+   valid proxy, and the two backends differ in a way that will mislead anyone
+   who assumes symmetry:
+
+   | Probe | Registered by | Valid dialect proxy? |
+   |---|---|---|
+   | `tessera-lower-to-rocm` | `Tessera_ROCM_Backend/lib/Conversion/Passes.cpp:501` — the backend library | **yes**, it is linked only with the backend |
+   | `tessera-lower-to-x86` | `src/transforms/lib/Passes.cpp:416` — **core `TesseraPasses`** | **no**, present with or without `TesseraX86IR` |
+
+   `X86-DIALECT-LOAD-CRASH-2026-08-12` is the proof this matters: in run
+   31648897366 `tessera-lower-to-x86` was registered while the x86 dialect
+   crashed on load. A pipeline-name probe would have reported the driver
+   healthy. (This does **not** impeach `lit.cfg.py:126`, whose ROCm feature
+   uses the left-hand row and is sound — but any future *x86* lit feature must
+   use the ledger, not `tessera-lower-to-x86`.)
    Expect **zero** UNSUPPORTED among the 13 gated fixtures here. If any fixture
    fails **there**, it is a real ROCm (or x86) defect and outranks the CI gap —
    file it as its own item before touching CI.

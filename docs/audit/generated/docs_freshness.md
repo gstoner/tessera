@@ -6,9 +6,9 @@ Reference date for staleness: **2026-08-13**.
 
 ## Headline
 
-- **137** docs catalogued across the canonical doc tree.
-- **136** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **78** updated within the last 30 days.
+- **138** docs catalogued across the canonical doc tree.
+- **137** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **79** updated within the last 30 days.
 - **13** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -179,6 +179,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 5 | ✓ |
 | `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-08-08 | 5 | ✓ |
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 27 | ✓ |
+| `compiler/SPARDA_REVIEW.md` | - | 2026-08-12 | 1 | ✓ |
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 11 | ✓ |
 | `compiler/TILERT_ASSESSMENT.md` | - | 2026-08-11 | 2 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 14 | ✓ |

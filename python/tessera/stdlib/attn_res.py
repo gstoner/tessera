@@ -111,11 +111,11 @@ def block_attnres_forward(
     """Execute the direct Block AttnRes recurrence from plan algorithm A2."""
     if (num_blocks is None) == (block_sizes is None):
         raise ValueError("provide exactly one of num_blocks or block_sizes")
-    sizes = (
-        balanced_block_sizes(len(sublayers), int(num_blocks))
-        if block_sizes is None
-        else tuple(block_sizes)
-    )
+    if block_sizes is None:
+        assert num_blocks is not None
+        sizes = balanced_block_sizes(len(sublayers), num_blocks)
+    else:
+        sizes = tuple(block_sizes)
     state, query_values, sizes, norm_values = _validate_program(
         x, sublayers, queries, sizes, norms
     )
@@ -160,11 +160,11 @@ def block_attnres_two_phase(
     """Execute the exact query-hoisted two-phase recurrence from plan A4."""
     if (num_blocks is None) == (block_sizes is None):
         raise ValueError("provide exactly one of num_blocks or block_sizes")
-    sizes = (
-        balanced_block_sizes(len(sublayers), int(num_blocks))
-        if block_sizes is None
-        else tuple(block_sizes)
-    )
+    if block_sizes is None:
+        assert num_blocks is not None
+        sizes = balanced_block_sizes(len(sublayers), num_blocks)
+    else:
+        sizes = tuple(block_sizes)
     state, query_values, sizes, norm_values = _validate_program(
         x, sublayers, queries, sizes, norms
     )

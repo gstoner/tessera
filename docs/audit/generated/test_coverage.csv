@@ -138,7 +138,7 @@ dct,49,2,2,51,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,51 direc
 ddpm_noise_pred_loss,5,0,0,5,0,,directly_tested,5 direct test references
 deepseek_sparse_attention,22,5,0,27,0,,directly_tested,27 direct test references
 denoising_score_matching_loss,5,0,0,5,0,,directly_tested,5 direct test references
-depth_attn,5,5,1,10,0,f32 fp32,directly_tested,10 direct test references
+depth_attn,7,10,1,17,0,f32 fp32,directly_tested,17 direct test references
 depthwise_conv1d,18,0,1,18,0,fp16,directly_tested,18 direct test references
 dequant_grouped_gemm,1,4,0,5,0,int8,directly_tested,5 direct test references
 dequant_matmul,4,4,0,8,0,fp32 int8,directly_tested,8 direct test references

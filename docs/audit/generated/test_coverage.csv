@@ -29,6 +29,7 @@ attn_compressed_blocks,11,2,0,13,0,fp16,directly_tested,13 direct test reference
 attn_local_window_2d,36,25,1,61,0,fp16 fp32,directly_tested,61 direct test references
 attn_sliding_window,17,2,2,19,0,,directly_tested,19 direct test references
 attn_top_k_blocks,17,2,1,19,0,bf16 fp16,directly_tested,19 direct test references
+attn_with_stats,8,2,1,10,0,,directly_tested,10 direct test references
 autocast,0,0,0,0,1,,structural_only,category default for 'transform'
 avg_pool,4,0,0,4,0,,directly_tested,4 direct test references
 axis_index,0,0,0,0,1,,structural_only,category default for 'transform'
@@ -137,6 +138,7 @@ dct,49,2,2,51,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,51 direc
 ddpm_noise_pred_loss,5,0,0,5,0,,directly_tested,5 direct test references
 deepseek_sparse_attention,22,5,0,27,0,,directly_tested,27 direct test references
 denoising_score_matching_loss,5,0,0,5,0,,directly_tested,5 direct test references
+depth_attn,5,5,1,10,0,f32 fp32,directly_tested,10 direct test references
 depthwise_conv1d,18,0,1,18,0,fp16,directly_tested,18 direct test references
 dequant_grouped_gemm,1,4,0,5,0,int8,directly_tested,5 direct test references
 dequant_matmul,4,4,0,8,0,fp32 int8,directly_tested,8 direct test references
@@ -420,6 +422,8 @@ smooth_l1_loss,9,0,0,9,0,f32,directly_tested,9 direct test references
 soft_top_k,1,0,0,1,1,fp64,directly_tested,"public forward plus exact-k, domain, and FD-VJP tests"
 softcap,11,0,1,11,0,bf16,directly_tested,11 direct test references
 softmax,147,48,31,195,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,195 direct test references
+softmax_finalize,6,2,1,8,0,,directly_tested,8 direct test references
+softmax_merge,5,2,0,7,0,,directly_tested,7 direct test references
 softmax_safe,7,4,1,11,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,11 direct test references
 softplus,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
 sort,13,0,0,13,0,,directly_tested,13 direct test references

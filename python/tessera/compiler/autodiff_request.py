@@ -38,7 +38,7 @@ _MODE_ALIASES = {"jvp": "forward"}
 COMPILER_FORWARD_FAMILIES: frozenset[str] = frozenset(
     {
         "add", "all_gather", "all_reduce", "all_to_all", "broadcast", "dct",
-        "dropout", "es_low_rank_correction", "expand", "fft", "flatten",
+        "depth_attn", "dropout", "es_low_rank_correction", "expand", "fft", "flatten",
         "ifft", "irfft", "layer_norm", "matmul", "mul", "permute", "reduce",
         "reduce_scatter", "reshape", "rfft", "rmsnorm", "sigmoid", "softmax", "squeeze",
         "spectral_conv", "spectral_filter", "stft", "istft", "stop_gradient",

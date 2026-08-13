@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-11
+last_updated: 2026-08-13
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
@@ -706,6 +706,69 @@ gate rather than three disconnected substrates.
 compiles, differentiates, and executes, with numerical agreement against the
 Python oracle.*
 
+### PDE-STENCIL-FOUNDATION-1 — truthful discretization contracts
+
+The first correctness slice landed 2026-08-12. Neighbors stencil definitions
+carry one finite floating-point coefficient per tap, and loop materialization
+performs the explicit multiply. TPP stencil operations require a scheme,
+positive even order, and positive per-axis spacing; none is manufactured by
+legalization. The CPU gradient ABI consumes the selected-axis spacing. Target
+lowering now distinguishes `executable` from `artifact_only` and emits a
+callable symbol only for a linkable implementation.
+
+The two stencil stacks are declared differential oracles. Their shared
+periodic central-gradient subset is tested against the compiled TPP CPU kernel
+using the typed physical-coefficient contract, including non-unit spacing and
+`h^-derivative_order` scaling. Temporal halos, general kernels, boundary modes,
+and physical target consumers remain open. Next ordered work is
+the typed `pde.operator` and exact-rational classifier/stability certificate,
+followed by architecture-owned physical consumers. ROCm owns the first
+gfx1151 stencil+halo packet; x86 owns the CPU/AVX-512 packet. Apple and NVIDIA
+remain independent follow-ups. Acceptance criteria live in
+[`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md).
+
+### BLOCK-ATTNRES-1 — ROCm-first depth-attention residuals
+
+Synchronization key `BLOCK-ATTNRES-ROCM-2026-08-12` owns this project. The
+delivery order is intentionally split by evidence domain:
+
+1. **Host-free semantic phases 0–4.** Phase 0 established the balanced block
+   partition, epsilon-qualified key normalization, forward/VJP equations, and
+   merge lemma. Phase 1 now exposes fp32 `attn_with_stats`, `softmax_merge`,
+   and `softmax_finalize` reference operations with associative/commutative,
+   partition-invariance, dtype, shape, and fail-closed tests. These references
+   remain `artifact_only` at the lowering registry. Phase 2 is also landed: the
+   faithful stdlib recurrence and query-hoisted two-phase algorithm preserve
+   zero-init, balanced nonempty blocks, absent-partial identity, fp32 statistics,
+   storage dtype, and attention-based final aggregation. Phase 3 landed
+   2026-08-13: typed statistics/finalize/depth-attention Graph operations carry
+   required epsilon and numeric-policy attributes; `depth_attn` implements the
+   compiler Adjoint and Tangent interfaces through typed product operations;
+   direct numerical tests compare both analytic products with the canonical
+   decomposition. Phase 4 carries the exact static all-f32 contract through one
+   content-addressed `schedule.depth_attention` operation and one launch-level
+   `tile.depth_attention_kernel`; its digest binds source count, rows, width,
+   epsilon, numeric policy, source tile, workgroup, statistics recurrence,
+   associative merge recurrence, and target architecture. Schedule→Tile
+   rejects changed policy and gfx1200/gfx1250 remain fail-closed. This shared
+   closure grants no Target execution claim.
+2. **Exact-device phase 5 (landed 2026-08-13).** ROCm/gfx1151 now owns the
+   typed Target record, fused statistics-attention plus associative
+   merge/finalize kernel, exact content-addressed HSACO package, and runtime
+   descriptor consumer. Three exact-device shapes pass the independent fp32
+   oracle (maximum absolute error `1.96e-5`). The committed WSL packet records
+   operation-total host-wall samples and is explicitly selector-ineligible;
+   bare-metal HIP-event/ROCprofiler calibration remains open. gfx1200/gfx1250
+   remain fail-closed.
+3. **Architecture phase 6.** x86/AVX-512 owns an independent vectorized
+   package and clean Zen 5 packet after the shared contract is stable. Apple
+   and NVIDIA own separate packages and evidence; no schedule or result
+   transfers between targets.
+
+The scoped mathematical and acceptance authority is
+[`BLOCK_ATTNRES_ROCM_PLAN.md`](BLOCK_ATTNRES_ROCM_PLAN.md). Global ordering and
+promotion authority remain here.
+
 ### W5 — Decisions become measured *(9 weeks · depends on W1, W3)*
 
 Root cause: L5, "a constant where a measured decision belongs." Every item routes
@@ -721,8 +784,9 @@ an existing hardcoded choice through the arbiter Decision #28 already built.
 | W5.2d | **COMP-SCHED-OVERLAP-1/R4 — bounded functional consumer closed 2026-08-10.** MegaMoE now executes a content-addressed chunk/action plan rather than reconstructing an implicit loop policy. The plan owns contiguous chunk slices, per-chunk expert capacity, a two-live-frame workspace bound, dispatch→compute and compute→combine true-use dependencies, ordered collective dependencies, and deterministic chunk-combine order. R3 requires total measured evidence for every action and may only prune plans; exact-device scalar latency selects among retained plans before the chosen digest is passed to the runtime. Runtime telemetry records the digest, issued action order, true-use waits, combine order, and maximum live workspace. Mock multi-rank numerical and repeated bit-identity proofs pass. Native NCCL/RCCL/MPI/OFI/SHMEM transport plus architecture-owned correctness/performance packets remain open and do not transfer across targets. | TileRT R4 + TileSight T4 | closed |
 | W5.2e | **Automatic dependence-edge generation — conservative parity gate landed; selector proof remains open.** `infer_action_dag` consumes a fresh W2.1 Graph snapshot and total R2 resource vectors. It emits explicit edges for SSA producers, overlapping or unknown alias sets, value-scoped memory dependence, mutation/state/I/O, registered stochastic identity, ordered collectives, unknown effects, and region boundaries. Unknown alias facts now carry an explicit reason rather than relying on a side effect of `may_alias`. `compare_inferred_action_dag` requires generated edges to cover every edge in an existing hand-authored R3 fixture; additional conservative edges are reported separately. Pure SSA matches the current fixture exactly, and opaque dataflow is serialized. `CompositionCandidate.from_graph` remains the physical-family entry point. **Open:** adopt it in remaining non-JVP physical producers and collect clean calibrated Zen 5/bare-metal gfx1151 packets before scalar measured latency may select a retained schedule. WSL and analytical vectors remain prune/rank-only. | W2.1 + TileRT R3/R4 | landing |
 | W5.2f | **Tiled SSD family.** Define one content-addressed Schedule→Tile program for chunked SSD GEMM, reduction, recurrent carry, checkpoint/residency, and mutation lineage. Existing ReplaySSM and backend-specific sequence kernels are candidates/oracles, not semantic authorities. Physical lowering and promotion remain architecture-owned. | Roadmap tiled-SSD design + E2E-REAL-6 | open |
+| W5.2g | **Scalable action-DAG search.** Replace factorial bounded enumeration on wide antichains with deterministic critical-path/list scheduling and the admissible lower bound `max(critical path, per-resource-lane work)`. Retain exhaustive enumeration as a test oracle for small DAGs and require differential equality/legality checks through eight actions. Inexact schedules remain rank/prune-only; this does not create a second scheduler or selector authority. Shared graph-oracle utilities are test infrastructure. | PDE plan §IV.3/IV.4 routed into TileRT R3 | open |
 | W5.3 | Generic fusion region discovery over a legality oracle (a W2.1 client); keep the measured cost models | Sweep §F3 | *(folded into W5.2)* |
-| W5.4 | **Typed placement lattice and explicit reshard planner landed 2026-08-12; native execution remains open.** The compiler represents replicated, tiled, partial-reduction, and unknown placements and propagates registered pure rules to a content-digested fixed point. Shape-preserving rules are now drawn from the canonical op catalog rather than a ten-name list; reduction and the four collective placement transforms are explicit. Consumer requirements can produce digest-bound `all_gather`, `all_reduce`, `reduce_scatter`, `all_to_all`, or local-shard actions. Unknown placement, missing mesh axes, compound transitions, effects, and regions fail closed instead of guessing transport. Remaining: encode and consume the 43 generated domain-specific/axis-changing contracts, materialize planned actions as Graph/Schedule collective SSA, subgroup/region propagation, mock-mesh family proofs, and native NCCL/RCCL/MPI/OFI/SHMEM packets. | Sweep §F4 | landing |
+| W5.4 | **Typed placement lattice and explicit reshard planner landed 2026-08-12; native execution remains open.** The compiler represents replicated, tiled, partial-reduction, and unknown placements and propagates registered pure rules to a content-digested fixed point. Shape-preserving rules are now drawn from the canonical op catalog rather than a ten-name list; reduction and the four collective placement transforms are explicit. Consumer requirements can produce digest-bound `all_gather`, `all_reduce`, `reduce_scatter`, `all_to_all`, or local-shard actions. Unknown placement, missing mesh axes, compound transitions, effects, and regions fail closed instead of guessing transport. The conflict-free collective scheduler proposed by the PDE review is owned here: decompose a regular peer-transfer graph into verified `collective_permute` matching rounds, derive `max_inflight`, and keep native transport/evidence as the promotion gate. Remaining: encode and consume the 43 generated domain-specific/axis-changing contracts, materialize planned actions as Graph/Schedule collective SSA, subgroup/region propagation, matching-round integration, mock-mesh family proofs, and native NCCL/RCCL/MPI/OFI/SHMEM packets. | Sweep §F4 + PDE plan §IV.1 | landing |
 | W5.5 | Rule-table-driven canonicalization (PDL/PDLL). **Defer equality saturation** until the rule table is large enough that ordering demonstrably costs something | Sweep §F5 | 3w |
 
 **Exit:** no tile size, residual policy, or fusion boundary is chosen by a

@@ -28,8 +28,8 @@ func.func @test_materialize_periodic_5pt(%arg0: tensor<?x?xf32>) -> tensor<?x?xf
               dense<[-1, 0]> : tensor<2xi64>,
               dense<[0, 1]>  : tensor<2xi64>,
               dense<[0, -1]> : tensor<2xi64>],
-      bc = "periodic"
-  } : () -> index
+      bc = "periodic", coeffs = [-4.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1, 1]
@@ -66,8 +66,8 @@ func.func @test_materialize_dirichlet(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32>
   %st = "tessera.neighbors.stencil.define"() {
       taps = [dense<[0, 0]>  : tensor<2xi64>,
               dense<[1, 0]>  : tensor<2xi64>],
-      bc = "dirichlet(2.5),dirichlet(2.5)"
-  } : () -> index
+      bc = "dirichlet(2.5),dirichlet(2.5)", coeffs = [1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1, 1]
@@ -104,8 +104,8 @@ func.func @test_materialize_neumann(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
       taps = [dense<[0, 0]>  : tensor<2xi64>,
               dense<[1, 0]>  : tensor<2xi64>,
               dense<[0, 1]>  : tensor<2xi64>],
-      bc = "neumann(-1.0),neumann(-1.0)"
-  } : () -> index
+      bc = "neumann(-1.0),neumann(-1.0)", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1, 1]

@@ -275,6 +275,25 @@ class TestGraphIRBuilder:
         op_names = [op.op_name for op in fn_ir.body]
         assert "tessera.matmul" in op_names
 
+    def test_depth_attn_materializes_required_graph_policy(self):
+        def depth(query, sources):
+            return tessera.ops.depth_attn(query, sources)
+
+        builder = GraphIRBuilder()
+        fn_ir = builder.lower(depth)
+        op = next(op for op in fn_ir.body if op.op_name == "tessera.depth_attn")
+        assert op.kwargs["eps"] == 1.0e-6
+        assert op.kwargs["numeric_policy"] == {
+            "storage": "fp32",
+            "softmax": "fp32",
+            "accum": "fp32",
+        }
+        text = builder.module().to_mlir()
+        assert (
+            'numeric_policy = {accum = "fp32", softmax = "fp32", '
+            'storage = "fp32"}' in text
+        )
+
     def test_lower_multiple_functions(self):
         def f(x):
             return tessera.ops.gemm(x, x)

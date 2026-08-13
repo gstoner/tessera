@@ -148,6 +148,7 @@ func.func @test_stencil_halo_infer(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
 
   %st = "tessera.neighbors.stencil.define"() {
       taps = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]],
+      coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64],
       bc = "periodic"
   } : () -> index
 

@@ -69,6 +69,11 @@ def _contracts() -> tuple[DerivativeProofContract, ...]:
             "matmul", ProofKind.DIRECTIONAL_AND_DUALITY,
             "d(A@B)=dA@B+A@dB", "legal contraction shapes"),
         DerivativeProofContract(
+            "depth_attn", ProofKind.DIRECTIONAL_AND_DUALITY,
+            "RMS-key JVP and VJP are dual derivatives of the max-shifted "
+            "attention-statistics decomposition",
+            "finite query[d] and non-empty sources[m,...,d]; positive epsilon"),
+        DerivativeProofContract(
             "spectral_filter", ProofKind.DIRECTIONAL_AND_DUALITY,
             "d(X*H)=dX*H+X*dH",
             "equal-shape complex spectra"),

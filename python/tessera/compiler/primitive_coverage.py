@@ -479,6 +479,49 @@ _EXISTING_CATEGORIES: dict[str, str] = {
 #   - `backend_kernel` stays `partial` until each backend ships a real
 #     hardware kernel — that's Phase G/H work.
 _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
+    # Block AttnRes Phase 1: exact fp32 host semantics and property tests are
+    # closed. Graph operations, autodiff products, and physical packages are
+    # deliberately retained as planned/partial work for Phases 3 and 4.
+    "attn_with_stats": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "masking_effect_rule": "complete",
+        "lowering_rule": "complete",
+        "tests": "complete",
+    },
+    "softmax_merge": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "masking_effect_rule": "complete",
+        "lowering_rule": "complete",
+        "tests": "complete",
+    },
+    "softmax_finalize": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "masking_effect_rule": "complete",
+        "lowering_rule": "complete",
+        "tests": "complete",
+    },
+    # Phase 3: the public primitive now has a typed Graph op, an explicit
+    # numeric policy, compiler-owned reverse/forward products, and direct
+    # decomposition-versus-analytic tests. Physical target execution remains
+    # planned and cannot be inferred from this semantic closure.
+    "depth_attn": {
+        "math_semantics": "complete",
+        "shape_rule": "complete",
+        "dtype_layout_rule": "complete",
+        "batching_rule": "complete",
+        "masking_effect_rule": "complete",
+        "lowering_rule": "complete",
+        "tests": "complete",
+    },
     # EGGROLL W2 — an explicitly keyed, deterministic zeroth-order primitive.
     # With member ids and the Philox key held fixed, the correction is a linear
     # map of x. The compiler owns that JVP and the mathematical transpose is
@@ -1918,6 +1961,12 @@ _GRAPH_IR_LOWERING_OVERRIDES: dict[str, str] = {
     "depthwise_conv1d":      "registered",
     "online_softmax":        "registered",
     "online_softmax_state":  "registered",
+    # Block AttnRes Phase 1 decomposes canonically through registered
+    # RMSNorm/einsum/max/exp/sum/elementwise Graph operations. Dedicated fused
+    # ODS operations are Phase 3, but the decomposed Graph path is already real.
+    "attn_with_stats":       "registered",
+    "softmax_merge":         "registered",
+    "softmax_finalize":      "registered",
     # selective_ssm — dedicated Mamba2 Graph IR op `tessera.selective_ssm`
     # (state-space lowering kind, stateful effect).  NOTE (Track L L4,
     # 2026-06-15): this entry previously asserted the op "landed (2026-05-18)"
@@ -2095,6 +2144,9 @@ _NUMERIC_POLICY_BY_NAME_FACTORIES: dict[str, "Callable[[], NumericPolicy]"] = {
     "softmax_safe":          _stable_reduce_policy,
     "online_softmax":        _stable_reduce_policy,
     "online_softmax_state":  _stable_reduce_policy,
+    "attn_with_stats":       _stable_reduce_policy,
+    "softmax_merge":         _stable_reduce_policy,
+    "softmax_finalize":      _stable_reduce_policy,
     "logsumexp":             _stable_reduce_policy,
     "log_softmax":           _stable_reduce_policy,
     # ── Quantization family ────────────────────────────────────────────
@@ -2783,6 +2835,18 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "online_softmax": ("stable_reduction", "state", "streaming softmax helper"),
         "online_softmax_state": ("state_update", "state", "streaming softmax carry state"),
         "selective_ssm": ("state_space", "state", "Mamba-style selective state-space op"),
+        "attn_with_stats": (
+            "attention", "pure",
+            "Block AttnRes Phase-1 max-shifted attention statistics reference",
+        ),
+        "softmax_merge": (
+            "stable_reduction", "pure",
+            "Block AttnRes associative statistics-merge reference",
+        ),
+        "softmax_finalize": (
+            "stable_reduction", "pure",
+            "Block AttnRes statistics finalization reference",
+        ),
     }
     for name, (lowering, effect, notes) in supplemental_public_ops.items():
         has_vjp = _existing_op_has_vjp(name, registered_vjps)

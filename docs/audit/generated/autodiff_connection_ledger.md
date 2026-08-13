@@ -17,12 +17,12 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 
 ## Summary
 
-- Differentiable families tracked: **294**
-- `python_reference` (Python VJP/JVP): **294**
-- `ir_adjoint = native`: **51** (adam, adam_w, add, all_gather, all_reduce, all_to_all, binary_cross_entropy_loss, broadcast, cross_entropy_loss, dct, expand, fft, flatten, gelu, huber_loss, ifft, irfft, istft, j_s_divergence_loss, k_l_divergence_loss, layer_norm, mae_loss, matmul, momentum, mse_loss, mul, nesterov, permute, reduce, reduce_scatter, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, tanh, transpose, unsqueeze, view)
+- Differentiable families tracked: **295**
+- `python_reference` (Python VJP/JVP): **295**
+- `ir_adjoint = native`: **52** (adam, adam_w, add, all_gather, all_reduce, all_to_all, binary_cross_entropy_loss, broadcast, cross_entropy_loss, dct, depth_attn, expand, fft, flatten, gelu, huber_loss, ifft, irfft, istft, j_s_divergence_loss, k_l_divergence_loss, layer_norm, mae_loss, matmul, momentum, mse_loss, mul, nesterov, permute, reduce, reduce_scatter, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, tanh, transpose, unsqueeze, view)
 - `ir_adjoint = placeholder` (Python round-trip, not native): **3** (log_softmax, sin, softplus)
 - `ir_adjoint = mixed` (kind-aware native + placeholder): **0**
-- `ir_tangent = native`: **35** (add, all_gather, all_reduce, all_to_all, broadcast, dct, dropout, es_low_rank_correction, expand, fft, flatten, ifft, irfft, istft, layer_norm, matmul, mul, permute, reduce, reduce_scatter, reshape, rfft, rmsnorm, sigmoid, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, sub, tanh, transpose, unsqueeze, view)
+- `ir_tangent = native`: **36** (add, all_gather, all_reduce, all_to_all, broadcast, dct, depth_attn, dropout, es_low_rank_correction, expand, fft, flatten, ifft, irfft, istft, layer_norm, matmul, mul, permute, reduce, reduce_scatter, reshape, rfft, rmsnorm, sigmoid, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, sub, tanh, transpose, unsqueeze, view)
 - forward JVP IR **oracle-verified on CPU**: **12** (fft, ifft, irfft, layer_norm, matmul, mul, reduce, rfft, rmsnorm, sigmoid, softmax, tanh)
 - backward IR **oracle-verified on CPU** (interpreted): **36** (add, amax, amin, broadcast, dct, expand, fft, flatten, gelu, huber_loss, ifft, irfft, layer_norm, mae_loss, matmul, max, mean, min, mse_loss, mul, permute, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, squeeze, sum, tanh, transpose, unsqueeze, view)
 - backward `target_lowered` on any exact target: **29**
@@ -145,6 +145,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `ddpm_noise_pred_loss` | loss | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `deepseek_sparse_attention` | attention | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `denoising_score_matching_loss` | loss | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `depth_attn` | attention | yes | native | native | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core | native compiler adjoint |
 | `depthwise_conv1d` | stencil | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `dequant_matmul` | quantization | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `dequantize_fp4` | quantize | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |

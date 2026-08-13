@@ -43,8 +43,8 @@ func.func @test_full_halo_pipeline(%arg0: tensor<?x?xf32>) {
         taps = [dense<[0, 0]>  : tensor<2xi64>,
                 dense<[1, 0]>  : tensor<2xi64>,
                 dense<[-1, 0]> : tensor<2xi64>],
-        bc = "periodic,reflect"
-    } : () -> index
+        bc = "periodic,reflect", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64]
+        } : () -> index
 
     %h = "tessera.neighbors.halo.region"(%arg0) {
         halo.width = [1, 1]

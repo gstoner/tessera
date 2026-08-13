@@ -766,7 +766,10 @@ class IROp:
         attr_parts = []
         if self.attrs:
             attr_parts.append(self.attrs)
-        attr_parts.extend(f"{k} = {_format_attr_value(v)}" for k, v in self.kwargs.items())
+        attr_parts.extend(
+            f"{key} = {_format_named_attr(key, value)}"
+            for key, value in self.kwargs.items()
+        )
         # W2.2: carry registered semantics into Graph IR. Emit ``pure`` too:
         # absence means "unregistered/unknown", never "probably pure".
         if "tessera.effect_kind" not in (self.attrs or "") and \
@@ -825,6 +828,12 @@ class IROp:
         return f"{indent}{lhs}{self.op_name}({ops_str}){attr_str}{type_str}"
 
 
+def _format_named_attr(key: str, value: Any) -> str:
+    if key == "numeric_policy" and isinstance(value, dict):
+        return _format_dictionary_attr(value)
+    return _format_attr_value(value)
+
+
 def _format_attr_value(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -848,6 +857,14 @@ def _format_attr_value(value: Any) -> str:
             return f"{mantissa}e{exponent}"
         return rendered
     return repr(value)
+
+
+def _format_dictionary_attr(value: Dict[str, Any]) -> str:
+    """Render a typed MLIR dictionary rather than JSON inside a string attr."""
+    return "{" + ", ".join(
+        f"{key} = {_format_attr_value(item)}"
+        for key, item in sorted(value.items())
+    ) + "}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2059,6 +2076,15 @@ class _OpExtractor(ast.NodeVisitor):
             self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands
         ]
         _canonicalize_spectral_attrs(mlir_name, inferred_operands, kwargs)
+        if mlir_name == "tessera.depth_attn":
+            # Resolve public defaults at the frontend boundary. The typed Graph
+            # op itself keeps these attributes required and therefore never
+            # delegates an absent numeric decision to a backend.
+            kwargs.setdefault("eps", 1.0e-6)
+            kwargs.setdefault(
+                "numeric_policy",
+                {"storage": "fp32", "softmax": "fp32", "accum": "fp32"},
+            )
 
         result_types = _infer_result_types(
             mlir_name,
@@ -3277,6 +3303,18 @@ def _shape_reduce_trailing(operand_types: List[IRType], attrs: Optional[Dict[str
     return tensor_ir_type(("*",), x.dtype, layout=x.layout)
 
 
+def _shape_depth_attention(operand_types: List[IRType],
+                           attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """``query[d], sources[m,...,d] -> [...,d]``."""
+    if len(operand_types) != 2:
+        return TENSOR_OPAQUE
+    query, sources = operand_types
+    if query.rank != 1 or sources.rank is None or sources.rank < 2:
+        return TENSOR_OPAQUE
+    return tensor_ir_type(tuple(sources.shape[1:]), sources.dtype,
+                          layout=sources.layout)
+
+
 _SHAPE_RULES = {
     "same_as_first": _shape_same_as_first,
     "matmul_2d": _shape_matmul_2d,
@@ -3298,6 +3336,7 @@ _SHAPE_RULES = {
     "cast": _shape_cast,
     "transpose": _shape_transpose,
     "reduce_trailing": _shape_reduce_trailing,
+    "depth_attention": _shape_depth_attention,
     "matmul_trailing": _shape_matmul_trailing,
     "same_as_second": _shape_same_as_second,
     "conv_spatial": _shape_conv_spatial,

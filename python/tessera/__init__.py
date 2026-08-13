@@ -441,6 +441,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     def softmax_safe(x, axis: int = -1):
         return softmax(x, axis=axis)
 
+    from ._block_attnres_ops import (
+        attn_with_stats,
+        depth_attn,
+        softmax_finalize,
+        softmax_merge,
+    )
+
     def reduce(x, op: str = "sum", axis=None, keepdims: bool = False):
         if hasattr(x, "_data"):
             x = x._data
@@ -4457,6 +4464,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "layer_norm": layer_norm,
         "softmax": softmax,
         "softmax_safe": softmax_safe,
+        "attn_with_stats": attn_with_stats,
+        "depth_attn": depth_attn,
+        "softmax_merge": softmax_merge,
+        "softmax_finalize": softmax_finalize,
         "reduce": reduce,
         "sum": sum,
         "gelu": gelu,
@@ -5049,6 +5060,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         layer_norm=layer_norm,
         softmax=softmax,
         softmax_safe=softmax_safe,
+        attn_with_stats=attn_with_stats,
+        depth_attn=depth_attn,
+        softmax_merge=softmax_merge,
+        softmax_finalize=softmax_finalize,
         reduce=reduce,
         sum=sum,
         sigmoid=sigmoid,

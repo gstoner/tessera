@@ -25,8 +25,8 @@ func.func @test_stencil_lower_basic(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
               dense<[-1, 0]> : tensor<2xi64>,
               dense<[0, 1]>  : tensor<2xi64>,
               dense<[0, -1]> : tensor<2xi64>],
-      bc = "periodic"
-  } : () -> index
+      bc = "periodic", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %out = "tessera.neighbors.stencil.apply"(%st, %arg0, %topo) :
       (index, tensor<?x?xf32>, !tessera.neighbors.topology) -> tensor<?x?xf32>
@@ -57,8 +57,8 @@ func.func @test_stencil_lower_async(%arg0: tensor<?xf32>) -> tensor<?xf32> {
   %st = "tessera.neighbors.stencil.define"() {
       taps = [dense<[-1]> : tensor<1xi64>,
               dense<[0]>  : tensor<1xi64>,
-              dense<[1]>  : tensor<1xi64>]
-  } : () -> index
+              dense<[1]>  : tensor<1xi64>], coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %out = "tessera.neighbors.stencil.apply"(%st, %arg0, %topo) :
       (index, tensor<?xf32>, !tessera.neighbors.topology) -> tensor<?xf32>
@@ -81,8 +81,8 @@ func.func @test_stencil_lower_idempotent(%arg0: tensor<?xf32>) -> tensor<?xf32> 
   } : () -> !tessera.neighbors.topology
 
   %st = "tessera.neighbors.stencil.define"() {
-      taps = [dense<[0]> : tensor<1xi64>]
-  } : () -> index
+      taps = [dense<[0]> : tensor<1xi64>], coeffs = [1.0 : f64]
+      } : () -> index
 
   // Pre-annotated as already lowered — pass must leave it alone
   %out = "tessera.neighbors.stencil.apply"(%st, %arg0, %topo) {

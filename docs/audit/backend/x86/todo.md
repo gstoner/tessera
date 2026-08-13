@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-12
+last_updated: 2026-08-13
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -113,10 +113,25 @@ change: the box runs under WSL2, so host-wall timing there stays
 **regression-only** and does not satisfy the clean AVX-512 timing packet still
 open above; and Zen 5 has AVX-512 but **no AMX**, so nothing on this host can
 retire the AMX lane.
+Cross-backend sync `CI-LIT-DEPS-2026-08-12` — **parity validated; no physical
+follow-up required.** PR 554 made the shared opt-in MLIR lit lane install the
+workflow-owned Python dependency set before `lit`/FileCheck collection. This is
+backend-neutral test infrastructure, changes no compiler/runtime contract, and
+requires no x86 package or exact-device evidence.
+
+Cross-backend sync `PDE-STENCIL-FOUNDATION-1-2026-08-12` — **CPU gradient
+correctness landed; broader AVX-512 follow-up required.** The executable CPU
+gradient ABI consumes explicit axis spacing and passes non-unit-grid numerical
+tests. General stencil apply, boundary, and halo primitives remain
+artifact-only; x86 still owns their typed consumers and a clean Zen 5 packet.
+No gfx1151 evidence transfers.
 
 Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
 The shared Block AttnRes numerical-policy, balanced-partition, VJP, and
-softmax-merge oracle contracts apply to x86. This PR adds no AVX-512 physical
+softmax-merge oracle contracts apply to x86. The exact static all-f32 Graph
+contract now lowers through the same content-addressed
+`schedule.depth_attention` → `tile.depth_attention_kernel` boundary, with an
+x86-owned workgroup policy included in its digest. This adds no AVX-512 Target
 consumer or Zen 5 evidence. After the gfx1151 contract is proven, x86 must own
 its vectorized stats-attention/merge package and independent correctness and
 performance packet; ROCm schedules and evidence do not transfer.

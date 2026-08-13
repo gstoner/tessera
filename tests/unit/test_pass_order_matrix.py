@@ -61,8 +61,8 @@ func.func @t(%arg0: tensor<?x?xf32>) {
         taps = [dense<[0, 0]> : tensor<2xi64>,
                 dense<[1, 0]> : tensor<2xi64>,
                 dense<[-1, 0]> : tensor<2xi64>],
-        bc = "periodic"
-    } : () -> index
+        bc = "periodic", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64]
+        } : () -> index
     %h = "tessera.neighbors.halo.region"(%arg0) {halo.width = [1, 1]} : (tensor<?x?xf32>) -> tensor<?x?xf32>
     %out = "tessera.neighbors.stencil.apply"(%st, %h, %topo) :
         (index, tensor<?x?xf32>, !tessera.neighbors.topology) -> tensor<?x?xf32>

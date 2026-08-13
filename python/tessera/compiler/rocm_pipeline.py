@@ -43,6 +43,7 @@ FAMILY_PLUGINS: dict[str, ROCMFamilyPlugin] = {
     for family in (
         "attention",
         "attention_backward",
+        "depth_attention",
         "algebra_clifford",
         "attention_mla_decode",
         "draft_dspark",

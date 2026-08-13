@@ -1035,6 +1035,82 @@ def Tessera_FlashAttnOp : Op<
   let hasVerifier = 1;
 }
 
+// BLOCK-ATTNRES-1 Phase 3.  These operations are the shared semantic boundary
+// for depth attention.  Target kernels are forbidden from inventing a second
+// contract: physical consumers must consume these Graph values (or their
+// canonical decomposition) and preserve the explicit numeric policy.
+def Tessera_AttnWithStatsOp : Op<Tessera_Dialect, "attn_with_stats", [Pure]> {
+  let summary = "Depth attention with max-shifted merge statistics";
+  let arguments = (ins TensorType:$query, TensorType:$sources,
+                       F64Attr:$eps,
+                       Tessera_NumericPolicyAttr:$numeric_policy);
+  let results = (outs TensorType:$output, TensorType:$maximum,
+                      TensorType:$normalizer);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_SoftmaxMergeOp : Op<Tessera_Dialect, "softmax_merge", [Pure]> {
+  let summary = "Associative merge of two max-shifted attention states";
+  let arguments = (ins TensorType:$output_a, TensorType:$maximum_a,
+                       TensorType:$normalizer_a, TensorType:$output_b,
+                       TensorType:$maximum_b, TensorType:$normalizer_b,
+                       BoolAttr:$reassociable,
+                       Tessera_NumericPolicyAttr:$numeric_policy);
+  let results = (outs TensorType:$output, TensorType:$maximum,
+                      TensorType:$normalizer);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_SoftmaxFinalizeOp : Op<Tessera_Dialect, "softmax_finalize", [Pure]> {
+  let summary = "Finalize an attention statistics state as output / normalizer";
+  let arguments = (ins TensorType:$output, TensorType:$normalizer,
+                       Tessera_NumericPolicyAttr:$numeric_policy);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_DepthAttnOp : Op<
+  Tessera_Dialect, "depth_attn",
+  [Pure, DeclareOpInterfaceMethods<Tessera_AdjointInterface>,
+   DeclareOpInterfaceMethods<Tessera_TangentInterface>]
+> {
+  let summary = "RMS-key normalized attention over a source-depth axis";
+  let arguments = (ins TensorType:$query, TensorType:$sources,
+                       F64Attr:$eps,
+                       Tessera_NumericPolicyAttr:$numeric_policy);
+  let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Exact compiler-owned products.  Keeping the primal operands and the product
+// direction/cotangent explicit makes lineage auditable through Graph lowering;
+// these are not target packages and do not grant backend support.
+def Tessera_DepthAttnVJPOp : Op<Tessera_Dialect, "depth_attn_vjp", [Pure]> {
+  let summary = "Exact reverse product for depth attention";
+  let arguments = (ins TensorType:$output_cotangent, TensorType:$query,
+                       TensorType:$sources, F64Attr:$eps,
+                       Tessera_NumericPolicyAttr:$numeric_policy);
+  let results = (outs TensorType:$query_cotangent,
+                      TensorType:$sources_cotangent);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_DepthAttnJVPOp : Op<Tessera_Dialect, "depth_attn_jvp", [Pure]> {
+  let summary = "Exact forward product for depth attention";
+  let arguments = (ins TensorType:$query, TensorType:$sources,
+                       TensorType:$query_tangent, TensorType:$sources_tangent,
+                       F64Attr:$eps,
+                       Tessera_NumericPolicyAttr:$numeric_policy);
+  let results = (outs TensorType:$result_tangent);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_VarlenSdpaOp : Op<
   Tessera_Dialect, "varlen_sdpa", [Pure]
 > {

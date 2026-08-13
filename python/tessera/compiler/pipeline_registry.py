@@ -598,6 +598,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         family_plugins=(
             ("algebra_clifford", ("generate-rocm-clifford-kernel",)),
             ("attention", ("generate-wmma-flash-attn-kernel",)),
+            ("depth_attention", ("generate-rocm-depth-attention-kernel",)),
             ("attention_mla_decode", ("generate-rocm-mla-absorb-decode-kernel",)),
             (
                 "attention_backward",

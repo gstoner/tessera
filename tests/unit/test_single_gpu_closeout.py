@@ -29,6 +29,7 @@ def test_tile_ir_partials_are_all_classified() -> None:
         "fused_reclassify",
         "multi_gpu_deferred",
         "single_gpu_closeable",
+        "architecture_evidence_gated",
     }
     assert all(r["owner"] and r["next_action"] for r in rows)
 
@@ -42,6 +43,7 @@ def test_target_ir_references_are_all_classified() -> None:
         "intentional_reference_review",
         "multi_gpu_deferred",
         "single_gpu_promote",
+        "architecture_evidence_gated",
     }
 
 

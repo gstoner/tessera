@@ -5,6 +5,6 @@
 
 func.func @bad_scheme(%x: tensor<32x32xf32>) -> tensor<32x32xf32> {
   // expected-error @+1 {{unknown spatial scheme 'quadratic'}}
-  %y = "tpp.grad"(%x) { scheme = "quadratic" } : (tensor<32x32xf32>) -> tensor<32x32xf32>
+  %y = "tpp.grad"(%x) {scheme = "quadratic", order = 2 : i64, spacing = [1.0 : f64, 1.0 : f64]} : (tensor<32x32xf32>) -> tensor<32x32xf32>
   return %y : tensor<32x32xf32>
 }

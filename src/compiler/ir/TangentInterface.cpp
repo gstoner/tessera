@@ -138,6 +138,27 @@ llvm::SmallVector<mlir::Value> AddOp::buildTangent(
                                 tangents[1]).getResult()};
 }
 
+llvm::SmallVector<mlir::Value> DepthAttnOp::buildTangent(
+    mlir::OpBuilder &builder, mlir::ValueRange tangents) {
+  if (tangents.size() != 2 || (!tangents[0] && !tangents[1]))
+    return {};
+  mlir::Value queryTangent = tangents[0];
+  mlir::Value sourcesTangent = tangents[1];
+  if (!queryTangent)
+    queryTangent = buildZeroLike(builder, getLoc(), getQuery().getType());
+  if (!sourcesTangent)
+    sourcesTangent = buildZeroLike(builder, getLoc(), getSources().getType());
+  if (!queryTangent || !sourcesTangent)
+    return {};
+  mlir::OperationState state(getLoc(), "tessera.depth_attn_jvp");
+  state.addOperands(
+      {getQuery(), getSources(), queryTangent, sourcesTangent});
+  state.addTypes(getResult().getType());
+  state.addAttribute("eps", getEpsAttr());
+  state.addAttribute("numeric_policy", getNumericPolicyAttr());
+  return {builder.create(state)->getResult(0)};
+}
+
 llvm::SmallVector<mlir::Value> SubOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
   if (tangents.size() != 2 || (!tangents[0] && !tangents[1]))

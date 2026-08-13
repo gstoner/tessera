@@ -19,6 +19,7 @@ src/compiler/ir/TesseraOps.td,AttnCompressedBlocksOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnLocalWindow2DOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnSlidingWindowOp,1,1,real
 src/compiler/ir/TesseraOps.td,AttnTopKBlocksOp,1,1,real
+src/compiler/ir/TesseraOps.td,AttnWithStatsOp,1,1,real
 src/compiler/ir/TesseraOps.td,BatchedGemmOp,1,1,real
 src/compiler/ir/TesseraOps.td,BinaryCrossEntropyLossBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,BinaryCrossEntropyLossOp,1,1,real
@@ -51,6 +52,9 @@ src/compiler/ir/TesseraOps.td,CrossEntropyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,CustomAdjointCallOp,1,1,real
 src/compiler/ir/TesseraOps.td,DCTOp,1,1,real
 src/compiler/ir/TesseraOps.td,DeepSeekSparseAttentionOp,1,1,real
+src/compiler/ir/TesseraOps.td,DepthAttnJVPOp,1,1,real
+src/compiler/ir/TesseraOps.td,DepthAttnOp,1,1,real
+src/compiler/ir/TesseraOps.td,DepthAttnVJPOp,1,1,real
 src/compiler/ir/TesseraOps.td,DequantGroupedGemmOp,1,1,real
 src/compiler/ir/TesseraOps.td,DequantMatmulOp,1,1,real
 src/compiler/ir/TesseraOps.td,DequantizeFP4Op,1,1,real
@@ -185,6 +189,8 @@ src/compiler/ir/TesseraOps.td,SiluMulOp,1,1,real
 src/compiler/ir/TesseraOps.td,SiluOp,1,1,real
 src/compiler/ir/TesseraOps.td,SinOp,1,1,real
 src/compiler/ir/TesseraOps.td,SmoothL1LossOp,1,1,real
+src/compiler/ir/TesseraOps.td,SoftmaxFinalizeOp,1,1,real
+src/compiler/ir/TesseraOps.td,SoftmaxMergeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftmaxOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftmaxSafeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftplusOp,1,1,real

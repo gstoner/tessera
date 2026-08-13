@@ -628,9 +628,9 @@ def test_theta_scheme_conditional_below_half(
 def test_centered_explicit_advection_is_unconditionally_unstable(a: Fraction) -> None:
     """E.6: the negative golden. |xi|^2 = 1 + a^2(1 - c^2) > 1 for any a != 0.
 
-    This is why `scheme` is a semantic key: LegalizeSpaceTime currently defaults
-    a missing scheme to "central", which silently turns an unannotated advection
-    kernel into a divergent one.
+    This is why `scheme` is a semantic key: LegalizeSpaceTime must reject a
+    missing scheme rather than turn an unannotated advection kernel into a
+    divergent centered discretization.
     """
     ok, witness = stable_on_cos(centered_advection_r(a))
     assert not ok, f"a={a} must be refuted"

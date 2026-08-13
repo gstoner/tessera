@@ -249,6 +249,31 @@ def Schedule_AttentionOp : Op<ScheduleDialect, "attention", [Pure]> {
   let hasVerifier = 1;
 }
 
+// BLOCK-ATTNRES-1 Phase 4.  This is deliberately distinct from token
+// attention: the source-depth axis, RMS-key normalization, and associative
+// max-shifted statistics merge are semantic identity, not backend heuristics.
+def Schedule_DepthAttentionOp : Op<ScheduleDialect, "depth_attention", [Pure]> {
+  let summary = "Content-addressed depth attention statistics/merge program";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$arch,
+                       StrAttr:$storage,
+                       StrAttr:$softmax,
+                       StrAttr:$accum,
+                       F64Attr:$eps,
+                       I64Attr:$source_count,
+                       I64Attr:$rows,
+                       I64Attr:$width,
+                       I64Attr:$source_tile,
+                       I64Attr:$workgroup_size,
+                       StrAttr:$statistics_recurrence,
+                       StrAttr:$merge_recurrence,
+                       BoolAttr:$reassociable);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
 def Schedule_AttentionBackwardOp : Op<ScheduleDialect, "attention_backward", [Pure]> {
   let summary = "Scheduled canonical tensor-valued attention VJP";
   let arguments = (ins AnyType:$dq_subject,

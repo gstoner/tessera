@@ -21,7 +21,7 @@
 //   tessera.neighbors.halo.region       — derive a halo view from a tile
 //   tessera.neighbors.halo.exchange     — initiate async halo exchange
 //   tessera.neighbors.neighbor.read     — read a neighbor slice by Δ
-//   tessera.neighbors.stencil.define    — declare taps + BC
+//   tessera.neighbors.stencil.define    — declare explicit tap/coeff pairs + BC
 //   tessera.neighbors.stencil.apply     — apply stencil (infers halos)
 //   tessera.neighbors.pipeline.config   — configure overlap/double-buffer
 //===----------------------------------------------------------------------===//
@@ -397,8 +397,37 @@ struct StencilDefineOp
     p.printOptionalAttrDict((*this)->getAttrs());
   }
   LogicalResult verify() {
-    if (!(*this)->getAttr("taps"))
+    auto taps = (*this)->getAttrOfType<ArrayAttr>("taps");
+    if (!taps || taps.empty())
       return emitOpError("requires 'taps' array of DeltaArrayAttr");
+    auto coeffs = (*this)->getAttrOfType<ArrayAttr>("coeffs");
+    if (!coeffs || coeffs.empty())
+      return emitOpError("requires explicit non-empty 'coeffs' array");
+    if (taps.size() != coeffs.size())
+      return emitOpError("requires one coefficient per tap; got ")
+             << taps.size() << " taps and " << coeffs.size()
+             << " coefficients";
+    int64_t tapRank = -1;
+    for (auto [index, tap] : llvm::enumerate(taps)) {
+      auto delta = llvm::dyn_cast<DenseIntElementsAttr>(tap);
+      if (!delta || delta.getType().getRank() != 1 || delta.empty())
+        return emitOpError("tap ") << index
+               << " must be a non-empty rank-1 dense integer vector";
+      int64_t rank = delta.getNumElements();
+      if (tapRank < 0)
+        tapRank = rank;
+      else if (rank != tapRank)
+        return emitOpError("tap ") << index << " has rank " << rank
+               << ", expected " << tapRank;
+    }
+    for (auto [index, coeff] : llvm::enumerate(coeffs)) {
+      auto value = llvm::dyn_cast<FloatAttr>(coeff);
+      if (!value || !value.getType().isF64())
+        return emitOpError("coefficient ") << index
+               << " must use the canonical f64 metadata dtype";
+      if (!value.getValue().isFinite())
+        return emitOpError("coefficient ") << index << " must be finite";
+    }
     return success();
   }
 };

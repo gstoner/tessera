@@ -103,6 +103,9 @@ def _is_multi_gpu(family: str, op_name: str) -> bool:
     return family in _MULTI_GPU_FAMILIES or op_name.startswith(_MULTI_GPU_OP_PREFIXES)
 
 
+_PHASED_ARTIFACT_ONLY_OPS = frozenset({"depth_attn"})
+
+
 def _tile_bucket(row: audit.OpSupportRow) -> tuple[str, str, str]:
     target = row.cells["target_ir"].status
     if _is_multi_gpu(row.family, row.op_name):
@@ -110,6 +113,12 @@ def _tile_bucket(row: audit.OpSupportRow) -> tuple[str, str, str]:
             "multi_gpu_deferred",
             "distributed_validation",
             "Move out of the single-GPU denominator; prove with distributed launch or mock-mesh oracle.",
+        )
+    if row.op_name in _PHASED_ARTIFACT_ONLY_OPS:
+        return (
+            "architecture_evidence_gated",
+            "backend_codegen",
+            "Shared Graph/AD contract is closed; wait for the named architecture-owned physical phase and device packet.",
         )
     if target == "fused":
         return (
@@ -130,6 +139,12 @@ def _target_bucket(row: audit.OpSupportRow) -> tuple[str, str, str]:
             "multi_gpu_deferred",
             "distributed_validation",
             "Keep reference lane until a real collective/distributed proof exists.",
+        )
+    if row.op_name in _PHASED_ARTIFACT_ONLY_OPS:
+        return (
+            "architecture_evidence_gated",
+            "backend_codegen",
+            "Keep artifact-only until the named target package and exact-device evidence land.",
         )
     if row.family == "acceptance_verification":
         return (

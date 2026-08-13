@@ -3574,6 +3574,7 @@ def _submit_rocm_gfx1151_native(
     from tessera.compiler.rocm_native import (
         GFX1151_ATTN_BF16_ABI,
         GFX1151_ATTN_F16_ABI,
+        GFX1151_DEPTH_ATTN_F32_ABI,
         GFX1151_MATMUL_F16_F32_ABI,
         GFX1151_MOE_DISPATCH_F32_ABI,
         GFX1151_PAGED_KV_F32_ABI,
@@ -3595,6 +3596,7 @@ def _submit_rocm_gfx1151_native(
         GFX1151_ATTN_F16_ABI,
         GFX1151_ATTN_BF16_ABI,
         GFX1151_MATMUL_F16_F32_ABI,
+        GFX1151_DEPTH_ATTN_F32_ABI,
     }:
         raise RuntimeError(f"unsupported gfx1151 descriptor ABI {descriptor.abi_id!r}")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
@@ -3605,6 +3607,7 @@ def _submit_rocm_gfx1151_native(
         GFX1151_ATTN_BF16_ABI,
     }
     matmul = descriptor.abi_id == GFX1151_MATMUL_F16_F32_ABI
+    depth_attention = descriptor.abi_id == GFX1151_DEPTH_ATTN_F32_ABI
     attention_bias = attention and bool(descriptor.provenance["bias"])
     expected_buffers = (
         5
@@ -3612,7 +3615,7 @@ def _submit_rocm_gfx1151_native(
         else 4
         if attention
         else 3
-        if paged_kv or moe_dispatch or matmul
+        if paged_kv or moe_dispatch or matmul or depth_attention
         else 2
     )
     if len(ordered) != expected_buffers:
@@ -3625,7 +3628,28 @@ def _submit_rocm_gfx1151_native(
     reduction = descriptor.abi_id in reduction_abis
     dimensions: tuple[int, ...] = ()
     expected_dtype: Any = None
-    if matmul:
+    if depth_attention:
+        query = buffers[ordered[0].name]
+        sources = buffers[ordered[1].name]
+        output = buffers[ordered[2].name]
+        source_count = int(cast(int, descriptor.provenance["source_count"]))
+        rows = int(cast(int, descriptor.provenance["rows"]))
+        width = int(cast(int, descriptor.provenance["width"]))
+        if (
+            tuple(query.shape) != (width,)
+            or sources.size != source_count * rows * width
+            or output.size != rows * width
+            or query.dtype != np.float32
+            or sources.dtype != np.float32
+            or output.dtype != np.float32
+        ):
+            raise RuntimeError(
+                "gfx1151 depth-attention arrays disagree with descriptor shape/dtype"
+            )
+        input_arrays = [np.ascontiguousarray(query), np.ascontiguousarray(sources)]
+        grid_x = rows
+        grid_y = 1
+    elif matmul:
         a = buffers[ordered[0].name]
         b_matrix = buffers[ordered[1].name]
         output = buffers[ordered[2].name]
@@ -3760,7 +3784,7 @@ def _submit_rocm_gfx1151_native(
                 raise RuntimeError("gfx1151 bf16 reduction requires ml_dtypes")
         else:
             expected_dtype = np.float32
-    elif not attention and not paged_kv and not moe_dispatch and not matmul:
+    elif not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention:
         rows = int(cast(int, scalars["Rows"]))
         columns = int(cast(int, scalars["K"]))
         if x.size != rows * columns or tuple(output.shape) != tuple(x.shape):
@@ -3768,7 +3792,7 @@ def _submit_rocm_gfx1151_native(
         dimensions = (rows, columns)
         grid_x = rows
         expected_dtype = np.float16 if descriptor.abi_id == GFX1151_SOFTMAX_F16_ABI else np.float32
-    if not attention and not paged_kv and not moe_dispatch and not matmul:
+    if not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention:
         expected_output_dtype = np.float32 if reduction else expected_dtype
         if x.dtype != expected_dtype or output.dtype != expected_output_dtype:
             raise RuntimeError("gfx1151 native array dtype disagrees with descriptor ABI")
@@ -3861,7 +3885,7 @@ def _submit_rocm_gfx1151_native(
         rc = hip.hipModuleLaunchKernel(
             function,
             grid_x,
-            grid_y if attention or matmul else 1,
+            grid_y if attention or matmul or depth_attention else 1,
             1,
             32 if attention or matmul else _SOFTMAX_BLOCKDIM,
             1,
@@ -4687,6 +4711,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         return
 
     from tessera.compiler.rocm_native import (
+        GFX1151_DEPTH_ATTN_F32_ABI,
         GFX1151_MATMUL_F16_F32_ABI,
         GFX1151_MOE_DISPATCH_F32_ABI,
         GFX1151_PAGED_KV_F32_ABI,
@@ -4709,6 +4734,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX1151_PAGED_KV_F32_ABI,
             GFX1151_MOE_DISPATCH_F32_ABI,
             GFX1151_MATMUL_F16_F32_ABI,
+            GFX1151_DEPTH_ATTN_F32_ABI,
         }
         and target not in _native_launchers
     ):

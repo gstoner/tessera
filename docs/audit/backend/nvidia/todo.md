@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-12
+last_updated: 2026-08-13
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
@@ -28,11 +28,25 @@ and the x86 Target IR. That is the same trap documented for ROCm under this
 sync key; NVIDIA's separate driver is the existing, correct answer. Revisit
 only if a CUDA-capable runner joins CI, which would also be the point at which
 sm_120 exact-device evidence becomes schedulable.
+Cross-backend sync `CI-LIT-DEPS-2026-08-12` — **parity validated; no physical
+follow-up required.** PR 554 made the shared opt-in MLIR lit lane install the
+workflow-owned Python dependency set before `lit`/FileCheck collection. This is
+backend-neutral test infrastructure, changes no compiler/runtime contract, and
+requires no CUDA package or exact-device evidence.
+
+Cross-backend sync `PDE-STENCIL-FOUNDATION-1-2026-08-12` — **shared semantic
+parity validated; CUDA physical follow-up required.** Explicit coefficients,
+scheme/order, and per-axis spacing are compiler requirements. The absent
+NVIDIA stencil/halo/boundary symbols are artifact-only rather than callable
+Target records. No SM120 package or CUDA packet was added.
 
 Cross-backend sync `BLOCK-ATTNRES-ROCM-2026-08-12` — **follow-up required.**
 The shared Block AttnRes plan establishes portable balanced-partition,
 epsilon-qualified numeric, VJP, and softmax-merge oracle contracts. This PR
-adds no SM120 package or CUDA evidence. NVIDIA must later provide its own
+adds Phase-1 stats/merge/finalize references, the Phase-2 stdlib recurrence,
+Phase-3 typed Graph/VJP/JVP contracts, and the Phase-4 content-addressed
+Schedule→Tile artifact, but no SM120 package or CUDA evidence. NVIDIA must
+later provide its own
 stats-attention/merge Target consumer and exact-device packet; the small depth
 shapes do not by themselves justify tensor-core lowering, and ROCm proof does
 not transfer.

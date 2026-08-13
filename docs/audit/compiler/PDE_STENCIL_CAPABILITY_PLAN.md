@@ -327,42 +327,58 @@ than only refusing.
 These predate the plan and must close first; layering new ops on them would
 inherit the bugs.
 
-**[GAP-1] Grid spacing does not exist anywhere in TPP.**
+**[GAP-1 — closed 2026-08-12] Grid spacing was absent from TPP.**
 `src/solvers/tpp/lib/TargetHooks/CPU/Stencil.cpp:9` states the convention in a
 *comment* — "unit grid spacing, periodic boundary" — and the kernel hardcodes
-both. A repo-wide grep for `spacing` across `src/solvers/tpp` and
-`src/compiler/tessera_neighbors` returns **exactly that one comment**. Every PDE
-lowered through this lane on a grid with `h ≠ 1` is wrong by `h^{-|α|}`, with no
-diagnostic. The Target-IR ABI has no parameter for it either
-(`ts_stencil_grad_cpu(const float*, float*, int nx, int ny, int axis, int order)`).
+both. `PDE-STENCIL-FOUNDATION-1` now requires a positive per-axis `spacing`
+array, validates its rank, preserves it through Target IR, and passes the
+selected-axis spacing into the CPU ABI. Missing, non-finite, non-positive, and
+rank-mismatched spacing fail closed.
 
-**[GAP-2] `StencilDefineOp` has taps but no coefficients.** Its ODS summary
+**[GAP-2 — closed 2026-08-12] `StencilDefineOp` had taps but no coefficients.** Its ODS summary
 reads *"Define a stencil taps/coeffs object with BC"* while its arguments are
 `(ins ArrayAttr:$taps, OptionalAttr<StrAttr>:$bc)` — the coefficients field the
 summary advertises does not exist. `StencilLoopMaterializePass.cpp:333`
 consequently accumulates with a bare `arith::AddFOp`, i.e. implicit coefficient
 1.0, so the only expressible update is `u_out[i] = Σ_j u[i+δ_j]`. **FTCS heat is
 not representable.** This is simultaneously the blocking gap for the stability
-pass and a live correctness bug.
+pass and a live correctness bug. The ODS and executable pass boundary now
+require equal-length tap/coefficient arrays with finite floating coefficients.
+Materialization emits the multiply; a non-unit golden fixture fails if
+implicit-one behavior returns.
 
-**[GAP-3] A semantic key is silently defaulted.**
+**[GAP-3 — closed 2026-08-12] A semantic key was silently defaulted.**
 `LegalizeSpaceTime.cpp:74` reads `StringRef scheme = "central";` *before*
 checking whether the attribute exists. Combined with the verified result that
 centered explicit advection is unconditionally unstable (§I.3), an unannotated
 advection kernel is silently converted into a divergent one. This is the
 `EBMCanonicalize` `manifold` failure that motivated Decision #21a, recurring.
+Legalization now requires explicit scheme and positive even order before
+stamping its normalized contract.
 
-**[GAP-4] Two production stencil/halo stacks, no declared oracle relationship.**
+**[GAP-4 — common gradient subset closed 2026-08-12] Two production
+stencil/halo stacks require a declared oracle relationship.**
 `tessera_neighbors` and `src/solvers/tpp` each define `stencil.apply`,
 `halo.exchange`, and a halo-infer pass. Decision #31 permits a second
 implementation only as a declared oracle with a differential test. The ordering
 caveat applies: do not collapse before the survivor carries temporal halos
 (neighbors) *and* space–time fusion + RK stepping (TPP).
 
-**[GAP-5] Three of four named Target-IR callees have no definition.**
+The shared periodic central-gradient subset now uses the production
+`central_difference_taps` contract to generate physical Neighbors coefficients
+with `h^-derivative_order`, then compares those semantics against the compiled
+TPP CPU kernel for both axes, accuracy orders 2/4, and non-unit grids. The
+relationship remains open beyond that common subset: boundary modes, general
+stencil kernels, distributed halos, and temporal fusion still require paired
+physical execution.
+
+**[GAP-5 — fail-closed 2026-08-12] Three of four named Target-IR callees have no definition.**
 `LowerTPPToTargetIR.cpp` names `ts_stencil_grad_*`, `ts_stencil_apply_*`,
-`ts_bc_enforce_*`, `ts_halo_exchange_*`; only `ts_stencil_grad_cpu` exists. That
-is Decision #29 inverted — a consumer named with nothing behind it.
+`ts_bc_enforce_*`, `ts_halo_exchange_*`; only `ts_stencil_grad_cpu` exists.
+Target lowering now emits that CPU call as `executable` and records every
+unavailable backend/primitive combination as `artifact_only` without a
+callable symbol. Implementing those physical consumers remains open, but the
+compiler no longer claims they exist.
 
 ### III.4 Autodiff and coverage
 
@@ -451,15 +467,25 @@ lit-covered. New `benchmarks/pde/` emitting `BenchmarkRow`, honest triple
 | Phase | Deliverable | Where it runs |
 |---|---|---|
 | **0** | This plan + the executable contract test (**landed**) | any box |
-| **1** | [GAP-1..3] fixes: `spacing` attribute + tap scaling, `coeffs` on `StencilDefineOp` (also fixes the materializer), `scheme` fails closed. Each with a negative fixture. | any box (host-free) |
+| **1** | **Landed 2026-08-12:** [GAP-1..3] `spacing` ABI + derivative scaling, explicit `coeffs` on `StencilDefineOp`, and fail-closed scheme/order. Missing Target implementations are also truthfully `artifact_only`. | any box (host-free) |
 | **2** | `pde.operator` ODS + exact-rational analysis + `-tessera-pde-classify` + `-tessera-pde-legality`; 24 lit fixtures incl. 14 negative | any box |
 | **3** | `-tpp-stability-certificate` + bound emission + autotuner rejection reasons + `-tpp-select-dt` | any box |
 | **4** | Manufactured-solutions harness, the metamorphic oracle family, `E_PDE_*` diagnostics, `benchmarks/pde/` | any box |
 | **5** | First hardware proof: stencil + halo on gfx1151, `evaluate()` to `HARDWARE_VERIFIED`; Apple GPU lane second | **Strix Halo**, then Mac |
 | **6** | [GAP-4] neighbors/TPP unification, once the survivor carries both feature sets | any box |
 
-Graph-infrastructure items (Part IV) are independent of this ordering and land
-in the sequence 4 → 3 → 2 → 1 given in §IV.5.
+Graph-theory findings in Part IV do not create an independent compiler project
+or synchronization key. They are evidence and algorithms routed into the
+existing owning projects: IV.3 belongs to W5.2 action-DAG scheduling, IV.1/IV.2
+to W5.4 distributed placement/routing, and IV.4 to their test-oracle support.
+Their local implementation order remains 4 → 3 → 2 → 1.
+
+| Part IV finding | Owning authority | Scope at that authority |
+|---|---|---|
+| Conflict-free collective rounds | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md), **W5.4** | Produce verified `collective_permute` rounds inside native distributed planning; transport and packets remain W5.4 gates. |
+| Critical-path/list DAG scheduling | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md), **W5.2g** | Replace factorial search as the scalable rank/prune implementation while retaining exhaustive small-DAG differential proof. |
+| Hall/König MoE defect certificates | [`MODEL_CLASS_ROADMAP.md`](../roadmap/MODEL_CLASS_ROADMAP.md), **MODEL-ROUTE-CERT-1** | Diagnose infeasible capacity/routing and enable later candidate-set overflow redirect; this is model routing, not PDE lowering. |
+| Matrix-tree/de Bruijn graph oracles | Shared `python/tessera/testing` infrastructure | Test-only proof utilities consumed by W5.2/W5.4/model routing; never production scheduling authority. |
 
 ---
 
@@ -467,7 +493,8 @@ in the sequence 4 → 3 → 2 → 1 given in §IV.5.
 
 ### IV.1 Conflict-free collective schedule generator
 
-`python/tessera/compiler/collective_schedule.py`. Peel Δ perfect matchings
+Candidate implementation: `python/tessera/compiler/collective_schedule.py`.
+This is a W5.4 component, not a PDE deliverable. Peel Δ perfect matchings
 (A6); each round lowers to **`collective_permute`, which already exists
 end-to-end** — MLIR op with `source_peers`/`target_peers`, C++ adapter with real
 `ncclSend`/`ncclRecv` in-group for both NCCL and RCCL, Python export — and
@@ -487,7 +514,8 @@ beside the existing draft would violate Decision #31's spirit.
 
 ### IV.2 Hall/König MoE reference router
 
-`python/tessera/testing/flow_router.py` (test-side: a declared oracle, not a
+Candidate implementation: `python/tessera/testing/flow_router.py` (test-side:
+a declared oracle owned by MODEL-ROUTE-CERT-1, not a
 second production router). **Measured finding that changes the framing:** a
 max-flow router adds *zero placement value* to today's `route_tokens()` — 300/300
 instances tied — because each `(token, slot)` has exactly one candidate expert,
@@ -504,7 +532,7 @@ the exact drop count `|U| − |N(U)|` — verified to reproduce the drop count i
 
 ### IV.3 DAG scheduling upgrade
 
-`composition_cost.py::_topological_orders` enumerates **every** topological order
+Under W5.2g, `composition_cost.py::_topological_orders` enumerates **every** topological order
 by DFS (factorial in the width of an antichain, cut off at `max_orders=4096`).
 When the cutoff trips, `prune_composition_candidates` retains every candidate —
 which is *deliberate and tested* (`test_bounded_nonexhaustive_search_retains_candidate`;
@@ -527,6 +555,7 @@ is pruned as though the search explored something.
 
 ### IV.4 Test utilities
 
+Shared test infrastructure, proposed as
 `python/tessera/testing/graph_oracles.py`: `laplacian_count()` (matrix-tree,
 self-checking across minor / coefficient / eigenvalue forms — verified against
 brute force, Cayley `n^{n-2}` for `n = 2..8`, Petersen 2000) and
@@ -537,7 +566,7 @@ large — a silent off-by-a-factor in a test assertion.
 
 ### IV.5 Order and effort
 
-`IV.4` (small, self-contained, supplies IV.3's oracle) → `IV.3` (medium; removes
+Within the existing W5.2/W5.4 projects, `IV.4` (small, self-contained, supplies IV.3's oracle) → `IV.3` (medium; removes
 an already-degrading exponential path) → `IV.2` (small-medium; clean diagnostic
 win) → `IV.1` (medium; largest, and most transport-gated).
 
@@ -547,7 +576,7 @@ win) → `IV.1` (medium; largest, and most transport-gated).
 
 | Risk | Mitigation |
 |---|---|
-| Fixing [GAP-2] changes stencil numerics for anything relying on implicit-1.0 taps | The materializer bug and the ODS gap close in one patch with a golden-value fixture at `h = 0.5`; grep for in-tree `stencil.define` users first |
+| [GAP-2] migration accidentally preserves implicit-1.0 numerics | Closed with explicit coefficients on every in-tree definition, pass-level totality validation, and a weighted golden fixture; future omissions fail closed |
 | Classification proves too conservative — real operators land in `unknown` | Deliberate. Fixture 14 documents a known false negative so a future "improvement" that guesses must delete a test with written rationale |
 | Stability certificate blocks a scheme a user knows is fine | `-tpp-stability=advisory` downgrades to a warning **and stamps `enforced = false` into the IR**, so the artifact self-describes and the evaluator refuses it a correctness rung |
 | Exact rational arithmetic is slow | Sizes are tiny (`n ≤ 4`, `S ≤ 8`, stencil degree < 10); integer-scaled `APInt` throughout |

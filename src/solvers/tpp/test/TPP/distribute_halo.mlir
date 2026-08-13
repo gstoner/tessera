@@ -8,7 +8,7 @@
 
 module attributes {tessera.mesh.axes = ["dp", "tp"]} {
   func.func @grad(%x: tensor<32x32xf32>) -> tensor<32x32xf32> {
-    %y = "tpp.grad"(%x) : (tensor<32x32xf32>) -> tensor<32x32xf32>
+    %y = "tpp.grad"(%x) {scheme = "central", order = 2 : i64, spacing = [1.0 : f64, 1.0 : f64]} : (tensor<32x32xf32>) -> tensor<32x32xf32>
     return %y : tensor<32x32xf32>
   }
 }

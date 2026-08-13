@@ -35,6 +35,7 @@ from .native_artifact import (
 from .scheduled_matmul import ScheduledMatmulArtifact
 from .scheduled_kernel import ScheduledKernelArtifact
 from .scheduled_attention import ScheduledAttentionArtifact
+from .scheduled_depth_attention import ScheduledDepthAttentionArtifact
 from .rocm_pipeline import (
     ROCMExecutablePipeline,
     ROCMInputLevel,
@@ -65,6 +66,9 @@ GFX1151_ATTN_BWD_DKDV_ABI = "tessera.rocm.attention_backward.dkdv_split.v1"
 GFX1151_ATTN_BWD_REDUCE_ABI = "tessera.rocm.attention_backward.dkdv_reduce.v1"
 GFX1151_ATTN_BWD_DQ_ABI = "tessera.rocm.attention_backward.dq.v1"
 GFX1151_MATMUL_F16_F32_ABI = "tessera.rocm.matmul.a_b_o_m_n_k.f16_f32.v1"
+GFX1151_DEPTH_ATTN_F32_ABI = (
+    "tessera.rocm.depth_attention.query_sources_o.f32.v1"
+)
 
 
 @dataclass(frozen=True)
@@ -1339,6 +1343,14 @@ def _compile_scheduled_attention_tile_ir(tile_ir: str):
     )
 
 
+def _compile_scheduled_depth_attention_tile_ir(tile_ir: str):
+    return _compile_native_tile_ir(
+        tile_ir,
+        directive="tessera_rocm.depth_attention",
+        family="depth_attention",
+    )
+
+
 def _compile_attention_graph_ir(tile_ir: str, *, tile_q: int, tile_kv: int):
     return _compile_native_tile_ir(
         tile_ir,
@@ -1703,6 +1715,116 @@ def package_scheduled_attention(
             "backward_lse_selection": artifact.backward_lse_selection,
             "schedule_digest": artifact.schedule_digest,
             "semantic_ir_digest": artifact.semantic_ir_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return ROCMNativePackage(
+        artifact.tile_ir, target_ir, backend_ir, image, descriptor
+    )
+
+
+def package_scheduled_depth_attention(
+    artifact: ScheduledDepthAttentionArtifact,
+    *,
+    pipeline_name: str,
+) -> ROCMNativePackage:
+    """Package the exact Block AttnRes Schedule-to-Tile artifact for gfx1151."""
+
+    artifact.validate()
+    if (
+        artifact.target != "rocm"
+        or artifact.architecture != "gfx1151"
+        or artifact.storage != "f32"
+        or artifact.softmax != "f32"
+        or artifact.accum != "f32"
+        or artifact.statistics_recurrence != "rms_key_online_softmax_stats_v1"
+        or artifact.merge_recurrence != "max_shifted_pairwise_merge_v1"
+    ):
+        raise ValueError("ROCm depth attention requires the exact gfx1151 f32 contract")
+    (
+        target_ir,
+        backend_ir,
+        payload,
+        compiler_fp,
+        toolchain_fp,
+        device_libraries,
+        compile_state,
+    ) = _compile_scheduled_depth_attention_tile_ir(artifact.tile_ir)
+    entry = artifact.function_name
+    image = NativeImageArtifact(
+        target="rocm_gfx1151",
+        architecture="gfx1151",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="hsaco",
+        payload=payload,
+        entry_points=(NativeEntryPoint(entry, GFX1151_DEPTH_ATTN_F32_ABI),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=GFX1151_DEPTH_ATTN_F32_ABI,
+        buffers=(
+            BufferBinding(0, artifact.query_name, "input", "fp32", 1, "row_major", 4),
+            BufferBinding(
+                1,
+                artifact.sources_name,
+                "input",
+                "fp32",
+                len(artifact.sources_shape),
+                "row_major",
+                4,
+            ),
+            BufferBinding(
+                2,
+                artifact.output_name,
+                "output",
+                "fp32",
+                len(artifact.output_shape),
+                "row_major",
+                4,
+            ),
+        ),
+        scalars=(),
+        shape_guards=tuple(
+            [
+                ShapeGuard(artifact.query_name, axis, "eq", extent)
+                for axis, extent in enumerate(artifact.query_shape)
+            ]
+            + [
+                ShapeGuard(artifact.sources_name, axis, "eq", extent)
+                for axis, extent in enumerate(artifact.sources_shape)
+            ]
+            + [
+                ShapeGuard(artifact.output_name, axis, "eq", extent)
+                for axis, extent in enumerate(artifact.output_shape)
+            ]
+        ),
+        geometry=LaunchGeometry(policy="gfx1151_depth_attention_row_workgroup_256"),
+        ordering=OrderingSemantics(
+            ordered_submission=True,
+            residency="none",
+            synchronization=("completion",),
+        ),
+        provenance={
+            "work_item": "BLOCK-ATTNRES-ROCM-1",
+            "sync_key": "BLOCK-ATTNRES-ROCM-2026-08-12",
+            "route": "canonical_scheduled_tile_consumer",
+            "algorithm": artifact.statistics_recurrence,
+            "merge": artifact.merge_recurrence,
+            "source_count": artifact.source_count,
+            "rows": artifact.rows,
+            "width": artifact.width,
+            "eps": artifact.eps,
+            "source_tile": artifact.source_tile,
+            "storage": artifact.storage,
+            "softmax": artifact.softmax,
+            "accum": artifact.accum,
+            "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },
     )
@@ -2689,6 +2811,7 @@ __all__ = [
     "GFX1151_ATTN_BWD_PRE_ABI",
     "GFX1151_ATTN_BWD_REDUCE_ABI",
     "GFX1151_ATTN_F16_ABI",
+    "GFX1151_DEPTH_ATTN_F32_ABI",
     "GFX1151_MOE_DISPATCH_F32_ABI",
     "GFX1151_MATMUL_F16_F32_ABI",
     "GFX1151_PAGED_KV_F32_ABI",
@@ -2711,6 +2834,7 @@ __all__ = [
     "package_native",
     "package_scheduled_kernel",
     "package_scheduled_attention",
+    "package_scheduled_depth_attention",
     "package_scheduled_attention_backward",
     "package_scheduled_matmul",
     "package_attention",

@@ -1986,6 +1986,188 @@ static int64_t maxHeadDimForTargetSm(StringRef sm) {
       .Default(-1);  // unknown / no limit applied
 }
 
+static bool compatibleExtent(int64_t lhs, int64_t rhs) {
+  return ShapedType::isDynamic(lhs) || ShapedType::isDynamic(rhs) || lhs == rhs;
+}
+
+static LogicalResult verifyDepthAttnPolicy(Operation *op,
+                                           DictionaryAttr policy,
+                                           Type storageType) {
+  auto storage = dyn_cast_or_null<StringAttr>(policy.get("storage"));
+  auto softmax = dyn_cast_or_null<StringAttr>(policy.get("softmax"));
+  auto accum = dyn_cast_or_null<StringAttr>(policy.get("accum"));
+  if (!storage || !softmax || !accum)
+    return op->emitOpError(
+        "numeric_policy requires storage, softmax, and accum strings");
+  StringRef expectedStorage;
+  if (storageType.isF32())
+    expectedStorage = "fp32";
+  else if (storageType.isBF16())
+    expectedStorage = "bf16";
+  else if (storageType.isF16())
+    expectedStorage = "fp16";
+  else
+    return op->emitOpError("requires fp16, bf16, or fp32 storage");
+  if (storage.getValue() != expectedStorage)
+    return op->emitOpError("numeric_policy.storage must match operand storage (")
+           << expectedStorage << ")";
+  if (softmax.getValue() != "fp32" || accum.getValue() != "fp32")
+    return op->emitOpError(
+        "numeric_policy requires softmax=fp32 and accum=fp32");
+  return success();
+}
+
+static LogicalResult verifyDepthAttnShape(Operation *op, Value query,
+                                          Value sources, Type resultType,
+                                          FloatAttr eps,
+                                          DictionaryAttr policy,
+                                          bool resultUsesStorage = true) {
+  auto queryType = dyn_cast<RankedTensorType>(query.getType());
+  auto sourcesType = dyn_cast<RankedTensorType>(sources.getType());
+  auto outputType = dyn_cast<RankedTensorType>(resultType);
+  if (!queryType || !sourcesType || !outputType)
+    return op->emitOpError("requires ranked tensor operands and result");
+  if (queryType.getRank() != 1 || sourcesType.getRank() < 2)
+    return op->emitOpError(
+        "requires query[d] and sources[m,...,d] with rank >= 2");
+  if (!ShapedType::isDynamic(sourcesType.getDimSize(0)) &&
+      sourcesType.getDimSize(0) <= 0)
+    return op->emitOpError("requires a non-empty source-depth dimension");
+  if (!compatibleExtent(queryType.getDimSize(0),
+                        sourcesType.getDimSize(sourcesType.getRank() - 1)))
+    return op->emitOpError("query width must match the final source dimension");
+  if (queryType.getElementType() != sourcesType.getElementType())
+    return op->emitOpError("query and sources element types must match");
+  if (outputType.getRank() != sourcesType.getRank() - 1)
+    return op->emitOpError("result must have sources shape with axis zero removed");
+  for (int64_t i = 1; i < sourcesType.getRank(); ++i)
+    if (!compatibleExtent(sourcesType.getDimSize(i),
+                          outputType.getDimSize(i - 1)))
+      return op->emitOpError(
+          "result must have sources shape with axis zero removed");
+  if (resultUsesStorage &&
+      outputType.getElementType() != sourcesType.getElementType())
+    return op->emitOpError("result and sources element types must match");
+  double epsilon = eps.getValueAsDouble();
+  if (!std::isfinite(epsilon) || epsilon <= 0.0)
+    return op->emitOpError("eps must be finite and positive");
+  return verifyDepthAttnPolicy(op, policy, sourcesType.getElementType());
+}
+
+LogicalResult DepthAttnOp::verify() {
+  return verifyDepthAttnShape(getOperation(), getQuery(), getSources(),
+                              getResult().getType(), getEpsAttr(),
+                              getNumericPolicyAttr());
+}
+
+LogicalResult AttnWithStatsOp::verify() {
+  if (failed(verifyDepthAttnShape(getOperation(), getQuery(), getSources(),
+                                  getOutput().getType(), getEpsAttr(),
+                                  getNumericPolicyAttr(), false)))
+    return failure();
+  auto outputType = cast<RankedTensorType>(getOutput().getType());
+  auto maximumType = dyn_cast<RankedTensorType>(getMaximum().getType());
+  auto normalizerType = dyn_cast<RankedTensorType>(getNormalizer().getType());
+  if (!maximumType || !normalizerType || maximumType != normalizerType)
+    return emitOpError("maximum and normalizer must have identical ranked types");
+  if (!outputType.getElementType().isF32() ||
+      !maximumType.getElementType().isF32())
+    return emitOpError("statistics state must use fp32 output and scalars");
+  if (maximumType.getRank() + 1 != outputType.getRank())
+    return emitOpError("statistics shape must equal the output prefix");
+  for (int64_t i = 0; i < maximumType.getRank(); ++i)
+    if (!compatibleExtent(maximumType.getDimSize(i), outputType.getDimSize(i)))
+      return emitOpError("statistics shape must equal the output prefix");
+  return success();
+}
+
+static LogicalResult verifyStatsState(Operation *op, Value output,
+                                      Value maximum, Value normalizer) {
+  auto outputType = dyn_cast<RankedTensorType>(output.getType());
+  auto maximumType = dyn_cast<RankedTensorType>(maximum.getType());
+  auto normalizerType = dyn_cast<RankedTensorType>(normalizer.getType());
+  if (!outputType || !maximumType || !normalizerType || outputType.getRank() < 1)
+    return op->emitOpError("requires ranked attention-state tensors");
+  if (!outputType.getElementType().isF32() ||
+      !maximumType.getElementType().isF32() ||
+      !normalizerType.getElementType().isF32())
+    return op->emitOpError("attention-state tensors must be fp32");
+  if (maximumType != normalizerType ||
+      maximumType.getRank() + 1 != outputType.getRank())
+    return op->emitOpError(
+        "maximum and normalizer must match the output prefix type");
+  for (int64_t i = 0; i < maximumType.getRank(); ++i)
+    if (!compatibleExtent(maximumType.getDimSize(i), outputType.getDimSize(i)))
+      return op->emitOpError(
+          "maximum and normalizer must match the output prefix type");
+  return success();
+}
+
+LogicalResult SoftmaxMergeOp::verify() {
+  if (!getReassociable())
+    return emitOpError("reassociable must be true for the canonical merge");
+  if (failed(verifyStatsState(getOperation(), getOutputA(), getMaximumA(),
+                              getNormalizerA())) ||
+      failed(verifyStatsState(getOperation(), getOutputB(), getMaximumB(),
+                              getNormalizerB())) ||
+      failed(verifyStatsState(getOperation(), getOutput(), getMaximum(),
+                              getNormalizer())))
+    return failure();
+  if (getOutputA().getType() != getOutputB().getType() ||
+      getOutputA().getType() != getOutput().getType() ||
+      getMaximumA().getType() != getMaximumB().getType() ||
+      getMaximumA().getType() != getMaximum().getType())
+    return emitOpError("both inputs and the result must use one state type");
+  auto storage = dyn_cast_or_null<StringAttr>(getNumericPolicyAttr().get("storage"));
+  auto softmax = dyn_cast_or_null<StringAttr>(getNumericPolicyAttr().get("softmax"));
+  auto accum = dyn_cast_or_null<StringAttr>(getNumericPolicyAttr().get("accum"));
+  if (!storage || !softmax || !accum ||
+      (storage.getValue() != "fp16" && storage.getValue() != "bf16" &&
+       storage.getValue() != "fp32") ||
+      softmax.getValue() != "fp32" || accum.getValue() != "fp32")
+    return emitOpError(
+        "numeric_policy requires supported storage and fp32 softmax/accum");
+  return success();
+}
+
+LogicalResult SoftmaxFinalizeOp::verify() {
+  auto outputType = dyn_cast<RankedTensorType>(getOutput().getType());
+  auto normalizerType = dyn_cast<RankedTensorType>(getNormalizer().getType());
+  auto resultType = dyn_cast<RankedTensorType>(getResult().getType());
+  if (!outputType || !normalizerType || !resultType || outputType.getRank() < 1)
+    return emitOpError("requires ranked tensors");
+  if (!outputType.getElementType().isF32() ||
+      !normalizerType.getElementType().isF32())
+    return emitOpError("input attention state must be fp32");
+  if (resultType.getShape() != outputType.getShape())
+    return emitOpError("result shape must match output shape");
+  if (normalizerType.getRank() + 1 != outputType.getRank())
+    return emitOpError("normalizer shape must equal the output prefix");
+  for (int64_t i = 0; i < normalizerType.getRank(); ++i)
+    if (!compatibleExtent(normalizerType.getDimSize(i), outputType.getDimSize(i)))
+      return emitOpError("normalizer shape must equal the output prefix");
+  return verifyDepthAttnPolicy(getOperation(), getNumericPolicyAttr(),
+                               resultType.getElementType());
+}
+
+LogicalResult DepthAttnVJPOp::verify() {
+  if (getQueryCotangent().getType() != getQuery().getType() ||
+      getSourcesCotangent().getType() != getSources().getType())
+    return emitOpError("cotangent result types must match primal operand types");
+  return verifyDepthAttnShape(getOperation(), getQuery(), getSources(),
+                              getOutputCotangent().getType(), getEpsAttr(),
+                              getNumericPolicyAttr());
+}
+
+LogicalResult DepthAttnJVPOp::verify() {
+  if (getQueryTangent().getType() != getQuery().getType() ||
+      getSourcesTangent().getType() != getSources().getType())
+    return emitOpError("input tangent types must match primal operand types");
+  return verifyDepthAttnShape(getOperation(), getQuery(), getSources(),
+                              getResultTangent().getType(), getEpsAttr(),
+                              getNumericPolicyAttr());
+}
+
 LogicalResult FlashAttnOp::verify() {
   const int64_t headDim = getHeadDimAttr().getInt();
   if (headDim <= 0)

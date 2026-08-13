@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-11
+last_updated: 2026-08-13
 audit_role: index
 ---
 
@@ -52,6 +52,8 @@ proof at every boundary:
 | 9 | **TILE-SYNC-RECONCILE-2026-08-10 — compiler contract and gfx1151 correctness closed** | `tile.async_copy` and `tile.wait_async` share one declared dual-form contract; typed `!tile.async_token` SSA is production and legacy grouping keys are optional compatibility inputs. PR #544 closed required host-free compiler parity, and the follow-up gfx1151 global→LDS/LDS-WMMA/via-Tile cohort passed. Migration of remaining Python/stage-only carriers remains open; host-compiler timing makes no selector claim. |
 | 10 | **COMP-SCHED-OVERLAP-1 R1–R4 + W2.1/W2.2 — shared software boundary closed** | Explicit async lineage, registered Graph effects, and the fail-closed MLIR `DataFlowSolver` product for shape/alias/liveness/memory dependence/activity are landed. Reverse AD and await sinking consume it; mutation invalidates and recomputes facts; Python queries use the same schema and structural-digest invalidation. Measured resource vectors, prune-only Tile action-DAG analysis, and the content-addressed MegaMoE overlap consumer are also landed. Native transport, exact-device performance packets, and wiring inferred dependence edges into future Graph-derived action-DAG producers remain architecture/client work. |
 | 11 | **E2E-REAL-6 — first cohort landing** | Native forward products now use tracer-produced canonical Graph IR and explicit family plugins; `JitFn` owns only call binding/cache/launch. ROCm scheduled attention backward consumes its Tile artifact without Graph reconstruction. General solver products generate digest-bound target children for pointwise, reduction, rank-2 matmul, bounded-dynamic/mixed-storage, counted-region, and pure scalar predicate-bearing residuals. AVX-512 and gfx1151 own expanded-family correctness packets; clean selector evidence remains open. Continue per family; the AST frontend and retained backend candidates cannot be deleted until lineage, correctness, and architecture-owned evidence are complete. |
+| 12 | **PDE-STENCIL-FOUNDATION-1 — semantic correctness slice landed** | Neighbors owns explicit tap coefficients; TPP owns required scheme/order/per-axis spacing; only linkable Target implementations receive callable symbols. Typed PDE classification/stability analysis, stencil-stack unification, and architecture-owned gfx1151/x86 physical packets remain open. |
+| 13 | **BLOCK-ATTNRES-1 — gfx1151 Phase 5 landed** | Shared statistics/merge/finalize semantics, typed Graph products, and the content-addressed Schedule→Tile boundary now feed a typed ROCm Target record and exact gfx1151 HSACO/runtime consumer. Three exact-device shapes pass; WSL operation-total timing is retained but selector-ineligible pending bare-metal device timing. AVX-512 Phase 6 remains independent. |
 
 Hardware packets and backend-specific tuning are synchronized follow-ups to
 these slices, not blockers for landing shared contracts with honest fail-closed

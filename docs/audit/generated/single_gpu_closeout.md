@@ -14,10 +14,11 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 392 | backend_pathway_owned=377, multi_gpu_deferred=15 | backend_codegen=377, distributed_validation=15 |
+| `backend_kernel` | 396 | backend_pathway_owned=381, multi_gpu_deferred=15 | backend_codegen=381, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
-| `sharding_rule` | 43 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=40 | compiler_middle_end=1, distributed_validation=2, primitive_registry=40 |
-| `target_ir` | 4 | multi_gpu_deferred=4 | distributed_validation=4 |
+| `sharding_rule` | 45 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=42 | compiler_middle_end=1, distributed_validation=2, primitive_registry=42 |
+| `target_ir` | 5 | architecture_evidence_gated=1, multi_gpu_deferred=4 | backend_codegen=1, distributed_validation=4 |
+| `tile_ir` | 1 | architecture_evidence_gated=1 | backend_codegen=1 |
 
 ## Rows
 
@@ -31,8 +32,10 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `attn_local_window_2d` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `attn_sliding_window` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `attn_top_k_blocks` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `attn_with_stats` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `cross_attention` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `deepseek_sparse_attention` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `depth_attn` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `flash_attn` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `gated_attention` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `gated_deltanet` | attention | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -382,6 +385,8 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `reduce` | stable_reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `sigmoid_safe` | stable_reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `softmax` | stable_reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `softmax_finalize` | stable_reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `softmax_merge` | stable_reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `softmax_safe` | stable_reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `sum` | stable_reduction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `selective_ssm` | state_space | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -416,8 +421,10 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `image_resize` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `interpolate` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `benchmark_evidence` | `batched_gemm` | loop_nest | none | `benchmark_required` | benchmarks | Add smoke benchmark evidence for the fused/native single-GPU lane. |
+| `sharding_rule` | `attn_with_stats` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `cross_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `deepseek_sparse_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `depth_attn` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `gated_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `gated_deltanet` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `hybrid_attention` | attention | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
@@ -459,7 +466,9 @@ test, ABI, and surface dashboards.
 | `sharding_rule` | `selective_ssm` | state_space | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `cache_commit` | state_update | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `cache_rollback` | state_update | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `target_ir` | `depth_attn` | attention | reference | `architecture_evidence_gated` | backend_codegen | Keep artifact-only until the named target package and exact-device evidence land. |
 | `target_ir` | `all_gather` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `all_reduce` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `all_to_all` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `reduce_scatter` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
+| `tile_ir` | `depth_attn` | attention | partial | `architecture_evidence_gated` | backend_codegen | Shared Graph/AD contract is closed; wait for the named architecture-owned physical phase and device packet. |

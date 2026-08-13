@@ -22,8 +22,8 @@ func.func @test_bc_periodic(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
               dense<[-1, 0]> : tensor<2xi64>,
               dense<[0, 1]>  : tensor<2xi64>,
               dense<[0, -1]> : tensor<2xi64>],
-      bc = "periodic"
-  } : () -> index
+      bc = "periodic", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1, 1]
@@ -54,8 +54,8 @@ func.func @test_bc_periodic_reflect(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> {
               dense<[-1, 0]> : tensor<2xi64>,
               dense<[0, 1]>  : tensor<2xi64>,
               dense<[0, -1]> : tensor<2xi64>],
-      bc = "periodic,reflect"
-  } : () -> index
+      bc = "periodic,reflect", coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1, 1]
@@ -85,8 +85,8 @@ func.func @test_bc_dirichlet_neumann(%arg0: tensor<?x?xf32>) -> tensor<?x?xf32> 
   %st = "tessera.neighbors.stencil.define"() {
       taps = [dense<[0, 0]> : tensor<2xi64>,
               dense<[1, 0]> : tensor<2xi64>],
-      bc = "dirichlet(2.5),neumann(-1.0)"
-  } : () -> index
+      bc = "dirichlet(2.5),neumann(-1.0)", coeffs = [1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1, 1]
@@ -115,8 +115,8 @@ func.func @test_bc_default(%arg0: tensor<?xf32>) -> tensor<?xf32> {
   %st = "tessera.neighbors.stencil.define"() {
       taps = [dense<[-1]> : tensor<1xi64>,
               dense<[0]>  : tensor<1xi64>,
-              dense<[1]>  : tensor<1xi64>]
-  } : () -> index
+              dense<[1]>  : tensor<1xi64>], coeffs = [1.0 : f64, 1.0 : f64, 1.0 : f64]
+      } : () -> index
 
   %h = "tessera.neighbors.halo.region"(%arg0) {
       halo.width = [1]

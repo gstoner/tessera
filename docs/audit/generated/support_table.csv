@@ -8,6 +8,7 @@ attn_local_window_2d,attention,public,public,registered,complete,fused,fused,rea
 attn_sliding_window,attention,public,public,registered,complete,fused,device_verified_jit,ready,none
 attn_top_k_blocks,attention,public,public,registered,complete,fused,fused,ready,benchmarked
 deepseek_sparse_attention,attention,public,public,registered,complete,fused,device_verified_jit,ready,none
+depth_attn,attention,public,public,registered,complete,partial,reference,ready,none
 flash_attn,attention,public,public,registered,complete,fused,device_verified_abi,ready,benchmarked
 gated_attention,attention,public,public,registered,complete,fused,device_verified_jit,ready,none
 gated_deltanet,attention,public,public,registered,complete,fused,device_verified_jit,ready,none

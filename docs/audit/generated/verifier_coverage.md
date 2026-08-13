@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 225 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 231 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 225 | |
+| **Total** | 231 | |
 
 ## Per-dialect details
 
@@ -38,6 +38,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `AttnLocalWindow2DOp` | `real` |
 | `AttnSlidingWindowOp` | `real` |
 | `AttnTopKBlocksOp` | `real` |
+| `AttnWithStatsOp` | `real` |
 | `BatchedGemmOp` | `real` |
 | `BinaryCrossEntropyLossBackwardOp` | `real` |
 | `BinaryCrossEntropyLossOp` | `real` |
@@ -70,6 +71,9 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `CustomAdjointCallOp` | `real` |
 | `DCTOp` | `real` |
 | `DeepSeekSparseAttentionOp` | `real` |
+| `DepthAttnJVPOp` | `real` |
+| `DepthAttnOp` | `real` |
+| `DepthAttnVJPOp` | `real` |
 | `DequantGroupedGemmOp` | `real` |
 | `DequantMatmulOp` | `real` |
 | `DequantizeFP4Op` | `real` |
@@ -204,6 +208,8 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SiluOp` | `real` |
 | `SinOp` | `real` |
 | `SmoothL1LossOp` | `real` |
+| `SoftmaxFinalizeOp` | `real` |
+| `SoftmaxMergeOp` | `real` |
 | `SoftmaxOp` | `real` |
 | `SoftmaxSafeOp` | `real` |
 | `SoftplusOp` | `real` |

@@ -2081,6 +2081,7 @@ struct LowerTileToROCMPass
       if (name == "tile.mma" || name == "tile.matmul_kernel" ||
           name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
           name == "tile.attention_kernel" ||
+          name == "tile.depth_attention_kernel" ||
           name == "tile.attention_backward_kernel" ||
           name == "tile.spectral_backward_kernel" ||
           name == "tile.solver_ift_kernel" ||
@@ -2108,6 +2109,84 @@ struct LowerTileToROCMPass
           signalPassFailure();
           return;
         }
+        continue;
+      }
+
+      if (name == "tile.depth_attention_kernel") {
+        auto opArch = op->getAttrOfType<StringAttr>("arch");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto softmax = op->getAttrOfType<StringAttr>("softmax");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto eps = op->getAttrOfType<FloatAttr>("eps");
+        auto sourceTile = op->getAttrOfType<IntegerAttr>("source_tile");
+        auto statistics =
+            op->getAttrOfType<StringAttr>("statistics_recurrence");
+        auto merge = op->getAttrOfType<StringAttr>("merge_recurrence");
+        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+            !hash || hash.getValue().size() != 64 || !storage ||
+            storage.getValue() != "f32" || !softmax ||
+            softmax.getValue() != "f32" || !accum ||
+            accum.getValue() != "f32" || !eps ||
+            !eps.getValue().isFinite() || eps.getValueAsDouble() <= 0.0 ||
+            !sourceTile || sourceTile.getInt() <= 0 || !statistics ||
+            statistics.getValue() != "rms_key_online_softmax_stats_v1" ||
+            !merge || merge.getValue() != "max_shifted_pairwise_merge_v1" ||
+            op->getNumOperands() != 6) {
+          op->emitError(
+              "BLOCK-ATTNRES-1 ROCm Target lowering requires the exact "
+              "content-addressed gfx1151 all-f32 ABI");
+          signalPassFailure();
+          return;
+        }
+        auto constantExtent = [&](unsigned operand) -> std::optional<int64_t> {
+          if (auto constant =
+                  op->getOperand(operand).getDefiningOp<arith::ConstantIntOp>())
+            return constant.value();
+          if (auto constant =
+                  op->getOperand(operand).getDefiningOp<LLVM::ConstantOp>())
+            if (auto value = dyn_cast<IntegerAttr>(constant.getValue()))
+              return value.getInt();
+          return std::nullopt;
+        };
+        auto sourceCount = constantExtent(3);
+        auto rows = constantExtent(4);
+        auto width = constantExtent(5);
+        if (!sourceCount || *sourceCount <= 0 || *sourceCount > 256 ||
+            !rows || *rows <= 0 ||
+            !width || *width <= 0 || sourceTile.getInt() > *sourceCount) {
+          op->emitError("ROCm depth attention requires positive static launch extents");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm depth attention requires a symbol-owned launch envelope");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.depth_attention");
+        state.addAttribute("name", symbol);
+        state.addAttribute("arch", opArch);
+        state.addAttribute("artifact_hash", hash);
+        state.addAttribute("eps", eps);
+        state.addAttribute("source_count",
+                           builder.getI64IntegerAttr(*sourceCount));
+        state.addAttribute("rows", builder.getI64IntegerAttr(*rows));
+        state.addAttribute("width", builder.getI64IntegerAttr(*width));
+        state.addAttribute("source_tile", sourceTile);
+        state.addAttribute("dtype", builder.getStringAttr("f32"));
+        state.addAttribute("statistics_recurrence", statistics);
+        state.addAttribute("merge_recurrence", merge);
+        builder.create(state);
+        op->erase();
         continue;
       }
 

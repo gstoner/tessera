@@ -9,8 +9,11 @@ Four contracts, each a reimplementation trap if taken on faith:
 1.  The CUDA max-pool remap (kernel 5, stride 4, padding 1) over the compressed
     axis is *exactly* the block-overlap set of a 64-token block with 32/16
     mean-pool windows.
-2.  The legacy stage-1 causal rule uses C-truncating division and is strictly
-    causal; Python's floor division gives a DIFFERENT answer for small t.
+2.  The legacy stage-1 causal rule is strictly causal and uses C-truncating
+    division. That choice is only OBSERVABLE under a nonzero causal_k_offset
+    (right-aligned chunked prefill/decode), so the suite exercises that case
+    and carries a mutation guard: swapping c_div for // must flip a real
+    visibility outcome, not merely an intermediate quotient.
 3.  Softmax elision at inference is rank-equivalent to the softmax training
     objective (top-k is invariant to strictly monotone row transforms).
 4.  Full-window-only compression leaves a decode lag of exactly
@@ -129,18 +132,69 @@ def test_stage1_rule_is_whole_window_past() -> None:
             assert stage1_visible(t, j) == window_fully_past(t, j), (t, j)
 
 
-def test_python_floordiv_would_break_the_stage1_contract() -> None:
-    """Pins the reimplementation trap: // is not the C++ semantics here.
+def _py_floordiv_visible(t: int, j: int, causal_k_offset: int = 0) -> bool:
+    """stage1_visible with Python's floor division -- the reimplementation bug."""
+    return j < ((t - STRIDE + 1) // STRIDE) + causal_k_offset
 
-    For t < STRIDE - 1 the numerator (t - 15) is negative, where Python floors
-    toward -inf and C++ truncates toward zero.
+
+@pytest.mark.parametrize("offset", [0, 1, 2, 4, 9])
+def test_floordiv_under_selects_and_only_shows_under_right_alignment(offset: int) -> None:
+    """The C-vs-Python division choice, stated as an observable contract.
+
+    Two claims, both load-bearing:
+
+    * **Direction.** C truncation admits a superset of what Python's floor
+      admits -- never fewer. So the bug's failure mode is UNDER-selection: a
+      legitimately visible compressed key is silently dropped and attention
+      never scores KV it should have. That is the dangerous direction, and it
+      fails open (a smaller candidate set still produces plausible output).
+    * **Visibility.** The difference only materializes when
+      ``causal_k_offset > 0`` -- the right-alignment mask.h applies for chunked
+      prefill and decode. At offset 0 the two limits (-1 and 0) both reject
+      every real key index, so a zero-offset-only suite CANNOT catch a
+      ``c_div`` -> ``//`` swap. This parametrization is why the mutation guard
+      below has teeth.
+
+    Deliberately not asserted here: an equivalence between the right-aligned
+    predicate and ``window_fully_past(t, j - offset)``. That identity is false
+    -- it breaks once ``j - offset`` goes negative, which is not a real key
+    index. The exhaustive whole-window-past contract is proven at offset 0
+    above; this test owns the offset behaviour only.
     """
-    disagreements = [t for t in range(STRIDE) if (t - STRIDE + 1) // STRIDE != c_div(t - STRIDE + 1, STRIDE)]
-    assert disagreements, "expected C-vs-Python divergence for small t"
-    t = disagreements[0]
-    # Python's floor admits no keys (limit -1); C truncation gives limit 0.
-    assert (t - STRIDE + 1) // STRIDE == -1
-    assert c_div(t - STRIDE + 1, STRIDE) == 0
+    strictly_more = 0
+    for t in range(256):
+        for j in range(40):
+            c_admits = stage1_visible(t, j, offset)
+            py_admits = _py_floordiv_visible(t, j, offset)
+            assert c_admits or not py_admits, (t, j, offset)  # python ⊆ C
+            strictly_more += c_admits and not py_admits
+    if offset:
+        assert strictly_more > 0, "expected an observable difference under right-alignment"
+    else:
+        assert strictly_more == 0, "offset 0 must hide the difference -- see docstring"
+
+
+def test_python_floordiv_changes_visibility_not_just_the_quotient() -> None:
+    """Mutation guard: swapping c_div for // must flip an OBSERVABLE outcome.
+
+    An earlier version of this test compared only the two intermediate
+    quotients, which the contract never exposes at offset 0 -- it passed
+    against a ``stage1_visible`` that had the bug. This version disagrees on
+    the predicate itself.
+    """
+    disagreements = [
+        (t, j, off)
+        for t in range(STRIDE)
+        for off in (1, 2, 4)
+        for j in range(off + 2)
+        if stage1_visible(t, j, off) != _py_floordiv_visible(t, j, off)
+    ]
+    assert disagreements, "expected an observable C-vs-Python predicate difference"
+
+    t, j, off = disagreements[0]
+    assert (t, j, off) == (0, 0, 1)
+    assert stage1_visible(t, j, off) is True    # C truncation admits the key
+    assert _py_floordiv_visible(t, j, off) is False  # floor drops it
 
 
 # ---------------------------------------------------------------------------

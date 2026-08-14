@@ -32,7 +32,7 @@ Policy-derived legality is labelled `legal_only`, not executable support.
 > **supports only wave32**. `ROCMFragmentLayout.h:192` hardwires the CDNA branch
 > to `"mfma", 64`. Not a live bug (CDNA 5 is not in the arch list, so it fails
 > closed), but adding CDNA 5 is a change of SHAPE, not an arch append. See
-> [`docs/reference/isa/PRIMARY_SOURCES.md`](../../reference/isa/PRIMARY_SOURCES.md).
+> [`docs/reference/isa/PRIMARY_SOURCES.md`](../../../reference/isa/PRIMARY_SOURCES.md).
 
 Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **owning ROCm item,
 follow-up required; ROCm `tessera-ir` lit fixtures remain uncovered in CI.**

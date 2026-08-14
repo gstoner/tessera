@@ -25,7 +25,6 @@ import csv
 import functools
 import io
 from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import Iterable, Mapping
 
 from tessera.dtype import canonicalize_dtype
@@ -33,7 +32,7 @@ from tessera.dtype import canonicalize_dtype
 from . import audit, backend_manifest
 from .capabilities import TARGET_CAPABILITIES, canonical_op
 from .op_catalog import OP_SPECS, shape_rule_for
-from .primitive_coverage import all_primitive_coverages
+from .primitive_coverage import PrimitiveCoverage, all_primitive_coverages
 from .tsol_coverage import all_tsol_op_names
 
 
@@ -140,18 +139,32 @@ def _manifest_dtype_candidates(dtype: str) -> frozenset[str]:
     return frozenset((dtype, component)) if component else frozenset((dtype,))
 
 
-def _manifest_rows(coverage) -> tuple[Mapping[str, object], ...]:
+def _iter_metadata_values(value: object) -> tuple[object, ...]:
+    """Narrow heterogeneous registry metadata before iterating it."""
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return tuple(value)
+    return ()
+
+
+def _manifest_rows(
+    coverage: PrimitiveCoverage,
+) -> tuple[Mapping[str, object], ...]:
     raw = coverage.metadata.get("backend_kernel_manifest", ())
-    return tuple(row for row in raw if isinstance(row, Mapping))
+    return tuple(
+        row for row in _iter_metadata_values(raw)
+        if isinstance(row, Mapping)
+    )
 
 
-def _declared_dtypes(coverage, graph_name: str) -> tuple[str, ...]:
+def _declared_dtypes(
+    coverage: PrimitiveCoverage, graph_name: str,
+) -> tuple[str, ...]:
     declared: set[str] = set()
     policy = coverage.metadata.get("numeric_policy")
     if isinstance(policy, Mapping) and policy.get("storage"):
         declared.add(_canonical_dtype(policy["storage"]))
     for row in _manifest_rows(coverage):
-        for dtype in row.get("dtypes", ()):
+        for dtype in _iter_metadata_values(row.get("dtypes", ())):
             declared.add(_canonical_dtype(dtype))
     canonical = canonical_op(graph_name)
     for target in TARGET_CAPABILITIES.values():
@@ -180,20 +193,22 @@ def _matrix_accumulators(dtype: str) -> set[str]:
     from .x86_dtype_contract import X86_DTYPE_CONTRACTS
 
     for rows in AMD_DTYPE_CONTRACTS.values():
-        contract = rows.get(dtype)
-        if contract is not None and contract.isa_matrix_supported:
-            out.update(contract.accumulators)
-    for contract in SM120_DTYPE_CONTRACTS:
-        if contract.storage == dtype and contract.tensor_core != "unsupported":
-            out.update(contract.accumulators)
-    for contract in X86_DTYPE_CONTRACTS:
-        if contract.storage == dtype and contract.matrix_state != "unsupported":
-            if contract.accumulator:
-                out.add(contract.accumulator)
+        amd_contract = rows.get(dtype)
+        if amd_contract is not None and amd_contract.isa_matrix_supported:
+            out.update(amd_contract.accumulators)
+    for sm_contract in SM120_DTYPE_CONTRACTS:
+        if sm_contract.storage == dtype and sm_contract.tensor_core != "unsupported":
+            out.update(sm_contract.accumulators)
+    for x86_contract in X86_DTYPE_CONTRACTS:
+        if x86_contract.storage == dtype and x86_contract.matrix_state != "unsupported":
+            if x86_contract.accumulator:
+                out.add(x86_contract.accumulator)
     return {_canonical_dtype(value) for value in out}
 
 
-def _accumulators(coverage, op_name: str, dtype: str) -> tuple[str, ...]:
+def _accumulators(
+    coverage: PrimitiveCoverage, op_name: str, dtype: str,
+) -> tuple[str, ...]:
     if op_name in {"gemm", "matmul"}:
         matrix = _matrix_accumulators(dtype)
         if matrix:
@@ -203,7 +218,10 @@ def _accumulators(coverage, op_name: str, dtype: str) -> tuple[str, ...]:
     if isinstance(policy, Mapping) and policy.get("accum"):
         out.add(_canonical_dtype(policy["accum"]))
     for row in _manifest_rows(coverage):
-        if dtype not in {_canonical_dtype(value) for value in row.get("dtypes", ())}:
+        if dtype not in {
+            _canonical_dtype(value)
+            for value in _iter_metadata_values(row.get("dtypes", ()))
+        }:
             continue
         for key in ("mma_selection", "mma_descriptor"):
             selection = row.get(key)
@@ -219,7 +237,9 @@ def _best(states: Iterable[TargetDtypeState]) -> TargetDtypeState:
     return min(rows, key=lambda row: _STATUS_RANK.get(row.status, 99))
 
 
-def _manifest_target_state(coverage, target: str, dtype: str) -> TargetDtypeState | None:
+def _manifest_target_state(
+    coverage: PrimitiveCoverage, target: str, dtype: str,
+) -> TargetDtypeState | None:
     aliases = _MANIFEST_TARGET_ALIASES[target]
     states: list[TargetDtypeState] = []
     target_declared = False
@@ -227,7 +247,10 @@ def _manifest_target_state(coverage, target: str, dtype: str) -> TargetDtypeStat
         if str(row.get("target")) not in aliases:
             continue
         target_declared = True
-        row_dtypes = {_canonical_dtype(value) for value in row.get("dtypes", ())}
+        row_dtypes = {
+            _canonical_dtype(value)
+            for value in _iter_metadata_values(row.get("dtypes", ()))
+        }
         if not (_manifest_dtype_candidates(dtype) & row_dtypes):
             continue
         # A lit/FileCheck fixture is structural evidence and a benchmark file
@@ -297,7 +320,7 @@ def _amd_matmul_isa_state(op_name: str, target: str, dtype: str) -> TargetDtypeS
     )
 
 
-def _target_state(coverage, op_name: str, graph_name: str,
+def _target_state(coverage: PrimitiveCoverage, op_name: str, graph_name: str,
                   target: str, dtype: str) -> TargetDtypeState:
     manifest = _manifest_target_state(coverage, target, dtype)
     if manifest is not None:
@@ -356,7 +379,11 @@ def collect_dtype_flow_rows() -> tuple[DtypeFlowRow, ...]:
             # domain ops in addition to the primitive registry. Preserve them
             # and their backend dtype rows while flagging the missing registry
             # through the Graph/Schedule axes instead of crashing generation.
-            coverage = SimpleNamespace(
+            coverage = PrimitiveCoverage(
+                name=op_name,
+                category=audit_row.family,
+                status="partial",
+                contract_status={},
                 graph_name=None,
                 metadata={
                     "backend_kernel_manifest": tuple(

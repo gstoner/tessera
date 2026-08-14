@@ -1,9 +1,9 @@
 """Unit tests for tessera.compiler.rocm_tiling (B1).
 
 Covers the AMD-Gluon-grounded register-budget tiling model: per-arch register
-budgets (512 CDNA vs 256 RDNA/wave32), the VGPR-usage heuristic, candidate
-pruning (the v6 "double-buffering spills" lesson), and the output-tile slicing
-transforms (quad_slice / n_slice).
+budgets (512 legacy CDNA, 256 RDNA wave32, and 1024 CDNA5 wave32), the
+VGPR-usage heuristic, candidate pruning (the v6 "double-buffering spills"
+lesson), and the output-tile slicing transforms (quad_slice / n_slice).
 """
 
 from __future__ import annotations
@@ -55,15 +55,22 @@ def test_all_cdna_arches_have_512_budget() -> None:
         assert prof.total_reg_budget == 512, arch.name
 
 
-def test_all_wave32_arches_have_256_budget() -> None:
+def test_all_rdna_wave32_arches_have_256_budget() -> None:
     for arch in (
         AMDArch.GFX_1100, AMDArch.GFX_1151,
         AMDArch.GFX_1200, AMDArch.GFX_1201,
-        AMDArch.GFX_1250, AMDArch.GFX_1251,
     ):
         prof = ROCmTargetProfile(arch=arch)
         assert prof.agpr_budget == 0, arch.name
         assert prof.total_reg_budget == 256, arch.name
+
+
+def test_all_cdna5_wave32_arches_have_1024_budget() -> None:
+    for arch in (AMDArch.GFX_1250, AMDArch.GFX_1251):
+        prof = ROCmTargetProfile(arch=arch)
+        assert prof.vgpr_budget == 1024, arch.name
+        assert prof.agpr_budget == 0, arch.name
+        assert prof.total_reg_budget == 1024, arch.name
 
 
 # ── TileShape / TileCandidate validation ────────────────────────────────────

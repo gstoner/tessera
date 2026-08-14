@@ -2,8 +2,8 @@
 
 Tile IR owns logical matrix roles and layouts.  This module owns the physical
 per-lane ABI selected after an exact AMD architecture is known.  In particular,
-gfx11 WMMA duplication, gfx12 dense WMMA fragments, gfx125x WMMA-v2, and CDNA
-MFMA must never share an implicit register map.
+gfx11 WMMA duplication, gfx12 dense WMMA fragments, CDNA5 wave32 XDL-WMMA,
+and legacy CDNA MFMA must never share an implicit register map.
 
 The descriptor is intentionally data-only.  C++ lowering mirrors these fields
 and a consistency test prevents either side from drifting.
@@ -20,7 +20,7 @@ from .rocm_target import AMDArch, TesseraROCmTargetError
 class FragmentFamily(str, Enum):
     RDNA3_WMMA = "rdna3_wmma"
     RDNA4_WMMA = "rdna4_wmma"
-    GFX125X_WMMA_V2 = "gfx125x_wmma_v2"
+    CDNA5_WMMA = "cdna5_wmma"
     CDNA2_MFMA = "cdna2_mfma"
     CDNA3_MFMA = "cdna3_mfma"
     CDNA4_MFMA = "cdna4_mfma"
@@ -82,6 +82,27 @@ class FragmentLayoutDescriptor:
             else "soa_row_per_lane"
         )
 
+    @property
+    def isa_instruction(self) -> str:
+        """Exact matrix mnemonic carried into Target provenance."""
+        if self.arch in {
+            AMDArch.GFX_1100, AMDArch.GFX_1151,
+            AMDArch.GFX_1200, AMDArch.GFX_1201,
+            AMDArch.GFX_1250, AMDArch.GFX_1251,
+        }:
+            # Local import keeps the ISA table leaf-like and avoids making
+            # rocm_target depend on fragment materialization.
+            from .rocm_isa_contract import select_amd_matrix_instruction
+            contract_arch = {
+                AMDArch.GFX_1100: AMDArch.GFX_1151,
+                AMDArch.GFX_1201: AMDArch.GFX_1200,
+            }.get(self.arch, self.arch)
+            return select_amd_matrix_instruction(
+                contract_arch, self.dtype, accumulator=self.acc_dtype,
+                shape=self.shape, scaled=self.dtype == "fp4_e2m1",
+            ).mnemonic
+        return self.matrix_op
+
     def as_metadata_dict(self) -> dict[str, object]:
         return {
             "family": self.family.value,
@@ -98,6 +119,7 @@ class FragmentLayoutDescriptor:
             "accumulator_format": self.accumulator_format.value,
             "input_lane_replication": self.input_lane_replication,
             "intrinsic_abi": self.intrinsic_abi,
+            "isa_instruction": self.isa_instruction,
             "accumulator_mapping": self.accumulator_mapping,
             "materialization_ready": self.materialization_ready,
         }
@@ -140,10 +162,10 @@ def select_fragment_layout(
         raise TesseraROCmTargetError(
             f"ROCM_FRAGMENT_UNSUPPORTED_DTYPE: no physical fragment for {dtype!r}")
     m, n, k = shape
-    if (m, n) != (16, 16):
+    if (m, n) not in {(16, 16), (32, 16)}:
         raise TesseraROCmTargetError(
             "ROCM_FRAGMENT_UNSUPPORTED_SHAPE: portable materialization currently "
-            f"requires m16n16; got {shape}")
+            f"requires m16n16 or CDNA5 m32n16; got {shape}")
 
     if arch in _RDNA3:
         legal_k = 16
@@ -178,18 +200,27 @@ def select_fragment_layout(
             1, "abc_3arg_gfx12")
 
     if arch in _GFX125X:
-        legal_k = 32 if dtype in ("fp16", "bf16") else 64
-        legal = {"fp16", "bf16", "fp8_e4m3", "fp8_e5m2"}
-        if dtype not in legal or k != legal_k:
+        legal_shapes = {
+            "fp32": {(16, 16, 4)},
+            "fp16": {(16, 16, 32)},
+            "bf16": {(16, 16, 32)},
+            "fp8_e4m3": {(16, 16, 64), (16, 16, 128)},
+            "fp8_e5m2": {(16, 16, 64), (16, 16, 128)},
+            "int8": {(16, 16, 64)},
+            "fp4_e2m1": {(16, 16, 128), (32, 16, 128)},
+        }
+        if shape not in legal_shapes.get(dtype, set()):
             raise TesseraROCmTargetError(
-                "ROCM_FRAGMENT_ILLEGAL_GFX125X_WMMA_V2: gfx125x requires its "
-                f"K-doubled WMMA-v2 table; got {dtype} {shape}")
+                "ROCM_FRAGMENT_ILLEGAL_CDNA5_WMMA: gfx125x requires the CDNA5 "
+                f"wave32 WMMA shape/dtype table; got {dtype} {shape}")
         elements = m * k // 32
         registers = (elements * _BITS[dtype] + 31) // 32
         return FragmentLayoutDescriptor(
-            arch, FragmentFamily.GFX125X_WMMA_V2, "wmma", 32, shape, dtype,
-            "fp32", elements, registers, 8, 8, RegisterFormat.SOA,
-            RegisterFormat.SOA, 1, "mods_reuse_8arg_gfx125x",
+            arch, FragmentFamily.CDNA5_WMMA, "wmma", 32, shape, dtype,
+            _acc_dtype(dtype), elements, registers, m * n // 32, m * n // 32,
+            RegisterFormat.SOA if _BITS[dtype] >= 16 else RegisterFormat.SOA_INT,
+            RegisterFormat.SOA if _acc_dtype(dtype) == "fp32" else RegisterFormat.SOA_INT,
+            1, "mods_reuse_scale_gfx125x",
             materialization_ready=dtype in ("fp16", "bf16"))
 
     if arch in _CDNA2 | _CDNA3 | _CDNA4:

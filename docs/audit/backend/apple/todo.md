@@ -3,10 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-13
+last_updated: 2026-08-14
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `AMD-ISA-DTYPE-2026-08-14` — **parity assessed; no Apple
+physical change required.** The shared compiler gained an AMD-only
+architecture/dtype/matrix-instruction selector and CDNA5 fragment identity.
+No Graph dtype spelling, public operation, Schedule contract, Apple ABI, or
+Metal capability changed; Apple must not inherit AMD low-precision legality or
+evidence. The shared `OP-DTYPE-FLOW-1` generator now audits every Apple
+operator/dtype row across the IR stack; policy-derived Apple dtype rows remain
+`legal_only` until an Apple manifest declares a physical consumer.
 
 Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **parity validated;
 no Apple change required.** The `Validate / lit` lane was dead from 2026-08-11

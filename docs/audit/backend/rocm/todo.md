@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-13
+last_updated: 2026-08-14
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -7,13 +7,32 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `AMD-ISA-DTYPE-2026-08-14` — **owning ROCm foundation
+landing; physical expansion required.** The compiler now distinguishes RDNA3.5
+gfx1151, RDNA4 gfx1200, and CDNA5 gfx1250/gfx1251 by architecture family,
+wave size, matrix pipeline, dense/sparse legality, operand and accumulator
+formats, scale lineage, exact instruction mnemonic, and implementation state.
+MI455X is gfx1250 and MI430X is gfx1251; they share the CDNA5 low-precision
+instruction ABI, gfx1251 adds FP64 WMMA, and they retain distinct cost-model
+identities. The existing f16/bf16 K32 gfx125x
+fragment reaches ROCDL under the new CDNA5 family. Remaining ROCm work is typed
+FP8/BF8 and IU8 materialization, sparse SWMMAC, F8F6F4/FP4/MX scale operands,
+gfx1251 FP64 WMMA, and independent gfx1200/MI455X/MI430X exact-device packets.
+No gfx1151 schedule or evidence transfers.
+
+The shared `OP-DTYPE-FLOW-1` generated matrix is the synchronization surface
+for frontend → Graph → Schedule → Tile → ROCm datatype flow and TSOL.
+Generic ROCm manifest rows apply only to gfx1151; gfx1200, gfx1250, and gfx1251
+remain architecture-specific and fail closed unless they have their own row.
+Policy-derived legality is labelled `legal_only`, not executable support.
+
 > **CDNA 5 breaks the `family ⇒ (matrixOp, waveSize)` model (assessed 2026-08-13).**
 > AMD's CDNA5 ISA guide contains **zero** MFMA/SMFMAC mnemonics — it uses
 > `V_WMMA_*` / `V_SWMMAC_*` — and states in Chapter 1 that the device
 > **supports only wave32**. `ROCMFragmentLayout.h:192` hardwires the CDNA branch
 > to `"mfma", 64`. Not a live bug (CDNA 5 is not in the arch list, so it fails
 > closed), but adding CDNA 5 is a change of SHAPE, not an arch append. See
-> [`docs/reference/isa/PRIMARY_SOURCES.md`](../../reference/isa/PRIMARY_SOURCES.md).
+> [`docs/reference/isa/PRIMARY_SOURCES.md`](../../../reference/isa/PRIMARY_SOURCES.md).
 
 Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **owning ROCm item,
 follow-up required; ROCm `tessera-ir` lit fixtures remain uncovered in CI.**

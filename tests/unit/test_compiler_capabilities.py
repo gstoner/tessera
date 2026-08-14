@@ -23,6 +23,10 @@ def test_capability_registry_normalizes_existing_target_aliases():
     assert normalize_target("mi350p") == "rocm_gfx950"
     assert normalize_target("mi355x") == "rocm_gfx950"
     assert normalize_target("mi455x") == "rocm_gfx1250"
+    assert normalize_target("rx9060xt") == "rocm_gfx1200"
+    assert normalize_target("rx9070xt") == "rocm_gfx1200"
+    assert normalize_target("Radeon RX 9060 XT") == "rocm_gfx1200"
+    assert normalize_target("Radeon RX 9070 XT") == "rocm_gfx1200"
     assert normalize_target("mi325x") == "rocm_gfx942"
 
     with pytest.raises(ValueError):

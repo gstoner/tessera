@@ -3,6 +3,7 @@
 Generated from `python/tessera/compiler/tsol_coverage.py`.  Don't edit by hand — regenerate via `python -m tessera.compiler.generated_docs --write tsol_coverage`, which writes this file *and* its CSV companion.  Drift gated by `tests/unit/test_tsol_coverage.py` and `scripts/check_generated_docs.sh`.
 
 Spec: `docs/operations/Tessera_Standard_Operations.md`.  Full primitive registry: `docs/audit/standalone_primitive_coverage.md`.
+The `dtype_layout_rule` axis below means that a semantic dtype/layout contract exists; it is not a per-target kernel-dtype claim. Use `docs/audit/generated/dtype_flow.md` for TSOL logical dtype → ABI storage and exact-target support.
 
 ## Headline
 

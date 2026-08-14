@@ -1,12 +1,12 @@
 ---
-last_updated: 2026-07-28
+last_updated: 2026-08-14
 audit_role: reference
 ---
 
-# gfx1250 / MI450 — Source-Grounded Compiler Reference
+# gfx1250 MI455X / gfx1251 MI430X — Source-Grounded Compiler Reference
 
-> **Purpose.** A primary-source reference for the gfx1250 (AMD Instinct MI450
-> series) target, assembled for compiler and backend work: hardware constants,
+> **Purpose.** A primary-source reference for the CDNA5 gfx1250 (AMD Instinct
+> MI455X) and its distinct gfx1251 (MI430X) sibling, assembled for compiler and backend work: hardware constants,
 > the WMMA pipeline and its hazards, the three data-movement mechanisms, the
 > split completion model, workgroup clusters, device-initiated SDMA, and the
 > scale-up fabric.
@@ -52,8 +52,8 @@ exist. **[V]**
 
 ## 1. Target identity and hardware constants
 
-gfx1250 is the AMD Instinct **MI450 series**. gfx1251 is a sibling ISA in the
-same family — *not* an alias (see §2.4). Both derive from
+gfx1250 is AMD Instinct **MI455X**. gfx1251 is AMD Instinct **MI430X**, a
+sibling target in the same CDNA5 family — *not* an alias (see §2.4). Both derive from
 `FeatureISAVersion12_50_Common` in `AMDGPU.td`. **[V]**
 
 Despite the `gfx12xx` numbering it is **not RDNA 4**. It is wave32 with WMMA and
@@ -240,8 +240,10 @@ performance change silently broke correctness through an unmodelled coupling.
 gfx1250. It selects hazard categories 4/5 (latency 16/32) instead of 0/6
 (latency 8/4) — the **same instruction at 4× different throughput**. **[V]**
 
-Treating the two as one class is correct for **ABI** (identical intrinsics and
-operand forms) and wrong for any **cost model, scheduler, or autotuner**.
+Treating the two as one class is correct only for their **common low-precision
+ABI** (identical low-precision intrinsics and operand forms). gfx1251 adds an
+FP64 WMMA form absent from gfx1250. Sharing either extension legality or any
+**cost model, scheduler, or autotuner** decision is wrong.
 
 ### 2.5 The machine model behind the hazard categories
 

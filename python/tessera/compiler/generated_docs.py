@@ -259,6 +259,16 @@ def _r_tsol_csv() -> str:
     return tsol_coverage.render_csv()
 
 
+def _r_dtype_flow() -> str:
+    from . import dtype_flow_audit
+    return dtype_flow_audit.render_markdown()
+
+
+def _r_dtype_flow_csv() -> str:
+    from . import dtype_flow_audit
+    return dtype_flow_audit.render_csv()
+
+
 def _r_effect_lattice() -> str:
     from . import effect_audit
     return effect_audit.render_dashboard()
@@ -550,6 +560,11 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
     GeneratedDoc(
         "tsol_coverage", "specialized", _GEN / "tsol_coverage.md", _r_tsol,
         csv_path=_GEN / "tsol_coverage.csv", render_csv=_r_tsol_csv,
+    ),
+    GeneratedDoc(
+        "dtype_flow", "specialized", _GEN / "dtype_flow.md", _r_dtype_flow,
+        csv_path=_GEN / "dtype_flow.csv", render_csv=_r_dtype_flow_csv,
+        also_gate_md=True,
     ),
     GeneratedDoc(
         "effect_lattice_audit", "specialized", _GEN / "effect_lattice_audit.md",

@@ -12,7 +12,7 @@ namespace mlir::tessera_rocm {
 enum class FragmentFamily {
   RDNA3WMMA,
   RDNA4WMMA,
-  GFX125XWMMAV2,
+  CDNA5WMMA,
   CDNA2MFMA,
   CDNA3MFMA,
   CDNA4MFMA,
@@ -29,6 +29,10 @@ struct FragmentLayoutDescriptor {
   FragmentFamily family;
   llvm::StringRef familyName;
   llvm::StringRef matrixOp;
+  /// Exact ISA operation selected for this architecture/dtype/shape tuple.
+  /// This is provenance, not an execution claim: materializationReady remains
+  /// the independent gate for fragment packing and intrinsic lowering.
+  llvm::StringRef matrixInstruction;
   int64_t waveSize;
   int64_t inputElementsPerLane;
   int64_t inputRegistersPerLane;
@@ -79,6 +83,58 @@ inline int64_t dtypeBits(llvm::StringRef dtype) {
   return 0;
 }
 
+inline llvm::StringRef denseMatrixInstruction(llvm::StringRef arch,
+                                              llvm::StringRef dtype,
+                                              int64_t k) {
+  if (arch == "gfx1100" || arch == "gfx1151") {
+    if (dtype == "f16")
+      return "V_WMMA_F32_16X16X16_F16";
+    if (dtype == "bf16")
+      return "V_WMMA_F32_16X16X16_BF16";
+    if (dtype == "int8")
+      return "V_WMMA_I32_16X16X16_IU8";
+    if (dtype == "int4")
+      return "V_WMMA_I32_16X16X16_IU4";
+  }
+  if (arch == "gfx1200" || arch == "gfx1201") {
+    if (dtype == "f16")
+      return "V_WMMA_F32_16X16X16_F16";
+    if (dtype == "bf16")
+      return "V_WMMA_F32_16X16X16_BF16";
+    if (dtype == "e4m3" || dtype == "fp8")
+      return "V_WMMA_F32_16X16X16_FP8_FP8";
+    if (dtype == "e5m2" || dtype == "bf8")
+      return "V_WMMA_F32_16X16X16_BF8_BF8";
+    if (dtype == "int8")
+      return "V_WMMA_I32_16X16X16_IU8";
+    if (dtype == "int4" && k == 16)
+      return "V_WMMA_I32_16X16X16_IU4";
+    if (dtype == "int4" && k == 32)
+      return "V_WMMA_I32_16X16X32_IU4";
+  }
+  if (arch == "gfx1250" || arch == "gfx1251") {
+    if (dtype == "f32" && k == 4)
+      return "V_WMMA_F32_16X16X4_F32";
+    if (dtype == "f16" && k == 32)
+      return "V_WMMA_F32_16X16X32_F16";
+    if (dtype == "bf16" && k == 32)
+      return "V_WMMA_F32_16X16X32_BF16";
+    if ((dtype == "e4m3" || dtype == "fp8") && k == 64)
+      return "V_WMMA_F32_16X16X64_FP8_FP8";
+    if ((dtype == "e5m2" || dtype == "bf8") && k == 64)
+      return "V_WMMA_F32_16X16X64_BF8_BF8";
+    if ((dtype == "e4m3" || dtype == "fp8") && k == 128)
+      return "V_WMMA_F32_16X16X128_FP8_FP8";
+    if ((dtype == "e5m2" || dtype == "bf8") && k == 128)
+      return "V_WMMA_F32_16X16X128_BF8_BF8";
+    if (dtype == "int8" && k == 64)
+      return "V_WMMA_I32_16X16X64_IU8";
+    if (dtype == "fp4" && k == 128)
+      return "V_WMMA_SCALE_F32_16X16X128_F8F6F4";
+  }
+  return {};
+}
+
 inline std::optional<FragmentLayoutDescriptor>
 resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
                       llvm::StringRef arch) {
@@ -96,7 +152,8 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
     return std::nullopt;
 
   auto make = [&](FragmentFamily family, llvm::StringRef familyName,
-                  llvm::StringRef matrixOp, int64_t waveSize,
+                  llvm::StringRef matrixOp, llvm::StringRef matrixInstruction,
+                  int64_t waveSize,
                   int64_t inputElements, FragmentRegisterFormat inputFormat,
                   FragmentRegisterFormat accumulatorFormat,
                   int64_t replication, llvm::StringRef abi,
@@ -104,6 +161,7 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
     return {family,
             familyName,
             matrixOp,
+            matrixInstruction,
             waveSize,
             inputElements,
             (inputElements * bits + 31) / 32,
@@ -121,7 +179,8 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
         !isAnyOf(dtype, {"f16", "bf16", "int8", "int4"}) ||
         (desc.getFamily() != "auto" && desc.getFamily() != "wmma"))
       return std::nullopt;
-    return make(FragmentFamily::RDNA3WMMA, "rdna3_wmma", "wmma", 32,
+    return make(FragmentFamily::RDNA3WMMA, "rdna3_wmma", "wmma",
+                denseMatrixInstruction(arch, dtype, desc.getK()), 32,
                 16, FragmentRegisterFormat::WMMAInputGFX11,
                 FragmentRegisterFormat::WMMAAccGFX11, 2,
                 "abc_3arg_gfx11");
@@ -139,7 +198,8 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
     FragmentRegisterFormat inputFormat =
         bits >= 16 ? FragmentRegisterFormat::SOA
                    : FragmentRegisterFormat::SOAInt;
-    return make(FragmentFamily::RDNA4WMMA, "rdna4_wmma", "wmma", 32,
+    return make(FragmentFamily::RDNA4WMMA, "rdna4_wmma", "wmma",
+                denseMatrixInstruction(arch, dtype, desc.getK()), 32,
                 inputElements, inputFormat,
                 integer ? FragmentRegisterFormat::SOAInt
                         : FragmentRegisterFormat::SOA,
@@ -147,15 +207,27 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
   }
 
   if (arch == "gfx1250" || arch == "gfx1251") {
-    int64_t expectedK = isAnyOf(dtype, {"f16", "bf16"}) ? 32 : 64;
-    if (desc.getK() != expectedK ||
-        !isAnyOf(dtype, {"f16", "bf16", "e4m3", "e5m2", "fp8", "bf8"}) ||
+    bool validShape =
+        (dtype == "f32" && desc.getK() == 4) ||
+        (isAnyOf(dtype, {"f16", "bf16"}) && desc.getK() == 32) ||
+        (isAnyOf(dtype, {"e4m3", "e5m2", "fp8", "bf8"}) &&
+         (desc.getK() == 64 || desc.getK() == 128)) ||
+        (dtype == "int8" && desc.getK() == 64) ||
+        (dtype == "fp4" && desc.getK() == 128);
+    if (!validShape ||
         (desc.getFamily() != "auto" && desc.getFamily() != "wmma"))
       return std::nullopt;
-    return make(FragmentFamily::GFX125XWMMAV2, "gfx125x_wmma_v2", "wmma",
-                32, 16 * expectedK / 32, FragmentRegisterFormat::SOA,
-                FragmentRegisterFormat::SOA, 1,
-                "mods_reuse_8arg_gfx125x", isAnyOf(dtype, {"f16", "bf16"}));
+    int64_t inputElements = 16 * desc.getK() / 32;
+    FragmentRegisterFormat inputFormat =
+        bits >= 16 ? FragmentRegisterFormat::SOA
+                   : FragmentRegisterFormat::SOAInt;
+    return make(FragmentFamily::CDNA5WMMA, "cdna5_wmma", "wmma",
+                denseMatrixInstruction(arch, dtype, desc.getK()), 32,
+                inputElements, inputFormat,
+                integer ? FragmentRegisterFormat::SOAInt
+                        : FragmentRegisterFormat::SOA,
+                1, "mods_reuse_scale_gfx125x",
+                isAnyOf(dtype, {"f16", "bf16"}));
   }
 
   FragmentFamily family;
@@ -189,7 +261,7 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
   FragmentRegisterFormat inputFormat =
       bits >= 16 ? FragmentRegisterFormat::SOA
                  : FragmentRegisterFormat::SOAInt;
-  return make(family, familyName, "mfma", 64, inputElements, inputFormat,
+  return make(family, familyName, "mfma", "mfma", 64, inputElements, inputFormat,
               integer ? FragmentRegisterFormat::SOAInt
                       : FragmentRegisterFormat::SOA,
               1, "mfma_abc_ctrl", isAnyOf(dtype, {"f16", "bf16"}));

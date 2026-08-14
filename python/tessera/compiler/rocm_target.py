@@ -10,6 +10,7 @@ Per-ISA feature matrix covers:
   - gfx1100 (RDNA 3, prosumer; kept for completeness)
   - gfx1151 (RDNA 3.5, Strix Halo APU — Radeon 8060S / Ryzen AI Max+ 395)
   - gfx1200 (RDNA 4 / GFX12 consumer class)
+  - gfx1250 / gfx1251 (CDNA 5, MI455X / MI430X)
 
 Each ISA exposes a feature dict + a dtype set + matrix-instruction
 variants.  ``rocm_feature_status(isa, name)`` queries individual flags;
@@ -49,18 +50,16 @@ class AMDArch(IntEnum):
     GFX_1151 = 1151    # RDNA 3.5 APU — Strix Halo (Radeon 8060S / Ryzen AI Max+ 395)
     GFX_1200 = 1200    # RDNA 4 / GFX12 prosumer
     GFX_1201 = 1201    # RDNA 4 / Radeon AI PRO R9700
-    # gfx1250/1251 — the "v2" mods/reuse WMMA ABI (K-doubled 16x16x32, native
-    # bfloat).  Family designation NOT asserted (no public ISA consulted); grounded
-    # only by `llc` (LLVM 23 AMDGPU) + LLVM IntrinsicsAMDGPU.td.  See rocdl_emit.py.
+    # CDNA 5: wave32 XDL WMMA/SWMMAC, not legacy wave64 MFMA. gfx1250 is
+    # MI455X; gfx1251 is MI430X. They share an instruction ABI but have distinct
+    # latency/cost identities and must not share selector evidence.
     GFX_1250 = 1250
     GFX_1251 = 1251
 
 
-#: wave32 / WMMA-matrix-path arches (vs CDNA wave64 / MFMA).  Used by lane-width and
-#: matrix-path gates.  "RDNA" historically, now also the gfx125x WMMA targets —
-#: ``is_rdna`` here means "wave32 + WMMA path", an operational gate, not a strict
-#: family claim (gfx125x wave32 is `llc`-grounded; its family is not asserted).
-_RDNA_ARCHES: frozenset[AMDArch] = frozenset({
+#: Wave32 architectures. CDNA 5 is deliberately present: architecture family
+#: no longer determines wave size or matrix mnemonic family.
+_WAVE32_ARCHES: frozenset[AMDArch] = frozenset({
     AMDArch.GFX_1100, AMDArch.GFX_1151, AMDArch.GFX_1200,
     AMDArch.GFX_1201,
     AMDArch.GFX_1250, AMDArch.GFX_1251,
@@ -85,11 +84,10 @@ _LDS_BYTES: dict[AMDArch, int] = {
     AMDArch.GFX_1151: 65536,    # RDNA 3.5 — 128 KiB per WGP (2 CUs); 64 KiB/CU view
     AMDArch.GFX_1200: 65536,
     AMDArch.GFX_1201: 65536,
-    # gfx1250/1251 — PROVISIONAL (no gfx1250 ISA consulted; mirrors the RDNA 3/4
-    # 64 KiB/CU value).  Not used in any execution path; the grounded gfx1250 surface
-    # is the WMMA emitter (rocdl_emit.py).  Replace once a gfx1250 ISA is available.
-    AMDArch.GFX_1250: 65536,
-    AMDArch.GFX_1251: 65536,
+    # CDNA 5 addressable LDS per WGP. The physical allocation/accounting unit
+    # must be carried by consumers rather than treating this as RDNA per-CU LDS.
+    AMDArch.GFX_1250: 327680,
+    AMDArch.GFX_1251: 327680,
 }
 
 
@@ -103,8 +101,8 @@ _MAX_WAVES: dict[AMDArch, int] = {
     AMDArch.GFX_1151: 16,       # RDNA 3.5 wave32 occupancy (same as RDNA 3)
     AMDArch.GFX_1200: 16,
     AMDArch.GFX_1201: 16,
-    AMDArch.GFX_1250: 16,       # PROVISIONAL (no gfx1250 ISA; mirrors RDNA wave32)
-    AMDArch.GFX_1251: 16,       # PROVISIONAL
+    AMDArch.GFX_1250: 16,
+    AMDArch.GFX_1251: 16,
 }
 
 
@@ -164,9 +162,9 @@ _ROCM_DTYPES: dict[AMDArch, frozenset[str]] = {
         "int8", "int32", "int4",
     }),
     AMDArch.GFX_1250: frozenset({
-        # gfx1250/1251 — the v2 mods/reuse WMMA ABI.  f16/bf16 (16x16x32) are
-        # `llc`-verified (rocdl_emit.py); fp8_e4m3/e5m2 (16x16x64/128, the ModsC
-        # ABI) + int8 are from LLVM IntrinsicsAMDGPU.td.  int4 stays planned-gated.
+        # MI455X / CDNA 5 executable storage ABI. FP4/FP6/MX formats are
+        # represented in rocm_isa_contract as planned-gated matrix formats;
+        # they are not promoted to Graph storage by this target row.
         "fp32", "bf16", "fp16",
         "fp8_e4m3", "fp8_e5m2",
         "int8",
@@ -334,11 +332,9 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         "sram_ecc":            "not_supported",
     },
     AMDArch.GFX_1250: {
-        # gfx1250/1251 — WMMA-class (v2 mods/reuse ABI).  WMMA float + fp8 flags
-        # are grounded (`llc` for f16/bf16 16x16x32; LLVM IntrinsicsAMDGPU.td for
-        # the fp8 16x16x64/128 forms).  Everything else is "tba": NOT grounded —
-        # no gfx1250 ISA was consulted, so async-copy / cluster / ECC readiness is
-        # genuinely unknown rather than asserted.
+        # MI455X / CDNA 5. Architecture support is grounded in the CDNA5 ISA
+        # and LLVM gfx1250 subtarget; execution promotion remains separately
+        # gated by the exact-device target capability.
         "mfma":                "not_supported",
         "mfma_f8":             "not_supported",
         "mfma_xf32":           "not_supported",
@@ -347,12 +343,12 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         "wmma_f16":            "ready",
         "wmma_bf16":           "ready",
         "wmma_f8":             "ready",
-        "lds_async_copy":      "tba",
-        "buffer_load_lds":     "tba",
-        "global_load_lds":     "tba",
-        "cluster_mode":        "tba",
-        "xnack":               "tba",
-        "sram_ecc":            "tba",
+        "lds_async_copy":      "ready",
+        "buffer_load_lds":     "ready",
+        "global_load_lds":     "not_supported",
+        "cluster_mode":        "ready",
+        "xnack":               "ready",
+        "sram_ecc":            "ready",
     },
     AMDArch.GFX_1251: {
         "mfma":                "not_supported",
@@ -363,12 +359,12 @@ _ROCM_7_2_FEATURES: dict[AMDArch, dict[str, str]] = {
         "wmma_f16":            "ready",
         "wmma_bf16":           "ready",
         "wmma_f8":             "ready",
-        "lds_async_copy":      "tba",
-        "buffer_load_lds":     "tba",
-        "global_load_lds":     "tba",
-        "cluster_mode":        "tba",
-        "xnack":               "tba",
-        "sram_ecc":            "tba",
+        "lds_async_copy":      "ready",
+        "buffer_load_lds":     "ready",
+        "global_load_lds":     "not_supported",
+        "cluster_mode":        "ready",
+        "xnack":               "ready",
+        "sram_ecc":            "ready",
     },
 }
 
@@ -440,11 +436,16 @@ _WMMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int]]] = {
     # not modeled here), and WMMA load-transpose (§11.6).  No FP4 (E2M1) WMMA.
     AMDArch.GFX_1200: frozenset({(16, 16, 16), (16, 16, 32)}),
     AMDArch.GFX_1201: frozenset({(16, 16, 16), (16, 16, 32)}),
-    # gfx1250/1251 — the v2 mods/reuse WMMA ABI.  The K is DOUBLED: f16/bf16 are
-    # 16x16x32 (`llc`-verified, rocdl_emit.py), and the fp8/bf8 forms are 16x16x64 /
-    # 16x16x128 (LLVM IntrinsicsAMDGPU.td, ModsC ABI).  bf16 is native `<16 x bfloat>`.
-    AMDArch.GFX_1250: frozenset({(16, 16, 32), (16, 16, 64), (16, 16, 128)}),
-    AMDArch.GFX_1251: frozenset({(16, 16, 32), (16, 16, 64), (16, 16, 128)}),
+    # CDNA 5 dense WMMA shapes. K=4 is F32, K=32 F16/BF16, K=64/128 FP8/BF8
+    # and IU8, and the non-square 32x16x128 form is block-scaled F4.
+    AMDArch.GFX_1250: frozenset({
+        (16, 16, 4), (16, 16, 32), (16, 16, 64), (16, 16, 128),
+        (32, 16, 128),
+    }),
+    AMDArch.GFX_1251: frozenset({
+        (16, 16, 4), (16, 16, 32), (16, 16, 64), (16, 16, 128),
+        (32, 16, 128),
+    }),
 }
 
 
@@ -458,8 +459,8 @@ _WMMA_VARIANTS: dict[AMDArch, frozenset[tuple[int, int, int]]] = {
 #   CDNA (gfx90a/940/942/950): 256 VGPR + 256 AGPR per lane = 512 combined.
 #     The AGPRs are the matrix-core accumulator registers; the combined 512
 #     matches the Gluon "512-VGPR budget" framing on gfx950.
-#   RDNA / wave32 (gfx1100/1151/1200/1250/1251): 256 VGPR + 0 AGPR.
-#     RDNA has no separate AGPR file; the accumulator lives in the VGPR file.
+#   RDNA wave32 (gfx1100/1151/1200): 256 VGPR + 0 AGPR.
+#   CDNA 5 wave32 (gfx1250/1251): 1024 addressable VGPR + 0 AGPR.
 _VGPR_BUDGET: dict[AMDArch, int] = {
     AMDArch.GFX_90A:  256,
     AMDArch.GFX_940:  256,
@@ -469,12 +470,12 @@ _VGPR_BUDGET: dict[AMDArch, int] = {
     AMDArch.GFX_1151: 256,
     AMDArch.GFX_1200: 256,
     AMDArch.GFX_1201: 256,
-    AMDArch.GFX_1250: 256,
-    AMDArch.GFX_1251: 256,
+    AMDArch.GFX_1250: 1024,
+    AMDArch.GFX_1251: 1024,
 }
 
-#: Accumulator (matrix-core) register budget per lane.  Non-zero only on CDNA,
-#: which has a dedicated AGPR file feeding MFMA; RDNA/wave32 has none (0).
+#: Accumulator register budget per lane. Non-zero only on legacy CDNA MFMA
+#: targets. CDNA 5 WMMA accumulates in its 1024-entry VGPR file and has no AGPR.
 _AGPR_BUDGET: dict[AMDArch, int] = {
     AMDArch.GFX_90A:  256,
     AMDArch.GFX_940:  256,
@@ -511,8 +512,8 @@ _XCD_COUNT: dict[AMDArch, int] = {
     AMDArch.GFX_1151: 1,
     AMDArch.GFX_1200: 1,
     AMDArch.GFX_1201: 1,
-    AMDArch.GFX_1250: 1,
-    AMDArch.GFX_1251: 1,
+    AMDArch.GFX_1250: 8,    # MI455X product topology
+    AMDArch.GFX_1251: 1,    # MI430X topology remains product-evidence gated
 }
 
 
@@ -646,16 +647,18 @@ class ROCmTargetProfile:
 
     @property
     def agpr_budget(self) -> int:
-        """Accumulator (matrix-core) registers per lane.  Non-zero only on CDNA
-        (dedicated AGPR file feeding MFMA); ``0`` on RDNA/wave32 arches."""
+        """Dedicated accumulator registers per lane.
+
+        Legacy CDNA MFMA has an AGPR file; RDNA and CDNA 5 WMMA do not.
+        """
         return _AGPR_BUDGET[self.arch]
 
     @property
     def total_reg_budget(self) -> int:
         """Combined per-lane register budget (``vgpr_budget + agpr_budget``).
 
-        On CDNA this is 512 (256 VGPR + 256 AGPR — the Gluon "512-VGPR budget");
-        on RDNA/wave32 it is 256 (no separate AGPR file)."""
+        Legacy CDNA returns 512 (256 VGPR + 256 AGPR), RDNA returns 256,
+        and CDNA 5 returns 1024 VGPR with no separate AGPR file."""
         return self.vgpr_budget + self.agpr_budget
 
     @property
@@ -676,8 +679,8 @@ class ROCmTargetProfile:
 
     @property
     def threads_per_wave(self) -> int:
-        # AMD wavefronts are 64 lanes on CDNA, 32 on RDNA.
-        return 32 if self.arch in _RDNA_ARCHES else 64
+        # Wave size is architecture-specific. CDNA 5 is wave32.
+        return 32 if self.arch in _WAVE32_ARCHES else 64
 
     @property
     def rocm_features(self) -> frozenset[str]:
@@ -720,16 +723,24 @@ class ROCmTargetProfile:
 
     @property
     def is_wave32(self) -> bool:
-        """True when the arch uses a 32-lane wavefront + the WMMA matrix path (vs
-        CDNA wave64 + MFMA). This is the precise operational predicate; ``is_rdna``
-        is the historical alias (gfx125x is wave32/WMMA but not asserted-RDNA)."""
-        return self.arch in _RDNA_ARCHES
+        """True when the arch uses a 32-lane wavefront.
+
+        CDNA 5 is wave32 + WMMA, so this is intentionally independent of
+        :attr:`is_rdna` and of the matrix instruction family.
+        """
+        return self.arch in _WAVE32_ARCHES
 
     @property
     def is_rdna(self) -> bool:
-        """Alias of :attr:`is_wave32` — kept for back-compat. NOTE: a literal RDNA
-        family claim is *not* implied for gfx125x (see ``_RDNA_ARCHES``)."""
-        return self.is_wave32
+        """True only for literal RDNA-family targets.
+
+        Older code used this as a wave32 alias. Use :attr:`is_wave32` for that
+        operational question; CDNA 5 is wave32 but is not RDNA.
+        """
+        return self.arch in {
+            AMDArch.GFX_1100, AMDArch.GFX_1151,
+            AMDArch.GFX_1200, AMDArch.GFX_1201,
+        }
 
 
 def rocm_feature_status(arch: AMDArch, feature: str) -> str:
@@ -888,7 +899,7 @@ def rank_mfma_shapes_by_footprint(
     caller restricts to the K a given storage dtype lowers to (bf16/fp16 → 16
     on the 16×16×16 form, fp8 → 32, fp4 → 64, xf32 → 8).
     """
-    lanes = 32 if arch in _RDNA_ARCHES else 64
+    lanes = 32 if arch in _WAVE32_ARCHES else 64
     shapes = [s for s in _MFMA_VARIANTS[arch] if k is None or s[2] == k]
     ranked = [(s, mfma_accumulator_regs(s, lanes=lanes)) for s in shapes]
     # Cheapest accumulator first; tie → larger M*N*K (more work per issue) first.

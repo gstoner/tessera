@@ -426,6 +426,13 @@ def _dashboard_map_rows() -> list[ProgressRow]:
             "Use to find runnable proof surfaces and stale scaffolds.",
         ),
         (
+            "dtype_flow",
+            "specialized",
+            "Per-operator logical dtype, physical ABI storage, accumulator, IR-layer, and exact-target state.",
+            "docs/audit/generated/dtype_flow.csv",
+            "Use for dtype support questions; do not infer per-dtype execution from aggregate conformance or capability rows.",
+        ),
+        (
             "contract_consumers / effect_lattice / tsol",
             "specialized",
             "Focused contract-pass, effect-system, and TSOL views.",
@@ -706,6 +713,7 @@ def render_markdown(rows: list[ProgressRow] | None = None) -> str:
             "- Primitive contract readiness comes from `s_series_status.md`; `backend_kernel` is a promotion axis, not an all-up compiler veto.",
             "- Backend/pathway denominators are declared `BackendKernelEntry` op×target grains from `s_series_status.md`; runtime-path counts are independent supporting detail and are never added to those totals.",
             "- Only `device_verified_abi` and `device_verified_jit` close a hardware pathway grain. `fused`/`packaged` prove implementation presence, while reference and artifact/planned rows remain visible without being promoted.",
+            "- Datatype support comes from `dtype_flow.csv`; its `legal_only` state is expressibility, not an operator-specific physical kernel, and logical complex dtypes remain distinct from their interleaved real ABI storage.",
             "- Integration evidence comes from verifier, test, ABI, and surface dashboards; these are the places to look for the next real blockers.",
             "",
         ]

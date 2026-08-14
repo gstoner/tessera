@@ -11,6 +11,8 @@ A cell is **complete** only when every proof column is `complete`. Its `first_fa
 
 The four IR columns are derived by compiling each curated program and running the typed Graph/Schedule/Tile/Target verifiers. Backend and runtime columns join exact-target `backend_manifest` evidence to an executable `execution_matrix` target row. Numerical completion requires an exact-target execute-and-compare fixture.
 
+This matrix is dtype-aggregated: a complete cell proves only the curated dtype envelope for that conformance program. For the per-operator logical dtype, physical ABI storage, accumulator, and exact-target status matrix, use [`generated/dtype_flow.md`](generated/dtype_flow.md).
+
 Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md) recommendation **A**: the gap between *architecture-implied capability* and *executable capability* is now drift-gated rather than implicit.
 
 ## Status legend

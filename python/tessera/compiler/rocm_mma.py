@@ -40,6 +40,7 @@ from .rocm_target import (
     wmma_variants,
 )
 from .rocm_fragment import FragmentLayoutDescriptor, select_fragment_layout
+from .rocm_isa_contract import select_amd_matrix_instruction
 
 # ── dtype bit widths (MMA-relevant canonical dtypes) ────────────────────────
 # Storage bit width per canonical dtype; used to derive the K-packing hint and
@@ -86,7 +87,8 @@ _WMMA_K_RDNA4: dict[str, int] = {
     "fp8_e4m3": 16, "fp8_e5m2": 16,
 }
 _WMMA_K_GFX125X: dict[str, int] = {
-    "fp16": 32, "bf16": 32, "fp8_e4m3": 64, "fp8_e5m2": 64,
+    "fp32": 4, "fp16": 32, "bf16": 32,
+    "fp8_e4m3": 64, "fp8_e5m2": 64, "int8": 64,
 }
 
 _RDNA3_CLASS = frozenset({AMDArch.GFX_1100, AMDArch.GFX_1151})
@@ -206,6 +208,19 @@ class MmaDescriptor:
         din = _MNEMONIC_DTYPE.get(self.in_dtype, self.in_dtype)
         return f"v_{self.kind}_{acc}_{m}x{n}x{k}_{din}"
 
+    @property
+    def isa_instruction(self) -> str:
+        """Exact ISA mnemonic where the cross-generation contract owns one."""
+        if self.arch in {
+            AMDArch.GFX_1151, AMDArch.GFX_1200,
+            AMDArch.GFX_1250, AMDArch.GFX_1251,
+        }:
+            return select_amd_matrix_instruction(
+                self.arch, self.in_dtype, accumulator=self.acc_dtype,
+                shape=self.shape,
+            ).mnemonic
+        return self.intrinsic.upper()
+
     def as_metadata_dict(self) -> dict[str, object]:
         return {
             "arch": self.arch.name,
@@ -216,6 +231,7 @@ class MmaDescriptor:
             "acc_dtype": self.acc_dtype,
             "transposed": self.transposed,
             "intrinsic": self.intrinsic,
+            "isa_instruction": self.isa_instruction,
             "operands": [op.as_metadata_dict() for op in self.operands],
             "physical_fragment": self.fragment_layout.as_metadata_dict(),
         }
@@ -375,7 +391,7 @@ def mma_for_matmul(
     ``numeric_policy.math_mode='tf32'``; this raises on an RDNA profile because
     RDNA has no full/xf32 fp32 WMMA path.
     """
-    if dtype == "fp32" and profile.arch in _RDNA_ALL:
+    if dtype == "fp32" and profile.arch in _LITERAL_RDNA:
         raise TesseraROCmTargetError(
             "fp32 matmul has no WMMA path on RDNA; use bf16/fp16 storage or run "
             "on a CDNA arch (fp32→xf32 MFMA).")
@@ -383,8 +399,7 @@ def mma_for_matmul(
         profile.arch, dtype, out_dtype=out_dtype, transposed=transposed)
 
 
-_RDNA_ALL = frozenset(
-    _RDNA3_CLASS | _RDNA4_CLASS | _GFX125X_CLASS)
+_LITERAL_RDNA = frozenset(_RDNA3_CLASS | _RDNA4_CLASS)
 
 
 __all__ = [

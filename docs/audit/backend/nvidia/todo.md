@@ -3,10 +3,18 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-13
+last_updated: 2026-08-14
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `AMD-ISA-DTYPE-2026-08-14` — **parity assessed; no NVIDIA
+physical change required.** The new selector is AMD-specific and changes no
+Graph dtype spelling, public operation, Schedule contract, NVVM/PTX ABI, or
+SM120 capability. AMD FP8/BF8/FP4/MX and sparse-WMMA evidence cannot be used as
+CUDA evidence. The shared `OP-DTYPE-FLOW-1` generator now audits SM120 by
+operator and storage dtype; target-wide derived legality remains `legal_only`
+unless an NVIDIA manifest owns the physical kernel.
 
 Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **not applicable to
 NVIDIA, by existing architecture.** The `Validate / lit` lane was dead from

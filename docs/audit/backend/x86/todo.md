@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-13
+last_updated: 2026-08-14
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,17 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `AMD-ISA-DTYPE-2026-08-14` — **parity assessed; no x86
+physical change required.** The shared change is confined to AMD architecture,
+datatype-role, and matrix-instruction selection. It changes no Graph dtype
+spelling, public operation, Schedule contract, AVX-512/VNNI ABI, or AMX gate;
+x86 evidence remains independent.
+
+The shared `OP-DTYPE-FLOW-1` generator now audits every x86 operator/storage
+pair from frontend through physical manifests. Accumulator-compatible dtypes
+derived from target-wide AVX-512 legality remain `legal_only`; only explicit
+x86 per-operation rows can claim a physical consumer or execution evidence.
 
 ## P0 — `TesseraX86Dialect` segfaults on load (`X86-DIALECT-LOAD-CRASH-2026-08-12`)
 

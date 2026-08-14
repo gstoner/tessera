@@ -751,7 +751,12 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
     ),
     "rocm_gfx1200": TargetCapability(
         name="rocm_gfx1200",
-        aliases=("gfx1200", "gfx12", "rdna4", "rx9000"),
+        aliases=(
+            "gfx1200", "gfx12", "rdna4", "rx9000",
+            "rx9060xt", "rx9070xt",
+            "radeon_rx_9060_xt", "radeon_rx_9070_xt",
+            "radeon rx 9060 xt", "radeon rx 9070 xt",
+        ),
         family="rocm",
         runtime_backend="hip",
         default_runtime_status="artifact_only",
@@ -803,7 +808,11 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             ),
         ),
         supported_dtypes=("bf16", "fp16", "fp32", "int8"),
-        features=("wmma_v2", "wave32", "buffer_load_lds", "rocm_7_2_3"),
+        features=(
+            "cdna5", "wmma_v2", "wmma_f8", "swmmac", "microscaling",
+            "wave32", "lds_async_copy", "buffer_load_lds", "cluster_mode",
+            "xnack", "sram_ecc", "rocm_7_2_3",
+        ),
     ),
     "apple_cpu": TargetCapability(
         name="apple_cpu",

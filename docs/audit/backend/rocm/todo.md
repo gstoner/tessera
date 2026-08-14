@@ -7,6 +7,14 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+> **CDNA 5 breaks the `family ⇒ (matrixOp, waveSize)` model (assessed 2026-08-13).**
+> AMD's CDNA5 ISA guide contains **zero** MFMA/SMFMAC mnemonics — it uses
+> `V_WMMA_*` / `V_SWMMAC_*` — and states in Chapter 1 that the device
+> **supports only wave32**. `ROCMFragmentLayout.h:192` hardwires the CDNA branch
+> to `"mfma", 64`. Not a live bug (CDNA 5 is not in the arch list, so it fails
+> closed), but adding CDNA 5 is a change of SHAPE, not an arch append. See
+> [`docs/reference/isa/PRIMARY_SOURCES.md`](../../reference/isa/PRIMARY_SOURCES.md).
+
 Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **owning ROCm item,
 follow-up required; ROCm `tessera-ir` lit fixtures remain uncovered in CI.**
 The `Validate / lit` lane was dead from 2026-08-11 to 2026-08-12 (pytest

@@ -504,6 +504,7 @@ void registerTesseraPasses() {
   ::mlir::registerPass([]() { return createAutodiffPairedPass(); });
   // AD-FWD-CORE-1 — paired forward-mode JVP through TangentInterface.
   ::mlir::registerPass([]() { return createAutodiffForwardPass(); });
+  ::mlir::registerPass([]() { return createAutodiffHvpPreparePass(); });
 
   // ── Phase 8.4.8 SwiGLU fusion (Stage 2b of SwiGLU Performance Plan) ───────
   // Matches the 3-op SwiGLU chain at the Graph IR layer and emits
@@ -621,6 +622,16 @@ void registerTesseraPasses() {
         pm.addPass(createAdjointCollectiveInsertionPass());
         pm.addPass(createAwaitSinkingPass());
       });
+
+  ::mlir::PassPipelineRegistration<>
+    autodiffHvpPipeline(
+        "tessera-autodiff-hvp-pipeline",
+        "Exact forward-over-reverse HVP: paired reverse -> tangent product",
+        [](OpPassManager &pm) {
+          pm.addPass(createAutodiffPairedPass());
+          pm.addPass(createAutodiffHvpPreparePass());
+          pm.addPass(createAutodiffForwardPass());
+        });
 
   // Full Phase 3 GPU lowering chain: Graph IR → SM_90 PTX.
   //

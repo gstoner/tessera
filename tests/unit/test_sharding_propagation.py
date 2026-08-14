@@ -1,8 +1,19 @@
 from __future__ import annotations
 
-from tessera.compiler.graph_ir import GraphIRFunction, IRArg, IROp, tensor_ir_type
+import pytest
+
+from tessera.compiler.graph_ir import (
+    GraphIRFunction,
+    GraphIRModule,
+    IRArg,
+    IROp,
+    tensor_ir_type,
+)
+from tessera.compiler.schedule_ir import lower_graph_to_schedule_ir
+from tessera.compiler.tile_ir import lower_schedule_to_tile_ir
 from tessera.compiler.sharding_propagation import (
     Placement,
+    materialize_reshard_plan,
     plan_explicit_reshards,
     propagate_sharding,
 )
@@ -168,3 +179,103 @@ def test_registered_collectives_transform_placement_explicitly():
     assert result.placements["scattered"] == Placement.tiled({0: "data"})
     assert result.placements["exchanged"] == Placement.tiled({1: "data"})
     assert result.placements["reduced"] == Placement.replicated()
+
+
+def test_reshard_plan_materializes_graph_schedule_and_tile_ssa():
+    ty = tensor_ir_type(("8", "16"), "fp32")
+    consume = _op("out", "tessera.sigmoid", ["%x"])
+    fn = GraphIRFunction(
+        "f", args=[IRArg("x", ty)], result_types=[ty], body=[consume],
+        return_values=["%out"],
+    )
+    propagated = propagate_sharding(fn, {"x": Placement.tiled({0: "data"})})
+    plan = plan_explicit_reshards(
+        fn, propagated, {0: (Placement.replicated(),)}, subgroup=(0, 1)
+    )
+    materialized = materialize_reshard_plan(fn, plan)
+    assert [op.op_name for op in materialized.body] == [
+        "tessera.all_gather", "tessera.sigmoid"
+    ]
+    collective, rewritten = materialized.body
+    assert rewritten.operands == [f"%{collective.result}"]
+    assert collective.kwargs["reshard_plan_digest"] == plan.digest
+    assert collective.kwargs["subgroup"] == [0, 1]
+
+    schedule = lower_graph_to_schedule_ir(
+        GraphIRModule(functions=[materialized]), target_kind="cpu"
+    )
+    scheduled_collective = schedule.functions[0].body[0]
+    assert scheduled_collective.op_name == "schedule.collective"
+    assert scheduled_collective.result == collective.result
+    assert scheduled_collective.operands == ["%x"]
+    assert scheduled_collective.attrs["subgroup"] == [0, 1]
+    tile = lower_schedule_to_tile_ir(schedule)
+    assert tile.functions[0].body[0].op_name == "tile.all_gather"
+    assert tile.functions[0].body[0].result == collective.result
+
+
+def test_all_to_all_gets_verified_matching_rounds_and_region_identity():
+    ty = tensor_ir_type(("8", "16"), "fp32")
+    consume = _op(
+        "out", "tessera.sigmoid", ["%x"], _region_path=("loop0", "then")
+    )
+    fn = GraphIRFunction(
+        "f", args=[IRArg("x", ty)], result_types=[ty], body=[consume],
+        return_values=["%out"],
+    )
+    propagated = propagate_sharding(fn, {"x": Placement.tiled({0: "data"})})
+    plan = plan_explicit_reshards(
+        fn, propagated, {0: (Placement.tiled({1: "data"}),)},
+        subgroup=(2, 4, 7),
+    )
+    assert len(plan.matching_rounds) == 2
+    expected = {(2, 4), (4, 7), (7, 2), (2, 7), (4, 2), (7, 4)}
+    assert {edge for round_ in plan.matching_rounds for edge in round_} == expected
+    assert all(
+        len({source for source, _ in round_}) == 3
+        and len({target for _, target in round_}) == 3
+        for round_ in plan.matching_rounds
+    )
+    materialized = materialize_reshard_plan(fn, plan)
+    collective = materialized.body[0]
+    assert collective.op_name == "tessera.all_to_all"
+    assert collective.kwargs["scatter_axis"] == 0
+    assert collective.kwargs["gather_axis"] == 1
+    assert collective.kwargs["region_path"] == ["loop0", "then"]
+    schedule = lower_graph_to_schedule_ir(
+        GraphIRModule(functions=[materialized]), target_kind="cpu"
+    )
+    tile = lower_schedule_to_tile_ir(schedule)
+    assert tile.verify().ok
+    tile_collective = tile.functions[0].body[0]
+    tile_collective.attrs["matching_rounds"] = [[[2, 4]]]
+    verification = tile.verify()
+    assert not verification.ok
+    assert "factor every directed peer edge once" in verification.format()
+
+
+def test_reshard_rejects_sibling_region_escape_and_untyped_local_shard():
+    ty = tensor_ir_type(("8", "16"), "fp32")
+    producer = _op("p", "tessera.sigmoid", ["%x"], _region_path=("then",))
+    consume = _op("out", "tessera.sigmoid", ["%p"], _region_path=("else",))
+    fn = GraphIRFunction(
+        "f", args=[IRArg("x", ty)], result_types=[ty], body=[producer, consume],
+        return_values=["%out"],
+    )
+    propagated = propagate_sharding(fn, {"x": Placement.tiled({0: "data"})})
+    with pytest.raises(ValueError, match="sibling or escaping regions"):
+        plan_explicit_reshards(
+            fn, propagated, {1: (Placement.replicated(),)}, subgroup=(0, 1)
+        )
+
+    root_fn = GraphIRFunction(
+        "root", args=[IRArg("x", ty)], result_types=[ty],
+        body=[_op("out", "tessera.sigmoid", ["%x"])], return_values=["%out"],
+    )
+    root_result = propagate_sharding(root_fn, {"x": Placement.replicated()})
+    local_plan = plan_explicit_reshards(
+        root_fn, root_result, {0: (Placement.tiled({0: "data"}),)},
+        subgroup=(0, 1),
+    )
+    with pytest.raises(ValueError, match="typed mesh-size shape contract"):
+        materialize_reshard_plan(root_fn, local_plan)

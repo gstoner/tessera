@@ -406,6 +406,24 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="AD-FWD-CORE-1",
     ),
     PassMetadata(
+        name="tessera-autodiff-hvp-prepare",
+        cpp_class="AutodiffHvpPreparePass",
+        summary=(
+            "Marks the paired reverse Graph program for exact "
+            "forward-over-reverse differentiation."
+        ),
+        input_dialects=("tessera", "func", "arith"),
+        output_dialects=("tessera", "func", "arith"),
+        required_attrs=("tessera.autodiff.role", "tessera.autodiff.forward"),
+        preserved_attrs=(
+            "tessera.autodiff.hvp",
+            "tessera.autodiff.hvp_parent",
+        ),
+        diagnostic_codes=(),
+        pass_kind="transform",
+        sprint="AD-HIGHER-1",
+    ),
+    PassMetadata(
         name="tessera-autodiff-paired",
         cpp_class="AutodiffPairedPass",
         summary=(

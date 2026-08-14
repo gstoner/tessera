@@ -7,6 +7,31 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `PDE-EXACT-CONTRACT-2026-08-14` — **shared exact semantic
+authority landed; gfx1151 physical follow-up required.** The compiler now owns
+a typed constant-coefficient PDE carrier, exact-rational principal-symbol
+classification, and a fail-closed centered-FTCS diagonal-diffusion certificate
+with non-unit spacing. The Graph ODS/passes, broader certificates, typed
+stencil/boundary/halo package, transport, and gfx1151 packet remain open.
+
+Cross-backend sync `DIST-SHARD-HVP-2026-08-14` — **shared SSA/product
+foundation landed; gfx1151 transport evidence remains open.** Planned
+all-gather/all-reduce/reduce-scatter/all-to-all conversions now become real
+Graph→Schedule→Tile SSA carrying digest, subgroup, region, and deterministic
+matching-round identity. Exact compiler forward-over-reverse HVP is also live.
+This slice does not claim RCCL execution, a native gfx1151 HVP package, or a
+multi-rank packet. Replicated-to-tiled local-shard typing and RCCL launcher
+binding remain required before physical promotion; gfx1200/gfx1250 stay
+fail-closed.
+
+Cross-backend sync `E2E-REAL-6-NATIVE-VJP-2026-08-14` — **gfx1151
+normalization ownership migrated; no selector change.** RMSNorm and LayerNorm
+reverse execution now enters one declared native-VJP family plugin whose
+Graph/Schedule/Tile/Target ownership names the gfx1151 normalization consumer.
+`JitFn` binds arguments and records the plugin result but no longer constructs
+this ROCm package. Existing exact-device numerics remain the evidence; other
+ROCm backward families and package producers remain compatibility paths.
+
 Cross-backend sync `AMD-ISA-DTYPE-2026-08-14` — **owning ROCm foundation
 landing; physical expansion required.** The compiler now distinguishes RDNA3.5
 gfx1151, RDNA4 gfx1200, and CDNA5 gfx1250/gfx1251 by architecture family,
@@ -34,8 +59,8 @@ Policy-derived legality is labelled `legal_only`, not executable support.
 > closed), but adding CDNA 5 is a change of SHAPE, not an arch append. See
 > [`docs/reference/isa/PRIMARY_SOURCES.md`](../../../reference/isa/PRIMARY_SOURCES.md).
 
-Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **owning ROCm item,
-follow-up required; ROCm `tessera-ir` lit fixtures remain uncovered in CI.**
+Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **combined-host
+validation closed; a dedicated ROCm CI lane remains open.**
 The `Validate / lit` lane was dead from 2026-08-11 to 2026-08-12 (pytest
 collection aborted on a missing `ml_dtypes`, fixed in #554), and the first
 green-collection run exposed that the lane's `tessera-opt` registers neither
@@ -49,7 +74,7 @@ the lean arm drops core `TesseraIR`/`TesseraPasses` plus the x86 Target IR
 larger core+x86 regression. This is a CI coverage gap, **not** a ROCm compiler
 defect, and it transfers no gfx1151 evidence.
 
-**These 13 fixtures are now `// REQUIRES: tessera-rocm-backend`.** They were the
+**These 12 fixtures are now `// REQUIRES: tessera-rocm-backend`.** They were the
 only ROCm-driven fixtures in `tests/tessera-ir/` missing the gate their siblings
 already carry (`phase3/streaming_attention_backward_rocm{,_invalid,_nobias}.mlir`
 have had it all along), so in a ROCm-less driver they hard-failed instead of
@@ -69,7 +94,7 @@ Gated fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
 `phase3/streaming_attention_modifiers_rocm.mlir`,
 `phase_f4/{es_low_rank_correction,spectral_backward}_rocm_native.mlir`.
 
-**Instructions — ROCm host (Strix Halo / gfx1151), host-free, no device needed:**
+**Reproduction — ROCm host (Strix Halo / gfx1151), host-free, no device needed:**
 
 0. **Treat the `REQUIRES` gate as a debt marker, not a resolution.** On the
    Strix Halo box these fixtures must actually RUN — a lit summary showing
@@ -128,7 +153,7 @@ Gated fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
    healthy. (This does **not** impeach `lit.cfg.py:126`, whose ROCm feature
    uses the left-hand row and is sound — but any future *x86* lit feature must
    use the ledger, not `tessera-lower-to-x86`.)
-   Expect **zero** UNSUPPORTED among the 13 gated fixtures here. If any fixture
+   Expect **zero** UNSUPPORTED among the 12 gated fixtures here. If any fixture
    fails **there**, it is a real ROCm (or x86) defect and outranks the CI gap —
    file it as its own item before touching CI.
 3. Choose and own the CI recovery. Preferred: a second configure+build in the
@@ -137,8 +162,12 @@ Gated fixtures (all under `tests/tessera-ir/`, driven by `tessera-opt`, so
    a separate driver). Alternative: relax the `:95` lean condition so a
    HIP-less ROCm build keeps core+x86 registration — larger blast radius,
    needs its own Decision-#19/#31 review, do not attempt as a drive-by.
-4. Do not mark this parity-validated from the x86 result; ROCm needs its own
-   green fixture run recorded here with the build configuration used.
+4. **Completed 2026-08-14:** the production HIP build was rebuilt with both
+   backend flags. Its ledger reports `rocm-backend` and `x86-target-ir`; the
+   shared suite reports 321 enabled passes, 52 configuration-gated tests, and
+   zero failures across 373 discovered tests; the x86 verifier pair plus all twelve gated
+   ROCm fixtures execute 14/14. This closes host ownership, not the separate CI
+   lane proposed in step 3.
 
 Current host-free compiler validation: **57/57 ROCm backend lit tests pass**
 after adding the Block AttnRes Target-record/generator fixture. Older counts in
@@ -209,6 +238,15 @@ Lowered `control_scan` has shared JVP/VJP products under `recompute_all`; saved
 checkpoint policies remain rejected. No RCCL reshard materialization, native
 region product, or new bare-metal packet was added; gfx1200/gfx1250 remain
 fail-closed.
+
+Cross-backend sync `W4-CFG-RESIDUAL-W5.2G-2026-08-14` — **shared compiler
+carriers and scalable scheduler landed; gfx1151 physical follow-up required.**
+The tracer-owned structured CFG, block-wide Presburger identity, and executable
+SAVE/HYBRID residual ABI change shared lineage only. The action-DAG model now
+uses deterministic critical-path/list scheduling with safe lower-bound pruning
+and a small-DAG exhaustive oracle. No ROCm region-product package, inferred-edge
+producer wiring, bare-metal calibration, or selection claim was added;
+gfx1200/gfx1250 remain fail-closed.
 
 Cross-backend sync `E2E-AUTH-DAG-2026-08-12` — **reduction and normalization
 forward-product authority closed on gfx1151; calibrated promotion remains
@@ -350,9 +388,10 @@ remain fail-closed.
 
 Cross-backend sync `COMP-SCHED-OVERLAP-1-R3-2026-08-10` — **shared prune-only
 Tile action-DAG model landed; gfx1151 promotion policy is unchanged.** The
-model validates explicit dependencies and calibration identity, searches legal
-orders, and composes compute/memory/communication lanes with queue
-serialization. Only exhaustive clear losers may be pruned; every estimate is
+model validates explicit dependencies and calibration identity, uses
+deterministic critical-path/list scheduling, and composes compute/memory/
+communication lanes with queue serialization. Exact small DAGs and proven
+lower-bound losers may be pruned; every estimate is
 promotion-ineligible and scalar measured latency remains authoritative. WSL
 rows lacking valid HIP/activity calibration cannot become promotion evidence;
 gfx1200/gfx1250 remain fail-closed. R4 must bind the model to an executable

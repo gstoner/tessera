@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-12
+last_updated: 2026-08-14
 audit_role: plan
 plan_state: open
 ---
@@ -468,8 +468,8 @@ lit-covered. New `benchmarks/pde/` emitting `BenchmarkRow`, honest triple
 |---|---|---|
 | **0** | This plan + the executable contract test (**landed**) | any box |
 | **1** | **Landed 2026-08-12:** [GAP-1..3] `spacing` ABI + derivative scaling, explicit `coeffs` on `StencilDefineOp`, and fail-closed scheme/order. Missing Target implementations are also truthfully `artifact_only`. | any box (host-free) |
-| **2** | `pde.operator` ODS + exact-rational analysis + `-tessera-pde-classify` + `-tessera-pde-legality`; 24 lit fixtures incl. 14 negative | any box |
-| **3** | `-tpp-stability-certificate` + bound emission + autotuner rejection reasons + `-tpp-select-dt` | any box |
+| **2 (landing)** | Production exact semantics now live in `python/tessera/compiler/pde_operator.py`: typed constant-coefficient terms/operators, exact-rational principal-symbol inertia, and fail-closed classification. Still open: ODS, `-tessera-pde-classify`, `-tessera-pde-legality`, variable coefficient fields, and the full lit cohort. | any box |
+| **3 (landing)** | The first constructive certificate is production: exact centered-FTCS diagonal-diffusion `dt_max`, including non-unit spacing and stable-boundary identity. Mixed derivatives and non-elliptic operators fail closed. Still open: the C++ TPP pass, general root-condition certificates, bound emission, autotuner rejection reasons, and `-tpp-select-dt`. | any box |
 | **4** | Manufactured-solutions harness, the metamorphic oracle family, `E_PDE_*` diagnostics, `benchmarks/pde/` | any box |
 | **5** | First hardware proof: stencil + halo on gfx1151, `evaluate()` to `HARDWARE_VERIFIED`; Apple GPU lane second | **Strix Halo**, then Mac |
 | **6** | [GAP-4] neighbors/TPP unification, once the survivor carries both feature sets | any box |
@@ -483,7 +483,7 @@ Their local implementation order remains 4 → 3 → 2 → 1.
 | Part IV finding | Owning authority | Scope at that authority |
 |---|---|---|
 | Conflict-free collective rounds | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md), **W5.4** | Produce verified `collective_permute` rounds inside native distributed planning; transport and packets remain W5.4 gates. |
-| Critical-path/list DAG scheduling | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md), **W5.2g** | Replace factorial search as the scalable rank/prune implementation while retaining exhaustive small-DAG differential proof. |
+| Critical-path/list DAG scheduling | [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md), **W5.2g — closed 2026-08-14** | Deterministic list scheduling and the resource/queue lower bound are production; exhaustive search remains the ≤8-action oracle. |
 | Hall/König MoE defect certificates | [`MODEL_CLASS_ROADMAP.md`](../roadmap/MODEL_CLASS_ROADMAP.md), **MODEL-ROUTE-CERT-1** | Diagnose infeasible capacity/routing and enable later candidate-set overflow redirect; this is model routing, not PDE lowering. |
 | Matrix-tree/de Bruijn graph oracles | Shared `python/tessera/testing` infrastructure | Test-only proof utilities consumed by W5.2/W5.4/model routing; never production scheduling authority. |
 
@@ -532,26 +532,19 @@ the exact drop count `|U| − |N(U)|` — verified to reproduce the drop count i
 
 ### IV.3 DAG scheduling upgrade
 
-Under W5.2g, `composition_cost.py::_topological_orders` enumerates **every** topological order
-by DFS (factorial in the width of an antichain, cut off at `max_orders=4096`).
-When the cutoff trips, `prune_composition_candidates` retains every candidate —
-which is *deliberate and tested* (`test_bounded_nonexhaustive_search_retains_candidate`;
-the docstring states "Inexact searches are always retained"), and is the correct
-conservative choice given the search is inexact. The problem is not that the
-fallback is silent; it is that the fallback engages at around 8 independent
-actions (`8! = 40320 > 4096`), so the pruner becomes a no-op at exactly the DAG
-widths where pruning would pay. A secondary nit: `_validate_dag` calls
-`_topological_orders` twice with identical arguments (lines 416 and 421), using
-only `exhaustive` from the first and `orders` from the second — bounded at
-`max_orders=1` so it is cheap, but redundant. Replace with critical-path list
-scheduling plus a real lower bound
-(`max(critical path, per-lane work)`), retaining the exhaustive enumerator as a
-**declared oracle** with a mandatory differential test on DAGs of ≤8 actions.
-Independent checks: longest path via nilpotency index of the adjacency matrix
-(verified 600/600), and the "unique topological order ⟺ Hamiltonian path"
-zero-slack detector (verified; 91/600 instances) that should emit a planner
-diagnostic — today a fully serial DAG produces one order, `exhaustive=True`, and
-is pruned as though the search explored something.
+W5.2g originally used `composition_cost.py::_topological_orders` to enumerate
+**every** topological order by DFS (factorial in the width of an antichain,
+formerly cut off at `max_orders=4096`). The 2026-08-14 v2 implementation now
+uses deterministic Kahn validation plus critical-path/list scheduling for wide
+DAGs; only the declared ≤8-action oracle enters exhaustive enumeration. Kahn
+validation also removes the duplicated bounded-enumerator call. The admissible
+bound is `max(dependency critical path, per-resource-lane work, queue work)`.
+An inexact candidate is discarded only when that lower bound is already worse
+than another candidate's feasible upper bound; otherwise it remains in the
+exact-device measurement set. Direct tests cover deterministic wide-antichain
+scheduling, small-DAG oracle behavior, legality, and safe lower-bound pruning.
+The separate matrix/nilpotency and Hamiltonian-path graph oracles remain useful
+test infrastructure, not production scheduling authority.
 
 ### IV.4 Test utilities
 

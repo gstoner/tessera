@@ -7,25 +7,25 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **495** ops in `primitive_coverage` registry.
-- **5074** total Python-test references, **1281** total lit-fixture references.
+- **5091** total Python-test references, **1285** total lit-fixture references.
 - **78** ops have **zero** references in either test surface.
 - **123** ops have ≤1 reference ("thinly tested").
 - **168** ops have ≥10 references ("well tested").
-- **142** ops have at least one associated `pytest.raises` negative test.
+- **143** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  476 |  273 |  749 |  21 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  478 |  273 |  751 |  21 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  129 |   73 |  202 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `softmax` |  147 |   48 |  195 |  31 | `bf16`, `f16`, `f32`, `f64` … |
-| `add` |  152 |   40 |  192 |  11 | `bf16`, `f16`, `f32`, `f64` … |
-| `relu` |  117 |   37 |  154 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `mul` |  110 |   29 |  139 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `add` |  152 |   41 |  193 |  11 | `bf16`, `f16`, `f32`, `f64` … |
+| `relu` |  118 |   37 |  155 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `mul` |  112 |   31 |  143 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |  108 |   17 |  125 |   8 | `bf16`, `f16`, `f32`, `f64` … |
-| `rmsnorm` |  105 |   18 |  123 |   6 | `bf16`, `f16`, `f32`, `f64` … |
-| `silu` |   89 |    8 |   97 |   5 | `bf16`, `f16`, `f32`, `f64` … |
+| `rmsnorm` |  106 |   18 |  124 |   6 | `bf16`, `f16`, `f32`, `f64` … |
+| `silu` |   90 |    8 |   98 |   5 | `bf16`, `f16`, `f32`, `f64` … |
 | `cast` |   24 |   61 |   85 |   1 | `bf16`, `fp16`, `fp32`, `int8` |
 | `gemm` |   83 |    2 |   85 |   8 | `bf16`, `f16`, `f32`, `fp16` … |
 | `layer_norm` |   66 |   16 |   82 |   3 | `bf16`, `f16`, `f32`, `fp16` … |

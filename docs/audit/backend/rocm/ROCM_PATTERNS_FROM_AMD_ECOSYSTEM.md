@@ -15,7 +15,7 @@ audit_role: reference
 > GEMM tutorial at survey depth; the primary-source target reference — hardware
 > constants, WMMA shapes/ABI/hazards, the three data-movement mechanisms, split wait
 > counters, workgroup clusters, device-initiated SDMA, and the UALink/IFoE fabric — is
-> [`GFX1250_MI450_COMPILER_REFERENCE.md`](GFX1250_MI450_COMPILER_REFERENCE.md).
+> [`GFX125X_CDNA5_COMPILER_REFERENCE.md`](GFX125X_CDNA5_COMPILER_REFERENCE.md).
 >
 > **AMD's two kernel *compilers* are surveyed separately.** This document covers
 > kernel *libraries*; StinkyTofu (asm-level pass optimizer, gfx1250+) and rocRoller

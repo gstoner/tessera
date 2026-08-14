@@ -9,6 +9,29 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `PDE-EXACT-CONTRACT-2026-08-14` — **shared exact semantic
+authority landed; AVX-512 physical follow-up required.** The compiler now owns
+a typed constant-coefficient PDE carrier, exact-rational principal-symbol
+classification, and a fail-closed centered-FTCS diagonal-diffusion certificate
+with non-unit spacing. This adds no x86 Target record, vector package,
+transport, or clean Zen 5 packet.
+
+Cross-backend sync `DIST-SHARD-HVP-2026-08-14` — **shared SSA/product
+foundation landed; native process transport remains open.** Planned bulk
+reshards now become real Graph→Schedule→Tile SSA carrying digest, subgroup,
+region, and deterministic all-to-all matching-round identity. Exact compiler
+forward-over-reverse HVP is also live. This adds no MPI/OFI/SHMEM launcher,
+native AVX-512 HVP package, or multi-rank/Zen 5 performance packet. Local-shard
+result typing and process-transport evidence remain architecture-owned gates.
+
+Cross-backend sync `E2E-REAL-6-NATIVE-VJP-2026-08-14` — **AVX-512
+normalization ownership migrated.** RMSNorm and LayerNorm reverse execution
+now enters one native-VJP family plugin with explicit Graph/Schedule/Tile/x86
+Target consumers. `JitFn` binds inputs and records the result but no longer
+constructs the normalization backward package. Existing Zen 5 correctness
+evidence remains authoritative; this synchronization adds no performance or
+AMX claim. Other x86 backward families remain compatibility paths.
+
 Cross-backend sync `AMD-ISA-DTYPE-2026-08-14` — **parity assessed; no x86
 physical change required.** The shared change is confined to AMD architecture,
 datatype-role, and matrix-instruction selection. It changes no Graph dtype
@@ -20,70 +43,28 @@ pair from frontend through physical manifests. Accumulator-compatible dtypes
 derived from target-wide AVX-512 legality remain `legal_only`; only explicit
 x86 per-operation rows can claim a physical consumer or execution evidence.
 
-## P0 — `TesseraX86Dialect` segfaults on load (`X86-DIALECT-LOAD-CRASH-2026-08-12`)
+## P0 closed — x86 dialect load and combined-driver proof
 
-**The x86 Target IR dialect has never successfully loaded.** With
-`TESSERA_BUILD_X86_BACKEND=ON` (PR #555), `tessera-opt` no longer reports
-``Dialect `tessera_x86' not found`` — it **crashes** during dialect
-initialization, before parsing a single op. Run 31648897366, all 14 x86
-fixtures, 13 with an identical backtrace:
+`X86-DIALECT-LOAD-CRASH-2026-08-12` is closed on the owning Strix Halo host.
+A fresh Release build against apt LLVM/MLIR 23 loads `!tessera_x86.tile`; the
+positive Target-IR fixture and its verifier-negative sibling pass. The named
+`x86_dialect_load.mlir` regression now isolates dialect initialization from
+operation lowering, so a future `TileType` registration failure cannot hide
+behind the larger lit suite.
 
-```
-Stack dump:
-1.  MLIR Parser: custom op parser 'builtin.module'
-2.  MLIR Parser: custom op parser 'func.func'
- #4 mlir::Dialect::addType<mlir::tessera_x86::TileType>()
- #5 MLIRContext::getOrLoadDialect<mlir::tessera_x86::TesseraX86Dialect>()
- #9 OperationParser::parseCustomOperationName()
-```
-
-The crash is inside `initialize()` registering `TileType`, so **every claim
-that depends on the dialect being loadable is unproven**, including the
-Decision #19 statement that the `!tessera_x86.tile` verifier "rejects a tile
-dot-product whose operands never came from a tile load". That verifier has
-never executed. This went undetected because CI never built the dialect
-(2026-08-02 → 2026-08-12) — the CI gap and this defect share a cause: nothing
-exercised the code.
-
-**Two hypotheses, neither confirmed — do not fix before deciding between
-them:**
-
-1. **Missing/mismatched `MLIR_DEFINE_EXPLICIT_TYPE_ID` for `TileType`, or the
-   generated types `.cpp.inc` not compiled into `TesseraX86IR`.** The classic
-   cause of a null TypeID at `addType`. Would mean the dialect is broken
-   everywhere.
-2. **Shared-library TypeID collision.** CI links `libLLVM.so.23.1` (shared),
-   which surfaces ODR/TypeID problems a static build hides. Would mean the
-   dialect works in some configurations and not CI's — and that any local
-   "it works here" is not evidence.
-
-Diagnosing 1 vs 2 changes the fix, so a backtrace alone is not enough.
-
-**Reproduce on Strix Halo** — x86 Linux with the same apt LLVM 23 as CI, so it
-reproduces CI's shared-`libLLVM` conditions (an arm64 Mac does not, and may not
-even compile the backend subdirectory):
-
-```
-cmake -S . -B build-x86 -G Ninja -DTESSERA_BUILD_X86_BACKEND=ON \
-  -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
-ninja -C build-x86 tessera-opt
-./build-x86/tools/tessera-opt/tessera-opt tests/tessera-ir/phase2/x86_target_ir.mlir
-```
-
-Acceptance: `phase2/x86_target_ir.mlir` **and** its negative sibling
-`x86_target_ir_invalid.mlir` both pass — the negative one is the actual proof
-that the tile-provenance verifier runs, which is the whole point of the
-Decision #19 fixture pair. Ship a regression guard that loads the dialect
-directly, so a load-time crash can never again require a full lit run to
-notice.
-
-**This P0 outranks the CI bookkeeping below.** A crashing dialect is a compiler
-defect; the lane coverage gap is what let it hide.
+The production HIP build was also rebuilt with both
+`TESSERA_BUILD_ROCM_BACKEND=ON` and `TESSERA_BUILD_X86_BACKEND=ON`. Its feature
+ledger reports both `rocm-backend` and `x86-target-ir`; the complete shared lit
+suite reports 321 enabled passes, 52 configuration-gated tests, and zero
+failures across 373 discovered tests; the x86 verifier pair plus all twelve explicitly
+gated ROCm fixtures execute 14/14 rather than becoming unsupported. This is
+host-free compiler proof, not clean Zen 5 performance or AMX evidence.
 
 ---
 
-Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **owning x86 item,
-landing; host-free lit coverage restored, no Zen 5 evidence added.** The
+Cross-backend sync `CI-LIT-BACKEND-DIALECTS-2026-08-12` — **x86 and combined
+host proof closed; host-free lit coverage restored, no Zen 5 timing evidence
+added.** The
 `Validate / lit` lane was dead from 2026-08-11 to 2026-08-12 (pytest collection
 aborted on a missing `ml_dtypes`, fixed in #554). The first green-collection run
 discovered 367 fixtures, passed 318, and failed 27 — all from one cause: the
@@ -171,6 +152,15 @@ states; catalog pointwise/reduction/collective rules feed an explicit fail-close
 reshard planner. Lowered `control_scan` has shared JVP/VJP products under
 `recompute_all`; saved checkpoint policies remain rejected. No MPI/OFI/SHMEM
 reshard materialization, native region product, or clean Zen 5 packet was added.
+
+Cross-backend sync `W4-CFG-RESIDUAL-W5.2G-2026-08-14` — **shared compiler
+carriers and scalable scheduler landed; AVX-512 physical follow-up required.**
+The tracer-owned structured CFG, block-wide Presburger identity, and executable
+SAVE/HYBRID residual ABI change shared lineage only. The action-DAG model now
+uses deterministic critical-path/list scheduling with safe lower-bound pruning
+and a small-DAG exhaustive oracle. No native region-product package,
+inferred-edge producer wiring, clean Zen 5 calibration, or selection claim was
+added.
 
 Cross-backend sync `E2E-AUTH-DAG-2026-08-12` — **shared reduction and
 normalization product authority landed; exact AVX-512 rerun is blocked.**
@@ -296,9 +286,10 @@ evidence with stable affinity.
 
 Cross-backend sync `COMP-SCHED-OVERLAP-1-R3-2026-08-10` — **shared prune-only
 Tile action-DAG model landed; no AVX-512 selection claim.** R3 validates
-explicit dependencies and calibration identity, searches legal orders, and
-composes compute/memory/communication lanes with queue serialization. Only
-exhaustive clear losers may be pruned; every estimate is promotion-ineligible
+explicit dependencies and calibration identity, uses deterministic
+critical-path/list scheduling, and composes compute/memory/communication lanes
+with queue serialization. Exact small DAGs and proven lower-bound losers may be
+pruned; every estimate is promotion-ineligible
 and scalar measured latency remains authoritative. WSL timing and blocked PMU
 access do not become calibration evidence; clean Zen 5 vectors remain required
 before architecture-owned composition analysis or R4 transport overlap.

@@ -141,9 +141,11 @@ unbounded family checklist:
 4. **AD-TREEVERSE-1.** Turn measured counted-region candidates into an
    executable checkpoint/replay schedule and report actual backward work plus
    retained bytes.
-5. **AD-HIGHER-1.** Compose the compiler transforms for exact
-   forward-over-reverse HVP, then remove the structural `grad(grad(...))` block
-   only for proven families.
+5. **AD-HIGHER-1 — bounded compiler composition landed.** The named HVP
+   pipeline composes paired reverse with the exact tangent transform and emits
+   `@f__bwd__jvp`; the emitted quadratic product is numerically interpreted.
+   Broaden second-order tangent coverage before removing the eager tape's
+   structural `grad(grad(...))` block.
 6. **AD-SPARSE-1 / AD-BATCH-1.** Add Jacobian sparsity/coloring and a real
    batching transform. The Python loop remains an explicit oracle fallback, not
    native `vmap` evidence.
@@ -699,7 +701,7 @@ once Phase 0 lands.
 | 3 | matmul→tanh/sigmoid→loss — backward native on CPU | ✅ paired-pass output launches through MLIR/LLVM JIT on `cpu_x86_64`; direct gradient oracle proof landed 2026-07-12 |
 | 4 | Compiled backward bound to runtime ABI (ROCm first) | ✅ **complete** 2026-07-12 via A1–A4; aliases share their dedicated implementation, matmul is an explicit two-GEMM composition, and residual policy is structured per target. |
 | 5 | Closed operation-family expansion | 🟡 live family and target truth is generated; native losses/optimizers, spectral transforms, bounded compound spectral backward, and bounded IFT packages have advanced beyond the older normalization-only summary. Apple/NVIDIA physical promotion and remaining family rows stay open. |
-| D2 | General compiler forward mode | 🟡 `TangentInterface`, paired JVP pass, fail-closed legality, public provenance, multi-active `wrt` ABI, and direct rules have landed. Public `jvp`/`jacfwd` use those rules without finite-difference substitution. Compiler forward mode carries primal/tangent state through bounded `if`/`for`/`while`. Content-addressed normalization, core/compound spectral, generated typed solver, and exact ISTFT-window products execute through bounded packages; solver child generation covers reduction, rank-2 reduced-storage matmul, bounded-dynamic/mixed-storage, distinct parameter-space, counted regions, and digest-bound pure scalar predicate replay. Expanded-family AVX-512/gfx1151 WSL correctness packets are committed. Typed `collective_permute` plus bulk products reach NCCL/RCCL launcher contracts. Exact HVP, broader/non-pure predicate support, broader ISTFT policies, subgroup/process transport, Apple/CUDA packages, and clean performance packets remain open. |
+| D2 | General compiler forward mode | 🟡 `TangentInterface`, paired JVP pass, fail-closed legality, public provenance, multi-active `wrt` ABI, and direct rules have landed. Public `jvp`/`jacfwd` use those rules without finite-difference substitution. The exact HVP pipeline now composes the compiler-emitted reverse with forward mode and numerically proves the emitted quadratic product; coverage is bounded to reverse programs whose generated operations have tangent semantics. Content-addressed normalization, core/compound spectral, generated typed solver, and exact ISTFT-window products execute through bounded packages. Typed `collective_permute` plus bulk products reach NCCL/RCCL launcher contracts. Broader HVP and predicate coverage, broader ISTFT policies, subgroup/process transport, Apple/CUDA packages, and clean performance packets remain open. |
 | 6 | NVIDIA sm_120 Flash Attention backward promotion | ✅ first CUDA family: f32/fp16 storage, f32 VJP accumulation, MHA/GQA/MQA aliases, mask/bias/soft-cap derivatives; exact `nvidia_sm120` `device_verified_jit` proof with recompute-all residual policy. |
 
 Per-family × per-target rung truth is now the **generated ledger**, not a hand

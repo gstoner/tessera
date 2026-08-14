@@ -504,6 +504,7 @@ def to_graph_ir_module(
     identity recorded by the tracer.
     """
     from .graph_ir import GraphIRFunction, GraphIRModule, IRArg, IRType, tensor_ir_type
+    from .structured_cfg import recover_structured_cfg
 
     result_types: list[IRType] = []
     by_result = {
@@ -518,6 +519,7 @@ def to_graph_ir_module(
                 f"trace output %{output} has no typed Graph IR definition"
             )
         result_types.append(IRType(operation.result_type))
+    structured_cfg = recover_structured_cfg(traced.body)
     function = GraphIRFunction(
         name=name,
         args=[
@@ -526,9 +528,15 @@ def to_graph_ir_module(
         ],
         result_types=result_types,
         body=list(traced.body),
-        fn_attrs={"tessera.frontend.authority": '"tracer"'},
+        fn_attrs={
+            "tessera.frontend.authority": '"tracer"',
+            "tessera.structured_cfg.schema": '"tessera.structured_cfg.v1"',
+            "tessera.structured_cfg.digest": f'"{structured_cfg.digest}"',
+            "tessera.structured_cfg.blocks": str(len(structured_cfg.blocks)),
+        },
         return_values=[f"%{output}" for output in traced.outputs],
         source_hash=source_hash,
+        structured_cfg=structured_cfg,
     )
     module = GraphIRModule(
         functions=[function],

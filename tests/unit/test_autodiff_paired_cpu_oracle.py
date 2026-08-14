@@ -457,6 +457,14 @@ def _run_forward(fwd_mlir: str) -> dict[str, _Interp]:
     return _parse_functions(out.stdout)
 
 
+def _run_hvp(fwd_mlir: str) -> dict[str, _Interp]:
+    out = subprocess.run(
+        [_TESSERA_OPT, "--tessera-autodiff-hvp-pipeline", "/dev/stdin"],
+        input=fwd_mlir, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, f"tessera-opt failed:\n{out.stderr}"
+    return _parse_functions(out.stdout)
+
+
 # ── the vertical slice: forward = act(matmul(x, w)), loss = sum(forward) ─────
 
 def _forward_mlir(act: str) -> str:
@@ -630,6 +638,30 @@ module {
     np.testing.assert_allclose(primal, expected_primal, rtol=2e-6, atol=2e-6)
     np.testing.assert_allclose(tangent, expected_tangent, rtol=2e-6, atol=2e-6)
     np.testing.assert_allclose(tangent, finite_difference, rtol=2e-3, atol=2e-3)
+
+
+def test_compiler_forward_over_reverse_hvp_matches_exact_oracle():
+    """AD-HIGHER-1 executes the emitted reverse JVP, not a perturbation."""
+    mlir = """
+module {
+  func.func @square(%x: tensor<7xf32>) -> tensor<7xf32>
+      attributes {tessera.autodiff = "reverse"} {
+    %y = "tessera.mul"(%x, %x) :
+        (tensor<7xf32>, tensor<7xf32>) -> tensor<7xf32>
+    return %y : tensor<7xf32>
+  }
+}
+"""
+    rng = np.random.default_rng(741)
+    x = rng.standard_normal(7).astype(np.float32)
+    output_cotangent = rng.standard_normal(7).astype(np.float32)
+    direction = rng.standard_normal(7).astype(np.float32)
+
+    gradient, product = _run_hvp(mlir)["square__bwd__jvp"].run(
+        [x, output_cotangent, direction]
+    )
+    np.testing.assert_array_equal(gradient, 2.0 * x * output_cotangent)
+    np.testing.assert_array_equal(product, 2.0 * direction * output_cotangent)
 
 
 @pytest.mark.parametrize("op", ["sigmoid", "tanh"])

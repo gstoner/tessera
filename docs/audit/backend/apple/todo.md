@@ -8,6 +8,27 @@ last_updated: 2026-08-14
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `PDE-EXACT-CONTRACT-2026-08-14` — **shared semantic parity
+validated; Metal physical follow-up required.** Exact-rational PDE
+classification and the first fail-closed diffusion stability certificate are
+backend-neutral. No Metal stencil/boundary/halo package or evidence is claimed.
+
+Cross-backend sync `DIST-SHARD-HVP-2026-08-14` — **shared compiler parity;
+native Apple follow-up required.** Reshard plans now materialize bulk
+collectives as Graph→Schedule→Tile SSA with subgroup/region identity and
+deterministic all-to-all matching rounds. Exact forward-over-reverse HVP now
+exists as a compiler Graph product. Apple receives the shared IR contracts but
+adds no Metal collective transport or native HVP package in this slice; those
+remain architecture-owned and require independent Apple execution evidence.
+
+Cross-backend sync `E2E-REAL-6-NATIVE-VJP-2026-08-14` — **shared authority
+parity assessed; Apple follow-up required.** Normalization reverse package
+construction moved out of `JitFn` into a registry that declares its complete
+Graph/Schedule/Tile/Target ownership. Apple has no registered native consumer
+in this first slice, so eager/Metal behavior is unchanged and no x86, gfx1151,
+or SM120 evidence transfers. A future Metal normalization VJP must register an
+Apple Target consumer before it can use this boundary.
+
 Cross-backend sync `AMD-ISA-DTYPE-2026-08-14` — **parity assessed; no Apple
 physical change required.** The shared compiler gained an AMD-only
 architecture/dtype/matrix-instruction selector and CDNA5 fragment identity.
@@ -92,6 +113,15 @@ replicated/tiled/partial-reduction fixed point and explicit reshard planner;
 lowered `control_scan` owns shared recompute-all JVP/VJP products. This adds no
 Metal region product, reshard lowering, native transport, or Mac packet;
 x86/gfx1151 evidence does not transfer.
+
+Cross-backend sync `W4-CFG-RESIDUAL-W5.2G-2026-08-14` — **shared compiler
+carriers and scalable scheduler landed; Metal follow-up required.** The
+tracer-owned structured CFG, block-wide Presburger identity, and executable
+SAVE/HYBRID residual ABI change shared lineage only. The action-DAG model now
+uses deterministic critical-path/list scheduling with safe lower-bound pruning
+and a small-DAG exhaustive oracle. No Metal region product, physical producer
+wiring, calibrated packet, or selection claim was added; architecture evidence
+does not transfer.
 
 Cross-backend sync `E2E-AUTH-DAG-2026-08-12` — **shared native-product v3 and
 automatic dependency consumption landed; Metal remains follow-up required.**
@@ -189,9 +219,10 @@ Mac correctness/performance packet.
 
 Cross-backend sync `COMP-SCHED-OVERLAP-1-R3-2026-08-10` — **shared prune-only
 Tile action-DAG model landed; no Metal selection claim.** R3 validates explicit
-dependencies and calibration identity, searches legal orders, and composes
-compute/memory/communication lanes with queue serialization. Only exhaustive
-clear losers may be pruned; every estimate is promotion-ineligible and scalar
+dependencies and calibration identity, uses deterministic critical-path/list
+scheduling, and composes compute/memory/communication lanes with queue
+serialization. Exact small DAGs and proven lower-bound losers may be pruned;
+every estimate is promotion-ineligible and scalar
 measured latency remains authoritative. No x86/gfx1151 calibration transfers
 to Apple. Metal vectors and a Mac packet are required before an Apple DAG may
 use the model; R4 remains a separate production-consumer slice.

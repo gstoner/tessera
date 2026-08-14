@@ -11,6 +11,7 @@ from tessera.compiler.autotune_v2 import (
 from tessera.compiler.benchmark_row import MeasuredResourceVector
 from tessera.compiler.composition_cost import (
     COMPOSITION_MODEL,
+    EXHAUSTIVE_ORACLE_ACTION_LIMIT,
     CompositionCalibration,
     CompositionCandidate,
     TileAction,
@@ -147,7 +148,12 @@ def test_pruning_removes_only_exhaustively_analyzed_clear_losers():
 
 def test_bounded_nonexhaustive_search_retains_candidate():
     wide = CompositionCandidate("wide", tuple(
-        _action(f"a{i}", compute_ms=20.0, queue=f"compute:{i}")
+        _action(
+            f"a{i}",
+            compute_ms=1.0,
+            queue=f"compute:{i}",
+            resource=f"device:{i}",
+        )
         for i in range(4)
     ))
     exact = CompositionCandidate("exact", (_action("e", compute_ms=1.0),))
@@ -159,6 +165,71 @@ def test_bounded_nonexhaustive_search_retains_candidate():
     wide_estimate = next(e for e in result.estimates if e.candidate_id == "wide")
     assert not wide_estimate.exhaustive
     assert "wide" in result.retained
+
+
+def test_w5_2g_wide_dag_uses_deterministic_list_scheduler_not_factorial_search():
+    actions = tuple(
+        _action(
+            f"a{i:02d}",
+            compute_ms=float(i + 1),
+            queue=f"compute:{i}",
+            resource=f"device:{i}",
+            digest_char="a",
+        )
+        for i in range(EXHAUSTIVE_ORACLE_ACTION_LIMIT + 4)
+    )
+    candidate = CompositionCandidate("wide_list", actions)
+
+    first = estimate_composition(candidate, _calibration())
+    second = estimate_composition(candidate, _calibration())
+
+    assert first.search_method == "critical_path_list"
+    assert not first.exhaustive
+    assert first.orders_examined == 1
+    assert first.action_order == second.action_order
+    assert first.predicted_makespan_ms == pytest.approx(12.0)
+    assert first.lower_bound_ms == pytest.approx(12.0)
+    assert first.list_schedule_makespan_ms == pytest.approx(12.0)
+
+
+def test_w5_2g_small_dag_retains_exhaustive_oracle_and_bounds_list_schedule():
+    candidate = CompositionCandidate("small_oracle", (
+        _action("root", compute_ms=2.0),
+        _action("long", compute_ms=7.0, queue="compute:1", depends_on=("root",)),
+        _action("short", compute_ms=3.0, queue="compute:2", depends_on=("root",)),
+        _action("join", compute_ms=1.0, depends_on=("long", "short")),
+    ))
+
+    estimate = estimate_composition(candidate, _calibration())
+
+    assert estimate.search_method == "exhaustive_small_dag_oracle"
+    assert estimate.exhaustive
+    assert estimate.orders_examined == 2
+    assert estimate.lower_bound_ms <= estimate.predicted_makespan_ms
+    assert estimate.predicted_makespan_ms <= estimate.list_schedule_makespan_ms
+
+
+def test_w5_2g_lower_bound_can_safely_prune_a_wide_inexact_candidate():
+    serial = tuple(
+        _action(
+            f"serial:{i}",
+            compute_ms=2.0,
+            depends_on=((f"serial:{i - 1}",) if i else ()),
+            digest_char="b",
+        )
+        for i in range(EXHAUSTIVE_ORACLE_ACTION_LIMIT + 1)
+    )
+    slow = CompositionCandidate("provably_slow", serial)
+    fast = CompositionCandidate("fast", (_action("fast", compute_ms=1.0),))
+
+    result = prune_composition_candidates(
+        (slow, fast), _calibration(), relative_margin=0.0
+    )
+
+    slow_estimate = result.estimates[0]
+    assert not slow_estimate.exhaustive
+    assert slow_estimate.lower_bound_ms == pytest.approx(18.0)
+    assert result.pruned == ("provably_slow",)
 
 
 def test_dag_rejects_unknown_dependencies_and_cycles():

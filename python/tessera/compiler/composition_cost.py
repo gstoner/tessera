@@ -24,7 +24,9 @@ from .graph_ir import GraphIRFunction, IROp
 from .op_catalog import get_op_spec
 
 
-COMPOSITION_MODEL = "tessera.tile_action_dag_cost.v1"
+COMPOSITION_MODEL = "tessera.tile_action_dag_cost.v2"
+EXHAUSTIVE_ORACLE_ACTION_LIMIT = 8
+EXHAUSTIVE_ORACLE_MAX_ORDERS = math.factorial(EXHAUSTIVE_ORACLE_ACTION_LIMIT)
 
 
 @dataclass(frozen=True)
@@ -295,6 +297,9 @@ class CompositionEstimate:
     action_order: tuple[str, ...]
     orders_examined: int
     exhaustive: bool
+    lower_bound_ms: float
+    search_method: str
+    list_schedule_makespan_ms: float
     calibration_digest: str
     analysis_digest: str
     method: str = COMPOSITION_MODEL
@@ -319,22 +324,43 @@ def estimate_composition(
     candidate: CompositionCandidate,
     calibration: CompositionCalibration,
     *,
-    max_orders: int = 4096,
+    max_orders: int = EXHAUSTIVE_ORACLE_MAX_ORDERS,
 ) -> CompositionEstimate:
-    """Return the best modeled makespan over bounded legal DAG orders."""
+    """Return a deterministic, bounded estimate for one legal action DAG.
+
+    Production search uses critical-path/list scheduling.  DAGs containing at
+    most eight actions additionally run the exhaustive enumerator as a declared
+    oracle; the oracle result remains the estimate for that deliberately small
+    domain.  Wider DAGs never enter factorial enumeration.
+    """
 
     if max_orders < 1:
         raise ValueError("max_orders must be >= 1")
-    orders, exhaustive = _topological_orders(candidate.actions, max_orders=max_orders)
-    best_order: tuple[str, ...] = ()
-    best_ms = math.inf
-    for order in orders:
-        makespan = _simulate_order(candidate.actions, order, calibration)
-        if makespan < best_ms:
-            best_ms = makespan
-            best_order = order
-    if not orders:
-        raise ValueError("composition candidate has no legal topological order")
+    list_order = _critical_path_list_order(candidate.actions, calibration)
+    list_ms = _simulate_order(candidate.actions, list_order, calibration)
+    lower_bound = _composition_lower_bound(candidate.actions, calibration)
+    if lower_bound > list_ms + 1e-12:
+        raise RuntimeError("composition lower bound exceeds a feasible schedule")
+
+    best_order = list_order
+    best_ms = list_ms
+    orders_examined = 1
+    exhaustive = False
+    search_method = "critical_path_list"
+    if len(candidate.actions) <= EXHAUSTIVE_ORACLE_ACTION_LIMIT:
+        orders, exhaustive = _topological_orders(
+            candidate.actions, max_orders=max_orders
+        )
+        if exhaustive:
+            orders_examined = len(orders)
+            search_method = "exhaustive_small_dag_oracle"
+            for order in orders:
+                makespan = _simulate_order(candidate.actions, order, calibration)
+                if makespan < best_ms or (
+                    math.isclose(makespan, best_ms) and order < best_order
+                ):
+                    best_ms = makespan
+                    best_order = order
     payload = {
         "candidate_id": candidate.candidate_id,
         "action_order": list(best_order),
@@ -342,6 +368,8 @@ def estimate_composition(
             action.resource_vector["artifact_digest"] for action in candidate.actions
         ],
         "calibration_digest": calibration.digest,
+        "lower_bound_ms": lower_bound,
+        "search_method": search_method,
         "method": COMPOSITION_MODEL,
     }
     analysis_digest = hashlib.sha256(
@@ -351,8 +379,11 @@ def estimate_composition(
         candidate_id=candidate.candidate_id,
         predicted_makespan_ms=best_ms,
         action_order=best_order,
-        orders_examined=len(orders),
+        orders_examined=orders_examined,
         exhaustive=exhaustive,
+        lower_bound_ms=lower_bound,
+        search_method=search_method,
+        list_schedule_makespan_ms=list_ms,
         calibration_digest=calibration.digest,
         analysis_digest=analysis_digest,
     )
@@ -363,13 +394,15 @@ def prune_composition_candidates(
     calibration: CompositionCalibration,
     *,
     relative_margin: float = 0.25,
-    max_orders: int = 4096,
+    max_orders: int = EXHAUSTIVE_ORACLE_MAX_ORDERS,
 ) -> CompositionPruningResult:
-    """Prune clearly inferior *exhaustively analyzed* candidates.
+    """Prune only candidates with a mathematical proof of inferiority.
 
-    Inexact searches are always retained.  The best modeled candidate is also
-    retained, but is not selected: callers must exact-device measure every
-    retained candidate and use scalar latency to choose among them.
+    An exhaustive estimate is exact.  A scalable list estimate is only an upper
+    bound, but its admissible lower bound can still prove it cannot beat another
+    candidate's feasible upper bound.  All other inexact candidates remain.
+    This is pruning, not selection: exact-device scalar latency remains the
+    authority among retained candidates.
     """
 
     if not candidates:
@@ -383,16 +416,16 @@ def prune_composition_candidates(
         estimate_composition(candidate, calibration, max_orders=max_orders)
         for candidate in candidates
     )
-    exact = [estimate for estimate in estimates if estimate.exhaustive]
-    if not exact:
-        return CompositionPruningResult(tuple(ids), (), estimates, relative_margin)
-    floor = min(estimate.predicted_makespan_ms for estimate in exact)
-    threshold = floor * (1.0 + relative_margin)
+    feasible_floor = min(estimate.predicted_makespan_ms for estimate in estimates)
+    threshold = feasible_floor * (1.0 + relative_margin)
     by_id = {estimate.candidate_id: estimate for estimate in estimates}
     pruned = tuple(
         candidate_id for candidate_id in ids
-        if by_id[candidate_id].exhaustive
-        and by_id[candidate_id].predicted_makespan_ms > threshold
+        if (
+            by_id[candidate_id].predicted_makespan_ms
+            if by_id[candidate_id].exhaustive
+            else by_id[candidate_id].lower_bound_ms
+        ) > threshold
     )
     pruned_set = set(pruned)
     retained = tuple(candidate_id for candidate_id in ids if candidate_id not in pruned_set)
@@ -413,14 +446,29 @@ def _validate_dag(actions: Sequence[TileAction]) -> None:
                 f"Tile action {action.action_id!r} has unknown dependencies: "
                 f"{sorted(missing)}"
             )
-    _, exhaustive = _topological_orders(actions, max_orders=1)
-    if not exhaustive and len(actions) == 1:
-        return
-    # A bounded search still produces an order for every acyclic graph. Empty
-    # means Kahn's ready set became empty before all actions were emitted.
-    orders, _ = _topological_orders(actions, max_orders=1)
-    if not orders:
+    if len(_kahn_order(actions)) != len(actions):
         raise ValueError("Tile action dependencies contain a cycle")
+
+
+def _kahn_order(actions: Sequence[TileAction]) -> tuple[str, ...]:
+    """Return one deterministic order, or a strict prefix for a cyclic DAG."""
+
+    dependents: dict[str, list[str]] = {action.action_id: [] for action in actions}
+    indegree = {action.action_id: len(action.depends_on) for action in actions}
+    for action in actions:
+        for predecessor in action.depends_on:
+            dependents[predecessor].append(action.action_id)
+    ready = sorted(action_id for action_id, degree in indegree.items() if degree == 0)
+    order: list[str] = []
+    while ready:
+        action_id = ready.pop(0)
+        order.append(action_id)
+        for successor in sorted(dependents[action_id]):
+            indegree[successor] -= 1
+            if indegree[successor] == 0:
+                ready.append(successor)
+                ready.sort()
+    return tuple(order)
 
 
 def _topological_orders(
@@ -450,6 +498,98 @@ def _topological_orders(
     return tuple(found), True
 
 
+def _action_lane_durations(
+    action: TileAction, calibration: CompositionCalibration
+) -> dict[str, float]:
+    vector = action.resource_vector
+    return {
+        "compute": float(vector["compute_time_ms"]),
+        "memory": int(vector["bytes_moved"]) / calibration.memory_bytes_per_ms,
+        "communication": int(vector["communication_bytes"])
+        / calibration.communication_bytes_per_ms,
+    }
+
+
+def _action_duration(
+    action: TileAction, calibration: CompositionCalibration
+) -> float:
+    return max(_action_lane_durations(action, calibration).values(), default=0.0)
+
+
+def _critical_path_priorities(
+    actions: Sequence[TileAction], calibration: CompositionCalibration
+) -> dict[str, float]:
+    """Compute deterministic bottom levels in reverse topological order."""
+
+    order = _kahn_order(actions)
+    if len(order) != len(actions):
+        raise ValueError("Tile action dependencies contain a cycle")
+    by_id = {action.action_id: action for action in actions}
+    successors: dict[str, list[str]] = {action_id: [] for action_id in order}
+    for action in actions:
+        for predecessor in action.depends_on:
+            successors[predecessor].append(action.action_id)
+    bottom: dict[str, float] = {}
+    for action_id in reversed(order):
+        tail = max((bottom[item] for item in successors[action_id]), default=0.0)
+        bottom[action_id] = _action_duration(by_id[action_id], calibration) + tail
+    return bottom
+
+
+def _critical_path_list_order(
+    actions: Sequence[TileAction], calibration: CompositionCalibration
+) -> tuple[str, ...]:
+    """Schedule ready actions by descending bottom level, then stable identity."""
+
+    priorities = _critical_path_priorities(actions, calibration)
+    dependencies = {
+        action.action_id: frozenset(action.depends_on) for action in actions
+    }
+    remaining = set(dependencies)
+    emitted: set[str] = set()
+    order: list[str] = []
+    while remaining:
+        ready = [
+            action_id
+            for action_id in remaining
+            if dependencies[action_id].issubset(emitted)
+        ]
+        if not ready:
+            raise ValueError("Tile action dependencies contain a cycle")
+        action_id = min(ready, key=lambda item: (-priorities[item], item))
+        order.append(action_id)
+        emitted.add(action_id)
+        remaining.remove(action_id)
+    return tuple(order)
+
+
+def _composition_lower_bound(
+    actions: Sequence[TileAction], calibration: CompositionCalibration
+) -> float:
+    """Admissible max(critical path, resource-lane work, queue work) bound."""
+
+    priorities = _critical_path_priorities(actions, calibration)
+    critical_path = max(priorities.values(), default=0.0)
+    lane_work: dict[tuple[str, str], float] = {}
+    queue_work: dict[str, float] = {}
+    for action in actions:
+        vector = action.resource_vector
+        resource = str(vector["resource_identity"])
+        queue = str(vector["queue_identity"])
+        durations = _action_lane_durations(action, calibration)
+        queue_work[queue] = queue_work.get(queue, 0.0) + max(
+            durations.values(), default=0.0
+        )
+        for lane, duration in durations.items():
+            lane_key = (resource, lane)
+            lane_work[lane_key] = lane_work.get(lane_key, 0.0) + duration
+    return max(
+        critical_path,
+        max(lane_work.values(), default=0.0),
+        max(queue_work.values(), default=0.0),
+    )
+
+
 def _simulate_order(
     actions: Sequence[TileAction],
     order: Sequence[str],
@@ -464,12 +604,7 @@ def _simulate_order(
         vector = action.resource_vector
         queue = str(vector["queue_identity"])
         resource = str(vector["resource_identity"])
-        durations = {
-            "compute": float(vector["compute_time_ms"]),
-            "memory": int(vector["bytes_moved"]) / calibration.memory_bytes_per_ms,
-            "communication": int(vector["communication_bytes"])
-            / calibration.communication_bytes_per_ms,
-        }
+        durations = _action_lane_durations(action, calibration)
         active = {name: duration for name, duration in durations.items() if duration > 0.0}
         dependency_ready = max(
             (completed[dependency] for dependency in action.depends_on),
@@ -499,6 +634,8 @@ def _require_digest(value: str, label: str) -> None:
 
 __all__ = [
     "COMPOSITION_MODEL",
+    "EXHAUSTIVE_ORACLE_ACTION_LIMIT",
+    "EXHAUSTIVE_ORACLE_MAX_ORDERS",
     "ActionDAGParity",
     "CompositionCalibration",
     "CompositionCandidate",

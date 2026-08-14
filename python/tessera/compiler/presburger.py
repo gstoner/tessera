@@ -133,6 +133,12 @@ def attach_presburger_system(function: Any, system: PresburgerSystem) -> None:
 
     function.fn_attrs["tessera.presburger_constraints"] = system.to_mlir_attr()
     function.fn_attrs["tessera.presburger_digest"] = json.dumps(system.digest)
+    structured_cfg = getattr(function, "structured_cfg", None)
+    if structured_cfg is not None:
+        function.structured_cfg = structured_cfg.with_presburger(system)
+        function.fn_attrs["tessera.structured_cfg.digest"] = json.dumps(
+            function.structured_cfg.digest
+        )
 
 
 def presburger_system_from_constraints(

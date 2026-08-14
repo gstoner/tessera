@@ -966,6 +966,10 @@ class GraphIRFunction:
     cache invalidation, drift detection, and reproducibility
     proofs.  ``None`` when the producer doesn't have the source
     (e.g., textual-DSL parse without a backing file)."""
+    structured_cfg: Any | None = None
+    """Tracer-owned multi-block CFG carrier.  This remains separate from the
+    flat inspection serialization until the native region dialect consumes the
+    complete block/edge ABI."""
 
     def to_mlir(self, *, verify: bool = False, canonical: bool = False) -> str:
         if verify:

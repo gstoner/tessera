@@ -281,6 +281,47 @@ class TileIRVerifier:
             diagnostics.append(
                 TileIRDiagnostic("error", f"{op.op_name} has unsupported reduction", "TILE_IR_COLLECTIVE_REDUCTION")
             )
+        plan_digest = str(op.attrs.get("reshard_plan_digest", ""))
+        if plan_digest:
+            subgroup = tuple(op.attrs.get("subgroup", ()))
+            if (
+                len(subgroup) < 2
+                or len(set(subgroup)) != len(subgroup)
+                or any(not isinstance(rank, int) or rank < 0 for rank in subgroup)
+            ):
+                diagnostics.append(TileIRDiagnostic(
+                    "error",
+                    "materialized reshard requires distinct non-negative subgroup ranks",
+                    "TILE_IR_COLLECTIVE_SUBGROUP",
+                ))
+            if op.op_name == "tile.all_to_all" and subgroup:
+                rounds = tuple(op.attrs.get("matching_rounds", ()))
+                expected = {
+                    (source, target)
+                    for source in subgroup
+                    for target in subgroup
+                    if source != target
+                }
+                seen: set[tuple[int, int]] = set()
+                valid = len(rounds) == len(subgroup) - 1
+                for round_ in rounds:
+                    edges = tuple(tuple(edge) for edge in round_)
+                    if any(len(edge) != 2 for edge in edges):
+                        valid = False
+                        continue
+                    valid &= (
+                        len(edges) == len(subgroup)
+                        and {edge[0] for edge in edges} == set(subgroup)
+                        and {edge[1] for edge in edges} == set(subgroup)
+                    )
+                    seen.update(edges)
+                valid &= seen == expected
+                if not valid:
+                    diagnostics.append(TileIRDiagnostic(
+                        "error",
+                        "all-to-all matching rounds must factor every directed peer edge once",
+                        "TILE_IR_COLLECTIVE_MATCHING_ROUNDS",
+                    ))
         if op.op_name == "tile.collective_permute":
             sources = tuple(op.attrs.get("source_peers", ()))
             targets = tuple(op.attrs.get("target_peers", ()))

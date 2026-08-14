@@ -371,7 +371,7 @@ remain architecture-owned follow-ups. Full contract and evidence:
 A front-to-back audit of every IR level framed by one question: *where is Tessera
 still a library/dispatcher, and what does each layer need to become an optimizing
 compiler?* This section is the strategic spine; the per-item status lives in
-**Still Open** / **Next Work** below (cross-referenced, not duplicated).
+the historical finding ledger below (cross-referenced, not duplicated).
 
 ### The central finding — two disconnected worlds, one half-closed seam
 
@@ -1045,7 +1045,16 @@ the A–E kernel spine — each PR test-gated:
   symbols). The four Apple CPU+GPU state docs were also consolidated into the
   single reference `docs/backends/apple/`.
 
-## Still Open
+## Historical finding ledger — not a work queue
+
+The entries below preserve the chronology and closeout evidence of the original
+compiler audit. They are not sequencing authority, and labels such as “still
+open” describe the state at the dated audit point rather than current priority.
+Use [`README.md`](README.md) for routing, the generated dashboards for current
+implementation/evidence state, and
+[`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) as the sole global
+compiler queue. New work must be recorded there or in its routed scoped/backend
+plan instead of extending this historical ledger.
 
 - **Program identity — component-op vectors + gating landed (2026-06-02);
   component-aware metadata landed (2026-06-07).** `CompileResult` carries

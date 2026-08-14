@@ -3,7 +3,7 @@ last_updated: 2026-08-14
 audit_role: reference
 ---
 
-# gfx1250 MI455X / gfx1251 MI430X — Source-Grounded Compiler Reference
+# CDNA5 gfx1250 MI455X / gfx1251 MI430X — Source-Grounded Compiler Reference
 
 > **Purpose.** A primary-source reference for the CDNA5 gfx1250 (AMD Instinct
 > MI455X) and its distinct gfx1251 (MI430X) sibling, assembled for compiler and backend work: hardware constants,

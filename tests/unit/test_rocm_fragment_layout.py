@@ -26,6 +26,7 @@ def test_gfx1151_owns_duplicated_gfx11_fragment_map():
     assert d.input_lane_replication == 2
     assert d.input_format is RegisterFormat.WMMA_INPUT_GFX11
     assert d.accumulator_mapping == "gfx11_col_per_lane"
+    assert d.isa_instruction == "V_WMMA_F32_16X16X16_F16"
 
 
 @pytest.mark.parametrize("arch", [AMDArch.GFX_1200, AMDArch.GFX_1201])
@@ -38,6 +39,7 @@ def test_rdna4_owns_dense_nonduplicated_fragment_map(arch):
     assert d.input_format is RegisterFormat.SOA
     assert d.accumulator_mapping == "soa_row_per_lane"
     assert d.intrinsic_abi == "abc_3arg_gfx12"
+    assert d.isa_instruction == "V_WMMA_F32_16X16X16_BF16"
 
 
 def test_rdna4_fp8_is_packed_and_int4_uses_k32():
@@ -55,10 +57,11 @@ def test_rdna4_fp8_is_packed_and_int4_uses_k32():
 
 def test_gfx125x_v2_does_not_alias_rdna4():
     d = select_fragment_layout(AMDArch.GFX_1250, "bf16", (16, 16, 32))
-    assert d.family is FragmentFamily.GFX125X_WMMA_V2
+    assert d.family is FragmentFamily.CDNA5_WMMA
     assert d.input_elements_per_lane == 16
-    assert d.intrinsic_abi == "mods_reuse_8arg_gfx125x"
+    assert d.intrinsic_abi == "mods_reuse_scale_gfx125x"
     assert d.materialization_ready
+    assert d.isa_instruction == "V_WMMA_F32_16X16X32_BF16"
 
 
 @pytest.mark.parametrize(
@@ -95,6 +98,7 @@ def test_mma_metadata_carries_the_physical_fragment_contract():
     assert physical["family"] == "rdna4_wmma"
     assert physical["input_elements_per_lane"] == 8
     assert physical["input_lane_replication"] == 1
+    assert physical["isa_instruction"] == "V_WMMA_F32_16X16X16_F16"
 
 
 def test_int4_selection_uses_family_specific_k():
@@ -118,3 +122,12 @@ def test_python_and_cpp_fragment_contract_names_do_not_drift():
         assert f'"{descriptor.family.value}"' in header
         assert f'"{descriptor.intrinsic_abi}"' in header
         assert f'"{descriptor.input_format.value}"' in header
+        assert f'"{descriptor.isa_instruction}"' in header
+
+
+def test_cpp_target_records_carry_exact_instruction_provenance():
+    root = Path(__file__).resolve().parents[2]
+    lowering = (root / "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion"
+                / "TileToROCM.cpp").read_text()
+    assert lowering.count('"matrix_instruction"') >= 2
+    assert "physical->matrixInstruction" in lowering

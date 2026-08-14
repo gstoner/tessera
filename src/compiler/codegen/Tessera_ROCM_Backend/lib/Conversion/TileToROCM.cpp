@@ -1067,6 +1067,8 @@ struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
     state.addAttribute("source", rewriter.getStringAttr("tile.fragment_pack"));
     state.addAttribute("fragment_family",
                        rewriter.getStringAttr(physical->familyName));
+    state.addAttribute("matrix_instruction",
+                       rewriter.getStringAttr(physical->matrixInstruction));
     state.addAttribute(
         "fragment_input_format",
         rewriter.getStringAttr(
@@ -2702,6 +2704,9 @@ struct LowerTileToROCMPass
                              builder.getStringAttr("tile.fragment_pack"));
           state.addAttribute("fragment_family",
                              builder.getStringAttr(physical->familyName));
+          state.addAttribute(
+              "matrix_instruction",
+              builder.getStringAttr(physical->matrixInstruction));
           state.addAttribute(
               "fragment_input_format",
               builder.getStringAttr(

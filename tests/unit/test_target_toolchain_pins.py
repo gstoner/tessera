@@ -309,13 +309,19 @@ class TestROCmWMMAShapeTable:
             wmma_variants, mfma_variants, ROCmTargetProfile, AMDArch,
             rocm_feature_status)
         for arch in (AMDArch.GFX_1250, AMDArch.GFX_1251):
-            assert wmma_variants(arch) == frozenset({(16, 16, 32), (16, 16, 64), (16, 16, 128)})
+            assert wmma_variants(arch) == frozenset({
+                (16, 16, 4), (16, 16, 32), (16, 16, 64),
+                (16, 16, 128), (32, 16, 128),
+            })
             assert mfma_variants(arch) == frozenset()        # WMMA arch, not MFMA
-            assert ROCmTargetProfile(arch=arch).threads_per_wave == 32  # wave32 (llc-grounded)
-            # WMMA float + fp8 flags grounded; everything else honestly "tba".
+            profile = ROCmTargetProfile(arch=arch)
+            assert profile.threads_per_wave == 32
+            assert not profile.is_rdna  # CDNA 5 is wave32; family != wave size.
             assert rocm_feature_status(arch, "wmma_bf16") == "ready"
             assert rocm_feature_status(arch, "wmma_f8") == "ready"
-            assert rocm_feature_status(arch, "lds_async_copy") == "tba"
+            assert rocm_feature_status(arch, "lds_async_copy") == "ready"
+            assert profile.lds_capacity_bytes == 320 * 1024
+            assert profile.vgpr_budget == 1024
 
     def test_cdna_arches_have_no_wmma(self):
         from tessera.compiler.rocm_target import wmma_variants, AMDArch
@@ -415,13 +421,12 @@ class TestCompileableStatus:
 
 
 class TestROCmReviewHardening:
-    def test_is_wave32_alias_matches_is_rdna(self):
+    def test_wave_size_is_independent_of_architecture_family(self):
         from tessera.compiler.rocm_target import ROCmTargetProfile, AMDArch
-        for arch in AMDArch:
-            p = ROCmTargetProfile(arch=arch)
-            assert p.is_wave32 == p.is_rdna
-        # gfx1250 is wave32 (llc-grounded) even though its family isn't asserted RDNA.
+        assert ROCmTargetProfile(arch=AMDArch.GFX_1151).is_rdna
+        assert ROCmTargetProfile(arch=AMDArch.GFX_1151).is_wave32
         assert ROCmTargetProfile(arch=AMDArch.GFX_1250).is_wave32
+        assert not ROCmTargetProfile(arch=AMDArch.GFX_1250).is_rdna
 
     def test_feature_status_unknown_name_raises_clearly(self):
         from tessera.compiler.rocm_target import rocm_feature_status, AMDArch

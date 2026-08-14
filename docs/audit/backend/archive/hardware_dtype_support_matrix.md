@@ -2,9 +2,18 @@
 status: Informative
 classification: Hardware Dtype Audit
 last_updated: 2026-05-20
+superseded_by: ../../generated/dtype_flow.md
 ---
 
 # Hardware Dtype Support Matrix
+
+> **Archived historical survey.** This document compares hardware-family
+> datasheets as they were understood on 2026-05-20. It is not an active
+> compiler capability or operator-support authority. Use
+> [`../../generated/dtype_flow.md`](../../generated/dtype_flow.md) for current
+> per-operator compiler support and the architecture-owned target maps for ISA
+> legality. In particular, do not copy target identities or dtype claims from
+> this snapshot into live plans.
 
 This matrix maps Tessera's cleaned dtype families onto the hardware targets
 called out in the May 2026 dtype audit. It is a hardware capability view, not a

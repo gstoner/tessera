@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-13
+last_updated: 2026-08-14
 audit_role: reference
 ---
 
@@ -37,6 +37,12 @@ three for `gfx[0-9]+` and for `MI###` returns **zero** hits. They are
 *architecture* references. The architecture ↔ target mapping must come from
 somewhere else (for Tessera: `docs/reference/isa/rdna/`, `rocminfo`, or the LLVM
 target definitions). Do not expect to resolve "is this gfx1151?" from these PDFs.
+
+The project target mapping is maintained separately from the PDFs:
+`gfx1151 → Strix Halo`, `gfx1200 → RDNA 4 Radeon RX 9060 XT / Radeon
+RX 9070 XT`, `gfx1250 → MI455X`, and
+`gfx1251 → MI430X`. The last two are distinct CDNA5 products, not aliases;
+their instruction ABI can be shared while scheduling and evidence cannot.
 
 **2. CDNA 5 has no MFMA instructions at all.** Zero occurrences of `MFMA` or
 `SMFMAC` in the entire 832-page document. CDNA 5 uses the **`V_WMMA_*` /

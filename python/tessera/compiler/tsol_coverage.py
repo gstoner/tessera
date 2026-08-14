@@ -313,6 +313,12 @@ def render_dashboard() -> str:
         "Full primitive registry: "
         "`docs/audit/standalone_primitive_coverage.md`."
     )
+    lines.append(
+        "The `dtype_layout_rule` axis below means that a semantic dtype/layout"
+        " contract exists; it is not a per-target kernel-dtype claim. Use"
+        " `docs/audit/generated/dtype_flow.md` for TSOL logical dtype → ABI"
+        " storage and exact-target support."
+    )
     lines.append("")
 
     # ── Headline summary ───────────────────────────────────────────────

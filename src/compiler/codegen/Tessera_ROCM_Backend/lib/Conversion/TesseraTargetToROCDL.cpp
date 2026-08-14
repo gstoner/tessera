@@ -49,11 +49,11 @@ bool lowerRealWMMA(Operation *op, PatternRewriter &rewriter) {
   if (auto attr = op->getAttrOfType<StringAttr>("fragment_family"))
     fragmentFamily = attr.getValue();
 
-  // gfx125x WMMA-v2 doubles K for f16/bf16 and has a distinct intrinsic ABI.
+  // CDNA5 WMMA doubles K for f16/bf16 and has a distinct intrinsic ABI.
   // The five modifiers are instruction attributes, not extra fragment values:
   // no sign inversion, no C modification, and no explicit operand reuse is the
   // exact dense A*B+C operation represented by Tile's logical mma contract.
-  if (fragmentFamily == "gfx125x_wmma_v2" &&
+  if (fragmentFamily == "cdna5_wmma" &&
       isVec(c.getType(), 8, f32) && isVec(resTy, 8, f32)) {
     Operation *real = nullptr;
     if (isVec(a.getType(), 16, rewriter.getF16Type()) &&

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-13
+last_updated: 2026-08-14
 audit_role: index
 ---
 
@@ -15,6 +15,7 @@ direction.
 1. **Generated status truth:**
    [`generated/compiler_progress.md`](../generated/compiler_progress.md),
    [`generated/autodiff_connection_ledger.md`](../generated/autodiff_connection_ledger.md),
+   [`generated/dtype_flow.md`](../generated/dtype_flow.md),
    and the other generated dashboards report what is implemented and evidenced.
 2. **Compiler narrative:** [`COMPILER_AUDIT.md`](COMPILER_AUDIT.md) explains the
    current architecture, important findings, and remaining gaps without owning
@@ -54,6 +55,8 @@ proof at every boundary:
 | 11 | **E2E-REAL-6 — first cohort landing** | Native forward products now use tracer-produced canonical Graph IR and explicit family plugins; `JitFn` owns only call binding/cache/launch. ROCm scheduled attention backward consumes its Tile artifact without Graph reconstruction. General solver products generate digest-bound target children for pointwise, reduction, rank-2 matmul, bounded-dynamic/mixed-storage, counted-region, and pure scalar predicate-bearing residuals. AVX-512 and gfx1151 own expanded-family correctness packets; clean selector evidence remains open. Continue per family; the AST frontend and retained backend candidates cannot be deleted until lineage, correctness, and architecture-owned evidence are complete. |
 | 12 | **PDE-STENCIL-FOUNDATION-1 — semantic correctness slice landed** | Neighbors owns explicit tap coefficients; TPP owns required scheme/order/per-axis spacing; only linkable Target implementations receive callable symbols. Typed PDE classification/stability analysis, stencil-stack unification, and architecture-owned gfx1151/x86 physical packets remain open. |
 | 13 | **BLOCK-ATTNRES-1 — gfx1151 Phase 5 landed** | Shared statistics/merge/finalize semantics, typed Graph products, and the content-addressed Schedule→Tile boundary now feed a typed ROCm Target record and exact gfx1151 HSACO/runtime consumer. Three exact-device shapes pass; WSL operation-total timing is retained but selector-ineligible pending bare-metal device timing. AVX-512 Phase 6 remains independent. |
+| 14 | **AMD-ISA-DTYPE-1 — cross-generation foundation landing** | A dtype-total selector now distinguishes RDNA3.5, RDNA4, and CDNA5 scalar/vector, dense, sparse, accumulator, scale, shape, and evidence states. CDNA5 gfx1250/MI455X and gfx1251/MI430X are wave32 XDL-WMMA targets with separate cost identities; only existing f16/bf16 K32 materialization is executable, and every newer dtype path remains explicitly gated. |
+| 15 | **OP-DTYPE-FLOW-1 — generated end-to-end datatype audit landing** | A normalized generated matrix joins frontend/Graph/Schedule/Tile state, numeric-policy storage and accumulator identity, TSOL membership, per-operation physical manifests, target capability declarations, and exact AMD architecture legality. Derived dtype legality is reported as `legal_only` and cannot masquerade as an operator-specific kernel. |
 
 Hardware packets and backend-specific tuning are synchronized follow-ups to
 these slices, not blockers for landing shared contracts with honest fail-closed

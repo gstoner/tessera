@@ -44,4 +44,5 @@ dashboard_map,verifier_coverage,integration,0,0,0,ODS/C++ verifier implementatio
 dashboard_map,test_coverage,integration,0,0,0,"Direct, structural, family, and hardware-gated test evidence by op.",docs/audit/generated/test_coverage.csv,Use for proof-quality triage.
 dashboard_map,runtime_abi,integration,0,0,0,C ABI symbols and implementation/stub split.,docs/audit/generated/runtime_abi.csv,Use when runtime/backend claims need symbol-level evidence.
 dashboard_map,surface_status,integration,0,0,0,"Examples, benchmarks, research, tools, and tests surface status.",docs/audit/generated/surface_status.csv,Use to find runnable proof surfaces and stale scaffolds.
+dashboard_map,dtype_flow,specialized,0,0,0,"Per-operator logical dtype, physical ABI storage, accumulator, IR-layer, and exact-target state.",docs/audit/generated/dtype_flow.csv,Use for dtype support questions; do not infer per-dtype execution from aggregate conformance or capability rows.
 dashboard_map,contract_consumers / effect_lattice / tsol,specialized,0,0,0,"Focused contract-pass, effect-system, and TSOL views.",docs/audit/generated/,Use only when the specialized subsystem is the question.

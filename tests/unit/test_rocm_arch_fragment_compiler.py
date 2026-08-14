@@ -116,6 +116,36 @@ def _serialize(tools: CompilerToolchain, lowered: str, arch: str) -> str:
     return result.stdout
 
 
+def _lower_to_target(tools: CompilerToolchain, arch: str, source: str) -> str:
+    pipeline = f"--pass-pipeline=builtin.module(lower-tile-to-rocm{{arch={arch}}})"
+    tessera_opt = tools.require_tessera_opt(pipeline)
+    result = subprocess.run(
+        [str(tessera_opt), "-", "--allow-unregistered-dialect",
+         "--mlir-print-op-generic", pipeline],
+        input=source, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+@pytest.mark.parametrize(
+    ("arch", "source", "instruction"),
+    [
+        ("gfx1151", _typed_source("bf16"),
+         "V_WMMA_F32_16X16X16_BF16"),
+        ("gfx1200", _typed_source("e4m3"),
+         "V_WMMA_F32_16X16X16_FP8_FP8"),
+        ("gfx1250", _gfx125x_source("bf16"),
+         "V_WMMA_F32_16X16X32_BF16"),
+    ],
+)
+def test_target_record_carries_exact_isa_instruction(
+    compiler_toolchain, arch, source, instruction,
+):
+    target = _lower_to_target(compiler_toolchain, arch, source)
+    assert f'matrix_instruction = "{instruction}"' in target
+
+
 @pytest.mark.parametrize(
     ("arch", "input_type", "intrinsic", "wave_size"),
     [

@@ -87,6 +87,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `test_coverage` | integration | Direct, structural, family, and hardware-gated test evidence by op. | Use for proof-quality triage. | `docs/audit/generated/test_coverage.csv` |
 | `runtime_abi` | integration | C ABI symbols and implementation/stub split. | Use when runtime/backend claims need symbol-level evidence. | `docs/audit/generated/runtime_abi.csv` |
 | `surface_status` | integration | Examples, benchmarks, research, tools, and tests surface status. | Use to find runnable proof surfaces and stale scaffolds. | `docs/audit/generated/surface_status.csv` |
+| `dtype_flow` | specialized | Per-operator logical dtype, physical ABI storage, accumulator, IR-layer, and exact-target state. | Use for dtype support questions; do not infer per-dtype execution from aggregate conformance or capability rows. | `docs/audit/generated/dtype_flow.csv` |
 | `contract_consumers / effect_lattice / tsol` | specialized | Focused contract-pass, effect-system, and TSOL views. | Use only when the specialized subsystem is the question. | `docs/audit/generated/` |
 
 ## Reading Rules
@@ -95,4 +96,5 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 - Primitive contract readiness comes from `s_series_status.md`; `backend_kernel` is a promotion axis, not an all-up compiler veto.
 - Backend/pathway denominators are declared `BackendKernelEntry` op×target grains from `s_series_status.md`; runtime-path counts are independent supporting detail and are never added to those totals.
 - Only `device_verified_abi` and `device_verified_jit` close a hardware pathway grain. `fused`/`packaged` prove implementation presence, while reference and artifact/planned rows remain visible without being promoted.
+- Datatype support comes from `dtype_flow.csv`; its `legal_only` state is expressibility, not an operator-specific physical kernel, and logical complex dtypes remain distinct from their interleaved real ABI storage.
 - Integration evidence comes from verifier, test, ABI, and surface dashboards; these are the places to look for the next real blockers.

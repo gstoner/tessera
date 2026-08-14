@@ -85,6 +85,9 @@ def test_rocm_priority_targets_do_not_inherit_gfx1151_proof() -> None:
     assert ("rocm_gfx950", "MI350X / MI355X / MI350P") in products
     assert ("rocm_gfx1250", "MI455X") in products
     assert ("rocm_gfx1201", "Radeon AI PRO R9700") in products
+    assert (
+        "rocm_gfx1200", "Radeon RX 9060 XT / Radeon RX 9070 XT"
+    ) in products
     for row in rows:
         if row.target != "rocm_gfx1151":
             assert row.status not in {"device_verified_jit", "device_verified_abi"}

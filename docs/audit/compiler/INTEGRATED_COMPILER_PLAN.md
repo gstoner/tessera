@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-13
+last_updated: 2026-08-14
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
@@ -117,6 +117,16 @@ E2E-REAL-0:
    windows, exact ring readback, and independent HIP-event/host-wall clocks.
    Exact multi-node gfx1151 proof remains open; ordinary collective records
    cannot opt into the one-sided lane.
+9. **AMD-ISA-DTYPE-1 — cross-generation foundation landing:** gfx1151,
+   gfx1200, and CDNA5 gfx1250/gfx1251 now have a dtype-total architecture
+   contract separating scalar/vector storage, dense WMMA, sparse SWMMAC,
+   accumulator, scale-operand, compiler-state, and exact mnemonic identity.
+   CDNA5 is modeled as wave32 XDL-WMMA rather than inherited wave64 MFMA;
+   MI455X maps to gfx1250 and MI430X to gfx1251 with distinct cost identities.
+   The C++ fragment boundary recognizes a distinct CDNA5 ABI and lowers the
+   already-proven f16/bf16 K32 forms. FP8/BF8, IU8, F8F6F4/FP4/MX scaling,
+   sparse materialization, and gfx1251 FP64 WMMA remain fail-closed until typed
+   Target operations, LLVM serialization, and exact-product packets land.
 
 Scoped plans own the design and acceptance details for these items. Backend
 plans own exact-device promotion. Neither creates a competing global order.

@@ -662,6 +662,14 @@ def render_markdown() -> str:
     )
     lines.append("")
     lines.append(
+        "This matrix is dtype-aggregated: a complete cell proves only the"
+        " curated dtype envelope for that conformance program. For the"
+        " per-operator logical dtype, physical ABI storage, accumulator, and"
+        " exact-target status matrix, use"
+        " [`generated/dtype_flow.md`](generated/dtype_flow.md)."
+    )
+    lines.append("")
+    lines.append(
         "Audit response to"
         " [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDIT.md)"
         " recommendation **A**: the gap between *architecture-implied"

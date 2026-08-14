@@ -3,7 +3,7 @@ status: Normative
 classification: Normative
 authority: Canonical public Python API naming and documentation routing
 scope: Stable public names, namespaces, and terminology; not runtime status or backend capability
-last_updated: 2026-07-13
+last_updated: 2026-08-14
 ---
 
 # Tessera Canonical API
@@ -133,7 +133,7 @@ the execution status of any target.
 | `gfx950`, `mi350p`, `mi350x`, `mi355x` | `rocm_gfx950` |
 | `gfx1100`, `rdna3`, `rx7900` | `rocm_gfx1100` |
 | `gfx1151`, `radeon8060s`, `rdna35`, `ryzenaimax395`, `strixhalo` | `rocm_gfx1151` |
-| `gfx1200`, `gfx12`, `rdna4`, `rx9000` | `rocm_gfx1200` |
+| `gfx1200`, `gfx12`, `rdna4`, `rx9000`, `rx9060xt`, `rx9070xt`, `radeon_rx_9060_xt`, `radeon_rx_9070_xt`, `Radeon RX 9060 XT`, `Radeon RX 9070 XT` | `rocm_gfx1200` |
 | `gfx1201`, `r9700`, `radeon_ai_pro_r9700` | `rocm_gfx1201` |
 | `gfx1250`, `mi455x` | `rocm_gfx1250` |
 | `apple_cpu`, `macos_cpu`, `m_series_cpu` | `apple_cpu` |

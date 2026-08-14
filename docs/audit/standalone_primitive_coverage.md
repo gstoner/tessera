@@ -20,6 +20,13 @@ For historical audit narrative, see `docs/audit/coverage/COVERAGE_AUDIT.md`.
 For current cross-layer support state, use
 `docs/audit/generated/support_table.md` and the registry source.
 
+The `dtype_layout_rule` count in this document answers only whether each
+primitive has a semantic dtype/layout contract. It does **not** say which
+logical dtypes have physical kernels on each target. The sole generated
+operator-by-dtype routing surface is
+[`generated/dtype_flow.md`](generated/dtype_flow.md); use its CSV companion for
+machine-readable frontend → Graph → Schedule → Tile → target state.
+
 ## Contract Axes
 
 Every primitive is tracked across these contract fields:

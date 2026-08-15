@@ -17,13 +17,29 @@ target_compile_options(tessera_x86_base PRIVATE
   -march=x86-64 -mno-avx -mno-avx2 -mno-avx512f
 )
 
-# Try to detect and add compiler flags for AVX-512 / AMX
+# Try to detect compiler flags for AVX-512 / AMX.
+#
+# These are COLLECTED here and applied per-target at the end of the kernel
+# section -- deliberately NOT via `add_compile_options`, which is directory
+# scoped and therefore leaks into every `add_subdirectory` below it. That leak
+# is what made `tessera-opt` die with SIGILL inside
+# `TesseraX86Dialect::initialize()` on any host without AVX-512
+# (`X86-DIALECT-LOAD-CRASH-2026-08-12`): the hardware-free Target IR dialect in
+# `lib/IR` was compiled with `-mavx512f`, so the compiler was free to emit an
+# AVX-512 encoding (e.g. `vpbroadcastq %rgpr, %xmm`, which is AVX-512-only) into
+# dialect registration -- code that by contract must run on any host at all.
+#
+# Position-independence is the point: the earlier arrangement was correct only
+# as long as nobody added a subdirectory after this block, and that is not a
+# property a build system should ask a reader to maintain by hand.
 include(CheckCXXCompilerFlag)
+
+set(TESSERA_X86_ARCH_FLAGS "")
 
 macro(try_add_flag flag var)
   check_cxx_compiler_flag(${flag} ${var})
   if(${var})
-    add_compile_options(${flag})
+    list(APPEND TESSERA_X86_ARCH_FLAGS ${flag})
   endif()
 endmacro()
 
@@ -216,6 +232,32 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_predicate_f32.cpp
   src/kernels/kv_cache_f32.cpp
 )
+
+# ------------------------------------------------------------------
+# Apply the detected AVX-512 / AMX flags to the KERNEL targets only.
+#
+# Enumerating this directory's targets keeps the rule automatic: a kernel target
+# added later is covered without anyone remembering to extend a hand-written
+# list, while targets in subdirectories -- the hardware-free Target IR dialect
+# in `lib/IR` -- are structurally excluded, because BUILDSYSTEM_TARGETS is
+# per-directory.
+#
+# `tessera_x86_base` is excluded on purpose: it already pins itself to baseline
+# x86-64 via PRIVATE options, and appending `-mavx512f` after those would
+# silently re-enable exactly what it opted out of.
+# ------------------------------------------------------------------
+if(TESSERA_X86_ARCH_FLAGS)
+  get_property(_tessera_x86_kernel_targets
+    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
+  foreach(_tgt IN LISTS _tessera_x86_kernel_targets)
+    if(NOT _tgt STREQUAL "tessera_x86_base")
+      target_compile_options(${_tgt} PRIVATE ${TESSERA_X86_ARCH_FLAGS})
+    endif()
+  endforeach()
+  message(STATUS
+    "tessera_x86 kernel arch flags: ${TESSERA_X86_ARCH_FLAGS} "
+    "(kernel targets only; lib/IR stays baseline)")
+endif()
 
 # ------------------------------------------------------------------
 # tessera_x86 Target IR dialect (Decision #19, built by W0.10)

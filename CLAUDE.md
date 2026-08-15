@@ -223,17 +223,36 @@ Per-phase deliverables and the open-work priority queue live in
 
 19. **Backends expose hardware-free Target IR before hardware-specific lowering.** Each backend defines an ODS dialect of abstract target ops (`tessera_rocm.mfma`, `tessera_apple.cpu.accelerate_gemm`, `tessera_apple.gpu.metal_kernel`) between Tile IR and final hardware emission. The hardware-free layer is what makes backends lit-testable; validated by `test_target_ir_contract.py`.
 
-    **`tessera_x86` exists but does not load — the compliance claim below is
-    SUSPENDED (2026-08-12, `X86-DIALECT-LOAD-CRASH-2026-08-12`).** As soon as CI
-    was configured to build the dialect (PR #555), `tessera-opt` was shown to
-    **segfault inside `TesseraX86Dialect::initialize()` while registering
-    `TileType`** — it dies on load, before parsing any op (run 31648897366; all
-    14 x86 fixtures). Nothing below that depends on the dialect being loadable
-    is proven: in particular the `!tessera_x86.tile` verifier described here
-    **has never executed**, so read the paragraph as the *intended* contract,
-    not a demonstrated one. It stayed hidden because no CI lane built the
-    dialect between 2026-08-02 and 2026-08-12. Status and remediation:
-    [`docs/audit/backend/x86/todo.md`](docs/audit/backend/x86/todo.md) P0.
+    **`X86-DIALECT-LOAD-CRASH-2026-08-12` was a build-flag leak, not an IR
+    defect — root-caused 2026-08-15.** The dialect and its `TileType`
+    registration were always correct. The x86 kernel project applied its
+    detected AVX-512/AMX flags with **`add_compile_options`**, which is
+    *directory* scoped, and `add_subdirectory(lib/IR)` sat below that call — so
+    the hardware-free Target IR dialect was compiled `-mavx512f … -mamx-tile …`
+    and the compiler emitted an AVX-512-only encoding into dialect registration
+    itself. On a host with AVX-512 that runs fine; on the CI runner it does not,
+    and `tessera-opt` died the first time it touched the dialect. **The tell was
+    the signal: all 14 fixtures failed with SIGILL (signal 4) at one identical
+    address, not SIGSEGV** — an illegal instruction is a build-configuration
+    fact, and `Dialect::addType<TileType>()` was merely the first code from that
+    translation unit to execute. Flags are now applied per-target to the kernel
+    targets only, and `lib/IR/CMakeLists.txt` **fails configure** if any
+    host-specific ISA flag is in scope.
+
+    **Standing lesson, because it will recur: a host that has the ISA cannot
+    falsify a host-portability claim.** This P0 was closed once on Zen 5 —
+    correctly, for that host — and CI reopened it. Decision #19's "lit-testable
+    on any host" is only evidenced by a host *without* AVX-512.
+
+    **Separately, still open: `TileToX86Pass` loads `tessera_x86` from inside
+    `runOnOperation()`** (`src/transforms/lib/TileToX86Pass.cpp:1045`, a by-name
+    `getOrLoadDialect` used to avoid linking the optional backend). MLIR forbids
+    loading a dialect during pass execution; on an **assertions-enabled** LLVM
+    this is a hard `LLVM ERROR` that fails 12 of the x86 fixtures, and on an
+    NDEBUG build (what CI uses) it is silently undefined behavior. CI cannot see
+    it. Fixing it means declaring the dialect in `getDependentDialects()`, which
+    couples `TesseraPasses` to the optional `TesseraX86IR` — a layering call.
+    Status: [`docs/audit/backend/x86/todo.md`](docs/audit/backend/x86/todo.md) P0.
 
     **`tessera_x86` now exists — x86 complies (built 2026-08-02, W0.10).** It was previously the one backend with no Target IR dialect at all: `TileToX86Pass` lowered Tile IR to 21 `func::CallOp`s into a hand-written C shim, and the Python emitter named a `tessera_x86.func` op no dialect defined. **No carve-out was granted.** The dialect lives at `src/compiler/codegen/tessera_x86_backend/include/TesseraX86/IR/`, is registered in `tessera-opt`, and splits into value-carrying ops (`amx_tile_load`/`amx_tile_zero`/`amx_dpbf16ps`/`amx_dpbusd`/`amx_tile_store` over a real `!tessera_x86.tile` type, so the verifier rejects a tile dot-product whose operands never came from a tile load) and directives (`avx512_gemm_microkernel`, `pack_b_panel`, `elementwise`, `kernel`, `kv_cache_read`, `unsupported`). `abi_call` **models the C-shim boundary instead of hiding it**, so Decision #28's arbiter can tell compiler-generated work from delegated work. Fixtures: `tests/tessera-ir/phase2/x86_target_ir{,_invalid}.mlir` — including a negative case, since a dialect that only ever accepts proves nothing. **Remaining follow-on is `x86vector.*` (AVX-512) lowering only; the AMX half is optional** — per project direction (2026-08-02) AMX is expected to be superseded by the ACE matrix instructions jointly agreed by Intel and AMD, so the AMX ops stay as the IR-level contract without an `amx.*` lowering. That also removes the hardware blocker: AVX-512 runs on the primary box, while no fleet machine has AMX.
 

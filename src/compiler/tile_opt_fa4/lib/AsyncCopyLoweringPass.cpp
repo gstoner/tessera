@@ -234,10 +234,20 @@ struct LowerWaitAsync : public RewritePattern {
       OperationState st(loc, tessera::tile::MBarrierWaitOp::getOperationName());
       st.addOperands(op->getOperands());
       st.addAttribute("slot", rewriter.getI64IntegerAttr(0));
+      // Segments: (barrier, token, dependencies) — barrier and the mbarrier
+      // token are retrofitted by NVTMADescriptorPass; the wait_async operands
+      // ride through as typed async-token dependencies.
       st.addAttribute(
           "operandSegmentSizes",
           rewriter.getDenseI32ArrayAttr(
-              {0, static_cast<int32_t>(op->getNumOperands())}));
+              {0, 0, static_cast<int32_t>(op->getNumOperands())}));
+      // A keyless tile.wait_async means "retire everything outstanding" (the
+      // declared legacy contract). Carry that meaning as an explicit marker
+      // instead of an indistinguishable bare wait — the verifier fails closed
+      // on a wait with no sync edge AND no declared retire-all semantics, and
+      // NVTMADescriptorPass replaces the marker with the real token set.
+      if (op->getNumOperands() == 0)
+        st.addAttribute("tile.retire_all", rewriter.getUnitAttr());
       rewriter.create(st);
     } else {
       OperationState st(loc, "tile.cp_async.wait_all");

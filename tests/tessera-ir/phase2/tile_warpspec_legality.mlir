@@ -1,24 +1,38 @@
-// RUN: tessera-opt --allow-unregistered-dialect --tessera-warpspec-legality -split-input-file -verify-diagnostics %s | FileCheck %s
+// RUN: tessera-opt --tessera-warpspec-legality -split-input-file -verify-diagnostics %s | FileCheck %s
 //
 // C6 (2026-06-23, TIRx review / COMPILER_AUDIT item C6): structural warp-spec
 // diagnostics from the "Debugging Warp-Specialized Kernels" appendix,
 // complementing C3's phase-asymmetry check. A warp-role region is modeled by an
 // ancestor carrying `tile.warp_role`.
+//
+// Ported to the REGISTERED vocabulary (P1a second increment, CAKE §5.4,
+// 2026-08-15): no `--allow-unregistered-dialect`, no husk spellings, and the
+// legality predicates that recognize these ops are typed (`isa<...>`), not
+// name substrings. The producer/consumer loop markers are `scf.for` loops
+// carrying the `tile.pipeline` / `tile.trip_count` attributes the C6
+// trip-count check reads.
 
 // A well-formed warp-specialized kernel: barrier init at CTA top level, the
-// cta_sync collective at top level, matching producer/consumer trip counts, and
-// a visibility fence before the TMA store.
+// cta_sync collective at top level, matching producer/consumer trip counts,
+// and a visibility fence before the TMA store.
 // CHECK-LABEL: func.func @well_formed
 func.func @well_formed() {
-  "tile.mbarrier_init"() {count = 1 : i64} : () -> ()
-  "tile.cta_sync"() : () -> ()
-  "tile.tma_loop"() {tile.pipeline = "kv", tile.trip_count = 8 : i64} : () -> ()
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c8 = arith.constant 8 : index
+  %bar = tile.mbarrier.init {slots = 1 : i64, phase_bits = 1 : i64} : !tile.mbarrier
+  tile.cta_sync
+  scf.for %i = %c0 to %c8 step %c1 {
+    scf.yield
+  } {tile.pipeline = "kv", tile.trip_count = 8 : i64}
   scf.execute_region {
-    "tile.mma_loop"() {tile.pipeline = "kv", tile.trip_count = 8 : i64} : () -> ()
+    scf.for %j = %c0 to %c8 step %c1 {
+      scf.yield
+    } {tile.pipeline = "kv", tile.trip_count = 8 : i64}
     scf.yield
   } {tile.warp_role = "consumer"}
-  "tile.fence"() {scope = "shared::cta"} : () -> ()
-  "tile.tma_store"() : () -> ()
+  tile.fence {scope = "shared::cta"}
+  tile.tma.store
   return
 }
 
@@ -29,7 +43,7 @@ func.func @well_formed() {
 func.func @init_under_guard() {
   scf.execute_region {
     // expected-error @+1 {{WARPSPEC_INIT_UNDER_GUARD}}
-    "tile.mbarrier_init"() {count = 1 : i64} : () -> ()
+    %bar = tile.mbarrier.init {slots = 1 : i64, phase_bits = 1 : i64} : !tile.mbarrier
     scf.yield
   } {tile.warp_role = "producer"}
   return
@@ -41,7 +55,7 @@ func.func @init_under_guard() {
 func.func @collective_in_branch() {
   scf.execute_region {
     // expected-error @+1 {{WARPSPEC_COLLECTIVE_IN_DIVERGENT_BRANCH}}
-    "tile.cta_sync"() : () -> ()
+    tile.cta_sync
     scf.yield
   } {tile.warp_role = "producer"}
   return
@@ -51,10 +65,18 @@ func.func @collective_in_branch() {
 
 // Producer TMA loop count (8) disagrees with consumer MMA loop count (7).
 func.func @loop_count_disagree() {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c7 = arith.constant 7 : index
+  %c8 = arith.constant 8 : index
   // expected-note @+1 {{pipeline "kv" first trip count here}}
-  "tile.tma_loop"() {tile.pipeline = "kv", tile.trip_count = 8 : i64} : () -> ()
+  scf.for %i = %c0 to %c8 step %c1 {
+    scf.yield
+  } {tile.pipeline = "kv", tile.trip_count = 8 : i64}
   // expected-error @+1 {{WARPSPEC_LOOP_COUNT_DISAGREE}}
-  "tile.mma_loop"() {tile.pipeline = "kv", tile.trip_count = 7 : i64} : () -> ()
+  scf.for %j = %c0 to %c7 step %c1 {
+    scf.yield
+  } {tile.pipeline = "kv", tile.trip_count = 7 : i64}
   return
 }
 
@@ -63,7 +85,7 @@ func.func @loop_count_disagree() {
 // TMA store with no prior visibility fence in its block.
 func.func @missing_fence() {
   // expected-error @+1 {{WARPSPEC_MISSING_VISIBILITY_FENCE}}
-  "tile.tma_store"() : () -> ()
+  tile.tma.store
   return
 }
 

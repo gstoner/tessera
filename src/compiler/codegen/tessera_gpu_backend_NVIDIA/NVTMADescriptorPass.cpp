@@ -264,13 +264,16 @@ struct NVTMADescriptorPass
         dependencies.append(completionTokens.begin(), completionTokens.end());
       operands.append(dependencies);
       SmallVector<NamedAttribute> attrs;
+      // Drop tile.retire_all: the marker's "everything outstanding" meaning is
+      // realized here as the concrete completion-token set.
       for (NamedAttribute attr : wait->getAttrs())
-        if (attr.getName() != "operandSegmentSizes")
+        if (attr.getName() != "operandSegmentSizes" &&
+            attr.getName() != "tile.retire_all")
           attrs.push_back(attr);
       attrs.push_back(b.getNamedAttr(
           "operandSegmentSizes",
           b.getDenseI32ArrayAttr(
-              {1, static_cast<int32_t>(dependencies.size())})));
+              {1, 0, static_cast<int32_t>(dependencies.size())})));
       b.setInsertionPoint(wait);
       OperationState st(wait.getLoc(),
                         tile::MBarrierWaitOp::getOperationName());

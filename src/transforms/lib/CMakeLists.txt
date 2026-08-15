@@ -84,6 +84,7 @@ add_library(TesseraPasses
   # 2026-06-23 — C4: compute/storage dtype legalize split (Decision #15a, TIRx review).
   DtypeLegalizePass.cpp
   # 2026-06-23 — C6: warp-spec structural diagnostics (TIRx debugging appendix).
+  TileDataflowLegalityPass.cpp
   WarpSpecLegalityPass.cpp
   # 2026-06-23 — pipeline-parallel: real stage partitioning + 1F1B schedule proof.
   PipelineStagePartitionPass.cpp

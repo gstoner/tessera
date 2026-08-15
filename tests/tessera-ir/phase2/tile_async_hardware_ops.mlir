@@ -16,11 +16,16 @@ module {
       mbarrier_slot = 0 : i64, expect_tx = 8192 : i64
     } : (!tile.tma_descriptor, !tile.mbarrier) -> !tile.async_token
     tile.mbarrier.wait %barrier, %copy {
-      operandSegmentSizes = array<i32: 1, 1>, slot = 0 : i64
+      operandSegmentSizes = array<i32: 1, 0, 1>, slot = 0 : i64
     } : !tile.mbarrier, !tile.async_token
     %arrival = tile.mbarrier.arrive_expect_tx %barrier {
       slot = 0 : i64, bytes = 8192 : i64
     } : !tile.mbarrier -> !tile.mbarrier_token
+    // The arrive→wait edge is expressible in the type system (CAKE Phase 1
+    // §5.2 row 1): the wait consumes the typed mbarrier token.
+    tile.mbarrier.wait %barrier, %arrival {
+      operandSegmentSizes = array<i32: 1, 1, 0>, slot = 0 : i64
+    } : !tile.mbarrier, !tile.mbarrier_token
     %ready = tile.mbarrier.try_wait %barrier, %arrival {
       slot = 0 : i64
     } : !tile.mbarrier, !tile.mbarrier_token
@@ -48,6 +53,8 @@ module {
 // CHECK-SAME: !tile.async_token
 // CHECK: tile.mbarrier.wait %[[BARRIER]], %[[COPY]]
 // CHECK: %[[ARRIVAL:.*]] = tile.mbarrier.arrive_expect_tx %[[BARRIER]]
+// CHECK-SAME: !tile.mbarrier_token
+// CHECK: tile.mbarrier.wait %[[BARRIER]], %[[ARRIVAL]]
 // CHECK-SAME: !tile.mbarrier_token
 // CHECK: tile.mbarrier.try_wait %[[BARRIER]], %[[ARRIVAL]]
 // CHECK: %[[ACC:.*]] = tile.tmem.allocate

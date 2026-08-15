@@ -124,6 +124,15 @@ flip,pure,,1,1,0
 floor,pure,,1,1,0
 floor_div,pure,,1,1,0
 fused_epilogue,pure,,1,1,0
+game_boltzmann_value,pure,,1,1,0
+game_coalition_excess,pure,,1,1,0
+game_coalition_marginal,pure,,1,1,0
+game_mex,pure,,1,1,0
+game_semivalue,pure,,1,1,0
+game_subset_mobius,pure,,1,1,0
+game_subset_zeta,pure,,1,1,0
+game_superset_mobius,pure,,1,1,0
+game_superset_zeta,pure,,1,1,0
 gated_attention,state,,1,1,1
 gated_deltanet,state,,1,1,1
 gather,pure,,1,1,0

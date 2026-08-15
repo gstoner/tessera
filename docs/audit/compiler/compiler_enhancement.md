@@ -479,6 +479,67 @@ is every real FA-4 schedule.
 
 **Do not proceed to 5.2 until both experiments have a written answer.**
 
+#### 5.1.1 Results (measured 2026-08-15, `tessera-opt` at `2d05e823`, Strix Halo box)
+
+Both experiments were run on the registered vocabulary with **no**
+`--allow-unregistered-dialect`, through all three legality passes
+(`--tessera-warpspec-legality --tessera-tile-pipeline-legality
+--tessera-tile-barrier-reuse-legality`). **Both fail open.**
+
+**Experiment 1 — loop-carried barrier/staged data: FAIL-OPEN, confirmed.**
+The control (straight-line `tile.async_copy` → `tile.mma` with no token edge)
+correctly fires
+`'tile.mma' op WARPSPEC_MMA_NOT_TOKEN_SYNCED: tile.mma reads an async-staged
+tile from a producer but has no !tile.async_token completion edge to it`.
+The identical defect in the canonical pipelined shape — the staged tile arrives
+at the `tile.mma` as an `scf.for` `iter_args` block argument — produces **zero
+diagnostics, rc=0**: `WarpSpecLegalityPass.cpp`'s
+`operand.getDefiningOp()` returns null on a block argument and the walk
+`continue`s past it. Three further silent passes in the same run:
+
+* an `!tile.mbarrier` carried as `iter_args` with a `tile.mbarrier.wait` inside
+  the loop and **no arrive anywhere in the module** (a guaranteed device hang)
+  verifies and passes all three passes;
+* the wait's required "asynchronous dependency" was satisfied by the **loop
+  induction variable** (an `index`) — and a separate probe confirmed an
+  `arith.constant 42 : i32` also satisfies it: the check is shape-only;
+* two `#tile.barrier` annotations on the **same SSA barrier value** with
+  conflicting `expect` counts under different `tile.barrier_id` strings pass
+  silently — `WARPSPEC_ARRIVAL_COUNT_MISMATCH` keys on the string, not the SSA
+  value, so an aliased barrier escapes the arrival-count gate.
+
+Also confirmed live: a `tile.mbarrier.wait` with **no barrier operand at all**
+verifies and passes — `MBarrierWaitOp::verify()` guards its dependency
+requirement behind `getBarrier()`, so absence of the barrier bypasses both
+checks (`TileOps.cpp:2374`).
+
+**Experiment 2 — pipeline ring across the back-edge: expressible, unverified,
+FAIL-OPEN on the semantic defect.** The well-formed ring (`tile.pipeline_init`
+→ `iter_args` → `tile.pipeline_advance` → `scf.yield %next`) parses, verifies,
+and passes legality — the ring **is** expressible across the back-edge. But the
+**stale ring** — the loop yields the *original* state instead of the advanced
+one, so the pipeline never advances (the classic stalled-ring bug) — also
+passes everything, **rc=0, zero diagnostics**. Nothing walks the ring's def-use
+chain; `TilePipelineLegalityPass` checks only per-`pipeline_init` phase
+asymmetry and string-keyed barrier-kind consistency.
+
+**Correction to §3.2 the experiments forced — three rows are narrower than the
+ODS scan suggested** (the §9 "upper bound, not proof" caveat, realized):
+
+| §3.2 row | Measured status |
+|---|---|
+| `tile.pipeline_advance` "need not consume a `pipeline_state`" | **Wrong at behavior level.** `PipelineAdvanceOp::verify()` (`TileOps.cpp:1604`) rejects a non-`!tile.pipeline_state` first operand: `'tile.pipeline_advance' op first operand must be the prior !tile.pipeline_state`. The hole is ODS-only; §5.2 row 6 becomes an ODS *hoist* plus back-edge derivation, not a new constraint |
+| `tile.tma.copy_async` "gates on nothing verifies" | **Partially mitigated.** An SSA-barrier-bound copy without `expect_tx` is rejected: `'tile.tma.copy_async' op an SSA mbarrier binding requires explicit expect_tx bytes` (`TileOps.cpp:2332`). A copy with *no barrier at all* still verifies |
+| `tile.mbarrier.wait` optional barrier | **Confirmed, with sharper shape.** Barrier present ⇒ a dependency is required but its *type* is unchecked (any value passes); barrier absent ⇒ nothing is checked at all |
+
+**Consequence for §5.2/§5.3 sequencing:** the ODS rows 1–5 stand as scoped, but
+the center of gravity moves to §5.3 — the load-bearing defect is that **no pass
+derives anything across a block-argument edge and the arrival/wait pairing has
+no SSA form**, not that op verifiers are absent. The warp-spec gate does not
+fire on the canonical pipelined kernel shape (every real FA-4 schedule), which
+was the outcome §5.1 said would be a finding in its own right. Experiment
+fixtures preserved in `research/` are the seeds of §5.4's ported fixtures.
+
 ### 5.2 ODS tightening
 
 Ordered by risk, lowest first. Each row is independently landable.
@@ -497,7 +558,116 @@ Ordered by risk, lowest first. Each row is independently landable.
 Rows 1–5 are the phase's floor: they are mechanical, they each admit a two-line
 negative fixture, and they are worth landing even if 6–8 stall.
 
+#### 5.2.1 Rows 1–5 landed (2026-08-15) — with one scope correction the tree forced
+
+All five rows are in, drift-gated by
+`tests/tessera-ir/phase2/tile_sync_typed_invalid.mlir` (six rejected-now cases)
+plus a positive arrive→wait token case in `phase2/tile_async_hardware_ops.mlir`.
+Full lit suite green (323 passed / 0 failed); `check-tessera-rocm` green except
+the pre-existing, unrelated `gfx1151_philox_distributions.mlir` failure (also
+fails on the base tree — reported separately).
+
+**Scope correction — rows 1–2 could not make the barrier ODS-mandatory, and the
+reason is a §3.3-class finding in its own right.** The NV lowering assembles
+synchronization in two stages: `AsyncCopyLoweringPass` emits `tile.mbarrier.wait`
+and `tile.tma.copy_async` **without barrier operands** (segments `{0,0,N}` /
+`{1,0,N}`), and `NVTMADescriptorPass` retrofits the barrier, slots, and
+`#tile.barrier` attrs afterward. An ODS-mandatory barrier would make the
+pipeline's own intermediate IR unverifiable between those passes. So the landed
+form is:
+
+* **Row 1** — `tile.mbarrier.wait` gains a typed
+  `Optional<Tile_MBarrierTokenType>:$token` slot (**the arrive→wait edge is now
+  expressible in the type system**), and `MBarrierWaitOp::verify` fails closed:
+  every dependency must be `!tile.async_token` / `!tile.mbarrier_token`
+  (`TILE_WAIT_UNTYPED_DEPENDENCY` — kills the measured index/i32 hole), and a
+  wait with no token, no dependencies, and no declared semantics is rejected
+  (`TILE_WAIT_GATES_ON_NOTHING`). The legacy keyless `tile.wait_async`
+  ("retire everything outstanding") is now an **explicit** `tile.retire_all`
+  marker stamped by the lowering and replaced with the concrete token set by
+  `NVTMADescriptorPass` — Decision #21a applied to what was an
+  indistinguishable bare form. Barrier-mandatory is deferred to the emission
+  restructure (barriers assigned at birth, not retrofitted); tracked as the
+  revised row 6/7 follow-on.
+* **Row 2** — `TMACopyAsyncOp::verify` rejects a copy with no SSA barrier, no
+  `!tile.async_token` result, and no legacy grouping key
+  (`TILE_TMA_COPY_GATES_ON_NOTHING`): nothing could ever retire it.
+* **Row 3** — descriptor `$source` is `AnyTypeOf<[Tile_BufferType, AnyMemRef,
+  AnyRankedTensor]>`; ranked tensors stay legal because the value lane stages
+  tensors by contract.
+* **Row 4** — `tile.tmem.load/.store` indices are `Variadic<Index>`.
+* **Row 5** — `tile.alloc` layout is a typed `#tile.layout` constraint in ODS.
+  The verifier **already enforced this** (`AllocOp::verify`) — a fourth
+  §3.2-row-narrower-than-the-ODS-scan case; the hoist moves rejection to parse
+  time.
+
+**§5.6 fixture-break count: 3.** `nvtma_barrier_emission.mlir` and
+`warpspec_async_token.mlir` broke through the legacy keyless-wait lane (the
+lowered bare wait now fails closed — fixed by the `tile.retire_all` design, not
+by weakening the gate), and `tile_async_hardware_ops.mlir` needed the
+three-segment migration. That count is the first datum for §7's `p`: on a
+322-fixture suite, three sites were relying on under-constrained sync IR.
+
 ### 5.3 Verifier rewrite
+
+#### 5.3.1 First increment landed (2026-08-15) — the block-argument edge is closed
+
+`TileDataflowLegalityPass` (`--tessera-tile-dataflow-legality`, W2.4's named
+pass, born here) plus a shared loop-carry resolver
+(`src/transforms/lib/TileValueProvenance.h`) now derive across `scf.for`
+`iter_args` — both the init operand and the back edge — failing closed on the
+underivable. **Every §5.1.1 silent row has flipped**, verified against the
+preserved probes and drift-gated by
+`tests/tessera-ir/phase2/tile_dataflow_legality.mlir` (positive control: the
+canonical well-formed loop pipeline produces no diagnostic):
+
+| §5.1.1 silent case | Now fires |
+|---|---|
+| mma reading a loop-carried staged tile with no token edge | `WARPSPEC_MMA_NOT_TOKEN_SYNCED` (WarpSpecLegality's producer walk resolves through the shared resolver) |
+| wrong-slot arrive→wait on a loop-carried barrier | `TILE_WAIT_SLOT_MISMATCH` (+ `TILE_WAIT_TOKEN_UNPAIRED`, `TILE_WAIT_BARRIER_DISAGREES` for the sibling defects) |
+| barrier of unprovable origin (e.g. function argument) | `TILE_BARRIER_ORIGIN_UNRESOLVED` — exit gate 2's fail-closed derivation |
+| stale / restarted pipeline ring across the back edge | `TILE_PIPELINE_RING_STALE` / `TILE_PIPELINE_RING_UNDERIVED` |
+| same-SSA-barrier conflicting `expect` under two string ids | `TILE_TMA_EXPECT_MISMATCH` (SSA-keyed through the descriptor edge, superseding string-keyed identity for this case) |
+
+Suite state: full lit 324/0; `check-tessera-rocm` green modulo the
+pre-existing unrelated Philox failure; full `ninja` build clean.
+
+#### 5.3.2 Second increment landed (same day) — predicates typed, hatches deleted, fixtures ported, pipelines wired
+
+The rest of §5.3 and all of §5.4, in one change:
+
+* **Registered sync vocabulary.** Four new ODS ops close the husk gap:
+  `tile.cta_sync` (WarpSpecialization's by-name emission now resolves to the
+  registered op — zero emitter changes), `tile.fence`, `tile.tma.store`, and
+  `tile.buffer_write` (one op replacing the four smem/tmem/lds/reg husk write
+  spellings — the space comes from the alloc, Decision #31). The unproduced
+  ops' named consumer is the legality gate itself (Decision #29); their
+  emission lands with the warp-spec lowering growth.
+* **The six substring predicates are gone.** `isBarrierInit` / `isCollective`
+  / `isTmaStore` / `isVisibilityFence` / `isBufferFree` and the barrier-reuse
+  release predicate are typed `isa<>` queries. The **attribute escape hatches
+  (`tile.barrier_init`, `tile.collective`, `tile.tma_store`, `tile.fence`,
+  `tile.buffer_free`) are deleted** — measured first: no pass ever stamped
+  them, so they were pure fail-open surface. Exact-name (not substring)
+  matches remain for exactly three cases with real or pending producers
+  (`tile.cp_async.commit_group` — the SM<90 trio AsyncCopyLowering emits —
+  and `tile.cluster_sync` / `tile.tile_scheduler.next_tile`), each annotated
+  to graduate to ODS with its producer.
+* **§5.4 fixture port complete.** Both legality fixtures run **without**
+  `--allow-unregistered-dialect` on the registered vocabulary (loop markers
+  became `scf.for` with the C6 trip-count attributes). The §3.3
+  "registered path and verified path are disjoint sets" finding is closed.
+* **Pipeline wiring.** `--tessera-tile-dataflow-legality` runs inside both
+  NVIDIA pipeline builders after the post-NVTMA C3/C6 blocks — and the
+  pipelines' own lowered output (matmul → warpspec → TMA retrofit) **passes
+  its own derivation gate**, the dogfood result that makes the wiring safe.
+  One cosmetic fixture fix: registered `tile.cta_sync` prints unquoted.
+
+**Remaining for Phase 1 exit:** the §5.5 gate 5 numerical run on gfx1151, the
+barrier-at-birth emission restructure (revised rows 6–7), and row 8 after
+W1.1 step 5. The verifier-derivation scope of §5.3 is **closed**.
+
+The original scope, kept for the record:
 
 Replace the six substring predicates in `WarpSpecLegalityPass.cpp:76–119` with
 type- and def-use-derived queries. Concretely:
@@ -562,6 +732,23 @@ Ordered, and each is necessary:
 5. **Numerical gate** (W1.1 §4.2). A pipelined kernel through the tightened path
    is numerically verified **on gfx1151**. A lowering fixture cannot catch the
    wrong-answer failure mode; W1.1 has the scar to prove it.
+
+   > **Closed for the executing lane (2026-08-15).** On the tree carrying every
+   > §5.2/§5.3/§5.4 change: the staged global→LDS token round-trip and the
+   > staged LDS+WMMA GEMM (typed `!tessera_rocm.token` — the Target-IR form of
+   > the tightened `tile.async_copy`/`wait_async` contract) execute on gfx1151
+   > and match numpy (`test_rocm_async_copy_runnable.py`,
+   > `test_rocm_gemm_staged_async_copy.py`); the via-Tile seam gates are 10/10
+   > (`test_rocm_pipeline_tile_lowering.py` — `tile.mma` flows through
+   > `lower-tile-to-rocm`, not around it); and the **full compiled ROCm device
+   > sweep — 1,569 tests (every `_compiled` lane + staged pipeline + canonical
+   > GEMM matrix) — passes in 61 s**, all genuine launches (skip-gated on GPU
+   > presence, none skipped). **Scope honesty:** the `tile.mbarrier.*` /
+   > `tile.tma.*` family this phase retyped most directly has **no device lane
+   > on this fleet** — consumer sm_120 lives on the other box and Hopper is
+   > Phase G/H — so for that family the evidence remains lowering + pipeline
+   > legality (gates 1–4); the gfx1151 numerics cover the shared token
+   > contract, which is what this fleet can execute.
 6. **No-regression gate.** `ninja -C build` (all targets, not `tessera-opt`
    alone), `lit tests/tessera-ir/`, and `ninja -C build check-tessera-rocm` —
    the second lit suite CI runs and `check-tessera` does not.

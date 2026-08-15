@@ -790,6 +790,35 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="C2 (TIRx)",
     ),
     PassMetadata(
+        name="tessera-tile-dataflow-legality",
+        cpp_class="TileDataflowLegality",
+        summary=(
+            "P1a / CAKE §5.3 (W2.4's TileDataflowLegalityPass): derives — "
+            "never name-matches — arrive→wait token pairing with slot "
+            "identity, barrier origin, pipeline-ring advancement, and "
+            "SSA-keyed TMA expect agreement, resolving across scf.for "
+            "block-argument edges via the shared TileValueProvenance "
+            "loop-carry resolver and failing closed on the underivable. "
+            "Runs after the post-NVTMADescriptor C3/C6 blocks in both "
+            "NVIDIA pipeline builders."
+        ),
+        input_dialects=("tessera", "tile", "func", "scf"),
+        output_dialects=("tessera", "tile", "func", "scf"),
+        required_attrs=("slot", "expect_tx", "tile.retire_all"),
+        diagnostic_codes=(
+            "TILE_WAIT_TOKEN_UNPAIRED",
+            "TILE_WAIT_SLOT_MISMATCH",
+            "TILE_WAIT_BARRIER_DISAGREES",
+            "TILE_BARRIER_ORIGIN_UNRESOLVED",
+            "TILE_PIPELINE_RING_STALE",
+            "TILE_PIPELINE_RING_UNDERIVED",
+            "TILE_TMA_EXPECT_MISMATCH",
+            "TILE_TMA_DESC_ORIGIN_UNRESOLVED",
+        ),
+        pass_kind="verifier",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    PassMetadata(
         name="tessera-tile-pipeline-legality",
         cpp_class="TilePipelineLegality",
         summary=(

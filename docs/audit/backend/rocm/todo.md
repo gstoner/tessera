@@ -3657,3 +3657,15 @@ performance promotion is inferred. The attributed Mac-only ROCm cases also
 passed in a **25/25** owning-WSL cohort. Full commands and provenance are
 recorded in the completed
 `docs/audit/compiler/archive/STRIX_HALO_WORKLIST_2026-08-10.md`.
+
+## TILE-SYNC-TYPED-2026-08-15 — shared Tile sync ABI assessment (PR #566)
+
+**Parity validated on-device.** The changed operand-segment ABI
+(`tile.mbarrier.wait`) is NVIDIA vocabulary with no ROCm consumer; ROCm's
+token lane (`tessera_rocm.async_copy` → `!tessera_rocm.token` → `wait`) and
+the shared `tile.async_copy`/`tile.wait_async` dual-form contract are
+unchanged. Evidence on the changed tree: the full compiled gfx1151 device
+sweep — 1,569 tests (every `_compiled` lane + staged global→LDS/LDS-WMMA +
+canonical GEMM matrix) — green; `check-tessera-rocm` green modulo the
+pre-existing `gfx1151_philox_distributions.mlir` failure (fails on clean
+main; independent of this change).

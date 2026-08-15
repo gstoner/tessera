@@ -6,10 +6,10 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **495** ops in `primitive_coverage` registry.
+- **504** ops in `primitive_coverage` registry.
 - **5091** total Python-test references, **1285** total lit-fixture references.
-- **78** ops have **zero** references in either test surface.
-- **123** ops have ≤1 reference ("thinly tested").
+- **87** ops have **zero** references in either test surface.
+- **132** ops have ≤1 reference ("thinly tested").
 - **168** ops have ≥10 references ("well tested").
 - **143** ops have at least one associated `pytest.raises` negative test.
 
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **123** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **132** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -105,7 +105,7 @@ These **123** ops have at most one test reference across the whole test surface.
 | `ebm_sphere_langevin_step` |    0 |    0 |    0 |
 | `ema_update` |    1 |    0 |    1 |
 
-_(63 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(72 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,23 +117,28 @@ Companion section to the by-op coverage table above: that section says **which**
 
 ## Headline
 
-**123** ops have ≤1 direct test reference.  They break down as:
+**132** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   26 | Tested via a parent op or family wrapper |
-| `structural_only`        |   86 | Registry/metadata/wrapper; no direct numerical test meaningful |
-| `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
+| `structural_only`        |   90 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `needs_direct_test`      |    5 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
 | `directly_tested`         |    7 | Direct proof exists; parameterization/defining surfaces keep the lexical count ≤1 |
 
 ## Actionable: `needs_direct_test` ops
 
-These **0** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
+These **5** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
 
 | Op | py refs | lit refs | reason |
 |----|--------:|---------:|--------|
+| `game_coalition_marginal` |   0 |   0 | category default for 'spectral' |
+| `game_subset_mobius` |   0 |   0 | category default for 'spectral' |
+| `game_subset_zeta` |   0 |   0 | category default for 'spectral' |
+| `game_superset_mobius` |   0 |   0 | category default for 'spectral' |
+| `game_superset_zeta` |   0 |   0 | category default for 'spectral' |
 
 ## Hardware-gated ops
 
@@ -179,7 +184,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `rng_multinomial` | category default for 'rng' |
 | `rng_permutation` | category default for 'rng' |
 
-## `structural_only` — 86 ops
+## `structural_only` — 90 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -216,4 +221,4 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `dataset_shuffle` | category default for 'data' |
 | `dataset_zip` | category default for 'data' |
 
-_(56 additional structural ops omitted.)_
+_(60 additional structural ops omitted.)_

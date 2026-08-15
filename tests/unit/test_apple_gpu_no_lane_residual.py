@@ -63,6 +63,15 @@ def _t(bare: str) -> str:
 # the live computation, so the grouping is documentation only.
 _NO_LANE_BARE: frozenset[str] = frozenset(
     {
+        # Coalition-lattice family (GAME_THEORY_PLAN.md G1): Python reference
+        # tier by plan. The Apple GPU lane is a named later phase — G5 puts
+        # boltzmann_value on the shipped online-softmax MSL emitter and the
+        # butterflies behind G1b's shared spectral lowering; none of that has
+        # landed, so no lane is the intended current state, not a gap.
+        "game_subset_zeta", "game_subset_mobius",
+        "game_superset_zeta", "game_superset_mobius",
+        "game_coalition_marginal", "game_semivalue",
+        "game_boltzmann_value", "game_coalition_excess", "game_mex",
         # Optimizer step ops without an Apple GPU lane.
         "adafactor", "nesterov",
         # EGGROLL rank-1 correction has gfx1151 and Zen 5 packages; Metal owns

@@ -840,6 +840,174 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="TILE-SYNC-RECONCILE-2026-08-10",
     ),
 
+    # ── TILE-SYNC-TYPED-2026-08-15 — CAKE Phase 1 typed sync verifiers ─────
+    DiagnosticCode(
+        code="TILE_WAIT_UNTYPED_DEPENDENCY",
+        pass_origin="MBarrierWaitOp::verify",
+        severity="error",
+        summary=(
+            "A tile.mbarrier.wait dependency operand is not a typed sync "
+            "value (!tile.async_token / !tile.mbarrier_token) — an arbitrary "
+            "SSA value is not a completion edge."
+        ),
+        fix_hint=(
+            "Thread the copy's !tile.async_token or the arrive's "
+            "!tile.mbarrier_token into the wait instead of a data/index value."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §5.2.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_WAIT_GATES_ON_NOTHING",
+        pass_origin="MBarrierWaitOp::verify",
+        severity="error",
+        summary=(
+            "A tile.mbarrier.wait has no mbarrier token, no async-token "
+            "dependency, and no explicit tile.retire_all marker — it releases "
+            "against no completion edge."
+        ),
+        fix_hint=(
+            "Consume the arrive's token or a copy's async token, or stamp "
+            "tile.retire_all for the declared retire-everything semantics."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §5.2.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_TMA_COPY_GATES_ON_NOTHING",
+        pass_origin="TMACopyAsyncOp::verify",
+        severity="error",
+        summary=(
+            "A tile.tma.copy_async has no SSA mbarrier operand, no "
+            "!tile.async_token result, and no legacy grouping key — no wait "
+            "can ever retire it."
+        ),
+        fix_hint=(
+            "Bind an SSA mbarrier (with expect_tx), return an async token, "
+            "or carry a legacy tile.barrier_id / stage grouping key."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §5.2.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_WAIT_TOKEN_UNPAIRED",
+        pass_origin="TileDataflowLegality",
+        severity="error",
+        summary=(
+            "A wait's !tile.mbarrier_token cannot be resolved (across "
+            "scf.for block-argument edges) to tile.mbarrier.arrive_expect_tx "
+            "results."
+        ),
+        fix_hint=(
+            "Produce the token from arrive_expect_tx and carry it through "
+            "loop iter_args; an underivable pairing fails closed."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §5.3.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_WAIT_SLOT_MISMATCH",
+        pass_origin="TileDataflowLegality",
+        severity="error",
+        summary=(
+            "The wait and its resolved arrive name different mbarrier slots "
+            "— the wait never releases on hardware."
+        ),
+        fix_hint="Use one slot index on the arrive/wait pair per barrier phase.",
+        spec="docs/audit/compiler/compiler_enhancement.md §5.3.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_WAIT_BARRIER_DISAGREES",
+        pass_origin="TileDataflowLegality",
+        severity="error",
+        summary=(
+            "The wait's barrier and its token's arrive barrier resolve to "
+            "different tile.mbarrier.init roots."
+        ),
+        fix_hint="Arrive and wait on the same SSA barrier value.",
+        spec="docs/audit/compiler/compiler_enhancement.md §5.3.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_BARRIER_ORIGIN_UNRESOLVED",
+        pass_origin="TileDataflowLegality",
+        severity="error",
+        summary=(
+            "A !tile.mbarrier operand cannot be resolved to a "
+            "tile.mbarrier.init across its def-use/loop-carry chain — an "
+            "unprovable origin is unproven, not permitted."
+        ),
+        fix_hint=(
+            "Initialize the barrier with tile.mbarrier.init in the kernel "
+            "and thread it through scf.for iter_args, not opaque values."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §5.3.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_PIPELINE_RING_STALE",
+        pass_origin="TileDataflowLegality",
+        severity="error",
+        summary=(
+            "A loop-carried !tile.pipeline_state is yielded un-advanced (or "
+            "advances a different state) — the ring never moves."
+        ),
+        fix_hint=(
+            "Yield the tile.pipeline_advance result of THIS loop's iter_arg "
+            "on the back edge."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §5.3.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_PIPELINE_RING_UNDERIVED",
+        pass_origin="TileDataflowLegality",
+        severity="error",
+        summary=(
+            "The yielded !tile.pipeline_state is not derived from "
+            "tile.pipeline_advance on the loop's iter_arg; an unprovable "
+            "ring fails closed."
+        ),
+        fix_hint=(
+            "Derive the yielded state from pipeline_advance of the carried "
+            "state instead of re-initializing or forwarding foreign state."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §5.3.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_TMA_EXPECT_MISMATCH",
+        pass_origin="TileDataflowLegality",
+        severity="error",
+        summary=(
+            "A tile.tma.copy_async and the descriptor it reaches through SSA "
+            "declare different expected transaction byte counts — the wait "
+            "on this barrier never releases."
+        ),
+        fix_hint=(
+            "Declare one expect_tx on the descriptor/copy pair (SSA identity "
+            "is authoritative; string barrier ids do not override it)."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §5.3.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+    DiagnosticCode(
+        code="TILE_TMA_DESC_ORIGIN_UNRESOLVED",
+        pass_origin="TileDataflowLegality",
+        severity="error",
+        summary=(
+            "A copy's descriptor operand cannot be resolved to a "
+            "tile.tma.descriptor across the def-use/loop-carry chain."
+        ),
+        fix_hint=(
+            "Produce the descriptor with tile.tma.descriptor in-kernel and "
+            "carry it through loop iter_args."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §5.3.1",
+        sprint="TILE-SYNC-TYPED-2026-08-15",
+    ),
+
     # ── W1.1 step 3 — pointer-backed Tile address contracts ────────────────
     DiagnosticCode(
         code="TILE_VIEW_POINTER_ARITY",

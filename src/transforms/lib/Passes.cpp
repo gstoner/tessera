@@ -131,6 +131,10 @@ static void addCUDA13PipelineForSM(
   pm.addNestedPass<func::FuncOp>(createNVTMADescriptorPass());
   pm.addPass(createTilePipelineLegalityPass());
   pm.addPass(createWarpSpecLegalityPass());
+  // P1a (2026-08-15): derived sync legality over the fully retrofitted
+  // barriers/tokens — arrive→wait pairing, barrier origin, ring advancement,
+  // SSA-keyed expect agreement across block-argument edges.
+  pm.addPass(createTileDataflowLegalityPass());
   if (sm == 90)
     pm.addPass(createNVFlashAttnKernelEmitterPass(sm));
   if (storageLegalizationEnabled(opts, target)) {
@@ -585,6 +589,9 @@ void registerTesseraPasses() {
   // collective-in-branch, loop-count agreement, TMA visibility fence).
   // --tessera-warpspec-legality.
   ::mlir::registerPass([]() { return createWarpSpecLegalityPass(); });
+  // 2026-08-15: P1a / CAKE §5.3 — derived Tile sync legality across
+  // block-argument edges. --tessera-tile-dataflow-legality.
+  ::mlir::registerPass([]() { return createTileDataflowLegalityPass(); });
 
   // ── Sprint V5 (2026-05-22) — Symbolic dim equality verifier ───────────
   // Closes the 4th MLIR-verifier gap in SHAPE_SYSTEM.md §11.2.
@@ -695,6 +702,10 @@ void registerTesseraPasses() {
         // NVTMADescriptor emits (kind consistency + arrival-count == init-count).
         pm.addPass(createTilePipelineLegalityPass());
         pm.addPass(createWarpSpecLegalityPass());
+        // P1a (2026-08-15): derived sync legality over the retrofitted
+        // barriers/tokens (arrive→wait pairing, barrier origin, ring
+        // advancement, SSA-keyed expect agreement).
+        pm.addPass(createTileDataflowLegalityPass());
         pm.addPass(createNVFlashAttnKernelEmitterPass());
         // C4 terminal storage-legalize (gated).
         if (storageLegalizationEnabled(opts, "nvidia_sm90")) {

@@ -207,6 +207,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `matmul` | loop_nest | public | public | registered | complete | fused | device_verified_abi | ready | benchmarked |
 | `moe_swiglu_block` | loop_nest | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `quantized_matmul` | loop_nest | public | public | registered | complete | fused | device_verified_abi | ready | none |
+| `tridiagonal_solve` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
 | `asymmetric_bce` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `binary_cross_entropy_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `contrastive_divergence_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -373,7 +374,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_decomposition | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | linalg_solver | 2 | PPGCFCN· PPGCFCN· |
 | logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
-| loop_nest | 13 | PPGCFFN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· |
+| loop_nest | 14 | PPGCFFN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· PPGCpRN· |
 | loss | 20 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | model_layer | 1 | PPGCFCN· |
 | moe | 1 | PPGCFCN· |

@@ -487,6 +487,7 @@ tree_reduce,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_transpose,0,0,0,0,1,,structural_only,category default for 'state_tree'
 tree_unflatten,1,0,0,1,1,,structural_only,category default for 'state_tree'
 tri_solve,15,2,0,17,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,17 direct test references
+tridiagonal_solve,0,0,0,0,1,,structural_only,unclassified — defaults to structural_only
 triplet_loss,10,0,0,10,0,,directly_tested,10 direct test references
 trunc,4,0,0,4,0,bf16 f32 fp16 fp32,directly_tested,4 direct test references
 unpack,6,0,0,6,0,fp16,directly_tested,6 direct test references

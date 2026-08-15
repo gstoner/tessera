@@ -539,6 +539,8 @@ moe_swiglu_block,tessera.moe_swiglu_block,loop_nest,no,fp32,fp32,fp32,public,reg
 quantized_matmul,tessera.quantized_matmul,loop_nest,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,legal_only,unsupported,unsupported,absent,absent,absent,absent,absent,tile/physical/direct_test
 quantized_matmul,tessera.quantized_matmul,loop_nest,no,fp16,fp16,fp32,public,registered,complete,fused,unsupported,unsupported,unsupported,device_verified_abi,absent,absent,absent,absent,absent,
 quantized_matmul,tessera.quantized_matmul,loop_nest,no,fp32,fp32,fp32,public,registered,complete,fused,reference,legal_only,reference,device_verified_abi,absent,absent,absent,absent,absent,
+tridiagonal_solve,tessera.tridiagonal_solve,loop_nest,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,legal_only,unsupported,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
+tridiagonal_solve,tessera.tridiagonal_solve,loop_nest,no,fp32,fp32,fp32,public,registered,complete,reference,reference,legal_only,reference,absent,absent,absent,absent,absent,absent,physical/direct_test
 asymmetric_bce,tessera.loss.asymmetric_bce,loss,no,bf16,bf16,fp32,public,registered,complete,fused,unsupported,unsupported,unsupported,unsupported,absent,device_verified_jit,absent,absent,absent,
 asymmetric_bce,tessera.loss.asymmetric_bce,loss,no,fp16,fp16,fp32,public,registered,complete,fused,unsupported,unsupported,unsupported,unsupported,absent,device_verified_jit,absent,absent,absent,
 asymmetric_bce,tessera.loss.asymmetric_bce,loss,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,device_verified_jit,absent,device_verified_jit,absent,absent,absent,

@@ -10,10 +10,10 @@ physical backend row says so. Accumulators are listed separately from
 logical tensor dtype. Complex logical values display their physical
 interleaved-component ABI explicitly.
 
-- Operators: **338**
+- Operators: **339**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **923**
-- Rows retaining at least one compiler/evidence gap: **353**
+- Operator/logical-dtype rows: **925**
+- Rows retaining at least one compiler/evidence gap: **355**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -217,6 +217,7 @@ for the complete per-dtype and per-target matrix.
 | `matmul` | loop_nest | yes | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int4,int8,nvfp4 | direct_test,physical,tile |
 | `moe_swiglu_block` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
 | `quantized_matmul` | loop_nest | no | bf16,fp16,fp32 | direct_test,physical,tile |
+| `tridiagonal_solve` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
 | `contrastive_divergence_loss` | loss | no | bf16,fp32 | direct_test,physical,tile |
 | `ddpm_noise_pred_loss` | loss | no | bf16,fp32 | direct_test,physical,tile |
 | `denoising_score_matching_loss` | loss | no | bf16,fp32 | direct_test,physical,tile |

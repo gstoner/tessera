@@ -112,6 +112,9 @@ _PHASED_ARTIFACT_ONLY_OPS = frozenset({"depth_attn"})
 # lowering. Until those phases land, the Python reference is the declared
 # state — not an unclassified single-GPU gap.
 _PHASED_REFERENCE_OPS = frozenset({
+    # tridiagonal_solve: PDE plan §III.1 owns its backend phase (TSOL-A1 /
+    # the PDE op-set admission); Thomas reference is the declared tier today.
+    "tridiagonal_solve",
     "game_subset_zeta", "game_subset_mobius",
     "game_superset_zeta", "game_superset_mobius",
     "game_coalition_marginal", "game_semivalue",

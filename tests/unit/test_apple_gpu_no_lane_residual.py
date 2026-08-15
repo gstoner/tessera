@@ -72,6 +72,9 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         "game_superset_zeta", "game_superset_mobius",
         "game_coalition_marginal", "game_semivalue",
         "game_boltzmann_value", "game_coalition_excess", "game_mex",
+        # Tridiagonal Thomas solve: PDE plan §III.1 reference tier; Apple
+        # lane arrives with the PDE backend phase, not before.
+        "tridiagonal_solve",
         # Optimizer step ops without an Apple GPU lane.
         "adafactor", "nesterov",
         # EGGROLL rank-1 correction has gfx1151 and Zen 5 packages; Metal owns

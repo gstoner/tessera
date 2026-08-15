@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 290 |
-| ``runnable_reference`` | 14 |
+| ``runnable_reference`` | 15 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **338** |
+| **total** | **339** |
 
 ## complete (290)
 
@@ -326,7 +326,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (14)
+## runnable_reference (15)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -338,6 +338,7 @@ each row into a single E2E tier.
 | ``game_boltzmann_value`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_excess`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``game_semivalue`` | contraction | public | public | registered | partial | reference | ready | none |
+| ``tridiagonal_solve`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``game_mex`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_marginal`` | spectral | public | public | registered | partial | reference | ready | none |
 | ``game_subset_mobius`` | spectral | public | public | registered | partial | reference | ready | none |

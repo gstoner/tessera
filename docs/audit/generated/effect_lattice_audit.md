@@ -4,7 +4,7 @@ Generated from `python/tessera/compiler/effect_audit.py`.  Don't edit by hand â€
 
 ## Headline
 
-- **323** ops in `OP_SPECS` carry an effect.
+- **332** ops in `OP_SPECS` carry an effect.
 - **0** mismatch the TSOL spec anchors (of 25 anchored ops).
 - **0** ops sit at the conservative `top` fallback level.
 - **23** ops declare deterministic-aware numeric policies.
@@ -13,7 +13,7 @@ Generated from `python/tessera/compiler/effect_audit.py`.  Don't edit by hand â€
 
 | Effect level | Count | Description |
 |--------------|------:|-------------|
-| `pure` | 281 | No side effects; output depends only on inputs. |
+| `pure` | 290 | No side effects; output depends only on inputs. |
 | `random` | 4 | RNG-bearing; result varies across calls. |
 | `movement` | 2 | Explicit prefetch / async copy / wait. |
 | `state` | 29 | Reads or writes compiler-visible state (KV cache). |

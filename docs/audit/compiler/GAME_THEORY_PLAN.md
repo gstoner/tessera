@@ -2,7 +2,17 @@
 last_updated: 2026-08-15
 audit_role: plan
 plan_state: open
-status: proposal — not started, no library code landed; every algebraic claim
+status: G1 COMPLETE (2026-08-15, two slices) — python/tessera/game/ ships the
+        four zeta/Möbius butterflies, coalition_marginal, weight-parameterized
+        semivalue, boltzmann_value (closed-form VJP, FD-checked; T<0 legal,
+        T=0 fails closed per H5), coalition_excess (jointly linear, declared
+        transpose; zeta-of-additive-game oracle), and segmented mex
+        (non-differentiable by construction; Sprague–Grundy nim-XOR oracle).
+        fp64 per §6; fail-closed lattice/weight contracts; nine catalog rows +
+        spec rows + regenerated dashboards (Decision #24/#26); oracles 1–7 +
+        11 green (tests/unit/test_game_lattice.py, 26 tests; mypy clean).
+        Open question 3 RESOLVED: segment_reduce/cum*/control.scan already
+        existed — G3 consumes them, no new ops (#31). Every algebraic claim
         numerically verified (27 checks, research/game_theory/)
 source: U. Faigle, "Mathematical Game Theory: A New Approach" (lecture-note draft,
         `Mathematical_Game_Theory_new.tex`) + a maintainer-supplied list of refined
@@ -895,11 +905,16 @@ consumer and therefore nothing to consolidate.
 2. **Is differentiable equilibrium the actual goal?** If the intent is learned
    mechanisms / differentiable economics, G2 outranks G1 and should go first.
    If the intent is cooperative-value analysis, G1 first as written.
-3. **Do `segment_sum` and `scan` want to land independently?** Both are missing
-   from `op_catalog` and useful well beyond this plan (`segment_sum` for CFR
-   and graph workloads; `scan` for Bellman backups, RNN-style recurrences, and
-   the sequence-mixer track). They likely belong to a general-ops tranche that
-   this plan then consumes.
+3. **Do `segment_sum` and `scan` want to land independently?**
+   **RESOLVED by measurement (2026-08-15): the premise was stale.** The
+   catalog already carries `segment_reduce(x, seg_ids, op=...)` (CFR's
+   scatter-add is `op="sum"`), the prefix-scan family
+   (`cumsum`/`cummax`/`cumprod`), and `control.scan` (S5) lowering to
+   `tessera.control_scan` for general carried recurrences (Bellman backups).
+   Adding `segment_sum`/`scan` beside them would be the Decision #31
+   duplication this plan elsewhere consolidates. G3/G4 consume the existing
+   ops; the general-ops tranche item reduces to *verifying they carry what
+   CFR needs* (ragged encoding, reach-weight multiply), not to new ops.
 4. **Where does this sit against the S-series and the Riemannian-OT track?** All
    three consume the same implicit-differentiation seam; if that seam needs
    hardening — H3's strict-complementarity check is now a concrete work item on

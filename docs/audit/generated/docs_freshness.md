@@ -2,14 +2,14 @@
 
 Generated from `python/tessera/compiler/docs_manifest.py`.  Don't edit by hand — regenerate via `python -c "from tessera.compiler.docs_manifest import render_dashboard; open('docs/audit/generated/docs_freshness.md', 'w').write(render_dashboard())"`.  Drift gated by `tests/unit/test_docs_freshness.py`.
 
-Reference date for staleness: **2026-08-14**.
+Reference date for staleness: **2026-08-15**.
 
 ## Headline
 
-- **138** docs catalogued across the canonical doc tree.
-- **137** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **62** updated within the last 30 days.
-- **13** older than 90 days; **0** older than 180 days.
+- **141** docs catalogued across the canonical doc tree.
+- **140** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **64** updated within the last 30 days.
+- **14** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
 
@@ -23,171 +23,174 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `AUTODIFF_SPEC.md` | - | 2026-07-14 | 31 | ✓ |
-| `CITL_ROCM_TRACE_PROFILER_SPEC.md` | Draft | 2026-08-06 | 8 | ✓ |
-| `CLIFFORD_SPEC.md` | - | 2026-05-17 | 89 | ✓ |
-| `COMPILER_REFERENCE.md` | Normative | 2026-06-25 | 50 | ✓ |
-| `CONFORMANCE.md` | Normative | 2026-06-11 | 64 | ✓ |
-| `CONTROL_FLOW_CONTRACT.md` | - | 2026-08-11 | 3 | ✓ |
-| `EBM_SPEC.md` | - | 2026-05-16 | 90 | ✓ |
-| `GA_EBM_EXECUTION_STATUS.md` | - | 2026-07-18 | 27 | ✓ |
-| `GRAPH_IR_SPEC.md` | Normative | 2026-07-14 | 31 | ✓ |
-| `LANGUAGE_AND_IR_SPEC.md` | Normative | 2026-05-06 | 100 | ✓ |
-| `LANGUAGE_SPEC.md` | Normative | 2026-07-14 | 31 | ✓ |
-| `LOWERING_PIPELINE_SPEC.md` | Normative | 2026-07-13 | 32 | ✓ |
-| `MEMORY_MODEL_SPEC.md` | Normative | 2026-05-22 | 84 | ✓ |
-| `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 26 | ✓ |
-| `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 70 | ✓ |
-| `PYTHON_API_SPEC.md` | Normative | 2026-07-23 | 22 | ✓ |
-| `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 27 | ✓ |
-| `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 84 | ✓ |
-| `TARGET_IR_SPEC.md` | Normative | 2026-07-13 | 32 | ✓ |
-| `TILE_IR.md` | Normative | 2026-08-10 | 4 | ✓ |
-| `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 12 | ✓ |
-| `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 71 | ✓ |
+| `AUTODIFF_SPEC.md` | - | 2026-07-14 | 32 | ✓ |
+| `CITL_ROCM_TRACE_PROFILER_SPEC.md` | Draft | 2026-08-06 | 9 | ✓ |
+| `CLIFFORD_SPEC.md` | - | 2026-05-17 | 90 | ✓ |
+| `COMPILER_REFERENCE.md` | Normative | 2026-06-25 | 51 | ✓ |
+| `CONFORMANCE.md` | Normative | 2026-06-11 | 65 | ✓ |
+| `CONTROL_FLOW_CONTRACT.md` | - | 2026-08-11 | 4 | ✓ |
+| `EBM_SPEC.md` | - | 2026-05-16 | 91 | ✓ |
+| `GA_EBM_EXECUTION_STATUS.md` | - | 2026-07-18 | 28 | ✓ |
+| `GRAPH_IR_SPEC.md` | Normative | 2026-07-14 | 32 | ✓ |
+| `LANGUAGE_AND_IR_SPEC.md` | Normative | 2026-05-06 | 101 | ✓ |
+| `LANGUAGE_SPEC.md` | Normative | 2026-07-14 | 32 | ✓ |
+| `LOWERING_PIPELINE_SPEC.md` | Normative | 2026-07-13 | 33 | ✓ |
+| `MEMORY_MODEL_SPEC.md` | Normative | 2026-05-22 | 85 | ✓ |
+| `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 27 | ✓ |
+| `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 71 | ✓ |
+| `PYTHON_API_SPEC.md` | Normative | 2026-07-23 | 23 | ✓ |
+| `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 28 | ✓ |
+| `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 85 | ✓ |
+| `TARGET_IR_SPEC.md` | Normative | 2026-07-13 | 33 | ✓ |
+| `TILE_IR.md` | Normative | 2026-08-10 | 5 | ✓ |
+| `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 13 | ✓ |
+| `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 72 | ✓ |
 
 ### `docs/guides/`
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `Tessera_Debugging_Tools_Guide.md` | Informative | 2026-05-06 | 100 | ✓ |
-| `Tessera_Developer_Frontend_End_To_End.md` | Informative | 2026-05-06 | 100 | ✓ |
-| `Tessera_Differentiable_NAS_Guide.md` | Draft | 2026-04-28 | 108 | ✓ |
-| `Tessera_Error_Handling_And_Diagnostics_Guide.md` | Normative | 2026-04-28 | 108 | ✓ |
-| `Tessera_Fault_Tolerance_And_Elasticity_Guide.md` | Informative | 2026-04-28 | 108 | ✓ |
-| `Tessera_Inference_Server_Guide.md` | Informative | 2026-06-11 | 64 | ✓ |
-| `Tessera_Production_Reliability_And_Chaos_Guide.md` | Informative | 2026-04-28 | 108 | ✓ |
-| `Tessera_Profiler_Release_Gates.md` | Informative | 2026-08-06 | 8 | ✓ |
-| `Tessera_Profiling_And_Autotuning_Guide.md` | Informative | 2026-08-06 | 8 | ✓ |
-| `Tessera_QA_Reliability_Guide.md` | Informative | 2026-04-28 | 108 | ✓ |
-| `Tessera_Runtime_ABI_Guide.md` | Tutorial | 2026-07-14 | 31 | ✓ |
-| `Tessera_Tensor_Layout_And_Data_Movement_Guide.md` | Normative | 2026-07-14 | 31 | ✓ |
-| `porting_advanced_examples.md` | Informative | 2026-05-09 | 97 | ✓ |
+| `Tessera_Debugging_Tools_Guide.md` | Informative | 2026-05-06 | 101 | ✓ |
+| `Tessera_Developer_Frontend_End_To_End.md` | Informative | 2026-05-06 | 101 | ✓ |
+| `Tessera_Differentiable_NAS_Guide.md` | Draft | 2026-04-28 | 109 | ✓ |
+| `Tessera_Error_Handling_And_Diagnostics_Guide.md` | Normative | 2026-04-28 | 109 | ✓ |
+| `Tessera_Fault_Tolerance_And_Elasticity_Guide.md` | Informative | 2026-04-28 | 109 | ✓ |
+| `Tessera_Inference_Server_Guide.md` | Informative | 2026-06-11 | 65 | ✓ |
+| `Tessera_Production_Reliability_And_Chaos_Guide.md` | Informative | 2026-04-28 | 109 | ✓ |
+| `Tessera_Profiler_Release_Gates.md` | Informative | 2026-08-06 | 9 | ✓ |
+| `Tessera_Profiling_And_Autotuning_Guide.md` | Informative | 2026-08-06 | 9 | ✓ |
+| `Tessera_QA_Reliability_Guide.md` | Informative | 2026-04-28 | 109 | ✓ |
+| `Tessera_Runtime_ABI_Guide.md` | Tutorial | 2026-07-14 | 32 | ✓ |
+| `Tessera_Tensor_Layout_And_Data_Movement_Guide.md` | Normative | 2026-07-14 | 32 | ✓ |
+| `porting_advanced_examples.md` | Informative | 2026-05-09 | 98 | ✓ |
 
 ### `docs/programming_guide/`
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `Tessera_Goals.md` | Tutorial | 2026-07-14 | 31 | ✓ |
-| `Tessera_Programming_Guide_Appendix_NVL72.md` | Tutorial | 2026-06-11 | 64 | ✓ |
-| `Tessera_Programming_Guide_Chapter10_Portability.md` | Tutorial | 2026-07-13 | 32 | ✓ |
-| `Tessera_Programming_Guide_Chapter11_Conclusion.md` | Tutorial | 2026-07-14 | 31 | ✓ |
-| `Tessera_Programming_Guide_Chapter1_Introduction_Overview.md` | Tutorial | 2026-06-11 | 64 | ✓ |
-| `Tessera_Programming_Guide_Chapter2_Programming_Model.md` | Tutorial | 2026-06-11 | 64 | ✓ |
-| `Tessera_Programming_Guide_Chapter3_Memory_Model.md` | Tutorial | 2026-06-11 | 64 | ✓ |
-| `Tessera_Programming_Guide_Chapter4_Execution_Model.md` | Tutorial | 2026-06-11 | 64 | ✓ |
-| `Tessera_Programming_Guide_Chapter5_Kernel_Programming.md` | Tutorial | 2026-06-11 | 64 | ✓ |
-| `Tessera_Programming_Guide_Chapter6_Numerics_Model.md` | Tutorial | 2026-06-11 | 64 | ✓ |
-| `Tessera_Programming_Guide_Chapter7_Autodiff.md` | Tutorial | 2026-06-11 | 64 | ✓ |
-| `Tessera_Programming_Guide_Chapter8_Layouts_Data_Movement.md` | Tutorial | 2026-06-11 | 64 | ✓ |
-| `Tessera_Programming_Guide_Chapter9_Libraries_Primitives.md` | Tutorial | 2026-06-11 | 64 | ✓ |
+| `Tessera_Goals.md` | Tutorial | 2026-07-14 | 32 | ✓ |
+| `Tessera_Programming_Guide_Appendix_NVL72.md` | Tutorial | 2026-06-11 | 65 | ✓ |
+| `Tessera_Programming_Guide_Chapter10_Portability.md` | Tutorial | 2026-07-13 | 33 | ✓ |
+| `Tessera_Programming_Guide_Chapter11_Conclusion.md` | Tutorial | 2026-07-14 | 32 | ✓ |
+| `Tessera_Programming_Guide_Chapter1_Introduction_Overview.md` | Tutorial | 2026-06-11 | 65 | ✓ |
+| `Tessera_Programming_Guide_Chapter2_Programming_Model.md` | Tutorial | 2026-06-11 | 65 | ✓ |
+| `Tessera_Programming_Guide_Chapter3_Memory_Model.md` | Tutorial | 2026-06-11 | 65 | ✓ |
+| `Tessera_Programming_Guide_Chapter4_Execution_Model.md` | Tutorial | 2026-06-11 | 65 | ✓ |
+| `Tessera_Programming_Guide_Chapter5_Kernel_Programming.md` | Tutorial | 2026-06-11 | 65 | ✓ |
+| `Tessera_Programming_Guide_Chapter6_Numerics_Model.md` | Tutorial | 2026-06-11 | 65 | ✓ |
+| `Tessera_Programming_Guide_Chapter7_Autodiff.md` | Tutorial | 2026-06-11 | 65 | ✓ |
+| `Tessera_Programming_Guide_Chapter8_Layouts_Data_Movement.md` | Tutorial | 2026-06-11 | 65 | ✓ |
+| `Tessera_Programming_Guide_Chapter9_Libraries_Primitives.md` | Tutorial | 2026-06-11 | 65 | ✓ |
 
 ### `docs/operations/`
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `Tessera_Standard_Operations.md` | Normative | 2026-07-13 | 32 | ✓ |
-| `backend_local_proofs.md` | - | 2026-07-15 | 30 | ✓ |
-| `release_gates.md` | Normative | 2026-07-13 | 32 | ✓ |
+| `Tessera_Standard_Operations.md` | Normative | 2026-07-13 | 33 | ✓ |
+| `backend_local_proofs.md` | - | 2026-07-15 | 31 | ✓ |
+| `release_gates.md` | Normative | 2026-07-13 | 33 | ✓ |
 
 ### `docs/architecture/`
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `Compiler/Tessera_Compiler_Architecture_Overview.md` | Informative | 2026-07-14 | 31 | ✓ |
-| `Compiler/Tessera_Compiler_Frontend_Design_GraphIR.md` | Informative | 2026-07-14 | 31 | ✓ |
-| `Compiler/Tessera_Compiler_ScheduleIR_Design.md` | Informative | 2026-07-14 | 31 | ✓ |
-| `Compiler/Tessera_Compiler_TargetIR_Design.md` | Informative | 2026-07-14 | 31 | ✓ |
-| `Compiler/Tessera_Compiler_TileIR_Design.md` | Informative | 2026-07-14 | 31 | ✓ |
-| `Compiler/tessera_ir_layers.md` | Informative | 2026-07-13 | 32 | ✓ |
-| `Compiler/tessera_tile_ir_documentation.md` | Informative | 2026-07-14 | 31 | ✓ |
-| `README.md` | Informative | 2026-05-20 | 86 | ✓ |
-| `Tessera_Kernel_Compilation_Stages_Overview.md` | Informative | 2026-05-06 | 100 | ✓ |
-| `compiler_gaps_1_3_5_plan.md` | - | 2026-07-14 | 31 | ✓ |
-| `compiler_test_architecture.md` | Normative | 2026-08-02 | 12 | ✓ |
-| `distributed/megamoe.md` | - | 2026-06-09 | 66 | ✓ |
-| `frontend_substrate_plan.md` | Active | 2026-05-20 | 86 | ✓ |
-| `inference/serving.md` | - | 2026-07-13 | 32 | ✓ |
-| `proposals/cute_tessera_enhancement.md` | Proposal | 2026-04-26 | 110 | ✓ |
-| `proposals/tile_fragment_abi.md` | Proposal | 2026-07-19 | 26 | ✓ |
-| `proposals/tiled_ssd_tile_ir_schedule.md` | - | 2026-07-14 | 31 | ✓ |
-| `stencil_materialize_and_window_lowering.md` | Informative | 2026-05-20 | 86 | ✓ |
-| `system_overview.md` | Informative | 2026-06-11 | 64 | ✓ |
-| `tessera_target_ir_usage_guide.md` | Informative | 2026-04-30 | 106 | ✓ |
-| `workloads/attention-family.md` | Planning | 2026-07-14 | 31 | ✓ |
-| `workloads/dflash.md` | - | 2026-07-14 | 31 | ✓ |
-| `workloads/msa-cuda-phase3.md` | - | 2026-07-13 | 32 | ✓ |
-| `workloads/msa.md` | - | 2026-07-13 | 32 | ✓ |
+| `Compiler/Tessera_Compiler_Architecture_Overview.md` | Informative | 2026-07-14 | 32 | ✓ |
+| `Compiler/Tessera_Compiler_Frontend_Design_GraphIR.md` | Informative | 2026-07-14 | 32 | ✓ |
+| `Compiler/Tessera_Compiler_ScheduleIR_Design.md` | Informative | 2026-07-14 | 32 | ✓ |
+| `Compiler/Tessera_Compiler_TargetIR_Design.md` | Informative | 2026-07-14 | 32 | ✓ |
+| `Compiler/Tessera_Compiler_TileIR_Design.md` | Informative | 2026-07-14 | 32 | ✓ |
+| `Compiler/tessera_ir_layers.md` | Informative | 2026-07-13 | 33 | ✓ |
+| `Compiler/tessera_tile_ir_documentation.md` | Informative | 2026-07-14 | 32 | ✓ |
+| `README.md` | Informative | 2026-05-20 | 87 | ✓ |
+| `Tessera_Kernel_Compilation_Stages_Overview.md` | Informative | 2026-05-06 | 101 | ✓ |
+| `compiler_gaps_1_3_5_plan.md` | - | 2026-07-14 | 32 | ✓ |
+| `compiler_test_architecture.md` | Normative | 2026-08-02 | 13 | ✓ |
+| `distributed/megamoe.md` | - | 2026-06-09 | 67 | ✓ |
+| `frontend_substrate_plan.md` | Active | 2026-05-20 | 87 | ✓ |
+| `inference/serving.md` | - | 2026-07-13 | 33 | ✓ |
+| `proposals/cute_tessera_enhancement.md` | Proposal | 2026-04-26 | 111 | ✓ |
+| `proposals/tile_fragment_abi.md` | Proposal | 2026-07-19 | 27 | ✓ |
+| `proposals/tiled_ssd_tile_ir_schedule.md` | - | 2026-07-14 | 32 | ✓ |
+| `stencil_materialize_and_window_lowering.md` | Informative | 2026-05-20 | 87 | ✓ |
+| `system_overview.md` | Informative | 2026-06-11 | 65 | ✓ |
+| `tessera_target_ir_usage_guide.md` | Informative | 2026-04-30 | 107 | ✓ |
+| `workloads/attention-family.md` | Planning | 2026-07-14 | 32 | ✓ |
+| `workloads/dflash.md` | - | 2026-07-14 | 32 | ✓ |
+| `workloads/msa-cuda-phase3.md` | - | 2026-07-13 | 33 | ✓ |
+| `workloads/msa.md` | - | 2026-07-13 | 33 | ✓ |
 
 ### `docs/reference/`
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `tessera-api-reference.md` | Informative | 2026-07-13 | 32 | ✓ |
+| `tessera-api-reference.md` | Informative | 2026-07-13 | 33 | ✓ |
 | `tessera_frontend_lanes.md` | - | _undated_ | - | _body_ |
-| `tessera_migration_guide_part1.md` | Pre-canonical | 2026-05-20 | 86 | ✓ |
-| `tessera_migration_guide_part2.md` | Informative | 2026-05-20 | 86 | ✓ |
-| `tessera_tensor_attributes.md` | Normative | 2026-05-11 | 95 | ✓ |
+| `tessera_migration_guide_part1.md` | Pre-canonical | 2026-05-20 | 87 | ✓ |
+| `tessera_migration_guide_part2.md` | Informative | 2026-05-20 | 87 | ✓ |
+| `tessera_tensor_attributes.md` | Normative | 2026-05-11 | 96 | ✓ |
 
 ### `docs/audit/`
 
 | Path | status | last_updated | days stale | frontmatter |
 |------|--------|--------------|-----------:|--|
-| `MASTER_AUDIT.md` | - | 2026-08-11 | 3 | ✓ |
-| `README.md` | - | 2026-08-08 | 6 | ✓ |
-| `backend/BACKEND_AUDIT.md` | - | 2026-07-31 | 14 | ✓ |
-| `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-07-27 | 18 | ✓ |
-| `backend/X86_AVX512_ABI_INVENTORY.md` | - | 2026-07-22 | 23 | ✓ |
-| `backend/apple/APPLE_AUDIT.md` | - | 2026-07-28 | 17 | ✓ |
-| `backend/apple/APPLE_GPU_CODEGEN_PLAN.md` | - | 2026-07-13 | 32 | ✓ |
-| `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 32 | ✓ |
-| `backend/apple/README.md` | - | 2026-07-13 | 32 | ✓ |
-| `backend/apple/todo.md` | - | 2026-08-14 | 0 | ✓ |
-| `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-06-24 | 51 | ✓ |
-| `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-07-18 | 27 | ✓ |
-| `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-19 | 26 | ✓ |
-| `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 32 | ✓ |
-| `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 51 | ✓ |
-| `backend/nvidia/todo.md` | - | 2026-08-14 | 0 | ✓ |
-| `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 10 | ✓ |
-| `backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md` | - | 2026-08-14 | 0 | ✓ |
-| `backend/rocm/GIN_EXACT_DEVICE_RUNBOOK.md` | - | 2026-08-09 | 5 | ✓ |
-| `backend/rocm/ROCM_AUDIT.md` | - | 2026-08-14 | 0 | ✓ |
-| `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-08-05 | 9 | ✓ |
-| `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 17 | ✓ |
-| `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 52 | ✓ |
-| `backend/rocm/todo.md` | - | 2026-08-14 | 0 | ✓ |
-| `backend/x86/todo.md` | - | 2026-08-14 | 0 | ✓ |
-| `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 17 | ✓ |
-| `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-09 | 5 | ✓ |
-| `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-10 | 4 | ✓ |
-| `compiler/BLOCK_ATTNRES_ROCM_PLAN.md` | - | 2026-08-13 | 1 | ✓ |
-| `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-11 | 3 | ✓ |
-| `compiler/COMPILER_AUDIT.md` | - | 2026-08-10 | 4 | ✓ |
-| `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 6 | ✓ |
-| `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 17 | ✓ |
-| `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-08-08 | 6 | ✓ |
-| `compiler/EGGROLL_SUPPORT_PLAN.md` | - | 2026-08-09 | 5 | ✓ |
-| `compiler/EVALUATOR_PLAN.md` | - | 2026-08-08 | 6 | ✓ |
-| `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 12 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-08-14 | 0 | ✓ |
-| `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 12 | ✓ |
-| `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 18 | ✓ |
-| `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 6 | ✓ |
-| `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-08-14 | 0 | ✓ |
-| `compiler/README.md` | - | 2026-08-14 | 0 | ✓ |
-| `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 6 | ✓ |
-| `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-08-08 | 6 | ✓ |
-| `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 28 | ✓ |
-| `compiler/SPARDA_REVIEW.md` | - | 2026-08-12 | 2 | ✓ |
-| `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 12 | ✓ |
-| `compiler/TILERT_ASSESSMENT.md` | - | 2026-08-14 | 0 | ✓ |
-| `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 15 | ✓ |
-| `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-04 | 10 | ✓ |
-| `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 12 | ✓ |
-| `coverage/COVERAGE_AUDIT.md` | - | 2026-08-11 | 3 | ✓ |
-| `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 64 | ✓ |
-| `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-08-02 | 12 | ✓ |
-| `roadmap/CF_CROSS_ELEMENT_PLAN.md` | - | 2026-06-30 | 45 | ✓ |
-| `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-08-12 | 2 | ✓ |
-| `roadmap/ROADMAP_AUDIT.md` | - | 2026-08-11 | 3 | ✓ |
+| `MASTER_AUDIT.md` | - | 2026-08-11 | 4 | ✓ |
+| `README.md` | - | 2026-08-08 | 7 | ✓ |
+| `backend/BACKEND_AUDIT.md` | - | 2026-07-31 | 15 | ✓ |
+| `backend/E2E_COMPILATION_AUDIT.md` | - | 2026-07-27 | 19 | ✓ |
+| `backend/X86_AVX512_ABI_INVENTORY.md` | - | 2026-07-22 | 24 | ✓ |
+| `backend/apple/APPLE_AUDIT.md` | - | 2026-07-28 | 18 | ✓ |
+| `backend/apple/APPLE_GPU_CODEGEN_PLAN.md` | - | 2026-07-13 | 33 | ✓ |
+| `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 33 | ✓ |
+| `backend/apple/README.md` | - | 2026-07-13 | 33 | ✓ |
+| `backend/apple/todo.md` | - | 2026-08-14 | 1 | ✓ |
+| `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-06-24 | 52 | ✓ |
+| `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-07-18 | 28 | ✓ |
+| `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-07-19 | 27 | ✓ |
+| `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 33 | ✓ |
+| `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 52 | ✓ |
+| `backend/nvidia/todo.md` | - | 2026-08-14 | 1 | ✓ |
+| `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 11 | ✓ |
+| `backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md` | - | 2026-08-14 | 1 | ✓ |
+| `backend/rocm/GIN_EXACT_DEVICE_RUNBOOK.md` | - | 2026-08-09 | 6 | ✓ |
+| `backend/rocm/ROCM_AUDIT.md` | - | 2026-08-14 | 1 | ✓ |
+| `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-08-05 | 10 | ✓ |
+| `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 18 | ✓ |
+| `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-06-23 | 53 | ✓ |
+| `backend/rocm/todo.md` | - | 2026-08-14 | 1 | ✓ |
+| `backend/x86/todo.md` | - | 2026-08-15 | 0 | ✓ |
+| `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 18 | ✓ |
+| `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-09 | 6 | ✓ |
+| `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-10 | 5 | ✓ |
+| `compiler/BLOCK_ATTNRES_ROCM_PLAN.md` | - | 2026-08-13 | 2 | ✓ |
+| `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-11 | 4 | ✓ |
+| `compiler/COMPILER_AUDIT.md` | - | 2026-08-10 | 5 | ✓ |
+| `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 7 | ✓ |
+| `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 18 | ✓ |
+| `compiler/CORE_SUBSTRATE_VIEW.md` | - | 2026-08-15 | 0 | ✓ |
+| `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-08-08 | 7 | ✓ |
+| `compiler/EGGROLL_SUPPORT_PLAN.md` | - | 2026-08-09 | 6 | ✓ |
+| `compiler/EVALUATOR_PLAN.md` | - | 2026-08-08 | 7 | ✓ |
+| `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 13 | ✓ |
+| `compiler/GAME_THEORY_PLAN.md` | - | 2026-08-15 | 0 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-08-14 | 1 | ✓ |
+| `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 13 | ✓ |
+| `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 19 | ✓ |
+| `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 7 | ✓ |
+| `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-08-14 | 1 | ✓ |
+| `compiler/README.md` | - | 2026-08-14 | 1 | ✓ |
+| `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 7 | ✓ |
+| `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-08-08 | 7 | ✓ |
+| `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 29 | ✓ |
+| `compiler/SPARDA_REVIEW.md` | - | 2026-08-12 | 3 | ✓ |
+| `compiler/TARGET_IR_REVIEW.md` | - | 2026-08-02 | 13 | ✓ |
+| `compiler/TILERT_ASSESSMENT.md` | - | 2026-08-14 | 1 | ✓ |
+| `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 16 | ✓ |
+| `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-08-04 | 11 | ✓ |
+| `compiler/W1_1_TYPING_INVENTORY.md` | - | 2026-08-02 | 13 | ✓ |
+| `compiler/compiler_enhancement.md` | - | 2026-08-15 | 0 | ✓ |
+| `coverage/COVERAGE_AUDIT.md` | - | 2026-08-11 | 4 | ✓ |
+| `domain/DOMAIN_AUDIT.md` | - | 2026-06-11 | 65 | ✓ |
+| `domain/GA_EBM_ARCHITECTURE_REVIEW.md` | - | 2026-08-02 | 13 | ✓ |
+| `roadmap/CF_CROSS_ELEMENT_PLAN.md` | - | 2026-06-30 | 46 | ✓ |
+| `roadmap/MODEL_CLASS_ROADMAP.md` | - | 2026-08-12 | 3 | ✓ |
+| `roadmap/ROADMAP_AUDIT.md` | - | 2026-08-11 | 4 | ✓ |

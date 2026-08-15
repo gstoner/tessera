@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 290 |
-| ``runnable_reference`` | 5 |
+| ``runnable_reference`` | 14 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **329** |
+| **total** | **338** |
 
 ## complete (290)
 
@@ -326,7 +326,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (5)
+## runnable_reference (14)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -335,6 +335,15 @@ each row into a single E2E tier.
 | ``all_reduce`` | collective | public | public | registered | complete | reference | ready | benchmarked |
 | ``all_to_all`` | collective | public | public | registered | complete | reference | ready | benchmarked |
 | ``reduce_scatter`` | collective | public | public | registered | complete | reference | ready | benchmarked |
+| ``game_boltzmann_value`` | contraction | public | public | registered | partial | reference | ready | none |
+| ``game_coalition_excess`` | contraction | public | public | registered | partial | reference | ready | none |
+| ``game_semivalue`` | contraction | public | public | registered | partial | reference | ready | none |
+| ``game_mex`` | segment_reduce | public | public | registered | partial | reference | ready | none |
+| ``game_coalition_marginal`` | spectral | public | public | registered | partial | reference | ready | none |
+| ``game_subset_mobius`` | spectral | public | public | registered | partial | reference | ready | none |
+| ``game_subset_zeta`` | spectral | public | public | registered | partial | reference | ready | none |
+| ``game_superset_mobius`` | spectral | public | public | registered | partial | reference | ready | none |
+| ``game_superset_zeta`` | spectral | public | public | registered | partial | reference | ready | none |
 
 ## partial (34)
 

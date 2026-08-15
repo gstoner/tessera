@@ -1,6 +1,7 @@
 ---
 last_updated: 2026-08-15
-audit_role: reference
+audit_role: plan
+plan_state: open
 ---
 
 # Compiler enhancement — what CAKE says about our Tile IR, and the two phases it scopes
@@ -11,8 +12,18 @@ audit_role: reference
 > (frozen CAKE-generated SM100a KDA prefill kernels). Assessed 2026-08-15
 > against the tree at `f96695f`.
 >
-> **This is a `reference` doc, not a status surface.** Status truth stays in
+> **This is a scoped `plan`, not a status surface.** Status truth stays in
 > [`MASTER_AUDIT.md`](../MASTER_AUDIT.md) + `generated/` (Decision #26).
+>
+> **Global sequencing authority is
+> [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md), not this
+> document.** §§5–6 scope *what* Phase 1 and Phase 2 are and *what gates them*;
+> they deliberately do not assert a position in the global order or a fleet
+> allocation against other workstreams. Both phases need an owning work-item ID
+> and a slot in the integrated plan's table before implementation starts, and
+> §5's own dependency on the in-flight W1.1 chain (§3.5) is a sequencing
+> constraint that only the integrated plan can resolve. The compiler map is
+> [`README.md`](README.md).
 >
 > **Reads against:** [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md) (the
 > in-flight typing workstream — §3.5 states precisely what here is *not* new),
@@ -124,14 +135,44 @@ literature, and running 6 × 80M-token clean starts is expensive. It is a
 statement about what we may conclude: **treat it as a well-controlled pilot, not
 a demonstrated 23% win.**
 
-### 2.3 What is actually supported
+### 2.3 What is actually supported — and it is less than "convergence is proven"
 
-> CAKE IR **converges faster and more reliably** than direct CUDA/PTX authoring:
-> roughly half the wall-clock to plateau, with complete separation, and 3/3
-> versus 0/3 runs reaching the prespecified plateau criterion.
+An earlier draft of this section asserted that CAKE IR "converges faster and
+more reliably" as *the statistically supported conclusion*. **That overclaims,
+and §2.2 is the reason.** The evolve-time and plateau results are each `p = 0.05`
+**unadjusted**; against the family-wise floor of 0.15 established one section
+earlier, neither reaches the conventional 0.05 level after correction. Holm is no
+kinder: the sorted p-values `(0.05, 0.05, 0.20)` are compared first against
+`α/3 = 0.0167`, which the smallest already fails, so the procedure stops at the
+first step and rejects nothing.
 
-That is a claim about the *search*, not about the *ceiling*. It is also the more
-useful claim for us, per §2.4.
+Two further facts prevent rescuing a single metric:
+
+* **No primary endpoint is prespecified.** The paper does not designate one of
+  the three metrics as primary, so selecting the two that separate is post-hoc.
+  A prespecified primary endpoint would have made an unadjusted `p = 0.05` a
+  legitimate single test; without one, it cannot.
+* **Evolve time and plateau are not independent** — a run that plateaus early
+  necessarily consumes less evolve time — so Bonferroni is *conservative* for
+  that pair. Conservative does not rescue them: the unadjusted values are at the
+  floor, so no less-conservative correction brings either below 0.05 either.
+
+What survives is **descriptive, not inferential**, and it is worth stating
+plainly because it is still the useful part:
+
+> Across three matched runs per arm, the two representations are **not
+> separated on attained speedup** (the control's best run beats the treatment's
+> median), but are **completely separated on evolve time** (every treatment run
+> faster than every control run) and split 3/3 versus 0/3 on the plateau
+> criterion. Treat this as unadjusted exploratory evidence of a *convergence*
+> difference, not as a demonstrated effect.
+
+That ordering of evidence — convergence separates, ceiling does not — is a claim
+about the *search*, not the *ceiling*, and it is what §2.4 builds on. §2.4's
+planning consequence does not depend on any of these three tests clearing a
+significance threshold; if anything the correct reading strengthens it, because
+the paper establishes **no** effect at a family-wise 0.05 level and the only
+defensible read of the whole experiment is directional.
 
 ### 2.4 Budget transfer — the constraint that reshapes the plan
 
@@ -144,11 +185,19 @@ magnitude inside the regime where the paper's own curve sits under baseline.
 
 **Consequence, and it is the single most important planning fact in this
 document: do not justify an authoring surface on the performance number.**
-Justify it on the two statistically defensible metrics — time-to-plateau and
-convergence rate — because those are exactly the properties that matter at small
-budgets, where the question is whether a search *terminates* rather than how
-high it climbs. A capability that makes the search converge is worth building at
-2M tokens; a capability that adds 20% at 80M tokens is not.
+Justify it on time-to-plateau and convergence rate — not because those are
+*proven* (§2.3: they are not, after correction) but because they are the only
+axis on which the experiment shows any separation at all, **and** because they
+are the properties that matter at small budgets, where the question is whether a
+search *terminates* rather than how high it climbs. A capability that makes the
+search converge is worth building at 2M tokens; a capability that adds 20% at
+80M tokens is not.
+
+Stated as the gate it becomes: **Phase 3's success criterion is a reduction in
+repair rounds to a correct verified kernel, measured on our own workload — not a
+reproduction of anyone's speedup number.** That criterion is measurable inside
+our budget; the speedup claim is not, and per §2.3 it was never established
+anyway.
 
 Two secondary notes on their methodology, both minor:
 
@@ -198,14 +247,39 @@ specific holes.
 
 ### 3.2 F1 — the typing hole is on the sync/memory surface
 
-Counted per op definition in `src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td`:
+Counted in `src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td`. **Explicit
+inclusion rule**, so the scan is reproducible: comment text is stripped, then
+every `def <Name> : <Base><…>` declaration (including the multi-line
+`def X\n    : Tile_Op<…>` spelling) is collected, and a declaration counts as an
+op iff `<Base>` is one of the six op bases this file declares —
+`Tile_Op`, `Tile_CollectiveOp`, `Tile_CliffordBinaryOp`, `Tile_CliffordUnaryOp`,
+`Tile_LinalgOp`, `Tile_ControlOp` — each of which resolves to `Tile_Op`.
 
-* **74** op definitions scanned (57 direct `Tile_Op`, remainder via the
-  collective/Clifford bases).
-* **55** have `AnyType` somewhere in their `arguments` list.
-* **8** reference a declared `Tile_*` type at all.
+> **Corrected 2026-08-15 (PR review).** An earlier draft reported 74 ops and "57
+> direct `Tile_Op`". Both were wrong: the scan enumerated only four of the six op
+> bases, dropping `Tile_LinalgOp` (6) and `Tile_ControlOp` (4), and the
+> direct-`Tile_Op` count used a single-line regex that missed the multi-line
+> `def X\n    : Tile_Op<…>` form. The corrected figures are below; **the ratio
+> gets worse, not better.**
+
+* **82** op definitions — 61 `Tile_Op`, 6 `Tile_LinalgOp`, 4 `Tile_CollectiveOp`,
+  4 `Tile_CliffordBinaryOp`, 4 `Tile_ControlOp`, 3 `Tile_CliffordUnaryOp`.
+* **63** declare their own `let arguments` list; the other **19** inherit from a
+  base or take none. The 63 are the correct denominator — an op with no argument
+  list of its own cannot be under- or over-constrained by one.
+* **55 of 63 (87%)** have `AnyType` somewhere in their `arguments` list.
+* **8 of 63** reference a declared `Tile_*` type at all.
 * **5** mix both — and those five are precisely the hardware-explicit ops a
   schedule verifier would need to reason about.
+
+Two notes the corrected scan makes possible. The four `Tile_ControlOp` ops
+(`control_for`, `control_if`, `control_while`, `control_scan`) are **not** among
+the 55: they declare no argument list of their own. Had they done so, `AnyType`
+on their `iter_args` would have been *explained and correct* — loop-carried
+values are polymorphic exactly as `scf.for`'s are — which is the distinction
+W1.1 step 6 drew for `tessera_apple.gpu.control_{if,loop,while}`. And of the 55,
+53 are plain `Tile_Op`: the hole is in the core vocabulary, not in a peripheral
+family.
 
 The specific defects, all read from ODS:
 
@@ -456,11 +530,31 @@ Ship a `CHECK-NOT` negative fixture per Decision #10a.
 
 Ordered, and each is necessary:
 
-1. **Type gate.** A `tile.mbarrier.wait` whose barrier never came from a
-   `tile.mbarrier.init` is rejected by the type system, with **no pass running**.
-2. **Derivation gate.** `WARPSPEC_INIT_UNDER_GUARD` fires from role-set /
-   def-use reachability, and the same fixture passes with every
-   `tile.barrier_init` attribute escape hatch deleted.
+1. **Operand-shape gate — what the type system can actually decide.** A
+   `tile.mbarrier.wait` with **no** barrier operand, or with an operand that is
+   not a `!tile.mbarrier`, is rejected with **no pass running**. Same for
+   `tile.tma.copy_async`. That is the whole of what ODS decides here.
+
+   > **Scope correction (PR review, 2026-08-15).** An earlier draft wrote this
+   > gate as "a wait whose barrier never came from a `tile.mbarrier.init` is
+   > rejected by the type system." **That is not achievable and the draft
+   > contradicted itself**: a mandatory operand type constrains the *shape* of
+   > the value, never its *origin*, so a function argument or a loop-carried
+   > `scf.for` block argument of type `!tile.mbarrier` satisfies the ODS
+   > constraint completely. The loop-carried case is not hypothetical — it is
+   > the exact shape §5.1 exists to investigate, which is what makes the error
+   > worth recording rather than silently fixing. **Provenance is a derivation
+   > property and belongs to gate 2.**
+
+2. **Derivation gate — where provenance is actually decided.** A verifier
+   establishes barrier origin by def-use reachability to a `tile.mbarrier.init`,
+   **including across a block-argument edge** (an `scf.for` `iter_args` barrier
+   must resolve to its initializer through the loop's init operand and
+   back-edge, not fail to resolve and pass). `WARPSPEC_INIT_UNDER_GUARD` fires
+   from role-set / def-use reachability, and the same fixture passes with every
+   `tile.barrier_init` attribute escape hatch deleted. Per §5.3, a barrier whose
+   origin cannot be resolved **fails closed** — the fail-open answer is the
+   defect §5.1 is looking for, not an acceptable outcome.
 3. **Registered-path gate.** Both legality fixtures run without
    `--allow-unregistered-dialect`.
 4. **Lowering gate** (W1.1 §4.1). The registered pipelined fixture *lowers*, not
@@ -672,9 +766,12 @@ how a 55M-token budget becomes a 5M-token one.
   authors release per-run data, §2.1 should be recomputed; the medians and ranges
   fix the triples only because n=3.
 * **§3's counts are ODS-derived, not behavior-derived.** An `AnyType` operand can
-  still be constrained by a hand-written verifier. I did not audit all 55 ops'
-  `verify()` bodies, so the count is an upper bound on the hole, not a proof of
-  it. The eight ops named in the §3.2 table were read individually.
+  still be constrained by a hand-written verifier. All 55 ops' `verify()` bodies
+  were not audited, so the count is an upper bound on the hole, not a proof of
+  it. The eight ops named in the §3.2 table were read individually. The §3.2
+  inclusion rule is stated so the scan is reproducible — the first version of
+  this count was wrong in both numerator base and denominator, and an
+  unreproducible scan is how that survived to review.
 * **The 5.1 experiments have not been run.** They are the phase's first work
   item precisely because their outcome could invalidate 5.2 rows 6–7.
 * **Phase 2 gate 2 (one role model across NVIDIA and AMD) is a genuine open

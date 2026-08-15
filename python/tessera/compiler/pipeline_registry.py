@@ -116,6 +116,23 @@ class TargetPipelineResolution:
 
 REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
     PipelineSpec(
+        name="tessera-autodiff-hvp-pipeline",
+        passes=(
+            "tessera-autodiff-paired",
+            "tessera-autodiff-hvp-prepare",
+            "tessera-autodiff-forward",
+        ),
+        required_dialects=("tessera", "func", "arith"),
+        # The pipeline itself produces a target-neutral Graph product. These
+        # are the targets with direct compiler/native product proof today;
+        # Apple and NVIDIA join only with their architecture-owned consumers.
+        targets=("cpu", "rocm_gfx1151", "x86", "x86_avx512"),
+        lit_fixtures=("tests/tessera-ir/phase_f4/autodiff_exact_hvp.mlir",),
+        phase="lowering",
+        status="lit_verified",
+        sprint="AD-HIGHER-1",
+    ),
+    PipelineSpec(
         name="tessera-lower-to-apple_cpu",
         passes=(
             "tessera-effect-annotate",

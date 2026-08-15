@@ -1017,6 +1017,32 @@ class JitFn:
             )
         return transformed.stdout
 
+    def _compile_hvp_module(self, module: GraphIRModule) -> str:
+        """Compose paired reverse and forward transforms into an exact HVP."""
+        import re
+        import subprocess
+        from .scheduled_matmul import find_tessera_opt
+
+        opt = find_tessera_opt()
+        if opt is None:
+            raise TesseraJitError("tessera-opt not built; cannot emit exact HVP")
+        graph_text = re.sub(
+            r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir()
+        )
+        transformed = subprocess.run(
+            [str(opt), "--tessera-autodiff-hvp-pipeline", "/dev/stdin"],
+            input=graph_text,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if transformed.returncode != 0:
+            raise TesseraJitError(
+                "exact forward-over-reverse HVP transform failed: "
+                + transformed.stderr.strip()
+            )
+        return transformed.stdout
+
     def compiled_jvp_ir(self, *args: Any, **kwargs: Any) -> str:
         """Return the compiler-emitted paired JVP Graph IR for this signature.
 
@@ -1032,6 +1058,23 @@ class JitFn:
             )
         module = self._specialized_autodiff_module(args, kwargs)
         return self._compile_jvp_module(module)
+
+    def compiled_hvp_ir(self, *args: Any, **kwargs: Any) -> str:
+        """Return the exact compiler-owned forward-over-reverse product IR.
+
+        The generated ``@f__bwd__jvp`` ABI takes backward primals (including
+        the output-cotangent seed) followed by tangents for the original
+        differentiable inputs.  Its tangent results are Hessian-vector
+        products. Unsupported second-order operations fail in the compiler;
+        this method never substitutes finite differences.
+        """
+        request = self.differentiation_request
+        if request is None or request.mode != "reverse":
+            raise TesseraJitError(
+                "compiled_hvp_ir requires @jit(autodiff='reverse')"
+            )
+        module = self._specialized_autodiff_module(args, kwargs)
+        return self._compile_hvp_module(module)
 
     def native_jvp(
         self, *args: Any, tangents: Any, **kwargs: Any
@@ -1173,6 +1216,33 @@ class JitFn:
         if source_effect == Effect.pure:
             self.frontend_differential(*args, **kwargs)
         target_kind = normalize_target_kind(self.target)
+        graph_ops = [
+            op for function in source_module.functions for op in function.body
+        ]
+        if len(graph_ops) == 1:
+            from .native_vjp_plugins import execute_native_vjp_family
+
+            ordered = self._ordered_inputs(args, kwargs)
+            if ordered is None:
+                raise TesseraJitError(
+                    "native backward requires every forward argument"
+                )
+            request = self.differentiation_request
+            if request is None:
+                raise TesseraJitError(
+                    "native backward requires a differentiation request"
+                )
+            plugin_result = execute_native_vjp_family(
+                source=graph_ops[0],
+                target=target_kind,
+                ordered_inputs=ordered,
+                arg_names=self.arg_names,
+                out_cotangents=out_cotangents,
+                wrt_names=request.wrt,
+            )
+            if plugin_result is not None:
+                self.last_backward_execution = dict(plugin_result.execution)
+                return plugin_result.gradients
         if target_kind == "rocm":
             return self._native_rocm_backward(
                 args, kwargs, out_cotangents=out_cotangents)
@@ -1180,10 +1250,6 @@ class JitFn:
             return self._native_nvidia_backward(
                 args, kwargs, out_cotangents=out_cotangents)
         if target_kind == "x86":
-            graph_ops = [
-                op for fn in self._specialized_autodiff_module(args, kwargs).functions
-                for op in fn.body
-            ]
             if (
                 len(graph_ops) == 1
                 and graph_ops[0].op_name.removeprefix("tessera.") == "sgd"
@@ -1397,8 +1463,9 @@ class JitFn:
                     result = launch(artifact, tuple([*inputs, cotangents[0]]))
                     path = "x86_adafactor_bwd_compiled"
                 else:
-                    return self._native_norm_backward(
-                        "x86", args, kwargs, out_cotangents=out_cotangents)
+                    raise TesseraJitError(
+                        f"no x86 native backward candidate for {name!r}"
+                    )
                 if not result.get("ok"):
                     raise TesseraJitError(
                         f"{path} launch failed: {result.get('reason')}"
@@ -1420,8 +1487,9 @@ class JitFn:
                     ),
                 }
                 return tuple(result["output"])
-            return self._native_norm_backward(
-                "x86", args, kwargs, out_cotangents=out_cotangents)
+            raise TesseraJitError(
+                "x86 native backward currently requires one registered Graph op"
+            )
         if target_kind != "cpu":
             raise TesseraJitError(
                 "native_backward currently supports target='cpu'/'x86', "
@@ -1488,105 +1556,6 @@ class JitFn:
             "invocation_delta": after - before,
         }
         return tuple(result["output"])
-
-    def _native_norm_backward(
-        self,
-        target: str,
-        args: Tuple[Any, ...],
-        kwargs: Dict[str, Any],
-        *,
-        out_cotangents: Any,
-    ) -> tuple[Any, ...]:
-        """Package one registered normalization op into its target VJP ABI."""
-        import numpy as np
-        from tessera.runtime import RuntimeArtifact, launch
-
-        ordered = self._ordered_inputs(args, kwargs)
-        if ordered is None:
-            raise TesseraJitError(
-                f"{target} normalization backward requires every forward argument"
-            )
-        inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
-        cotangents = (out_cotangents if isinstance(out_cotangents, (tuple, list))
-                      else (out_cotangents,))
-        if len(cotangents) != 1:
-            raise TesseraJitError("normalization backward requires one output cotangent")
-        dy = np.ascontiguousarray(np.asarray(cotangents[0]))
-        graph_ops = [
-            op for fn in self._specialized_autodiff_module(args, kwargs).functions
-            for op in fn.body
-        ]
-        if len(graph_ops) != 1:
-            raise TesseraJitError(
-                "compiled normalization backward requires a single-op graph"
-            )
-        source_op = graph_ops[0]
-        bare = source_op.op_name.removeprefix("tessera.")
-        if bare not in {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
-            raise TesseraJitError(
-                f"no {target} normalization backward candidate for {bare!r}"
-            )
-        family = "layer_norm" if bare == "layer_norm" else "rmsnorm"
-        operand_names = list(self.arg_names)
-        gradient_names = [f"d_{name}" for name in operand_names]
-        nvidia = target == "nvidia_sm120"
-        gpu = target in {"rocm", "nvidia_sm120"}
-        path = (
-            "nvidia_norm_bwd_compiled"
-            if nvidia
-            else f"{target}_{family}_bwd_compiled"
-        )
-        execution_mode = (
-            "cuda_driver" if nvidia
-            else "hip_runtime" if target == "rocm"
-            else "cpu_avx512"
-        )
-        artifact = RuntimeArtifact(metadata={
-            "target": target,
-            "compiler_path": path,
-            "executable": True,
-            "execution_kind": "native_gpu" if gpu else "native_cpu",
-            "execution_mode": execution_mode,
-            "autodiff_phase": "backward",
-            "out_cotangent": "dy",
-            "arg_names": operand_names + ["dy"],
-            "output_names": gradient_names,
-            "ops": [{
-                "op_name": source_op.op_name,
-                "result": source_op.result,
-                "operands": operand_names,
-                "kwargs": dict(source_op.kwargs),
-            }],
-        })
-        result = launch(artifact, tuple([*inputs, dy]))
-        expected_mode = execution_mode
-        if not result.get("ok") or result.get("execution_mode") != expected_mode:
-            raise TesseraJitError(
-                f"verified {target} normalization backward launch failed: "
-                + str(result.get("reason"))
-            )
-        evidence_target = (
-            "nvidia_sm120" if nvidia
-            else "rocm_gfx1151" if target == "rocm"
-            else "x86_avx512"
-        )
-        self.last_backward_execution = {
-            "compiler_path": path,
-            "execution_kind": "native_gpu" if gpu else "native_cpu",
-            "execution_mode": expected_mode,
-            "evidence_target": evidence_target,
-            "implementation": "dedicated",
-            "residual_policy": "recompute_all",
-        }
-        output = result["output"]
-        all_gradients = (tuple(output)
-                         if isinstance(output, (tuple, list)) else (output,))
-        by_name = dict(zip(operand_names, all_gradients))
-        request = self.differentiation_request
-        if request is None:
-            raise TesseraJitError("native backward requires a differentiation request")
-        requested = request.wrt
-        return tuple(by_name[name] for name in requested)
 
     def _native_sgd_backward(
         self,
@@ -2436,10 +2405,6 @@ class JitFn:
             raise TesseraJitError(
                 "SM120 native training backward currently requires one Graph op"
             )
-        if ops <= {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
-            return self._native_norm_backward(
-                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
-            )
         if ops <= {"gated_deltanet", "kimi_delta_attention", "modified_delta_attention"}:
             import numpy as np
             from tessera.runtime import RuntimeArtifact, launch
@@ -2711,10 +2676,6 @@ class JitFn:
         cotangents = [np.ascontiguousarray(np.asarray(value)) for value in cots]
         graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
         ops = {op.op_name.removeprefix("tessera.") for op in graph_ops}
-
-        if len(graph_ops) == 1 and ops <= {"rmsnorm", "rmsnorm_safe", "layer_norm"}:
-            return self._native_norm_backward(
-                "rocm", args, kwargs, out_cotangents=out_cotangents)
 
         if len(graph_ops) == 1 and ops == {"sgd"}:
             return self._native_sgd_backward(

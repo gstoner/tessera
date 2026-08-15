@@ -12,7 +12,7 @@ audit_role: reference
 > not a status surface.
 >
 > For gfx1250/MI450 **target facts** (ISA, hazards, counters, clusters, SDMA) see
-> [`../backend/rocm/GFX1250_MI450_COMPILER_REFERENCE.md`](../backend/rocm/GFX1250_MI450_COMPILER_REFERENCE.md).
+> [`../backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md`](../backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md).
 > For the AMD **ecosystem survey** (AITER, hipBLASLt, rocWMMA, Mori, Iris, XIO,
 > Gluon) see
 > [`../backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md`](../backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md).
@@ -1240,7 +1240,7 @@ rather than here).
 ---
 
 *See also:
-[`../backend/rocm/GFX1250_MI450_COMPILER_REFERENCE.md`](../backend/rocm/GFX1250_MI450_COMPILER_REFERENCE.md)
+[`../backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md`](../backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md)
 (target facts) ·
 [`../backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md`](../backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md)
 (ecosystem survey) ·

@@ -184,6 +184,11 @@ std::unique_ptr<mlir::Pass> createAutodiffPairedPass();
 // from Graph operations implementing TangentInterface.
 std::unique_ptr<mlir::Pass> createAutodiffForwardPass();
 
+// AutodiffHvpPreparePass — marks the compiler-emitted paired backward program
+// for exact forward-over-reverse differentiation. It is used only after
+// AutodiffPairedPass and before AutodiffForwardPass.
+std::unique_ptr<mlir::Pass> createAutodiffHvpPreparePass();
+
 // AdjointCollectiveInsertionPass — Phase F5. Runs **after** AutodiffPass.
 // For each function argument with both a recorded cotangent (set by
 // AutodiffPass via `tessera.autodiff.arg_cotangents`) and a sharding

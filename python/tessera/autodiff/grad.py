@@ -8,10 +8,10 @@ Compared to the v1 ``reverse(fn)`` wrapper:
 
 * ``grad(fn, argnums=0)`` returns the *gradient(s)* directly rather than
   ``(loss, grads_dict)``. Matches JAX's ``jax.grad`` shape.
-* ``hvp`` (Hessian-vector product) is provided via central finite
-  difference of ``grad``. fp64 inputs give ~1e-6 accuracy. True
-  forward-over-reverse HVP requires the forward-mode tape that lands in
-  Item 5c.
+* The eager ``hvp`` compatibility helper uses a central finite difference of
+  ``grad``. Compiler-owned exact forward-over-reverse products are exposed by
+  ``JitFn.compiled_hvp_ir``; they deliberately do not reuse this identity-keyed
+  Python tape.
 * ``elementwise_grad(fn)`` covers the common case where ``fn`` is a
   vector → vector elementwise op and the user wants per-element
   derivatives — handy for diagnosing activation derivatives etc.
@@ -130,10 +130,10 @@ def hvp(
 
         hvp(f, x, v) ≈ (∇f(x + ε v) - ∇f(x - ε v)) / (2 ε)
 
-    fp64 primals give ~1e-6 accuracy at ``eps=1e-4``. True
-    forward-over-reverse HVP — the path JAX uses — requires the
-    forward-mode autodiff tape that lands in Item 5c (deferred-items
-    plan); this finite-difference variant is the v1 unblock for
+    fp64 primals give ~1e-6 accuracy at ``eps=1e-4``. The compiler's exact
+    forward-over-reverse path is available through ``compiled_hvp_ir`` on a
+    reverse-differentiated ``@jit`` function; this eager finite-difference
+    variant remains the compatibility unblock for
     second-order optimizers (L-BFGS, natural gradient, GAN penalties).
 
     ``primals`` and ``tangents`` may be a single ndarray or a tuple of

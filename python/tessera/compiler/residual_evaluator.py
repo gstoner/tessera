@@ -16,12 +16,15 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 import copy
+import hashlib
+import json
 import statistics
 import time
 from typing import Any, Literal
 
 
 ResidualPolicy = Literal["save", "recompute", "hybrid", "treeverse"]
+REGION_RESIDUAL_ABI_SCHEMA = "tessera.region_residual_abi.v1"
 
 
 @dataclass(frozen=True)
@@ -124,6 +127,122 @@ class TreeverseCandidate:
 
 
 @dataclass(frozen=True)
+class RegionResidualSlot:
+    """One content-addressed state checkpoint crossing the forward/backward ABI."""
+
+    checkpoint_index: int
+    logical_name: str
+    retained_bytes: int
+
+    def __post_init__(self) -> None:
+        if self.checkpoint_index <= 0 or not self.logical_name:
+            raise ValueError("region residual slots require positive identity")
+        if self.retained_bytes <= 0:
+            raise ValueError("region residual slots require retained bytes")
+
+
+@dataclass(frozen=True)
+class RegionResidualABI:
+    """Typed SAVE/HYBRID/RECOMPUTE boundary for one structured CFG."""
+
+    policy: Literal["save", "recompute", "hybrid"]
+    cfg_digest: str
+    steps: int
+    state_dtype: str
+    state_shape: tuple[int, ...]
+    slots: tuple[RegionResidualSlot, ...]
+    schema: str = REGION_RESIDUAL_ABI_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != REGION_RESIDUAL_ABI_SCHEMA:
+            raise ValueError("unsupported region residual ABI schema")
+        if (
+            len(self.cfg_digest) != 64
+            or any(char not in "0123456789abcdef" for char in self.cfg_digest)
+        ):
+            raise ValueError("region residual ABI requires a CFG SHA-256 digest")
+        if self.steps <= 0 or not self.state_dtype:
+            raise ValueError("region residual ABI requires steps and state dtype")
+        indices = tuple(slot.checkpoint_index for slot in self.slots)
+        if indices != tuple(sorted(set(indices))) or any(
+            index >= self.steps for index in indices
+        ):
+            raise ValueError("region residual slots must be unique interior checkpoints")
+        expected = (
+            "recompute"
+            if not indices
+            else "save"
+            if len(indices) == self.steps - 1
+            else "hybrid"
+        )
+        if self.policy != expected:
+            raise ValueError(
+                f"region residual policy {self.policy!r} disagrees with {indices}"
+            )
+
+    @property
+    def checkpoint_indices(self) -> tuple[int, ...]:
+        return tuple(slot.checkpoint_index for slot in self.slots)
+
+    @property
+    def retained_bytes(self) -> int:
+        return sum(slot.retained_bytes for slot in self.slots)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "schema": self.schema,
+            "policy": self.policy,
+            "cfg_digest": self.cfg_digest,
+            "steps": self.steps,
+            "state_dtype": self.state_dtype,
+            "state_shape": list(self.state_shape),
+            "slots": [slot.__dict__ for slot in self.slots],
+        }
+
+    @property
+    def digest(self) -> str:
+        payload = json.dumps(self.as_dict(), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def build_region_residual_abi(
+    candidate: TreeverseCandidate,
+    *,
+    cfg_digest: str,
+    state_dtype: str,
+    state_shape: Sequence[int],
+) -> RegionResidualABI:
+    """Materialize a candidate as an explicit executable residual contract."""
+
+    if not candidate.checkpoint_indices:
+        policy: Literal["save", "recompute", "hybrid"] = "recompute"
+    elif len(candidate.checkpoint_indices) == candidate.steps - 1:
+        policy = "save"
+    else:
+        policy = "hybrid"
+    per_slot = (
+        candidate.retained_residual_bytes // len(candidate.checkpoint_indices)
+        if candidate.checkpoint_indices
+        else 0
+    )
+    slots = tuple(
+        RegionResidualSlot(index, f"state_after_{index}", per_slot)
+        for index in candidate.checkpoint_indices
+    )
+    abi = RegionResidualABI(
+        policy=policy,
+        cfg_digest=cfg_digest,
+        steps=candidate.steps,
+        state_dtype=state_dtype,
+        state_shape=tuple(int(dim) for dim in state_shape),
+        slots=slots,
+    )
+    if abi.retained_bytes != candidate.retained_residual_bytes:
+        raise ValueError("candidate retained bytes are not divisible across slots")
+    return abi
+
+
+@dataclass(frozen=True)
 class TreeverseExecution:
     """Observed execution of one candidate over a differentiable region."""
 
@@ -152,8 +271,14 @@ def capture_treeverse_forward(
     initial_state: Any,
     forward_step: Callable[[int, Any], Any],
     clone_state: Callable[[Any], Any] = _clone_state,
+    residual_abi: RegionResidualABI | None = None,
 ) -> ForwardCapture:
     """Execute the forward region and retain exactly the selected checkpoints."""
+    if residual_abi is not None and (
+        residual_abi.steps != candidate.steps
+        or residual_abi.checkpoint_indices != candidate.checkpoint_indices
+    ):
+        raise ValueError("region residual ABI does not match its treeverse candidate")
     state = clone_state(initial_state)
     checkpoints: dict[int, Any] = {}
     selected = set(candidate.checkpoint_indices)
@@ -167,6 +292,7 @@ def capture_treeverse_forward(
             "candidate": candidate,
             "borrowed_initial": _BorrowedState(initial_state),
             "checkpoints": checkpoints,
+            "residual_abi": residual_abi,
         },
     )
 
@@ -189,12 +315,19 @@ def execute_treeverse_region_adjoint(
     candidate = residuals.get("candidate")
     checkpoints = residuals.get("checkpoints")
     borrowed = residuals.get("borrowed_initial")
+    residual_abi = residuals.get("residual_abi")
     if (
         not isinstance(candidate, TreeverseCandidate)
         or not isinstance(checkpoints, Mapping)
         or not isinstance(borrowed, _BorrowedState)
     ):
         raise TypeError("treeverse residuals must come from capture_treeverse_forward")
+    if residual_abi is not None and (
+        not isinstance(residual_abi, RegionResidualABI)
+        or residual_abi.steps != candidate.steps
+        or residual_abi.checkpoint_indices != candidate.checkpoint_indices
+    ):
+        raise ValueError("region residual ABI identity does not match the execution")
     if tuple(sorted(int(i) for i in checkpoints)) != candidate.checkpoint_indices:
         raise ValueError("treeverse checkpoint identity does not match the candidate")
     available_checkpoints = {0: borrowed.value, **checkpoints}
@@ -527,9 +660,13 @@ __all__ = [
     "ForwardCapture",
     "ResidualEvidence",
     "ResidualPolicy",
+    "REGION_RESIDUAL_ABI_SCHEMA",
+    "RegionResidualABI",
+    "RegionResidualSlot",
     "TreeverseCandidate",
     "TreeverseExecution",
     "capture_treeverse_forward",
+    "build_region_residual_abi",
     "execute_treeverse_region_adjoint",
     "measure_treeverse_region_candidate",
     "measure_counted_region_policy_cohort",

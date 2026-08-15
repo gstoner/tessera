@@ -18,7 +18,7 @@ design guidance lives in
 [`ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md`](ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md).
 Primary-source CDNA5 gfx1250/MI455X and gfx1251/MI430X target facts — WMMA shapes and hazards, TDM,
 workgroup clusters, the split wait-counter model, device-initiated SDMA — live in
-[`GFX1250_MI450_COMPILER_REFERENCE.md`](GFX1250_MI450_COMPILER_REFERENCE.md).
+[`GFX125X_CDNA5_COMPILER_REFERENCE.md`](GFX125X_CDNA5_COMPILER_REFERENCE.md).
 
 > **Status authority.** ROCm proof is recorded at exact-target granularity. The
 > generic `rocm` name is a family rollup and never inherits compile, execution,

@@ -10,8 +10,9 @@ covers the JAX-style convenience surface on top of the tape engine:
   * ``tape.backward(retain_graph=True)`` — repeated backward passes for
     jacrev (Item 5b) and similar.
 
-True forward-over-reverse HVP via ``jvp(grad(fn), x, v)`` requires the
-forward-mode tape from Item 5c.
+The eager helper remains finite differences. Compiler-owned exact
+forward-over-reverse HVP is tested through ``compiled_hvp_ir`` and the emitted
+Graph-product oracle; it does not compose this identity-keyed Python tape.
 """
 
 from __future__ import annotations

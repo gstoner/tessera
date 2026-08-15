@@ -108,10 +108,12 @@ Three consequences follow directly:
 3. **Therefore `grad(grad(f))` cannot work.** Higher-order differentiation is
    blocked by the data structure, not by missing rules.
 
-That is why `hvp` remains finite differences (§B4) even though public `jvp` and
-`jacfwd` now execute registered tangent rules exactly. First-order forward mode
-is no longer the blocker; the identity-keyed reverse tape still cannot expose a
-differentiable gradient program for forward-over-reverse composition.
+That is why the eager Python `hvp` compatibility helper remains finite
+differences (§B4) even though public `jvp` and `jacfwd` execute registered
+tangent rules exactly. The compiler no longer shares that limitation:
+`--tessera-autodiff-hvp-pipeline` differentiates the compiler-emitted paired
+reverse program and exposes the result through `compiled_hvp_ir`. Coverage is
+bounded by TangentInterface support in the generated backward program.
 
 ### A3. Bounded SCF reverse and forward mode exist; general regions fail closed
 
@@ -166,8 +168,8 @@ gfx1200/gfx1250 remain fail-closed. Native collective product execution is
 gated to a live multi-rank NCCL/RCCL adapter; its hardware packet is open.
 Bounded `scf.if`/positive-step `scf.for`/canonical `scf.while` forward products
 and exact public `jacfwd` are now live. Broader spectral/solver products,
-general or effectful regions, Apple/CUDA packages, exact forward-over-reverse
-HVP, and Taylor/jet composition remain open.
+general or effectful regions, Apple/CUDA packages, broader second-order product
+coverage, and Taylor/jet composition remain open.
 
 ### A5. Backward SSA activity is implemented; region and memory activity remain
 
@@ -298,7 +300,7 @@ functions, per-sample clipping, meta-learning) — is a Python loop over example
 **Contrast.** In JAX, `vmap` is a program transform on the jaxpr driven by
 per-primitive batching rules, and `vmap(grad(f))` compiles to one batched kernel.
 
-### B4. `hvp` is central finite differences of `grad`
+### B4. Eager `hvp` is finite differences; compiler HVP is exact but bounded
 
 [`grad.py:120`](../../../python/tessera/autodiff/grad.py#L120), and its docstring
 says so plainly:
@@ -307,9 +309,12 @@ says so plainly:
 hvp(f, x, v) ≈ (∇f(x + ε v) - ∇f(x - ε v)) / (2 ε)
 ```
 
-Two full gradient evaluations, `ε = 1e-4` hardcoded, `O(ε)` truncation error
-compounding with roundoff. Exact forward-over-reverse HVP costs roughly 2× a
-single gradient and is exact. Blocked by A2 and A4, not by missing rules.
+The eager helper still performs two gradient evaluations with `ε = 1e-4`, so
+it retains truncation and roundoff error. The compiler path now composes
+`AutodiffPairedPass` → `AutodiffHvpPreparePass` → `AutodiffForwardPass`, emits
+`@f__bwd__jvp`, and executes the emitted quadratic product against an exact
+oracle. Unsupported reverse-generated operations fail closed. The remaining
+gap is coverage and native target packaging, not the composition algorithm.
 
 This matters more than it looks: HVP is the primitive under L-BFGS, natural
 gradient, K-FAC, Gauss–Newton, trust-region methods, GAN gradient penalties, and

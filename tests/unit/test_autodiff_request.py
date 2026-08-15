@@ -277,3 +277,23 @@ def test_jit_compiled_jvp_ir_uses_requested_tangent_abi():
     )[0]
     assert signature.count("tensor<2x3xf32>") == 1
     assert signature.count("tensor<3x4xf32>") == 2
+
+
+@tessera.jit(autodiff="reverse", wrt=("x",))
+def _exact_hvp_square(x):
+    return tessera.ops.mul(x, x)
+
+
+def test_jit_compiled_hvp_ir_composes_reverse_and_forward_exactly():
+    from tessera import _jit_boundary
+
+    if _jit_boundary._find_tessera_opt() is None:
+        pytest.skip("tessera-opt not built")
+    import numpy as np
+
+    ir = _exact_hvp_square.compiled_hvp_ir(
+        np.ones((4,), dtype=np.float32)
+    )
+    assert "@_exact_hvp_square__bwd__jvp" in ir
+    assert "tessera.autodiff.hvp = @_exact_hvp_square__bwd__jvp" in ir
+    assert "finite_difference" not in ir

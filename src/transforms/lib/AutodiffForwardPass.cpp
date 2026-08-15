@@ -149,6 +149,30 @@ class RegionTangentBuilder {
         tangentState.addTypes(primal->getResultTypes());
         tangentState.addAttributes(primal->getAttrs());
         resultTangents.push_back(builder.create(tangentState)->getResult(0));
+      } else if (mlir::isa<mlir::arith::AddFOp>(primal)) {
+        if (inputTangents.size() != 2 || !inputTangents[0] ||
+            !inputTangents[1])
+          return mlir::failure();
+        resultTangents.push_back(mlir::arith::AddFOp::create(
+            builder, primal->getLoc(), inputTangents[0], inputTangents[1]));
+      } else if (mlir::isa<mlir::arith::SubFOp>(primal)) {
+        if (inputTangents.size() != 2 || !inputTangents[0] ||
+            !inputTangents[1])
+          return mlir::failure();
+        resultTangents.push_back(mlir::arith::SubFOp::create(
+            builder, primal->getLoc(), inputTangents[0], inputTangents[1]));
+      } else if (mlir::isa<mlir::arith::MulFOp>(primal)) {
+        if (inputTangents.size() != 2 || !inputTangents[0] ||
+            !inputTangents[1])
+          return mlir::failure();
+        mlir::Value left = mlir::arith::MulFOp::create(
+            builder, primal->getLoc(), inputTangents[0],
+            primal->getOperand(1));
+        mlir::Value right = mlir::arith::MulFOp::create(
+            builder, primal->getLoc(), primal->getOperand(0),
+            inputTangents[1]);
+        resultTangents.push_back(mlir::arith::AddFOp::create(
+            builder, primal->getLoc(), left, right));
       } else if (auto tangent = mlir::dyn_cast<TangentInterface>(primal)) {
         resultTangents = tangent.buildTangent(builder, inputTangents);
       } else {
@@ -608,10 +632,86 @@ class AutodiffForwardPass
   }
 };
 
+class AutodiffHvpPreparePass
+    : public mlir::PassWrapper<AutodiffHvpPreparePass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+ public:
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AutodiffHvpPreparePass)
+
+  llvm::StringRef getArgument() const final {
+    return "tessera-autodiff-hvp-prepare";
+  }
+  llvm::StringRef getDescription() const final {
+    return "Prepare the paired reverse Graph program for exact forward-over-reverse HVP";
+  }
+
+  void runOnOperation() override {
+    mlir::ModuleOp module = getOperation();
+    llvm::SmallVector<mlir::func::FuncOp> backwards;
+    module.walk([&](mlir::func::FuncOp function) {
+      auto role = function->getAttrOfType<mlir::StringAttr>(
+          "tessera.autodiff.role");
+      if (role && role.getValue() == "backward")
+        backwards.push_back(function);
+    });
+    if (backwards.empty()) {
+      module.emitError(
+          "tessera-autodiff-hvp-prepare: paired backward program is missing");
+      return signalPassFailure();
+    }
+
+    for (mlir::func::FuncOp backward : backwards) {
+      auto forwardRef = backward->getAttrOfType<mlir::FlatSymbolRefAttr>(
+          "tessera.autodiff.forward");
+      auto forward = forwardRef
+                         ? module.lookupSymbol<mlir::func::FuncOp>(
+                               forwardRef.getValue())
+                         : mlir::func::FuncOp{};
+      if (!forward) {
+        backward.emitError(
+            "tessera-autodiff-hvp-prepare: backward has no live forward parent");
+        return signalPassFailure();
+      }
+
+      llvm::SmallVector<mlir::Attribute> wrt;
+      for (unsigned index = 0; index < forward.getNumArguments(); ++index) {
+        auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(
+            forward.getArgumentTypes()[index]);
+        if (!tensor ||
+            !mlir::isa<mlir::FloatType, mlir::ComplexType>(
+                tensor.getElementType()))
+          continue;
+        wrt.push_back(mlir::IntegerAttr::get(
+            mlir::IntegerType::get(&getContext(), 64), index));
+      }
+      if (wrt.empty()) {
+        forward.emitError(
+            "tessera-autodiff-hvp-prepare: no differentiable primal arguments");
+        return signalPassFailure();
+      }
+
+      backward->setAttr("tessera.autodiff",
+                        mlir::StringAttr::get(&getContext(), "forward"));
+      backward->setAttr("tessera.autodiff.wrt_indices",
+                        mlir::ArrayAttr::get(&getContext(), wrt));
+      backward->setAttr("tessera.autodiff.hvp_parent",
+                        mlir::FlatSymbolRefAttr::get(&getContext(),
+                                                    forward.getName()));
+      std::string productName = (backward.getName() + "__jvp").str();
+      forward->setAttr("tessera.autodiff.hvp",
+                       mlir::FlatSymbolRefAttr::get(&getContext(), productName));
+    }
+  }
+};
+
 }  // namespace
 
 std::unique_ptr<mlir::Pass> createAutodiffForwardPass() {
   return std::make_unique<AutodiffForwardPass>();
+}
+
+std::unique_ptr<mlir::Pass> createAutodiffHvpPreparePass() {
+  return std::make_unique<AutodiffHvpPreparePass>();
 }
 
 }  // namespace tessera

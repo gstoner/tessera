@@ -110,7 +110,7 @@ Execution order:
 | O13 | Open | Distributed/full-scale execution | Full-scale execution, distributed MoE, and NVIDIA FP8/sparse performance remain hardware-gated. | Hardware-backed CI or reproducible artifact gate covers full-scale launch metadata, distributed routing, and target-specific performance/regression thresholds. |
 | O14 | Open | MoE routing defect certificates | Capacity failure currently lacks a production Hall/König witness, and overflow redirect has no certified candidate-set contract. | Routing emits a stable registered diagnostic containing the violating and reachable sets plus exact deficit; exhaustive/max-flow test oracles prove the certificate and show zero claimed gain for single-candidate routing. |
 
-The generated 43 sharding gaps, four reference-only Target rows, 123 missing
+The generated 45 sharding gaps, four reference-only Target rows, 123 missing
 direct-test proofs, and 229 benchmark gaps are triage inventories. They identify
 coverage debt but are not 399 equally urgent compiler implementations. This
 roadmap orders work by dependency: physical weight ABI first, fused model-family

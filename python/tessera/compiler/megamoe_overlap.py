@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from .composition_cost import (
+    EXHAUSTIVE_ORACLE_MAX_ORDERS,
     CompositionCalibration,
     CompositionCandidate,
     CompositionPruningResult,
@@ -201,7 +202,7 @@ def prune_megamoe_overlap_plans(
     calibration: CompositionCalibration,
     *,
     relative_margin: float = 0.25,
-    max_orders: int = 4096,
+    max_orders: int = EXHAUSTIVE_ORACLE_MAX_ORDERS,
 ) -> CompositionPruningResult:
     """R3 prune-only analysis for executable MegaMoE plans."""
 

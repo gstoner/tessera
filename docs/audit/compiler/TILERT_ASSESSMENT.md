@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-11
+last_updated: 2026-08-14
 audit_role: reference
 ---
 
@@ -250,7 +250,7 @@ representation that survives into IR.
 |---|---|---|---|
 | **R1** | **Await-sinking as the first overlap pass** — sink E3's adjacent awaits to true SSA use sites | The 2026-08-09 unification made this a small, legal dataflow transform (typed futures, explicit lineage). It converts the overlap window from zero to "whatever independent work sits between dispatch and first use" — the cheapest possible B-reclaim, dense-model-safe, fully static (M4) | new pass after `tessera-lower-tile-collectives`; E9 §8 already names it |
 | **R2 — landed 2026-08-10** | **Record resource vectors in the measured corpus** (M3 consequence) | Successful measured autotune rows carry validated `tessera.measured_resource_vector.v1` metadata in the declared `hot_path_metadata` slot. The vector binds compute time, dtype-correct bytes moved, communication bytes, queue/resource identity, timing provenance, and a content digest. Provenance round-trips through the tuning cache; analytical rows cannot claim measured vectors. `composition_analysis_only` and `selector_authority = latency_ms` make the non-selection contract machine-checkable | `autotune_v2.py` + `benchmark_row.py` |
-| **R3 — landed 2026-08-10** | **T3 cost module over Tile IR** — resource vectors (E7) × calibrated per-action times (E8) × legal-topological-order search | `composition_cost.py` owns validated actions/DAGs, calibration provenance, bounded deterministic order search, and compute/memory/communication lane simulation. It reproduces M3's scalar-order reversal. Only exhaustive clear losers may be pruned; bounded searches retain the candidate. Every estimate is promotion-ineligible and names scalar `latency_ms` as selector authority | `composition_cost.py` |
+| **R3 — v2 landed 2026-08-14** | **T3 cost module over Tile IR** — resource vectors (E7) × calibrated per-action times (E8) × scalable legal scheduling | `composition_cost.py` validates DAGs with Kahn traversal, uses deterministic critical-path/list scheduling on production-width graphs, and computes an admissible `max(critical path, per-resource-lane work, queue work)` bound. Exhaustive enumeration is restricted to the ≤8-action oracle. An inexact candidate is pruned only when its lower bound loses to another feasible upper bound. Every estimate remains promotion-ineligible and names scalar `latency_ms` as selector authority | `composition_cost.py` |
 | **R4 — bounded functional consumer landed 2026-08-10** | **MoE dispatch/combine chunk-granular overlap** as the worked dynamic example | `megamoe_overlap.py` emits a content-addressed action DAG with contiguous slices, capacity/workspace bounds, true-use edges, ordered collectives, and deterministic combines. `megamoe_forward_pipelined` consumes that exact plan and reports its digest and execution trace. R3 only prunes; measured scalar latency selects. Mock multi-rank execution proves numerical and bitwise-repeatable behavior; native transports and exact-device packets remain target-owned | `megamoe_overlap.py` + `distributed/moe.py` |
 
 ### Adapt

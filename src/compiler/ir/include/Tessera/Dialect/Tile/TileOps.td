@@ -166,9 +166,23 @@ def Tile_TMEMType : Tile_Type<"TMEM", "tmem"> {
 // Physical storage and staged-pipeline ownership. These operations are the
 // canonical def-use identity. #tile.buffer_ref remains parser-visible only for
 // migration diagnostics and archived IR; active passes do not consume it.
+// layout must be a typed #tile.layout (Decision #21a hoist; the verifier
+// already required this — CAKE Phase 1 §5.2 row 5 moves the rejection to
+// parse time). A CPred constraint rather than Tile_LayoutAttr directly
+// because that def appears later in this file and TableGen does not resolve
+// forward references.
+def Tile_TypedLayoutAttr : Attr<
+    CPred<"::llvm::isa<::tessera::tile::TileLayoutAttr>($_self)">,
+    "structured #tile.layout attribute"> {
+  let storageType = "::mlir::Attribute";
+  let returnType = "::mlir::Attribute";
+  let convertFromStorage = "$_self";
+}
+
 def Tile_AllocOp : Tile_Op<"alloc"> {
   let summary = "Allocate a physical Tile buffer and return its SSA handle";
-  let arguments = (ins StrAttr:$space, I64Attr:$bytes, AnyAttr:$layout);
+  let arguments = (ins StrAttr:$space, I64Attr:$bytes,
+                        Tile_TypedLayoutAttr:$layout);
   let results = (outs Tile_BufferType:$buffer);
   let assemblyFormat = "attr-dict `:` type($buffer)";
   let hasVerifier = 1;
@@ -244,7 +258,12 @@ def Tile_CollectivePermuteOp : Tile_Op<
 // select an architecture-specific implementation.
 def Tile_TMADescriptorOp : Tile_Op<"tma.descriptor"> {
   let summary = "Create an SSA tensor-memory-access descriptor";
-  let arguments = (ins AnyType:$source, I64Attr:$tile_rows,
+  // The source is the memory a TMA engine reads: a Tile buffer, a memref, or
+  // (value lane) a ranked tensor. A scalar/index/token source is meaningless
+  // and is rejected at parse time (CAKE Phase 1 §5.2 row 3).
+  let arguments = (ins AnyTypeOf<[Tile_BufferType, AnyMemRef,
+                                  AnyRankedTensor]>:$source,
+                        I64Attr:$tile_rows,
                         I64Attr:$tile_cols, OptionalAttr<I64Attr>:$slot,
                         OptionalAttr<I64Attr>:$expect_tx);
   let results = (outs Tile_TMADescriptorType:$descriptor);
@@ -289,7 +308,24 @@ def Tile_MBarrierArriveExpectTxOp
 def Tile_MBarrierWaitOp
     : Tile_Op<"mbarrier.wait", [AttrSizedOperandSegments]> {
   let summary = "Wait for one transaction-barrier slot and dependency token";
+  let description = [{
+    Typed sync contract (CAKE Phase 1, 2026-08-15). A wait must name what it
+    gates on: either the `$token` produced by `tile.mbarrier.arrive_expect_tx`
+    (the arrive→wait edge, expressible in the type system since this change) or
+    at least one `!tile.async_token` dependency (the TMA-lane completion edge
+    minted by `tile.tma.copy_async` / `tile.async_copy`). Every dependency must
+    be a typed sync value — an arbitrary SSA value is not a synchronization
+    edge. The verifier fails closed on a wait that gates on nothing.
+
+    `$barrier` stays Optional at the ODS level ONLY because the staged NV
+    lowering emits the wait before `NVTMADescriptorPass` retrofits the barrier
+    operand (AsyncCopyLoweringPass → NVTMADescriptorPass seam). Making it
+    mandatory is deferred until barrier assignment moves into the emitting
+    pass; do not read Optional as "a barrier-less wait is a valid final form" —
+    the legality gate requires the barrier on lowered IR.
+  }];
   let arguments = (ins Optional<Tile_MBarrierType>:$barrier,
+                        Optional<Tile_MBarrierTokenType>:$token,
                         Variadic<AnyType>:$dependencies, I64Attr:$slot);
   let results = (outs);
   let assemblyFormat = "operands attr-dict `:` type(operands)";
@@ -306,6 +342,50 @@ def Tile_MBarrierTryWaitOp : Tile_Op<"mbarrier.try_wait"> {
   let hasVerifier = 1;
 }
 
+// Registered collective / visibility / store / write vocabulary (P1a second
+// increment, CAKE §5.3–§5.4, 2026-08-15). These were previously unregistered
+// husks: WarpSpecialization emits `tile.cta_sync` by name (creation now
+// resolves to the registered op), and the C2/C6 legality passes derive their
+// collective / fence / TMA-store / buffer-write predicates from these op
+// identities instead of name substrings. Ops with no C++ producer yet
+// (fence, tma.store, buffer_write) are the declared vocabulary of the
+// legality checks — the checks are their named consumer (Decision #29); the
+// warp-spec lowering grows their emission next.
+def Tile_CtaSyncOp : Tile_Op<"cta_sync"> {
+  let summary = "CTA-wide execution barrier (every warp arrives)";
+  let arguments = (ins);
+  let results = (outs);
+  let assemblyFormat = "attr-dict";
+}
+
+def Tile_FenceOp : Tile_Op<"fence"> {
+  let summary = "Visibility fence for the asynchronous proxy";
+  let arguments = (ins OptionalAttr<StrAttr>:$scope);
+  let results = (outs);
+  let assemblyFormat = "attr-dict";
+}
+
+def Tile_TMAStoreOp : Tile_Op<"tma.store"> {
+  let summary = "Descriptor-driven asynchronous tile store (SMEM to global)";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "(`(` $inputs^ `:` type($inputs) `)`)? attr-dict";
+}
+
+def Tile_BufferWriteOp : Tile_Op<"buffer_write"> {
+  let summary = "Write into a layout-described region of a Tile buffer";
+  let description = [{
+    The registered form of the write markers the barrier-reuse legality (C2)
+    reasons about: a write into the `#tile.layout`-described storage region of
+    a `!tile.buffer`. The memory space comes from the buffer's `tile.alloc`,
+    not from the op name — one op replaces the old smem/tmem/lds/reg husk
+    spellings (Decision #31).
+  }];
+  let arguments = (ins Tile_BufferType:$buffer, Variadic<AnyType>:$values);
+  let results = (outs);
+  let assemblyFormat = "operands attr-dict `:` type(operands)";
+}
+
 // SM100-only physical vocabulary. These are registered in shared Tile IR so
 // WarpSpec can express and thread the contract, but exact execution remains an
 // NVIDIA target decision and SM120 must reject it.
@@ -319,7 +399,7 @@ def Tile_TMEMAllocOp : Tile_Op<"tmem.allocate"> {
 
 def Tile_TMEMLoadOp : Tile_Op<"tmem.load"> {
   let summary = "Load a logical value from tensor memory";
-  let arguments = (ins Tile_TMEMType:$handle, Variadic<AnyType>:$indices);
+  let arguments = (ins Tile_TMEMType:$handle, Variadic<Index>:$indices);
   let results = (outs AnyType:$value);
   let assemblyFormat =
       "operands attr-dict `:` functional-type(operands, results)";
@@ -329,7 +409,7 @@ def Tile_TMEMLoadOp : Tile_Op<"tmem.load"> {
 def Tile_TMEMStoreOp : Tile_Op<"tmem.store"> {
   let summary = "Store a logical value into tensor memory";
   let arguments = (ins AnyType:$value, Tile_TMEMType:$handle,
-                        Variadic<AnyType>:$indices);
+                        Variadic<Index>:$indices);
   let results = (outs);
   let assemblyFormat =
       "$value `,` $handle (`[` $indices^ `]`)? attr-dict `:` type(operands)";

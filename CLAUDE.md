@@ -22,16 +22,21 @@ heuristics. "Standalone" means runtime-independent of PyTorch / JAX / Flax
 Target hardware: NVIDIA (SM90 Hopper, SM100 Blackwell), AMD ROCm,
 x86 AMX/AVX512, Apple M-series CPU/GPU.
 
-**Execution reality (reconciled 2026-06-24 hardware bring-up):** the **x86
-AMX/AVX512** backend and **Apple CPU (Accelerate) + GPU (MPS/MSL/MPSGraph)**
-backends execute natively. Non-Apple hardware is **no longer purely gated**:
-**ROCm gfx1151** (Strix Halo, RDNA 3.5) executes a compiler-generated matmul +
-flash-attention family via `runtime.launch()`, and **NVIDIA sm_120** (RTX 5070 Ti,
-consumer Blackwell) has a hardware-verified `mma.sync` matmul. Broader op coverage
-and datacenter archs (ROCm CDNA/MI300; NVIDIA Hopper sm_90 / datacenter sm_100)
-stay hardware-gated (Phase G/H). Everything else produces IR/artifacts until a
-hardware-gated proof row says otherwise — read the generated dashboards for what
-is actually proven, never counts copied into prose (Decision #26). See
+**Execution reality (updated 2026-08-15):** the **x86 AMX/AVX512** backend and
+**Apple CPU (Accelerate) + GPU (MPS/MSL/MPSGraph)** backends execute natively.
+**ROCm gfx1151** (Strix Halo, RDNA 3.5) now has **broad native execution, not
+merely matmul + flash-attention** — the generated execution matrix records
+dozens of `native_gpu` family rows (attention family, norms/activations,
+matmul-family compositions, MoE transport, SSM fwd/bwd, EBM, warp-shuffle
+reduce/scan/argreduce lanes); the remaining boundary is exact-device expansion,
+not a missing launcher. **NVIDIA sm_120** (RTX 5070 Ti, consumer Blackwell)
+likewise executes a broad compiled family (attention fwd/bwd, conv2d, MLA
+decode, SSM, bounded control flow, MoE transport, optimizer/loss backwards) —
+no longer just an `mma.sync` matmul. Datacenter archs (ROCm CDNA/MI300; NVIDIA
+Hopper sm_90 / datacenter sm_100) stay hardware-gated (Phase G/H). Everything
+else produces IR/artifacts until a hardware-gated proof row says otherwise —
+read `docs/audit/generated/runtime_execution_matrix.md` for what is actually
+proven, never counts copied into prose (Decision #26). See
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md).
 
 **"Executes natively" is a runtime claim, not a compiler-maturity claim — read
@@ -54,9 +59,11 @@ Decision #28 tier 1/2 *is* built, in Python under
 `simdgroup_matrix`**, norm-chain, pointwise-graph, pointwise-reduce, attention
 incl. online-softmax, gated-matmul), alongside `nvidia_cuda.py`,
 `rocm_hip.py`, `x86_llvm.py`, over the arch-agnostic regions in
-`fusion_core.py` and the `KernelEmitter`/`compile_fn`/`KernelRunner` seams in
-`emit/kernel_emitter.py` + `emit/kernel_cache.py`. See
-[`WORKSTREAM_C_HANDOFF.md`](docs/audit/compiler/WORKSTREAM_C_HANDOFF.md).
+`compiler/fusion_core.py` (one level up from `emit/`) and the
+`KernelEmitter`/`compile_fn`/`KernelRunner` seams in `emit/kernel_emitter.py` +
+`emit/kernel_cache.py`. The Workstream C handoff is archived at
+`docs/audit/compiler/archive/WORKSTREAM_C_HANDOFF.md`; route current compiler
+work through [`docs/audit/compiler/README.md`](docs/audit/compiler/README.md).
 
 **So the real Apple gap is not "no emitter" — it is that the Python synthesizer
 and the C++ MLIR pipeline are two disconnected compilers.** The MLIR lane
@@ -82,7 +89,7 @@ Schedule IR (schedule.* dialect — mesh regions, pipeline stages, optimizer sha
 Tile IR     (tile_opt_fa4 — warp specialization, TMEM, async copy, KV cache)
      │
      ▼
-Target IR   (per-backend: NVRubinCPX, ROCm, Apple, x86)
+Target IR   (per-backend: NVIDIA, ROCm, Apple, x86)
 ```
 
 New backends MUST expose a hardware-free Target IR dialect before
@@ -99,7 +106,8 @@ PTX/HIP/Metal source.
 | 7 | 🟢 Lit-verified | Neighbors (halo/stencil) dialect; real HW gated on Phase G/H |
 | 8 | 🟢 Apple operational | Hardware-free Target IR; `@jit(target="rocm"/"apple_cpu"/"apple_gpu")`; Apple CPU (Accelerate) + GPU (MPS + MSL + MPSGraph) execute natively |
 | S-series | 🟢 In progress | Standalone-compiler track — primitive contract registry + S2–S15 Python reference surface + reasoning-model attention/RL; `backend_kernel` axis is the long-pole gate (Phase G/H) |
-| RubinCPX | ✅ Built | `tessera.target.cpx` dialect + 4 passes + `tessera-cpx-opt` driver |
+| W-series | 🟢 In progress | Compiler-contract track — W0 governance landed; **W1.1 typed Tile IR: ROCm steps 1–4 + typed performance closure landed (typed route is now the canonical gfx1151 selection; NVIDIA producers + permissive-branch deletion open)**; W2.1 `GraphDataflowAnalysis` and W2.2 IR-derived effects **closed** (2026-08-10/11). Top active program: **E2E-REAL-6, one compiler authority** (tracer becomes sole general frontend; `_OpExtractor` retired after differential proof). See `INTEGRATED_COMPILER_PLAN.md` + MASTER_AUDIT §1 |
+| RubinCPX | 📦 Archived | Retired 2026-06-08 with TPU/Metalium/Cerebras (focus = x86 + Apple + NVIDIA + ROCm); material under `archive/`, no build target |
 
 Per-phase deliverables and the open-work priority queue live in
 `docs/audit/MASTER_AUDIT.md` and the theme audits.
@@ -114,12 +122,12 @@ Per-phase deliverables and the open-work priority queue live in
 |--------|---------|
 | `__init__.py` | Top-level exports: `jit`, `kernel`, `Region`, `domain`, `dist`, `array`, `index_launch`, `constraint`, `ops`, `Tensor`, `dtype`. `train` is lazily bound via PEP 562 `__getattr__`. |
 | `dtype.py` | Canonical dtype enforcement + `Dtype` typed object + promotion lattice (`canonicalize_dtype`, `result_type`, `is_canonical_dtype`, …). Canonical 15-name set; aliases normalize at API boundaries; `tf32` rejected as storage dtype (use `numeric_policy.math_mode`). See Decision #15a. |
-| `compiler/jit.py` | `@jit`/`@kernel` decorators; routes to x86, GPU, or string-target pipeline. Call-time constraint re-check via `JitFn._enforce_call_time_constraints`. |
+| `compiler/jit.py` | `@jit`/`@kernel` decorators; routes to x86, GPU, or string-target pipeline. Call-time constraint re-check via `JitFn._enforce_call_time_constraints`. **In migration (E2E-REAL-6):** family selection / package construction is moving out of `JitFn` into the tracer as the one compiler authority; the AST `_OpExtractor` is deleted only after differential execution covers each migrated family — see `MASTER_AUDIT.md` §1. |
 | `compiler/op_catalog.py` | Canonical op-name catalog — "what we accept today" across all IR layers. |
 | `compiler/primitive_coverage.py` | **Audit truth** (Decision #24) — standalone primitive contract registry over 12 axes; consults `autodiff.vjp._VJPS`/`jvp._JVPS` so registered (V/J)VPs auto-flip to complete. Renders `docs/audit/standalone_primitive_coverage.md`. |
 | `compiler/backend_manifest.py` | Per-op × per-target × per-dtype kernel manifest synthesizer; `BackendKernelEntry` + statuses `fused`/`reference`/`compileable`/`artifact_only`/`planned`. |
 | `compiler/gpu_target.py` / `rocm_target.py` | Target profiles + feature matrices. NVIDIA pinned CUDA 13.3; AMD pinned ROCm 7.2.4. |
-| `compiler/{constraints,effects,graph_ir}.py` | `ConstraintSolver` (decoration-time), `EffectLattice` (`pure<random<memory<io<top`), Python→Graph IR emission. |
+| `compiler/{constraints,effects,graph_ir}.py` | `ConstraintSolver` (decoration-time), `EffectLattice` (`pure<random<memory<io<top`, derived from registered traced Graph IR since W2.2 — see Decision #5), Python→Graph IR emission. |
 | `compiler/{autotune_v2,attn_lower,matmul_pipeline,checkpoint,solver_config,distributed_planner,pipeline_planner}.py` | Bayesian autotuner; FA-4 lowering config; multi-target matmul dispatch; checkpoint extension; solver/ZeRO/resilience config; dp/tp/pp + 1F1B planners. |
 | `compiler/evaluator.py` + `conformance_evaluator.py` + `ptx_emit.py` + `flywheel{,_autotune}.py` + `compiler_grader.py` + `attention_tasks.py` + `magellan.py` + `alphaevolve.py` | **Evaluator program** — execution-derived, rung-aware scoring engine; four oracles (vertical/horizontal/metamorphic/DESIL cross-path), conformance re-derivation, NVIDIA WGMMA PTX emission, device-keyed autotuning records, anti-cheat scored-environment search. See `docs/audit/compiler/EVALUATOR_PLAN.md` §9.5. |
 | `rng.py` / `state/` / `control.py` / `sharding.py` | S4 RNG (Philox `RNGKey` + 12 samplers); S3 pytrees + 8-collection state taxonomy; S5 control flow + autodiff transforms; S6 `shard_map`/collectives + `MemoryShardSpec`. |
@@ -139,10 +147,10 @@ Per-phase deliverables and the open-work priority queue live in
 |------|---------|
 | `compiler/ir/TesseraOps.td` | Graph IR ODS — `MatmulOp`, `Conv2DNHWCOp`, `FlashAttnOp` (+ optional `attn_bias`), TilingInterface |
 | `compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td` | Schedule IR ODS — mesh, pipeline, yield |
-| `compiler/tile_opt_fa4/include/tessera/Dialect/{Attn,Queue}/*.td` | FA-4 Tile IR dialects |
+| `compiler/tile_opt_fa4/include/tessera/Dialect/Attn/*.td` | FA-4 Attn Tile IR dialect (the dead `Queue` dialect was deleted 2026-08-10 per Decisions #29/#31) |
 | `compiler/codegen/tessera_x86_backend/` | AMX BF16 + AVX512 GEMM — **works end-to-end** |
 | `compiler/codegen/Tessera_Apple_Backend/` | Apple CPU + GPU — **operational**. CPU: `MatmulToAppleCPU` + Accelerate shim. GPU: 17-pass Tile→Apple lowering + Objective-C++ runtime (`apple_gpu_runtime.mm`) with MPS/MSL/MPSGraph lanes. |
-| `compiler/codegen/{tessera_gpu_backend_NVIDIA,Tessera_ROCM_Backend,Tessera_RubinCPX_Backend}/` | Per-target backends (IR/artifact; HW execution gated where noted) |
+| `compiler/codegen/{tessera_gpu_backend_NVIDIA,Tessera_ROCM_Backend}/` | Per-target backends (IR/artifact; HW execution gated where noted). RubinCPX/TPU/Metalium/Cerebras backends are retired to `archive/` (2026-06-08) |
 | `compiler/tessera_neighbors/` | Halo/stencil neighbor-exchange dialect (Phase 7) |
 | `transforms/lib/*.cpp` | Pass bodies — Canonicalize/Verify/Migrate (P1), Distribution/Effect/Tiling/TileToX86 (P2), TileIRLowering/WarpSpec/AsyncCopy/WGMMA/TMA (P3), Collective/PipelineStage (P4), `AttentionFamilyPasses.cpp` (reasoning-model attention) |
 | `solvers/` | Core (11 passes), linalg, scaling-resilience, spectral (6 pass bodies + `ts-spectral-opt`), TPP (7 passes + `tpp-space-time`) |
@@ -172,21 +180,19 @@ Per-phase deliverables and the open-work priority queue live in
 
 5. **Effects are inferred, not declared.** Programmers only declare
    `@jit(deterministic=True)` and `@jit(seed=N)` at the top level.
-   **Corrected 2026-08-02 — inference is currently AST-based and there are two
-   mechanisms.** `EffectLattice` (`python/tessera/compiler/effects.py`) does
-   *not* walk the IR: `_EffectVisitor(ast.NodeVisitor)` walks the function's
-   **Python source AST** and matches dotted call names against `_OP_EFFECTS`.
-   Its own docstring scopes this ("Phase 1: AST-based single-function analysis.
-   Phase 2: full inter-procedural dataflow over the Graph IR call graph").
-   Separately, `src/transforms/lib/EffectAnnotationPass.cpp` computes effects on
-   the MLIR side — that is the one `GPUCollectiveInsertionPass` orders against.
-   **Consequence to design around: the AST walker fails open.** An op reached
-   through an alias, a local, a helper function, `getattr`, or a dict dispatch is
-   invisible to name matching, and an invisible op contributes `Effect.pure` — so
-   a function that calls RNG through a wrapper is inferred pure and
-   `@jit(deterministic=True)` passes. Do not rely on `EffectLattice` as a safety
-   property until effects are derived from traced IR (integrated plan W2.2).
-   Full analysis: [`docs/audit/compiler/COMPILER_ARCHITECTURE_SWEEP.md`](docs/audit/compiler/COMPILER_ARCHITECTURE_SWEEP.md) §F1.
+   **Updated 2026-08-10 — W2.2 closed; inference is IR-derived and fails
+   closed.** `EffectLattice` (`python/tessera/compiler/effects.py`) now joins
+   registered effects across **traced Graph IR records**: the canonical op
+   catalog emits explicit `tessera.effect_kind`, the old Python-AST
+   `_EffectVisitor` is **deleted**, and unknown behavior joins to `top`
+   (fail-closed) — so RNG reached through an alias, wrapper, `getattr`, or dict
+   dispatch no longer slips past `@jit(deterministic=True)`. The generated
+   `docs/audit/generated/effect_lattice_audit.md` dashboard tracks how many ops
+   sit at the conservative fallback. Separately,
+   `src/transforms/lib/EffectAnnotationPass.cpp` computes effects on the MLIR
+   side — that is the one `GPUCollectiveInsertionPass` orders against.
+   History of the old fail-open AST design:
+   [`docs/audit/compiler/COMPILER_ARCHITECTURE_SWEEP.md`](docs/audit/compiler/COMPILER_ARCHITECTURE_SWEEP.md) §F1.
 
 6. **Mock collectives use threads, not processes.** Multi-rank tests run in-process via `MockRankGroup`. No NCCL/MPI dependency in the test suite.
 
@@ -274,7 +280,7 @@ Per-phase deliverables and the open-work priority queue live in
 
 26. **The audit folder is the canonical "what's done / what's open" surface — follow its flow.** `docs/audit/` = one root audit + theme audits + generated dashboards + theme-local archives:
     1. **Start at `docs/audit/MASTER_AUDIT.md`** — all-up snapshot + P0/P1/P2 queue. Single entry point; do not reconstruct status by grepping.
-    2. **Drill into the theme audit:** `compiler/COMPILER_AUDIT.md`, `backend/BACKEND_AUDIT.md` (+ `backend/{apple,nvidia,rocm}/`), `coverage/COVERAGE_AUDIT.md`, `domain/DOMAIN_AUDIT.md`, `roadmap/ROADMAP_AUDIT.md`.
+    2. **Drill into the theme audit:** `compiler/COMPILER_AUDIT.md`, `backend/BACKEND_AUDIT.md` (+ `backend/{apple,nvidia,rocm,x86}/` per-backend todo queues), `coverage/COVERAGE_AUDIT.md`, `domain/DOMAIN_AUDIT.md`, `roadmap/ROADMAP_AUDIT.md`. For compiler work specifically, `docs/audit/compiler/README.md` states the **authority chain** (generated dashboards > COMPILER_AUDIT > INTEGRATED_COMPILER_PLAN > scoped plans > backend todos) — the integrated plan is the sole cross-domain compiler queue and wins when a scoped plan proposes a different order.
     3. **`docs/audit/generated/` dashboards are count/status truth** (script/test-owned, drift-gated). **Never hand-edit generated docs**; regenerate via their CLI + `scripts/check_generated_docs.sh`.
     4. **`*/archive/` is provenance only** — not the current status surface.
     When you finish audit-relevant work, update the theme audit (and `MASTER_AUDIT.md` if the all-up picture shifts); let generated dashboards carry the numbers.
@@ -330,7 +336,7 @@ Per-phase deliverables and the open-work priority queue live in
 
 29. **A declaration must have a consumer.** (Adopted 2026-08-02, W0.8.) If the compiler declares metadata — an ODS type or attribute, a `primitive_coverage` axis, a coverage claim — a **named pass or code path must consume it**, or the declaration is deleted. A declaration with no consumer is worse than a missing one: it reads as a closed contract in review and in the dashboards while carrying nothing. Drift-gated by `tests/unit/test_governance_declarations.py`. Derived from seven independent instances (`manifold` reaching no backend; `MultivectorSpec.grades` ignored by `geometric_product`; a closed `batching_rule` axis whose `vmap` is a Python for-loop; a closed `shape_rule` axis whose inference is a five-case if-chain; nine declared `!tile.*` types alongside 70 `Variadic<AnyType>`; `numeric_policy` with no carrier below Graph IR; `TilingInterface` unused by `fusion_core.py`).
 
-30. **Derive, don't ask.** (Adopted 2026-08-02, W0.8.) A pass that needs a program fact — purity, activity, liveness, fusion legality, shape equality, sharding — **queries the analysis layer**; it does not accept the fact syntactically and it does not hand-roll an eighth bespoke walker. New ad-hoc analyses are rejected in review. Told-not-derived facts are wrong at the edges and **fail open**, which is how `EffectLattice` name-matching lets an aliased RNG call pass `@jit(deterministic=True)`. Until the W2.1 dataflow framework exists, a pass that cannot derive a fact must fail closed (treat unprovable as unsafe), not assume the permissive answer.
+30. **Derive, don't ask.** (Adopted 2026-08-02, W0.8.) A pass that needs a program fact — purity, activity, liveness, fusion legality, shape equality, sharding — **queries the analysis layer**; it does not accept the fact syntactically and it does not hand-roll an eighth bespoke walker. New ad-hoc analyses are rejected in review. Told-not-derived facts are wrong at the edges and **fail open** — the canonical scar is the old AST-based `EffectLattice` letting an aliased RNG call pass `@jit(deterministic=True)` (fixed by W2.2, see Decision #5). **The analysis layer now exists:** W2.1's `GraphDataflowAnalysis` (closed 2026-08-11) runs shape/alias product lattices + liveness on MLIR `DataFlowSolver`, derives value-scoped memory dependence from registered effects/resources, and exposes reverse activity, with explicit `invalidate`/`recompute`. Query it. A fact it cannot derive still fails closed (treat unprovable as unsafe), never the permissive answer.
 
 31. **One implementation per boundary.** (Adopted 2026-08-02, W0.8.) Each IR level boundary has exactly **one production lowering**. A second implementation is either (a) a **declared oracle** with a differential test against the production path, or (b) deleted. Same rule for frontends and AD engines. Drift-gated by `tests/unit/test_governance_declarations.py`. **Ordering caveat:** do not collapse a duplication before the surviving path can carry what the deleted one carried — that is the documented way this fails; see the W0→W1→W2→W3 ordering in `INTEGRATED_COMPILER_PLAN.md`.
 
@@ -365,8 +371,10 @@ Gate all of these behind `target_profile.isa >= ISA.SM_90`:
 - `tile.tcgen05.mma` (Blackwell TMEM MMA) — the mnemonic is `tcgen05.mma`, not `mma.tcgen05`; the latter spelling came from a parallel `tile` ODS deleted in W0.6 that nothing compiled
 - `tile.async_copy` / `tile.wait_async` stage indexing
 - `tessera.schedule.policy "persistent"` (persistent CTA scheduling)
-- `tessera.queue.{create, push, pop}` (tile queue dialect)
 - `tcgen05.mma` PTX inline asm
+
+(The `tessera.queue.*` tile-queue dialect that used to sit in this list was
+deleted 2026-08-10 as dead IR — Decisions #29/#31.)
 
 ---
 
@@ -472,11 +480,16 @@ See `docs/GETTING_STARTED.md` for the full cross-platform matrix.
 ## C++ Build
 
 ```bash
-# Canonical configure — PRIMARY box (Ubuntu/Strix Halo), x86 + ROCm + solver dialects
+# Canonical configure — PRIMARY box (Ubuntu/Strix Halo), x86 + ROCm + solver dialects.
+# TESSERA_BUILD_X86_BACKEND is OFF by default and MUST be on here: x86 and ROCm
+# share this host, and this is the only fleet configuration that runs both
+# fixture families in one `lit` invocation (the 08-12 load-crash hid behind its
+# absence — see Decision #19).
 cmake -S . -B build -G Ninja \
   -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm \
   -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
   -DTESSERA_ENABLE_HIP=ON -DTESSERA_BUILD_ROCM_BACKEND=ON \
+  -DTESSERA_BUILD_X86_BACKEND=ON \
   -DCMAKE_PREFIX_PATH=/opt/rocm/core
 ninja -C build tessera-opt        # 32 threads; ~1-2 min cold
 
@@ -498,7 +511,6 @@ cmake -S . -B build -G Ninja \
 
 # Other backend toggles (additive)
 cmake .. -DTESSERA_ENABLE_CUDA=ON -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda   # CUDA
-cmake .. -DTESSERA_BUILD_RUBINCPX_BACKEND=ON                                # RubinCPX
 
 # Benchmarks (stable JSON schema, Decision #12)
 python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
@@ -513,7 +525,6 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | `tessera-lower-to-rocm` | AMD ROCm MFMA |
 | `tessera-lower-to-apple_cpu[-runtime]` | Apple CPU (Accelerate artifact / cblas_sgemm runtime) |
 | `tessera-lower-to-apple_gpu[-runtime]` | Apple GPU (Metal artifact / MPS + MSL + MPSGraph runtime; longest-fusion-first ordering) |
-| `tessera-cpx-pipeline` / `-context-pipeline` | NV Rubin CPX (separate `tessera-cpx-opt` driver) |
 
 ---
 
@@ -523,14 +534,14 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 |---------------|-------|
 | **START HERE — status + open-work queue** | `docs/audit/MASTER_AUDIT.md` (+ theme audits; `docs/audit/README.md` for the map) |
 | **Forward compiler direction (north star)** — three-tier/arbiter model + coordination (Decision #28) | `docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md` (read first) + `COMPILER_REFACTOR_PLAN.md` + reassessed `OPTIMIZING_COMPILER_PLAN.md` |
-| **Backend plugin handoff** — picking up Workstream C (x86/NVIDIA/ROCm) on the Strix Halo / NR2 Pro box against the merged synthesizer framework | `docs/audit/compiler/WORKSTREAM_C_HANDOFF.md` (the 3-seam build recipe + skeleton + F4-verify + per-backend cards) |
+| **Compiler map + authority chain** — which doc wins when plans disagree (dashboards > COMPILER_AUDIT > INTEGRATED_COMPILER_PLAN > scoped plans > backend todos) | `docs/audit/compiler/README.md` (routes all scoped plans, incl. `GAME_THEORY_PLAN.md`, `compiler_enhancement.md` (CAKE), `W1_1_TYPING_DESIGN.md`; the Workstream C handoff is archived under `compiler/archive/`) |
 | **Generated dashboards** (count/status truth — never hand-edit) | `docs/audit/generated/` |
 | Authoritative API naming | `docs/CANONICAL_API.md` |
 | Canonical tensor attributes & dtypes | `docs/reference/tessera_tensor_attributes.md` |
 | Backend architecture + kernel guides | `docs/backends/` (Apple, x86, ROCm, NVIDIA) |
-| **RDNA ISA data archive** (does-this-op-exist-on-my-target truth before emitting) | `docs/reference/isa/rdna/` — structured, regenerable extraction of AMD's RDNA3 / RDNA3.5 / RDNA4 ISA guides + Micro Engine Scheduler. Per-version instruction DB (`<ver>/instructions.json`: opcodes, pseudocode), microcode encoding bit-fields (`encodings.json`), and a cross-version opcode matrix (`cross_version/instruction_matrix.{json,md}`). **gfx1151 = RDNA3.5: WMMA F16/BF16/IU8/IU4, NO FP8/BF8 WMMA (those + sparse SWMMAC are RDNA4-only).** JSON = machine truth, MD = mirror; regenerate via `tools/build_archive.py` (no network). MES scheduler write-up at `mes/SCHEDULER_OVERVIEW.md`. |
+| **RDNA ISA data archive** (does-this-op-exist-on-my-target truth before emitting) | `docs/reference/isa/rdna/` — structured, regenerable extraction of AMD's RDNA3 / RDNA3.5 / RDNA4 ISA guides + Micro Engine Scheduler. Per-version instruction DB (`<ver>/instructions.json`: opcodes, pseudocode), microcode encoding bit-fields (`encodings.json`), and a cross-version opcode matrix (`cross_version/instruction_matrix.{json,md}`). **gfx1151 = RDNA3.5: WMMA F16/BF16/IU8/IU4, NO FP8/BF8 WMMA (those + sparse SWMMAC are RDNA4-only).** JSON = machine truth, MD = mirror; regenerate via `tools/build_archive.py` (no network). MES scheduler write-up at `mes/SCHEDULER_OVERVIEW.md`. Sibling index: `docs/reference/isa/PRIMARY_SOURCES{,_INDEX}.md` — AMD primary-source assessment incl. CDNA 5 (assessed only, no extracted `cdna/` archive). |
 | Graph IR ops / canonicalizations | `src/compiler/ir/TesseraOps.td`, `src/transforms/lib/CanonicalizeTesseraIR.cpp` |
-| Schedule IR / FA-4 Tile IR ODS | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td`, `src/compiler/tile_opt_fa4/include/tessera/Dialect/{Attn,Queue}/` |
+| Schedule IR / FA-4 Tile IR ODS | `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td`, `src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/` |
 | Runtime C ABI header | `src/runtime/include/tessera/tessera_runtime.h` |
 | IR specs (14 files incl. AUTODIFF_SPEC) | `docs/spec/` |
 | User guides + 11-chapter programming guide | `docs/guides/`, `docs/programming_guide/` (check before claiming a feature is missing — Decision #22) |

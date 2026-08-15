@@ -2902,3 +2902,18 @@ production model (`TileIRLoweringPass::emitAsyncCopy`,
 verifier was the one rejecting production NV Tile IR, and
 `phase2/pm_verify_async_token.mlir` (red at baseline) now passes. No
 NV-device-lane (`tessera-nvidia-opt`) fixtures changed.
+
+## TILE-SYNC-TYPED-2026-08-15 — shared Tile sync ABI assessment (PR #566)
+
+**Follow-up required.** The retyped family is NVIDIA's vocabulary:
+`tile.mbarrier.wait` gains an optional `!tile.mbarrier_token` segment (the
+operand-segment ABI is now barrier/token/dependencies), `tile.tma.copy_async`
+and the wait grow fail-closed gates-on-nothing verifiers, the keyless legacy
+wait is an explicit `tile.retire_all` marker (stamped by AsyncCopyLowering,
+resolved — or preserved when no completion tokens exist — by
+NVTMADescriptorPass), and `--tessera-tile-dataflow-legality` runs in every
+NVIDIA pipeline after the post-NVTMA legality blocks. Host-free evidence:
+full lit 324/0 including the pipeline-alias and NVTMA fixtures. **Open on
+this queue:** sm_120-host revalidation of the NVTMA pipelines and any
+SM90/Hopper device proof (Phase G/H); the barrier-at-birth emission
+restructure is the tracked follow-on (compiler_enhancement.md §5.2.1).

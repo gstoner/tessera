@@ -14,11 +14,11 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 396 | backend_pathway_owned=381, multi_gpu_deferred=15 | backend_codegen=381, distributed_validation=15 |
+| `backend_kernel` | 405 | backend_pathway_owned=390, multi_gpu_deferred=15 | backend_codegen=390, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
-| `sharding_rule` | 45 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=42 | compiler_middle_end=1, distributed_validation=2, primitive_registry=42 |
-| `target_ir` | 5 | architecture_evidence_gated=1, multi_gpu_deferred=4 | backend_codegen=1, distributed_validation=4 |
-| `tile_ir` | 1 | architecture_evidence_gated=1 | backend_codegen=1 |
+| `sharding_rule` | 50 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=47 | compiler_middle_end=1, distributed_validation=2, primitive_registry=47 |
+| `target_ir` | 14 | architecture_evidence_gated=10, multi_gpu_deferred=4 | backend_codegen=10, distributed_validation=4 |
+| `tile_ir` | 10 | architecture_evidence_gated=10 | backend_codegen=10 |
 
 ## Rows
 
@@ -75,6 +75,9 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `lt` | comparison | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ne` | comparison | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `einsum` | contraction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `game_boltzmann_value` | contraction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `game_coalition_excess` | contraction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `game_semivalue` | contraction | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `edm_loss_weight` | diffusion | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `edm_precondition` | diffusion | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ebm_bivector_langevin_sample` | ebm | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -358,6 +361,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `rng_truncated_normal` | rng | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `mrope_2d` | rotary_embedding | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `rope` | rotary_embedding | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `game_mex` | segment_reduce | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `segment_reduce` | segment_reduce | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `named_sharding` | sharding | planned | `multi_gpu_deferred` | distributed_validation | Backend kernel proof needs distributed or collective execution ownership. |
 | `backend_kernel` | `partition_spec` | sharding | planned | `multi_gpu_deferred` | distributed_validation | Backend kernel proof needs distributed or collective execution ownership. |
@@ -371,6 +375,11 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `spmm_csr` | sparse | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dct` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `fft` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `game_coalition_marginal` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `game_subset_mobius` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `game_subset_zeta` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `game_superset_mobius` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `game_superset_zeta` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `ifft` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `irfft` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `istft` | spectral | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -456,6 +465,11 @@ test, ABI, and surface dashboards.
 | `sharding_rule` | `spmm_coo` | sparse | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `dct` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `fft` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `game_coalition_marginal` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `game_subset_mobius` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `game_subset_zeta` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `game_superset_mobius` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `game_superset_zeta` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `ifft` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `irfft` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `istft` | spectral | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
@@ -471,4 +485,22 @@ test, ABI, and surface dashboards.
 | `target_ir` | `all_reduce` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `all_to_all` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
 | `target_ir` | `reduce_scatter` | collective | reference | `multi_gpu_deferred` | distributed_validation | Keep reference lane until a real collective/distributed proof exists. |
+| `target_ir` | `game_boltzmann_value` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `game_coalition_excess` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `game_semivalue` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `game_mex` | segment_reduce | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `game_coalition_marginal` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `game_subset_mobius` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `game_subset_zeta` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `game_superset_mobius` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `game_superset_zeta` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `tile_ir` | `depth_attn` | attention | partial | `architecture_evidence_gated` | backend_codegen | Shared Graph/AD contract is closed; wait for the named architecture-owned physical phase and device packet. |
+| `tile_ir` | `game_boltzmann_value` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `game_coalition_excess` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `game_semivalue` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `game_mex` | segment_reduce | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `game_coalition_marginal` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `game_subset_mobius` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `game_subset_zeta` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `game_superset_mobius` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `game_superset_zeta` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |

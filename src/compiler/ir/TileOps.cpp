@@ -1571,8 +1571,8 @@ LogicalResult AllocOp::verify() {
     return emitOpError("space must be smem|tmem|gmem");
   if (getBytes() == 0)
     return emitOpError("bytes must be positive");
-  if (!isa<TileLayoutAttr>(getLayout()))
-    return emitOpError("layout must be a structured #tile.layout attribute");
+  // layout's #tile.layout typing is enforced by the ODS constraint since the
+  // CAKE Phase 1 §5.2 row 5 hoist — rejected at parse, before this runs.
   if (getSpace() == "tmem" &&
       getOperation()->getAttrOfType<StringAttr>("target") &&
       getOperation()->getAttrOfType<StringAttr>("target").getValue() ==
@@ -2332,6 +2332,29 @@ LogicalResult TMACopyAsyncOp::verify() {
   if (getBarrier() && !expect)
     return emitOpError(
         "an SSA mbarrier binding requires explicit expect_tx bytes");
+  // A copy must be observable by *some* completion mechanism (CAKE Phase 1
+  // §5.2 row 2): an SSA mbarrier, a typed !tile.async_token result, or a
+  // legacy grouping key (tile.barrier_id / tile.barrier / stage /
+  // tile.depends_on). A copy with none of these gates on nothing — no wait
+  // can ever retire it — and used to verify silently.
+  if (!getBarrier()) {
+    bool producesToken = llvm::any_of(getOutputs(), [](Value out) {
+      return isa<AsyncTokenType>(out.getType());
+    });
+    bool hasLegacyKey = getOperation()->hasAttr("tile.barrier_id") ||
+                        getOperation()->hasAttr("tile.barrier") ||
+                        getOperation()->hasAttr("stage") ||
+                        getOperation()->hasAttr("tile.depends_on") ||
+                        // AsyncCopyLowering's declared "barrier retrofit
+                        // pending" marker (stripped by NVTMADescriptorPass
+                        // when the SSA barrier is bound).
+                        getOperation()->hasAttr("tile.pending_mbarrier");
+    if (!producesToken && !hasLegacyKey)
+      return emitOpError(
+          "TILE_TMA_COPY_GATES_ON_NOTHING: a tile.tma.copy_async needs an SSA "
+          "mbarrier operand, a !tile.async_token result, or a legacy grouping "
+          "key (tile.barrier_id / stage); with none, no wait can retire it");
+  }
   int64_t coordinateCount = 0;
   if (auto count =
           getOperation()->getAttrOfType<IntegerAttr>("coordinate_count"))
@@ -2371,8 +2394,29 @@ LogicalResult MBarrierWaitOp::verify() {
   auto slot = getOperation()->getAttrOfType<IntegerAttr>("slot");
   if (!slot || slot.getInt() < 0)
     return emitOpError("requires slot >= 0");
-  if (getBarrier() && getDependencies().empty())
-    return emitOpError("requires an explicit asynchronous dependency");
+  // Typed sync contract (CAKE Phase 1 §5.2 row 1). Every dependency must be a
+  // typed synchronization value — an arbitrary SSA value (the measured hole:
+  // an i32 constant, a loop induction variable) is not a completion edge and
+  // conveys nothing a backend can honor.
+  for (Value dep : getDependencies())
+    if (!isa<AsyncTokenType, MBarrierTokenType>(dep.getType()))
+      return emitOpError(
+                 "TILE_WAIT_UNTYPED_DEPENDENCY: dependency operands must be "
+                 "!tile.async_token or !tile.mbarrier_token; got ")
+             << dep.getType();
+  // A wait must gate on something: the mbarrier token from
+  // tile.mbarrier.arrive_expect_tx, at least one async-token dependency, or
+  // the explicit retire-all marker (the declared keyless-wait_async legacy
+  // semantics, stamped by AsyncCopyLoweringPass and replaced with the real
+  // token set by NVTMADescriptorPass). Fails closed — the bare form used to
+  // verify and gated on nothing.
+  if (!getToken() && getDependencies().empty() &&
+      !getOperation()->hasAttr("tile.retire_all"))
+    return emitOpError(
+        "TILE_WAIT_GATES_ON_NOTHING: a wait needs a !tile.mbarrier_token, "
+        "at least one !tile.async_token dependency, or the explicit "
+        "tile.retire_all marker; with none it releases against no completion "
+        "edge");
   return success();
 }
 

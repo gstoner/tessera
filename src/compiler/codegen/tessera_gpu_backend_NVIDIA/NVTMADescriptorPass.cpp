@@ -223,10 +223,14 @@ struct NVTMADescriptorPass
       operands.append(copy.getDependencies().begin(),
                       copy.getDependencies().end());
       SmallVector<NamedAttribute> attrs;
+      // tile.pending_mbarrier is AsyncCopyLowering's "barrier retrofit
+      // pending" declaration; the rebuilt copy binds the real SSA barrier, so
+      // the marker is resolved here.
       for (NamedAttribute attr : copy->getAttrs())
         if (attr.getName() != "operandSegmentSizes" &&
             attr.getName() != "mbarrier_slot" &&
-            attr.getName() != "expect_tx")
+            attr.getName() != "expect_tx" &&
+            attr.getName() != "tile.pending_mbarrier")
           attrs.push_back(attr);
       attrs.push_back(
           b.getNamedAttr("mbarrier_slot",
@@ -264,13 +268,21 @@ struct NVTMADescriptorPass
         dependencies.append(completionTokens.begin(), completionTokens.end());
       operands.append(dependencies);
       SmallVector<NamedAttribute> attrs;
+      // Drop tile.retire_all ONLY when the marker's "everything outstanding"
+      // meaning was actually realized as a concrete completion-token set. If
+      // the copies in this kernel returned no tokens, the wait still means
+      // "retire everything" and the marker must survive — stripping it here
+      // would build a barrier-only wait that MBarrierWaitOp::verify()
+      // correctly rejects as TILE_WAIT_GATES_ON_NOTHING.
+      const bool syncRealized = !dependencies.empty();
       for (NamedAttribute attr : wait->getAttrs())
-        if (attr.getName() != "operandSegmentSizes")
+        if (attr.getName() != "operandSegmentSizes" &&
+            !(syncRealized && attr.getName() == "tile.retire_all"))
           attrs.push_back(attr);
       attrs.push_back(b.getNamedAttr(
           "operandSegmentSizes",
           b.getDenseI32ArrayAttr(
-              {1, static_cast<int32_t>(dependencies.size())})));
+              {1, 0, static_cast<int32_t>(dependencies.size())})));
       b.setInsertionPoint(wait);
       OperationState st(wait.getLoc(),
                         tile::MBarrierWaitOp::getOperationName());

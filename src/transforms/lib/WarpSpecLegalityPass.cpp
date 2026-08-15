@@ -49,6 +49,8 @@
 //
 // All seven structural + lifetime invariants from the appendix are now checked.
 
+#include "TileValueProvenance.h"
+
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
 
@@ -74,41 +76,37 @@ static bool isUnderWarpRoleGuard(Operation *op, Operation *funcOp) {
   return false;
 }
 
+// P1a second increment (CAKE §5.3–§5.4, 2026-08-15): the six predicates are
+// derived from registered op identity, not name substrings, and the
+// unproduced attribute escape hatches (`tile.barrier_init`, `tile.collective`,
+// `tile.tma_store`, `tile.fence`, `tile.buffer_free`) are deleted — no pass
+// stamped them, so they were pure fail-open surface. The remaining exact-name
+// matches are the SM<90 `cp_async` husk trio (a real producer in
+// AsyncCopyLoweringPass) and the two collectives with no producer yet; each
+// graduates to a typed check when its op is registered (Decision #29).
 static bool isBarrierInit(Operation *op) {
-  if (op->hasAttr("tile.barrier_init"))
-    return true;
-  StringRef n = op->getName().getStringRef();
-  return n.contains("mbarrier") && n.contains("init");
+  return isa<tessera::tile::MBarrierInitOp>(op);
 }
 
 static bool isCollective(Operation *op) {
-  if (op->hasAttr("tile.collective"))
+  if (isa<tessera::tile::CtaSyncOp>(op))
     return true;
   StringRef n = op->getName().getStringRef();
-  return n.contains("cta_sync") || n.contains("cluster_sync") ||
-         n.contains("next_tile");
+  return n == "tile.cluster_sync" || n == "tile.tile_scheduler.next_tile";
 }
 
 static bool isTmaStore(Operation *op) {
-  if (op->hasAttr("tile.tma_store"))
-    return true;
-  StringRef n = op->getName().getStringRef();
-  return n.contains("tma") && n.contains("store");
+  return isa<tessera::tile::TMAStoreOp>(op);
 }
 
 static bool isVisibilityFence(Operation *op) {
-  if (op->hasAttr("tile.fence"))
+  if (isa<tessera::tile::FenceOp>(op))
     return true;
-  StringRef n = op->getName().getStringRef();
-  return n.contains("fence") || n.contains("proxy_async") ||
-         n.contains("commit_group");
+  return op->getName().getStringRef() == "tile.cp_async.commit_group";
 }
 
 static bool isBufferFree(Operation *op) {
-  if (op->hasAttr("tile.buffer_free"))
-    return true;
-  StringRef n = op->getName().getStringRef();
-  return n.contains("buffer_free") || n.contains("dealloc");
+  return isa<tessera::tile::DeallocOp>(op);
 }
 
 // A producer of async-staged data for a consumer mma: either a tile.async_copy /
@@ -267,16 +265,27 @@ struct WarpSpecLegality
         if (n != "tile.mma")
           return;
         // Per producer the mma reads from: did it read data, and a token?
+        // Producers are resolved ACROSS scf.for block-argument edges (P1a /
+        // CAKE §5.3): a staged tile arriving as an iter_arg resolves to the
+        // async copy that produced it, so the canonical pipelined shape is no
+        // longer invisible to this check (the measured §5.1.1 fail-open).
         llvm::DenseMap<Operation *, std::pair<bool, bool>> fromProducer;
         for (Value operand : op->getOperands()) {
-          Operation *def = operand.getDefiningOp();
-          if (!def || !isAsyncDataProducer(def))
-            continue;
+          tessera::provenance::Resolution res =
+              tessera::provenance::resolveThroughLoopCarry(operand);
           bool isToken = isa<tessera::tile::AsyncTokenType>(operand.getType());
-          auto &flags = fromProducer[def];
-          (isToken ? flags.second : flags.first) = true;
-          // (b) retirement, only for a token minted directly by a copy op.
-          if (isToken) {
+          for (Value root : res.roots) {
+            Operation *def = root.getDefiningOp();
+            if (!def || !isAsyncDataProducer(def))
+              continue;
+            auto &flags = fromProducer[def];
+            (isToken ? flags.second : flags.first) = true;
+          }
+          // (b) retirement, only for a token minted directly by a copy op
+          // (a loop-carried token is retired structurally on the back edge;
+          // the direct case is the one this single-visit walk can prove).
+          Operation *def = operand.getDefiningOp();
+          if (isToken && def) {
             StringRef dn = def->getName().getStringRef();
             bool directCopy =
                 dn == "tile.async_copy" || dn == "tile.tma.copy_async";

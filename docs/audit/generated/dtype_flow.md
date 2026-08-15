@@ -10,10 +10,10 @@ physical backend row says so. Accumulators are listed separately from
 logical tensor dtype. Complex logical values display their physical
 interleaved-component ABI explicitly.
 
-- Operators: **329**
+- Operators: **338**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **905**
-- Rows retaining at least one compiler/evidence gap: **335**
+- Operator/logical-dtype rows: **923**
+- Rows retaining at least one compiler/evidence gap: **353**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -111,6 +111,9 @@ for the complete per-dtype and per-target matrix.
 | `le` | comparison | no | bf16,fp16,fp32,int32 | direct_test,physical,tile |
 | `lt` | comparison | no | bf16,fp16,fp32,int32 | direct_test,physical,tile |
 | `ne` | comparison | no | bf16,fp16,fp32,int32 | direct_test,physical,tile |
+| `game_boltzmann_value` | contraction | no | bf16,fp32 | direct_test,physical,tile |
+| `game_coalition_excess` | contraction | no | bf16,fp32 | direct_test,physical,tile |
+| `game_semivalue` | contraction | no | bf16,fp32 | direct_test,physical,tile |
 | `atan2` | elementwise | no | bf16,fp32 | direct_test,physical,tile |
 | `clip` | elementwise | no | bf16,fp32 | direct_test,physical,tile |
 | `popcount` | elementwise | no | bf16,fp32,int32 | direct_test,physical,tile |
@@ -254,6 +257,7 @@ for the complete per-dtype and per-target matrix.
 | `rng_philox_uniform` | random_source | yes | bf16,fp32 | direct_test,physical,tile |
 | `rng_uniform` | random_source | yes | bf16,fp32 | direct_test,physical,tile |
 | `count_nonzero` | reduction | no | bf16,fp32 | direct_test,physical,tile |
+| `game_mex` | segment_reduce | no | bf16,fp32 | direct_test,physical,tile |
 | `segment_reduce` | segment_reduce | yes | bf16,fp32 | direct_test,physical,tile |
 | `argsort` | sort | no | bf16,fp32 | direct_test,physical,tile |
 | `sort` | sort | no | bf16,fp32 | direct_test,physical,tile |
@@ -262,6 +266,11 @@ for the complete per-dtype and per-target matrix.
 | `sddmm` | sparse | yes | bf16,fp32 | direct_test,physical,tile |
 | `spmm_coo` | sparse | yes | bf16,fp32 | direct_test,physical,tile |
 | `spmm_csr` | sparse | yes | bf16,fp32 | direct_test,physical,tile |
+| `game_coalition_marginal` | spectral | no | bf16,fp32 | direct_test,physical,tile |
+| `game_subset_mobius` | spectral | no | bf16,fp32 | direct_test,physical,tile |
+| `game_subset_zeta` | spectral | no | bf16,fp32 | direct_test,physical,tile |
+| `game_superset_mobius` | spectral | no | bf16,fp32 | direct_test,physical,tile |
+| `game_superset_zeta` | spectral | no | bf16,fp32 | direct_test,physical,tile |
 | `reduce` | stable_reduction | no | bf16,fp32 | direct_test,physical,tile |
 | `sigmoid_safe` | stable_reduction | no | bf16,fp32 | direct_test,physical,tile |
 | `cache_commit` | state_update | no | bf16,fp32 | direct_test,physical,tile |

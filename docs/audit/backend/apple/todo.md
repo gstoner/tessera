@@ -3314,3 +3314,14 @@ Mac.** Apple lanes consume the Python tile IR spine and the runtime
 `func.call` lowering, not the C++ stage-model verifier that changed; the
 spine relaxation is covered by the on-box unit suite (`test_tile_ir.py`
 no-key-verifies-clean case). No MSL/MPS consumer changed.
+
+## TILE-SYNC-TYPED-2026-08-15 — shared Tile sync ABI assessment (PR #566)
+
+**Parity validated at lit level; no ABI consumer.** The Apple lane consumes
+no `tile.mbarrier.wait` (the changed operand-segment ABI), and its
+threadgroup pipeline fixtures that touch shared TMA vocabulary
+(`phase8/apple_threadgroup_pipeline{,_invalid}.mlir`, incl.
+`tile.tma.descriptor`) pass unchanged in the full 324/0 lit run on the
+changed tree. The new `tile.tma.descriptor` source-type constraint
+(buffer/memref/ranked-tensor) admits every Apple fixture form. No Metal/MPS
+runtime surface changed; no on-Mac evidence is claimed or required.

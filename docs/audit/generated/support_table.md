@@ -57,6 +57,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `lt` | comparison | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `ne` | comparison | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `einsum` | contraction | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `game_boltzmann_value` | contraction | public | public | registered | complete | partial | reference | ready | none |
+| `game_coalition_excess` | contraction | public | public | registered | complete | partial | reference | ready | none |
+| `game_semivalue` | contraction | public | public | registered | complete | partial | reference | ready | none |
 | `acos` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `add` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `asin` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -292,6 +295,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `normalize_group_advantages` | rl_loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `ppo_policy_loss` | rl_loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `rope` | rotary_embedding | public | public | registered | complete | fused | device_verified_abi | ready | none |
+| `game_mex` | segment_reduce | public | public | registered | complete | partial | reference | ready | none |
 | `segment_reduce` | segment_reduce | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `argsort` | sort | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `sort` | sort | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -302,6 +306,11 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `spmm_csr` | sparse | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `dct` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `fft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
+| `game_coalition_marginal` | spectral | public | public | registered | complete | partial | reference | ready | none |
+| `game_subset_mobius` | spectral | public | public | registered | complete | partial | reference | ready | none |
+| `game_subset_zeta` | spectral | public | public | registered | complete | partial | reference | ready | none |
+| `game_superset_mobius` | spectral | public | public | registered | complete | partial | reference | ready | none |
+| `game_superset_zeta` | spectral | public | public | registered | complete | partial | reference | ready | none |
 | `ifft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `irfft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `istft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
@@ -353,7 +362,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | attention | 27 | PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCN· PPGCpRN· PPGCFHNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB |
 | collective | 4 | PPGCCRNB PPGCCRNB PPGCCRNB PPGCCRNB |
 | comparison | 6 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
-| contraction | 1 | PPGCFCN· |
+| contraction | 4 | PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB |
 | energy_based_models | 10 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 7 | PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
@@ -380,10 +389,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | reduction | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | rl_loss | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | rotary_embedding | 1 | PPGCFHN· |
-| segment_reduce | 1 | PPGCnnN· |
+| segment_reduce | 2 | PPGCpRN· PPGCnnN· |
 | sort | 3 | PPGCFCN· PPGCFCN· PPGCFCN· |
 | sparse | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
-| spectral | 9 | PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB |
+| spectral | 14 | PPGCFCNB PPGCFCNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB |
 | stable_reduction | 7 | PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFHNB PPGCFHN· PPGCFCNB |
 | state_space | 1 | PPGCFCN· |
 | state_update | 5 | PPGCnnN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFFNB |

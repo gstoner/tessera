@@ -263,6 +263,10 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             # NVTMADescriptor emits (kind consistency + arrival-count).
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
+            # P1a (TILE-SYNC-TYPED-2026-08-15): derived sync legality over
+            # the retrofitted barriers/tokens (arrive-wait pairing, barrier
+            # origin, ring advancement, SSA-keyed expect agreement).
+            "tessera-tile-dataflow-legality",
         ),
         required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm90", "nvidia_sm100", "nvidia_sm120"),
@@ -416,6 +420,10 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             # NVTMADescriptor emits (kind consistency + arrival-count).
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
+            # P1a (TILE-SYNC-TYPED-2026-08-15): derived sync legality over
+            # the retrofitted barriers/tokens (arrive-wait pairing, barrier
+            # origin, ring advancement, SSA-keyed expect agreement).
+            "tessera-tile-dataflow-legality",
             "tessera-nv-flash-attn-emitter",
         ),
         required_dialects=("tessera", "tile", "func", "scf", "arith"),
@@ -461,6 +469,9 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             # Second placement — over the typed #tile.barrier markers.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
+            # P1a (TILE-SYNC-TYPED-2026-08-15): derived sync legality over
+            # the retrofitted barriers/tokens.
+            "tessera-tile-dataflow-legality",
         ),
         required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm100",),
@@ -505,6 +516,9 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             # Second placement — over the typed #tile.barrier markers.
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
+            # P1a (TILE-SYNC-TYPED-2026-08-15): derived sync legality over
+            # the retrofitted barriers/tokens.
+            "tessera-tile-dataflow-legality",
         ),
         required_dialects=("tessera", "tile", "func", "scf", "arith"),
         targets=("nvidia_sm120",),
@@ -551,6 +565,10 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             # NVTMADescriptor emits (kind consistency + arrival-count).
             "tessera-tile-pipeline-legality",
             "tessera-warpspec-legality",
+            # P1a (TILE-SYNC-TYPED-2026-08-15): derived sync legality over
+            # the retrofitted barriers/tokens (arrive-wait pairing, barrier
+            # origin, ring advancement, SSA-keyed expect agreement).
+            "tessera-tile-dataflow-legality",
             "tessera-nv-flash-attn-emitter",
         ),
         required_dialects=("tessera", "tile", "func", "scf", "arith"),

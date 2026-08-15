@@ -41,6 +41,9 @@ le,comparison,public,public,registered,complete,fused,device_verified_jit,ready,
 lt,comparison,public,public,registered,complete,fused,device_verified_jit,ready,none
 ne,comparison,public,public,registered,complete,fused,device_verified_jit,ready,none
 einsum,contraction,public,public,registered,complete,fused,device_verified_jit,ready,none
+game_boltzmann_value,contraction,public,public,registered,complete,partial,reference,ready,none
+game_coalition_excess,contraction,public,public,registered,complete,partial,reference,ready,none
+game_semivalue,contraction,public,public,registered,complete,partial,reference,ready,none
 acos,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,none
 add,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,benchmarked
 asin,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,none
@@ -276,6 +279,7 @@ grpo_policy_loss,rl_loss,public,public,registered,complete,fused,device_verified
 normalize_group_advantages,rl_loss,public,public,registered,complete,fused,device_verified_jit,ready,none
 ppo_policy_loss,rl_loss,public,public,registered,complete,fused,device_verified_jit,ready,none
 rope,rotary_embedding,public,public,registered,complete,fused,device_verified_abi,ready,none
+game_mex,segment_reduce,public,public,registered,complete,partial,reference,ready,none
 segment_reduce,segment_reduce,public,public,registered,complete,not_applicable,not_applicable,ready,none
 argsort,sort,public,public,registered,complete,fused,device_verified_jit,ready,none
 sort,sort,public,public,registered,complete,fused,device_verified_jit,ready,none
@@ -286,6 +290,11 @@ spmm_coo,sparse,public,public,registered,complete,fused,device_verified_jit,read
 spmm_csr,sparse,public,public,registered,complete,fused,device_verified_jit,ready,none
 dct,spectral,public,public,registered,complete,fused,device_verified_jit,ready,benchmarked
 fft,spectral,public,public,registered,complete,fused,device_verified_jit,ready,benchmarked
+game_coalition_marginal,spectral,public,public,registered,complete,partial,reference,ready,none
+game_subset_mobius,spectral,public,public,registered,complete,partial,reference,ready,none
+game_subset_zeta,spectral,public,public,registered,complete,partial,reference,ready,none
+game_superset_mobius,spectral,public,public,registered,complete,partial,reference,ready,none
+game_superset_zeta,spectral,public,public,registered,complete,partial,reference,ready,none
 ifft,spectral,public,public,registered,complete,fused,device_verified_jit,ready,benchmarked
 irfft,spectral,public,public,registered,complete,fused,device_verified_jit,ready,benchmarked
 istft,spectral,public,public,registered,complete,fused,device_verified_jit,ready,benchmarked

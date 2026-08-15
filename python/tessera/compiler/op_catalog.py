@@ -207,6 +207,34 @@ _SPECS = [
            effect="pure", lowering="random_source", shape_rule="from_shape_attr",
            stochastic_identity="key_counter"),
     OpSpec("fused_epilogue", "tessera.fused_epilogue", 1, 3, lowering="fused_epilogue"),
+    # Coalition-lattice family (GAME_THEORY_PLAN.md G1, 2026-08-15). The
+    # zeta/Möbius butterflies are structurally a radix-2 Stockham schedule with
+    # a constant real 2x2 kernel, so they ride the spectral lowering lane —
+    # the shared `tessera.butterfly_transform` consolidation (G1b) replaces
+    # the per-name lowering, not this catalog surface. Python reference:
+    # python/tessera/game/ (fp64 by the §6 numerics mandate).
+    OpSpec("game_subset_zeta", "tessera.game_subset_zeta", 1, 1,
+           lowering="spectral", shape_rule="same_as_first"),
+    OpSpec("game_subset_mobius", "tessera.game_subset_mobius", 1, 1,
+           lowering="spectral", shape_rule="same_as_first"),
+    OpSpec("game_superset_zeta", "tessera.game_superset_zeta", 1, 1,
+           lowering="spectral", shape_rule="same_as_first"),
+    OpSpec("game_superset_mobius", "tessera.game_superset_mobius", 1, 1,
+           lowering="spectral", shape_rule="same_as_first"),
+    OpSpec("game_coalition_marginal", "tessera.game_coalition_marginal", 1, 1,
+           lowering="spectral", shape_rule="coalition_marginal"),
+    OpSpec("game_semivalue", "tessera.game_semivalue", 2, 2,
+           lowering="contraction", shape_rule="coalition_players_axis"),
+    # The §3.2 flagship: n-head softmax-weighted lattice reduction (streams
+    # like flash-attention's online softmax on the kernel tier).
+    OpSpec("game_boltzmann_value", "tessera.game_boltzmann_value", 2, 2,
+           lowering="contraction", shape_rule="coalition_players_axis"),
+    OpSpec("game_coalition_excess", "tessera.game_coalition_excess", 2, 2,
+           lowering="contraction", shape_rule="same_as_first"),
+    # Segmented minimum excludant (Grundy numbers); integer, non-diff, rides
+    # the segment_reduce ragged encoding. Nim-sums use existing bitwise_xor.
+    OpSpec("game_mex", "tessera.game_mex", 2, 2,
+           lowering="segment_reduce", shape_rule="segment_mex"),
     OpSpec("fft", "tessera.fft", 1, 1, lowering="spectral"),
     OpSpec("ifft", "tessera.ifft", 1, 1, lowering="spectral"),
     OpSpec("rfft", "tessera.rfft", 1, 1, lowering="spectral"),
@@ -999,6 +1027,9 @@ SHAPE_RULE_NAMES = frozenset({
     "depth_attention",
     "matmul_2d",
     "es_population_features",
+    "coalition_marginal",
+    "coalition_players_axis",
+    "segment_mex",
     "batched_gemm_3d",
     "transpose",
     "same_shape_bool",

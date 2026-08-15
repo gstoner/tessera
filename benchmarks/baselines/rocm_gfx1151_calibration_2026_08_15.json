@@ -1,0 +1,14 @@
+{
+  "kind": "calibration_corpus",
+  "version": 1,
+  "measured_on": "2026-08-15",
+  "host": "strix-halo-wsl2",
+  "method": "wall-clock median-of-reps (WSL /dev/dxg device events return garbage); WMMA peak = 8-chain register-resident microbenchmark; BW = grid-stride vector<4xf32> copy, read+write bytes over 256 MiB",
+  "devices": {
+    "radeon_8060s": {
+      "dram_bw_gbps": 186.8,
+      "peak_tflops.fp16:matrix": 47.27,
+      "peak_tflops.bf16:matrix": 50.22
+    }
+  }
+}

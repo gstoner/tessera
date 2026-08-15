@@ -105,15 +105,21 @@ static bool overlaps(const std::pair<int64_t, int64_t> &a,
 //     forms. An arrive / alloc / non-completing try_wait is deliberately NOT a
 //     release.
 static bool isBarrierOp(Operation *op) {
-  StringRef name = op->getName().getStringRef();
-  if (name == "tile.async_copy")
+  // Typed identities first (P1a second increment): the registered wait forms
+  // release; a non-completing try_wait deliberately does not; async_copy is
+  // the hazard source even though it carries a waitcnt #tile.barrier marker.
+  if (isa<tessera::tile::AsyncCopyOp>(op))
     return false;
   if (auto b =
           op->getAttrOfType<tessera::tile::TileBarrierAttr>("tile.barrier"))
     return b.getKind() != "waitcnt";
-  return name == "tile.wait_async" || name == "tile.s_barrier" ||
-         name == "tile.barrier" || name == "tile.mbarrier_wait" ||
-         name == "tile.mbarrier.wait";
+  if (isa<tessera::tile::WaitAsyncOp, tessera::tile::MBarrierWaitOp,
+          tessera::tile::CtaSyncOp>(op))
+    return true;
+  // Exact-name remainder with no registered op yet (ROCm s_barrier lane);
+  // graduates to a typed check when registered (Decision #29).
+  StringRef name = op->getName().getStringRef();
+  return name == "tile.s_barrier" || name == "tile.barrier";
 }
 
 struct PendingWrite {

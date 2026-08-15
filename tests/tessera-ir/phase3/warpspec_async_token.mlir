@@ -43,7 +43,7 @@
 // WARP-SAME: (tensor<64x64xbf16>, tensor<64x64xbf16>, !tile.async_token, !tile.async_token, !tile.buffer)
 // WARP: tile.pipeline_advance %[[CSTATE]]
 // WARP: role = "consumer"
-// WARP: "tile.cta_sync"
+// WARP: tile.cta_sync
 // WARP-NEXT: tile.dealloc %[[SMEMA]]
 // WARP-NEXT: tile.dealloc %[[SMEMB]]
 // WARP-NEXT: tile.dealloc %[[TMEM]]

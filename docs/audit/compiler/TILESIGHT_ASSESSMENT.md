@@ -218,12 +218,22 @@ Three foundation items have landed — see
   and the ROCm GEMM path still compute `blockIdx` directly. Wiring them needs a
   measurement on the NR2 Pro / Strix Halo boxes to mean anything, and neither was
   available at the time. The default is the identity, so nothing changed.
-- **The calibration sweeps have not been run.** `target_perf.py` ships the
-  mechanism and the spec/derived baseline; the `measured` overlay is empty. Every
-  fleet box's bf16/fp8 *matrix* peak and all Zen5 peaks are deliberately absent
-  rather than guessed — which means `SchedulePlanner.for_target(..., "bf16")`
-  currently raises on all three boxes. That is the gap made visible, not a
-  regression.
+- **The calibration sweeps: gfx1151 is DONE (2026-08-15); sm_120 and Apple
+  remain.** `benchmarks/calibration/calibrate_gfx1151.py` measured
+  `dram_bw_gbps = 186.8` (73% of the 256 spec — the APU shares LPDDR5X with the
+  CPU, exactly the binding-constraint note in the profile),
+  `peak_tflops.fp16:matrix = 47.3`, and `peak_tflops.bf16:matrix = 50.2`
+  (≈85% of the ~59 TFLOP/s derived WMMA ceiling — the same measured-vs-spec
+  band as this paper's own B6000 Table 3). Method: wall-clock median-of-reps
+  (WSL `/dev/dxg` device events return garbage, so device-event timing is
+  deliberately not used); WMMA peak is an 8-chain register-resident
+  microbenchmark, zero memory traffic in the timed loop. Corpus:
+  `benchmarks/baselines/rocm_gfx1151_calibration_2026_08_15.json`
+  (apply_corpus schema v1); after `target_perf.load_corpus()` the previously
+  raising `SchedulePlanner.for_target("rocm_gfx1151")` succeeds. **Still
+  open:** the corpus is not auto-loaded at import — consumers must
+  `load_corpus()` the baselines file (wiring is a small follow-up); Zen5 and
+  sm_120/Apple peaks stay deliberately absent until their boxes run the sweep.
 - **Only T1 v1 is built.** T3 resource/action-DAG ordering and T4
   resident-tile/prologue/steady/epilogue overlap remain follow-ons. The T1
   implementation intentionally assigns no warp/stage bonus and does not select

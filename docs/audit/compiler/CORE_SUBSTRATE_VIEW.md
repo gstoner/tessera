@@ -7,10 +7,10 @@ verification: every previously prose-only mathematical claim this view inherits
         closed forms). Sources with their own harnesses are not re-verified.
 ---
 
-# Core Substrate View — one integrated read across the six capability papers
+# Core Substrate View — one integrated read across the seven capability papers
 
 > **Routing:** start at [`README.md`](README.md). This is a `reference`
-> synthesis: it maps what six independently-reviewed papers/plans demand of the
+> synthesis: it maps what seven independently-reviewed papers/plans demand of the
 > **core compiler**, identifies the shared substrate so one investment serves
 > many capabilities, and names the owning integrated-plan row for each piece.
 > It mints **no** work-item IDs and owns **no** ordering — global sequencing
@@ -25,14 +25,16 @@ verification: every previously prose-only mathematical claim this view inherits
 > [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) ·
 > [`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md) ·
 > [`GAME_THEORY_PLAN.md`](GAME_THEORY_PLAN.md) ·
-> [`compiler_enhancement.md`](compiler_enhancement.md) (CAKE).
+> [`compiler_enhancement.md`](compiler_enhancement.md) (CAKE) ·
+> [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) (folded 2026-08-15 — it landed
+> mid-arc as PR #565).
 
 ---
 
 ## 0. Why one view
 
-Each of the six documents was written as its own extraction: a paper or domain
-reviewed, verified, and mapped to Tessera. Read together, they are not six
+Each of the seven documents was written as its own extraction: a paper or domain
+reviewed, verified, and mapped to Tessera. Read together, they are not seven
 capability requests — they are **repeated hits on a small set of core-compiler
 seams**. Every paper independently lands on some subset of: derive facts the
 verifier currently takes on faith; make the schedule a first-class object; make
@@ -95,11 +97,12 @@ demands (details and evidence live in the source docs):
 | **TileSight** (`TILESIGHT_ASSESSMENT.md`) | Calibrated per-device performance parameters with provenance (`target_perf.py` **landed; the measured overlay is still empty — calibration sweeps never run**); reuse-distance pruning model (T1 v1 landed); **prune-don't-select** in front of the measured arbiter (T2); resource-vector + action-DAG cost module (T3, landed as `composition_cost.py` v2); prologue/steady/epilogue + resident-tiles overlap model (T4, open); block-rasterization knob (landed as `tile_rasterization.py`; **no emitter consumes it yet**) |
 | **TileRT** (`TILERT_ASSESSMENT.md`) | The composition layer: await-sinking (W5.2a **closed**), resource vectors in the measured corpus (W5.2b **closed**), scalable action-DAG scheduling (W5.2c/g **closed**), MoE chunk-overlap consumer (W5.2d **closed**), automatic dependence-edge synthesis (W5.2e landing); **a schedule datum that survives into IR** (E5 — `ScheduleStep` is still discarded at the IR boundary); M3: once composition exists, per-op scalar-latency argmin is *wrong*, so selection must eventually rank against the step's bottleneck resource; M4: static-first, dynamic only for MoE/MTP variance under a determinism rule |
 | **SparDA** (`SPARDA_REVIEW.md`) | No new math ops — a **scheduling and memory-space problem**: cross-layer data-dependent **prefetch edge** in Schedule IR with a static overlap-feasibility legality check; host-DRAM as a first-class KV tier with explicit cache-state invariants (`KVCacheHandle` extension); **bitmask block-sparse iteration** as a Tile-IR representation choice the arbiter picks per shape; stats-emitting attention as **one primitive family with two result modes** (#31); `causal_convention` as a fail-closed semantic key (#21a); GQA-fold layout rewrite via the #15a `layout` attribute; index ops (`top-k`, `block_set_diff`) |
+| **FORGE** (`FORGE_ASSESSMENT.md`) | Generalize "fuse a consumer into its producer's tiled epilogue" into declared substrate: a **read-locality lattice** on operands (`coordinate ⊏ … ⊏ global`, the A/U optimizer split — gives `TilingInterface` its first consumer, closing a live #29 gap); a **residency contract + static materialization proof** (`LOWER-COUNT-1` generalized into a pass — host-free memory claims, Decision #19's discipline applied to memory); the `matmul → optimizer` fusion instance with structural guards; **fail-closed semantic keys** `grad_clip_scope` (global clipping is *provably* unfusable — P2) and `routing` (the 2.24× MoE decay hazard — P5); a **precision-realizability oracle** (§1.3: whether the fp32-accumulator win is realizable is `numeric_policy.accum` × state dtype — the measured motivation for the #32 carrier, with a published error target); affine reduce-into-state for ZeRO-2 |
 | **PDE/stencil** (`PDE_STENCIL_CAPABILITY_PLAN.md`) | **Semantic analysis as compiler passes** (classify → guards → legality → discretize → stability certificate), all fail-closed incl. attribute-absence; certificates emitted as **symbolic admissible regions** a constructive consumer reads (`-tpp-select-dt` maximizes `dt` inside the region — the model for certificate-driven autotuning); BC/scheme/derivative-convention as semantic keys; typed operator handles; the neighbors/TPP **stencil-stack unification** (#31, GAP-4); `numeric_policy` has **no carrier below Graph IR in either stencil tree** (#32 info-loss records mandated); `tridiagonal_solve`, Chebyshev/DST, jet AD |
 
 ---
 
-## 2. The shared substrate — eight investments, many consumers
+## 2. The shared substrate — nine investments, many consumers
 
 ### S1. Derived facts across block-argument edges (the legality substrate)
 
@@ -184,7 +187,10 @@ artifacts a correctness rung.
 *certificate-emission* half is per-lane work carried inside each plan. No new
 core mechanism needed — the discipline is the mechanism. This is also the
 answer to SparDA §II.6: every defect found in that mature external codebase
-fails open; ours must not.
+fails open; ours must not. FORGE adds the sharpest key instances yet:
+`grad_clip_scope` (where `global` is rejected because exact fused global
+clipping is *provably impossible* — P2 — and every approximation measured as
+bad as no clipping) and `routing` (the silent 2.24× MoE state-decay hazard).
 
 ### S5. `numeric_policy` carried below Graph IR (the Decision #32 carrier)
 
@@ -201,6 +207,11 @@ learn from `numeric_policy`, not from a special case), and the PDE plan §III.4
 **Stands:** partially landed where W1.1 reached — `!tile.fragment<…, acc, …>`
 carries the accumulator on the typed ROCm route. Generalizing beyond MMA
 fragments (pointwise/reduction/butterfly chains) has **no owning row**.
+**FORGE §1.3 supplies the measured target** this carrier was missing: whether
+the fused-epilogue fp32-accumulator win is realizable flips 913× → 1.1× → 1.0×
+purely as a function of `accum` × state dtype — a fact only a compiler carrying
+the policy can decide and report (the W5 realizability oracle is S3's
+certificate discipline applied to it).
 
 ### S6. The general structural-op tranche
 
@@ -262,6 +273,34 @@ axes; batching and implicit-diff hardening are open with no row; schedule-level
 AD is gated on S1+S2 and is deliberately a *later* item — it is the payoff, not
 the prerequisite.
 
+### S9. Locality + residency: fusion legality as declared, provable metadata (from FORGE)
+
+**What:** the two-piece substrate FORGE's whole workstream list reduces to.
+(1) A **read-locality lattice** on operands
+(`coordinate ⊏ row/column ⊏ block ⊏ tensor ⊏ layer ⊏ global`): fusion into a
+tiled producer is legal iff the consumer's read-locality ⊑ the producer's tile
+partition. This is the A/U optimizer decomposition generalized past
+optimizers, it subsumes FORGE's four regimes as lattice positions, and its
+legality query finally consumes `MatmulOp::getLoopIteratorTypes` +
+`tessera.full_k` — closing `TilingInterface`'s Decision #29 gap. (2) A
+**residency contract** (`tessera.residency ∈ {tile, layer, full}`) with a
+boundary verifier that fails when a lowering materializes above it — the
+in-tree `LOWER-COUNT-1` idiom generalized into a pass, making memory claims
+**host-free provable** (no fleet machine can hold the 62 GB peak; the IR
+proof makes that irrelevant).
+
+**Consumers:** FORGE W3/W7/W8 (the epilogue-fusion family: optimizer, loss
+VJP over the 128k-vocab logits, norm reductions, quant/dequant, EMA); the
+S2 schedule object (residency is a schedule-visible property); W5.3's fusion
+region discovery (the legality oracle it was waiting for); the S5 carrier
+(the fused path must transport `numeric_policy` before #31 allows collapse).
+
+**Stands:** the pieces exist as precedents (`TrainingStepFusionPass` with its
+negative fixture + `LOWER-COUNT-1` check; `numeric_policy` consumers below
+Graph IR on `MatmulOp`); the lattice, the residency pass, and the fusion
+instance are **unowned** (FORGE's own build order W1→W2→W3→W4 is the sequence,
+and it is deliberately host-free).
+
 ---
 
 ## 3. Ownership map
@@ -276,13 +315,15 @@ the prerequisite.
 | S6 structural-op tranche | — | **Entire tranche — no row** (G1b, scan, segment_sum, tridiagonal, attention modes, index ops) |
 | S7 memory tiers + prefetch | W2.4a (sync floor); E4 chunk machinery | **Prefetch edge + feasibility check + KV-cache invariants** — no row beyond SparDA's own table |
 | S8 transform substrate | AD-* rows (partial) | **Real batching; implicit-diff hardening** — no rows; schedule-AD deliberately deferred |
+| S9 locality + residency (FORGE) | — (precedents: `TrainingStepFusionPass`, `LOWER-COUNT-1`, `numeric_policy` on `MatmulOp`) | **Entire pair — no rows** (FORGE W1–W4 in its own order); host-free |
 
-Three flagged inputs for the integrated plan (recommendation only; ordering is
+Four flagged inputs for the integrated plan (recommendation only; ordering is
 its call): a row for the **structural-op tranche** (S6 — serves three plans),
 a row for the **generalized numeric_policy carrier** (S5 — three plans mandate
 it via #32), and the **calibration sweeps** as an explicit small task rather
 than a perpetual "still open" footnote (S3 — it silently gates four other
-items).
+items). Fourth: **rows for FORGE W1→W2→W3→W4** (S9 — host-free, and W2's
+residency proof is the cheapest honest answer to every future memory claim).
 
 ## 4. The updated build sequence (proposal — ordering authority stays with the integrated plan)
 
@@ -368,7 +409,15 @@ lowering once G1b lands.
 **P3 — S2, the schedule object, designed once.** CAKE Phase 2 (roles +
 producer/consumer sets as SSA), TileRT E5 (a schedule datum that survives
 `to_mlir_attrs()`), and the W5.2 action DAG are **one object** — specify it in
-a single design doc before any of the three lands separately. *Gates:* CAKE
+a single design doc before any of the three lands separately.
+
+> **Design doc landed (2026-08-15):**
+> [`SCHEDULE_OBJECT_DESIGN.md`](SCHEDULE_OBJECT_DESIGN.md) — the
+> actions/edges/roles/residency object with a content-addressed digest, two
+> entry points (derived + stated) over one IR carrier, six gates (incl. the
+> one-rule CDNA/Hopper role test and the M4 determinism rule), named
+> consumers, and the SO-1..SO-5 build order (host-free except SO-2's gfx1151
+> fixture). FORGE W2's residency lives on this object by design. *Gates:* CAKE
 Phase 2 exit gate 2 (the CDNA ping-pong schedule and the Hopper
 producer/consumer split verify through the same rule, no target branch — a
 negative verdict re-scopes Phase 3 before anything depends on it); a

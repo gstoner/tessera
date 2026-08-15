@@ -33,6 +33,7 @@ def _membership(n: int, size: int) -> np.ndarray:
 
 
 def _semivalue_impl(vhat: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    orig = vhat
     vhat = np.asarray(vhat, dtype=np.float64)
     n = lattice_players(vhat)
     weights = np.asarray(weights, dtype=np.float64)
@@ -42,8 +43,11 @@ def _semivalue_impl(vhat: np.ndarray, weights: np.ndarray) -> np.ndarray:
             f"entry per coalition cardinality 0..n; got {weights.shape}")
     size = vhat.shape[-1]
     weighted = vhat * weights[_popcounts(size)]
-    # Φ[..., i] = Σ_S M[i, S] · w(|S|) · v̂[..., S]
-    return weighted @ _membership(n, size).T
+    # Φ[..., i] = Σ_S M[i, S] · w(|S|) · v̂[..., S] — fp64 accumulation,
+    # storage dtype preserved (#15a; see lattice._storage_dtype).
+    from .lattice import _storage_dtype
+    return (weighted @ _membership(n, size).T).astype(
+        _storage_dtype(orig), copy=False)
 
 
 def _semivalue_transpose(dout: np.ndarray, vhat: np.ndarray,
@@ -111,19 +115,26 @@ def _boltzmann_softmax(v: np.ndarray, temperature: float) -> np.ndarray:
     return p / p.sum(axis=-1, keepdims=True)
 
 
-def _boltzmann_value_impl(v: np.ndarray, temperature: float) -> np.ndarray:
+def _boltzmann_value_impl(v: np.ndarray, *, temperature: float) -> np.ndarray:
     """E^T_i(v) = Σ_S ∂_i v(S) · p_S with p = softmax(v/T) — the plan's §3.2
     flagship: an n-head softmax-weighted reduction over the 2^n lattice
     (structurally flash-attention's online softmax; the reference tier
-    materializes p, the kernel tier streams it)."""
+    materializes p, the kernel tier streams it).
+
+    ``temperature`` is keyword-only BY CONTRACT: the tape records array
+    positionals and replays keyword arguments into the VJP, so a positional
+    scalar would be silently dropped from the reverse pass — keyword-only
+    makes the parameter retainable instead of lost."""
+    orig = v
     v = np.asarray(v, dtype=np.float64)
-    from .lattice import _coalition_marginal_impl
+    from .lattice import _coalition_marginal_impl, _storage_dtype
     p = _boltzmann_softmax(v, float(temperature))
     m = _coalition_marginal_impl(v)
-    return np.einsum("...is,...s->...i", m, p)
+    out = np.einsum("...is,...s->...i", np.asarray(m, dtype=np.float64), p)
+    return out.astype(_storage_dtype(orig), copy=False)
 
 
-def _boltzmann_value_vjp(dout: np.ndarray, v: np.ndarray,
+def _boltzmann_value_vjp(dout: np.ndarray, v: np.ndarray, *,
                          temperature: float, **_kw: object) -> np.ndarray:
     """Closed-form gradient (finite-difference checked in the oracle tests):
     grad_R = Σ_i d_i (p_R − p_{R⊕i}) + (p_R/T)(Σ_i d_i m_{iR} − ⟨d, E⟩)."""
@@ -155,6 +166,7 @@ def _coalition_excess_impl(v: np.ndarray, x: np.ndarray) -> np.ndarray:
     """e(S, x) = v(S) − Σ_{i∈S} x_i — the core/nucleolus separation quantity.
     Jointly linear in (v, x); the x term is exactly ``subset_zeta`` of the
     additive game placing x_i on the singletons (the oracle the tests pin)."""
+    orig = v
     v = np.asarray(v, dtype=np.float64)
     x = np.asarray(x, dtype=np.float64)
     n = lattice_players(v)
@@ -162,7 +174,9 @@ def _coalition_excess_impl(v: np.ndarray, x: np.ndarray) -> np.ndarray:
         raise ValueError(
             f"coalition_excess allocation must have trailing extent n = {n}; "
             f"got {x.shape[-1]}")
-    return v - x @ _membership(n, v.shape[-1])
+    from .lattice import _storage_dtype
+    out = v - x @ _membership(n, v.shape[-1])
+    return out.astype(_storage_dtype(orig), copy=False)
 
 
 def _coalition_excess_transpose(dout: np.ndarray, v: np.ndarray,
@@ -173,7 +187,30 @@ def _coalition_excess_transpose(dout: np.ndarray, v: np.ndarray,
     return dout, -(dout @ m.T)
 
 
+def _coalition_excess_jvp(primals, tangents, **_kw: object):
+    """Dedicated JVP: tangent = dv − M·dx (missing tangents are zero).
+
+    The generic linear-JVP derivation substitutes ONE tangent at a time while
+    leaving the other PRIMAL in place — for a jointly linear map of two
+    arguments that computes f(dv, x) + f(v, dx), which double-counts both
+    primal terms. A multi-linear-arg primitive therefore registers its own
+    JVP; the declared transpose stays the VJP.
+    """
+    v, x = primals
+    dv, dx = tangents
+    out = _coalition_excess_impl(v, x)
+    n = np.asarray(x).shape[-1]
+    m = _membership(n, np.asarray(v).shape[-1])
+    tangent = np.zeros_like(out)
+    if dv is not None:
+        tangent = tangent + np.asarray(dv, dtype=np.float64)
+    if dx is not None:
+        tangent = tangent - np.asarray(dx, dtype=np.float64) @ m
+    return out, tangent
+
+
 coalition_excess = custom_primitive(
     "game_coalition_excess", linear=True, linear_args=(0, 1),
+    jvp=_coalition_excess_jvp,
     transpose_rule=_coalition_excess_transpose,
 )(_coalition_excess_impl)

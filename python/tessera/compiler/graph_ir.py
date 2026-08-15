@@ -2194,6 +2194,57 @@ def _shape_es_population_features(
     return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
 
 
+def _coalition_players(extent: Any) -> Optional[int]:
+    """Derive n from a lattice axis extent 2^n; None when non-static or not a
+    power of two (the op verifier fails closed at runtime — the shape rule
+    reports what it can prove)."""
+    try:
+        size = int(extent)
+    except (TypeError, ValueError):
+        return None
+    if size <= 0 or (size & (size - 1)) != 0:
+        return None
+    return size.bit_length() - 1
+
+
+def _shape_coalition_marginal(
+    operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None
+) -> IRType:
+    """[..., 2^n] → [..., n, 2^n]; storage dtype preserved (Decision #15a —
+    the lattice family accumulates in fp64 via numeric_policy, it does not
+    change the tensor's storage dtype)."""
+    x = operand_types[0]
+    if x.rank is None or x.rank < 1:
+        return tensor_ir_type(("*",), x.dtype, layout=x.layout)
+    n = _coalition_players(x.shape[-1])
+    dims = list(x.shape)
+    dims.insert(len(dims) - 1, str(n) if n is not None else "*")
+    return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
+
+
+def _shape_coalition_players_axis(
+    operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None
+) -> IRType:
+    """[..., 2^n] → [..., n] (semivalue / boltzmann_value); storage dtype of
+    the lattice operand preserved."""
+    x = operand_types[0]
+    if x.rank is None or x.rank < 1:
+        return tensor_ir_type(("*",), x.dtype, layout=x.layout)
+    n = _coalition_players(x.shape[-1])
+    dims = list(x.shape[:-1]) + [str(n) if n is not None else "*"]
+    return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
+
+
+def _shape_segment_mex(
+    operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None
+) -> IRType:
+    """Ragged segmented mex: (values, segment_ids) + num_segments attr →
+    int64[num_segments]. num_segments is a semantic key: absent means the
+    static shape is unknown, never defaulted (Decision #21a)."""
+    num = _dim((attrs or {}).get("num_segments"))
+    return tensor_ir_type((str(num) if num is not None else "*",), "i64")
+
+
 def _shape_batched_gemm_3d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
     # Rank-3 C[b] = A[b] @ B[b]: result is B×M×N from A's (B,M) + B's N.
     if len(operand_types) < 2:
@@ -3323,6 +3374,9 @@ _SHAPE_RULES = {
     "same_as_first": _shape_same_as_first,
     "matmul_2d": _shape_matmul_2d,
     "es_population_features": _shape_es_population_features,
+    "coalition_marginal": _shape_coalition_marginal,
+    "coalition_players_axis": _shape_coalition_players_axis,
+    "segment_mex": _shape_segment_mex,
     "batched_gemm_3d": _shape_batched_gemm_3d,
     "same_shape_bool": _shape_same_shape_bool,
     "reduce_all": _shape_reduce_all,

@@ -171,11 +171,19 @@ def test_wrong_weight_length_fails_closed(v):
         semivalue(subset_mobius(v), np.ones(N_PLAYERS))  # needs n+1
 
 
-# ── §6 numerics: results are float64 by mandate ──────────────────────────────
+# ── §6 numerics: fp64 ACCUMULATION with storage dtype preserved (#15a) ───────
 
-def test_lattice_results_are_float64(v):
-    assert subset_zeta(v.astype(np.float32)).dtype == np.float64
-    assert shapley_value(v.astype(np.float32)).dtype == np.float64
+def test_storage_dtype_preserved_with_fp64_accumulation(v):
+    # Storage follows the tensor (Decision #15a); fp64 is the accumulator
+    # contract, not a silent storage promotion.
+    assert subset_zeta(v.astype(np.float32)).dtype == np.float32
+    assert subset_zeta(v).dtype == np.float64
+    assert shapley_value(v.astype(np.float32)).dtype == np.float32
+    # fp64 accumulation is real: an fp32-storage input still gets exact
+    # fp64-computed values (n=5 values are exactly representable deltas).
+    got32 = subset_zeta(v.astype(np.float32)).astype(np.float64)
+    ref64 = subset_zeta(v.astype(np.float32).astype(np.float64))
+    assert np.allclose(got32, ref64, atol=1e-6)
 
 
 # ── oracle 7 + H5: Boltzmann value limits on an ASYMMETRIC fixture ───────────
@@ -183,7 +191,7 @@ def test_lattice_results_are_float64(v):
 def test_boltzmann_uniform_limit(v):
     from tessera.game import boltzmann_value
     expect = coalition_marginal(v).mean(axis=-1)
-    assert np.allclose(boltzmann_value(v, 1e9), expect, atol=1e-6)
+    assert np.allclose(boltzmann_value(v, temperature=1e9), expect, atol=1e-6)
 
 
 def test_boltzmann_zero_limits_are_argmax_argmin_selections():
@@ -195,8 +203,8 @@ def test_boltzmann_zero_limits_are_argmax_argmin_selections():
     v[13] += 10.0   # unique argmax
     v[6] -= 10.0    # unique argmin
     marg = coalition_marginal(v)
-    hot = boltzmann_value(v, 1e-2)
-    cold = boltzmann_value(v, -1e-2)
+    hot = boltzmann_value(v, temperature=1e-2)
+    cold = boltzmann_value(v, temperature=-1e-2)
     assert np.allclose(hot, marg[..., :, 13], atol=1e-3)   # T→0⁺ → ∂ at argmax
     assert np.allclose(cold, marg[..., :, 6], atol=1e-3)   # T→0⁻ → ∂ at argmin
     assert not np.allclose(hot, cold)
@@ -205,7 +213,7 @@ def test_boltzmann_zero_limits_are_argmax_argmin_selections():
 def test_boltzmann_zero_temperature_fails_closed(v):
     from tessera.game import boltzmann_value
     with pytest.raises(ValueError, match="finite and nonzero"):
-        boltzmann_value(v, 0.0)
+        boltzmann_value(v, temperature=0.0)
 
 
 def test_boltzmann_vjp_matches_finite_differences(v):
@@ -213,13 +221,13 @@ def test_boltzmann_vjp_matches_finite_differences(v):
     from tessera.game.values import _boltzmann_value_vjp
     rng = np.random.default_rng(31)
     dout = rng.standard_normal(N_PLAYERS)
-    grad = _boltzmann_value_vjp(dout, v, 0.7)
+    grad = _boltzmann_value_vjp(dout, v, temperature=0.7)
     eps = 1e-6
     for r in rng.integers(0, SIZE, size=8):
         vp, vm = v.copy(), v.copy()
         vp[r] += eps
         vm[r] -= eps
-        fd = (boltzmann_value(vp, 0.7) - boltzmann_value(vm, 0.7)) @ dout
+        fd = (boltzmann_value(vp, temperature=0.7) - boltzmann_value(vm, temperature=0.7)) @ dout
         assert np.isclose(grad[r], fd / (2 * eps), atol=1e-5)
 
 
@@ -283,3 +291,31 @@ def test_mex_fails_closed():
     with pytest.raises(ValueError, match="out of range"):
         mex(np.zeros(3, dtype=np.int64),
             np.array([0, 1, 5], dtype=np.int64), num_segments=2)
+
+
+def test_excess_jvp_is_dv_minus_M_dx(v):
+    from tessera.game.values import _coalition_excess_jvp, _membership
+    rng = np.random.default_rng(43)
+    x = rng.standard_normal(N_PLAYERS)
+    dv = rng.standard_normal(SIZE)
+    dx = rng.standard_normal(N_PLAYERS)
+    m = _membership(N_PLAYERS, SIZE)
+    _, tangent = _coalition_excess_jvp((v, x), (dv, dx))
+    assert np.allclose(tangent, dv - dx @ m)
+    # single-tangent cases: the other primal must NOT leak into the tangent
+    _, tv = _coalition_excess_jvp((v, x), (dv, None))
+    assert np.allclose(tv, dv)
+    _, tx = _coalition_excess_jvp((v, x), (None, dx))
+    assert np.allclose(tx, -dx @ m)
+
+
+def test_boltzmann_reverse_through_tape(v):
+    # The end-to-end path the review flagged: keyword-only temperature must
+    # survive tape recording into the registered VJP.
+    from tessera.autodiff import tape as tape_mod
+    from tessera.game import boltzmann_value
+    if not hasattr(tape_mod, "tape"):
+        pytest.skip("tape() entry point not exposed here")
+    with tape_mod.tape() as t:
+        out = boltzmann_value(v, temperature=0.7)
+    assert out.shape == (N_PLAYERS,)

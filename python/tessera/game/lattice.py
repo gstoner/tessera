@@ -15,9 +15,11 @@ The transpose pairs are declared via ``def_transpose`` (through the
 and derives the JVP — giving the registry's ``transpose_rule`` axis a genuine
 consumer (Decision #29) and making oracle 2 (⟨ζv, w⟩ = ⟨v, ζᵀw⟩) load-bearing.
 
-Numerics: forward results are float64 by mandate (plan §6 — the fp32 wall for
-nonnegative games is at ``n ≈ 16–20`` and it is a *storage* wall, not an
-accumulator wall).
+Numerics: fp64 ACCUMULATION by mandate with the input's storage dtype
+preserved (Decision #15a — storage lives on the tensor; §6's fp32 wall for
+nonnegative games past ``n ≈ 16`` is a *materialization* hazard owned by the
+fused lowering / H1's narrow-materialization diagnostic, not by a silent
+storage promotion in the reference tier).
 """
 
 from __future__ import annotations
@@ -42,17 +44,36 @@ def lattice_players(x: np.ndarray) -> int:
     return size.bit_length() - 1
 
 
+def _storage_dtype(x: np.ndarray) -> np.dtype:
+    """Result STORAGE dtype: the input's floating dtype, or float64 for
+    non-floating inputs. Decision #15a — storage lives on the tensor and the
+    lattice family's fp64 mandate is an ACCUMULATION contract
+    (`numeric_policy.accum = fp64`), not a storage rewrite. The §6 hazard
+    (fp32-materialized zeta is noise for nonnegative games past n ≈ 16) is
+    handled where the plan puts it: fused consumers / a diagnostic on narrow
+    materialization at lowering (H1), never a silent storage promotion here."""
+    dt = np.asarray(x).dtype
+    # Preserve every floating storage dtype INCLUDING the ml_dtypes reduced
+    # precisions (bf16 et al.), whose numpy kind is not 'f' — upcasting out of
+    # reduced precision is exactly the bug the reduced-precision drift gate
+    # exists to catch. Only integer/bool inputs promote (to the fp64 oracle).
+    if dt.kind in ("i", "u", "b"):
+        return np.dtype(np.float64)
+    return dt
+
+
 def _butterfly(x: np.ndarray, *, half: int, sign: float) -> np.ndarray:
     """Shared Yates recurrence. ``half`` selects which half accumulates
     (1 = subset transforms, 0 = superset transforms); ``sign`` is the kernel's
-    off-diagonal entry (+1 zeta, −1 Möbius)."""
+    off-diagonal entry (+1 zeta, −1 Möbius). Accumulates in float64 (§6),
+    returns in the input's storage dtype (#15a)."""
     out = np.array(x, dtype=np.float64, copy=True)
     n = lattice_players(out)
     other = 1 - half
     for i in range(n):
         g = out.reshape(-1, out.shape[-1] >> (i + 1), 2, 1 << i)
         g[:, :, half, :] += sign * g[:, :, other, :]
-    return out
+    return out.astype(_storage_dtype(x), copy=False)
 
 
 def _subset_zeta_impl(v: np.ndarray) -> np.ndarray:
@@ -75,6 +96,7 @@ def _coalition_marginal_impl(v: np.ndarray) -> np.ndarray:
     """``∂_i v(S) = v(S) − v(S Δ {i})`` for every player: [..., 2^n] →
     [..., n, 2^n]. The bit-flip is a symmetric permutation, so the map is
     linear and self-adjoint-per-player."""
+    orig = v
     v = np.asarray(v, dtype=np.float64)
     n = lattice_players(v)
     size = v.shape[-1]
@@ -82,7 +104,7 @@ def _coalition_marginal_impl(v: np.ndarray) -> np.ndarray:
     out = np.empty(v.shape[:-1] + (n, size), dtype=np.float64)
     for i in range(n):
         out[..., i, :] = v - v[..., idx ^ (1 << i)]
-    return out
+    return out.astype(_storage_dtype(orig), copy=False)
 
 
 def _coalition_marginal_transpose(dout: np.ndarray, v: np.ndarray,

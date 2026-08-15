@@ -2344,7 +2344,11 @@ LogicalResult TMACopyAsyncOp::verify() {
     bool hasLegacyKey = getOperation()->hasAttr("tile.barrier_id") ||
                         getOperation()->hasAttr("tile.barrier") ||
                         getOperation()->hasAttr("stage") ||
-                        getOperation()->hasAttr("tile.depends_on");
+                        getOperation()->hasAttr("tile.depends_on") ||
+                        // AsyncCopyLowering's declared "barrier retrofit
+                        // pending" marker (stripped by NVTMADescriptorPass
+                        // when the SSA barrier is bound).
+                        getOperation()->hasAttr("tile.pending_mbarrier");
     if (!producesToken && !hasLegacyKey)
       return emitOpError(
           "TILE_TMA_COPY_GATES_ON_NOTHING: a tile.tma.copy_async needs an SSA "

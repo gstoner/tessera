@@ -85,6 +85,13 @@ static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
   // ROCm token edge (Phase C-NV). The mbarrier still carries the byte count.
   if (tokenType)
     st.addTypes(tokenType);
+  else
+    // Legacy tokenless lane: the copy's completion mechanism is the mbarrier
+    // NVTMADescriptorPass retrofits AFTER this pass. Declare that pending
+    // assignment explicitly so the intermediate IR is not a copy that "gates
+    // on nothing" (which TMACopyAsyncOp::verify correctly rejects); the
+    // descriptor pass strips the marker when it binds the real SSA barrier.
+    st.addAttribute("tile.pending_mbarrier", b.getUnitAttr());
   return b.create(st);
 }
 

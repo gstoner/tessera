@@ -1376,3 +1376,12 @@ matmul through `TileToX86Pass` `func.call`s and emits no
 double-buffering stage model to reconcile. PR #544's required build and unit
 lanes validated the shared Tile dialect on an x86 CI host. This transfers no
 AVX-512 schedule, Zen 5 performance result, or AMX evidence.
+
+## TILE-SYNC-TYPED-2026-08-15 — shared Tile sync ABI assessment (PR #566)
+
+**Not applicable.** x86 has no asynchronous-copy or mbarrier lane: the
+x86/no-async path is a recorded no-op in the await-sinking contract (W5.2a),
+and no x86 lowering consumes `tile.mbarrier.*`, `tile.tma.*`, or the new
+registered sync ops. The shared Tile dialect still builds and verifies on
+this configuration (combined-driver lit run green in the same 324/0 suite);
+no AVX-512/AMX evidence transfers or is claimed.

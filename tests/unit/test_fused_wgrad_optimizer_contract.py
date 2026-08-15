@@ -52,10 +52,24 @@ def _wgrad(dY, X, chunk):
     Graph-IR precondition is that K stays whole inside the tile — what
     ``MatmulOp::getLoopIteratorTypes`` encodes as {parallel, parallel} over
     (M, N) with ``tessera.full_k`` stamped on the tiled clone.
+
+    DETERMINISM (the CI flake this replaces, observed on PR #566): the chunk
+    partial used to be a BLAS GEMM (``dY_chunk.T @ X_chunk``), whose per-element
+    K-dot reduction order is a shape- and hardware-dependent kernel choice —
+    the full-matrix GEMM and a 64x64 tile GEMM can legitimately differ in ULPs,
+    and DID differ across GitHub's heterogeneous runner CPUs (AVX-512 kernels
+    vs not), intermittently breaking the bitwise assertions below.  The
+    per-token outer-product accumulation used here gives every output element
+    an IDENTICAL sequential fp32 chain (t ascending within the chunk, chunks
+    ascending) on both the monolithic and the tiled side, on any hardware —
+    which is the accumulation-order pin the bitwise contract needs.
     """
     acc = np.zeros((dY.shape[1], X.shape[1]), np.float32)
     for k in range(0, dY.shape[0], chunk):
-        acc += (dY[k:k + chunk].T @ X[k:k + chunk]).astype(np.float32)
+        partial = np.zeros_like(acc)
+        for t in range(k, min(k + chunk, dY.shape[0])):
+            partial += dY[t][:, None] * X[t][None, :]
+        acc += partial
     return acc
 
 

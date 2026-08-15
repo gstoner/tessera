@@ -104,6 +104,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | [`OPTIMIZING_COMPILER_PLAN.md`](OPTIMIZING_COMPILER_PLAN.md) | Middle-end synthesis and backend-lift details. |
 | [`PDE_STENCIL_CAPABILITY_PLAN.md`](PDE_STENCIL_CAPABILITY_PLAN.md) | PDE-operator semantics, symbol classification, discrete-stability certificates, and the stencil/halo contract queue. |
 | [`RIEMANNIAN_OT_PLAN.md`](RIEMANNIAN_OT_PLAN.md) | Geometry/implicit-differentiation consumer and acceptance workload. |
+| [`compiler_enhancement.md`](compiler_enhancement.md) | CAKE compiler–agent co-design assessment: statistical audit of its clean-start A/B, the Tile sync/memory typing + type-blind-verifier findings, and the scoped Phase 1 / Phase 2 work they open. Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`SPARDA_REVIEW.md`](SPARDA_REVIEW.md) | SparDA source review, verified compressed-key/block-selection contracts, and the cross-layer prefetch + block-sparse iteration extraction queue. |
 | [`SEQUENCE_MIXER_ENGINEERING_PLAN.md`](SEQUENCE_MIXER_ENGINEERING_PLAN.md) | Sequence-mixer family contracts and physical rollout. |
 

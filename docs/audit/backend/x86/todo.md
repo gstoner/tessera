@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-14
+last_updated: 2026-08-15
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -43,14 +43,83 @@ pair from frontend through physical manifests. Accumulator-compatible dtypes
 derived from target-wide AVX-512 legality remain `legal_only`; only explicit
 x86 per-operation rows can claim a physical consumer or execution evidence.
 
-## P0 closed — x86 dialect load and combined-driver proof
+## P0 root-caused — x86 dialect load was a build-flag leak, not an IR defect
 
-`X86-DIALECT-LOAD-CRASH-2026-08-12` is closed on the owning Strix Halo host.
-A fresh Release build against apt LLVM/MLIR 23 loads `!tessera_x86.tile`; the
-positive Target-IR fixture and its verifier-negative sibling pass. The named
-`x86_dialect_load.mlir` regression now isolates dialect initialization from
-operation lowering, so a future `TileType` registration failure cannot hide
-behind the larger lit suite.
+`X86-DIALECT-LOAD-CRASH-2026-08-12` was **reopened by CI on 2026-08-15** (run
+31893492411) after being closed on the Strix Halo host, and is now root-caused.
+Both observations were correct; the host is what differed.
+
+The dialect and its `TileType` registration were never at fault. The x86 kernel
+project applied its detected AVX-512/AMX flags with **`add_compile_options`**,
+which is *directory* scoped, and `add_subdirectory(lib/IR)` sat below that call
+— so the hardware-free Target IR dialect was compiled with `-mavx512f
+-mavx512bw … -mamx-tile …`. The compiler was then entitled to emit an AVX-512
+encoding into dialect registration itself (confirmed by disassembly:
+`vpbroadcastq %rgpr, %xmm`, a GPR-source broadcast that exists only under
+AVX-512). On Zen 5 that instruction is legal, so the Strix Halo build ran
+clean and the P0 read as closed. On the GitHub runner it is not, and
+`tessera-opt` died the first time it touched the dialect.
+
+The tell was in the exit status all along: **all 14 fixtures failed with signal
+4 (SIGILL) at one identical address**, not SIGSEGV. An illegal instruction is a
+build-configuration fact, not a memory-safety one — a crash *inside*
+`Dialect::addType<TileType>()` was the first code from that translation unit to
+execute, not the code that was wrong.
+
+Fix: the flags are collected into `TESSERA_X86_ARCH_FLAGS` and applied with
+`target_compile_options` to this directory's kernel targets only, enumerated via
+`BUILDSYSTEM_TARGETS` so a later kernel target is covered automatically while
+subdirectories are structurally excluded. `lib/IR/CMakeLists.txt` additionally
+**fails configure** if any host-specific ISA flag is in scope, so the next
+occurrence is a build error naming the cause rather than a runtime SIGILL that
+reads as a corrupt MLIR install (Decision #21a, fail closed).
+
+Standing lesson for this backend: a host that *has* the ISA cannot falsify a
+host-portability claim. Decision #19's "lit-testable on any host" is only
+evidenced by a host without AVX-512 — which, in the current fleet, means CI.
+
+The named `x86_dialect_load.mlir` regression isolates dialect initialization
+from operation lowering, so a future `TileType` registration failure cannot hide
+behind the larger lit suite. Acceptance evidence for this fix is the green
+`Validate / lit` lane on a non-AVX-512 runner, not a local rebuild.
+
+## P0 open — `TileToX86Pass` loads a dialect during pass execution
+
+Found while verifying the fix above, on an **assertions-enabled** LLVM/MLIR 23.
+Distinct defect, same code path, and **CI structurally cannot see it**.
+
+`src/transforms/lib/TileToX86Pass.cpp:1045` calls
+`getContext().getOrLoadDialect("tessera_x86")` from inside `runOnOperation()`,
+by name, to avoid linking the optional backend library. MLIR forbids loading a
+dialect during pass execution:
+
+```
+LLVM ERROR: Loading a dialect (tessera_x86) while in a multi-threaded execution
+context (maybe the PassManager): this can indicate a missing `dependentDialects`
+in a pass for example.
+```
+
+That guard is `#ifndef NDEBUG`. The CI lit lane builds Release against apt
+LLVM/MLIR 23 (assertions off), so the check is compiled out and the load becomes
+silent undefined behaviour that happens to survive. On an assertions-enabled
+build it is a hard error that fails **12 of the 15** x86 fixtures — i.e. the
+whole x86 lit suite is currently unrunnable on a normal assert-enabled developer
+toolchain, which is the second reason this backend's Decision #19 claim has been
+easy to overstate.
+
+Not fixed here, because the fix is a layering decision rather than a bug edit:
+the canonical remedy is declaring the dialect in `getDependentDialects()`, which
+needs the C++ type and therefore couples `TesseraPasses` to the optional
+`TesseraX86IR`. `TesseraPasses` links **no** backend Target IR library today, so
+this would establish a new dependency direction (core passes → optional backend)
+and wants an explicit owner decision under Decisions #19/#31. The narrower
+alternative — a `TESSERA_HAS_X86_TARGET_IR` compile guard around both the
+`registry.insert<TesseraX86Dialect>()` and the existing fail-closed diagnostic —
+keeps the coupling optional and is the recommended shape.
+
+Note for whoever picks this up: `Pass::initialize(MLIRContext*)` is **not** an
+escape hatch. Its contract explicitly forbids loading dialects and redirects to
+`getDependentDialects()`.
 
 The production HIP build was also rebuilt with both
 `TESSERA_BUILD_ROCM_BACKEND=ON` and `TESSERA_BUILD_X86_BACKEND=ON`. Its feature

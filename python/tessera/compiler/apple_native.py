@@ -862,6 +862,121 @@ def _package_scheduled_simdgroup_f16(
     return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
 
 
+APPLE_SYNTH_REDUCE_F32_ABI = "tessera.apple.synth.pointwise_reduce.rows_cols.f32.v1"
+APPLE_SYNTH_REDUCE_F32_SYMBOL = "tessera_apple_gpu_synth_pointwise_reduce_f32"
+# Shared reduce kind -> synthesizer kind.  `max` is spelled `amax` by the
+# region vocabulary; mapping it explicitly keeps the rename auditable.
+APPLE_SYNTH_REDUCE_KINDS = {"sum": "sum", "mean": "mean", "max": "amax"}
+
+
+def synthesized_reduce_source(kind: str) -> str:
+    """Emit the MSL for one last-axis reduction, deterministically.
+
+    Deterministic in ``kind`` alone, which is what lets the package record a
+    source digest at build time and the runtime re-derive and *verify* it before
+    dispatch instead of trusting a blob carried through the descriptor.
+    """
+    from .emit.apple_msl import synthesize_pointwise_reduce_msl
+    from .fusion_core import PointwiseReduceRegion
+
+    try:
+        synth_kind = APPLE_SYNTH_REDUCE_KINDS[kind]
+    except KeyError as exc:
+        raise ValueError(f"Apple GPU scheduled reduction has no kernel for {kind!r}") from exc
+    # An empty pointwise chain makes this a pure reduction: the identity
+    # `output is input` feeds the row fold directly.
+    region = PointwiseReduceRegion(ops=(), inputs=("x",), output="x", reduce=synth_kind)
+    return synthesize_pointwise_reduce_msl(region, "f32")
+
+
+def _package_scheduled_reduce(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Package a last-axis f32 reduction as compiler-synthesized MSL.
+
+    Unlike the delegated MPS matmul route and the hand-written softmax kernel,
+    this family is genuinely emitted by the compiler: the Decision #28 tier-1
+    synthesizer produces the kernel and the source-carrying ABI runs it.  The
+    source digest is recorded here and re-verified at submission, so a package
+    cannot execute a kernel other than the one it was built from.
+    """
+    if artifact.inner != 1:
+        raise ValueError(
+            "Apple GPU scheduled reduction requires a last-axis contract "
+            f"(inner == 1), got inner={artifact.inner}"
+        )
+    if artifact.keepdims:
+        raise ValueError("Apple GPU scheduled reduction is rank-reducing only")
+    source = synthesized_reduce_source(artifact.kind)
+    source_digest = hashlib.sha256(source.encode()).hexdigest()
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "E2E-REAL-5 Apple GPU scheduled reduction requires a fresh Tessera "
+            "Apple GPU runtime dylib"
+        )
+    symbol, abi = APPLE_SYNTH_REDUCE_F32_SYMBOL, APPLE_SYNTH_REDUCE_F32_ABI
+    # The synthesized kernel *is* the Target IR for this route, so carry it
+    # rather than a call stub: it is the artifact a reader must audit.
+    target_ir = (
+        f'tessera_apple.gpu.msl_kernel @{symbol} '
+        f'{{abi = "{abi}", kind = "{artifact.kind}", storage = "f32", '
+        f'accumulation = "f32", source_sha256 = "{source_digest}", '
+        f'status = "executable"}}\n// ---- synthesized MSL ----\n{source}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, artifact.input_name, "input", "fp32",
+                          len(artifact.input_shape), "row_major", 4),
+            BufferBinding(1, artifact.output_name, "output", "fp32",
+                          len(artifact.output_shape), "row_major", 4),
+        ),
+        shape_guards=tuple(
+            [ShapeGuard(artifact.input_name, axis, "eq", extent)
+             for axis, extent in enumerate(artifact.input_shape)]
+            + [ShapeGuard(artifact.output_name, axis, "eq", extent)
+               for axis, extent in enumerate(artifact.output_shape)]
+        ),
+        geometry=LaunchGeometry(policy="apple_msl_synth_pointwise_reduce"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-5",
+            "route": "apple_gpu_synth_pointwise_reduce_f32",
+            "op_kind": "reduce",
+            "family": "reduce",
+            "kind": artifact.kind,
+            "synthesized": True,
+            "source_sha256": source_digest,
+            "logical_input_shape": list(artifact.input_shape),
+            "axis": artifact.axis,
+            "keepdims": artifact.keepdims,
+            "outer": artifact.outer,
+            "axis_extent": artifact.axis_extent,
+            "inner": artifact.inner,
+            "storage": "f32",
+            "accum": "f32",
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
 def package_scheduled_kernel(
     artifact: ScheduledKernelArtifact,
     *,
@@ -870,23 +985,32 @@ def package_scheduled_kernel(
     """Consume the E2E-REAL-5 shared launch-Tile semantic-kernel artifact
     without Graph re-entry, binding it to the native MSL softmax route.
 
-    Only the softmax family is wired: Apple GPU has a proven
-    ``tessera_apple_gpu_softmax_f32`` MSL route (which, unlike the MPS matmul
-    route, exposes a command-buffer device timer, so it is not gated by
-    APPLE-DEVICE-EVENT-1).  Reduction has no Apple GPU scheduled consumer and
-    fails closed at the shared boundary.  The shared launch tile carries rows x
-    columns after flattening leading dims; the descriptor binds that rank-2
-    softmax contract, which is exact because softmax rows are independent.
+    Two families are wired, and they take deliberately different routes:
+
+    * **softmax** binds the proven hand-written ``tessera_apple_gpu_softmax_f32``
+      MSL kernel (which, unlike the MPS matmul route, exposes a command-buffer
+      device timer, so it is not gated by APPLE-DEVICE-EVENT-1);
+    * **reduce** is **compiler-synthesized MSL** — the Decision #28 tier-1
+      synthesizer emits the kernel and the source-carrying
+      ``tessera_apple_gpu_synth_pointwise_reduce_f32`` ABI runs it.
+
+    The shared launch tile carries rows x columns after flattening leading dims;
+    the flatten is exact for both families because their rows are independent.
     """
     artifact.validate()
     if (
         artifact.target != "apple_gpu"
         or artifact.architecture != "apple7"
-        or artifact.family != "softmax"
         or (artifact.dtype, artifact.storage, artifact.accum) != ("fp32", "f32", "f32")
     ):
         raise ValueError(
-            "Apple GPU scheduled kernel requires the f32 apple7 softmax contract"
+            "Apple GPU scheduled kernel requires the f32 apple7 contract"
+        )
+    if artifact.family == "reduce":
+        return _package_scheduled_reduce(artifact, pipeline_name=pipeline_name)
+    if artifact.family != "softmax":
+        raise ValueError(
+            "Apple GPU scheduled kernel supports only softmax and reduce"
         )
     library = _runtime_library_path()
     if library is None:

@@ -418,10 +418,6 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
 
   if (opName != "tessera.reduce")
     return failure();
-  // Apple has no scheduled reduction consumer; fail closed rather than emit an
-  // artifact no Apple package can launch.
-  if (apple_gpu)
-    return failure();
   auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
   int64_t axis = axisAttr ? axisAttr.getInt() : -1;
   if (axis < 0) axis += input.getRank();
@@ -438,7 +434,12 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   else expected.erase(expected.begin() + axis);
   if (ArrayRef<int64_t>(expected) != output.getShape() ||
       schedule.storage != "f32" ||
-      (x86 && axis != input.getRank() - 1))
+      (x86 && axis != input.getRank() - 1) ||
+      // Apple's synthesized reduce kernel gives one thread per row and folds
+      // over the trailing extent, so it expresses last-axis reductions only.
+      // An interior axis (inner != 1) fails closed rather than being reordered
+      // into something the program did not ask for.
+      (apple_gpu && axis != input.getRank() - 1))
     return failure();
   schedule.family = "reduce";
   schedule.kind = kindAttr.getValue();

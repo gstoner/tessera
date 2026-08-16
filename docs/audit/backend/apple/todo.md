@@ -2409,7 +2409,7 @@ capability-rejection or consumer proof, not undeclared divergence.
 | 29 | APPLE-ATTN-BWD-3 | **active** | `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified shared backward contracts; confirm Apple's backward satisfies them or record the divergence. The shared LSE checkpoint contract is now real and conditional; Apple retains recompute until an exact Metal package and benchmark justify a saved checkpoint. |
 | 30 | APPLE-ATTN-MODIFIERS-1 | **active** | `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26` lands shared tensor-valued attention loop modifiers. Apple owns validating that its causal / sliding-window / softcap / bias / GQA-MQA envelope still expresses every admitted modifier after the shared change, and rejecting the rest by name rather than silently narrowing. |
 | 31 | APPLE-STATEFUL-TRANSPORT-1 | **active** | `SSA-STATEFUL-TRANSPORT-2026-07-26` retired the `#tile.buffer_ref` compatibility reader and generalized the proven Apple ReplaySSM lifecycle schema to target-keyed resident ABIs, adding MoE launch-workspace ownership and optional rank/device topology binding. Apple keeps its session-private ring, flush/rollback, ordered submission, and drain-before-release semantics; the open item is Metal threadgroup scheduling against the generalized schema. APPLE-PIPE-1 already rejects name-based `#tile.buffer_ref` identity, so Apple is aligned with the retirement. |
-| 32 | APPLE-DEVICE-EVENT-1 | **open — scoped to the MPSGraph route** | *Corrected 2026-07-27: the first diagnosis of this row was wrong.* The device timer is **not** broken on the descriptor lane. `tessera_apple_gpu_last_dispatch_device_time_ns()` reads `-1` only because dispatch telemetry is **opt-in and off by default**; after `tessera_apple_gpu_dispatch_telemetry_set_enabled(1)` the MSL softmax route reports a real `device_time_ns` with `timing_source=1` and a full threadgroup/execution-width resource record. The genuine gap is narrower: the **matmul route runs through MPSGraph**, which populates neither the command-buffer device timer nor the MSL dispatch record. Because `required_timing_domains` is report-wide and every family in scope must supply both domains, one family without a device timer forces the whole `apple_gpu` packet onto `kernel_wall`. Closing this means giving the MPSGraph route a device timer (or moving matmul to an MSL/`simdgroup_matrix` route that already has one), then re-recording with `required_timing_domains = ["device_event", "end_to_end"]`. Independent of `CAP_DISPATCH_BOUNDARY_SAMPLING` (bit 4), which this M1 Max does not report — the command-buffer interval needs no counter sampling. |
+| 32 | APPLE-DEVICE-EVENT-1 | **closed (2026-08-16)** | *Corrected 2026-07-27: the first diagnosis of this row was wrong.* The device timer is **not** broken on the descriptor lane. `tessera_apple_gpu_last_dispatch_device_time_ns()` reads `-1` only because dispatch telemetry is **opt-in and off by default**; after `tessera_apple_gpu_dispatch_telemetry_set_enabled(1)` the MSL softmax route reports a real `device_time_ns` with `timing_source=1` and a full threadgroup/execution-width resource record. The genuine gap is narrower: the **matmul route runs through MPSGraph**, which populates neither the command-buffer device timer nor the MSL dispatch record. Because `required_timing_domains` is report-wide and every family in scope must supply both domains, one family without a device timer forces the whole `apple_gpu` packet onto `kernel_wall`. Closing this means giving the MPSGraph route a device timer (or moving matmul to an MSL/`simdgroup_matrix` route that already has one), then re-recording with `required_timing_domains = ["device_event", "end_to_end"]`. Independent of `CAP_DISPATCH_BOUNDARY_SAMPLING` (bit 4), which this M1 Max does not report — the command-buffer interval needs no counter sampling. **Closed 2026-08-16:** `mpsg_run_bmm` now encodes into an owned `MPSCommandBuffer` under the shared `MPSGraphTimingBracket`, the recorder probes device-interval availability per family instead of hard-coding it, and the re-recorded packet seals `required_timing_domains = ["device_event", "end_to_end"]`. |
 | 33 | APPLE-PLACEMENT-ABI-1 | **landed (2026-07-27), extension open** | `tessera_apple_gpu_softmax_f32` and `tessera_apple_gpu_bmm_f32` are `void` ABIs that fall through to a numerically-identical CPU reference when Metal is unavailable or a pipeline/allocation/command fails. Nothing in a numerical proof distinguishes the two paths, so an oracle-matching fixture could have been sealed as Level-C GPU evidence while running on the host. Both now have status-bearing twins (`..._f32_status`) following the documented TILE-1 precedent at `tessera_apple_gpu_mps_matmul_f16_status`, and the fleet recorder refuses to seal a fixture or benchmark whose placement is not positively proven — at the fixture shape *and* the timing shape, since a dispatch can succeed at one and fail at the other. The MSL dispatch record is captured where the route populates it (softmax) and reported absent, never inferred as CPU, where it does not (MPSGraph matmul). **Open:** the other ~130 `void` Apple GPU entry points have the same latent hazard; any that a benchmark or packet records must gain a status twin before its result is admitted as GPU evidence. |
 
 ## Canonical validation lanes
@@ -3591,3 +3591,124 @@ evidence is none of what the Apple promotion contract requires.
 backward kernels, not of this boundary work, and it is recorded here rather than
 quietly optimized — a kernel rewrite needs its own slice and its own paired
 corpus.
+
+### Update 2026-08-16b — scheduled reduction landed (first synthesized family)
+
+Apple GPU now consumes the shared `schedule.reduce → tile.reduce_kernel`
+artifact, closing the last WS-1 family. **This one is different in kind from its
+siblings:** matmul f32 delegates to MPS and softmax binds a hand-written MSL
+kernel, but reduction is genuinely **compiler-emitted** — the Decision #28
+tier-1 synthesizer (`emit/apple_msl.py::synthesize_pointwise_reduce_msl`)
+produces the kernel and the source-carrying
+`tessera_apple_gpu_synth_pointwise_reduce_f32` ABI runs it. It is the first
+Apple family where the MLIR-side boundary and the Python synthesizer meet on one
+artifact, which is the seam `CLAUDE.md` names as the real Apple gap.
+
+- **Content-addressed source.** The package records the synthesized kernel's
+  SHA-256 and carries the MSL itself as the Target IR (`tessera_apple.gpu.
+  msl_kernel`, not a call stub). The runtime **re-derives the source and
+  verifies the digest before dispatch**, so a descriptor cannot execute a kernel
+  other than the one it was built from. Synthesis is deterministic in the reduce
+  kind alone, which is what makes that check meaningful rather than decorative.
+- **Placement is asserted, not inferred.** `run_pointwise_reduce` silently falls
+  back to a NumPy reference on any dispatch failure, so the submit path requires
+  a `metal_runtime` provenance and raises otherwise — a correct answer alone
+  would not distinguish GPU from CPU (APPLE-PLACEMENT-ABI-1).
+- **Envelope:** f32, rank-reducing, **last axis only** (`inner == 1`), kinds
+  `sum`/`mean`/`max` (mapped to the synthesizer's `amax`). The kernel gives one
+  thread per row and folds the trailing extent, so an interior axis fails closed
+  in both owners rather than being reordered. gfx1151 keeps its arbitrary-axis
+  support — the Apple bound must not leak to siblings, and a test asserts that.
+
+Evidence: six exact-device configurations (sum/mean/max × rank-2/rank-3) execute
+on Metal with `native_gpu` placement and match NumPy; 21 tests in the
+scheduled-kernel suite pass.
+
+### Update 2026-08-16c — APPLE-DEVICE-EVENT-1 closed
+
+Row 32 is closed. The GPU matmul route ran through `MPSGraph
+runWithMTLCommandQueue:`, which **owns and commits its own command buffer**, so
+no object existed on which to observe a device interval and the whole `apple_gpu`
+packet was forced onto `kernel_wall`.
+
+`mpsg_run_bmm` now encodes into an explicitly owned `MPSCommandBuffer` under the
+**already-existing** shared `MPSGraphTimingBracket` — the same one the sibling
+MPSGraph paths (gather, transpose, row-op, BSMM) use, so this reuses one
+implementation rather than adding a second (Decision #31).
+
+- **Measured, not asserted.** `record_apple_packet.py` no longer hard-codes
+  `device_event_available: False` with a now-false reason. It probes the device
+  interval per family and claims the `device_event` domain **only when every
+  family in scope published one** — one family without it would make a
+  report-wide domain dishonest, so the packet falls back to `kernel_wall` for
+  all families rather than mixing domains.
+- **The sealed packet is re-recorded, not re-stamped.** Editing
+  `apple_gpu_runtime.mm` correctly tripped the packet's source fingerprint;
+  the fix is a fresh measurement. The packet now seals
+  `required_timing_domains: ["device_event", "end_to_end"]` with both families
+  stable at 31×80 sampling (the 15×50 default drifted 5.2% > the 4% bar for the
+  device cohort — device intervals are noisier than wall time at these shapes,
+  so the sampling was raised rather than the bar lowered).
+
+**What the stronger domain immediately revealed:** at the packet's timing
+shapes, matmul is **0.595 ms device** inside **1.810 ms** end-to-end, and
+softmax is **0.0235 ms device** inside **1.014 ms**. Softmax spends ~23 µs on
+the GPU inside a millisecond of wall time — i.e. these lanes are host-overhead
+dominated, which `kernel_wall` could not have shown. That is a materially better
+question to optimize than any of the kernel timings above.
+
+**Cost check, since a `.mm` edit is not free:** the strict route ledger's
+fingerprint was **already** invalid before this change (pinned `74eb6e95…` vs
+live `9b12af9a…`, inert since 2026-07-27), so no live selector evidence was
+destroyed. End-to-end matmul timing is unchanged (0.95 → 0.89–0.96 ms across
+runs, inside p90 noise), so the device timer costs nothing measurable.
+
+#### Benchmark, all four WS-1 families (Apple7, 20 reps, end-to-end)
+
+| case | route | median ms |
+|---|---|---|
+| matmul.fp32 64³ / 256³ | `apple_gpu_bmm_f32_batch1` | 0.90 / 0.95 |
+| matmul.fp16 64³ / 256³ | `apple_gpu_simdgroup_gemm_f16` | 0.49 / 0.82 |
+| softmax rank-2 / rank-3 | `apple_softmax_native_library` | 1.14 / 0.98 |
+| **reduce sum/mean/max** | `apple_gpu_synth_pointwise_reduce_f32` | **0.37** |
+| attention fwd / causal | `apple_gpu_flash_attn_variant_f32` | 1.64 / 2.78 |
+| attention bwd / causal | `apple_gpu_flash_attn_bwd_split_f32_grads` | 195 / 389 |
+
+Still `selector_eligible: false` — one process, no paired interleaving.
+
+#### PR #571 review finding — `max` violated its own declared NaN contract
+
+Review found a real semantic-contract violation in the reduce slice, confirmed
+on device before fixing. The shared synthesizer emitted `max(acc, v)`; Metal's
+`max`/`min` are IEEE maxNum/minNum-style and **suppress** a NaN operand, so:
+
+| row | GPU (before) | numpy reference |
+|---|---|---|
+| `[1, NaN, 3]` | `3` | `NaN` |
+| `[NaN, NaN, NaN]` | **`-inf`** | `NaN` |
+
+The reduce Schedule artifact literally declares `nan_mode = "propagate"`, and
+the synthesizer's *own* numpy reference propagates — so the kernel disagreed
+with both. The all-NaN case is the one that matters: missing data silently
+became a finite extreme, which a downstream `argmax` or clamp would act on.
+
+Fixed at the single source (`fusion_core.py::_PW_REDUCE_KINDS`, whose only
+kernel consumer is `emit/apple_msl.py`) so extrema propagate explicitly; `sum`
+and `mean` needed no change because IEEE addition already propagates. All four
+kinds now match numpy exactly, including ±inf rows, and
+`test_apple_gpu_scheduled_reduce_propagates_nan` locks it on device — asserting
+both the numeric equality and that an all-NaN row does not become `-inf`. The
+sibling queues record this as not-applicable-with-reason (no other kernel
+consumer), with the caution that CUDA `fmaxf` and x86 `maxps` suppress NaN the
+same way, so a future port must propagate explicitly.
+
+#### Operational note that cost real debugging time
+
+After rebuilding `libTesseraAppleRuntime.dylib`, ~20 device tests failed with
+`Apple runtime is missing <symbol>` even though `nm` showed the symbol present.
+The runtime **publishes the dylib into a temp cache**
+(`$TMPDIR/tessera_apple_gpu_runtime/libtessera_apple_gpu_runtime.<n>.dylib`),
+and that cache was stale until the next process republished it. It is not a
+regression and not a build failure — but it is indistinguishable from one at
+first glance. After rebuilding the dylib, run any Apple test once to force
+republication before trusting a sweep.

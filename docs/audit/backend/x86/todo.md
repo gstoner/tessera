@@ -1406,3 +1406,28 @@ reference is serial in the system dimension `n` and vectorized only across the
 leading batch axes, so the batch axis is the sole AVX-512 parallel axis — an
 x86 lane is a batch-blocked recurrence, not a vectorization of the sweep. No
 AVX-512 or AMX evidence is claimed or transfers.
+
+## APPLE-SCHEDULED-REDUCE-NAN-2026-08-16 — shared reduce NaN semantics (PR #571)
+
+**Shared contract changed; assess before relying on extrema reductions.** The
+synthesizer's reduce vocabulary (`compiler/fusion_core.py::_PW_REDUCE_KINDS`)
+emitted `max(acc, v)` / `min(acc, v)` for `amax`/`amin`. Metal's `max`/`min` are
+IEEE maxNum/minNum-style and **suppress** a NaN operand, so the emitted kernel
+disagreed with the table's own numpy reference (`a.max(-1)`, which propagates)
+and with the `nan_mode = "propagate"` the reduce Schedule artifact declares.
+With the `-INFINITY` seed an all-NaN row reduced to **`-inf`** — missing data
+silently becoming a finite extreme. The accumulators now propagate explicitly.
+
+**x86 outcome: not applicable — no consumer.** `_PW_REDUCE_KINDS` supplies MSL
+accumulate expressions consumed only by `compiler/emit/apple_msl.py`; the Zen 5
+AVX-512 scheduled reduction consumes its own `tile.reduce_kernel` lowering and is
+unaffected. No x86 schedule, ABI, selector, or evidence changes. Same caution as
+NVIDIA for any future `emit/x86_llvm.py` reduce emitter: `maxps`/`maxss` also
+suppress NaN, so propagation must be explicit to honour `nan_mode = "propagate"`.
+
+Also recorded for coordination: PR #571 admits Apple GPU into the shared
+scheduled reduce contract (`scheduled_kernel.py`, last axis only) and closes
+APPLE-DEVICE-EVENT-1 by giving the Apple MPSGraph BMM route an owned command
+buffer. Both are Apple-guarded — the shared `scheduled_kernel` gate adds an
+`apple_gpu` branch beside the existing x86/ROCm ones and changes neither — and
+the runtime edit is in `apple_gpu_runtime.mm`, which no sibling links.

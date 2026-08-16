@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import os
 
@@ -57,14 +58,21 @@ def _artifact(*, family: str, target: str) -> ScheduledKernelArtifact:
         input_shape = output_shape = (2, 3, 5)
         kind, axis, rows, columns, outer, extent, inner = "softmax", -1, 6, 5, 1, 1, 1
     else:
+        # Apple's synthesized reduce is last-axis only (inner == 1); gfx1151
+        # owns the arbitrary-axis kernel, so its fixture keeps an interior axis.
+        apple = target == "apple_gpu"
+        reduce_axis = 2 if apple else 1
         tile_op = f'''tile.reduce_kernel %x, %o, %outer, %extent, %inner {{
-      storage = "f32", accum = "f32", kind = "mean", axis = 1 : i64,
+      storage = "f32", accum = "f32", kind = "mean", axis = {reduce_axis} : i64,
       keepdims = false, schedule = "serial", nan_mode = "propagate",
-      inner_is_one = false, tessera.schedule_hash = "{digest}",
+      inner_is_one = {"true" if apple else "false"}, tessera.schedule_hash = "{digest}",
       tessera.workgroup_size = {workgroup} : i64
     }} : !llvm.ptr, !llvm.ptr, i64, i64, i64'''
-        input_shape, output_shape = (2, 3, 5), (2, 5)
-        kind, axis, rows, columns, outer, extent, inner = "mean", 1, 1, 1, 2, 3, 5
+        input_shape = (2, 3, 5)
+        output_shape = (2, 3) if apple else (2, 5)
+        kind, rows, columns = "mean", 1, 1
+        axis = reduce_axis
+        outer, extent, inner = (6, 5, 1) if apple else (2, 3, 5)
     return ScheduledKernelArtifact(
         graph_ir=f'module attributes {{tessera.target = "{compiler_target}"}} {{}}',
         schedule_ir=f'''module {{
@@ -174,22 +182,95 @@ def test_apple_gpu_packages_exact_scheduled_softmax(monkeypatch, tmp_path) -> No
     assert package.descriptor.provenance["tile_ir_digest"] == artifact.tile_digest
 
 
-def test_apple_gpu_scheduled_reduce_fails_closed(monkeypatch, tmp_path) -> None:
+def _reduce_module(shape, out_shape, *, axis=-1, keepdims=False, kind="mean"):
+    x = IRType("tensor<" + "x".join(map(str, shape)) + "xf32>",
+               tuple(map(str, shape)), "fp32")
+    o = IRType("tensor<" + "x".join(map(str, out_shape)) + "xf32>",
+               tuple(map(str, out_shape)), "fp32")
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="apple_reduce", args=[IRArg("x", x)], result_types=[o],
+        body=[IROp(result="o", op_name="tessera.reduce", operands=["%x"],
+                   operand_types=[str(x)], result_type=str(o),
+                   kwargs={"kind": kind, "axis": axis, "keepdims": keepdims})],
+        return_values=["%o"])])
+
+
+def test_apple_gpu_scheduled_reduce_envelope_fails_closed() -> None:
+    """Apple's synthesized reduce folds the trailing extent, last axis only.
+
+    An interior axis would have to be reordered into something the program did
+    not ask for, so it fails closed — while gfx1151, which owns an arbitrary-axis
+    kernel, must keep accepting it (the Apple bound must not leak to siblings).
+    """
+    supports = scheduled_kernel.supports_scheduled_kernel
+    assert supports(_reduce_module((2, 3, 5), (2, 3)), target="apple_gpu")
+    assert not supports(_reduce_module((2, 3, 5), (2, 5), axis=1), target="apple_gpu")
+    assert not supports(_reduce_module((2, 3, 5), (3, 5), axis=0), target="apple_gpu")
+    assert not supports(
+        _reduce_module((2, 3, 5), (2, 3, 1), keepdims=True), target="apple_gpu"
+    )
+    # The sibling's arbitrary-axis support is untouched.
+    assert supports(_reduce_module((2, 3, 5), (2, 5), axis=1), target="rocm_gfx1151")
+
+
+def test_apple_gpu_scheduled_reduce_is_compiler_synthesized(monkeypatch, tmp_path) -> None:
+    """The reduce family is emitted by the compiler, not delegated to a vendor.
+
+    This is the distinguishing property of the family: matmul f32 delegates to
+    MPS and softmax binds a hand-written kernel, but the reduce kernel is MSL the
+    Decision #28 tier-1 synthesizer produced, carried in the Target IR and bound
+    by a recorded source digest.
+    """
     from tessera.compiler import apple_native
 
-    # The shared contract must not admit an Apple GPU reduction (no consumer).
-    assert not scheduled_kernel.supports_scheduled_kernel(
-        _module(family="reduce", target="rocm"), target="apple_gpu"
-    )
-    # And the consumer rejects a non-softmax artifact outright.
     fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     fake_dylib.write_bytes(b"apple-runtime-image")
     monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
-    with pytest.raises(ValueError, match="apple7 softmax contract"):
+    artifact = _artifact(family="reduce", target="apple_gpu")
+    package = apple_native.package_scheduled_kernel(
+        artifact, pipeline_name="tessera-lower-to-apple_gpu"
+    )
+    provenance = package.descriptor.provenance
+    assert provenance["synthesized"] is True
+    assert provenance["route"] == "apple_gpu_synth_pointwise_reduce_f32"
+    assert provenance["work_item"] == "E2E-REAL-5"
+    # The emitted kernel is the Target IR for this route, not a call stub.
+    assert "kernel void synth_pw_reduce" in package.target_ir
+    assert (
+        hashlib.sha256(
+            apple_native.synthesized_reduce_source(artifact.kind).encode()
+        ).hexdigest()
+        == provenance["source_sha256"]
+    )
+    # Consumed the shared launch tile verbatim.
+    assert package.tile_ir == artifact.tile_ir
+
+
+def test_apple_gpu_scheduled_reduce_rejects_unmappable_contracts(
+    monkeypatch, tmp_path
+) -> None:
+    from tessera.compiler import apple_native
+
+    fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    fake_dylib.write_bytes(b"apple-runtime-image")
+    monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+    # A gfx1151 artifact is structurally valid but not the apple7 contract.
+    with pytest.raises(ValueError, match="apple7 contract"):
         apple_native.package_scheduled_kernel(
             _artifact(family="reduce", target="rocm"),
             pipeline_name="tessera-lower-to-apple_gpu",
         )
+    # An interior-axis artifact (inner != 1) has no synthesized kernel.
+    interior = dataclasses.replace(
+        _artifact(family="reduce", target="apple_gpu"), inner=5, axis=1
+    )
+    with pytest.raises(ValueError, match="last-axis contract"):
+        apple_native.package_scheduled_kernel(
+            interior, pipeline_name="tessera-lower-to-apple_gpu"
+        )
+    # A reduce kind with no synthesizer mapping must not be invented.
+    with pytest.raises(ValueError, match="no kernel for"):
+        apple_native.synthesized_reduce_source("prod")
 
 
 @pytest.mark.parametrize(
@@ -345,6 +426,118 @@ def _softmax_module(shape: tuple[int, ...]) -> GraphIRModule:
                    kwargs={"axis": -1})],
         return_values=["%o"],
     )])
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.skipif(
+    find_tessera_opt() is None,
+    reason="Apple GPU runtime dylib / tessera-opt unavailable",
+)
+@pytest.mark.parametrize("kind,op_name", [("sum", "tessera.sum"),
+                                          ("mean", "tessera.mean"),
+                                          ("max", "tessera.max")])
+@pytest.mark.parametrize("shape", [(64, 128), (8, 16, 32), (128,)])
+def test_apple_gpu_scheduled_reduce_executes_synthesized_kernel(shape, kind, op_name) -> None:
+    """The synthesized reduce must execute on Metal and match NumPy.
+
+    Launching with the module's own logical shape, and asserting `native_gpu`,
+    matters here for a specific reason: the underlying helper silently falls
+    back to a NumPy reference on any dispatch failure, so a correct answer alone
+    would not distinguish GPU execution from the CPU path.
+    """
+    from tessera.compiler import apple_native
+
+    if not apple_native.tools_available():
+        pytest.skip("Apple GPU runtime dylib unavailable")
+    out_shape = shape[:-1]
+    x_type = IRType("tensor<" + "x".join(map(str, shape)) + "xf32>",
+                    tuple(map(str, shape)), "fp32")
+    # A rank-1 reduction produces a *scalar*: `tensor<f32>`, not `tensor<xf32>`.
+    # That path exercises the rank-0 output binding, which is why it is covered.
+    o_type = IRType(
+        "tensor<" + "x".join(map(str, out_shape)) + "xf32>" if out_shape else "tensor<f32>",
+        tuple(map(str, out_shape)), "fp32",
+    )
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name="apple_reduce", args=[IRArg("x", x_type)], result_types=[o_type],
+        body=[IROp(result="o", op_name=op_name, operands=["%x"],
+                   operand_types=[str(x_type)], result_type=str(o_type),
+                   kwargs={"axis": -1, "keepdims": False})],
+        return_values=["%o"])])
+    bundle = compile_graph_module(
+        module, source_origin="e2e-real-5-exact-device", target="apple_gpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.native_image is not None and bundle.launch_descriptor is not None
+    provenance = bundle.launch_descriptor.provenance
+    assert provenance["route"] == "apple_gpu_synth_pointwise_reduce_f32"
+    assert provenance["synthesized"] is True
+    runtime_artifact = rt.RuntimeArtifact(
+        metadata={"target": "apple_gpu"}, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+        tile_ir=bundle.tile.text if bundle.tile else "",
+        target_ir=bundle.target_ir.text if bundle.target_ir else "",
+    )
+    rng = np.random.default_rng(6021)
+    x = np.ascontiguousarray(rng.standard_normal(shape), dtype=np.float32)
+    output = np.zeros(out_shape, dtype=np.float32)
+    result = rt.launch(runtime_artifact, {"x": x, "o": output})
+    assert result["ok"] is True, result.get("reason")
+    assert result.get("execution_kind") == "native_gpu", result
+    expected = {"sum": x.sum(-1), "mean": x.mean(-1), "max": x.max(-1)}[kind]
+    np.testing.assert_allclose(output, expected, rtol=2e-5, atol=2e-5)
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.skipif(
+    find_tessera_opt() is None,
+    reason="Apple GPU runtime dylib / tessera-opt unavailable",
+)
+def test_apple_gpu_scheduled_reduce_propagates_nan() -> None:
+    """`max` must propagate NaN, because the artifact declares nan_mode=propagate.
+
+    Metal's `max`/`min` are IEEE maxNum/minNum-style and *suppress* a NaN
+    operand, so the naive accumulator disagreed with both the declared contract
+    and the NumPy oracle — and with the ``-INFINITY`` seed an all-NaN row came
+    back as ``-inf``, turning missing data into a finite extreme. That is a
+    silent wrong answer, not a rounding difference, so it gets a device test.
+    """
+    from tessera.compiler import apple_native
+
+    if not apple_native.tools_available():
+        pytest.skip("Apple GPU runtime dylib unavailable")
+    shape = (4, 3)
+    x_type = IRType("tensor<4x3xf32>", ("4", "3"), "fp32")
+    o_type = IRType("tensor<4xf32>", ("4",), "fp32")
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name="apple_reduce_nan", args=[IRArg("x", x_type)], result_types=[o_type],
+        body=[IROp(result="o", op_name="tessera.max", operands=["%x"],
+                   operand_types=[str(x_type)], result_type=str(o_type),
+                   kwargs={"axis": -1, "keepdims": False})],
+        return_values=["%o"])])
+    bundle = compile_graph_module(
+        module, source_origin="e2e-real-5-nan", target="apple_gpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    # The contract this test is defending is written into the Tile artifact.
+    assert 'nan_mode = "propagate"' in (bundle.tile.text if bundle.tile else "")
+    runtime_artifact = rt.RuntimeArtifact(
+        metadata={"target": "apple_gpu"}, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+        tile_ir=bundle.tile.text if bundle.tile else "",
+        target_ir=bundle.target_ir.text if bundle.target_ir else "",
+    )
+    x = np.array([[1.0, np.nan, 3.0],   # one NaN poisons the row
+                  [np.nan] * 3,          # all-NaN must not become -inf
+                  [2.0, 5.0, 1.0],       # ordinary row still reduces
+                  [np.inf, -np.inf, 0.0]],  # infinities are not NaN
+                 dtype=np.float32)
+    output = np.zeros(shape[:-1], dtype=np.float32)
+    result = rt.launch(runtime_artifact, {"x": x, "o": output})
+    assert result["ok"] is True, result.get("reason")
+    assert result.get("execution_kind") == "native_gpu", result
+    np.testing.assert_array_equal(output, np.max(x, axis=-1))
+    assert np.isnan(output[1]), "an all-NaN row must not reduce to -inf"
 
 
 @pytest.mark.hardware_apple_gpu

@@ -291,11 +291,33 @@ def test_both_apple_identities_are_sealed_independently() -> None:
     # Each report speaks only for its own identity.
     assert reports["gpu"]["target"] == "apple_gpu"
     assert reports["cpu"]["target"] == "apple_cpu"
-    # Neither lane can report device_event today: the value-descriptor ABI does
-    # not feed the Metal command-buffer timer. If a future packet claims it,
-    # that claim must come with a real device timer, not a host clock.
-    for report in reports.values():
-        assert set(report["required_timing_domains"]) == {"kernel_wall", "end_to_end"}
+    # Timing domains are per-identity, and that is the point of this test: the
+    # two lanes reach different domains and neither inherits the other's.
+    #
+    # `apple_gpu` reached `device_event` when APPLE-DEVICE-EVENT-1 closed
+    # (2026-08-16) — its matmul route now encodes into an owned MPSCommandBuffer
+    # under the shared MPSGraph timing bracket, so a real Metal device interval
+    # exists. `apple_cpu` is Accelerate; it has no Metal command buffer at all,
+    # so it measures the native-submit boundary.
+    #
+    # Every lane must still pair its domain with `end_to_end`, and a
+    # `device_event` claim must come from a real device timer, never a host
+    # clock — which is why the GPU packet also records
+    # `resources.metal.device_event_available`.
+    for name, report in reports.items():
+        domains = set(report["required_timing_domains"])
+        assert "end_to_end" in domains
+        assert domains <= {"device_event", "kernel_wall", "end_to_end"}
+        assert len(domains) == 2, f"{name} must pair exactly one clock with end_to_end"
+    assert set(reports["cpu"]["required_timing_domains"]) == {
+        "kernel_wall", "end_to_end",
+    }, "apple_cpu has no Metal command buffer and cannot reach device_event"
+    if "device_event" in set(reports["gpu"]["required_timing_domains"]):
+        resources = json.loads(
+            (gpu[0] / "resources.json").read_text(encoding="utf-8"))
+        assert resources["metal"]["device_event_available"] is True, (
+            "a device_event claim must be backed by a measured device interval"
+        )
 
 
 def test_apple_packets_only_claim_families_their_registration_declares() -> None:

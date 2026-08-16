@@ -2938,3 +2938,29 @@ online-softmax emitter) as the NVIDIA-side entry point for the lattice family;
 the solver's entry point is the PDE op-set admission, not G5. No sm_120 host
 revalidation was run for this registration and no device evidence is claimed —
 nothing here changes generated code.
+
+## APPLE-SCHEDULED-REDUCE-NAN-2026-08-16 — shared reduce NaN semantics (PR #571)
+
+**Shared contract changed; assess before relying on extrema reductions.** The
+synthesizer's reduce vocabulary (`compiler/fusion_core.py::_PW_REDUCE_KINDS`)
+emitted `max(acc, v)` / `min(acc, v)` for `amax`/`amin`. Metal's `max`/`min` are
+IEEE maxNum/minNum-style and **suppress** a NaN operand, so the emitted kernel
+disagreed with the table's own numpy reference (`a.max(-1)`, which propagates)
+and with the `nan_mode = "propagate"` the reduce Schedule artifact declares.
+With the `-INFINITY` seed an all-NaN row reduced to **`-inf`** — missing data
+silently becoming a finite extreme. The accumulators now propagate explicitly.
+
+**NVIDIA outcome: not applicable — no consumer.** `_PW_REDUCE_KINDS` supplies MSL
+accumulate expressions consumed only by `compiler/emit/apple_msl.py`; SM120
+reduction lowering is untouched. No CUDA schedule, PTX path, ABI, or exact-device
+claim changes. The NaN-propagation contract is worth noting for any future
+`emit/nvidia_cuda.py` reduce emitter: CUDA's `fmaxf` suppresses NaN the same way,
+so a naive port would reintroduce the same divergence from the declared
+`nan_mode = "propagate"`.
+
+Also recorded for coordination: PR #571 admits Apple GPU into the shared
+scheduled reduce contract (`scheduled_kernel.py`, last axis only) and closes
+APPLE-DEVICE-EVENT-1 by giving the Apple MPSGraph BMM route an owned command
+buffer. Both are Apple-guarded — the shared `scheduled_kernel` gate adds an
+`apple_gpu` branch beside the existing x86/ROCm ones and changes neither — and
+the runtime edit is in `apple_gpu_runtime.mm`, which no sibling links.

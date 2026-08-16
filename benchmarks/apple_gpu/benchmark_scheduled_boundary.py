@@ -219,6 +219,32 @@ def main() -> int:
         rows.append(_row(f"softmax.rank{len(shape)}", provenance, timing, error,
                          native=native, shape=list(shape)))
 
+    # --- reduce (compiler-synthesized MSL, last axis) ---
+    for kind, reference in (("sum", lambda a: a.sum(-1)),
+                            ("mean", lambda a: a.mean(-1)),
+                            ("max", lambda a: a.max(-1))):
+        shape = (64, 256)
+        x_type = _tensor(shape)
+        o_type = _tensor(shape[:-1])
+        module = GraphIRModule(functions=[GraphIRFunction(
+            name="bench_reduce", args=[IRArg("x", x_type)], result_types=[o_type],
+            body=[IROp(result="o", op_name=f"tessera.{kind}", operands=["%x"],
+                       operand_types=[str(x_type)], result_type=str(o_type),
+                       kwargs={"axis": -1, "keepdims": False})],
+            return_values=["%o"])])
+        artifact, provenance = _artifact_from_driver(module)
+        x = np.ascontiguousarray(rng.standard_normal(shape), dtype=np.float32)
+        out = np.zeros(shape[:-1], dtype=np.float32)
+        result = rt.launch(artifact, {"x": x, "o": out})
+        native = result.get("execution_kind") == "native_gpu"
+        error = float(np.abs(out - reference(x)).max())
+        if error > 3e-5:
+            raise RuntimeError(f"reduce {kind} failed its oracle: {error}")
+        timing = _time(lambda: rt.launch(artifact, {"x": x, "o": out}),
+                       reps=args.reps, warmup=args.warmup)
+        rows.append(_row(f"reduce.{kind}", provenance, timing, error,
+                         native=native, shape=list(shape)))
+
     # --- attention forward (status-returning GQA MSL) ---
     for (b_, hq, hkv, sq, sk, d, causal) in ((1, 4, 2, 64, 64, 64, False),
                                              (1, 4, 2, 128, 128, 64, True)):

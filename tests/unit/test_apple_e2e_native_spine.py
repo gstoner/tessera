@@ -234,13 +234,37 @@ def test_apple_softmax_package_hashes_dylib_and_names_abi(monkeypatch, tmp_path)
     assert package.descriptor.provenance["route"] == "apple_softmax_native_library"
 
 
-def test_apple_gpu_package_trace_uses_descriptor_provenance(monkeypatch, tmp_path) -> None:
-    """Trace metadata must name the package actually selected, not BMM by default."""
-    from tessera.compiler.driver import compile_graph_module
+@pytest.mark.parametrize("scheduled_available", [False, True])
+def test_apple_gpu_package_trace_uses_descriptor_provenance(
+    monkeypatch, tmp_path, scheduled_available: bool
+) -> None:
+    """Trace metadata must name the package actually selected, not BMM by default.
 
+    Both Apple softmax routes are legitimate and this asserts the *right* one is
+    named in each world:
+
+    * with production ``tessera-opt``, a rank-2 f32 softmax migrates to the
+      shared Graph->Schedule->launch-Tile boundary (``E2E-REAL-5``);
+    * without it there is no shared artifact to consume, so the independently
+      proven descriptor route stays authoritative (``APPLE-E2E-1``) — a
+      runtime-only install must not hard-fail.
+
+    The anti-regression guard is unchanged in both: the trace must name
+    ``softmax``, never a defaulted BMM.
+    """
+    from tessera.compiler import driver as _driver
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+    if scheduled_available and find_tessera_opt() is None:
+        # Forcing the gate open cannot conjure the tool the lowering runs.
+        pytest.skip("scheduled boundary needs a built tessera-opt")
     dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     dylib.write_bytes(b"apple-e2e-test-runtime")
     monkeypatch.setenv("TESSERA_APPLE_GPU_RUNTIME_LIB", str(dylib))
+    monkeypatch.setattr(
+        _driver, "_apple_scheduled_boundary_available", lambda: scheduled_available
+    )
     bundle = compile_graph_module(
         _softmax_module(), source_origin="apple-gpu-trace-provenance-test",
         target="apple_gpu", options={"package_native": True},
@@ -250,7 +274,9 @@ def test_apple_gpu_package_trace_uses_descriptor_provenance(monkeypatch, tmp_pat
                  if event.pass_name == "apple-gpu-native-package")
     assert event.metadata["dtype"] == "fp32"
     assert event.metadata["op_family"] == "softmax"
-    assert event.metadata["work_item"] == "APPLE-E2E-1"
+    assert event.metadata["work_item"] == (
+        "E2E-REAL-5" if scheduled_available else "APPLE-E2E-1"
+    )
 
 
 def _value_module(op_name, arg_shapes, out_shape, *, kwargs=None, dtype="fp32"):

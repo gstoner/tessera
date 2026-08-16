@@ -74,6 +74,286 @@ def _x86_reference(do, q, key, value, bias, *, scale, window, softcap):
     return (dq, dk, dv), row_lse
 
 
+def _apple_module(
+    *, b: int = 1, hq: int = 4, hkv: int = 2, sq: int = 8, sk: int = 8,
+    d: int = 16, dtype: str = "fp32", causal: bool = False,
+    window: tuple[int, int] = (-1, -1), dropout_p: float = 0.0,
+    lse_checkpoint: str = "auto", scale: float = 0.25,
+):
+    """Rank-4 module inside the Apple MSL VJP envelope.
+
+    Deliberately separate from the shared `_module` helper: that one always
+    supplies a bias operand, while the Apple envelope must be exercised both
+    with and without one.
+    """
+    from tessera.compiler.graph_ir import (
+        GraphIRFunction, GraphIRModule, IRArg, IROp, IRType,
+    )
+
+    element = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
+
+    def tensor(shape, spelling=element, kind=dtype):
+        return IRType(f"tensor<{'x'.join(map(str, shape))}x{spelling}>",
+                      tuple(map(str, shape)), kind)
+
+    q, key = tensor((b, hq, sq, d)), tensor((b, hkv, sk, d))
+    value, do = tensor((b, hkv, sk, d)), tensor((b, hq, sq, d))
+    dq = tensor((b, hq, sq, d), "f32", "fp32")
+    dk = tensor((b, hkv, sk, d), "f32", "fp32")
+    dv = tensor((b, hkv, sk, d), "f32", "fp32")
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="apple_attention_backward_program",
+        args=[IRArg("do", do), IRArg("q", q), IRArg("k", key), IRArg("v", value)],
+        result_types=[dq, dk, dv],
+        body=[IROp(
+            result="dq,dk,dv", op_name="tessera.flash_attn_bwd",
+            operands=["%do", "%q", "%k", "%v"],
+            operand_types=[str(do), str(q), str(key), str(value)],
+            result_type=f"({dq}, {dk}, {dv})",
+            kwargs={"scale": scale, "causal": causal,
+                    "window_left": window[0], "window_right": window[1],
+                    "softcap": 0.0, "dropout_p": dropout_p, "dropout_seed": 0,
+                    "query_block": 16, "key_block": 16, "split_count": 2,
+                    "lse_checkpoint": lse_checkpoint},
+        )],
+        return_values=["%dq", "%dk", "%dv"],
+    )])
+
+
+def _apple_backward_reference(do, q, key, value, *, scale, causal):
+    """Analytic VJP in float64, derived from the softmax Jacobian.
+
+    Independent of the kernel under test: comparing a kernel to itself proves
+    nothing.  GQA gradients are reduced over the query-head group, which is the
+    property that catches a kernel accumulating into the wrong KV head.
+    """
+    b, hq, sq, d = q.shape
+    _, hkv, sk, _ = key.shape
+    group = hq // hkv
+    k_x = np.repeat(key, group, axis=1).astype(np.float64)
+    v_x = np.repeat(value, group, axis=1).astype(np.float64)
+    q_d, do_d = q.astype(np.float64), do.astype(np.float64)
+    scores = np.einsum("bhqd,bhkd->bhqk", q_d, k_x) * scale
+    if causal:
+        offset = max(sk - sq, 0)
+        rows = np.arange(sq)[:, None] + offset
+        cols = np.arange(sk)[None, :]
+        scores = np.where(cols <= rows, scores, -np.inf)
+    probs = np.exp(scores - scores.max(axis=-1, keepdims=True))
+    probs /= probs.sum(axis=-1, keepdims=True)
+    d_v = np.einsum("bhqk,bhqd->bhkd", probs, do_d)
+    d_p = np.einsum("bhqd,bhkd->bhqk", do_d, v_x)
+    d_s = probs * (d_p - (d_p * probs).sum(axis=-1, keepdims=True))
+    d_q = np.einsum("bhqk,bhkd->bhqd", d_s, k_x) * scale
+    d_k = np.einsum("bhqk,bhqd->bhkd", d_s, q_d) * scale
+
+    def reduce_group(value_):
+        return value_.reshape(b, hkv, group, *value_.shape[2:]).sum(axis=2)
+
+    return d_q, reduce_group(d_k), reduce_group(d_v)
+
+
+def test_apple_gpu_attention_backward_envelope_fails_closed() -> None:
+    """Requests outside the Apple MSL VJP envelope must not be narrowed."""
+    supports = supports_scheduled_attention_backward
+    assert supports(_apple_module(), target="apple_gpu")
+    assert supports(_apple_module(causal=True), target="apple_gpu")
+    assert supports(_apple_module(dtype="fp16"), target="apple_gpu")
+    assert supports(_apple_module(dtype="bf16"), target="apple_gpu")
+    # A live window: the MSL non-causal window is a symmetric half-window, which
+    # is not the shared window_left/window_right semantics.
+    assert not supports(_apple_module(window=(4, 4)), target="apple_gpu")
+    assert not supports(_apple_module(window=(4, 0)), target="apple_gpu")
+    # The ABI carries no dropout.
+    assert not supports(_apple_module(dropout_p=0.1), target="apple_gpu")
+    # D > 256 exceeds the kernel bound; a non-whole GQA group is unmappable.
+    assert not supports(_apple_module(d=512), target="apple_gpu")
+    assert not supports(_apple_module(hq=3, hkv=2), target="apple_gpu")
+    # Apple cannot save an LSE checkpoint: asking for one must fail closed
+    # rather than silently recomputing under a `saved` label.
+    assert not supports(_apple_module(lse_checkpoint="saved"), target="apple_gpu")
+
+
+@_needs_opt
+def test_apple_gpu_attention_backward_declares_its_own_lse_policy() -> None:
+    artifact = lower_scheduled_attention_backward(
+        _apple_module(), target="apple_gpu"
+    )
+    assert artifact.target == "apple_gpu" and artifact.architecture == "apple7"
+    # Apple must not inherit x86's save_lse or the gfx1151 threshold.
+    assert artifact.lse_checkpoint_policy == "apple7_recompute"
+    assert artifact.lse_checkpoint_selection == "recompute"
+    assert artifact.tile_ir.count("tile.attention_backward_kernel") == 1
+    assert "tessera.flash_attn" not in artifact.tile_ir
+    assert "schedule." not in artifact.tile_ir
+
+
+@_needs_opt
+def test_apple_gpu_packages_exact_backward_tile(tmp_path, monkeypatch) -> None:
+    from tessera.compiler import apple_native
+
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-runtime-image")
+    monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: dylib)
+    artifact = lower_scheduled_attention_backward(
+        _apple_module(), target="apple_gpu"
+    )
+    package = apple_native.package_scheduled_attention_backward(
+        artifact, pipeline_name="tessera-lower-to-apple_gpu"
+    )
+    assert package.tile_ir == artifact.tile_ir
+    assert package.descriptor.entry_symbol == (
+        "tessera_apple_gpu_flash_attn_bwd_variant_f32_status"
+    )
+    assert package.descriptor.provenance["work_item"] == "E2E-REAL-5B"
+    # The shared contract declares a two-way split with ascending fixed-order
+    # reduction, so the deterministic split route is the only faithful mapping;
+    # the atomic route (1) is explicitly nondeterministic.
+    assert package.descriptor.provenance["msl_route"] == 2
+    assert package.descriptor.provenance["deterministic"] is True
+    assert package.descriptor.provenance["reduction_order"] == [0, 1]
+    assert package.descriptor.provenance["lse_checkpoint_policy"] == "apple7_recompute"
+    assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
+
+
+@_needs_opt
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("target", "x86"),
+        ("architecture", "gfx1151"),
+        ("lse_checkpoint_policy", "save_lse"),
+        ("lse_checkpoint_selection", "saved"),
+        ("window_left", 4),
+    ],
+)
+def test_apple_gpu_backward_rejects_foreign_contract(
+    tmp_path, monkeypatch, field, value
+) -> None:
+    """Each guarded field is load-bearing, not decoration.
+
+    Mutating exactly one field of an otherwise valid Apple artifact must be
+    refused — otherwise a sibling's schedule or policy could be packaged under
+    Apple's ABI.  Two layers refuse, and both are fail-closed: the LSE policy
+    and selection are *digest-bound into the Tile text*, so tampering with them
+    trips the artifact's own content-identity check before the Apple guard is
+    even reached; target/architecture/window are caught by the guard itself.
+    """
+    from tessera.compiler import apple_native
+
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-runtime-image")
+    monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: dylib)
+    artifact = lower_scheduled_attention_backward(
+        _apple_module(), target="apple_gpu"
+    )
+    foreign = dataclasses.replace(artifact, **{field: value})
+    digest_bound = field in {"lse_checkpoint_policy", "lse_checkpoint_selection"}
+    expected = "stale" if digest_bound else "apple7"
+    with pytest.raises(ValueError, match=expected):
+        apple_native.package_scheduled_attention_backward(
+            foreign, pipeline_name="tessera-lower-to-apple_gpu"
+        )
+
+
+@pytest.mark.hardware_apple_gpu
+@_needs_opt
+@pytest.mark.parametrize(
+    "hq,hkv,sq,sk,causal",
+    [
+        (4, 2, 8, 8, False),    # GQA
+        (4, 4, 16, 16, False),  # MHA
+        (4, 1, 8, 8, False),    # MQA
+        (2, 2, 8, 8, True),     # causal
+    ],
+)
+def test_apple_gpu_backward_executes_and_matches_analytic_vjp(
+    hq, hkv, sq, sk, causal
+) -> None:
+    """All three gradients must match an independently derived analytic VJP."""
+    from tessera.compiler import apple_native
+    from tessera.runtime import RuntimeArtifact, launch
+
+    if not apple_native.tools_available():
+        pytest.skip("Apple GPU runtime dylib unavailable")
+    b, d, scale = 1, 16, 0.25
+    artifact = lower_scheduled_attention_backward(
+        _apple_module(b=b, hq=hq, hkv=hkv, sq=sq, sk=sk, d=d, causal=causal,
+                      scale=scale),
+        target="apple_gpu",
+    )
+    package = apple_native.package_scheduled_attention_backward(
+        artifact, pipeline_name="tessera-lower-to-apple_gpu"
+    )
+    runtime_artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu"}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir,
+        target_ir=package.target_ir,
+    )
+    rng = np.random.default_rng(5811)
+    q = np.ascontiguousarray(rng.standard_normal((b, hq, sq, d)), dtype=np.float32)
+    key = np.ascontiguousarray(rng.standard_normal((b, hkv, sk, d)), dtype=np.float32)
+    value = np.ascontiguousarray(rng.standard_normal((b, hkv, sk, d)), dtype=np.float32)
+    do = np.ascontiguousarray(rng.standard_normal((b, hq, sq, d)), dtype=np.float32)
+    d_q = np.zeros_like(q)
+    d_k = np.zeros_like(key)
+    d_v = np.zeros_like(value)
+
+    result = launch(runtime_artifact, {
+        "do": do, "q": q, "k": key, "v": value,
+        "dq": d_q, "dk": d_k, "dv": d_v,
+    })
+
+    assert result["ok"] is True, result.get("reason")
+    assert result.get("execution_kind") == "native_gpu", result
+    expected_q, expected_k, expected_v = _apple_backward_reference(
+        do, q, key, value, scale=scale, causal=causal
+    )
+    np.testing.assert_allclose(d_q, expected_q, rtol=2e-4, atol=2e-5)
+    np.testing.assert_allclose(d_k, expected_k, rtol=2e-4, atol=2e-5)
+    np.testing.assert_allclose(d_v, expected_v, rtol=2e-4, atol=2e-5)
+
+
+@pytest.mark.hardware_apple_gpu
+@_needs_opt
+def test_apple_gpu_backward_split_route_is_bit_deterministic() -> None:
+    """The declared ascending fixed-order reduction implies bit-identical repeats."""
+    from tessera.compiler import apple_native
+    from tessera.runtime import RuntimeArtifact, launch
+
+    if not apple_native.tools_available():
+        pytest.skip("Apple GPU runtime dylib unavailable")
+    artifact = lower_scheduled_attention_backward(
+        _apple_module(hq=4, hkv=2, sq=16, sk=16), target="apple_gpu"
+    )
+    package = apple_native.package_scheduled_attention_backward(
+        artifact, pipeline_name="tessera-lower-to-apple_gpu"
+    )
+    runtime_artifact = RuntimeArtifact(
+        metadata={"target": "apple_gpu"}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir,
+        target_ir=package.target_ir,
+    )
+    rng = np.random.default_rng(991)
+    q = np.ascontiguousarray(rng.standard_normal((1, 4, 16, 16)), dtype=np.float32)
+    key = np.ascontiguousarray(rng.standard_normal((1, 2, 16, 16)), dtype=np.float32)
+    value = np.ascontiguousarray(rng.standard_normal((1, 2, 16, 16)), dtype=np.float32)
+    do = np.ascontiguousarray(rng.standard_normal((1, 4, 16, 16)), dtype=np.float32)
+    runs = []
+    for _ in range(3):
+        grads = (np.zeros_like(q), np.zeros_like(key), np.zeros_like(value))
+        result = launch(runtime_artifact, {
+            "do": do, "q": q, "k": key, "v": value,
+            "dq": grads[0], "dk": grads[1], "dv": grads[2],
+        })
+        assert result["ok"] is True, result.get("reason")
+        runs.append(tuple(g.copy() for g in grads))
+    for later in runs[1:]:
+        for first_grad, later_grad in zip(runs[0], later):
+            # Bit-identical, not merely close: atomics would fail this.
+            assert np.array_equal(first_grad, later_grad)
+
+
 @_needs_opt
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
 def test_attention_backward_schedule_is_one_content_addressed_three_result_program(target: str) -> None:

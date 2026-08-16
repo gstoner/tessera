@@ -39,7 +39,7 @@ import time
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, cast
 
 from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 from .compiler.capabilities import get_target_capability, normalize_target, runtime_status as compiler_runtime_status
@@ -4659,6 +4659,9 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         APPLE_SOFTMAX_DYNAMIC_F32_ABI,
         APPLE_SOFTMAX_F16_ABI,
         APPLE_SOFTMAX_F32_ABI,
+        APPLE_SIMDGROUP_GEMM_F16_ABI,
+        APPLE_FLASH_ATTN_VARIANT_F32_ABI,
+        APPLE_FLASH_ATTN_BWD_VARIANT_ABIS,
         APPLE_TRANSPOSE_BF16_ABI,
         APPLE_TRANSPOSE_F16_ABI,
         APPLE_TRANSPOSE_F32_ABI,
@@ -4694,11 +4697,14 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 APPLE_SOFTMAX_DYNAMIC_F32_ABI,
                 APPLE_SOFTMAX_F16_ABI,
                 APPLE_SOFTMAX_BF16_ABI,
+                APPLE_SIMDGROUP_GEMM_F16_ABI,
+                APPLE_FLASH_ATTN_VARIANT_F32_ABI,
                 APPLE_TOPK_DYNAMIC_F32_I32_ABI,
                 APPLE_TRANSPOSE_F32_ABI,
                 APPLE_TRANSPOSE_F16_ABI,
                 APPLE_TRANSPOSE_BF16_ABI,
             }
+            or abi_id in {abi for _, abi in APPLE_FLASH_ATTN_BWD_VARIANT_ABIS.values()}
             or abi_id.startswith("tessera.apple.value.")
         )
         and target not in _native_launchers
@@ -4973,8 +4979,215 @@ def _submit_apple_gpu_native(
         APPLE_TRANSPOSE_F32_SYMBOL,
         APPLE_TOPK_DYNAMIC_F32_I32_ABI,
         APPLE_TOPK_F32_SYMBOL,
+        APPLE_SIMDGROUP_GEMM_F16_ABI,
+        APPLE_SIMDGROUP_GEMM_F16_SYMBOL,
+        APPLE_FLASH_ATTN_VARIANT_F32_ABI,
+        APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL,
+        APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE,
+        APPLE_FLASH_ATTN_BWD_VARIANT_ABIS,
         _runtime_library_path,
     )
+
+    _bwd_by_abi = {abi: symbol for symbol, abi in APPLE_FLASH_ATTN_BWD_VARIANT_ABIS.values()}
+    if descriptor.abi_id in _bwd_by_abi:
+        # E2E-REAL-5B rank-4 backward VJP.  Same ABI conventions as the forward
+        # route: `B` is the FLATTENED batch*q_heads extent and `window_size` is
+        # active only when > 0.  dQ/dK/dV are f32 for every input storage.
+        from tessera._apple_gpu_dispatch import bind_registered
+
+        provenance = descriptor.provenance
+        ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+        expected_symbol = _bwd_by_abi[descriptor.abi_id]
+        if descriptor.entry_symbol != expected_symbol or len(ordered) not in {7, 8}:
+            raise RuntimeError(
+                "Apple flash-attention backward descriptor ABI or buffer contract "
+                "is invalid"
+            )
+        values = [buffers[item.name] for item in ordered]
+        grads = values[-3:]
+        feeds = values[:-3]
+        if len(feeds) == 4:
+            q, k, v, d_out = feeds
+            bias = None
+        else:
+            q, k, v, d_out, bias = feeds
+        d_q, d_k, d_v = grads
+        if any(not isinstance(value, np.ndarray) for value in (*feeds, *grads)):
+            raise RuntimeError(
+                "Apple flash-attention backward descriptor requires ndarray buffers"
+            )
+        if any(value.dtype != np.float32 or not value.flags.c_contiguous
+               for value in grads):
+            raise RuntimeError(
+                "Apple flash-attention backward requires contiguous f32 dQ/dK/dV"
+            )
+        storage = str(provenance["storage"])
+        batch, q_heads, kv_heads, sq, sk, head_dim, value_dim = (
+            int(value) for value in cast(Sequence[int], provenance["dims"])
+        )
+        if (q.shape != (batch, q_heads, sq, head_dim)
+                or k.shape != (batch, kv_heads, sk, head_dim)
+                or v.shape != (batch, kv_heads, sk, value_dim)
+                or d_out.shape != (batch, q_heads, sq, value_dim)
+                or d_q.shape != q.shape or d_k.shape != k.shape
+                or d_v.shape != v.shape):
+            raise RuntimeError(
+                "Apple flash-attention backward buffers disagree with the "
+                "descriptor shape contract"
+            )
+        function = bind_registered(expected_symbol)
+        if function is None:
+            raise RuntimeError(f"Apple runtime is missing {expected_symbol}")
+        float_pointer = ctypes.POINTER(ctypes.c_float)
+        word_pointer = ctypes.POINTER(ctypes.c_uint16)
+        feed_pointer = float_pointer if storage == "f32" else word_pointer
+
+        def feed_ptr(value: Any) -> Any:
+            if storage == "f32":
+                if value.dtype != np.float32 or not value.flags.c_contiguous:
+                    raise RuntimeError("Apple backward f32 inputs must be contiguous f32")
+                return value.ctypes.data_as(float_pointer)
+            if value.itemsize != 2 or not value.flags.c_contiguous:
+                raise RuntimeError("Apple backward low-precision inputs must be 2-byte contiguous")
+            return value.view(np.uint16).ctypes.data_as(word_pointer)
+
+        window = int(cast(int, provenance["window"]))
+        status = int(function(
+            feed_ptr(q), feed_ptr(k), feed_ptr(v), feed_ptr(d_out),
+            feed_ptr(bias) if bias is not None else feed_pointer(),
+            d_q.ctypes.data_as(float_pointer),
+            d_k.ctypes.data_as(float_pointer),
+            d_v.ctypes.data_as(float_pointer),
+            ctypes.c_int32(batch * q_heads), ctypes.c_int32(q_heads),
+            ctypes.c_int32(kv_heads), ctypes.c_int32(sq), ctypes.c_int32(sk),
+            ctypes.c_int32(head_dim),
+            ctypes.c_float(float(cast(float, provenance["scale"]))),
+            ctypes.c_int32(1 if provenance["causal"] else 0),
+            ctypes.c_int32(window if window > 0 else 0),
+            ctypes.c_float(float(cast(float, provenance["softcap"]))),
+            ctypes.c_int32(int(cast(int, provenance.get("msl_route",
+                                                        APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE)))),
+        ))
+        if status != 1:
+            raise RuntimeError(
+                "Apple flash-attention backward ABI reported a non-native dispatch"
+            )
+        return (d_q, d_k, d_v)
+
+    if descriptor.abi_id == APPLE_FLASH_ATTN_VARIANT_F32_ABI:
+        # E2E-REAL-5A rank-4 forward attention through the status-returning GQA
+        # MSL ABI.  A zero status is an explicit non-native dispatch, never a
+        # silently-correct CPU result (APPLE-PLACEMENT-ABI-1).
+        ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+        if descriptor.entry_symbol != APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL or len(ordered) not in {4, 5}:
+            raise RuntimeError(
+                "Apple flash-attention descriptor ABI or buffer contract is invalid"
+            )
+        provenance = descriptor.provenance
+        values = [buffers[item.name] for item in ordered]
+        *operands, out = values
+        if len(operands) == 3:
+            q, k, v = operands
+            bias = None
+        else:
+            q, k, v, bias = operands
+        if any(not isinstance(value, np.ndarray) for value in (q, k, v, out)):
+            raise RuntimeError("Apple flash-attention descriptor requires ndarray buffers")
+        if any(value.dtype != np.float32 or not value.flags.c_contiguous
+               for value in (q, k, v, out)):
+            raise RuntimeError("Apple flash-attention descriptor requires contiguous f32 buffers")
+        batch, q_heads, kv_heads, sq, sk, head_dim, value_dim = (
+            int(value) for value in cast(Sequence[int], provenance["dims"])
+        )
+        if (q.shape != (batch, q_heads, sq, head_dim)
+                or k.shape != (batch, kv_heads, sk, head_dim)
+                or v.shape != (batch, kv_heads, sk, value_dim)
+                or out.shape != (batch, q_heads, sq, value_dim)):
+            raise RuntimeError(
+                "Apple flash-attention buffers disagree with the descriptor shape contract"
+            )
+        if bias is not None and (
+            not isinstance(bias, np.ndarray) or bias.dtype != np.float32
+            or not bias.flags.c_contiguous or bias.shape != (batch, q_heads, sq, sk)
+        ):
+            raise RuntimeError("Apple flash-attention bias disagrees with its contract")
+        from tessera._apple_gpu_dispatch import bind_registered
+
+        function = bind_registered(APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL)
+        if function is None:
+            raise RuntimeError(
+                f"Apple runtime is missing {APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL}"
+            )
+        float_pointer = ctypes.POINTER(ctypes.c_float)
+
+        def attn_pointer(value: Any) -> Any:
+            return value.ctypes.data_as(float_pointer)
+
+        # ABI semantics read off the MSL kernel, not assumed:
+        #  * its `B` operand is the FLATTENED batch*q_heads extent (the kernel
+        #    recovers b_outer = B/q_heads and q_head = B%q_heads);
+        #  * `window_size` is active only when > 0, so the canonical
+        #    "no window" request (-1) is passed as 0.  A negative value is
+        #    rejected outright by the dispatch guard.
+        window = int(cast(int, provenance["window"]))
+        window_size = window if window > 0 else 0
+        status = int(function(
+            attn_pointer(q), attn_pointer(k), attn_pointer(v),
+            # A NULL float* is the ABI's "no bias" encoding; calling the pointer
+            # type with no argument is the typed way to build it.
+            attn_pointer(bias) if bias is not None else float_pointer(),
+            attn_pointer(out),
+            ctypes.c_int32(batch * q_heads), ctypes.c_int32(q_heads),
+            ctypes.c_int32(kv_heads),
+            ctypes.c_int32(sq), ctypes.c_int32(sk), ctypes.c_int32(head_dim),
+            ctypes.c_float(float(cast(float, provenance["scale"]))),
+            ctypes.c_int32(1 if provenance["causal"] else 0),
+            ctypes.c_int32(window_size),
+            ctypes.c_float(float(cast(float, provenance["softcap"]))),
+        ))
+        if status != 1:
+            raise RuntimeError(
+                "Apple flash-attention ABI reported a non-native dispatch"
+            )
+        return out
+
+    if descriptor.abi_id == APPLE_SIMDGROUP_GEMM_F16_ABI:
+        # E2E-REAL-3 f16->f32 simdgroup_matrix GEMM: reuse the proven TILE-1
+        # MSL materializer + dispatch, driven by the scheduled block sizes.
+        from tessera.compiler.apple_target import AppleGPUArch, AppleGPUTargetProfile
+        from tessera.compiler.msl_gemm_emit import (
+            dispatch_apple_simdgroup_tile_f16,
+            materialize_apple_simdgroup_tile_msl,
+        )
+
+        ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+        if descriptor.entry_symbol != APPLE_SIMDGROUP_GEMM_F16_SYMBOL or len(ordered) != 3:
+            raise RuntimeError(
+                "Apple simdgroup GEMM descriptor ABI or buffer contract is invalid"
+            )
+        a, b, out = (buffers[item.name] for item in ordered)
+        if any(not isinstance(value, np.ndarray) for value in (a, b, out)):
+            raise RuntimeError("Apple simdgroup GEMM descriptor requires ndarray buffers")
+        if (a.ndim != 2 or b.ndim != 2 or out.ndim != 2
+                or a.shape[1] != b.shape[0]
+                or out.shape != (a.shape[0], b.shape[1])):
+            raise RuntimeError(
+                "Apple simdgroup GEMM buffers disagree with the rank-2 "
+                "A[M,K] @ B[K,N] contract"
+            )
+        if out.dtype != np.float32 or not out.flags.c_contiguous:
+            raise RuntimeError("Apple simdgroup GEMM requires a contiguous f32 output")
+        block = cast(Sequence[int], descriptor.provenance.get("block") or [32, 32, 16])
+        bm, bn, bk = (int(value) for value in block)
+        artifact = materialize_apple_simdgroup_tile_msl(
+            AppleGPUTargetProfile(AppleGPUArch.APPLE7), "fp16", bm, bn, bk,
+            double_buffer=True,
+        )
+        result, native = dispatch_apple_simdgroup_tile_f16(artifact, a, b)
+        if not native:
+            raise RuntimeError("Apple simdgroup GEMM ABI returned a non-native dispatch")
+        np.copyto(out, np.asarray(result, dtype=np.float32).reshape(out.shape))
+        return out
 
     if descriptor.provenance.get("route") == "apple_value_executor":
         ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
@@ -5188,13 +5401,23 @@ def _submit_apple_gpu_native(
             raise RuntimeError("Apple softmax descriptor requires ndarray buffers")
         if any(value.dtype != softmax_dtype or not value.flags.c_contiguous for value in (x, out)):
             raise RuntimeError("Apple softmax descriptor requires contiguous buffers matching its storage dtype")
-        if x.ndim != 2 or out.shape != x.shape:
+        if x.ndim < 2 or out.shape != x.shape:
             raise RuntimeError("Apple softmax buffers disagree with descriptor static shape contract")
         if descriptor.abi_id == APPLE_SOFTMAX_DYNAMIC_F32_ABI:
+            if x.ndim != 2:
+                raise RuntimeError("Apple dynamic softmax requires rank-2 buffers")
             rows = int(cast(int, scalars["Rows"]))
             columns = int(cast(int, scalars["Columns"]))
             if (rows, columns) != tuple(x.shape) or rows <= 0 or columns <= 0:
                 raise RuntimeError("Apple dynamic softmax Rows/Columns scalars disagree with buffer shapes")
+        # The MSL softmax ABI is rank-2 (rows, columns).  The scheduled boundary
+        # (E2E-REAL-5) binds the LOGICAL rank, so a rank-N artifact arrives with
+        # its declared shape; flattening the leading dims is exact because
+        # softmax rows are independent.  Both operands are already required to
+        # be C-contiguous, so these reshapes are views, not copies — the kernel
+        # writes through `out`.
+        x = x.reshape(-1, x.shape[-1])
+        out = out.reshape(-1, out.shape[-1])
         runtime = _load_apple_gpu_runtime()
         function = getattr(runtime, softmax_symbol, None)
         if function is None:
@@ -5334,6 +5557,14 @@ def _submit_apple_gpu_native(
         raise RuntimeError("Apple BMM descriptor requires ndarray buffers")
     if any(value.dtype != dtype or not value.flags.c_contiguous for value in (a, b, out)):
         raise RuntimeError(f"Apple BMM descriptor requires contiguous {descriptor.buffers[0].dtype} buffers")
+    # E2E-REAL-3: a rank-2 scheduled matmul is delegated to this batched ABI as
+    # a single batch.  Present rank-2 operands as batch-1 rank-3 views (the
+    # views alias the caller's contiguous storage) so the rank-3 batched
+    # contract below is unchanged for existing callers.
+    if a.ndim == 2 and b.ndim == 2 and out.ndim == 2:
+        a = a.reshape(1, *a.shape)
+        b = b.reshape(1, *b.shape)
+        out = out.reshape(1, *out.shape)
     if a.ndim != 3 or b.ndim != 3 or out.ndim != 3:
         raise RuntimeError("Apple BMM descriptor requires rank-3 buffers")
     batch, m, k = (int(v) for v in a.shape)

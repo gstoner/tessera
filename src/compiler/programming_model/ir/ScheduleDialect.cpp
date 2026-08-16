@@ -366,8 +366,14 @@ LogicalResult AttentionOp::verify() {
     return emitOpError("requires positive tile_q/tile_kv");
   if (getRecurrence() != "rank4_batch_query_head_kv_online_softmax_v1")
     return emitOpError("requires the canonical rank-4 streaming recurrence");
+  // Architecture-owned backward LSE policies.  This is a closed allowlist by
+  // design: a backend must declare its saved/recompute identity here rather
+  // than inheriting a sibling's.  `apple7_recompute` records that Apple's
+  // backward recomputes m/l per query row and its ABI takes no LSE buffer
+  // (APPLE-ATTN-STREAM-1).
   if (getBackwardLsePolicy() != "save_lse" &&
-      getBackwardLsePolicy() != "gfx1151_auto_128")
+      getBackwardLsePolicy() != "gfx1151_auto_128" &&
+      getBackwardLsePolicy() != "apple7_recompute")
     return emitOpError("requires an architecture-owned backward LSE policy");
   if (getBackwardLseSelection() != "saved" &&
       getBackwardLseSelection() != "recompute")
@@ -427,8 +433,12 @@ LogicalResult AttentionBackwardOp::verify() {
       return emitOpError("requires ascending fixed-order split reduction");
   if (getRecurrence() != "tensor_dq_split_dkdv_fixed_reduce_v1")
     return emitOpError("requires the canonical tensor-valued VJP recurrence");
+  // Same closed allowlist as the forward op: a backend declares its own
+  // saved/recompute identity rather than inheriting a sibling's.  Apple's
+  // backward recomputes m/l per query row and its ABI takes no LSE buffer.
   if (getLseCheckpointPolicy() != "save_lse" &&
-      getLseCheckpointPolicy() != "gfx1151_auto_128")
+      getLseCheckpointPolicy() != "gfx1151_auto_128" &&
+      getLseCheckpointPolicy() != "apple7_recompute")
     return emitOpError("requires an architecture-owned LSE policy");
   if (getLseCheckpointSelection() != "saved" &&
       getLseCheckpointSelection() != "recompute")

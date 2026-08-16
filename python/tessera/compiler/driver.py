@@ -406,6 +406,21 @@ def _package_artifacts(
     return tile, target, backend
 
 
+def _apple_scheduled_boundary_available() -> bool:
+    """Whether Apple may enter the shared scheduled Graph->Schedule->Tile lane.
+
+    The shared artifact is produced by running production ``tessera-opt``, so
+    without that tool there is nothing to consume.  A runtime-only install is
+    the common Apple case, and its descriptor route is independently proven —
+    so the honest behavior is to fall back to that route rather than fail the
+    compile.  Callers must consult this before treating a `supports_scheduled_*`
+    answer as a decision.
+    """
+    from .scheduled_matmul import find_tessera_opt
+
+    return find_tessera_opt() is not None
+
+
 def _scheduled_package_artifacts(
     graph: LoweringArtifact,
     schedule_text: str,
@@ -538,6 +553,41 @@ def compile_graph_module(
                         target=target_kind,
                     )
                     graph_text = scheduled_kernel_artifact.graph_ir
+    elif bool(options.get("package_native", False)) and target_kind == "apple_gpu":
+        # E2E-REAL-3/5 Apple slice — rank-2 f32 matmul and f32 softmax are wired
+        # to the shared scheduled boundary; every other Apple GPU op stays on the
+        # existing descriptor package route below.
+        from . import scheduled_matmul
+
+        if not _apple_scheduled_boundary_available():
+            # No production tessera-opt: leave every family on the descriptor
+            # route below instead of entering a lane that cannot be produced.
+            pass
+        elif scheduled_matmul.supports_scheduled_matmul(module, target=target_kind):
+            scheduled_matmul_artifact = scheduled_matmul.lower_scheduled_matmul(
+                module,
+                target=target_kind,
+            )
+            graph_text = scheduled_matmul_artifact.graph_ir
+        else:
+            from . import scheduled_attention, scheduled_kernel
+
+            if scheduled_attention.supports_scheduled_attention(
+                module, target=target_kind
+            ):
+                scheduled_attention_artifact = (
+                    scheduled_attention.lower_scheduled_attention(
+                        module,
+                        target=target_kind,
+                    )
+                )
+                graph_text = scheduled_attention_artifact.graph_ir
+            elif scheduled_kernel.supports_scheduled_kernel(module, target=target_kind):
+                scheduled_kernel_artifact = scheduled_kernel.lower_scheduled_kernel(
+                    module,
+                    target=target_kind,
+                )
+                graph_text = scheduled_kernel_artifact.graph_ir
     function_name = module.functions[0].name if module.functions else "<unknown>"
     request = CompileRequest(
         source_origin=source_origin,
@@ -990,22 +1040,69 @@ def compile_graph_module(
     elif target_kind == "apple_gpu" and bool((options or {}).get("package_native", False)):
         from . import apple_native
 
-        package_kind = apple_native.native_package_kind(module)
-        if package_kind is None:
-            raise ValueError("Apple GPU native packaging requires one static supported descriptor contract")
         resolution = target_pipeline_lookup(target_kind)
         producer = (
             (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
         )
         package_start = time.perf_counter()
-        apple_package = apple_native.package_native(module, pipeline_name=producer)
-        tile, target_artifact, backend_artifact = _package_artifacts(
-            graph,
-            target_kind,
-            apple_package.tile_ir,
-            apple_package.target_ir,
-            apple_package.backend_ir,
-        )
+        if scheduled_matmul_artifact is not None:
+            # E2E-REAL-3 — consume the shared Graph->Schedule->launch-Tile matmul
+            # artifact instead of re-classifying the Graph module.
+            package_kind = "matmul"
+            apple_package = apple_native.package_scheduled_matmul(
+                scheduled_matmul_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_matmul_artifact.schedule_ir,
+                apple_package.tile_ir,
+                target_kind,
+                apple_package.target_ir,
+                apple_package.backend_ir,
+            )
+        elif scheduled_attention_artifact is not None:
+            # E2E-REAL-5A — consume the shared rank-4 forward attention artifact.
+            package_kind = "attention"
+            apple_package = apple_native.package_scheduled_attention(
+                scheduled_attention_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_attention_artifact.schedule_ir,
+                apple_package.tile_ir,
+                target_kind,
+                apple_package.target_ir,
+                apple_package.backend_ir,
+            )
+        elif scheduled_kernel_artifact is not None:
+            # E2E-REAL-5 — consume the shared softmax launch-Tile artifact.
+            package_kind = scheduled_kernel_artifact.family
+            apple_package = apple_native.package_scheduled_kernel(
+                scheduled_kernel_artifact,
+                pipeline_name=producer,
+            )
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph,
+                scheduled_kernel_artifact.schedule_ir,
+                apple_package.tile_ir,
+                target_kind,
+                apple_package.target_ir,
+                apple_package.backend_ir,
+            )
+        else:
+            package_kind = apple_native.native_package_kind(module)
+            if package_kind is None:
+                raise ValueError("Apple GPU native packaging requires one static supported descriptor contract")
+            apple_package = apple_native.package_native(module, pipeline_name=producer)
+            tile, target_artifact, backend_artifact = _package_artifacts(
+                graph,
+                target_kind,
+                apple_package.tile_ir,
+                apple_package.target_ir,
+                apple_package.backend_ir,
+            )
         native_image = apple_package.image
         launch_descriptor = apple_package.descriptor
         executable = True
@@ -1116,9 +1213,29 @@ def canonical_compile_options(
         resolved["package_native"] = supports_native_package(module) and tools_available()
     if target_kind == "apple_gpu" and "package_native" not in resolved:
         from .apple_native import native_package_kind, tools_available
+        from .scheduled_attention import supports_scheduled_attention
+        from .scheduled_kernel import supports_scheduled_kernel
+        from .scheduled_matmul import supports_scheduled_matmul
 
         resolved["package_native"] = (
-            apple_target_ir_mode != "value" and native_package_kind(module) is not None and tools_available()
+            apple_target_ir_mode != "value"
+            and tools_available()
+            and (
+                native_package_kind(module) is not None
+                # E2E-REAL-3/5/5A — a rank-2 f32 matmul, f32 softmax, or rank-4
+                # f32 attention is not an Apple descriptor kind, but it is a
+                # shared scheduled-boundary consumer.  Only claim it when that
+                # boundary can actually be produced, or a runtime-only install
+                # would enable packaging for a family it cannot package.
+                or (
+                    _apple_scheduled_boundary_available()
+                    and (
+                        supports_scheduled_matmul(module, target="apple_gpu")
+                        or supports_scheduled_kernel(module, target="apple_gpu")
+                        or supports_scheduled_attention(module, target="apple_gpu")
+                    )
+                )
+            )
         )
     if target_kind == "apple_cpu" and "package_native" not in resolved:
         from .apple_cpu_native import native_package_kind, tools_available

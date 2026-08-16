@@ -1,4 +1,4 @@
-// RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --split-input-file %s | FileCheck %s --check-prefixes=X86,ROCM
+// RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --split-input-file %s | FileCheck %s --check-prefixes=X86,ROCM,APPLE
 // RUN: tessera-opt --tessera-graph-to-schedule --split-input-file %s | FileCheck %s --check-prefix=SCHEDULE
 
 module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
@@ -55,3 +55,26 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
 // ROCM-SAME: storage = "f32"
 // ROCM-SAME: tessera.schedule_hash = "{{[0-9a-f]+}}"
 // ROCM-SAME: tessera.workgroup_size = 256
+
+// -----
+
+// E2E-REAL-5 Apple slice: f32 softmax is admitted for Apple GPU (delegated to
+// the native MSL softmax route); reduction is not (fail-closed, see the invalid
+// fixture).  The launch tile does not prescribe a workgroup for Apple.
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_softmax(%x: tensor<3x17xf32>) -> tensor<3x17xf32> {
+    %0 = "tessera.softmax"(%x) {axis = -1 : i64}
+        : (tensor<3x17xf32>) -> tensor<3x17xf32>
+    return %0 : tensor<3x17xf32>
+  }
+}
+
+// APPLE-LABEL: func.func @apple_softmax
+// APPLE-NOT: tessera.softmax
+// APPLE-NOT: schedule.
+// APPLE-COUNT-1: tile.softmax_kernel
+// APPLE-SAME: accum = "f32"
+// APPLE-SAME: axis = -1
+// APPLE-SAME: storage = "f32"
+// APPLE-SAME: tessera.schedule_hash = "{{[0-9a-f]+}}"
+// APPLE-SAME: tessera.workgroup_size = 1

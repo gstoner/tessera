@@ -3347,3 +3347,247 @@ Apple shape when G5 opens, since it rides the existing online-softmax emitter;
 the remaining eight need the G1b butterfly lowering and the solver needs the
 PDE plan's phase. No on-Mac evidence is claimed or required — nothing here
 changes a Metal/MPS surface.
+
+## E2E-REAL-3-APPLE-GPU-MATMUL-2026-08-15 — Apple GPU joins the shared scheduled-matmul boundary
+
+**Landed — compiler-boundary + on-Mac correctness; device-time promotion still
+gated.** This closes the Apple-GPU half of the 2026-08-05
+`E2E-REAL-SCHEDULED-MATMUL` / `E2E-REAL-PHYSICAL-CONSUMERS` follow-ups: the
+Apple GPU backend now **consumes** the shared `Graph → Schedule → launch-Tile`
+matmul artifact instead of re-classifying the `GraphIRModule`.
+
+What landed (WS-1 first slice of the Apple compiler-foundation integration):
+
+- **C++** `getMatmulSchedule` (`PMPasses.cpp`) admits `apple_gpu` static rank-2
+  f32→f32 (arch `apple7`, logical 16×16 macro-tile). One decision function
+  unlocks both `--tessera-graph-to-schedule` and `--tessera-schedule-to-tile`;
+  the emitted `tile.matmul_kernel` uses `family = "auto"`. Fail-closed tamper
+  fixtures unchanged.
+- **Python** `apple_native.package_scheduled_matmul` consumes `artifact.tile_ir`
+  verbatim (no Graph re-entry) and binds the proven
+  `tessera_apple_gpu_bmm_f32` **batch-1** route (`apple_gpu_bmm_f32_batch1`,
+  sealed by APPLE-NATIVE-E2E-2). Apple GPU has no rank-2 f32 cooperative-matrix
+  GEMM, so the shared macro-tile/mma decision is a **named dropped decision**
+  (`dropped_reason = "delegated_to_mps_bmm"`) per E2E §0.2 point 5, not a silent
+  loss. `scheduled_matmul._graph_contract` gained the matching apple_gpu branch;
+  the driver gained an isolated apple_gpu scheduled block + dispatch (zero risk
+  to x86/ROCm); the BMM runtime submit accepts rank-2 operands as batch-1
+  (`runtime.py` only — no `apple_gpu_runtime.mm` fingerprint impact).
+
+Evidence, on the owning Mac (M1 Max / apple7, LLVM/MLIR 23 `build-apple`):
+
+- Lit: `tests/tessera-ir/phase2/e2e_matmul_graph_schedule_tile.mlir` gains an
+  Apple typed instance beside x86/ROCm — 4/4 e2e_matmul fixtures pass; the three
+  fail-closed fixtures still reject.
+- Unit: `tests/unit/test_scheduled_matmul_consumers.py` — package consumption,
+  non-apple-contract rejection, and driver lineage adjacency
+  (`test_driver_records_adjacent_scheduled_matmul_lineage[apple_gpu]`) pass
+  host-free.
+- **Exact-device**: `test_apple_gpu_scheduled_matmul_executes_exact_artifact`
+  ran on Metal for `16×16×16` and `17×19×23`, asserting `native_gpu` placement
+  and matching the NumPy oracle — not a `reference_cpu` fallback.
+
+NVIDIA and ROCm are not applicable: no shared IR, sibling ABI, or schedule
+changed; the C++ branch is target-guarded to `apple_gpu`.
+
+### Update 2026-08-15b — softmax (E2E-REAL-5) and f16 simdgroup matmul landed
+
+Two more WS-1 families now consume the shared scheduled boundary on Apple GPU,
+each with on-Mac exact-device proof (M1 Max / apple7):
+
+- **Softmax (E2E-REAL-5).** `apple_native.package_scheduled_kernel` consumes the
+  shared `schedule.softmax → tile.softmax_kernel` artifact and binds the native
+  MSL `tessera_apple_gpu_softmax_f32` route (which *does* expose a device timer,
+  so it is not DEVICE-EVENT-1 gated). The C++ `getSemanticKernelSchedule` admits
+  `apple_gpu` f32 softmax and **fails closed on reduction** (no Apple GPU
+  scheduled reduce consumer). Rank-2 f32 softmax now migrates to this boundary
+  by default; `test_apple_gpu_package_trace_uses_descriptor_provenance` was
+  updated (work_item `APPLE-E2E-1 → E2E-REAL-5`), and the direct descriptor
+  route stays covered by `test_apple_softmax_package_hashes_dylib_and_names_abi`.
+  Exact-device: `test_apple_gpu_scheduled_softmax_executes_exact_artifact`.
+- **f16→f32 simdgroup matmul.** `package_scheduled_matmul` now dispatches by
+  dtype: f32 → batch-1 MPS BMM (above), **f16 → the compiler-emitted
+  `simdgroup_matrix` MSL GEMM** (`tessera_apple_gpu_tile_simdgroup_gemm_f16`,
+  APPLE-TILE-1). The C++ `getMatmulSchedule` gained an apple7 f16→f32 branch
+  (32×32 macro tile); `_submit_apple_gpu_native` gained a simdgroup descriptor
+  branch that reuses the proven TILE-1 materializer + dispatch. **This route
+  honors the scheduled tile and has a device timer, so it is NOT gated by
+  APPLE-DEVICE-EVENT-1** (`device_time_promotion = "eligible"`) — it is the
+  intended lift of that gate for matmul. Exact-device:
+  `test_apple_gpu_scheduled_simdgroup_f16_executes_exact_artifact` (16³ and
+  48×32×80 on Metal).
+
+Consolidated: 121 shared/apple scheduled + e2e-spine + fleet + lineage tests
+pass, 9 skipped (x86/rocm device lanes), 0 failed. Lit: the shared
+`e2e_matmul_graph_schedule_tile.mlir` and `e2e_semantic_kernel_graph_schedule_tile.mlir`
+each carry Apple typed instances and pass 100%.
+
+### Update 2026-08-15c — rank-4 forward attention (E2E-REAL-5A) landed
+
+Apple GPU now consumes the shared `schedule.attention → tile.attention_kernel`
+artifact, closing the last *forward* WS-1 family. This is the item the
+2026-08-05 `E2E-REAL-ATTENTION` sync recorded as "Apple must define an
+architecture-owned schedule instance … x86 and gfx1151 schedules and evidence do
+not transfer."
+
+- **Apple owns its LSE identity.** `schedule.attention` gained a third declared
+  backward-LSE policy, `apple7_recompute` (`ScheduleDialect.cpp`), because
+  Apple's backward recomputes m/l per query row and its ABI takes no LSE buffer
+  (APPLE-ATTN-STREAM-1). The verifier allowlist stays closed by design — Apple
+  declares its own identity rather than inheriting x86's `save_lse` or the
+  gfx1151 threshold.
+- **Consumer:** `apple_native.package_scheduled_attention` binds
+  `tessera_apple_gpu_flash_attn_variant_f32_status` — the **status-returning**
+  GQA MSL route from APPLE-ATTN-FWD-1. Because it reports placement, a
+  numerically-correct CPU fallback cannot be sealed as GPU evidence
+  (APPLE-PLACEMENT-ABI-1).
+- **Two ABI facts were read off the MSL kernel, not assumed** (both had to be
+  corrected against a first wrong guess, and both are now commented at the call
+  site): its `B` operand is the **flattened `batch × q_heads`** extent, and
+  `window_size` is active only when `> 0`, so the canonical "no window" request
+  (`-1`) is passed as `0`.
+- **Envelope, enforced in both owners (C++ gate + Python recognizer), never
+  narrowed:** f32 storage, MHA/GQA/MQA with whole group size, shared
+  head/value dim, `D <= 256`, **no live window**, no dropout. The window
+  exclusion is deliberate: the MSL non-causal window is a *symmetric
+  half-window* (`window_size/2` per side), which is **not** the shared
+  `window_left`/`window_right` semantics — admitting it would silently compute a
+  different mask than the program requested. Windowed Apple attention needs its
+  own contract and oracle.
+
+Evidence (M1 Max / apple7): new shared fixture
+`tests/tessera-ir/phase2/e2e_attention_graph_schedule_tile.mlir` carries x86 and
+Apple typed instances and passes; four **exact-device** Metal configurations
+(GQA, MHA batch-2, MQA, causal) execute with `native_gpu` placement and match the
+NumPy oracle at f32 epsilon (~1e-7 max abs error); a five-way envelope test
+proves each out-of-envelope request fails closed. Consolidated: **230 passed /
+11 skipped / 0 failed** across the scheduled, e2e-spine, fleet, lineage, and
+Apple attention/MLA/MPSGraph suites.
+
+**Pre-existing lit failures, proven not mine.** `lit tests/tessera-ir/phase2/`
+reports 14 failures in this Apple-only `build-apple` (x86/ROCm fixtures whose
+dialects are not configured). The failing set is **byte-identical** with this
+work stashed and applied, so no regression was introduced; the honest reading is
+that this host cannot evaluate those lanes.
+
+Still open on Apple WS-1: **attention backward** (E2E-REAL-5B) has no Apple
+scheduled consumer and is gated separately; scheduled **reduction** has no Apple
+GPU consumer; and the f32 BMM matmul route remains DEVICE-EVENT-1 gated for
+device-time promotion (correctness/boundary only). Windowed attention and
+f16/bf16 attention storage are out of the admitted envelope.
+
+#### PR #570 review findings — two real defects, both regression-locked
+
+Automated review of PR #570 found two P1 defects that the original tests did not
+catch. Both are recorded here because the *shape* of each is a recurring hazard
+in this codebase, not because the fix was large.
+
+1. **A live attention window was silently erased (fail-open).** The Apple
+   recognizer read only the `window` alias, so a mask expressed in the canonical
+   `window_left`/`window_right` pair defaulted to `-1` and was accepted as
+   *unwindowed* — and `lower_scheduled_attention` then wrote that `-1` back over
+   the operation's own attributes (`scheduled_attention.py:147`), erasing the
+   window and computing full attention instead of the requested mask. This is
+   precisely the failure the slice's own design note claimed to prevent, arriving
+   through a spelling the recognizer did not read. The recognizer now reads
+   **every** spelling present, requires them to agree, and fails closed on any
+   live, asymmetric, or self-disagreeing window. Locked by
+   `test_apple_gpu_attention_reads_every_window_spelling` (7 cases).
+2. **The softmax descriptor hard-coded rank 2, and the test hid it.** The shared
+   contract admits any positive rank and flattens leading dims into `rows`, but
+   the Apple bindings declared rank 2, so launching a rank-3 graph with its own
+   declared shape failed `E_LAUNCH_BINDING_MISMATCH` before submission — a
+   regression, since such a module previously just declined to package natively.
+   The original exact-device test masked this by passing a pre-flattened `(6,5)`
+   buffer for its logical `(2,3,5)` graph. The descriptor now binds the
+   **logical** rank and shape (matching the x86 consumer), and the flatten to
+   `(rows, columns)` happens at submission, where it is exact because softmax
+   rows are independent and both operands are already required C-contiguous (so
+   the reshapes are views, not copies). The test now launches with the logical
+   shape and is parametrized over rank 2/3/4, asserting the binding rank itself.
+
+The general lesson, worth carrying: **a test that constructs its input to match
+the implementation cannot falsify the implementation.** The rank bug was
+invisible for exactly as long as the test pre-flattened its own buffer.
+
+3. **A runtime-only Apple install hard-failed (found by CI, not by the local
+   suite).** The shared scheduled artifact is produced by *running* production
+   `tessera-opt`. The driver entered the Apple scheduled lane on the strength of
+   `supports_scheduled_*` alone, so on a host with no built compiler an ordinary
+   rank-2 f32 softmax raised `RuntimeError: scheduled softmax/reduction lowering
+   requires production tessera-opt` instead of using its descriptor route — a
+   regression, since that module previously just declined to package natively.
+   The `package_native` auto-enable had the same defect for rank-2 f32 matmul.
+   Both now consult `driver._apple_scheduled_boundary_available()`, and Apple
+   falls back to the independently proven descriptor route when the tool is
+   absent. Locked by
+   `test_apple_scheduled_boundary_falls_back_without_tessera_opt` and by
+   parametrizing the trace-provenance test over both worlds.
+
+   **This was invisible on the Mac** because the dev box always has a built
+   `tessera-opt`. The reproduction that matters is
+   `env -u TESSERA_OPT TESSERA_BUILD_DIR=/nonexistent python -m pytest …`,
+   which reproduces the CI host locally in seconds; the two host-free lineage
+   proofs now pin the predicate rather than inheriting whatever the runner has.
+
+### Update 2026-08-16 — rank-4 attention BACKWARD (E2E-REAL-5B) landed
+
+Apple GPU now consumes the shared `schedule.attention_backward →
+tile.attention_backward_kernel` artifact, closing the last WS-1 attention
+family. `AttentionBackwardOp`'s LSE allowlist gains `apple7_recompute` on the
+same closed-by-design basis as the forward op.
+
+- **Consumer:** `apple_native.package_scheduled_attention_backward` binds the
+  status-returning MSL VJP proven by APPLE-ATTN-BWD-1, for f32/f16/bf16 storage;
+  dQ/dK/dV are f32 for every input storage, matching the shared gradient
+  identity. Envelope (enforced in the C++ gate *and* the Python contract):
+  shared head/value dim, `D <= 256`, whole GQA group, **no live window**, no
+  dropout, and `saved` LSE explicitly refused rather than silently recomputed
+  under a `saved` label.
+- **Route selection is contract-driven, not speed-driven.** The MSL ABI offers
+  serial (0), atomic (1), and split (2) dK/dV routes. The shared contract
+  declares a two-way split with **ascending fixed-order reduction**, so only the
+  split route is a faithful mapping — atomic is explicitly nondeterministic and
+  would violate the declared order. Measured cost of that correctness, same
+  shape (`B1 Hq4 Hkv2 S64 D64`, 10 reps, median): **atomic 65 ms, split 193 ms,
+  serial 373 ms**. Split is ~3× slower than atomic; it is still the right
+  selection, and the number is recorded so the tradeoff is visible rather than
+  implied.
+- **A third ordering fact read from source, not assumed:** the shared artifact
+  orders its inputs **(dO, Q, K, V)**, not (Q, K, V, dO). Confirmed against the
+  x86 consumer before wiring.
+
+Evidence (M1 Max / apple7): four exact-device configurations (GQA, MHA, MQA,
+causal) match an **independently derived float64 analytic VJP** — dQ, dK and dV
+each to ~1e-6, with GQA gradients reduced over the query-head group (the
+property that catches a kernel accumulating into the wrong KV head). Repeats are
+**bit-identical**, which the atomic route would fail. 17 of 18 tests in the
+backward consumer suite pass; the one failure
+(`test_gfx1151_..._packages_exact_tile_program`) is **proven pre-existing** —
+it needs AMD clang, absent on this host, and fails identically with this work
+stashed.
+
+#### Benchmark — `benchmarks/apple_gpu/benchmark_scheduled_boundary.py`
+
+New characterization over all four scheduled families. Every row re-checks its
+numerical oracle, so a fast wrong answer cannot be recorded as a win, and every
+row asserts `native_gpu`. Apple7, 20 reps after 5 warmups, end-to-end host wall
+(the common denominator, since the MPS matmul route has no device timer):
+
+| case | route | median ms |
+|---|---|---|
+| matmul.fp32 64³ / 256³ | `apple_gpu_bmm_f32_batch1` | 0.95 / 1.03 |
+| matmul.fp16 64³ / 256³ | `apple_gpu_simdgroup_gemm_f16` | 0.48 / 0.82 |
+| softmax rank-2 / rank-3 | `apple_softmax_native_library` | 1.14 / 0.99 |
+| attention fwd / causal | `apple_gpu_flash_attn_variant_f32` | 1.64 / 2.81 |
+| attention bwd / causal | `apple_gpu_flash_attn_bwd_split_f32_grads` | 195 / 396 |
+
+The report sets **`selector_eligible: false`** and writes no committed ledger:
+one process, one timing domain, no paired interleaving and no retained counter
+evidence is none of what the Apple promotion contract requires.
+
+**Open finding worth its own item: backward is ~120× forward** (195 ms vs
+1.64 ms at the same shape). That is a property of the existing hand-written MSL
+backward kernels, not of this boundary work, and it is recorded here rather than
+quietly optimized — a kernel rewrite needs its own slice and its own paired
+corpus.

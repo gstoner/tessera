@@ -436,7 +436,7 @@ def _softmax_module(shape: tuple[int, ...]) -> GraphIRModule:
 @pytest.mark.parametrize("kind,op_name", [("sum", "tessera.sum"),
                                           ("mean", "tessera.mean"),
                                           ("max", "tessera.max")])
-@pytest.mark.parametrize("shape", [(64, 128), (8, 16, 32)])
+@pytest.mark.parametrize("shape", [(64, 128), (8, 16, 32), (128,)])
 def test_apple_gpu_scheduled_reduce_executes_synthesized_kernel(shape, kind, op_name) -> None:
     """The synthesized reduce must execute on Metal and match NumPy.
 
@@ -452,8 +452,12 @@ def test_apple_gpu_scheduled_reduce_executes_synthesized_kernel(shape, kind, op_
     out_shape = shape[:-1]
     x_type = IRType("tensor<" + "x".join(map(str, shape)) + "xf32>",
                     tuple(map(str, shape)), "fp32")
-    o_type = IRType("tensor<" + "x".join(map(str, out_shape)) + "xf32>",
-                    tuple(map(str, out_shape)), "fp32")
+    # A rank-1 reduction produces a *scalar*: `tensor<f32>`, not `tensor<xf32>`.
+    # That path exercises the rank-0 output binding, which is why it is covered.
+    o_type = IRType(
+        "tensor<" + "x".join(map(str, out_shape)) + "xf32>" if out_shape else "tensor<f32>",
+        tuple(map(str, out_shape)), "fp32",
+    )
     module = GraphIRModule(functions=[GraphIRFunction(
         name="apple_reduce", args=[IRArg("x", x_type)], result_types=[o_type],
         body=[IROp(result="o", op_name=op_name, operands=["%x"],

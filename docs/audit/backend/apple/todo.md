@@ -3590,7 +3590,7 @@ evidence is none of what the Apple promotion contract requires.
 1.64 ms at the same shape). That is a property of the existing hand-written MSL
 backward kernels, not of this boundary work, and it is recorded here rather than
 quietly optimized — a kernel rewrite needs its own slice and its own paired
-corpus.
+corpus. **Closed 2026-08-16 — see APPLE-ATTN-BWD-PERF-1 below.**
 
 ### Update 2026-08-16b — scheduled reduction landed (first synthesized family)
 
@@ -3712,3 +3712,77 @@ and that cache was stale until the next process republished it. It is not a
 regression and not a build failure — but it is indistinguishable from one at
 first glance. After rebuilding the dylib, run any Apple test once to force
 republication before trusting a sweep.
+
+## APPLE-ATTN-BWD-PERF-1 — the backward gap was an unimplemented workspace stage
+
+**Closed 2026-08-16.** The `~120x forward` finding recorded in the E2E-REAL-5B
+slice is resolved: attention backward went from **195 ms to 6.0 ms** (non-causal)
+and **389 ms to 10.9 ms** (causal) at the benchmark shape, ~32-36x, with the
+numerical result unchanged (analytic-VJP max error 3.4e-06 before and after) and
+bit-identical repeats preserved.
+
+### The cause was a declaration with no consumer
+
+`plan_attention_backward_workspace` already declares a **`row_prepass`** stage
+producing `row_lse` and `row_delta`, consumed by `dkdv_split` and `dq`. Apple
+declared that workspace and never used it: every kernel recomputed the row
+statistics inline via `bwd_query_stats`. That cost twice — the O(Sk*D) statistics
+were computed once in the dQ pass and again in the dK/dV pass — but the
+expensive consequence was structural. The statistics are a reduction over the
+whole key axis, so a kernel that recomputes them inline **must own a whole query
+stream**, which pinned the dK/dV split kernel at one thread per (partial, KV
+batch): for `B1 Hq4 Hkv2 S64` that is **4 threads** for the entire dK/dV
+computation, on a GPU with thousands of lanes. The dQ kernel, which owns one
+query row, already ran 256.
+
+This is Decision #29 in its costly form: the declaration read as a closed
+contract in review while carrying nothing, and the missing consumer was worth a
+30x.
+
+### What changed
+
+- A `flash_attn_bwd_row_prepass_f32` kernel computes `row_lse = m + log(l)` and
+  `row_delta` once per query row. A fully masked row stores `+INFINITY`, so
+  `exp(score - lse)` is exactly 0 and the old early-out becomes branchless.
+- `flash_attn_bwd_split_stream_f32` is now **key-parallel**: one thread per
+  (partial, KV batch, key row), raising parallelism from `2 * kv_outer` to
+  `2 * kv_outer * Sk` — 4 threads to 256 at the benchmark shape. Each key row is
+  written by exactly one thread, so the route stays single-owner deterministic:
+  no atomics, no zeroing pass, bit-identical repeats.
+- **The declared schedule did not change.** Still a two-way split over the query
+  stream (`split_count = 2`) reduced in ascending partial order
+  (`reduction_order = (0, 1)`). Only the thread mapping changed, which is
+  architecture-owned.
+
+### The determinism/speed tradeoff recorded last slice is now withdrawn
+
+The E2E-REAL-5B entry recorded atomic 65 ms vs split 193 ms and argued the split
+route was worth ~3x for its determinism. That tradeoff no longer exists — the
+deterministic route is now the fastest by a wide margin, and the margin grows
+with size:
+
+| shape | atomic (nondeterministic) | split (deterministic) | split speedup |
+|---|---|---|---|
+| `B1 Hq4/Hkv2 S64 D64` | 65.9 ms | **6.0 ms** | 11.0x |
+| `B1 Hq8/Hkv8 S128 D64` | 169.3 ms | **10.0 ms** | 17.0x |
+| `B2 Hq8/Hkv2 S256 D64` | 545.1 ms | **32.5 ms** | 16.8x |
+
+All three routes still agree numerically (max pairwise difference 1.9e-06, f32
+accumulation order). Backward is now ~3.6x forward rather than ~120x, which is
+the ordinary range for attention backward.
+
+### Deliberately not changed
+
+The `serial` (route 0) and `atomic` (route 1) candidates still recompute their
+statistics inline and keep their old thread mappings. They are alternative
+candidates, not the contract route, and the contract route is now the fastest on
+every measured shape; rewriting them would widen the blast radius for no
+selection benefit. The prepass now runs on their dispatches too, and the cost is
+noise (serial 373 -> 379 ms, atomic 65 -> 66 ms), which is measured rather than
+assumed.
+
+Evidence: the four exact-device analytic-VJP configurations (GQA/MHA/MQA/causal)
+still match an independently derived float64 VJP to ~1e-6 on all three
+gradients, repeats remain bit-identical, and 164 tests pass across the Apple
+scheduled, e2e-spine and attention suites. Timing above is single-process
+characterization, not a selector corpus.

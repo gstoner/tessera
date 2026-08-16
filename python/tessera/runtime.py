@@ -4933,6 +4933,51 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         )
 
 
+# (path, mtime_ns, size) -> sha256 of that exact file content.
+_APPLE_RUNTIME_DIGEST_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _apple_runtime_identity_matches(expected_digest: str) -> bool:
+    """Whether the loaded Apple dylib is still the compiler-produced image.
+
+    The check itself is load-bearing — it is what stops a stale or substituted
+    dylib from masquerading as the image a descriptor was built against, which
+    is a mistake this backend makes easily (rebuilding the runtime republishes
+    it under a new cache path).
+
+    It used to re-read and SHA-256 the whole ~1 MB dylib on *every launch*,
+    which measured ~580 us against ~23 us of actual GPU work for a row softmax:
+    the integrity check cost 25x the computation it was guarding. The digest is
+    now memoized on the file's `(path, mtime_ns, size)` identity, so a launch
+    pays one `stat` instead.
+
+    What that trades: content is still byte-verified whenever the file identity
+    changes — a rebuild, a republish, or any size/mtime change re-hashes — but an
+    in-place edit that preserved both mtime and size would no longer be caught.
+    That is a deliberate swap rather than the staleness this guard exists to
+    catch, and the same assumption every mtime-based build cache already makes.
+    """
+    from tessera.compiler.apple_native import _runtime_library_path
+
+    path = _runtime_library_path()
+    if path is None:
+        return False
+    try:
+        stat = path.stat()
+    except OSError:
+        return False
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    digest = _APPLE_RUNTIME_DIGEST_CACHE.get(key)
+    if digest is None:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        # Bound the cache: entries are only ever added on a genuine file
+        # identity change, so this stays tiny in practice.
+        if len(_APPLE_RUNTIME_DIGEST_CACHE) > 16:
+            _APPLE_RUNTIME_DIGEST_CACHE.clear()
+        _APPLE_RUNTIME_DIGEST_CACHE[key] = digest
+    return digest == expected_digest
+
+
 def _submit_apple_gpu_native(
     image: NativeImageArtifact,
     descriptor: LaunchDescriptor,
@@ -4990,7 +5035,6 @@ def _submit_apple_gpu_native(
         APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_SYNTH_REDUCE_F32_SYMBOL,
         APPLE_SYNTH_REDUCE_KINDS,
-        _runtime_library_path,
     )
 
     if descriptor.abi_id == APPLE_SYNTH_REDUCE_F32_ABI:
@@ -5276,8 +5320,7 @@ def _submit_apple_gpu_native(
         np.copyto(output, np.asarray(result, dtype=output.dtype).reshape(output.shape))
         return output
 
-    path = _runtime_library_path()
-    if path is None or hashlib.sha256(path.read_bytes()).hexdigest() != image.payload_digest:
+    if not _apple_runtime_identity_matches(image.payload_digest):
         raise RuntimeError("Apple runtime dylib identity no longer matches the compiler-produced native image")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
     if descriptor.abi_id == APPLE_TOPK_DYNAMIC_F32_I32_ABI:
@@ -11606,6 +11649,71 @@ def _execute_x86_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) ->
     else:
         lib.tessera_x86_avx512_layernorm_bwd_f32(
             *common, ctypes.c_int(beta is not None), dx.ctypes.data_as(cf), dg.ctypes.data_as(cf), db.ctypes.data_as(cf)
+        )
+    grads = [dx.reshape(x.shape)]
+    if gamma is not None:
+        grads.append(dg)
+    if beta is not None:
+        grads.append(db)
+    return tuple(grads)
+
+
+def _execute_apple_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch the Apple GPU RMSNorm/LayerNorm VJP (E2E-REAL-6 / WS-2).
+
+    Row pass computes dX and publishes per-row statistics; a column pass reduces
+    dGamma/dBeta over rows in fixed ascending order, so the affine gradients are
+    deterministic. The ABI is status-returning, so a numerically correct CPU
+    fallback cannot be mistaken for GPU execution (APPLE-PLACEMENT-ABI-1) —
+    a zero status raises instead of being silently accepted.
+    """
+    import numpy as np
+
+    _, kind, x, gamma, beta, dy, eps = _parse_compiled_norm_backward(artifact, args)
+    if np.asarray(x).dtype != np.float32:
+        raise ValueError(f"Apple norm backward handles f32 only; got {np.asarray(x).dtype}")
+    rows = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+    cols = int(x.shape[-1])
+    runtime = _load_apple_gpu_runtime()
+    symbol = getattr(
+        runtime,
+        "tessera_apple_gpu_rmsnorm_bwd_f32" if kind == "rmsnorm"
+        else "tessera_apple_gpu_layer_norm_bwd_f32",
+        None,
+    )
+    if symbol is None:
+        raise RuntimeError("Apple runtime is missing the normalization backward ABI")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    dyc = np.ascontiguousarray(dy, dtype=np.float32).reshape(-1)
+    gc = (np.ascontiguousarray(gamma, dtype=np.float32)
+          if gamma is not None else None)
+    dx = np.zeros(rows * cols, dtype=np.float32)
+    dg = np.zeros(cols, dtype=np.float32)
+    db = np.zeros(cols, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    # Calling the pointer type yields a typed NULL; `cast(None, ...)` is not
+    # accepted by the stubs and means the same thing.
+    null = cf()
+    ptr = lambda a: a.ctypes.data_as(cf)  # noqa: E731
+    want_gamma = gamma is not None
+    if kind == "rmsnorm":
+        symbol.argtypes = [cf, cf, cf, cf, cf, ctypes.c_int32, ctypes.c_int32,
+                           ctypes.c_float]
+        symbol.restype = ctypes.c_int32
+        status = symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),
+                        ptr(dx), ptr(dg) if want_gamma else null,
+                        rows, cols, ctypes.c_float(eps))
+    else:
+        symbol.argtypes = [cf, cf, cf, cf, cf, cf, ctypes.c_int32,
+                           ctypes.c_int32, ctypes.c_float]
+        symbol.restype = ctypes.c_int32
+        status = symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),
+                        ptr(dx), ptr(dg) if want_gamma else null,
+                        ptr(db) if beta is not None else null,
+                        rows, cols, ctypes.c_float(eps))
+    if int(status) != 1:
+        raise RuntimeError(
+            "Apple normalization backward ABI reported a non-native dispatch"
         )
     grads = [dx.reshape(x.shape)]
     if gamma is not None:
@@ -29698,6 +29806,7 @@ def _executor_table():
         "apple_gpu_optimizer_compiled": _execute_apple_gpu_compiled_optimizer,
         "apple_gpu_rng_compiled": _execute_apple_gpu_compiled_rng,
         "apple_gpu_linalg_compiled": _execute_apple_gpu_compiled_linalg,
+        "apple_gpu_norm_bwd_compiled": _execute_apple_compiled_norm_backward,
         "apple_gpu_matmul_family_compiled": _execute_apple_gpu_compiled_matmul_family,
         "native_cpu": _execute_cpu_native_or_jit,
         "cpu_autodiff_paired_llvm_jit": _execute_cpu_autodiff_paired,
@@ -43351,6 +43460,13 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 getattr(lib, "tessera_apple_gpu_lookahead_sparse_attn_f32")
                 # Resident ReplaySSM native checkpoint fold + ring clear.
                 getattr(lib, "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc")
+                # Normalization VJP (E2E-REAL-6 / WS-2). Kept in step with
+                # ``_apple_gpu_dispatch._SENTINEL_SYMBOLS``: a prebuilt dylib
+                # accepted here without them fails later at the call site with
+                # a missing symbol, which reads as a broken consumer rather
+                # than the stale runtime it is.
+                getattr(lib, "tessera_apple_gpu_rmsnorm_bwd_f32")
+                getattr(lib, "tessera_apple_gpu_layer_norm_bwd_f32")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

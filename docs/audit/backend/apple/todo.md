@@ -2405,10 +2405,10 @@ capability-rejection or consumer proof, not undeclared divergence.
 | 25 | APPLE-DTYPE-1-REJECT | **closed** | The macOS-27 SDK gate is enforced, not incidental. `tests/tessera-ir/phase8/apple_lowprecision_capability_gate.mlir` runs the same module through `--tessera-storage-legalize` twice: the `apple_gpu` target stamps no `tessera.storage_packed`/`_container` on either a block-scaled NVFP4 decode or a packed int4 contraction, while the `nvidia_sm120` contrast run stamps both — so the negative cannot pass merely because the pass did nothing. A block-scaled or otherwise unrouted cooperative-matrix descriptor is separately rejected with `APPLE_MMA_STORAGE_UNSUPPORTED`, and `tests/unit/test_apple_threadgroup_pipeline.py` binds that gate to `select_apple_simdgroup_fragment`: fp16/bf16 accepted by both owners, nvfp4/fp4/fp6/fp8/int4 refused by both. APPLE-DTYPE-1 itself stays **blocked — SDK**; this row proves the block, it does not lift it. |
 | 26 | APPLE-COUNTER-1 | **landing** | `compiler/apple_counter_evidence.py` maps Metal telemetry onto the shared autotune-evidence fields with an explicit four-state reason on every field: `measured`, `not_measured` (device can, this run did not), `unsupported_by_device` (this GPU family cannot), `no_public_api` (Metal exposes no query — register count, scratch bytes, spill count, achieved occupancy). Supplying a value the capability bits do not support raises rather than silently downgrading, so a corpus cannot claim evidence the device cannot produce. Bit positions are drift-gated against the runtime's own documented matrix. **Narrower follow-up:** the benchmark writers do not yet emit these fields into a committed corpus, so this is the vocabulary and its guards, not a recorded two-run corpus. |
 | 27 | APPLE-ATTN-STREAM-2 | **closed (2026-07-31, narrow f32 GQA contract)** | `tessera-apple-streaming-attention` now recognizes the marked rank-2 KV loop only when it is enclosed by the shared `query_head` then `batch` distributions, and replaces the **batch-loop result** with one `flash_attn_gqa` descriptor — never the rank-2 inner slice. The descriptor carries static `B/Hq/Hkv/Sq/Sk/D`, GQA group size, `scale`, causal/logical-KV semantics, and the shared KV block, and binds `tessera_apple_gpu_flash_attn_gqa_f32` through the Apple value-artifact executor. Structural tests prove the enclosing loops/staging disappear; an Apple7 exact-device repeat-KV oracle proves that descriptor ABI. Scope is deliberately static f32, no live LSE, no dropout, and causal/scale only; f16/bf16 output policy and window/bias/softcap coverage remain owned by APPLE-ATTN-MODIFIERS-1. Sibling outcome: shared IR was unchanged, so ROCm/NVIDIA/x86 schedules were not altered or reclassified. |
-| 28 | APPLE-ATTN-BWD-2 | **active** | Consume the shared tensor-valued attention **backward** phase loops. `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` made gfx1151 the first direct physical consumer; Apple must validate the same dQ / split-dK/dV / fixed-reduction contract and map it to a Metal-owned package. APPLE-ATTN-BWD-1 already owns proven serial / atomic / split-reduce Metal routes, so this is contract adoption, not new kernels — the question is whether the shared phase loops describe the schedules Apple already runs. The AMD WMMA schedule, five-entry HSACO, HIP workspace, and host-wall timing do not transfer. |
-| 29 | APPLE-ATTN-BWD-3 | **active** | `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified shared backward contracts; confirm Apple's backward satisfies them or record the divergence. The shared LSE checkpoint contract is now real and conditional; Apple retains recompute until an exact Metal package and benchmark justify a saved checkpoint. |
-| 30 | APPLE-ATTN-MODIFIERS-1 | **active** | `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26` lands shared tensor-valued attention loop modifiers. Apple owns validating that its causal / sliding-window / softcap / bias / GQA-MQA envelope still expresses every admitted modifier after the shared change, and rejecting the rest by name rather than silently narrowing. |
-| 31 | APPLE-STATEFUL-TRANSPORT-1 | **active** | `SSA-STATEFUL-TRANSPORT-2026-07-26` retired the `#tile.buffer_ref` compatibility reader and generalized the proven Apple ReplaySSM lifecycle schema to target-keyed resident ABIs, adding MoE launch-workspace ownership and optional rank/device topology binding. Apple keeps its session-private ring, flush/rollback, ordered submission, and drain-before-release semantics; the open item is Metal threadgroup scheduling against the generalized schema. APPLE-PIPE-1 already rejects name-based `#tile.buffer_ref` identity, so Apple is aligned with the retirement. |
+| 28 | APPLE-ATTN-BWD-2 | **closed (2026-08-16)** | Consume the shared tensor-valued attention **backward** phase loops. `ROCM-ATTENTION-SHARED-BACKWARD-CONSUMER-2026-07-26` made gfx1151 the first direct physical consumer; Apple must validate the same dQ / split-dK/dV / fixed-reduction contract and map it to a Metal-owned package. APPLE-ATTN-BWD-1 already owns proven serial / atomic / split-reduce Metal routes, so this is contract adoption, not new kernels — the question is whether the shared phase loops describe the schedules Apple already runs. The AMD WMMA schedule, five-entry HSACO, HIP workspace, and host-wall timing do not transfer. |
+| 29 | APPLE-ATTN-BWD-3 | **closed (2026-08-16)** | `CORE-ATTENTION-BACKWARD-CONTRACT-2026-07-26` adds verified shared backward contracts; confirm Apple's backward satisfies them or record the divergence. The shared LSE checkpoint contract is now real and conditional; Apple retains recompute until an exact Metal package and benchmark justify a saved checkpoint. |
+| 30 | APPLE-ATTN-MODIFIERS-1 | **active — narrowed to windows + named diagnostics** | `CORE-ATTENTION-TENSOR-LOOPS-MODIFIERS-2026-07-26` lands shared tensor-valued attention loop modifiers. Apple owns validating that its causal / sliding-window / softcap / bias / GQA-MQA envelope still expresses every admitted modifier after the shared change, and rejecting the rest by name rather than silently narrowing. |
+| 31 | APPLE-STATEFUL-TRANSPORT-1 | **active — unchanged, no Apple consumer** | `SSA-STATEFUL-TRANSPORT-2026-07-26` retired the `#tile.buffer_ref` compatibility reader and generalized the proven Apple ReplaySSM lifecycle schema to target-keyed resident ABIs, adding MoE launch-workspace ownership and optional rank/device topology binding. Apple keeps its session-private ring, flush/rollback, ordered submission, and drain-before-release semantics; the open item is Metal threadgroup scheduling against the generalized schema. APPLE-PIPE-1 already rejects name-based `#tile.buffer_ref` identity, so Apple is aligned with the retirement. |
 | 32 | APPLE-DEVICE-EVENT-1 | **closed (2026-08-16)** | *Corrected 2026-07-27: the first diagnosis of this row was wrong.* The device timer is **not** broken on the descriptor lane. `tessera_apple_gpu_last_dispatch_device_time_ns()` reads `-1` only because dispatch telemetry is **opt-in and off by default**; after `tessera_apple_gpu_dispatch_telemetry_set_enabled(1)` the MSL softmax route reports a real `device_time_ns` with `timing_source=1` and a full threadgroup/execution-width resource record. The genuine gap is narrower: the **matmul route runs through MPSGraph**, which populates neither the command-buffer device timer nor the MSL dispatch record. Because `required_timing_domains` is report-wide and every family in scope must supply both domains, one family without a device timer forces the whole `apple_gpu` packet onto `kernel_wall`. Closing this means giving the MPSGraph route a device timer (or moving matmul to an MSL/`simdgroup_matrix` route that already has one), then re-recording with `required_timing_domains = ["device_event", "end_to_end"]`. Independent of `CAP_DISPATCH_BOUNDARY_SAMPLING` (bit 4), which this M1 Max does not report — the command-buffer interval needs no counter sampling. **Closed 2026-08-16:** `mpsg_run_bmm` now encodes into an owned `MPSCommandBuffer` under the shared `MPSGraphTimingBracket`, the recorder probes device-interval availability per family instead of hard-coding it, and the re-recorded packet seals `required_timing_domains = ["device_event", "end_to_end"]`. |
 | 33 | APPLE-PLACEMENT-ABI-1 | **landed (2026-07-27), extension open** | `tessera_apple_gpu_softmax_f32` and `tessera_apple_gpu_bmm_f32` are `void` ABIs that fall through to a numerically-identical CPU reference when Metal is unavailable or a pipeline/allocation/command fails. Nothing in a numerical proof distinguishes the two paths, so an oracle-matching fixture could have been sealed as Level-C GPU evidence while running on the host. Both now have status-bearing twins (`..._f32_status`) following the documented TILE-1 precedent at `tessera_apple_gpu_mps_matmul_f16_status`, and the fleet recorder refuses to seal a fixture or benchmark whose placement is not positively proven — at the fixture shape *and* the timing shape, since a dispatch can succeed at one and fail at the other. The MSL dispatch record is captured where the route populates it (softmax) and reported absent, never inferred as CPU, where it does not (MPSGraph matmul). **Open:** the other ~130 `void` Apple GPU entry points have the same latent hazard; any that a benchmark or packet records must gain a status twin before its result is admitted as GPU evidence. |
 
@@ -3786,3 +3786,180 @@ still match an independently derived float64 VJP to ~1e-6 on all three
 gradients, repeats remain bit-identical, and 164 tests pass across the Apple
 scheduled, e2e-spine and attention suites. Timing above is single-process
 characterization, not a selector corpus.
+
+## APPLE-NORM-VJP-1 — Apple joins the native-VJP boundary (E2E-REAL-6 / WS-2)
+
+**Landed 2026-08-16.** Apple GPU is now a registered Target consumer in the
+native-VJP registry for all three normalization ops (`rmsnorm`, `rmsnorm_safe`,
+`layer_norm`), with exact-device proof. This is the Apple follow-up the
+`E2E-REAL-6-NATIVE-VJP-2026-08-14` sync recorded as required.
+
+### The scope was not what "registry wiring" implied
+
+Investigation first, per the plan: Apple had **no** normalization-backward ABI
+(zero `*_bwd` / `*_vjp` norm symbols), no `_execute_apple_compiled_norm_backward`
+executor, and the synthesizer's `NormChainRegion` is forward-only. Adding an
+`apple_gpu` entry pointing at nothing would have been precisely the unconsumed
+declaration Decision #29 rejects — the same defect that cost a 30x in
+APPLE-ATTN-BWD-PERF-1. The registry entry required writing the kernel first.
+
+### What landed
+
+- **Two MSL passes.** A row pass (one thread per row) computes `dX` and
+  publishes per-row `mean`/`inv`; a column pass (one thread per channel)
+  reduces `dGamma`/`dBeta` over rows in **fixed ascending order**, so the affine
+  gradients are deterministic and repeats are bit-identical. The column pass
+  rebuilds `y_hat` from the published statistics rather than re-reducing the row.
+- **One row routine serves both norms.** `mean` is 0 for RMSNorm, so
+  `is_layer_norm` selects only whether the row is centred — and RMSNorm
+  correspondingly drops the `sum(dy)` term, which is the asymmetry easiest to get
+  wrong. The non-affine case passes a unit scale vector rather than branching, so
+  the two paths cannot drift apart.
+- **Status-returning ABI**, so a numerically identical CPU fallback cannot be
+  mistaken for GPU execution (APPLE-PLACEMENT-ABI-1); a zero status raises.
+- Registered in `native_vjp_plugins` (`apple.metal_normalization`, evidence
+  target `apple7`), in the runtime executor table, and as two
+  `execution_matrix` rows behind one `apple_gpu_norm_bwd_compiled` executor.
+
+### Evidence
+
+`tests/unit/test_apple_normalization_vjp.py` — 12 tests. Every registered op,
+affine, across rank-2, **rank-3**, and a **ragged width (13)**, each against an
+independently derived float64 VJP; all gradients match to ~1e-6 with
+`native_gpu` placement asserted. Affine gradients are proven bit-identical
+across repeats.
+
+**A test bug the rank-3 case caught.** The first reference computed `dGamma`
+with `.sum(0)`, which reduces only the first axis. That is correct at rank 2 and
+silently wrong at rank 3, where the kernel reduces over `prod(shape[:-1])` rows.
+The kernel was right and the oracle was wrong — which is the argument for
+carrying a rank-3 and a ragged shape rather than a tidy power-of-two pair.
+
+Still open for this family: f16/bf16 storage (the ABI is f32-only today) and a
+paired performance corpus; neither is required for the registry claim, which is
+a correctness/consumer claim.
+
+## APPLE-LAUNCH-OVERHEAD-1 — the integrity check cost 25x the computation
+
+**Landed 2026-08-16.** Following the APPLE-DEVICE-EVENT-1 finding that these
+lanes are host-overhead dominated (softmax: ~23 us of GPU work inside ~1014 us
+of wall time), the launch path was profiled rather than guessed at. Row softmax
+`64x256` end to end: **1368 us -> 478 us (2.9x)**.
+
+### Where the time was
+
+| stage | per launch |
+|---|---|
+| `_split_native_arguments` | 11 us |
+| `descriptor.validate_invocation` | 2 us |
+| **dylib SHA-256 + file read** | **~890 us** |
+| native ABI call (incl. submit/sync) | ~478 us |
+
+`_submit_apple_gpu_native` re-read the whole ~1 MB Apple dylib from disk and
+SHA-256'd it **on every launch** to confirm the loaded runtime still matched the
+compiler-produced image. The check is genuinely load-bearing — it is what stops a
+stale or substituted dylib masquerading as the image a descriptor was built
+against, which this backend gets wrong easily (a rebuild republishes under a new
+cache path; see the operational note under APPLE-DEVICE-EVENT-1). But it cost
+roughly 25x the GPU work it was guarding.
+
+### What changed, and what it trades
+
+The digest is memoized on the file's `(path, mtime_ns, size)` identity, so a
+launch pays one `stat` (~26 us including path resolution) instead of a 1 MB
+re-hash. Content is still byte-verified whenever the file identity changes — a
+rebuild, a republish, any size or mtime change re-hashes. **What is given up:**
+an in-place edit preserving both mtime and size would no longer be caught. That
+is a deliberate swap rather than the staleness this guard exists to catch, and it
+is the same assumption every mtime-based build cache already makes. Stated here
+rather than left implicit.
+
+### A near-miss worth recording
+
+The first version of the cache called `_runtime_library_path()` at module scope,
+where it is not bound. `launch` swallowed the resulting `NameError` into
+`ok: False`, and the change appeared to deliver a **62x speedup** — which was
+the cost of failing fast with an all-zero output. It was caught only because the
+result was checked against its oracle rather than timed alone. **A speed
+assertion without a correctness assertion beside it can report a broken path as
+a win**; `test_launch_still_produces_a_correct_native_result` now pins that,
+repeating the launch so the cached path and not just the first uncached one is
+proven.
+
+### What remains, and why it is not in this slice
+
+The residual ~478 us is inside the native ABI: command-buffer creation,
+buffer acquire/copy, submission, and the completion wait — against ~23 us of GPU
+work. That is Metal submission latency for a single small dispatch, and the
+runtime already owns the mechanism that addresses it (the encode-session API,
+`ts_enc_commit_wait` and the `*_dev_*_enc` symbols, which batch several ops into
+one command buffer). Routing the descriptor path through session batching is a
+design change to the dispatch model with its own correctness surface, so it is
+recorded as the next candidate rather than attempted here.
+
+Regression: `tests/unit/test_apple_runtime_identity_cache.py` (4 tests) pins that
+the guard still accepts the real digest, still rejects a wrong one *on the cached
+path*, re-hashes when file identity changes, stays bounded, and that a launch
+remains correct and `native_gpu` across repeats. 198 tests pass across the Apple
+scheduled, e2e-spine, fleet and MLA suites.
+
+## APPLE-ROWS-28-31-ASSESSMENT-2026-08-16 — shared-contract adoption, checked in source
+
+Rows 28-31 were opened as contract-adoption items and had sat `active` since
+2026-07-27. Each is now assessed against source rather than left open by default.
+Two are satisfied by work that has since landed; two are not, and are narrowed
+rather than closed.
+
+### Row 28 — APPLE-ATTN-BWD-2: **closed**
+
+The row asked Apple to consume the shared tensor-valued backward phase loops and
+map the dQ / split-dK-dV / fixed-reduction contract to a Metal-owned package.
+E2E-REAL-5B does exactly that: `apple_native.package_scheduled_attention_backward`
+consumes the shared `ScheduledAttentionBackwardArtifact`, **verifies**
+`split_count == 2` and `reduction_order == (0, 1)` rather than assuming them, and
+selects the MSL split route because it is the only faithful mapping of an
+ascending fixed-order reduction. Four exact-device configurations match an
+independent float64 VJP and repeats are bit-identical. The AMD schedule, HSACO
+and HIP workspace did not transfer, as the row required.
+
+### Row 29 — APPLE-ATTN-BWD-3: **closed**
+
+The row asked Apple to satisfy the shared backward contracts or record the
+divergence. Apple declares its own `apple7_recompute` LSE identity, and that
+declaration is **enforced by the ODS verifier** on both `schedule.attention` and
+`schedule.attention_backward` — Apple cannot silently inherit x86's `save_lse` or
+the gfx1151 threshold. The row's condition for retaining recompute ("until an
+exact Metal package and benchmark justify a saved checkpoint") is now materially
+better informed: APPLE-ATTN-BWD-PERF-1 shows the row statistics cost is real, and
+answers it by computing them **once per launch** in the declared `row_prepass`
+rather than by saving them across the forward/backward boundary. A saved
+checkpoint remains unjustified, now on measured grounds rather than absent ones.
+
+### Row 30 — APPLE-ATTN-MODIFIERS-1: **active, narrowed**
+
+Apple's envelope expresses **causal, softcap, additive bias, and MHA/GQA/MQA**,
+and rejects the remainder closed (live window, dropout, `D > 256`, non-whole GQA
+group, mismatched head/value dim). So the row's substance — validate what is
+expressed, reject the rest rather than silently narrowing — is met for four of
+five modifiers. Two things keep it open, both specific:
+
+1. **Windows are excluded, not expressed.** The MSL non-causal window is a
+   *symmetric half-window* (`window_size/2` per side), which is not the shared
+   `window_left`/`window_right` semantics; admitting it would compute a different
+   mask than requested. Expressing windows needs its own kernel contract and
+   oracle.
+2. **Rejections name their reason in the message, but are not registered
+   diagnostics.** Decision #21 asks for a stable named diagnostic per refused
+   lowering. These are `ValueError`s with specific text, which is honest but not
+   the registered form the sibling passes use.
+
+### Row 31 — APPLE-STATEFUL-TRANSPORT-1: **active, unchanged**
+
+No Apple consumer of the generalized target-keyed resident ABI schema exists —
+searched, not assumed. Apple retains its session-private ReplaySSM ring with
+flush/rollback, ordered submission and drain-before-release (APPLE-REPLAY-1,
+closed), and APPLE-PIPE-1 already rejects name-based `#tile.buffer_ref`, so Apple
+is aligned with the retirement half of the shared change. The open half — Metal
+threadgroup scheduling against the generalized schema, including MoE
+launch-workspace ownership and optional rank/device topology binding — is
+untouched by any work to date and stays open with its original scope.

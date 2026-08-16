@@ -798,6 +798,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "libtessera_x86_elementwise.so; AVX-512 horizontal "
                             "reduce); the CPU analog of the ROCm norm lane. f32, "
                             "matches numpy 2e-5",
+    "apple_gpu_norm_bwd_compiled": "Apple GPU (Metal) paired RMSNorm / "
+                                   "LayerNorm VJP: row pass for dX plus a "
+                                   "fixed-order column reduction for the "
+                                   "affine gradients.",
     "x86_norm_bwd_compiled": "x86 CPU AVX-512 paired RMSNorm / LayerNorm "
                             "backward launch with dynamic rows/width and "
                             "deterministic f32 dx/dGamma/dBeta reductions",
@@ -2124,6 +2128,35 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "projection and binary lanes under one compiler-owned ABI.",
         execution_mode="cpu_avx512", direction="forward",
         op_family="normalization"),
+    ("apple_gpu", "apple_gpu_rmsnorm_bwd_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_rmsnorm_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="apple_gpu_norm_bwd_compiled", runtime_status="success",
+        reason="Generated paired RMSNorm backward artifacts launch the "
+               "status-returning Metal MSL VJP: a row pass produces dX and "
+               "publishes per-row statistics, and a column pass reduces dGamma "
+               "over rows in fixed ascending order.",
+        execution_mode="metal_runtime", direction="backward",
+        op_family="rmsnorm", backward_aliases=("rmsnorm_safe",),
+        device_proof="device_verified_abi", evidence_target="apple7",
+        numerical_fixture="tests/unit/test_apple_normalization_vjp.py",
+        proof_build="LLVM/MLIR 23; Apple M1 Max (apple7) Metal",
+        residual_policy="recompute_all",
+        residual_tradeoff="Recompute inverse RMS from X; no saved-stat ABI."),
+    ("apple_gpu", "apple_gpu_layer_norm_bwd_compiled"): ExecutionRow(
+        target="apple_gpu", compiler_path="apple_gpu_layer_norm_bwd_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="apple_gpu_norm_bwd_compiled", runtime_status="success",
+        reason="Generated paired LayerNorm backward artifacts launch the "
+               "status-returning Metal MSL VJP and return dX plus dGamma and "
+               "dBeta when the forward graph is affine.",
+        execution_mode="metal_runtime", direction="backward",
+        op_family="layer_norm",
+        device_proof="device_verified_abi", evidence_target="apple7",
+        numerical_fixture="tests/unit/test_apple_normalization_vjp.py",
+        proof_build="LLVM/MLIR 23; Apple M1 Max (apple7) Metal",
+        residual_policy="recompute_all",
+        residual_tradeoff="Recompute mean/inverse std from X; no saved-stat ABI."),
     ("x86", "x86_rmsnorm_bwd_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_rmsnorm_bwd_compiled",
         execution_kind="native_cpu", executable=True,

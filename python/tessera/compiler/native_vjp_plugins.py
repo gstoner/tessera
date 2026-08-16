@@ -91,6 +91,7 @@ def register_native_vjp_plugin(
         "x86": "x86.avx512_normalization",
         "rocm": "rocm.gfx1151_normalization",
         "nvidia_sm120": "nvidia.sm120_normalization",
+        "apple_gpu": "apple.metal_normalization",
     },
 )
 def _execute_normalization(
@@ -125,6 +126,7 @@ def _execute_normalization(
         "x86": ("cpu_avx512", "native_cpu", "x86_avx512"),
         "rocm": ("hip_runtime", "native_gpu", "rocm_gfx1151"),
         "nvidia_sm120": ("cuda_driver", "native_gpu", "nvidia_sm120"),
+        "apple_gpu": ("metal_runtime", "native_gpu", "apple7"),
     }
     try:
         execution_mode, execution_kind, evidence_target = target_identity[target]

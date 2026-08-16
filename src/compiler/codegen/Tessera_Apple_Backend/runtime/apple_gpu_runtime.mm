@@ -20857,6 +20857,222 @@ extern "C" void tessera_apple_gpu_layer_norm_f16(const uint16_t *x,
   std::memcpy(out, x, (size_t)rows * cols * 2);
 }
 
+//===----------------------------------------------------------------------===//
+// Normalization VJP (E2E-REAL-6 / WS-2).
+//
+// These are the NON-AFFINE derivatives, which is what the shared native-VJP
+// boundary asks for: the registry's normalization plugin differentiates the
+// affine (gamma/beta) part separately through ordinary binary products, and
+// hands this ABI the bare normalize. Matching `autodiff/vjp.py` exactly:
+//
+//   rmsnorm:    y = x * inv_rms,  inv_rms = 1/sqrt(mean(x^2) + eps)
+//               dx = inv_rms * (dy - (1/n) * y * sum(dy*y))
+//   layer_norm: y = (x - mean) * inv_std,  inv_std = 1/sqrt(var + eps)
+//               dx = (1/n) * inv_std * (n*dy - sum(dy) - y*sum(dy*y))
+//
+// One thread owns one row, which is the natural mapping here: the row count is
+// prod(leading dims), so parallelism scales with the tensor rather than with a
+// head or batch count. Accumulation is in fp32 in a fixed ascending order, so
+// repeats are bit-identical.
+//===----------------------------------------------------------------------===//
+static NSString *const kNormBackwardSource = @R"MSL(
+#include <metal_stdlib>
+using namespace metal;
+
+// `mean` is 0 for RMSNorm, so one row routine serves both: `is_layer_norm`
+// selects whether the row is centred. Row statistics are published so the
+// column pass can rebuild y_hat without a second reduction over the row.
+inline void norm_row_stats(device const float *X, int base, int cols, float eps,
+                           int is_layer_norm, thread float &mean,
+                           thread float &inv) {
+  float n = float(cols);
+  mean = 0.0f;
+  if (is_layer_norm != 0) {
+    for (int c = 0; c < cols; ++c) mean += X[base + c];
+    mean /= n;
+  }
+  float acc = 0.0f;
+  for (int c = 0; c < cols; ++c) {
+    float d = X[base + c] - mean;
+    acc += d * d;
+  }
+  inv = 1.0f / sqrt(acc / n + eps);
+}
+
+// Row pass: one thread per row. Produces dX and publishes (mean, inv) for the
+// column pass. `G` is the affine scale; when absent the caller passes a unit
+// vector so the arithmetic is identical and no branch enters the inner loop.
+kernel void tessera_norm_bwd_rows_f32(
+    device const float *X    [[buffer(0)]],
+    device const float *dY   [[buffer(1)]],
+    device const float *G    [[buffer(2)]],
+    device float       *dX   [[buffer(3)]],
+    device float       *rowMean [[buffer(4)]],
+    device float       *rowInv  [[buffer(5)]],
+    constant int   &rows     [[buffer(6)]],
+    constant int   &cols     [[buffer(7)]],
+    constant float &eps      [[buffer(8)]],
+    constant int   &is_layer_norm [[buffer(9)]],
+    uint gid [[thread_position_in_grid]]) {
+  if (gid >= (uint)rows) return;
+  int base = int(gid) * cols;
+  float n = float(cols), mean, inv;
+  norm_row_stats(X, base, cols, eps, is_layer_norm, mean, inv);
+  rowMean[gid] = mean;
+  rowInv[gid] = inv;
+  float sum_g = 0.0f, sum_g_y = 0.0f;
+  for (int c = 0; c < cols; ++c) {
+    float g = dY[base + c] * G[c];
+    float y = (X[base + c] - mean) * inv;
+    sum_g += g;
+    sum_g_y += g * y;
+  }
+  for (int c = 0; c < cols; ++c) {
+    float g = dY[base + c] * G[c];
+    float y = (X[base + c] - mean) * inv;
+    // RMSNorm drops the mean term: its normalizer does not subtract the mean,
+    // so d(mean)/dx contributes nothing.
+    float centred = is_layer_norm != 0 ? sum_g : 0.0f;
+    dX[base + c] = (inv / n) * (n * g - centred - y * sum_g_y);
+  }
+}
+
+// Column pass: one thread per channel, reducing over rows in fixed ascending
+// order so dGamma/dBeta are deterministic. y_hat is rebuilt from the published
+// row statistics rather than re-reduced.
+kernel void tessera_norm_bwd_affine_f32(
+    device const float *X    [[buffer(0)]],
+    device const float *dY   [[buffer(1)]],
+    device const float *rowMean [[buffer(2)]],
+    device const float *rowInv  [[buffer(3)]],
+    device float       *dG   [[buffer(4)]],
+    device float       *dB   [[buffer(5)]],
+    constant int   &rows     [[buffer(6)]],
+    constant int   &cols     [[buffer(7)]],
+    uint gid [[thread_position_in_grid]]) {
+  if (gid >= (uint)cols) return;
+  int c = int(gid);
+  float acc_g = 0.0f, acc_b = 0.0f;
+  for (int r = 0; r < rows; ++r) {
+    int idx = r * cols + c;
+    float y = (X[idx] - rowMean[r]) * rowInv[r];
+    acc_g += dY[idx] * y;
+    acc_b += dY[idx];
+  }
+  dG[c] = acc_g;
+  dB[c] = acc_b;
+}
+)MSL";
+
+namespace {
+
+// Returns 1 on a real Metal dispatch, 0 otherwise. Status-returning by design:
+// a void ABI that fell through to a CPU reference would be indistinguishable
+// from GPU execution in a numerical test (APPLE-PLACEMENT-ABI-1).
+// `gamma` may be null (non-affine); `dgamma`/`dbeta` may be null when the caller
+// does not need the affine gradients, in which case the column pass is skipped
+// entirely rather than computed and discarded.
+static int32_t dispatch_norm_backward_msl(const float *x, const float *dy,
+                                          const float *gamma, float *dx,
+                                          float *dgamma, float *dbeta,
+                                          int32_t rows, int32_t cols,
+                                          float eps, int32_t is_layer_norm) {
+  MetalDeviceContext &ctx = deviceContext();
+  if (!ctx.ok || !x || !dy || !dx || rows <= 0 || cols <= 0) return 0;
+  @autoreleasepool {
+    id<MTLComputePipelineState> rows_pso = compile_msl_kernel(
+        ctx, kNormBackwardSource, @"tessera_norm_bwd_rows_f32");
+    if (!rows_pso) return 0;
+    const bool want_affine = dgamma != nullptr || dbeta != nullptr;
+    id<MTLComputePipelineState> affine_pso = nil;
+    if (want_affine) {
+      affine_pso = compile_msl_kernel(ctx, kNormBackwardSource,
+                                      @"tessera_norm_bwd_affine_f32");
+      if (!affine_pso) return 0;
+    }
+    NSUInteger bytes = sizeof(float) * (NSUInteger)rows * cols;
+    NSUInteger col_bytes = sizeof(float) * (NSUInteger)cols;
+    NSUInteger row_bytes = sizeof(float) * (NSUInteger)rows;
+    // A unit scale keeps the non-affine case on the same arithmetic path as the
+    // affine one, so the two cannot drift apart.
+    std::vector<float> ones;
+    if (!gamma) ones.assign((size_t)cols, 1.0f);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDY, ctx, dy, bytes);
+    TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gamma ? gamma : ones.data(),
+                                    col_bytes);
+    TS_METAL_BUF_ACQUIRE(bufDX, ctx, bytes);
+    TS_METAL_BUF_ACQUIRE(bufMean, ctx, row_bytes);
+    TS_METAL_BUF_ACQUIRE(bufInv, ctx, row_bytes);
+    TS_METAL_BUF_ACQUIRE(bufDG, ctx, col_bytes);
+    TS_METAL_BUF_ACQUIRE(bufDB, ctx, col_bytes);
+    if (!bufX || !bufDY || !bufG || !bufDX || !bufMean || !bufInv ||
+        !bufDG || !bufDB) return 0;
+    id<MTLCommandBuffer> cb = [ctx.queue commandBuffer];
+    if (!cb) return 0;
+    cb.label = @"tessera_norm.backward.f32";
+    id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:rows_pso];
+    [enc setBuffer:bufX offset:0 atIndex:0];
+    [enc setBuffer:bufDY offset:0 atIndex:1];
+    [enc setBuffer:bufG offset:0 atIndex:2];
+    [enc setBuffer:bufDX offset:0 atIndex:3];
+    [enc setBuffer:bufMean offset:0 atIndex:4];
+    [enc setBuffer:bufInv offset:0 atIndex:5];
+    [enc setBytes:&rows length:sizeof(int32_t) atIndex:6];
+    [enc setBytes:&cols length:sizeof(int32_t) atIndex:7];
+    [enc setBytes:&eps length:sizeof(float) atIndex:8];
+    [enc setBytes:&is_layer_norm length:sizeof(int32_t) atIndex:9];
+    {
+      NSUInteger width = std::max<NSUInteger>(1, std::min<NSUInteger>(
+          (NSUInteger)rows,
+          std::min<NSUInteger>(rows_pso.maxTotalThreadsPerThreadgroup, 64)));
+      [enc dispatchThreads:MTLSizeMake((NSUInteger)rows, 1, 1)
+          threadsPerThreadgroup:MTLSizeMake(width, 1, 1)];
+    }
+    [enc endEncoding];
+    if (want_affine) {
+      enc = [cb computeCommandEncoder];
+      [enc setComputePipelineState:affine_pso];
+      [enc setBuffer:bufX offset:0 atIndex:0];
+      [enc setBuffer:bufDY offset:0 atIndex:1];
+      [enc setBuffer:bufMean offset:0 atIndex:2];
+      [enc setBuffer:bufInv offset:0 atIndex:3];
+      [enc setBuffer:bufDG offset:0 atIndex:4];
+      [enc setBuffer:bufDB offset:0 atIndex:5];
+      [enc setBytes:&rows length:sizeof(int32_t) atIndex:6];
+      [enc setBytes:&cols length:sizeof(int32_t) atIndex:7];
+      NSUInteger width = std::max<NSUInteger>(1, std::min<NSUInteger>(
+          (NSUInteger)cols,
+          std::min<NSUInteger>(affine_pso.maxTotalThreadsPerThreadgroup, 64)));
+      [enc dispatchThreads:MTLSizeMake((NSUInteger)cols, 1, 1)
+          threadsPerThreadgroup:MTLSizeMake(width, 1, 1)];
+      [enc endEncoding];
+    }
+    if (!commit_and_wait_with_timeout(ctx, cb, 30000, "norm_backward")) return 0;
+    memcpy(dx, [bufDX contents], bytes);
+    if (dgamma) memcpy(dgamma, [bufDG contents], col_bytes);
+    if (dbeta) memcpy(dbeta, [bufDB contents], col_bytes);
+    return 1;
+  }
+}
+
+}  // namespace
+
+extern "C" int32_t tessera_apple_gpu_rmsnorm_bwd_f32(
+    const float *x, const float *gamma, const float *dy, float *dx,
+    float *dgamma, int32_t rows, int32_t cols, float eps) {
+  return dispatch_norm_backward_msl(x, dy, gamma, dx, dgamma, nullptr, rows,
+                                    cols, eps, /*is_layer_norm=*/0);
+}
+
+extern "C" int32_t tessera_apple_gpu_layer_norm_bwd_f32(
+    const float *x, const float *gamma, const float *dy, float *dx,
+    float *dgamma, float *dbeta, int32_t rows, int32_t cols, float eps) {
+  return dispatch_norm_backward_msl(x, dy, gamma, dx, dgamma, dbeta, rows, cols,
+                                    eps, /*is_layer_norm=*/1);
+}
+
 extern "C" void tessera_apple_gpu_rmsnorm_gpu_f32(const float *x,
                                                   const float *gamma, float *out,
                                                   int32_t rows, int32_t cols,

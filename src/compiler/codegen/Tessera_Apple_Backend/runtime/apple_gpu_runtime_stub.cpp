@@ -2610,6 +2610,39 @@ extern "C" void tessera_apple_gpu_layer_norm_bf16(const uint16_t* x, const uint1
   tessera_apple_gpu_layer_norm_f32(xf.data(), gf.data(), bbf.data(), of.data(), rows, cols, eps);
   for (std::size_t i = 0; i < nrc; ++i) out[i] = float_to_bfloat16_stub(of[i]);
 }
+// Normalization VJP (E2E-REAL-6 / WS-2). The real ABI returns 1 only on a real
+// Metal dispatch, so the portable stub must return 0: off-Darwin there is no
+// Apple GPU, and a numerically correct CPU fallback here would be
+// indistinguishable from GPU execution in a numerical test
+// (APPLE-PLACEMENT-ABI-1 — same rule as the PPO value executor above). Python
+// raises on a non-1 status rather than silently accepting the result.
+extern "C" int32_t tessera_apple_gpu_rmsnorm_bwd_f32(
+    const float* x, const float* gamma, const float* dy, float* dx,
+    float* dgamma, int32_t rows, int32_t cols, float eps) {
+  (void)x;
+  (void)gamma;
+  (void)dy;
+  (void)dx;
+  (void)dgamma;
+  (void)rows;
+  (void)cols;
+  (void)eps;
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_layer_norm_bwd_f32(
+    const float* x, const float* gamma, const float* dy, float* dx,
+    float* dgamma, float* dbeta, int32_t rows, int32_t cols, float eps) {
+  (void)x;
+  (void)gamma;
+  (void)dy;
+  (void)dx;
+  (void)dgamma;
+  (void)dbeta;
+  (void)rows;
+  (void)cols;
+  (void)eps;
+  return 0;
+}
 extern "C" void tessera_apple_gpu_mpsgraph_softmax_f32(const float* x, float* out,
                                                        int32_t rows, int32_t cols) {
   for (int32_t r = 0; r < rows; ++r) {

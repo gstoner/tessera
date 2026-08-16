@@ -43,8 +43,8 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 |---|---|---:|---:|---:|---|---|
 | `Verifier coverage` | closed | 231 | 231 | 0 | real=231 | No action unless this row reopens. |
 | `Direct test evidence` | mixed | 392 | 505 | 113 | covered_by_family=26, directly_tested=399, hardware_gated=4, structural_only=76 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
-| `Runtime execution matrix` | closed | 238 | 238 | 0 | apple_cpu=2, apple_gpu=22, cpu=5, nvidia_sm120=32, rocm=91, x86=86 | Add rows only when a launch path actually executes. |
-| `Runtime ABI symbols` | mixed | 528 | 836 | 308 | apple=677, nvidia=7, rocm=13, x86=139 | Reduce stub-only ABI rows where a backend claims native execution. |
+| `Runtime execution matrix` | closed | 240 | 240 | 0 | apple_cpu=2, apple_gpu=24, cpu=5, nvidia_sm120=32, rocm=91, x86=86 | Add rows only when a launch path actually executes. |
+| `Runtime ABI symbols` | mixed | 530 | 840 | 310 | apple=681, nvidia=7, rocm=13, x86=139 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 31 | 58 | 27 | archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
 ## Code Generation Pathways
@@ -54,7 +54,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Portable CPU reference` | closed | 356 | 356 | 0 | manifest: exact_verified=0, implementation_present=0, reference=356, artifact_or_planned=0, other=0, missing_target_row=149; runtime_paths: executable=5/5 (cpu=5) | Keep portable reference execution distinct from native x86 proof. |
 | `x86 / AVX-512` | mixed | 289 | 344 | 55 | manifest: exact_verified=289, implementation_present=49, reference=6, artifact_or_planned=0, other=0, missing_target_row=161; runtime_paths: executable=86/86 (x86=86) | Promote implementation-only rows with exact Zen 5 execute-and-compare; keep AMX separately gated. |
 | `Apple CPU` | mixed | 384 | 388 | 4 | manifest: exact_verified=0, implementation_present=4, reference=384, artifact_or_planned=0, other=0, missing_target_row=117; runtime_paths: executable=2/2 (apple_cpu=2) | Exact-device verify implementation-only rows or retain them explicitly as reference execution. |
-| `Apple GPU` | mixed | 148 | 207 | 59 | manifest: exact_verified=148, implementation_present=51, reference=4, artifact_or_planned=4, other=0, missing_target_row=298; runtime_paths: executable=22/22 (apple_gpu=22) | Promote implementation/artifact rows only with exact-device execute-and-compare. |
+| `Apple GPU` | mixed | 148 | 207 | 59 | manifest: exact_verified=148, implementation_present=51, reference=4, artifact_or_planned=4, other=0, missing_target_row=298; runtime_paths: executable=24/24 (apple_gpu=24) | Promote implementation/artifact rows only with exact-device execute-and-compare. |
 | `ROCm / gfx1151` | mixed | 346 | 352 | 6 | manifest: exact_verified=346, implementation_present=0, reference=2, artifact_or_planned=4, other=0, missing_target_row=153; runtime_paths: executable=91/91 (rocm=91) | Promote remaining reference rows only with exact gfx1151 execute-and-compare. |
 | `NVIDIA SM80` | open | 0 | 72 | 72 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=72, other=0, missing_target_row=433; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
 | `NVIDIA SM90` | open | 0 | 104 | 104 | manifest: exact_verified=0, implementation_present=0, reference=2, artifact_or_planned=102, other=0, missing_target_row=401; runtime_paths: executable=0/0 (no runtime rows) | Keep compile/artifact evidence separate from SM120 exact-device execution. |

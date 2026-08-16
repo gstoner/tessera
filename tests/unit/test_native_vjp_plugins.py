@@ -24,7 +24,7 @@ def test_normalization_vjp_declares_the_complete_compiler_spine() -> None:
         assert declaration.schedule_consumer.startswith("schedule.")
         assert declaration.tile_consumer.startswith("tile.")
         assert set(declaration.target_consumers) == {
-            "x86", "rocm", "nvidia_sm120"
+            "x86", "rocm", "nvidia_sm120", "apple_gpu"
         }
 
 

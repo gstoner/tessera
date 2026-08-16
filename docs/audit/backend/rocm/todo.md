@@ -3741,3 +3741,19 @@ query stream, which capped the dK/dV split at one thread per (partial, KV batch)
 keeping single-owner determinism. Any backend whose backward recomputes row
 statistics inside its dK/dV kernel should check whether it has the same
 structural cap before attributing slowness to memory or instruction mix.
+
+## APPLE-NORM-VJP-1-2026-08-16 — Apple native-VJP registration assessment
+
+**Outcome: not applicable — no shared contract changed.** Apple registered as a
+Target consumer in the existing native-VJP normalization plugin and added its own
+Metal MSL VJP kernels. The shared registry schema, the `_parse_compiled_norm_backward`
+contract, the Graph/Schedule contracts, and every sibling executor are unchanged;
+the new code is Apple-private (`apple_gpu_runtime.mm`, one runtime executor, two
+`execution_matrix` rows behind one new Apple executor id). This target's own
+normalization VJP rows, evidence and selectors are untouched.
+
+Recorded because the *scoping* lesson is portable: the item was scoped as
+"registry wiring", but the target had no normalization-backward ABI at all, so
+the entry would have been an unconsumed declaration (Decision #29). Any backend
+asked to join this boundary should confirm it owns an executable VJP before
+declaring a consumer.

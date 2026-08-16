@@ -280,11 +280,39 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
   // vocabulary is portable, but gfx1200/gfx1250 must supply their own exact-
   // device schedule and instruction-family profile rather than inheriting it.
   bool rocm = schedule.arch.contains("gfx1151");
+  // Apple GPU has no rank-2 f32 cooperative-matrix GEMM: the shared launch
+  // contract is consumed as a batch-1 MPS BMM (apple_gpu_bmm_f32_batch1).  The
+  // macro-tile below is a logical default only; the MPS route owns its own
+  // tiling, which the Apple package records as an explicit dropped decision.
+  bool apple_gpu = schedule.target == "apple_gpu";
   if (x86 && lhsElement.isF32() && rhsElement.isF32() && outElement.isF32()) {
     schedule.storage = "f32";
     schedule.accum = "f32";
     if (schedule.arch.empty())
       schedule.arch = "x86-avx512";
+    return schedule;
+  }
+  if (apple_gpu && lhsElement.isF32() && rhsElement.isF32() &&
+      outElement.isF32()) {
+    schedule.storage = "f32";
+    schedule.accum = "f32";
+    if (schedule.arch.empty())
+      schedule.arch = "apple7";
+    return schedule;
+  }
+  if (apple_gpu && lhsElement.isF16() && rhsElement.isF16() &&
+      outElement.isF32()) {
+    // Apple7+ simdgroup_matrix GEMM: f16 storage, f32 accumulation.  Unlike the
+    // f32 batch-1 BMM above, this is compiler-emitted MSL with a device timer,
+    // so its promotion is not gated by APPLE-DEVICE-EVENT-1.  The 32x32
+    // macro-tile mirrors the proven APPLE-TILE-1 emitter default (a multiple of
+    // the 8x8x8 simdgroup fragment); the MSL materializer owns the byte layout.
+    schedule.storage = "f16";
+    schedule.accum = "f32";
+    schedule.macroTileM = 32;
+    schedule.macroTileN = 32;
+    if (schedule.arch.empty())
+      schedule.arch = "apple7";
     return schedule;
   }
   if (rocm && lhsElement.isF16() && rhsElement.isF16() && outElement.isF32()) {
@@ -364,7 +392,12 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   bool x86 = schedule.target == "x86" || schedule.arch.contains("avx512") ||
              schedule.arch.contains("zen5");
   bool rocm = schedule.arch.contains("gfx1151");
-  if (!x86 && !rocm)
+  // Apple GPU consumes the shared softmax launch tile through its f32 MSL ABI.
+  // It has no scheduled reduction consumer yet, so it is admitted for softmax
+  // only below.  The launch tile does not prescribe a workgroup for Apple (the
+  // delegated MSL route owns its threadgroup), so workgroupSize stays 1.
+  bool apple_gpu = schedule.target == "apple_gpu";
+  if (!x86 && !rocm && !apple_gpu)
     return failure();
 
   StringRef opName = op->getName().getStringRef();
@@ -372,7 +405,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
     if ((axisAttr && axisAttr.getInt() != -1) || input != output ||
         (x86 && schedule.storage != "f32") ||
-        (rocm && schedule.storage != "f16" && schedule.storage != "f32"))
+        (rocm && schedule.storage != "f16" && schedule.storage != "f32") ||
+        (apple_gpu && schedule.storage != "f32"))
       return failure();
     schedule.family = "softmax";
     schedule.rows = 1;
@@ -383,6 +417,10 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   }
 
   if (opName != "tessera.reduce")
+    return failure();
+  // Apple has no scheduled reduction consumer; fail closed rather than emit an
+  // artifact no Apple package can launch.
+  if (apple_gpu)
     return failure();
   auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
   int64_t axis = axisAttr ? axisAttr.getInt() : -1;
@@ -1030,7 +1068,14 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   bool x86 = schedule.target == "x86" &&
              (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
   bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
-  if (!x86 && !rocm)
+  // Apple GPU consumes the shared rank-4 FORWARD attention launch tile through
+  // its status-returning GQA MSL ABI
+  // (tessera_apple_gpu_flash_attn_variant_f32_status).  That ABI is f32-only,
+  // takes ONE symmetric window extent, and requires head_dim == value_dim;
+  // those bounds are enforced below.  Attention BACKWARD has no Apple scheduled
+  // consumer and is gated separately.
+  bool apple_gpu = schedule.target == "apple_gpu" && schedule.arch == "apple7";
+  if (!x86 && !rocm && !apple_gpu)
     return failure();
   schedule.batch = q.getDimSize(0);
   schedule.queryHeads = q.getDimSize(1);
@@ -1059,7 +1104,12 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   if ((x86 && schedule.storage != "f32") ||
       (rocm && (schedule.storage != "f16" && schedule.storage != "bf16")) ||
       (rocm && (schedule.headDim != schedule.valueDim ||
-                schedule.headDim % 16 != 0)))
+                schedule.headDim % 16 != 0)) ||
+      // The Apple GQA MSL ABI is f32-only, shares one head/value dim, and
+      // rejects D > 256 before submission.
+      (apple_gpu && (schedule.storage != "f32" ||
+                     schedule.headDim != schedule.valueDim ||
+                     schedule.headDim > 256)))
     return failure();
   if (op->getNumOperands() == 4) {
     auto bias = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
@@ -1092,6 +1142,15 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
                 (causal.getValue() && windowLeft.getInt() >= 0 &&
                  windowRight.getInt() == 0)))
     return failure();
+  // Apple's MSL non-causal window is a *symmetric half-window*
+  // (window_size/2 per side), which is not the shared window_left/window_right
+  // semantics, so a live window would compute a different mask than requested.
+  // Bound this slice to the unwindowed contract (causal is still supported) and
+  // reject dropout, which the ABI does not carry.  Windowed Apple attention
+  // needs its own contract and oracle before admission.
+  if (apple_gpu && (windowLeft.getInt() != -1 || windowRight.getInt() != -1 ||
+                    dropoutP.getValueAsDouble() != 0.0))
+    return failure();
   schedule.scale = static_cast<double>(
       static_cast<float>(scale.getValueAsDouble()));
   schedule.causal = causal.getValue();
@@ -1104,9 +1163,15 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
   schedule.dropoutSeed = dropoutSeed.getInt();
   schedule.tileQ = schedule.queryRows;
   schedule.workgroupSize = rocm ? 256 : 1;
-  schedule.backwardLsePolicy = x86 ? "save_lse" : "gfx1151_auto_128";
+  // Apple's attention backward recomputes m/l per query row and its ABI takes
+  // no LSE buffer (APPLE-ATTN-STREAM-1), so it owns an explicit recompute
+  // policy rather than inheriting x86's save_lse or the gfx1151 threshold.
+  schedule.backwardLsePolicy = apple_gpu   ? "apple7_recompute"
+                               : x86       ? "save_lse"
+                                           : "gfx1151_auto_128";
   schedule.backwardLseSelection =
-      x86 || schedule.queryRows >= 128 ? "saved" : "recompute";
+      apple_gpu ? "recompute"
+                : (x86 || schedule.queryRows >= 128) ? "saved" : "recompute";
   schedule.qShape.assign(q.getShape().begin(), q.getShape().end());
   schedule.kShape.assign(k.getShape().begin(), k.getShape().end());
   schedule.vShape.assign(v.getShape().begin(), v.getShape().end());
@@ -1351,7 +1416,8 @@ struct GraphToSchedulePass
   StringRef getArgument() const override { return "tessera-graph-to-schedule"; }
   StringRef getDescription() const override {
     return "Create a content-addressed mixed-level schedule.matmul SSA edge "
-           "for bounded static x86-f32 and ROCm-f16/f32 Graph matmul";
+           "for bounded static x86-f32, ROCm-f16/f32, and Apple-GPU-f32 Graph "
+           "matmul";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
@@ -1370,7 +1436,8 @@ struct GraphToSchedulePass
       FailureOr<MatmulSchedule> selected = getMatmulSchedule(op);
       if (failed(selected)) {
         op->emitError("E2E-REAL-2 Graph->Schedule requires static rank-2 "
-                      "x86 f32->f32 or ROCm f16->f32 matmul with no transpose");
+                      "x86 f32->f32, ROCm f16->f32, or Apple-GPU f32->f32 "
+                      "matmul with no transpose");
         return signalPassFailure();
       }
       std::string digest = scheduleDigest(*selected);

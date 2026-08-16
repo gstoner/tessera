@@ -1,4 +1,4 @@
-// RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --split-input-file %s | FileCheck %s --check-prefixes=X86,ROCM
+// RUN: tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --split-input-file %s | FileCheck %s --check-prefixes=X86,ROCM,APPLE
 // RUN: tessera-opt --tessera-graph-to-schedule --split-input-file %s | FileCheck %s --check-prefix=SCHEDULE
 
 module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
@@ -71,3 +71,58 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1151"} {
 // ROCM-SAME: tessera.tile_m = 16
 // ROCM-SAME: tessera.tile_n = 16
 // ROCM: return %{{.*}} : tensor<48x80xf32>
+
+// -----
+
+// E2E-REAL-3 Apple slice: Apple GPU has no rank-2 f32 cooperative-matrix GEMM,
+// so the shared launch tile is later delegated to a batch-1 MPS BMM.  The
+// Graph->Schedule->Tile boundary itself is target-neutral: the same canonical
+// tile.matmul_kernel is produced, keyed by the apple7 schedule digest.
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_matmul(%a: tensor<64x32xf32>, %b: tensor<32x48xf32>)
+      -> tensor<64x48xf32> {
+    %0 = tessera.matmul %a, %b
+        : (tensor<64x32xf32>, tensor<32x48xf32>) -> tensor<64x48xf32>
+    return %0 : tensor<64x48xf32>
+  }
+}
+
+// APPLE-LABEL: func.func @apple_matmul
+// APPLE-NOT: tessera.matmul
+// APPLE-NOT: schedule.
+// APPLE-COUNT-1: tile.matmul_kernel
+// APPLE-SAME: family = "auto"
+// APPLE-SAME: a = "f32"
+// APPLE-SAME: b = "f32"
+// APPLE-SAME: acc = "f32"
+// APPLE-SAME: tessera.macro_tile_m = 16
+// APPLE-SAME: tessera.macro_tile_n = 16
+// APPLE-SAME: tessera.schedule_hash = "{{[0-9a-f]+}}"
+// APPLE: return %{{.*}} : tensor<64x48xf32>
+
+// -----
+
+// Apple7+ simdgroup_matrix GEMM: f16 storage, f32 accumulation.  Unlike the f32
+// batch-1 BMM above, this is compiler-emitted MSL that honors the 32x32 macro
+// tile (a multiple of the 8x8x8 simdgroup fragment).
+module attributes {tessera.target = "apple_gpu", tessera.arch = "apple7"} {
+  func.func @apple_matmul_f16(%a: tensor<48x32xf16>, %b: tensor<32x80xf16>)
+      -> tensor<48x80xf32> {
+    %0 = tessera.matmul %a, %b
+        : (tensor<48x32xf16>, tensor<32x80xf16>) -> tensor<48x80xf32>
+    return %0 : tensor<48x80xf32>
+  }
+}
+
+// APPLE-LABEL: func.func @apple_matmul_f16
+// APPLE-NOT: tessera.matmul
+// APPLE-NOT: schedule.
+// APPLE-COUNT-1: tile.matmul_kernel
+// APPLE-SAME: family = "auto"
+// APPLE-SAME: a = "f16"
+// APPLE-SAME: b = "f16"
+// APPLE-SAME: acc = "f32"
+// APPLE-SAME: tessera.macro_tile_m = 32
+// APPLE-SAME: tessera.macro_tile_n = 32
+// APPLE-SAME: tessera.schedule_hash = "{{[0-9a-f]+}}"
+// APPLE: return %{{.*}} : tensor<48x80xf32>

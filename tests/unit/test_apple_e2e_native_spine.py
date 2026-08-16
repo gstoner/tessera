@@ -235,7 +235,16 @@ def test_apple_softmax_package_hashes_dylib_and_names_abi(monkeypatch, tmp_path)
 
 
 def test_apple_gpu_package_trace_uses_descriptor_provenance(monkeypatch, tmp_path) -> None:
-    """Trace metadata must name the package actually selected, not BMM by default."""
+    """Trace metadata must name the package actually selected, not BMM by default.
+
+    As of E2E-REAL-5, a rank-2 f32 softmax is migrated to the shared
+    Graph->Schedule->launch-Tile boundary, so the selected package is the
+    scheduled softmax consumer (``work_item = "E2E-REAL-5"``) rather than the
+    ``APPLE-E2E-1`` descriptor route.  The anti-regression guard is unchanged:
+    the trace must still name ``softmax``, never a defaulted BMM.  The direct
+    descriptor route remains covered by
+    ``test_apple_softmax_package_hashes_dylib_and_names_abi``.
+    """
     from tessera.compiler.driver import compile_graph_module
 
     dylib = tmp_path / "libTesseraAppleRuntime.dylib"
@@ -250,7 +259,7 @@ def test_apple_gpu_package_trace_uses_descriptor_provenance(monkeypatch, tmp_pat
                  if event.pass_name == "apple-gpu-native-package")
     assert event.metadata["dtype"] == "fp32"
     assert event.metadata["op_family"] == "softmax"
-    assert event.metadata["work_item"] == "APPLE-E2E-1"
+    assert event.metadata["work_item"] == "E2E-REAL-5"
 
 
 def _value_module(op_name, arg_shapes, out_shape, *, kwargs=None, dtype="fp32"):

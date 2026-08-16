@@ -165,6 +165,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         compiler_target, architecture, workgroup_size = "x86", "zen5-avx512", 1
     elif target == "rocm_gfx1151":
         compiler_target, architecture, workgroup_size = "rocm", "gfx1151", 256
+    elif target == "apple_gpu":
+        compiler_target, architecture, workgroup_size = "apple_gpu", "apple7", 1
     else:
         raise ValueError("unsupported scheduled semantic-kernel target")
 
@@ -183,6 +185,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         )
         if kind not in {"sum", "mean", "max"} or bool(op.kwargs.get("keepdims", False)):
             raise ValueError("scheduled reduction requires rank-reducing sum/mean/max")
+        if compiler_target == "apple_gpu":
+            raise ValueError("Apple GPU has no scheduled reduction consumer yet")
         raw_axis = op.kwargs.get("axis", -1)
         if not isinstance(raw_axis, int) or isinstance(raw_axis, bool):
             raise ValueError("scheduled reduction requires one integer axis")

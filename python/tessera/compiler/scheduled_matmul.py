@@ -207,6 +207,40 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             32,
             64,
         )
+    elif target == "apple_gpu" and (a_dtype, b_dtype, output_dtype) == (
+        "fp32",
+        "fp32",
+        "fp32",
+    ):
+        # Apple GPU has no rank-2 f32 cooperative-matrix GEMM; the shared launch
+        # contract is consumed as a batch-1 MPS BMM.  The 16x16 macro-tile is a
+        # logical default that the Apple package records as an explicit drop,
+        # matching the C++ getMatmulSchedule default for this target.
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "apple_gpu",
+            "apple7",
+            "f32",
+            "f32",
+            16,
+            16,
+        )
+    elif target == "apple_gpu" and (a_dtype, b_dtype, output_dtype) == (
+        "fp16",
+        "fp16",
+        "fp32",
+    ):
+        # Apple7+ simdgroup_matrix GEMM: f16 storage, f32 accumulation.  This is
+        # a compiler-emitted MSL route (not delegated MPS), so the 32x32 macro
+        # tile is honored by the emitter.  Matches the C++ getMatmulSchedule
+        # apple7 f16 branch.
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "apple_gpu",
+            "apple7",
+            "f16",
+            "f32",
+            32,
+            32,
+        )
     else:
         raise ValueError("unsupported target dtype contract for scheduled matmul")
     return (

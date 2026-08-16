@@ -42,9 +42,11 @@ def _module(*, family: str, target: str) -> GraphIRModule:
 
 def _artifact(*, family: str, target: str) -> ScheduledKernelArtifact:
     digest = hashlib.sha256(f"{family}-{target}".encode()).hexdigest()
-    compiler_target = "x86" if target == "x86" else "rocm"
-    architecture = "zen5-avx512" if target == "x86" else "gfx1151"
-    workgroup = 1 if target == "x86" else 256
+    compiler_target, architecture, workgroup = {
+        "x86": ("x86", "zen5-avx512", 1),
+        "rocm": ("rocm", "gfx1151", 256),
+        "apple_gpu": ("apple_gpu", "apple7", 1),
+    }[target]
     if family == "softmax":
         tile_op = f'''tile.softmax_kernel %x, %o, %rows, %cols {{
       storage = "f32", accum = "f32", axis = -1 : i64,
@@ -151,9 +153,51 @@ def test_rocm_packages_exact_scheduled_reduction(monkeypatch) -> None:
     assert package.descriptor.provenance["tile_ir_digest"] == artifact.tile_digest
 
 
-@pytest.mark.parametrize("target,family", [("x86", "softmax"), ("rocm_gfx1151", "reduce")])
-def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, target, family) -> None:
-    artifact_target = "x86" if target == "x86" else "rocm"
+def test_apple_gpu_packages_exact_scheduled_softmax(monkeypatch, tmp_path) -> None:
+    from tessera.compiler import apple_native
+
+    artifact = _artifact(family="softmax", target="apple_gpu")
+    fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    fake_dylib.write_bytes(b"apple-runtime-image")
+    monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+
+    package = apple_native.package_scheduled_kernel(
+        artifact, pipeline_name="tessera-lower-to-apple_gpu"
+    )
+    assert package.tile_ir == artifact.tile_ir
+    assert package.descriptor.entry_symbol == "tessera_apple_gpu_softmax_f32"
+    assert package.descriptor.provenance["work_item"] == "E2E-REAL-5"
+    assert package.descriptor.provenance["route"] == "apple_softmax_native_library"
+    assert package.descriptor.provenance["rows"] == 6
+    assert package.descriptor.provenance["columns"] == 5
+    assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
+    assert package.descriptor.provenance["tile_ir_digest"] == artifact.tile_digest
+
+
+def test_apple_gpu_scheduled_reduce_fails_closed(monkeypatch, tmp_path) -> None:
+    from tessera.compiler import apple_native
+
+    # The shared contract must not admit an Apple GPU reduction (no consumer).
+    assert not scheduled_kernel.supports_scheduled_kernel(
+        _module(family="reduce", target="rocm"), target="apple_gpu"
+    )
+    # And the consumer rejects a non-softmax artifact outright.
+    fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    fake_dylib.write_bytes(b"apple-runtime-image")
+    monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+    with pytest.raises(ValueError, match="apple7 softmax contract"):
+        apple_native.package_scheduled_kernel(
+            _artifact(family="reduce", target="rocm"),
+            pipeline_name="tessera-lower-to-apple_gpu",
+        )
+
+
+@pytest.mark.parametrize(
+    "target,family",
+    [("x86", "softmax"), ("rocm_gfx1151", "reduce"), ("apple_gpu", "softmax")],
+)
+def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, tmp_path, target, family) -> None:
+    artifact_target = {"x86": "x86", "rocm_gfx1151": "rocm", "apple_gpu": "apple_gpu"}[target]
     artifact = _artifact(family=family, target=artifact_target)
     module = _module(family=family, target=artifact_target)
     monkeypatch.setattr(
@@ -164,11 +208,17 @@ def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, target, fa
             x86_native, "_lower",
             lambda tile_ir, symbol, family: (f"module {{ call @{symbol} }}", b"x86", "compiler", "toolchain"),
         )
-    else:
+    elif target == "rocm_gfx1151":
         monkeypatch.setattr(
             rocm_native, "_compile_reduction_tile_ir",
             lambda tile_ir: ("target", "backend", b"hsaco", "compiler", "toolchain", (), "cold"),
         )
+    else:
+        from tessera.compiler import apple_native
+
+        fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+        fake_dylib.write_bytes(b"apple-runtime-image")
+        monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
     bundle = compile_graph_module(
         module, source_origin="test", target=target,
         options={"package_native": True}, enable_tool_validation=False,
@@ -248,3 +298,41 @@ def test_gfx1151_scheduled_semantic_kernel_executes_exact_artifact(family) -> No
     result = rt.launch(runtime_artifact, args)
     assert result["ok"] is True, result.get("reason")
     np.testing.assert_allclose(output, expected, rtol=2e-5, atol=2e-5)
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.skipif(
+    find_tessera_opt() is None,
+    reason="Apple GPU runtime dylib / tessera-opt unavailable",
+)
+def test_apple_gpu_scheduled_softmax_executes_exact_artifact() -> None:
+    from tessera.compiler import apple_native
+
+    if not apple_native.tools_available():
+        pytest.skip("Apple GPU runtime dylib unavailable")
+    # rank-2 rows x columns: the shared launch tile flattens leading dims, and
+    # the Apple MSL softmax ABI is rank-2.  softmax rows are independent, so a
+    # [6, 5] launch is exact for the [2, 3, 5] logical module.
+    module = _module(family="softmax", target="apple_gpu")
+    bundle = compile_graph_module(
+        module, source_origin="e2e-real-5-exact-device", target="apple_gpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.native_image is not None and bundle.launch_descriptor is not None
+    assert bundle.tile is not None and bundle.target_ir is not None
+    assert bundle.launch_descriptor.provenance["route"] == "apple_softmax_native_library"
+    assert bundle.launch_descriptor.provenance["work_item"] == "E2E-REAL-5"
+    runtime_artifact = rt.RuntimeArtifact(
+        metadata={"target": "apple_gpu"}, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor, tile_ir=bundle.tile.text,
+        target_ir=bundle.target_ir.text,
+    )
+    rng = np.random.default_rng(5115)
+    x = np.ascontiguousarray(rng.standard_normal((6, 5)), dtype=np.float32)
+    output = np.zeros_like(x)
+    result = rt.launch(runtime_artifact, {"x": x, "o": output})
+    assert result["ok"] is True, result.get("reason")
+    assert result.get("execution_kind") == "native_gpu", result
+    shifted = x - np.max(x, axis=-1, keepdims=True)
+    expected = np.exp(shifted) / np.sum(np.exp(shifted), axis=-1, keepdims=True)
+    np.testing.assert_allclose(output, expected, rtol=3e-5, atol=3e-5)

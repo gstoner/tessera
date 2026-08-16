@@ -10,9 +10,18 @@ from .graph_ir import GraphIRModule
 from .native_artifact import (BufferBinding, LaunchDescriptor, LaunchGeometry,
                               NativeEntryPoint, NativeImageArtifact,
                               OrderingSemantics, ScalarArgument, ShapeGuard)
+from .scheduled_attention import ScheduledAttentionArtifact
+from .scheduled_kernel import ScheduledKernelArtifact
+from .scheduled_matmul import ScheduledMatmulArtifact
 
 APPLE_BMM_F32_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.f32.v1"
 APPLE_BMM_F32_SYMBOL = "tessera_apple_gpu_bmm_f32"
+APPLE_SIMDGROUP_GEMM_F16_ABI = "tessera.apple.tile.simdgroup_gemm.a_b_o_m_n_k.f16_f32.v1"
+APPLE_SIMDGROUP_GEMM_F16_SYMBOL = "tessera_apple_gpu_tile_simdgroup_gemm_f16"
+APPLE_FLASH_ATTN_VARIANT_F32_ABI = (
+    "tessera.apple.flash_attn.q_k_v_bias_o_b_hq_hkv_sq_sk_d.f32.v1"
+)
+APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL = "tessera_apple_gpu_flash_attn_variant_f32_status"
 APPLE_BMM_F16_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.f16.v1"
 APPLE_BMM_F16_SYMBOL = "tessera_apple_gpu_bmm_f16"
 APPLE_BMM_BF16_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.bf16.v1"
@@ -557,6 +566,465 @@ def package_batched_gemm(module: GraphIRModule, *, pipeline_name: str) -> AppleN
                     "broadcast_b": broadcast, "storage": dtype},
     )
     return AppleNativePackage("tile.matmul_kernel", target_ir, target_ir, image, descriptor)
+
+
+def package_scheduled_matmul(
+    artifact: ScheduledMatmulArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Consume the E2E-REAL-3 shared launch-Tile matmul artifact without Graph
+    re-entry, binding it to the Apple GPU native GEMM route for its dtype.
+
+    Two typed instances are wired:
+
+    * **f32 -> f32** delegates to ``tessera_apple_gpu_bmm_f32`` as a single-batch
+      BMM (the ``apple_gpu_bmm_f32_batch1`` route sealed by APPLE-NATIVE-E2E-2);
+      the runtime BMM dispatch treats a rank-2 operand as ``batch == 1``.  Apple
+      has no rank-2 f32 cooperative-matrix GEMM, so the shared macro-tile/mma
+      decision is a **named dropped decision** (E2E §0.2 point 5), and device-time
+      promotion stays gated by APPLE-DEVICE-EVENT-1 (MPS has no device timer).
+    * **f16 -> f32** binds the compiler-emitted ``simdgroup_matrix`` MSL route
+      (``tessera_apple_gpu_tile_simdgroup_gemm_f16``, APPLE-TILE-1).  It honors
+      the scheduled tile decision and has a command-buffer device timer, so it is
+      **not** gated by APPLE-DEVICE-EVENT-1.
+    """
+    artifact.validate()
+    if artifact.target != "apple_gpu" or artifact.architecture != "apple7":
+        raise ValueError("Apple GPU scheduled matmul requires the apple7 contract")
+    if (
+        (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
+        == ("fp16", "fp16", "fp32")
+        and (artifact.storage, artifact.accum) == ("f16", "f32")
+    ):
+        return _package_scheduled_simdgroup_f16(artifact, pipeline_name=pipeline_name)
+    if (
+        (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
+        != ("fp32", "fp32", "fp32")
+        or (artifact.storage, artifact.accum) != ("f32", "f32")
+    ):
+        raise ValueError(
+            "Apple GPU scheduled matmul requires the f32 batch-1 BMM or "
+            "f16->f32 simdgroup contract"
+        )
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "E2E-REAL-3 Apple GPU scheduled matmul requires a fresh Tessera "
+            "Apple GPU runtime dylib"
+        )
+    symbol, abi = APPLE_BMM_F32_SYMBOL, APPLE_BMM_F32_ABI
+    target_ir = (
+        f'tessera_apple.gpu.kernel_call @{symbol} '
+        f'{{abi = "{abi}", storage = "f32", batch = 1, status = "executable"}}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, artifact.a_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(1, artifact.b_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(2, artifact.output_name, "output", "fp32", 2, "row_major", 4),
+        ),
+        shape_guards=(
+            ShapeGuard(artifact.a_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.a_name, 1, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 0, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 1, "eq", artifact.n),
+            ShapeGuard(artifact.output_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.output_name, 1, "eq", artifact.n),
+        ),
+        geometry=LaunchGeometry(policy="apple_mps_bmm"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-3",
+            "route": "apple_gpu_bmm_f32_batch1",
+            "op_kind": "matmul",
+            "shape": [artifact.m, artifact.n, artifact.k],
+            "batch": 1,
+            "broadcast_b": False,
+            "storage": "f32",
+            "accum": "f32",
+            # E2E §0.2 point 5 — decisions the delegated MPS BMM route does not
+            # materialize from the shared launch tile, named rather than lost.
+            "dropped_macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
+            "dropped_mma_family": "auto",
+            "dropped_reason": "delegated_to_mps_bmm",
+            "device_time_promotion": "blocked:APPLE-DEVICE-EVENT-1",
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+def _attention_contract(module: GraphIRModule):
+    """Recognize the rank-4 f32 forward attention Apple's GQA MSL ABI accepts.
+
+    Envelope, all enforced rather than narrowed: f32 storage/result, rank-4
+    Q/K/V, ``q_heads % kv_heads == 0`` (MHA/GQA/MQA), shared head/value dim,
+    ``D <= 256``, one **symmetric** window extent, and no live dropout.  These
+    mirror ``tessera_apple_gpu_flash_attn_variant_f32_status``.
+    """
+    import math
+
+    if (len(module.functions) != 1 or len(module.functions[0].body) != 1
+            or module.functions[0].body[0].op_name != "tessera.flash_attn"):
+        return None
+    function, op = module.functions[0], module.functions[0].body[0]
+    if len(op.operands) not in {3, 4} or len(function.result_types) != 1:
+        return None
+    names = tuple(value.removeprefix("%") for value in op.operands[:3])
+    args = {arg.name: arg for arg in function.args}
+    if any(name not in args or args[name].ir_type.dtype != "fp32" for name in names):
+        return None
+    try:
+        shapes = [tuple(int(v) for v in args[name].ir_type.shape) for name in names]
+        output_shape = tuple(int(v) for v in function.result_types[0].shape)
+    except (TypeError, ValueError):
+        return None
+    if any(len(shape) != 4 or any(extent <= 0 for extent in shape) for shape in shapes):
+        return None
+    (b, hq, sq, d), (bk, hkv, sk, dk), (bv, hv, sv, dv) = shapes
+    if (b != bk or b != bv or hkv != hv or sk != sv or d != dk
+            or hkv <= 0 or hq % hkv != 0):
+        return None
+    # The Apple ABI shares one head/value dim and rejects D > 256.
+    if d != dv or d > 256:
+        return None
+    if function.result_types[0].dtype != "fp32" or output_shape != (b, hq, sq, dv):
+        return None
+    bias_name = op.operands[3].removeprefix("%") if len(op.operands) == 4 else None
+    if bias_name is not None:
+        bias = args.get(bias_name)
+        if bias is None or bias.ir_type.dtype != "fp32":
+            return None
+        try:
+            bias_shape = tuple(int(v) for v in bias.ir_type.shape)
+        except (TypeError, ValueError):
+            return None
+        if bias_shape != (b, hq, sq, sk):
+            return None
+    raw_window = op.kwargs.get("window", -1)
+    if isinstance(raw_window, (tuple, list)):
+        # One symmetric extent only: the ABI has a single window_size operand,
+        # so an asymmetric request fails closed instead of being narrowed.
+        if len(raw_window) != 2 or raw_window[0] != raw_window[1]:
+            return None
+        raw_window = raw_window[0]
+    if not isinstance(raw_window, int) or isinstance(raw_window, bool) or raw_window < -1:
+        return None
+    # Bound this slice to the unwindowed contract.  The MSL kernel's non-causal
+    # window is a *symmetric half-window* (window_size/2 on each side), which is
+    # not the shared window_left/window_right semantics; admitting a live window
+    # here would silently compute a different mask than the program requested.
+    # Windowed Apple attention needs its own contract + oracle before admission.
+    if raw_window != -1:
+        return None
+    softcap = float(op.kwargs.get("softcap", op.kwargs.get("logit_softcap", 0.0)) or 0.0)
+    dropout = float(op.kwargs.get("dropout_p", op.kwargs.get("dropout", 0.0)) or 0.0)
+    scale = float(op.kwargs.get("scale", 1.0 / math.sqrt(float(d))))
+    if (not math.isfinite(scale) or scale <= 0.0 or not math.isfinite(softcap)
+            or softcap < 0.0 or dropout != 0.0):
+        return None
+    return (
+        names, bias_name, op.result or "output",
+        (b, hq, hkv, sq, sk, d, dv), scale,
+        bool(op.kwargs.get("causal", False)), raw_window, softcap,
+    )
+
+
+def _package_scheduled_simdgroup_f16(
+    artifact: ScheduledMatmulArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Bind the f16->f32 ``simdgroup_matrix`` MSL GEMM to the shared launch tile.
+
+    This is compiler-emitted MSL (APPLE-TILE-1), not a delegated vendor call, so
+    it honors the scheduled block decision and has a command-buffer device timer
+    (not gated by APPLE-DEVICE-EVENT-1).  The MSL materializer owns the byte
+    layout; the block sizes come from the scheduled macro tile.
+    """
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "E2E-REAL-3 Apple GPU scheduled simdgroup matmul requires a fresh "
+            "Tessera Apple GPU runtime dylib"
+        )
+    symbol, abi = APPLE_SIMDGROUP_GEMM_F16_SYMBOL, APPLE_SIMDGROUP_GEMM_F16_ABI
+    # Block sizes: the macro tile is the simdgroup block (a multiple of the
+    # 8x8x8 fragment); 16 is the K step.  The MSL materializer owns byte layout.
+    bm, bn, bk = artifact.macro_tile_m, artifact.macro_tile_n, 16
+    target_ir = (
+        f'tessera_apple.gpu.kernel_call @{symbol} '
+        f'{{abi = "{abi}", storage = "f16", accumulation = "f32", '
+        f'block = "{bm}x{bn}x{bk}", status = "executable"}}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, artifact.a_name, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(1, artifact.b_name, "input", "fp16", 2, "row_major", 2),
+            BufferBinding(2, artifact.output_name, "output", "fp32", 2, "row_major", 4),
+        ),
+        # No scalar args: the simdgroup dispatch infers M/N/K from the buffer
+        # shapes, which the guards below pin exactly.
+        shape_guards=(
+            ShapeGuard(artifact.a_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.a_name, 1, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 0, "eq", artifact.k),
+            ShapeGuard(artifact.b_name, 1, "eq", artifact.n),
+            ShapeGuard(artifact.output_name, 0, "eq", artifact.m),
+            ShapeGuard(artifact.output_name, 1, "eq", artifact.n),
+        ),
+        geometry=LaunchGeometry(policy="apple_simdgroup_tile_gemm"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-3",
+            "route": "apple_gpu_simdgroup_gemm_f16",
+            "op_kind": "matmul",
+            "shape": [artifact.m, artifact.n, artifact.k],
+            "storage": "f16",
+            "accum": "f32",
+            "block": [bm, bn, bk],
+            "staging_layout_owner": "canonical_tile_ir",
+            "device_time_promotion": "eligible",
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+def package_scheduled_kernel(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Consume the E2E-REAL-5 shared launch-Tile semantic-kernel artifact
+    without Graph re-entry, binding it to the native MSL softmax route.
+
+    Only the softmax family is wired: Apple GPU has a proven
+    ``tessera_apple_gpu_softmax_f32`` MSL route (which, unlike the MPS matmul
+    route, exposes a command-buffer device timer, so it is not gated by
+    APPLE-DEVICE-EVENT-1).  Reduction has no Apple GPU scheduled consumer and
+    fails closed at the shared boundary.  The shared launch tile carries rows x
+    columns after flattening leading dims; the descriptor binds that rank-2
+    softmax contract, which is exact because softmax rows are independent.
+    """
+    artifact.validate()
+    if (
+        artifact.target != "apple_gpu"
+        or artifact.architecture != "apple7"
+        or artifact.family != "softmax"
+        or (artifact.dtype, artifact.storage, artifact.accum) != ("fp32", "f32", "f32")
+    ):
+        raise ValueError(
+            "Apple GPU scheduled kernel requires the f32 apple7 softmax contract"
+        )
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "E2E-REAL-5 Apple GPU scheduled softmax requires a fresh Tessera "
+            "Apple GPU runtime dylib"
+        )
+    symbol, abi = APPLE_SOFTMAX_F32_SYMBOL, APPLE_SOFTMAX_F32_ABI
+    rows, columns = artifact.rows, artifact.columns
+    target_ir = (
+        f'tessera_apple.gpu.kernel_call @{symbol} '
+        f'{{abi = "{abi}", storage = "f32", status = "executable"}}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, artifact.input_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(1, artifact.output_name, "output", "fp32", 2, "row_major", 4),
+        ),
+        shape_guards=(
+            ShapeGuard(artifact.input_name, 0, "eq", rows),
+            ShapeGuard(artifact.input_name, 1, "eq", columns),
+            ShapeGuard(artifact.output_name, 0, "eq", rows),
+            ShapeGuard(artifact.output_name, 1, "eq", columns),
+        ),
+        geometry=LaunchGeometry(policy="apple_msl_softmax"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-5",
+            "route": "apple_softmax_native_library",
+            "op_kind": "softmax",
+            "family": "softmax",
+            "logical_input_shape": list(artifact.input_shape),
+            "rows": rows,
+            "columns": columns,
+            "storage": "f32",
+            "accum": "f32",
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+def package_scheduled_attention(
+    artifact: ScheduledAttentionArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Consume the E2E-REAL-5A shared rank-4 forward attention launch tile.
+
+    Binds ``tessera_apple_gpu_flash_attn_variant_f32_status`` — the
+    status-returning GQA MSL route proven by APPLE-ATTN-FWD-1.  Because it
+    returns a placement status (rather than a ``void`` ABI that can fall through
+    to a CPU reference), a numerically-correct result cannot be mistaken for GPU
+    execution; see APPLE-PLACEMENT-ABI-1.
+
+    Scope is deliberately the ABI's own envelope: f32 storage, MHA/GQA/MQA,
+    shared head/value dim, ``D <= 256``, one symmetric window, no dropout.
+    Anything outside it never reaches here — the shared contract fails closed.
+    Attention **backward** has no Apple scheduled consumer in this slice.
+    """
+    artifact.validate()
+    if (
+        artifact.target != "apple_gpu"
+        or artifact.architecture != "apple7"
+        or artifact.dtype != "fp32"
+        or artifact.storage != "f32"
+        or artifact.accum != "f32"
+        or artifact.dropout_p != 0.0
+        or artifact.window_left != artifact.window_right
+        or artifact.backward_lse_policy != "apple7_recompute"
+        or artifact.backward_lse_selection != "recompute"
+    ):
+        raise ValueError(
+            "Apple GPU scheduled attention requires the apple7 f32 recompute policy"
+        )
+    batch, q_heads, kv_heads, sq, sk, head_dim, value_dim = artifact.dims
+    if head_dim != value_dim or head_dim > 256 or q_heads % kv_heads != 0:
+        raise ValueError(
+            "Apple GPU scheduled attention requires shared head/value dim <= 256 "
+            "and a whole GQA group size"
+        )
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "E2E-REAL-5A Apple GPU scheduled attention requires a fresh Tessera "
+            "Apple GPU runtime dylib"
+        )
+    symbol, abi = APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL, APPLE_FLASH_ATTN_VARIANT_F32_ABI
+    target_ir = (
+        f'tessera_apple.gpu.kernel_call @{symbol} '
+        f'{{abi = "{abi}", storage = "f32", accumulation = "f32", '
+        f'status = "executable"}}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    inputs = [
+        BufferBinding(0, artifact.q_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(1, artifact.k_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(2, artifact.v_name, "input", "fp32", 4, "row_major", 4),
+    ]
+    guards = [
+        ShapeGuard(artifact.q_name, 0, "eq", batch),
+        ShapeGuard(artifact.q_name, 1, "eq", q_heads),
+        ShapeGuard(artifact.q_name, 2, "eq", sq),
+        ShapeGuard(artifact.q_name, 3, "eq", head_dim),
+        ShapeGuard(artifact.k_name, 1, "eq", kv_heads),
+        ShapeGuard(artifact.k_name, 2, "eq", sk),
+        ShapeGuard(artifact.v_name, 1, "eq", kv_heads),
+        ShapeGuard(artifact.v_name, 2, "eq", sk),
+        ShapeGuard(artifact.v_name, 3, "eq", value_dim),
+    ]
+    if artifact.bias_name is not None:
+        inputs.append(
+            BufferBinding(3, artifact.bias_name, "input", "fp32", 4, "row_major", 4)
+        )
+        guards.extend([
+            ShapeGuard(artifact.bias_name, 0, "eq", batch),
+            ShapeGuard(artifact.bias_name, 1, "eq", q_heads),
+            ShapeGuard(artifact.bias_name, 2, "eq", sq),
+            ShapeGuard(artifact.bias_name, 3, "eq", sk),
+        ])
+    output_ordinal = len(inputs)
+    buffers = tuple(inputs) + (
+        BufferBinding(output_ordinal, artifact.output_name, "output", "fp32", 4, "row_major", 4),
+    )
+    guards.extend([
+        ShapeGuard(artifact.output_name, 0, "eq", batch),
+        ShapeGuard(artifact.output_name, 1, "eq", q_heads),
+        ShapeGuard(artifact.output_name, 2, "eq", sq),
+        ShapeGuard(artifact.output_name, 3, "eq", value_dim),
+    ])
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=buffers, shape_guards=tuple(guards),
+        geometry=LaunchGeometry(policy="apple_msl_flash_attn_gqa"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-5A",
+            "route": "apple_gpu_flash_attn_variant_f32",
+            "op_kind": "attention",
+            "dims": list(artifact.dims),
+            "scale": artifact.scale,
+            "causal": artifact.causal,
+            "window": artifact.window_left,
+            "softcap": artifact.softcap,
+            "has_bias": artifact.bias_name is not None,
+            "storage": "f32",
+            "accum": "f32",
+            "backward_lse_policy": artifact.backward_lse_policy,
+            "backward_lse_selection": artifact.backward_lse_selection,
+            "recurrence": artifact.recurrence,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
 
 
 def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:

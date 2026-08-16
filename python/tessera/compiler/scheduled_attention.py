@@ -243,9 +243,34 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         workgroup_size = 256
         backward_lse_policy = "gfx1151_auto_128"
         backward_lse_selection = "saved" if dims[3] >= 128 else "recompute"
+    elif target == "apple_gpu":
+        from .apple_native import _attention_contract as _apple_attention_contract
+
+        apple_physical = _apple_attention_contract(module)
+        if apple_physical is None:
+            raise ValueError("unsupported Apple GPU scheduled attention contract")
+        (
+            names,
+            bias_name,
+            output_name,
+            dims,
+            scale,
+            causal,
+            window,
+            softcap,
+        ) = apple_physical
+        dtype, storage = "fp32", "f32"
+        # The Apple ABI carries one symmetric window extent and no dropout.
+        window_left = window_right = window
+        dropout_p, dropout_seed = 0.0, 0
+        compiler_target, architecture = "apple_gpu", "apple7"
+        workgroup_size = 1
+        # Apple's backward recomputes m/l per query row and its ABI takes no LSE
+        # buffer (APPLE-ATTN-STREAM-1), so it owns an explicit recompute policy.
+        backward_lse_policy, backward_lse_selection = "apple7_recompute", "recompute"
     else:
         raise ValueError(
-            "scheduled attention supports only x86 and rocm_gfx1151; "
+            "scheduled attention supports only x86, rocm_gfx1151, and apple_gpu; "
             "gfx1200/gfx1250 require architecture-owned profiles and evidence"
         )
     function = module.functions[0]

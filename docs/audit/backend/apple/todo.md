@@ -3347,3 +3347,131 @@ Apple shape when G5 opens, since it rides the existing online-softmax emitter;
 the remaining eight need the G1b butterfly lowering and the solver needs the
 PDE plan's phase. No on-Mac evidence is claimed or required — nothing here
 changes a Metal/MPS surface.
+
+## E2E-REAL-3-APPLE-GPU-MATMUL-2026-08-15 — Apple GPU joins the shared scheduled-matmul boundary
+
+**Landed — compiler-boundary + on-Mac correctness; device-time promotion still
+gated.** This closes the Apple-GPU half of the 2026-08-05
+`E2E-REAL-SCHEDULED-MATMUL` / `E2E-REAL-PHYSICAL-CONSUMERS` follow-ups: the
+Apple GPU backend now **consumes** the shared `Graph → Schedule → launch-Tile`
+matmul artifact instead of re-classifying the `GraphIRModule`.
+
+What landed (WS-1 first slice of the Apple compiler-foundation integration):
+
+- **C++** `getMatmulSchedule` (`PMPasses.cpp`) admits `apple_gpu` static rank-2
+  f32→f32 (arch `apple7`, logical 16×16 macro-tile). One decision function
+  unlocks both `--tessera-graph-to-schedule` and `--tessera-schedule-to-tile`;
+  the emitted `tile.matmul_kernel` uses `family = "auto"`. Fail-closed tamper
+  fixtures unchanged.
+- **Python** `apple_native.package_scheduled_matmul` consumes `artifact.tile_ir`
+  verbatim (no Graph re-entry) and binds the proven
+  `tessera_apple_gpu_bmm_f32` **batch-1** route (`apple_gpu_bmm_f32_batch1`,
+  sealed by APPLE-NATIVE-E2E-2). Apple GPU has no rank-2 f32 cooperative-matrix
+  GEMM, so the shared macro-tile/mma decision is a **named dropped decision**
+  (`dropped_reason = "delegated_to_mps_bmm"`) per E2E §0.2 point 5, not a silent
+  loss. `scheduled_matmul._graph_contract` gained the matching apple_gpu branch;
+  the driver gained an isolated apple_gpu scheduled block + dispatch (zero risk
+  to x86/ROCm); the BMM runtime submit accepts rank-2 operands as batch-1
+  (`runtime.py` only — no `apple_gpu_runtime.mm` fingerprint impact).
+
+Evidence, on the owning Mac (M1 Max / apple7, LLVM/MLIR 23 `build-apple`):
+
+- Lit: `tests/tessera-ir/phase2/e2e_matmul_graph_schedule_tile.mlir` gains an
+  Apple typed instance beside x86/ROCm — 4/4 e2e_matmul fixtures pass; the three
+  fail-closed fixtures still reject.
+- Unit: `tests/unit/test_scheduled_matmul_consumers.py` — package consumption,
+  non-apple-contract rejection, and driver lineage adjacency
+  (`test_driver_records_adjacent_scheduled_matmul_lineage[apple_gpu]`) pass
+  host-free.
+- **Exact-device**: `test_apple_gpu_scheduled_matmul_executes_exact_artifact`
+  ran on Metal for `16×16×16` and `17×19×23`, asserting `native_gpu` placement
+  and matching the NumPy oracle — not a `reference_cpu` fallback.
+
+NVIDIA and ROCm are not applicable: no shared IR, sibling ABI, or schedule
+changed; the C++ branch is target-guarded to `apple_gpu`.
+
+### Update 2026-08-15b — softmax (E2E-REAL-5) and f16 simdgroup matmul landed
+
+Two more WS-1 families now consume the shared scheduled boundary on Apple GPU,
+each with on-Mac exact-device proof (M1 Max / apple7):
+
+- **Softmax (E2E-REAL-5).** `apple_native.package_scheduled_kernel` consumes the
+  shared `schedule.softmax → tile.softmax_kernel` artifact and binds the native
+  MSL `tessera_apple_gpu_softmax_f32` route (which *does* expose a device timer,
+  so it is not DEVICE-EVENT-1 gated). The C++ `getSemanticKernelSchedule` admits
+  `apple_gpu` f32 softmax and **fails closed on reduction** (no Apple GPU
+  scheduled reduce consumer). Rank-2 f32 softmax now migrates to this boundary
+  by default; `test_apple_gpu_package_trace_uses_descriptor_provenance` was
+  updated (work_item `APPLE-E2E-1 → E2E-REAL-5`), and the direct descriptor
+  route stays covered by `test_apple_softmax_package_hashes_dylib_and_names_abi`.
+  Exact-device: `test_apple_gpu_scheduled_softmax_executes_exact_artifact`.
+- **f16→f32 simdgroup matmul.** `package_scheduled_matmul` now dispatches by
+  dtype: f32 → batch-1 MPS BMM (above), **f16 → the compiler-emitted
+  `simdgroup_matrix` MSL GEMM** (`tessera_apple_gpu_tile_simdgroup_gemm_f16`,
+  APPLE-TILE-1). The C++ `getMatmulSchedule` gained an apple7 f16→f32 branch
+  (32×32 macro tile); `_submit_apple_gpu_native` gained a simdgroup descriptor
+  branch that reuses the proven TILE-1 materializer + dispatch. **This route
+  honors the scheduled tile and has a device timer, so it is NOT gated by
+  APPLE-DEVICE-EVENT-1** (`device_time_promotion = "eligible"`) — it is the
+  intended lift of that gate for matmul. Exact-device:
+  `test_apple_gpu_scheduled_simdgroup_f16_executes_exact_artifact` (16³ and
+  48×32×80 on Metal).
+
+Consolidated: 121 shared/apple scheduled + e2e-spine + fleet + lineage tests
+pass, 9 skipped (x86/rocm device lanes), 0 failed. Lit: the shared
+`e2e_matmul_graph_schedule_tile.mlir` and `e2e_semantic_kernel_graph_schedule_tile.mlir`
+each carry Apple typed instances and pass 100%.
+
+### Update 2026-08-15c — rank-4 forward attention (E2E-REAL-5A) landed
+
+Apple GPU now consumes the shared `schedule.attention → tile.attention_kernel`
+artifact, closing the last *forward* WS-1 family. This is the item the
+2026-08-05 `E2E-REAL-ATTENTION` sync recorded as "Apple must define an
+architecture-owned schedule instance … x86 and gfx1151 schedules and evidence do
+not transfer."
+
+- **Apple owns its LSE identity.** `schedule.attention` gained a third declared
+  backward-LSE policy, `apple7_recompute` (`ScheduleDialect.cpp`), because
+  Apple's backward recomputes m/l per query row and its ABI takes no LSE buffer
+  (APPLE-ATTN-STREAM-1). The verifier allowlist stays closed by design — Apple
+  declares its own identity rather than inheriting x86's `save_lse` or the
+  gfx1151 threshold.
+- **Consumer:** `apple_native.package_scheduled_attention` binds
+  `tessera_apple_gpu_flash_attn_variant_f32_status` — the **status-returning**
+  GQA MSL route from APPLE-ATTN-FWD-1. Because it reports placement, a
+  numerically-correct CPU fallback cannot be sealed as GPU evidence
+  (APPLE-PLACEMENT-ABI-1).
+- **Two ABI facts were read off the MSL kernel, not assumed** (both had to be
+  corrected against a first wrong guess, and both are now commented at the call
+  site): its `B` operand is the **flattened `batch × q_heads`** extent, and
+  `window_size` is active only when `> 0`, so the canonical "no window" request
+  (`-1`) is passed as `0`.
+- **Envelope, enforced in both owners (C++ gate + Python recognizer), never
+  narrowed:** f32 storage, MHA/GQA/MQA with whole group size, shared
+  head/value dim, `D <= 256`, **no live window**, no dropout. The window
+  exclusion is deliberate: the MSL non-causal window is a *symmetric
+  half-window* (`window_size/2` per side), which is **not** the shared
+  `window_left`/`window_right` semantics — admitting it would silently compute a
+  different mask than the program requested. Windowed Apple attention needs its
+  own contract and oracle.
+
+Evidence (M1 Max / apple7): new shared fixture
+`tests/tessera-ir/phase2/e2e_attention_graph_schedule_tile.mlir` carries x86 and
+Apple typed instances and passes; four **exact-device** Metal configurations
+(GQA, MHA batch-2, MQA, causal) execute with `native_gpu` placement and match the
+NumPy oracle at f32 epsilon (~1e-7 max abs error); a five-way envelope test
+proves each out-of-envelope request fails closed. Consolidated: **230 passed /
+11 skipped / 0 failed** across the scheduled, e2e-spine, fleet, lineage, and
+Apple attention/MLA/MPSGraph suites.
+
+**Pre-existing lit failures, proven not mine.** `lit tests/tessera-ir/phase2/`
+reports 14 failures in this Apple-only `build-apple` (x86/ROCm fixtures whose
+dialects are not configured). The failing set is **byte-identical** with this
+work stashed and applied, so no regression was introduced; the honest reading is
+that this host cannot evaluate those lanes.
+
+Still open on Apple WS-1: **attention backward** (E2E-REAL-5B) has no Apple
+scheduled consumer and is gated separately; scheduled **reduction** has no Apple
+GPU consumer; and the f32 BMM matmul route remains DEVICE-EVENT-1 gated for
+device-time promotion (correctness/boundary only). Windowed attention and
+f16/bf16 attention storage are out of the admitted envelope.

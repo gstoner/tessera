@@ -56,13 +56,58 @@ def _module(*, target: str, bias: bool = False, query_rows: int = 17) -> GraphIR
     )
 
 
+def _apple_module(
+    *,
+    dims: tuple[int, int, int, int, int] = (1, 4, 2, 8, 8),
+    head_dim: int = 16,
+    causal: bool = False,
+    window: int = -1,
+    value_dim: int | None = None,
+) -> GraphIRModule:
+    """Rank-4 f32 module inside the Apple GQA MSL ABI envelope.
+
+    Kept separate from ``_module``: the x86 shape uses head_dim != value_dim,
+    which the Apple ABI does not accept (it shares one head/value dim).
+    """
+    b, hq, hkv, sq, sk = dims
+    dv = head_dim if value_dim is None else value_dim
+    def _t(shape: tuple[int, ...], element: str = "f32", dtype: str = "fp32") -> IRType:
+        text = "tensor<" + "x".join(map(str, shape)) + f"x{element}>"
+        return IRType(text, tuple(map(str, shape)), dtype)
+    q = _t((b, hq, sq, head_dim))
+    k = _t((b, hkv, sk, head_dim))
+    v = _t((b, hkv, sk, dv))
+    o = _t((b, hq, sq, dv))
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="apple_scheduled_attention",
+        args=[IRArg("q", q), IRArg("k", k), IRArg("v", v)],
+        result_types=[o],
+        body=[IROp(
+            result="o", op_name="tessera.flash_attn",
+            operands=["%q", "%k", "%v"],
+            operand_types=[str(q), str(k), str(v)],
+            result_type=str(o),
+            kwargs={"scale": 0.25, "causal": causal, "window": window,
+                    "softcap": 0.0, "dropout_p": 0.0, "dropout_seed": 0},
+        )],
+        return_values=["%o"],
+    )])
+
+
 def _artifact(*, target: str) -> ScheduledAttentionArtifact:
     rocm = target == "rocm"
+    apple = target == "apple_gpu"
     digest = hashlib.sha256(f"attention-{target}".encode()).hexdigest()
-    policy = "gfx1151_auto_128" if rocm else "save_lse"
-    selection = "recompute" if rocm else "saved"
+    policy = (
+        "apple7_recompute" if apple else "gfx1151_auto_128" if rocm else "save_lse"
+    )
+    selection = "saved" if (not rocm and not apple) else "recompute"
     storage, dtype = ("f16", "fp16") if rocm else ("f32", "fp32")
-    dims = (1, 4, 2, 17, 19, 64, 64) if rocm else (1, 2, 2, 5, 7, 4, 3)
+    dims = (
+        (1, 4, 2, 8, 8, 16, 16) if apple
+        else (1, 4, 2, 17, 19, 64, 64) if rocm
+        else (1, 2, 2, 5, 7, 4, 3)
+    )
     workgroup = 256 if rocm else 1
     tile_ir = f'''module {{
   llvm.func @{target}_scheduled_attention() {{
@@ -88,7 +133,7 @@ def _artifact(*, target: str) -> ScheduledAttentionArtifact:
           "tessera_attn.boundary_mask"() : () -> () } }""",
         tile_ir=tile_ir,
         target=target,
-        architecture="gfx1151" if rocm else "zen5-avx512",
+        architecture="apple7" if apple else "gfx1151" if rocm else "zen5-avx512",
         function_name=f"{target}_scheduled_attention",
         q_name="q",
         k_name="k",
@@ -194,6 +239,133 @@ def test_rocm_packages_exact_attention_tile(monkeypatch) -> None:
     assert package.tile_ir == artifact.tile_ir
     assert package.descriptor.provenance["work_item"] == "E2E-REAL-5A"
     assert package.descriptor.provenance["backward_lse_selection"] == "recompute"
+
+
+def test_apple_gpu_packages_exact_attention_tile(monkeypatch, tmp_path) -> None:
+    from tessera.compiler import apple_native
+
+    artifact = _artifact(target="apple_gpu")
+    fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    fake_dylib.write_bytes(b"apple-runtime-image")
+    monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+
+    package = apple_native.package_scheduled_attention(
+        artifact, pipeline_name="tessera-lower-to-apple_gpu"
+    )
+    # Consumes the shared launch tile verbatim — no Graph re-entry.
+    assert package.tile_ir == artifact.tile_ir
+    assert package.descriptor.entry_symbol == (
+        "tessera_apple_gpu_flash_attn_variant_f32_status"
+    )
+    assert package.descriptor.provenance["work_item"] == "E2E-REAL-5A"
+    assert package.descriptor.provenance["route"] == "apple_gpu_flash_attn_variant_f32"
+    # Apple owns its recompute policy; it must not inherit x86's save_lse.
+    assert package.descriptor.provenance["backward_lse_policy"] == "apple7_recompute"
+    assert package.descriptor.provenance["backward_lse_selection"] == "recompute"
+    assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
+    assert package.descriptor.provenance["tile_ir_digest"] == artifact.tile_digest
+
+
+def test_apple_gpu_attention_rejects_foreign_lse_policy(monkeypatch, tmp_path) -> None:
+    from tessera.compiler import apple_native
+
+    fake_dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    fake_dylib.write_bytes(b"apple-runtime-image")
+    monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: fake_dylib)
+    # An x86 artifact is structurally valid but carries save_lse/saved.
+    with pytest.raises(ValueError, match="apple7 f32 recompute policy"):
+        apple_native.package_scheduled_attention(
+            _artifact(target="x86"), pipeline_name="tessera-lower-to-apple_gpu"
+        )
+
+
+@pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
+def test_apple_gpu_attention_envelope_fails_closed() -> None:
+    """Requests outside the Apple GQA ABI envelope must not be silently narrowed."""
+    supports = scheduled_attention.supports_scheduled_attention
+    # In-envelope: GQA, shared head/value dim, no window, no dropout.
+    assert supports(_apple_module(), target="apple_gpu")
+    assert supports(_apple_module(causal=True), target="apple_gpu")
+    # head_dim != value_dim — the ABI shares one dim.
+    assert not supports(_apple_module(value_dim=8), target="apple_gpu")
+    # A live window: the MSL non-causal window is a symmetric half-window, which
+    # is not the shared window_left/window_right semantics.
+    assert not supports(_apple_module(window=4), target="apple_gpu")
+    # q_heads must be a whole multiple of kv_heads.
+    assert not supports(_apple_module(dims=(1, 3, 2, 8, 8)), target="apple_gpu")
+    # D > 256 exceeds the kernel's TESSERA_GQA_MAX_D bound.
+    assert not supports(_apple_module(head_dim=512), target="apple_gpu")
+
+
+@pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
+def test_apple_attention_lowers_through_one_content_addressed_tile_artifact() -> None:
+    artifact = scheduled_attention.lower_scheduled_attention(
+        _apple_module(), target="apple_gpu"
+    )
+    assert artifact.schedule_ir.count("schedule.attention") == 1
+    assert artifact.tile_ir.count("tile.attention_kernel") == 1
+    assert "tessera.flash_attn" not in artifact.tile_ir
+    assert "schedule." not in artifact.tile_ir
+    assert artifact.backward_lse_policy == "apple7_recompute"
+    assert artifact.architecture == "apple7"
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
+@pytest.mark.parametrize(
+    "dims,causal",
+    [
+        ((1, 4, 2, 8, 8), False),    # GQA
+        ((2, 4, 4, 16, 16), False),  # MHA, batch 2
+        ((1, 4, 1, 8, 8), False),    # MQA
+        ((1, 2, 2, 8, 8), True),     # causal
+    ],
+)
+def test_apple_gpu_scheduled_attention_executes_exact_artifact(dims, causal) -> None:
+    from tessera.compiler import apple_native
+
+    if not apple_native.tools_available():
+        pytest.skip("Apple GPU runtime dylib unavailable")
+    b, hq, hkv, sq, sk = dims
+    head_dim = 16
+    bundle = compile_graph_module(
+        _apple_module(dims=dims, head_dim=head_dim, causal=causal),
+        source_origin="e2e-real-5a-exact-device", target="apple_gpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    assert bundle.native_image is not None and bundle.launch_descriptor is not None
+    assert bundle.tile is not None and bundle.target_ir is not None
+    assert bundle.lineage_complete
+    assert bundle.launch_descriptor.provenance["route"] == "apple_gpu_flash_attn_variant_f32"
+    runtime_artifact = rt.RuntimeArtifact(
+        metadata={"target": "apple_gpu"}, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor, tile_ir=bundle.tile.text,
+        target_ir=bundle.target_ir.text,
+    )
+    rng = np.random.default_rng(5901)
+    q = np.ascontiguousarray(rng.standard_normal((b, hq, sq, head_dim)), dtype=np.float32)
+    k = np.ascontiguousarray(rng.standard_normal((b, hkv, sk, head_dim)), dtype=np.float32)
+    v = np.ascontiguousarray(rng.standard_normal((b, hkv, sk, head_dim)), dtype=np.float32)
+    out = np.zeros((b, hq, sq, head_dim), dtype=np.float32)
+
+    result = rt.launch(runtime_artifact, {"q": q, "k": k, "v": v, "o": out})
+
+    assert result["ok"] is True, result.get("reason")
+    # The status-returning ABI proves placement; a CPU reference cannot pass.
+    assert result.get("execution_kind") == "native_gpu", result
+    group = hq // hkv
+    k_expanded, v_expanded = np.repeat(k, group, axis=1), np.repeat(v, group, axis=1)
+    scores = np.einsum("bhqd,bhkd->bhqk", q, k_expanded) * 0.25
+    if causal:
+        offset = max(sk - sq, 0)
+        rows = np.arange(sq)[:, None] + offset
+        cols = np.arange(sk)[None, :]
+        scores = np.where(cols <= rows, scores, -np.inf)
+    scores = scores - scores.max(axis=-1, keepdims=True)
+    probs = np.exp(scores)
+    probs /= probs.sum(axis=-1, keepdims=True)
+    expected = np.einsum("bhqk,bhkd->bhqd", probs, v_expanded)
+    np.testing.assert_allclose(out, expected, rtol=2e-5, atol=2e-5)
 
 
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])

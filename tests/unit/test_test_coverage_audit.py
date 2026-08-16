@@ -283,6 +283,23 @@ def test_dashboard_headline_numbers_match_live_scan() -> None:
 # PR #568 classified `structural_only` despite having dedicated suites.
 
 
+def _synthetic_dotted_call(module: str, op: str) -> tuple[str, str]:
+    """Build ``module.op`` and ``tessera.module.op`` sample text.
+
+    Same rationale as ``_synthetic_import``: writing the literal dotted
+    form directly in this file — module name, then a dot, then an op
+    name, adjacent in the source text — would BE a real reference as far
+    as the scanner is concerned, since it reads this file's raw bytes
+    like any other file under ``tests/unit/``.  (Note: even this
+    docstring has to describe the shape rather than show one — spelling
+    an example out is exactly the mistake this helper exists to avoid.)
+    Callers must pass ``module``/``op`` as separate arguments (as done
+    here) so the joined form only ever exists at runtime, never in the
+    source.
+    """
+    return f"{module}.{op}", f"tessera.{module}.{op}"
+
+
 def _synthetic_import(module: str, name: str) -> str:
     """Build a sample import line WITHOUT writing it as a literal.
 
@@ -379,3 +396,63 @@ def test_dotted_calls_are_not_double_counted() -> None:
     assert len(offsets) == 1, (
         f"the dotted call was double-counted by the binding scan: {offsets}"
     )
+
+
+def test_dotted_call_into_prefixed_family_resolves_to_registry_name() -> None:
+    """A dotted call into a module-prefixed family — both the short
+    form and the fully-qualified form — resolves to the registry name.
+
+    Regression pin for a PR #569 review finding: the combined-regex path
+    (dotted calls, as opposed to imports) captured the module's short
+    name with no knowledge of ``_MODULE_PREFIXED_FAMILIES``, so a suite
+    written in the dotted-call style would score zero for every
+    ``game_*`` op despite real references — exactly the failure mode
+    this whole scanner rewrite exists to fix.
+
+    (No dotted form is written as a literal anywhere in this test file —
+    see ``_synthetic_dotted_call``.)
+    """
+    from tessera.compiler import test_coverage_audit as tca
+
+    short, qualified = _synthetic_dotted_call("game", "subset_zeta")
+    registry = frozenset({"game_subset_zeta"})
+    text = f"import tessera.game as game\nx = {short}(v)\ny = {qualified}(w)\n"
+    resolved = [
+        tca._resolve_py_match(m, registry)
+        for m in tca._PY_OP_REFERENCE_RE.finditer(text)
+    ]
+    assert resolved == ["game_subset_zeta", "game_subset_zeta"], (
+        f"dotted calls into a prefixed family did not resolve to the "
+        f"registry name: {resolved}"
+    )
+
+
+def test_dotted_call_into_prefixed_family_ignores_non_op_names() -> None:
+    """A dotted call to a non-op helper in a prefixed family must not
+    fabricate a bogus registry key — a helper name that isn't itself
+    registered (prefixed or not) must resolve to nothing."""
+    from tessera.compiler import test_coverage_audit as tca
+
+    short, _qualified = _synthetic_dotted_call("game", "lattice_players")
+    registry = frozenset({"game_subset_zeta"})  # lattice_players NOT registered
+    text = f"{short}(n)\n"
+    matches = [
+        tca._resolve_py_match(m, registry)
+        for m in tca._PY_OP_REFERENCE_RE.finditer(text)
+    ]
+    assert matches == [None], f"expected the unregistered helper to be dropped, got {matches}"
+
+
+def test_dotted_call_into_non_prefixed_family_is_unaffected() -> None:
+    """A family module NOT in ``_MODULE_PREFIXED_FAMILIES`` must resolve
+    a dotted call unchanged, straight to its own name."""
+    from tessera.compiler import test_coverage_audit as tca
+
+    short, _qualified = _synthetic_dotted_call("optim", "sgd")
+    registry = frozenset({"sgd"})
+    text = f"{short}(params, lr)\n"
+    matches = [
+        tca._resolve_py_match(m, registry)
+        for m in tca._PY_OP_REFERENCE_RE.finditer(text)
+    ]
+    assert matches == ["sgd"]

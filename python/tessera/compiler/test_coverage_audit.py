@@ -294,20 +294,59 @@ def _all_op_names() -> tuple[str, ...]:
 # so we use anonymous groups and pick whichever fired.
 _OP_NAME_RE = r"([a-zA-Z_][a-zA-Z0-9_]*)"
 _TRAINING_OP_NAME_RE = r"(training\.[a-zA-Z_][a-zA-Z0-9_]*)"
-_PY_OP_REFERENCE_RE = re.compile(
-    rf'"tessera\.{_TRAINING_OP_NAME_RE}"'
-    rf"|\b(?:tessera|ts)\.ops\.{_OP_NAME_RE}\b"
-    rf"|(?<![A-Za-z0-9_])ops\.{_OP_NAME_RE}\b"
-    rf'|"tessera\.{_OP_NAME_RE}"'
+
+# Each entry is (pattern, owning_module).  ``owning_module`` is the
+# family module a dotted call belongs to (``"game"`` for
+# ``game.subset_zeta(...)``), or ``None`` for the module-agnostic forms
+# (``tessera.ops.*`` / ``ops.*`` / the MLIR-string form).  Built as a list
+# of parts — rather than one f-string — so the group-index-to-module
+# mapping below can be derived from the same source instead of hand-counted.
+_PY_OP_REFERENCE_PARTS: tuple[tuple[str, str | None], ...] = (
+    (rf'"tessera\.{_TRAINING_OP_NAME_RE}"', None),
+    (rf"\b(?:tessera|ts)\.ops\.{_OP_NAME_RE}\b", None),
+    (rf"(?<![A-Za-z0-9_])ops\.{_OP_NAME_RE}\b", None),
+    (rf'"tessera\.{_OP_NAME_RE}"', None),
     # NOTE: the ``from tessera.<mod> import ...`` alternatives that used
     # to live here are owned by ``_import_binding_refs`` — see the
     # comment above ``_FAMILY_IMPORT_RE``.
-    + "".join(
-        rf"|\btessera\.{mod}\.{_OP_NAME_RE}\b"
-        rf"|(?<![A-Za-z0-9_]){mod}\.{_OP_NAME_RE}\b"
-        for mod in _FAMILY_MODULES
+) + tuple(
+    part
+    for mod in _FAMILY_MODULES
+    for part in (
+        (rf"\btessera\.{mod}\.{_OP_NAME_RE}\b", mod),
+        (rf"(?<![A-Za-z0-9_]){mod}\.{_OP_NAME_RE}\b", mod),
     )
 )
+
+_PY_OP_REFERENCE_RE = re.compile(
+    "|".join(pattern for pattern, _module in _PY_OP_REFERENCE_PARTS)
+)
+
+# 1-based group index -> owning module (or None), so a match's
+# ``m.lastindex`` tells us which alternative fired without needing named
+# groups (which ``re`` forbids duplicating across alternatives).  Every
+# part above has exactly one capturing group, so group order == part order.
+_PY_OP_REFERENCE_GROUP_MODULE: tuple[str | None, ...] = tuple(
+    module for _pattern, module in _PY_OP_REFERENCE_PARTS
+)
+
+
+def _resolve_py_match(m: re.Match[str], registry: frozenset[str]) -> str | None:
+    """Turn one ``_PY_OP_REFERENCE_RE`` match into a registry op name.
+
+    Returns ``None`` when the match doesn't resolve to a registry op
+    (e.g. a dotted call into a module-prefixed family whose short name
+    isn't a registered op — a helper, not an op).
+    """
+    name = next((g for g in m.groups() if g is not None), None)
+    if name is None:
+        return None
+    module = (
+        _PY_OP_REFERENCE_GROUP_MODULE[m.lastindex - 1] if m.lastindex else None
+    )
+    if module in _MODULE_PREFIXED_FAMILIES:
+        return _resolve_family_op(module, name, registry)
+    return name
 
 _LIT_OP_REFERENCE_RE = re.compile(
     rf'"tessera(?:\.[a-z_]+)?\.{_OP_NAME_RE}"'
@@ -433,14 +472,15 @@ def _scan_all_files_vectorized() -> tuple[
             text = path.read_text(errors="replace")
         except OSError:
             continue
-        # Match all op references in one go.
+        # Match all op references in one go.  ``_resolve_py_match`` maps
+        # a dotted call into a module-prefixed family (e.g.
+        # ``game.subset_zeta(...)``) back to its registry key
+        # (``game_subset_zeta``) — without it, that reference is recorded
+        # under a key no registry op has and is silently dropped by
+        # ``collect_op_test_coverage``'s ``for op in all_ops`` loop.
         any_matches = False
         for m in _PY_OP_REFERENCE_RE.finditer(text):
-            # One named group fires per alternative; pick the
-            # non-None capture.
-            name = next(
-                (g for g in m.groups() if g is not None), None
-            )
+            name = _resolve_py_match(m, registry)
             if name is None:
                 continue
             any_matches = True

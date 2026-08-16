@@ -203,6 +203,12 @@ def test_driver_records_adjacent_semantic_kernel_lineage(monkeypatch, tmp_path, 
     monkeypatch.setattr(
         scheduled_kernel, "lower_scheduled_kernel", lambda module, *, target: artifact
     )
+    # Host-free lineage proof: the lowering is stubbed, so pin the Apple
+    # scheduled-boundary availability rather than depending on whether the
+    # runner happens to have a built tessera-opt.
+    from tessera.compiler import driver as _driver
+
+    monkeypatch.setattr(_driver, "_apple_scheduled_boundary_available", lambda: True)
     if target == "x86":
         monkeypatch.setattr(
             x86_native, "_lower",
@@ -300,35 +306,83 @@ def test_gfx1151_scheduled_semantic_kernel_executes_exact_artifact(family) -> No
     np.testing.assert_allclose(output, expected, rtol=2e-5, atol=2e-5)
 
 
+def test_apple_scheduled_boundary_falls_back_without_tessera_opt(monkeypatch, tmp_path) -> None:
+    """A runtime-only Apple install must not hard-fail.
+
+    The shared scheduled artifact is produced by running production
+    ``tessera-opt``. When that tool is absent the driver must leave Apple on its
+    independently proven descriptor route rather than entering a lane it cannot
+    produce — the regression this locks is a `RuntimeError: scheduled
+    softmax/reduction lowering requires production tessera-opt` raised from an
+    ordinary rank-2 f32 softmax compile.
+    """
+    from tessera.compiler import apple_native
+    from tessera.compiler import driver as _driver
+
+    dylib = tmp_path / "libTesseraAppleRuntime.dylib"
+    dylib.write_bytes(b"apple-runtime-image")
+    monkeypatch.setattr(apple_native, "_runtime_library_path", lambda: dylib)
+    monkeypatch.setattr(_driver, "_apple_scheduled_boundary_available", lambda: False)
+
+    bundle = compile_graph_module(
+        _softmax_module((3, 17)), source_origin="no-tessera-opt",
+        target="apple_gpu", options={"package_native": True},
+        enable_tool_validation=False,
+    )
+    event = next(e for e in bundle.trace_events
+                 if e.pass_name == "apple-gpu-native-package")
+    assert event.metadata["op_family"] == "softmax"
+    assert event.metadata["work_item"] == "APPLE-E2E-1"
+
+
+def _softmax_module(shape: tuple[int, ...]) -> GraphIRModule:
+    x = IRType("tensor<" + "x".join(map(str, shape)) + "xf32>",
+               tuple(map(str, shape)), "fp32")
+    return GraphIRModule(functions=[GraphIRFunction(
+        name="apple_softmax", args=[IRArg("x", x)], result_types=[x],
+        body=[IROp(result="o", op_name="tessera.softmax", operands=["%x"],
+                   operand_types=[str(x)], result_type=str(x),
+                   kwargs={"axis": -1})],
+        return_values=["%o"],
+    )])
+
+
 @pytest.mark.hardware_apple_gpu
 @pytest.mark.skipif(
     find_tessera_opt() is None,
     reason="Apple GPU runtime dylib / tessera-opt unavailable",
 )
-def test_apple_gpu_scheduled_softmax_executes_exact_artifact() -> None:
+@pytest.mark.parametrize("shape", [(6, 5), (2, 3, 5), (2, 3, 4, 7)])
+def test_apple_gpu_scheduled_softmax_executes_exact_artifact(shape) -> None:
+    """Launch with the module's own LOGICAL shape, not a pre-flattened one.
+
+    The descriptor binds the logical rank, so a rank-N graph must launch with
+    its declared shape; the flatten to (rows, columns) happens at submission and
+    is exact because softmax rows are independent.  Passing an already-flattened
+    buffer here would hide a rank mismatch in the binding contract.
+    """
     from tessera.compiler import apple_native
 
     if not apple_native.tools_available():
         pytest.skip("Apple GPU runtime dylib unavailable")
-    # rank-2 rows x columns: the shared launch tile flattens leading dims, and
-    # the Apple MSL softmax ABI is rank-2.  softmax rows are independent, so a
-    # [6, 5] launch is exact for the [2, 3, 5] logical module.
-    module = _module(family="softmax", target="apple_gpu")
     bundle = compile_graph_module(
-        module, source_origin="e2e-real-5-exact-device", target="apple_gpu",
-        options={"package_native": True}, enable_tool_validation=False,
+        _softmax_module(shape), source_origin="e2e-real-5-exact-device",
+        target="apple_gpu", options={"package_native": True},
+        enable_tool_validation=False,
     )
     assert bundle.native_image is not None and bundle.launch_descriptor is not None
     assert bundle.tile is not None and bundle.target_ir is not None
     assert bundle.launch_descriptor.provenance["route"] == "apple_softmax_native_library"
     assert bundle.launch_descriptor.provenance["work_item"] == "E2E-REAL-5"
+    # The binding must carry the logical rank, not a flattened rank-2.
+    assert [item.rank for item in bundle.launch_descriptor.buffers] == [len(shape)] * 2
     runtime_artifact = rt.RuntimeArtifact(
         metadata={"target": "apple_gpu"}, native_image=bundle.native_image,
         launch_descriptor=bundle.launch_descriptor, tile_ir=bundle.tile.text,
         target_ir=bundle.target_ir.text,
     )
     rng = np.random.default_rng(5115)
-    x = np.ascontiguousarray(rng.standard_normal((6, 5)), dtype=np.float32)
+    x = np.ascontiguousarray(rng.standard_normal(shape), dtype=np.float32)
     output = np.zeros_like(x)
     result = rt.launch(runtime_artifact, {"x": x, "o": output})
     assert result["ok"] is True, result.get("reason")

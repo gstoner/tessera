@@ -286,6 +286,12 @@ def test_driver_records_adjacent_scheduled_matmul_lineage(
         "lower_scheduled_matmul",
         lambda module, *, target: artifact,
     )
+    # This lineage proof is host-free: the lowering is stubbed above, so pin the
+    # Apple scheduled-boundary availability too. Otherwise the assertion would
+    # silently depend on whether the runner happens to have a built tessera-opt.
+    from tessera.compiler import driver as _driver
+
+    monkeypatch.setattr(_driver, "_apple_scheduled_boundary_available", lambda: True)
     if target == "x86":
         monkeypatch.setattr(
             x86_native,

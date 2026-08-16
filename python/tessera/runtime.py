@@ -39,7 +39,7 @@ import time
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, cast
 
 from .telemetry import TELEMETRY_SCHEMA_VERSION, make_event, telemetry_report
 from .compiler.capabilities import get_target_capability, normalize_target, runtime_status as compiler_runtime_status
@@ -5007,7 +5007,7 @@ def _submit_apple_gpu_native(
                for value in (q, k, v, out)):
             raise RuntimeError("Apple flash-attention descriptor requires contiguous f32 buffers")
         batch, q_heads, kv_heads, sq, sk, head_dim, value_dim = (
-            int(value) for value in provenance["dims"]
+            int(value) for value in cast(Sequence[int], provenance["dims"])
         )
         if (q.shape != (batch, q_heads, sq, head_dim)
                 or k.shape != (batch, kv_heads, sk, head_dim)
@@ -5039,19 +5039,21 @@ def _submit_apple_gpu_native(
         #  * `window_size` is active only when > 0, so the canonical
         #    "no window" request (-1) is passed as 0.  A negative value is
         #    rejected outright by the dispatch guard.
-        window = int(provenance["window"])
+        window = int(cast(int, provenance["window"]))
         window_size = window if window > 0 else 0
         status = int(function(
             attn_pointer(q), attn_pointer(k), attn_pointer(v),
-            attn_pointer(bias) if bias is not None else ctypes.cast(None, float_pointer),
+            # A NULL float* is the ABI's "no bias" encoding; calling the pointer
+            # type with no argument is the typed way to build it.
+            attn_pointer(bias) if bias is not None else float_pointer(),
             attn_pointer(out),
             ctypes.c_int32(batch * q_heads), ctypes.c_int32(q_heads),
             ctypes.c_int32(kv_heads),
             ctypes.c_int32(sq), ctypes.c_int32(sk), ctypes.c_int32(head_dim),
-            ctypes.c_float(float(provenance["scale"])),
+            ctypes.c_float(float(cast(float, provenance["scale"]))),
             ctypes.c_int32(1 if provenance["causal"] else 0),
             ctypes.c_int32(window_size),
-            ctypes.c_float(float(provenance["softcap"])),
+            ctypes.c_float(float(cast(float, provenance["softcap"]))),
         ))
         if status != 1:
             raise RuntimeError(
@@ -5085,7 +5087,7 @@ def _submit_apple_gpu_native(
             )
         if out.dtype != np.float32 or not out.flags.c_contiguous:
             raise RuntimeError("Apple simdgroup GEMM requires a contiguous f32 output")
-        block = descriptor.provenance.get("block") or [32, 32, 16]
+        block = cast(Sequence[int], descriptor.provenance.get("block") or [32, 32, 16])
         bm, bn, bk = (int(value) for value in block)
         artifact = materialize_apple_simdgroup_tile_msl(
             AppleGPUTargetProfile(AppleGPUArch.APPLE7), "fp16", bm, bn, bk,
@@ -5309,13 +5311,23 @@ def _submit_apple_gpu_native(
             raise RuntimeError("Apple softmax descriptor requires ndarray buffers")
         if any(value.dtype != softmax_dtype or not value.flags.c_contiguous for value in (x, out)):
             raise RuntimeError("Apple softmax descriptor requires contiguous buffers matching its storage dtype")
-        if x.ndim != 2 or out.shape != x.shape:
+        if x.ndim < 2 or out.shape != x.shape:
             raise RuntimeError("Apple softmax buffers disagree with descriptor static shape contract")
         if descriptor.abi_id == APPLE_SOFTMAX_DYNAMIC_F32_ABI:
+            if x.ndim != 2:
+                raise RuntimeError("Apple dynamic softmax requires rank-2 buffers")
             rows = int(cast(int, scalars["Rows"]))
             columns = int(cast(int, scalars["Columns"]))
             if (rows, columns) != tuple(x.shape) or rows <= 0 or columns <= 0:
                 raise RuntimeError("Apple dynamic softmax Rows/Columns scalars disagree with buffer shapes")
+        # The MSL softmax ABI is rank-2 (rows, columns).  The scheduled boundary
+        # (E2E-REAL-5) binds the LOGICAL rank, so a rank-N artifact arrives with
+        # its declared shape; flattening the leading dims is exact because
+        # softmax rows are independent.  Both operands are already required to
+        # be C-contiguous, so these reshapes are views, not copies — the kernel
+        # writes through `out`.
+        x = x.reshape(-1, x.shape[-1])
+        out = out.reshape(-1, out.shape[-1])
         runtime = _load_apple_gpu_runtime()
         function = getattr(runtime, softmax_symbol, None)
         if function is None:

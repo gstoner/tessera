@@ -406,6 +406,21 @@ def _package_artifacts(
     return tile, target, backend
 
 
+def _apple_scheduled_boundary_available() -> bool:
+    """Whether Apple may enter the shared scheduled Graph->Schedule->Tile lane.
+
+    The shared artifact is produced by running production ``tessera-opt``, so
+    without that tool there is nothing to consume.  A runtime-only install is
+    the common Apple case, and its descriptor route is independently proven —
+    so the honest behavior is to fall back to that route rather than fail the
+    compile.  Callers must consult this before treating a `supports_scheduled_*`
+    answer as a decision.
+    """
+    from .scheduled_matmul import find_tessera_opt
+
+    return find_tessera_opt() is not None
+
+
 def _scheduled_package_artifacts(
     graph: LoweringArtifact,
     schedule_text: str,
@@ -544,7 +559,11 @@ def compile_graph_module(
         # existing descriptor package route below.
         from . import scheduled_matmul
 
-        if scheduled_matmul.supports_scheduled_matmul(module, target=target_kind):
+        if not _apple_scheduled_boundary_available():
+            # No production tessera-opt: leave every family on the descriptor
+            # route below instead of entering a lane that cannot be produced.
+            pass
+        elif scheduled_matmul.supports_scheduled_matmul(module, target=target_kind):
             scheduled_matmul_artifact = scheduled_matmul.lower_scheduled_matmul(
                 module,
                 target=target_kind,
@@ -1205,10 +1224,17 @@ def canonical_compile_options(
                 native_package_kind(module) is not None
                 # E2E-REAL-3/5/5A — a rank-2 f32 matmul, f32 softmax, or rank-4
                 # f32 attention is not an Apple descriptor kind, but it is a
-                # shared scheduled-boundary consumer.
-                or supports_scheduled_matmul(module, target="apple_gpu")
-                or supports_scheduled_kernel(module, target="apple_gpu")
-                or supports_scheduled_attention(module, target="apple_gpu")
+                # shared scheduled-boundary consumer.  Only claim it when that
+                # boundary can actually be produced, or a runtime-only install
+                # would enable packaging for a family it cannot package.
+                or (
+                    _apple_scheduled_boundary_available()
+                    and (
+                        supports_scheduled_matmul(module, target="apple_gpu")
+                        or supports_scheduled_kernel(module, target="apple_gpu")
+                        or supports_scheduled_attention(module, target="apple_gpu")
+                    )
+                )
             )
         )
     if target_kind == "apple_cpu" and "package_native" not in resolved:

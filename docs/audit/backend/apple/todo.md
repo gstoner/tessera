@@ -3475,3 +3475,57 @@ scheduled consumer and is gated separately; scheduled **reduction** has no Apple
 GPU consumer; and the f32 BMM matmul route remains DEVICE-EVENT-1 gated for
 device-time promotion (correctness/boundary only). Windowed attention and
 f16/bf16 attention storage are out of the admitted envelope.
+
+#### PR #570 review findings — two real defects, both regression-locked
+
+Automated review of PR #570 found two P1 defects that the original tests did not
+catch. Both are recorded here because the *shape* of each is a recurring hazard
+in this codebase, not because the fix was large.
+
+1. **A live attention window was silently erased (fail-open).** The Apple
+   recognizer read only the `window` alias, so a mask expressed in the canonical
+   `window_left`/`window_right` pair defaulted to `-1` and was accepted as
+   *unwindowed* — and `lower_scheduled_attention` then wrote that `-1` back over
+   the operation's own attributes (`scheduled_attention.py:147`), erasing the
+   window and computing full attention instead of the requested mask. This is
+   precisely the failure the slice's own design note claimed to prevent, arriving
+   through a spelling the recognizer did not read. The recognizer now reads
+   **every** spelling present, requires them to agree, and fails closed on any
+   live, asymmetric, or self-disagreeing window. Locked by
+   `test_apple_gpu_attention_reads_every_window_spelling` (7 cases).
+2. **The softmax descriptor hard-coded rank 2, and the test hid it.** The shared
+   contract admits any positive rank and flattens leading dims into `rows`, but
+   the Apple bindings declared rank 2, so launching a rank-3 graph with its own
+   declared shape failed `E_LAUNCH_BINDING_MISMATCH` before submission — a
+   regression, since such a module previously just declined to package natively.
+   The original exact-device test masked this by passing a pre-flattened `(6,5)`
+   buffer for its logical `(2,3,5)` graph. The descriptor now binds the
+   **logical** rank and shape (matching the x86 consumer), and the flatten to
+   `(rows, columns)` happens at submission, where it is exact because softmax
+   rows are independent and both operands are already required C-contiguous (so
+   the reshapes are views, not copies). The test now launches with the logical
+   shape and is parametrized over rank 2/3/4, asserting the binding rank itself.
+
+The general lesson, worth carrying: **a test that constructs its input to match
+the implementation cannot falsify the implementation.** The rank bug was
+invisible for exactly as long as the test pre-flattened its own buffer.
+
+3. **A runtime-only Apple install hard-failed (found by CI, not by the local
+   suite).** The shared scheduled artifact is produced by *running* production
+   `tessera-opt`. The driver entered the Apple scheduled lane on the strength of
+   `supports_scheduled_*` alone, so on a host with no built compiler an ordinary
+   rank-2 f32 softmax raised `RuntimeError: scheduled softmax/reduction lowering
+   requires production tessera-opt` instead of using its descriptor route — a
+   regression, since that module previously just declined to package natively.
+   The `package_native` auto-enable had the same defect for rank-2 f32 matmul.
+   Both now consult `driver._apple_scheduled_boundary_available()`, and Apple
+   falls back to the independently proven descriptor route when the tool is
+   absent. Locked by
+   `test_apple_scheduled_boundary_falls_back_without_tessera_opt` and by
+   parametrizing the trace-provenance test over both worlds.
+
+   **This was invisible on the Mac** because the dev box always has a built
+   `tessera-opt`. The reproduction that matters is
+   `env -u TESSERA_OPT TESSERA_BUILD_DIR=/nonexistent python -m pytest …`,
+   which reproduces the CI host locally in seconds; the two host-free lineage
+   proofs now pin the predicate rather than inheriting whatever the runner has.

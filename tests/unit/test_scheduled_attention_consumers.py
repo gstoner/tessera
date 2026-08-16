@@ -279,6 +279,49 @@ def test_apple_gpu_attention_rejects_foreign_lse_policy(monkeypatch, tmp_path) -
         )
 
 
+def test_apple_gpu_attention_reads_every_window_spelling() -> None:
+    """A live window must fail closed in EVERY spelling it can arrive in.
+
+    Regression for a real fail-open: the recognizer read only the ``window``
+    alias, so a canonical ``window_left``/``window_right`` pair defaulted to -1
+    and was accepted as unwindowed — and ``lower_scheduled_attention`` then wrote
+    that -1 back over the operation's own attributes, erasing the window and
+    computing full attention instead of the requested mask.
+    """
+    supports = scheduled_attention.supports_scheduled_attention
+    def module(**kwargs) -> GraphIRModule:
+        base = dict(kwargs)
+        b, hq, hkv, sq, sk, d = 1, 4, 2, 8, 8, 16
+        def _t(shape):
+            return IRType("tensor<" + "x".join(map(str, shape)) + "xf32>",
+                          tuple(map(str, shape)), "fp32")
+        q, k, v = _t((b, hq, sq, d)), _t((b, hkv, sk, d)), _t((b, hkv, sk, d))
+        o = _t((b, hq, sq, d))
+        kw = {"scale": 0.25, "causal": False, "softcap": 0.0,
+              "dropout_p": 0.0, "dropout_seed": 0, **base}
+        return GraphIRModule(functions=[GraphIRFunction(
+            name="w", args=[IRArg("q", q), IRArg("k", k), IRArg("v", v)],
+            result_types=[o],
+            body=[IROp(result="o", op_name="tessera.flash_attn",
+                       operands=["%q", "%k", "%v"],
+                       operand_types=[str(q), str(k), str(v)],
+                       result_type=str(o), kwargs=kw)],
+            return_values=["%o"])])
+
+    # Unwindowed, in every spelling, is admitted.
+    assert supports(module(), target="apple_gpu")
+    assert supports(module(window=-1), target="apple_gpu")
+    assert supports(module(window_left=-1, window_right=-1), target="apple_gpu")
+    # A live window fails closed in every spelling.
+    assert not supports(module(window=4), target="apple_gpu")
+    assert not supports(module(window_left=4, window_right=4), target="apple_gpu")
+    # Asymmetric and self-disagreeing requests cannot be expressed by the ABI.
+    assert not supports(module(window_left=4, window_right=0), target="apple_gpu")
+    assert not supports(
+        module(window=-1, window_left=4, window_right=4), target="apple_gpu"
+    )
+
+
 @pytest.mark.skipif(find_tessera_opt() is None, reason="production tessera-opt unavailable")
 def test_apple_gpu_attention_envelope_fails_closed() -> None:
     """Requests outside the Apple GQA ABI envelope must not be silently narrowed."""

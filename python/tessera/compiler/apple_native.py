@@ -716,15 +716,36 @@ def _attention_contract(module: GraphIRModule):
             return None
         if bias_shape != (b, hq, sq, sk):
             return None
-    raw_window = op.kwargs.get("window", -1)
-    if isinstance(raw_window, (tuple, list)):
-        # One symmetric extent only: the ABI has a single window_size operand,
-        # so an asymmetric request fails closed instead of being narrowed.
-        if len(raw_window) != 2 or raw_window[0] != raw_window[1]:
+    # The mask may arrive as the `window` alias OR as the canonical
+    # `window_left`/`window_right` pair.  Read every spelling present: reading
+    # only the alias would default a live canonical window to -1, and
+    # `lower_scheduled_attention` writes this contract's value back over the
+    # operation's own attributes — silently erasing the window and computing a
+    # different mask than the program requested.
+    raw_extents: list[object] = []
+    if "window" in op.kwargs:
+        alias = op.kwargs["window"]
+        if isinstance(alias, (tuple, list)):
+            if len(alias) != 2:
+                return None
+            raw_extents.extend(alias)
+        else:
+            raw_extents.append(alias)
+    for key in ("window_left", "window_right"):
+        if key in op.kwargs:
+            raw_extents.append(op.kwargs[key])
+    if not raw_extents:
+        raw_extents = [-1]
+    extents: list[int] = []
+    for value in raw_extents:
+        if not isinstance(value, int) or isinstance(value, bool) or value < -1:
             return None
-        raw_window = raw_window[0]
-    if not isinstance(raw_window, int) or isinstance(raw_window, bool) or raw_window < -1:
+        extents.append(value)
+    # Disagreeing or asymmetric spellings fail closed: the ABI carries a single
+    # symmetric window_size operand and cannot express them.
+    if len(set(extents)) != 1:
         return None
+    raw_window = extents[0]
     # Bound this slice to the unwindowed contract.  The MSL kernel's non-causal
     # window is a *symmetric half-window* (window_size/2 on each side), which is
     # not the shared window_left/window_right semantics; admitting a live window
@@ -870,15 +891,23 @@ def package_scheduled_kernel(
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        # Bind the LOGICAL rank and shape, matching the x86 consumer.  The
+        # shared contract admits any positive rank and flattens leading dims
+        # into `rows`; hard-coding rank 2 here would reject a caller launching
+        # a rank-N graph with its own declared shape.  The flatten to
+        # (rows, columns) happens at submission, where it is exact because
+        # softmax rows are independent.
         buffers=(
-            BufferBinding(0, artifact.input_name, "input", "fp32", 2, "row_major", 4),
-            BufferBinding(1, artifact.output_name, "output", "fp32", 2, "row_major", 4),
+            BufferBinding(0, artifact.input_name, "input", "fp32",
+                          len(artifact.input_shape), "row_major", 4),
+            BufferBinding(1, artifact.output_name, "output", "fp32",
+                          len(artifact.output_shape), "row_major", 4),
         ),
-        shape_guards=(
-            ShapeGuard(artifact.input_name, 0, "eq", rows),
-            ShapeGuard(artifact.input_name, 1, "eq", columns),
-            ShapeGuard(artifact.output_name, 0, "eq", rows),
-            ShapeGuard(artifact.output_name, 1, "eq", columns),
+        shape_guards=tuple(
+            [ShapeGuard(artifact.input_name, axis, "eq", extent)
+             for axis, extent in enumerate(artifact.input_shape)]
+            + [ShapeGuard(artifact.output_name, axis, "eq", extent)
+               for axis, extent in enumerate(artifact.output_shape)]
         ),
         geometry=LaunchGeometry(policy="apple_msl_softmax"),
         ordering=OrderingSemantics(

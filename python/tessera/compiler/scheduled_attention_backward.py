@@ -217,10 +217,11 @@ def _shape(module: GraphIRModule, name: str) -> tuple[int, ...]:
 
 
 def _graph_contract(module: GraphIRModule, target: str) -> tuple:
-    if target not in {"x86", "rocm_gfx1151"}:
+    if target not in {"x86", "rocm_gfx1151", "apple_gpu"}:
         raise ValueError(
-            "scheduled attention backward supports only x86 and rocm_gfx1151; "
-            "gfx1200/gfx1250 require architecture-owned profiles and evidence"
+            "scheduled attention backward supports only x86, rocm_gfx1151, and "
+            "apple_gpu; gfx1200/gfx1250 require architecture-owned profiles and "
+            "evidence"
         )
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
         raise ValueError("attention backward requires one Graph operation")
@@ -254,6 +255,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         raise ValueError("Zen 5 attention backward requires fp32")
     if target == "rocm_gfx1151" and (dtype not in {"fp16", "bf16"} or d % 16):
         raise ValueError("gfx1151 attention backward requires fp16/bf16 D%16=0")
+    if target == "apple_gpu" and (dtype not in {"fp32", "fp16", "bf16"} or d > 256):
+        raise ValueError("Apple GPU attention backward requires f32/f16/bf16 with D<=256")
     expected = (q_shape, k_shape, v_shape)
     for result, shape in zip(function.result_types, expected, strict=True):
         if result.dtype != "fp32" or tuple(map(int, result.shape)) != shape:
@@ -276,6 +279,11 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         (left == -1 and right == -1) or (causal and left >= 0 and right == 0)
     ):
         raise ValueError("gfx1151 attention backward window is unsupported")
+    # The Apple MSL non-causal window is a symmetric half-window, not the shared
+    # window_left/window_right semantics, so a live window fails closed rather
+    # than silently computing a different mask than the program requested.
+    if target == "apple_gpu" and (left != -1 or right != -1):
+        raise ValueError("Apple GPU attention backward window is unsupported")
     scale = float(op.kwargs.get("scale", d ** -0.5))
     softcap = float(op.kwargs.get("softcap", op.kwargs.get("logit_softcap", 0.0)) or 0.0)
     dropout = float(op.kwargs.get("dropout_p", op.kwargs.get("dropout", 0.0)) or 0.0)
@@ -284,12 +292,25 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         raise ValueError("attention backward numeric modifiers are invalid")
     if target == "x86" and dropout:
         raise ValueError("Zen 5 attention backward does not support dropout")
+    if target == "apple_gpu" and dropout:
+        raise ValueError("Apple GPU attention backward does not support dropout")
     requested = op.kwargs.get("lse_checkpoint", "auto")
     if requested not in {"auto", "saved", "recompute"}:
         raise ValueError("invalid attention backward LSE checkpoint selection")
     if target == "x86":
         selection, policy = "saved", "save_lse"
         architecture, storage = "zen5-avx512", "f32"
+    elif target == "apple_gpu":
+        # Apple's backward recomputes m/l per query row and its ABI takes no LSE
+        # buffer, so `saved` is not expressible here — request it and fail
+        # closed rather than silently recomputing under a `saved` label.
+        if requested == "saved":
+            raise ValueError("Apple GPU attention backward cannot save an LSE checkpoint")
+        selection, policy = "recompute", "apple7_recompute"
+        apple_storage = {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}
+        if dtype is None or dtype not in apple_storage:
+            raise ValueError("Apple GPU attention backward requires f32, fp16, or bf16")
+        architecture, storage = "apple7", apple_storage[dtype]
     else:
         selection = "saved" if requested == "auto" and max(sq, sk) >= 128 else "recompute" if requested == "auto" else requested
         policy = "gfx1151_auto_128"
@@ -300,8 +321,9 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         if dtype is None or dtype not in storage_by_dtype:
             raise ValueError("gfx1151 attention backward requires fp16 or bf16")
         architecture, storage = "gfx1151", storage_by_dtype[dtype]
+    compiler_targets = {"x86": "x86", "apple_gpu": "apple_gpu"}
     return (
-        "x86" if target == "x86" else "rocm", architecture, function.name,
+        compiler_targets.get(target, "rocm"), architecture, function.name,
         names, bias_name, result_names, dtype, storage,
         (b, hq, hkv, sq, sk, d, dv), scale, causal, left, right, softcap,
         dropout, seed, policy, selection,

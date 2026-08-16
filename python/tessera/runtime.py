@@ -4661,6 +4661,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         APPLE_SOFTMAX_F32_ABI,
         APPLE_SIMDGROUP_GEMM_F16_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
+        APPLE_FLASH_ATTN_BWD_VARIANT_ABIS,
         APPLE_TRANSPOSE_BF16_ABI,
         APPLE_TRANSPOSE_F16_ABI,
         APPLE_TRANSPOSE_F32_ABI,
@@ -4703,6 +4704,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 APPLE_TRANSPOSE_F16_ABI,
                 APPLE_TRANSPOSE_BF16_ABI,
             }
+            or abi_id in {abi for _, abi in APPLE_FLASH_ATTN_BWD_VARIANT_ABIS.values()}
             or abi_id.startswith("tessera.apple.value.")
         )
         and target not in _native_launchers
@@ -4981,8 +4983,96 @@ def _submit_apple_gpu_native(
         APPLE_SIMDGROUP_GEMM_F16_SYMBOL,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL,
+        APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE,
+        APPLE_FLASH_ATTN_BWD_VARIANT_ABIS,
         _runtime_library_path,
     )
+
+    _bwd_by_abi = {abi: symbol for symbol, abi in APPLE_FLASH_ATTN_BWD_VARIANT_ABIS.values()}
+    if descriptor.abi_id in _bwd_by_abi:
+        # E2E-REAL-5B rank-4 backward VJP.  Same ABI conventions as the forward
+        # route: `B` is the FLATTENED batch*q_heads extent and `window_size` is
+        # active only when > 0.  dQ/dK/dV are f32 for every input storage.
+        from tessera._apple_gpu_dispatch import bind_registered
+
+        provenance = descriptor.provenance
+        ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+        expected_symbol = _bwd_by_abi[descriptor.abi_id]
+        if descriptor.entry_symbol != expected_symbol or len(ordered) not in {7, 8}:
+            raise RuntimeError(
+                "Apple flash-attention backward descriptor ABI or buffer contract "
+                "is invalid"
+            )
+        values = [buffers[item.name] for item in ordered]
+        grads = values[-3:]
+        feeds = values[:-3]
+        if len(feeds) == 4:
+            q, k, v, d_out = feeds
+            bias = None
+        else:
+            q, k, v, d_out, bias = feeds
+        d_q, d_k, d_v = grads
+        if any(not isinstance(value, np.ndarray) for value in (*feeds, *grads)):
+            raise RuntimeError(
+                "Apple flash-attention backward descriptor requires ndarray buffers"
+            )
+        if any(value.dtype != np.float32 or not value.flags.c_contiguous
+               for value in grads):
+            raise RuntimeError(
+                "Apple flash-attention backward requires contiguous f32 dQ/dK/dV"
+            )
+        storage = str(provenance["storage"])
+        batch, q_heads, kv_heads, sq, sk, head_dim, value_dim = (
+            int(value) for value in cast(Sequence[int], provenance["dims"])
+        )
+        if (q.shape != (batch, q_heads, sq, head_dim)
+                or k.shape != (batch, kv_heads, sk, head_dim)
+                or v.shape != (batch, kv_heads, sk, value_dim)
+                or d_out.shape != (batch, q_heads, sq, value_dim)
+                or d_q.shape != q.shape or d_k.shape != k.shape
+                or d_v.shape != v.shape):
+            raise RuntimeError(
+                "Apple flash-attention backward buffers disagree with the "
+                "descriptor shape contract"
+            )
+        function = bind_registered(expected_symbol)
+        if function is None:
+            raise RuntimeError(f"Apple runtime is missing {expected_symbol}")
+        float_pointer = ctypes.POINTER(ctypes.c_float)
+        word_pointer = ctypes.POINTER(ctypes.c_uint16)
+        feed_pointer = float_pointer if storage == "f32" else word_pointer
+
+        def feed_ptr(value: Any) -> Any:
+            if storage == "f32":
+                if value.dtype != np.float32 or not value.flags.c_contiguous:
+                    raise RuntimeError("Apple backward f32 inputs must be contiguous f32")
+                return value.ctypes.data_as(float_pointer)
+            if value.itemsize != 2 or not value.flags.c_contiguous:
+                raise RuntimeError("Apple backward low-precision inputs must be 2-byte contiguous")
+            return value.view(np.uint16).ctypes.data_as(word_pointer)
+
+        window = int(cast(int, provenance["window"]))
+        status = int(function(
+            feed_ptr(q), feed_ptr(k), feed_ptr(v), feed_ptr(d_out),
+            feed_ptr(bias) if bias is not None else feed_pointer(),
+            d_q.ctypes.data_as(float_pointer),
+            d_k.ctypes.data_as(float_pointer),
+            d_v.ctypes.data_as(float_pointer),
+            ctypes.c_int32(batch * q_heads), ctypes.c_int32(q_heads),
+            ctypes.c_int32(kv_heads), ctypes.c_int32(sq), ctypes.c_int32(sk),
+            ctypes.c_int32(head_dim),
+            ctypes.c_float(float(cast(float, provenance["scale"]))),
+            ctypes.c_int32(1 if provenance["causal"] else 0),
+            ctypes.c_int32(window if window > 0 else 0),
+            ctypes.c_float(float(cast(float, provenance["softcap"]))),
+            ctypes.c_int32(int(cast(int, provenance.get("msl_route",
+                                                        APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE)))),
+        ))
+        if status != 1:
+            raise RuntimeError(
+                "Apple flash-attention backward ABI reported a non-native dispatch"
+            )
+        return (d_q, d_k, d_v)
 
     if descriptor.abi_id == APPLE_FLASH_ATTN_VARIANT_F32_ABI:
         # E2E-REAL-5A rank-4 forward attention through the status-returning GQA

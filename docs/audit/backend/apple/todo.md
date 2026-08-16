@@ -3529,3 +3529,65 @@ invisible for exactly as long as the test pre-flattened its own buffer.
    `env -u TESSERA_OPT TESSERA_BUILD_DIR=/nonexistent python -m pytest …`,
    which reproduces the CI host locally in seconds; the two host-free lineage
    proofs now pin the predicate rather than inheriting whatever the runner has.
+
+### Update 2026-08-16 — rank-4 attention BACKWARD (E2E-REAL-5B) landed
+
+Apple GPU now consumes the shared `schedule.attention_backward →
+tile.attention_backward_kernel` artifact, closing the last WS-1 attention
+family. `AttentionBackwardOp`'s LSE allowlist gains `apple7_recompute` on the
+same closed-by-design basis as the forward op.
+
+- **Consumer:** `apple_native.package_scheduled_attention_backward` binds the
+  status-returning MSL VJP proven by APPLE-ATTN-BWD-1, for f32/f16/bf16 storage;
+  dQ/dK/dV are f32 for every input storage, matching the shared gradient
+  identity. Envelope (enforced in the C++ gate *and* the Python contract):
+  shared head/value dim, `D <= 256`, whole GQA group, **no live window**, no
+  dropout, and `saved` LSE explicitly refused rather than silently recomputed
+  under a `saved` label.
+- **Route selection is contract-driven, not speed-driven.** The MSL ABI offers
+  serial (0), atomic (1), and split (2) dK/dV routes. The shared contract
+  declares a two-way split with **ascending fixed-order reduction**, so only the
+  split route is a faithful mapping — atomic is explicitly nondeterministic and
+  would violate the declared order. Measured cost of that correctness, same
+  shape (`B1 Hq4 Hkv2 S64 D64`, 10 reps, median): **atomic 65 ms, split 193 ms,
+  serial 373 ms**. Split is ~3× slower than atomic; it is still the right
+  selection, and the number is recorded so the tradeoff is visible rather than
+  implied.
+- **A third ordering fact read from source, not assumed:** the shared artifact
+  orders its inputs **(dO, Q, K, V)**, not (Q, K, V, dO). Confirmed against the
+  x86 consumer before wiring.
+
+Evidence (M1 Max / apple7): four exact-device configurations (GQA, MHA, MQA,
+causal) match an **independently derived float64 analytic VJP** — dQ, dK and dV
+each to ~1e-6, with GQA gradients reduced over the query-head group (the
+property that catches a kernel accumulating into the wrong KV head). Repeats are
+**bit-identical**, which the atomic route would fail. 17 of 18 tests in the
+backward consumer suite pass; the one failure
+(`test_gfx1151_..._packages_exact_tile_program`) is **proven pre-existing** —
+it needs AMD clang, absent on this host, and fails identically with this work
+stashed.
+
+#### Benchmark — `benchmarks/apple_gpu/benchmark_scheduled_boundary.py`
+
+New characterization over all four scheduled families. Every row re-checks its
+numerical oracle, so a fast wrong answer cannot be recorded as a win, and every
+row asserts `native_gpu`. Apple7, 20 reps after 5 warmups, end-to-end host wall
+(the common denominator, since the MPS matmul route has no device timer):
+
+| case | route | median ms |
+|---|---|---|
+| matmul.fp32 64³ / 256³ | `apple_gpu_bmm_f32_batch1` | 0.95 / 1.03 |
+| matmul.fp16 64³ / 256³ | `apple_gpu_simdgroup_gemm_f16` | 0.48 / 0.82 |
+| softmax rank-2 / rank-3 | `apple_softmax_native_library` | 1.14 / 0.99 |
+| attention fwd / causal | `apple_gpu_flash_attn_variant_f32` | 1.64 / 2.81 |
+| attention bwd / causal | `apple_gpu_flash_attn_bwd_split_f32_grads` | 195 / 396 |
+
+The report sets **`selector_eligible: false`** and writes no committed ledger:
+one process, one timing domain, no paired interleaving and no retained counter
+evidence is none of what the Apple promotion contract requires.
+
+**Open finding worth its own item: backward is ~120× forward** (195 ms vs
+1.64 ms at the same shape). That is a property of the existing hand-written MSL
+backward kernels, not of this boundary work, and it is recorded here rather than
+quietly optimized — a kernel rewrite needs its own slice and its own paired
+corpus.

@@ -1286,7 +1286,12 @@ getAttentionBackwardSchedule(Operation *op) {
   bool x86 = schedule.target == "x86" &&
              (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
   bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
-  if (!x86 && !rocm)
+  // Apple GPU consumes the shared rank-4 BACKWARD launch tile through its
+  // status-returning MSL VJP ABI (tessera_apple_gpu_flash_attn_bwd_variant_*
+  // _status), which owns dQ / split-dK/dV / fixed-order reduction routes.
+  // Same envelope as the Apple forward gate; enforced below.
+  bool apple_gpu = schedule.target == "apple_gpu" && schedule.arch == "apple7";
+  if (!x86 && !rocm && !apple_gpu)
     return failure();
   schedule.batch = q.getDimSize(0);
   schedule.queryHeads = q.getDimSize(1);
@@ -1318,7 +1323,14 @@ getAttentionBackwardSchedule(Operation *op) {
   if ((x86 && schedule.storage != "f32") ||
       (rocm && schedule.storage != "f16" && schedule.storage != "bf16") ||
       (rocm && (schedule.headDim != schedule.valueDim ||
-                schedule.headDim % 16 != 0)))
+                schedule.headDim % 16 != 0)) ||
+      // The Apple VJP ABI shares one head/value dim and rejects D > 256.  It
+      // accepts f32/f16/bf16 storage; dQ/dK/dV are always f32, which the
+      // shared contract already requires above.
+      (apple_gpu && ((schedule.storage != "f32" && schedule.storage != "f16" &&
+                      schedule.storage != "bf16") ||
+                     schedule.headDim != schedule.valueDim ||
+                     schedule.headDim > 256)))
     return failure();
   schedule.bias = bias.getRank() == 4;
   if (schedule.bias) {
@@ -1355,6 +1367,12 @@ getAttentionBackwardSchedule(Operation *op) {
                 (causal.getValue() && windowLeft.getInt() >= 0 &&
                  windowRight.getInt() == 0)))
     return failure();
+  // Same bound as the Apple forward gate: the MSL non-causal window is a
+  // symmetric half-window, not the shared window_left/window_right semantics,
+  // so a live window fails closed rather than computing a different mask.
+  if (apple_gpu && (windowLeft.getInt() != -1 || windowRight.getInt() != -1 ||
+                    dropoutP.getValueAsDouble() != 0.0))
+    return failure();
   schedule.scale = static_cast<double>(static_cast<float>(scale.getValueAsDouble()));
   schedule.causal = causal.getValue();
   schedule.windowLeft = windowLeft.getInt();
@@ -1366,9 +1384,15 @@ getAttentionBackwardSchedule(Operation *op) {
   schedule.keyBlock = keyBlock.getInt();
   schedule.splitCount = splitCount.getInt();
   schedule.workgroupSize = rocm ? 256 : 1;
-  schedule.lseCheckpointPolicy = x86 ? "save_lse" : "gfx1151_auto_128";
+  // Apple's backward recomputes m/l per query row and its ABI takes no LSE
+  // buffer (APPLE-ATTN-STREAM-1), so it declares its own policy rather than
+  // inheriting x86's save_lse or the gfx1151 threshold.
+  schedule.lseCheckpointPolicy = apple_gpu ? "apple7_recompute"
+                                 : x86     ? "save_lse"
+                                           : "gfx1151_auto_128";
   schedule.lseCheckpointSelection =
-      x86 || std::max(schedule.queryRows, schedule.keyRows) >= 128
+      apple_gpu ? "recompute"
+      : (x86 || std::max(schedule.queryRows, schedule.keyRows) >= 128)
           ? "saved"
           : "recompute";
   Operation *function = op->getParentOp();

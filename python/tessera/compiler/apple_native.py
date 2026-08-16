@@ -11,6 +11,7 @@ from .native_artifact import (BufferBinding, LaunchDescriptor, LaunchGeometry,
                               NativeEntryPoint, NativeImageArtifact,
                               OrderingSemantics, ScalarArgument, ShapeGuard)
 from .scheduled_attention import ScheduledAttentionArtifact
+from .scheduled_attention_backward import ScheduledAttentionBackwardArtifact
 from .scheduled_kernel import ScheduledKernelArtifact
 from .scheduled_matmul import ScheduledMatmulArtifact
 
@@ -22,6 +23,26 @@ APPLE_FLASH_ATTN_VARIANT_F32_ABI = (
     "tessera.apple.flash_attn.q_k_v_bias_o_b_hq_hkv_sq_sk_d.f32.v1"
 )
 APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL = "tessera_apple_gpu_flash_attn_variant_f32_status"
+# Backward VJP: Q,K,V,dO,bias -> dQ,dK,dV.  dQ/dK/dV are always f32 regardless
+# of input storage, which matches the shared contract's fp32 gradient identity.
+APPLE_FLASH_ATTN_BWD_VARIANT_ABIS = {
+    "f32": (
+        "tessera_apple_gpu_flash_attn_bwd_variant_f32_status",
+        "tessera.apple.flash_attn_bwd.q_k_v_do_bias_dq_dk_dv.f32.v1",
+    ),
+    "f16": (
+        "tessera_apple_gpu_flash_attn_bwd_variant_f16_status",
+        "tessera.apple.flash_attn_bwd.q_k_v_do_bias_dq_dk_dv.f16.v1",
+    ),
+    "bf16": (
+        "tessera_apple_gpu_flash_attn_bwd_variant_bf16_status",
+        "tessera.apple.flash_attn_bwd.q_k_v_do_bias_dq_dk_dv.bf16.v1",
+    ),
+}
+# MSL dK/dV route selector: 0 serial, 1 atomic (nondeterministic), 2 split.
+# The shared contract declares a two-way split with ascending fixed-order
+# reduction, so the split route is the only faithful mapping.
+APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE = 2
 APPLE_BMM_F16_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.f16.v1"
 APPLE_BMM_F16_SYMBOL = "tessera_apple_gpu_bmm_f16"
 APPLE_BMM_BF16_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.bf16.v1"
@@ -1048,6 +1069,140 @@ def package_scheduled_attention(
             "accum": "f32",
             "backward_lse_policy": artifact.backward_lse_policy,
             "backward_lse_selection": artifact.backward_lse_selection,
+            "recurrence": artifact.recurrence,
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+def package_scheduled_attention_backward(
+    artifact: ScheduledAttentionBackwardArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Consume the E2E-REAL-5B shared rank-4 backward launch tile.
+
+    Binds the status-returning MSL VJP route proven by APPLE-ATTN-BWD-1.  The
+    shared contract declares a two-way dK/dV split with ascending fixed-order
+    reduction, so this selects the **split** MSL route (2) rather than the
+    atomic one — atomic is explicitly nondeterministic and would violate the
+    declared reduction order, and serial performs no split at all.
+
+    dQ/dK/dV are f32 for every input storage, matching the shared fp32 gradient
+    identity.  Apple's backward recomputes m/l per query row and takes no LSE
+    buffer, hence the `apple7_recompute` policy.
+    """
+    artifact.validate()
+    if (
+        artifact.target != "apple_gpu"
+        or artifact.architecture != "apple7"
+        or artifact.storage not in APPLE_FLASH_ATTN_BWD_VARIANT_ABIS
+        or artifact.dropout_p != 0.0
+        or artifact.window_left != -1
+        or artifact.window_right != -1
+        or artifact.lse_checkpoint_policy != "apple7_recompute"
+        or artifact.lse_checkpoint_selection != "recompute"
+    ):
+        raise ValueError(
+            "Apple GPU scheduled attention backward requires the apple7 "
+            "unwindowed recompute contract"
+        )
+    batch, q_heads, kv_heads, sq, sk, head_dim, value_dim = artifact.dims
+    if head_dim != value_dim or head_dim > 256 or q_heads % kv_heads != 0:
+        raise ValueError(
+            "Apple GPU attention backward requires shared head/value dim <= 256 "
+            "and a whole GQA group size"
+        )
+    if artifact.split_count != 2 or tuple(artifact.reduction_order) != (0, 1):
+        raise ValueError(
+            "Apple GPU attention backward requires the two-way ascending split"
+        )
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "E2E-REAL-5B Apple GPU scheduled attention backward requires a "
+            "fresh Tessera Apple GPU runtime dylib"
+        )
+    symbol, abi = APPLE_FLASH_ATTN_BWD_VARIANT_ABIS[artifact.storage]
+    storage_dtype = {"f32": "fp32", "f16": "fp16", "bf16": "bf16"}[artifact.storage]
+    alignment = 4 if artifact.storage == "f32" else 2
+    target_ir = (
+        f'tessera_apple.gpu.kernel_call @{symbol} '
+        f'{{abi = "{abi}", storage = "{artifact.storage}", '
+        f'accumulation = "f32", route = "split", status = "executable"}}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    # The shared artifact orders its inputs (dO, Q, K, V) — not (Q, K, V, dO).
+    do_name, q_name, k_name, v_name = artifact.input_names
+    dq_name, dk_name, dv_name = artifact.output_names
+    inputs = [
+        BufferBinding(0, q_name, "input", storage_dtype, 4, "row_major", alignment),
+        BufferBinding(1, k_name, "input", storage_dtype, 4, "row_major", alignment),
+        BufferBinding(2, v_name, "input", storage_dtype, 4, "row_major", alignment),
+        BufferBinding(3, do_name, "input", storage_dtype, 4, "row_major", alignment),
+    ]
+    guards = [
+        ShapeGuard(q_name, 0, "eq", batch), ShapeGuard(q_name, 1, "eq", q_heads),
+        ShapeGuard(q_name, 2, "eq", sq), ShapeGuard(q_name, 3, "eq", head_dim),
+        ShapeGuard(k_name, 1, "eq", kv_heads), ShapeGuard(k_name, 2, "eq", sk),
+        ShapeGuard(v_name, 1, "eq", kv_heads), ShapeGuard(v_name, 2, "eq", sk),
+        ShapeGuard(v_name, 3, "eq", value_dim),
+        ShapeGuard(do_name, 2, "eq", sq), ShapeGuard(do_name, 3, "eq", value_dim),
+    ]
+    if artifact.bias_name is not None:
+        inputs.append(
+            BufferBinding(4, artifact.bias_name, "input", storage_dtype, 4,
+                          "row_major", alignment)
+        )
+        guards.extend([
+            ShapeGuard(artifact.bias_name, 0, "eq", batch),
+            ShapeGuard(artifact.bias_name, 1, "eq", q_heads),
+            ShapeGuard(artifact.bias_name, 2, "eq", sq),
+            ShapeGuard(artifact.bias_name, 3, "eq", sk),
+        ])
+    base = len(inputs)
+    buffers = tuple(inputs) + (
+        BufferBinding(base, dq_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(base + 1, dk_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(base + 2, dv_name, "output", "fp32", 4, "row_major", 4),
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=buffers, shape_guards=tuple(guards),
+        geometry=LaunchGeometry(policy="apple_msl_flash_attn_bwd_split"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-5B",
+            "route": "apple_gpu_flash_attn_bwd_split_f32_grads",
+            "op_kind": "attention_backward",
+            "dims": list(artifact.dims),
+            "scale": artifact.scale,
+            "causal": artifact.causal,
+            "window": artifact.window_left,
+            "softcap": artifact.softcap,
+            "has_bias": artifact.bias_name is not None,
+            "storage": artifact.storage,
+            "accum": "f32",
+            "msl_route": APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE,
+            "deterministic": True,
+            "split_count": artifact.split_count,
+            "reduction_order": list(artifact.reduction_order),
+            "workspace_bytes": artifact.workspace_bytes,
+            "lse_checkpoint_policy": artifact.lse_checkpoint_policy,
+            "lse_checkpoint_selection": artifact.lse_checkpoint_selection,
             "recurrence": artifact.recurrence,
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,

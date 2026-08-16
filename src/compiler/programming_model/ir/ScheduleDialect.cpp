@@ -433,8 +433,12 @@ LogicalResult AttentionBackwardOp::verify() {
       return emitOpError("requires ascending fixed-order split reduction");
   if (getRecurrence() != "tensor_dq_split_dkdv_fixed_reduce_v1")
     return emitOpError("requires the canonical tensor-valued VJP recurrence");
+  // Same closed allowlist as the forward op: a backend declares its own
+  // saved/recompute identity rather than inheriting a sibling's.  Apple's
+  // backward recomputes m/l per query row and its ABI takes no LSE buffer.
   if (getLseCheckpointPolicy() != "save_lse" &&
-      getLseCheckpointPolicy() != "gfx1151_auto_128")
+      getLseCheckpointPolicy() != "gfx1151_auto_128" &&
+      getLseCheckpointPolicy() != "apple7_recompute")
     return emitOpError("requires an architecture-owned LSE policy");
   if (getLseCheckpointSelection() != "saved" &&
       getLseCheckpointSelection() != "recompute")

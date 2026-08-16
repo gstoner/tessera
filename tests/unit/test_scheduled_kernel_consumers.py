@@ -493,6 +493,58 @@ def test_apple_gpu_scheduled_reduce_executes_synthesized_kernel(shape, kind, op_
     find_tessera_opt() is None,
     reason="Apple GPU runtime dylib / tessera-opt unavailable",
 )
+def test_apple_gpu_scheduled_reduce_propagates_nan() -> None:
+    """`max` must propagate NaN, because the artifact declares nan_mode=propagate.
+
+    Metal's `max`/`min` are IEEE maxNum/minNum-style and *suppress* a NaN
+    operand, so the naive accumulator disagreed with both the declared contract
+    and the NumPy oracle — and with the ``-INFINITY`` seed an all-NaN row came
+    back as ``-inf``, turning missing data into a finite extreme. That is a
+    silent wrong answer, not a rounding difference, so it gets a device test.
+    """
+    from tessera.compiler import apple_native
+
+    if not apple_native.tools_available():
+        pytest.skip("Apple GPU runtime dylib unavailable")
+    shape = (4, 3)
+    x_type = IRType("tensor<4x3xf32>", ("4", "3"), "fp32")
+    o_type = IRType("tensor<4xf32>", ("4",), "fp32")
+    module = GraphIRModule(functions=[GraphIRFunction(
+        name="apple_reduce_nan", args=[IRArg("x", x_type)], result_types=[o_type],
+        body=[IROp(result="o", op_name="tessera.max", operands=["%x"],
+                   operand_types=[str(x_type)], result_type=str(o_type),
+                   kwargs={"axis": -1, "keepdims": False})],
+        return_values=["%o"])])
+    bundle = compile_graph_module(
+        module, source_origin="e2e-real-5-nan", target="apple_gpu",
+        options={"package_native": True}, enable_tool_validation=False,
+    )
+    # The contract this test is defending is written into the Tile artifact.
+    assert 'nan_mode = "propagate"' in (bundle.tile.text if bundle.tile else "")
+    runtime_artifact = rt.RuntimeArtifact(
+        metadata={"target": "apple_gpu"}, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+        tile_ir=bundle.tile.text if bundle.tile else "",
+        target_ir=bundle.target_ir.text if bundle.target_ir else "",
+    )
+    x = np.array([[1.0, np.nan, 3.0],   # one NaN poisons the row
+                  [np.nan] * 3,          # all-NaN must not become -inf
+                  [2.0, 5.0, 1.0],       # ordinary row still reduces
+                  [np.inf, -np.inf, 0.0]],  # infinities are not NaN
+                 dtype=np.float32)
+    output = np.zeros(shape[:-1], dtype=np.float32)
+    result = rt.launch(runtime_artifact, {"x": x, "o": output})
+    assert result["ok"] is True, result.get("reason")
+    assert result.get("execution_kind") == "native_gpu", result
+    np.testing.assert_array_equal(output, np.max(x, axis=-1))
+    assert np.isnan(output[1]), "an all-NaN row must not reduce to -inf"
+
+
+@pytest.mark.hardware_apple_gpu
+@pytest.mark.skipif(
+    find_tessera_opt() is None,
+    reason="Apple GPU runtime dylib / tessera-opt unavailable",
+)
 @pytest.mark.parametrize("shape", [(6, 5), (2, 3, 5), (2, 3, 4, 7)])
 def test_apple_gpu_scheduled_softmax_executes_exact_artifact(shape) -> None:
     """Launch with the module's own LOGICAL shape, not a pre-flattened one.

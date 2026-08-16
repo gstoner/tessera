@@ -3690,3 +3690,30 @@ GAME_THEORY_PLAN.md G1b/G5 for the lattice family), note that the Thomas sweep
 is a sequential recurrence in `n`: a wavefront lane needs the plan's chosen
 parallel algorithm, not a transliteration of the reference. No exact-device
 gfx1151 evidence is claimed.
+
+## APPLE-SCHEDULED-REDUCE-NAN-2026-08-16 — shared reduce NaN semantics (PR #571)
+
+**Shared contract changed; assess before relying on extrema reductions.** The
+synthesizer's reduce vocabulary (`compiler/fusion_core.py::_PW_REDUCE_KINDS`)
+emitted `max(acc, v)` / `min(acc, v)` for `amax`/`amin`. Metal's `max`/`min` are
+IEEE maxNum/minNum-style and **suppress** a NaN operand, so the emitted kernel
+disagreed with the table's own numpy reference (`a.max(-1)`, which propagates)
+and with the `nan_mode = "propagate"` the reduce Schedule artifact declares.
+With the `-INFINITY` seed an all-NaN row reduced to **`-inf`** — missing data
+silently becoming a finite extreme. The accumulators now propagate explicitly.
+
+**ROCm outcome: not applicable — no consumer.** `_PW_REDUCE_KINDS` supplies MSL
+accumulate expressions and its only kernel consumer is
+`compiler/emit/apple_msl.py`; the gfx1151 reduction path is the HIP
+`tile.reduce_kernel` lowering, which is unaffected. gfx1151's arbitrary-axis
+scheduled reduction is explicitly retained (Apple admits last-axis only) and a
+test asserts the Apple bound does not narrow it. No ROCm dtype, schedule, ABI,
+or evidence changes. If a future ROCm reduce emitter reuses this table, it
+inherits the corrected semantics rather than the bug.
+
+Also recorded for coordination: PR #571 admits Apple GPU into the shared
+scheduled reduce contract (`scheduled_kernel.py`, last axis only) and closes
+APPLE-DEVICE-EVENT-1 by giving the Apple MPSGraph BMM route an owned command
+buffer. Both are Apple-guarded — the shared `scheduled_kernel` gate adds an
+`apple_gpu` branch beside the existing x86/ROCm ones and changes neither — and
+the runtime edit is in `apple_gpu_runtime.mm`, which no sibling links.

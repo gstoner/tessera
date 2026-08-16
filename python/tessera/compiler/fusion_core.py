@@ -625,11 +625,21 @@ def _is_trailing_feature(a_shape: tuple[int, ...],
         return False
     return all(d == 1 for d in a_shape[:-1])
 #: reduce-kind → (MSL init, MSL accumulate-expr template, numpy fn).
+# Metal's `max`/`min` are IEEE maxNum/minNum-style: a NaN operand is *suppressed*
+# in favour of the other one. That contradicts this table's own numpy reference
+# (`a.max(-1)` propagates) and the `nan_mode = "propagate"` the reduce Schedule
+# artifact declares, and it is not a benign difference: an all-NaN row reduced
+# with the `-INFINITY` seed came back as `-inf`, turning missing data into a
+# finite extreme. The extrema accumulators therefore propagate explicitly. Once
+# `acc` is NaN the second branch keeps it NaN, so one NaN poisons the row exactly
+# as numpy does. `sum`/`mean` need no help: IEEE addition already propagates.
 _PW_REDUCE_KINDS: dict[str, tuple[str, str, Any]] = {
     "sum": ("0.0f", "acc + v", lambda a: a.sum(-1)),
     "mean": ("0.0f", "acc + v", lambda a: a.mean(-1)),
-    "amax": ("-INFINITY", "max(acc, v)", lambda a: a.max(-1)),
-    "amin": ("INFINITY", "min(acc, v)", lambda a: a.min(-1)),
+    "amax": ("-INFINITY", "isnan(v) ? v : (isnan(acc) ? acc : max(acc, v))",
+             lambda a: a.max(-1)),
+    "amin": ("INFINITY", "isnan(v) ? v : (isnan(acc) ? acc : min(acc, v))",
+             lambda a: a.min(-1)),
 }
 
 

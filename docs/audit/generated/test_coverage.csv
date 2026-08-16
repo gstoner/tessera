@@ -282,7 +282,7 @@ masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
 matmul,478,277,21,755,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,755 direct test references
-max,8,0,2,8,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,8 direct test references
+max,9,0,2,9,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,9 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,11,0,2,11,0,bf16 f32 fp16 fp32,directly_tested,11 direct test references
 mean,21,0,1,21,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,21 direct test references

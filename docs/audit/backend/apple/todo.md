@@ -3676,6 +3676,32 @@ runs, inside p90 noise), so the device timer costs nothing measurable.
 
 Still `selector_eligible: false` — one process, no paired interleaving.
 
+#### PR #571 review finding — `max` violated its own declared NaN contract
+
+Review found a real semantic-contract violation in the reduce slice, confirmed
+on device before fixing. The shared synthesizer emitted `max(acc, v)`; Metal's
+`max`/`min` are IEEE maxNum/minNum-style and **suppress** a NaN operand, so:
+
+| row | GPU (before) | numpy reference |
+|---|---|---|
+| `[1, NaN, 3]` | `3` | `NaN` |
+| `[NaN, NaN, NaN]` | **`-inf`** | `NaN` |
+
+The reduce Schedule artifact literally declares `nan_mode = "propagate"`, and
+the synthesizer's *own* numpy reference propagates — so the kernel disagreed
+with both. The all-NaN case is the one that matters: missing data silently
+became a finite extreme, which a downstream `argmax` or clamp would act on.
+
+Fixed at the single source (`fusion_core.py::_PW_REDUCE_KINDS`, whose only
+kernel consumer is `emit/apple_msl.py`) so extrema propagate explicitly; `sum`
+and `mean` needed no change because IEEE addition already propagates. All four
+kinds now match numpy exactly, including ±inf rows, and
+`test_apple_gpu_scheduled_reduce_propagates_nan` locks it on device — asserting
+both the numeric equality and that an all-NaN row does not become `-inf`. The
+sibling queues record this as not-applicable-with-reason (no other kernel
+consumer), with the caution that CUDA `fmaxf` and x86 `maxps` suppress NaN the
+same way, so a future port must propagate explicitly.
+
 #### Operational note that cost real debugging time
 
 After rebuilding `libTesseraAppleRuntime.dylib`, ~20 device tests failed with

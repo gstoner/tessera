@@ -374,4 +374,4 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `where` | numeric_helper | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `z_loss` | loss | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 
-Backward-execution rungs are tracked against targets: cpu, cpu_x86_64, x86_avx512, apple_cpu, apple_gpu, rocm_gfx1151, nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120.
+Backward-execution rungs are tracked against targets: cpu, cpu_x86_64, x86_avx512, apple_cpu, apple_gpu, apple7, rocm_gfx1151, nvidia_sm80, nvidia_sm90, nvidia_sm100, nvidia_sm120.

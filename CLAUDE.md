@@ -24,7 +24,7 @@ does damage that lands on someone else:
 | Tier | What it means | Examples |
 |---|---|---|
 | **Default** | Depart with a recorded reason. Judgment is expected; scale the effort to the blast radius. | Which gates to run for a given change; explore via graphify before grepping; how far to read the backend queues |
-| **Hard — claim integrity** | Never assert more than the evidence supports. A false claim gets acted on downstream, and the cost is paid by whoever believes it. | Native execution proven separately from the `reference_cpu` lane; no parity claim for a target without *that* hardware's proof; no green report over a red lane (Decisions #19, #25, #26) |
+| **Hard — claim integrity** | Never assert more than the evidence supports. A false claim gets acted on downstream, and the cost is paid by whoever believes it. | Device work runs on the box with that device (the sandbox has no CUDA/ROCm, and a missing device *skips* rather than errors); native execution proven separately from the `reference_cpu` lane; no parity claim for a target without *that* hardware's proof; no green report over a red lane (Decisions #19, #25, #26) |
 | **Hard — destructive / not yours** | Ask first. These are irreversible or belong to the repo owner, and an agent lacks the context to judge the cost. | Deleting branches, rewriting history, discarding unrelated dirty work, force-push (see **Working Rules**) |
 
 This taxonomy mirrors what the code already does: Decision #21a splits attributes
@@ -448,6 +448,22 @@ specifically — they are irreversible, or they make a claim someone else acts o
 
 ### Hard — claim integrity
 
+- **Run device work on the box that has the device.** The sandbox has **no CUDA
+  and no ROCm**; the Mac has no CUDA and no ROCm either. Route by hardware, not
+  by convenience:
+
+  | Need | Box |
+  |---|---|
+  | ROCm / gfx1151, x86 AVX-512 | Strix Halo, Ubuntu 24.04 under **WSL2** |
+  | CUDA / sm_120 | **NR2 Pro** (RTX 5070 Ti, Linux) |
+  | Metal / Apple CPU + GPU | **Mac** M1 Max |
+
+  This is a claim-integrity rule, not a convenience one, because of *how* it
+  fails. A device test on a host without that device does not usually error —
+  it **skips**, or falls through to the `reference_cpu` lane, and the run comes
+  back green. Reporting that as evidence asserts a hardware result that was
+  never produced. If the hardware is not present, the honest output is "this
+  host cannot evaluate these lanes," never a pass.
 - **Prove native execution separately from the `reference_cpu` lane.** A
   hardware claim needs exact-device evidence from *that* device. Read Decision
   #19's standing lesson: a host that has the ISA cannot falsify a
@@ -461,12 +477,11 @@ specifically — they are irreversible, or they make a claim someone else acts o
 
 ### Defaults — depart with a recorded reason
 
-- **Where to run.** Core compiler work, tests, and Git/GitHub actions belong on
-  the host WSL/Ubuntu box, not the sandbox. Apple-backend work cannot be
-  retargeted and runs on the Mac. When a change is host-independent (docs, pure
-  numpy, Python-only contracts) running it on the Mac is a reasonable departure
-  — say which host produced the result, because "the tests pass" means different
-  things on different boxes.
+- **Host-independent work** (docs, pure numpy, Python-only contracts, lit
+  fixtures that need no device) may run on whichever box is convenient — but
+  **say which host produced the result.** "The tests pass" means different
+  things on different boxes, and a suite run where half the lanes cannot be
+  evaluated is not the same evidence as a clean run.
 - **Explore via the code graph first.** `graphify query` / `codegraph_search`
   before grepping, for anything wider than a single known symbol. Refresh with
   `graphify update .` after edits. Both indexes are local, machine-specific

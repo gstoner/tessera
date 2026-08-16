@@ -82,6 +82,28 @@ def test_apple_normalization_vjp_rows_are_registered_in_the_execution_matrix() -
     ].backward_aliases
 
 
+def test_normalization_bwd_symbols_gate_dylib_freshness() -> None:
+    """A prebuilt dylib without these exports must be rejected, not accepted.
+
+    Without this, a runtime built before the VJP landed clears the older
+    staleness sentinel, gets loaded, and then fails at the call site with a
+    missing symbol — which reads as a broken consumer rather than the stale
+    dylib it is. Both loaders gate on the symbols, so both are checked.
+    """
+    from pathlib import Path
+
+    from tessera import _apple_gpu_dispatch as agd
+    from tessera import runtime as R
+
+    legacy = Path(R.__file__).read_text(encoding="utf-8")
+    for symbol in ("tessera_apple_gpu_rmsnorm_bwd_f32",
+                   "tessera_apple_gpu_layer_norm_bwd_f32"):
+        assert symbol in agd._SENTINEL_SYMBOLS, symbol
+        assert symbol in agd.APPLE_ABI, f"{symbol} is not in the canonical ABI registry"
+        assert f'getattr(lib, "{symbol}")' in legacy, (
+            f"{symbol} does not gate runtime.py's legacy candidate scan")
+
+
 @pytest.mark.hardware_apple_gpu
 @pytest.mark.skipif(not _apple_available(), reason="Apple GPU runtime dylib unavailable")
 @pytest.mark.parametrize("op_name", ["tessera.rmsnorm", "tessera.rmsnorm_safe",

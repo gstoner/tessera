@@ -57,8 +57,15 @@ _TANGENT_CPP = _REPO_ROOT / "src" / "compiler" / "ir" / "TangentInterface.cpp"
 # The backend targets the backward-execution rungs are tracked against.  Kept in
 # sync with the runtime execution matrix's target set; the ledger reports which
 # of these may reach each backward proof axis.
+#
+# `apple7` sits alongside `apple_cpu`/`apple_gpu` because the matrix records
+# Apple device evidence at *device* granularity, the way `rocm_gfx1151` and
+# `nvidia_sm120` do: the Apple GPU proofs run on an M1 Max, whose GPU family is
+# apple7. Dropping it back to `apple_gpu` would widen the claim to every Apple
+# GPU, which no run evidences.
 _TARGETS: tuple[str, ...] = (
-    "cpu", "cpu_x86_64", "x86_avx512", "apple_cpu", "apple_gpu", "rocm_gfx1151",
+    "cpu", "cpu_x86_64", "x86_avx512", "apple_cpu", "apple_gpu", "apple7",
+    "rocm_gfx1151",
     "nvidia_sm80", "nvidia_sm90", "nvidia_sm100", "nvidia_sm120",
 )
 

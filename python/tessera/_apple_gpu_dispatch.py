@@ -91,10 +91,20 @@ def _find_runtime_source() -> Optional[Path]:
     return None
 
 
-# Newest C ABI symbol — used as the staleness sentinel when accepting a
-# prebuilt library (env-pointed or CMake-built). If a candidate lacks it,
-# it predates the current source and we fall through to a fresh build.
-_SENTINEL_SYMBOL = "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc"
+# Newest C ABI symbols — the staleness sentinels for accepting a prebuilt
+# library (env-pointed or CMake-built). A candidate missing ANY of them
+# predates the current source, so we reject it and build fresh.
+#
+# Keep this current with the newest exports: a prebuilt dylib that clears a
+# stale sentinel is accepted and then fails at the *call site* with a missing
+# symbol, which reads as a broken consumer rather than the stale runtime it is.
+_SENTINEL_SYMBOLS = (
+    # Resident ReplaySSM native checkpoint fold + ring clear.
+    "tessera_apple_gpu_ssm_replay_flush_dev_f32_enc",
+    # Normalization VJP (E2E-REAL-6 / WS-2).
+    "tessera_apple_gpu_rmsnorm_bwd_f32",
+    "tessera_apple_gpu_layer_norm_bwd_f32",
+)
 
 
 def _prebuilt_candidate() -> Optional[ctypes.CDLL]:
@@ -120,7 +130,8 @@ def _prebuilt_candidate() -> Optional[ctypes.CDLL]:
             continue
         try:
             lib = ctypes.CDLL(str(cand))
-            getattr(lib, _SENTINEL_SYMBOL)  # staleness gate
+            for sentinel in _SENTINEL_SYMBOLS:  # staleness gate
+                getattr(lib, sentinel)
         except (OSError, AttributeError):
             continue
         return lib
@@ -374,6 +385,9 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_flash_attn_cooperative_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_flash_attn_cooperative_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_flash_attn_cooperative_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_int32, ctypes.c_float, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    # Normalization VJP (E2E-REAL-6 / WS-2): status-returning, so a non-native
+    # dispatch cannot be mistaken for GPU execution.
+    "tessera_apple_gpu_layer_norm_bwd_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_layer_norm_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_layer_norm_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_layer_norm_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
@@ -428,6 +442,7 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_philox_uniform_f32": ((ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_philox_normal_f32": ((ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_philox_dropout_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
+    "tessera_apple_gpu_rmsnorm_bwd_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),

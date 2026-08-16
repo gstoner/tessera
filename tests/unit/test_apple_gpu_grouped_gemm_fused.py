@@ -28,11 +28,13 @@ def _ref(x, w, gs):
 
 @gpu
 def test_grouped_gemm_symbol_present_in_runtime():
-    # The sentinel is always the *newest* symbol (it moves as kernels land);
-    # what matters for grouped_gemm is that its C ABI symbol is loadable in the
-    # current runtime image (i.e. the recompile picked it up).
+    # The sentinels are always the *newest* symbols (they move as kernels
+    # land); what matters for grouped_gemm is that its C ABI symbol is loadable
+    # in the current runtime image (i.e. the recompile picked it up).
     from tessera import _apple_gpu_dispatch as agd
-    assert isinstance(agd._SENTINEL_SYMBOL, str) and agd._SENTINEL_SYMBOL
+    assert agd._SENTINEL_SYMBOLS and all(
+        isinstance(sym, str) and sym for sym in agd._SENTINEL_SYMBOLS
+    )
     assert _GPU, "Apple GPU runtime unavailable on the hardware test host"
     lib = agb._load()
     assert hasattr(lib, "tessera_apple_gpu_grouped_gemm_f32")

@@ -5500,6 +5500,42 @@ inline bool bwd_query_stats(
 // One thread owns one query row. It computes the row softmax once and retains
 // all dQ components locally, removing the per-output softmax recomputation of
 // the original proof kernel.
+// The `row_prepass` stage the shared backward workspace contract already
+// declares (`row_lse` and `row_delta`, produced by `row_prepass` and consumed by
+// `dkdv_split` and `dq`). Apple previously declared that workspace and did not
+// use it: every kernel recomputed the row statistics inline, which both
+// duplicated the O(Sk*D) work across the dQ and dK/dV passes and — because the
+// statistics are a per-query reduction — forced the dK/dV kernel to own a whole
+// query stream, capping its parallelism at one thread per KV batch.
+//
+// `row_lse` stores `m + log(l)` so a consumer recovers the probability with one
+// exp: `exp(score - lse)`. A fully masked row stores `+INFINITY`, which makes
+// that same expression yield exactly 0 without a branch, matching the previous
+// early-out.
+kernel void flash_attn_bwd_row_prepass_f32(
+    device const bwd_storage_t *Q [[buffer(0)]],
+    device const bwd_storage_t *K [[buffer(1)]],
+    device const bwd_storage_t *V [[buffer(2)]],
+    device const bwd_storage_t *dO [[buffer(3)]],
+    device const bwd_storage_t *bias [[buffer(4)]],
+    device float *row_lse [[buffer(5)]],
+    device float *row_delta [[buffer(6)]],
+    constant BwdParams &p [[buffer(7)]],
+    uint gid [[thread_position_in_grid]]) {
+  int b = int(gid) / p.Sq, q = int(gid) % p.Sq;
+  if (b >= p.B) return;
+  int kvb = bwd_kv_batch(b, p);
+  int row = b * p.Sq + q;
+  float m, l, dd;
+  if (!bwd_query_stats(Q, K, V, dO, bias, b, q, kvb, p, m, l, dd)) {
+    row_lse[row] = INFINITY;
+    row_delta[row] = 0.0f;
+    return;
+  }
+  row_lse[row] = m + log(l);
+  row_delta[row] = dd;
+}
+
 kernel void flash_attn_bwd_dq_stream_f32(
     device const bwd_storage_t *Q [[buffer(0)]],
     device const bwd_storage_t *K [[buffer(1)]],
@@ -5507,6 +5543,8 @@ kernel void flash_attn_bwd_dq_stream_f32(
     device const bwd_storage_t *dO [[buffer(3)]],
     device const bwd_storage_t *bias [[buffer(4)]],
     device float *dQ [[buffer(5)]], constant BwdParams &p [[buffer(6)]],
+    device const float *row_lse [[buffer(7)]],
+    device const float *row_delta [[buffer(8)]],
     uint gid [[thread_position_in_grid]]) {
   int b = int(gid) / p.Sq, q = int(gid) % p.Sq;
   if (b >= p.B) return;
@@ -5514,15 +5552,12 @@ kernel void flash_attn_bwd_dq_stream_f32(
   int base = kvb * p.Sk * p.D;
   float gradient[256];
   for (int d = 0; d < p.D; ++d) gradient[d] = 0.0f;
-  float m, l, dd;
-  if (!bwd_query_stats(Q, K, V, dO, bias, b, q, kvb, p, m, l, dd)) {
-    for (int d = 0; d < p.D; ++d) dQ[qoff + d] = 0.0f;
-    return;
-  }
+  int row = b * p.Sq + q;
+  float lse = row_lse[row], dd = row_delta[row];
   for (int k = 0; k < p.Sk; ++k) if (bwd_keep(q, k, p)) {
     int koff = base + k * p.D;
     float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
-    float probability = exp(bwd_score(raw, p) - m) / l;
+    float probability = exp(bwd_score(raw, p) - lse);
     float dp = 0.0f;
     for (int d = 0; d < p.D; ++d)
       dp += bwd_load(dO, qoff + d) * bwd_load(V, koff + d);
@@ -5617,6 +5652,17 @@ kernel void flash_attn_bwd_serial_stream_f32(
   }
 }
 
+// One thread owns one (partial, KV batch, key position). The declared schedule
+// is unchanged — still a two-way split over the query stream reduced in
+// ascending partial order — but the *mapping* is no longer one thread per KV
+// batch. Each key row is written by exactly one thread, so this is still
+// single-owner deterministic (no atomics, bit-identical repeats), while
+// parallelism rises from `2 * kv_outer` to `2 * kv_outer * Sk`.
+//
+// This is only expressible because `row_lse` / `row_delta` arrive precomputed:
+// the statistics are a reduction over the whole key axis, so a key-parallel
+// thread could not derive them without redoing O(Sk) work per key and undoing
+// the gain.
 kernel void flash_attn_bwd_split_stream_f32(
     device const bwd_storage_t *Q [[buffer(0)]],
     device const bwd_storage_t *K [[buffer(1)]],
@@ -5626,24 +5672,48 @@ kernel void flash_attn_bwd_split_stream_f32(
     device float *dK0 [[buffer(5)]], device float *dV0 [[buffer(6)]],
     device float *dK1 [[buffer(7)]], device float *dV1 [[buffer(8)]],
     constant BwdParams &p [[buffer(9)]],
+    device const float *row_lse [[buffer(10)]],
+    device const float *row_delta [[buffer(11)]],
     uint gid [[thread_position_in_grid]]) {
-  int part = int(gid) & 1, kvb = int(gid) >> 1;
   int kv_outer = (p.B / p.q_heads) * p.kv_heads;
-  if (kvb >= kv_outer) return;
+  int idx = int(gid);
+  if (idx >= 2 * kv_outer * p.Sk) return;
+  int part = idx & 1, rest = idx >> 1;
+  int kvb = rest / p.Sk, k = rest % p.Sk;
   device float *outK = part == 0 ? dK0 : dK1;
   device float *outV = part == 0 ? dV0 : dV1;
-  int elements = p.Sk * p.D, base = kvb * elements;
-  for (int i = 0; i < elements; ++i) {
-    outK[base + i] = 0.0f; outV[base + i] = 0.0f;
-  }
+  int koff = (kvb * p.Sk + k) * p.D;
+  float accK[256], accV[256];
+  for (int d = 0; d < p.D; ++d) { accK[d] = 0.0f; accV[d] = 0.0f; }
   int outer = kvb / p.kv_heads, kv_head = kvb % p.kv_heads;
   int group = p.q_heads / p.kv_heads, total = group * p.Sq;
   int begin = part == 0 ? 0 : (total + 1) / 2;
   int end = part == 0 ? (total + 1) / 2 : total;
   for (int linear = begin; linear < end; ++linear) {
     int local_head = linear / p.Sq, q = linear % p.Sq;
+    if (!bwd_keep(q, k, p)) continue;
     int b = outer * p.q_heads + kv_head * group + local_head;
-    bwd_accumulate_query(Q, K, V, dO, bias, outK, outV, b, q, kvb, p);
+    int qoff = (b * p.Sq + q) * p.D, row = b * p.Sq + q;
+    float lse = row_lse[row];
+    float raw = bwd_raw_score(Q, K, bias, qoff, koff, b, q, k, p);
+    // A fully masked row carries lse = +INFINITY, so this is exactly 0 and the
+    // row contributes nothing — the branchless form of the old early-out.
+    float probability = exp(bwd_score(raw, p) - lse);
+    float dp = 0.0f;
+    for (int d = 0; d < p.D; ++d)
+      dp += bwd_load(dO, qoff + d) * bwd_load(V, koff + d);
+    float coeff = p.scale * probability * (dp - row_delta[row]) *
+                  bwd_score_grad(raw, p);
+    for (int d = 0; d < p.D; ++d) {
+      accK[d] += coeff * bwd_load(Q, qoff + d);
+      accV[d] += probability * bwd_load(dO, qoff + d);
+    }
+  }
+  // Sole owner of this key row for this partial: write, never accumulate, so no
+  // zeroing pass is needed either.
+  for (int d = 0; d < p.D; ++d) {
+    outK[koff + d] = accK[d];
+    outV[koff + d] = accV[d];
   }
 }
 
@@ -5756,8 +5826,18 @@ static bool dispatch_flash_attn_bwd_msl(MetalDeviceContext &ctx,
         route == 2 ? kv_bytes : 0);
     id<MTLBuffer> bufPK = guardPK.buf;
     id<MTLBuffer> bufPV = guardPV.buf;
+    // `row_lse` / `row_delta` from the declared backward workspace. Both are
+    // O(B*Sq) floats — negligible beside the dK/dV partials — and they are what
+    // let the dK/dV kernel be key-parallel.
+    NSUInteger row_bytes = sizeof(float) * static_cast<NSUInteger>(B) * Sq;
+    TS_METAL_BUF_ACQUIRE(bufRowLse, ctx, row_bytes);
+    TS_METAL_BUF_ACQUIRE(bufRowDelta, ctx, row_bytes);
     if (!bufQ || !bufK || !bufV || !bufDO || !bufBias || !bufDQ || !bufDK || !bufDV ||
+        !bufRowLse || !bufRowDelta ||
         (route == 2 && (!bufPK || !bufPV))) return false;
+    id<MTLComputePipelineState> prepass_pso = compile_msl_kernel(
+        ctx, source, @"flash_attn_bwd_row_prepass_f32");
+    if (!prepass_pso) return false;
     FlashAttnBwdParams params{B, q_heads, kv_heads, Sq, Sk, D, scale, causal,
                               causal_offset, bias ? 1 : 0, window_size,
                               logit_softcap};
@@ -5771,13 +5851,32 @@ static bool dispatch_flash_attn_bwd_msl(MetalDeviceContext &ctx,
       [clear fillBuffer:bufDV range:NSMakeRange(0, kv_bytes) value:0];
       [clear endEncoding];
     }
+    NSUInteger row_threads = static_cast<NSUInteger>(B) * Sq;
     id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
+    [enc setComputePipelineState:prepass_pso];
+    [enc setBuffer:bufQ offset:0 atIndex:0]; [enc setBuffer:bufK offset:0 atIndex:1];
+    [enc setBuffer:bufV offset:0 atIndex:2]; [enc setBuffer:bufDO offset:0 atIndex:3];
+    [enc setBuffer:bufBias offset:0 atIndex:4];
+    [enc setBuffer:bufRowLse offset:0 atIndex:5];
+    [enc setBuffer:bufRowDelta offset:0 atIndex:6];
+    [enc setBytes:&params length:sizeof(params) atIndex:7];
+    {
+      NSUInteger width = std::max<NSUInteger>(1, std::min<NSUInteger>(
+          row_threads, std::min<NSUInteger>(
+              prepass_pso.maxTotalThreadsPerThreadgroup, 64)));
+      [enc dispatchThreads:MTLSizeMake(row_threads, 1, 1)
+          threadsPerThreadgroup:MTLSizeMake(width, 1, 1)];
+    }
+    [enc endEncoding];
+    enc = [cb computeCommandEncoder];
     [enc setComputePipelineState:dq_pso];
     [enc setBuffer:bufQ offset:0 atIndex:0]; [enc setBuffer:bufK offset:0 atIndex:1];
     [enc setBuffer:bufV offset:0 atIndex:2]; [enc setBuffer:bufDO offset:0 atIndex:3];
     [enc setBuffer:bufBias offset:0 atIndex:4];
     [enc setBuffer:bufDQ offset:0 atIndex:5];
     [enc setBytes:&params length:sizeof(params) atIndex:6];
+    [enc setBuffer:bufRowLse offset:0 atIndex:7];
+    [enc setBuffer:bufRowDelta offset:0 atIndex:8];
     NSUInteger dq_threads = static_cast<NSUInteger>(B) * Sq;
     NSUInteger dq_tg_width = std::max<NSUInteger>(1, std::min<NSUInteger>(
         dq_threads, std::min<NSUInteger>(dq_pso.maxTotalThreadsPerThreadgroup,
@@ -5795,12 +5894,16 @@ static bool dispatch_flash_attn_bwd_msl(MetalDeviceContext &ctx,
       [enc setBuffer:bufDK offset:0 atIndex:5]; [enc setBuffer:bufDV offset:0 atIndex:6];
       [enc setBuffer:bufPK offset:0 atIndex:7]; [enc setBuffer:bufPV offset:0 atIndex:8];
       [enc setBytes:&params length:sizeof(params) atIndex:9];
+      [enc setBuffer:bufRowLse offset:0 atIndex:10];
+      [enc setBuffer:bufRowDelta offset:0 atIndex:11];
     } else {
       [enc setBuffer:bufDK offset:0 atIndex:5]; [enc setBuffer:bufDV offset:0 atIndex:6];
       [enc setBytes:&params length:sizeof(params) atIndex:7];
     }
+    // The split route is now key-parallel: one thread per (partial, KV batch,
+    // key row) rather than one per (partial, KV batch).
     NSUInteger dkdv_threads = route == 1 ? static_cast<NSUInteger>(B) * Sq :
-        (route == 2 ? static_cast<NSUInteger>(kv_outer) * 2
+        (route == 2 ? static_cast<NSUInteger>(kv_outer) * 2 * Sk
                     : static_cast<NSUInteger>(kv_outer));
     NSUInteger dkdv_tg_width = std::max<NSUInteger>(1, std::min<NSUInteger>(
         dkdv_threads,

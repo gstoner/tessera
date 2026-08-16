@@ -3717,3 +3717,27 @@ APPLE-DEVICE-EVENT-1 by giving the Apple MPSGraph BMM route an owned command
 buffer. Both are Apple-guarded — the shared `scheduled_kernel` gate adds an
 `apple_gpu` branch beside the existing x86/ROCm ones and changes neither — and
 the runtime edit is in `apple_gpu_runtime.mm`, which no sibling links.
+
+## APPLE-ATTN-BWD-PERF-1-2026-08-16 — backward row-prepass assessment (PR pending)
+
+**Outcome: not applicable to this architecture — no shared contract changed.**
+Apple's attention-backward dK/dV split kernel became key-parallel by finally
+implementing the `row_prepass` stage that
+`attention_contract.plan_attention_backward_workspace` **already declares**
+(`row_lse`, `row_delta`, consumed by `dkdv_split` and `dq`). The change is
+confined to Apple-private MSL in `apple_gpu_runtime.mm` and its dispatch; no
+shared IR, Schedule contract, workspace plan, dtype, ABI, or sibling schedule
+was modified. The declared schedule is unchanged — still `split_count = 2` with
+ascending `reduction_order = (0, 1)`; only Apple's thread mapping changed, which
+is architecture-owned.
+
+**Worth reading anyway, because the shape of the bug is portable.** The declared
+workspace stage existed and had no consumer, so every kernel recomputed the row
+statistics inline. That is not merely duplicated work: because the statistics
+reduce over the whole key axis, an inline-recompute kernel must own an entire
+query stream, which capped the dK/dV split at one thread per (partial, KV batch)
+— 4 threads at `B1 Hq4/Hkv2 S64`. Implementing the declared prepass raised it to
+`2 * kv_outer * Sk` and moved backward from 195 ms to 6.0 ms (~32x), while
+keeping single-owner determinism. Any backend whose backward recomputes row
+statistics inside its dK/dV kernel should check whether it has the same
+structural cap before attributing slowness to memory or instruction mix.

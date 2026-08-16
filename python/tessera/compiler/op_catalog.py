@@ -235,6 +235,11 @@ _SPECS = [
     # the segment_reduce ragged encoding. Nim-sums use existing bitwise_xor.
     OpSpec("game_mex", "tessera.game_mex", 2, 2,
            lowering="segment_reduce", shape_rule="segment_mex"),
+    # Thomas-algorithm tridiagonal solve (P2 tranche; PDE plan §III.1 —
+    # required for Crank-Nicolson). Reference tier; fp64 accumulation with
+    # the rhs storage dtype preserved; VJP = the transpose solve.
+    OpSpec("tridiagonal_solve", "tessera.tridiagonal_solve", 4, 4,
+           lowering="loop_nest", shape_rule="tridiagonal_rhs"),
     OpSpec("fft", "tessera.fft", 1, 1, lowering="spectral"),
     OpSpec("ifft", "tessera.ifft", 1, 1, lowering="spectral"),
     OpSpec("rfft", "tessera.rfft", 1, 1, lowering="spectral"),
@@ -1030,6 +1035,7 @@ SHAPE_RULE_NAMES = frozenset({
     "coalition_marginal",
     "coalition_players_axis",
     "segment_mex",
+    "tridiagonal_rhs",
     "batched_gemm_3d",
     "transpose",
     "same_shape_bool",

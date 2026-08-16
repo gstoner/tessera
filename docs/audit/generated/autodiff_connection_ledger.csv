@@ -293,6 +293,7 @@ tanh,elementwise,yes,native,native,cpu,cpu,cpu_x86_64,cpu_x86_64,cpu_x86_64,cpu_
 tile,tensor_algebra,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 transpose,layout_transform,yes,native,native,,cpu,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core;bwd_cpu_ir_oracle=llvm23-core,native compiler adjoint,,
 tri_solve,linalg_solver,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
+tridiagonal_solve,loop_nest,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 triplet_loss,loss,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 unsqueeze,tensor_algebra,yes,native,native,,cpu,,,,,,python_reference=python-unit-registry;ir_adjoint=llvm23-core;ir_tangent=llvm23-core;bwd_cpu_ir_oracle=llvm23-core,native compiler adjoint,,
 var,reduction,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,

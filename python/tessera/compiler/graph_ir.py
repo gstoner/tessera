@@ -2235,6 +2235,14 @@ def _shape_coalition_players_axis(
     return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
 
 
+def _shape_tridiagonal_rhs(
+    operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None
+) -> IRType:
+    """Solve result: shape and storage dtype of the right-hand side (the
+    fourth operand); the three diagonals parameterize the system."""
+    return operand_types[3] if len(operand_types) >= 4 else operand_types[-1]
+
+
 def _shape_segment_mex(
     operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None
 ) -> IRType:
@@ -3377,6 +3385,7 @@ _SHAPE_RULES = {
     "coalition_marginal": _shape_coalition_marginal,
     "coalition_players_axis": _shape_coalition_players_axis,
     "segment_mex": _shape_segment_mex,
+    "tridiagonal_rhs": _shape_tridiagonal_rhs,
     "batched_gemm_3d": _shape_batched_gemm_3d,
     "same_shape_bool": _shape_same_shape_bool,
     "reduce_all": _shape_reduce_all,

@@ -17,8 +17,8 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 
 ## Summary
 
-- Differentiable families tracked: **303**
-- `python_reference` (Python VJP/JVP): **303**
+- Differentiable families tracked: **304**
+- `python_reference` (Python VJP/JVP): **304**
 - `ir_adjoint = native`: **52** (adam, adam_w, add, all_gather, all_reduce, all_to_all, binary_cross_entropy_loss, broadcast, cross_entropy_loss, dct, depth_attn, expand, fft, flatten, gelu, huber_loss, ifft, irfft, istft, j_s_divergence_loss, k_l_divergence_loss, layer_norm, mae_loss, matmul, momentum, mse_loss, mul, nesterov, permute, reduce, reduce_scatter, relu, reshape, rfft, rmsnorm, sgd, sigmoid, silu, smooth_l1_loss, softmax, spectral_conv, spectral_filter, squeeze, stft, stop_gradient, tanh, transpose, unsqueeze, view)
 - `ir_adjoint = placeholder` (Python round-trip, not native): **3** (log_softmax, sin, softplus)
 - `ir_adjoint = mixed` (kind-aware native + placeholder): **0**
@@ -363,6 +363,7 @@ One row per differentiable **op family**, over the independent proof axes of [`A
 | `tile` | tensor_algebra | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `transpose` | layout_transform | yes | native | native | — | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `tri_solve` | linalg_solver | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
+| `tridiagonal_solve` | loop_nest | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `triplet_loss` | loss | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |
 | `unsqueeze` | tensor_algebra | yes | native | native | — | cpu | — | — | — | — | — | — | — | python_reference=python-unit-registry; ir_adjoint=llvm23-core; ir_tangent=llvm23-core; bwd_cpu_ir_oracle=llvm23-core | native compiler adjoint |
 | `var` | reduction | yes | none | none | — | — | — | — | — | — | — | — | — | python_reference=python-unit-registry |  |

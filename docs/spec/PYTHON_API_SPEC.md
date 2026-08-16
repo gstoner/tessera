@@ -1560,6 +1560,7 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `game_boltzmann_value(v, *, temperature)` | `([..., 2^n], scalar) → [..., n]` | `pure` | `E^T_i(v) = Σ_S ∂_i v(S)·softmax(v/T)_S` — softmax-weighted marginals (flash-attention-style online softmax on the kernel tier). `T < 0` is legal (min-seeking); `T == 0` fails closed. Closed-form VJP registered, FD-checked. |
 | `game_coalition_excess(v, x)` | `([..., 2^n], [..., n]) → [..., 2^n]` | `pure` | `e(S,x) = v(S) − Σ_{i∈S} x_i` — the core/nucleolus separation quantity; jointly linear, declared transpose. |
 | `game_mex(values, segment_ids, *, num_segments)` | `(int[], int[]) → int[num_segments]` | `pure` | Segmented minimum excludant (Grundy numbers); integer-valued, non-differentiable (no VJP — a gradient path through it raises). Nim-sums ride the existing `bitwise_xor`. |
+| `tridiagonal_solve(dl, d, du, b)` | `([n], [n], [n], [..., n]) → [..., n]` | `pure` | Thomas-algorithm tridiagonal solve (PDE §III.1, Crank–Nicolson). fp64 accumulation, rhs storage dtype preserved; zero pivots fail closed; VJP is the transpose solve (adjoint system), so reverse-mode AD is O(n) with no unrolling. |
 | `fft(x, axis=-1)`, `ifft(xf, axis=-1)`, `rfft(x, axis=-1)`, `irfft(xf, axis=-1, n=None)` | `(array) → array` | `pure` | NumPy FFT helpers |
 | `stft(x, win, hop)`, `istft(xf, win, hop)` | `(array, array) → array` | `pure` | NumPy FFT-derived windowed transform references |
 | `spectral_filter(Xf, Hf)` | `(array, array) → array` | `pure` | Frequency-domain multiply reference |

@@ -61,6 +61,18 @@ distributed and multi-optimizer results are not.
 Re-derived and checked numerically. Harness:
 [`tests/unit/test_fused_wgrad_optimizer_contract.py`](../../../tests/unit/test_fused_wgrad_optimizer_contract.py).
 
+> **Harness determinism pin (2026-08-15).** The P1 bitwise assertions
+> originally computed chunk partials with a BLAS GEMM, whose per-element
+> reduction order is a shape- and hardware-dependent kernel choice — the
+> full-matrix and tile GEMMs legitimately diverged in ULPs on GitHub's
+> heterogeneous runners (observed intermittently on PR #566; green on rerun).
+> The harness now accumulates per-token outer products so every element has an
+> identical sequential fp32 chain on both sides, on any hardware. The
+> *contract* is unchanged; the pin is exactly the accumulation-order
+> discipline the fused epilogue itself must declare (W2/W3).
+> Cross-referenced by the substrate view, which folds this assessment as the
+> seventh paper ([`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md) S9).
+
 ### 1.1 What holds
 
 | Claim | Result |

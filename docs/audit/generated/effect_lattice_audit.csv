@@ -321,6 +321,7 @@ training.loss_adamw,pure,,1,1,0
 training.loss_sgd,pure,,1,1,0
 transpose,pure,pure,1,1,0
 tri_solve,pure,,1,1,0
+tridiagonal_solve,pure,,1,1,0
 trunc,pure,,1,1,0
 unpack,movement,,1,1,0
 unsqueeze,pure,,1,1,0

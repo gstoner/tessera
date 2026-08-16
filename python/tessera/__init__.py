@@ -5653,6 +5653,7 @@ from . import aot  # noqa: E402
 from . import custom  # noqa: E402
 from . import relaxation  # noqa: E402,F401  registers sparsemax/entmax15/soft_top_k/… ops (T1)
 from . import game  # noqa: E402,F401  registers game_* coalition-lattice ops (G1)
+from . import solvers_ops  # noqa: E402,F401  registers tridiagonal_solve (P2 tranche)
 from . import data  # noqa: E402
 from . import losses  # noqa: E402
 from . import memory  # noqa: E402

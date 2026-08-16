@@ -20875,25 +20875,26 @@ extern "C" void tessera_apple_gpu_layer_norm_f16(const uint16_t *x,
 // head or batch count. Accumulation is in fp32 in a fixed ascending order, so
 // repeats are bit-identical.
 //===----------------------------------------------------------------------===//
-static NSString *const kNormBackwardSource = @R"MSL(
+static NSString *const kNormBackwardSourceTemplate = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
+%%NORM_STORAGE%%
 
 // `mean` is 0 for RMSNorm, so one row routine serves both: `is_layer_norm`
 // selects whether the row is centred. Row statistics are published so the
 // column pass can rebuild y_hat without a second reduction over the row.
-inline void norm_row_stats(device const float *X, int base, int cols, float eps,
+inline void norm_row_stats(device const norm_storage_t *X, int base, int cols, float eps,
                            int is_layer_norm, thread float &mean,
                            thread float &inv) {
   float n = float(cols);
   mean = 0.0f;
   if (is_layer_norm != 0) {
-    for (int c = 0; c < cols; ++c) mean += X[base + c];
+    for (int c = 0; c < cols; ++c) mean += norm_load(X, base + c);
     mean /= n;
   }
   float acc = 0.0f;
   for (int c = 0; c < cols; ++c) {
-    float d = X[base + c] - mean;
+    float d = norm_load(X, base + c) - mean;
     acc += d * d;
   }
   inv = 1.0f / sqrt(acc / n + eps);
@@ -20903,10 +20904,10 @@ inline void norm_row_stats(device const float *X, int base, int cols, float eps,
 // column pass. `G` is the affine scale; when absent the caller passes a unit
 // vector so the arithmetic is identical and no branch enters the inner loop.
 kernel void tessera_norm_bwd_rows_f32(
-    device const float *X    [[buffer(0)]],
-    device const float *dY   [[buffer(1)]],
-    device const float *G    [[buffer(2)]],
-    device float       *dX   [[buffer(3)]],
+    device const norm_storage_t *X    [[buffer(0)]],
+    device const norm_storage_t *dY   [[buffer(1)]],
+    device const norm_storage_t *G    [[buffer(2)]],
+    device norm_storage_t *dX   [[buffer(3)]],
     device float       *rowMean [[buffer(4)]],
     device float       *rowInv  [[buffer(5)]],
     constant int   &rows     [[buffer(6)]],
@@ -20922,18 +20923,18 @@ kernel void tessera_norm_bwd_rows_f32(
   rowInv[gid] = inv;
   float sum_g = 0.0f, sum_g_y = 0.0f;
   for (int c = 0; c < cols; ++c) {
-    float g = dY[base + c] * G[c];
-    float y = (X[base + c] - mean) * inv;
+    float g = norm_load(dY, base + c) * norm_load(G, c);
+    float y = (norm_load(X, base + c) - mean) * inv;
     sum_g += g;
     sum_g_y += g * y;
   }
   for (int c = 0; c < cols; ++c) {
-    float g = dY[base + c] * G[c];
-    float y = (X[base + c] - mean) * inv;
+    float g = norm_load(dY, base + c) * norm_load(G, c);
+    float y = (norm_load(X, base + c) - mean) * inv;
     // RMSNorm drops the mean term: its normalizer does not subtract the mean,
     // so d(mean)/dx contributes nothing.
     float centred = is_layer_norm != 0 ? sum_g : 0.0f;
-    dX[base + c] = (inv / n) * (n * g - centred - y * sum_g_y);
+    norm_store(dX, base + c, (inv / n) * (n * g - centred - y * sum_g_y));
   }
 }
 
@@ -20941,12 +20942,12 @@ kernel void tessera_norm_bwd_rows_f32(
 // order so dGamma/dBeta are deterministic. y_hat is rebuilt from the published
 // row statistics rather than re-reduced.
 kernel void tessera_norm_bwd_affine_f32(
-    device const float *X    [[buffer(0)]],
-    device const float *dY   [[buffer(1)]],
+    device const norm_storage_t *X    [[buffer(0)]],
+    device const norm_storage_t *dY   [[buffer(1)]],
     device const float *rowMean [[buffer(2)]],
     device const float *rowInv  [[buffer(3)]],
-    device float       *dG   [[buffer(4)]],
-    device float       *dB   [[buffer(5)]],
+    device norm_storage_t *dG   [[buffer(4)]],
+    device norm_storage_t *dB   [[buffer(5)]],
     constant int   &rows     [[buffer(6)]],
     constant int   &cols     [[buffer(7)]],
     uint gid [[thread_position_in_grid]]) {
@@ -20955,14 +20956,55 @@ kernel void tessera_norm_bwd_affine_f32(
   float acc_g = 0.0f, acc_b = 0.0f;
   for (int r = 0; r < rows; ++r) {
     int idx = r * cols + c;
-    float y = (X[idx] - rowMean[r]) * rowInv[r];
-    acc_g += dY[idx] * y;
-    acc_b += dY[idx];
+    float y = (norm_load(X, idx) - rowMean[r]) * rowInv[r];
+    acc_g += norm_load(dY, idx) * y;
+    acc_b += norm_load(dY, idx);
   }
-  dG[c] = acc_g;
-  dB[c] = acc_b;
+  norm_store(dG, c, acc_g);
+  norm_store(dB, c, acc_b);
 }
 )MSL";
+
+enum : int32_t {
+  kNormBwdStorageF32 = 0,
+  kNormBwdStorageF16 = 1,
+  kNormBwdStorageBF16 = 2,
+};
+
+// Same substitution idiom `flash_attn_bwd_source` uses. Storage is two-byte for
+// f16/bf16 while every accumulation stays f32, and each result is stored back at
+// its operand's own dtype — the project's reduced-precision policy (compute at
+// f32, store at the operand dtype), not a silent upcast of the gradients.
+static NSString *norm_backward_source(int32_t storage_dtype) {
+  NSString *decl = nil;
+  if (storage_dtype == kNormBwdStorageF32) {
+    decl = @"typedef float norm_storage_t;\n"
+            "inline float norm_load(device const norm_storage_t *p, int i)"
+            " { return p[i]; }\n"
+            "inline void norm_store(device norm_storage_t *p, int i, float v)"
+            " { p[i] = v; }";
+  } else if (storage_dtype == kNormBwdStorageF16) {
+    decl = @"typedef half norm_storage_t;\n"
+            "inline float norm_load(device const norm_storage_t *p, int i)"
+            " { return float(p[i]); }\n"
+            "inline void norm_store(device norm_storage_t *p, int i, float v)"
+            " { p[i] = half(v); }";
+  } else if (storage_dtype == kNormBwdStorageBF16) {
+    // Round-to-nearest-even on the way down, matching the convention already
+    // used elsewhere in this runtime; truncating would bias every gradient.
+    decl = @"typedef ushort norm_storage_t;\n"
+            "inline float norm_load(device const norm_storage_t *p, int i)"
+            " { return as_type<float>(uint(p[i]) << 16); }\n"
+            "inline void norm_store(device norm_storage_t *p, int i, float v)"
+            " { uint b = as_type<uint>(v);"
+            "   p[i] = ushort((b + 0x7fffu + ((b >> 16) & 1u)) >> 16); }";
+  } else {
+    return nil;
+  }
+  return [kNormBackwardSourceTemplate
+      stringByReplacingOccurrencesOfString:@"%%NORM_STORAGE%%"
+                                withString:decl];
+}
 
 namespace {
 
@@ -20972,31 +21014,53 @@ namespace {
 // `gamma` may be null (non-affine); `dgamma`/`dbeta` may be null when the caller
 // does not need the affine gradients, in which case the column pass is skipped
 // entirely rather than computed and discarded.
-static int32_t dispatch_norm_backward_msl(const float *x, const float *dy,
-                                          const float *gamma, float *dx,
-                                          float *dgamma, float *dbeta,
+static int32_t dispatch_norm_backward_msl(const void *x, const void *dy,
+                                          const void *gamma, void *dx,
+                                          void *dgamma, void *dbeta,
                                           int32_t rows, int32_t cols,
-                                          float eps, int32_t is_layer_norm) {
+                                          float eps, int32_t is_layer_norm,
+                                          int32_t storage_dtype) {
   MetalDeviceContext &ctx = deviceContext();
   if (!ctx.ok || !x || !dy || !dx || rows <= 0 || cols <= 0) return 0;
+  if (storage_dtype < kNormBwdStorageF32 || storage_dtype > kNormBwdStorageBF16)
+    return 0;
   @autoreleasepool {
+    NSString *source = norm_backward_source(storage_dtype);
+    if (!source) return 0;
     id<MTLComputePipelineState> rows_pso = compile_msl_kernel(
-        ctx, kNormBackwardSource, @"tessera_norm_bwd_rows_f32");
+        ctx, source, @"tessera_norm_bwd_rows_f32");
     if (!rows_pso) return 0;
     const bool want_affine = dgamma != nullptr || dbeta != nullptr;
     id<MTLComputePipelineState> affine_pso = nil;
     if (want_affine) {
-      affine_pso = compile_msl_kernel(ctx, kNormBackwardSource,
+      affine_pso = compile_msl_kernel(ctx, source,
                                       @"tessera_norm_bwd_affine_f32");
       if (!affine_pso) return 0;
     }
-    NSUInteger bytes = sizeof(float) * (NSUInteger)rows * cols;
-    NSUInteger col_bytes = sizeof(float) * (NSUInteger)cols;
+    // Element size follows the storage dtype; the row statistics stay f32
+    // because they are compiler-owned intermediates, not operands.
+    const size_t elem = storage_dtype == kNormBwdStorageF32 ? sizeof(float)
+                                                            : sizeof(uint16_t);
+    NSUInteger bytes = elem * (NSUInteger)rows * cols;
+    NSUInteger col_bytes = elem * (NSUInteger)cols;
     NSUInteger row_bytes = sizeof(float) * (NSUInteger)rows;
     // A unit scale keeps the non-affine case on the same arithmetic path as the
-    // affine one, so the two cannot drift apart.
-    std::vector<float> ones;
-    if (!gamma) ones.assign((size_t)cols, 1.0f);
+    // affine one, so the two cannot drift apart. The literal 1.0 is written in
+    // the operand's own storage so the kernel's loader reads it correctly.
+    std::vector<uint8_t> ones;
+    if (!gamma) {
+      ones.assign((size_t)cols * elem, 0);
+      for (int32_t c = 0; c < cols; ++c) {
+        if (storage_dtype == kNormBwdStorageF32) {
+          float one = 1.0f;
+          memcpy(ones.data() + (size_t)c * elem, &one, sizeof(float));
+        } else {
+          // half(1.0) is 0x3C00; bf16(1.0) is 0x3F80.
+          uint16_t one = storage_dtype == kNormBwdStorageF16 ? 0x3C00u : 0x3F80u;
+          memcpy(ones.data() + (size_t)c * elem, &one, sizeof(uint16_t));
+        }
+      }
+    }
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufX, ctx, x, bytes);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufDY, ctx, dy, bytes);
     TS_METAL_BUF_ACQUIRE_WITH_BYTES(bufG, ctx, gamma ? gamma : ones.data(),
@@ -21063,14 +21127,52 @@ extern "C" int32_t tessera_apple_gpu_rmsnorm_bwd_f32(
     const float *x, const float *gamma, const float *dy, float *dx,
     float *dgamma, int32_t rows, int32_t cols, float eps) {
   return dispatch_norm_backward_msl(x, dy, gamma, dx, dgamma, nullptr, rows,
-                                    cols, eps, /*is_layer_norm=*/0);
+                                    cols, eps, /*is_layer_norm=*/0,
+                                    kNormBwdStorageF32);
 }
 
 extern "C" int32_t tessera_apple_gpu_layer_norm_bwd_f32(
     const float *x, const float *gamma, const float *dy, float *dx,
     float *dgamma, float *dbeta, int32_t rows, int32_t cols, float eps) {
   return dispatch_norm_backward_msl(x, dy, gamma, dx, dgamma, dbeta, rows, cols,
-                                    eps, /*is_layer_norm=*/1);
+                                    eps, /*is_layer_norm=*/1,
+                                    kNormBwdStorageF32);
+}
+
+// Low-precision storage variants. Operands and results are two-byte; every
+// accumulation inside the kernel is f32, and each gradient is stored back at its
+// operand's dtype rather than widened — so a caller's f16 graph stays f16 rather
+// than silently acquiring an f32 gradient it must then cast back.
+extern "C" int32_t tessera_apple_gpu_rmsnorm_bwd_f16(
+    const uint16_t *x, const uint16_t *gamma, const uint16_t *dy, uint16_t *dx,
+    uint16_t *dgamma, int32_t rows, int32_t cols, float eps) {
+  return dispatch_norm_backward_msl(x, dy, gamma, dx, dgamma, nullptr, rows,
+                                    cols, eps, /*is_layer_norm=*/0,
+                                    kNormBwdStorageF16);
+}
+
+extern "C" int32_t tessera_apple_gpu_layer_norm_bwd_f16(
+    const uint16_t *x, const uint16_t *gamma, const uint16_t *dy, uint16_t *dx,
+    uint16_t *dgamma, uint16_t *dbeta, int32_t rows, int32_t cols, float eps) {
+  return dispatch_norm_backward_msl(x, dy, gamma, dx, dgamma, dbeta, rows, cols,
+                                    eps, /*is_layer_norm=*/1,
+                                    kNormBwdStorageF16);
+}
+
+extern "C" int32_t tessera_apple_gpu_rmsnorm_bwd_bf16(
+    const uint16_t *x, const uint16_t *gamma, const uint16_t *dy, uint16_t *dx,
+    uint16_t *dgamma, int32_t rows, int32_t cols, float eps) {
+  return dispatch_norm_backward_msl(x, dy, gamma, dx, dgamma, nullptr, rows,
+                                    cols, eps, /*is_layer_norm=*/0,
+                                    kNormBwdStorageBF16);
+}
+
+extern "C" int32_t tessera_apple_gpu_layer_norm_bwd_bf16(
+    const uint16_t *x, const uint16_t *gamma, const uint16_t *dy, uint16_t *dx,
+    uint16_t *dgamma, uint16_t *dbeta, int32_t rows, int32_t cols, float eps) {
+  return dispatch_norm_backward_msl(x, dy, gamma, dx, dgamma, dbeta, rows, cols,
+                                    eps, /*is_layer_norm=*/1,
+                                    kNormBwdStorageBF16);
 }
 
 extern "C" void tessera_apple_gpu_rmsnorm_gpu_f32(const float *x,

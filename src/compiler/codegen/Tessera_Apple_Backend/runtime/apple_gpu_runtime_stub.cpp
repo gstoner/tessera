@@ -2643,6 +2643,62 @@ extern "C" int32_t tessera_apple_gpu_layer_norm_bwd_f32(
   (void)eps;
   return 0;
 }
+// Low-precision storage variants of the same VJP. Same rule: return 0, never a
+// computed result, so an off-Darwin build cannot look like a Metal dispatch.
+extern "C" int32_t tessera_apple_gpu_rmsnorm_bwd_f16(
+    const uint16_t* x, const uint16_t* gamma, const uint16_t* dy, uint16_t* dx,
+    uint16_t* dgamma, int32_t rows, int32_t cols, float eps) {
+  (void)x;
+  (void)gamma;
+  (void)dy;
+  (void)dx;
+  (void)dgamma;
+  (void)rows;
+  (void)cols;
+  (void)eps;
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_rmsnorm_bwd_bf16(
+    const uint16_t* x, const uint16_t* gamma, const uint16_t* dy, uint16_t* dx,
+    uint16_t* dgamma, int32_t rows, int32_t cols, float eps) {
+  (void)x;
+  (void)gamma;
+  (void)dy;
+  (void)dx;
+  (void)dgamma;
+  (void)rows;
+  (void)cols;
+  (void)eps;
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_layer_norm_bwd_f16(
+    const uint16_t* x, const uint16_t* gamma, const uint16_t* dy, uint16_t* dx,
+    uint16_t* dgamma, uint16_t* dbeta, int32_t rows, int32_t cols, float eps) {
+  (void)x;
+  (void)gamma;
+  (void)dy;
+  (void)dx;
+  (void)dgamma;
+  (void)dbeta;
+  (void)rows;
+  (void)cols;
+  (void)eps;
+  return 0;
+}
+extern "C" int32_t tessera_apple_gpu_layer_norm_bwd_bf16(
+    const uint16_t* x, const uint16_t* gamma, const uint16_t* dy, uint16_t* dx,
+    uint16_t* dgamma, uint16_t* dbeta, int32_t rows, int32_t cols, float eps) {
+  (void)x;
+  (void)gamma;
+  (void)dy;
+  (void)dx;
+  (void)dgamma;
+  (void)dbeta;
+  (void)rows;
+  (void)cols;
+  (void)eps;
+  return 0;
+}
 extern "C" void tessera_apple_gpu_mpsgraph_softmax_f32(const float* x, float* out,
                                                        int32_t rows, int32_t cols) {
   for (int32_t r = 0; r < rows; ++r) {

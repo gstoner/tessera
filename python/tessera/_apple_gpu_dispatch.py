@@ -443,6 +443,12 @@ APPLE_ABI: dict[str, tuple[tuple, object]] = {
     "tessera_apple_gpu_philox_normal_f32": ((ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_philox_dropout_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.c_uint64, ctypes.c_uint64, ctypes.c_float, ctypes.POINTER(ctypes.c_float), ctypes.c_int32), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_bwd_f32": ((ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    # Low-precision storage variants: two-byte operands and two-byte gradients,
+    # f32 accumulation inside the kernel.
+    "tessera_apple_gpu_rmsnorm_bwd_f16": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_rmsnorm_bwd_bf16": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_layer_norm_bwd_f16": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
+    "tessera_apple_gpu_layer_norm_bwd_bf16": ((ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16), ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_bf16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_f16_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),
     "tessera_apple_gpu_rmsnorm_dev_f32_enc": ((ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int32, ctypes.c_int32, ctypes.c_float), ctypes.c_int32),

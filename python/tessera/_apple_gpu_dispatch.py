@@ -104,6 +104,15 @@ _SENTINEL_SYMBOLS = (
     # Normalization VJP (E2E-REAL-6 / WS-2).
     "tessera_apple_gpu_rmsnorm_bwd_f32",
     "tessera_apple_gpu_layer_norm_bwd_f32",
+    # Low-precision storage variants (APPLE-NORM-VJP-2). These must gate too:
+    # a dylib built between the f32 and the low-precision landing exports the
+    # f32 names, so probing only those would accept it as current and then fail
+    # at the call site with a missing symbol — which reads as a broken consumer
+    # rather than the stale runtime it actually is.
+    "tessera_apple_gpu_rmsnorm_bwd_f16",
+    "tessera_apple_gpu_rmsnorm_bwd_bf16",
+    "tessera_apple_gpu_layer_norm_bwd_f16",
+    "tessera_apple_gpu_layer_norm_bwd_bf16",
 )
 
 

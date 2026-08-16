@@ -43527,6 +43527,13 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # than the stale runtime it is.
                 getattr(lib, "tessera_apple_gpu_rmsnorm_bwd_f32")
                 getattr(lib, "tessera_apple_gpu_layer_norm_bwd_f32")
+                # Low-precision storage variants (APPLE-NORM-VJP-2). A dylib
+                # built between the f32 and low-precision landings exports the
+                # f32 names only, so gating on those alone would accept it.
+                getattr(lib, "tessera_apple_gpu_rmsnorm_bwd_f16")
+                getattr(lib, "tessera_apple_gpu_rmsnorm_bwd_bf16")
+                getattr(lib, "tessera_apple_gpu_layer_norm_bwd_f16")
+                getattr(lib, "tessera_apple_gpu_layer_norm_bwd_bf16")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

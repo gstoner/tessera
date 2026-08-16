@@ -6,9 +6,9 @@ Reference date for staleness: **2026-08-15**.
 
 ## Headline
 
-- **142** docs catalogued across the canonical doc tree.
-- **141** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **65** updated within the last 30 days.
+- **143** docs catalogued across the canonical doc tree.
+- **142** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **66** updated within the last 30 days.
 - **14** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -180,6 +180,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-08-14 | 1 | ✓ |
 | `compiler/README.md` | - | 2026-08-14 | 1 | ✓ |
 | `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-08-08 | 7 | ✓ |
+| `compiler/SCHEDULE_OBJECT_DESIGN.md` | - | 2026-08-15 | 0 | ✓ |
 | `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-08-08 | 7 | ✓ |
 | `compiler/SEQUENCE_MIXER_THEORY.md` | - | 2026-07-17 | 29 | ✓ |
 | `compiler/SPARDA_REVIEW.md` | - | 2026-08-12 | 3 | ✓ |

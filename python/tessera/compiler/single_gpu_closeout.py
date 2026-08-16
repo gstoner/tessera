@@ -105,21 +105,46 @@ def _is_multi_gpu(family: str, op_name: str) -> bool:
 
 _PHASED_ARTIFACT_ONLY_OPS = frozenset({"depth_attn"})
 
-# Reference-tier by design until their named architecture-owned phase:
-# GAME_THEORY_PLAN.md G5 registers the coalition-lattice arbiter lanes
-# (SubsetZetaRegion beside SpectralFFTRegion; boltzmann_value on the
-# online-softmax emitter) per target, and G1b owns the shared butterfly
-# lowering. Until those phases land, the Python reference is the declared
-# state — not an unclassified single-GPU gap.
-_PHASED_REFERENCE_OPS = frozenset({
-    # tridiagonal_solve: PDE plan §III.1 owns its backend phase (TSOL-A1 /
-    # the PDE op-set admission); Thomas reference is the declared tier today.
-    "tridiagonal_solve",
-    "game_subset_zeta", "game_subset_mobius",
-    "game_superset_zeta", "game_superset_mobius",
-    "game_coalition_marginal", "game_semivalue",
-    "game_boltzmann_value", "game_coalition_excess", "game_mex",
-})
+# Reference-tier by design until their named architecture-owned phase.
+# Until that phase lands, the Python reference is the declared state —
+# not an unclassified single-GPU gap.
+#
+# The rationale is PER OP, not per bucket: these rows are read by backend
+# owners as a pointer to the plan that owns the follow-on work, so a
+# shared string sends every op to whichever plan happened to be first.
+# ``(tile_rationale, target_rationale)``.
+_PHASED_REFERENCE_RATIONALE: dict[str, tuple[str, str]] = {
+    # Coalition-lattice family: G1b owns the shared butterfly Tile
+    # lowering; G5 registers the per-target arbiter lanes (SubsetZetaRegion
+    # beside SpectralFFTRegion; boltzmann_value on the online-softmax
+    # emitter).
+    **{
+        op: (
+            "Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared "
+            "butterfly Tile lowering; hold until that phase lands.",
+            "Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the "
+            "per-target arbiter lanes; hold until that phase lands.",
+        )
+        for op in (
+            "game_subset_zeta", "game_subset_mobius",
+            "game_superset_zeta", "game_superset_mobius",
+            "game_coalition_marginal", "game_semivalue",
+            "game_boltzmann_value", "game_coalition_excess", "game_mex",
+        )
+    },
+    # PDE solver: the butterfly/arbiter phases above own neither half of
+    # this op. Its backend phase is the PDE op-set admission.
+    "tridiagonal_solve": (
+        "Reference tier by plan: PDE_STENCIL_CAPABILITY_PLAN.md §III.1 owns "
+        "the Thomas-recurrence Tile lowering (TSOL-A1 op-set admission); "
+        "hold until that phase lands.",
+        "Reference tier by plan: PDE_STENCIL_CAPABILITY_PLAN.md §III.1 owns "
+        "the per-target solver lane (TSOL-A1 op-set admission); hold until "
+        "that phase lands.",
+    ),
+}
+
+_PHASED_REFERENCE_OPS = frozenset(_PHASED_REFERENCE_RATIONALE)
 
 
 def _tile_bucket(row: audit.OpSupportRow) -> tuple[str, str, str]:
@@ -140,7 +165,7 @@ def _tile_bucket(row: audit.OpSupportRow) -> tuple[str, str, str]:
         return (
             "architecture_evidence_gated",
             "backend_codegen",
-            "Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands.",
+            _PHASED_REFERENCE_RATIONALE[row.op_name][0],
         )
     if target == "fused":
         return (
@@ -172,7 +197,7 @@ def _target_bucket(row: audit.OpSupportRow) -> tuple[str, str, str]:
         return (
             "architecture_evidence_gated",
             "backend_codegen",
-            "Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands.",
+            _PHASED_REFERENCE_RATIONALE[row.op_name][1],
         )
     if row.family == "acceptance_verification":
         return (

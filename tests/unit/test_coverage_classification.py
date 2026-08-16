@@ -173,13 +173,22 @@ def test_structural_only_bucket_has_substantial_size(
     """Structural ops (state-tree, transforms, schedules, AOT,
     custom-primitive escape hatches, serialization, data combinators,
     tokenizers, conformance, sharding wrappers, control-flow) are
-    the largest legitimate slice.  Floor at 85 — the bucket shrinks as
+    the largest legitimate slice.  Floor at 70 — the bucket shrinks as
     formerly-structural ops (e.g. the EBM energy/step-compute ops) gain
     direct device tests, which is the desired direction; `needs_direct_test`
-    staying small is the real guard."""
+    staying small is the real guard.
+
+    2026-08-15: 91 → 76 when the coverage scanner learned to read
+    multi-line family-module imports and module-prefixed registry names
+    (PR #568 review follow-up).  Those 15 ops — the `tessera.state`
+    pytree group plus the coalition-lattice and solver families — always
+    had direct suites; the scanner simply could not see them, so they
+    defaulted into `structural_only`.  `needs_direct_test` went 5 → 0 in
+    the same change, i.e. the real guard moved the right way, so the
+    floor is lowered rather than the classifier changed."""
     summary = classification_summary()
     structural = summary[STRUCTURAL_ONLY]
-    assert structural >= 85, (
+    assert structural >= 70, (
         f"`structural_only` bucket shrank to {structural} "
         f"(baseline ~140).  Did a structural category get accidentally "
         f"reclassified into `needs_direct_test`?"

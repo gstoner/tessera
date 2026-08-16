@@ -1385,3 +1385,24 @@ and no x86 lowering consumes `tile.mbarrier.*`, `tile.tma.*`, or the new
 registered sync ops. The shared Tile dialect still builds and verifies on
 this configuration (combined-driver lit run green in the same 324/0 suite);
 no AVX-512/AMX evidence transfers or is claimed.
+
+## REF-TIER-OPS-2026-08-15 — reference-tier op registration assessment (PR #568)
+
+PR #568 registered ten new public operations through the canonical op catalog
+and the primitive coverage registry — `tridiagonal_solve` (Thomas recurrence,
+PDE plan §III.1 / TSOL-A1) and the nine-op coalition-lattice family
+(`game_subset_zeta`, `game_subset_mobius`, `game_superset_zeta`,
+`game_superset_mobius`, `game_coalition_marginal`, `game_semivalue`,
+`game_boltzmann_value`, `game_coalition_excess`, `game_mex`). Op registration
+is a shared contract, so this queue records the outcome per AGENTS.md
+"Cross-backend work coordination"; PR #568 itself landed without these records.
+
+**Follow-up required — no x86 lane exists for any of the ten.** Both families
+are Python numpy references today; `TileToX86Pass` has no pattern for either,
+and the generated closeout carries them as `target_ir=reference` /
+`tile_ir=partial` under their owning plan phase, not as an unclassified
+single-GPU gap. The relevant x86 shape when that phase opens: the Thomas
+reference is serial in the system dimension `n` and vectorized only across the
+leading batch axes, so the batch axis is the sole AVX-512 parallel axis — an
+x86 lane is a batch-blocked recurrence, not a vectorization of the sweep. No
+AVX-512 or AMX evidence is claimed or transfers.

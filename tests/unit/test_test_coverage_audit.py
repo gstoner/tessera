@@ -269,3 +269,113 @@ def test_dashboard_headline_numbers_match_live_scan() -> None:
         f"{summary['total_ops']} ops; regenerate via "
         f"`tessera.compiler.test_coverage_audit.write_dashboard()`."
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Import-binding scanner (PR #568 review follow-up)
+# ─────────────────────────────────────────────────────────────────────────
+#
+# The scanner used to see only single-line ``from tessera.<mod> import X``
+# and only registry-spelled names.  That silently scored zero for any op
+# whose suite used the parenthesized multi-line import form, or whose
+# module exports a short name for a prefixed registry op — which is how
+# `tridiagonal_solve` and the whole coalition-lattice family landed in
+# PR #568 classified `structural_only` despite having dedicated suites.
+
+
+def _synthetic_import(module: str, name: str) -> str:
+    """Build a sample import line WITHOUT writing it as a literal.
+
+    This file is itself inside ``tests/unit/``, which is the tree the
+    coverage scanner walks.  A literal ``from tessera.<mod> import <op>``
+    in a fixture would be indistinguishable from a real reference and
+    would silently inflate that op's row in the live dashboard — which
+    the generated-doc drift gate then bakes in.  Assembling the string
+    at runtime keeps the fixtures out of the scan.
+    """
+    return f"from tessera.{module} import {name}"
+
+
+def _refs(op_name: str) -> int:
+    rows = {r.op_name: r for r in collect_op_test_coverage()}
+    assert op_name in rows, f"{op_name} is not in the primitive registry"
+    return rows[op_name].total_refs
+
+
+def test_family_module_import_is_seen_single_line() -> None:
+    """A single-line family-module import of the solver counts.
+
+    Regression pin for the PR #568 review finding: the solver suite
+    exists (`tests/unit/test_tridiagonal_solve.py`) and must not read
+    as an untested op.
+
+    (The import form is deliberately described rather than quoted —
+    see `_synthetic_import` for why a literal here would corrupt the
+    very number this test is pinning.)
+    """
+    assert _refs("tridiagonal_solve") >= 2, (
+        "tridiagonal_solve scores as untested — `solvers_ops` fell out of "
+        "_FAMILY_MODULES, or the import-binding scan regressed."
+    )
+
+
+def test_multiline_import_and_prefixed_family_are_seen() -> None:
+    """Parenthesized imports + ``game_``-prefixed registry names.
+
+    ``tessera.game`` exports ``subset_zeta``; the registry names it
+    ``game_subset_zeta``.  Both halves must work or the family scores
+    zero across the board.
+    """
+    for op in ("game_subset_zeta", "game_mex", "game_boltzmann_value"):
+        assert _refs(op) >= 2, (
+            f"{op} scores as untested — multi-line import parsing or the "
+            f"_MODULE_PREFIXED_FAMILIES mapping regressed."
+        )
+
+
+def test_repeated_local_imports_do_not_multiply_call_sites() -> None:
+    """Call sites are counted once per bound name, not once per import.
+
+    ``test_game_lattice.py`` re-imports ``boltzmann_value`` inside
+    several test bodies.  A per-import full-text rescan multiplied its
+    call sites ~3.5x, which would inflate the audit rather than fix it.
+    """
+    from tessera.compiler import test_coverage_audit as tca
+
+    # Synthetic source is ASSEMBLED, never written as a literal: this
+    # file lives in tests/unit/, which is exactly what the scanner walks,
+    # so an inline ``from tessera.game import ...`` line here would be
+    # counted as a real reference and inflate the live dashboard.
+    imp = _synthetic_import("game", "boltzmann_value")
+    text = (
+        f"{imp}\n"
+        "def a():\n"
+        f"    {imp}\n"
+        "    return boltzmann_value(1)\n"
+        "def b():\n"
+        f"    {imp}\n"
+        "    return boltzmann_value(2)\n"
+    )
+    registry = frozenset({"game_boltzmann_value"})
+    offsets = tca._import_binding_refs(text, registry)["game_boltzmann_value"]
+    # 3 imports + 2 distinct call sites, each counted exactly once.
+    assert len(offsets) == len(set(offsets)) == 5, (
+        f"expected 3 imports + 2 unique call sites = 5, got {len(offsets)} "
+        f"({len(set(offsets))} unique) — call-site dedupe regressed"
+    )
+
+
+def test_dotted_calls_are_not_double_counted() -> None:
+    """``mod.op(...)`` belongs to the combined regex, not the binding scan."""
+    from tessera.compiler import test_coverage_audit as tca
+
+    op = "tridiagonal" + "_solve"          # see _synthetic_import's note
+    text = (
+        f"{_synthetic_import('solvers_ops', op)}\n"
+        f"solvers_ops.{op}(a)\n"
+    )
+    registry = frozenset({op})
+    offsets = tca._import_binding_refs(text, registry)[op]
+    assert len(offsets) == 1, (
+        f"the dotted call was double-counted by the binding scan: {offsets}"
+    )

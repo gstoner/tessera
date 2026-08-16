@@ -4,13 +4,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 1831603.13125,
+      "median_ns": 2046040.3625,
       "repetitions": 2480,
       "resource_fingerprint": "4e503c51921b402e61035687aa7a92e9b57642ffc30b2b81444b2add78c67e93",
       "route": "apple_gpu_bmm_f32_batch1",
       "run_medians_ns": [
-        1830752.0875,
-        1832454.175
+        2046483.85,
+        2045596.875
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -21,13 +21,13 @@
     {
       "discard_first": true,
       "family": "matmul",
-      "median_ns": 600143.7125,
+      "median_ns": 633385.58125,
       "repetitions": 2480,
       "resource_fingerprint": "4e503c51921b402e61035687aa7a92e9b57642ffc30b2b81444b2add78c67e93",
       "route": "apple_gpu_bmm_f32_batch1",
       "run_medians_ns": [
-        600938.75,
-        599348.675
+        635189.8,
+        631581.3625
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -38,13 +38,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 1021679.16875,
+      "median_ns": 1228833.3375,
       "repetitions": 2480,
       "resource_fingerprint": "9a5654aa94d64d4b82b90daf10335896677cc19cd93aca261b9c54d58a889fe1",
       "route": "apple_gpu_msl_softmax_f32",
       "run_medians_ns": [
-        1022945.3125,
-        1020413.025
+        1211302.6125,
+        1246364.0625
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -55,13 +55,13 @@
     {
       "discard_first": true,
       "family": "softmax",
-      "median_ns": 22909.9,
+      "median_ns": 28534.40625,
       "repetitions": 2480,
       "resource_fingerprint": "9a5654aa94d64d4b82b90daf10335896677cc19cd93aca261b9c54d58a889fe1",
       "route": "apple_gpu_msl_softmax_f32",
       "run_medians_ns": [
-        23182.8,
-        22637.0
+        28428.1375,
+        28640.675
       ],
       "selected": true,
       "stability_limit_pct": 4.0,
@@ -159,7 +159,7 @@
     "matmul",
     "softmax"
   ],
-  "source_commit": "a136395ec210b1d1c23b2445a6d2a98e70512ed8",
+  "source_commit": "5c53c63510e42f29a11ab612d5bb3dee2d60a097",
   "target": "apple_gpu",
   "toolchain_fingerprint": "9cd8dd83cd5047c7f971a8f1c7cd2d069322b001265fc048deb8ae25ddcbdaab"
 }

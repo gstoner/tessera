@@ -214,24 +214,6 @@ def _device_time_reader() -> Callable[[], int] | None:
     return lambda: int(probe())
 
 
-def _probe_device_event(submit: Callable[[], object]) -> int:
-    """Run one submit and report the device interval it published, or -1.
-
-    Measured, not assumed: APPLE-DEVICE-EVENT-1 was open because the MPSGraph
-    matmul route owned no command buffer to time.  Now that it encodes into an
-    owned buffer under the shared timing bracket, whether a device interval is
-    actually published is a question for the device, so ask it.
-    """
-    reader = _device_time_reader()
-    if reader is None:
-        return -1
-    submit()
-    try:
-        return reader()
-    except Exception:
-        return -1
-
-
 def _device_event_medians_ns(
     submit: Callable[[], object], reader: Callable[[], int], *,
     samples: int, iterations: int,

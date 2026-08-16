@@ -145,6 +145,28 @@ model can read the IR directly rather than asking a human to describe it.
 
 The paper reports block swizzle moving L2 hit rate **35% → 72%**. In our tree:
 
+> **Updated 2026-08-16 — the *mechanism* half of this finding is closed; the
+> *lever* half still stands.** The bullets below recorded the state when this
+> assessment was written. `tile_rasterization.py` has since landed and is now
+> consumed by all four emitters —
+> [`emit/nvidia_cuda.py`](../../../python/tessera/compiler/emit/nvidia_cuda.py)
+> (`_raster_launch`), [`msl_gemm_emit.py`](../../../python/tessera/compiler/msl_gemm_emit.py),
+> [`apple_gemm_schedules.py`](../../../python/tessera/compiler/apple_gemm_schedules.py),
+> and [`rocm_schedule.py`](../../../python/tessera/compiler/rocm_schedule.py) —
+> and the MLX `swizzle_log` heuristic was retired rather than promoted. Verified
+> by *executing* the NVIDIA path: `row_major`, `column_major`, and `grouped_m`
+> emit materially different block-index code.
+>
+> What has **not** changed is the conclusion. `raster_order` is **carried, not
+> swept**: it defaults to `row_major` in
+> [`autotune_v2.py`](../../../python/tessera/compiler/autotune_v2.py) and
+> every emitter, and automatic enumeration is deliberately withheld pending an
+> architecture-owned correlation/retain verdict, because ROCM-CALIB-1 proved an
+> unvalidated locality metric must not change a production raster choice. So the
+> lever is now *expressible on every backend and still not pulled* — the blocker
+> moved from codegen to measured device evidence. See
+> [`CUTE_IR_ASSESSMENT.md`](CUTE_IR_ASSESSMENT.md) §3.2.
+
 - Threadblock swizzle exists on **exactly one** backend —
   [`apple_gemm_schedules.py:128`](../../../python/tessera/compiler/apple_gemm_schedules.py#L128),
   an MLX-inherited hardcoded heuristic (`swizzle_log = 0 if tm <= 3 else 1`),

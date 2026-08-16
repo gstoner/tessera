@@ -84,6 +84,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | How should game-theoretic operators land? | [`GAME_THEORY_PLAN.md`](GAME_THEORY_PLAN.md) | [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md) for the oracle rows |
 | What is the LSE identity contract? | [`LSE_CHECKPOINT_CONTRACT.md`](LSE_CHECKPOINT_CONTRACT.md) | architecture-owned attention plans |
 | When may a consumer fuse into its producer's tiled epilogue? | [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) | [`COMPILER_THEORY_OF_OPERATION.md`](COMPILER_THEORY_OF_OPERATION.md) for the arbiter, [`TARGET_IR_REVIEW.md`](TARGET_IR_REVIEW.md) for the emitter seam |
+| How should layouts and index arithmetic be represented? | [`CUTE_IR_ASSESSMENT.md`](CUTE_IR_ASSESSMENT.md) | [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md) S9 for the consumer, [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md) for the typing precedent |
 
 ## Complete live-document catalog
 
@@ -102,6 +103,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 | [`AUTODIFF_UNIFICATION_PLAN.md`](AUTODIFF_UNIFICATION_PLAN.md) | Compiler-owned differentiation boundary and proof ledger. |
 | [`BLOCK_ATTNRES_ROCM_PLAN.md`](BLOCK_ATTNRES_ROCM_PLAN.md) | Block AttnRes mathematical contract, portable oracle, and ROCm-first physical acceptance criteria. |
 | [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) | Shared spine, plugin, packaging, and backend reconciliation details. |
+| [`CUTE_IR_ASSESSMENT.md`](CUTE_IR_ASSESSMENT.md) | CuTe IR (NVIDIA/cutlass#3426) review and verified layout algebra: the four-primitive scoping result, the mechanisms worth importing (partially-static value-in-type, fold-static, dynamic-leaf-only lowering, negative-scoped driver), and the `LAYOUT-ALG-1` sequence (integrated plan) serving the S9 `⊑` operator, SparDA's GQA-fold, TileSight's rasterization knob, and the G1b butterfly consolidation. Numeric contract in `tests/unit/test_layout_algebra_contracts.py`. Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`EGGROLL_SUPPORT_PLAN.md`](EGGROLL_SUPPORT_PLAN.md) | Gradient-free / Evolution-Strategies track: low-rank ES op contract, reference tier, and operator-improvement catalog. |
 | [`EVALUATOR_PLAN.md`](EVALUATOR_PLAN.md) | Correctness/evidence rung and promotion contract. |
 | [`FORGE_ASSESSMENT.md`](FORGE_ASSESSMENT.md) | FORGE (arXiv:2606.22932) assessment and the residency-aware epilogue-fusion track it opens: locality lattice, static materialization proof, `matmul → optimizer` fusion, fail-closed clipping/routing keys, and the precision-realizability oracle. Numeric contract in `tests/unit/test_fused_wgrad_optimizer_contract.py`. Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |

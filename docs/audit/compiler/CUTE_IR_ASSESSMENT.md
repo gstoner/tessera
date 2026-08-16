@@ -226,17 +226,40 @@ Three more measurements from the same pass over the tree:
   seam named in `CLAUDE.md` appears here in measurable form: **Tile IR has a
   structured placement object; the compiler that emits code has an enum.**
 
-### 3.2 A stale claim found in passing (not fixed here)
+### 3.2 The rasterization knob — mechanism closed, lever still unpulled
 
 [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md) §1 and
-[`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) §3.2 both state the
-block-rasterization knob has **no emitter consumer**. The tree now shows
-[`emit/nvidia_cuda.py:80`](../../../python/tessera/compiler/emit/nvidia_cuda.py#L80)
-importing `RasterOrder, emit_c` and using it at `_raster_launch` /
-`raster_order`, plus `apple_gemm_schedules.py`, `msl_gemm_emit.py`,
-`rocm_schedule.py`. Import and use sites verified by inspection; **not
-executed**. Those two documents should be re-checked and corrected by their
-owners — deliberately out of scope for this PR.
+[`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) §3.2 both stated the
+block-rasterization knob has **no emitter consumer**. That half is stale, and
+both documents are corrected in this PR.
+
+**Verified by execution, not inspection.** Driving
+[`emit/nvidia_cuda.py`](../../../python/tessera/compiler/emit/nvidia_cuda.py)'s
+`_raster_launch` produces materially different block-index code per order:
+
+```text
+row_major     int mt=blockIdx.x*16, nt=blockIdx.y*8,
+column_major  _tsr_mt = blockIdx.x % ((M+15)/16); _tsr_nt = blockIdx.x / ((M+15)/16)
+grouped_m     _tsr_raster_pp = 4 * ((N+7)/8);  … panel walk …
+```
+
+All four emitters consume `tile_rasterization.py`
+(`emit/nvidia_cuda.py`, `msl_gemm_emit.py`, `apple_gemm_schedules.py`,
+`rocm_schedule.py`), and the MLX-inherited `swizzle_log` heuristic was retired
+rather than silently promoted.
+
+**But TileSight's substantive conclusion survives intact, and it is worth being
+precise about why.** `raster_order` is **carried, not swept** — it defaults to
+`row_major` in [`autotune_v2.py`](../../../python/tessera/compiler/autotune_v2.py)
+and in every emitter, and automatic enumeration is deliberately withheld pending
+an architecture-owned correlation/retain verdict, because ROCM-CALIB-1
+established that an unvalidated locality metric must not change a production
+raster choice. So the lever is now **expressible on every backend and still not
+pulled**; what moved is the blocker — from codegen to measured device evidence.
+
+Two consequences for this plan: L4 shrinks (the emitter plumbing exists; L4 is a
+consolidation onto shared algebra, not new capability), and the measured half
+stays architecture-owned and out of L4's scope entirely.
 
 ---
 
@@ -262,28 +285,51 @@ applied to index arithmetic. (c) The scope is four primitives, not 63 ops.
 
 ---
 
-## 5. Proposed build sequence — LAYOUT-ALG-0…5
+## 5. Build sequence — LAYOUT-ALG-1 (L0…L5)
 
-Internal sequence only. Nothing here reprioritizes
-[`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md), which owns global
-order; these items need integrated-plan IDs before they are treated as
-priority. Sizing is an estimate, not a measurement.
+**Bound to [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) as
+`LAYOUT-ALG-1` on 2026-08-16.** That plan owns global order and promotion; this
+document owns the mathematical verification and the acceptance criteria below.
+Sizing is an estimate, not a measurement.
 
-### L0 — decide the home (blocking, no code)
+### L0 — the home: C++ first, Python binds to the dylib (decided 2026-08-16)
 
-Where does the algebra live, given the two-compiler seam?
+**Decided by the repo owner.** The algebra is **one C++ implementation** in the
+Tessera runtime/support library; `python/tessera/compiler/` reaches it through
+the existing ctypes ABI. There is no second implementation and therefore no
+differential-oracle pair to maintain — this is Decision #31 satisfied by
+construction (one implementation per boundary) rather than by declared-oracle
+exemption.
 
-**Recommendation:** Python is production for the synthesizer lane **and** the
-declared oracle; C++ lands only at L5, when a named MLIR pass needs it, gated by
-a golden-corpus differential test. That is Decision #31's "declared oracle with
-a differential test" rather than two productions, and it respects the ordering
-caveat — do not duplicate before the survivor can carry the load.
+An earlier draft of this document recommended Python-first with C++ deferred to
+L5. That recommendation is **withdrawn**; it optimized for the synthesizer's
+immediate convenience and accepted a duplication that Decision #31 exists to
+prevent. The decision taken is the stronger one against the governance rules —
+it makes MLIR passes (L3, L5) first-class consumers rather than deferred ones,
+and it means the FORGE `⊑` verifier and the emitter index math query the *same*
+code, which is the whole point of building a shared substrate.
 
-**The alternative** (C++ first, Python binding to the dylib) couples `emit/` to
-a build artifact; the Apple dylib already demonstrates that cost. This is a
-repo-owner call, not an agent call.
+**The cost is real and is not being wished away.** Coupling `emit/` to a build
+artifact is the failure mode the Apple dylib already demonstrates: a stale or
+absent dylib currently fails 32 Apple tests as "requires a fresh dylib" rather
+than skipping. Layout algebra sits under *every* emitter, so the same failure
+would be broader. Two acceptance criteria fold that risk into L1 rather than
+deferring it:
 
-### L1 — algebra kernel + exhaustive proof (~1 week)
+- **A1 — diagnose, never silently degrade.** The Python binding raises one
+  named, actionable diagnostic when the symbol is missing or stale (Decision
+  #21a: this is a semantic dependency, so it fails closed). No NumPy fallback
+  path, because a fallback is a second implementation wearing a disguise.
+- **A2 — the build dependency is declared and gated.** `ninja -C build` must
+  produce the symbol as part of the ordinary target set, and a unit test asserts
+  the binding loads, so the failure surfaces at test time with a fix instruction
+  rather than inside an emitter.
+
+This reorders the build sequence below: the C++ kernel and its binding are now
+both inside L1, and L5 shrinks to the MLIR *carrier* (types, interface,
+fold-static pass) since the algebra it would have introduced already exists.
+
+### L1 — C++ algebra kernel + ctypes binding + exhaustive proof (~2 weeks)
 
 Eleven operations: `composition`, `complement`, `coalesce`, `right_inverse`,
 `logical_divide`, `zipped_divide`, `logical_product`, `size`, `cosize`,
@@ -295,9 +341,23 @@ Four types (`Shape`, `Stride`, `Layout`, `Coord`), not CuTe's eight — skip
 `IntTuple` / `Tile` / `ComposedLayout`, and keep the existing `#tile.swizzle`
 split rather than adopting `composed_layout` yet.
 
-*Acceptance:* every op exhaustively verified against brute-force evaluation over
-all layouts up to size 64; §1.2's three defects carried as negative fixtures.
-Host-free.
+Per L0 this is C++ (`src/` support library, no MLIR dependency — the MLIR
+*carrier* is L5, and the algebra must be usable without loading a dialect), plus
+the ctypes binding under `python/tessera/compiler/`. Sizing is ~2 weeks rather
+than the ~1 week an in-language implementation would take: the extra week is the
+ABI surface, the build wiring, and A1/A2.
+
+*Acceptance:*
+
+- every op exhaustively verified against brute-force evaluation over all layouts
+  up to size 64, **on both sides of the ABI** — the C++ unit test and the Python
+  binding test run the same corpus, so a marshalling bug cannot hide;
+- §1.2's three defects carried as negative fixtures
+  ([`test_layout_algebra_contracts.py`](../../../tests/unit/test_layout_algebra_contracts.py)
+  is the existing corpus and moves to driving the real implementation);
+- A1 (named fail-closed diagnostic, no fallback path) and A2 (declared build
+  dependency + binding-loads test) from L0;
+- host-free — no device, no MLIR, no dialect load.
 
 **Do not land L1 without L2 committed** — otherwise it is a Decision #29
 violation by construction.
@@ -325,24 +385,38 @@ fixtures for tied weights, `state_locality = row` (Adafactor), MoE-routed
 weight. Host-free — which is the point, since no fleet machine can hold FORGE's
 62 GB peak. Consumers: FORGE W1/W2, and S9 in `CORE_SUBSTRATE_VIEW.md`.
 
-### L4 — emitter index math (~2 weeks)
+### L4 — emitter index math (~1–2 weeks, smaller than first scoped)
 
-Generalize the rasterization knob to `composition(grid, raster_layout)`, and
-route the emitters' hardcoded `A[row*K+k]` / `B[k*N+n]` templates through
-`crd2idx`. This is where the payoff for math ops lands: the epilogue-fusion
-track, the `simdgroup_matrix` path, and the ROCm typed lane stop re-deriving
-index arithmetic per emitter.
+Route the emitters' hardcoded `A[row*K+k]` / `B[k*N+n]` templates through
+`crd2idx`, and re-express the rasterization orders as `composition(grid,
+raster_layout)` instead of four hand-written block-index emitters. This is where
+the payoff for math ops lands: the epilogue-fusion track, the `simdgroup_matrix`
+path, and the ROCm typed lane stop re-deriving index arithmetic per emitter.
 
-*Acceptance:* generated kernels bit-identical to today's for the row-major case
-(pure-refactor proof, host-free), **then** one non-trivial rasterization
-measured on a box that has the device — per the Working Rules, the measured half
-is architecture-owned and does not transfer.
+**Rescoped down after §3.2's correction.** The original estimate assumed the
+emitters had no way to express a rasterization. They do —
+`tile_rasterization.py` is consumed by all four. So L4 is a *consolidation* of
+existing working code onto the shared algebra, not new capability, and it
+inherits `tile_rasterization.py`'s own tests as the regression net.
 
-### L5 — MLIR carrier (~2–3 weeks)
+*Acceptance:* generated kernels **bit-identical** to today's output for every
+currently-reachable `(raster_order, raster_group)` combination — a pure-refactor
+proof, host-free, and a strictly stronger gate than the row-major-only check
+first proposed. Any measured non-default raster choice remains **out of scope
+for L4**: per §3.2 that is blocked on an architecture-owned correlation/retain
+verdict (ROCM-CALIB-1), not on codegen, and it does not transfer between
+architectures.
+
+### L5 — MLIR carrier (~1–2 weeks, smaller under L0's C++-first decision)
 
 Extend `#tile.layout` from flat `ArrayRefParameter<int64_t>` to nested with
-dynamic leaves; add `MaybeStaticTypeInterface` + a fold-static pass. C++ mirror
-validated against L1's golden corpus.
+dynamic leaves; add `MaybeStaticTypeInterface` + a fold-static pass, with the
+attribute delegating to L1's algebra rather than reimplementing it.
+
+**Rescoped down by L0.** With the algebra already in C++, L5 is the *carrier*
+only — types, interface, and the fold pass — and there is no second
+implementation to differential-test, which was the bulk of the original
+estimate. This is the concrete dividend of the C++-first decision.
 
 *Sequencing:* this follows W1.1 step 4, it does not precede it — the same
 Decision #31 ordering argument [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md)

@@ -782,6 +782,65 @@ The scoped mathematical and acceptance authority is
 [`BLOCK_ATTNRES_ROCM_PLAN.md`](BLOCK_ATTNRES_ROCM_PLAN.md). Global ordering and
 promotion authority remain here.
 
+### LAYOUT-ALG-1 — one layout algebra under five asking consumers
+
+Bound 2026-08-16 from [`CUTE_IR_ASSESSMENT.md`](CUTE_IR_ASSESSMENT.md), which
+owns the mathematical verification and the acceptance criteria. Global ordering
+and promotion authority remain here.
+
+The finding that justifies an ID rather than a reference: **five independent
+in-tree items already ask for a piece of layout reasoning, and each proposes a
+different, weaker mechanism.** FORGE W1's read-locality lattice is a six-point
+chain approximating a question that layout composition plus divisibility decides
+exactly; FORGE W2's residency contract is `cosize`; SparDA §III.3's GQA-fold is
+`group_modes`/`logical_divide` and is **not expressible today** — `rearrange`
+fails closed on precisely that spec; TileSight §3.2's rasterization is
+`composition(grid, raster_layout)`; and the G1b butterfly/FFT consolidation
+needs a shared representation in order to be shared at all. This is root cause B
+("told, not derived") about to recur five times, and Decision #30's "no eighth
+bespoke walker" rule applied before the walkers exist. Against
+[`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md), layout algebra is not a tenth
+substrate investment — it is the missing implementation under **S9**, whose `⊑`
+operator that document already flags unowned.
+
+Ordered delivery, host-free throughout except where noted:
+
+1. **L1 — the algebra and its binding.** Eleven operations over nested
+   `(shape, stride)` with static-or-dynamic leaves; four types. **One C++
+   implementation** in the support library with a ctypes binding, per the
+   2026-08-16 home decision — not a Python/C++ pair, so Decision #31 is
+   satisfied by construction rather than by declared-oracle exemption. The
+   binding fails closed with a named diagnostic and ships **no fallback path**,
+   because a fallback is a second implementation in disguise. Exhaustive proof
+   over all layouts to size 64 runs on **both sides of the ABI**.
+2. **L2 — first consumer, `rearrange`/GQA-fold.** Smallest real consumer;
+   converts a documented `ValueError` into a working op without regressing its
+   Decision #21a fail-closed behaviour. **L1 does not land without L2 committed**
+   — otherwise it is a Decision #29 violation by construction.
+3. **L3 — the `⊑` decision procedure.** FORGE W1/W2's legality query and
+   residency check implemented as layout factorization and `cosize`. The lattice
+   stays the declared interface; the algebra makes `block` precise instead of a
+   promise. Closes the S9 implementation gap.
+4. **L4 — emitter index math.** Consolidates the four hand-written block-index
+   emitters and the hardcoded `A[row*K+k]`/`B[k*N+n]` templates onto the shared
+   algebra. Acceptance is **bit-identical output** for every currently reachable
+   `(raster_order, raster_group)` — a pure-refactor proof. Choosing a measured
+   non-default raster is explicitly **not** in this item: per ROCM-CALIB-1 that
+   is architecture-owned and blocked on a correlation/retain verdict, and it
+   does not transfer between targets.
+5. **L5 — MLIR carrier.** `#tile.layout` gains nesting and dynamic leaves;
+   `MaybeStaticTypeInterface` plus a fold-static pass, delegating to L1 rather
+   than reimplementing. **Sequenced after W1.1 step 4**, never before — the same
+   Decision #31 ordering caveat [`W1_1_TYPING_DESIGN.md`](W1_1_TYPING_DESIGN.md)
+   applies to `#tile.mma_desc`.
+
+Independent of the above and not blocking it: a negative-scoped
+`tessera-target-opt` driver that registers the Target IR dialects without
+`tessera`/`tile`, making Tile IR leakage a parse error. `test_target_ir_contract.py`
+parses and verifies every emitter and golden, but registers everything, so it
+cannot falsify a *leakage* claim — the same argument as Decision #19's standing
+lesson that a host with the ISA cannot falsify a host-portability claim.
+
 ### W5 — Decisions become measured *(9 weeks · depends on W1, W3)*
 
 Root cause: L5, "a constant where a measured decision belongs." Every item routes

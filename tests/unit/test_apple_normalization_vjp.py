@@ -96,12 +96,16 @@ def test_normalization_bwd_symbols_gate_dylib_freshness() -> None:
     from tessera import runtime as R
 
     legacy = Path(R.__file__).read_text(encoding="utf-8")
-    for symbol in ("tessera_apple_gpu_rmsnorm_bwd_f32",
-                   "tessera_apple_gpu_layer_norm_bwd_f32"):
-        assert symbol in agd._SENTINEL_SYMBOLS, symbol
-        assert symbol in agd.APPLE_ABI, f"{symbol} is not in the canonical ABI registry"
-        assert f'getattr(lib, "{symbol}")' in legacy, (
-            f"{symbol} does not gate runtime.py's legacy candidate scan")
+    # EVERY storage variant must gate, not just f32. A dylib built between the
+    # f32 landing and the low-precision one exports the f32 names, so probing
+    # only those would accept it as current and then fail at the call site.
+    for family in ("rmsnorm", "layer_norm"):
+        for storage in ("f32", "f16", "bf16"):
+            symbol = f"tessera_apple_gpu_{family}_bwd_{storage}"
+            assert symbol in agd._SENTINEL_SYMBOLS, symbol
+            assert symbol in agd.APPLE_ABI, f"{symbol} is not in the canonical ABI registry"
+            assert f'getattr(lib, "{symbol}")' in legacy, (
+                f"{symbol} does not gate runtime.py's legacy candidate scan")
 
 
 @pytest.mark.hardware_apple_gpu

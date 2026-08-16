@@ -3757,3 +3757,33 @@ Recorded because the *scoping* lesson is portable: the item was scoped as
 the entry would have been an unconsumed declaration (Decision #29). Any backend
 asked to join this boundary should confirm it owns an executable VJP before
 declaring a consumer.
+
+## APPLE-NORM-VJP-2-2026-08-16 — reduced-precision normalization VJP assessment
+
+**Outcome: not applicable — no shared contract changed.** Apple's normalization
+VJP gained f16/bf16 storage: four new Apple-private C ABI exports
+(`tessera_apple_gpu_{rmsnorm,layer_norm}_bwd_{f16,bf16}`), their MSL, the
+non-Darwin stub returning 0, and Apple's own ABI registry rows. The shared
+native-VJP registry schema, `_parse_compiled_norm_backward`, the Graph/Schedule
+contracts, the execution-matrix executor id, and every sibling executor are
+unchanged. This architecture's normalization VJP dtype support, evidence and
+selectors are untouched.
+
+Two portable notes, recorded because both are cheap to get wrong:
+
+1. **Store rounding is part of the numeric contract.** The kernel accumulates in
+   f32 and stores back at the operand's own dtype, and bf16 stores use
+   round-to-nearest-even. Truncating instead would bias every gradient in one
+   direction — a systematic error, not noise. Any sibling adding reduced-precision
+   gradients should match its own runtime's established rounding convention
+   rather than defaulting to a shift.
+2. **A tolerance derived from storage epsilon is what proves the accumulator.**
+   Measured error is ~0.5-0.65 ulp of each format's epsilon, i.e. one rounding on
+   store; storage-format accumulation would land near `sqrt(cols)` ulps. A test
+   asserting against that second level catches a silently dropped f32
+   accumulator, where a hand-picked loose tolerance would absorb it.
+
+A third note is Apple-specific but the shape recurs: adding an export obliges
+updating the dylib **freshness gates**, or a runtime built between two landings
+exports the older names, passes the staleness check, and then fails at the call
+site — which reads as a broken consumer rather than the stale build it is.

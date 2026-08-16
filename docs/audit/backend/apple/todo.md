@@ -3963,3 +3963,59 @@ is aligned with the retirement half of the shared change. The open half — Meta
 threadgroup scheduling against the generalized schema, including MoE
 launch-workspace ownership and optional rank/device topology binding — is
 untouched by any work to date and stays open with its original scope.
+
+## APPLE-NORM-VJP-2 — f16/bf16 storage for the normalization VJP
+
+**Landed 2026-08-16.** Closes the storage gap APPLE-NORM-VJP-1 named: the Apple
+normalization VJP was f32-only. It now accepts **f32, f16 and bf16** storage for
+`rmsnorm`, `rmsnorm_safe` and `layer_norm`, affine and non-affine.
+
+### Policy: accumulate f32, store at the operand's dtype
+
+Not an upcast. Operands and **gradients** are two-byte for f16/bf16, while every
+accumulation inside the kernel stays f32 — the project's reduced-precision rule
+(`REDUCED-PRECISION-COMPUTE-2026-08-03`). An f16 graph therefore keeps f16
+gradients rather than acquiring f32 ones the caller must cast back.
+
+Implementation reuses the substitution idiom `flash_attn_bwd_source` already
+uses: one MSL template with a `%%NORM_STORAGE%%` declaration supplying
+`norm_storage_t` plus `norm_load`/`norm_store`, rather than three copies of the
+kernel. bf16 stores **round-to-nearest-even**
+(`(bits + 0x7fff + ((bits >> 16) & 1)) >> 16`), matching the convention already
+in this runtime — truncating would bias every gradient in one direction.
+
+### The measured error says the accumulator is real
+
+Relative error against a float64 analytic VJP **fed the same rounded inputs the
+kernel received** (comparing against full-precision inputs would charge the
+kernel for the caller's own input rounding):
+
+| storage | observed | ~ulp of that format |
+|---|---|---|
+| f32 | 7e-08 | — |
+| f16 | 3.2e-04 | ~0.65 ulp |
+| bf16 | 2.1e-03 | ~0.54 ulp |
+
+Both low-precision formats land at roughly **half an ulp of their own storage
+epsilon** — i.e. the error is one final rounding on store, not accumulation. A
+kernel that accumulated in the storage format would sit near `sqrt(cols)` ulps
+instead, and `test_low_precision_is_far_better_than_low_precision_accumulation`
+asserts against that level specifically, so a future change that quietly dropped
+the f32 accumulator is caught rather than absorbed by a loose tolerance.
+
+Tolerances in the suite are **derived from each format's epsilon**, not picked.
+
+### Evidence
+
+`tests/unit/test_apple_normalization_vjp_lowp.py` (6 tests) proves both norms in
+both low-precision formats execute with `native_gpu` placement, return gradients
+**in the operand dtype** (asserted, not assumed), and stay inside 8 ulps. 112
+tests pass across the Apple norm-VJP, identity-cache, e2e-spine and native-VJP
+suites. The non-Darwin stub gained the four new entry points returning 0, so an
+off-Darwin build still cannot look like a Metal dispatch.
+
+**Worktree note:** this was developed in an isolated git worktree while another
+agent worked the shared tree. Five e2e-spine failures during the sweep were
+traced to `TESSERA_OPT` pointing at a `tessera-opt` the worktree had never built —
+an environment artifact, not a regression; the same tests passed against main
+throughout, and passed here once the worktree's compiler was built.

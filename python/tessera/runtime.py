@@ -11658,6 +11658,49 @@ def _execute_x86_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) ->
     return tuple(grads)
 
 
+def _apple_norm_storage_name(dtype: Any) -> str | None:
+    """Map a NumPy storage dtype onto the Apple norm-VJP ABI suffix."""
+    import numpy as np
+
+    if dtype == np.float32:
+        return "f32"
+    if dtype == np.float16:
+        return "f16"
+    if _bfloat16_dtype() is not None and dtype == _bfloat16_dtype():
+        return "bf16"
+    return None
+
+
+def _apple_norm_to_u16(values: Any) -> Any:
+    """Reinterpret a 2-byte storage array as the u16 lanes the ABI takes.
+
+    A view, never a conversion: the caller's f16/bf16 bits are passed through
+    untouched, so nothing is re-rounded on the way in.
+    """
+    import numpy as np
+
+    array = np.ascontiguousarray(values)
+    if array.dtype.itemsize != 2:
+        raise ValueError(
+            f"Apple norm backward low-precision operands must be 2-byte; got {array.dtype}"
+        )
+    return array.view(np.uint16)
+
+
+def _apple_norm_from_u16(values: Any, storage: str) -> Any:
+    """Reinterpret returned u16 lanes back as the operand's storage dtype."""
+    import numpy as np
+
+    if storage == "f16":
+        return values.view(np.float16)
+    bf16 = _bfloat16_dtype()
+    if bf16 is None:
+        # Without ml_dtypes there is no bf16 array type to hand back; widening
+        # to f32 would silently change the declared gradient dtype, so refuse.
+        raise RuntimeError("bf16 normalization gradients require the ml_dtypes package")
+    return values.view(bf16)
+
+
 def _execute_apple_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) -> Any:
     """Launch the Apple GPU RMSNorm/LayerNorm VJP (E2E-REAL-6 / WS-2).
 
@@ -11670,42 +11713,57 @@ def _execute_apple_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) 
     import numpy as np
 
     _, kind, x, gamma, beta, dy, eps = _parse_compiled_norm_backward(artifact, args)
-    if np.asarray(x).dtype != np.float32:
-        raise ValueError(f"Apple norm backward handles f32 only; got {np.asarray(x).dtype}")
+    storage = _apple_norm_storage_name(np.asarray(x).dtype)
+    if storage is None:
+        raise ValueError(
+            "Apple norm backward handles f32, f16 and bf16 storage; got "
+            f"{np.asarray(x).dtype}"
+        )
     rows = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
     cols = int(x.shape[-1])
     runtime = _load_apple_gpu_runtime()
-    symbol = getattr(
-        runtime,
-        "tessera_apple_gpu_rmsnorm_bwd_f32" if kind == "rmsnorm"
-        else "tessera_apple_gpu_layer_norm_bwd_f32",
-        None,
-    )
+    family = "rmsnorm" if kind == "rmsnorm" else "layer_norm"
+    symbol = getattr(runtime, f"tessera_apple_gpu_{family}_bwd_{storage}", None)
     if symbol is None:
-        raise RuntimeError("Apple runtime is missing the normalization backward ABI")
-    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
-    dyc = np.ascontiguousarray(dy, dtype=np.float32).reshape(-1)
-    gc = (np.ascontiguousarray(gamma, dtype=np.float32)
-          if gamma is not None else None)
-    dx = np.zeros(rows * cols, dtype=np.float32)
-    dg = np.zeros(cols, dtype=np.float32)
-    db = np.zeros(cols, dtype=np.float32)
-    cf = ctypes.POINTER(ctypes.c_float)
+        raise RuntimeError(
+            f"Apple runtime is missing the {storage} normalization backward ABI"
+        )
+    # Gradients are produced in the operand's own storage, not widened: the
+    # kernel accumulates in f32 and rounds once on store, so an f16 graph keeps
+    # an f16 gradient instead of acquiring an f32 one the caller must cast back.
+    # These three vary with storage width, so they are deliberately untyped:
+    # pinning them to the f32 branch would reject the 2-byte one.
+    pointer: Any
+    as_bits: Callable[[Any], Any]
+    out_dtype: Any
+    if storage == "f32":
+        pointer = ctypes.POINTER(ctypes.c_float)
+        as_bits = lambda a: np.ascontiguousarray(a, dtype=np.float32)  # noqa: E731
+        out_dtype = np.float32
+    else:
+        pointer = ctypes.POINTER(ctypes.c_uint16)
+        as_bits = _apple_norm_to_u16
+        out_dtype = np.uint16
+    xc = as_bits(x).reshape(-1)
+    dyc = as_bits(dy).reshape(-1)
+    gc = as_bits(gamma) if gamma is not None else None
+    dx = np.zeros(rows * cols, dtype=out_dtype)
+    dg = np.zeros(cols, dtype=out_dtype)
+    db = np.zeros(cols, dtype=out_dtype)
     # Calling the pointer type yields a typed NULL; `cast(None, ...)` is not
     # accepted by the stubs and means the same thing.
-    null = cf()
-    ptr = lambda a: a.ctypes.data_as(cf)  # noqa: E731
+    null = pointer()
+    ptr = lambda a: a.ctypes.data_as(pointer)  # noqa: E731
     want_gamma = gamma is not None
+    trailing = [ctypes.c_int32, ctypes.c_int32, ctypes.c_float]
     if kind == "rmsnorm":
-        symbol.argtypes = [cf, cf, cf, cf, cf, ctypes.c_int32, ctypes.c_int32,
-                           ctypes.c_float]
+        symbol.argtypes = [pointer] * 5 + trailing
         symbol.restype = ctypes.c_int32
         status = symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),
                         ptr(dx), ptr(dg) if want_gamma else null,
                         rows, cols, ctypes.c_float(eps))
     else:
-        symbol.argtypes = [cf, cf, cf, cf, cf, cf, ctypes.c_int32,
-                           ctypes.c_int32, ctypes.c_float]
+        symbol.argtypes = [pointer] * 6 + trailing
         symbol.restype = ctypes.c_int32
         status = symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),
                         ptr(dx), ptr(dg) if want_gamma else null,
@@ -11715,11 +11773,13 @@ def _execute_apple_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) 
         raise RuntimeError(
             "Apple normalization backward ABI reported a non-native dispatch"
         )
-    grads = [dx.reshape(x.shape)]
+    decode = (lambda a: a) if storage == "f32" else (
+        lambda a: _apple_norm_from_u16(a, storage))
+    grads = [decode(dx).reshape(x.shape)]
     if gamma is not None:
-        grads.append(dg)
+        grads.append(decode(dg))
     if beta is not None:
-        grads.append(db)
+        grads.append(decode(db))
     return tuple(grads)
 
 
@@ -43467,6 +43527,13 @@ def _load_apple_gpu_runtime() -> ctypes.CDLL:
                 # than the stale runtime it is.
                 getattr(lib, "tessera_apple_gpu_rmsnorm_bwd_f32")
                 getattr(lib, "tessera_apple_gpu_layer_norm_bwd_f32")
+                # Low-precision storage variants (APPLE-NORM-VJP-2). A dylib
+                # built between the f32 and low-precision landings exports the
+                # f32 names only, so gating on those alone would accept it.
+                getattr(lib, "tessera_apple_gpu_rmsnorm_bwd_f16")
+                getattr(lib, "tessera_apple_gpu_rmsnorm_bwd_bf16")
+                getattr(lib, "tessera_apple_gpu_layer_norm_bwd_f16")
+                getattr(lib, "tessera_apple_gpu_layer_norm_bwd_bf16")
                 _apple_gpu_runtime = lib
                 return _apple_gpu_runtime
             except (OSError, AttributeError):

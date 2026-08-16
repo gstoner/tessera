@@ -11,6 +11,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## How to Read This File
+
+**Most of what follows is a default, not a law.** Depart from a default when the
+code, a test, or a device result says you should — and say so in the PR. What
+makes a default worth keeping is that it encodes a reason someone already paid
+for; what makes it a default is that the reason can stop applying.
+
+Two kinds of item are **not** defaults, because departing from them silently
+does damage that lands on someone else:
+
+| Tier | What it means | Examples |
+|---|---|---|
+| **Default** | Depart with a recorded reason. Judgment is expected; scale the effort to the blast radius. | Which gates to run for a given change; explore via graphify before grepping; how far to read the backend queues |
+| **Hard — claim integrity** | Never assert more than the evidence supports. A false claim gets acted on downstream, and the cost is paid by whoever believes it. | Device work runs on the box with that device (the sandbox has no CUDA/ROCm, and a missing device *skips* rather than errors); native execution proven separately from the `reference_cpu` lane; no parity claim for a target without *that* hardware's proof; no green report over a red lane (Decisions #19, #25, #26) |
+| **Hard — destructive / not yours** | Ask first. These are irreversible or belong to the repo owner, and an agent lacks the context to judge the cost. | Deleting branches, rewriting history, discarding unrelated dirty work, force-push (see **Working Rules**) |
+
+This taxonomy mirrors what the code already does: Decision #21a splits attributes
+into *semantic keys* that fail closed on absence and *performance keys* that may
+fall back with a diagnostic. Same idea, applied to the prose.
+
+**The asymmetry is deliberate.** A rule can be a default for the repo owner and
+a hard constraint for an agent working in it. You can rewrite a branch because
+you know what is on it; an agent reasoning from a partial view does not, and the
+cost of being wrong is not symmetric.
+
+---
+
 ## What Tessera Is
 
 Tessera is a **pre-alpha, standalone, tile-centric programming model and
@@ -168,7 +195,29 @@ Per-phase deliverables and the open-work priority queue live in
 
 ---
 
-## Architecture Decisions — Do Not Revisit
+## Architecture Decisions — Stable by Default, Amend with Evidence
+
+> Treat these as load-bearing. Do not re-open one because it looks wrong at a
+> glance, and never re-litigate from first principles without reading the code
+> it governs — that is churn, and it is the main source of contradictory
+> direction.
+>
+> **Do re-open when evidence demands it:** a failing lane, a device result, or a
+> code read that contradicts the decision. When you do, amend in place — a dated
+> banner (`Corrected YYYY-MM-DD` / `root-caused` / `withdrawn`) or a
+> letter-suffixed sub-decision (#10a, #15a, #21a, #26a are the existing ones) —
+> so the next reader sees what changed and why. Never silently edit a decision
+> to match new behavior; the record of the change is the point.
+>
+> **A decision the code no longer matches is a bug in this file, not a
+> constraint on the code.** As of 2026-08-15 this section carries 13 recorded
+> amendments: six `Adopted 2026-08-02` entries, four letter-suffixed
+> sub-decisions, and three dated banners (`Updated 2026-08-10` on #5,
+> `root-caused 2026-08-15` on #19, one `withdrawn` claim in #26a). Decision #5
+> has now been amended twice — fail-open AST inference was recorded as a
+> correction, then superseded when W2.2 made inference IR-derived and
+> fail-closed. That is the protocol working, not a defect. It was previously
+> headed "Do Not Revisit," which was never true of its own contents.
 
 1. **CPU-first, then GPU.** x86 AMX is the only real execution path on the original roadmap; GPU ops gated behind `target_profile.isa >= SM_90`. (Apple is the second native lane, Phase 8.)
 
@@ -276,13 +325,13 @@ Per-phase deliverables and the open-work priority queue live in
 
 24. **`primitive_coverage.py` is the standalone compiler's audit truth, not `op_catalog.py`.** Catalog = runtime/frontend op acceptor; coverage = audit dashboard (what each primitive must prove across 12 axes). Ship a new primitive → update *both*. The registry auto-flips (V/J)VP axes from registered `_VJPS`/`_JVPS`, and rejects duplicate planned entries. The dashboard is drift-gated.
 
-25. **Registry `partial` ≠ compiler-complete.** Coverage is layered: Python reference, frontend, Graph IR, sharding/transpose/batching, backend manifest, runtime, benchmark proof are separate claims. A row can be useful and still `partial`. The generated dashboards are status truth; do not copy numeric snapshots into prose unless a drift gate owns the copy. When a sprint says "shipped", read the generated rows to see what is actually proven vs. `planned`/`partial`/`reference`/`artifact_only`/hardware-gated.
+25. **Registry `partial` ≠ compiler-complete.** Coverage is layered: Python reference, frontend, Graph IR, sharding/transpose/batching, backend manifest, runtime, benchmark proof are separate claims. A row can be useful and still `partial`. The generated dashboards are the **primary current-status evidence** — reconcile them against implementation, tests, and exact-device proof when they conflict or look stale; do not copy numeric snapshots into prose unless a drift gate owns the copy. When a sprint says "shipped", read the generated rows to see what is actually proven vs. `planned`/`partial`/`reference`/`artifact_only`/hardware-gated.
 
 26. **The audit folder is the canonical "what's done / what's open" surface — follow its flow.** `docs/audit/` = one root audit + theme audits + generated dashboards + theme-local archives:
     1. **Start at `docs/audit/MASTER_AUDIT.md`** — all-up snapshot + P0/P1/P2 queue. Single entry point; do not reconstruct status by grepping.
     2. **Drill into the theme audit:** `compiler/COMPILER_AUDIT.md`, `backend/BACKEND_AUDIT.md` (+ `backend/{apple,nvidia,rocm,x86}/` per-backend todo queues), `coverage/COVERAGE_AUDIT.md`, `domain/DOMAIN_AUDIT.md`, `roadmap/ROADMAP_AUDIT.md`. For compiler work specifically, `docs/audit/compiler/README.md` states the **authority chain** (generated dashboards > COMPILER_AUDIT > INTEGRATED_COMPILER_PLAN > scoped plans > backend todos) — the integrated plan is the sole cross-domain compiler queue and wins when a scoped plan proposes a different order.
-    3. **`docs/audit/generated/` dashboards are count/status truth** (script/test-owned, drift-gated). **Never hand-edit generated docs**; regenerate via their CLI + `scripts/check_generated_docs.sh`.
-    4. **`*/archive/` is provenance only** — not the current status surface.
+    3. **`docs/audit/generated/` dashboards are the primary count/status evidence** (script/test-owned, drift-gated). Note what the gate does and does not prove: `check_generated_docs.sh` **byte-compares each committed doc against its generator**, so it catches a stale doc, not a wrong generator model. A dashboard can be green and still overstate reality — Decision #24's registry auto-flips a (V/J)VP axis to complete on *registration of a numpy reference*, which is not a test and not device proof. Reconcile against implementation/tests/device evidence when a row looks stale or contradicts what you read in the code. **Never hand-edit generated docs**; regenerate via their CLI + `scripts/check_generated_docs.sh`.
+    4. **`*/archive/` is provenance only** — not the current status surface. Historical checklists and sprint prose remain useful context for *why* something was built; they are not sufficient on their own to establish that it is done.
     When you finish audit-relevant work, update the theme audit (and `MASTER_AUDIT.md` if the all-up picture shifts); let generated dashboards carry the numbers.
 
 26a. **There *is* an LLVM IR → AIR path to Apple GPUs; it is just not an open
@@ -332,7 +381,7 @@ Per-phase deliverables and the open-work priority queue live in
 
 27. **Ground every Metal / Apple GPU API claim in a real source before declaring it possible or "blocked."** Authoritative sources, in reliability order: **(1) on-machine SDK headers** — `xcrun --show-sdk-path` → `…/System/Library/Frameworks/{Metal,MetalPerformanceShaders,MetalPerformanceShadersGraph,MetalPerformancePrimitives}.framework/Headers/`; **(2) user-provided doc dumps**; **(3) the `apple-metal-docs-urls` memory file**. **WebFetch caveat:** developer.apple.com is a JS-rendered SPA — `WebFetch` returns only the page title, not the API body — so it is NOT a reliable Metal-doc source. Anti-pattern: writing a "blocked / no API path" conclusion from absence of evidence in one source.
 
-28. **The forward compiler direction is the three-tier / measured-arbiter model — leads set the ceiling, the generic framework raises the floor.** (North star, 2026-07-02.) Kernels come from three tiers: **(1)** a generic synthesizer (arch-agnostic region-IR + F4 oracle + synth→compile→cache→launch loop), **(2)** a per-arch codegen plugin (`KernelEmitter`/`TargetPlugin`: MSL / PTX / AMDGCN / C-LLVM), **(3)** hand-tuned kernels. A **measured, accuracy-budgeted arbiter** picks the fastest *in-budget* candidate per `(op, shape-bucket, dtype, target)`. **ROCm and CUDA are the lead performance targets: shared infra must never cap their ceiling** — hand-emitted `wgmma`/`mma.sync`/MFMA/WMMA stay first-class arbiter candidates, displaced only when a compiled kernel is both faster and in accuracy budget. The synthesizer/plugin interface is **symbolic-dim-aware from day one** (`static | bucket | dynamic` policy; first impls bucket-specialize) so dynamic shapes never force an API break. Full model: [`docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md`](docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md); execution: [`docs/audit/compiler/COMPILER_REFACTOR_PLAN.md`](docs/audit/compiler/COMPILER_REFACTOR_PLAN.md). These are *direction*; MASTER_AUDIT + generated dashboards stay status truth.
+28. **The forward compiler direction is the three-tier / measured-arbiter model — leads set the ceiling, the generic framework raises the floor.** (North star, 2026-07-02.) Kernels come from three tiers: **(1)** a generic synthesizer (arch-agnostic region-IR + F4 oracle + synth→compile→cache→launch loop), **(2)** a per-arch codegen plugin (`KernelEmitter`/`TargetPlugin`: MSL / PTX / AMDGCN / C-LLVM), **(3)** hand-tuned kernels. A **measured, accuracy-budgeted arbiter** picks the fastest *in-budget* candidate per `(op, shape-bucket, dtype, target)`. **ROCm and CUDA are the lead performance targets: shared infra must never cap their ceiling** — hand-emitted `wgmma`/`mma.sync`/MFMA/WMMA stay first-class arbiter candidates, displaced only when a compiled kernel is both faster and in accuracy budget. The synthesizer/plugin interface is **symbolic-dim-aware from day one** (`static | bucket | dynamic` policy; first impls bucket-specialize) so dynamic shapes never force an API break. Full model: [`docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md`](docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md); execution: [`docs/audit/compiler/COMPILER_REFACTOR_PLAN.md`](docs/audit/compiler/COMPILER_REFACTOR_PLAN.md). These are *direction*; MASTER_AUDIT + generated dashboards stay the primary status evidence.
 
 29. **A declaration must have a consumer.** (Adopted 2026-08-02, W0.8.) If the compiler declares metadata — an ODS type or attribute, a `primitive_coverage` axis, a coverage claim — a **named pass or code path must consume it**, or the declaration is deleted. A declaration with no consumer is worse than a missing one: it reads as a closed contract in review and in the dashboards while carrying nothing. Drift-gated by `tests/unit/test_governance_declarations.py`. Derived from seven independent instances (`manifold` reaching no backend; `MultivectorSpec.grades` ignored by `geometric_product`; a closed `batching_rule` axis whose `vmap` is a Python for-loop; a closed `shape_rule` axis whose inference is a five-case if-chain; nine declared `!tile.*` types alongside 70 `Variadic<AnyType>`; `numeric_policy` with no carrier below Graph IR; `TilingInterface` unused by `fusion_core.py`).
 
@@ -375,6 +424,79 @@ Gate all of these behind `target_profile.isa >= ISA.SM_90`:
 
 (The `tessera.queue.*` tile-queue dialect that used to sit in this list was
 deleted 2026-08-10 as dead IR — Decisions #29/#31.)
+
+---
+
+## Working Rules
+
+Tiered per **How to Read This File**. The hard ones are hard *for an agent*
+specifically — they are irreversible, or they make a claim someone else acts on.
+
+### Hard — ask first (destructive / not yours)
+
+- **Never delete a branch, rewrite history, force-push, or discard unrelated
+  dirty work without explicit approval.** This includes `git branch -d` after a
+  merge, `rebase`, `reset --hard`, `commit --amend` on pushed work, and
+  `stash`/`clean` over changes you did not make. All of these look cheap from
+  inside a single session and are judged with a partial view of what they
+  destroy. Ask, and say what you are about to remove.
+- **Preserve unrelated dirty work.** If the tree has changes you did not make,
+  leave them. Do not stash them to get a clean run; branch from where you are,
+  or ask. If you must stash, say so before and restore it after.
+- **Keep changes focused.** One concern per PR. Adjacent problems you notice go
+  in the PR description or a follow-up, not in the diff.
+
+### Hard — claim integrity
+
+- **Run device work on the box that has the device.** The sandbox has **no CUDA
+  and no ROCm**; the Mac has no CUDA and no ROCm either. Route by hardware, not
+  by convenience:
+
+  | Need | Box |
+  |---|---|
+  | ROCm / gfx1151, x86 AVX-512 | Strix Halo, Ubuntu 24.04 under **WSL2** |
+  | CUDA / sm_120 | **NR2 Pro** (RTX 5070 Ti, Linux) |
+  | Metal / Apple CPU + GPU | **Mac** M1 Max |
+
+  This is a claim-integrity rule, not a convenience one, because of *how* it
+  fails. A device test on a host without that device does not usually error —
+  it **skips**, or falls through to the `reference_cpu` lane, and the run comes
+  back green. Reporting that as evidence asserts a hardware result that was
+  never produced. If the hardware is not present, the honest output is "this
+  host cannot evaluate these lanes," never a pass.
+- **Prove native execution separately from the `reference_cpu` lane.** A
+  hardware claim needs exact-device evidence from *that* device. Read Decision
+  #19's standing lesson: a host that has the ISA cannot falsify a
+  host-portability claim.
+- **Record sibling-backend impact without claiming parity.** Noting that a
+  change should also help ROCm is useful; asserting it works there without that
+  hardware's proof is not. Evidence never transfers between architectures.
+- **Never report green over a red lane.** If a gate fails, say so with the
+  output, name whether it is pre-existing (prove it — stash and re-run), and fix
+  the underlying lane where you can rather than routing around it.
+
+### Defaults — depart with a recorded reason
+
+- **Host-independent work** (docs, pure numpy, Python-only contracts, lit
+  fixtures that need no device) may run on whichever box is convenient — but
+  **say which host produced the result.** "The tests pass" means different
+  things on different boxes, and a suite run where half the lanes cannot be
+  evaluated is not the same evidence as a clean run.
+- **Explore via the code graph first.** `graphify query` / `codegraph_search`
+  before grepping, for anything wider than a single known symbol. Refresh with
+  `graphify update .` after edits. Both indexes are local, machine-specific
+  caches and must stay out of commits — `graphify-out/` via the root
+  `.gitignore`, the CodeGraph database (117 MB) via `.codegraph/.gitignore`.
+  `.codegraph/config.json` is tracked on purpose; nothing else under those two
+  directories is.
+- **Cross-registry changes.** Dtypes, ops, diagnostics, targets, and passes each
+  span several registries and contracts. Adding one means updating every
+  affected contract *and* its focused drift test — see Decision #24 for the
+  primitive case and Decision #29 for why an unconsumed declaration is worse
+  than a missing one.
+- **Read the backend queues before backend work.** All four:
+  `docs/audit/backend/{apple,nvidia,rocm,x86}/todo.md`. Scale how far you read
+  to the blast radius of the change.
 
 ---
 
@@ -534,8 +656,8 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 |---------------|-------|
 | **START HERE — status + open-work queue** | `docs/audit/MASTER_AUDIT.md` (+ theme audits; `docs/audit/README.md` for the map) |
 | **Forward compiler direction (north star)** — three-tier/arbiter model + coordination (Decision #28) | `docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md` (read first) + `COMPILER_REFACTOR_PLAN.md` + reassessed `OPTIMIZING_COMPILER_PLAN.md` |
-| **Compiler map + authority chain** — which doc wins when plans disagree (dashboards > COMPILER_AUDIT > INTEGRATED_COMPILER_PLAN > scoped plans > backend todos) | `docs/audit/compiler/README.md` (routes all scoped plans, incl. `GAME_THEORY_PLAN.md`, `compiler_enhancement.md` (CAKE), `W1_1_TYPING_DESIGN.md`; the Workstream C handoff is archived under `compiler/archive/`) |
-| **Generated dashboards** (count/status truth — never hand-edit) | `docs/audit/generated/` |
+| **Compiler map + authority chain** — which doc wins when plans disagree (dashboards > COMPILER_AUDIT > INTEGRATED_COMPILER_PLAN > scoped plans > backend todos) | `docs/audit/compiler/README.md` (routes all scoped plans, incl. `GAME_THEORY_PLAN.md`, `compiler_enhancement.md` (CAKE), `FORGE_ASSESSMENT.md`, `W1_1_TYPING_DESIGN.md`; the Workstream C handoff is archived under `compiler/archive/`) |
+| **Generated dashboards** (primary count/status evidence — never hand-edit) | `docs/audit/generated/` |
 | Authoritative API naming | `docs/CANONICAL_API.md` |
 | Canonical tensor attributes & dtypes | `docs/reference/tessera_tensor_attributes.md` |
 | Backend architecture + kernel guides | `docs/backends/` (Apple, x86, ROCm, NVIDIA) |

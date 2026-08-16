@@ -3786,3 +3786,55 @@ still match an independently derived float64 VJP to ~1e-6 on all three
 gradients, repeats remain bit-identical, and 164 tests pass across the Apple
 scheduled, e2e-spine and attention suites. Timing above is single-process
 characterization, not a selector corpus.
+
+## APPLE-NORM-VJP-1 — Apple joins the native-VJP boundary (E2E-REAL-6 / WS-2)
+
+**Landed 2026-08-16.** Apple GPU is now a registered Target consumer in the
+native-VJP registry for all three normalization ops (`rmsnorm`, `rmsnorm_safe`,
+`layer_norm`), with exact-device proof. This is the Apple follow-up the
+`E2E-REAL-6-NATIVE-VJP-2026-08-14` sync recorded as required.
+
+### The scope was not what "registry wiring" implied
+
+Investigation first, per the plan: Apple had **no** normalization-backward ABI
+(zero `*_bwd` / `*_vjp` norm symbols), no `_execute_apple_compiled_norm_backward`
+executor, and the synthesizer's `NormChainRegion` is forward-only. Adding an
+`apple_gpu` entry pointing at nothing would have been precisely the unconsumed
+declaration Decision #29 rejects — the same defect that cost a 30x in
+APPLE-ATTN-BWD-PERF-1. The registry entry required writing the kernel first.
+
+### What landed
+
+- **Two MSL passes.** A row pass (one thread per row) computes `dX` and
+  publishes per-row `mean`/`inv`; a column pass (one thread per channel)
+  reduces `dGamma`/`dBeta` over rows in **fixed ascending order**, so the affine
+  gradients are deterministic and repeats are bit-identical. The column pass
+  rebuilds `y_hat` from the published statistics rather than re-reducing the row.
+- **One row routine serves both norms.** `mean` is 0 for RMSNorm, so
+  `is_layer_norm` selects only whether the row is centred — and RMSNorm
+  correspondingly drops the `sum(dy)` term, which is the asymmetry easiest to get
+  wrong. The non-affine case passes a unit scale vector rather than branching, so
+  the two paths cannot drift apart.
+- **Status-returning ABI**, so a numerically identical CPU fallback cannot be
+  mistaken for GPU execution (APPLE-PLACEMENT-ABI-1); a zero status raises.
+- Registered in `native_vjp_plugins` (`apple.metal_normalization`, evidence
+  target `apple7`), in the runtime executor table, and as two
+  `execution_matrix` rows behind one `apple_gpu_norm_bwd_compiled` executor.
+
+### Evidence
+
+`tests/unit/test_apple_normalization_vjp.py` — 12 tests. Every registered op,
+affine, across rank-2, **rank-3**, and a **ragged width (13)**, each against an
+independently derived float64 VJP; all gradients match to ~1e-6 with
+`native_gpu` placement asserted. Affine gradients are proven bit-identical
+across repeats.
+
+**A test bug the rank-3 case caught.** The first reference computed `dGamma`
+with `.sum(0)`, which reduces only the first axis. That is correct at rank 2 and
+silently wrong at rank 3, where the kernel reduces over `prod(shape[:-1])` rows.
+The kernel was right and the oracle was wrong — which is the argument for
+carrying a rank-3 and a ragged shape rather than a tidy power-of-two pair.
+
+Still open for this family: f16/bf16 storage (the ABI is f32-only today) and a
+paired performance corpus; neither is required for the registry claim, which is
+a correctness/consumer claim.

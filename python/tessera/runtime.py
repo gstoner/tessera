@@ -11615,6 +11615,71 @@ def _execute_x86_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) ->
     return tuple(grads)
 
 
+def _execute_apple_compiled_norm_backward(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Launch the Apple GPU RMSNorm/LayerNorm VJP (E2E-REAL-6 / WS-2).
+
+    Row pass computes dX and publishes per-row statistics; a column pass reduces
+    dGamma/dBeta over rows in fixed ascending order, so the affine gradients are
+    deterministic. The ABI is status-returning, so a numerically correct CPU
+    fallback cannot be mistaken for GPU execution (APPLE-PLACEMENT-ABI-1) —
+    a zero status raises instead of being silently accepted.
+    """
+    import numpy as np
+
+    _, kind, x, gamma, beta, dy, eps = _parse_compiled_norm_backward(artifact, args)
+    if np.asarray(x).dtype != np.float32:
+        raise ValueError(f"Apple norm backward handles f32 only; got {np.asarray(x).dtype}")
+    rows = int(np.prod(x.shape[:-1])) if x.ndim > 1 else 1
+    cols = int(x.shape[-1])
+    runtime = _load_apple_gpu_runtime()
+    symbol = getattr(
+        runtime,
+        "tessera_apple_gpu_rmsnorm_bwd_f32" if kind == "rmsnorm"
+        else "tessera_apple_gpu_layer_norm_bwd_f32",
+        None,
+    )
+    if symbol is None:
+        raise RuntimeError("Apple runtime is missing the normalization backward ABI")
+    xc = np.ascontiguousarray(x, dtype=np.float32).reshape(-1)
+    dyc = np.ascontiguousarray(dy, dtype=np.float32).reshape(-1)
+    gc = (np.ascontiguousarray(gamma, dtype=np.float32)
+          if gamma is not None else None)
+    dx = np.zeros(rows * cols, dtype=np.float32)
+    dg = np.zeros(cols, dtype=np.float32)
+    db = np.zeros(cols, dtype=np.float32)
+    cf = ctypes.POINTER(ctypes.c_float)
+    # Calling the pointer type yields a typed NULL; `cast(None, ...)` is not
+    # accepted by the stubs and means the same thing.
+    null = cf()
+    ptr = lambda a: a.ctypes.data_as(cf)  # noqa: E731
+    want_gamma = gamma is not None
+    if kind == "rmsnorm":
+        symbol.argtypes = [cf, cf, cf, cf, cf, ctypes.c_int32, ctypes.c_int32,
+                           ctypes.c_float]
+        symbol.restype = ctypes.c_int32
+        status = symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),
+                        ptr(dx), ptr(dg) if want_gamma else null,
+                        rows, cols, ctypes.c_float(eps))
+    else:
+        symbol.argtypes = [cf, cf, cf, cf, cf, cf, ctypes.c_int32,
+                           ctypes.c_int32, ctypes.c_float]
+        symbol.restype = ctypes.c_int32
+        status = symbol(ptr(xc), ptr(gc) if want_gamma else null, ptr(dyc),
+                        ptr(dx), ptr(dg) if want_gamma else null,
+                        ptr(db) if beta is not None else null,
+                        rows, cols, ctypes.c_float(eps))
+    if int(status) != 1:
+        raise RuntimeError(
+            "Apple normalization backward ABI reported a non-native dispatch"
+        )
+    grads = [dx.reshape(x.shape)]
+    if gamma is not None:
+        grads.append(dg)
+    if beta is not None:
+        grads.append(db)
+    return tuple(grads)
+
+
 def _execute_compiled_norm_jvp(
     artifact: RuntimeArtifact, args: Any, *, target: str
 ) -> tuple[Any, Any]:
@@ -29698,6 +29763,7 @@ def _executor_table():
         "apple_gpu_optimizer_compiled": _execute_apple_gpu_compiled_optimizer,
         "apple_gpu_rng_compiled": _execute_apple_gpu_compiled_rng,
         "apple_gpu_linalg_compiled": _execute_apple_gpu_compiled_linalg,
+        "apple_gpu_norm_bwd_compiled": _execute_apple_compiled_norm_backward,
         "apple_gpu_matmul_family_compiled": _execute_apple_gpu_compiled_matmul_family,
         "native_cpu": _execute_cpu_native_or_jit,
         "cpu_autodiff_paired_llvm_jit": _execute_cpu_autodiff_paired,

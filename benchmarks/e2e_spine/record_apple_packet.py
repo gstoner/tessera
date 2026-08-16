@@ -6,13 +6,19 @@ registrations. Exact-device evidence never transfers between them, so each
 `--lane` produces its own report/resources/manifest triple under its own packet
 directory. Recording one does not close the other.
 
-Both lanes report `kernel_wall`, not `device_event`. The Apple GPU runtime does
-expose a command-buffer device timer, but only the tile/dispatch lane feeds it:
-after a value-descriptor launch `tessera_apple_gpu_last_dispatch_device_time_ns`
-still reads `-1` and the timing source reads `0`. Claiming `device_event` from a
-host clock would be a fabricated domain, so this recorder measures the native
-submit boundary and records the reason in `resources.json` rather than leaving a
-reader to guess why the stronger domain is absent.
+The timing domain is **measured, not declared**. `device_event` is claimed only
+when every family in scope actually publishes a Metal device interval; if any
+family does not, the packet falls back to the native-submit boundary
+(`kernel_wall`) for all families rather than mixing domains, and records why in
+`resources.json`. Claiming `device_event` from a host clock would be a
+fabricated domain.
+
+APPLE-DEVICE-EVENT-1 (closed 2026-08-16): the GPU matmul route used to run
+through `MPSGraph runWithMTLCommandQueue:`, which owns and commits its own
+command buffer, so no object existed on which to observe a device interval and
+the whole packet was forced onto `kernel_wall`. That route now encodes into an
+explicitly owned `MPSCommandBuffer` under the shared timing bracket, so the
+`device_event` domain is reachable.
 """
 
 from __future__ import annotations
@@ -191,6 +197,64 @@ def _packager(lane: Lane) -> Callable[..., Any]:
     from tessera.compiler import apple_cpu_native
 
     return apple_cpu_native.package_native
+
+
+def _device_time_reader() -> Callable[[], int] | None:
+    """Return a reader for the last dispatch's Metal device interval, if any."""
+    from tessera._apple_gpu_dispatch import apple_gpu_runtime
+
+    try:
+        runtime = apple_gpu_runtime()
+    except Exception:
+        return None
+    probe = getattr(runtime, "tessera_apple_gpu_last_dispatch_device_time_ns", None)
+    if probe is None:
+        return None
+    probe.restype = ctypes.c_int64
+    return lambda: int(probe())
+
+
+def _probe_device_event(submit: Callable[[], object]) -> int:
+    """Run one submit and report the device interval it published, or -1.
+
+    Measured, not assumed: APPLE-DEVICE-EVENT-1 was open because the MPSGraph
+    matmul route owned no command buffer to time.  Now that it encodes into an
+    owned buffer under the shared timing bracket, whether a device interval is
+    actually published is a question for the device, so ask it.
+    """
+    reader = _device_time_reader()
+    if reader is None:
+        return -1
+    submit()
+    try:
+        return reader()
+    except Exception:
+        return -1
+
+
+def _device_event_medians_ns(
+    submit: Callable[[], object], reader: Callable[[], int], *,
+    samples: int, iterations: int,
+) -> list[float] | None:
+    """Two interleaved cohorts of *device* intervals, mirroring the wall cohorts.
+
+    Returns ``None`` if any sample fails to publish an interval — a partially
+    timed cohort would silently mix domains, which is worse than no row.
+    """
+    submit()
+    cohorts: tuple[list[float], list[float]] = ([], [])
+    for sample in range(samples):
+        order = (0, 1) if sample % 2 == 0 else (1, 0)
+        for cohort in order:
+            total = 0
+            for _ in range(iterations):
+                submit()
+                observed = reader()
+                if observed <= 0:
+                    return None
+                total += observed
+            cohorts[cohort].append(float(total) / iterations)
+    return [statistics.median(cohorts[0]), statistics.median(cohorts[1])]
 
 
 def _two_run_medians_ns(
@@ -394,7 +458,7 @@ def _native_submit(package: Any, bindings: dict) -> Callable[[], object]:
     )
 
 
-def _gpu_resource_evidence() -> dict[str, Any]:
+def _gpu_resource_evidence(device_event_available: bool) -> dict[str, Any]:
     """Metal-native resource evidence, with absent fields carrying their reason.
 
     `source_fingerprint` must be the *kernel source* hash, not the toolchain
@@ -435,16 +499,19 @@ def _gpu_resource_evidence() -> dict[str, Any]:
     return {
         "capability_matrix": capabilities.raw,
         "evidence": evidence,
-        "device_event_available": False,
+        "device_event_available": device_event_available,
         "device_event_reason": (
-            "the Metal command-buffer device timer works for MSL-dispatched ops "
-            "once tessera_apple_gpu_dispatch_telemetry_set_enabled(1) is set "
-            "(softmax reports a real device_time_ns and timing_source=1), but the "
-            "matmul route runs through MPSGraph, which populates neither the "
-            "device timer nor the MSL dispatch record. required_timing_domains is "
-            "report-wide and every family must supply both domains, so this packet "
-            "uses kernel_wall. Closing APPLE-DEVICE-EVENT-1 means giving the "
-            "MPSGraph route a device timer, not fixing the descriptor lane."
+            "APPLE-DEVICE-EVENT-1 closed 2026-08-16: the GPU matmul route now "
+            "encodes into an explicitly owned MPSCommandBuffer under the shared "
+            "MPSGraph timing bracket instead of MPSGraph-owned "
+            "runWithMTLCommandQueue:, so it publishes a whole-dispatch device "
+            "interval. Every family in scope supplied one, so this packet claims "
+            "the device_event domain."
+            if device_event_available else
+            "at least one family in scope published no Metal device interval, so "
+            "this packet uses the native-submit boundary (kernel_wall) for all "
+            "families rather than mixing domains. Which family, and why, is "
+            "visible in the per-family benchmark rows."
         ),
     }
 
@@ -481,6 +548,9 @@ def record(
     fixture_rows: list[dict] = []
     cache_rows: list[dict] = []
     benchmark_rows: list[dict] = []
+    # family -> did this route publish a Metal device interval? Only a report
+    # where EVERY family did may claim the `device_event` domain.
+    device_event_families: dict[str, bool] = {}
     resource_rows: list[dict] = []
     toolchains: set[str] = set()
 
@@ -548,6 +618,20 @@ def record(
                 samples=samples, iterations=iterations,
             ),
         }
+        # APPLE-DEVICE-EVENT-1: collect the device interval per family when the
+        # route actually publishes one.  A family that does not is recorded as
+        # absent rather than back-filled from wall time; `required_timing_domains`
+        # below only claims `device_event` if EVERY family supplied it.
+        if lane.target == "apple_gpu":
+            reader = _device_time_reader()
+            device_medians = (
+                _device_event_medians_ns(
+                    submit, reader, samples=samples, iterations=iterations)
+                if reader is not None else None
+            )
+            if device_medians is not None:
+                run_medians["device_event"] = device_medians
+            device_event_families[plan.family] = device_medians is not None
         resource_fingerprint = hashlib.sha256(json.dumps({
             "target": lane.target, "architecture": lane.architecture,
             "entry": timing_package.descriptor.entry_symbol,
@@ -595,13 +679,23 @@ def record(
         })
 
     toolchain = hashlib.sha256("\n".join(sorted(toolchains)).encode()).hexdigest()
+    # Measured, not asserted: `device_event` is claimed only when EVERY family
+    # in scope actually published a Metal device interval. One family without
+    # one would make a report-wide domain dishonest, so the packet falls back to
+    # the native-submit boundary for all families rather than mixing domains.
+    _device_event_ok = bool(device_event_families) and all(device_event_families.values())
+    selected_domains = (["device_event", "end_to_end"] if _device_event_ok
+                        else ["kernel_wall", "end_to_end"])
+    benchmark_rows = [row for row in benchmark_rows
+                      if row["timing_domain"] in selected_domains]
+
     report = {
         "schema": "tessera.e2e-backend-report.v1",
         "target": lane.target, "architecture": lane.architecture,
         "device": {"exact": True, "identity": f"{platform.node()} | {model} | {brand}"},
         "source_commit": source_commit, "toolchain_fingerprint": toolchain,
         "scope": [plan.family for plan in lane.plans],
-        "required_timing_domains": ["kernel_wall", "end_to_end"],
+        "required_timing_domains": selected_domains,
         "fixtures": fixture_rows, "cache_proofs": cache_rows,
         "benchmarks": benchmark_rows,
     }
@@ -622,7 +716,7 @@ def record(
         "rows": resource_rows,
     }
     if lane.target == "apple_gpu":
-        resources["metal"] = _gpu_resource_evidence()
+        resources["metal"] = _gpu_resource_evidence(_device_event_ok)
     else:
         resources["metal"] = {
             "applicable": False,

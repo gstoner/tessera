@@ -21077,13 +21077,38 @@ static bool mpsg_run_bmm(MetalDeviceContext &ctx, const void *a, const void *b,
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufA shape:aShape dataType:ioType];
     MPSGraphTensorData *bd =
         [[MPSGraphTensorData alloc] initWithMTLBuffer:bufB shape:bShape dataType:ioType];
-    NSDictionary *res = [g runWithMTLCommandQueue:ctx.queue
-                                            feeds:@{pa : ad, pb : bd}
-                                    targetTensors:@[ y ]
-                                 targetOperations:nil];
-    MPSGraphTensorData *od = res[y];
-    if (!od) return false;
-    [[od mpsndarray] readBytes:out strideBytes:nil];
+    // APPLE-DEVICE-EVENT-1: this route used to call `runWithMTLCommandQueue:`,
+    // which lets MPSGraph own and commit its own command buffer — so no object
+    // existed on which to observe a device interval, and the whole `apple_gpu`
+    // packet was forced onto `kernel_wall`. Encode into an explicitly owned
+    // MPSCommandBuffer under the same timing bracket the sibling MPSGraph paths
+    // already use (gather, transpose, row-op, BSMM), so the graph gets a real
+    // whole-dispatch interval across any internal `commitAndContinue` rotation.
+    // The bracket is telemetry-only: if it is unavailable, timing stays absent
+    // and the result is still correct — a profiling limitation must never be
+    // reported as an execution failure.
+    NSArray<NSNumber *> *oShape = @[ @(batch), @(M), @(N) ];
+    size_t oBytes = (size_t)batch * M * N * elemSize;
+    TS_METAL_BUF_ACQUIRE(bufO, ctx, oBytes);
+    if (!bufO) return false;
+    MPSGraphTensorData *od =
+        [[MPSGraphTensorData alloc] initWithMTLBuffer:bufO shape:oShape dataType:ioType];
+    id<MTLCommandBuffer> metal_cb = [ctx.queue commandBuffer];
+    if (!metal_cb) return false;
+    metal_cb.label = @"tessera.bmm.mpsgraph";
+    MPSCommandBuffer *owned =
+        [MPSCommandBuffer commandBufferWithCommandBuffer:metal_cb];
+    if (!owned) return false;
+    MPSGraphTimingBracket timing(ctx);
+    [g encodeToCommandBuffer:owned
+                       feeds:@{pa : ad, pb : bd}
+            targetOperations:nil
+           resultsDictionary:@{y : od}
+         executionDescriptor:timing.execution_descriptor];
+    if (!commit_mpsgraph_and_wait_with_timeout(ctx, owned, metal_cb, 30000,
+                                               "bmm", &timing))
+      return false;
+    memcpy(out, [bufO contents], oBytes);
     return true;
   }
 }

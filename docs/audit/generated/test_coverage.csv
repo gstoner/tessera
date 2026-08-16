@@ -282,10 +282,10 @@ masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
 matmul,478,277,21,755,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,755 direct test references
-max,7,0,2,7,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,7 direct test references
+max,8,0,2,8,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,8 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,11,0,2,11,0,bf16 f32 fp16 fp32,directly_tested,11 direct test references
-mean,20,0,1,20,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,20 direct test references
+mean,21,0,1,21,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,21 direct test references
 memory_evict,5,0,1,5,0,,directly_tested,5 direct test references
 memory_index_score,9,0,1,9,0,,directly_tested,9 direct test references
 memory_index_select,4,0,1,4,0,,directly_tested,4 direct test references
@@ -363,7 +363,7 @@ quantize_nvfp4,21,0,3,21,0,bf16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 fp8_e5m
 quantized_matmul,5,0,0,5,0,f16,directly_tested,5 direct test references
 rearrange,8,0,0,8,0,fp16,directly_tested,8 direct test references
 reciprocal,5,0,0,5,0,bf16 f32 fp16 fp32,directly_tested,5 direct test references
-reduce,108,17,8,125,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,125 direct test references
+reduce,109,17,8,126,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,126 direct test references
 reduce_scatter,3,0,0,3,0,fp32,directly_tested,3 direct test references
 relu,118,37,9,155,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,155 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
@@ -459,7 +459,7 @@ stereographic,11,0,0,11,0,fp32,directly_tested,11 direct test references
 stft,30,2,2,32,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,32 direct test references
 stop_gradient,1,5,0,6,0,fp32,directly_tested,6 direct test references
 sub,29,7,3,36,0,bf16 f16 f32 fp16 fp32,directly_tested,36 direct test references
-sum,18,0,2,18,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,18 direct test references
+sum,19,0,2,19,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,19 direct test references
 svd,20,5,0,25,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,25 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

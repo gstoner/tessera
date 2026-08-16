@@ -4662,6 +4662,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         APPLE_SIMDGROUP_GEMM_F16_ABI,
         APPLE_FLASH_ATTN_VARIANT_F32_ABI,
         APPLE_FLASH_ATTN_BWD_VARIANT_ABIS,
+        APPLE_SYNTH_REDUCE_F32_ABI,
         APPLE_TRANSPOSE_BF16_ABI,
         APPLE_TRANSPOSE_F16_ABI,
         APPLE_TRANSPOSE_F32_ABI,
@@ -4699,6 +4700,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 APPLE_SOFTMAX_BF16_ABI,
                 APPLE_SIMDGROUP_GEMM_F16_ABI,
                 APPLE_FLASH_ATTN_VARIANT_F32_ABI,
+                APPLE_SYNTH_REDUCE_F32_ABI,
                 APPLE_TOPK_DYNAMIC_F32_I32_ABI,
                 APPLE_TRANSPOSE_F32_ABI,
                 APPLE_TRANSPOSE_F16_ABI,
@@ -4985,8 +4987,57 @@ def _submit_apple_gpu_native(
         APPLE_FLASH_ATTN_VARIANT_F32_SYMBOL,
         APPLE_FLASH_ATTN_BWD_SPLIT_ROUTE,
         APPLE_FLASH_ATTN_BWD_VARIANT_ABIS,
+        APPLE_SYNTH_REDUCE_F32_ABI,
+        APPLE_SYNTH_REDUCE_F32_SYMBOL,
+        APPLE_SYNTH_REDUCE_KINDS,
         _runtime_library_path,
     )
+
+    if descriptor.abi_id == APPLE_SYNTH_REDUCE_F32_ABI:
+        # E2E-REAL-5 last-axis reduction as COMPILER-SYNTHESIZED MSL.  The
+        # kernel is re-derived here and checked against the digest the package
+        # recorded, so a descriptor cannot execute a kernel other than the one
+        # it was built from.  The underlying helper falls back to a numpy
+        # reference on any failure, so its provenance is asserted rather than
+        # trusted (APPLE-PLACEMENT-ABI-1).
+        import hashlib as _hashlib
+
+        from tessera.compiler.apple_native import synthesized_reduce_source
+        from tessera.compiler.emit.apple_msl import run_pointwise_reduce
+        from tessera.compiler.fusion_core import PointwiseReduceRegion
+
+        provenance = descriptor.provenance
+        ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+        if descriptor.entry_symbol != APPLE_SYNTH_REDUCE_F32_SYMBOL or len(ordered) != 2:
+            raise RuntimeError(
+                "Apple synthesized-reduce descriptor ABI or buffer contract is invalid"
+            )
+        source_in, out = (buffers[item.name] for item in ordered)
+        if not isinstance(source_in, np.ndarray) or not isinstance(out, np.ndarray):
+            raise RuntimeError("Apple synthesized reduce requires ndarray buffers")
+        if source_in.dtype != np.float32 or not source_in.flags.c_contiguous:
+            raise RuntimeError("Apple synthesized reduce requires a contiguous f32 input")
+        kind = str(provenance["kind"])
+        expected_digest = str(provenance["source_sha256"])
+        actual_digest = _hashlib.sha256(
+            synthesized_reduce_source(kind).encode()
+        ).hexdigest()
+        if actual_digest != expected_digest:
+            raise RuntimeError(
+                "Apple synthesized reduce kernel does not match the packaged "
+                "source digest"
+            )
+        synth_kind = APPLE_SYNTH_REDUCE_KINDS[kind]
+        region = PointwiseReduceRegion(
+            ops=(), inputs=("x",), output="x", reduce=synth_kind,
+        )
+        result, route = run_pointwise_reduce(region, [source_in])
+        if route != "metal_runtime":
+            raise RuntimeError(
+                f"Apple synthesized reduce fell back to {route!r} instead of Metal"
+            )
+        np.copyto(out, np.asarray(result, dtype=np.float32).reshape(out.shape))
+        return out
 
     _bwd_by_abi = {abi: symbol for symbol, abi in APPLE_FLASH_ATTN_BWD_VARIANT_ABIS.values()}
     if descriptor.abi_id in _bwd_by_abi:

@@ -185,8 +185,6 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         )
         if kind not in {"sum", "mean", "max"} or bool(op.kwargs.get("keepdims", False)):
             raise ValueError("scheduled reduction requires rank-reducing sum/mean/max")
-        if compiler_target == "apple_gpu":
-            raise ValueError("Apple GPU has no scheduled reduction consumer yet")
         raw_axis = op.kwargs.get("axis", -1)
         if not isinstance(raw_axis, int) or isinstance(raw_axis, bool):
             raise ValueError("scheduled reduction requires one integer axis")
@@ -195,6 +193,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("scheduled reduction axis is out of range")
         if target == "x86" and axis != len(input_shape) - 1:
             raise ValueError("initial x86 scheduled reduction requires the last axis")
+        # Apple's synthesized reduce kernel gives one thread per row and folds
+        # over the trailing extent, so it expresses last-axis reductions only.
+        if target == "apple_gpu" and axis != len(input_shape) - 1:
+            raise ValueError("Apple GPU scheduled reduction requires the last axis")
         expected = input_shape[:axis] + input_shape[axis + 1 :]
         if output_shape != expected:
             raise ValueError("scheduled reduction output shape does not match its axis")

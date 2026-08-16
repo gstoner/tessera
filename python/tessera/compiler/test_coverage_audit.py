@@ -87,7 +87,23 @@ _FAMILY_MODULES: tuple[str, ...] = (
     # M7 visual-complex op surface).
     "functional",
     "complex",
+    # Host-level solver primitives (P2 tranche) and the coalition-lattice
+    # family.  Both route through their own namespace: ``solvers_ops``
+    # exports ``tridiagonal_solve`` directly, and ``game`` exports the
+    # ``game_``-prefixed registry ops under their short names
+    # (``game_subset_zeta`` → ``tessera.game.subset_zeta``) — see
+    # ``_MODULE_PREFIXED_FAMILIES``.
+    "solvers_ops",
+    "game",
 )
+
+
+#: Family modules whose registry op names carry the module name as a
+#: prefix.  ``tessera.game`` exports ``subset_zeta``, but the primitive
+#: registry (and the op catalog) name it ``game_subset_zeta``; without
+#: this mapping every op in such a family scores zero references no
+#: matter how thoroughly it is tested.
+_MODULE_PREFIXED_FAMILIES: frozenset[str] = frozenset({"game"})
 
 
 def _ops_namespace_patterns(op_name: str) -> tuple[re.Pattern, ...]:
@@ -278,24 +294,154 @@ def _all_op_names() -> tuple[str, ...]:
 # so we use anonymous groups and pick whichever fired.
 _OP_NAME_RE = r"([a-zA-Z_][a-zA-Z0-9_]*)"
 _TRAINING_OP_NAME_RE = r"(training\.[a-zA-Z_][a-zA-Z0-9_]*)"
-_PY_OP_REFERENCE_RE = re.compile(
-    rf'"tessera\.{_TRAINING_OP_NAME_RE}"'
-    rf"|\b(?:tessera|ts)\.ops\.{_OP_NAME_RE}\b"
-    rf"|(?<![A-Za-z0-9_])ops\.{_OP_NAME_RE}\b"
-    rf'|"tessera\.{_OP_NAME_RE}"'
-    rf"|\bfrom tessera\.ops import [^\n]*?\b{_OP_NAME_RE}\b"
-    + "".join(
-        rf"|\btessera\.{mod}\.{_OP_NAME_RE}\b"
-        rf"|(?<![A-Za-z0-9_]){mod}\.{_OP_NAME_RE}\b"
-        rf"|\bfrom tessera\.{mod} import [^\n]*?\b{_OP_NAME_RE}\b"
-        for mod in _FAMILY_MODULES
+
+# Each entry is (pattern, owning_module).  ``owning_module`` is the
+# family module a dotted call belongs to (``"game"`` for
+# ``game.subset_zeta(...)``), or ``None`` for the module-agnostic forms
+# (``tessera.ops.*`` / ``ops.*`` / the MLIR-string form).  Built as a list
+# of parts — rather than one f-string — so the group-index-to-module
+# mapping below can be derived from the same source instead of hand-counted.
+_PY_OP_REFERENCE_PARTS: tuple[tuple[str, str | None], ...] = (
+    (rf'"tessera\.{_TRAINING_OP_NAME_RE}"', None),
+    (rf"\b(?:tessera|ts)\.ops\.{_OP_NAME_RE}\b", None),
+    (rf"(?<![A-Za-z0-9_])ops\.{_OP_NAME_RE}\b", None),
+    (rf'"tessera\.{_OP_NAME_RE}"', None),
+    # NOTE: the ``from tessera.<mod> import ...`` alternatives that used
+    # to live here are owned by ``_import_binding_refs`` — see the
+    # comment above ``_FAMILY_IMPORT_RE``.
+) + tuple(
+    part
+    for mod in _FAMILY_MODULES
+    for part in (
+        (rf"\btessera\.{mod}\.{_OP_NAME_RE}\b", mod),
+        (rf"(?<![A-Za-z0-9_]){mod}\.{_OP_NAME_RE}\b", mod),
     )
 )
+
+_PY_OP_REFERENCE_RE = re.compile(
+    "|".join(pattern for pattern, _module in _PY_OP_REFERENCE_PARTS)
+)
+
+# 1-based group index -> owning module (or None), so a match's
+# ``m.lastindex`` tells us which alternative fired without needing named
+# groups (which ``re`` forbids duplicating across alternatives).  Every
+# part above has exactly one capturing group, so group order == part order.
+_PY_OP_REFERENCE_GROUP_MODULE: tuple[str | None, ...] = tuple(
+    module for _pattern, module in _PY_OP_REFERENCE_PARTS
+)
+
+
+def _resolve_py_match(m: re.Match[str], registry: frozenset[str]) -> str | None:
+    """Turn one ``_PY_OP_REFERENCE_RE`` match into a registry op name.
+
+    Returns ``None`` when the match doesn't resolve to a registry op
+    (e.g. a dotted call into a module-prefixed family whose short name
+    isn't a registered op — a helper, not an op).
+    """
+    name = next((g for g in m.groups() if g is not None), None)
+    if name is None:
+        return None
+    module = (
+        _PY_OP_REFERENCE_GROUP_MODULE[m.lastindex - 1] if m.lastindex else None
+    )
+    if module in _MODULE_PREFIXED_FAMILIES:
+        return _resolve_family_op(module, name, registry)
+    return name
 
 _LIT_OP_REFERENCE_RE = re.compile(
     rf'"tessera(?:\.[a-z_]+)?\.{_OP_NAME_RE}"'
     rf"|tessera(?:\.[a-z_]+)?\.{_OP_NAME_RE}\b"
 )
+
+
+# ── Import bindings ──────────────────────────────────────────────────
+#
+# ``from tessera.<mod> import ...`` is handled here rather than in
+# ``_PY_OP_REFERENCE_RE`` so that ONE code path owns the import form.
+# The combined regex could only match single-line imports (its
+# ``[^\n]*?`` cannot cross a newline), which silently scored zero for
+# every test using the parenthesized multi-line form — the style the
+# coalition-lattice suite uses.
+#
+# Binding-awareness also lets us count the call sites.  A test that does
+# ``from tessera.solvers_ops import tridiagonal_solve`` and then calls
+# ``tridiagonal_solve(...)`` twelve times is not a one-reference op; the
+# name is in file scope and every bare call is a real exercise of it.
+_FAMILY_IMPORT_RE = re.compile(
+    r"\bfrom\s+tessera\.(" + "|".join(
+        re.escape(m) for m in ("ops",) + _FAMILY_MODULES
+    ) + r")\s+import\s+(?:\(([^)]*)\)|([^\n(]*))",
+    re.MULTILINE,
+)
+
+#: ``name`` / ``name as alias`` inside an import list, comments stripped.
+_IMPORT_NAME_RE = re.compile(
+    r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)"
+    r"(?:\s+as\s+([A-Za-z_][A-Za-z0-9_]*))?"
+)
+
+
+def _resolve_family_op(module: str, imported: str, registry: frozenset[str]) -> str | None:
+    """Map an imported short name back to its registry op name.
+
+    Returns ``None`` when the name is not a registry op — test files
+    import plenty of helpers and fixtures alongside the ops.
+    """
+    if imported in registry:
+        return imported
+    if module in _MODULE_PREFIXED_FAMILIES:
+        prefixed = f"{module}_{imported}"
+        if prefixed in registry:
+            return prefixed
+    return None
+
+
+def _import_binding_refs(
+    text: str, registry: frozenset[str]
+) -> dict[str, list[int]]:
+    """Return ``{registry_op: [char offsets]}`` for imported ops.
+
+    Each binding contributes the import statement itself plus every
+    bare call site of the locally bound name in the same file.
+    """
+    found: dict[str, list[int]] = {}
+    # Local names bound to each op.  A test file may import the same op
+    # several times (module scope plus function-local imports); each
+    # import is its own reference, but the call sites must be counted
+    # ONCE per bound name, not once per import statement.
+    locals_by_op: dict[str, set[str]] = {}
+    for m in _FAMILY_IMPORT_RE.finditer(text):
+        module = m.group(1)
+        names_blob = m.group(2) if m.group(2) is not None else (m.group(3) or "")
+        # Strip trailing comments (a lint-suppression pragma on the
+        # import line is common in these suites).
+        names_blob = re.sub(r"#[^\n]*", "", names_blob)
+        if "*" in names_blob:
+            continue
+        for nm in _IMPORT_NAME_RE.finditer(names_blob):
+            imported, alias = nm.group(1), nm.group(2)
+            if imported == "as":
+                continue
+            op = _resolve_family_op(module, imported, registry)
+            if op is None:
+                continue
+            found.setdefault(op, []).append(m.start())
+            locals_by_op.setdefault(op, set()).add(alias or imported)
+
+    # Bare call sites of each bound name, e.g. ``subset_zeta(v)``.  The
+    # negative lookbehind for ``.`` avoids double-counting
+    # ``mod.subset_zeta(...)``, which the combined regex owns.
+    for op, names in locals_by_op.items():
+        import_offsets = set(found.get(op, ()))
+        seen: set[int] = set()
+        for local in names:
+            call_re = re.compile(rf"(?<![A-Za-z0-9_.]){re.escape(local)}\s*\(")
+            for cm in call_re.finditer(text):
+                if cm.start() in import_offsets or cm.start() in seen:
+                    continue
+                seen.add(cm.start())
+                found[op].append(cm.start())
+    return found
 
 
 def _scan_all_files_vectorized() -> tuple[
@@ -316,26 +462,35 @@ def _scan_all_files_vectorized() -> tuple[
     lit_refs_by_op: dict[str, int] = {}
     raises_by_path: dict[Path, list[int]] = {}  # line numbers
 
+    # Registry op names, needed to resolve import bindings back to
+    # their canonical names (``subset_zeta`` → ``game_subset_zeta``).
+    registry = frozenset(_all_op_names())
+
     # ── Python pass ───────────────────────────────────────────────
     for path in _TESTS_UNIT.rglob("*.py"):
         try:
             text = path.read_text(errors="replace")
         except OSError:
             continue
-        # Match all op references in one go.
+        # Match all op references in one go.  ``_resolve_py_match`` maps
+        # a dotted call into a module-prefixed family (e.g.
+        # ``game.subset_zeta(...)``) back to its registry key
+        # (``game_subset_zeta``) — without it, that reference is recorded
+        # under a key no registry op has and is silently dropped by
+        # ``collect_op_test_coverage``'s ``for op in all_ops`` loop.
         any_matches = False
         for m in _PY_OP_REFERENCE_RE.finditer(text):
-            # One named group fires per alternative; pick the
-            # non-None capture.
-            name = next(
-                (g for g in m.groups() if g is not None), None
-            )
+            name = _resolve_py_match(m, registry)
             if name is None:
                 continue
             any_matches = True
             py_refs_by_op.setdefault(name, {}).setdefault(path, []).append(
                 m.start()
             )
+        # Import bindings + their bare call sites (multi-line aware).
+        for op, offsets in _import_binding_refs(text, registry).items():
+            any_matches = True
+            py_refs_by_op.setdefault(op, {}).setdefault(path, []).extend(offsets)
         if not any_matches:
             continue
         # Cache dtype literals per file.

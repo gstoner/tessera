@@ -2917,3 +2917,24 @@ full lit 324/0 including the pipeline-alias and NVTMA fixtures. **Open on
 this queue:** sm_120-host revalidation of the NVTMA pipelines and any
 SM90/Hopper device proof (Phase G/H); the barrier-at-birth emission
 restructure is the tracked follow-on (compiler_enhancement.md §5.2.1).
+
+## REF-TIER-OPS-2026-08-15 — reference-tier op registration assessment (PR #568)
+
+PR #568 registered ten new public operations through the canonical op catalog
+and the primitive coverage registry — `tridiagonal_solve` (Thomas recurrence,
+PDE plan §III.1 / TSOL-A1) and the nine-op coalition-lattice family
+(`game_subset_zeta`, `game_subset_mobius`, `game_superset_zeta`,
+`game_superset_mobius`, `game_coalition_marginal`, `game_semivalue`,
+`game_boltzmann_value`, `game_coalition_excess`, `game_mex`). Op registration
+is a shared contract, so this queue records the outcome per AGENTS.md
+"Cross-backend work coordination"; PR #568 itself landed without these records.
+
+**Follow-up required — no NVIDIA lane exists for any of the ten.** No
+`tessera-nvidia-pipeline-{sm90,sm100,sm120}` stage, PTX emitter, or backend
+manifest row consumes either family; the declared tier is the Python
+reference. GAME_THEORY_PLAN.md G5 names the per-target arbiter registration
+(SubsetZetaRegion beside SpectralFFTRegion, `boltzmann_value` on the
+online-softmax emitter) as the NVIDIA-side entry point for the lattice family;
+the solver's entry point is the PDE op-set admission, not G5. No sm_120 host
+revalidation was run for this registration and no device evidence is claimed —
+nothing here changes generated code.

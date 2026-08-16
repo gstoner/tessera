@@ -3669,3 +3669,24 @@ sweep — 1,569 tests (every `_compiled` lane + staged global→LDS/LDS-WMMA +
 canonical GEMM matrix) — green; `check-tessera-rocm` green modulo the
 pre-existing `gfx1151_philox_distributions.mlir` failure (fails on clean
 main; independent of this change).
+
+## REF-TIER-OPS-2026-08-15 — reference-tier op registration assessment (PR #568)
+
+PR #568 registered ten new public operations through the canonical op catalog
+and the primitive coverage registry — `tridiagonal_solve` (Thomas recurrence,
+PDE plan §III.1 / TSOL-A1) and the nine-op coalition-lattice family
+(`game_subset_zeta`, `game_subset_mobius`, `game_superset_zeta`,
+`game_superset_mobius`, `game_coalition_marginal`, `game_semivalue`,
+`game_boltzmann_value`, `game_coalition_excess`, `game_mex`). Op registration
+is a shared contract, so this queue records the outcome per AGENTS.md
+"Cross-backend work coordination"; PR #568 itself landed without these records.
+
+**Follow-up required — no ROCm lane exists for any of the ten.** No
+`tessera_rocm.*` Target IR op, MFMA/WMMA path, or hsaco lane consumes either
+family; the declared tier is the Python reference. The gfx1151 device sweep is
+unaffected — nothing in this registration changes an existing kernel, pipeline,
+or manifest row. When the owning phases open (PDE plan §III.1 for the solver,
+GAME_THEORY_PLAN.md G1b/G5 for the lattice family), note that the Thomas sweep
+is a sequential recurrence in `n`: a wavefront lane needs the plan's chosen
+parallel algorithm, not a transliteration of the reference. No exact-device
+gfx1151 evidence is claimed.

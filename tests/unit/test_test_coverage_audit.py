@@ -269,3 +269,190 @@ def test_dashboard_headline_numbers_match_live_scan() -> None:
         f"{summary['total_ops']} ops; regenerate via "
         f"`tessera.compiler.test_coverage_audit.write_dashboard()`."
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Import-binding scanner (PR #568 review follow-up)
+# ─────────────────────────────────────────────────────────────────────────
+#
+# The scanner used to see only single-line ``from tessera.<mod> import X``
+# and only registry-spelled names.  That silently scored zero for any op
+# whose suite used the parenthesized multi-line import form, or whose
+# module exports a short name for a prefixed registry op — which is how
+# `tridiagonal_solve` and the whole coalition-lattice family landed in
+# PR #568 classified `structural_only` despite having dedicated suites.
+
+
+def _synthetic_dotted_call(module: str, op: str) -> tuple[str, str]:
+    """Build ``module.op`` and ``tessera.module.op`` sample text.
+
+    Same rationale as ``_synthetic_import``: writing the literal dotted
+    form directly in this file — module name, then a dot, then an op
+    name, adjacent in the source text — would BE a real reference as far
+    as the scanner is concerned, since it reads this file's raw bytes
+    like any other file under ``tests/unit/``.  (Note: even this
+    docstring has to describe the shape rather than show one — spelling
+    an example out is exactly the mistake this helper exists to avoid.)
+    Callers must pass ``module``/``op`` as separate arguments (as done
+    here) so the joined form only ever exists at runtime, never in the
+    source.
+    """
+    return f"{module}.{op}", f"tessera.{module}.{op}"
+
+
+def _synthetic_import(module: str, name: str) -> str:
+    """Build a sample import line WITHOUT writing it as a literal.
+
+    This file is itself inside ``tests/unit/``, which is the tree the
+    coverage scanner walks.  A literal ``from tessera.<mod> import <op>``
+    in a fixture would be indistinguishable from a real reference and
+    would silently inflate that op's row in the live dashboard — which
+    the generated-doc drift gate then bakes in.  Assembling the string
+    at runtime keeps the fixtures out of the scan.
+    """
+    return f"from tessera.{module} import {name}"
+
+
+def _refs(op_name: str) -> int:
+    rows = {r.op_name: r for r in collect_op_test_coverage()}
+    assert op_name in rows, f"{op_name} is not in the primitive registry"
+    return rows[op_name].total_refs
+
+
+def test_family_module_import_is_seen_single_line() -> None:
+    """A single-line family-module import of the solver counts.
+
+    Regression pin for the PR #568 review finding: the solver suite
+    exists (`tests/unit/test_tridiagonal_solve.py`) and must not read
+    as an untested op.
+
+    (The import form is deliberately described rather than quoted —
+    see `_synthetic_import` for why a literal here would corrupt the
+    very number this test is pinning.)
+    """
+    assert _refs("tridiagonal_solve") >= 2, (
+        "tridiagonal_solve scores as untested — `solvers_ops` fell out of "
+        "_FAMILY_MODULES, or the import-binding scan regressed."
+    )
+
+
+def test_multiline_import_and_prefixed_family_are_seen() -> None:
+    """Parenthesized imports + ``game_``-prefixed registry names.
+
+    ``tessera.game`` exports ``subset_zeta``; the registry names it
+    ``game_subset_zeta``.  Both halves must work or the family scores
+    zero across the board.
+    """
+    for op in ("game_subset_zeta", "game_mex", "game_boltzmann_value"):
+        assert _refs(op) >= 2, (
+            f"{op} scores as untested — multi-line import parsing or the "
+            f"_MODULE_PREFIXED_FAMILIES mapping regressed."
+        )
+
+
+def test_repeated_local_imports_do_not_multiply_call_sites() -> None:
+    """Call sites are counted once per bound name, not once per import.
+
+    ``test_game_lattice.py`` re-imports ``boltzmann_value`` inside
+    several test bodies.  A per-import full-text rescan multiplied its
+    call sites ~3.5x, which would inflate the audit rather than fix it.
+    """
+    from tessera.compiler import test_coverage_audit as tca
+
+    # Synthetic source is ASSEMBLED, never written as a literal: this
+    # file lives in tests/unit/, which is exactly what the scanner walks,
+    # so an inline ``from tessera.game import ...`` line here would be
+    # counted as a real reference and inflate the live dashboard.
+    imp = _synthetic_import("game", "boltzmann_value")
+    text = (
+        f"{imp}\n"
+        "def a():\n"
+        f"    {imp}\n"
+        "    return boltzmann_value(1)\n"
+        "def b():\n"
+        f"    {imp}\n"
+        "    return boltzmann_value(2)\n"
+    )
+    registry = frozenset({"game_boltzmann_value"})
+    offsets = tca._import_binding_refs(text, registry)["game_boltzmann_value"]
+    # 3 imports + 2 distinct call sites, each counted exactly once.
+    assert len(offsets) == len(set(offsets)) == 5, (
+        f"expected 3 imports + 2 unique call sites = 5, got {len(offsets)} "
+        f"({len(set(offsets))} unique) — call-site dedupe regressed"
+    )
+
+
+def test_dotted_calls_are_not_double_counted() -> None:
+    """``mod.op(...)`` belongs to the combined regex, not the binding scan."""
+    from tessera.compiler import test_coverage_audit as tca
+
+    op = "tridiagonal" + "_solve"          # see _synthetic_import's note
+    text = (
+        f"{_synthetic_import('solvers_ops', op)}\n"
+        f"solvers_ops.{op}(a)\n"
+    )
+    registry = frozenset({op})
+    offsets = tca._import_binding_refs(text, registry)[op]
+    assert len(offsets) == 1, (
+        f"the dotted call was double-counted by the binding scan: {offsets}"
+    )
+
+
+def test_dotted_call_into_prefixed_family_resolves_to_registry_name() -> None:
+    """A dotted call into a module-prefixed family — both the short
+    form and the fully-qualified form — resolves to the registry name.
+
+    Regression pin for a PR #569 review finding: the combined-regex path
+    (dotted calls, as opposed to imports) captured the module's short
+    name with no knowledge of ``_MODULE_PREFIXED_FAMILIES``, so a suite
+    written in the dotted-call style would score zero for every
+    ``game_*`` op despite real references — exactly the failure mode
+    this whole scanner rewrite exists to fix.
+
+    (No dotted form is written as a literal anywhere in this test file —
+    see ``_synthetic_dotted_call``.)
+    """
+    from tessera.compiler import test_coverage_audit as tca
+
+    short, qualified = _synthetic_dotted_call("game", "subset_zeta")
+    registry = frozenset({"game_subset_zeta"})
+    text = f"import tessera.game as game\nx = {short}(v)\ny = {qualified}(w)\n"
+    resolved = [
+        tca._resolve_py_match(m, registry)
+        for m in tca._PY_OP_REFERENCE_RE.finditer(text)
+    ]
+    assert resolved == ["game_subset_zeta", "game_subset_zeta"], (
+        f"dotted calls into a prefixed family did not resolve to the "
+        f"registry name: {resolved}"
+    )
+
+
+def test_dotted_call_into_prefixed_family_ignores_non_op_names() -> None:
+    """A dotted call to a non-op helper in a prefixed family must not
+    fabricate a bogus registry key — a helper name that isn't itself
+    registered (prefixed or not) must resolve to nothing."""
+    from tessera.compiler import test_coverage_audit as tca
+
+    short, _qualified = _synthetic_dotted_call("game", "lattice_players")
+    registry = frozenset({"game_subset_zeta"})  # lattice_players NOT registered
+    text = f"{short}(n)\n"
+    matches = [
+        tca._resolve_py_match(m, registry)
+        for m in tca._PY_OP_REFERENCE_RE.finditer(text)
+    ]
+    assert matches == [None], f"expected the unregistered helper to be dropped, got {matches}"
+
+
+def test_dotted_call_into_non_prefixed_family_is_unaffected() -> None:
+    """A family module NOT in ``_MODULE_PREFIXED_FAMILIES`` must resolve
+    a dotted call unchanged, straight to its own name."""
+    from tessera.compiler import test_coverage_audit as tca
+
+    short, _qualified = _synthetic_dotted_call("optim", "sgd")
+    registry = frozenset({"sgd"})
+    text = f"{short}(params, lr)\n"
+    matches = [
+        tca._resolve_py_match(m, registry)
+        for m in tca._PY_OP_REFERENCE_RE.finditer(text)
+    ]
+    assert matches == ["sgd"]

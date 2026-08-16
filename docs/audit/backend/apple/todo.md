@@ -3325,3 +3325,25 @@ threadgroup pipeline fixtures that touch shared TMA vocabulary
 changed tree. The new `tile.tma.descriptor` source-type constraint
 (buffer/memref/ranked-tensor) admits every Apple fixture form. No Metal/MPS
 runtime surface changed; no on-Mac evidence is claimed or required.
+
+## REF-TIER-OPS-2026-08-15 — reference-tier op registration assessment (PR #568)
+
+PR #568 registered ten new public operations through the canonical op catalog
+and the primitive coverage registry — `tridiagonal_solve` (Thomas recurrence,
+PDE plan §III.1 / TSOL-A1) and the nine-op coalition-lattice family
+(`game_subset_zeta`, `game_subset_mobius`, `game_superset_zeta`,
+`game_superset_mobius`, `game_coalition_marginal`, `game_semivalue`,
+`game_boltzmann_value`, `game_coalition_excess`, `game_mex`). Op registration
+is a shared contract, so this queue records the outcome per AGENTS.md
+"Cross-backend work coordination"; PR #568 itself landed without these records.
+
+**Follow-up required — no Apple lane exists for any of the ten.** Neither
+family appears in `apple_gpu_envelope.runtime_ops`, the MSL synthesizer
+(`compiler/emit/apple_msl.py`), or the Accelerate CPU shim; the declared tier
+is the Python reference. Per the parity methodology, absence from
+`runtime_ops` — not the backend manifest — is the accurate Apple-GPU gap
+signal here. `game_boltzmann_value` is the one op with a plausible near-term
+Apple shape when G5 opens, since it rides the existing online-softmax emitter;
+the remaining eight need the G1b butterfly lowering and the solver needs the
+PDE plan's phase. No on-Mac evidence is claimed or required — nothing here
+changes a Metal/MPS surface.

@@ -3838,3 +3838,67 @@ carrying a rank-3 and a ragged shape rather than a tidy power-of-two pair.
 Still open for this family: f16/bf16 storage (the ABI is f32-only today) and a
 paired performance corpus; neither is required for the registry claim, which is
 a correctness/consumer claim.
+
+## APPLE-LAUNCH-OVERHEAD-1 — the integrity check cost 25x the computation
+
+**Landed 2026-08-16.** Following the APPLE-DEVICE-EVENT-1 finding that these
+lanes are host-overhead dominated (softmax: ~23 us of GPU work inside ~1014 us
+of wall time), the launch path was profiled rather than guessed at. Row softmax
+`64x256` end to end: **1368 us -> 478 us (2.9x)**.
+
+### Where the time was
+
+| stage | per launch |
+|---|---|
+| `_split_native_arguments` | 11 us |
+| `descriptor.validate_invocation` | 2 us |
+| **dylib SHA-256 + file read** | **~890 us** |
+| native ABI call (incl. submit/sync) | ~478 us |
+
+`_submit_apple_gpu_native` re-read the whole ~1 MB Apple dylib from disk and
+SHA-256'd it **on every launch** to confirm the loaded runtime still matched the
+compiler-produced image. The check is genuinely load-bearing — it is what stops a
+stale or substituted dylib masquerading as the image a descriptor was built
+against, which this backend gets wrong easily (a rebuild republishes under a new
+cache path; see the operational note under APPLE-DEVICE-EVENT-1). But it cost
+roughly 25x the GPU work it was guarding.
+
+### What changed, and what it trades
+
+The digest is memoized on the file's `(path, mtime_ns, size)` identity, so a
+launch pays one `stat` (~26 us including path resolution) instead of a 1 MB
+re-hash. Content is still byte-verified whenever the file identity changes — a
+rebuild, a republish, any size or mtime change re-hashes. **What is given up:**
+an in-place edit preserving both mtime and size would no longer be caught. That
+is a deliberate swap rather than the staleness this guard exists to catch, and it
+is the same assumption every mtime-based build cache already makes. Stated here
+rather than left implicit.
+
+### A near-miss worth recording
+
+The first version of the cache called `_runtime_library_path()` at module scope,
+where it is not bound. `launch` swallowed the resulting `NameError` into
+`ok: False`, and the change appeared to deliver a **62x speedup** — which was
+the cost of failing fast with an all-zero output. It was caught only because the
+result was checked against its oracle rather than timed alone. **A speed
+assertion without a correctness assertion beside it can report a broken path as
+a win**; `test_launch_still_produces_a_correct_native_result` now pins that,
+repeating the launch so the cached path and not just the first uncached one is
+proven.
+
+### What remains, and why it is not in this slice
+
+The residual ~478 us is inside the native ABI: command-buffer creation,
+buffer acquire/copy, submission, and the completion wait — against ~23 us of GPU
+work. That is Metal submission latency for a single small dispatch, and the
+runtime already owns the mechanism that addresses it (the encode-session API,
+`ts_enc_commit_wait` and the `*_dev_*_enc` symbols, which batch several ops into
+one command buffer). Routing the descriptor path through session batching is a
+design change to the dispatch model with its own correctness surface, so it is
+recorded as the next candidate rather than attempted here.
+
+Regression: `tests/unit/test_apple_runtime_identity_cache.py` (4 tests) pins that
+the guard still accepts the real digest, still rejects a wrong one *on the cached
+path*, re-hashes when file identity changes, stays bounded, and that a launch
+remains correct and `native_gpu` across repeats. 198 tests pass across the Apple
+scheduled, e2e-spine, fleet and MLA suites.

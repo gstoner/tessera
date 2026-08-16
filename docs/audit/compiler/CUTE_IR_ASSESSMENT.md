@@ -28,7 +28,12 @@ below about *behaviour* is read off a declared contract, not observed execution.
 
 **Verification:** every worked example in the tutorial is machine-checked by
 [`tests/unit/test_layout_algebra_contracts.py`](../../../tests/unit/test_layout_algebra_contracts.py)
-— independent integer evaluation, no cutegen dependency, no numpy. 25 tests.
+— independent integer evaluation, no cutegen dependency, no numpy. 32 tests.
+Fixtures are the **documented layout strings verbatim** (`"((3,4),(2,5)):((4,1),(12,24))"`),
+parsed into nested `(shape, stride)` trees, so mode nesting is preserved and
+transcription is removed as a source of error. Each operation is checked on both
+axes — its **function** (image over `[0, size)`) and its exact **result
+structure** — because the two are independent and neither implies the other.
 
 **Bottom line:** the algebra is mathematically sound and its documentation has
 three defects. The surface is 63 ops but the mathematics is **four primitives
@@ -139,8 +144,28 @@ Reading the dialect with the arithmetic lens changes the cost estimate sharply:
 
 Everything else — 11 tiling products, 4 divides, 14 accessors, the casts — is
 **mode regrouping and plumbing**. §1.1 confirms this directly: all six product
-variants and all four divide variants are the same leaf multiset in different
-bracketings.
+variants and all four divide variants carry the same leaf multiset and address
+the same offsets in different bracketings.
+
+> **The regrouping claim is structurally proven, not assumed** (strengthened
+> 2026-08-16, PR #573 review). A leaf-multiset comparison is grouping-*invariant*
+> by construction, so on its own it cannot distinguish the variants — it would be
+> vacuous if the fixtures had collapsed them. The harness therefore pins each
+> variant's exact nested structure first (`logical_product` → `((3,4),(2,5))`,
+> `tiled_product` → `((3,4),2,5)`, `flat_product` → `(3,4,2,5)`,
+> `blocked_product` → `((3,2),(4,5))`, `raked_product` → `((2,3),(5,4))`), and
+> pins the equivalence classes: the six are **five** distinct structures, since
+> `logical_product` and `zipped_product` coincide for a plain-layout tiler.
+> Only against that does the shared multiset mean anything.
+>
+> An earlier revision encoded every layout flat, which collapsed four of the six
+> products onto one identical tuple — so that version of the test asserted what
+> had been typed rather than what the algebra does. Verified by mutation: the
+> flat harness passes with `zipped_divide` deliberately returning
+> `logical_divide`'s grouping; the current one fails three tests on that
+> mutation, three on a wrong `blocked_product` grouping, three on a
+> flatten-everything implementation, and one on flattening the depth-2 divide
+> split.
 
 So the honest scope for Tessera is **four primitives plus regrouping**, not 63
 ops.

@@ -812,7 +812,11 @@ Ordered delivery, host-free throughout except where noted:
    satisfied by construction rather than by declared-oracle exemption. The
    binding fails closed with a named diagnostic and ships **no fallback path**,
    because a fallback is a second implementation in disguise. Exhaustive proof
-   over all layouts to size 64 runs on **both sides of the ABI**.
+   over all layouts to size 64 runs on **both sides of the ABI**. Every operation
+   is accepted on **two independent axes — function and result structure**;
+   `test_layout_algebra_contracts.py` already enforces the pair, and an
+   implementation that returns the right elements under the wrong mode grouping
+   must fail, since grouping is what downstream slicing and partitioning read.
 2. **L2 — first consumer, `rearrange`/GQA-fold.** Smallest real consumer;
    converts a documented `ValueError` into a working op without regressing its
    Decision #21a fail-closed behaviour. **L1 does not land without L2 committed**

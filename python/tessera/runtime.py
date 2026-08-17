@@ -14734,13 +14734,22 @@ def _execute_x86_compiled_sgd_backward(artifact: RuntimeArtifact, args: Any) -> 
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.sgd":
-        raise ValueError("x86_sgd_bwd_compiled requires one tessera.sgd op")
+    package = metadata.get("native_stateful_vjp_package")
+    if package:
+        from .compiler.native_stateful_vjp import validate_native_stateful_vjp_runtime_metadata
+        validate_native_stateful_vjp_runtime_metadata(metadata)
+        op_name = str(package["graph_consumer"])
+        op_kwargs = dict(metadata["state_contract"]["numeric"])
+    else:
+        ops = list(metadata.get("ops") or [])
+        op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+        op_kwargs = dict(ops[0].get("kwargs") or {}) if len(ops) == 1 else {}
+    if op_name != "tessera.sgd":
+        raise ValueError("x86_sgd_bwd_compiled requires one tessera.sgd package")
     values = _bind_launch_args(args, arg_names)
     dy_name = str(metadata.get("out_cotangent", "dy"))
     dy = np.ascontiguousarray(_as_numpy(values[dy_name]), np.float32)
-    lr = float((ops[0].get("kwargs") or {}).get("lr", 0.0))
+    lr = float(op_kwargs.get("lr", 0.0))
     dparam = np.empty_like(dy)
     dgrad = np.empty_like(dy)
     lib = _load_x86_elementwise()
@@ -14763,8 +14772,16 @@ def _execute_x86_compiled_momentum_backward(artifact: RuntimeArtifact, args: Any
 
     metadata = artifact.metadata or {}
     names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    package = metadata.get("native_stateful_vjp_package")
+    if package:
+        from .compiler.native_stateful_vjp import validate_native_stateful_vjp_runtime_metadata
+        validate_native_stateful_vjp_runtime_metadata(metadata)
+        op_name = str(package["graph_consumer"])
+        op_kwargs = dict(metadata["state_contract"]["numeric"])
+    else:
+        ops = list(metadata.get("ops") or [])
+        op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+        op_kwargs = dict(ops[0].get("kwargs") or {}) if len(ops) == 1 else {}
     if op_name not in {"tessera.momentum", "tessera.nesterov"}:
         raise ValueError("x86 momentum backward requires momentum or nesterov")
     values = _bind_launch_args(args, names)
@@ -14773,7 +14790,6 @@ def _execute_x86_compiled_momentum_backward(artifact: RuntimeArtifact, args: Any
     dv = np.ascontiguousarray(_as_numpy(values[cotangent_names[1]]), np.float32)
     if dp.shape != dv.shape:
         raise ValueError("momentum output cotangents must have matching shapes")
-    kwargs = ops[0].get("kwargs") or {}
     outputs = [np.empty_like(dp) for _ in range(3)]
     lib = _load_x86_elementwise()
     if lib is None:
@@ -14783,8 +14799,8 @@ def _execute_x86_compiled_momentum_backward(artifact: RuntimeArtifact, args: Any
         dp.ctypes.data_as(cf),
         dv.ctypes.data_as(cf),
         ctypes.c_int64(dp.size),
-        ctypes.c_float(float(kwargs.get("lr", 0.0))),
-        ctypes.c_float(float(kwargs.get("momentum", 0.9))),
+        ctypes.c_float(float(op_kwargs.get("lr", 0.0))),
+        ctypes.c_float(float(op_kwargs.get("momentum", 0.9))),
         ctypes.c_int(op_name == "tessera.nesterov"),
         *(output.ctypes.data_as(cf) for output in outputs),
     )
@@ -27193,13 +27209,22 @@ def _execute_rocm_compiled_sgd_backward(artifact: RuntimeArtifact, args: Any) ->
 
     metadata = artifact.metadata or {}
     arg_names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.sgd":
-        raise ValueError("rocm_sgd_bwd_compiled requires one tessera.sgd op")
+    package = metadata.get("native_stateful_vjp_package")
+    if package:
+        from .compiler.native_stateful_vjp import validate_native_stateful_vjp_runtime_metadata
+        validate_native_stateful_vjp_runtime_metadata(metadata)
+        op_name = str(package["graph_consumer"])
+        op_kwargs = dict(metadata["state_contract"]["numeric"])
+    else:
+        ops = list(metadata.get("ops") or [])
+        op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+        op_kwargs = dict(ops[0].get("kwargs") or {}) if len(ops) == 1 else {}
+    if op_name != "tessera.sgd":
+        raise ValueError("rocm_sgd_bwd_compiled requires one tessera.sgd package")
     values = _bind_launch_args(args, arg_names)
     dy_name = str(metadata.get("out_cotangent", "dy"))
     dy = np.ascontiguousarray(_as_numpy(values[dy_name]), np.float32)
-    lr = float((ops[0].get("kwargs") or {}).get("lr", 0.0))
+    lr = float(op_kwargs.get("lr", 0.0))
     n = int(dy.size)
     chip = _rocm_chip()
     directive = (
@@ -27269,8 +27294,16 @@ def _execute_rocm_compiled_momentum_backward(artifact: RuntimeArtifact, args: An
 
     metadata = artifact.metadata or {}
     names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    package = metadata.get("native_stateful_vjp_package")
+    if package:
+        from .compiler.native_stateful_vjp import validate_native_stateful_vjp_runtime_metadata
+        validate_native_stateful_vjp_runtime_metadata(metadata)
+        op_name = str(package["graph_consumer"])
+        op_kwargs = dict(metadata["state_contract"]["numeric"])
+    else:
+        ops = list(metadata.get("ops") or [])
+        op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+        op_kwargs = dict(ops[0].get("kwargs") or {}) if len(ops) == 1 else {}
     if op_name not in {"tessera.momentum", "tessera.nesterov"}:
         raise ValueError("ROCm momentum backward requires momentum or nesterov")
     values = _bind_launch_args(args, names)
@@ -27281,9 +27314,8 @@ def _execute_rocm_compiled_momentum_backward(artifact: RuntimeArtifact, args: An
         raise ValueError("momentum output cotangents must have matching shapes")
     n = int(dp.size)
     kind = "nesterov" if op_name.endswith("nesterov") else "momentum"
-    kwargs = ops[0].get("kwargs") or {}
-    lr = float(kwargs.get("lr", 0.0))
-    momentum = float(kwargs.get("momentum", 0.9))
+    lr = float(op_kwargs.get("lr", 0.0))
+    momentum = float(op_kwargs.get("momentum", 0.9))
     chip = _rocm_chip()
     directive = (
         'module {\n  "tessera_rocm.optimizer"() {name = "momentum_bwd", '
@@ -27341,12 +27373,21 @@ def _execute_rocm_compiled_adam_backward(
 
     metadata = artifact.metadata or {}
     names = list(metadata.get("arg_names") or [])
-    ops = list(metadata.get("ops") or [])
-    op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+    package = metadata.get("native_stateful_vjp_package")
+    if package:
+        from .compiler.native_stateful_vjp import validate_native_stateful_vjp_runtime_metadata
+        validate_native_stateful_vjp_runtime_metadata(metadata)
+        op_name = str(package["graph_consumer"])
+        operand_names = [str(name) for name in package["argument_names"]]
+        op_kwargs = dict(metadata["state_contract"]["numeric"])
+    else:
+        ops = list(metadata.get("ops") or [])
+        op_name = str(ops[0].get("op_name", "")) if len(ops) == 1 else ""
+        operand_names = [str(name) for name in ops[0].get("operands", ())] if len(ops) == 1 else []
+        op_kwargs = dict(ops[0].get("kwargs") or {}) if len(ops) == 1 else {}
     if op_name not in {"tessera.adam", "tessera.adamw"}:
         raise ValueError("ROCm Adam backward requires adam or adamw")
     values = _bind_launch_args(args, names)
-    operand_names = [str(name) for name in ops[0].get("operands", ())]
     if len(operand_names) != 4:
         raise ValueError("ROCm Adam backward requires parameter, gradient, m, v")
     inputs = [
@@ -27367,14 +27408,13 @@ def _execute_rocm_compiled_adam_backward(
     if any(value.shape != shape for value in (*inputs, *cotangents)):
         raise ValueError("ROCm Adam backward tensors must have matching shapes")
     n = int(inputs[0].size)
-    kwargs = ops[0].get("kwargs") or {}
     kind = "adamw" if op_name == "tessera.adamw" else "adam"
-    lr = float(kwargs.get("lr", 1.0e-3))
-    beta1 = float(kwargs.get("beta1", 0.9))
-    beta2 = float(kwargs.get("beta2", 0.999))
-    eps = float(kwargs.get("eps", 1.0e-8))
-    weight_decay = float(kwargs.get("weight_decay", 0.0))
-    step = int(kwargs.get("step", 1))
+    lr = float(op_kwargs.get("lr", 1.0e-3))
+    beta1 = float(op_kwargs.get("beta1", 0.9))
+    beta2 = float(op_kwargs.get("beta2", 0.999))
+    eps = float(op_kwargs.get("eps", 1.0e-8))
+    weight_decay = float(op_kwargs.get("weight_decay", 0.0))
+    step = int(op_kwargs.get("step", 1))
     if step < 1:
         raise ValueError("ROCm Adam backward step must be positive")
     beta1_correction = 1.0 - beta1**step

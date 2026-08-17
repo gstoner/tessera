@@ -8,8 +8,8 @@ physical execution.
 
 Normalization, bounded compound spectral products, canonical rank-4 attention,
 Lion, factored/full Adafactor, and causal sequence-mixer backward are migrated.
-Other native backward families remain compatibility paths in ``JitFn`` until
-they acquire equivalent lineage and differential gates.
+SGD, Momentum/Nesterov, and the gfx1151 Adam/AdamW consumers also use that
+boundary; unsupported target pairs fail closed before package construction.
 """
 
 from __future__ import annotations
@@ -484,6 +484,56 @@ def _execute_stateful_package(
             "frontend_authority": "tracer",
             "proof_mode": "structural_non_reexecuting",
         },
+    )
+
+
+@register_native_vjp_plugin(
+    "sgd",
+    family="optimizer_vjp",
+    schedule_consumer="schedule.optimizer_vjp",
+    tile_consumer="tile.training_kernel",
+    target_consumers={
+        "x86": "x86.avx512_sgd_backward",
+        "rocm": "rocm.gfx1151_sgd_backward",
+    },
+    differential_policy="non_reexecuting_state_lineage",
+)
+@register_native_vjp_plugin(
+    "momentum", "nesterov",
+    family="optimizer_vjp",
+    schedule_consumer="schedule.optimizer_vjp",
+    tile_consumer="tile.training_kernel",
+    target_consumers={
+        "x86": "x86.avx512_momentum_backward",
+        "rocm": "rocm.gfx1151_momentum_backward",
+    },
+    differential_policy="non_reexecuting_state_lineage",
+)
+@register_native_vjp_plugin(
+    "adam", "adamw",
+    family="optimizer_vjp",
+    schedule_consumer="schedule.optimizer_vjp",
+    tile_consumer="tile.training_kernel",
+    target_consumers={"rocm": "rocm.gfx1151_adam_backward"},
+    differential_policy="non_reexecuting_state_lineage",
+)
+def _execute_optimizer_vjp(
+    *, source: Any, target: str, ordered_inputs: Sequence[Any],
+    arg_names: Sequence[str], source_arg_names: Sequence[str],
+    out_cotangents: Any, wrt_names: Sequence[str],
+    declaration: NativeVJPPluginDeclaration, source_graph_ir: str | None,
+    frontend_certificate: Any | None,
+) -> NativeVJPResult:
+    from .native_stateful_vjp import build_native_optimizer_vjp_package
+
+    return _execute_stateful_package(
+        source=source, target=target, ordered_inputs=ordered_inputs,
+        arg_names=arg_names, out_cotangents=out_cotangents,
+        wrt_names=wrt_names, declaration=declaration,
+        source_graph_ir=source_graph_ir,
+        frontend_certificate=frontend_certificate,
+        builder=build_native_optimizer_vjp_package,
+        residual_policy="save_explicit_optimizer_state",
     )
 
 

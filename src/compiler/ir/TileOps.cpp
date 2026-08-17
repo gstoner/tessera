@@ -2006,17 +2006,33 @@ LogicalResult TrainingKernelOp::verify() {
   if (!family)
     return emitOpError("requires a training family");
   bool lion = family.getValue() == "lion_vjp";
+  bool optimizer = family.getValue() == "optimizer_vjp";
   bool sequenceMixer = family.getValue() == "sequence_mixer_backward";
   auto topology = getOperation()->getAttrOfType<StringAttr>("topology");
-  bool factored = !lion && !sequenceMixer && topology &&
+  bool factored = !lion && !optimizer && !sequenceMixer && topology &&
                   topology.getValue() == "factored";
-  bool full = !lion && !sequenceMixer && topology &&
+  bool full = !lion && !optimizer && !sequenceMixer && topology &&
               topology.getValue() == "full";
-  if (!lion && !sequenceMixer && family.getValue() != "adafactor_vjp")
+  if (!lion && !optimizer && !sequenceMixer &&
+      family.getValue() != "adafactor_vjp")
     return emitOpError(
-        "training contract supports Lion, Adafactor, and sequence mixers");
+        "training contract supports typed optimizer VJPs, Lion, Adafactor, and sequence mixers");
+  unsigned optimizerPointers = 0;
+  if (optimizer) {
+    auto kind = getOperation()->getAttrOfType<StringAttr>("optimizer");
+    if (!kind)
+      return emitOpError("optimizer VJP requires an optimizer identity");
+    if (kind.getValue() == "sgd") optimizerPointers = 5;
+    else if (kind.getValue() == "momentum" || kind.getValue() == "nesterov")
+      optimizerPointers = 8;
+    else if (kind.getValue() == "adam" || kind.getValue() == "adamw")
+      optimizerPointers = 11;
+    else
+      return emitOpError("optimizer VJP has an unsupported family");
+  }
   unsigned pointerCount =
-      sequenceMixer ? 13 : lion ? 8 : factored ? 9 : full ? 7 : 0;
+      sequenceMixer ? 13 : lion ? 8 : optimizer ? optimizerPointers
+                                                : factored ? 9 : full ? 7 : 0;
   unsigned dimensionCount = sequenceMixer ? 5 : factored ? 2 : 1;
   if (!pointerCount || getInputs().size() != pointerCount + dimensionCount)
     return emitOpError("training operands disagree with family/state topology");
@@ -2075,6 +2091,15 @@ LogicalResult TrainingKernelOp::verify() {
     return emitOpError("requires the Lion state transition");
   if (!lion && transition.getValue() != "state@0-read-only;d_state@1-fresh")
     return emitOpError("requires the Adafactor state transition");
+  if (optimizer) {
+    for (StringRef name : {"learning_rate", "beta1", "beta2", "epsilon",
+                           "momentum", "weight_decay"}) {
+      auto value = getOperation()->getAttrOfType<FloatAttr>(name);
+      if (!value || !value.getValue().isFinite())
+        return emitOpError("requires finite optimizer coefficients");
+    }
+    return success();
+  }
   SmallVector<StringRef> coefficientNames{"learning_rate", "beta2"};
   coefficientNames.push_back(lion ? "weight_decay" : "epsilon");
   for (StringRef name : coefficientNames) {

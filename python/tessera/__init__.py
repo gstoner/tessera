@@ -1015,15 +1015,57 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         new_v = new_v.astype(state_np, copy=False)
         return new_param, new_m, new_v
 
-    def adamw(params, grads, state=None, **kwargs):
+    def sgd(params, grads, state=None, **kwargs):
+        # The compiler ABI is the stateless flat-tensor update. Preserve the
+        # pytree optimizer API for explicit dictionary state callers.
+        if isinstance(params, np.ndarray) and isinstance(grads, np.ndarray):
+            lr = float(kwargs.get("lr", 1.0e-3))
+            return np.asarray(params) - lr * np.asarray(grads)
+        from . import optim as _optim
+        return _optim.sgd(params, grads, state, **kwargs)
+
+    def adamw(params, grads, state=None, moment2=None, **kwargs):
+        if isinstance(state, np.ndarray) and isinstance(moment2, np.ndarray):
+            p = np.asarray(params)
+            g = np.asarray(grads, dtype=np.float32)
+            m = np.asarray(state, dtype=np.float32)
+            v = np.asarray(moment2, dtype=np.float32)
+            lr = float(kwargs.get("lr", 1.0e-3))
+            beta1 = float(kwargs.get("beta1", 0.9))
+            beta2 = float(kwargs.get("beta2", 0.999))
+            eps = float(kwargs.get("eps", 1.0e-8))
+            weight_decay = float(kwargs.get("weight_decay", 0.0))
+            step = int(kwargs.get("step", 1))
+            new_m = beta1 * m + (1.0 - beta1) * g
+            new_v = beta2 * v + (1.0 - beta2) * g * g
+            update = new_m / (1.0 - beta1**step)
+            update /= np.sqrt(new_v / (1.0 - beta2**step)) + eps
+            new_p = p.astype(np.float32) - lr * (update + weight_decay * p)
+            return new_p.astype(p.dtype, copy=False), new_m, new_v
         from . import optim as _optim
         return _optim.adamw(params, grads, state, **kwargs)
 
     def momentum(params, grads, state=None, **kwargs):
+        if isinstance(state, np.ndarray):
+            p = np.asarray(params)
+            g = np.asarray(grads, dtype=np.float32)
+            velocity = float(kwargs.get("momentum", 0.9)) * np.asarray(
+                state, dtype=np.float32
+            ) + g
+            updated = p.astype(np.float32) - float(kwargs.get("lr", 1.0e-3)) * velocity
+            return updated.astype(p.dtype, copy=False), velocity
         from . import optim as _optim
         return _optim.momentum(params, grads, state, **kwargs)
 
     def nesterov(params, grads, state=None, **kwargs):
+        if isinstance(state, np.ndarray):
+            p = np.asarray(params)
+            g = np.asarray(grads, dtype=np.float32)
+            coefficient = float(kwargs.get("momentum", 0.9))
+            velocity = coefficient * np.asarray(state, dtype=np.float32) + g
+            update = g + coefficient * velocity
+            updated = p.astype(np.float32) - float(kwargs.get("lr", 1.0e-3)) * update
+            return updated.astype(p.dtype, copy=False), velocity
         from . import optim as _optim
         return _optim.nesterov(params, grads, state, **kwargs)
 
@@ -4404,7 +4446,6 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     instance_norm_ref = _lazy_module_fn("nn.functional", "instance_norm")
     weight_norm_ref = _lazy_module_fn("nn.functional", "weight_norm")
     fake_quantize_ref = _lazy_module_fn("quantization", "fake_quantize")
-    sgd_ref = _lazy_module_fn("optim", "sgd")
 
     def _training_loss_gradients(
         prediction, target, cotangent, *, kind, parameter=1.0,
@@ -4764,7 +4805,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "sort": sort,
         "argsort": argsort,
         "linear_general": linear_general_ref,
-        "sgd": sgd_ref,
+        "sgd": sgd,
         "training.loss_sgd": training_loss_sgd_ref,
         "training.loss_adamw": training_loss_adamw_ref,
         "mse_loss": mse_loss_ref,
@@ -5168,6 +5209,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         adam=adam,
         adamw=adamw,
         momentum=momentum,
+        nesterov=nesterov,
         adafactor=adafactor,
         lion=lion,
         transpose=transpose,
@@ -5394,7 +5436,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         sort=sort,
         argsort=argsort,
         linear_general=linear_general_ref,
-        sgd=sgd_ref,
+        sgd=sgd,
         mse_loss=mse_loss_ref,
         mae_loss=mae_loss_ref,
         huber_loss=huber_loss_ref,

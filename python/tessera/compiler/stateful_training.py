@@ -252,6 +252,179 @@ def validate_lion_vjp_state_contract(
         raise ValueError("Lion VJP state/buffer lineage contract is stale or malformed")
 
 
+_OPTIMIZER_ABI = {
+    "sgd": (("p", "g", "dy"), ("d_p", "d_g")),
+    "momentum": (("p", "g", "velocity", "dparam_out", "dvelocity_out"),
+                 ("d_p", "d_g", "d_velocity")),
+    "nesterov": (("p", "g", "velocity", "dparam_out", "dvelocity_out"),
+                  ("d_p", "d_g", "d_velocity")),
+    "adam": (("p", "g", "m1", "m2", "dparam_out", "dm1_out", "dm2_out"),
+             ("d_p", "d_g", "d_m1", "d_m2")),
+    "adamw": (("p", "g", "m1", "m2", "dparam_out", "dm1_out", "dm2_out"),
+              ("d_p", "d_g", "d_m1", "d_m2")),
+}
+
+
+def build_optimizer_vjp_state_contract(
+    *, target: str, optimizer: str, shape: Sequence[int], kwargs: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Bind optimizer state/cotangents to one non-reexecuting physical VJP."""
+    if target not in {"x86", "rocm_gfx1151"}:
+        raise ValueError("optimizer VJP lineage has no physical target owner")
+    if optimizer not in _OPTIMIZER_ABI or (
+        target == "x86" and optimizer in {"adam", "adamw"}
+    ):
+        raise ValueError(f"{optimizer} VJP has no physical consumer on {target}")
+    dims = tuple(int(dim) for dim in shape)
+    if not dims or any(dim <= 0 for dim in dims):
+        raise ValueError("optimizer VJP requires a positive static shape")
+    numeric = {
+        "lr": float(kwargs.get("lr", 1.0e-3)),
+        "beta1": float(kwargs.get("beta1", 0.9)),
+        "beta2": float(kwargs.get("beta2", 0.999)),
+        "eps": float(kwargs.get("eps", 1.0e-8)),
+        "momentum": float(kwargs.get("momentum", 0.0)),
+        "weight_decay": float(kwargs.get("weight_decay", 0.0)),
+        "step": int(kwargs.get("step", 1)),
+        "nesterov": optimizer == "nesterov",
+    }
+    if not all(
+        math.isfinite(float(value))
+        for key, value in numeric.items()
+        if key not in {"step", "nesterov"}
+    ) or numeric["step"] < 1:
+        raise ValueError("optimizer VJP requires finite coefficients and step >= 1")
+    input_names, output_names = _OPTIMIZER_ABI[optimizer]
+    inputs = [
+        _buffer(name=name, role=name, shape=dims, version=0, access="read_only")
+        for name in input_names
+    ]
+    parents = tuple(item["lineage_id"] for item in inputs)
+    outputs = [
+        _buffer(name=name, role=name, shape=dims, version=1,
+                access="fresh_write", parents=parents)
+        for name in output_names
+    ]
+    body: dict[str, Any] = {
+        "schema": _SCHEMA,
+        "family": "optimizer_vjp",
+        "optimizer": optimizer,
+        "phase": "backward",
+        "target": target,
+        "architecture": "zen5-avx512" if target == "x86" else "gfx1151",
+        "numeric": numeric,
+        "inputs": inputs,
+        "outputs": outputs,
+        "mutation": {
+            "mode": "functional",
+            "alias_policy": "no_input_output_alias",
+            "ordered_writes": list(output_names),
+            "state_transition": "state@0-read-only;d_state@1-fresh",
+        },
+    }
+    return {**body, "artifact_hash": _digest(body)}
+
+
+@dataclass(frozen=True)
+class ScheduledOptimizerVJPArtifact:
+    target: str
+    architecture: str
+    optimizer: str
+    shape: tuple[int, ...]
+    state_contract: Mapping[str, Any]
+    schedule_ir: str
+    tile_ir: str
+
+    @property
+    def schedule_digest(self) -> str:
+        return str(self.state_contract["artifact_hash"])
+
+    def metadata(self) -> dict[str, Any]:
+        self.validate()
+        return {"family": "optimizer_vjp", "optimizer": self.optimizer,
+                "target": self.target, "architecture": self.architecture,
+                "shape": list(self.shape), "schedule_digest": self.schedule_digest,
+                "tile_ir": self.tile_ir}
+
+    def validate(self) -> None:
+        expected = build_optimizer_vjp_state_contract(
+            target=self.target, optimizer=self.optimizer, shape=self.shape,
+            kwargs=self.state_contract["numeric"])
+        if dict(self.state_contract) != expected:
+            raise ValueError("optimizer VJP state lineage is stale")
+        if self.schedule_ir.count("schedule.optimizer_vjp") != 1:
+            raise ValueError("optimizer VJP requires one typed Schedule operation")
+        if self.tile_ir.count("tile.training_kernel") != 1 or "schedule." in self.tile_ir:
+            raise ValueError("optimizer VJP requires exact launch-level Tile IR")
+        if _TILE_HASH_RE.findall(self.tile_ir) != [self.schedule_digest]:
+            raise ValueError("optimizer VJP Tile lineage is stale")
+        for marker in ('family = "optimizer_vjp"',
+                       f'optimizer = "{self.optimizer}"',
+                       'mutation_mode = "functional"',
+                       'alias_policy = "no_input_output_alias"'):
+            if marker not in self.tile_ir:
+                raise ValueError(f"optimizer VJP Tile artifact lost {marker}")
+
+
+def lower_scheduled_optimizer_vjp(
+    *, target: str, optimizer: str, shape: Sequence[int], kwargs: Mapping[str, Any]
+) -> ScheduledOptimizerVJPArtifact:
+    contract = build_optimizer_vjp_state_contract(
+        target=target, optimizer=optimizer, shape=shape, kwargs=kwargs)
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("scheduled optimizer VJP requires production tessera-opt")
+    dims = tuple(int(dim) for dim in shape)
+    tensor_type = "tensor<" + "x".join(map(str, dims)) + "xf32>"
+    input_names, output_names = _OPTIMIZER_ABI[optimizer]
+    args = ", ".join(f"%{name}: {tensor_type}" for name in input_names)
+    operands = ", ".join(f"%{name}" for name in input_names)
+    input_types = ", ".join([tensor_type] * len(input_names))
+    result_types = ", ".join([tensor_type] * len(output_names))
+    digest = str(contract["artifact_hash"])
+    payload = _payload({k: v for k, v in contract.items() if k != "artifact_hash"})
+    numeric, mutation = contract["numeric"], contract["mutation"]
+    architecture = str(contract["architecture"])
+    compiler_target = "x86" if target == "x86" else "rocm"
+    writes = ", ".join(map(str, range(len(output_names))))
+    schedule_ir = f'''module attributes {{tessera.target = "{compiler_target}", tessera.arch = "{architecture}"}} {{
+  func.func @tessera_optimizer_vjp({args}) -> ({result_types}) {{
+    %grads:{len(output_names)} = schedule.optimizer_vjp {operands} {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", optimizer = "{optimizer}", learning_rate = {numeric["lr"]:.9e} : f32, beta1 = {numeric["beta1"]:.9e} : f32, beta2 = {numeric["beta2"]:.9e} : f32, epsilon = {numeric["eps"]:.9e} : f32, momentum = {numeric["momentum"]:.9e} : f32, weight_decay = {numeric["weight_decay"]:.9e} : f32, step = {numeric["step"]} : i64, nesterov = {str(numeric["nesterov"]).lower()}, mutation_mode = "{mutation["mode"]}", alias_policy = "{mutation["alias_policy"]}", state_transition = "{mutation["state_transition"]}", ordered_writes = array<i64: {writes}>, workgroup_size = {256 if target == "rocm_gfx1151" else 1} : i64}} : {input_types} -> {result_types}
+    schedule.artifact {{hash = "{digest}", arch = "{architecture}", shape_key = "family=optimizer_vjp;optimizer={optimizer};shape={'x'.join(map(str, dims))};storage=f32", numeric_policy = "f32;functional_no_alias"}}
+    return {", ".join(f"%grads#{i}" for i in range(len(output_names)))} : {result_types}
+  }}
+}}
+'''
+    tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
+    artifact = ScheduledOptimizerVJPArtifact(
+        target, architecture, optimizer, dims, contract, schedule_ir, tile_ir)
+    artifact.validate()
+    return artifact
+
+
+def validate_scheduled_optimizer_vjp_metadata(
+    metadata: Mapping[str, Any], *, target: str, shape: Sequence[int],
+    optimizer: str, state_contract: Mapping[str, Any],
+) -> None:
+    dims = tuple(int(dim) for dim in shape)
+    if (metadata.get("family") != "optimizer_vjp"
+            or metadata.get("optimizer") != optimizer
+            or metadata.get("target") != target
+            or tuple(metadata.get("shape", ())) != dims
+            or metadata.get("schedule_digest") != state_contract.get("artifact_hash")):
+        raise ValueError("optimizer VJP scheduled metadata is stale")
+    expected = build_optimizer_vjp_state_contract(
+        target=target, optimizer=optimizer, shape=dims,
+        kwargs=state_contract["numeric"])
+    if dict(state_contract) != expected:
+        raise ValueError("optimizer VJP state lineage is stale")
+    tile_ir = str(metadata.get("tile_ir", ""))
+    if tile_ir.count("tile.training_kernel") != 1 or "schedule." in tile_ir:
+        raise ValueError("optimizer VJP scheduled artifact is not exact Tile IR")
+    if _TILE_HASH_RE.findall(tile_ir) != [str(state_contract["artifact_hash"])]:
+        raise ValueError("optimizer VJP scheduled lineage is stale")
+
+
 _TILE_HASH_RE = re.compile(
     r'tile\.training_kernel[\s\S]*?tessera\.schedule_hash = "([0-9a-f]{64})"'
 )
@@ -845,16 +1018,20 @@ def validate_scheduled_sequence_mixer_backward_metadata(
 __all__ = [
     "ScheduledAdafactorVJPArtifact",
     "ScheduledLionVJPArtifact",
+    "ScheduledOptimizerVJPArtifact",
     "ScheduledSequenceMixerBackwardArtifact",
     "build_adafactor_vjp_state_contract",
     "build_lion_vjp_state_contract",
+    "build_optimizer_vjp_state_contract",
     "build_sequence_mixer_backward_state_contract",
     "lower_scheduled_adafactor_vjp",
     "lower_scheduled_lion_vjp",
+    "lower_scheduled_optimizer_vjp",
     "lower_scheduled_sequence_mixer_backward",
     "validate_adafactor_vjp_state_contract",
     "validate_scheduled_adafactor_vjp_metadata",
     "validate_scheduled_lion_vjp_metadata",
+    "validate_scheduled_optimizer_vjp_metadata",
     "validate_scheduled_sequence_mixer_backward_metadata",
     "validate_lion_vjp_state_contract",
     "validate_sequence_mixer_backward_state_contract",

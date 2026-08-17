@@ -10,9 +10,11 @@ from tessera import runtime
 from tessera.compiler.stateful_training import (
     build_adafactor_vjp_state_contract,
     build_lion_vjp_state_contract,
+    build_optimizer_vjp_state_contract,
     build_sequence_mixer_backward_state_contract,
     lower_scheduled_adafactor_vjp,
     lower_scheduled_lion_vjp,
+    lower_scheduled_optimizer_vjp,
     lower_scheduled_sequence_mixer_backward,
     validate_sequence_mixer_backward_state_contract,
     validate_lion_vjp_state_contract,
@@ -156,6 +158,44 @@ def test_scheduled_lion_vjp_rejects_tile_policy_tampering() -> None:
             target="rocm_gfx1151",
             shape=(7,),
             state_contract=artifact.state_contract,
+        )
+
+
+@_needs_opt
+@pytest.mark.parametrize(
+    ("target", "optimizer", "inputs", "outputs"),
+    [
+        ("x86", "sgd", 3, 2),
+        ("x86", "nesterov", 5, 3),
+        ("rocm_gfx1151", "adamw", 7, 4),
+    ],
+)
+def test_optimizer_vjp_contract_lowers_to_one_exact_tile(
+    target: str, optimizer: str, inputs: int, outputs: int
+) -> None:
+    kwargs = {"lr": 0.01, "momentum": 0.8, "step": 3}
+    contract = build_optimizer_vjp_state_contract(
+        target=target, optimizer=optimizer, shape=(11,), kwargs=kwargs
+    )
+    artifact = lower_scheduled_optimizer_vjp(
+        target=target, optimizer=optimizer, shape=(11,), kwargs=kwargs
+    )
+    assert len(contract["inputs"]) == inputs
+    assert len(contract["outputs"]) == outputs
+    assert artifact.state_contract == contract
+    artifact.validate()
+    assert artifact.tile_ir.count("tile.training_kernel") == 1
+    assert "schedule." not in artifact.tile_ir
+
+
+def test_optimizer_vjp_fails_closed_without_a_physical_owner() -> None:
+    with pytest.raises(ValueError, match="no physical consumer"):
+        build_optimizer_vjp_state_contract(
+            target="x86", optimizer="adamw", shape=(7,), kwargs={}
+        )
+    with pytest.raises(ValueError, match="no physical target owner"):
+        build_optimizer_vjp_state_contract(
+            target="apple_gpu", optimizer="sgd", shape=(7,), kwargs={}
         )
 
 

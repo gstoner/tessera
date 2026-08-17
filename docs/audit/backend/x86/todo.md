@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **bounded
+AVX-512 SGD and Momentum/Nesterov reverse authority complete.** The plugins
+bind one-execution tracer proof and functional state lineage through typed
+`schedule.optimizer_vjp` → `tile.training_kernel` packages before the existing
+AVX-512 calls. Adam/AdamW remain fail closed on x86 because no physical reverse
+consumer exists; clean Zen 5 timing remains a separate evidence gate.
+
 Cross-backend sync `E2E-REAL-6E-STATEFUL-VJP-2026-08-17` — **bounded AVX-512
 Adafactor and sequence-mixer reverse authority complete.** Explicit plugins
 now own full/factored Adafactor and causal gated/Kimi/modified DeltaNet

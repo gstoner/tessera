@@ -1015,8 +1015,8 @@ def Tile_AttentionBackwardKernelOp : Tile_Op<"attention_backward_kernel"> {
   let hasVerifier = 1;
 }
 
-// Launch-level stateful-training envelope. Lion VJP uses five input pointers
-// (p/g/m/dp_out/dm_out), three fresh output pointers, and an i64 element count.
+// Launch-level stateful-training envelope. Optimizer VJPs, Lion, Adafactor,
+// and sequence mixers carry typed input/output pointer ABIs plus dimensions.
 // The content hash binds the complete logical-buffer lineage; mutation and
 // aliasing are explicit rather than inferred from pointer equality.
 def Tile_TrainingKernelOp : Tile_Op<"training_kernel"> {

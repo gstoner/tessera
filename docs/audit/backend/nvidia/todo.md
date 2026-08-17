@@ -8,6 +8,13 @@ last_updated: 2026-08-17
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **shared
+optimizer lineage validated; NVIDIA not applicable for the bounded physical
+set.** The new `schedule.optimizer_vjp` → `tile.training_kernel` authority
+does not declare CUDA consumers because no matching native reverse package
+was proved in this slice. SM120 remains fail closed and inherits no AVX-512 or
+gfx1151 evidence.
+
 Cross-backend sync `E2E-REAL-6E-STATEFUL-VJP-2026-08-17` — **shared
 Adafactor/sequence-mixer authority validated; NVIDIA target follow-up
 required.** Factored/full Adafactor and causal DeltaNet backward now have a

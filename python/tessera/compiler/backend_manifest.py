@@ -3651,13 +3651,14 @@ _ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
 #   * matmul/gemm: AMX BF16 fused backend row.
 #   * AVX-512 f32/i32/bool lanes: runtime-loaded compiled kernels from
 #     libtessera_x86_elementwise.so, each backed by an execute-compare fixture.
-#     Rows with stable exported symbols use ``device_verified_abi``; other
-#     generated/native lanes remain ``device_verified_jit``.
+#     A stable exported symbol is necessary but not sufficient for
+#     ``device_verified_abi``.  New native lanes remain ``fused`` until a clean
+#     exact-device packet and the corresponding promotion allow-list land.
 # ─────────────────────────────────────────────────────────────────────────────
 _X86_KERNELS: dict[str, dict[str, Any]] = {
     **{
         op: {
-            "status": _DEVICE_VERIFIED_ABI_STATUS,
+            "status": "fused",
             "dtypes": ("fp32",),
             "runtime_symbol": "tessera_x86_avx512_coalition_butterfly_f32",
             "feature_flags": (
@@ -3680,7 +3681,7 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         )
     },
     "tridiagonal_solve": {
-        "status": _DEVICE_VERIFIED_ABI_STATUS,
+        "status": "fused",
         "dtypes": ("fp32",),
         "runtime_symbol": "tessera_x86_avx512_tridiagonal_solve_f32",
         "feature_flags": (

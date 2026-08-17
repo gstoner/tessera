@@ -197,8 +197,8 @@ The compiler-facing table contains **339** callable/IR rows; the remaining **166
 | `frontend` | `public` 339 |
 | `graph_ir` | `registered` 307, `not_applicable` 32 |
 | `schedule_ir` | `not_applicable` 2, `complete` 337 |
-| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 11, `fused` 291, `no_kernel_required` 7 |
-| `target_ir` | `not_applicable` 26, `fused` 72, `device_verified_abi` 13, `device_verified_jit` 205, `reference` 15, `no_kernel_required` 8 |
+| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 6, `fused` 296, `no_kernel_required` 7 |
+| `target_ir` | `not_applicable` 26, `fused` 72, `device_verified_abi` 13, `device_verified_jit` 210, `reference` 10, `no_kernel_required` 8 |
 | `runtime` | `fused` 6, `ready` 333 |
 | `bench` | `benchmarked` 99, `none` 240 |
 
@@ -214,15 +214,15 @@ Exact-target backend-manifest rows:
 | `nvidia_sm80` | 71 | `artifact_only` 41, `planned` 30 |
 | `nvidia_sm90` | 94 | `artifact_only` 41, `planned` 53 |
 | `rocm` | 323 | `device_verified_abi` 3, `device_verified_jit` 316, `planned` 4 |
-| `x86` | 315 | `device_verified_jit` 269, `fused` 42, `reference` 4 |
+| `x86` | 320 | `device_verified_jit` 274, `fused` 42, `reference` 4 |
 
 Current open queues derived from the same sources:
 
 | Queue | Count | Scope |
 |---|---:|---|
-| Tile IR partial | 11 | `depth_attn`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `game_subset_mobius`, `game_subset_zeta`, `game_superset_mobius`, `game_superset_zeta`, `tridiagonal_solve` |
+| Tile IR partial | 6 | `depth_attn`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue` |
 | Backend contract planned | 9 | `broadcast_to_axis`, `collective_permute`, `named_sharding`, `partition_spec`, `pmax`, `pmean`, `pmin`, `psum`, `shard_map` |
-| Native/fused aggregate rows without benchmark inventory | 196 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
+| Native/fused aggregate rows without benchmark inventory | 201 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
 | VJP / JVP planned | 35 / 44 | Autodiff rules, not forward compiler execution. |
 | Sharding partial | 50 | Multi-device/domain proof. |
 

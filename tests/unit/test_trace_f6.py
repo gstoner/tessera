@@ -66,6 +66,55 @@ def test_tracer_carries_concrete_value():
     assert [op.op_name for op in tf.body] == ["tessera.matmul", "tessera.softmax"]
 
 
+def test_composite_catalog_op_is_one_trace_boundary():
+    """Concrete execution must not recursively trace a composite's internals."""
+    rng = np.random.default_rng(11)
+    q = rng.standard_normal((1, 4, 3, 8)).astype(np.float32)
+    k = rng.standard_normal((1, 2, 5, 8)).astype(np.float32)
+    v = rng.standard_normal((1, 2, 5, 8)).astype(np.float32)
+
+    def gqa(query, key, value):
+        return ts.ops.gqa_attention(
+            query,
+            key,
+            value,
+            num_query_heads=4,
+            num_kv_heads=2,
+            causal=True,
+        )
+
+    tf = trace(gqa, q, k, v)
+    assert [op.op_name for op in tf.body] == ["tessera.gqa_attention"]
+    assert tf.body[0].operands == ["%a0", "%a1", "%a2"]
+    assert tf.output_values[0].shape == q.shape
+
+
+def test_flat_lion_records_two_typed_results_without_state_reexecution():
+    param = np.linspace(-1.0, 1.0, 12, dtype=np.float32).reshape(3, 4)
+    grad = np.linspace(0.5, -0.5, 12, dtype=np.float32).reshape(3, 4)
+    moment = np.full_like(param, 0.125)
+
+    def step(p, g, m):
+        return ts.ops.lion(
+            p,
+            g,
+            m,
+            lr=0.004,
+            beta1=0.8,
+            beta2=0.93,
+            weight_decay=0.025,
+        )
+
+    tf = trace(step, param, grad, moment)
+    assert [op.op_name for op in tf.body] == ["tessera.lion"]
+    assert tf.body[0].result_names == ["v0", "v1"]
+    assert tf.body[0].result_type == (
+        "(tensor<3x4xf32>, tensor<3x4xf32>)"
+    )
+    assert tf.outputs == ["v0", "v1"]
+    assert len(tf.output_values) == 2
+
+
 # --- smart dispatch + deferral (apple_gpu) ---------------------------------- #
 @gpu
 def test_straightline_defers_to_canonical_bit_identical():

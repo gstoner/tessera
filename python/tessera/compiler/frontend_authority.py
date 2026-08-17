@@ -22,6 +22,7 @@ from .graph_ir import GraphIRModule, IROp, IRType
 
 
 SCHEMA = "tessera.frontend_differential.v1"
+NON_REEXECUTING_SCHEMA = "tessera.frontend_structural_non_reexecuting.v1"
 
 
 def _canonical(value: object) -> str:
@@ -123,22 +124,96 @@ class FrontendDifferentialCertificate:
             raise ValueError("legacy frontend candidate lacks differential parity")
 
 
+@dataclass(frozen=True)
+class NonReexecutingFrontendCertificate:
+    """Structural authority proof for stateful/effectful family migrations."""
+
+    contract: Mapping[str, Any]
+
+    @property
+    def digest(self) -> str:
+        return str(self.contract["digest"])
+
+    def validate(self) -> None:
+        body = dict(self.contract)
+        actual = str(body.pop("digest", ""))
+        if body.get("schema") != NON_REEXECUTING_SCHEMA or actual != _digest(body):
+            raise ValueError("non-reexecuting frontend certificate has stale identity")
+        if body.get("proof_mode") != "structural_non_reexecuting":
+            raise ValueError("frontend certificate does not prohibit re-execution")
+        if body.get("concrete_executions") != 1 or not body.get("structural_match"):
+            raise ValueError("stateful frontend candidate lacks structural parity")
+        if not body.get("graph_consumers"):
+            raise ValueError("non-reexecuting frontend certificate has no owner")
+
+
+def certify_frontends_non_reexecuting(
+    *,
+    legacy_module: GraphIRModule,
+    tracer_module: GraphIRModule,
+    graph_consumers: Sequence[str],
+) -> NonReexecutingFrontendCertificate:
+    """Certify tracer authority without executing the source program twice.
+
+    The tracer performs the sole concrete execution.  This certificate compares
+    only canonical Graph topology against the retained AST candidate and binds
+    an exact family allow-list.  Numerical proof belongs to the physical family
+    package because replaying a stateful or stochastic source would be unsound.
+    """
+    permitted = frozenset(str(name) for name in graph_consumers)
+    tracer_ops = [op for function in tracer_module.functions for op in function.body]
+    observed = frozenset(op.op_name for op in tracer_ops)
+    if not observed or not observed <= permitted:
+        raise ValueError(
+            "non-reexecuting frontend certificate encountered an unowned Graph op: "
+            + ", ".join(sorted(observed - permitted))
+        )
+    if tracer_module.module_attrs.get("tessera.frontend.authority") != '"tracer"':
+        raise ValueError("non-reexecuting certificate requires tracer authority")
+    legacy_signature = graph_signature(legacy_module)
+    tracer_signature = graph_signature(tracer_module)
+    body = {
+        "schema": NON_REEXECUTING_SCHEMA,
+        "proof_mode": "structural_non_reexecuting",
+        "concrete_executions": 1,
+        "graph_consumers": sorted(permitted),
+        "legacy_graph_digest": _digest(legacy_signature),
+        "tracer_graph_digest": _digest(tracer_signature),
+        "structural_match": legacy_signature == tracer_signature,
+        "numerical_authority": "physical_package_required",
+    }
+    certificate = NonReexecutingFrontendCertificate(
+        {**body, "digest": _digest(body)}
+    )
+    certificate.validate()
+    return certificate
+
+
 def certify_frontends(
     *,
     legacy_module: GraphIRModule,
     tracer_module: GraphIRModule,
     legacy_outputs: Sequence[Any],
     tracer_outputs: Sequence[Any],
+    permitted_effect_ops: Sequence[str] = (),
     rtol: float = 1e-5,
     atol: float = 1e-6,
 ) -> FrontendDifferentialCertificate:
-    """Certify one pure concrete signature or reject it fail-closed."""
+    """Certify one concrete signature under an explicit effect envelope.
+
+    The default remains pure-only. A family plugin may permit named Graph
+    operations only after validating the concrete operation attributes. The
+    exemption is included in the certificate identity and cannot authorize a
+    different operation.
+    """
     tracer_ops = [op for function in tracer_module.functions for op in function.body]
     effect, offenders = infer_graph_effects(tracer_ops)
-    if effect != Effect.pure:
+    permitted = frozenset(str(name) for name in permitted_effect_ops)
+    unpermitted = [name for name in offenders if name not in permitted]
+    if effect != Effect.pure and unpermitted:
         raise ValueError(
             "frontend differential refuses effectful or stochastic programs: "
-            + ", ".join(offenders)
+            + ", ".join(unpermitted)
         )
     legacy_signature = graph_signature(legacy_module)
     tracer_signature = graph_signature(tracer_module)
@@ -169,6 +244,7 @@ def certify_frontends(
         "max_abs_error": max_error,
         "rtol": float(rtol),
         "atol": float(atol),
+        "permitted_effect_ops": sorted(permitted),
     }
     certificate = FrontendDifferentialCertificate({**body, "digest": _digest(body)})
     certificate.validate()
@@ -177,7 +253,10 @@ def certify_frontends(
 
 __all__ = [
     "FrontendDifferentialCertificate",
+    "NON_REEXECUTING_SCHEMA",
+    "NonReexecutingFrontendCertificate",
     "SCHEMA",
     "certify_frontends",
+    "certify_frontends_non_reexecuting",
     "graph_signature",
 ]

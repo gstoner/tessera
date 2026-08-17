@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-16
+last_updated: 2026-08-17
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,49 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `E2E-REAL-6E-STATEFUL-VJP-2026-08-17` — **bounded AVX-512
+Adafactor and sequence-mixer reverse authority complete.** Explicit plugins
+now own full/factored Adafactor and causal gated/Kimi/modified DeltaNet
+backward; the compiler route binds tracer identity, one-execution proof,
+state/workspace lineage, Schedule, and exact Tile identity without passing
+Graph metadata to the runtime. Existing AVX-512 numerical tests remain valid;
+clean Zen 5 selector-grade timing is a separate evidence gate and no AMX claim
+is implied.
+
+Cross-backend sync `E2E-REAL-6D-LION-VJP-2026-08-17` — **bounded AVX-512
+Lion reverse authority closed.** The flat functional Lion Graph ABI now has
+exactly two results, `(new_param, new_moment)`, and concrete tracing executes
+that source once. A structural non-reexecuting certificate binds the retained
+AST candidate to tracer Graph IR; the family plugin then builds the existing
+`schedule.lion_vjp` → `tile.training_kernel` state-lineage package. Runtime
+receives no Graph operation metadata and validates the frontend certificate,
+state lineage, Schedule identity, and exact Tile digest before the AVX-512
+call. Public numerical, one-execution, and tamper tests pass. Clean Zen 5
+performance evidence remains independent.
+
+Cross-backend sync `E2E-REAL-6C-ATTENTION-VJP-2026-08-17` — **bounded public
+AVX-512 canonical rank-4 attention reverse authority closed.** `flash_attn`,
+GQA, and MQA now enter one native-VJP family plugin from tracer-produced Graph
+IR. The plugin builds the exact `schedule.attention_backward` →
+`tile.attention_backward_kernel` package, preserves x86’s saved-LSE identity,
+and binds parent Graph, Schedule, Tile, native-image, and aggregate digests
+before runtime. `JitFn` no longer constructs the x86 attention package. Public
+ragged GQA numerical proof and lineage/tamper negatives pass for the explicit
+zero-dropout differential envelope; active dropout remains fail-closed until
+keyed replay can be certified without duplicate effects. The rank-3
+`multi_head_attention` wrapper remains a compatibility path until its
+reshape/transpose product is explicit; clean Zen 5 performance evidence is
+independent and remains open.
+
+Cross-backend sync `E2E-REAL-6B-SPECTRAL-VJP-2026-08-17` — **bounded AVX-512
+compound spectral reverse execution closed.** `spectral_filter` and
+unbroadcast full `spectral_conv` now enter one native-VJP family plugin from
+tracer-produced Graph IR. Source, Schedule, and Tile digests are validated
+before the existing AVX-512 adjoint ABI executes; public numerical and
+fail-closed tests cover filter, convolution, unsupported broadcasting, and
+tampered lineage. Broader axes/dtypes and STFT/ISTFT backward remain separate
+work, and clean Zen 5 performance evidence remains open.
 
 Cross-backend sync `GFX1151-CALIB-BAREMETAL-2026-08-16` — **shared calibration
 authority parity validated; no x86 evidence transfers.** `target_perf` now

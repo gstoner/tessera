@@ -228,6 +228,7 @@ def _masked_scores(
     window_right: int,
     softcap: float,
     key_offset: int = 0,
+    query_offset: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     raw = scale * (q @ key.T)
     if bias is not None:
@@ -239,7 +240,7 @@ def _masked_scores(
     else:
         scores = raw
         derivative = np.ones_like(raw, dtype=np.float32)
-    qpos = np.arange(q.shape[0], dtype=np.int64)[:, None]
+    qpos = query_offset + np.arange(q.shape[0], dtype=np.int64)[:, None]
     kpos = key_offset + np.arange(key.shape[0], dtype=np.int64)[None, :]
     valid = np.ones(scores.shape, dtype=np.bool_)
     if causal:
@@ -330,13 +331,28 @@ def reference_streaming_attention(
                     window_right=window_right,
                     softcap=softcap,
                     key_offset=start,
+                    query_offset=max(key_rows - query_rows, 0),
                 )
                 block_max = np.max(scores, axis=1)
                 new_max = np.maximum(running_max, block_max)
-                old_scale = np.exp(running_max - new_max)
-                old_scale = np.where(np.isfinite(running_max), old_scale, 0.0)
-                weights = np.exp(scores - new_max[:, None])
-                weights = np.where(valid, weights, 0.0)
+                # A leading KV block can be wholly outside a ragged causal
+                # window. Avoid forming -inf - -inf while preserving the exact
+                # zero contribution required by online softmax.
+                old_delta = np.full_like(running_max, -np.inf)
+                finite_old = np.isfinite(running_max) & np.isfinite(new_max)
+                np.subtract(
+                    running_max, new_max, out=old_delta, where=finite_old
+                )
+                old_scale = np.exp(old_delta)
+                score_delta = np.full_like(scores, -np.inf)
+                finite_rows = np.isfinite(new_max)[:, None]
+                np.subtract(
+                    scores,
+                    new_max[:, None],
+                    out=score_delta,
+                    where=valid & finite_rows,
+                )
+                weights = np.exp(score_delta)
                 output_weights = weights * dropout_replay[
                     batch_index, query_head, :, start:stop
                 ]
@@ -421,6 +437,7 @@ def reference_attention_backward_split_reduced(
                 window_left=window_left,
                 window_right=window_right,
                 softcap=softcap,
+                query_offset=max(key_rows - query_rows, 0),
             )
             row_max = np.max(scores, axis=1, keepdims=True)
             weights = np.exp(scores - row_max)

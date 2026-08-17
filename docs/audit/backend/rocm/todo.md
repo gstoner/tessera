@@ -1,11 +1,59 @@
 ---
-last_updated: 2026-08-16
+last_updated: 2026-08-17
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+`E2E-REAL-6E-STATEFUL-VJP-2026-08-17` — **bounded gfx1151 Adafactor and
+sequence-mixer reverse authority complete.** Explicit plugins now own
+factored/full Adafactor and causal gated/Kimi/modified DeltaNet backward; the
+compiler route binds tracer identity, one-execution proof, state/workspace
+lineage, Schedule, and exact Tile identity without passing Graph metadata to
+the runtime. Existing WSL-visible gfx1151 physical tests remain correctness
+evidence, not bare-metal selector-grade timing. gfx1200/gfx1250 remain
+fail-closed for these packages.
+
+`E2E-REAL-6D-LION-VJP-2026-08-17` — **bounded gfx1151 Lion reverse authority
+closed.** Lion now enters the shared non-reexecuting family plugin from a
+tracer-owned two-result flat Graph operation. The plugin binds its structural
+frontend certificate, source Graph digest, functional/no-alias state lineage,
+typed `schedule.lion_vjp`, exact `tile.training_kernel`, and aggregate artifact
+identity before runtime. The HIP executor receives no Graph metadata and the
+existing WSL-visible gfx1151 numerical proof passes. This does not promote a
+selector or transfer evidence to gfx1200/gfx1250; those targets remain
+fail-closed pending architecture-owned packages and device packets.
+
+`E2E-REAL-6C-ATTENTION-VJP-2026-08-17` — **public gfx1151 canonical rank-4
+attention reverse authority closed for the admitted envelope.**
+`flash_attn`, GQA, and MQA now enter one native-VJP family plugin from
+tracer-produced Graph IR. The plugin lowers the shared tensor-valued
+dQ/split-dK-dV/fixed-reduction program, prebuilds its exact five-entry gfx1151
+image, and binds parent Graph, Schedule, Tile, image, and aggregate digests
+before runtime. The runtime receives only that typed package; the former
+`JitFn` ROCm attention artifact constructor is deleted. The work also repaired
+a real ragged-causal defect: shared references, generated forward/backward
+kernels, the direct lowering, and the shipped HIP ABI now use bottom-right
+query alignment. The affected 67-test cohort passes on the WSL-visible
+gfx1151. The public differential migration admits zero dropout only; the
+existing physical dropout carrier is retained, but active dropout remains
+fail-closed at this frontend boundary until keyed replay is non-reexecuting.
+This is correctness/authority evidence, not bare-metal timing;
+gfx1200/gfx1250 remain fail-closed and rank-3 MHA remains a compatibility path.
+
+`E2E-REAL-6B-SPECTRAL-VJP-2026-08-17` — **public gfx1151 compound spectral
+reverse execution closed for the bounded physical envelope.**
+`spectral_filter` and unbroadcast full `spectral_conv` now enter one native-VJP
+family plugin from tracer-produced Graph IR. The package binds source,
+Schedule, and Tile digests, builds exact gfx1151 HSACO before runtime, and the
+runtime consumes only that serialized image. Public filter and convolution
+numerical tests pass on the WSL-visible gfx1151. The exact-target capability
+registry now also reflects the already-proven compound spectral forward rows,
+including logical complex64 carried as interleaved fp32. This is correctness
+and authority evidence, not selector-grade timing; broader broadcasting,
+axes/dtypes, STFT/ISTFT backward, and gfx1200/gfx1250 remain open.
 
 `GFX1151-CALIB-BAREMETAL-2026-08-16` — **producer hardened; bare-metal packet
 still hardware-gated.** The 2026-08-15 WSL figures (186.8 GB/s, 47.27 fp16

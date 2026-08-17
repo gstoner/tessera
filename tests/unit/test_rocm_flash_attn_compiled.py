@@ -115,7 +115,7 @@ def _ref(Q, K, V, scale, causal):
     S = scale * np.einsum("bhqd,bhkd->bhqk", Qf, Kf)
     B, H, Sq, Sk = S.shape
     if causal:
-        i = np.arange(Sq)[:, None]
+        i = np.arange(Sq)[:, None] + max(Sk - Sq, 0)
         j = np.arange(Sk)[None, :]
         S = np.where(j[None, None] > i[None, None], -1e30, S)
     S = S - S.max(axis=-1, keepdims=True)
@@ -238,7 +238,7 @@ def test_optimized_gqa_bias_softcap_window_dropout_matches_counter_oracle():
         "bhqd,bhkd->bhqk", q.astype(np.float32), kq
     )
     scores = cap * np.tanh((scores + bias) / cap)
-    qpos = np.arange(Sq)[:, None]
+    qpos = np.arange(Sq)[:, None] + max(Sk - Sq, 0)
     kpos = np.arange(Sk)[None, :]
     masked = (kpos > qpos) | ((qpos - kpos) >= window)
     scores = np.where(masked[None, None], -1e30, scores)

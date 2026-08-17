@@ -104,7 +104,7 @@ _SPECS = [
     OpSpec("adamw", "tessera.adamw", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("momentum", "tessera.momentum", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("nesterov", "tessera.nesterov", 2, 3, lowering="functional_optimizer_step"),
-    OpSpec("adafactor", "tessera.adafactor", 2, 3, lowering="functional_optimizer_step"),
+    OpSpec("adafactor", "tessera.adafactor", 2, 4, lowering="functional_optimizer_step"),
     OpSpec("lion", "tessera.lion", 2, 3, lowering="functional_optimizer_step"),
     # `ebm_energy_quadratic` is canonicalized to the flat-lane graph name
     # `tessera.ebm_energy_quadratic` below; the dotted Graph IR ODS spelling
@@ -825,7 +825,11 @@ OP_SHAPE_RULE: dict = {
     # exception, and the exemption also silently covered an optimizer wrongly
     # rounding its state DOWN to the param dtype.
     **{f"tessera.{n}": "optimizer_step" for n in
-       ("adam", "adamw", "momentum", "nesterov", "adafactor", "lion", "sgd")},
+       ("adam", "adamw", "momentum", "nesterov", "adafactor", "sgd")},
+    # Lion's flat compiler ABI returns exactly (new_param, new_moment).  It is
+    # not the three-result Adam-style contract used by optimizer_step.
+    "tessera.lion": "optimizer_pair_step",
+    "tessera.adafactor": "adafactor_step",
 
     # Cache mutators thread the handle through -- the ODS says
     # `-> Tessera_KVCacheType:$updated` for each. `read` is the one member of
@@ -1050,6 +1054,8 @@ SHAPE_RULE_NAMES = frozenset({
     "quantize_per_tensor",
     "quantize_per_block",
     "optimizer_step",
+    "optimizer_pair_step",
+    "adafactor_step",
     "from_shape_attr",
     "cast",
     "reduce_trailing",

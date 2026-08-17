@@ -202,7 +202,11 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value isCausal = b.create<arith::CmpIOp>(loc, ne, causal, c0);
   // A windowed kernel is causal for the upper bound regardless of the flag.
   Value useCausal = window ? trueI1 : isCausal;
-  Value ckt = b.create<arith::DivUIOp>(loc, add(q0, c15), c16);
+  Value hasQueryOffset = b.create<arith::CmpIOp>(loc, slt, Sq, Sk);
+  Value queryOffset = b.create<arith::SelectOp>(
+      loc, hasQueryOffset, b.create<arith::SubIOp>(loc, Sk, Sq), c0);
+  Value alignedQ0 = add(q0, queryOffset);
+  Value ckt = b.create<arith::DivUIOp>(loc, add(alignedQ0, c15), c16);
   Value lastKt = b.create<arith::SelectOp>(loc, useCausal, ckt, nKVm1);
   Value over = b.create<arith::CmpIOp>(loc, slt, nKVm1, lastKt);
   lastKt = b.create<arith::SelectOp>(loc, over, nKVm1, lastKt);
@@ -213,7 +217,7 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   // below that contribute only masked (-inf) scores, so we never enter them.
   Value firstKt = c0;
   if (window) {
-    Value q0p1 = add(q0, c1);
+    Value q0p1 = add(alignedQ0, c1);
     Value above = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt,
                                           q0p1, W);
     Value minKey = b.create<arith::SelectOp>(
@@ -332,13 +336,15 @@ void emitFlashAttnBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
         v0 = b.create<arith::MulFOp>(loc, cap, t);
       }
       // Causal (future-key) mask — active when causal or windowed.
+      Value queryPosition = add(qpos, queryOffset);
       Value cmask = b.create<arith::AndIOp>(
-          loc, useCausal, b.create<arith::CmpIOp>(loc, slt, qpos, gk));
+          loc, useCausal,
+          b.create<arith::CmpIOp>(loc, slt, queryPosition, gk));
       Value masked = b.create<arith::OrIOp>(loc, gkOOB, cmask);
       // Window lower edge: mask keys older than W (qpos - gk >= W). Only the
       // valid (gk <= qpos) side matters; future keys are already cmask-masked.
       if (window) {
-        Value age = b.create<arith::SubIOp>(loc, qpos, gk);
+        Value age = b.create<arith::SubIOp>(loc, queryPosition, gk);
         Value tooOld = b.create<arith::CmpIOp>(loc, sge, age, W);
         masked = b.create<arith::OrIOp>(loc, masked, tooOld);
       }

@@ -1027,11 +1027,72 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         from . import optim as _optim
         return _optim.nesterov(params, grads, state, **kwargs)
 
-    def adafactor(params, grads, state=None, **kwargs):
+    def adafactor(params, grads, state=None, column_state=None, **kwargs):
+        # Compiler-visible flat ABIs keep optimizer state as explicit tensor
+        # operands.  A full state returns ``(new_param, new_state)``; factored
+        # row/column state returns ``(new_param, new_row, new_column)``.  The
+        # public tree optimizer and its dictionary state remain unchanged.
+        if isinstance(state, np.ndarray):
+            param = np.asarray(params)
+            grad = np.asarray(grads, dtype=np.float32)
+            row_or_full = np.asarray(state, dtype=np.float32)
+            if param.shape != grad.shape:
+                raise ValueError("flat Adafactor parameter and gradient must match")
+            lr = np.float32(float(kwargs.get("lr", 1.0e-3)))
+            beta2 = np.float32(float(kwargs.get("beta2", 0.999)))
+            eps = np.float32(float(kwargs.get("eps", 1.0e-30)))
+            grad2 = grad * grad
+            if column_state is None:
+                if row_or_full.shape != grad.shape:
+                    raise ValueError("full Adafactor state must match parameter shape")
+                new_state = beta2 * row_or_full + (np.float32(1.0) - beta2) * grad2
+                update = grad / (np.sqrt(np.maximum(new_state, eps)) + eps)
+                return param - lr * update, new_state
+            column = np.asarray(column_state, dtype=np.float32)
+            if grad.ndim < 2:
+                raise ValueError("factored Adafactor requires rank-2+ parameters")
+            if row_or_full.shape != grad.shape[:-1] or column.shape != (grad.shape[-1],):
+                raise ValueError("factored Adafactor row/column state shapes are invalid")
+            reduce_axes = tuple(range(grad.ndim - 1))
+            new_row = beta2 * row_or_full + (np.float32(1.0) - beta2) * grad2.mean(axis=-1)
+            new_column = beta2 * column + (np.float32(1.0) - beta2) * grad2.mean(axis=reduce_axes)
+            safe_row = np.maximum(new_row, eps)
+            scale = safe_row[..., None] * np.maximum(new_column, eps) / max(
+                float(np.mean(safe_row)), float(eps)
+            )
+            update = grad / (np.sqrt(scale) + eps)
+            return param - lr * update, new_row, new_column
         from . import optim as _optim
         return _optim.adafactor(params, grads, state, **kwargs)
 
     def lion(params, grads, state=None, **kwargs):
+        # The compiler-visible flat ABI carries the moment tensor directly and
+        # returns ``(new_param, new_moment)``.  The public tree optimizer keeps
+        # its dictionary state ABI below.  Keeping these two representations
+        # explicit makes Lion traceable without manufacturing or inspecting a
+        # Python state dictionary inside Graph IR.
+        if isinstance(state, np.ndarray):
+            param = np.asarray(params)
+            grad = np.asarray(grads)
+            moment = np.asarray(state, dtype=np.float32)
+            if param.shape != grad.shape or param.shape != moment.shape:
+                raise ValueError("flat Lion operands must have matching shapes")
+            lr = float(kwargs.get("lr", 1.0e-4))
+            beta1 = float(kwargs.get("beta1", 0.9))
+            beta2 = float(kwargs.get("beta2", 0.99))
+            weight_decay = float(kwargs.get("weight_decay", 0.0))
+            lr32 = np.float32(lr)
+            update = np.float32(beta1) * moment + np.float32(1.0 - beta1) * grad.astype(
+                np.float32, copy=False
+            )
+            new_moment = np.float32(beta2) * moment + np.float32(1.0 - beta2) * grad.astype(
+                np.float32, copy=False
+            )
+            new_param = param.astype(np.float32, copy=False)
+            if weight_decay:
+                new_param = new_param * np.float32(1.0 - lr * weight_decay)
+            new_param = new_param - lr32 * np.sign(update)
+            return new_param.astype(param.dtype, copy=False), new_moment
         from . import optim as _optim
         return _optim.lion(params, grads, state, **kwargs)
 

@@ -193,14 +193,21 @@ struct AttentionContract {
 
   Value legalKey(Value q, Value key) {
     Value legal = arith::ConstantIntOp::create(builder, loc, 1, 1);
+    // Canonical flash-attention aligns a shorter query sequence to the right
+    // edge of the KV sequence (decode/cached-KV semantics).  The old direct
+    // ROCm path compared key <= q and therefore implemented a different,
+    // top-left causal mask whenever Sk != Sq.
+    Value queryOffset = arith::MaxSIOp::create(
+        builder, loc, arith::SubIOp::create(builder, loc, Sk, Sq), zeroI64());
+    Value queryPosition = addI64(builder, loc, q, queryOffset);
     if (causalAttr.getValue())
       legal = arith::AndIOp::create(
           builder, loc, legal,
           arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ule, key,
-                                q));
+                                queryPosition));
     if (windowLeftAttr.getInt() >= 0) {
       Value lower = arith::SubIOp::create(
-          builder, loc, q,
+          builder, loc, queryPosition,
           i64Constant(builder, loc, windowLeftAttr.getInt()));
       legal = arith::AndIOp::create(
           builder, loc, legal,
@@ -209,7 +216,7 @@ struct AttentionContract {
     }
     if (windowRightAttr.getInt() >= 0) {
       Value upper =
-          addI64(builder, loc, q,
+          addI64(builder, loc, queryPosition,
                  i64Constant(builder, loc, windowRightAttr.getInt()));
       legal = arith::AndIOp::create(
           builder, loc, legal,

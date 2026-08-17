@@ -44,21 +44,32 @@ def _flash(q, k, v):
 
 
 def test_rocm_flash_backward_binds_paired_inputs_to_verified_lane(monkeypatch):
-    import tessera.runtime as runtime
+    from types import SimpleNamespace
+
+    from tessera.compiler import native_attention_vjp
 
     seen = {}
 
-    def fake_launch(artifact, args):
-        seen["metadata"] = artifact.metadata
-        seen["args"] = args
-        return {
-            "ok": True,
-            "execution_mode": "hip_runtime",
-            "execution_kind": "native_gpu",
-            "output": tuple(np.zeros_like(x) for x in args[1:]),
-        }
+    package = SimpleNamespace(
+        operand_names=("q", "k", "v"),
+        scheduled=SimpleNamespace(lse_checkpoint_selection="recompute"),
+        source_graph_ir_digest="1" * 64,
+        schedule_artifact_hash="2" * 64,
+        tile_program_digest="3" * 64,
+        native_image_digest="4" * 64,
+        artifact_hash="5" * 64,
+    )
 
-    monkeypatch.setattr(runtime, "launch", fake_launch)
+    def fake_build(**kwargs):
+        seen["build"] = kwargs
+        return package
+
+    def fake_execute(_package, **kwargs):
+        seen["execute"] = kwargs
+        return tuple(np.zeros_like(value, dtype=np.float32) for value in kwargs["ordered_inputs"])
+
+    monkeypatch.setattr(native_attention_vjp, "build_native_attention_vjp_package", fake_build)
+    monkeypatch.setattr(native_attention_vjp, "execute_native_attention_vjp_package", fake_execute)
     q = np.zeros((1, 2, 4, 16), np.float16)
     k = np.zeros_like(q)
     v = np.zeros_like(q)
@@ -66,10 +77,14 @@ def test_rocm_flash_backward_binds_paired_inputs_to_verified_lane(monkeypatch):
     grads = _flash.native_backward(q, k, v, out_cotangents=dout)
 
     assert len(grads) == 3
-    assert seen["metadata"]["compiler_path"] == "rocm_flash_attn_bwd_compiled"
-    assert seen["metadata"]["ops"][0]["kwargs"]["causal"] is True
-    assert seen["args"][0] is not q  # cotangent-first paired adapter
+    assert seen["build"]["out_cotangent"] is dout
+    assert seen["build"]["source"].kwargs["causal"] is True
+    assert seen["execute"]["out_cotangent"] is dout
     assert _flash.last_backward_execution["evidence_target"] == "rocm_gfx1151"
+    assert _flash.last_backward_execution["implementation"] == "family_plugin"
+    assert _flash.last_backward_execution["schedule_consumer"] == (
+        "schedule.attention_backward"
+    )
 
 
 @ts.jit(target="rocm", autodiff="reverse", wrt=("a", "b"))

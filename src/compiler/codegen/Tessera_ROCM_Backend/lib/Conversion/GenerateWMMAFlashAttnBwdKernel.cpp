@@ -171,6 +171,13 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value qtile = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
   Value bh = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value q0 = e.mul(qtile, c16);
+  // Match the public bottom-right causal contract for ragged attention.  A
+  // shorter query sequence is aligned with the tail of the key sequence, so
+  // its logical position is q + (Sk - Sq), not q.
+  Value hasQueryOffset = e.lt(Sq, Sk);
+  Value queryOffset = e.sel(
+      hasQueryOffset, b.create<arith::SubIOp>(loc, Sk, Sq), c0);
+  Value alignedQ0 = e.add(q0, queryOffset);
   Value qbase = e.mul(e.mul(bh, Sq), cD);
   // GQA: bh is a query head; read K from the grouped KV head (L/D stay per
   // query head, indexed by bh).
@@ -247,7 +254,7 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
     // KV-tile bounds (causal: only tiles up to the query tile's diagonal).
   Value nKV = b.create<arith::DivUIOp>(loc, e.add(Sk, c15), c16);
   Value nKVm1 = b.create<arith::SubIOp>(loc, nKV, c1);
-  Value ckt = b.create<arith::DivUIOp>(loc, e.add(q0, c15), c16);
+  Value ckt = b.create<arith::DivUIOp>(loc, e.add(alignedQ0, c15), c16);
   Value lastKt = e.sel(useCausal, ckt, nKVm1);
   lastKt = e.sel(e.lt(nKVm1, lastKt), nKVm1, lastKt);
   Value upper = e.add(lastKt, c1);
@@ -282,6 +289,7 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
       // The shared modifier order is scale -> additive bias -> soft-cap.
       // Bounds-guard the bias read against the [bh,Sq,Sk] buffer.
       Value gqe = e.add(q0, qi);
+      Value queryPosition = e.add(gqe, queryOffset);
       if (bias) {
         Value gqSafe = e.sel(e.lt(gqe, Sq), gqe, c0);
         Value gkSafe = e.sel(e.ge(gk, Sk), c0, gk);
@@ -294,10 +302,11 @@ void emitPre(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
                                                   loc, v0, cap));
         v0 = e.mulf(cap, t);
       }
-      Value cmask = b.create<arith::AndIOp>(loc, useCausal, e.lt(gqe, gk));
+      Value cmask = b.create<arith::AndIOp>(loc, useCausal,
+                                            e.lt(queryPosition, gk));
       Value masked = b.create<arith::OrIOp>(loc, e.ge(gk, Sk), cmask);
       if (window) {  // too-old key: q - k >= W
-        Value age = b.create<arith::SubIOp>(loc, gqe, gk);
+        Value age = b.create<arith::SubIOp>(loc, queryPosition, gk);
         masked = b.create<arith::OrIOp>(loc, masked, e.ge(age, W));
       }
       b.create<memref::StoreOp>(loc, e.sel(masked, e.negInf, v0), sS,
@@ -452,13 +461,18 @@ void recomputeScoreTile(Emit &e, OpBuilder &b, Location loc, const ScoreCtx &x,
     // (q - k >= W) -> P = 0. A windowed kernel is implicitly causal.
     Value trueI1 = b.create<arith::ConstantIntOp>(loc, 1, 1);
     Value useCausal = x.W ? trueI1 : x.isCausal;
+    Value hasQueryOffset = e.lt(x.Sq, x.Sk);
+    Value queryOffset = e.sel(
+        hasQueryOffset, b.create<arith::SubIOp>(loc, x.Sk, x.Sq), c0);
+    Value queryPosition = e.add(gqi, queryOffset);
     Value m1 = e.ge(gqi, x.Sq);
     Value m2 = e.ge(gk, x.Sk);
-    Value m3 = b.create<arith::AndIOp>(loc, useCausal, e.lt(gqi, gk));
+    Value m3 = b.create<arith::AndIOp>(loc, useCausal,
+                                       e.lt(queryPosition, gk));
     Value masked = b.create<arith::OrIOp>(
         loc, b.create<arith::OrIOp>(loc, m1, m2), m3);
     if (x.W) {
-      Value age = b.create<arith::SubIOp>(loc, gqi, gk);  // q - k
+      Value age = b.create<arith::SubIOp>(loc, queryPosition, gk);
       masked = b.create<arith::OrIOp>(loc, masked, e.ge(age, x.W));
     }
     P = e.sel(masked, e.zerof, P);
@@ -591,7 +605,11 @@ void emitDkDv(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   // causal, start the query loop at `ktile` (skip the tiles entirely below the
   // diagonal); the diagonal tile qt==ktile is still per-element masked. ~halves
   // the query-tile work for causal. Non-causal starts at 0.
-  Value qStart = e.sel(useCausal, ktile, c0);
+  Value equalLengths = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::eq, Sq, Sk);
+  Value canUseDiagonalSkip =
+      b.create<arith::AndIOp>(loc, useCausal, equalLengths);
+  Value qStart = e.sel(canUseDiagonalSkip, ktile, c0);
   if (splitReduced)
     qStart = e.add(qStart, split);
   auto qloop = b.create<scf::ForOp>(
@@ -814,7 +832,11 @@ void emitDq(OpBuilder &b, Location loc, gpu::GPUFuncOp f, int64_t D,
   Value nKfull = b.create<arith::DivUIOp>(loc, e.add(Sk, c15), c16);
   Value cKlimit = e.add(qtile, c1);
   Value nKcausal = e.sel(e.lt(cKlimit, nKfull), cKlimit, nKfull);
-  Value nK = e.sel(useCausal, nKcausal, nKfull);
+  Value equalLengths = b.create<arith::CmpIOp>(
+      loc, arith::CmpIPredicate::eq, Sq, Sk);
+  Value canUseDiagonalSkip =
+      b.create<arith::AndIOp>(loc, useCausal, equalLengths);
+  Value nK = e.sel(canUseDiagonalSkip, nKcausal, nKfull);
   auto kloop = b.create<scf::ForOp>(loc, c0, nK, c1);
   {
     OpBuilder::InsertionGuard g(b);

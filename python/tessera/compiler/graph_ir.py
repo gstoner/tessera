@@ -2598,6 +2598,50 @@ def _shape_optimizer_step(operand_types: List[IRType],
     )
 
 
+def _shape_optimizer_pair_step(
+    operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None
+):
+    """Lion flat ABI: updated parameter plus one f32 optimizer moment."""
+    param = operand_types[0]
+    attrs = attrs or {}
+    state = attrs.get("state_dtype") or "fp32"
+    try:
+        from ..dtype import canonicalize_dtype
+
+        state = canonicalize_dtype(str(state).strip("\"'"))
+    except Exception:
+        state = str(state)
+    return (
+        tensor_ir_type(param.shape, param.dtype, layout=param.layout),
+        tensor_ir_type(param.shape, state, layout=param.layout),
+    )
+
+
+def _shape_adafactor_step(
+    operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None
+):
+    """Flat Adafactor ABI with topology-specific explicit state results."""
+    param = operand_types[0]
+    attrs = attrs or {}
+    state_dtype = attrs.get("state_dtype") or "fp32"
+    try:
+        from ..dtype import canonicalize_dtype
+
+        state_dtype = canonicalize_dtype(str(state_dtype).strip("\"'"))
+    except Exception:
+        state_dtype = str(state_dtype)
+    updated = tensor_ir_type(param.shape, param.dtype, layout=param.layout)
+    if len(operand_types) == 4:
+        return (
+            updated,
+            tensor_ir_type(operand_types[2].shape, state_dtype, layout=operand_types[2].layout),
+            tensor_ir_type(operand_types[3].shape, state_dtype, layout=operand_types[3].layout),
+        )
+    state_shape = operand_types[2].shape if len(operand_types) >= 3 else param.shape
+    state_layout = operand_types[2].layout if len(operand_types) >= 3 else param.layout
+    return updated, tensor_ir_type(state_shape, state_dtype, layout=state_layout)
+
+
 def _shape_select_from_second(operand_types: List[IRType],
                               attrs: Optional[Dict[str, Any]] = None) -> IRType:
     """Select along a candidate axis of operand 1, keyed by operand 0.
@@ -3416,6 +3460,8 @@ _SHAPE_RULES = {
     "quantize_per_tensor": _shape_quantize_per_tensor,
     "quantize_per_block": _shape_quantize_per_block,
     "optimizer_step": _shape_optimizer_step,
+    "optimizer_pair_step": _shape_optimizer_pair_step,
+    "adafactor_step": _shape_adafactor_step,
     "from_shape_attr": _shape_from_shape_attr,
     "cast": _shape_cast,
     "transpose": _shape_transpose,
@@ -3934,14 +3980,32 @@ def specialize_module_from_values(
                 name if str(name).startswith("%") else f"%{name}"
                 for name in op.operands
             ]
-            inferred = _infer_result_type(
-                op.op_name, [env.get(name, TENSOR_OPAQUE) for name in operands])
-            op.operand_types = [str(env.get(name, TENSOR_OPAQUE)) for name in operands]
+            inferred_operands = [
+                env.get(name, TENSOR_OPAQUE) for name in operands
+            ]
+            # Specialization is a real frontend boundary, not just a shape
+            # substitution. Resolve the same canonical attributes as tracing
+            # before result inference; otherwise shape-derived spectral identity
+            # (notably convolution logical_length) differs between the retained
+            # AST candidate and the tracer for the same concrete call.
+            _canonicalize_spectral_attrs(
+                op.op_name, inferred_operands, op.kwargs
+            )
+            inferred_types = _infer_result_types(
+                op.op_name, inferred_operands, op.kwargs
+            )
+            inferred = inferred_types[0]
+            op.operand_types = [str(value) for value in inferred_operands]
             op.inferred_type = inferred
-            op.result_type = str(inferred)
-            if op.result is not None:
-                result = op.result if op.result.startswith("%") else f"%{op.result}"
-                env[result] = inferred
+            op.inferred_types = tuple(inferred_types)
+            op.result_type = (
+                str(inferred)
+                if len(inferred_types) == 1
+                else "(" + ", ".join(str(value) for value in inferred_types) + ")"
+            )
+            for name, result_type in zip(op.result_names, inferred_types):
+                result = name if name.startswith("%") else f"%{name}"
+                env[result] = result_type
 
         fn.result_types = [
             env.get(v if str(v).startswith("%") else f"%{v}", typ)

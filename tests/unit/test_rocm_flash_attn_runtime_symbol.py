@@ -61,7 +61,7 @@ def _ref_attention(Q, K, V, scale, causal):
     Sq, Sk = Q.shape[2], K.shape[2]
     scores = np.einsum("bhqd,bhkd->bhqk", Q, K) * scale
     if causal:
-        q = np.arange(Sq)[:, None]
+        q = np.arange(Sq)[:, None] + max(Sk - Sq, 0)
         k = np.arange(Sk)[None, :]
         scores = np.where(q >= k, scores, -1e30)
     scores = scores - scores.max(-1, keepdims=True)

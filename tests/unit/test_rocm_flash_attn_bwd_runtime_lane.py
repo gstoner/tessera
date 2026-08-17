@@ -38,7 +38,10 @@ def _ref_bwd(Q, K, V, dO, scale, causal, bias=None, window=0, softcap=0.0):
     ratio = H // G
     Qf, Kf, Vf, dOf = (a.astype(np.float32) for a in (Q, K, V, dO))
     biasf = None if bias is None else np.asarray(bias, np.float32)
-    i = np.arange(Sq)[:, None]; j = np.arange(Sk)[None, :]
+    # Canonical ragged-causal attention is bottom-right aligned: when Sq < Sk,
+    # query row zero has logical position Sk - Sq in the key sequence.
+    i = np.arange(Sq)[:, None] + max(Sk - Sq, 0)
+    j = np.arange(Sk)[None, :]
     dQ = np.zeros((B, H, Sq, D), np.float32)
     dK = np.zeros((B, G, Sk, D), np.float32)
     dV = np.zeros((B, G, Sk, D), np.float32)

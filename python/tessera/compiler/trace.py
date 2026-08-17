@@ -165,7 +165,9 @@ class TraceBuilder:
         self._counter += 1
         return f"v{n}"
 
-    def record_op(self, name: str, original, args: tuple, kwargs: dict) -> Tracer:
+    def record_op(
+        self, name: str, original, args: tuple, kwargs: dict
+    ) -> Tracer | tuple[Tracer, ...]:
         graph_name = graph_name_for(name)
         if graph_name is None:
             raise TesseraTraceError(f"trace: op {name!r} is not in the op catalog")
@@ -213,7 +215,6 @@ class TraceBuilder:
                   and all(isinstance(value, Tracer) for value in item)):
                 tracer_args.extend(item)
                 ir_kwargs.pop(key, None)
-        ssa = self._fresh()
         # F6 concrete tracing: when every input carries a concrete value, run the
         # real numpy op to get the result's shape/dtype (works for ANY op, no
         # per-op shape rule). Falls back to the shape-rule path for value-less
@@ -232,18 +233,34 @@ class TraceBuilder:
                 else item
                 for key, item in call_kwargs.items()
             }
-            out = original(*[_concrete(x) for x in call_args], **concrete_kwargs)
-            if isinstance(out, tuple):
+            # The catalog operation is the trace boundary.  Its eager
+            # implementation may itself call other registered operations
+            # (GQA expands K/V and calls flash attention, for example).  Run
+            # that implementation with tracing suspended so those private
+            # implementation details do not become duplicate Graph nodes or
+            # receive already-materialized ndarray operands.
+            token = _trace_hook.set_active_tracer(None)
+            try:
+                out = original(
+                    *[_concrete(x) for x in call_args], **concrete_kwargs
+                )
+            finally:
+                _trace_hook.reset_active_tracer(token)
+            concrete_outputs = out if isinstance(out, tuple) else (out,)
+            if not concrete_outputs:
                 raise TesseraTraceError(
-                    f"trace: multi-output op {name!r} is not supported (F6+)")
-            out = np.asarray(out)
-            out_shape = tuple(out.shape)
-            dtype = _np_dtype_to_elem(out.dtype)
-            value: Any = out
+                    f"trace: op {name!r} returned an empty result tuple"
+                )
+            arrays = tuple(np.asarray(value) for value in concrete_outputs)
+            out_shapes = tuple(tuple(value.shape) for value in arrays)
+            dtypes = tuple(_np_dtype_to_elem(value.dtype) for value in arrays)
+            values: tuple[Any, ...] = arrays
         else:
-            out_shape = _infer_shape(name, [t.shape for t in tracer_args], ir_kwargs)
-            dtype = tracer_args[0].dtype if tracer_args else "fp32"
-            value = None
+            out_shapes = (
+                _infer_shape(name, [t.shape for t in tracer_args], ir_kwargs),
+            )
+            dtypes = (tracer_args[0].dtype if tracer_args else "fp32",)
+            values = (None,)
         if graph_name == "tessera.reduce" and name in {"sum", "mean"}:
             ir_kwargs.setdefault("kind", name)
         from .graph_ir import _canonicalize_spectral_attrs, tensor_ir_type
@@ -252,15 +269,33 @@ class TraceBuilder:
             for item in tracer_args
         ]
         _canonicalize_spectral_attrs(graph_name, operand_ir_types, ir_kwargs)
+        ssas = tuple(self._fresh() for _ in out_shapes)
+        result_ir_types = tuple(
+            tensor_ir_type(tuple(str(dim) for dim in shape), dtype)
+            for shape, dtype in zip(out_shapes, dtypes, strict=True)
+        )
+        result_type = (
+            str(result_ir_types[0])
+            if len(result_ir_types) == 1
+            else "(" + ", ".join(map(str, result_ir_types)) + ")"
+        )
         self.body.append(IROp(
-            result=ssa,
+            result=",".join(ssas),
             op_name=graph_name,
             operands=[f"%{t.ssa}" for t in tracer_args],
             operand_types=[_ty(t.shape, t.dtype) for t in tracer_args],
-            result_type=_ty(out_shape, dtype),
+            result_type=result_type,
             kwargs=ir_kwargs,
+            inferred_type=result_ir_types[0],
+            inferred_types=result_ir_types,
         ))
-        return Tracer(out_shape, dtype, ssa, value)
+        traced_outputs = tuple(
+            Tracer(shape, dtype, ssa, value)
+            for shape, dtype, ssa, value in zip(
+                out_shapes, dtypes, ssas, values, strict=True
+            )
+        )
+        return traced_outputs[0] if len(traced_outputs) == 1 else traced_outputs
 
     def _trace_region(self, run) -> Any:
         """Run ``run()`` with a fresh sub-builder active (sharing this builder's

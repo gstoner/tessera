@@ -743,6 +743,27 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                     "the FFT and EGGROLL execution boundaries"
                 ),
             ),
+            **_ops(
+                "ready",
+                (
+                    "tessera.dct", "tessera.stft", "tessera.istft",
+                    "tessera.spectral_conv",
+                ),
+                dtypes=("bf16", "fp16", "fp32"),
+                reason=(
+                    "Exact-device gfx1151 content-addressed compound spectral "
+                    "package with reduced-storage conversion into f32 accumulation"
+                ),
+            ),
+            **_ops(
+                "ready",
+                ("tessera.spectral_filter",),
+                dtypes=("fp32",),
+                reason=(
+                    "Exact-device gfx1151 interleaved-complex-f32 spectral "
+                    "filter package"
+                ),
+            ),
         },
         # ISA §7.9 Table 33: F16/BF16/IU8 executable surface; no FP8 WMMA on
         # RDNA 3.5 (the load-bearing difference from gfx1200).

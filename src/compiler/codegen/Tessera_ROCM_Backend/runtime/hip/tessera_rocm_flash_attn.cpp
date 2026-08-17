@@ -64,6 +64,7 @@ extern "C" __global__ void %NAME%(
   long qbase = (long)bh * Sq * D;       // (b,h) slice of Q / O
   long kbase = (long)bh * Sk * D;       // (b,h) slice of K / V
   int q0 = qtile * 16;
+  int queryOffset = Sk > Sq ? Sk - Sq : 0;
   for (int i = tid; i < 16 * D; i += 32) {
     int r = i / D, c = i % D, gq = q0 + r;
     sQ[i] = (gq < Sq) ? Q[qbase + (long)gq * D + c] : (%TYPE%)0;
@@ -72,7 +73,7 @@ extern "C" __global__ void %NAME%(
   if (tid < 16) { sm[tid] = -1e30f; sl[tid] = 0.0f; }
   __syncthreads();
   int nKV = (Sk + 15) / 16;
-  int lastKt = causal ? ((q0 + 15) / 16) : (nKV - 1);
+  int lastKt = causal ? ((q0 + queryOffset + 15) / 16) : (nKV - 1);
   if (lastKt > nKV - 1) lastKt = nKV - 1;
   for (int kt = 0; kt <= lastKt; ++kt) {
     int k0 = kt * 16;
@@ -90,7 +91,7 @@ extern "C" __global__ void %NAME%(
       int qi = 2 * e + half, ki = l15, gk = k0 + ki;
       float v = cs[e] * scale;
       if (gk >= Sk) v = -1e30f;
-      else if (causal && (q0 + qi) < gk) v = -1e30f;
+      else if (causal && (q0 + qi + queryOffset) < gk) v = -1e30f;
       sS[qi * 16 + ki] = v;
     }
     __syncthreads();
@@ -258,7 +259,7 @@ int runFlash(FlashKernel* k, const void* Q, const void* Kk, const void* V,
 // Flash-attention forward, f16 storage / f32 accumulate + output.
 // Q[B,H,Sq,D], K[B,H,Sk,D], V[B,H,Sk,D] (f16, row-major); O[B,H,Sq,D] (f32).
 // scale multiplies the QK^T scores (pass 1/sqrt(D) for standard attention).
-// causal != 0 applies a causal mask (query i attends only to keys <= i).
+// causal != 0 applies bottom-right-aligned causal masking for ragged Sq/Sk.
 // head_dim D must be a multiple of 16. Returns 0 ok / 1 bad shape /
 // 2 no usable HIP device or HIPRTC / 3 a device memory/launch/copy op failed.
 extern "C" int tessera_rocm_wmma_flash_attn_f16(

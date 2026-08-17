@@ -2911,7 +2911,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     #: else is rejected rather than ignored -- see `rearrange`.
     _IDENTITY_LAYOUTS = frozenset({"row_major", "identity", "c", "contiguous"})
 
-    def rearrange(x, layout):
+    def rearrange(x, layout, axes_lengths=None):
         """Permute axes by an explicit permutation, or assert an identity layout.
 
         The string branch used to `return np.asarray(x)` for ANY string, so an
@@ -2930,6 +2930,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         if layout is None or (isinstance(layout, str)
                               and layout.strip().lower() in _IDENTITY_LAYOUTS):
             return np.asarray(x)
+        if isinstance(layout, str) and "->" in layout:
+            from .compiler.layout_algebra import rearrange_plan
+
+            value = np.asarray(x)
+            plan = rearrange_plan(value.shape, layout, axes_lengths=axes_lengths)
+            expanded = value.reshape(plan.expanded_shape)
+            permuted = np.transpose(expanded, plan.permutation)
+            return permuted.reshape(plan.output_shape)
         raise ValueError(
             f"rearrange layout {layout!r} is not a permutation or a known "
             f"identity layout {sorted(_IDENTITY_LAYOUTS)}. Pass an explicit "

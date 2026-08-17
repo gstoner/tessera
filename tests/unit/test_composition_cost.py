@@ -327,6 +327,9 @@ def test_w5_2e_infers_ssa_edges_but_preserves_pure_parallelism():
     )
     assert candidate.actions == consumed.actions
     assert set(candidate.actions[-1].depends_on) == {"left", "right"}
+    assert candidate.schedule_object is not None
+    assert len(candidate.schedule_object.digest) == 64
+    assert candidate.schedule_object.edges
 
     reference = (
         _action("left", compute_ms=1.0),

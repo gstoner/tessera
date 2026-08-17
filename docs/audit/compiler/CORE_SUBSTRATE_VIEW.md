@@ -346,13 +346,15 @@ fail-open, the 3-fixture break count — are recorded in
 > barrier-at-birth restructure; the mbarrier/TMA family stays lowering-verified
 > until Phase G/H silicon.
 >
-> **P1b's gfx1151 sweep is DONE (same day):** `dram_bw_gbps = 186.8`,
+> **P1b's gfx1151 WSL pruning sweep ran; selector calibration is open:**
+> `dram_bw_gbps = 186.8`,
 > `fp16:matrix = 47.3`, `bf16:matrix = 50.2` TFLOP/s
-> (`benchmarks/calibration/calibrate_gfx1151.py`, wall-clock method; corpus in
-> `benchmarks/baselines/`); `SchedulePlanner.for_target("rocm_gfx1151")` no
-> longer raises after `load_corpus()`. Remaining for P1b: sm_120 + Apple
-> sweeps (their boxes), Zen5 peaks, corpus auto-load wiring, and the
-> rasterization knob's first consuming emitter.
+> (`benchmarks/calibration/calibrate_gfx1151.py`, WSL host-wall method; corpus
+> in `benchmarks/baselines/`) are retained only for pruning. The corpus is
+> stamped selector-ineligible and `load_corpus()` rejects it. Remaining for
+> P1b: clean bare-metal gfx1151 HIP-event + ROCprofiler calibration, sm_120 +
+> Apple sweeps (their boxes), Zen5 peaks, and selector wiring only after those
+> evidence gates pass.
 
 **P1 — the two force multipliers (start now, in parallel).**
 

@@ -49,6 +49,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseSet.h"
 
 using namespace mlir;
 using tessera::provenance::Resolution;
@@ -228,6 +229,64 @@ struct TileDataflowLegality
     }
   }
 
+  // ── SO-2: logical roles are provenance, not string annotations. ─────────
+  bool collectRoleKinds(Value value, Operation *owner,
+                        llvm::SmallDenseSet<StringRef, 2> &kinds,
+                        llvm::SmallDenseSet<StringRef, 4> &names) {
+    Resolution resolution = resolveThroughLoopCarry(value);
+    if (!resolution.complete || resolution.roots.empty()) {
+      err(owner,
+          "TILE_ROLE_RELATION_INVALID: !tile.role provenance cannot be "
+          "resolved to tile.role declarations across its def-use/loop-carry "
+          "chain");
+      return false;
+    }
+    bool valid = true;
+    for (Value root : resolution.roots) {
+      auto declaration = root.getDefiningOp<tessera::tile::RoleOp>();
+      if (!declaration) {
+        err(owner,
+            "TILE_ROLE_RELATION_INVALID: a resolved !tile.role root is not "
+            "produced by tile.role");
+        valid = false;
+        continue;
+      }
+      kinds.insert(declaration.getKind());
+      names.insert(declaration.getName());
+    }
+    return valid;
+  }
+
+  void checkPipelineRole(tessera::tile::PipelineInitOp pipeline) {
+    Value logicalRole = pipeline.getLogicalRole();
+    if (!logicalRole)
+      return; // compatibility form; physical producers migrate independently.
+    llvm::SmallDenseSet<StringRef, 2> kinds;
+    llvm::SmallDenseSet<StringRef, 4> names;
+    if (!collectRoleKinds(logicalRole, pipeline, kinds, names))
+      return;
+    if (kinds.size() != 1 || !kinds.contains(pipeline.getRole()))
+      err(pipeline,
+          "TILE_ROLE_RELATION_INVALID: pipeline role disagrees with its "
+          "resolved logical role declaration");
+  }
+
+  void checkBarrierRoles(tessera::tile::MBarrierInitOp barrier) {
+    if (barrier.getRoles().empty())
+      return; // compatibility form during staged producer migration.
+    llvm::SmallDenseSet<StringRef, 2> kinds;
+    llvm::SmallDenseSet<StringRef, 4> names;
+    bool valid = true;
+    for (Value role : barrier.getRoles())
+      valid &= collectRoleKinds(role, barrier, kinds, names);
+    if (!valid)
+      return;
+    if (!kinds.contains("producer") || !kinds.contains("consumer"))
+      err(barrier,
+          "TILE_ROLE_RELATION_INVALID: a role-bearing barrier requires "
+          "resolved producer and consumer role sets");
+  }
+
   void runOnOperation() override {
     anyError = false;
     getOperation().walk([&](func::FuncOp func) {
@@ -236,6 +295,10 @@ struct TileDataflowLegality
           checkWaitTokenPairing(wait);
         if (auto copy = dyn_cast<tessera::tile::TMACopyAsyncOp>(op))
           checkCopyExpect(copy);
+        if (auto pipeline = dyn_cast<tessera::tile::PipelineInitOp>(op))
+          checkPipelineRole(pipeline);
+        if (auto barrier = dyn_cast<tessera::tile::MBarrierInitOp>(op))
+          checkBarrierRoles(barrier);
         if (auto forOp = dyn_cast<scf::ForOp>(op))
           checkPipelineRing(forOp);
         checkBarrierOrigin(op);

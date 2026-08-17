@@ -1,11 +1,59 @@
 ---
-last_updated: 2026-08-14
+last_updated: 2026-08-16
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+`GFX1151-CALIB-BAREMETAL-2026-08-16` — **producer hardened; bare-metal packet
+still hardware-gated.** The 2026-08-15 WSL figures (186.8 GB/s, 47.27 fp16
+WMMA TFLOP/s, 50.22 bf16 WMMA TFLOP/s) are now explicitly
+`provisional_pruning_only`; `target_perf.load_corpus()` rejects them instead of
+silently assigning measured selector authority. The calibration runner records
+independent host-wall and HIP-event samples and finalizes only a clean-source,
+exact-gfx1151, bare-metal measurement paired with fresh-process ROCprofiler
+dispatch/activity proof. This WSL host exposes `/dev/dxg`, not `/dev/kfd`, so it
+cannot replace the packet. Run the documented two-step capture/finalize command
+on bare-metal gfx1151, then review and commit the resulting selector-grade
+corpus before changing any selector.
+Finalization also binds each result to its expected kernel name, image digest,
+raw timing samples, work count, and recomputed metric; unrelated profiler
+dispatches or a requested/self-reported architecture cannot promote evidence.
+
+Cross-backend sync `LAYOUT-SCHEDULE-OBJECT-2026-08-16` — **shared carrier and
+gfx1151 physical role proof validated.** The first
+native layout ABI and executable GQA fold transfer no AMD physical layout or
+raster choice. SO-1 now owns the content-addressed action/edge/role/residency
+value; SO-2 registers loop-carry-safe symbolic producer/consumer roles on Tile
+pipelines and mbarriers. `rocm-wave-lds-pipeline` emits the role-bearing state
+and `rocm-wave-lds-legality` consumes it. The exact CAKE §5.5 cohort passed 8/8
+on gfx1151 with no skips; NVIDIA barrier-at-birth work does not block this AMD
+proof.
+Existing raster output remains bit-identical and row-major remains selected.
+Nested Schedule resource metadata is now frozen before hashing, and dynamic
+rearrange/GQA-fold inference preserves ranked `?` dimensions. Neither change
+selects a new AMD layout or raster policy.
+
+Cross-backend sync `ATTN-BWD-ARCH-2026-08-16` — **ROCm decomposition retained.**
+The canonical forward/recompute → prepass → split dK/dV → fixed-order reduction
+→ dQ program passed 23 host/device/package checks on gfx1151; five Apple-only
+cases skipped for their declared Darwin gate. No unused workspace or missing
+stage was found, so this slice makes no ROCm kernel change or performance
+promotion.
+
+Cross-backend sync `X86-PASS-DIALECT-DEPENDENCY-2026-08-16` — **shared build
+parity validated; no ROCm physical follow-up.** The shared pass library now
+models the optional hardware-free x86 Target dialect as a declared MLIR pass
+dependency and fails closed when it is absent. ROCm-only compilation is
+unchanged. The rebuilt combined LLVM 23 driver advertises both `rocm-backend`
+and `x86-target-ir`; its shared lit suite passes 329 enabled tests with 52
+configuration-gated Apple/NVIDIA fixtures, and the standalone ROCm suite
+passes 61/61. The transform library now consumes the sole ODS Schedule dialect
+from `TesseraScheduleIR`, eliminating the duplicate namespace that crashed five
+composite x86 pipelines. No ROCm Target ABI, schedule, selector, or gfx1151
+evidence changed.
 
 Cross-backend sync `PDE-EXACT-CONTRACT-2026-08-14` — **shared exact semantic
 authority landed; gfx1151 physical follow-up required.** The compiler now owns
@@ -3681,15 +3729,22 @@ PDE plan §III.1 / TSOL-A1) and the nine-op coalition-lattice family
 is a shared contract, so this queue records the outcome per AGENTS.md
 "Cross-backend work coordination"; PR #568 itself landed without these records.
 
-**Follow-up required — no ROCm lane exists for any of the ten.** No
-`tessera_rocm.*` Target IR op, MFMA/WMMA path, or hsaco lane consumes either
-family; the declared tier is the Python reference. The gfx1151 device sweep is
-unaffected — nothing in this registration changes an existing kernel, pipeline,
-or manifest row. When the owning phases open (PDE plan §III.1 for the solver,
-GAME_THEORY_PLAN.md G1b/G5 for the lattice family), note that the Thomas sweep
-is a sequential recurrence in `n`: a wavefront lane needs the plan's chosen
-parallel algorithm, not a transliteration of the reference. No exact-device
-gfx1151 evidence is claimed.
+**2026-08-16 physical follow-up (`REF-TIER-PHYS-2026-08-16`): host-free lane
+implemented for the solver and four lattice transforms.** The solver selects
+`cooperative_lds_pcr_v1`: one workgroup per system, logarithmic parallel cyclic
+reduction, fp64 LDS recurrence state, and one final fp32 store. It deliberately
+does not map Thomas' serial row sweep onto a wave. The four subset/superset
+zeta/Mobius operations share one parameterized, ascending-bit Yates
+Schedule→Tile→`tessera_rocm` consumer and one fp64-LDS generator. gfx1200 and
+gfx1250 remain fail-closed. Host-free Target/generator fixtures are the current
+evidence; exact-device gfx1151 correctness and performance packets remain
+required before promotion. Coalition marginal, semivalue, Boltzmann value,
+excess, and MEX remain reference/composition follow-ups rather than five new
+one-off emitters.
+The PCR artifact now has an explicit per-equation i32 status ABI for invalid or
+non-finite pivots. The coalition consumer enforces matching workgroup identity
+and the 64 KiB fp64-LDS envelope before generation; these strengthen host-free
+correctness but do not constitute a device packet.
 
 ## APPLE-SCHEDULED-REDUCE-NAN-2026-08-16 — shared reduce NaN semantics (PR #571)
 
@@ -3718,7 +3773,7 @@ buffer. Both are Apple-guarded — the shared `scheduled_kernel` gate adds an
 `apple_gpu` branch beside the existing x86/ROCm ones and changes neither — and
 the runtime edit is in `apple_gpu_runtime.mm`, which no sibling links.
 
-## APPLE-ATTN-BWD-PERF-1-2026-08-16 — backward row-prepass assessment (PR pending)
+## APPLE-ATTN-BWD-PERF-1-2026-08-16 — backward row-prepass assessment (PR #572 merged)
 
 **Outcome: not applicable to this architecture — no shared contract changed.**
 Apple's attention-backward dK/dV split kernel became key-parallel by finally

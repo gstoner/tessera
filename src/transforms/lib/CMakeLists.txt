@@ -112,6 +112,15 @@ target_include_directories(TesseraPasses
     ${CMAKE_CURRENT_SOURCE_DIR}/../../compiler/tile_opt_fa4/include
 )
 
+# TileToX86Pass must declare TesseraX86Dialect before pass execution.  Keep the
+# dependency optional: builds without the x86 Target IR retain the pass name,
+# but invoking it fails closed before rewriting the module.
+if(TARGET TesseraX86IR)
+  target_compile_definitions(TesseraPasses PRIVATE
+    TESSERA_HAS_X86_TARGET_IR=1)
+  target_link_libraries(TesseraPasses PRIVATE TesseraX86IR)
+endif()
+
 # Phase F4 / AD-CORE-LINEAR-1 — pass bodies need both generated derivative
 # interface headers before compiling.
 add_dependencies(TesseraPasses
@@ -123,6 +132,7 @@ add_dependencies(TesseraPasses
 target_link_libraries(TesseraPasses
   PUBLIC
     TesseraIR
+    TesseraScheduleIR
     TesseraCollectiveDialect
     MLIRIR
     MLIRAnalysis
@@ -134,6 +144,7 @@ target_link_libraries(TesseraPasses
     # Phase 2 dialect dependencies
     MLIRFuncDialect
     MLIRArithDialect
+    MLIRControlFlowDialect
     MLIRSCFDialect
     MLIRTensorDialect
     MLIRLinalgDialect

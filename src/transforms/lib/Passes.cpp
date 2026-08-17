@@ -167,11 +167,13 @@ struct X86ExecutablePipelineOptions
 static bool isRegisteredX86Family(StringRef family) {
   static constexpr StringLiteral families[] = {
       "alibi", "argreduce", "attention", "attention_backward", "clifford",
-      "deltanet", "ebm", "elementwise", "es_low_rank_correction", "fft",
+      "coalition_butterfly", "deltanet", "ebm", "elementwise",
+      "es_low_rank_correction", "fft",
       "kv_cache", "linalg",
       "loss", "matmul", "moe", "movement", "norm", "optimizer",
       "quantization", "reduction", "rng", "rope", "scan", "softmax",
-      "solver_ift", "sort", "sparse", "spectral_backward", "ssm"};
+      "solver_ift", "sort", "sparse", "spectral_backward", "ssm",
+      "tridiagonal_solve"};
   return llvm::is_contained(families, family);
 }
 
@@ -192,6 +194,10 @@ static StringRef directCarrierForX86Family(StringRef family) {
     return "tile.solver_ift_kernel";
   if (family == "es_low_rank_correction")
     return "tile.es_low_rank_correction_kernel";
+  if (family == "tridiagonal_solve")
+    return "tile.tridiagonal_solve_kernel";
+  if (family == "coalition_butterfly")
+    return "tile.coalition_butterfly_kernel";
   if (family == "elementwise")
     return "tile.elementwise_kernel";
   if (family == "argreduce")
@@ -214,6 +220,8 @@ static bool isX86FamilyCarrier(Operation *op) {
          name == "tile.attention_backward_kernel" ||
          name == "tile.spectral_backward_kernel" ||
          name == "tile.solver_ift_kernel" ||
+         name == "tile.tridiagonal_solve_kernel" ||
+         name == "tile.coalition_butterfly_kernel" ||
          name == "tile.es_low_rank_correction_kernel" ||
          name == "tile.elementwise_kernel" ||
          name == "tile.argreduce_kernel" || name == "tile.scan_kernel" ||

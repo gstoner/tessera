@@ -14,14 +14,12 @@ import math
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
-from .benchmark_row import (
-    SCALAR_SELECTOR_AUTHORITY,
-    validate_resource_vector,
-)
+from .benchmark_row import SCALAR_SELECTOR_AUTHORITY
 from .effects import Effect, registered_op_effect
 from .graph_dataflow import analyze_graph_dataflow
 from .graph_ir import GraphIRFunction, IROp
 from .op_catalog import get_op_spec
+from .schedule_object import ScheduleAction, ScheduleEdge, ScheduleObject
 
 
 COMPOSITION_MODEL = "tessera.tile_action_dag_cost.v2"
@@ -54,38 +52,7 @@ class CompositionCalibration:
         _require_digest(self.digest, "calibration digest")
 
 
-@dataclass(frozen=True)
-class TileAction:
-    """One measured action and its explicit predecessor identities."""
-
-    action_id: str
-    resource_vector: Mapping[str, Any]
-    depends_on: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        if not self.action_id:
-            raise ValueError("Tile action_id must be non-empty")
-        if self.action_id in self.depends_on:
-            raise ValueError(f"Tile action {self.action_id!r} cannot depend on itself")
-        if len(set(self.depends_on)) != len(self.depends_on):
-            raise ValueError(f"Tile action {self.action_id!r} has duplicate dependencies")
-        validate_resource_vector(self.resource_vector)
-
-    @classmethod
-    def from_benchmark_row(
-        cls,
-        action_id: str,
-        row: Mapping[str, Any],
-        *,
-        depends_on: Sequence[str] = (),
-    ) -> "TileAction":
-        hot_path = row.get("hot_path_metadata")
-        if not isinstance(hot_path, Mapping):
-            raise ValueError("Tile action benchmark row lacks hot_path_metadata")
-        vector = hot_path.get("resource_vector")
-        if not isinstance(vector, Mapping):
-            raise ValueError("Tile action benchmark row lacks a measured resource vector")
-        return cls(action_id, vector, tuple(depends_on))
+TileAction = ScheduleAction
 
 
 @dataclass(frozen=True)
@@ -104,6 +71,7 @@ class InferredActionDAG:
     actions: tuple[TileAction, ...]
     dependencies: tuple[InferredDependency, ...]
     graph_analysis_digest: str
+    schedule_object: ScheduleObject
 
 
 @dataclass(frozen=True)
@@ -192,7 +160,40 @@ def infer_action_dag(
         TileAction(ids[index], resource_vectors[index], tuple(predecessors[index]))
         for index in range(len(ops))
     )
-    return InferredActionDAG(actions, dependencies, analysis.digest)
+    data_reasons = {
+        "ssa_value_flow",
+        "alias_set",
+        "memory_dependence",
+        "unknown_alias_fact",
+    }
+    schedule_edges: list[ScheduleEdge] = []
+    for dependency in dependencies:
+        data = tuple(reason for reason in dependency.reasons if reason in data_reasons)
+        sync = tuple(reason for reason in dependency.reasons if reason not in data_reasons)
+        if data:
+            schedule_edges.append(
+                ScheduleEdge(
+                    dependency.predecessor,
+                    dependency.successor,
+                    "data",
+                    data,
+                )
+            )
+        if sync:
+            schedule_edges.append(
+                ScheduleEdge(
+                    dependency.predecessor,
+                    dependency.successor,
+                    "sync",
+                    sync,
+                )
+            )
+    schedule = ScheduleObject(
+        object_id=function.name,
+        actions=actions,
+        edges=tuple(schedule_edges),
+    )
+    return InferredActionDAG(actions, dependencies, analysis.digest, schedule)
 
 
 def compare_inferred_action_dag(
@@ -268,11 +269,18 @@ def _unknown_dataflow_reasons(analysis: Any, op: IROp) -> tuple[str, ...]:
 class CompositionCandidate:
     candidate_id: str
     actions: tuple[TileAction, ...]
+    schedule_object: ScheduleObject | None = None
 
     def __post_init__(self) -> None:
         if not self.candidate_id:
             raise ValueError("composition candidate_id must be non-empty")
         _validate_dag(self.actions)
+        schedule = self.schedule_object or ScheduleObject(
+            self.candidate_id, self.actions
+        )
+        if schedule.actions != self.actions:
+            raise ValueError("composition candidate actions disagree with schedule object")
+        object.__setattr__(self, "schedule_object", schedule)
 
     @classmethod
     def from_graph(
@@ -287,7 +295,14 @@ class CompositionCandidate:
         inferred = infer_action_dag(
             function, resource_vectors, action_ids=action_ids
         )
-        return cls(candidate_id, inferred.actions), inferred
+        schedule = ScheduleObject(
+            candidate_id,
+            inferred.schedule_object.actions,
+            inferred.schedule_object.edges,
+            inferred.schedule_object.roles,
+            inferred.schedule_object.residency,
+        )
+        return cls(candidate_id, inferred.actions, schedule), inferred
 
 
 @dataclass(frozen=True)

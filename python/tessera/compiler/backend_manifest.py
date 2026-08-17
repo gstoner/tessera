@@ -55,7 +55,7 @@ Optional_quad = Optional[Tuple[int, int, int, int]]
 _FUSED_KERNEL_STATUS = "fused"
 _REFERENCE_STATUS = "reference"
 _ARTIFACT_STATUS = "artifact_only"
-_COMPILEABLE_STATUS = "compileable"   # Sprint G/H follow-up: passes ptxas/hipcc
+_COMPILEABLE_STATUS = "compileable"  # Sprint G/H follow-up: passes ptxas/hipcc
 _PLANNED_STATUS = "planned"
 # Architecture-neutral execution proof for a compiler-generated target binary
 # (for example HSACO, cubin/PTX-derived binary, Metal library, or native object).
@@ -87,21 +87,22 @@ DEVICE_EXECUTION_PROOF_DEFINITIONS = {
         "numerically verified; no stable public C ABI required"
     ),
     DEVICE_VERIFIED_ABI_STATUS: (
-        "shipped stable C ABI runtime symbol, launched on the exact target and "
-        "numerically verified"
+        "shipped stable C ABI runtime symbol, launched on the exact target and numerically verified"
     ),
 }
 
-_VALID_STATUSES = frozenset({
-    _FUSED_KERNEL_STATUS,
-    _REFERENCE_STATUS,
-    _ARTIFACT_STATUS,
-    _COMPILEABLE_STATUS,
-    _PLANNED_STATUS,
-    _DEVICE_VERIFIED_JIT_STATUS,
-    _DEVICE_VERIFIED_ABI_STATUS,
-    _PACKAGED_STATUS,
-})
+_VALID_STATUSES = frozenset(
+    {
+        _FUSED_KERNEL_STATUS,
+        _REFERENCE_STATUS,
+        _ARTIFACT_STATUS,
+        _COMPILEABLE_STATUS,
+        _PLANNED_STATUS,
+        _DEVICE_VERIFIED_JIT_STATUS,
+        _DEVICE_VERIFIED_ABI_STATUS,
+        _PACKAGED_STATUS,
+    }
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -117,10 +118,19 @@ _VALID_STATUSES = frozenset({
 # ─────────────────────────────────────────────────────────────────────────────
 
 #: Hot-path groups a benchmarked kernel can belong to.
-BENCHMARK_HOT_PATH_GROUPS: frozenset[str] = frozenset({
-    "gemm", "norm", "activation", "attention", "conv", "moe",
-    "fused_epilogue", "packaged", "ga_ebm",
-})
+BENCHMARK_HOT_PATH_GROUPS: frozenset[str] = frozenset(
+    {
+        "gemm",
+        "norm",
+        "activation",
+        "attention",
+        "conv",
+        "moe",
+        "fused_epilogue",
+        "packaged",
+        "ga_ebm",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -133,6 +143,7 @@ class BenchmarkMetadata:
     ratchet_key    : the ``op`` key in the baseline (required when ratcheted)
     notes          : free-form provenance
     """
+
     hot_path_group: str
     harness: str
     ratcheted: bool = False
@@ -143,11 +154,12 @@ class BenchmarkMetadata:
         if self.hot_path_group not in BENCHMARK_HOT_PATH_GROUPS:
             raise ValueError(
                 f"BenchmarkMetadata.hot_path_group must be one of "
-                f"{sorted(BENCHMARK_HOT_PATH_GROUPS)}, got {self.hot_path_group!r}")
+                f"{sorted(BENCHMARK_HOT_PATH_GROUPS)}, got {self.hot_path_group!r}"
+            )
         if self.ratcheted and not self.ratchet_key:
             raise ValueError(
-                "BenchmarkMetadata.ratcheted=True requires a ratchet_key "
-                "(the op's row key in the ratchet baseline)")
+                "BenchmarkMetadata.ratcheted=True requires a ratchet_key (the op's row key in the ratchet baseline)"
+            )
 
     def to_dict(self) -> dict[str, object]:
         out: dict[str, object] = {
@@ -331,10 +343,7 @@ class BackendKernelEntry:
         from ..dtype import canonicalize_dtype
 
         if self.status not in _VALID_STATUSES:
-            raise ValueError(
-                f"BackendKernelEntry.status must be one of {sorted(_VALID_STATUSES)}, "
-                f"got {self.status!r}"
-            )
+            raise ValueError(f"BackendKernelEntry.status must be one of {sorted(_VALID_STATUSES)}, got {self.status!r}")
         # Normalize dtype aliases to canonical names + dedupe (insertion order).
         seen: dict[str, None] = {}
         for d in self.dtypes:
@@ -345,73 +354,65 @@ class BackendKernelEntry:
             object.__setattr__(self, "dtypes", normalized)
 
         # P1 validation: benchmark_metadata, when set, must be a BenchmarkMetadata.
-        if self.benchmark_metadata is not None and not isinstance(
-            self.benchmark_metadata, BenchmarkMetadata
-        ):
+        if self.benchmark_metadata is not None and not isinstance(self.benchmark_metadata, BenchmarkMetadata):
             raise ValueError(
                 "BackendKernelEntry.benchmark_metadata must be a "
-                f"BenchmarkMetadata, got {type(self.benchmark_metadata).__name__}")
+                f"BenchmarkMetadata, got {type(self.benchmark_metadata).__name__}"
+            )
 
         # Sprint G-3 validation: WGMMA shape only on NVIDIA targets.
         if self.wgmma_shape is not None:
             if not self.target.startswith("nvidia"):
-                raise ValueError(
-                    f"wgmma_shape only applies to NVIDIA targets, got "
-                    f"target={self.target!r}"
-                )
+                raise ValueError(f"wgmma_shape only applies to NVIDIA targets, got target={self.target!r}")
             if len(self.wgmma_shape) != 3:
-                raise ValueError(
-                    f"wgmma_shape must be (M, N, K), got {self.wgmma_shape!r}"
-                )
+                raise ValueError(f"wgmma_shape must be (M, N, K), got {self.wgmma_shape!r}")
         # cuda_arch_min validation — must be in the known set.
         if self.cuda_arch_min is not None:
             _valid_arches = {
-                "sm_70", "sm_75", "sm_80", "sm_86", "sm_89",
-                "sm_90", "sm_90a", "sm_100", "sm_100a", "sm_120", "sm_120a",
+                "sm_70",
+                "sm_75",
+                "sm_80",
+                "sm_86",
+                "sm_89",
+                "sm_90",
+                "sm_90a",
+                "sm_100",
+                "sm_100a",
+                "sm_120",
+                "sm_120a",
             }
             if self.cuda_arch_min not in _valid_arches:
-                raise ValueError(
-                    f"cuda_arch_min must be one of {sorted(_valid_arches)}, "
-                    f"got {self.cuda_arch_min!r}"
-                )
+                raise ValueError(f"cuda_arch_min must be one of {sorted(_valid_arches)}, got {self.cuda_arch_min!r}")
         # MFMA shape only on AMD targets.
         if self.mfma_shape is not None:
             if not self.target.startswith("rocm"):
-                raise ValueError(
-                    f"mfma_shape only applies to ROCm targets, got "
-                    f"target={self.target!r}"
-                )
+                raise ValueError(f"mfma_shape only applies to ROCm targets, got target={self.target!r}")
             if len(self.mfma_shape) != 4:
-                raise ValueError(
-                    f"mfma_shape must be (M, N, K, K_blocks), got "
-                    f"{self.mfma_shape!r}"
-                )
+                raise ValueError(f"mfma_shape must be (M, N, K, K_blocks), got {self.mfma_shape!r}")
         # expected_mfu in [0, 1]
         if self.expected_mfu is not None:
             if not (0.0 <= self.expected_mfu <= 1.0):
-                raise ValueError(
-                    f"expected_mfu must be in [0, 1], got {self.expected_mfu}"
-                )
+                raise ValueError(f"expected_mfu must be in [0, 1], got {self.expected_mfu}")
 
         # A1 (2026-06-18) — mma_descriptor must be a rocm_mma.MmaDescriptor and
         # only applies to ROCm targets (lazy import avoids an import cycle).
         if self.mma_descriptor is not None:
             from .rocm_mma import MmaDescriptor
+
             if not isinstance(self.mma_descriptor, MmaDescriptor):
                 raise TypeError(
-                    f"mma_descriptor must be a rocm_mma.MmaDescriptor, got "
-                    f"{type(self.mma_descriptor).__name__}")
+                    f"mma_descriptor must be a rocm_mma.MmaDescriptor, got {type(self.mma_descriptor).__name__}"
+                )
             if not self.target.startswith("rocm"):
-                raise ValueError(
-                    f"mma_descriptor only applies to ROCm targets, got "
-                    f"target={self.target!r}")
+                raise ValueError(f"mma_descriptor only applies to ROCm targets, got target={self.target!r}")
 
         if self.mma_selection is not None:
             from .mma_selector import MmaSelection
+
             if not isinstance(self.mma_selection, MmaSelection):
                 raise TypeError(
-                    "mma_selection must be an mma_selector.MmaSelection, got "
-                    f"{type(self.mma_selection).__name__}")
+                    f"mma_selection must be an mma_selector.MmaSelection, got {type(self.mma_selection).__name__}"
+                )
 
         # Arch-3 (2026-05-22) — device_verified_abi contract.  This is
         # the top rung of the readiness ladder; an entry only qualifies
@@ -423,8 +424,7 @@ class BackendKernelEntry:
         if self.status == _DEVICE_VERIFIED_ABI_STATUS:
             if not self.runtime_symbol:
                 raise ValueError(
-                    f"status='device_verified_abi' requires runtime_symbol "
-                    f"to be set; got target={self.target!r}"
+                    f"status='device_verified_abi' requires runtime_symbol to be set; got target={self.target!r}"
                 )
             if not self.execute_compare_fixture:
                 raise ValueError(
@@ -476,25 +476,22 @@ class BackendKernelEntry:
             # Import here so a non-Apple manifest module doesn't pay
             # the cost / can't trigger a cycle.
             from ..apple_mlpkg import AppleKernelBindingSpec
+
             spec = self.apple_binding_spec
             if not isinstance(spec, AppleKernelBindingSpec):
-                raise TypeError(
-                    f"apple_binding_spec must be an AppleKernelBindingSpec, "
-                    f"got {type(spec).__name__}"
-                )
+                raise TypeError(f"apple_binding_spec must be an AppleKernelBindingSpec, got {type(spec).__name__}")
             if self.status != _PACKAGED_STATUS:
-                raise ValueError(
-                    f"apple_binding_spec is only valid when "
-                    f"status='packaged', got status={self.status!r}"
-                )
+                raise ValueError(f"apple_binding_spec is only valid when status='packaged', got status={self.status!r}")
             # The spec's package_path must match the manifest's
             # packaged_pipeline_path — they're the same artifact viewed
             # from two angles, and disagreement would silently route
             # the runtime to a different package than the compiler
             # contract declared.
-            if (self.packaged_pipeline_path is not None
-                    and spec.package_path
-                    and spec.package_path != self.packaged_pipeline_path):
+            if (
+                self.packaged_pipeline_path is not None
+                and spec.package_path
+                and spec.package_path != self.packaged_pipeline_path
+            ):
                 raise ValueError(
                     f"apple_binding_spec.package_path "
                     f"({spec.package_path!r}) does not match "
@@ -529,10 +526,12 @@ class BackendKernelEntry:
             out["roofline_target"] = self.roofline_target
         if self.mma_descriptor is not None:
             from .rocm_mma import MmaDescriptor
+
             if isinstance(self.mma_descriptor, MmaDescriptor):
                 out["mma_descriptor"] = self.mma_descriptor.as_metadata_dict()
         if self.mma_selection is not None:
             from .mma_selector import MmaSelection
+
             if isinstance(self.mma_selection, MmaSelection):
                 out["mma_selection"] = self.mma_selection.as_metadata_dict()
         # Arch-3 (2026-05-22) — execute-and-compare hooks.
@@ -598,8 +597,7 @@ def primitive_is_complete(entries: tuple["BackendKernelEntry", ...]) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 _APPLE_GPU_FUSED = ("fp32", "fp16", "bf16")
 
-_APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE = (
-    "tests/unit/test_apple_gpu_structured_compute_compiled.py")
+_APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE = "tests/unit/test_apple_gpu_structured_compute_compiled.py"
 
 _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     "matmul": {
@@ -611,9 +609,11 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     "batched_gemm": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
-        "notes": ("Static rank-3 BMM through the compiler-owned Apple native "
-                  "image and descriptor ABI (f32/f16/bf16); exact-device "
-                  "execute/compare and repeat-launch evidence is required."),
+        "notes": (
+            "Static rank-3 BMM through the compiler-owned Apple native "
+            "image and descriptor ABI (f32/f16/bf16); exact-device "
+            "execute/compare and repeat-launch evidence is required."
+        ),
         "execute_compare_fixture": "tests/unit/test_apple_e2e_native_spine.py",
     },
     # Structured-compute convolution family (2026-07-09) — parity with the
@@ -624,25 +624,29 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     "conv1d": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32", "fp16"),
-        "notes": ("Structured-compute conv1d via "
-                  "apple_gpu_structured_compute_compiled; matches "
-                  "tessera.nn.functional.conv1d."),
+        "notes": (
+            "Structured-compute conv1d via apple_gpu_structured_compute_compiled; matches tessera.nn.functional.conv1d."
+        ),
         "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
     },
     "conv_transpose": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32", "fp16"),
-        "notes": ("Structured-compute conv_transpose via "
-                  "apple_gpu_structured_compute_compiled; matches "
-                  "tessera.nn.functional.conv_transpose."),
+        "notes": (
+            "Structured-compute conv_transpose via "
+            "apple_gpu_structured_compute_compiled; matches "
+            "tessera.nn.functional.conv_transpose."
+        ),
         "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
     },
     "depthwise_conv1d": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": ("Structured-compute depthwise_conv1d via "
-                  "apple_gpu_structured_compute_compiled; matches "
-                  "tessera.ops.depthwise_conv1d."),
+        "notes": (
+            "Structured-compute depthwise_conv1d via "
+            "apple_gpu_structured_compute_compiled; matches "
+            "tessera.ops.depthwise_conv1d."
+        ),
         "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
     },
     # Pointwise-regression loss lane (2026-07-09) — parity with the x86/ROCm
@@ -650,45 +654,70 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # reduce lanes (mse/mae also on the GPU mul/abs opcodes; huber/smooth_l1/
     # log_cosh apply the piecewise/transcendental middle host-side). ``device_verified_jit``
     # (direct execute/compare vs tessera.losses), NOT a bespoke fused kernel.
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Pointwise-regression loss {op} via apple_gpu_loss_compiled "
-                  "(MPSGraph binary + reduce lanes, host piecewise middle); "
-                  "matches tessera.losses."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_loss_compiled.py",
-    } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
-                 "log_cosh_loss")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Pointwise-regression loss {op} via apple_gpu_loss_compiled "
+                "(MPSGraph binary + reduce lanes, host piecewise middle); "
+                "matches tessera.losses."
+            ),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_loss_compiled.py",
+        }
+        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss", "log_cosh_loss")
+    },
     # Loss-family lane (2026-07-09) — binary-CE / class-axis / RL-policy /
     # EBM-diffusion. Per-sample loss via the standalone reference (host
     # structure); none/mean/sum reduction on the MPSGraph reduce lane. Parity
     # with the x86/ROCm binary/class/rl/ebm loss lanes. ``device_verified_jit`` (direct
     # execute/compare vs tessera.losses / tessera.rl), NOT a bespoke fused kernel.
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Loss-family {op} via apple_gpu_loss_family_compiled "
-                  "(reference per-sample loss + MPSGraph reduce lane); matches "
-                  "tessera.losses / tessera.rl."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_loss_family_compiled.py",
-    } for op in ("binary_cross_entropy_loss",
-                 "cross_entropy_loss", "kl_divergence", "js_divergence", "z_loss",
-                 "ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
-                 "score_matching_loss", "denoising_score_matching_loss",
-                 "implicit_score_matching_loss", "contrastive_divergence_loss",
-                 "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
-                 "load_balance_loss")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Loss-family {op} via apple_gpu_loss_family_compiled "
+                "(reference per-sample loss + MPSGraph reduce lane); matches "
+                "tessera.losses / tessera.rl."
+            ),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_loss_family_compiled.py",
+        }
+        for op in (
+            "binary_cross_entropy_loss",
+            "cross_entropy_loss",
+            "kl_divergence",
+            "js_divergence",
+            "z_loss",
+            "ppo_policy_loss",
+            "cispo_policy_loss",
+            "grpo_policy_loss",
+            "score_matching_loss",
+            "denoising_score_matching_loss",
+            "implicit_score_matching_loss",
+            "contrastive_divergence_loss",
+            "persistent_cd_loss",
+            "ddpm_noise_pred_loss",
+            "vlb_loss",
+            "load_balance_loss",
+        )
+    },
     # ctc_loss + edm_loss_weight ride the existing apple_gpu structured-compute
     # lane (they are in _SINGLE_GPU_COMPUTE_REFERENCE_OPS -> the structured
     # manifest path + apple_gpu_structured_compute_compiled executor).
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Structured-compute loss/schedule {op} via "
-                  "apple_gpu_structured_compute_compiled; matches "
-                  "tessera.losses / diffusion_schedule."),
-        "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
-    } for op in ("ctc_loss", "edm_loss_weight")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Structured-compute loss/schedule {op} via "
+                "apple_gpu_structured_compute_compiled; matches "
+                "tessera.losses / diffusion_schedule."
+            ),
+            "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
+        }
+        for op in ("ctc_loss", "edm_loss_weight")
+    },
     # Structured-compute tail (2026-07-09) — vision/layout transforms, recurrent
     # cells, MoR routing, VLM resamplers, RoPE split/merge, and other
     # host-structured primitives. All reach an executable apple_gpu path via
@@ -696,125 +725,184 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # nn.functional.* / memory.*). ``device_verified_jit`` (direct execute/compare), NOT a
     # bespoke fused Metal kernel — parity with the x86/ROCm structured-compute
     # lanes.
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Structured-compute {op} via "
-                  "apple_gpu_structured_compute_compiled; matches the "
-                  "tessera reference primitive."),
-        "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
-    } for op in (
-        "arange", "bidirectional_scan", "center_crop", "cross_attention",
-        "edm_precondition", "factorized_pos_emb", "gru_cell", "lstm_cell", "image_resize",
-        "interpolate", "lora_linear", "masked_fill", "masked_scatter",
-        "memory_read", "mor_partition", "mor_router", "mor_scatter", "mrope_2d",
-        "online_softmax_state", "pack", "patchify", "perceiver_resampler",
-        "pixel_shuffle", "pixel_unshuffle", "rearrange", "rope_merge",
-        "rope_split", "simple_rnn_cell", "spectral_norm", "tile_view", "unpack")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Structured-compute {op} via "
+                "apple_gpu_structured_compute_compiled; matches the "
+                "tessera reference primitive."
+            ),
+            "execute_compare_fixture": _APPLE_GPU_STRUCTURED_COMPUTE_FIXTURE,
+        }
+        for op in (
+            "arange",
+            "bidirectional_scan",
+            "center_crop",
+            "cross_attention",
+            "edm_precondition",
+            "factorized_pos_emb",
+            "gru_cell",
+            "lstm_cell",
+            "image_resize",
+            "interpolate",
+            "lora_linear",
+            "masked_fill",
+            "masked_scatter",
+            "memory_read",
+            "mor_partition",
+            "mor_router",
+            "mor_scatter",
+            "mrope_2d",
+            "online_softmax_state",
+            "pack",
+            "patchify",
+            "perceiver_resampler",
+            "pixel_shuffle",
+            "pixel_unshuffle",
+            "rearrange",
+            "rope_merge",
+            "rope_split",
+            "simple_rnn_cell",
+            "spectral_norm",
+            "tile_view",
+            "unpack",
+        )
+    },
     # Conformal-geometry lane (2026-07-09) — mobius f(z)=(az+b)/(cz+d) composed
     # on the interleaved-f32 Apple GPU complex_mul/complex_div lanes. ``device_verified_jit``
     # (direct execute/compare vs tessera.complex), parity with x86/rocm.
     "mobius": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": ("Conformal mobius via apple_gpu_conformal_compiled "
-                  "(interleaved-f32 complex_mul/complex_div lanes); matches "
-                  "tessera.complex."),
+        "notes": (
+            "Conformal mobius via apple_gpu_conformal_compiled "
+            "(interleaved-f32 complex_mul/complex_div lanes); matches "
+            "tessera.complex."
+        ),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_complex_compiled.py",
     },
     # Optimizer lane — sgd/momentum/adam/adamw/lion share one fused Metal f32
     # p/g/m/v update ABI with the x86/ROCm lanes. Unsupported layouts/dtypes
     # remain explicit reference fallbacks.
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Optimizer {op} via apple_gpu_optimizer_compiled "
-                  "(fused Metal f32 p/g/m/v update); matches tessera.optim."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_optimizer_compiled.py",
-    } for op in ("sgd", "momentum", "adam", "adamw", "lion")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Optimizer {op} via apple_gpu_optimizer_compiled "
+                "(fused Metal f32 p/g/m/v update); matches tessera.optim."
+            ),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_optimizer_compiled.py",
+        }
+        for op in ("sgd", "momentum", "adam", "adamw", "lion")
+    },
     # 0-move + sort lane (2026-07-10) — pad/roll/flip/tile/repeat/stack +
     # sort/argsort via apple_gpu_shape_compiled (host index-map + numpy gather /
     # numpy stable sort; Apple ships no device gather/sort kernel). ``device_verified_jit``
     # (direct execute/compare), NOT a bespoke fused Metal kernel.
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"0-move/sort {op} via apple_gpu_shape_compiled (numpy gather / "
-                  "stable sort reference); matches tessera.ops / numpy."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_shape_compiled.py",
-    } for op in ("pad", "roll", "flip", "tile", "repeat", "stack",
-                 "sort", "argsort")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"0-move/sort {op} via apple_gpu_shape_compiled (numpy gather / "
+                "stable sort reference); matches tessera.ops / numpy."
+            ),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_shape_compiled.py",
+        }
+        for op in ("pad", "roll", "flip", "tile", "repeat", "stack", "sort", "argsort")
+    },
     # Reduce lane (2026-07-10) — sum genuinely on the MPSGraph reduce lane
     # (apple_gpu_reduce_compiled; numpy fallback when Metal is unavailable).
     "sum": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": ("Reduce sum via apple_gpu_reduce_compiled (MPSGraph reduce "
-                  "lane); matches numpy.sum."),
+        "notes": ("Reduce sum via apple_gpu_reduce_compiled (MPSGraph reduce lane); matches numpy.sum."),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_reduce_compiled.py",
     },
     # Scatter lane — deterministic f32 Metal row-scatter (set/add/min/max).
     # The ABI matches x86/ROCm; unsupported dtype/layout contracts use an
     # explicit reference override.
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Scatter {op} via apple_gpu_scatter_compiled "
-                  "(deterministic Metal f32 row-scatter); matches numpy."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_scatter_compiled.py",
-    } for op in ("scatter", "scatter_add", "scatter_reduce")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Scatter {op} via apple_gpu_scatter_compiled (deterministic Metal f32 row-scatter); matches numpy."
+            ),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_scatter_compiled.py",
+        }
+        for op in ("scatter", "scatter_add", "scatter_reduce")
+    },
     # Local MoE transport — dispatch gathers the kept expert-sorted token rows;
     # combine pre-scales by route weights then uses native scatter-add. This is
     # deliberately not a distributed all-to-all or general sparse claim.
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Local MoE {op} via apple_gpu_moe_transport_compiled "
-                  "(MPSGraph row gather + Metal scatter-add); matches "
-                  "tessera.stdlib.moe DispatchPlan semantics."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_moe_transport_compiled.py",
-    } for op in ("moe_dispatch", "moe_combine")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Local MoE {op} via apple_gpu_moe_transport_compiled "
+                "(MPSGraph row gather + Metal scatter-add); matches "
+                "tessera.stdlib.moe DispatchPlan semantics."
+            ),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_moe_transport_compiled.py",
+        }
+        for op in ("moe_dispatch", "moe_combine")
+    },
     # First sparse vertical slice: genuinely sparse f32 CSR x dense SpMM through
     # the direct Metal ABI. The narrow i64-contiguous CSR/RHS contract is
     # enforced at runtime; unsupported cases use an explicit reference override.
     "spmm_csr": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": ("CSR SpMM via apple_gpu_spmm_csr_compiled (direct Metal "
-                  "f32 CSR row-walk); unsupported dtype/layout/structure cases "
-                  "use reference_cpu."),
+        "notes": (
+            "CSR SpMM via apple_gpu_spmm_csr_compiled (direct Metal "
+            "f32 CSR row-walk); unsupported dtype/layout/structure cases "
+            "use reference_cpu."
+        ),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_spmm_csr_compiled.py",
     },
     "spmm_coo": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": ("COO SpMM via apple_gpu_spmm_coo_compiled: host COO-to-CSR "
-                  "canonicalization followed by direct Metal f32 CSR row-walk; "
-                  "unsupported dtype/layout/structure cases use reference_cpu."),
+        "notes": (
+            "COO SpMM via apple_gpu_spmm_coo_compiled: host COO-to-CSR "
+            "canonicalization followed by direct Metal f32 CSR row-walk; "
+            "unsupported dtype/layout/structure cases use reference_cpu."
+        ),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_spmm_coo_compiled.py",
     },
     "sddmm": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": ("SDDMM via apple_gpu_sddmm_compiled (direct Metal f32 "
-                  "sampled dot; exact-zero mask entries skip device dots); "
-                  "unsupported dtype/layout/shape cases use reference_cpu."),
+        "notes": (
+            "SDDMM via apple_gpu_sddmm_compiled (direct Metal f32 "
+            "sampled dot; exact-zero mask entries skip device dots); "
+            "unsupported dtype/layout/shape cases use reference_cpu."
+        ),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_sddmm_compiled.py",
     },
     "bsmm": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": ("BSMM via apple_gpu_bsmm_compiled (native f32 dense-block "
-                  "MPS matmul ABI); this public route has no BSR/block-map "
-                  "metadata support, and unsupported cases use reference_cpu."),
+        "notes": (
+            "BSMM via apple_gpu_bsmm_compiled (native f32 dense-block "
+            "MPS matmul ABI); this public route has no BSR/block-map "
+            "metadata support, and unsupported cases use reference_cpu."
+        ),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_bsmm_compiled.py",
     },
     "moe": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": ("Local top-1 MoE compute via apple_gpu_moe_compiled: host "
-                  "route grouping plus native f32 MPS expert-block matmuls; "
-                  "unsupported dtype/layout/route contracts use reference_cpu."),
+        "notes": (
+            "Local top-1 MoE compute via apple_gpu_moe_compiled: host "
+            "route grouping plus native f32 MPS expert-block matmuls; "
+            "unsupported dtype/layout/route contracts use reference_cpu."
+        ),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_moe_compiled.py",
     },
     # Reference tail lane (2026-07-10) — the heterogeneous remainder (MLA
@@ -822,25 +910,42 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # normalize_group_advantages, speculative-decode accept) via
     # apple_gpu_tail_compiled (public tessera reference; Apple ships no device
     # kernel). ``device_verified_jit`` (direct execute/compare).
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Reference tail {op} via apple_gpu_tail_compiled (public "
-                  "tessera reference); matches tessera.ops / losses / rl."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_tail_compiled.py",
-    } for op in ("latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v",
-                 "alibi", "lgamma", "digamma", "fused_epilogue", "asymmetric_bce",
-                 "normalize_group_advantages", "spec_accept",
-                 "spec_accept_sample", "spec_accept_tree_sample")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Reference tail {op} via apple_gpu_tail_compiled (public "
+                "tessera reference); matches tessera.ops / losses / rl."
+            ),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_tail_compiled.py",
+        }
+        for op in (
+            "latent_kv_compress",
+            "latent_kv_expand_k",
+            "latent_kv_expand_v",
+            "alibi",
+            "lgamma",
+            "digamma",
+            "fused_epilogue",
+            "asymmetric_bce",
+            "normalize_group_advantages",
+            "spec_accept",
+            "spec_accept_sample",
+            "spec_accept_tree_sample",
+        )
+    },
     # stereographic rides the existing apple_gpu_conformal_compiled lane
     # (_conformal_compute handles mobius + stereographic; genuine composition on
     # the interleaved-f32 complex/binary-div lanes -> native_gpu).
     "stereographic": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
-        "notes": ("Conformal stereographic via apple_gpu_conformal_compiled "
-                  "(sphere 3-vector -> C on the binary-div lane); matches "
-                  "tessera.complex."),
+        "notes": (
+            "Conformal stereographic via apple_gpu_conformal_compiled "
+            "(sphere 3-vector -> C on the binary-div lane); matches "
+            "tessera.complex."
+        ),
         "execute_compare_fixture": "tests/unit/test_apple_gpu_complex_compiled.py",
     },
     # Philox RNG base lane — rng_uniform / rng_normal / training dropout via
@@ -850,36 +955,47 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     # samplers and RNGKey handling
     # remain host-structured. ``device_verified_jit`` remains the direct
     # execute/compare support designation; compiler-envelope proof is separate.
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": dts,
-        "notes": (f"Philox RNG {op} via apple_gpu_rng_compiled "
-                  "(Metal Philox-4x32-10 base kernel; matches "
-                  "tessera.rng_device)."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_rng_compiled.py",
-    } for op, dts in (("rng_uniform", ("fp32",)), ("rng_normal", ("fp32",)),
-                      ("dropout", ("fp32",)))},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": dts,
+            "notes": (
+                f"Philox RNG {op} via apple_gpu_rng_compiled "
+                "(Metal Philox-4x32-10 base kernel; matches "
+                "tessera.rng_device)."
+            ),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_rng_compiled.py",
+        }
+        for op, dts in (("rng_uniform", ("fp32",)), ("rng_normal", ("fp32",)), ("dropout", ("fp32",)))
+    },
     # Linalg decomposition lane (2026-07-10) — cholesky_solve/lu/qr/svd via
     # apple_gpu_linalg_compiled. Apple ships no MPS lu/qr/svd primitive; the
     # decompositions resolve on the numpy reference (np.linalg + a standalone
     # partial-pivot LU) the x86/ROCm device kernels match. ``device_verified_jit`` (direct
     # execute/compare), NOT a bespoke fused Metal kernel.
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Linalg {op} via apple_gpu_linalg_compiled (numpy reference; "
-                  "no MPS lu/qr/svd primitive); matches np.linalg."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_linalg_compiled.py",
-    } for op in ("cholesky_solve", "lu", "qr", "svd")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Linalg {op} via apple_gpu_linalg_compiled (numpy reference; "
+                "no MPS lu/qr/svd primitive); matches np.linalg."
+            ),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_linalg_compiled.py",
+        }
+        for op in ("cholesky_solve", "lu", "qr", "svd")
+    },
     # Matmul-family lane (2026-07-10) — einsum / factorized_matmul via
     # apple_gpu_matmul_family_compiled (numpy reference the GEMM lanes match).
-    **{op: {
-        "status": _DEVICE_VERIFIED_JIT_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (f"Matmul-family {op} via apple_gpu_matmul_family_compiled "
-                  "(numpy reference); matches numpy."),
-        "execute_compare_fixture": "tests/unit/test_apple_gpu_matmul_family_compiled.py",
-    } for op in ("einsum", "factorized_matmul")},
+    **{
+        op: {
+            "status": _DEVICE_VERIFIED_JIT_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (f"Matmul-family {op} via apple_gpu_matmul_family_compiled (numpy reference); matches numpy."),
+            "execute_compare_fixture": "tests/unit/test_apple_gpu_matmul_family_compiled.py",
+        }
+        for op in ("einsum", "factorized_matmul")
+    },
     # Project 3 (2026-06-01) — 8 encode-eligible ops promoted to
     # ``device_verified_abi``. Each carries:
     #   * runtime_symbol = the per-op encode-session C ABI symbol
@@ -952,72 +1068,71 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "NSA compressed-block attention: QKᵀ / softmax / PV execute "
-                 "on the Apple GPU batched-attention lane over compressed K/V.",
+        "on the Apple GPU batched-attention lane over compressed K/V.",
         "shape_envelope": "Q,K,V rank-4 [B,H,S,D], fp32 attention core",
     },
     "attn_top_k_blocks": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "NSA top-k block attention: host top-k/gather selects blocks; "
-                 "per-query dense attention FLOPs execute on Apple GPU.",
+        "per-query dense attention FLOPs execute on Apple GPU.",
         "shape_envelope": "rank-4 Q/K/V; S_k divisible by block_size",
     },
     "attn_local_window_2d": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "2D local-window attention: structured host im2col gather + "
-                 "Apple GPU bmm/add-mask/softmax/bmm attention core.",
+        "Apple GPU bmm/add-mask/softmax/bmm attention core.",
         "shape_envelope": "rank-5 Q/K/V [B,H,Hq,Wq,D], non-negative window",
     },
     "lookahead_sparse_attention": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Lookahead sparse attention: host data-dependent footprint "
-                 "selection with Apple GPU per-footprint attention; uses fused "
-                 "MSL single-dispatch path when the symbol/envelope is available.",
+        "selection with Apple GPU per-footprint attention; uses fused "
+        "MSL single-dispatch path when the symbol/envelope is available.",
         "shape_envelope": "rank-4 Q/K/V; positive window/block/tau; footprint <= 256 for fused path",
     },
     "msa_sparse_attention": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32", "fp16"),
         "notes": "MiniMax Sparse Attention on Apple GPU: index/select may run on "
-                 "host or GPU selector; main sparse attention uses native fused "
-                 "block-sparse MSL when D<=256, otherwise composed GPU bmm lane.",
+        "host or GPU selector; main sparse attention uses native fused "
+        "block-sparse MSL when D<=256, otherwise composed GPU bmm lane.",
         "shape_envelope": "rank-4 Q/K/V; S_k divisible by block_size; D<=256 native fast path",
     },
     "linear_attn_state": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Linear-attention recurrent state via quadratic-parallel "
-                 "Apple GPU batched matmul path with structured host masks.",
+        "Apple GPU batched matmul path with structured host masks.",
         "shape_envelope": "rank-4 Q/K/V [B,H,S,D], fp32 state [B,H,D,D]",
     },
     "memory_index_score": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "LSA memory-index scoring: Apple GPU batched matmul + sigmoid "
-                 "composition; host only supplies scale/shape metadata.",
+        "composition; host only supplies scale/shape metadata.",
         "shape_envelope": "indexer_keys/query rank-4 [B,H,nb|Sq,Dk]",
     },
     "msa_index_scores": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "MSA index-branch scoring: host block/head mean reductions plus "
-                 "Apple GPU batched matmul over grouped queries and block keys.",
+        "Apple GPU batched matmul over grouped queries and block keys.",
         "shape_envelope": "rank-4 Q/K; Hq divisible by Hkv; positive block_size",
     },
     "varlen_sdpa": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Packed-sequence SDPA decomposes to per-segment Apple GPU "
-                 "flash-attention calls with host cu_seqlens metadata.",
+        "flash-attention calls with host cu_seqlens metadata.",
         "shape_envelope": "rank-3 packed [H,total,Dh] Q/K/V and monotonic cu_seqlens",
     },
     "score_combine": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": "Diffusion score composition base + gamma*delta via Apple GPU "
-                 "binary elementwise multiply/add lanes.",
+        "notes": "Diffusion score composition base + gamma*delta via Apple GPU binary elementwise multiply/add lanes.",
         "shape_envelope": "base/delta identical shape, scalar gamma",
     },
     # Phase 2.1c + 3b (2026-06-01) — encode-session ops with full dtype
@@ -1036,10 +1151,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     "silu": {
         "status": _DEVICE_VERIFIED_ABI_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
-        "notes": (
-            "MPSGraph unary node op=4 (silu = x * sigmoid(x)). "
-            "Encode-session reachable in {f32, f16, bf16}."
-        ),
+        "notes": ("MPSGraph unary node op=4 (silu = x * sigmoid(x)). Encode-session reachable in {f32, f16, bf16}."),
         "runtime_symbol": "tessera_apple_gpu_unary_dev_f32_enc",
         "shape_envelope": "n elements, no limit (elementwise unary)",
     },
@@ -1083,10 +1195,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
     "kv_cache_read": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": _APPLE_GPU_FUSED,
-        "notes": (
-            "KVCacheHandle.read() dispatches to the Apple GPU MPS path "
-            "for fp32/fp16/bf16 cache pages"
-        ),
+        "notes": ("KVCacheHandle.read() dispatches to the Apple GPU MPS path for fp32/fp16/bf16 cache pages"),
     },
     "transpose": {
         "status": _FUSED_KERNEL_STATUS,
@@ -1153,10 +1262,7 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
         ),
         "runtime_symbol": "tessera_apple_gpu_moe_swiglu_f32",
         "benchmark_json": "benchmarks/apple_gpu/benchmark_megamoe_overlap.py",
-        "shape_envelope": (
-            "x (T,K) + Wg/Wu (E,K,H) + Wd (E,H,Kout) + group_sizes (E,); "
-            "fused kernel H,Kout<=256"
-        ),
+        "shape_envelope": ("x (T,K) + Wg/Wu (E,K,H) + Wd (E,H,Kout) + group_sizes (E,); fused kernel H,Kout<=256"),
     },
     # Frontier MoE model-class track (2026-06-13) — fused dequantize-into-GEMM.
     # The genuine fused kernel behind stdlib.quant.dequant_matmul(backend=
@@ -1185,16 +1291,13 @@ _APPLE_GPU_KERNELS: dict[str, dict[str, Any]] = {
             "and split-K variants through the quant_matmul runtime lane."
         ),
         "runtime_symbol": "tessera_apple_gpu_quantized_matmul_i4_f32",
-        "shape_envelope": (
-            "x (M,K), packed weights (N,ceil(K/2)), scales/biases "
-            "(N,ceil(K/group_size)); O (M,N) fp32"
-        ),
+        "shape_envelope": ("x (M,K), packed weights (N,ceil(K/2)), scales/biases (N,ceil(K/group_size)); O (M,N) fp32"),
     },
     "masked_categorical": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32", "int32"),
         "notes": "Masked categorical greedy/select path via Apple GPU MPSGraph "
-                 "select + argmax subgraph; stochastic-key path remains reference.",
+        "select + argmax subgraph; stochastic-key path remains reference.",
         "shape_envelope": "rank-2 logits/mask; keyless greedy path",
     },
 }
@@ -1332,8 +1435,7 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32",),
         "feature_flags": ("explicit_rng", "eggroll", "rank1"),
         "shape_envelope": (
-            "static x[P,...,in], member_ids[P], key[2], rank=1, fp32; "
-            "antithetic member pairs on exact gfx1151"
+            "static x[P,...,in], member_ids[P], key[2], rank=1, fp32; antithetic member pairs on exact gfx1151"
         ),
         "notes": (
             "Content-addressed Graph -> Schedule -> Tile -> ROCm rank-1 "
@@ -1349,90 +1451,90 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("int32",),
         "feature_flags": ("control_flow", "speculative_decode"),
         "notes": "Speculative-decoding accept mask kernel — compiler-generated "
-                 "ROCm control-flow lane (generate-rocm-spec-accept-kernel). "
-                 "Executes via runtime.launch() (rocm_spec_accept_compiled).",
+        "ROCm control-flow lane (generate-rocm-spec-accept-kernel). "
+        "Executes via runtime.launch() (rocm_spec_accept_compiled).",
     },
     "spec_accept_sample": {
         "dtypes": ("int32", "fp32"),
         "feature_flags": ("control_flow", "speculative_decode", "explicit_rng"),
         "notes": "Speculative-decoding accept+sample kernel — compares proposal "
-                 "and target probabilities, emits accept flags plus sampled "
-                 "fallback ids via the explicit RNG stream. Executes via "
-                 "runtime.launch() (rocm_spec_accept_sample_compiled).",
+        "and target probabilities, emits accept flags plus sampled "
+        "fallback ids via the explicit RNG stream. Executes via "
+        "runtime.launch() (rocm_spec_accept_sample_compiled).",
     },
     "spec_accept_tree_sample": {
         "dtypes": ("fp32",),
         "feature_flags": ("control_flow", "speculative_decode", "explicit_rng"),
         "notes": "Tree speculative-decoding sampler — compiler-generated ROCm "
-                 "lane for per-node probabilities and parent links. Executes via "
-                 "runtime.launch() (rocm_spec_accept_tree_sample_compiled).",
+        "lane for per-node probabilities and parent links. Executes via "
+        "runtime.launch() (rocm_spec_accept_tree_sample_compiled).",
     },
     "gqa_attention": {
         "dtypes": ("fp16", "bf16"),
         "notes": "GQA/MQA via the flash_attn WMMA kernel (gqa directive attr; "
-                 "fwd+bwd, grouped K/V; runtime detects from operand shapes). "
-                 "Executes on gfx1151 via runtime.launch() (rocm_flash_attn_"
-                 "device_verified_jit); no shipped C-ABI symbol.",
+        "fwd+bwd, grouped K/V; runtime detects from operand shapes). "
+        "Executes on gfx1151 via runtime.launch() (rocm_flash_attn_"
+        "device_verified_jit); no shipped C-ABI symbol.",
     },
     "mqa_attention": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Multi-query attention = the GQA flash_attn kernel at "
-                 "kv_ratio=H (one shared KV head). Executes via runtime.launch().",
+        "kv_ratio=H (one shared KV head). Executes via runtime.launch().",
     },
     "multi_head_attention": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Full multi-head = the flash_attn WMMA kernel itself. Executes "
-                 "via runtime.launch() (rocm_flash_attn_compiled).",
+        "via runtime.launch() (rocm_flash_attn_compiled).",
     },
     "attn_sliding_window": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Mistral sliding-window via the flash_attn WMMA kernel "
-                 "(sliding_window attr, causal band of width W; KV-tile skip). "
-                 "Executes via runtime.launch() (window kwarg).",
+        "(sliding_window attr, causal band of width W; KV-tile skip). "
+        "Executes via runtime.launch() (window kwarg).",
     },
     "linear_attn": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Quadratic-parallel linear attention O=(φ(Q)φ(K)ᵀ⊙causal)@V, no "
-                 "softmax (dedicated generate-wmma-linear-attn-kernel). φ ∈ "
-                 "{identity,relu,polynomial_2}. Executes via runtime.launch() "
-                 "(rocm_linear_attn_compiled).",
+        "softmax (dedicated generate-wmma-linear-attn-kernel). φ ∈ "
+        "{identity,relu,polynomial_2}. Executes via runtime.launch() "
+        "(rocm_linear_attn_compiled).",
     },
     "lightning_attention": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Decay-masked linear attention (φ=identity, A[i,j]*=λ^(i-j)) via "
-                 "the linear-attn kernel, dispatched by op name. Executes via "
-                 "runtime.launch(). (Degree-2 retention — φ=x² + decay — shares "
-                 "this kernel via op-name dispatch but has no separate rocm op "
-                 "row.)",
+        "the linear-attn kernel, dispatched by op name. Executes via "
+        "runtime.launch(). (Degree-2 retention — φ=x² + decay — shares "
+        "this kernel via op-name dispatch but has no separate rocm op "
+        "row.)",
     },
     "retention": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Degree-2 retention (φ=x² plus optional decay) via the "
-                 "linear-attn kernel, dispatched by op name. Executes via "
-                 "runtime.launch() (rocm_linear_attn_compiled).",
+        "linear-attn kernel, dispatched by op name. Executes via "
+        "runtime.launch() (rocm_linear_attn_compiled).",
     },
     "fused_epilogue": {
         "dtypes": ("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
         "notes": "Matmul + fused bias/relu/gelu/silu epilogue on the f32 "
-                 "accumulator (generate-wmma-gemm-kernel). Executes via "
-                 "runtime.launch() (rocm_compiled + activation kwarg); float-only.",
+        "accumulator (generate-wmma-gemm-kernel). Executes via "
+        "runtime.launch() (rocm_compiled + activation kwarg); float-only.",
     },
     "softmax": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Row-wise stable softmax over the last axis — the first "
-                 "non-matmul/non-WMMA compiled ROCm kernel "
-                 "(generate-rocm-softmax-kernel: one workgroup per row, LDS "
-                 "tree-reduce, f32 reduce). Executes via runtime.launch() "
-                 "(rocm_softmax_compiled).",
+        "non-matmul/non-WMMA compiled ROCm kernel "
+        "(generate-rocm-softmax-kernel: one workgroup per row, LDS "
+        "tree-reduce, f32 reduce). Executes via runtime.launch() "
+        "(rocm_softmax_compiled).",
     },
     "online_softmax": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Stateless online_softmax (== softmax over the last axis) rides "
-                 "the compiled softmax kernel (generate-rocm-softmax-kernel) via "
-                 "runtime.launch() (rocm_softmax_compiled); the streaming-state "
-                 "form is declined (Decision #21).",
+        "the compiled softmax kernel (generate-rocm-softmax-kernel) via "
+        "runtime.launch() (rocm_softmax_compiled); the streaming-state "
+        "form is declined (Decision #21).",
     },
     # KV-cache paged-movement core (§5.6). The append/read/prune tensor movement
     # over a resident cache buffer executes on gfx1151 by COMPOSING the existing
@@ -1440,253 +1542,308 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
     # host page-index math — no bespoke kernel. Mirrors KVCacheHandle.{append,
     # read,prune} on the non-quantized fp path; quantize_kv rides the intquant
     # lane. Executes via runtime.launch() (rocm_kv_cache_compiled). f32.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("kv_cache", "paged"),
-        "notes": f"KV-cache {op.split('_')[-1]} paged-movement core over a "
-                 "resident cache buffer (max_seq, H, D): append = row scatter-"
-                 "write at [start, start+n) (generate-rocm-scatter-kernel, set "
-                 "mode); read = row gather of [start, end); prune = trailing-"
-                 "window gather + zero-fill (generate-rocm-gather-kernel). Host "
-                 "owns the page-index math; quantize_kv rides the intquant lane. "
-                 "Executes via runtime.launch() (rocm_kv_cache_compiled). f32, "
-                 "matches the KVCacheHandle reference.",
-    } for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")},
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("reduction",),
-        "notes": f"Row {op} reduction over the last axis (generate-rocm-reduce-"
-                 "kernel: one workgroup per row, LDS tree-reduce, f32 reduce) — "
-                 "the ROCm analog of the x86 AVX-512 reduction lane. Executes "
-                 "via runtime.launch() (rocm_reduce_compiled).",
-    } for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("kv_cache", "paged"),
+            "notes": f"KV-cache {op.split('_')[-1]} paged-movement core over a "
+            "resident cache buffer (max_seq, H, D): append = row scatter-"
+            "write at [start, start+n) (generate-rocm-scatter-kernel, set "
+            "mode); read = row gather of [start, end); prune = trailing-"
+            "window gather + zero-fill (generate-rocm-gather-kernel). Host "
+            "owns the page-index math; quantize_kv rides the intquant lane. "
+            "Executes via runtime.launch() (rocm_kv_cache_compiled). f32, "
+            "matches the KVCacheHandle reference.",
+        }
+        for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")
+    },
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("reduction",),
+            "notes": f"Row {op} reduction over the last axis (generate-rocm-reduce-"
+            "kernel: one workgroup per row, LDS tree-reduce, f32 reduce) — "
+            "the ROCm analog of the x86 AVX-512 reduction lane. Executes "
+            "via runtime.launch() (rocm_reduce_compiled).",
+        }
+        for op in ("sum", "mean", "max", "min", "amax", "amin")
+    },
     # argmax/argmin — CUB ArgMax-style warp-shuffle arg-reduce (value+index pair),
     # i32 index output. Executes via runtime.launch() (rocm_argreduce_compiled).
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("reduction",),
-        "notes": f"Row {op} along one axis (generate-rocm-argreduce-kernel: "
-                 "warp-shuffle (value,index) reduce, first-occurrence tie-break, "
-                 "i32 output). Executes via runtime.launch() "
-                 "(rocm_argreduce_compiled).",
-    } for op in ("argmax", "argmin")},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("reduction",),
+            "notes": f"Row {op} along one axis (generate-rocm-argreduce-kernel: "
+            "warp-shuffle (value,index) reduce, first-occurrence tie-break, "
+            "i32 output). Executes via runtime.launch() "
+            "(rocm_argreduce_compiled).",
+        }
+        for op in ("argmax", "argmin")
+    },
     # cumsum/cumprod/cummax/cummin — CUB BlockScan (gpu.shuffle up Kogge-Stone +
     # cross-tile carry); inclusive prefix, same-shape output. Executes via
     # runtime.launch() (rocm_scan_compiled).
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("scan",),
-        "notes": f"Row inclusive scan {op} (generate-rocm-scan-kernel: block-scan "
-                 "via gpu.shuffle up + cross-tile carry, f32 scan). Executes via "
-                 "runtime.launch() (rocm_scan_compiled).",
-    } for op in ("cumsum", "cumprod", "cummax", "cummin")},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("scan",),
+            "notes": f"Row inclusive scan {op} (generate-rocm-scan-kernel: block-scan "
+            "via gpu.shuffle up + cross-tile carry, f32 scan). Executes via "
+            "runtime.launch() (rocm_scan_compiled).",
+        }
+        for op in ("cumsum", "cumprod", "cummax", "cummin")
+    },
     "rmsnorm": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Unary/affine row rmsnorm plus paired backward over the last "
-                 "axis (generate-rocm-norm-kernel). Forward and recompute-all "
-                 "backward execute through runtime.launch(); backward preserves "
-                 "storage dX and deterministically folds dGamma in f32 without "
-                 "global atomics.",
+        "axis (generate-rocm-norm-kernel). Forward and recompute-all "
+        "backward execute through runtime.launch(); backward preserves "
+        "storage dX and deterministically folds dGamma in f32 without "
+        "global atomics.",
     },
     "layer_norm": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Unary/affine stable two-pass layer_norm plus paired backward "
-                 "over the last axis (generate-rocm-norm-kernel). Backward "
-                 "preserves storage dX and deterministically folds dGamma/dBeta "
-                 "in f32 without global atomics.",
+        "over the last axis (generate-rocm-norm-kernel). Backward "
+        "preserves storage dX and deterministically folds dGamma/dBeta "
+        "in f32 without global atomics.",
     },
     "rmsnorm_safe": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Unweighted row rmsnorm_safe over the last axis (row-reduction "
-                 "kernel, generate-rocm-norm-kernel) with the safe default "
-                 "eps=1e-6. Executes via runtime.launch() (rocm_norm_compiled).",
+        "kernel, generate-rocm-norm-kernel) with the safe default "
+        "eps=1e-6. Executes via runtime.launch() (rocm_norm_compiled).",
     },
     # P5 — group/instance/weight norm composed on the gfx1151 layer_norm (row
     # mean/var) + reduce (sum-of-squares) lanes; host does the reshape / divide.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("normalization",),
-        "notes": f"Standalone {op} — composed on the gfx1151 layer_norm / reduce "
-                 "kernels (no new kernel; host reshape/affine). Executes via "
-                 "runtime.launch() (rocm_normcompose_compiled).",
-    } for op in ("group_norm", "instance_norm", "weight_norm")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("normalization",),
+            "notes": f"Standalone {op} — composed on the gfx1151 layer_norm / reduce "
+            "kernels (no new kernel; host reshape/affine). Executes via "
+            "runtime.launch() (rocm_normcompose_compiled).",
+        }
+        for op in ("group_norm", "instance_norm", "weight_norm")
+    },
     "grad_clip_norm": {
         "dtypes": ("fp32",),
         "feature_flags": ("reduction", "grad_transform"),
         "notes": "Global gradient-norm clipping g*min(1, max_norm/||g||) — the "
-                 "L2 norm's global sum-of-squares runs on the gfx1151 reduce "
-                 "kernel (FLOP-heavy O(n) part); host does sqrt + the clip "
-                 "scale; norm_type=inf uses max|g|. Executes via runtime.launch() "
-                 "(rocm_grad_clip_compiled).",
+        "L2 norm's global sum-of-squares runs on the gfx1151 reduce "
+        "kernel (FLOP-heavy O(n) part); host does sqrt + the clip "
+        "scale; norm_type=inf uses max|g|. Executes via runtime.launch() "
+        "(rocm_grad_clip_compiled).",
     },
     "gelu": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "Standalone elementwise gelu (tanh approximation) — flat "
-                 "per-element kernel (generate-rocm-activation-kernel). Executes "
-                 "via runtime.launch() (rocm_activation_compiled).",
+        "per-element kernel (generate-rocm-activation-kernel). Executes "
+        "via runtime.launch() (rocm_activation_compiled).",
     },
     "silu": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "Standalone elementwise silu (x·σ(x)) — flat per-element kernel "
-                 "(generate-rocm-activation-kernel). Executes via runtime.launch()"
-                 " (rocm_activation_compiled).",
+        "(generate-rocm-activation-kernel). Executes via runtime.launch()"
+        " (rocm_activation_compiled).",
     },
     "relu": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "Standalone elementwise relu (max(0,x)) — flat per-element kernel "
-                 "(generate-rocm-activation-kernel). Executes via runtime.launch() "
-                 "(rocm_activation_compiled). (Reconciliation close: was runtime-"
-                 "native but manifest-undeclared — manifest_runtime_reconciliation.)",
+        "(generate-rocm-activation-kernel). Executes via runtime.launch() "
+        "(rocm_activation_compiled). (Reconciliation close: was runtime-"
+        "native but manifest-undeclared — manifest_runtime_reconciliation.)",
     },
     "silu_mul": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "SwiGLU gate-multiply silu(a)·b — flat 2-operand elementwise "
-                 "kernel (generate-rocm-silu-mul-kernel). The standalone analog "
-                 "of the fused SwiGLU gate-multiply. Executes via "
-                 "runtime.launch() (rocm_silu_mul_compiled).",
+        "kernel (generate-rocm-silu-mul-kernel). The standalone analog "
+        "of the fused SwiGLU gate-multiply. Executes via "
+        "runtime.launch() (rocm_silu_mul_compiled).",
     },
     # S11 pointwise regression losses — per-element loss kernel plus a
     # device-resident generated reduction for scalar sum/mean. The intermediate
     # allocation is retained across both launches; `none` copies the tensor.
     # The ROCm mirror of the x86_loss lane. Executes via rocm_loss_compiled.
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("elementwise",),
-        "notes": f"Pointwise regression loss {op} — per-element kernel "
-                 "(generate-rocm-pointwise-loss-kernel; exp/log1p via "
-                 "math->rocdl) + reduction. Executes via runtime.launch() "
-                 "(rocm_loss_compiled).",
-    } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
-                 "log_cosh_loss")},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("elementwise",),
+            "notes": f"Pointwise regression loss {op} — per-element kernel "
+            "(generate-rocm-pointwise-loss-kernel; exp/log1p via "
+            "math->rocdl) + reduction. Executes via runtime.launch() "
+            "(rocm_loss_compiled).",
+        }
+        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss", "log_cosh_loss")
+    },
     "training.loss_sgd": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise", "training_fusion"),
         "notes": "Compiler-generated one-launch regression-loss VJP to SGD "
-                 "kernel; prediction gradient remains in-register and only "
-                 "updated parameters plus target gradients are written. "
-                 "Runtime N/lr/mean scale; shape-independent gfx1151 HSACO.",
+        "kernel; prediction gradient remains in-register and only "
+        "updated parameters plus target gradients are written. "
+        "Runtime N/lr/mean scale; shape-independent gfx1151 HSACO.",
     },
     "training.loss_adamw": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise", "training_fusion"),
         "notes": "Compiler-generated one-launch loss-VJP to AdamW kernel; "
-                 "parameter and both moment states update without a prediction "
-                 "gradient allocation. Runtime N/hyperparameters/mean scale; "
-                 "shape-independent gfx1151 HSACO.",
+        "parameter and both moment states update without a prediction "
+        "gradient allocation. Runtime N/hyperparameters/mean scale; "
+        "shape-independent gfx1151 HSACO.",
     },
     # S11 binary-cross-entropy losses (generate-rocm-binary-loss-kernel) — ROCm
     # mirror of x86_binary_loss. Executes via rocm_binary_loss_compiled.
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("elementwise",),
-        "notes": f"Binary-cross-entropy loss {op} — per-element kernel "
-                 "(generate-rocm-binary-loss-kernel, stable softplus) + "
-                 "reduction. Executes via runtime.launch() "
-                 "(rocm_binary_loss_compiled).",
-    } for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("elementwise",),
+            "notes": f"Binary-cross-entropy loss {op} — per-element kernel "
+            "(generate-rocm-binary-loss-kernel, stable softplus) + "
+            "reduction. Executes via runtime.launch() "
+            "(rocm_binary_loss_compiled).",
+        }
+        for op in ("binary_cross_entropy_loss", "asymmetric_bce")
+    },
     # S11 RL policy losses — ppo/cispo/grpo surrogate
     # (generate-rocm-policy-loss-kernel) + normalize_group_advantages on the norm
     # lane. ROCm mirror of x86_rl_loss. Executes via rocm_rl_loss_compiled.
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("elementwise",),
-        "notes": f"RL policy loss {op} — surrogate kernel "
-                 "(generate-rocm-policy-loss-kernel) / norm-lane normalize + "
-                 "reduction. Executes via runtime.launch() "
-                 "(rocm_rl_loss_compiled).",
-    } for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
-                 "normalize_group_advantages")},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("elementwise",),
+            "notes": f"RL policy loss {op} — surrogate kernel "
+            "(generate-rocm-policy-loss-kernel) / norm-lane normalize + "
+            "reduction. Executes via runtime.launch() "
+            "(rocm_rl_loss_compiled).",
+        }
+        for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss", "normalize_group_advantages")
+    },
     # S11 class-axis losses — exp/log on the rocm unary lane + host class-axis
     # structure. ROCm mirror of x86_class_loss. Executes via
     # rocm_class_loss_compiled.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("elementwise",),
-        "notes": f"Class-axis loss {op} — exp/log on the rocm unary lane + host "
-                 "class-axis max/sum/gather. Executes via runtime.launch() "
-                 "(rocm_class_loss_compiled).",
-    } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
-                 "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("elementwise", "reduction", "hip_runtime"),
-        "notes": f"Metric/contrastive loss {op} — generated ROCm reduce + "
-                 "exp/log kernels with host label/mask/sort/matrix structure. "
-                 "Executes via runtime.launch() (rocm_metric_loss_compiled).",
-    } for op in ("wasserstein_distance", "cosine_embedding_loss",
-                 "contrastive_loss", "triplet_loss", "nt_xent_loss",
-                 "info_nce_loss", "seq2seq_loss")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("elementwise",),
+            "notes": f"Class-axis loss {op} — exp/log on the rocm unary lane + host "
+            "class-axis max/sum/gather. Executes via runtime.launch() "
+            "(rocm_class_loss_compiled).",
+        }
+        for op in (
+            "cross_entropy_loss",
+            "kl_divergence",
+            "js_divergence",
+            "focal_loss",
+            "label_smoothed_cross_entropy",
+            "z_loss",
+        )
+    },
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("elementwise", "reduction", "hip_runtime"),
+            "notes": f"Metric/contrastive loss {op} — generated ROCm reduce + "
+            "exp/log kernels with host label/mask/sort/matrix structure. "
+            "Executes via runtime.launch() (rocm_metric_loss_compiled).",
+        }
+        for op in (
+            "wasserstein_distance",
+            "cosine_embedding_loss",
+            "contrastive_loss",
+            "triplet_loss",
+            "nt_xent_loss",
+            "info_nce_loss",
+            "seq2seq_loss",
+        )
+    },
     # P7 — EBM / diffusion losses composed on the gfx1151 binary + reduce kernels
     # (diff/square + reductions on device; host structure). Executes via
     # rocm_ebm_loss_compiled.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("elementwise",),
-        "notes": f"EBM/diffusion loss {op} — diff/square + reductions on the "
-                 "rocm binary + reduce kernels (host structure). Executes via "
-                 "runtime.launch() (rocm_ebm_loss_compiled).",
-    } for op in ("score_matching_loss", "denoising_score_matching_loss",
-                 "implicit_score_matching_loss", "contrastive_divergence_loss",
-                 "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
-                 "load_balance_loss")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("elementwise",),
+            "notes": f"EBM/diffusion loss {op} — diff/square + reductions on the "
+            "rocm binary + reduce kernels (host structure). Executes via "
+            "runtime.launch() (rocm_ebm_loss_compiled).",
+        }
+        for op in (
+            "score_matching_loss",
+            "denoising_score_matching_loss",
+            "implicit_score_matching_loss",
+            "contrastive_divergence_loss",
+            "persistent_cd_loss",
+            "ddpm_noise_pred_loss",
+            "vlb_loss",
+            "load_balance_loss",
+        )
+    },
     # (EBM energy/step-compute + Langevin ops route through ebm_manifest_for() —
     # their device_verified_jit ROCm status is emitted there, not in this generic table,
     # since manifest_for() returns via ebm_manifest_for for every ebm_* name.)
     # S9 low-precision float quantization (generate-rocm-fpquant-kernel) — ROCm
     # mirror of x86_fpquant. Executes via rocm_fpquant_compiled / rocm_nvfp4.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("elementwise",),
-        "notes": f"Low-precision float {op} — grid-snap kernel "
-                 "(generate-rocm-fpquant-kernel; log2/exp2/roundeven) + scale. "
-                 "Executes via runtime.launch() (rocm_fpquant_compiled).",
-    } for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
-                 "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("elementwise",),
+            "notes": f"Low-precision float {op} — grid-snap kernel "
+            "(generate-rocm-fpquant-kernel; log2/exp2/roundeven) + scale. "
+            "Executes via runtime.launch() (rocm_fpquant_compiled).",
+        }
+        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6", "dequantize_fp6", "quantize_fp4", "dequantize_fp4")
+    },
     # Integer quantization — scalar qparam selection + logical-value staging
     # around generated ROCm unary/binary kernels. The composite API stages
     # signed int4 in int8 arrays because NumPy has no int4 dtype; this is
     # distinct from the packed two-nibbles-per-byte gfx1151 WMMA memory ABI.
-    **{op: {
-        "dtypes": (
-            ("fp32", "int8") if "int8" in op
-            else ("fp32", "int4") if "int4" in op
-            else ("fp32",)
-        ),
-        "feature_flags": ("elementwise", "hip_runtime"),
-        "notes": f"Integer quantization {op} — round/max/min/mul on generated "
-                 "ROCm unary/binary kernels + host qparam structure. Executes "
-                 "via runtime.launch() (rocm_intquant_compiled).",
-    } for op in ("quantize_int8", "dequantize_int8", "quantize_int4",
-                 "dequantize_int4", "fake_quantize")},
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("reduction", "hip_runtime"),
-        "notes": f"Pooling {op} — host window matrix + generated ROCm reduce "
-                 "kernel max/min/mean. Executes via runtime.launch() "
-                 "(rocm_pooling_compiled).",
-    } for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool")},
+    **{
+        op: {
+            "dtypes": (("fp32", "int8") if "int8" in op else ("fp32", "int4") if "int4" in op else ("fp32",)),
+            "feature_flags": ("elementwise", "hip_runtime"),
+            "notes": f"Integer quantization {op} — round/max/min/mul on generated "
+            "ROCm unary/binary kernels + host qparam structure. Executes "
+            "via runtime.launch() (rocm_intquant_compiled).",
+        }
+        for op in ("quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4", "fake_quantize")
+    },
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("reduction", "hip_runtime"),
+            "notes": f"Pooling {op} — host window matrix + generated ROCm reduce "
+            "kernel max/min/mean. Executes via runtime.launch() "
+            "(rocm_pooling_compiled).",
+        }
+        for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool")
+    },
     "image_normalize": {
         "dtypes": ("fp32",),
         "feature_flags": ("elementwise", "hip_runtime"),
         "notes": "image_normalize ((x-mean)/std) composed on generated ROCm "
-                 "binary sub/div kernels with host layout and per-channel "
-                 "broadcast. Executes via runtime.launch() "
-                 "(rocm_image_affine_compiled).",
+        "binary sub/div kernels with host layout and per-channel "
+        "broadcast. Executes via runtime.launch() "
+        "(rocm_image_affine_compiled).",
     },
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("elementwise",),
-        "notes": f"NVFP4 block-scaled fp4 {op} — per-block fp8-E4M3 scale + E2M1 "
-                 "codes on the fpquant kernel + host block structure. Executes "
-                 "via runtime.launch() (rocm_nvfp4_compiled).",
-    } for op in ("quantize_nvfp4", "dequantize_nvfp4")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("elementwise",),
+            "notes": f"NVFP4 block-scaled fp4 {op} — per-block fp8-E4M3 scale + E2M1 "
+            "codes on the fpquant kernel + host block structure. Executes "
+            "via runtime.launch() (rocm_nvfp4_compiled).",
+        }
+        for op in ("quantize_nvfp4", "dequantize_nvfp4")
+    },
     # S2 reduction foundation — prod via the warp-shuffle reduce kernel (new
     # combine); var/std use centered parallel Welford; count_nonzero composes sum.
     # rocm_stat_reduce_compiled.
@@ -1694,107 +1851,126 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("reduction",),
         "notes": "Row reduction prod (Π_k X[m,k]) — warp-shuffle reduce kernel "
-                 "(generate-rocm-reduce-kernel, prod combine). Executes via "
-                 "runtime.launch() (rocm_reduce_compiled).",
+        "(generate-rocm-reduce-kernel, prod combine). Executes via "
+        "runtime.launch() (rocm_reduce_compiled).",
     },
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("reduction",),
-        "notes": f"Statistical reduction {op} — compiler-generated centered "
-                 "parallel Welford with reduced-precision storage and f32 "
-                 "accumulation. Executes via "
-                 "runtime.launch() (rocm_stat_reduce_compiled).",
-    } for op in ("var", "std")},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("reduction",),
+            "notes": f"Statistical reduction {op} — compiler-generated centered "
+            "parallel Welford with reduced-precision storage and f32 "
+            "accumulation. Executes via "
+            "runtime.launch() (rocm_stat_reduce_compiled).",
+        }
+        for op in ("var", "std")
+    },
     "count_nonzero": {
         "dtypes": ("fp32",),
         "feature_flags": ("reduction",),
         "notes": "Statistical reduction count_nonzero — sum composition. "
-                 "Executes via runtime.launch() (rocm_stat_reduce_compiled).",
+        "Executes via runtime.launch() (rocm_stat_reduce_compiled).",
     },
     # S2 stable-reduction foundation — logsumexp/log_softmax (max-shifted reduce
     # + exp/log lane), softmax_safe/sigmoid_safe (alias stable softmax/sigmoid).
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("reduction",),
-        "notes": f"Stable reduction {op} — max-shifted reduce (max/sum) + "
-                 "unary exp/log lane. Executes via runtime.launch() "
-                 "(rocm_stable_reduce_compiled).",
-    } for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("reduction",),
+            "notes": f"Stable reduction {op} — max-shifted reduce (max/sum) + "
+            "unary exp/log lane. Executes via runtime.launch() "
+            "(rocm_stable_reduce_compiled).",
+        }
+        for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")
+    },
     # Spectral FFT — fft/ifft/rfft/irfft on the shipping mixed-radix
     # Stockham/Bluestein target hook on gfx1151 (rocm_fft_compiled).
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("spectral",),
-        "notes": f"Spectral {op} — strict gfx1151 Stockham/Bluestein package "
-                 "with batched rows, r2c/c2r, and plan-owned scale. "
-                 "Executes via runtime.launch() (rocm_fft_compiled).",
-    } for op in ("fft", "ifft", "rfft", "irfft")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("spectral",),
+            "notes": f"Spectral {op} — strict gfx1151 Stockham/Bluestein package "
+            "with batched rows, r2c/c2r, and plan-owned scale. "
+            "Executes via runtime.launch() (rocm_fft_compiled).",
+        }
+        for op in ("fft", "ifft", "rfft", "irfft")
+    },
     # Content-addressed TSOL composites with device-resident helpers around
     # persistent digest-bound child FFT plans (rocm_spectral_compiled).
-    **{op: {
-        "dtypes": ("bf16", "fp16", "fp32"),
-        "feature_flags": ("spectral",),
-        "notes": f"Spectral {op} — content-addressed gfx1151 package with "
-                 "device framing/window/overlap-add/pointwise work around "
-                 "persistent digest-bound child FFT plans; reduced storage "
-                 "uses package-owned conversion into f32 accumulation and "
-                 "arbitrary axes use package-owned host packing. Executes via "
-                 "runtime.launch() (rocm_spectral_compiled).",
-    } for op in ("dct", "stft", "istft", "spectral_conv")},
+    **{
+        op: {
+            "dtypes": ("bf16", "fp16", "fp32"),
+            "feature_flags": ("spectral",),
+            "notes": f"Spectral {op} — content-addressed gfx1151 package with "
+            "device framing/window/overlap-add/pointwise work around "
+            "persistent digest-bound child FFT plans; reduced storage "
+            "uses package-owned conversion into f32 accumulation and "
+            "arbitrary axes use package-owned host packing. Executes via "
+            "runtime.launch() (rocm_spectral_compiled).",
+        }
+        for op in ("dct", "stft", "istft", "spectral_conv")
+    },
     "spectral_filter": {
         "dtypes": ("fp32",),
         "feature_flags": ("spectral",),
-        "notes": "Spectral filter — content-addressed gfx1151 interleaved-"
-                 "complex-f32 pointwise package.",
+        "notes": "Spectral filter — content-addressed gfx1151 interleaved-complex-f32 pointwise package.",
     },
     # Sparse (PR) — COMPILER-GENERATED gfx1151 sparse kernels (spmm CSR row-wise,
     # sddmm sampled dense-dense) + the WMMA matmul for bsmm (rocm_sparse_compiled).
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("sparse",),
-        "notes": f"Sparse {op} — direct sparse kernel (generate-rocm-spmm/sddmm-"
-                 "kernel, iterates the nonzero structure) on gfx1151; bsmm via the "
-                 "WMMA matmul (bf16). Executes via runtime.launch() "
-                 "(rocm_sparse_compiled).",
-    } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("composite_helper", "wmma"),
-        "notes": f"Composite helper {op} — Target IR keeps the helper "
-                 "compiler-visible while composing existing ROCm matmul/"
-                 "softmax/unary/binary kernels plus host metadata logic. "
-                 "Executes via runtime.launch() (rocm_composite_helper_compiled) "
-                 "without a numerical reference fallback.",
-    } for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
-                 "score_combine")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("sparse",),
+            "notes": f"Sparse {op} — direct sparse kernel (generate-rocm-spmm/sddmm-"
+            "kernel, iterates the nonzero structure) on gfx1151; bsmm via the "
+            "WMMA matmul (bf16). Executes via runtime.launch() "
+            "(rocm_sparse_compiled).",
+        }
+        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")
+    },
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("composite_helper", "wmma"),
+            "notes": f"Composite helper {op} — Target IR keeps the helper "
+            "compiler-visible while composing existing ROCm matmul/"
+            "softmax/unary/binary kernels plus host metadata logic. "
+            "Executes via runtime.launch() (rocm_composite_helper_compiled) "
+            "without a numerical reference fallback.",
+        }
+        for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa", "score_combine")
+    },
     # MoE compute (PR) — routed per-token expert GEMVs (top-1) on gfx1151
     # (rocm_moe_compiled). dispatch/combine = transport (mesh-gated), unchanged.
     "moe": {
         "dtypes": ("fp32",),
         "feature_flags": ("moe",),
         "notes": "MoE compute (moe) — direct routed per-token expert GEMV kernel "
-                 "(generate-rocm-moe-kernel, one thread per (token, out-col); "
-                 "routing resolved on host) on gfx1151. Executes via "
-                 "runtime.launch() (rocm_moe_compiled).",
+        "(generate-rocm-moe-kernel, one thread per (token, out-col); "
+        "routing resolved on host) on gfx1151. Executes via "
+        "runtime.launch() (rocm_moe_compiled).",
     },
     # Optimizer steps (P3) — fused per-parameter update on gfx1151
     # (rocm_optimizer_compiled).
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("optimizer",),
-        "notes": f"Optimizer {op} — direct fused per-parameter update kernel "
-                 "(generate-rocm-optimizer-kernel, kind StrAttr-selected, one "
-                 "thread per element; host computes the 1-β^t bias correction) on "
-                 "gfx1151. Executes via runtime.launch() (rocm_optimizer_compiled).",
-    } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("optimizer",),
+            "notes": f"Optimizer {op} — direct fused per-parameter update kernel "
+            "(generate-rocm-optimizer-kernel, kind StrAttr-selected, one "
+            "thread per element; host computes the 1-β^t bias correction) on "
+            "gfx1151. Executes via runtime.launch() (rocm_optimizer_compiled).",
+        }
+        for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")
+    },
     "adafactor": {
         "dtypes": ("fp32",),
         "feature_flags": ("optimizer", "factored_state"),
         "notes": "Optimizer adafactor — compiler-owned ten-entry gfx1151 "
-                 "HSACO updates explicit row/column or full moments and emits "
-                 "deterministic factored/full-moment VJPs. Executes via "
-                 "runtime.launch() (rocm_adafactor_compiled / "
-                 "rocm_adafactor_bwd_compiled).",
+        "HSACO updates explicit row/column or full moments and emits "
+        "deterministic factored/full-moment VJPs. Executes via "
+        "runtime.launch() (rocm_adafactor_compiled / "
+        "rocm_adafactor_bwd_compiled).",
     },
     # P3 tail — LAMB: device adam update + a per-tensor trust ratio ‖p‖/‖update‖
     # on host (the reduction the elementwise lane can't do).
@@ -1802,8 +1978,8 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32",),
         "feature_flags": ("optimizer",),
         "notes": "Optimizer lamb — gfx1151 adam kernel (lr=1/wd=0) + host "
-                 "layer-wise trust ratio ‖p‖/‖update‖. Executes via "
-                 "runtime.launch() (rocm_lamb_compiled).",
+        "layer-wise trust ratio ‖p‖/‖update‖. Executes via "
+        "runtime.launch() (rocm_lamb_compiled).",
     },
     # P3 tail — Muon: momentum + orthogonal polar factor U·Vh from a gfx1151
     # device SVD (host does the small U@Vh + momentum/sgd). <2-D normalizes.
@@ -1811,8 +1987,8 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32",),
         "feature_flags": ("optimizer",),
         "notes": "Optimizer muon — momentum then U·Vh orthogonalization via the "
-                 "gfx1151 SVD kernel (rocm_linalg svd); host U@Vh + sgd. Executes "
-                 "via runtime.launch() (rocm_muon_compiled).",
+        "gfx1151 SVD kernel (rocm_linalg svd); host U@Vh + sgd. Executes "
+        "via runtime.launch() (rocm_muon_compiled).",
     },
     # State-space (PR) — Mamba2 selective scan, one thread per (b,d) channel on
     # gfx1151 (rocm_selective_ssm_compiled).
@@ -1820,67 +1996,101 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("state_space",),
         "notes": "Mamba2 selective_ssm — direct selective-scan kernel "
-                 "(generate-rocm-selective-ssm-kernel, one thread per (b,d) "
-                 "channel, exp via math->rocdl) on gfx1151. Executes via "
-                 "runtime.launch() (rocm_selective_ssm_compiled). f16/bf16 "
-                 "storage (loads extf->f32, y truncf; state+exp+accumulate f32). "
-                 "Reverse-mode adjoint: generate-rocm-selective-ssm-bwd-kernel "
-                 "(reverse scan, atomic_rmw cross-channel reductions), matches "
-                 "the numpy VJP. (The chunked-parallel SSD form is x86-only: ROCm's "
-                 "WMMA bmm is f16/bf16, so f32/low-precision stay on this "
-                 "exact sequential scan rather than overflowing an f16 bmm.)",
+        "(generate-rocm-selective-ssm-kernel, one thread per (b,d) "
+        "channel, exp via math->rocdl) on gfx1151. Executes via "
+        "runtime.launch() (rocm_selective_ssm_compiled). f16/bf16 "
+        "storage (loads extf->f32, y truncf; state+exp+accumulate f32). "
+        "Reverse-mode adjoint: generate-rocm-selective-ssm-bwd-kernel "
+        "(reverse scan, atomic_rmw cross-channel reductions), matches "
+        "the numpy VJP. (The chunked-parallel SSD form is x86-only: ROCm's "
+        "WMMA bmm is f16/bf16, so f32/low-precision stay on this "
+        "exact sequential scan rather than overflowing an f16 bmm.)",
     },
     # Linalg PR-A — Cholesky + triangular solve on gfx1151 (one thread per matrix
     # / per matrix-RHS-column) (rocm_linalg_compiled).
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("linalg",),
-        "notes": f"Linalg {op} — direct factorization/solve kernel (generate-"
-                 "rocm-cholesky/tri-solve-kernel) on gfx1151; cholesky_solve = "
-                 "two triangular solves. Executes via runtime.launch() "
-                 "(rocm_linalg_compiled).",
-    } for op in ("cholesky", "tri_solve", "cholesky_solve")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("linalg",),
+            "notes": f"Linalg {op} — direct factorization/solve kernel (generate-"
+            "rocm-cholesky/tri-solve-kernel) on gfx1151; cholesky_solve = "
+            "two triangular solves. Executes via runtime.launch() "
+            "(rocm_linalg_compiled).",
+        }
+        for op in ("cholesky", "tri_solve", "cholesky_solve")
+    },
     # Linalg PR-B — LU (partial pivot) + Householder QR on gfx1151, one thread
     # per matrix (rocm_linalg_compiled).
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("linalg",),
-        "notes": f"Linalg {op} — direct factorization kernel (generate-rocm-{op}-"
-                 "kernel, one thread per matrix) on gfx1151. Executes via "
-                 "runtime.launch() (rocm_linalg_compiled).",
-    } for op in ("lu", "qr")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("linalg",),
+            "notes": f"Linalg {op} — direct factorization kernel (generate-rocm-{op}-"
+            "kernel, one thread per matrix) on gfx1151. Executes via "
+            "runtime.launch() (rocm_linalg_compiled).",
+        }
+        for op in ("lu", "qr")
+    },
     # Linalg PR-C — one-sided Jacobi SVD on gfx1151 (rocm_linalg_compiled).
     "svd": {
         "dtypes": ("fp32",),
         "feature_flags": ("linalg",),
         "notes": "Linalg svd — direct one-sided Jacobi SVD kernel (generate-rocm-"
-                 "svd-kernel, one thread per matrix, m>=n; wide case via "
-                 "transpose) on gfx1151. Executes via runtime.launch() "
-                 "(rocm_linalg_compiled).",
+        "svd-kernel, one thread per matrix, m>=n; wide case via "
+        "transpose) on gfx1151. Executes via runtime.launch() "
+        "(rocm_linalg_compiled).",
     },
     # S2 scalar-math / stability family — flat per-element unary math kernel
     # (generate-rocm-unary-kernel), the unary sibling of the activation lane.
     # Executes via runtime.launch() (rocm_unary_compiled). f32/f16/bf16, f32
     # compute. The transcendentals lower through the math → ROCDL path.
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("elementwise",),
-        "notes": f"Standalone elementwise {op} — flat per-element unary-math "
-                 "kernel (generate-rocm-unary-kernel). Executes via "
-                 "runtime.launch() (rocm_unary_compiled).",
-    } for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
-                 "abs", "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
-                 "softplus", "sin", "cos", "tan", "sinh", "cosh", "asin", "acos",
-                 "atan", "erfc", "floor", "ceil", "round", "trunc")},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("elementwise",),
+            "notes": f"Standalone elementwise {op} — flat per-element unary-math "
+            "kernel (generate-rocm-unary-kernel). Executes via "
+            "runtime.launch() (rocm_unary_compiled).",
+        }
+        for op in (
+            "exp",
+            "log",
+            "sqrt",
+            "rsqrt",
+            "reciprocal",
+            "absolute",
+            "abs",
+            "sign",
+            "erf",
+            "tanh",
+            "sigmoid",
+            "log1p",
+            "expm1",
+            "softplus",
+            "sin",
+            "cos",
+            "tan",
+            "sinh",
+            "cosh",
+            "asin",
+            "acos",
+            "atan",
+            "erfc",
+            "floor",
+            "ceil",
+            "round",
+            "trunc",
+        )
+    },
     # P2e — lgamma: ln Γ(x) via an MLIR-built Lanczos g=5 series + reflection
     # (no math.lgamma exists). Reduced storage converts to f32 compute.
     "lgamma": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "Standalone elementwise lgamma — MLIR-built Lanczos g=5 series "
-                 "(generate-rocm-unary-kernel; reflection via math.sin for "
-                 "x<0.5), with f32 compute for every storage dtype. Executes "
-                 "via runtime.launch() (rocm_unary_compiled).",
+        "(generate-rocm-unary-kernel; reflection via math.sin for "
+        "x<0.5), with f32 compute for every storage dtype. Executes "
+        "via runtime.launch() (rocm_unary_compiled).",
     },
     # P2e — digamma: ψ(x) via an MLIR-built recurrence + asymptotic series
     # (no math.digamma); reflection (math.tan) + pole->NaN for x<=0.
@@ -1888,52 +2098,63 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "Standalone elementwise digamma — MLIR-built recurrence + "
-                 "asymptotic series (generate-rocm-unary-kernel; reflection via "
-                 "math.tan, poles->NaN for x<=0), with f32 compute for every "
-                 "storage dtype. Executes via runtime.launch() "
-                 "(rocm_unary_compiled).",
+        "asymptotic series (generate-rocm-unary-kernel; reflection via "
+        "math.tan, poles->NaN for x<=0), with f32 compute for every "
+        "storage dtype. Executes via runtime.launch() "
+        "(rocm_unary_compiled).",
     },
     # S2 binary-arithmetic family — flat 2-operand per-element kernel
     # (generate-rocm-binary-kernel), the binary sibling of the unary-math lane.
     # Executes via runtime.launch() (rocm_binary_compiled). f32/f16/bf16, f32
     # compute. maximum/minimum are IEEE NaN-propagating; pow lowers via ROCDL.
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("elementwise",),
-        "notes": f"Standalone elementwise binary {op} — flat 2-operand "
-                 "per-element kernel (generate-rocm-binary-kernel). Executes via "
-                 "runtime.launch() (rocm_binary_compiled).",
-    } for op in ("sub", "div", "pow", "maximum", "minimum",
-                 "add", "mul", "mod", "floor_div")},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("elementwise",),
+            "notes": f"Standalone elementwise binary {op} — flat 2-operand "
+            "per-element kernel (generate-rocm-binary-kernel). Executes via "
+            "runtime.launch() (rocm_binary_compiled).",
+        }
+        for op in ("sub", "div", "pow", "maximum", "minimum", "add", "mul", "mod", "floor_div")
+    },
     # S2 comparison family — flat 2-operand per-element kernel
     # (generate-rocm-compare-kernel) with boolean (i8 0/1) output, NaN semantics
     # matching numpy. Executes via runtime.launch() (rocm_compare_compiled).
     # f32/f16/bf16 input storage, f32 compare, bool output.
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("elementwise",),
-        "notes": f"Standalone elementwise comparison {op} — flat 2-operand "
-                 "per-element kernel (generate-rocm-compare-kernel), bool output. "
-                 "Executes via runtime.launch() (rocm_compare_compiled).",
-    } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("elementwise",),
+            "notes": f"Standalone elementwise comparison {op} — flat 2-operand "
+            "per-element kernel (generate-rocm-compare-kernel), bool output. "
+            "Executes via runtime.launch() (rocm_compare_compiled).",
+        }
+        for op in ("eq", "ne", "lt", "le", "gt", "ge")
+    },
     # P2b — unary predicate family (isnan/isinf/isfinite), f32 in / i8 bool out
     # (generate-rocm-predicate-kernel). Executes via rocm_predicate_compiled.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("elementwise",),
-        "notes": f"Standalone unary predicate {op} — flat per-element kernel "
-                 "(generate-rocm-predicate-kernel), bool output. Executes via "
-                 "runtime.launch() (rocm_predicate_compiled).",
-    } for op in ("isnan", "isinf", "isfinite")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("elementwise",),
+            "notes": f"Standalone unary predicate {op} — flat per-element kernel "
+            "(generate-rocm-predicate-kernel), bool output. Executes via "
+            "runtime.launch() (rocm_predicate_compiled).",
+        }
+        for op in ("isnan", "isinf", "isfinite")
+    },
     # P2c — clamp/clip composed on the gfx1151 binary max/min lane (no new
     # kernel; scalar bounds broadcast on host). Executes via rocm_clamp_compiled.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("elementwise",),
-        "notes": f"Standalone {op} — min(max(x, lo), hi) composed on the "
-                 "rocm_binary_compiled max/min kernel (either bound optional). "
-                 "Executes via runtime.launch() (rocm_clamp_compiled).",
-    } for op in ("clamp", "clip")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("elementwise",),
+            "notes": f"Standalone {op} — min(max(x, lo), hi) composed on the "
+            "rocm_binary_compiled max/min kernel (either bound optional). "
+            "Executes via runtime.launch() (rocm_clamp_compiled).",
+        }
+        for op in ("clamp", "clip")
+    },
     # (complex_* ops route through complex_manifest_for() — their device_verified_jit
     # device-lane status is emitted there, not in this generic _ROCM table.)
     # P2e — softcap composed on the gfx1151 unary tanh lane (no new kernel;
@@ -1942,111 +2163,134 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32",),
         "feature_flags": ("elementwise",),
         "notes": "Standalone softcap — cap*tanh(x/cap) composed on the "
-                 "rocm_unary_compiled tanh kernel (scalar cap on host). "
-                 "Executes via runtime.launch() (rocm_softcap_compiled).",
+        "rocm_unary_compiled tanh kernel (scalar cap on host). "
+        "Executes via runtime.launch() (rocm_softcap_compiled).",
     },
     # P4 — 0-move / strided-copy lane: pad/cat/roll/flip/tile/repeat/stack via
     # the gfx1151 masked-gather kernel (host computes the index map; device moves
     # the f32 data). Executes via rocm_strided_compiled.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("layout_transform",),
-        "notes": f"Standalone {op} — 0-move op realized by the gfx1151 "
-                 "masked-gather kernel (generate-rocm-gather-kernel; host index "
-                 "map). Executes via runtime.launch() (rocm_strided_compiled).",
-    } for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("layout_transform",),
+            "notes": f"Standalone {op} — 0-move op realized by the gfx1151 "
+            "masked-gather kernel (generate-rocm-gather-kernel; host index "
+            "map). Executes via runtime.launch() (rocm_strided_compiled).",
+        }
+        for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")
+    },
     # P8 — scatter family (0-reduce indexed store) via the COMPILER-GENERATED
     # gfx1151 kernel (generate-rocm-scatter-kernel; one thread per element;
     # atomic_rmw for add/min/max). Executes via rocm_scatter_compiled.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("data_movement", "atomics"),
-        "notes": f"Standalone {op} — 0-reduce indexed store realized by the "
-                 "COMPILER-GENERATED gfx1151 kernel (generate-rocm-scatter-"
-                 "kernel; one thread per element; atomic_rmw add/min/max). "
-                 "Executes via runtime.launch() (rocm_scatter_compiled).",
-    } for op in ("scatter", "scatter_add", "scatter_reduce")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("data_movement", "atomics"),
+            "notes": f"Standalone {op} — 0-reduce indexed store realized by the "
+            "COMPILER-GENERATED gfx1151 kernel (generate-rocm-scatter-"
+            "kernel; one thread per element; atomic_rmw add/min/max). "
+            "Executes via runtime.launch() (rocm_scatter_compiled).",
+        }
+        for op in ("scatter", "scatter_add", "scatter_reduce")
+    },
     # P9 — sort / argsort / top_k via the COMPILER-GENERATED cooperative bitonic
     # kernel (generate-rocm-sort-kernel, one block per row; host pads/flips).
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("data_movement",),
-        "notes": f"Standalone {op} — data-independent bitonic sort network "
-                 "(generate-rocm-sort-kernel; one block per row; host pads to a "
-                 "power of two + flips for descending). Executes via "
-                 "runtime.launch() (rocm_sort_compiled).",
-    } for op in ("sort", "argsort", "top_k")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("data_movement",),
+            "notes": f"Standalone {op} — data-independent bitonic sort network "
+            "(generate-rocm-sort-kernel; one block per row; host pads to a "
+            "power of two + flips for descending). Executes via "
+            "runtime.launch() (rocm_sort_compiled).",
+        }
+        for op in ("sort", "argsort", "top_k")
+    },
     # P13 — conv2d / conv3d via im2col + the gfx1151 WMMA GEMM (host im2col,
     # device WMMA f16/bf16 with f32 accumulate). Executes via rocm_conv_compiled.
-    **{op: {
-        "dtypes": ("fp16", "bf16"),
-        "feature_flags": ("stencil", "wmma"),
-        "notes": f"Standalone {op} — im2col + the COMPILER-GENERATED gfx1151 "
-                 "WMMA GEMM (host lays out the patch matrix; f16/bf16 storage, "
-                 "f32 accumulate). Executes via runtime.launch() "
-                 "(rocm_conv_compiled).",
-    } for op in ("conv2d", "conv3d")},
+    **{
+        op: {
+            "dtypes": ("fp16", "bf16"),
+            "feature_flags": ("stencil", "wmma"),
+            "notes": f"Standalone {op} — im2col + the COMPILER-GENERATED gfx1151 "
+            "WMMA GEMM (host lays out the patch matrix; f16/bf16 storage, "
+            "f32 accumulate). Executes via runtime.launch() "
+            "(rocm_conv_compiled).",
+        }
+        for op in ("conv2d", "conv3d")
+    },
     # P5 — conformal geometry: mobius / stereographic composed on the gfx1151
     # complex (mul/div) + binary (div) lanes (no new kernel; host orchestration).
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("complex_namespace",),
-        "notes": f"Standalone {op} — composed on the gfx1151 complex / binary "
-                 "lanes (interleaved-f32; host orchestration). Executes via "
-                 "runtime.launch() (rocm_conformal_compiled).",
-    } for op in ("mobius", "stereographic")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("complex_namespace",),
+            "notes": f"Standalone {op} — composed on the gfx1151 complex / binary "
+            "lanes (interleaved-f32; host orchestration). Executes via "
+            "runtime.launch() (rocm_conformal_compiled).",
+        }
+        for op in ("mobius", "stereographic")
+    },
     # P6 — device RNG: counter-based Philox-4x32-10 (generate-rocm-philox-kernel)
     # and native distribution modes own uniform scaling, Box-Muller, and
     # dropout masking. A
     # SEPARATE deterministic stream from the host numpy-Generator path.
-    **{op: {
-        "dtypes": ("fp32",),
-        "feature_flags": ("random",),
-        "notes": f"Standalone {op} — native Philox-4x32-10 distribution kernel "
-                 "(generate-rocm-philox-kernel). Executes via "
-                 "runtime.launch() (rocm_rng_compiled).",
-    } for op in ("rng_uniform", "rng_normal", "rng_philox_uniform",
-                 "rng_philox_normal", "dropout")},
+    **{
+        op: {
+            "dtypes": ("fp32",),
+            "feature_flags": ("random",),
+            "notes": f"Standalone {op} — native Philox-4x32-10 distribution kernel "
+            "(generate-rocm-philox-kernel). Executes via "
+            "runtime.launch() (rocm_rng_compiled).",
+        }
+        for op in ("rng_uniform", "rng_normal", "rng_philox_uniform", "rng_philox_normal", "dropout")
+    },
     # P2e — atan2 composed on the gfx1151 unary atan lane (no new kernel;
     # quadrant/sign logic on host). Executes via rocm_atan2_compiled.
     "atan2": {
         "dtypes": ("fp32",),
         "feature_flags": ("elementwise",),
         "notes": "Standalone atan2 — quadrant-aware atan2(y, x) composed on the "
-                 "rocm_unary_compiled atan kernel (sign/quadrant on host). "
-                 "Executes via runtime.launch() (rocm_atan2_compiled).",
+        "rocm_unary_compiled atan kernel (sign/quadrant on host). "
+        "Executes via runtime.launch() (rocm_atan2_compiled).",
     },
     # S2 logical family — flat elementwise kernel over i8 booleans
     # (generate-rocm-logical-kernel). and/or/xor binary, not unary; inputs
     # normalized via != 0 (numpy semantics). Executes via runtime.launch()
     # (rocm_logical_compiled). bool in/out.
-    **{op: {
-        "dtypes": ("bool",),
-        "feature_flags": ("elementwise",),
-        "notes": f"Standalone elementwise {op} — flat per-element logical kernel "
-                 "(generate-rocm-logical-kernel) over i8 booleans. Executes via "
-                 "runtime.launch() (rocm_logical_compiled).",
-    } for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
+    **{
+        op: {
+            "dtypes": ("bool",),
+            "feature_flags": ("elementwise",),
+            "notes": f"Standalone elementwise {op} — flat per-element logical kernel "
+            "(generate-rocm-logical-kernel) over i8 booleans. Executes via "
+            "runtime.launch() (rocm_logical_compiled).",
+        }
+        for op in ("logical_and", "logical_or", "logical_xor", "logical_not")
+    },
     # S2 bitwise family — flat elementwise kernel over i32 integers
     # (generate-rocm-bitwise-kernel), acting on the full bit pattern (no
     # normalization). and/or/xor binary, not unary. Executes via
     # runtime.launch() (rocm_bitwise_compiled). i32 in/out.
-    **{op: {
-        "dtypes": ("int32",),
-        "feature_flags": ("elementwise",),
-        "notes": f"Standalone elementwise {op} — flat per-element bitwise kernel "
-                 "(generate-rocm-bitwise-kernel) over i32 integers. Executes via "
-                 "runtime.launch() (rocm_bitwise_compiled).",
-    } for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    **{
+        op: {
+            "dtypes": ("int32",),
+            "feature_flags": ("elementwise",),
+            "notes": f"Standalone elementwise {op} — flat per-element bitwise kernel "
+            "(generate-rocm-bitwise-kernel) over i32 integers. Executes via "
+            "runtime.launch() (rocm_bitwise_compiled).",
+        }
+        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")
+    },
     # P2e — popcount: set-bit count per i32 element, unary, on the bitwise lane
     # via math.ctpop (RDNA v_bcnt). Executes via runtime.launch().
     "popcount": {
         "dtypes": ("int32",),
         "feature_flags": ("elementwise",),
         "notes": "Standalone elementwise popcount — flat per-element set-bit "
-                 "count (generate-rocm-bitwise-kernel, math.ctpop / v_bcnt) over "
-                 "i32 integers. Executes via runtime.launch() "
-                 "(rocm_bitwise_compiled).",
+        "count (generate-rocm-bitwise-kernel, math.ctpop / v_bcnt) over "
+        "i32 integers. Executes via runtime.launch() "
+        "(rocm_bitwise_compiled).",
     },
     # Ternary select where(cond,a,b)=cond?a:b — flat 3-operand elementwise
     # kernel (generate-rocm-where-kernel). cond i8 normalized != 0, a/b/out
@@ -2055,141 +2299,141 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "Standalone ternary select where(cond,a,b)=cond?a:b — flat "
-                 "3-operand per-element kernel (generate-rocm-where-kernel); "
-                 "cond i8 normalized != 0, a/b/out float. Executes via "
-                 "runtime.launch() (rocm_where_compiled).",
+        "3-operand per-element kernel (generate-rocm-where-kernel); "
+        "cond i8 normalized != 0, a/b/out float. Executes via "
+        "runtime.launch() (rocm_where_compiled).",
     },
     "rope": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "Rotary position embedding (interleaved pairs) over [M, D] — "
-                 "elementwise-per-pair kernel (generate-rocm-rope-kernel: one "
-                 "workgroup per row, f32 cos/sin). Executes via runtime.launch() "
-                 "(rocm_rope_compiled).",
+        "elementwise-per-pair kernel (generate-rocm-rope-kernel: one "
+        "workgroup per row, f32 cos/sin). Executes via runtime.launch() "
+        "(rocm_rope_compiled).",
     },
     "alibi": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("elementwise",),
         "notes": "ALiBi positional-bias generator bias[h,i,j]=slope[h]·(j−i) over "
-                 "[H, S, S] — flat elementwise kernel (generate-rocm-alibi-"
-                 "kernel). Slopes default to the 2^(-8(k+1)/H) ramp. Executes via "
-                 "runtime.launch() (rocm_alibi_compiled).",
+        "[H, S, S] — flat elementwise kernel (generate-rocm-alibi-"
+        "kernel). Slopes default to the 2^(-8(k+1)/H) ramp. Executes via "
+        "runtime.launch() (rocm_alibi_compiled).",
     },
     "dequant_matmul": {
         "dtypes": ("fp32",),
         "feature_flags": ("quantization", "gemm"),
         "notes": "Packed dequantize-then-GEMM over int4/int8 grouped weights — "
-                 "compiler-generated ROCm dequant GEMM executor. Executes via "
-                 "runtime.launch() (rocm_dequant_gemm_compiled).",
+        "compiler-generated ROCm dequant GEMM executor. Executes via "
+        "runtime.launch() (rocm_dequant_gemm_compiled).",
     },
     "dequant_grouped_gemm": {
         "dtypes": ("fp32",),
         "feature_flags": ("quantization", "grouped_gemm"),
         "notes": "Grouped packed dequantize-then-GEMM, one expert slice per "
-                 "group size; reuses the ROCm dequant GEMM executor per expert. "
-                 "Executes via runtime.launch() (rocm_dequant_gemm_compiled).",
+        "group size; reuses the ROCm dequant GEMM executor per expert. "
+        "Executes via runtime.launch() (rocm_dequant_gemm_compiled).",
     },
     "batched_gemm": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Batched matmul A[...,M,K]@B[...,K,N] — the WMMA GEMM kernel "
-                 "looped over leading batch dims. Executes via runtime.launch() "
-                 "(rocm_matmul_family_compiled).",
+        "looped over leading batch dims. Executes via runtime.launch() "
+        "(rocm_matmul_family_compiled).",
     },
     "linear_general": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Axis-flexible linear projection x[...,K]@W[K,N] (+bias), "
-                 "axis=-1 — reshape + WMMA GEMM. Executes via runtime.launch() "
-                 "(rocm_matmul_family_compiled).",
+        "axis=-1 — reshape + WMMA GEMM. Executes via runtime.launch() "
+        "(rocm_matmul_family_compiled).",
     },
     "qkv_projection": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Fused QKV projection x[...,D]@W_qkv[D,3N] (the 3-way split is a "
-                 "trivial host view) — reshape + WMMA GEMM. Executes via "
-                 "runtime.launch() (rocm_matmul_family_compiled).",
+        "trivial host view) — reshape + WMMA GEMM. Executes via "
+        "runtime.launch() (rocm_matmul_family_compiled).",
     },
     "factorized_matmul": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Low-rank A@B with rank-r truncation — the WMMA GEMM on GPU + an "
-                 "exact host SVD-truncate epilogue. Executes via runtime.launch() "
-                 "(rocm_matmul_family_compiled).",
+        "exact host SVD-truncate epilogue. Executes via runtime.launch() "
+        "(rocm_matmul_family_compiled).",
     },
     "einsum": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Single-contraction two-operand einsum mapped to a (batched) "
-                 "WMMA GEMM (canonicalize + transpose); other specs emit a stable "
-                 "unsupported diagnostic. Executes via runtime.launch() "
-                 "(rocm_matmul_family_compiled).",
+        "WMMA GEMM (canonicalize + transpose); other specs emit a stable "
+        "unsupported diagnostic. Executes via runtime.launch() "
+        "(rocm_matmul_family_compiled).",
     },
     "gated_attention": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Softmax attention × a learned gate — the WMMA flash_attn kernel "
-                 "+ an elementwise sigmoid-gate multiply. Executes via "
-                 "runtime.launch() (rocm_exotic_attn_compiled).",
+        "+ an elementwise sigmoid-gate multiply. Executes via "
+        "runtime.launch() (rocm_exotic_attn_compiled).",
     },
     "mla_decode": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Multi-head latent attention decode — latent K/V projections "
-                 "(WMMA GEMM) + the WMMA flash_attn kernel. Executes via "
-                 "runtime.launch() (rocm_exotic_attn_compiled).",
+        "(WMMA GEMM) + the WMMA flash_attn kernel. Executes via "
+        "runtime.launch() (rocm_exotic_attn_compiled).",
     },
     "mla_decode_fused": {
         "dtypes": ("fp16", "bf16"),
         "notes": "Fused MLA decode — down/up latent projections (c=x@w_dkv; "
-                 "K=c@w_uk; V=c@w_uv on the WMMA GEMM) + the WMMA flash_attn "
-                 "kernel. Executes via runtime.launch() "
-                 "(rocm_exotic_attn_compiled).",
+        "K=c@w_uk; V=c@w_uv on the WMMA GEMM) + the WMMA flash_attn "
+        "kernel. Executes via runtime.launch() "
+        "(rocm_exotic_attn_compiled).",
     },
     "deepseek_sparse_attention": {
         "dtypes": ("fp32",),
         "feature_flags": ("sparse_attention",),
         "notes": "DeepSeek/NSA composition — sliding + compressed-block "
-                 "branches remain reference compositions while the top-k branch "
-                 "uses the GPU-resident top-k selector plus selected-block "
-                 "sparse-attention kernel when ROCm is available. Executes via "
-                 "runtime.launch() (rocm_sparse_attn_compiled), with exact "
-                 "reference fallback off hardware.",
+        "branches remain reference compositions while the top-k branch "
+        "uses the GPU-resident top-k selector plus selected-block "
+        "sparse-attention kernel when ROCm is available. Executes via "
+        "runtime.launch() (rocm_sparse_attn_compiled), with exact "
+        "reference fallback off hardware.",
     },
     "msa_sparse_attention": {
         "dtypes": ("fp32",),
         "feature_flags": ("sparse_attention",),
         "notes": "MiniMax Sparse Attention: block scores/select may use the ROCm "
-                 "GPU selector; selected-block attention uses the native sparse "
-                 "attention kernel when hardware is available. Executes via "
-                 "runtime.launch() (rocm_sparse_attn_compiled), with exact "
-                 "reference fallback off hardware.",
+        "GPU selector; selected-block attention uses the native sparse "
+        "attention kernel when hardware is available. Executes via "
+        "runtime.launch() (rocm_sparse_attn_compiled), with exact "
+        "reference fallback off hardware.",
     },
     "hybrid_attention": {
         "dtypes": ("fp16", "bf16", "fp32"),
         "feature_flags": ("attention_policy",),
         "notes": "Named Ling/Kimi hybrid attention policy wrapper — delegates "
-                 "Lightning slots to rocm_linear_attn_compiled and Delta/Kimi "
-                 "slots to rocm_deltanet_compiled when ROCm is available; MLA "
-                 "softmax/weight slots fall back to the public reference until "
-                 "the fused hybrid slot is promoted.",
+        "Lightning slots to rocm_linear_attn_compiled and Delta/Kimi "
+        "slots to rocm_deltanet_compiled when ROCm is available; MLA "
+        "softmax/weight slots fall back to the public reference until "
+        "the fused hybrid slot is promoted.",
     },
     "gated_deltanet": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("recurrent",),
         "notes": "Gated/delta linear-attention recurrence as a causal "
-                 "SEQUENTIAL-SCAN kernel (generate-rocm-deltanet-kernel: one "
-                 "workgroup per (b,h), one thread per value-column, LDS state) — "
-                 "the first recurrent compiled ROCm kernel. erase/gate/beta/decay "
-                 "flags. Executes via runtime.launch() (rocm_deltanet_compiled).",
+        "SEQUENTIAL-SCAN kernel (generate-rocm-deltanet-kernel: one "
+        "workgroup per (b,h), one thread per value-column, LDS state) — "
+        "the first recurrent compiled ROCm kernel. erase/gate/beta/decay "
+        "flags. Executes via runtime.launch() (rocm_deltanet_compiled).",
     },
     "kimi_delta_attention": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("recurrent",),
         "notes": "Kimi Delta Attention — the gated/delta scan kernel "
-                 "(generate-rocm-deltanet-kernel), same recurrence as "
-                 "gated_deltanet. Executes via runtime.launch() "
-                 "(rocm_deltanet_compiled).",
+        "(generate-rocm-deltanet-kernel), same recurrence as "
+        "gated_deltanet. Executes via runtime.launch() "
+        "(rocm_deltanet_compiled).",
     },
     "modified_delta_attention": {
         "dtypes": ("fp32", "fp16", "bf16"),
         "feature_flags": ("recurrent",),
         "notes": "Modified Delta Attention — the gated/delta scan kernel with a "
-                 "bounded delta update (delta / (1 + ‖k‖·‖target‖)). Executes via "
-                 "runtime.launch() (rocm_deltanet_compiled).",
+        "bounded delta update (delta / (1 + ‖k‖·‖target‖)). Executes via "
+        "runtime.launch() (rocm_deltanet_compiled).",
     },
 }
 
@@ -2283,23 +2527,38 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
         "notes": "ReLU is compiled into the canonical sm_120 mma.sync accumulator epilogue and executes without an intermediate global-memory tensor.",
     },
     "dsa_block_sparse_attention": {
-        "dtypes": ("fp32",), "feature_flags": ("sparse_attention", "cuda"),
+        "dtypes": ("fp32",),
+        "feature_flags": ("sparse_attention", "cuda"),
         "shape_envelope": "rank-4 Q/K/V; arbitrary KV length via masked block-tail padding",
         "notes": "Exact DSA selected-block contract: canonical block selection creates an additive selected-token mask, then the compiler-emitted CUDA Flash lane executes attention on sm_120.",
     },
     "mla_decode": {
-        "dtypes": ("fp32",), "feature_flags": ("mla", "flash_attention", "cuda"),
+        "dtypes": ("fp32",),
+        "feature_flags": ("mla", "flash_attention", "cuda"),
         "shape_envelope": "Q[B,Hq,Sq,D], latent K/V with optional last-dimension projection weights",
         "notes": "Composed MLA decode: f32 latent K/V projections followed by compiler-emitted CUDA Flash Attention on sm_120; fused MLA remains a separate follow-on lane.",
     },
     "mla_decode_fused": {
-        "dtypes": ("fp32",), "feature_flags": ("mla", "flash_attention", "fused_projection", "cuda"),
+        "dtypes": ("fp32",),
+        "feature_flags": ("mla", "flash_attention", "fused_projection", "cuda"),
         "shape_envelope": "x[B,Hkv,Sk,Dx], q[B,Hq,Sq,D], Hq % Hkv == 0; latent/output dims <= 256",
         "notes": "Dedicated fused MLA CUDA kernel on sm_120. The down-projection and K/V up-projections are evaluated inside the online-softmax key loop without materializing expanded K/V buffers.",
     },
     "flash_attn": {
         "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("flash_attention", "flash_attention_backward", "gqa", "mqa", "causal", "sliding_window", "attn_bias", "logit_softcap", "dropout", "compiler_owned_ptx", "cuda"),
+        "feature_flags": (
+            "flash_attention",
+            "flash_attention_backward",
+            "gqa",
+            "mqa",
+            "causal",
+            "sliding_window",
+            "attn_bias",
+            "logit_softcap",
+            "dropout",
+            "compiler_owned_ptx",
+            "cuda",
+        ),
         "shape_envelope": "Q[B,Hq,Sq,D], K[B,Hkv,Sk,D], V[B,Hkv,Sk,Dv]; Hq % Hkv == 0; Dv <= 256; optional dense [B,Hq,Sq,Sk] bias",
         "notes": "Compiler-owned SM120 PTX image/descriptor forward and deterministic VJP with f32/fp16/bf16 storage and f32 softmax/accumulation; explicit MHA/GQA/MQA mapping, causal/sliding-window masks, dense bias, logit soft-cap, and reproducible dropout replay. The P0 f32 saved-LSE pair is a distinct Q/K/V->O,row_lse and dO/Q/K/V,row_lse->dQ/dK/dV ABI; recompute remains the default pending broader SM120 evidence.",
     },
@@ -2312,54 +2571,81 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
             "image/descriptor seam with f32/f16/bf16 storage and f32 max/sum."
         ),
     },
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("reduction", "compiler_owned_ptx", "cuda"),
-        "shape_envelope": "rank >= 1, last axis > 0; flattened rows with any K",
-        "notes": (
-            "Compiler-owned SM120 PTX row-wise " + kind + " with "
-            "f32/f16/bf16 storage and f32 statistics/accumulation; LayerNorm "
-            "uses a stable two-pass variance. "
-            "Dynamic affine f32/f16/bf16 backward uses the compiler-owned PTX "
-            "descriptor seam with f32 accumulation."
-        ),
-    } for op, kind in (("rmsnorm", "RMSNorm"), ("rmsnorm_safe", "RMSNorm"),
-                       ("layer_norm", "LayerNorm"))},
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("backward", "cuda", "compiler_owned_ptx"),
-        "shape_envelope": "equal-shape non-empty prediction/target; dynamic "
-                          "extent; none/sum/mean cotangent contract",
-        "notes": "Compiler-owned SM120 CUDA/PTX paired backward emits both "
-                 "prediction and target gradients with f32 accumulation.",
-    } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
-                 "binary_cross_entropy_loss", "kl_divergence",
-                 "js_divergence")},
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("backward", "cuda", "compiler_owned_ptx"),
-        "shape_envelope": "rank-2 [rows,classes] logits and rank-1 i64 labels; "
-                          "none/sum/mean reduction; label smoothing",
-        "notes": "Stable max-subtracted compiler-owned SM120 CUDA/PTX logits "
-                 "gradient; integer labels are nondifferentiable.",
-    } for op in ("cross_entropy_loss", "label_smoothed_cross_entropy")},
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("training_fusion", "cuda", "compiler_owned_ptx"),
-        "shape_envelope": "equal-shape non-empty loss/parameter buffers with "
-                          "f32 optimizer state; none/sum/mean cotangent contract",
-        "notes": "Compiler-owned single SM120 PTX kernel fuses loss backward "
-                 "with the parameter/state update; selector remains unchanged.",
-    } for op in ("training.loss_sgd", "training.loss_adamw")},
-    **{op: {
-        "dtypes": ("fp32", "fp16", "bf16"),
-        "feature_flags": ("reduction", "compiler_owned_ptx", "cuda"),
-        "shape_envelope": "rank >= 1, non-empty reduced axis; arbitrary axis folded to rows",
-        "notes": "f32/f16/bf16-storage, f32-accumulating " + kind
-                 + " reduction emitted through compiler-owned SM120 PTX; serial "
-                 "and cooperative-128 schedules cover arbitrary axes/keepdims.",
-    } for op, kind in (("sum", "sum"), ("mean", "mean"), ("max", "max"),
-                       ("min", "min"), ("amax", "max"), ("amin", "min"))},
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("reduction", "compiler_owned_ptx", "cuda"),
+            "shape_envelope": "rank >= 1, last axis > 0; flattened rows with any K",
+            "notes": (
+                "Compiler-owned SM120 PTX row-wise " + kind + " with "
+                "f32/f16/bf16 storage and f32 statistics/accumulation; LayerNorm "
+                "uses a stable two-pass variance. "
+                "Dynamic affine f32/f16/bf16 backward uses the compiler-owned PTX "
+                "descriptor seam with f32 accumulation."
+            ),
+        }
+        for op, kind in (("rmsnorm", "RMSNorm"), ("rmsnorm_safe", "RMSNorm"), ("layer_norm", "LayerNorm"))
+    },
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("backward", "cuda", "compiler_owned_ptx"),
+            "shape_envelope": "equal-shape non-empty prediction/target; dynamic "
+            "extent; none/sum/mean cotangent contract",
+            "notes": "Compiler-owned SM120 CUDA/PTX paired backward emits both "
+            "prediction and target gradients with f32 accumulation.",
+        }
+        for op in (
+            "mse_loss",
+            "mae_loss",
+            "huber_loss",
+            "smooth_l1_loss",
+            "binary_cross_entropy_loss",
+            "kl_divergence",
+            "js_divergence",
+        )
+    },
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("backward", "cuda", "compiler_owned_ptx"),
+            "shape_envelope": "rank-2 [rows,classes] logits and rank-1 i64 labels; "
+            "none/sum/mean reduction; label smoothing",
+            "notes": "Stable max-subtracted compiler-owned SM120 CUDA/PTX logits "
+            "gradient; integer labels are nondifferentiable.",
+        }
+        for op in ("cross_entropy_loss", "label_smoothed_cross_entropy")
+    },
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("training_fusion", "cuda", "compiler_owned_ptx"),
+            "shape_envelope": "equal-shape non-empty loss/parameter buffers with "
+            "f32 optimizer state; none/sum/mean cotangent contract",
+            "notes": "Compiler-owned single SM120 PTX kernel fuses loss backward "
+            "with the parameter/state update; selector remains unchanged.",
+        }
+        for op in ("training.loss_sgd", "training.loss_adamw")
+    },
+    **{
+        op: {
+            "dtypes": ("fp32", "fp16", "bf16"),
+            "feature_flags": ("reduction", "compiler_owned_ptx", "cuda"),
+            "shape_envelope": "rank >= 1, non-empty reduced axis; arbitrary axis folded to rows",
+            "notes": "f32/f16/bf16-storage, f32-accumulating "
+            + kind
+            + " reduction emitted through compiler-owned SM120 PTX; serial "
+            "and cooperative-128 schedules cover arbitrary axes/keepdims.",
+        }
+        for op, kind in (
+            ("sum", "sum"),
+            ("mean", "mean"),
+            ("max", "max"),
+            ("min", "min"),
+            ("amax", "max"),
+            ("amin", "min"),
+        )
+    },
 }
 
 
@@ -2389,28 +2675,24 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("relu", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
     ("softmax", "cpu"): "tests/unit/test_end_to_end_matmul_cpu_path.py",
     ("flash_attn", "cpu"): "tests/unit/test_operator_registry_foundation.py",
-    ("matmul_relu", "cpu"):
-        "tests/unit/test_cpu_conformance_compositions.py",
-    ("matmul_softmax", "cpu"):
-        "tests/unit/test_cpu_conformance_compositions.py",
+    ("matmul_relu", "cpu"): "tests/unit/test_cpu_conformance_compositions.py",
+    ("matmul_softmax", "cpu"): "tests/unit/test_cpu_conformance_compositions.py",
     # Native x86 conformance proof: AVX-512 GEMM plus compiled AVX-512
     # maximum/softmax composition, each compared to the same-shape numpy oracle.
     ("matmul", "x86"): "tests/unit/test_x86_conformance_compositions.py",
     ("relu", "x86"): "tests/unit/test_x86_conformance_compositions.py",
-    ("matmul_relu", "x86"):
-        "tests/unit/test_x86_conformance_compositions.py",
-    ("matmul_softmax", "x86"):
-        "tests/unit/test_x86_conformance_compositions.py",
-    ("kv_cache_read", "x86"):
-        "tests/unit/test_x86_kv_cache_compiled.py",
-    ("matmul_relu", "rocm"):
-        "tests/unit/test_rocm_fused_epilogue_launch_execute.py",
-    ("matmul_softmax", "rocm"):
-        "tests/unit/test_rocm_conformance_compositions.py",
-    ("es_low_rank_correction", "rocm"):
-        "tests/unit/test_rocm_es_low_rank_exec.py",
-    ("es_low_rank_correction", "x86"):
-        "tests/unit/test_x86_es_low_rank_exec.py",
+    ("matmul_relu", "x86"): "tests/unit/test_x86_conformance_compositions.py",
+    ("matmul_softmax", "x86"): "tests/unit/test_x86_conformance_compositions.py",
+    ("kv_cache_read", "x86"): "tests/unit/test_x86_kv_cache_compiled.py",
+    ("matmul_relu", "rocm"): "tests/unit/test_rocm_fused_epilogue_launch_execute.py",
+    ("matmul_softmax", "rocm"): "tests/unit/test_rocm_conformance_compositions.py",
+    ("es_low_rank_correction", "rocm"): "tests/unit/test_rocm_es_low_rank_exec.py",
+    ("es_low_rank_correction", "x86"): "tests/unit/test_x86_es_low_rank_exec.py",
+    ("tridiagonal_solve", "x86"): "tests/unit/test_x86_reference_tier_compiled.py",
+    ("game_subset_zeta", "x86"): "tests/unit/test_x86_reference_tier_compiled.py",
+    ("game_subset_mobius", "x86"): "tests/unit/test_x86_reference_tier_compiled.py",
+    ("game_superset_zeta", "x86"): "tests/unit/test_x86_reference_tier_compiled.py",
+    ("game_superset_mobius", "x86"): "tests/unit/test_x86_reference_tier_compiled.py",
     # rocm — Strix Halo (gfx1151 / gfx1100 WSL) RDNA WMMA. The shipped
     # `tessera_rocm_wmma_gemm_f16` C-ABI symbol (libtessera_rocm_gemm.so) is
     # dlopened and its f32<-f16 16x16x16 WMMA GEMM compared to a numpy
@@ -2429,8 +2711,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("flash_attn", "rocm"): "tests/unit/test_rocm_flash_attn_runtime_symbol.py",
     ("spec_accept", "rocm"): "tests/unit/test_rocm_spec_accept_exec.py",
     ("spec_accept_sample", "rocm"): "tests/unit/test_rocm_spec_accept_sample_exec.py",
-    ("spec_accept_tree_sample", "rocm"):
-        "tests/unit/test_rocm_spec_accept_tree_sample_exec.py",
+    ("spec_accept_tree_sample", "rocm"): "tests/unit/test_rocm_spec_accept_tree_sample_exec.py",
     # P10 — x86 AVX-512 flash_attn partner (online-softmax FA forward), compared
     # to the dense attention reference on the AVX-512 box. Skip-clean w/o the .so.
     ("flash_attn", "x86"): "tests/unit/test_x86_flash_attn_compiled.py",
@@ -2443,97 +2724,112 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("conv3d", "rocm"): "tests/unit/test_rocm_conv_compiled.py",
     # P8 — scatter family (0-reduce indexed store) on x86 + ROCm, each compared
     # to the numpy scatter reference. Skip-clean w/o the .so / GPU.
-    **{(op, "x86"): "tests/unit/test_x86_scatter_compiled.py"
-       for op in ("scatter", "scatter_add", "scatter_reduce")},
-    **{(op, "rocm"): "tests/unit/test_rocm_scatter_compiled.py"
-       for op in ("scatter", "scatter_add", "scatter_reduce")},
+    **{(op, "x86"): "tests/unit/test_x86_scatter_compiled.py" for op in ("scatter", "scatter_add", "scatter_reduce")},
+    **{(op, "rocm"): "tests/unit/test_rocm_scatter_compiled.py" for op in ("scatter", "scatter_add", "scatter_reduce")},
     # §5.6 KV-cache paged-movement core — append/read/prune executed on the
     # gfx1151 scatter+gather kernels, compared to the KVCacheHandle reference.
-    **{(op, "rocm"): "tests/unit/test_rocm_kv_cache_compiled.py"
-       for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")},
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_kv_cache_compiled.py"
+        for op in ("kv_cache_append", "kv_cache_read", "kv_cache_prune")
+    },
     # P11 — x86 MLA latent-KV lane (compress/expand/decode composed on the GEMM +
     # flash_attn lanes), compared to the numpy MLA reference. Skip-clean w/o .so.
-    **{(op, "x86"): "tests/unit/test_x86_mla_compiled.py"
-       for op in ("latent_kv_compress", "latent_kv_expand_k",
-                  "latent_kv_expand_v", "mla_decode_fused")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_mla_compiled.py"
+        for op in ("latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v", "mla_decode_fused")
+    },
     # rocm compiled-lane family (2026-06-25) — compiler-generated hsaco executing
     # via runtime.launch(), each compared to a numpy reference on gfx1151. These
     # back the ``device_verified_jit`` status (no shipped C-ABI symbol). Skip-clean w/o GPU.
-    ("gqa_attention", "rocm"):
-        "tests/unit/test_rocm_flash_attn_launch_execute.py",
-    ("mqa_attention", "rocm"):
-        "tests/unit/test_rocm_flash_attn_launch_execute.py",
-    ("multi_head_attention", "rocm"):
-        "tests/unit/test_rocm_flash_attn_launch_execute.py",
-    ("attn_sliding_window", "rocm"):
-        "tests/unit/test_rocm_sliding_window_compiled.py",
+    ("gqa_attention", "rocm"): "tests/unit/test_rocm_flash_attn_launch_execute.py",
+    ("mqa_attention", "rocm"): "tests/unit/test_rocm_flash_attn_launch_execute.py",
+    ("multi_head_attention", "rocm"): "tests/unit/test_rocm_flash_attn_launch_execute.py",
+    ("attn_sliding_window", "rocm"): "tests/unit/test_rocm_sliding_window_compiled.py",
     ("linear_attn", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
-    ("lightning_attention", "rocm"):
-        "tests/unit/test_rocm_linear_attn_compiled.py",
+    ("lightning_attention", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
     ("retention", "rocm"): "tests/unit/test_rocm_linear_attn_compiled.py",
-    ("fused_epilogue", "rocm"):
-        "tests/unit/test_rocm_fused_epilogue_launch_execute.py",
+    ("fused_epilogue", "rocm"): "tests/unit/test_rocm_fused_epilogue_launch_execute.py",
     ("softmax", "rocm"): "tests/unit/test_rocm_softmax_compiled.py",
-    **{(op, "rocm"): "tests/unit/test_rocm_reduce_compiled.py"
-       for op in ("sum", "mean", "max", "min", "amax", "amin")},
-    **{(op, "rocm"): "tests/unit/test_rocm_argreduce_compiled.py"
-       for op in ("argmax", "argmin")},
-    **{(op, "rocm"): "tests/unit/test_rocm_scan_compiled.py"
-       for op in ("cumsum", "cumprod", "cummax", "cummin")},
-    **{(op, "x86"): "tests/unit/test_x86_scan_compiled.py"
-       for op in ("cumsum", "cumprod", "cummax", "cummin")},
-    **{(op, "x86"): "tests/unit/test_x86_argreduce_compiled.py"
-       for op in ("argmax", "argmin")},
-    **{(op, "x86"): "tests/unit/test_x86_reduce_compiled.py"
-       for op in ("sum", "mean", "max", "min", "amax", "amin")},
-    **{(op, "x86"): "tests/unit/test_x86_unary_compiled.py"
-       for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "sign",
-                  "floor", "ceil", "round", "trunc")},
-    **{(op, "x86"): "tests/unit/test_x86_binary_compiled.py"
-       for op in ("sub", "div", "maximum", "minimum")},
+    **{(op, "rocm"): "tests/unit/test_rocm_reduce_compiled.py" for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    **{(op, "rocm"): "tests/unit/test_rocm_argreduce_compiled.py" for op in ("argmax", "argmin")},
+    **{(op, "rocm"): "tests/unit/test_rocm_scan_compiled.py" for op in ("cumsum", "cumprod", "cummax", "cummin")},
+    **{(op, "x86"): "tests/unit/test_x86_scan_compiled.py" for op in ("cumsum", "cumprod", "cummax", "cummin")},
+    **{(op, "x86"): "tests/unit/test_x86_argreduce_compiled.py" for op in ("argmax", "argmin")},
+    **{(op, "x86"): "tests/unit/test_x86_reduce_compiled.py" for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_unary_compiled.py"
+        for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "sign", "floor", "ceil", "round", "trunc")
+    },
+    **{(op, "x86"): "tests/unit/test_x86_binary_compiled.py" for op in ("sub", "div", "maximum", "minimum")},
     # P2a — binary arithmetic completion (add/mul/mod/floor_div) + abs alias.
-    **{(op, "x86"): "tests/unit/test_x86_elementwise_p2_compiled.py"
-       for op in ("add", "mul", "mod", "floor_div", "abs")},
-    **{(op, "rocm"): "tests/unit/test_rocm_elementwise_p2_compiled.py"
-       for op in ("add", "mul", "mod", "floor_div", "abs")},
-    **{(op, "x86"): "tests/unit/test_x86_clamp_compiled.py"
-       for op in ("clamp", "clip")},
-    **{(op, "rocm"): "tests/unit/test_rocm_clamp_compiled.py"
-       for op in ("clamp", "clip")},
-    **{(op, "x86"): "tests/unit/test_x86_complex_compiled.py"
-       for op in ("complex_mul", "complex_div", "complex_conjugate",
-                  "complex_abs", "complex_arg", "complex_exp", "complex_log",
-                  "complex_sqrt", "complex_pow")},
-    **{(op, "rocm"): "tests/unit/test_rocm_complex_compiled.py"
-       for op in ("complex_mul", "complex_div", "complex_conjugate",
-                  "complex_abs", "complex_arg", "complex_exp", "complex_log",
-                  "complex_sqrt", "complex_pow")},
-    **{(op, "x86"): "tests/unit/test_x86_complex_compiled.py"
-       for op in ("check_cauchy_riemann", "conformal_jacobian", "dbar", "dz",
-                  "laplacian_2d")},
-    **{(op, "rocm"): "tests/unit/test_rocm_complex_compiled.py"
-       for op in ("check_cauchy_riemann", "conformal_jacobian", "dbar", "dz",
-                  "laplacian_2d")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_elementwise_p2_compiled.py"
+        for op in ("add", "mul", "mod", "floor_div", "abs")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_elementwise_p2_compiled.py"
+        for op in ("add", "mul", "mod", "floor_div", "abs")
+    },
+    **{(op, "x86"): "tests/unit/test_x86_clamp_compiled.py" for op in ("clamp", "clip")},
+    **{(op, "rocm"): "tests/unit/test_rocm_clamp_compiled.py" for op in ("clamp", "clip")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_complex_compiled.py"
+        for op in (
+            "complex_mul",
+            "complex_div",
+            "complex_conjugate",
+            "complex_abs",
+            "complex_arg",
+            "complex_exp",
+            "complex_log",
+            "complex_sqrt",
+            "complex_pow",
+        )
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_complex_compiled.py"
+        for op in (
+            "complex_mul",
+            "complex_div",
+            "complex_conjugate",
+            "complex_abs",
+            "complex_arg",
+            "complex_exp",
+            "complex_log",
+            "complex_sqrt",
+            "complex_pow",
+        )
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_complex_compiled.py"
+        for op in ("check_cauchy_riemann", "conformal_jacobian", "dbar", "dz", "laplacian_2d")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_complex_compiled.py"
+        for op in ("check_cauchy_riemann", "conformal_jacobian", "dbar", "dz", "laplacian_2d")
+    },
     ("softcap", "x86"): "tests/unit/test_x86_softcap_compiled.py",
     ("softcap", "rocm"): "tests/unit/test_rocm_softcap_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
-       for op in ("rng_uniform", "rng_normal", "rng_philox_uniform",
-                  "rng_philox_normal", "dropout")},
-    **{(op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
-       for op in ("rng_uniform", "rng_normal", "rng_philox_uniform",
-                  "rng_philox_normal", "dropout")},
-    **{(op, "x86"): "tests/unit/test_x86_strided_compiled.py"
-       for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
-    **{(op, "rocm"): "tests/unit/test_rocm_strided_compiled.py"
-       for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
-    **{(op, "x86"): "tests/unit/test_x86_conformal_compiled.py"
-       for op in ("mobius", "stereographic")},
-    **{(op, "rocm"): "tests/unit/test_rocm_conformal_compiled.py"
-       for op in ("mobius", "stereographic")},
-    **{(op, "x86"): "tests/unit/test_x86_sort_compiled.py"
-       for op in ("sort", "argsort", "top_k")},
-    **{(op, "rocm"): "tests/unit/test_rocm_sort_compiled.py"
-       for op in ("sort", "argsort", "top_k")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_rng_compiled.py"
+        for op in ("rng_uniform", "rng_normal", "rng_philox_uniform", "rng_philox_normal", "dropout")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
+        for op in ("rng_uniform", "rng_normal", "rng_philox_uniform", "rng_philox_normal", "dropout")
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_strided_compiled.py"
+        for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_strided_compiled.py"
+        for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")
+    },
+    **{(op, "x86"): "tests/unit/test_x86_conformal_compiled.py" for op in ("mobius", "stereographic")},
+    **{(op, "rocm"): "tests/unit/test_rocm_conformal_compiled.py" for op in ("mobius", "stereographic")},
+    **{(op, "x86"): "tests/unit/test_x86_sort_compiled.py" for op in ("sort", "argsort", "top_k")},
+    **{(op, "rocm"): "tests/unit/test_rocm_sort_compiled.py" for op in ("sort", "argsort", "top_k")},
     ("atan2", "x86"): "tests/unit/test_x86_atan2_compiled.py",
     ("atan2", "rocm"): "tests/unit/test_rocm_atan2_compiled.py",
     ("sin", "x86"): "tests/unit/test_x86_sin_compiled.py",
@@ -2542,265 +2838,423 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("lgamma", "rocm"): "tests/unit/test_rocm_lgamma_compiled.py",
     ("digamma", "x86"): "tests/unit/test_x86_digamma_compiled.py",
     ("digamma", "rocm"): "tests/unit/test_rocm_digamma_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_predicate_compiled.py"
-       for op in ("isnan", "isinf", "isfinite")},
-    **{(op, "rocm"): "tests/unit/test_rocm_predicate_compiled.py"
-       for op in ("isnan", "isinf", "isfinite")},
-    **{(op, "x86"): "tests/unit/test_x86_compare_compiled.py"
-       for op in ("eq", "ne", "lt", "le", "gt", "ge")},
-    **{(op, "x86"): "tests/unit/test_x86_logical_compiled.py"
-       for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
-    **{(op, "x86"): "tests/unit/test_x86_bitwise_compiled.py"
-       for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    **{(op, "x86"): "tests/unit/test_x86_predicate_compiled.py" for op in ("isnan", "isinf", "isfinite")},
+    **{(op, "rocm"): "tests/unit/test_rocm_predicate_compiled.py" for op in ("isnan", "isinf", "isfinite")},
+    **{(op, "x86"): "tests/unit/test_x86_compare_compiled.py" for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_logical_compiled.py"
+        for op in ("logical_and", "logical_or", "logical_xor", "logical_not")
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_bitwise_compiled.py"
+        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")
+    },
     ("popcount", "x86"): "tests/unit/test_x86_popcount_compiled.py",
     ("where", "x86"): "tests/unit/test_x86_where_compiled.py",
     ("where", "rocm"): "tests/unit/test_rocm_where_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_transcendental_compiled.py"
-       for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
-                  "softplus", "expm1", "log1p", "cos", "tan", "sinh", "cosh",
-                  "asin", "acos", "atan", "erfc")},
-    **{(op, "x86"): "tests/unit/test_x86_binary_math_compiled.py"
-       for op in ("pow", "silu_mul")},
-    **{(op, "x86"): "tests/unit/test_x86_norm_softmax_compiled.py"
-       for op in ("rmsnorm", "layer_norm", "softmax")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_transcendental_compiled.py"
+        for op in (
+            "exp",
+            "log",
+            "tanh",
+            "sigmoid",
+            "silu",
+            "gelu",
+            "erf",
+            "softplus",
+            "expm1",
+            "log1p",
+            "cos",
+            "tan",
+            "sinh",
+            "cosh",
+            "asin",
+            "acos",
+            "atan",
+            "erfc",
+        )
+    },
+    **{(op, "x86"): "tests/unit/test_x86_binary_math_compiled.py" for op in ("pow", "silu_mul")},
+    **{(op, "x86"): "tests/unit/test_x86_norm_softmax_compiled.py" for op in ("rmsnorm", "layer_norm", "softmax")},
     # Normalization tail closed on the existing kernels (dispatch only, no new
     # codegen): online_softmax(no-state) == softmax; rmsnorm_safe == rmsnorm.
-    ("online_softmax", "rocm"):
-        "tests/unit/test_online_softmax_rmsnorm_safe_compiled.py",
-    ("online_softmax", "x86"):
-        "tests/unit/test_online_softmax_rmsnorm_safe_compiled.py",
-    ("rmsnorm_safe", "x86"):
-        "tests/unit/test_online_softmax_rmsnorm_safe_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_matmul_family_compiled.py"
-       for op in ("batched_gemm", "linear_general", "qkv_projection",
-                  "factorized_matmul", "einsum")},
+    ("online_softmax", "rocm"): "tests/unit/test_online_softmax_rmsnorm_safe_compiled.py",
+    ("online_softmax", "x86"): "tests/unit/test_online_softmax_rmsnorm_safe_compiled.py",
+    ("rmsnorm_safe", "x86"): "tests/unit/test_online_softmax_rmsnorm_safe_compiled.py",
+    **{
+        (op, "x86"): "tests/unit/test_x86_matmul_family_compiled.py"
+        for op in ("batched_gemm", "linear_general", "qkv_projection", "factorized_matmul", "einsum")
+    },
     ("rope", "x86"): "tests/unit/test_x86_posenc_compiled.py",
     ("alibi", "x86"): "tests/unit/test_x86_posenc_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_attention_compiled.py"
-       for op in ("multi_head_attention", "gqa_attention", "mqa_attention",
-                  "mla_decode")},
-    ("attn_sliding_window", "x86"):
-        "tests/unit/test_x86_flash_attn_compiled.py",
-    ("deepseek_sparse_attention", "x86"):
-        "tests/unit/test_x86_nsa_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_linear_attn_compiled.py"
-       for op in ("linear_attn", "power_attn", "retention")},
-    **{(op, "x86"): "tests/unit/test_x86_deltanet_compiled.py"
-       for op in ("gated_deltanet", "kimi_delta_attention",
-                  "modified_delta_attention")},
-    **{(op, "x86"): "tests/unit/test_x86_rng_compiled.py"
-       for op in ("rng_uniform", "rng_normal", "rng_bernoulli", "rng_beta",
-                  "rng_categorical", "rng_dirichlet", "rng_gamma",
-                  "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
-                  "rng_mala_sample", "rng_multinomial", "rng_permutation",
-                  "rng_poisson", "rng_randint", "rng_truncated_normal",
-                  "rng_key", "rng_split", "rng_fold_in", "rng_clone")},
-    **{(op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
-       for op in ("rng_uniform", "rng_normal", "rng_bernoulli", "rng_beta",
-                  "rng_categorical", "rng_dirichlet", "rng_gamma",
-                  "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
-                  "rng_mala_sample", "rng_multinomial", "rng_permutation",
-                  "rng_poisson", "rng_randint", "rng_truncated_normal",
-                  "rng_key", "rng_split", "rng_fold_in", "rng_clone")},
-    **{(op, "x86"): "tests/unit/test_x86_structured_compute_compiled.py"
-       for op in ("attn_compressed_blocks", "attn_local_window_2d",
-                  "attn_top_k_blocks", "linear_attn_state",
-                  "lookahead_sparse_attention", "transpose")},
-    **{(op, "rocm"): "tests/unit/test_rocm_structured_compute_compiled.py"
-       for op in ("attn_compressed_blocks", "attn_local_window_2d",
-                  "attn_top_k_blocks", "linear_attn_state",
-                  "lookahead_sparse_attention", "power_attn", "transpose")},
-    **{(op, "x86"): "tests/unit/test_x86_loss_compiled.py"
-       for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
-                  "log_cosh_loss")},
-    ("training.loss_sgd", "x86"):
-        "tests/unit/test_training_loss_sgd_compiled.py",
-    ("training.loss_adamw", "x86"):
-        "tests/unit/test_training_loss_adamw_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_binary_loss_compiled.py"
-       for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
-    **{(op, "x86"): "tests/unit/test_x86_rl_loss_compiled.py"
-       for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
-                  "normalize_group_advantages")},
-    **{(op, "x86"): "tests/unit/test_x86_class_loss_compiled.py"
-       for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
-                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
-    **{(op, "x86"): "tests/unit/test_x86_metric_loss_compiled.py"
-       for op in ("wasserstein_distance", "cosine_embedding_loss",
-                  "contrastive_loss", "triplet_loss", "nt_xent_loss",
-                  "info_nce_loss", "seq2seq_loss")},
-    **{(op, "x86"): "tests/unit/test_x86_ebm_loss_compiled.py"
-       for op in ("score_matching_loss", "denoising_score_matching_loss",
-                  "implicit_score_matching_loss", "contrastive_divergence_loss",
-                  "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
-                  "load_balance_loss")},
-    **{(op, "x86"): "tests/unit/test_x86_ebm_compute_compiled.py"
-       for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement",
-                  "ebm_self_verify")},
-    ("ebm_langevin_step", "x86"):
-        "tests/unit/test_x86_ebm_langevin_compiled.py",
-    ("ebm_langevin_step", "rocm"):
-        "tests/unit/test_rocm_ebm_langevin_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_fpquant_compiled.py"
-       for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
-                  "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
-    **{(op, "x86"): "tests/unit/test_x86_intquant_compiled.py"
-       for op in ("quantize_int8", "dequantize_int8", "quantize_int4",
-                  "dequantize_int4", "fake_quantize")},
-    **{(op, "x86"): "tests/unit/test_x86_pooling_vision_compiled.py"
-       for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool",
-                  "image_normalize")},
-    **{(op, "x86"): "tests/unit/test_x86_nvfp4_compiled.py"
-       for op in ("quantize_nvfp4", "dequantize_nvfp4")},
-    **{(op, "x86"): "tests/unit/test_x86_reduce_foundation_compiled.py"
-       for op in ("prod", "var", "std", "count_nonzero", "logsumexp",
-                  "log_softmax", "softmax_safe", "sigmoid_safe")},
-    **{(op, "x86"): "tests/unit/test_x86_fft_compiled.py"
-       for op in ("fft", "ifft", "rfft", "irfft")},
-    **{(op, "rocm"): "tests/unit/test_rocm_fft_compiled.py"
-       for op in ("fft", "ifft", "rfft", "irfft")},
-    **{(op, "x86"): "tests/unit/test_x86_spectral_compiled.py"
-       for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
-    **{(op, "rocm"): "tests/unit/test_rocm_spectral_compiled.py"
-       for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")},
-    **{(op, "x86"): "tests/unit/test_x86_sparse_compiled.py"
-       for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
-    **{(op, "rocm"): "tests/unit/test_rocm_sparse_compiled.py"
-       for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
-    **{(op, "x86"): "tests/unit/test_composite_helper_backend_parity.py"
-       for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
-                  "score_combine")},
-    **{(op, "rocm"): "tests/unit/test_composite_helper_backend_parity.py"
-       for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
-                  "score_combine")},
-    **{(op, "apple_gpu"): "tests/unit/test_apple_gpu_composite_helpers.py"
-       for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
-                  "score_combine")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_attention_compiled.py"
+        for op in ("multi_head_attention", "gqa_attention", "mqa_attention", "mla_decode")
+    },
+    ("attn_sliding_window", "x86"): "tests/unit/test_x86_flash_attn_compiled.py",
+    ("deepseek_sparse_attention", "x86"): "tests/unit/test_x86_nsa_compiled.py",
+    **{(op, "x86"): "tests/unit/test_x86_linear_attn_compiled.py" for op in ("linear_attn", "power_attn", "retention")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_deltanet_compiled.py"
+        for op in ("gated_deltanet", "kimi_delta_attention", "modified_delta_attention")
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_rng_compiled.py"
+        for op in (
+            "rng_uniform",
+            "rng_normal",
+            "rng_bernoulli",
+            "rng_beta",
+            "rng_categorical",
+            "rng_dirichlet",
+            "rng_gamma",
+            "rng_gibbs_sample",
+            "rng_hmc_sample",
+            "rng_langevin_sample",
+            "rng_mala_sample",
+            "rng_multinomial",
+            "rng_permutation",
+            "rng_poisson",
+            "rng_randint",
+            "rng_truncated_normal",
+            "rng_key",
+            "rng_split",
+            "rng_fold_in",
+            "rng_clone",
+        )
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_rng_compiled.py"
+        for op in (
+            "rng_uniform",
+            "rng_normal",
+            "rng_bernoulli",
+            "rng_beta",
+            "rng_categorical",
+            "rng_dirichlet",
+            "rng_gamma",
+            "rng_gibbs_sample",
+            "rng_hmc_sample",
+            "rng_langevin_sample",
+            "rng_mala_sample",
+            "rng_multinomial",
+            "rng_permutation",
+            "rng_poisson",
+            "rng_randint",
+            "rng_truncated_normal",
+            "rng_key",
+            "rng_split",
+            "rng_fold_in",
+            "rng_clone",
+        )
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_structured_compute_compiled.py"
+        for op in (
+            "attn_compressed_blocks",
+            "attn_local_window_2d",
+            "attn_top_k_blocks",
+            "linear_attn_state",
+            "lookahead_sparse_attention",
+            "transpose",
+        )
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_structured_compute_compiled.py"
+        for op in (
+            "attn_compressed_blocks",
+            "attn_local_window_2d",
+            "attn_top_k_blocks",
+            "linear_attn_state",
+            "lookahead_sparse_attention",
+            "power_attn",
+            "transpose",
+        )
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_loss_compiled.py"
+        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss", "log_cosh_loss")
+    },
+    ("training.loss_sgd", "x86"): "tests/unit/test_training_loss_sgd_compiled.py",
+    ("training.loss_adamw", "x86"): "tests/unit/test_training_loss_adamw_compiled.py",
+    **{
+        (op, "x86"): "tests/unit/test_x86_binary_loss_compiled.py"
+        for op in ("binary_cross_entropy_loss", "asymmetric_bce")
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_rl_loss_compiled.py"
+        for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss", "normalize_group_advantages")
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_class_loss_compiled.py"
+        for op in (
+            "cross_entropy_loss",
+            "kl_divergence",
+            "js_divergence",
+            "focal_loss",
+            "label_smoothed_cross_entropy",
+            "z_loss",
+        )
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_metric_loss_compiled.py"
+        for op in (
+            "wasserstein_distance",
+            "cosine_embedding_loss",
+            "contrastive_loss",
+            "triplet_loss",
+            "nt_xent_loss",
+            "info_nce_loss",
+            "seq2seq_loss",
+        )
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_ebm_loss_compiled.py"
+        for op in (
+            "score_matching_loss",
+            "denoising_score_matching_loss",
+            "implicit_score_matching_loss",
+            "contrastive_divergence_loss",
+            "persistent_cd_loss",
+            "ddpm_noise_pred_loss",
+            "vlb_loss",
+            "load_balance_loss",
+        )
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_ebm_compute_compiled.py"
+        for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement", "ebm_self_verify")
+    },
+    ("ebm_langevin_step", "x86"): "tests/unit/test_x86_ebm_langevin_compiled.py",
+    ("ebm_langevin_step", "rocm"): "tests/unit/test_rocm_ebm_langevin_compiled.py",
+    **{
+        (op, "x86"): "tests/unit/test_x86_fpquant_compiled.py"
+        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6", "dequantize_fp6", "quantize_fp4", "dequantize_fp4")
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_intquant_compiled.py"
+        for op in ("quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4", "fake_quantize")
+    },
+    **{
+        (op, "x86"): "tests/unit/test_x86_pooling_vision_compiled.py"
+        for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool", "image_normalize")
+    },
+    **{(op, "x86"): "tests/unit/test_x86_nvfp4_compiled.py" for op in ("quantize_nvfp4", "dequantize_nvfp4")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_reduce_foundation_compiled.py"
+        for op in ("prod", "var", "std", "count_nonzero", "logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")
+    },
+    **{(op, "x86"): "tests/unit/test_x86_fft_compiled.py" for op in ("fft", "ifft", "rfft", "irfft")},
+    **{(op, "rocm"): "tests/unit/test_rocm_fft_compiled.py" for op in ("fft", "ifft", "rfft", "irfft")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_spectral_compiled.py"
+        for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_spectral_compiled.py"
+        for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")
+    },
+    **{(op, "x86"): "tests/unit/test_x86_sparse_compiled.py" for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    **{(op, "rocm"): "tests/unit/test_rocm_sparse_compiled.py" for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
+    **{
+        (op, "x86"): "tests/unit/test_composite_helper_backend_parity.py"
+        for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa", "score_combine")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_composite_helper_backend_parity.py"
+        for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa", "score_combine")
+    },
+    **{
+        (op, "apple_gpu"): "tests/unit/test_apple_gpu_composite_helpers.py"
+        for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa", "score_combine")
+    },
     ("selective_ssm", "x86"): "tests/unit/test_x86_state_space_compiled.py",
     ("selective_ssm", "rocm"): "tests/unit/test_rocm_state_space_compiled.py",
     ("moe", "x86"): "tests/unit/test_x86_moe_compiled.py",
     ("moe", "rocm"): "tests/unit/test_rocm_moe_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_optimizer_compiled.py"
-       for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
-    **{(op, "rocm"): "tests/unit/test_rocm_optimizer_compiled.py"
-       for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_optimizer_compiled.py"
+        for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_optimizer_compiled.py"
+        for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")
+    },
     ("adafactor", "x86"): "tests/unit/test_x86_optimizer_compiled.py",
     ("adafactor", "rocm"): "tests/unit/test_rocm_optimizer_compiled.py",
     ("lamb", "x86"): "tests/unit/test_x86_lamb_compiled.py",
     ("lamb", "rocm"): "tests/unit/test_rocm_lamb_compiled.py",
     ("muon", "x86"): "tests/unit/test_x86_muon_compiled.py",
     ("muon", "rocm"): "tests/unit/test_rocm_muon_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_linalg_compiled.py"
-       for op in ("cholesky", "tri_solve", "cholesky_solve")},
-    **{(op, "rocm"): "tests/unit/test_rocm_linalg_compiled.py"
-       for op in ("cholesky", "tri_solve", "cholesky_solve")},
+    **{(op, "x86"): "tests/unit/test_x86_linalg_compiled.py" for op in ("cholesky", "tri_solve", "cholesky_solve")},
+    **{(op, "rocm"): "tests/unit/test_rocm_linalg_compiled.py" for op in ("cholesky", "tri_solve", "cholesky_solve")},
     **{(op, "x86"): "tests/unit/test_x86_lu_qr_compiled.py" for op in ("lu", "qr")},
-    **{(op, "rocm"): "tests/unit/test_rocm_lu_qr_compiled.py"
-       for op in ("lu", "qr")},
+    **{(op, "rocm"): "tests/unit/test_rocm_lu_qr_compiled.py" for op in ("lu", "qr")},
     ("svd", "x86"): "tests/unit/test_x86_svd_compiled.py",
     ("svd", "rocm"): "tests/unit/test_rocm_svd_compiled.py",
     ("rmsnorm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("rmsnorm_safe", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
     ("layer_norm", "rocm"): "tests/unit/test_rocm_norm_compiled.py",
-    **{(op, "x86"): "tests/unit/test_x86_normcompose_compiled.py"
-       for op in ("group_norm", "instance_norm", "weight_norm")},
-    **{(op, "rocm"): "tests/unit/test_rocm_normcompose_compiled.py"
-       for op in ("group_norm", "instance_norm", "weight_norm")},
+    **{
+        (op, "x86"): "tests/unit/test_x86_normcompose_compiled.py"
+        for op in ("group_norm", "instance_norm", "weight_norm")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_normcompose_compiled.py"
+        for op in ("group_norm", "instance_norm", "weight_norm")
+    },
     ("grad_clip_norm", "x86"): "tests/unit/test_x86_grad_clip_compiled.py",
     ("grad_clip_norm", "rocm"): "tests/unit/test_rocm_grad_clip_compiled.py",
     ("gelu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("relu", "rocm"): "tests/unit/test_rocm_activation_compiled.py",
     ("silu_mul", "rocm"): "tests/unit/test_rocm_silu_mul_compiled.py",
-    **{(op, "rocm"): "tests/unit/test_rocm_loss_compiled.py"
-       for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
-                  "log_cosh_loss")},
-    ("training.loss_sgd", "rocm"):
-        "tests/unit/test_training_loss_sgd_compiled.py",
-    ("training.loss_adamw", "rocm"):
-        "tests/unit/test_training_loss_adamw_compiled.py",
-    **{(op, "rocm"): "tests/unit/test_rocm_binary_loss_compiled.py"
-       for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
-    **{(op, "rocm"): "tests/unit/test_rocm_rl_loss_compiled.py"
-       for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
-                  "normalize_group_advantages")},
-    **{(op, "rocm"): "tests/unit/test_rocm_class_loss_compiled.py"
-       for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
-                  "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
-    **{(op, "rocm"): "tests/unit/test_rocm_metric_loss_compiled.py"
-       for op in ("wasserstein_distance", "cosine_embedding_loss",
-                  "contrastive_loss", "triplet_loss", "nt_xent_loss",
-                  "info_nce_loss", "seq2seq_loss")},
-    **{(op, "rocm"): "tests/unit/test_rocm_ebm_loss_compiled.py"
-       for op in ("score_matching_loss", "denoising_score_matching_loss",
-                  "implicit_score_matching_loss", "contrastive_divergence_loss",
-                  "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
-                  "load_balance_loss")},
-    **{(op, "rocm"): "tests/unit/test_rocm_ebm_compute_compiled.py"
-       for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement",
-                  "ebm_self_verify")},
-    **{(op, "rocm"): "tests/unit/test_rocm_fpquant_compiled.py"
-       for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
-                  "dequantize_fp6", "quantize_fp4", "dequantize_fp4",
-                  "quantize_nvfp4", "dequantize_nvfp4")},
-    **{(op, "rocm"): "tests/unit/test_rocm_intquant_compiled.py"
-       for op in ("quantize_int8", "dequantize_int8", "quantize_int4",
-                  "dequantize_int4", "fake_quantize")},
-    **{(op, "rocm"): "tests/unit/test_rocm_pooling_vision_compiled.py"
-       for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool",
-                  "image_normalize")},
-    **{(op, "rocm"): "tests/unit/test_rocm_reduce_foundation_compiled.py"
-       for op in ("prod", "var", "std", "count_nonzero", "logsumexp",
-                  "log_softmax", "softmax_safe", "sigmoid_safe")},
-    **{(op, "rocm"): "tests/unit/test_rocm_unary_compiled.py"
-       for op in ("exp", "log", "sqrt", "rsqrt", "reciprocal", "absolute",
-                  "sign", "erf", "tanh", "sigmoid", "log1p", "expm1",
-                  "softplus", "cos", "tan", "sinh", "cosh", "asin", "acos",
-                  "atan", "erfc", "floor", "ceil", "round", "trunc")},
-    **{(op, "rocm"): "tests/unit/test_rocm_binary_compiled.py"
-       for op in ("sub", "div", "pow", "maximum", "minimum")},
-    **{(op, "rocm"): "tests/unit/test_rocm_compare_compiled.py"
-       for op in ("eq", "ne", "lt", "le", "gt", "ge")},
-    **{(op, "rocm"): "tests/unit/test_rocm_logical_compiled.py"
-       for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
-    **{(op, "rocm"): "tests/unit/test_rocm_bitwise_compiled.py"
-       for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_loss_compiled.py"
+        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss", "log_cosh_loss")
+    },
+    ("training.loss_sgd", "rocm"): "tests/unit/test_training_loss_sgd_compiled.py",
+    ("training.loss_adamw", "rocm"): "tests/unit/test_training_loss_adamw_compiled.py",
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_binary_loss_compiled.py"
+        for op in ("binary_cross_entropy_loss", "asymmetric_bce")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_rl_loss_compiled.py"
+        for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss", "normalize_group_advantages")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_class_loss_compiled.py"
+        for op in (
+            "cross_entropy_loss",
+            "kl_divergence",
+            "js_divergence",
+            "focal_loss",
+            "label_smoothed_cross_entropy",
+            "z_loss",
+        )
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_metric_loss_compiled.py"
+        for op in (
+            "wasserstein_distance",
+            "cosine_embedding_loss",
+            "contrastive_loss",
+            "triplet_loss",
+            "nt_xent_loss",
+            "info_nce_loss",
+            "seq2seq_loss",
+        )
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_ebm_loss_compiled.py"
+        for op in (
+            "score_matching_loss",
+            "denoising_score_matching_loss",
+            "implicit_score_matching_loss",
+            "contrastive_divergence_loss",
+            "persistent_cd_loss",
+            "ddpm_noise_pred_loss",
+            "vlb_loss",
+            "load_balance_loss",
+        )
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_ebm_compute_compiled.py"
+        for op in ("ebm_energy_quadratic", "ebm_inner_step", "ebm_refinement", "ebm_self_verify")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_fpquant_compiled.py"
+        for op in (
+            "quantize_fp8",
+            "dequantize_fp8",
+            "quantize_fp6",
+            "dequantize_fp6",
+            "quantize_fp4",
+            "dequantize_fp4",
+            "quantize_nvfp4",
+            "dequantize_nvfp4",
+        )
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_intquant_compiled.py"
+        for op in ("quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4", "fake_quantize")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_pooling_vision_compiled.py"
+        for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool", "image_normalize")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_reduce_foundation_compiled.py"
+        for op in ("prod", "var", "std", "count_nonzero", "logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_unary_compiled.py"
+        for op in (
+            "exp",
+            "log",
+            "sqrt",
+            "rsqrt",
+            "reciprocal",
+            "absolute",
+            "sign",
+            "erf",
+            "tanh",
+            "sigmoid",
+            "log1p",
+            "expm1",
+            "softplus",
+            "cos",
+            "tan",
+            "sinh",
+            "cosh",
+            "asin",
+            "acos",
+            "atan",
+            "erfc",
+            "floor",
+            "ceil",
+            "round",
+            "trunc",
+        )
+    },
+    **{(op, "rocm"): "tests/unit/test_rocm_binary_compiled.py" for op in ("sub", "div", "pow", "maximum", "minimum")},
+    **{(op, "rocm"): "tests/unit/test_rocm_compare_compiled.py" for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_logical_compiled.py"
+        for op in ("logical_and", "logical_or", "logical_xor", "logical_not")
+    },
+    **{
+        (op, "rocm"): "tests/unit/test_rocm_bitwise_compiled.py"
+        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")
+    },
     ("popcount", "rocm"): "tests/unit/test_rocm_popcount_compiled.py",
     ("rope", "rocm"): "tests/unit/test_rocm_rope_compiled.py",
     ("alibi", "rocm"): "tests/unit/test_rocm_alibi_compiled.py",
     ("dequant_matmul", "rocm"): "tests/unit/test_rocm_dequant_gemm_compiled.py",
-    ("dequant_grouped_gemm", "rocm"):
-        "tests/unit/test_rocm_dequant_gemm_compiled.py",
+    ("dequant_grouped_gemm", "rocm"): "tests/unit/test_rocm_dequant_gemm_compiled.py",
     ("batched_gemm", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
     ("linear_general", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
     ("qkv_projection", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
-    ("factorized_matmul", "rocm"):
-        "tests/unit/test_rocm_matmul_family_compiled.py",
+    ("factorized_matmul", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
     ("einsum", "rocm"): "tests/unit/test_rocm_matmul_family_compiled.py",
-    ("gated_attention", "rocm"):
-        "tests/unit/test_rocm_exotic_attn_compiled.py",
+    ("gated_attention", "rocm"): "tests/unit/test_rocm_exotic_attn_compiled.py",
     ("mla_decode", "rocm"): "tests/unit/test_rocm_exotic_attn_compiled.py",
-    ("mla_decode_fused", "rocm"):
-        "tests/unit/test_rocm_exotic_attn_compiled.py",
-    ("deepseek_sparse_attention", "rocm"):
-        "tests/unit/test_rocm_sparse_attn_compiled.py",
-    ("msa_sparse_attention", "rocm"):
-        "tests/unit/test_rocm_sparse_attn_compiled.py",
-    ("hybrid_attention", "rocm"):
-        "tests/unit/test_rocm_exotic_attn_compiled.py",
+    ("mla_decode_fused", "rocm"): "tests/unit/test_rocm_exotic_attn_compiled.py",
+    ("deepseek_sparse_attention", "rocm"): "tests/unit/test_rocm_sparse_attn_compiled.py",
+    ("msa_sparse_attention", "rocm"): "tests/unit/test_rocm_sparse_attn_compiled.py",
+    ("hybrid_attention", "rocm"): "tests/unit/test_rocm_exotic_attn_compiled.py",
     ("gated_deltanet", "rocm"): "tests/unit/test_rocm_deltanet_compiled.py",
-    ("kimi_delta_attention", "rocm"):
-        "tests/unit/test_rocm_deltanet_compiled.py",
-    ("modified_delta_attention", "rocm"):
-        "tests/unit/test_rocm_deltanet_compiled.py",
+    ("kimi_delta_attention", "rocm"): "tests/unit/test_rocm_deltanet_compiled.py",
+    ("modified_delta_attention", "rocm"): "tests/unit/test_rocm_deltanet_compiled.py",
     # nvidia_sm120 — consumer Blackwell (RTX 5070 Ti) warp-level mma.sync. The
     # shipped `tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}` C-ABI symbols
     # (libtessera_nvidia_gemm.so) are dlopened and each dtype's GEMM compared to a
     # numpy/ml_dtypes reference. Skip-clean when no NVIDIA GPU / NVRTC. The
     # numerical-proof half of the nvidia_sm120 matmul `device_verified_abi` row.
     ("matmul", "nvidia_sm120"): "tests/device/nvidia/test_mma_runtime_symbol.py",
-    ("gated_deltanet", "nvidia_sm120"):
-        "tests/device/nvidia/test_training_autodiff_native.py",
+    ("gated_deltanet", "nvidia_sm120"): "tests/device/nvidia/test_training_autodiff_native.py",
     ("fused_epilogue", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
     ("relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
     ("matmul_relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
@@ -2812,17 +3266,28 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("mla_decode", "nvidia_sm120"): "tests/device/nvidia/test_mla_decode.py",
     ("mla_decode_fused", "nvidia_sm120"): "tests/device/nvidia/test_mla_decode.py",
     ("softmax", "nvidia_sm120"): "tests/device/nvidia/test_softmax.py",
-    **{(op, "nvidia_sm120"): "tests/device/nvidia/test_norm.py"
-       for op in ("rmsnorm", "rmsnorm_safe", "layer_norm")},
-    **{(op, "nvidia_sm120"):
-       "tests/device/nvidia/test_training_autodiff_native.py"
-       for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
-                  "binary_cross_entropy_loss", "kl_divergence",
-                  "js_divergence", "cross_entropy_loss",
-                  "label_smoothed_cross_entropy", "training.loss_sgd",
-                  "training.loss_adamw", "lion")},
-    **{(op, "nvidia_sm120"): "tests/device/nvidia/test_reduce.py"
-       for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    **{(op, "nvidia_sm120"): "tests/device/nvidia/test_norm.py" for op in ("rmsnorm", "rmsnorm_safe", "layer_norm")},
+    **{
+        (op, "nvidia_sm120"): "tests/device/nvidia/test_training_autodiff_native.py"
+        for op in (
+            "mse_loss",
+            "mae_loss",
+            "huber_loss",
+            "smooth_l1_loss",
+            "binary_cross_entropy_loss",
+            "kl_divergence",
+            "js_divergence",
+            "cross_entropy_loss",
+            "label_smoothed_cross_entropy",
+            "training.loss_sgd",
+            "training.loss_adamw",
+            "lion",
+        )
+    },
+    **{
+        (op, "nvidia_sm120"): "tests/device/nvidia/test_reduce.py"
+        for op in ("sum", "mean", "max", "min", "amax", "amin")
+    },
     # conv2d on the CPU reference path: @jit conv2d_nhwc executes and is
     # assert_allclose'd against a hand-computed expected output (audit
     # 2026-06-10 — promotes conv2d/cpu off the keyword heuristic).
@@ -2832,49 +3297,33 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("kv_cache_read", "cpu"): "tests/unit/test_kv_cache_handle.py",
     # apple_cpu
     ("matmul", "apple_cpu"): "tests/unit/test_apple_backend_roadmap.py",
-    ("softmax", "apple_cpu"):
-        "tests/unit/test_apple_conformance_closeout.py",
-    ("flash_attn", "apple_cpu"):
-        "tests/unit/test_apple_conformance_closeout.py",
-    ("conv2d", "apple_cpu"):
-        "tests/unit/test_apple_conformance_closeout.py",
-    ("kv_cache_read", "apple_cpu"):
-        "tests/unit/test_apple_conformance_closeout.py",
-    ("matmul_relu", "apple_cpu"):
-        "tests/unit/test_apple_conformance_closeout.py",
-    ("matmul_softmax", "apple_cpu"):
-        "tests/unit/test_apple_conformance_closeout.py",
+    ("softmax", "apple_cpu"): "tests/unit/test_apple_conformance_closeout.py",
+    ("flash_attn", "apple_cpu"): "tests/unit/test_apple_conformance_closeout.py",
+    ("conv2d", "apple_cpu"): "tests/unit/test_apple_conformance_closeout.py",
+    ("kv_cache_read", "apple_cpu"): "tests/unit/test_apple_conformance_closeout.py",
+    ("matmul_relu", "apple_cpu"): "tests/unit/test_apple_conformance_closeout.py",
+    ("matmul_softmax", "apple_cpu"): "tests/unit/test_apple_conformance_closeout.py",
     # apple_gpu — landed runtime paths
     # GPU matmul vs both the CPU lane and numpy (gpu == a @ b). The
     # buffer-pool test executes matmul but asserts RAII invariants, not
     # numerical equality — so it is NOT a valid execute_compare_fixture.
-    ("matmul", "apple_gpu"):
-        "tests/unit/test_production_jit_phase3_apple_gpu.py",
+    ("matmul", "apple_gpu"): "tests/unit/test_production_jit_phase3_apple_gpu.py",
     ("softmax", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("softmax_safe", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("flash_attn", "apple_gpu"): "tests/unit/test_apple_gpu_fused_attention.py",
-    ("attn_compressed_blocks", "apple_gpu"):
-        "tests/unit/test_apple_gpu_masked_attn.py",
-    ("attn_top_k_blocks", "apple_gpu"):
-        "tests/unit/test_apple_gpu_sparse_attn.py",
-    ("attn_local_window_2d", "apple_gpu"):
-        "tests/unit/test_apple_gpu_sparse_attn.py",
-    ("lookahead_sparse_attention", "apple_gpu"):
-        "tests/unit/test_apple_gpu_lookahead_envelope.py",
-    ("msa_sparse_attention", "apple_gpu"):
-        "tests/unit/test_apple_gpu_sparse_attn.py",
-    ("linear_attn_state", "apple_gpu"):
-        "tests/unit/test_apple_gpu_linear_attn.py",
+    ("attn_compressed_blocks", "apple_gpu"): "tests/unit/test_apple_gpu_masked_attn.py",
+    ("attn_top_k_blocks", "apple_gpu"): "tests/unit/test_apple_gpu_sparse_attn.py",
+    ("attn_local_window_2d", "apple_gpu"): "tests/unit/test_apple_gpu_sparse_attn.py",
+    ("lookahead_sparse_attention", "apple_gpu"): "tests/unit/test_apple_gpu_lookahead_envelope.py",
+    ("msa_sparse_attention", "apple_gpu"): "tests/unit/test_apple_gpu_sparse_attn.py",
+    ("linear_attn_state", "apple_gpu"): "tests/unit/test_apple_gpu_linear_attn.py",
     # Fused matmul→softmax single MSL kernel: the fixture runs
     # ``agb.gpu_matmul_softmax(a, b)`` and compares it to both the un-fused
     # CPU-lane composition and the numpy reference ``softmax(a @ b)``.
-    ("matmul_softmax", "apple_gpu"):
-        "tests/unit/test_production_jit_phase3_apple_gpu.py",
-    ("matmul_relu", "apple_gpu"):
-        "tests/unit/test_apple_conformance_closeout.py",
+    ("matmul_softmax", "apple_gpu"): "tests/unit/test_production_jit_phase3_apple_gpu.py",
+    ("matmul_relu", "apple_gpu"): "tests/unit/test_apple_conformance_closeout.py",
     ("conv2d", "apple_gpu"): "tests/unit/test_apple_gpu_conv2d.py",
-    ("kv_cache_read", "apple_gpu"):
-        "tests/unit/test_apple_conformance_closeout.py",
+    ("kv_cache_read", "apple_gpu"): "tests/unit/test_apple_conformance_closeout.py",
     # Mamba-2 selective scan: chunked-parallel SSD with Metal bmm contractions,
     # validated bit-exact against the sequential numpy reference.
     ("selective_ssm", "apple_gpu"): "tests/unit/test_mamba_ssd_gpu.py",
@@ -2883,10 +3332,8 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # Fused dequantize-into-GEMM: dequant_matmul(backend="apple_gpu") output
     # compared to the full-precision x @ dequant(W) oracle.
     ("dequant_matmul", "apple_gpu"): "tests/unit/test_stdlib_quant.py",
-    ("quantized_matmul", "apple_gpu"):
-        "tests/unit/test_apple_gpu_quantized_matmul.py",
-    ("masked_categorical", "apple_gpu"):
-        "tests/unit/test_apple_gpu_ldt_loss_ops.py",
+    ("quantized_matmul", "apple_gpu"): "tests/unit/test_apple_gpu_quantized_matmul.py",
+    ("masked_categorical", "apple_gpu"): "tests/unit/test_apple_gpu_ldt_loss_ops.py",
     ("rmsnorm", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("gelu", "apple_gpu"): "tests/unit/test_apple_gpu_mpsgraph_lane.py",
     ("transpose", "apple_gpu"): "tests/unit/test_apple_gpu_transpose.py",
@@ -2899,12 +3346,9 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # Phase 2.1c + 3b (2026-06-01) — encode-session ops, multi-dtype.
     # Each fixture compares the encode-session output to a numpy
     # reference at the dtype-appropriate tolerance.
-    ("layer_norm", "apple_gpu"):
-        "tests/unit/test_apple_gpu_f16_encode_session.py",
-    ("silu", "apple_gpu"):
-        "tests/unit/test_apple_gpu_full_decoder_layer.py",
-    ("bmm", "apple_gpu"):
-        "tests/unit/test_apple_gpu_f16_encode_session.py",
+    ("layer_norm", "apple_gpu"): "tests/unit/test_apple_gpu_f16_encode_session.py",
+    ("silu", "apple_gpu"): "tests/unit/test_apple_gpu_full_decoder_layer.py",
+    ("bmm", "apple_gpu"): "tests/unit/test_apple_gpu_f16_encode_session.py",
     # Fused ragged SwiGLU MoE expert-FFN block: the fused MSL kernel +
     # composed-lane fast paths vs a numpy f64 reference (incl. E=1 reduces to
     # dense swiglu, large-H fallback).
@@ -2963,41 +3407,60 @@ _HOT_PATHS_BASELINE = "benchmarks/baselines/apple_gpu_hot_paths.json"
 
 _APPLE_GPU_HOT_PATH_METADATA: dict[str, BenchmarkMetadata] = {
     "matmul": BenchmarkMetadata(
-        hot_path_group="gemm", harness="benchmarks/benchmark_gemm.py",
-        ratcheted=True, ratchet_key="matmul"),
+        hot_path_group="gemm", harness="benchmarks/benchmark_gemm.py", ratcheted=True, ratchet_key="matmul"
+    ),
     "conv2d": BenchmarkMetadata(
         hot_path_group="conv",
         harness="benchmarks/apple_gpu/record_hot_path_baseline.py",
-        ratcheted=True, ratchet_key="conv2d"),
+        ratcheted=True,
+        ratchet_key="conv2d",
+    ),
     "softmax": BenchmarkMetadata(
-        hot_path_group="norm", harness="benchmarks/apple_gpu/benchmark_fusion.py",
-        ratcheted=False, notes="fused matmul_softmax epilogue is ratcheted; standalone softmax pending baseline row"),
+        hot_path_group="norm",
+        harness="benchmarks/apple_gpu/benchmark_fusion.py",
+        ratcheted=False,
+        notes="fused matmul_softmax epilogue is ratcheted; standalone softmax pending baseline row",
+    ),
     "rmsnorm": BenchmarkMetadata(
-        hot_path_group="norm", harness="benchmarks/apple_gpu/benchmark_fusion.py",
-        ratcheted=False, notes="fused matmul_rmsnorm epilogue is ratcheted; standalone rmsnorm pending baseline row"),
+        hot_path_group="norm",
+        harness="benchmarks/apple_gpu/benchmark_fusion.py",
+        ratcheted=False,
+        notes="fused matmul_rmsnorm epilogue is ratcheted; standalone rmsnorm pending baseline row",
+    ),
     "flash_attn": BenchmarkMetadata(
-        hot_path_group="attention", harness="benchmarks/benchmark_attention.py",
-        ratcheted=False, notes="benchmarked; standalone baseline row pending"),
+        hot_path_group="attention",
+        harness="benchmarks/benchmark_attention.py",
+        ratcheted=False,
+        notes="benchmarked; standalone baseline row pending",
+    ),
     "bmm": BenchmarkMetadata(
-        hot_path_group="gemm", harness="benchmarks/benchmark_gemm.py",
-        ratcheted=False, notes="benchmarked; standalone baseline row pending"),
+        hot_path_group="gemm",
+        harness="benchmarks/benchmark_gemm.py",
+        ratcheted=False,
+        notes="benchmarked; standalone baseline row pending",
+    ),
     "grouped_gemm": BenchmarkMetadata(
         hot_path_group="moe",
         harness="benchmarks/apple_gpu/benchmark_grouped_gemm.py",
-        ratcheted=True, ratchet_key="grouped_gemm",
+        ratcheted=True,
+        ratchet_key="grouped_gemm",
         notes="MoE expert-FFN core; isolated ratchet row (DeepGEMM keystone) — "
-              "timed standalone, not via the MegaMoE overlap harness"),
+        "timed standalone, not via the MegaMoE overlap harness",
+    ),
     "moe_swiglu_block": BenchmarkMetadata(
         hot_path_group="moe",
         harness="benchmarks/apple_gpu/benchmark_grouped_gemm.py",
-        ratcheted=True, ratchet_key="moe_swiglu_block",
+        ratcheted=True,
+        ratchet_key="moe_swiglu_block",
         notes="MoE expert-FFN block; isolated ratchet row (DeepGEMM keystone) — "
-              "timed standalone, not via the MegaMoE overlap harness"),
+        "timed standalone, not via the MegaMoE overlap harness",
+    ),
 }
 
 
 def _attach_numerical_fixtures(
-    op_name: str, entries: "list[BackendKernelEntry]",
+    op_name: str,
+    entries: "list[BackendKernelEntry]",
 ) -> "list[BackendKernelEntry]":
     """Post-process a manifest's entries to attach the audit-recorded
     ``execute_compare_fixture`` for any (op, target) pair the
@@ -3017,6 +3480,7 @@ def _attach_numerical_fixtures(
         # fixture field set. We use ``replace`` from dataclasses to be
         # explicit about field-by-field copy.
         from dataclasses import replace as _replace
+
         out.append(_replace(e, execute_compare_fixture=fixture))
     return out
 
@@ -3038,45 +3502,45 @@ def _attach_numerical_fixtures(
 
 _NVIDIA_KERNEL_TILE_SHAPES: dict[str, dict[str, tuple]] = {
     # ── Matmul / contraction family ──────────────────────────────────────
-    "matmul":           {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
-    "gemm":             {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
-    "batched_gemm":     {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
-    "einsum":           {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
-    "linear_general":   {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
-    "qkv_projection":   {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
-    "fused_epilogue":   {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
-    "factorized_matmul":{"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "matmul": {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "gemm": {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "batched_gemm": {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "einsum": {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "linear_general": {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "qkv_projection": {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "fused_epilogue": {"wgmma_shape": (64, 256, 16), "cluster": (1, 1, 1)},
+    "factorized_matmul": {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
     # ── Attention family ─────────────────────────────────────────────────
     # FA-4 uses two WGMMA passes per outer-step: tile_q=128, tile_kv=128,
     # head_dim=128 maps to wgmma (M=128, N=128, K=16) on bf16 inputs with
     # an fp32 accumulator.  Cluster (2, 1, 1) for producer-consumer
     # warp specialization across paired CTAs.
-    "flash_attn":               {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
-    "multi_head_attention":     {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
-    "gqa_attention":            {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
-    "mqa_attention":            {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
-    "mla_decode":               {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
-    "mla_decode_fused":         {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "flash_attn": {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "multi_head_attention": {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "gqa_attention": {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "mqa_attention": {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "mla_decode": {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "mla_decode_fused": {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
     # DeepSeek NSA — top-k sparse selection then WGMMA over the chosen
     # blocks.  Reuses the FA tile; cluster=1 since each block runs
     # independently.
-    "deepseek_sparse_attention":{"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
-    "attn_top_k_blocks":        {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
-    "attn_compressed_blocks":   {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
-    "attn_sliding_window":      {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "deepseek_sparse_attention": {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "attn_top_k_blocks": {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "attn_compressed_blocks": {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "attn_sliding_window": {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
     # 2D local-window attention — H×W spatial neighborhoods for weather/grid
     # workloads.  Same WGMMA tile as sliding-window 1D; cluster=1 since each
     # (h, w) center attends to a small fixed patch.
-    "attn_local_window_2d":     {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "attn_local_window_2d": {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
     # MiniMax Lightning — linear-attention with delta-rule recurrence.
     # The recurrence runs as a sequence of small (32, 32, 16) WGMMAs.
-    "lightning_attention":      {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
-    "linear_attn":              {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
-    "gated_deltanet":           {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
-    "kimi_delta_attention":     {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
-    "modified_delta_attention": {"wgmma_shape": (32, 32, 16),  "cluster": (1, 1, 1)},
-    "gated_attention":          {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
-    "hybrid_attention":         {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
+    "lightning_attention": {"wgmma_shape": (32, 32, 16), "cluster": (1, 1, 1)},
+    "linear_attn": {"wgmma_shape": (32, 32, 16), "cluster": (1, 1, 1)},
+    "gated_deltanet": {"wgmma_shape": (32, 32, 16), "cluster": (1, 1, 1)},
+    "kimi_delta_attention": {"wgmma_shape": (32, 32, 16), "cluster": (1, 1, 1)},
+    "modified_delta_attention": {"wgmma_shape": (32, 32, 16), "cluster": (1, 1, 1)},
+    "gated_attention": {"wgmma_shape": (64, 128, 16), "cluster": (1, 1, 1)},
+    "hybrid_attention": {"wgmma_shape": (64, 128, 16), "cluster": (2, 1, 1)},
     # ── Normalization (fused, no WGMMA — single-tile reductions) ─────────
     # rmsnorm / layer_norm / softmax don't use WGMMA in the canonical
     # fused kernel; they use cooperative warp-shuffle reductions.
@@ -3090,22 +3554,22 @@ _NVIDIA_KERNEL_TILE_SHAPES: dict[str, dict[str, tuple]] = {
 # — pending on-silicon measurement on the RTX 5070 Ti.
 _NVIDIA_KERNEL_MFU: dict[tuple[str, str], float] = {
     # cuBLAS WGMMA GEMM hits ~80% MFU on large M/N.
-    ("matmul",     "nvidia_sm90"):  0.80,
-    ("matmul",     "nvidia_sm100"): 0.82,
-    ("matmul",     "nvidia_sm120"): 0.80,
-    ("gemm",       "nvidia_sm90"):  0.80,
-    ("gemm",       "nvidia_sm100"): 0.82,
-    ("batched_gemm","nvidia_sm90"): 0.78,
-    ("batched_gemm","nvidia_sm100"):0.80,
+    ("matmul", "nvidia_sm90"): 0.80,
+    ("matmul", "nvidia_sm100"): 0.82,
+    ("matmul", "nvidia_sm120"): 0.80,
+    ("gemm", "nvidia_sm90"): 0.80,
+    ("gemm", "nvidia_sm100"): 0.82,
+    ("batched_gemm", "nvidia_sm90"): 0.78,
+    ("batched_gemm", "nvidia_sm100"): 0.80,
     # FA-4 on H100 hits ~75% of FP16 peak; B100 expected slightly higher.
-    ("flash_attn", "nvidia_sm90"):  0.75,
+    ("flash_attn", "nvidia_sm90"): 0.75,
     ("flash_attn", "nvidia_sm100"): 0.78,
     ("flash_attn", "nvidia_sm120"): 0.75,
     # MLA decode — KV-bound, lower MFU; perf target is decode tokens/sec.
-    ("mla_decode", "nvidia_sm90"):  0.55,
+    ("mla_decode", "nvidia_sm90"): 0.55,
     ("mla_decode", "nvidia_sm100"): 0.60,
     # Lightning + delta variants — linear-attention, recurrence-bound.
-    ("lightning_attention", "nvidia_sm90"):  0.40,
+    ("lightning_attention", "nvidia_sm90"): 0.40,
     ("kimi_delta_attention", "nvidia_sm90"): 0.40,
     # Sparse attention is gather-bound until WGMMA kicks in.
     ("deepseek_sparse_attention", "nvidia_sm90"): 0.50,
@@ -3113,13 +3577,13 @@ _NVIDIA_KERNEL_MFU: dict[tuple[str, str], float] = {
 
 
 _NVIDIA_KERNEL_ROOFLINE: dict[str, str] = {
-    "matmul":    "compute-bound at M*N >= 8192*8192 on SM_90; memory-bound at K <= 256",
-    "gemm":      "compute-bound at M*N >= 8192*8192 on SM_90; memory-bound at K <= 256",
-    "flash_attn":"compute-bound at seq_len >= 1024 + head_dim >= 64; memory-bound otherwise",
-    "mla_decode":"KV-cache-memory-bound (compressed latent KV reduces bandwidth ~4x vs MHA)",
+    "matmul": "compute-bound at M*N >= 8192*8192 on SM_90; memory-bound at K <= 256",
+    "gemm": "compute-bound at M*N >= 8192*8192 on SM_90; memory-bound at K <= 256",
+    "flash_attn": "compute-bound at seq_len >= 1024 + head_dim >= 64; memory-bound otherwise",
+    "mla_decode": "KV-cache-memory-bound (compressed latent KV reduces bandwidth ~4x vs MHA)",
     "lightning_attention": "recurrence-serial; memory-bound on the state update step",
     "deepseek_sparse_attention": "gather-bound at top-k <= 32; compute-bound at top-k >= 64",
-    "matmul_softmax":     "fused — saves the score-matrix DRAM round-trip; compute-bound after fusion",
+    "matmul_softmax": "fused — saves the score-matrix DRAM round-trip; compute-bound after fusion",
     "matmul_softmax_matmul": "fused 3-op chain — saves both score + softmax round-trips",
 }
 
@@ -3135,34 +3599,34 @@ _NVIDIA_KERNEL_ROOFLINE: dict[str, str] = {
 
 _ROCM_KERNEL_MFMA_SHAPES: dict[str, tuple[int, int, int, int]] = {
     # Matmul family — canonical CDNA bf16 shape
-    "matmul":           (32, 32, 8, 1),
-    "gemm":             (32, 32, 8, 1),
-    "batched_gemm":     (32, 32, 8, 1),
-    "einsum":           (32, 32, 8, 1),
-    "linear_general":   (32, 32, 8, 1),
-    "qkv_projection":   (32, 32, 8, 1),
-    "fused_epilogue":   (32, 32, 8, 1),
-    "factorized_matmul":(16, 16, 16, 1),
+    "matmul": (32, 32, 8, 1),
+    "gemm": (32, 32, 8, 1),
+    "batched_gemm": (32, 32, 8, 1),
+    "einsum": (32, 32, 8, 1),
+    "linear_general": (32, 32, 8, 1),
+    "qkv_projection": (32, 32, 8, 1),
+    "fused_epilogue": (32, 32, 8, 1),
+    "factorized_matmul": (16, 16, 16, 1),
     # Attention family — smaller MFMA tile (16x16) for the score matrix
     # because the matrix is typically narrow in N (head_dim ≤ 128).
-    "flash_attn":               (16, 16, 16, 1),
-    "multi_head_attention":     (16, 16, 16, 1),
-    "gqa_attention":            (16, 16, 16, 1),
-    "mqa_attention":            (16, 16, 16, 1),
-    "mla_decode":               (16, 16, 16, 1),
-    "mla_decode_fused":         (16, 16, 16, 1),
-    "deepseek_sparse_attention":(16, 16, 16, 1),
-    "attn_top_k_blocks":        (16, 16, 16, 1),
-    "attn_compressed_blocks":   (16, 16, 16, 1),
-    "attn_sliding_window":      (16, 16, 16, 1),
-    "attn_local_window_2d":     (16, 16, 16, 1),
-    "lightning_attention":      (16, 16, 16, 1),
-    "linear_attn":              (16, 16, 16, 1),
-    "gated_deltanet":           (16, 16, 16, 1),
-    "kimi_delta_attention":     (16, 16, 16, 1),
+    "flash_attn": (16, 16, 16, 1),
+    "multi_head_attention": (16, 16, 16, 1),
+    "gqa_attention": (16, 16, 16, 1),
+    "mqa_attention": (16, 16, 16, 1),
+    "mla_decode": (16, 16, 16, 1),
+    "mla_decode_fused": (16, 16, 16, 1),
+    "deepseek_sparse_attention": (16, 16, 16, 1),
+    "attn_top_k_blocks": (16, 16, 16, 1),
+    "attn_compressed_blocks": (16, 16, 16, 1),
+    "attn_sliding_window": (16, 16, 16, 1),
+    "attn_local_window_2d": (16, 16, 16, 1),
+    "lightning_attention": (16, 16, 16, 1),
+    "linear_attn": (16, 16, 16, 1),
+    "gated_deltanet": (16, 16, 16, 1),
+    "kimi_delta_attention": (16, 16, 16, 1),
     "modified_delta_attention": (16, 16, 16, 1),
-    "gated_attention":          (16, 16, 16, 1),
-    "hybrid_attention":         (16, 16, 16, 1),
+    "gated_attention": (16, 16, 16, 1),
+    "hybrid_attention": (16, 16, 16, 1),
 }
 
 
@@ -3170,8 +3634,8 @@ _ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
     # rocBLAS MFMA GEMM hits ~75% MFU on MI300X.
     ("matmul", "rocm_gfx942"): 0.75,
     ("matmul", "rocm_gfx950"): 0.78,
-    ("gemm",   "rocm_gfx942"): 0.75,
-    ("gemm",   "rocm_gfx950"): 0.78,
+    ("gemm", "rocm_gfx942"): 0.75,
+    ("gemm", "rocm_gfx950"): 0.78,
     ("batched_gemm", "rocm_gfx942"): 0.72,
     # FA on MI300X via rocm-FA2 hits ~65% of FP16 peak.
     ("flash_attn", "rocm_gfx942"): 0.65,
@@ -3187,10 +3651,53 @@ _ROCM_KERNEL_MFU: dict[tuple[str, str], float] = {
 #   * matmul/gemm: AMX BF16 fused backend row.
 #   * AVX-512 f32/i32/bool lanes: runtime-loaded compiled kernels from
 #     libtessera_x86_elementwise.so, each backed by an execute-compare fixture.
-#     These are ``device_verified_jit`` rather than ``device_verified_abi`` because the
-#     manifest does not claim per-op C ABI runtime_symbol contracts.
+#     A stable exported symbol is necessary but not sufficient for
+#     ``device_verified_abi``.  New native lanes remain ``fused`` until a clean
+#     exact-device packet and the corresponding promotion allow-list land.
 # ─────────────────────────────────────────────────────────────────────────────
 _X86_KERNELS: dict[str, dict[str, Any]] = {
+    **{
+        op: {
+            "status": "fused",
+            "dtypes": ("fp32",),
+            "runtime_symbol": "tessera_x86_avx512_coalition_butterfly_f32",
+            "feature_flags": (
+                "avx512",
+                "coalition_lattice",
+                "fp64_accum",
+                "shared_yates_butterfly",
+            ),
+            "notes": (
+                "Content-addressed Graph -> Schedule -> Tile -> tessera_x86 "
+                "coalition butterfly; one AVX-512 fp64-workspace Yates "
+                "consumer implements all subset/superset zeta/Mobius modes."
+            ),
+        }
+        for op in (
+            "game_subset_zeta",
+            "game_subset_mobius",
+            "game_superset_zeta",
+            "game_superset_mobius",
+        )
+    },
+    "tridiagonal_solve": {
+        "status": "fused",
+        "dtypes": ("fp32",),
+        "runtime_symbol": "tessera_x86_avx512_tridiagonal_solve_f32",
+        "feature_flags": (
+            "avx512",
+            "batch_vector_thomas",
+            "fp64_accum",
+        ),
+        "shape_envelope": (
+            "static shared rank-1 diagonals and static fp32 RHS [...,N]; "
+            "eight independent systems per AVX-512 recurrence vector"
+        ),
+        "notes": (
+            "Content-addressed Graph -> Schedule -> Tile -> tessera_x86 "
+            "batch-vector Thomas recurrence with fp64 working state."
+        ),
+    },
     "es_low_rank_correction": {
         "status": _DEVICE_VERIFIED_JIT_STATUS,
         "dtypes": ("fp32",),
@@ -3247,111 +3754,141 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Canonical shared rank-4 recurrence consumed by the AVX-512 "
-                 "online-softmax forward plus tensor-valued dQ/split-dK/dV/"
-                 "fixed-reduction backward (x86_flash_attn_compiled / "
-                 "x86_flash_attn_bwd_compiled; saved-LSE Zen 5 policy; f32)",
+        "online-softmax forward plus tensor-valued dQ/split-dK/dV/"
+        "fixed-reduction backward (x86_flash_attn_compiled / "
+        "x86_flash_attn_bwd_compiled; saved-LSE Zen 5 policy; f32)",
     },
     # P13 — conv2d / conv3d via im2col + the AVX-512 f32 GEMM (host im2col,
     # device GEMM; x86_conv_compiled lane). f32.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} — im2col + the AVX-512 f32 GEMM (host lays out the "
-                 "patch matrix; the device runs the GEMM; bias/groups on host; "
-                 "x86_conv_compiled lane; f32, matches the conv reference)",
-    } for op in ("conv2d", "conv3d")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"{op} — im2col + the AVX-512 f32 GEMM (host lays out the "
+            "patch matrix; the device runs the GEMM; bias/groups on host; "
+            "x86_conv_compiled lane; f32, matches the conv reference)",
+        }
+        for op in ("conv2d", "conv3d")
+    },
     # P11 — MLA latent-KV building blocks composed on the AVX-512 GEMM (compress/
     # expand = batched matmul) + the flash_attn lane (mla_decode_fused chains
     # compress→expand→flash_attn). x86_mla_compiled lane; f32; on-device fixture.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} — MLA latent-KV composed on the AVX-512 GEMM "
-                 "(+ flash_attn for mla_decode_fused; x86_mla_compiled lane; "
-                 "f32)",
-    } for op in ("latent_kv_compress", "latent_kv_expand_k",
-                 "latent_kv_expand_v", "mla_decode_fused")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"{op} — MLA latent-KV composed on the AVX-512 GEMM "
+            "(+ flash_attn for mla_decode_fused; x86_mla_compiled lane; "
+            "f32)",
+        }
+        for op in ("latent_kv_compress", "latent_kv_expand_k", "latent_kv_expand_v", "mla_decode_fused")
+    },
     # P8 — scatter family (0-reduce indexed store): scatter/scatter_add/
     # scatter_reduce via the AVX-512 row-scatter kernel (tessera_x86_scatter_f32,
     # runtime-loaded; x86_scatter_compiled lane). f32; on-device fixture.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} — 0-reduce indexed store via the AVX-512 row-scatter "
-                 "kernel (tessera_x86_scatter_f32, runtime-loaded; "
-                 "x86_scatter_compiled lane; f32)",
-    } for op in ("scatter", "scatter_add", "scatter_reduce")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"{op} — 0-reduce indexed store via the AVX-512 row-scatter "
+            "kernel (tessera_x86_scatter_f32, runtime-loaded; "
+            "x86_scatter_compiled lane; f32)",
+        }
+        for op in ("scatter", "scatter_add", "scatter_reduce")
+    },
     # S2 reduction family — hand-written AVX-512 row-reduction kernel
     # (tessera_x86_avx512_reduce_f32) the runtime ctypes-loads from
     # libtessera_x86_elementwise.so and executes (x86_reduce_compiled). f32,
     # NaN-propagating max/min; validated on-device (execute_compare_fixture).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 row reduction {op} (tessera_x86_avx512_reduce_f32, "
-                 "runtime-loaded; x86_reduce_compiled lane)",
-    } for op in ("sum", "mean", "max", "min", "amax", "amin")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 row reduction {op} (tessera_x86_avx512_reduce_f32, "
+            "runtime-loaded; x86_reduce_compiled lane)",
+        }
+        for op in ("sum", "mean", "max", "min", "amax", "amin")
+    },
     # scan + argreduce — runtime-loaded x86 kernels (x86_scan_compiled /
     # x86_argreduce_compiled lanes), the CPU analog of the ROCm block-scan /
     # arg-reduce. f32; validated on-device (execute_compare_fixture).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 inclusive scan {op} (tessera_x86_avx512_scan_f32, "
-                 "runtime-loaded; x86_scan_compiled lane)",
-    } for op in ("cumsum", "cumprod", "cummax", "cummin")},
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 {op} (tessera_x86_avx512_argreduce_f32, runtime-"
-                 "loaded; x86_argreduce_compiled lane; i32 index output)",
-    } for op in ("argmax", "argmin")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 inclusive scan {op} (tessera_x86_avx512_scan_f32, "
+            "runtime-loaded; x86_scan_compiled lane)",
+        }
+        for op in ("cumsum", "cumprod", "cummax", "cummin")
+    },
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 {op} (tessera_x86_avx512_argreduce_f32, runtime-"
+            "loaded; x86_argreduce_compiled lane; i32 index output)",
+        }
+        for op in ("argmax", "argmin")
+    },
     # S2 unary-math algebraic + rounding subset — hand-written AVX-512 kernel
     # (tessera_x86_avx512_unary_f32) the runtime ctypes-loads and executes
     # (x86_unary_compiled). f32; transcendentals stay numpy-reference on CPU.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 unary {op} (tessera_x86_avx512_unary_f32, direct "
-                 "intrinsic; runtime-loaded; x86_unary_compiled lane)",
-    } for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "abs", "sign",
-                 "floor", "ceil", "round", "trunc")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 unary {op} (tessera_x86_avx512_unary_f32, direct "
+            "intrinsic; runtime-loaded; x86_unary_compiled lane)",
+        }
+        for op in ("sqrt", "rsqrt", "reciprocal", "absolute", "abs", "sign", "floor", "ceil", "round", "trunc")
+    },
     # S2 binary-arithmetic direct-intrinsic subset — hand-written AVX-512 kernel
     # (tessera_x86_avx512_binary_f32) the runtime ctypes-loads and executes
     # (x86_binary_compiled). f32; `pow` is transcendental → numpy-reference.
     # P2a adds add/mul (arithmetic) + mod/floor_div (floor-based, numpy semantics).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 binary {op} (tessera_x86_avx512_binary_f32, direct "
-                 "intrinsic; runtime-loaded; x86_binary_compiled lane)",
-    } for op in ("sub", "div", "maximum", "minimum",
-                 "add", "mul", "mod", "floor_div")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 binary {op} (tessera_x86_avx512_binary_f32, direct "
+            "intrinsic; runtime-loaded; x86_binary_compiled lane)",
+        }
+        for op in ("sub", "div", "maximum", "minimum", "add", "mul", "mod", "floor_div")
+    },
     # S2 comparison family — hand-written AVX-512 kernel
     # (tessera_x86_avx512_compare_f32) the runtime ctypes-loads and executes
     # (x86_compare_compiled). f32 in, bool out; NaN semantics match numpy.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 comparison {op} (tessera_x86_avx512_compare_f32, "
-                 "runtime-loaded; x86_compare_compiled lane; bool output)",
-    } for op in ("eq", "ne", "lt", "le", "gt", "ge")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 comparison {op} (tessera_x86_avx512_compare_f32, "
+            "runtime-loaded; x86_compare_compiled lane; bool output)",
+        }
+        for op in ("eq", "ne", "lt", "le", "gt", "ge")
+    },
     # P2b — unary predicate family (isnan/isinf/isfinite), AVX-512 kernel
     # (tessera_x86_avx512_predicate_f32; x86_predicate_compiled). f32 in, bool out.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 predicate {op} (tessera_x86_avx512_predicate_f32, "
-                 "runtime-loaded; x86_predicate_compiled lane; bool output)",
-    } for op in ("isnan", "isinf", "isfinite")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 predicate {op} (tessera_x86_avx512_predicate_f32, "
+            "runtime-loaded; x86_predicate_compiled lane; bool output)",
+        }
+        for op in ("isnan", "isinf", "isfinite")
+    },
     # P2c — clamp/clip composed on the AVX-512 binary max/min kernel (no new
     # kernel; scalar bounds broadcast on host; x86_clamp_compiled lane).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} — min(max(x, lo), hi) composed on the x86_binary_compiled "
-                 "AVX-512 max/min kernel (either bound optional; matches np.clip)",
-    } for op in ("clamp", "clip")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"{op} — min(max(x, lo), hi) composed on the x86_binary_compiled "
+            "AVX-512 max/min kernel (either bound optional; matches np.clip)",
+        }
+        for op in ("clamp", "clip")
+    },
     # (complex_* ops route through complex_manifest_for() — their fused
     # device-lane status is emitted there, not in this generic _X86 table.)
     # P2e — softcap composed on the AVX-512 transcendental tanh kernel (no new
@@ -3360,83 +3897,100 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "softcap — cap*tanh(x/cap) composed on the "
-                 "x86_transcendental_compiled AVX-512 tanh kernel "
-                 "(scalar cap on host; matches cap*tanh(x/cap))",
+        "x86_transcendental_compiled AVX-512 tanh kernel "
+        "(scalar cap on host; matches cap*tanh(x/cap))",
     },
     # P4 — 0-move / strided-copy lane: pad/cat/roll/flip/tile/repeat/stack via
     # the AVX-512 masked-gather kernel (host index map; device data movement).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} — 0-move op realized by the AVX-512 masked-gather "
-                 "kernel (tessera_x86_gather_f32, runtime-loaded; host index "
-                 "map; x86_strided_compiled lane; f32, matches numpy)",
-    } for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"{op} — 0-move op realized by the AVX-512 masked-gather "
+            "kernel (tessera_x86_gather_f32, runtime-loaded; host index "
+            "map; x86_strided_compiled lane; f32, matches numpy)",
+        }
+        for op in ("pad", "cat", "roll", "flip", "tile", "repeat", "stack")
+    },
     # P9 — sort / argsort / top_k via the AVX-512 bitonic sort network kernel
     # (tessera_x86_bitonic_sort_kv_f32; host pads to a power of two + flips).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} — data-independent bitonic sort network "
-                 "(tessera_x86_bitonic_sort_kv_f32, runtime-loaded; AVX-512 wide "
-                 "stages + scalar tail; host pads to a power of two + flips for "
-                 "descending; x86_sort_compiled lane; f32, matches numpy)",
-    } for op in ("sort", "argsort", "top_k")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"{op} — data-independent bitonic sort network "
+            "(tessera_x86_bitonic_sort_kv_f32, runtime-loaded; AVX-512 wide "
+            "stages + scalar tail; host pads to a power of two + flips for "
+            "descending; x86_sort_compiled lane; f32, matches numpy)",
+        }
+        for op in ("sort", "argsort", "top_k")
+    },
     # P5 — conformal geometry: mobius / stereographic composed on the AVX-512
     # complex (mul/div) + binary (div) lanes (no new kernel; host orchestration).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} — composed on the AVX-512 complex / binary lanes "
-                 "(interleaved-f32; host orchestration; x86_conformal_compiled "
-                 "lane; f32, matches tessera.complex)",
-    } for op in ("mobius", "stereographic")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"{op} — composed on the AVX-512 complex / binary lanes "
+            "(interleaved-f32; host orchestration; x86_conformal_compiled "
+            "lane; f32, matches tessera.complex)",
+        }
+        for op in ("mobius", "stereographic")
+    },
     # P6 — device RNG: counter-based Philox-4x32-10 (tessera_x86_philox_uniform_f32)
     # plus native uniform/normal/dropout distribution transforms.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} — native Philox-4x32-10 distribution functions "
-                 "(runtime-loaded); x86_rng_compiled lane; uniform bit-exact vs "
-                 "tessera.rng_device (a deterministic stream, distinct from the "
-                 "host numpy-Generator path)",
-    } for op in ("rng_uniform", "rng_normal", "rng_philox_uniform",
-                 "rng_philox_normal", "dropout")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"{op} — native Philox-4x32-10 distribution functions "
+            "(runtime-loaded); x86_rng_compiled lane; uniform bit-exact vs "
+            "tessera.rng_device (a deterministic stream, distinct from the "
+            "host numpy-Generator path)",
+        }
+        for op in ("rng_uniform", "rng_normal", "rng_philox_uniform", "rng_philox_normal", "dropout")
+    },
     # P2e — atan2 composed on the AVX-512 transcendental atan kernel (no new
     # kernel; quadrant/sign logic on host; x86_atan2_compiled lane).
     "atan2": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "atan2 — quadrant-aware atan2(y, x) composed on the "
-                 "x86_transcendental_compiled AVX-512 atan kernel "
-                 "(sign/quadrant on host; matches np.arctan2)",
+        "x86_transcendental_compiled AVX-512 atan kernel "
+        "(sign/quadrant on host; matches np.arctan2)",
     },
     # S2 logical family — hand-written AVX-512 kernel
     # (tessera_x86_avx512_logical_i8) the runtime ctypes-loads and executes
     # (x86_logical_compiled). i8 bool in/out; inputs normalized via != 0.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("bool",),
-        "notes": f"AVX-512 logical {op} (tessera_x86_avx512_logical_i8, "
-                 "runtime-loaded; x86_logical_compiled lane; bool in/out)",
-    } for op in ("logical_and", "logical_or", "logical_xor", "logical_not")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("bool",),
+            "notes": f"AVX-512 logical {op} (tessera_x86_avx512_logical_i8, "
+            "runtime-loaded; x86_logical_compiled lane; bool in/out)",
+        }
+        for op in ("logical_and", "logical_or", "logical_xor", "logical_not")
+    },
     # S2 bitwise family — hand-written AVX-512 kernel
     # (tessera_x86_avx512_bitwise_i32) the runtime ctypes-loads and executes
     # (x86_bitwise_compiled). i32 in/out; full bit pattern (no normalization).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("int32",),
-        "notes": f"AVX-512 bitwise {op} (tessera_x86_avx512_bitwise_i32, "
-                 "runtime-loaded; x86_bitwise_compiled lane; i32 in/out)",
-    } for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("int32",),
+            "notes": f"AVX-512 bitwise {op} (tessera_x86_avx512_bitwise_i32, "
+            "runtime-loaded; x86_bitwise_compiled lane; i32 in/out)",
+        }
+        for op in ("bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_not")
+    },
     # P2e — popcount: set-bit count per i32, unary, on the bitwise lane via the
     # AVX-512 VPOPCNTDQ instruction (_mm512_popcnt_epi32).
     "popcount": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("int32",),
         "notes": "Standalone elementwise popcount — set-bit count per i32 "
-                 "element via AVX-512 VPOPCNTDQ (tessera_x86_avx512_bitwise_i32, "
-                 "runtime-loaded; x86_bitwise_compiled lane; i32 in/out)",
+        "element via AVX-512 VPOPCNTDQ (tessera_x86_avx512_bitwise_i32, "
+        "runtime-loaded; x86_bitwise_compiled lane; i32 in/out)",
     },
     # Ternary select where(cond,a,b) — hand-written AVX-512 kernel
     # (tessera_x86_avx512_where_f32, _mm512_cmpneq_epi8_mask +
@@ -3446,33 +4000,54 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 ternary select where(cond,a,b) "
-                 "(tessera_x86_avx512_where_f32, runtime-loaded; "
-                 "x86_where_compiled lane; cond i8 != 0, a/b/out f32)",
+        "(tessera_x86_avx512_where_f32, runtime-loaded; "
+        "x86_where_compiled lane; cond i8 != 0, a/b/out f32)",
     },
     # S2 transcendental / activation family — hand-written AVX-512 vectorized
     # kernel (tessera_x86_avx512_transcendental_f32) the runtime ctypes-loads
     # (x86_transcendental_compiled). Cephes exp/log minimax cores + A&S erf;
     # activations compose. The CPU analog reaching ROCm math->ROCDL parity.
     # gelu uses the tanh approximation (matches the ROCm activation reference).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 transcendental/activation {op} "
-                 "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
-                 "x86_transcendental_compiled lane; Cephes exp/log cores + A&S "
-                 "erf; f32, matches numpy 2e-5)",
-    } for op in ("exp", "log", "tanh", "sigmoid", "silu", "gelu", "erf",
-                 "softplus", "expm1", "log1p", "sin", "cos", "tan", "sinh",
-                 "cosh", "asin", "acos", "atan", "erfc")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 transcendental/activation {op} "
+            "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
+            "x86_transcendental_compiled lane; Cephes exp/log cores + A&S "
+            "erf; f32, matches numpy 2e-5)",
+        }
+        for op in (
+            "exp",
+            "log",
+            "tanh",
+            "sigmoid",
+            "silu",
+            "gelu",
+            "erf",
+            "softplus",
+            "expm1",
+            "log1p",
+            "sin",
+            "cos",
+            "tan",
+            "sinh",
+            "cosh",
+            "asin",
+            "acos",
+            "atan",
+            "erfc",
+        )
+    },
     # P2e — lgamma: ln Γ(x) via the AVX-512 NR-Lanczos g=5 SIMD core (positive
     # domain) + std::lgamma fallback for reflection lanes (x<0.5).
     "lgamma": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 lgamma — NR-Lanczos g=5 SIMD core "
-                 "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
-                 "x86_transcendental_compiled lane; std::lgamma fallback for "
-                 "x<0.5; f32, matches math.lgamma rel 1e-4)",
+        "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
+        "x86_transcendental_compiled lane; std::lgamma fallback for "
+        "x<0.5; f32, matches math.lgamma rel 1e-4)",
     },
     # P2e — digamma: ψ(x) AVX-512 recurrence + asymptotic SIMD core (x>0) +
     # scalar digamma_d fallback for x<=0 (reflection / poles).
@@ -3480,20 +4055,23 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 digamma — recurrence + asymptotic SIMD core "
-                 "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
-                 "x86_transcendental_compiled lane; scalar fallback for x<=0; "
-                 "f32, matches tessera.ops.digamma rel 1e-4)",
+        "(tessera_x86_avx512_transcendental_f32, runtime-loaded; "
+        "x86_transcendental_compiled lane; scalar fallback for x<=0; "
+        "f32, matches tessera.ops.digamma rel 1e-4)",
     },
     # Transcendental-backed BINARY ops — pow(a,b) (positive base) and
     # silu_mul(a,b)=silu(a)*b (SwiGLU gate-multiply); share the exp/log/sigmoid
     # cores. Runtime ctypes-loads them (x86_binary_math_compiled lane).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 transcendental-backed binary {op} "
-                 "(tessera_x86_avx512_{pow,silu_mul}_f32, runtime-loaded; "
-                 "x86_binary_math_compiled lane; f32, matches numpy 2e-5)",
-    } for op in ("pow", "silu_mul")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 transcendental-backed binary {op} "
+            "(tessera_x86_avx512_{pow,silu_mul}_f32, runtime-loaded; "
+            "x86_binary_math_compiled lane; f32, matches numpy 2e-5)",
+        }
+        for op in ("pow", "silu_mul")
+    },
     # Row-reduction norm / softmax — unary/affine rmsnorm / layer_norm, their
     # paired backward ABIs, and stable
     # softmax over the last axis (AVX-512 horizontal reduce). The CPU analog of
@@ -3503,67 +4081,72 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 unary/affine rmsnorm forward and deterministic "
-                 "paired backward (runtime-loaded f32 ABIs; exact-host oracle "
-                 "and public native_backward proof)",
+        "paired backward (runtime-loaded f32 ABIs; exact-host oracle "
+        "and public native_backward proof)",
     },
     "rmsnorm_safe": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "rmsnorm_safe (== rmsnorm, tighter eps default) rides the "
-                 "AVX-512 rmsnorm row-reduction (tessera_x86_avx512_rmsnorm_f32; "
-                 "x86_norm_compiled lane; f32, matches nn.functional)",
+        "AVX-512 rmsnorm row-reduction (tessera_x86_avx512_rmsnorm_f32; "
+        "x86_norm_compiled lane; f32, matches nn.functional)",
     },
     "layer_norm": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 unary/affine stable two-pass layer_norm forward and "
-                 "deterministic paired backward (runtime-loaded f32 ABIs; "
-                 "exact-host oracle and public native_backward proof)",
+        "deterministic paired backward (runtime-loaded f32 ABIs; "
+        "exact-host oracle and public native_backward proof)",
     },
     # P5 — group/instance/weight norm composed on the AVX-512 layer_norm (row
     # mean/var) + reduce (sum-of-squares) lanes; host does the reshape / divide.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"{op} composed on the AVX-512 layer_norm / reduce kernels "
-                 "(no new kernel; host reshape/affine; x86_normcompose_compiled "
-                 "lane; f32, matches nn.functional)",
-    } for op in ("group_norm", "instance_norm", "weight_norm")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"{op} composed on the AVX-512 layer_norm / reduce kernels "
+            "(no new kernel; host reshape/affine; x86_normcompose_compiled "
+            "lane; f32, matches nn.functional)",
+        }
+        for op in ("group_norm", "instance_norm", "weight_norm")
+    },
     "grad_clip_norm": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Global gradient-norm clipping g*min(1, max_norm/||g||) — the "
-                 "L2 sum-of-squares runs on the AVX-512 reduce kernel; host "
-                 "sqrt + scale; x86_grad_clip_compiled lane; f32, matches "
-                 "optim.clip_grad_norm",
+        "L2 sum-of-squares runs on the AVX-512 reduce kernel; host "
+        "sqrt + scale; x86_grad_clip_compiled lane; f32, matches "
+        "optim.clip_grad_norm",
     },
     "softmax": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 stable softmax row-reduction "
-                 "(tessera_x86_avx512_softmax_f32, runtime-loaded; "
-                 "x86_softmax_compiled lane; f32, matches numpy 2e-5)",
+        "(tessera_x86_avx512_softmax_f32, runtime-loaded; "
+        "x86_softmax_compiled lane; f32, matches numpy 2e-5)",
     },
     "online_softmax": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Stateless online_softmax (== softmax) rides the AVX-512 stable "
-                 "softmax row-reduction (tessera_x86_avx512_softmax_f32; "
-                 "x86_softmax_compiled lane); the streaming-state form is declined "
-                 "(Decision #21). f32, matches numpy",
+        "softmax row-reduction (tessera_x86_avx512_softmax_f32; "
+        "x86_softmax_compiled lane); the streaming-state form is declined "
+        "(Decision #21). f32, matches numpy",
     },
     # GEMM family — batched_gemm / linear_general / qkv_projection /
     # factorized_matmul / einsum, all on the AVX-512 f32 GEMM microkernel
     # (tessera_x86_avx512_gemm_f32) with reshape/batch/einsum in Python. The CPU
     # analog of the ROCm WMMA matmul-family lane (x86_matmul_family_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 f32 GEMM-family {op} "
-                 "(tessera_x86_avx512_gemm_f32 microkernel + Python "
-                 "reshape/batch/einsum; x86_matmul_family_compiled lane; f32)",
-    } for op in ("batched_gemm", "linear_general", "qkv_projection",
-                 "factorized_matmul", "einsum")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 f32 GEMM-family {op} "
+            "(tessera_x86_avx512_gemm_f32 microkernel + Python "
+            "reshape/batch/einsum; x86_matmul_family_compiled lane; f32)",
+        }
+        for op in ("batched_gemm", "linear_general", "qkv_projection", "factorized_matmul", "einsum")
+    },
     # Position encodings — interleaved-pair rope and the ALiBi bias generator.
     # The CPU analog of the ROCm rope/alibi lanes (x86_rope_compiled /
     # x86_alibi_compiled).
@@ -3571,60 +4154,67 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 interleaved-pair rotary position embedding "
-                 "(tessera_x86_avx512_rope_f32, runtime-loaded; deinterleave + "
-                 "Cephes sincos; x86_rope_compiled lane; f32, matches numpy 2e-5)",
+        "(tessera_x86_avx512_rope_f32, runtime-loaded; deinterleave + "
+        "Cephes sincos; x86_rope_compiled lane; f32, matches numpy 2e-5)",
     },
     "alibi": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 ALiBi positional-bias generator bias[h,i,j]="
-                 "slope[h]*(j-i) (tessera_x86_avx512_alibi_f32, runtime-loaded; "
-                 "x86_alibi_compiled lane; f32)",
+        "slope[h]*(j-i) (tessera_x86_avx512_alibi_f32, runtime-loaded; "
+        "x86_alibi_compiled lane; f32)",
     },
     # Softmax-attention family — multi_head / gqa / mqa / mla_decode, composed
     # from the AVX-512 GEMM (QK^T, probs*V) + the row-softmax kernel. The CPU
     # analog of the ROCm flash-attention family (x86_attention_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 softmax-attention {op} "
-                 "(O=softmax(QK^T*scale[+causal])V on the f32 GEMM + row-softmax "
-                 "kernels; x86_attention_compiled lane; f32)",
-    } for op in ("multi_head_attention", "gqa_attention", "mqa_attention",
-                 "mla_decode")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 softmax-attention {op} "
+            "(O=softmax(QK^T*scale[+causal])V on the f32 GEMM + row-softmax "
+            "kernels; x86_attention_compiled lane; f32)",
+        }
+        for op in ("multi_head_attention", "gqa_attention", "mqa_attention", "mla_decode")
+    },
     # P10 extras — sliding-window attention on the extended AVX-512 flash_attn
     # kernel (causal band of width W; GQA/softcap/bias also ride this lane).
     "attn_sliding_window": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 sliding-window attention "
-                 "(tessera_x86_flash_attn_ext_f32; causal band of width W; the "
-                 "online-softmax FA forward with window/softcap/bias support; "
-                 "x86_flash_attn_compiled lane; f32)",
+        "(tessera_x86_flash_attn_ext_f32; causal band of width W; the "
+        "online-softmax FA forward with window/softcap/bias support; "
+        "x86_flash_attn_compiled lane; f32)",
     },
     # P10 scan-family — linear-attention backbone (linear_attn / power_attn /
     # retention) via the quadratic-parallel form (φQ·φKᵀ ⊙ causal ⊙ decay)@V on
     # the AVX-512 GEMM; feature map / mask / decay on host (x86_linear_attn_
     # compiled lane). The AVX-512 partner to the ROCm linear_attn lane.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 {op} — quadratic-parallel linear attention "
-                 "(φ(Q)·φ(K)ᵀ ⊙ causal ⊙ decay)@V on two batched GEMMs; feature "
-                 "map / mask / decay on host; x86_linear_attn_compiled lane; f32",
-    } for op in ("linear_attn", "power_attn", "retention")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 {op} — quadratic-parallel linear attention "
+            "(φ(Q)·φ(K)ᵀ ⊙ causal ⊙ decay)@V on two batched GEMMs; feature "
+            "map / mask / decay on host; x86_linear_attn_compiled lane; f32",
+        }
+        for op in ("linear_attn", "power_attn", "retention")
+    },
     # DeltaNet / gated-delta linear attention — the hand-written AVX-512 causal
     # delta-rule sequential scan (avx512_deltanet_f32; x86_deltanet_compiled
     # lane), the x86 partner to the ROCm rocm_deltanet_compiled recurrence.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 {op} — causal delta-rule sequential scan "
-                 "(avx512_deltanet_f32: per (b,h) a Dqk x Dv state over S with "
-                 "erase/decay/beta/modified/gate); x86_deltanet_compiled lane; "
-                 "f32, matches numpy _delta_attention_impl",
-    } for op in ("gated_deltanet", "kimi_delta_attention",
-                 "modified_delta_attention")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 {op} — causal delta-rule sequential scan "
+            "(avx512_deltanet_f32: per (b,h) a Dqk x Dv state over S with "
+            "erase/decay/beta/modified/gate); x86_deltanet_compiled lane; "
+            "f32, matches numpy _delta_attention_impl",
+        }
+        for op in ("gated_deltanet", "kimi_delta_attention", "modified_delta_attention")
+    },
     # P11 — NSA (DeepSeek native sparse attention): the sliding / compressed /
     # top-k branches all run their attention on the AVX-512 flash_attn kernels;
     # block compression / top-k selection / gather / gate blend on the host.
@@ -3632,148 +4222,192 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 NSA — sliding (windowed FA) + compressed-block (dense "
-                 "FA over mean summaries) + top-k-block (host select/gather + "
-                 "dense FA) branches blended by the gate; x86_nsa_compiled lane; "
-                 "f32, matches the dense-masked reference",
+        "FA over mean summaries) + top-k-block (host select/gather + "
+        "dense FA) branches blended by the gate; x86_nsa_compiled lane; "
+        "f32, matches the dense-masked reference",
     },
     "msa_sparse_attention": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 MSA — exp-free index scoring + per-GQA-group top-k "
-                 "block selection on host (bit-identical to the reference ops); "
-                 "exact attend on the flash_attn kernel as dense attention with "
-                 "a non-selected/causal additive -inf mask; x86_msa_compiled "
-                 "lane; f32, matches the reference; dense-equivalence "
-                 "(top_k==num_blocks) → dense GQA",
+        "block selection on host (bit-identical to the reference ops); "
+        "exact attend on the flash_attn kernel as dense attention with "
+        "a non-selected/causal additive -inf mask; x86_msa_compiled "
+        "lane; f32, matches the reference; dense-equivalence "
+        "(top_k==num_blocks) → dense GQA",
     },
     # Pointwise regression losses — per-element loss on the AVX-512 loss kernel
     # + none/mean/sum on the reduce kernel (x86_loss_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 pointwise loss {op} "
-                 "(tessera_x86_avx512_pointwise_loss_f32 per-element + reduce "
-                 "kernel; x86_loss_compiled lane; f32, matches numpy 2e-5)",
-    } for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss",
-                 "log_cosh_loss")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 pointwise loss {op} "
+            "(tessera_x86_avx512_pointwise_loss_f32 per-element + reduce "
+            "kernel; x86_loss_compiled lane; f32, matches numpy 2e-5)",
+        }
+        for op in ("mse_loss", "mae_loss", "huber_loss", "smooth_l1_loss", "log_cosh_loss")
+    },
     "training.loss_sgd": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "feature_flags": ("avx512", "training_fusion"),
         "notes": "One AVX-512 loop fuses regression-loss VJP into SGD; "
-                 "prediction gradient is not materialized and target gradient "
-                 "remains observable.",
+        "prediction gradient is not materialized and target gradient "
+        "remains observable.",
     },
     "training.loss_adamw": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "feature_flags": ("avx512", "training_fusion"),
         "notes": "One AVX-512 loop fuses loss VJP into the complete AdamW "
-                 "parameter/first-moment/second-moment state transition; "
-                 "prediction gradient is not materialized.",
+        "parameter/first-moment/second-moment state transition; "
+        "prediction gradient is not materialized.",
     },
     # Binary-cross-entropy losses — per-element on the AVX-512 binary-loss kernel
     # (stable softplus) + reduce kernel (x86_binary_loss_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 binary-cross-entropy loss {op} "
-                 "(tessera_x86_avx512_binary_loss_f32 per-element + reduce "
-                 "kernel; x86_binary_loss_compiled lane; f32, matches numpy 2e-5)",
-    } for op in ("binary_cross_entropy_loss", "asymmetric_bce")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 binary-cross-entropy loss {op} "
+            "(tessera_x86_avx512_binary_loss_f32 per-element + reduce "
+            "kernel; x86_binary_loss_compiled lane; f32, matches numpy 2e-5)",
+        }
+        for op in ("binary_cross_entropy_loss", "asymmetric_bce")
+    },
     # RL policy losses — ppo/cispo/grpo core surrogate on the AVX-512 policy-loss
     # kernel; normalize_group_advantages on the layer_norm kernel over the group
     # axis (x86_rl_loss_compiled). KL/entropy/mask add-ons diagnose out.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 RL policy loss {op} "
-                 "(tessera_x86_avx512_policy_loss_f32 surrogate / layer_norm "
-                 "kernel; x86_rl_loss_compiled lane; core path, f32, numpy 2e-5)",
-    } for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss",
-                 "normalize_group_advantages")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 RL policy loss {op} "
+            "(tessera_x86_avx512_policy_loss_f32 surrogate / layer_norm "
+            "kernel; x86_rl_loss_compiled lane; core path, f32, numpy 2e-5)",
+        }
+        for op in ("ppo_policy_loss", "cispo_policy_loss", "grpo_policy_loss", "normalize_group_advantages")
+    },
     # Class-axis losses — exp/log on the AVX-512 transcendental kernel +
     # class-axis structure on the host + reduce kernel (x86_class_loss_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 class-axis loss {op} "
-                 "(exp/log on the transcendental kernel + host class-axis "
-                 "structure + reduce kernel; x86_class_loss_compiled lane; f32, "
-                 "matches numpy 2e-4)",
-    } for op in ("cross_entropy_loss", "kl_divergence", "js_divergence",
-                 "focal_loss", "label_smoothed_cross_entropy", "z_loss")},
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 metric/contrastive loss {op} "
-                 "(reduce + exp/log kernels with host label/mask/sort/matrix "
-                 "structure; x86_metric_loss_compiled lane; f32, matches "
-                 "tessera.losses)",
-    } for op in ("wasserstein_distance", "cosine_embedding_loss",
-                 "contrastive_loss", "triplet_loss", "nt_xent_loss",
-                 "info_nce_loss", "seq2seq_loss")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 class-axis loss {op} "
+            "(exp/log on the transcendental kernel + host class-axis "
+            "structure + reduce kernel; x86_class_loss_compiled lane; f32, "
+            "matches numpy 2e-4)",
+        }
+        for op in (
+            "cross_entropy_loss",
+            "kl_divergence",
+            "js_divergence",
+            "focal_loss",
+            "label_smoothed_cross_entropy",
+            "z_loss",
+        )
+    },
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 metric/contrastive loss {op} "
+            "(reduce + exp/log kernels with host label/mask/sort/matrix "
+            "structure; x86_metric_loss_compiled lane; f32, matches "
+            "tessera.losses)",
+        }
+        for op in (
+            "wasserstein_distance",
+            "cosine_embedding_loss",
+            "contrastive_loss",
+            "triplet_loss",
+            "nt_xent_loss",
+            "info_nce_loss",
+            "seq2seq_loss",
+        )
+    },
     # P7 — EBM / diffusion losses composed on the AVX-512 binary + reduce kernels
     # (diff/square + reductions on device; argmax/one-hot/scalar scale on host;
     # x86_ebm_loss_compiled lane). f32.
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 EBM/diffusion loss {op} (diff/square + reductions on "
-                 "the binary + reduce kernels; host structure; "
-                 "x86_ebm_loss_compiled lane; f32, matches numpy)",
-    } for op in ("score_matching_loss", "denoising_score_matching_loss",
-                 "implicit_score_matching_loss", "contrastive_divergence_loss",
-                 "persistent_cd_loss", "ddpm_noise_pred_loss", "vlb_loss",
-                 "load_balance_loss")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 EBM/diffusion loss {op} (diff/square + reductions on "
+            "the binary + reduce kernels; host structure; "
+            "x86_ebm_loss_compiled lane; f32, matches numpy)",
+        }
+        for op in (
+            "score_matching_loss",
+            "denoising_score_matching_loss",
+            "implicit_score_matching_loss",
+            "contrastive_divergence_loss",
+            "persistent_cd_loss",
+            "ddpm_noise_pred_loss",
+            "vlb_loss",
+            "load_balance_loss",
+        )
+    },
     # (EBM energy/step-compute + Langevin ops route through ebm_manifest_for() —
     # their fused x86 status is emitted there, not in this generic table.)
     # Low-precision float quantization — quantize/dequantize fp8/fp6/fp4 on the
     # AVX-512 fpquant kernel (per-tensor symmetric grid-snap, fake-quant in f32
     # storage; x86_fpquant_compiled). The lane is f32 in/out (the fpN grid is
     # the quantization target, stored back as f32 — the dtypes the KERNEL runs).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 low-precision float {op} "
-                 "(tessera_x86_avx512_fpquant_f32 grid-snap, per-tensor scale; "
-                 "x86_fpquant_compiled lane; f32 fake-quant, matches reference)",
-    } for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6",
-                 "dequantize_fp6", "quantize_fp4", "dequantize_fp4")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 low-precision float {op} "
+            "(tessera_x86_avx512_fpquant_f32 grid-snap, per-tensor scale; "
+            "x86_fpquant_compiled lane; f32 fake-quant, matches reference)",
+        }
+        for op in ("quantize_fp8", "dequantize_fp8", "quantize_fp6", "dequantize_fp6", "quantize_fp4", "dequantize_fp4")
+    },
     # Integer quantization — scalar qparam selection + int8 container conversion
     # around AVX-512 round/max/min/mul kernels. int4 is signed int4 values stored
     # in int8 containers (not packed weights).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32", "int8") if "int8" in op else ("fp32",),
-        "notes": f"AVX-512 integer quantization {op} "
-                 "(round/max/min/mul on libtessera_x86_elementwise.so; "
-                 "x86_intquant_compiled composite lane; matches reference)",
-    } for op in ("quantize_int8", "dequantize_int8", "quantize_int4",
-                 "dequantize_int4", "fake_quantize")},
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 pooling {op} "
-                 "(host window matrix + tessera_x86_avx512_reduce_f32 "
-                 "max/min/mean; x86_pooling_compiled lane; matches reference)",
-    } for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32", "int8") if "int8" in op else ("fp32",),
+            "notes": f"AVX-512 integer quantization {op} "
+            "(round/max/min/mul on libtessera_x86_elementwise.so; "
+            "x86_intquant_compiled composite lane; matches reference)",
+        }
+        for op in ("quantize_int8", "dequantize_int8", "quantize_int4", "dequantize_int4", "fake_quantize")
+    },
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 pooling {op} "
+            "(host window matrix + tessera_x86_avx512_reduce_f32 "
+            "max/min/mean; x86_pooling_compiled lane; matches reference)",
+        }
+        for op in ("max_pool", "avg_pool", "min_pool", "adaptive_pool")
+    },
     "image_normalize": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "AVX-512 image_normalize ((x-mean)/std) composed on "
-                 "tessera_x86_avx512_binary_f32 sub/div with host layout and "
-                 "per-channel broadcast; x86_image_affine_compiled lane",
+        "tessera_x86_avx512_binary_f32 sub/div with host layout and "
+        "per-channel broadcast; x86_image_affine_compiled lane",
     },
     # NVFP4 — block-scaled fp4 (E2M1 codes + per-block fp8-E4M3 scale) on the
     # AVX-512 fpquant kernel + host block structure (x86_nvfp4_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 NVFP4 block-scaled fp4 {op} (per-block fp8-E4M3 scale "
-                 "+ E2M1 codes on the fpquant kernel; x86_nvfp4_compiled lane; "
-                 "f32 fake-quant, matches the microscaling reference)",
-    } for op in ("quantize_nvfp4", "dequantize_nvfp4")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 NVFP4 block-scaled fp4 {op} (per-block fp8-E4M3 scale "
+            "+ E2M1 codes on the fpquant kernel; x86_nvfp4_compiled lane; "
+            "f32 fake-quant, matches the microscaling reference)",
+        }
+        for op in ("quantize_nvfp4", "dequantize_nvfp4")
+    },
     # S2 reduce/stable-reduce foundation — prod (new AVX-512 reduce kind);
     # var/std/count_nonzero composed from the reduce kernel; logsumexp/
     # log_softmax/softmax_safe/sigmoid_safe (max-shifted reduce + exp/log lane).
@@ -3781,112 +4415,126 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
     "prod": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": "AVX-512 row reduction prod (tessera_x86_avx512_reduce_f32 "
-                 "kind 4; x86_reduce_compiled lane; f32)",
+        "notes": "AVX-512 row reduction prod (tessera_x86_avx512_reduce_f32 kind 4; x86_reduce_compiled lane; f32)",
     },
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 statistical reduction {op} (f32 storage/output, "
-                 "native mergeable f64 Welford state ABI; "
-                 "x86_stat_reduce_compiled lane)",
-    } for op in ("var", "std")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 statistical reduction {op} (f32 storage/output, "
+            "native mergeable f64 Welford state ABI; "
+            "x86_stat_reduce_compiled lane)",
+        }
+        for op in ("var", "std")
+    },
     "count_nonzero": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
-        "notes": "AVX-512 count_nonzero (sum composition; "
-                 "x86_stat_reduce_compiled lane; f32)",
+        "notes": "AVX-512 count_nonzero (sum composition; x86_stat_reduce_compiled lane; f32)",
     },
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 stable reduction {op} (max-shifted reduce + exp/log "
-                 "lane; x86_stable_reduce_compiled lane; f32)",
-    } for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 stable reduction {op} (max-shifted reduce + exp/log "
+            "lane; x86_stable_reduce_compiled lane; f32)",
+        }
+        for op in ("logsumexp", "log_softmax", "softmax_safe", "sigmoid_safe")
+    },
     # Spectral FFT (PR2) — fft/ifft/rfft/irfft over a power-of-two axis on the
     # AVX-512 radix-2 C2C kernel + r2c/c2r pack-unpack (x86_fft_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"AVX-512 FFT {op} (radix-2 C2C kernel for power-of-two; tiny "
-                 "non-pow2 via the DFT-matrix on the GEMM; other non-pow2 via "
-                 "Bluestein; x86_fft_compiled lane; complex64/f32, matches "
-                 "np.fft)",
-    } for op in ("fft", "ifft", "rfft", "irfft")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"AVX-512 FFT {op} (radix-2 C2C kernel for power-of-two; tiny "
+            "non-pow2 via the DFT-matrix on the GEMM; other non-pow2 via "
+            "Bluestein; x86_fft_compiled lane; complex64/f32, matches "
+            "np.fft)",
+        }
+        for op in ("fft", "ifft", "rfft", "irfft")
+    },
     # Spectral composites (PR5) — dct/stft/istft/spectral_conv/spectral_filter
     # composed on the AVX-512 FFT lane (x86_spectral_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("bf16", "fp16", "fp32"),
-        "notes": f"Spectral {op} — content-addressed AVX-512 native package "
-                 "with package-owned arbitrary-axis packing, reduced-storage "
-                 "conversion into f32 accumulation, and backward/forward/ortho policy "
-                 "(x86_spectral_compiled lane)",
-    } for op in ("dct", "stft", "istft", "spectral_conv")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("bf16", "fp16", "fp32"),
+            "notes": f"Spectral {op} — content-addressed AVX-512 native package "
+            "with package-owned arbitrary-axis packing, reduced-storage "
+            "conversion into f32 accumulation, and backward/forward/ortho policy "
+            "(x86_spectral_compiled lane)",
+        }
+        for op in ("dct", "stft", "istft", "spectral_conv")
+    },
     "spectral_filter": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Spectral filter — AVX-512 native interleaved-complex-f32 "
-                 "pointwise package (x86_spectral_compiled lane)",
+        "pointwise package (x86_spectral_compiled lane)",
     },
     # Sparse (PR) — genuinely sparse AVX-512 kernels (spmm_csr row-AXPY, sddmm
     # sampled-dot) + the GEMM microkernel for bsmm (x86_sparse_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"Sparse {op} — AVX-512 sparse kernel (spmm = row-wise AXPY over "
-                 "CSR nonzeros, sddmm = sampled dense-dense dot; bsmm via the "
-                 "GEMM microkernel; x86_sparse_compiled lane; f32, matches numpy)",
-    } for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")},
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"Composite helper {op} — host shape/metadata logic composes "
-                 "the AVX-512 f32 GEMM, softmax, transcendental, and binary "
-                 "kernels; x86_composite_helper_compiled lane with no numerical "
-                 "reference fallback; f32, matches the public op reference",
-    } for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa",
-                 "score_combine")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"Sparse {op} — AVX-512 sparse kernel (spmm = row-wise AXPY over "
+            "CSR nonzeros, sddmm = sampled dense-dense dot; bsmm via the "
+            "GEMM microkernel; x86_sparse_compiled lane; f32, matches numpy)",
+        }
+        for op in ("spmm_csr", "spmm_coo", "sddmm", "bsmm")
+    },
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"Composite helper {op} — host shape/metadata logic composes "
+            "the AVX-512 f32 GEMM, softmax, transcendental, and binary "
+            "kernels; x86_composite_helper_compiled lane with no numerical "
+            "reference fallback; f32, matches the public op reference",
+        }
+        for op in ("memory_index_score", "msa_index_scores", "varlen_sdpa", "score_combine")
+    },
     # MoE compute (PR) — routed per-token expert GEMVs (top-1), AVX-512
     # (x86_moe_compiled). dispatch/combine = transport (mesh-gated), unchanged.
     "moe": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "MoE compute (moe) — AVX-512 routed per-token expert GEMV kernel "
-                 "(top-1; routing resolved on host, out_dim vectorized); "
-                 "x86_moe_compiled lane; f32, matches numpy",
+        "(top-1; routing resolved on host, out_dim vectorized); "
+        "x86_moe_compiled lane; f32, matches numpy",
     },
     # Optimizer steps (P3) — fused per-parameter update, AVX-512
     # (x86_optimizer_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": (
-            f"Optimizer {op} — AVX-512 fused per-parameter update kernel "
-            "(state m/v in-place; host computes the 1-β^t bias correction); "
-            "x86_optimizer_compiled lane; f32, matches the optim.py reference"
-            + (
-                "; Lion also has the x86_lion_bwd_compiled physical VJP"
-                if op == "lion"
-                else ""
-            )
-        ),
-    } for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": (
+                f"Optimizer {op} — AVX-512 fused per-parameter update kernel "
+                "(state m/v in-place; host computes the 1-β^t bias correction); "
+                "x86_optimizer_compiled lane; f32, matches the optim.py reference"
+                + ("; Lion also has the x86_lion_bwd_compiled physical VJP" if op == "lion" else "")
+            ),
+        }
+        for op in ("sgd", "momentum", "adam", "adamw", "lion", "nesterov")
+    },
     "adafactor": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Optimizer adafactor — AVX-512 factored row/column and "
-                 "lower-rank full-moment update plus analytic physical "
-                 "adjoints; x86_adafactor_compiled / "
-                 "x86_adafactor_bwd_compiled lanes",
+        "lower-rank full-moment update plus analytic physical "
+        "adjoints; x86_adafactor_compiled / "
+        "x86_adafactor_bwd_compiled lanes",
     },
     # P3 tail — LAMB: AVX-512 adam update + host per-tensor trust ratio.
     "lamb": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Optimizer lamb — AVX-512 adam kernel (lr=1/wd=0) + host "
-                 "layer-wise trust ratio ‖p‖/‖update‖; x86_lamb_compiled lane; "
-                 "f32, matches optim.lamb",
+        "layer-wise trust ratio ‖p‖/‖update‖; x86_lamb_compiled lane; "
+        "f32, matches optim.lamb",
     },
     # P3 tail — Muon: momentum + orthogonal polar factor U·Vh from the AVX-512
     # device SVD (host does U@Vh + momentum/sgd). <2-D normalizes.
@@ -3894,8 +4542,8 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Optimizer muon — momentum then U·Vh orthogonalization via the "
-                 "AVX-512 SVD kernel; host U@Vh + sgd; x86_muon_compiled lane; "
-                 "f32, matches optim.muon",
+        "AVX-512 SVD kernel; host U@Vh + sgd; x86_muon_compiled lane; "
+        "f32, matches optim.muon",
     },
     # State-space (PR) — Mamba2 selective scan, AVX-512 fused single-pass scan
     # vectorized over the state dim N (x86_selective_ssm_compiled).
@@ -3903,42 +4551,48 @@ _X86_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32", "fp16", "bf16"),
         "notes": "Mamba2 selective_ssm — AVX-512 fused selective-scan kernel "
-                 "(single pass over S, vectorized over the state dim N, exp via "
-                 "the Cephes core; x86_selective_ssm_compiled lane; matches the "
-                 "numpy reference). f16/bf16 storage (vcvtph2ps / vcvtpbh_ps "
-                 "load-convert, y truncated back; state+exp+accumulate f32). "
-                 "Reverse-mode adjoint tessera_x86_selective_ssm_bwd_f32 "
-                 "(sequential reverse scan vectorized over N) matches the "
-                 "numpy VJP. Scalar-state A (D,) f32 routes through the "
-                 "chunked-parallel SSD form (AVX-512 GEMM bmms)",
+        "(single pass over S, vectorized over the state dim N, exp via "
+        "the Cephes core; x86_selective_ssm_compiled lane; matches the "
+        "numpy reference). f16/bf16 storage (vcvtph2ps / vcvtpbh_ps "
+        "load-convert, y truncated back; state+exp+accumulate f32). "
+        "Reverse-mode adjoint tessera_x86_selective_ssm_bwd_f32 "
+        "(sequential reverse scan vectorized over N) matches the "
+        "numpy VJP. Scalar-state A (D,) f32 routes through the "
+        "chunked-parallel SSD form (AVX-512 GEMM bmms)",
     },
     # Linalg PR-A — Cholesky + triangular solve (SPD/triangular family). Genuine
     # AVX-512 factorization/substitution kernels (x86_linalg_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"Linalg {op} — AVX-512 kernel (Cholesky–Banachiewicz "
-                 "factorization / forward-back triangular substitution; "
-                 "cholesky_solve = two triangular solves; batched; "
-                 "x86_linalg_compiled lane; f32, matches numpy)",
-    } for op in ("cholesky", "tri_solve", "cholesky_solve")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"Linalg {op} — AVX-512 kernel (Cholesky–Banachiewicz "
+            "factorization / forward-back triangular substitution; "
+            "cholesky_solve = two triangular solves; batched; "
+            "x86_linalg_compiled lane; f32, matches numpy)",
+        }
+        for op in ("cholesky", "tri_solve", "cholesky_solve")
+    },
     # Linalg PR-B — LU (partial pivot) + Householder QR. Genuine AVX-512
     # factorization kernels (x86_linalg_compiled).
-    **{op: {
-        "status": _FUSED_KERNEL_STATUS,
-        "dtypes": ("fp32",),
-        "notes": f"Linalg {op} — AVX-512 kernel (getrf partial-pivot LU / "
-                 "Householder QR with vectorized rank-1 / reflector updates; "
-                 "batched; x86_linalg_compiled lane; f32, matches numpy)",
-    } for op in ("lu", "qr")},
+    **{
+        op: {
+            "status": _FUSED_KERNEL_STATUS,
+            "dtypes": ("fp32",),
+            "notes": f"Linalg {op} — AVX-512 kernel (getrf partial-pivot LU / "
+            "Householder QR with vectorized rank-1 / reflector updates; "
+            "batched; x86_linalg_compiled lane; f32, matches numpy)",
+        }
+        for op in ("lu", "qr")
+    },
     # Linalg PR-C — one-sided Jacobi SVD (x86_linalg_compiled).
     "svd": {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "notes": "Linalg svd — AVX-512 one-sided Jacobi (column-major working "
-                 "copy, vectorized column dots/rotations, descending sort; wide "
-                 "case via transpose; batched; x86_linalg_compiled lane; f32, "
-                 "matches numpy by invariants)",
+        "copy, vectorized column dots/rotations, descending sort; wide "
+        "case via transpose; batched; x86_linalg_compiled lane; f32, "
+        "matches numpy by invariants)",
     },
 }
 
@@ -3951,8 +4605,7 @@ _APPLE_CPU_KERNELS: dict[str, dict[str, Any]] = {
         "status": _FUSED_KERNEL_STATUS,
         "dtypes": ("fp32",),
         "feature_flags": ("reduction",),
-        "notes": "Static rank-2 f32 stable row-softmax "
-                 "(tessera_apple_cpu_softmax_f32; owned Apple native E2E-2 ABI)",
+        "notes": "Static rank-2 f32 stable row-softmax (tessera_apple_cpu_softmax_f32; owned Apple native E2E-2 ABI)",
     },
     "matmul": {
         "status": _FUSED_KERNEL_STATUS,
@@ -3976,7 +4629,7 @@ _APPLE_CPU_KERNELS: dict[str, dict[str, Any]] = {
         "dtypes": ("fp32",),
         "feature_flags": ("accelerate",),
         "notes": "Accelerate cblas_sgemm looped over the batch dim (f32 rank-3); "
-                 "fp16/bf16 or non-f32 batched fall to the numpy reference",
+        "fp16/bf16 or non-f32 batched fall to the numpy reference",
     },
 }
 
@@ -4021,10 +4674,12 @@ _CLIFFORD_PLANNED_GPU_DTYPES = ("fp32", "fp16", "bf16")
 # carry fp16 + bf16 MSL ports.  All other shipped-MSL ops are f32-only;
 # the dtype set below mirrors what `apple_gpu_runtime.mm` actually
 # exports.
-_CLIFFORD_HEADLINE_OPS = frozenset({
-    "clifford_geometric_product",
-    "clifford_rotor_sandwich",
-})
+_CLIFFORD_HEADLINE_OPS = frozenset(
+    {
+        "clifford_geometric_product",
+        "clifford_rotor_sandwich",
+    }
+)
 
 # Ops that ship fused MSL kernels on Apple GPU (2026-05-17 follow-on).
 # Each maps to the exported runtime C ABI symbol name + dtype set.
@@ -4145,33 +4800,34 @@ _CLIFFORD_PRIMITIVES = (
 # kernel + a CPU reference (the unfused composition), so `clifford_manifest_for`
 # reports them. Kept separate from `_CLIFFORD_PRIMITIVES` so the "17 primitives"
 # audits/counts stay exact.
-_CLIFFORD_FUSION_OPS = frozenset({"clifford_rotor_sandwich_norm",
-                                  "clifford_norm_squared"})
+_CLIFFORD_FUSION_OPS = frozenset({"clifford_rotor_sandwich_norm", "clifford_norm_squared"})
 
 # P12 (S_SERIES_GAP_CLOSURE_PLAN) — the GA ops with a native x86 + ROCm device
 # lane: table-driven Cl(3,0) bilinear products plus composite unary / field
 # wrappers that execute through runtime.launch() and compare against the
 # canonical flat Clifford shim.
-_CLIFFORD_DEVICE_COMPILED = frozenset({
-    "clifford_geometric_product",
-    "clifford_wedge",
-    "clifford_left_contraction",
-    "clifford_inner",
-    "clifford_rotor_sandwich",
-    "clifford_reverse",
-    "clifford_grade_involution",
-    "clifford_conjugate",
-    "clifford_grade_projection",
-    "clifford_hodge_star",
-    "clifford_ext_deriv",
-    "clifford_codiff",
-    "clifford_vec_deriv",
-    "clifford_exp",
-    "clifford_integral",
-    "clifford_log",
-    "clifford_norm",
-    "clifford_norm_squared",
-})
+_CLIFFORD_DEVICE_COMPILED = frozenset(
+    {
+        "clifford_geometric_product",
+        "clifford_wedge",
+        "clifford_left_contraction",
+        "clifford_inner",
+        "clifford_rotor_sandwich",
+        "clifford_reverse",
+        "clifford_grade_involution",
+        "clifford_conjugate",
+        "clifford_grade_projection",
+        "clifford_hodge_star",
+        "clifford_ext_deriv",
+        "clifford_codiff",
+        "clifford_vec_deriv",
+        "clifford_exp",
+        "clifford_integral",
+        "clifford_log",
+        "clifford_norm",
+        "clifford_norm_squared",
+    }
+)
 
 
 def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
@@ -4194,35 +4850,41 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # x86 — native AVX-512 bilinear lane (P12) for the table-driven products;
     # Python GA reference for the rest.
     if _device:
-        entries.append(BackendKernelEntry(
-            target="x86",
-            status=_FUSED_KERNEL_STATUS,
-            dtypes=("fp32",),
-            feature_flags=("clifford_dialect", "cayley_table", "avx512"),
-            notes="Cl(3,0) bilinear product on the AVX-512 kernel "
-                  "(tessera_x86_clifford_bilinear_f32; blade-major [8,n]; "
-                  "compile-time Cayley table; x86_clifford_compiled lane)",
-            execute_compare_fixture="tests/unit/test_x86_clifford_compiled.py",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="x86",
+                status=_FUSED_KERNEL_STATUS,
+                dtypes=("fp32",),
+                feature_flags=("clifford_dialect", "cayley_table", "avx512"),
+                notes="Cl(3,0) bilinear product on the AVX-512 kernel "
+                "(tessera_x86_clifford_bilinear_f32; blade-major [8,n]; "
+                "compile-time Cayley table; x86_clifford_compiled lane)",
+                execute_compare_fixture="tests/unit/test_x86_clifford_compiled.py",
+            )
+        )
     else:
-        entries.append(BackendKernelEntry(
-            target="x86",
-            status=_REFERENCE_STATUS,
-            dtypes=_CLIFFORD_CPU_DTYPES,
-            feature_flags=("clifford_dialect", "numpy_reference"),
-            notes="Python GA reference path; GA8 unrolled arith.mulf via ExpandProductTable lit-tested",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="x86",
+                status=_REFERENCE_STATUS,
+                dtypes=_CLIFFORD_CPU_DTYPES,
+                feature_flags=("clifford_dialect", "numpy_reference"),
+                notes="Python GA reference path; GA8 unrolled arith.mulf via ExpandProductTable lit-tested",
+            )
+        )
 
     # Apple CPU — reference status, same Python path as x86. The
     # Accelerate hand-off for matmul-flavored GA ops (geo_product
     # batched contractions) is a GA9-followup performance optimization.
-    entries.append(BackendKernelEntry(
-        target="apple_cpu",
-        status=_REFERENCE_STATUS,
-        dtypes=_CLIFFORD_CPU_DTYPES,
-        feature_flags=("clifford_dialect", "numpy_reference"),
-        notes="Python GA reference; Accelerate hand-off for batched products pending GA9-followup",
-    ))
+    entries.append(
+        BackendKernelEntry(
+            target="apple_cpu",
+            status=_REFERENCE_STATUS,
+            dtypes=_CLIFFORD_CPU_DTYPES,
+            feature_flags=("clifford_dialect", "numpy_reference"),
+            notes="Python GA reference; Accelerate hand-off for batched products pending GA9-followup",
+        )
+    )
 
     # Apple GPU — all 17 GA primitives ship fused MSL kernels as of
     # GA11 (2026-05-17). geo_product + rotor_sandwich additionally carry
@@ -4233,54 +4895,59 @@ def clifford_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # kernels — they take a sampled 3D grid + per-axis spacings
     # (D0, D1, D2, h0, h1, h2) instead of the (in, out, batch) ABI.
     fused_spec = _CLIFFORD_APPLE_GPU_FUSED[op_name]
-    entries.append(BackendKernelEntry(
-        target="apple_gpu",
-        status=_FUSED_KERNEL_STATUS,
-        dtypes=tuple(fused_spec["dtypes"]),
-        feature_flags=("clifford_dialect", "msl", "metal"),
-        notes=(
-            "Fused MSL kernel(s): "
-            + ", ".join(
-                f"{fused_spec['symbol_prefix']}{dt}"
-                for dt in fused_spec["dtypes"]
-            )
-            + " — apple_gpu_runtime.mm; verified bitwise vs Python GA reference."
-        ),
-    ))
+    entries.append(
+        BackendKernelEntry(
+            target="apple_gpu",
+            status=_FUSED_KERNEL_STATUS,
+            dtypes=tuple(fused_spec["dtypes"]),
+            feature_flags=("clifford_dialect", "msl", "metal"),
+            notes=(
+                "Fused MSL kernel(s): "
+                + ", ".join(f"{fused_spec['symbol_prefix']}{dt}" for dt in fused_spec["dtypes"])
+                + " — apple_gpu_runtime.mm; verified bitwise vs Python GA reference."
+            ),
+        )
+    )
 
     # NVIDIA — planned, gated on Phase G.  No per-arch breakout yet;
     # the artifact will land when Phase G H100 BF16 GEMM is green.
-    entries.append(BackendKernelEntry(
-        target="nvidia_sm90",
-        status=_PLANNED_STATUS,
-        dtypes=_CLIFFORD_PLANNED_GPU_DTYPES,
-        feature_flags=("clifford_dialect", "wgmma"),
-        notes="Gated on Phase G; canonical bf16 Cl(3,0) bivector kernel is the first target",
-    ))
+    entries.append(
+        BackendKernelEntry(
+            target="nvidia_sm90",
+            status=_PLANNED_STATUS,
+            dtypes=_CLIFFORD_PLANNED_GPU_DTYPES,
+            feature_flags=("clifford_dialect", "wgmma"),
+            notes="Gated on Phase G; canonical bf16 Cl(3,0) bivector kernel is the first target",
+        )
+    )
 
     # ROCm — native compiled bilinear lane (P12) for the table-driven products;
     # planned (Phase H) for the rest.
     if _device:
-        entries.append(BackendKernelEntry(
-            target="rocm",
-            status=_DEVICE_VERIFIED_JIT_STATUS,
-            dtypes=("fp32",),
-            feature_flags=("clifford_dialect", "cayley_table", "hip_runtime"),
-            notes="Cl(3,0) bilinear product on the COMPILER-GENERATED gfx1151 "
-                  "kernel (generate-rocm-clifford-kernel; one thread per batch "
-                  "element; triples unrolled at generation time; "
-                  "rocm_clifford_compiled lane)",
-            execute_compare_fixture="tests/unit/test_rocm_clifford_compiled.py",
-            hipcc_version_min="7.2.4",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="rocm",
+                status=_DEVICE_VERIFIED_JIT_STATUS,
+                dtypes=("fp32",),
+                feature_flags=("clifford_dialect", "cayley_table", "hip_runtime"),
+                notes="Cl(3,0) bilinear product on the COMPILER-GENERATED gfx1151 "
+                "kernel (generate-rocm-clifford-kernel; one thread per batch "
+                "element; triples unrolled at generation time; "
+                "rocm_clifford_compiled lane)",
+                execute_compare_fixture="tests/unit/test_rocm_clifford_compiled.py",
+                hipcc_version_min="7.2.4",
+            )
+        )
     else:
-        entries.append(BackendKernelEntry(
-            target="rocm",
-            status=_PLANNED_STATUS,
-            dtypes=_CLIFFORD_PLANNED_GPU_DTYPES,
-            feature_flags=("clifford_dialect", "mfma"),
-            notes="Gated on Phase H",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="rocm",
+                status=_PLANNED_STATUS,
+                dtypes=_CLIFFORD_PLANNED_GPU_DTYPES,
+                feature_flags=("clifford_dialect", "mfma"),
+                notes="Gated on Phase H",
+            )
+        )
 
     return entries
 
@@ -4317,10 +4984,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
         "symbol": "tessera_apple_gpu_ebm_inner_step_f32",
         "dtypes": ("fp32",),
         "abi": "(y:f32*, grad:f32*, eta:f32, out:f32*, n:i32)",
-        "notes": (
-            "Pointwise EBM inner step on Apple GPU — out[i] = y[i] - "
-            "eta * grad[i]. First native EBM primitive."
-        ),
+        "notes": ("Pointwise EBM inner step on Apple GPU — out[i] = y[i] - eta * grad[i]. First native EBM primitive."),
     },
     # EBT refinement chain: T inner-step iterations on-device with
     # ping-pong buffers. Same kernel body as inner_step, dispatched in a
@@ -4329,18 +4993,14 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
         "symbol": "tessera_apple_gpu_ebm_refinement_f32",
         "dtypes": ("fp32",),
         "abi": "(y0:f32*, grad:f32*, eta:f32, T:i32, y_out:f32*, n:i32)",
-        "notes": (
-            "EBT-style refinement on Apple GPU — T iterations of "
-            "inner_step on-device with ping-pong buffers."
-        ),
+        "notes": ("EBT-style refinement on Apple GPU — T iterations of inner_step on-device with ping-pong buffers."),
     },
     # Pointwise Langevin step with caller-supplied noise buffer.
     # ABI: (y, grad, noise, eta, noise_scale, out, n).
     "ebm_langevin_step": {
         "symbol": "tessera_apple_gpu_ebm_langevin_step_f32",
         "dtypes": ("fp32",),
-        "abi": ("(y:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, "
-                "out:f32*, n:i32)"),
+        "abi": ("(y:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, out:f32*, n:i32)"),
         "notes": (
             "Affine Langevin step on Apple GPU — out[i] = y[i] - eta * "
             "grad[i] + noise_scale * noise[i]. Caller pre-generates noise "
@@ -4358,8 +5018,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "ebm_sphere_langevin_step": {
         "symbol": "tessera_apple_gpu_ebm_sphere_langevin_step_f32",
         "dtypes": ("fp32",),
-        "abi": ("(x:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, "
-                "out:f32*, d:i32)"),
+        "abi": ("(x:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, out:f32*, d:i32)"),
         "notes": (
             "One Langevin step on S^{d-1} — tangent-project the affine "
             "y - eta*grad + noise_scale*noise update, then renormalize to "
@@ -4369,8 +5028,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "ebm_bivector_langevin_step": {
         "symbol": "tessera_apple_gpu_ebm_langevin_step_f32",
         "dtypes": ("fp32",),
-        "abi": ("(y:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, "
-                "out:f32*, n:i32)"),
+        "abi": ("(y:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, out:f32*, n:i32)"),
         "notes": (
             "One Langevin step on the grade-2 (bivector) subspace of "
             "Cl(p,0) — the on-device update reuses the affine "
@@ -4385,8 +5043,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "ebm_langevin_step_philox": {
         "symbol": "tessera_apple_gpu_ebm_langevin_step_philox_f32",
         "dtypes": ("fp32",),
-        "abi": ("(y:f32*, grad:f32*, eta:f32, noise_scale:f32, "
-                "key:u32*, counter:u32*, out:f32*, n:i32)"),
+        "abi": ("(y:f32*, grad:f32*, eta:f32, noise_scale:f32, key:u32*, counter:u32*, out:f32*, n:i32)"),
         "notes": (
             "Affine Langevin step with on-device Philox-4x32-10 RNG. "
             "Per-thread counter = (counter[0]+i, counter[1..3]); Box-Muller "
@@ -4400,8 +5057,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "ebm_decode_init": {
         "symbol": "tessera_apple_gpu_ebm_decode_init_noise_apply_f32",
         "dtypes": ("fp32",),
-        "abi": ("(base:f32*, base_len:i32, noise:f32*, std:f32, "
-                "out:f32*, n:i32)"),
+        "abi": ("(base:f32*, base_len:i32, noise:f32*, std:f32, out:f32*, n:i32)"),
         "notes": (
             "decode_init(strategy='noise') applied on Apple GPU — "
             "broadcasts `base` across K × event dims and adds `std * "
@@ -4417,8 +5073,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "ebm_bivector_langevin": {
         "symbol": "tessera_apple_gpu_ebm_langevin_step_f32",
         "dtypes": ("fp32",),
-        "abi": ("(y:f32*[8], grad_proj:f32*[8], noise_proj:f32*[8], "
-                "eta:f32, noise_scale:f32, out:f32*[8])"),
+        "abi": ("(y:f32*[8], grad_proj:f32*[8], noise_proj:f32*[8], eta:f32, noise_scale:f32, out:f32*[8])"),
         "notes": (
             "Bivector Langevin step on Apple GPU — composition of GA "
             "grade_projection (already native; applied host-side via "
@@ -4433,8 +5088,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "ebm_sphere_langevin": {
         "symbol": "tessera_apple_gpu_ebm_sphere_langevin_step_f32",
         "dtypes": ("fp32",),
-        "abi": ("(x:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, "
-                "out:f32*, d:i32)"),
+        "abi": ("(x:f32*, grad:f32*, noise:f32*, eta:f32, noise_scale:f32, out:f32*, d:i32)"),
         "notes": (
             "Sphere Langevin step on Apple GPU — tangent projection + "
             "Euler-Maruyama update + retract to S^{d-1}, all in a single "
@@ -4446,8 +5100,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "ebm_self_verify": {
         "symbol": "tessera_apple_gpu_ebm_self_verify_hard_argmin_f32",
         "dtypes": ("fp32",),
-        "abi": ("(energies:f32*[BxK], candidates:f32*[BxKxD], "
-                "out:f32*[BxD], B:i32, K:i32, D:i32)"),
+        "abi": ("(energies:f32*[BxK], candidates:f32*[BxKxD], out:f32*[BxD], B:i32, K:i32, D:i32)"),
         "notes": (
             "Hard-argmin self_verify on Apple GPU — for each batch row, "
             "find k* = argmin_k(energies[b, k]) and copy "
@@ -4507,8 +5160,7 @@ _EBM_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "ebm_ebt_tiny": {
         "symbol": "tessera_apple_gpu_ebm_ebt_tiny_refinement_argmin_f32",
         "dtypes": ("fp32",),
-        "abi": ("(y0:f32*[BxKxD], grad:f32*[BxKxD], eta:f32, T:i32, "
-                "out:f32*[BxD], B:i32, K:i32, D:i32)"),
+        "abi": ("(y0:f32*[BxKxD], grad:f32*[BxKxD], eta:f32, T:i32, out:f32*[BxD], B:i32, K:i32, D:i32)"),
         "notes": (
             "Fused EBT-tiny pipeline: streaming closed-form refinement "
             "+ per-row squared-norm energy + K-way hard argmin, all in "
@@ -4529,7 +5181,7 @@ _EBM_PRIMITIVES: tuple[str, ...] = (
     "ebm_energy",
     "ebm_energy_quadratic",  # tensor-clean alias of ebm_energy (same fused kernel)
     "ebm_inner_step",
-    "ebm_refinement",       # EBT-style refinement loop
+    "ebm_refinement",  # EBT-style refinement loop
     "ebm_langevin_step",
     "ebm_self_verify",
     "ebm_decode_init",
@@ -4576,27 +5228,27 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     # one-workgroup-per-row warp-shuffle sum-of-squares
     # (generate-rocm-ebm-energy-quadratic-kernel). tessera.ebm.energy_quadratic
     # routes x86 → ROCm → Apple → numpy.
-    "ebm_energy": ("tests/unit/test_x86_ebm_energy_quadratic_compiled.py",
-                   "tests/unit/test_rocm_ebm_energy_quadratic_compiled.py"),
+    "ebm_energy": (
+        "tests/unit/test_x86_ebm_energy_quadratic_compiled.py",
+        "tests/unit/test_rocm_ebm_energy_quadratic_compiled.py",
+    ),
     "ebm_energy_quadratic": (
         "tests/unit/test_x86_ebm_energy_quadratic_compiled.py",
-        "tests/unit/test_rocm_ebm_energy_quadratic_compiled.py"),
+        "tests/unit/test_rocm_ebm_energy_quadratic_compiled.py",
+    ),
     # EBT-tiny fused inference step (refine→energy→hard-argmin→gather) over B
     # batches of K≤256 candidates: AVX-512 (double-accumulated energy, first-min
     # tie-break) + a gfx1151 one-workgroup-per-batch kernel with a shared-memory
     # tree argmin (generate-rocm-ebm-ebt-tiny-kernel). Matches Apple's fused f32
     # ebt_tiny dispatch. tessera.ebm.ebt_tiny routes x86 → ROCm → Apple → numpy.
-    "ebm_ebt_tiny": (
-        "tests/unit/test_x86_ebm_ebt_tiny_compiled.py",
-        "tests/unit/test_rocm_ebm_ebt_tiny_compiled.py"),
-    "ebm_inner_step": ("tests/unit/test_x86_ebm_compute_compiled.py",
-                       "tests/unit/test_rocm_ebm_compute_compiled.py"),
-    "ebm_refinement": ("tests/unit/test_x86_ebm_compute_compiled.py",
-                       "tests/unit/test_rocm_ebm_compute_compiled.py"),
-    "ebm_self_verify": ("tests/unit/test_x86_ebm_compute_compiled.py",
-                        "tests/unit/test_rocm_ebm_compute_compiled.py"),
-    "ebm_langevin_step": ("tests/unit/test_x86_ebm_langevin_compiled.py",
-                          "tests/unit/test_rocm_ebm_langevin_compiled.py"),
+    "ebm_ebt_tiny": ("tests/unit/test_x86_ebm_ebt_tiny_compiled.py", "tests/unit/test_rocm_ebm_ebt_tiny_compiled.py"),
+    "ebm_inner_step": ("tests/unit/test_x86_ebm_compute_compiled.py", "tests/unit/test_rocm_ebm_compute_compiled.py"),
+    "ebm_refinement": ("tests/unit/test_x86_ebm_compute_compiled.py", "tests/unit/test_rocm_ebm_compute_compiled.py"),
+    "ebm_self_verify": ("tests/unit/test_x86_ebm_compute_compiled.py", "tests/unit/test_rocm_ebm_compute_compiled.py"),
+    "ebm_langevin_step": (
+        "tests/unit/test_x86_ebm_langevin_compiled.py",
+        "tests/unit/test_rocm_ebm_langevin_compiled.py",
+    ),
     # On-device-Philox Langevin step — SAME affine math as ebm_langevin_step but
     # the noise is drawn IN-KERNEL from (key, counter) via Philox-4x32-10 +
     # Box-Muller (no host noise buffer). The x86 `tessera_x86_ebm_langevin_philox_f32`
@@ -4605,7 +5257,8 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     # langevin_step_philox routes x86 → ROCm → Apple → numpy.
     "ebm_langevin_step_philox": (
         "tests/unit/test_x86_ebm_langevin_philox_compiled.py",
-        "tests/unit/test_rocm_ebm_langevin_philox_compiled.py"),
+        "tests/unit/test_rocm_ebm_langevin_philox_compiled.py",
+    ),
     # Manifold Langevin STEP — reuses the native affine-Langevin kernel (host-drawn,
     # grade-projected noise as an input). x86 = AVX-512 affine kernel, ROCm =
     # generate-rocm-ebm-affine-langevin-kernel. Both the `_step` ops and their
@@ -4616,25 +5269,31 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     # native (device_verified_jit) too, proven by an on-device chain fixture in the geo tests.
     "ebm_bivector_langevin_step": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
-        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py",
+    ),
     "ebm_bivector_langevin": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
-        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py",
+    ),
     "ebm_bivector_langevin_sample": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
-        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py",
+    ),
     # Sphere step reuses the SAME affine kernel: host tangent-projection + affine
     # core + host normalize (retract). No dedicated kernel — the affine core is
     # native, the projection/retract are host (like bivector's grade projection).
     "ebm_sphere_langevin_step": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
-        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py",
+    ),
     "ebm_sphere_langevin": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
-        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py",
+    ),
     "ebm_sphere_langevin_sample": (
         "tests/unit/test_x86_ebm_geo_langevin_compiled.py",
-        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py"),
+        "tests/unit/test_rocm_ebm_geo_langevin_compiled.py",
+    ),
     # Exact-partition (from_energies f32 fast path): a dedicated log-sum-exp
     # reduction kernel — AVX-512 (double-accumulated) + a gfx1151 warp-shuffle
     # reduction (generate-rocm-ebm-partition-kernel). Matches Apple's fused f32
@@ -4642,7 +5301,8 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     # represent Z that overflows f32 and carries a 1e-10 contract).
     "ebm_partition_exact": (
         "tests/unit/test_x86_ebm_partition_compiled.py",
-        "tests/unit/test_rocm_ebm_partition_compiled.py"),
+        "tests/unit/test_rocm_ebm_partition_compiled.py",
+    ),
     # Decode-init noise-apply (DFlash / EBM speculative-decode seeding): a
     # dedicated elementwise `out = base + std*noise` kernel — AVX-512
     # (double-accumulated) + a gfx1151 one-thread-per-element kernel
@@ -4651,7 +5311,8 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
     # shares the numpy reference's samples exactly.
     "ebm_decode_init": (
         "tests/unit/test_x86_ebm_decode_init_compiled.py",
-        "tests/unit/test_rocm_ebm_decode_init_compiled.py"),
+        "tests/unit/test_rocm_ebm_decode_init_compiled.py",
+    ),
 }
 
 
@@ -4675,10 +5336,12 @@ _EBM_DEVICE_COMPILED: dict[str, tuple[str, str]] = {
 # composite precedent (host loop over a native device executor) — the manifold
 # `_sample` chains (`ebm_{bivector,sphere}_langevin_sample`), each proven by an
 # on-device chain fixture (see _EBM_DEVICE_COMPILED above).
-_EBM_USER_FUNCTION_OPS: frozenset[str] = frozenset({
-    "ebm_partition_monte_carlo",  # importance-sampled Z over a user energy_fn
-    "ebm_partition_ais",          # annealed IS over a user energy_fn + host schedule
-})
+_EBM_USER_FUNCTION_OPS: frozenset[str] = frozenset(
+    {
+        "ebm_partition_monte_carlo",  # importance-sampled Z over a user energy_fn
+        "ebm_partition_ais",  # annealed IS over a user energy_fn + host schedule
+    }
+)
 
 
 def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
@@ -4705,119 +5368,134 @@ def ebm_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # A user-function op has no possible native kernel on ANY backend — the GPU
     # slots are honestly `reference` (the numpy path is terminal), not `planned`.
     user_fn = op_name in _EBM_USER_FUNCTION_OPS
-    _user_fn_note = ("host-orchestrated sampler over a user energy_fn — no native "
-                     "kernel on any backend (Apple GPU is reference too); the "
-                     "Python reference is the terminal execution path, not a gap "
-                     "awaiting a kernel")
+    _user_fn_note = (
+        "host-orchestrated sampler over a user energy_fn — no native "
+        "kernel on any backend (Apple GPU is reference too); the "
+        "Python reference is the terminal execution path, not a gap "
+        "awaiting a kernel"
+    )
 
     # CPU targets — Python reference path on every host; the P7 device-lane ops
     # carry a native AVX-512 x86 kernel (fused) instead.
     if device is not None:
-        entries.append(BackendKernelEntry(
-            target="x86",
-            status=_FUSED_KERNEL_STATUS,
-            dtypes=("fp32",),
-            feature_flags=("ebm_namespace", "avx512"),
-            notes="AVX-512 EBM device lane — diff/square/reduce (compute), "
-                  "Philox Box-Muller (langevin), stable log-sum-exp "
-                  "(partition), base+std*noise (decode-init), or the fused "
-                  "refine→energy→argmin→gather EBT-tiny pipeline on the "
-                  "runtime-loaded kernels; see the execute-compare fixture",
-            execute_compare_fixture=device[0],
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="x86",
+                status=_FUSED_KERNEL_STATUS,
+                dtypes=("fp32",),
+                feature_flags=("ebm_namespace", "avx512"),
+                notes="AVX-512 EBM device lane — diff/square/reduce (compute), "
+                "Philox Box-Muller (langevin), stable log-sum-exp "
+                "(partition), base+std*noise (decode-init), or the fused "
+                "refine→energy→argmin→gather EBT-tiny pipeline on the "
+                "runtime-loaded kernels; see the execute-compare fixture",
+                execute_compare_fixture=device[0],
+            )
+        )
     else:
-        entries.append(BackendKernelEntry(
-            target="x86",
+        entries.append(
+            BackendKernelEntry(
+                target="x86",
+                status=_REFERENCE_STATUS,
+                dtypes=_EBM_CPU_DTYPES,
+                feature_flags=("ebm_namespace", "numpy_reference"),
+                notes="Python EBM reference (tessera.ebm.*)",
+            )
+        )
+    entries.append(
+        BackendKernelEntry(
+            target="apple_cpu",
             status=_REFERENCE_STATUS,
             dtypes=_EBM_CPU_DTYPES,
             feature_flags=("ebm_namespace", "numpy_reference"),
-            notes="Python EBM reference (tessera.ebm.*)",
-        ))
-    entries.append(BackendKernelEntry(
-        target="apple_cpu",
-        status=_REFERENCE_STATUS,
-        dtypes=_EBM_CPU_DTYPES,
-        feature_flags=("ebm_namespace", "numpy_reference"),
-        notes="Python EBM reference; Accelerate hand-off pending follow-up",
-    ))
+            notes="Python EBM reference; Accelerate hand-off pending follow-up",
+        )
+    )
 
     # Apple GPU — first native EBM primitives landed 2026-05-17.
     fused_spec = _EBM_APPLE_GPU_FUSED.get(op_name)
     if fused_spec is not None:
-        entries.append(BackendKernelEntry(
-            target="apple_gpu",
-            status=_FUSED_KERNEL_STATUS,
-            dtypes=tuple(fused_spec["dtypes"]),
-            feature_flags=("ebm_namespace", "msl", "metal"),
-            notes=(
-                f"Fused MSL kernel: {fused_spec['symbol']} "
-                f"— ABI {fused_spec['abi']}. {fused_spec['notes']}"
-            ),
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="apple_gpu",
+                status=_FUSED_KERNEL_STATUS,
+                dtypes=tuple(fused_spec["dtypes"]),
+                feature_flags=("ebm_namespace", "msl", "metal"),
+                notes=(f"Fused MSL kernel: {fused_spec['symbol']} — ABI {fused_spec['abi']}. {fused_spec['notes']}"),
+            )
+        )
     elif user_fn:
-        entries.append(BackendKernelEntry(
-            target="apple_gpu",
-            status=_REFERENCE_STATUS,
-            dtypes=_EBM_CPU_DTYPES,
-            feature_flags=("ebm_namespace", "numpy_reference"),
-            notes=_user_fn_note,
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="apple_gpu",
+                status=_REFERENCE_STATUS,
+                dtypes=_EBM_CPU_DTYPES,
+                feature_flags=("ebm_namespace", "numpy_reference"),
+                notes=_user_fn_note,
+            )
+        )
     else:
-        entries.append(BackendKernelEntry(
-            target="apple_gpu",
-            status=_PLANNED_STATUS,
-            dtypes=_EBM_APPLE_GPU_BASELINE_DTYPES,
-            feature_flags=("ebm_namespace", "msl"),
-            notes=(
-                "Python reference is the v1 execution path on Apple GPU; "
-                "native MSL kernel pending."
-            ),
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="apple_gpu",
+                status=_PLANNED_STATUS,
+                dtypes=_EBM_APPLE_GPU_BASELINE_DTYPES,
+                feature_flags=("ebm_namespace", "msl"),
+                notes=("Python reference is the v1 execution path on Apple GPU; native MSL kernel pending."),
+            )
+        )
 
     # NVIDIA — a user-function op is `reference` (no kernel possible); else planned
     # (gated on Phase G).
-    entries.append(BackendKernelEntry(
-        target="nvidia_sm90",
-        status=_REFERENCE_STATUS if user_fn else _PLANNED_STATUS,
-        dtypes=_EBM_CPU_DTYPES if user_fn else _EBM_PLANNED_GPU_DTYPES,
-        feature_flags=(("ebm_namespace", "numpy_reference") if user_fn
-                       else ("ebm_namespace",)),
-        notes=_user_fn_note if user_fn else "Gated on Phase G",
-    ))
+    entries.append(
+        BackendKernelEntry(
+            target="nvidia_sm90",
+            status=_REFERENCE_STATUS if user_fn else _PLANNED_STATUS,
+            dtypes=_EBM_CPU_DTYPES if user_fn else _EBM_PLANNED_GPU_DTYPES,
+            feature_flags=(("ebm_namespace", "numpy_reference") if user_fn else ("ebm_namespace",)),
+            notes=_user_fn_note if user_fn else "Gated on Phase G",
+        )
+    )
     # ROCm — device_verified_jit device lane for the P7 ops; `reference` for the user-function
     # ops (no kernel possible); else planned (Phase H).
     if device is not None:
-        entries.append(BackendKernelEntry(
-            target="rocm",
-            status=_DEVICE_VERIFIED_JIT_STATUS,
-            dtypes=("fp32",),
-            feature_flags=("ebm_namespace", "hip_runtime"),
-            notes="COMPILER-GENERATED gfx1151 EBM device lane — diff/square/"
-                  "reduce (compute), Philox Box-Muller (langevin), warp-shuffle "
-                  "log-sum-exp (partition), base+std*noise (decode-init), or the "
-                  "fused refine→energy→argmin→gather EBT-tiny pipeline "
-                  "(one-workgroup-per-batch, shared-memory tree argmin); "
-                  "executes via runtime.launch(); see the execute-compare "
-                  "fixture",
-            execute_compare_fixture=device[1],
-            hipcc_version_min="7.2.4",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="rocm",
+                status=_DEVICE_VERIFIED_JIT_STATUS,
+                dtypes=("fp32",),
+                feature_flags=("ebm_namespace", "hip_runtime"),
+                notes="COMPILER-GENERATED gfx1151 EBM device lane — diff/square/"
+                "reduce (compute), Philox Box-Muller (langevin), warp-shuffle "
+                "log-sum-exp (partition), base+std*noise (decode-init), or the "
+                "fused refine→energy→argmin→gather EBT-tiny pipeline "
+                "(one-workgroup-per-batch, shared-memory tree argmin); "
+                "executes via runtime.launch(); see the execute-compare "
+                "fixture",
+                execute_compare_fixture=device[1],
+                hipcc_version_min="7.2.4",
+            )
+        )
     elif user_fn:
-        entries.append(BackendKernelEntry(
-            target="rocm",
-            status=_REFERENCE_STATUS,
-            dtypes=_EBM_CPU_DTYPES,
-            feature_flags=("ebm_namespace", "numpy_reference"),
-            notes=_user_fn_note,
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="rocm",
+                status=_REFERENCE_STATUS,
+                dtypes=_EBM_CPU_DTYPES,
+                feature_flags=("ebm_namespace", "numpy_reference"),
+                notes=_user_fn_note,
+            )
+        )
     else:
-        entries.append(BackendKernelEntry(
-            target="rocm",
-            status=_PLANNED_STATUS,
-            dtypes=_EBM_PLANNED_GPU_DTYPES,
-            feature_flags=("ebm_namespace",),
-            notes="Gated on Phase H",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="rocm",
+                status=_PLANNED_STATUS,
+                dtypes=_EBM_PLANNED_GPU_DTYPES,
+                feature_flags=("ebm_namespace",),
+                notes="Gated on Phase H",
+            )
+        )
 
     return entries
 
@@ -4889,41 +5567,30 @@ _COMPLEX_APPLE_GPU_FUSED: dict[str, dict[str, Any]] = {
     "complex_mul": {
         "symbol": "tessera_apple_gpu_complex_mul_f32",
         "dtypes": ("fp32",),
-        "abi": ("(a_re:f32*, a_im:f32*, b_re:f32*, b_im:f32*, "
-                "out_re:f32*, out_im:f32*, n:i32)"),
-        "notes": (
-            "Elementwise complex multiplication on Apple GPU — "
-            "(a + bi)(c + di) = (ac − bd) + (ad + bc)i."
-        ),
+        "abi": ("(a_re:f32*, a_im:f32*, b_re:f32*, b_im:f32*, out_re:f32*, out_im:f32*, n:i32)"),
+        "notes": ("Elementwise complex multiplication on Apple GPU — (a + bi)(c + di) = (ac − bd) + (ad + bc)i."),
     },
     "complex_exp": {
         "symbol": "tessera_apple_gpu_complex_exp_f32",
         "dtypes": ("fp32",),
         "abi": "(re:f32*, im:f32*, out_re:f32*, out_im:f32*, n:i32)",
-        "notes": (
-            "Elementwise complex exponential via Euler form — "
-            "e^(a+bi) = e^a · (cos b, sin b)."
-        ),
+        "notes": ("Elementwise complex exponential via Euler form — e^(a+bi) = e^a · (cos b, sin b)."),
     },
     "complex_stereographic": {
         "symbol": "tessera_apple_gpu_complex_stereographic_f32",
         "dtypes": ("fp32",),
         "abi": ("(x:f32*, y:f32*, z:f32*, out_re:f32*, out_im:f32*, n:i32)"),
-        "notes": (
-            "Stereographic projection S² → ℂ — f(x,y,z) = (x + iy) / "
-            "(1 − z).  North pole → ∞."
-        ),
+        "notes": ("Stereographic projection S² → ℂ — f(x,y,z) = (x + iy) / (1 − z).  North pole → ∞."),
     },
     "complex_mobius": {
         "symbol": "tessera_apple_gpu_complex_mobius_f32",
         "dtypes": ("fp32",),
-        "abi": ("(z_re:f32*, z_im:f32*, a_re:f32, a_im:f32, "
-                "b_re:f32, b_im:f32, c_re:f32, c_im:f32, "
-                "d_re:f32, d_im:f32, out_re:f32*, out_im:f32*, n:i32)"),
-        "notes": (
-            "Möbius transformation (az+b)/(cz+d) — broadcasts scalar "
-            "(a, b, c, d) across the input batch."
+        "abi": (
+            "(z_re:f32*, z_im:f32*, a_re:f32, a_im:f32, "
+            "b_re:f32, b_im:f32, c_re:f32, c_im:f32, "
+            "d_re:f32, d_im:f32, out_re:f32*, out_im:f32*, n:i32)"
         ),
+        "notes": ("Möbius transformation (az+b)/(cz+d) — broadcasts scalar (a, b, c, d) across the input batch."),
     },
 }
 
@@ -4941,13 +5608,28 @@ _COMPLEX_PRIMITIVES: tuple[str, ...] = (
 # (interleaved-f32 composed on the AVX-512 / gfx1151 transcendental / unary /
 # binary / atan2 kernels; runtime x86_complex_compiled / rocm_complex_compiled).
 # complex_manifest_for() emits these as fused (x86) / device_verified_jit (rocm).
-_COMPLEX_DEVICE_COMPILED: frozenset[str] = frozenset({
-    "complex_mul", "complex_div", "complex_conjugate", "complex_abs",
-    "complex_arg", "complex_exp", "complex_log", "complex_sqrt", "complex_pow",
-    "check_cauchy_riemann", "conformal_jacobian",
-    "conformal_energy_on_sphere", "cross_ratio", "dbar", "dz",
-    "is_concyclic", "laplacian_2d", "mobius_from_three_points",
-})
+_COMPLEX_DEVICE_COMPILED: frozenset[str] = frozenset(
+    {
+        "complex_mul",
+        "complex_div",
+        "complex_conjugate",
+        "complex_abs",
+        "complex_arg",
+        "complex_exp",
+        "complex_log",
+        "complex_sqrt",
+        "complex_pow",
+        "check_cauchy_riemann",
+        "conformal_jacobian",
+        "conformal_energy_on_sphere",
+        "cross_ratio",
+        "dbar",
+        "dz",
+        "is_concyclic",
+        "laplacian_2d",
+        "mobius_from_three_points",
+    }
+)
 
 
 # E3 (2026-05-20) — every M7 Visual Complex op (4 fused + 16 long-tail)
@@ -5048,46 +5730,56 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # ``support.tier()`` sees a ``target_ir=reference`` row on the
     # ``cpu`` target and reports REFERENCE_ONLY instead of falling
     # through to the runtime=ready NATIVE_READY branch.
-    entries.append(BackendKernelEntry(
-        target="cpu",
-        status=_REFERENCE_STATUS,
-        dtypes=("fp32",),
-        feature_flags=("numpy", "reference_execution"),
-        notes="numpy reference path (tessera.complex.*)",
-    ))
-    entries.append(BackendKernelEntry(
-        target="x86",
-        status=_FUSED_KERNEL_STATUS if _complex_compiled else _REFERENCE_STATUS,
-        dtypes=("fp32",),
-        feature_flags=(("complex_namespace", "interleaved_f32", "avx512")
-                       if _complex_compiled
-                       else ("complex_namespace", "numpy_reference")),
-        notes=("interleaved-f32 complex op composed on the AVX-512 "
-               "transcendental/unary/binary/atan2 kernels "
-               "(x86_complex_compiled lane)" if _complex_compiled
-               else "Python complex reference (tessera.complex.*)"),
-    ))
-    entries.append(BackendKernelEntry(
-        target="apple_cpu",
-        status=_REFERENCE_STATUS,
-        dtypes=("fp32",),
-        feature_flags=("complex_namespace", "numpy_reference"),
-        notes="Python complex reference (tessera.complex.*)",
-    ))
+    entries.append(
+        BackendKernelEntry(
+            target="cpu",
+            status=_REFERENCE_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("numpy", "reference_execution"),
+            notes="numpy reference path (tessera.complex.*)",
+        )
+    )
+    entries.append(
+        BackendKernelEntry(
+            target="x86",
+            status=_FUSED_KERNEL_STATUS if _complex_compiled else _REFERENCE_STATUS,
+            dtypes=("fp32",),
+            feature_flags=(
+                ("complex_namespace", "interleaved_f32", "avx512")
+                if _complex_compiled
+                else ("complex_namespace", "numpy_reference")
+            ),
+            notes=(
+                "interleaved-f32 complex op composed on the AVX-512 "
+                "transcendental/unary/binary/atan2 kernels "
+                "(x86_complex_compiled lane)"
+                if _complex_compiled
+                else "Python complex reference (tessera.complex.*)"
+            ),
+        )
+    )
+    entries.append(
+        BackendKernelEntry(
+            target="apple_cpu",
+            status=_REFERENCE_STATUS,
+            dtypes=("fp32",),
+            feature_flags=("complex_namespace", "numpy_reference"),
+            notes="Python complex reference (tessera.complex.*)",
+        )
+    )
     # Apple GPU — fused MSL kernel for the 4-op fused subset; planned
     # slot (with full dtype matrix) for the long-tail.
     fused = _COMPLEX_APPLE_GPU_FUSED.get(op_name)
     if fused is not None:
-        entries.append(BackendKernelEntry(
-            target="apple_gpu",
-            status=_FUSED_KERNEL_STATUS,
-            dtypes=tuple(fused["dtypes"]),
-            feature_flags=("complex_namespace", "msl", "metal"),
-            notes=(
-                f"Fused MSL kernel: {fused['symbol']} — "
-                f"ABI {fused['abi']}. {fused['notes']}"
-            ),
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="apple_gpu",
+                status=_FUSED_KERNEL_STATUS,
+                dtypes=tuple(fused["dtypes"]),
+                feature_flags=("complex_namespace", "msl", "metal"),
+                notes=(f"Fused MSL kernel: {fused['symbol']} — ABI {fused['abi']}. {fused['notes']}"),
+            )
+        )
     elif in_long_tail and _complex_compiled:
         # P6 (2026-07-09) — the long-tail ops now ship a REAL Apple GPU lane
         # (apple_gpu_complex_compiled): the 9 pointwise ops compose interleaved-
@@ -5095,99 +5787,116 @@ def complex_manifest_for(op_name: str) -> list[BackendKernelEntry]:
         # reuse the tessera.complex reference (host structure — the same path
         # x86/ROCm take). Direct execute/compare, not a bespoke fused MSL kernel;
         # fp16/bf16 native storage stays the M7 follow-up.
-        entries.append(BackendKernelEntry(
-            target="apple_gpu",
-            status=_DEVICE_VERIFIED_JIT_STATUS,
-            dtypes=("fp32",),
-            feature_flags=("complex_namespace", "interleaved_f32", "msl", "metal"),
-            notes=(
-                "interleaved-f32 complex op composed on the Apple GPU unary/"
-                "binary/atan2 lanes (apple_gpu_complex_compiled); geometric ops "
-                "reuse the tessera.complex reference. fp16/bf16 native storage "
-                "remains the M7 follow-up."
-            ),
-            execute_compare_fixture="tests/unit/test_apple_gpu_complex_compiled.py",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="apple_gpu",
+                status=_DEVICE_VERIFIED_JIT_STATUS,
+                dtypes=("fp32",),
+                feature_flags=("complex_namespace", "interleaved_f32", "msl", "metal"),
+                notes=(
+                    "interleaved-f32 complex op composed on the Apple GPU unary/"
+                    "binary/atan2 lanes (apple_gpu_complex_compiled); geometric ops "
+                    "reuse the tessera.complex reference. fp16/bf16 native storage "
+                    "remains the M7 follow-up."
+                ),
+                execute_compare_fixture="tests/unit/test_apple_gpu_complex_compiled.py",
+            )
+        )
     elif in_long_tail:
-        entries.append(BackendKernelEntry(
-            target="apple_gpu",
-            status=_PLANNED_STATUS,
-            dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
-            feature_flags=("complex_namespace", "msl", "metal"),
-            notes=(
-                "Planned kernel target dtypes (fp32 + fp16 + bf16). "
-                "Today: this op runs only via the Python reference path "
-                "above (fp32-only); the fp16/bf16 entries here describe "
-                "what the future MSL kernel will support, not what runs "
-                "now. Promotion gated on the M7 follow-up kernel sprint."
-            ),
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="apple_gpu",
+                status=_PLANNED_STATUS,
+                dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
+                feature_flags=("complex_namespace", "msl", "metal"),
+                notes=(
+                    "Planned kernel target dtypes (fp32 + fp16 + bf16). "
+                    "Today: this op runs only via the Python reference path "
+                    "above (fp32-only); the fp16/bf16 entries here describe "
+                    "what the future MSL kernel will support, not what runs "
+                    "now. Promotion gated on the M7 follow-up kernel sprint."
+                ),
+            )
+        )
     # NVIDIA — planned slots across SM_80 / SM_90 / SM_100 / SM_120.
     # The 4 fused ops are the canonical first kernels for Phase G; the
     # long-tail is gated on the same Phase G milestone.  cuComplex.h-style
     # PTX intrinsics cover complex_log / sqrt / pow / div / conjugate /
     # abs / arg trivially once the SM_90 BF16 GEMM baseline is green.
     for target_name, flags, arch_min in (
-        ("nvidia_sm80",  ("complex_namespace", "wmma"),      "sm_80"),
-        ("nvidia_sm90",  ("complex_namespace", "wgmma"),     "sm_90a"),
-        ("nvidia_sm100", ("complex_namespace", "tcgen05"),   "sm_100a"),
-        ("nvidia_sm120", ("complex_namespace", "tcgen05"),   "sm_120a"),
+        ("nvidia_sm80", ("complex_namespace", "wmma"), "sm_80"),
+        ("nvidia_sm90", ("complex_namespace", "wgmma"), "sm_90a"),
+        ("nvidia_sm100", ("complex_namespace", "tcgen05"), "sm_100a"),
+        ("nvidia_sm120", ("complex_namespace", "tcgen05"), "sm_120a"),
     ):
-        entries.append(BackendKernelEntry(
-            target=target_name,
-            status=_PLANNED_STATUS,
-            dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
-            feature_flags=flags,
-            notes=(
-                "Planned WGMMA/tcgen05 kernel target dtypes "
-                "(fp32 + fp16 + bf16). Today: this op runs only via the "
-                "Python reference path (fp32-only); fp16/bf16 lanes "
-                "land with the actual Phase G kernel work."
-            ),
-            cuda_arch_min=arch_min,
-            nvcc_version_min="13.3",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target=target_name,
+                status=_PLANNED_STATUS,
+                dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
+                feature_flags=flags,
+                notes=(
+                    "Planned WGMMA/tcgen05 kernel target dtypes "
+                    "(fp32 + fp16 + bf16). Today: this op runs only via the "
+                    "Python reference path (fp32-only); fp16/bf16 lanes "
+                    "land with the actual Phase G kernel work."
+                ),
+                cuda_arch_min=arch_min,
+                nvcc_version_min="13.3",
+            )
+        )
     # ROCm — the 9 pointwise ops ship a device_verified_jit device lane (interleaved-f32
     # composed on the gfx1151 unary/binary/atan2 kernels, rocm_complex_compiled);
     # the long-tail stays planned (Phase H).
     if _complex_compiled:
-        entries.append(BackendKernelEntry(
-            target="rocm",
-            status=_DEVICE_VERIFIED_JIT_STATUS,
-            dtypes=("fp32",),
-            feature_flags=("complex_namespace", "interleaved_f32", "hip_runtime"),
-            notes=(
-                "interleaved-f32 complex op composed on the gfx1151 "
-                "unary/binary/atan2 kernels (rocm_complex_compiled lane)"
-            ),
-            execute_compare_fixture="tests/unit/test_rocm_complex_compiled.py",
-            hipcc_version_min="7.2.4",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="rocm",
+                status=_DEVICE_VERIFIED_JIT_STATUS,
+                dtypes=("fp32",),
+                feature_flags=("complex_namespace", "interleaved_f32", "hip_runtime"),
+                notes=(
+                    "interleaved-f32 complex op composed on the gfx1151 "
+                    "unary/binary/atan2 kernels (rocm_complex_compiled lane)"
+                ),
+                execute_compare_fixture="tests/unit/test_rocm_complex_compiled.py",
+                hipcc_version_min="7.2.4",
+            )
+        )
     else:
-        entries.append(BackendKernelEntry(
-            target="rocm",
-            status=_PLANNED_STATUS,
-            dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
-            feature_flags=("complex_namespace", "mfma"),
-            notes=(
-                "Planned MFMA kernel target dtypes (fp32 + fp16 + bf16). "
-                "Today: this op runs only via the Python reference path "
-                "(fp32-only); fp16/bf16 lanes land with the Phase H "
-                "kernel work."
-            ),
-            hipcc_version_min="7.2.4",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="rocm",
+                status=_PLANNED_STATUS,
+                dtypes=_M7_LONG_TAIL_PLANNED_GPU_DTYPES,
+                feature_flags=("complex_namespace", "mfma"),
+                notes=(
+                    "Planned MFMA kernel target dtypes (fp32 + fp16 + bf16). "
+                    "Today: this op runs only via the Python reference path "
+                    "(fp32-only); fp16/bf16 lanes land with the Phase H "
+                    "kernel work."
+                ),
+                hipcc_version_min="7.2.4",
+            )
+        )
     return entries
 
 
 # A1 (2026-06-18) — GEMM-family ops that carry a unified MMA descriptor.
 # Mirrors ``primitive_coverage._ROCM_MMA_OPS`` (kept as a local literal so this
 # module stays importable without pulling in the audit registry).
-_ROCM_MMA_OP_NAMES: frozenset[str] = frozenset({
-    "matmul", "batched_gemm", "grouped_gemm", "dequant_matmul",
-    "dequant_grouped_gemm",
-    "linear_general", "qkv_projection", "factorized_matmul",
-})
+_ROCM_MMA_OP_NAMES: frozenset[str] = frozenset(
+    {
+        "matmul",
+        "batched_gemm",
+        "grouped_gemm",
+        "dequant_matmul",
+        "dequant_grouped_gemm",
+        "linear_general",
+        "qkv_projection",
+        "factorized_matmul",
+    }
+)
 
 
 # Single-GPU closeout C.4 (2026-07-01): planned/partial compute-tail
@@ -5195,33 +5904,76 @@ _ROCM_MMA_OP_NAMES: frozenset[str] = frozenset({
 # ownership. These rows do not claim native kernels; they pin the conservative
 # CPU reference execution lane so the closeout dashboard no longer treats them
 # as ownerless backend work.
-_SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset({
-    # rng
-    "rng_bernoulli", "rng_beta", "rng_categorical", "rng_dirichlet",
-    "rng_clone", "rng_fold_in", "rng_key", "rng_split",
-    "rng_gamma", "rng_gibbs_sample", "rng_hmc_sample", "rng_langevin_sample",
-    "rng_mala_sample", "rng_multinomial", "rng_permutation", "rng_poisson",
-    "rng_randint", "rng_truncated_normal",
-    # loss
-    "ctc_loss",
-    # vision / pooling
-    "center_crop", "image_resize", "interpolate",
-    # recurrent / model / layout
-    "bidirectional_scan", "conv1d", "conv_transpose", "gru_cell", "lstm_cell",
-    "lora_linear", "patchify", "pixel_shuffle", "pixel_unshuffle",
-    "simple_rnn_cell",
-    "arange", "cast", "masked_fill", "mor_partition", "mor_router",
-    "mor_scatter", "pack", "rearrange", "rope_merge", "rope_split",
-    "tile_view", "unpack",
-    # smaller compute tails
-    "cross_attention", "depthwise_conv1d", "edm_loss_weight",
-    "edm_precondition", "factorized_pos_emb", "masked_scatter",
-    "memory_read", "mrope_2d", "online_softmax_state", "perceiver_resampler",
-    "spectral_norm",
-    # BLOCK-ATTNRES-1 Phase 1-3 — CPU reference owner plus explicit planned
-    # target lanes. Typed Graph/AD contracts are real; native packages are not.
-    "attn_with_stats", "depth_attn", "softmax_merge", "softmax_finalize",
-})
+_SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset(
+    {
+        # rng
+        "rng_bernoulli",
+        "rng_beta",
+        "rng_categorical",
+        "rng_dirichlet",
+        "rng_clone",
+        "rng_fold_in",
+        "rng_key",
+        "rng_split",
+        "rng_gamma",
+        "rng_gibbs_sample",
+        "rng_hmc_sample",
+        "rng_langevin_sample",
+        "rng_mala_sample",
+        "rng_multinomial",
+        "rng_permutation",
+        "rng_poisson",
+        "rng_randint",
+        "rng_truncated_normal",
+        # loss
+        "ctc_loss",
+        # vision / pooling
+        "center_crop",
+        "image_resize",
+        "interpolate",
+        # recurrent / model / layout
+        "bidirectional_scan",
+        "conv1d",
+        "conv_transpose",
+        "gru_cell",
+        "lstm_cell",
+        "lora_linear",
+        "patchify",
+        "pixel_shuffle",
+        "pixel_unshuffle",
+        "simple_rnn_cell",
+        "arange",
+        "cast",
+        "masked_fill",
+        "mor_partition",
+        "mor_router",
+        "mor_scatter",
+        "pack",
+        "rearrange",
+        "rope_merge",
+        "rope_split",
+        "tile_view",
+        "unpack",
+        # smaller compute tails
+        "cross_attention",
+        "depthwise_conv1d",
+        "edm_loss_weight",
+        "edm_precondition",
+        "factorized_pos_emb",
+        "masked_scatter",
+        "memory_read",
+        "mrope_2d",
+        "online_softmax_state",
+        "perceiver_resampler",
+        "spectral_norm",
+        # BLOCK-ATTNRES-1 Phase 1-3 — CPU reference owner plus explicit planned
+        # target lanes. Typed Graph/AD contracts are real; native packages are not.
+        "attn_with_stats",
+        "depth_attn",
+        "softmax_merge",
+        "softmax_finalize",
+    }
+)
 
 _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES: Mapping[str, tuple[str, ...]] = {
     "depth_attn": ("fp32",),
@@ -5238,42 +5990,95 @@ _SINGLE_GPU_COMPUTE_REFERENCE_DTYPES: Mapping[str, tuple[str, ...]] = {
 }
 
 
-_STRUCTURED_COMPUTE_COMPILED_OPS: frozenset[str] = frozenset({
-    "ctc_loss",
-    "center_crop", "image_resize", "interpolate",
-    "patchify", "pixel_shuffle", "pixel_unshuffle",
-    "conv1d", "conv_transpose", "lora_linear",
-    "gru_cell", "lstm_cell", "simple_rnn_cell",
-    "depthwise_conv1d",
-    "cross_attention", "perceiver_resampler",
-    "bidirectional_scan",
-    "arange", "cast", "masked_fill", "mor_partition", "mor_router",
-    "mor_scatter", "pack", "rearrange", "rope_merge", "rope_split",
-    "tile_view", "unpack",
-    "edm_loss_weight", "edm_precondition", "factorized_pos_emb",
-    "masked_scatter", "memory_read", "mrope_2d", "online_softmax_state",
-    "spectral_norm",
-})
+_STRUCTURED_COMPUTE_COMPILED_OPS: frozenset[str] = frozenset(
+    {
+        "ctc_loss",
+        "center_crop",
+        "image_resize",
+        "interpolate",
+        "patchify",
+        "pixel_shuffle",
+        "pixel_unshuffle",
+        "conv1d",
+        "conv_transpose",
+        "lora_linear",
+        "gru_cell",
+        "lstm_cell",
+        "simple_rnn_cell",
+        "depthwise_conv1d",
+        "cross_attention",
+        "perceiver_resampler",
+        "bidirectional_scan",
+        "arange",
+        "cast",
+        "masked_fill",
+        "mor_partition",
+        "mor_router",
+        "mor_scatter",
+        "pack",
+        "rearrange",
+        "rope_merge",
+        "rope_split",
+        "tile_view",
+        "unpack",
+        "edm_loss_weight",
+        "edm_precondition",
+        "factorized_pos_emb",
+        "masked_scatter",
+        "memory_read",
+        "mrope_2d",
+        "online_softmax_state",
+        "spectral_norm",
+    }
+)
 
-_STRUCTURED_COMPUTE_CUDA_PLANNED_OPS: frozenset[str] = frozenset({
-    "edm_loss_weight", "edm_precondition", "factorized_pos_emb",
-    "masked_scatter", "memory_read", "mrope_2d", "online_softmax_state",
-    "spectral_norm",
-})
+_STRUCTURED_COMPUTE_CUDA_PLANNED_OPS: frozenset[str] = frozenset(
+    {
+        "edm_loss_weight",
+        "edm_precondition",
+        "factorized_pos_emb",
+        "masked_scatter",
+        "memory_read",
+        "mrope_2d",
+        "online_softmax_state",
+        "spectral_norm",
+    }
+)
 
-_RNG_DISTRIBUTION_COMPILED_OPS: frozenset[str] = frozenset({
-    "rng_bernoulli", "rng_beta", "rng_categorical", "rng_clone",
-    "rng_dirichlet", "rng_fold_in", "rng_gamma", "rng_gibbs_sample",
-    "rng_hmc_sample", "rng_key", "rng_langevin_sample", "rng_mala_sample",
-    "rng_multinomial", "rng_permutation", "rng_poisson", "rng_randint",
-    "rng_split", "rng_truncated_normal",
-})
+_RNG_DISTRIBUTION_COMPILED_OPS: frozenset[str] = frozenset(
+    {
+        "rng_bernoulli",
+        "rng_beta",
+        "rng_categorical",
+        "rng_clone",
+        "rng_dirichlet",
+        "rng_fold_in",
+        "rng_gamma",
+        "rng_gibbs_sample",
+        "rng_hmc_sample",
+        "rng_key",
+        "rng_langevin_sample",
+        "rng_mala_sample",
+        "rng_multinomial",
+        "rng_permutation",
+        "rng_poisson",
+        "rng_randint",
+        "rng_split",
+        "rng_truncated_normal",
+    }
+)
 
-_STRUCTURED_COMPUTE_OVERLAY_OPS: frozenset[str] = frozenset({
-    "attn_compressed_blocks", "attn_local_window_2d", "attn_top_k_blocks",
-    "linear_attn_state", "lookahead_sparse_attention", "power_attn",
-    "transpose",
-})
+_STRUCTURED_COMPUTE_OVERLAY_OPS: frozenset[str] = frozenset(
+    {
+        "attn_compressed_blocks",
+        "attn_local_window_2d",
+        "attn_top_k_blocks",
+        "linear_attn_state",
+        "lookahead_sparse_attention",
+        "power_attn",
+        "transpose",
+    }
+)
 
 
 def _overlay_structured_compute_entries(
@@ -5290,23 +6095,27 @@ def _overlay_structured_compute_entries(
         "fused kernel."
     )
     out = [e for e in entries if e.target not in {"x86", "rocm"}]
-    out.append(BackendKernelEntry(
-        target="x86",
-        status=_DEVICE_VERIFIED_JIT_STATUS,
-        dtypes=dtypes,
-        feature_flags=("avx512",),
-        notes=notes + " Executes via x86_structured_compute_compiled.",
-        execute_compare_fixture="tests/unit/test_x86_structured_compute_compiled.py",
-    ))
-    out.append(BackendKernelEntry(
-        target="rocm",
-        status=_DEVICE_VERIFIED_JIT_STATUS,
-        dtypes=dtypes,
-        feature_flags=("hip_runtime", "structured_compute"),
-        notes=notes + " Executes via rocm_structured_compute_compiled.",
-        execute_compare_fixture="tests/unit/test_rocm_structured_compute_compiled.py",
-        hipcc_version_min="7.2.4",
-    ))
+    out.append(
+        BackendKernelEntry(
+            target="x86",
+            status=_DEVICE_VERIFIED_JIT_STATUS,
+            dtypes=dtypes,
+            feature_flags=("avx512",),
+            notes=notes + " Executes via x86_structured_compute_compiled.",
+            execute_compare_fixture="tests/unit/test_x86_structured_compute_compiled.py",
+        )
+    )
+    out.append(
+        BackendKernelEntry(
+            target="rocm",
+            status=_DEVICE_VERIFIED_JIT_STATUS,
+            dtypes=dtypes,
+            feature_flags=("hip_runtime", "structured_compute"),
+            notes=notes + " Executes via rocm_structured_compute_compiled.",
+            execute_compare_fixture="tests/unit/test_rocm_structured_compute_compiled.py",
+            hipcc_version_min="7.2.4",
+        )
+    )
     return out
 
 
@@ -5352,8 +6161,8 @@ def _single_gpu_compute_reference_manifest_for(
                 dtypes=dtypes,
                 feature_flags=("metal", "philox", "rng_distribution"),
                 notes=notes + " Executes via apple_gpu_rng_compiled "
-                              "(Philox reference core; Apple ships no device "
-                              "Philox kernel).",
+                "(Philox reference core; Apple ships no device "
+                "Philox kernel).",
                 execute_compare_fixture="tests/unit/test_apple_gpu_rng_compiled.py",
             ),
             BackendKernelEntry(
@@ -5400,32 +6209,36 @@ def _single_gpu_compute_reference_manifest_for(
         ]
         apple_gpu = _APPLE_GPU_KERNELS.get(op_name)
         if apple_gpu is not None:
-            entries.append(BackendKernelEntry(
-                target="apple_gpu",
-                status=str(apple_gpu["status"]),
-                dtypes=tuple(apple_gpu["dtypes"]),
-                feature_flags=("metal", "mps", "msl"),
-                notes=str(apple_gpu.get("notes", "")),
-                runtime_symbol=apple_gpu.get("runtime_symbol"),
-                shape_envelope=apple_gpu.get("shape_envelope"),
-                # A ``device_verified_jit`` structured-compute row carries its numerical
-                # proof (execute_compare_fixture) directly — mirrors the x86/
-                # ROCm entries above. Required at construction for device_verified_jit.
-                execute_compare_fixture=apple_gpu.get("execute_compare_fixture"),
-                benchmark_json=apple_gpu.get("benchmark_json"),
-                benchmark_metadata=_APPLE_GPU_HOT_PATH_METADATA.get(op_name),
-            ))
-        entries.extend([
-            BackendKernelEntry(
-                target="rocm",
-                status=_DEVICE_VERIFIED_JIT_STATUS,
-                dtypes=dtypes,
-                feature_flags=("hip_runtime", "structured_compute"),
-                notes=notes + " Executes via rocm_structured_compute_compiled.",
-                execute_compare_fixture="tests/unit/test_rocm_structured_compute_compiled.py",
-                hipcc_version_min="7.2.4",
-            ),
-        ])
+            entries.append(
+                BackendKernelEntry(
+                    target="apple_gpu",
+                    status=str(apple_gpu["status"]),
+                    dtypes=tuple(apple_gpu["dtypes"]),
+                    feature_flags=("metal", "mps", "msl"),
+                    notes=str(apple_gpu.get("notes", "")),
+                    runtime_symbol=apple_gpu.get("runtime_symbol"),
+                    shape_envelope=apple_gpu.get("shape_envelope"),
+                    # A ``device_verified_jit`` structured-compute row carries its numerical
+                    # proof (execute_compare_fixture) directly — mirrors the x86/
+                    # ROCm entries above. Required at construction for device_verified_jit.
+                    execute_compare_fixture=apple_gpu.get("execute_compare_fixture"),
+                    benchmark_json=apple_gpu.get("benchmark_json"),
+                    benchmark_metadata=_APPLE_GPU_HOT_PATH_METADATA.get(op_name),
+                )
+            )
+        entries.extend(
+            [
+                BackendKernelEntry(
+                    target="rocm",
+                    status=_DEVICE_VERIFIED_JIT_STATUS,
+                    dtypes=dtypes,
+                    feature_flags=("hip_runtime", "structured_compute"),
+                    notes=notes + " Executes via rocm_structured_compute_compiled.",
+                    execute_compare_fixture="tests/unit/test_rocm_structured_compute_compiled.py",
+                    hipcc_version_min="7.2.4",
+                ),
+            ]
+        )
         if op_name in _STRUCTURED_COMPUTE_CUDA_PLANNED_OPS:
             for target_name, flags, arch_min in (
                 ("nvidia_sm80", ("cuda", "wmma", "planned_kernel"), "sm_80"),
@@ -5433,19 +6246,21 @@ def _single_gpu_compute_reference_manifest_for(
                 ("nvidia_sm100", ("cuda", "tcgen05", "planned_kernel"), "sm_100a"),
                 ("nvidia_sm120", ("cuda", "tcgen05", "planned_kernel"), "sm_120a"),
             ):
-                entries.append(BackendKernelEntry(
-                    target=target_name,
-                    status=_PLANNED_STATUS,
-                    dtypes=dtypes,
-                    feature_flags=flags,
-                    notes=(
-                        "Single-GPU closeout compute-tail CUDA owner: planned "
-                        "kernel lane. X86/ROCm have compiled structured-compute "
-                        "proof; CUDA remains explicitly open."
-                    ),
-                    cuda_arch_min=arch_min,
-                    nvcc_version_min="13.3",
-                ))
+                entries.append(
+                    BackendKernelEntry(
+                        target=target_name,
+                        status=_PLANNED_STATUS,
+                        dtypes=dtypes,
+                        feature_flags=flags,
+                        notes=(
+                            "Single-GPU closeout compute-tail CUDA owner: planned "
+                            "kernel lane. X86/ROCm have compiled structured-compute "
+                            "proof; CUDA remains explicitly open."
+                        ),
+                        cuda_arch_min=arch_min,
+                        nvcc_version_min="13.3",
+                    )
+                )
         return entries
     notes = (
         "Single-GPU closeout compute-tail reference owner: Python/numpy "
@@ -5490,19 +6305,21 @@ def _single_gpu_compute_reference_manifest_for(
         ("nvidia_sm100", ("cuda", "tcgen05", "planned_kernel"), "sm_100a"),
         ("nvidia_sm120", ("cuda", "tcgen05", "planned_kernel"), "sm_120a"),
     ):
-        entries.append(BackendKernelEntry(
-            target=target_name,
-            status=_PLANNED_STATUS,
-            dtypes=dtypes,
-            feature_flags=flags,
-            notes=(
-                "Single-GPU closeout compute-tail NVIDIA owner: CUDA "
-                "compiler path planned lane. No PTX/SASS/runtime proof "
-                "claimed yet."
-            ),
-            cuda_arch_min=arch_min,
-            nvcc_version_min="13.3",
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target=target_name,
+                status=_PLANNED_STATUS,
+                dtypes=dtypes,
+                feature_flags=flags,
+                notes=(
+                    "Single-GPU closeout compute-tail NVIDIA owner: CUDA "
+                    "compiler path planned lane. No PTX/SASS/runtime proof "
+                    "claimed yet."
+                ),
+                cuda_arch_min=arch_min,
+                nvcc_version_min="13.3",
+            )
+        )
     return entries
 
 
@@ -5514,6 +6331,7 @@ def _rocm_mma_descriptor_for(op_name: str, dtypes: tuple[str, ...]):
         return None
     from .rocm_mma import select_mma
     from .rocm_target import AMDArch, TesseraROCmTargetError
+
     for dt in dtypes:
         try:
             return select_mma(AMDArch.GFX_942, dt)
@@ -5522,9 +6340,7 @@ def _rocm_mma_descriptor_for(op_name: str, dtypes: tuple[str, ...]):
     return None
 
 
-def _shared_mma_selection_for(
-    op_name: str, entry: BackendKernelEntry
-) -> object | None:
+def _shared_mma_selection_for(op_name: str, entry: BackendKernelEntry) -> object | None:
     """Resolve one representative matrix instruction through the shared A4
     selector.  Unsupported dtype/architecture combinations remain absent; the
     manifest never fabricates a fallback MMA claim."""
@@ -5565,18 +6381,13 @@ def _shared_mma_selection_for(
     return None
 
 
-def _attach_shared_mma_selections(
-    op_name: str, entries: list[BackendKernelEntry]
-) -> list[BackendKernelEntry]:
+def _attach_shared_mma_selections(op_name: str, entries: list[BackendKernelEntry]) -> list[BackendKernelEntry]:
     # Manifest generation visits hundreds of non-matrix families. Preserve
     # their existing immutable rows without rebuilding every dataclass; besides
     # being semantically exact, this keeps audit/dashboard generation linear.
     if op_name not in _ROCM_MMA_OP_NAMES:
         return entries
-    return [
-        replace(entry, mma_selection=_shared_mma_selection_for(op_name, entry))
-        for entry in entries
-    ]
+    return [replace(entry, mma_selection=_shared_mma_selection_for(op_name, entry)) for entry in entries]
 
 
 def manifest_for(op_name: str) -> list[BackendKernelEntry]:
@@ -5605,13 +6416,10 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # cross_ratio / dz / dbar / laplacian_2d / ...) need the same
     # CPU-reference + GPU-planned-slot treatment as the prefixed
     # ones, but they don't carry a ``complex_`` prefix.
-    if (op_name.startswith("complex_")
-            or op_name in _COMPLEX_APPLE_GPU_FUSED
-            or op_name in _M7_LONG_TAIL):
+    if op_name.startswith("complex_") or op_name in _COMPLEX_APPLE_GPU_FUSED or op_name in _M7_LONG_TAIL:
         return _attach_numerical_fixtures(op_name, complex_manifest_for(op_name))
     if op_name in _SINGLE_GPU_COMPUTE_REFERENCE_OPS:
-        return _attach_numerical_fixtures(
-            op_name, _single_gpu_compute_reference_manifest_for(op_name))
+        return _attach_numerical_fixtures(op_name, _single_gpu_compute_reference_manifest_for(op_name))
     entries: list[BackendKernelEntry] = []
 
     # x86 AMX / AVX-512
@@ -5620,32 +6428,44 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         x86_fixture = _NUMERICAL_FIXTURES.get((op_name, "x86"))
         x86_status = str(x86["status"])
         is_gemm = op_name in {"matmul", "gemm"}
-        if x86_fixture is not None and not is_gemm:
+        if (
+            x86_fixture is not None
+            and not is_gemm
+            and x86_status
+            not in {_DEVICE_VERIFIED_JIT_STATUS, _DEVICE_VERIFIED_ABI_STATUS}
+        ):
             x86_status = _DEVICE_VERIFIED_JIT_STATUS
-        entries.append(BackendKernelEntry(
-            target="x86",
-            status=x86_status,
-            dtypes=tuple(x86["dtypes"]),
-            feature_flags=(
-                tuple(x86.get("feature_flags", ("avx512",)))
-                if is_gemm else ("avx512",)
-            ),
-            notes=str(x86.get("notes", "")),
-            execute_compare_fixture=x86_fixture,
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="x86",
+                status=x86_status,
+                dtypes=tuple(x86["dtypes"]),
+                # Every native x86 row is compiled by the AVX-512 package
+                # producer.  Preserve family-specific flags without dropping
+                # the architecture contract required by executing manifests.
+                feature_flags=tuple(
+                    dict.fromkeys(("avx512", *x86.get("feature_flags", ())))
+                ),
+                notes=str(x86.get("notes", "")),
+                runtime_symbol=x86.get("runtime_symbol"),
+                execute_compare_fixture=x86_fixture,
+            )
+        )
 
     # Apple CPU
     apple_cpu = _APPLE_CPU_KERNELS.get(op_name)
     if apple_cpu is not None:
-        entries.append(BackendKernelEntry(
-            target="apple_cpu",
-            status=str(apple_cpu["status"]),
-            dtypes=tuple(apple_cpu["dtypes"]),
-            # Default cblas + BNNS; an op may override (e.g. batched_gemm is
-            # cblas-only — no BNNS batched path).
-            feature_flags=tuple(apple_cpu.get("feature_flags", ("accelerate", "bnns"))),
-            notes=str(apple_cpu.get("notes", "")),
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="apple_cpu",
+                status=str(apple_cpu["status"]),
+                dtypes=tuple(apple_cpu["dtypes"]),
+                # Default cblas + BNNS; an op may override (e.g. batched_gemm is
+                # cblas-only — no BNNS batched path).
+                feature_flags=tuple(apple_cpu.get("feature_flags", ("accelerate", "bnns"))),
+                notes=str(apple_cpu.get("notes", "")),
+            )
+        )
     else:
         # Apple CPU falls back to reference for everything else (Accelerate
         # has cblas_sgemm + numpy reference for the rest of the catalog).
@@ -5653,13 +6473,15 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         if cap is not None:
             status, dtypes = cap
             mapped = _REFERENCE_STATUS if status == "ready" else _ARTIFACT_STATUS
-            entries.append(BackendKernelEntry(
-                target="apple_cpu",
-                status=mapped,
-                dtypes=dtypes,
-                feature_flags=("accelerate",),
-                notes="reference path via numpy/Accelerate",
-            ))
+            entries.append(
+                BackendKernelEntry(
+                    target="apple_cpu",
+                    status=mapped,
+                    dtypes=dtypes,
+                    feature_flags=("accelerate",),
+                    notes="reference path via numpy/Accelerate",
+                )
+            )
 
     # Apple GPU (shipped MSL kernels)
     apple_gpu = _APPLE_GPU_KERNELS.get(op_name)
@@ -5679,37 +6501,44 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         _ag_fixture: Optional_str = (
             _NUMERICAL_FIXTURES.get((op_name, "apple_gpu"))
             if _ag_status == _DEVICE_VERIFIED_ABI_STATUS
-            else apple_gpu.get("execute_compare_fixture"))
-        entries.append(BackendKernelEntry(
-            target="apple_gpu",
-            status=_ag_status,
-            dtypes=tuple(apple_gpu["dtypes"]),
-            feature_flags=("metal", "mps", "msl"),
-            notes=str(apple_gpu.get("notes", "")),
-            runtime_symbol=_ag_runtime_symbol,
-            shape_envelope=_ag_shape_envelope,
-            execute_compare_fixture=_ag_fixture,
-            # P2 (2026-06-09) — hot-path rows carry their ratchet baseline.
-            benchmark_json=apple_gpu.get("benchmark_json"),
-            # P1 (2026-06-10) — uniform structured hot-path benchmark metadata.
-            benchmark_metadata=_APPLE_GPU_HOT_PATH_METADATA.get(op_name),
-        ))
+            else apple_gpu.get("execute_compare_fixture")
+        )
+        entries.append(
+            BackendKernelEntry(
+                target="apple_gpu",
+                status=_ag_status,
+                dtypes=tuple(apple_gpu["dtypes"]),
+                feature_flags=("metal", "mps", "msl"),
+                notes=str(apple_gpu.get("notes", "")),
+                runtime_symbol=_ag_runtime_symbol,
+                shape_envelope=_ag_shape_envelope,
+                execute_compare_fixture=_ag_fixture,
+                # P2 (2026-06-09) — hot-path rows carry their ratchet baseline.
+                benchmark_json=apple_gpu.get("benchmark_json"),
+                # P1 (2026-06-10) — uniform structured hot-path benchmark metadata.
+                benchmark_metadata=_APPLE_GPU_HOT_PATH_METADATA.get(op_name),
+            )
+        )
     else:
         cap = _capability_status("apple_gpu", op_name)
         if cap is not None:
             status, dtypes = cap
             mapped = (
-                _REFERENCE_STATUS if status == "ready"
-                else _ARTIFACT_STATUS if status == "artifact_only"
+                _REFERENCE_STATUS
+                if status == "ready"
+                else _ARTIFACT_STATUS
+                if status == "artifact_only"
                 else _PLANNED_STATUS
             )
-            entries.append(BackendKernelEntry(
-                target="apple_gpu",
-                status=mapped,
-                dtypes=dtypes,
-                feature_flags=("metal",),
-                notes="capability-registered Apple GPU coverage",
-            ))
+            entries.append(
+                BackendKernelEntry(
+                    target="apple_gpu",
+                    status=mapped,
+                    dtypes=dtypes,
+                    feature_flags=("metal",),
+                    notes="capability-registered Apple GPU coverage",
+                )
+            )
 
     # NVIDIA SM_80 / SM_90 / SM_100 / SM_120 — artifact-only until Phase G.
     # Sprint G-3 (2026-05-11): each entry carries cuda_arch_min /
@@ -5717,10 +6546,10 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # overrides come from `_NVIDIA_KERNEL_TILE_SHAPES` below.
     _kernel_shapes = _NVIDIA_KERNEL_TILE_SHAPES.get(op_name, {})
     for target_name, flags, arch_min in (
-        ("nvidia_sm80",  ("wmma",),                  "sm_80"),
-        ("nvidia_sm90",  ("wgmma", "tma"),           "sm_90a"),
-        ("nvidia_sm100", ("tcgen05", "tmem"),        "sm_100a"),
-        ("nvidia_sm120", ("tcgen05", "tmem"),        "sm_120a"),
+        ("nvidia_sm80", ("wmma",), "sm_80"),
+        ("nvidia_sm90", ("wgmma", "tma"), "sm_90a"),
+        ("nvidia_sm100", ("tcgen05", "tmem"), "sm_100a"),
+        ("nvidia_sm120", ("tcgen05", "tmem"), "sm_120a"),
     ):
         # Consumer-Blackwell bring-up (2026-06-25): a shipped runtime symbol +
         # execute-compare fixture promotes the sm_120 row to device_verified_abi
@@ -5728,44 +6557,50 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         # only; sm_80/90/100 stay artifact_only (proven only on sm_120).
         nv_hv = _NVIDIA_HARDWARE_VERIFIED.get(op_name) if target_name == "nvidia_sm120" else None
         if nv_hv is not None:
-            entries.append(BackendKernelEntry(
-                target="nvidia_sm120",
-                status=_DEVICE_VERIFIED_ABI_STATUS,
-                dtypes=tuple(nv_hv["dtypes"]),
-                feature_flags=tuple(nv_hv.get("feature_flags", ("mma_sync",))),
-                notes=str(nv_hv.get("notes", "")),
-                runtime_symbol=nv_hv["runtime_symbol"],
-                execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "nvidia_sm120")),
-                shape_envelope=nv_hv.get("shape_envelope"),
-                cuda_arch_min="sm_120a",
-                nvcc_version_min="13.3",
-                expected_mfu=_NVIDIA_KERNEL_MFU.get((op_name, "nvidia_sm120")),
-                # E2 — plumbing ready; stays None until the sm_120 box records
-                # benchmarks/baselines/nvidia_sm120_hot_paths.json (Decision #26
-                # forbids pointing at a baseline that does not yet exist).
-                benchmark_json=nv_hv.get("benchmark_json"),
-            ))
+            entries.append(
+                BackendKernelEntry(
+                    target="nvidia_sm120",
+                    status=_DEVICE_VERIFIED_ABI_STATUS,
+                    dtypes=tuple(nv_hv["dtypes"]),
+                    feature_flags=tuple(nv_hv.get("feature_flags", ("mma_sync",))),
+                    notes=str(nv_hv.get("notes", "")),
+                    runtime_symbol=nv_hv["runtime_symbol"],
+                    execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "nvidia_sm120")),
+                    shape_envelope=nv_hv.get("shape_envelope"),
+                    cuda_arch_min="sm_120a",
+                    nvcc_version_min="13.3",
+                    expected_mfu=_NVIDIA_KERNEL_MFU.get((op_name, "nvidia_sm120")),
+                    # E2 — plumbing ready; stays None until the sm_120 box records
+                    # benchmarks/baselines/nvidia_sm120_hot_paths.json (Decision #26
+                    # forbids pointing at a baseline that does not yet exist).
+                    benchmark_json=nv_hv.get("benchmark_json"),
+                )
+            )
             continue
         nv_jit = _NVIDIA_DEVICE_VERIFIED_JIT.get(op_name) if target_name == "nvidia_sm120" else None
         if nv_jit is not None:
-            entries.append(BackendKernelEntry(
-                target="nvidia_sm120",
-                status=_DEVICE_VERIFIED_JIT_STATUS,
-                dtypes=tuple(nv_jit["dtypes"]),
-                feature_flags=tuple(nv_jit["feature_flags"]),
-                notes=str(nv_jit["notes"]),
-                execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "nvidia_sm120")),
-                shape_envelope=nv_jit["shape_envelope"],
-                cuda_arch_min="sm_120a",
-                nvcc_version_min="13.3",
-            ))
+            entries.append(
+                BackendKernelEntry(
+                    target="nvidia_sm120",
+                    status=_DEVICE_VERIFIED_JIT_STATUS,
+                    dtypes=tuple(nv_jit["dtypes"]),
+                    feature_flags=tuple(nv_jit["feature_flags"]),
+                    notes=str(nv_jit["notes"]),
+                    execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "nvidia_sm120")),
+                    shape_envelope=nv_jit["shape_envelope"],
+                    cuda_arch_min="sm_120a",
+                    nvcc_version_min="13.3",
+                )
+            )
             continue
         cap = _capability_status(target_name, op_name)
         if cap is not None:
             status, dtypes = cap
             mapped = (
-                _FUSED_KERNEL_STATUS if status == "ready"
-                else _ARTIFACT_STATUS if status == "artifact_only"
+                _FUSED_KERNEL_STATUS
+                if status == "ready"
+                else _ARTIFACT_STATUS
+                if status == "artifact_only"
                 else _PLANNED_STATUS
             )
             # WGMMA only kicks in at SM_90+.  Use the per-kernel shape
@@ -5778,24 +6613,25 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 cluster = _kernel_shapes.get("cluster")
             mfu = _NVIDIA_KERNEL_MFU.get((op_name, target_name))
             roofline = _NVIDIA_KERNEL_ROOFLINE.get(op_name)
-            entries.append(BackendKernelEntry(
-                target=target_name,
-                status=mapped,
-                dtypes=dtypes,
-                feature_flags=flags,
-                notes=(
-                    "Target IR artifact ships under CUDA 13.3; "
-                    "execution gated on Phase G"
-                    if mapped == _ARTIFACT_STATUS
-                    else ""
-                ),
-                cuda_arch_min=arch_min,
-                nvcc_version_min="13.3",
-                wgmma_shape=wgmma_shape,
-                cluster_size=cluster,
-                expected_mfu=mfu,
-                roofline_target=roofline,
-            ))
+            entries.append(
+                BackendKernelEntry(
+                    target=target_name,
+                    status=mapped,
+                    dtypes=dtypes,
+                    feature_flags=flags,
+                    notes=(
+                        "Target IR artifact ships under CUDA 13.3; execution gated on Phase G"
+                        if mapped == _ARTIFACT_STATUS
+                        else ""
+                    ),
+                    cuda_arch_min=arch_min,
+                    nvcc_version_min="13.3",
+                    wgmma_shape=wgmma_shape,
+                    cluster_size=cluster,
+                    expected_mfu=mfu,
+                    roofline_target=roofline,
+                )
+            )
 
     # ROCm — Strix Halo bring-up (2026-06-22): ops with a shipped runtime
     # symbol + execute-compare fixture are ``device_verified_abi`` (RDNA WMMA);
@@ -5805,53 +6641,58 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     if rocm_hv is not None:
         # Both halves of the device_verified_abi contract are pulled in BEFORE
         # construction so the validator sees a complete (symbol + fixture) row.
-        entries.append(BackendKernelEntry(
-            target="rocm",
-            status=_DEVICE_VERIFIED_ABI_STATUS,
-            dtypes=tuple(rocm_hv["dtypes"]),
-            feature_flags=tuple(rocm_hv.get("feature_flags", ("wmma",))),
-            notes=str(rocm_hv.get("notes", "")),
-            runtime_symbol=rocm_hv["runtime_symbol"],
-            execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "rocm")),
-            shape_envelope=rocm_hv.get("shape_envelope"),
-            hipcc_version_min="7.2.4",
-            expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
-            # A device_verified_abi matrix-core op may ALSO carry a CDNA MFMA artifact
-            # shape (gemm does; matmul stays pure-RDNA-WMMA with None) — the CDNA
-            # datacenter target alongside the proven RDNA WMMA row.
-            mfma_shape=rocm_hv.get("mfma_shape"),
-            # E2 — hot-path rows carry their ratchet baseline (Apple-style
-            # layer-1 linkage); None for ops with no recorded gfx1151 baseline.
-            benchmark_json=rocm_hv.get("benchmark_json"),
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="rocm",
+                status=_DEVICE_VERIFIED_ABI_STATUS,
+                dtypes=tuple(rocm_hv["dtypes"]),
+                feature_flags=tuple(rocm_hv.get("feature_flags", ("wmma",))),
+                notes=str(rocm_hv.get("notes", "")),
+                runtime_symbol=rocm_hv["runtime_symbol"],
+                execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "rocm")),
+                shape_envelope=rocm_hv.get("shape_envelope"),
+                hipcc_version_min="7.2.4",
+                expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
+                # A device_verified_abi matrix-core op may ALSO carry a CDNA MFMA artifact
+                # shape (gemm does; matmul stays pure-RDNA-WMMA with None) — the CDNA
+                # datacenter target alongside the proven RDNA WMMA row.
+                mfma_shape=rocm_hv.get("mfma_shape"),
+                # E2 — hot-path rows carry their ratchet baseline (Apple-style
+                # layer-1 linkage); None for ops with no recorded gfx1151 baseline.
+                benchmark_json=rocm_hv.get("benchmark_json"),
+            )
+        )
     elif (rocm_c := _ROCM_COMPILED.get(op_name)) is not None:
         # Compiler-generated executing lane: runs on gfx1151 via runtime.launch()
         # as an hsaco (no C-ABI symbol), with a checked-in execute_compare_fixture
         # — status ``device_verified_jit`` (a rung below the C-symbol device_verified_abi).
-        entries.append(BackendKernelEntry(
-            target="rocm",
-            status=_DEVICE_VERIFIED_JIT_STATUS,
-            dtypes=tuple(rocm_c["dtypes"]),
-            feature_flags=tuple(rocm_c.get("feature_flags", ("wmma",))),
-            notes=str(rocm_c.get("notes", "")),
-            execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "rocm")),
-            shape_envelope=rocm_c.get("shape_envelope"),
-            hipcc_version_min="7.2.4",
-            expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
-            # GEMM-family device_verified_jit ops keep the unified MMA descriptor the old
-            # artifact entry carried (None for non-GEMM ops like softmax/norm/
-            # activation/rope) — promoting batched_gemm etc. to `device_verified_jit` must
-            # not drop it (test_backend_manifest_rocm_gemm_carries_mma_descriptor).
-            mma_descriptor=_rocm_mma_descriptor_for(
-                op_name, tuple(rocm_c["dtypes"])),
-        ))
+        entries.append(
+            BackendKernelEntry(
+                target="rocm",
+                status=_DEVICE_VERIFIED_JIT_STATUS,
+                dtypes=tuple(rocm_c["dtypes"]),
+                feature_flags=tuple(rocm_c.get("feature_flags", ("wmma",))),
+                notes=str(rocm_c.get("notes", "")),
+                execute_compare_fixture=_NUMERICAL_FIXTURES.get((op_name, "rocm")),
+                shape_envelope=rocm_c.get("shape_envelope"),
+                hipcc_version_min="7.2.4",
+                expected_mfu=_ROCM_KERNEL_MFU.get((op_name, "rocm_gfx942")),
+                # GEMM-family device_verified_jit ops keep the unified MMA descriptor the old
+                # artifact entry carried (None for non-GEMM ops like softmax/norm/
+                # activation/rope) — promoting batched_gemm etc. to `device_verified_jit` must
+                # not drop it (test_backend_manifest_rocm_gemm_carries_mma_descriptor).
+                mma_descriptor=_rocm_mma_descriptor_for(op_name, tuple(rocm_c["dtypes"])),
+            )
+        )
     else:
         cap = _capability_status("rocm", op_name)
         if cap is not None:
             status, dtypes = cap
             mapped = (
-                _FUSED_KERNEL_STATUS if status == "ready"
-                else _ARTIFACT_STATUS if status == "artifact_only"
+                _FUSED_KERNEL_STATUS
+                if status == "ready"
+                else _ARTIFACT_STATUS
+                if status == "artifact_only"
                 else _PLANNED_STATUS
             )
             mfma = _ROCM_KERNEL_MFMA_SHAPES.get(op_name)
@@ -5860,33 +6701,38 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             # GEMM-family ops, derived from a representative dtype on gfx942
             # (the `rocm` alias).
             mma_desc = _rocm_mma_descriptor_for(op_name, dtypes)
-            entries.append(BackendKernelEntry(
-                target="rocm",
-                status=mapped,
-                dtypes=dtypes,
-                feature_flags=("mfma",),
-                notes=(
-                    "ROCm 7.2.4 MFMA artifact ships; HIP execution gated on "
-                    "Phase H" if mapped == _ARTIFACT_STATUS else ""
-                ),
-                mfma_shape=mfma,
-                hipcc_version_min="7.2.4",
-                expected_mfu=mfu,
-                mma_descriptor=mma_desc,
-            ))
+            entries.append(
+                BackendKernelEntry(
+                    target="rocm",
+                    status=mapped,
+                    dtypes=dtypes,
+                    feature_flags=("mfma",),
+                    notes=(
+                        "ROCm 7.2.4 MFMA artifact ships; HIP execution gated on Phase H"
+                        if mapped == _ARTIFACT_STATUS
+                        else ""
+                    ),
+                    mfma_shape=mfma,
+                    hipcc_version_min="7.2.4",
+                    expected_mfu=mfu,
+                    mma_descriptor=mma_desc,
+                )
+            )
 
     # CPU numpy reference — always available as fallback
     cap = _capability_status("cpu", op_name)
     if cap is not None:
         status, dtypes = cap
         if status == "ready":
-            entries.append(BackendKernelEntry(
-                target="cpu",
-                status=_REFERENCE_STATUS,
-                dtypes=dtypes,
-                feature_flags=("numpy", "reference_execution"),
-                notes="numpy reference path",
-            ))
+            entries.append(
+                BackendKernelEntry(
+                    target="cpu",
+                    status=_REFERENCE_STATUS,
+                    dtypes=dtypes,
+                    feature_flags=("numpy", "reference_execution"),
+                    notes="numpy reference path",
+                )
+            )
 
     # Audit follow-up A.3 (2026-05-31) — attach known
     # ``execute_compare_fixture`` paths to entries that ship a real

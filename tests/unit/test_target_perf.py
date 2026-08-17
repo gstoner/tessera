@@ -11,6 +11,7 @@ Two properties this file protects, both about *honesty* rather than accuracy:
 
 See ``docs/audit/compiler/TILESIGHT_ASSESSMENT.md`` §2/§4.
 """
+
 from __future__ import annotations
 
 import json
@@ -33,6 +34,7 @@ from tessera.compiler.target_perf import (
     apply_registry_snapshot,
     devices_for_target,
     load_corpus,
+    load_pruning_corpus,
     load_registry_snapshot,
     peak_key,
     registry_snapshot,
@@ -46,13 +48,13 @@ from tessera.compiler.target_perf import (
 
 # --- registry integrity ------------------------------------------------------
 
+
 def test_every_device_targets_a_canonical_target_id() -> None:
     """A device pointing at a target id ``normalize_target`` does not know about
     is unreachable — it would silently never be selected."""
     for name in registered_devices():
         perf = perf_for_device(name)
-        assert perf.target in TARGET_CAPABILITIES, (
-            f"{name} targets {perf.target!r}, not a canonical target id")
+        assert perf.target in TARGET_CAPABILITIES, f"{name} targets {perf.target!r}, not a canonical target id"
 
 
 def test_every_device_carries_a_source_citation() -> None:
@@ -70,9 +72,9 @@ def test_peak_keys_are_canonical_dtypes() -> None:
 
 def test_peak_key_rejects_non_canonical_dtype_and_unit() -> None:
     with pytest.raises(ValueError, match="canonical"):
-        peak_key("bfloat16", UNIT_MATRIX)          # alias, not canonical
+        peak_key("bfloat16", UNIT_MATRIX)  # alias, not canonical
     with pytest.raises(ValueError, match="canonical"):
-        peak_key("tf32", UNIT_MATRIX)              # not a storage dtype at all
+        peak_key("tf32", UNIT_MATRIX)  # not a storage dtype at all
     with pytest.raises(ValueError, match="unit"):
         peak_key("bf16", "tensor_core")
 
@@ -84,6 +86,7 @@ def test_the_three_fleet_boxes_are_registered() -> None:
 
 
 # --- the no-invented-numbers rule -------------------------------------------
+
 
 def test_provenance_is_per_field_not_per_row() -> None:
     """Regression: provenance was stored per row, so a row labelled DERIVED
@@ -113,11 +116,19 @@ def test_apple_bandwidth_is_spec_not_derived() -> None:
 
 def test_field_provenance_rejects_bad_keys_and_unknown() -> None:
     with pytest.raises(ValueError, match="unknown field_provenance field"):
-        TargetPerf(device="d", target="x86", source="a source long enough to pass",
-                   field_provenance={"dram_bandwidth": Provenance.SPEC})
+        TargetPerf(
+            device="d",
+            target="x86",
+            source="a source long enough to pass",
+            field_provenance={"dram_bandwidth": Provenance.SPEC},
+        )
     with pytest.raises(ValueError, match="cannot be UNKNOWN"):
-        TargetPerf(device="d", target="x86", source="a source long enough to pass",
-                   field_provenance={"dram_bw_gbps": Provenance.UNKNOWN})
+        TargetPerf(
+            device="d",
+            target="x86",
+            source="a source long enough to pass",
+            field_provenance={"dram_bw_gbps": Provenance.UNKNOWN},
+        )
 
 
 def test_measured_overlay_still_outranks_a_field_provenance_entry() -> None:
@@ -173,9 +184,11 @@ def test_ambiguous_target_refuses_to_pick_a_sibling(monkeypatch) -> None:
     """``nvidia_sm120`` covers a 5070 Ti and an RTX PRO 6000; guessing between
     them is a >2x error, so the lookup must refuse."""
     sibling = TargetPerf(
-        device="_test_sm120_sibling", target="nvidia_sm120",
+        device="_test_sm120_sibling",
+        target="nvidia_sm120",
         source="synthetic row for the ambiguity test — not a real part",
-        peak_tflops={"fp32:vector": 1.0})
+        peak_tflops={"fp32:vector": 1.0},
+    )
     register_perf(sibling)
     try:
         with pytest.raises(TargetPerfError, match="disambiguate"):
@@ -192,6 +205,7 @@ def test_unregistered_target_returns_none_not_a_default() -> None:
 
 # --- derived quantities are arithmetically right -----------------------------
 
+
 def test_ridge_point_and_roofline_bound() -> None:
     a100 = perf_for_device("a100_sxm4_80gb")
     # 312 TFLOP/s over 2039 GB/s ~= 153 FLOP/byte.
@@ -200,12 +214,10 @@ def test_ridge_point_and_roofline_bound() -> None:
 
     # A kernel far below the ridge is memory-bound: the bound must come from the
     # bandwidth term, which the FLOPs-only estimator cannot express.
-    memory_bound = a100.roofline_ms(flops=1e9, bytes_moved=2.039e9,
-                                    dtype="bf16", unit=UNIT_MATRIX)
-    assert memory_bound == pytest.approx(1.0, rel=1e-3)   # 2.039 GB / 2039 GB/s
+    memory_bound = a100.roofline_ms(flops=1e9, bytes_moved=2.039e9, dtype="bf16", unit=UNIT_MATRIX)
+    assert memory_bound == pytest.approx(1.0, rel=1e-3)  # 2.039 GB / 2039 GB/s
 
-    compute_bound = a100.roofline_ms(flops=3.12e11, bytes_moved=1e3,
-                                     dtype="bf16", unit=UNIT_MATRIX)
+    compute_bound = a100.roofline_ms(flops=3.12e11, bytes_moved=1e3, dtype="bf16", unit=UNIT_MATRIX)
     assert compute_bound == pytest.approx(1.0, rel=1e-3)  # 312 GFLOP / 312 TFLOP/s
 
 
@@ -223,8 +235,7 @@ def test_derived_peaks_match_their_stated_identity() -> None:
         expected = lanes * 2 * perf.clock_ghz / 1e3  # TFLOP/s
         got = perf.peak("fp32", UNIT_VECTOR)
         assert got is not None
-        assert got == pytest.approx(expected, rel=0.02), (
-            f"{device}: stated {got} vs identity {expected}")
+        assert got == pytest.approx(expected, rel=0.02), f"{device}: stated {got} vs identity {expected}"
 
     # AMD: cus x 64 lanes x 2 flop/clk x clock
     amd = perf_for_device("radeon_8060s")
@@ -237,17 +248,16 @@ def test_derived_peaks_match_their_stated_identity() -> None:
 
 # --- the measured overlay ----------------------------------------------------
 
+
 def test_measured_wins_over_spec_and_is_reported_as_measured() -> None:
     a100 = perf_for_device("a100_sxm4_80gb")
     assert a100.provenance_of("dram_bw_gbps") is Provenance.SPEC
 
-    calibrated = a100.with_measured({"dram_bw_gbps": 1700.0}, on="2026-07-28",
-                                    host="test-host")
+    calibrated = a100.with_measured({"dram_bw_gbps": 1700.0}, on="2026-07-28", host="test-host")
     assert calibrated.value("dram_bw_gbps") == 1700.0
     assert calibrated.provenance_of("dram_bw_gbps") is Provenance.MEASURED
     # ...and the ridge point moves with it, which is the whole point.
-    assert calibrated.ridge_point("bf16", UNIT_MATRIX) != a100.ridge_point(
-        "bf16", UNIT_MATRIX)
+    assert calibrated.ridge_point("bf16", UNIT_MATRIX) != a100.ridge_point("bf16", UNIT_MATRIX)
     # The original is untouched (frozen dataclass, copy-on-write).
     assert a100.value("dram_bw_gbps") == 2039.0
 
@@ -264,20 +274,22 @@ def test_measured_overlay_rejects_a_typoed_field() -> None:
 
 def test_measured_overlay_requires_a_date() -> None:
     with pytest.raises(ValueError, match="measured_on"):
-        TargetPerf(device="d", target="x86", source="a source long enough to pass",
-                   measured={"dram_bw_gbps": 1.0})
+        TargetPerf(device="d", target="x86", source="a source long enough to pass", measured={"dram_bw_gbps": 1.0})
 
 
 # --- calibration corpus ------------------------------------------------------
 
+
 def test_apply_corpus_merges_and_reports_updated_devices() -> None:
     try:
-        updated = apply_corpus({
-            "version": CORPUS_VERSION,
-            "measured_on": "2026-07-28",
-            "host": "test-host",
-            "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
-        })
+        updated = apply_corpus(
+            {
+                "version": CORPUS_VERSION,
+                "measured_on": "2026-07-28",
+                "host": "test-host",
+                "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
+            }
+        )
         assert updated == ["a100_sxm4_80gb"]
         after = perf_for_device("a100_sxm4_80gb")
         assert after.value("dram_bw_gbps") == 1700.0
@@ -286,16 +298,54 @@ def test_apply_corpus_merges_and_reports_updated_devices() -> None:
         reset_registry()
 
 
+def test_provisional_wsl_corpus_is_pruning_only(tmp_path) -> None:
+    path = tmp_path / "provisional.json"
+    path.write_text(
+        json.dumps(
+            {
+                "kind": "calibration_corpus",
+                "version": CORPUS_VERSION,
+                "measured_on": "2026-08-15",
+                "host": "strix-halo-wsl2",
+                "selector_eligible": False,
+                "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}},
+            }
+        )
+    )
+    before = perf_for_device("radeon_8060s").measured
+    with pytest.raises(ValueError, match="pruning-only"):
+        load_corpus(path)
+    assert load_pruning_corpus(path) == {
+        "radeon_8060s": {"dram_bw_gbps": 186.8},
+    }
+    assert perf_for_device("radeon_8060s").measured == before
+
+
+def test_wsl_host_cannot_claim_selector_eligibility() -> None:
+    with pytest.raises(ValueError, match="WSL calibration"):
+        apply_corpus(
+            {
+                "version": CORPUS_VERSION,
+                "measured_on": "2026-08-15",
+                "host": "host-via-dxg",
+                "selector_eligible": True,
+                "devices": {"radeon_8060s": {"dram_bw_gbps": 186.8}},
+            }
+        )
+
+
 def test_reset_registry_undoes_a_corpus_merge() -> None:
     """The registry is process-global, so merging a corpus needs a defined way
     back — otherwise a corpus applied in one place silently colours every later
     lookup, and tests have to reach into private state to clean up."""
     original = perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps")
-    apply_corpus({
-        "version": CORPUS_VERSION,
-        "measured_on": "2026-07-28",
-        "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
-    })
+    apply_corpus(
+        {
+            "version": CORPUS_VERSION,
+            "measured_on": "2026-07-28",
+            "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
+        }
+    )
     assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == 1700.0
     reset_registry()
     assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == original
@@ -303,8 +353,7 @@ def test_reset_registry_undoes_a_corpus_merge() -> None:
 
 
 def test_reset_registry_drops_an_ad_hoc_registration() -> None:
-    register_perf(TargetPerf(device="_scratch", target="x86",
-                             source="a synthetic row long enough to pass"))
+    register_perf(TargetPerf(device="_scratch", target="x86", source="a synthetic row long enough to pass"))
     assert "_scratch" in registered_devices()
     reset_registry()
     assert "_scratch" not in registered_devices()
@@ -316,8 +365,9 @@ def test_corpus_rejects_version_skew_unknown_device_and_missing_date() -> None:
     with pytest.raises(ValueError, match="measured_on"):
         apply_corpus({"version": CORPUS_VERSION, "devices": {}})
     with pytest.raises(TargetPerfError, match="registered:"):
-        apply_corpus({"version": CORPUS_VERSION, "measured_on": "2026-07-28",
-                      "devices": {"no_such_gpu": {"dram_bw_gbps": 1.0}}})
+        apply_corpus(
+            {"version": CORPUS_VERSION, "measured_on": "2026-07-28", "devices": {"no_such_gpu": {"dram_bw_gbps": 1.0}}}
+        )
 
 
 def test_load_corpus_names_a_missing_file(tmp_path) -> None:
@@ -333,13 +383,16 @@ def test_apply_corpus_is_atomic_across_devices() -> None:
     before = perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps")
     try:
         with pytest.raises(TargetPerfError, match="registered:"):
-            apply_corpus({
-                "version": CORPUS_VERSION, "measured_on": "2026-07-28",
-                "devices": {
-                    "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},  # valid, first
-                    "no_such_gpu": {"dram_bw_gbps": 1.0},        # invalid, later
-                },
-            })
+            apply_corpus(
+                {
+                    "version": CORPUS_VERSION,
+                    "measured_on": "2026-07-28",
+                    "devices": {
+                        "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},  # valid, first
+                        "no_such_gpu": {"dram_bw_gbps": 1.0},  # invalid, later
+                    },
+                }
+            )
         assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == before
         assert perf_for_device("a100_sxm4_80gb").measured == {}
     finally:
@@ -352,13 +405,16 @@ def test_apply_corpus_is_atomic_across_bad_fields() -> None:
     before = perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps")
     try:
         with pytest.raises(ValueError, match="unknown measured field"):
-            apply_corpus({
-                "version": CORPUS_VERSION, "measured_on": "2026-07-28",
-                "devices": {
-                    "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},
-                    "h100_sxm5": {"dram_bandwidth": 3000.0},
-                },
-            })
+            apply_corpus(
+                {
+                    "version": CORPUS_VERSION,
+                    "measured_on": "2026-07-28",
+                    "devices": {
+                        "a100_sxm4_80gb": {"dram_bw_gbps": 1700.0},
+                        "h100_sxm5": {"dram_bandwidth": 3000.0},
+                    },
+                }
+            )
         assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == before
     finally:
         reset_registry()
@@ -366,12 +422,13 @@ def test_apply_corpus_is_atomic_across_bad_fields() -> None:
 
 # --- registry snapshot (distinct from a calibration corpus) ------------------
 
+
 def test_registry_snapshot_round_trips_through_its_own_loader() -> None:
     """Regression: the snapshot was shaped and versioned like a corpus but could
     not be loaded by one — it omitted the required `measured_on` and its rows are
     whole profiles, not measured-field overlays. Writing the documented
     fleet-shared snapshot and reading it straight back raised."""
-    text = json.dumps(registry_snapshot())   # JSON-clean: no enums leaking
+    text = json.dumps(registry_snapshot())  # JSON-clean: no enums leaking
     reloaded = json.loads(text)
     assert reloaded["kind"] == KIND_SNAPSHOT
     assert reloaded["version"] == SNAPSHOT_VERSION
@@ -391,9 +448,14 @@ def test_snapshot_survives_a_calibration_overlay() -> None:
     """A snapshot taken after a sweep must carry the measured values, else the
     fleet-shared artifact loses exactly the data worth sharing."""
     try:
-        apply_corpus({"version": CORPUS_VERSION, "measured_on": "2026-07-28",
-                      "host": "test-host",
-                      "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}}})
+        apply_corpus(
+            {
+                "version": CORPUS_VERSION,
+                "measured_on": "2026-07-28",
+                "host": "test-host",
+                "devices": {"a100_sxm4_80gb": {"dram_bw_gbps": 1700.0}},
+            }
+        )
         snap = json.loads(json.dumps(registry_snapshot()))
         reset_registry()
         assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == 2039.0
@@ -414,26 +476,26 @@ def test_each_loader_refuses_the_other_artifact_by_name() -> None:
     with pytest.raises(ValueError, match="apply_registry_snapshot"):
         apply_corpus(snap)
 
-    corpus = {"kind": KIND_CORPUS, "version": CORPUS_VERSION,
-              "measured_on": "2026-07-28", "devices": {}}
+    corpus = {"kind": KIND_CORPUS, "version": CORPUS_VERSION, "measured_on": "2026-07-28", "devices": {}}
     with pytest.raises(ValueError, match="apply_corpus"):
         apply_registry_snapshot(corpus)
 
 
 def test_snapshot_rejects_version_skew_and_malformed_rows() -> None:
     with pytest.raises(ValueError, match="version"):
-        apply_registry_snapshot({"kind": KIND_SNAPSHOT, "version": 999,
-                                 "devices": {}})
+        apply_registry_snapshot({"kind": KIND_SNAPSHOT, "version": 999, "devices": {}})
     with pytest.raises(ValueError, match="not a valid profile"):
-        apply_registry_snapshot({"kind": KIND_SNAPSHOT,
-                                 "version": SNAPSHOT_VERSION,
-                                 "devices": {"x": {"device": "x"}}})
+        apply_registry_snapshot({"kind": KIND_SNAPSHOT, "version": SNAPSHOT_VERSION, "devices": {"x": {"device": "x"}}})
     with pytest.raises(ValueError, match="does not match"):
-        apply_registry_snapshot({
-            "kind": KIND_SNAPSHOT, "version": SNAPSHOT_VERSION,
-            "devices": {"mislabelled": {
-                "device": "other", "target": "x86",
-                "source": "a synthetic row long enough to pass"}}})
+        apply_registry_snapshot(
+            {
+                "kind": KIND_SNAPSHOT,
+                "version": SNAPSHOT_VERSION,
+                "devices": {
+                    "mislabelled": {"device": "other", "target": "x86", "source": "a synthetic row long enough to pass"}
+                },
+            }
+        )
 
 
 def test_snapshot_is_atomic() -> None:
@@ -443,9 +505,13 @@ def test_snapshot_is_atomic() -> None:
     good["dram_bw_gbps"] = 1.0
     try:
         with pytest.raises(ValueError, match="not a valid profile"):
-            apply_registry_snapshot({
-                "kind": KIND_SNAPSHOT, "version": SNAPSHOT_VERSION,
-                "devices": {"a100_sxm4_80gb": good, "broken": {"device": "broken"}}})
+            apply_registry_snapshot(
+                {
+                    "kind": KIND_SNAPSHOT,
+                    "version": SNAPSHOT_VERSION,
+                    "devices": {"a100_sxm4_80gb": good, "broken": {"device": "broken"}},
+                }
+            )
         assert perf_for_device("a100_sxm4_80gb").value("dram_bw_gbps") == 2039.0
     finally:
         reset_registry()
@@ -464,6 +530,7 @@ def test_load_registry_snapshot_reads_a_file(tmp_path) -> None:
 
 
 # --- consumption: the schedule planner --------------------------------------
+
 
 def test_planner_for_target_uses_the_right_hardware_peak() -> None:
     """The bare constructor's default is A100 dense bf16 applied to everything;
@@ -497,17 +564,19 @@ def test_planner_refuses_to_inherit_another_devices_smem_budget() -> None:
     profile had no shared-memory capacity — inside a constructor whose stated
     contract is refusing silent defaults. A CPU lane would have inherited an
     A100-shaped budget and every legality verdict would be wrong."""
-    cpu = TargetPerf(device="_smemless", target="x86",
-                     source="a synthetic row with a peak but no SMEM capacity",
-                     peak_tflops={"fp32:vector": 2.0},
-                     dram_bw_gbps=100.0)
+    cpu = TargetPerf(
+        device="_smemless",
+        target="x86",
+        source="a synthetic row with a peak but no SMEM capacity",
+        peak_tflops={"fp32:vector": 2.0},
+        dram_bw_gbps=100.0,
+    )
     register_perf(cpu)
     try:
         with pytest.raises(TargetPerfError, match="smem_bytes_per_cu"):
             SchedulePlanner.for_target("x86", dtype="fp32", device="_smemless")
         # ...but the caller may state the budget rather than inherit one.
-        planner = SchedulePlanner.for_target(
-            "x86", dtype="fp32", device="_smemless", smem_budget_bytes=32_768)
+        planner = SchedulePlanner.for_target("x86", dtype="fp32", device="_smemless", smem_budget_bytes=32_768)
         assert planner.smem_budget_bytes == 32_768
         assert planner.peak_tflops == pytest.approx(2.0)
     finally:

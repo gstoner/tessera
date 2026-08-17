@@ -13,7 +13,7 @@ interleaved-component ABI explicitly.
 - Operators: **339**
 - TSOL operators: **51**
 - Operator/logical-dtype rows: **925**
-- Rows retaining at least one compiler/evidence gap: **355**
+- Rows retaining at least one compiler/evidence gap: **350**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states

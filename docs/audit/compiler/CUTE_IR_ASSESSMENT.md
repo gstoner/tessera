@@ -317,6 +317,18 @@ applied to index arithmetic. (c) The scope is four primitives, not 63 ops.
 document owns the mathematical verification and the acceptance criteria below.
 Sizing is an estimate, not a measurement.
 
+**Implementation checkpoint (2026-08-16).** The first native L1 ABI slice and
+the required L2 consumer are executable: the ordinary build produces
+`libtessera_layout_algebra`, Python loads its versioned C ABI with no semantic
+fallback, compact `size`/`cosize`/`crd2idx`/`idx2crd` are exhaustively checked
+through size 64 on both sides of the ABI, and `rearrange` now executes the GQA
+fold `b h s d -> b s (h d)` plus its explicitly factored inverse. The native
+planner parses nested mode groups and unresolved dynamic leaves fail closed.
+This is **not the whole L1 surface yet**: general nested
+`composition`/`complement`/`coalesce`/`right_inverse`, product/divide variants,
+and general slice remain open and L1 therefore remains landing. L3 and L4 must
+not treat this first consumer as the completed factorization algebra.
+
 ### L0 — the home: C++ first, Python binds to the dylib (decided 2026-08-16)
 
 **Decided by the repo owner.** The algebra is **one C++ implementation** in the

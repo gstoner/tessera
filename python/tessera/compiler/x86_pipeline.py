@@ -28,6 +28,7 @@ class X86FamilyPlugin:
     tile_producer: str = "content_addressed_tile"
     target_ir_consumer: str = "tessera_x86"
     backend_codegen: str = "prebuilt_native_shared_object"
+    async_role_policy: str = "no_async_noop"
 
 
 _FAMILIES = (

@@ -3,10 +3,53 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-14
+last_updated: 2026-08-16
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `GFX1151-CALIB-BAREMETAL-2026-08-16` — **shared calibration
+authority parity validated; no Apple evidence transfers.** `target_perf` now
+rejects explicitly provisional and WSL-hosted corpora from its measured
+selector registry while exposing a non-mutating pruning reader. Apple physical
+code and existing Metal packets are unchanged. Any future Apple peak corpus
+must independently carry selector-eligible Metal/device timing; gfx1151 HIP and
+ROCprofiler evidence is not applicable.
+
+Cross-backend sync `REF-TIER-PHYS-2026-08-16` — **shared Schedule contract
+received; Metal physical follow-up required.** Batched tridiagonal solve and
+the four coalition zeta/Mobius transforms now have content-addressed
+Schedule→Tile carriers. The coalition transforms share one parameterized
+Yates butterfly rather than four emitters. Apple gains no MSL consumer or
+device claim in this slice; any future lane must choose its own physical
+solver and butterfly schedules and provide independent Apple evidence.
+The shared Schedule Object now snapshots nested resource metadata before
+digesting, and dynamic rearrange/GQA-fold inference preserves ranked `?`
+dimensions; parity is validated without transferring a physical schedule.
+
+Cross-backend sync `LAYOUT-SCHEDULE-OBJECT-2026-08-16` — **shared parity
+validated; Apple physical follow-up deferred.** The first C++ layout-algebra
+ABI and GQA-fold consumer are target-neutral, and SO-1 replaces anonymous
+action tuples with one content-addressed Schedule Object. SO-2 adds symbolic
+Tile roles and role-bearing mbarriers. Apple has no mbarrier consumer, so SO-2
+is not applicable physically; a future Metal schedule producer may consume the
+Schedule Object without inheriting NVIDIA/AMD roles. The optional role-bearing
+`tile.pipeline_init` operand is shared IR but remains physically not applicable
+to Metal. No MSL raster output, selector, or Apple device claim changed.
+
+Cross-backend sync `ATTN-BWD-ARCH-2026-08-16` — **no Apple result transfers.**
+ROCm's split backward program was re-audited and x86 gained deterministic
+parallel query-row execution with private dK/dV partials. Apple's separately
+tracked backward materializer and exact-device evidence remain unchanged.
+
+Cross-backend sync `X86-PASS-DIALECT-DEPENDENCY-2026-08-16` — **parity
+validated; no Apple physical follow-up.** The shared pass library now models
+the optional hardware-free x86 Target dialect as a declared MLIR pass
+dependency and fails closed when it is absent. No Apple dialect, pipeline,
+Metal ABI, schedule, selector, or device evidence changed.
+The same closeout removes a private permissive `schedule` dialect from the
+shared transform library; all transforms now consume the canonical ODS
+`TesseraScheduleIR` authority. Apple receives the build-parity fix only.
 
 Cross-backend sync `PDE-EXACT-CONTRACT-2026-08-14` — **shared semantic parity
 validated; Metal physical follow-up required.** Exact-rational PDE

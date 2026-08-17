@@ -136,6 +136,18 @@ from .composition_cost import (
     infer_action_dag,
     prune_composition_candidates,
 )
+from .schedule_object import (
+    SCHEDULE_OBJECT_SCHEMA,
+    ScheduleAction,
+    ScheduleEdge,
+    ScheduleObject,
+    ScheduleResidency,
+    ScheduleRole,
+)
+from .scheduled_reference_tier import (
+    ScheduledReferenceTierArtifact,
+    lower_scheduled_reference_tier,
+)
 from .megamoe_overlap import (
     MegaMoEChunk,
     MegaMoEOverlapPlan,

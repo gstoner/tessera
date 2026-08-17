@@ -34,6 +34,8 @@ std::unique_ptr<mlir::Pass> createGenerateROCMSelectiveSsmKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMSelectiveSsmBwdKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMCholeskyKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMTriSolveKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMTridiagonalKernelPass();
+std::unique_ptr<mlir::Pass> createGenerateROCMCoalitionButterflyKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMLuKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMQrKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMSvdKernelPass();

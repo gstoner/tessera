@@ -107,9 +107,23 @@ static void stampPipelineMarkers(OpBuilder &b, Operation *warpOp,
   warpOp->setAttr("tile.pipeline", b.getStringAttr(pipelineId));
 }
 
-static Value createPipelineState(OpBuilder &b, Location loc, StringRef role,
-                                 int64_t phase) {
+static Value createLogicalRole(OpBuilder &b, Location loc, StringRef name,
+                               StringRef kind, ArrayRef<StringRef> members) {
+  OperationState state(loc, tile::RoleOp::getOperationName());
+  state.addAttribute("name", b.getStringAttr(name));
+  state.addAttribute("kind", b.getStringAttr(kind));
+  SmallVector<Attribute> memberAttrs;
+  llvm::transform(members, std::back_inserter(memberAttrs),
+                  [&](StringRef member) { return b.getStringAttr(member); });
+  state.addAttribute("members", b.getArrayAttr(memberAttrs));
+  state.addTypes(tile::RoleType::get(b.getContext()));
+  return b.create(state)->getResult(0);
+}
+
+static Value createPipelineState(OpBuilder &b, Location loc, Value logicalRole,
+                                 StringRef role, int64_t phase) {
   OperationState state(loc, "tile.pipeline_init");
+  state.addOperands(logicalRole);
   state.addTypes(tile::PipelineStateType::get(b.getContext()));
   state.addAttribute("depth", b.getI64IntegerAttr(2));
   state.addAttribute("stage", b.getI64IntegerAttr(0));
@@ -334,6 +348,14 @@ struct WarpSpecializationPass
 
       // ── Producer warp region (yields prodCross) ───────────────────────────
       b.setInsertionPointToStart(&entryBlock);
+      std::string producerRoleName = pipelineId + ".producer";
+      std::string consumerRoleName = pipelineId + ".consumer";
+      Value producerRole = createLogicalRole(
+          b, loc, producerRoleName, "producer",
+          {StringRef("async_copy")});
+      Value consumerRole = createLogicalRole(
+          b, loc, consumerRoleName, "consumer",
+          {StringRef("mma")});
       OperationState prodSt(loc, "schedule.warp");
       prodSt.addAttribute("role", b.getStringAttr("producer"));
       prodSt.addRegion();
@@ -382,7 +404,7 @@ struct WarpSpecializationPass
       Block *prodBody = b.createBlock(&prodWarp->getRegion(0));
       b.setInsertionPointToEnd(prodBody);
       Value producerState =
-          createPipelineState(b, loc, "producer", /*phase=*/1);
+          createPipelineState(b, loc, producerRole, "producer", /*phase=*/1);
       // Each tile.async_copy stages into its own shared-memory tile (linear `m`
       // axis); distinct buffers, so C2 sees no aliasing on well-formed lowering.
       for (Operation *p : producerOps) {
@@ -417,7 +439,7 @@ struct WarpSpecializationPass
       Block *consBody = b.createBlock(&consWarp->getRegion(0));
       b.setInsertionPointToEnd(consBody);
       Value consumerState =
-          createPipelineState(b, loc, "consumer", /*phase=*/0);
+          createPipelineState(b, loc, consumerRole, "consumer", /*phase=*/0);
       // Each tile.mma writes its accumulator to a TMEM tile (tlane/tcol axes).
       for (Operation *c : consumerOps) {
         if (c->getName().getStringRef() == "tile.mma") {

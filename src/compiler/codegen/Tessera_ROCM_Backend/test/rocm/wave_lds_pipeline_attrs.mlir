@@ -14,9 +14,15 @@ module {
   }
 }
 
-// PLAN: %[[CONSUMER:.*]] = tile.pipeline_init
+// PLAN: %[[CONSUMER_ROLE:.*]] = tile.role
+// PLAN-SAME: kind = "consumer"
+// PLAN-SAME: name = "rocm.wave_lds.consumer"
+// PLAN: %[[CONSUMER:.*]] = tile.pipeline_init %[[CONSUMER_ROLE]]
 // PLAN-SAME: role = "consumer"
-// PLAN: %[[PRODUCER:.*]] = tile.pipeline_init
+// PLAN: %[[PRODUCER_ROLE:.*]] = tile.role
+// PLAN-SAME: kind = "producer"
+// PLAN-SAME: name = "rocm.wave_lds.producer"
+// PLAN: %[[PRODUCER:.*]] = tile.pipeline_init %[[PRODUCER_ROLE]]
 // PLAN-SAME: role = "producer"
 // PLAN: %[[BUFFER:.*]] = tile.alloc
 // PLAN-SAME: bytes = 4096

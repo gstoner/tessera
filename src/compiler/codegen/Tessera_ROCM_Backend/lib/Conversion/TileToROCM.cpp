@@ -28,6 +28,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace mlir;
 
@@ -2084,6 +2085,8 @@ struct LowerTileToROCMPass
           name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
           name == "tile.attention_kernel" ||
           name == "tile.depth_attention_kernel" ||
+          name == "tile.tridiagonal_solve_kernel" ||
+          name == "tile.coalition_butterfly_kernel" ||
           name == "tile.attention_backward_kernel" ||
           name == "tile.spectral_backward_kernel" ||
           name == "tile.solver_ift_kernel" ||
@@ -2187,6 +2190,142 @@ struct LowerTileToROCMPass
         state.addAttribute("dtype", builder.getStringAttr("f32"));
         state.addAttribute("statistics_recurrence", statistics);
         state.addAttribute("merge_recurrence", merge);
+        builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.tridiagonal_solve_kernel") {
+        auto opArch = op->getAttrOfType<StringAttr>("arch");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto algorithm = op->getAttrOfType<StringAttr>("algorithm");
+        auto workgroup = op->getAttrOfType<IntegerAttr>("workgroup_size");
+        auto constantExtent = [&](unsigned operand) -> std::optional<int64_t> {
+          if (auto constant =
+                  op->getOperand(operand).getDefiningOp<arith::ConstantIntOp>())
+            return constant.value();
+          if (auto constant =
+                  op->getOperand(operand).getDefiningOp<LLVM::ConstantOp>())
+            if (auto value = dyn_cast<IntegerAttr>(constant.getValue()))
+              return value.getInt();
+          return std::nullopt;
+        };
+        auto batch = op->getNumOperands() == 7 ? constantExtent(5) : std::nullopt;
+        auto systemSize =
+            op->getNumOperands() == 7 ? constantExtent(6) : std::nullopt;
+        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+            !hash || hash.getValue().size() != 64 || !storage ||
+            storage.getValue() != "f32" || !accum ||
+            accum.getValue() != "f64" || !algorithm ||
+            algorithm.getValue() != "cooperative_lds_pcr_v1" || !workgroup ||
+            !batch || *batch <= 0 || !systemSize || *systemSize <= 0 ||
+            *systemSize > 256 || !llvm::isPowerOf2_64(*systemSize) ||
+            workgroup.getInt() != *systemSize) {
+          op->emitError(
+              "gfx1151 tridiagonal solve requires the bounded cooperative LDS PCR contract");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm tridiagonal solve requires a symbol-owned launch");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.tridiagonal_solve");
+        state.addAttribute("name", symbol);
+        state.addAttribute("arch", opArch);
+        state.addAttribute("artifact_hash", hash);
+        state.addAttribute("batch", builder.getI64IntegerAttr(*batch));
+        state.addAttribute("system_size",
+                           builder.getI64IntegerAttr(*systemSize));
+        state.addAttribute("workgroup_size", workgroup);
+        state.addAttribute("algorithm", algorithm);
+        state.addAttribute("accum", accum);
+        state.addAttribute(
+            "status_abi",
+            builder.getStringAttr("per_equation_i32_v1"));
+        state.addAttribute("dtype", builder.getStringAttr("f32"));
+        builder.create(state);
+        op->erase();
+        continue;
+      }
+
+      if (name == "tile.coalition_butterfly_kernel") {
+        auto opArch = op->getAttrOfType<StringAttr>("arch");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto order = op->getAttrOfType<StringAttr>("stage_order");
+        auto players = op->getAttrOfType<IntegerAttr>("players");
+        auto half = op->getAttrOfType<IntegerAttr>("half");
+        auto sign = op->getAttrOfType<IntegerAttr>("sign");
+        auto workgroup = op->getAttrOfType<IntegerAttr>("workgroup_size");
+        auto constantExtent = [&](unsigned operand) -> std::optional<int64_t> {
+          if (auto constant =
+                  op->getOperand(operand).getDefiningOp<arith::ConstantIntOp>())
+            return constant.value();
+          if (auto constant =
+                  op->getOperand(operand).getDefiningOp<LLVM::ConstantOp>())
+            if (auto value = dyn_cast<IntegerAttr>(constant.getValue()))
+              return value.getInt();
+          return std::nullopt;
+        };
+        auto batch = op->getNumOperands() == 4 ? constantExtent(2) : std::nullopt;
+        auto latticeSize =
+            op->getNumOperands() == 4 ? constantExtent(3) : std::nullopt;
+        if (arch != "gfx1151" || !opArch || opArch.getValue() != "gfx1151" ||
+            !hash || hash.getValue().size() != 64 || !storage ||
+            storage.getValue() != "f32" || !accum ||
+            accum.getValue() != "f64" || !order ||
+            order.getValue() != "ascending_bit_yates_v1" || !players ||
+            !half || (half.getInt() != 0 && half.getInt() != 1) || !sign ||
+            (sign.getInt() != -1 && sign.getInt() != 1) || !workgroup ||
+            !batch || *batch <= 0 || !latticeSize || *latticeSize <= 0 ||
+            *latticeSize > (64 * 1024) / static_cast<int64_t>(sizeof(double)) ||
+            !llvm::isPowerOf2_64(*latticeSize) ||
+            workgroup.getInt() != std::min<int64_t>(256, *latticeSize)) {
+          op->emitError(
+              "gfx1151 coalition transform requires the shared radix-2 Yates contract");
+          signalPassFailure();
+          return;
+        }
+        Operation *symbolOwner = op->getParentOp();
+        while (symbolOwner &&
+               !symbolOwner->hasAttr(SymbolTable::getSymbolAttrName()))
+          symbolOwner = symbolOwner->getParentOp();
+        auto symbol = symbolOwner
+                          ? symbolOwner->getAttrOfType<StringAttr>(
+                                SymbolTable::getSymbolAttrName())
+                          : StringAttr();
+        if (!symbol) {
+          op->emitError("ROCm coalition butterfly requires a symbol-owned launch");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.coalition_butterfly");
+        state.addAttribute("name", symbol);
+        state.addAttribute("arch", opArch);
+        state.addAttribute("artifact_hash", hash);
+        state.addAttribute("batch", builder.getI64IntegerAttr(*batch));
+        state.addAttribute("lattice_size",
+                           builder.getI64IntegerAttr(*latticeSize));
+        state.addAttribute("players", players);
+        state.addAttribute("half", half);
+        state.addAttribute("sign", sign);
+        state.addAttribute("workgroup_size", workgroup);
+        state.addAttribute("stage_order", order);
+        state.addAttribute("accum", accum);
+        state.addAttribute("dtype", builder.getStringAttr("f32"));
         builder.create(state);
         op->erase();
         continue;

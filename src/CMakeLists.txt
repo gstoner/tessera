@@ -21,7 +21,23 @@
 # Core IR layer (must come first — other components link against it)
 # ------------------------------------------------------------------
 add_subdirectory(compiler/ir)          # TesseraIR dialect + tablegen
+add_subdirectory(compiler/layout_algebra) # shared host-free layout authority
 add_subdirectory(collectives)          # Collective Target dialect + transport ABI
+
+# The Tile->x86 pass is part of the shared transform library, but its typed
+# Target marker is owned by the optional hardware-free x86 dialect.  Build that
+# small IR target before TesseraPasses so the pass can declare the dialect via
+# getDependentDialects(); loading it lazily from runOnOperation() is forbidden
+# by MLIR's multi-threaded pass-manager contract.  Native x86 kernels remain in
+# the later backend subdirectory and are not pulled into the shared layer.
+if(TESSERA_BUILD_X86_BACKEND)
+  add_subdirectory(compiler/codegen/tessera_x86_backend/lib/IR)
+endif()
+
+# The canonical Schedule dialect is shared by distribution lowering and the
+# programming-model passes. Define it before TesseraPasses so no transform may
+# invent a permissive dialect with the same namespace.
+add_subdirectory(compiler/programming_model)    # PM v1.1: Schedule IR ODS
 add_subdirectory(transforms)           # All lowering passes (Phases 1–3)
 
 # ------------------------------------------------------------------
@@ -33,7 +49,6 @@ add_subdirectory(runtime)
 # Compiler components (dialects and passes under compiler/)
 # ------------------------------------------------------------------
 add_subdirectory(compiler/tile_opt_fa4)         # Attn + Queue dialects, FA4 conversions
-add_subdirectory(compiler/programming_model)    # PM v1.1: Schedule IR ODS
 if(NOT ((TESSERA_BUILD_ROCM_BACKEND AND NOT TESSERA_ENABLE_CUDA AND NOT TESSERA_ENABLE_HIP) OR
         (TESSERA_BUILD_NVIDIA_BACKEND AND NOT TESSERA_ENABLE_CUDA)))
   add_subdirectory(compiler/tessera_neighbors)  # Neighbor topology + stencil passes

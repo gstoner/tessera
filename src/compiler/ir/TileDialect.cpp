@@ -556,7 +556,8 @@ bool isTileControlType(::mlir::Type type) {
   // Ordering / ownership handles, not data. `BufferType` is included to match
   // the set the ROCm lowering has used since it introduced this rule; changing
   // membership changes arity for every caller, so it is deliberately one list.
-  return ::mlir::isa<AsyncTokenType, BufferType, PipelineStateType>(type);
+  return ::mlir::isa<AsyncTokenType, BufferType, PipelineStateType, RoleType>(
+      type);
 }
 
 ::llvm::SmallVector<::mlir::Value> dataOperands(::mlir::Operation *op) {

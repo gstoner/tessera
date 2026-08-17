@@ -27,6 +27,7 @@
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/SHA256.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -972,6 +973,154 @@ struct DepthAttentionSchedule {
   bool reassociable = true;
 };
 
+struct TridiagonalSchedule {
+  StringRef target;
+  StringRef arch;
+  StringRef storage = "f32";
+  StringRef accum = "f64";
+  int64_t batch;
+  int64_t systemSize;
+  int64_t workgroupSize;
+  StringRef algorithm;
+};
+
+static FailureOr<TridiagonalSchedule>
+getTridiagonalSchedule(Operation *op) {
+  ModuleOp module = op->getParentOfType<ModuleOp>();
+  if (!module || op->getName().getStringRef() !=
+                     "tessera.tridiagonal_solve" ||
+      op->getNumOperands() != 4 || op->getNumResults() != 1)
+    return failure();
+  auto dl = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto diagonal = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+  auto du = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+  auto rhs = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
+  auto output = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!dl || !diagonal || !du || !rhs || !output || !dl.hasStaticShape() ||
+      !diagonal.hasStaticShape() || !du.hasStaticShape() ||
+      !rhs.hasStaticShape() || !output.hasStaticShape() || dl.getRank() != 1 ||
+      diagonal.getRank() != 1 || du.getRank() != 1 || rhs.getRank() < 1 ||
+      dl.getShape() != diagonal.getShape() || du.getShape() != diagonal.getShape() ||
+      rhs.getShape() != output.getShape() ||
+      rhs.getShape().back() != diagonal.getDimSize(0) ||
+      dl.getElementType() != diagonal.getElementType() ||
+      du.getElementType() != diagonal.getElementType() ||
+      rhs.getElementType() != diagonal.getElementType() ||
+      output.getElementType() != diagonal.getElementType() ||
+      !diagonal.getElementType().isF32())
+    return failure();
+
+  TridiagonalSchedule schedule;
+  schedule.target = moduleString(module, "tessera.target", "target");
+  schedule.arch = moduleString(module, "tessera.arch", "arch");
+  bool x86 = schedule.target == "x86" &&
+             (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
+  bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
+  if (!x86 && !rocm)
+    return failure();
+  schedule.systemSize = diagonal.getDimSize(0);
+  schedule.batch = 1;
+  for (int64_t extent : rhs.getShape().drop_back())
+    schedule.batch *= extent;
+  if (schedule.systemSize <= 0 || schedule.batch <= 0)
+    return failure();
+  if (rocm && (schedule.systemSize > 256 ||
+               !llvm::isPowerOf2_64(schedule.systemSize)))
+    return failure();
+  schedule.workgroupSize = rocm ? schedule.systemSize : 1;
+  schedule.algorithm = rocm ? "cooperative_lds_pcr_v1"
+                            : "batch_vector_thomas_v1";
+  return schedule;
+}
+
+static std::string
+tridiagonalScheduleDigest(const TridiagonalSchedule &schedule) {
+  std::string payload =
+      (Twine("schema=tessera.tridiagonal.schedule.v1;target=") +
+       schedule.target + ";arch=" + schedule.arch + ";batch=" +
+       Twine(schedule.batch) + ";n=" + Twine(schedule.systemSize) +
+       ";storage=" + schedule.storage + ";accum=" + schedule.accum +
+       ";algorithm=" + schedule.algorithm + ";workgroup=" +
+       Twine(schedule.workgroupSize))
+          .str();
+  return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(payload)),
+                     /*LowerCase=*/true);
+}
+
+struct CoalitionButterflySchedule {
+  StringRef target;
+  StringRef arch;
+  StringRef storage = "f32";
+  StringRef accum = "f64";
+  int64_t batch;
+  int64_t latticeSize;
+  int64_t players;
+  int64_t half;
+  int64_t sign;
+  int64_t workgroupSize;
+  StringRef stageOrder = "ascending_bit_yates_v1";
+};
+
+static FailureOr<CoalitionButterflySchedule>
+getCoalitionButterflySchedule(Operation *op) {
+  StringRef name = op->getName().getStringRef();
+  if (name != "tessera.game_subset_zeta" &&
+      name != "tessera.game_subset_mobius" &&
+      name != "tessera.game_superset_zeta" &&
+      name != "tessera.game_superset_mobius")
+    return failure();
+  ModuleOp module = op->getParentOfType<ModuleOp>();
+  if (!module || op->getNumOperands() != 1 || op->getNumResults() != 1)
+    return failure();
+  auto input = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto output = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!input || !output || !input.hasStaticShape() || !output.hasStaticShape() ||
+      input.getShape() != output.getShape() || input.getRank() < 1 ||
+      !input.getElementType().isF32() ||
+      input.getElementType() != output.getElementType())
+    return failure();
+  int64_t size = input.getShape().back();
+  if (size <= 0 || !llvm::isPowerOf2_64(size))
+    return failure();
+  CoalitionButterflySchedule schedule;
+  schedule.target = moduleString(module, "tessera.target", "target");
+  schedule.arch = moduleString(module, "tessera.arch", "arch");
+  bool x86 = schedule.target == "x86" &&
+             (schedule.arch.contains("avx512") || schedule.arch.contains("zen5"));
+  bool rocm = schedule.target == "rocm" && schedule.arch.contains("gfx1151");
+  if (!x86 && !rocm)
+    return failure();
+  // The physical gfx1151 consumer retains the complete fp64 lattice in LDS.
+  // Fail before artifact creation when that state cannot fit in 64 KiB/CU.
+  if (rocm && size > (64 * 1024) / static_cast<int64_t>(sizeof(double)))
+    return failure();
+  schedule.batch = 1;
+  for (int64_t extent : input.getShape().drop_back())
+    schedule.batch *= extent;
+  schedule.latticeSize = size;
+  schedule.players = llvm::Log2_64(size);
+  schedule.half = name.contains("subset") ? 1 : 0;
+  schedule.sign = name.contains("mobius") ? -1 : 1;
+  schedule.workgroupSize = rocm ? std::min<int64_t>(256, size) : 1;
+  return schedule;
+}
+
+static std::string coalitionButterflyDigest(
+    const CoalitionButterflySchedule &schedule) {
+  std::string payload =
+      (Twine("schema=tessera.coalition_butterfly.schedule.v1;target=") +
+       schedule.target + ";arch=" + schedule.arch + ";batch=" +
+       Twine(schedule.batch) + ";size=" + Twine(schedule.latticeSize) +
+       ";players=" + Twine(schedule.players) + ";half=" +
+       Twine(schedule.half) + ";sign=" + Twine(schedule.sign) +
+       ";storage=" + schedule.storage + ";accum=" + schedule.accum +
+       ";stage_order=" + schedule.stageOrder + ";workgroup=" +
+       Twine(schedule.workgroupSize))
+          .str();
+  return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(payload)),
+                     /*LowerCase=*/true);
+}
+
 static FailureOr<DepthAttentionSchedule>
 getDepthAttentionSchedule(Operation *op) {
   ModuleOp module = op->getParentOfType<ModuleOp>();
@@ -1452,6 +1601,138 @@ struct GraphToSchedulePass
   void runOnOperation() override {
     ModuleOp mod = getOperation();
     OpBuilder builder(mod.getContext());
+
+    SmallVector<Operation *> tridiagonalSolves;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tessera.tridiagonal_solve")
+        tridiagonalSolves.push_back(op);
+    });
+    for (Operation *op : tridiagonalSolves) {
+      FailureOr<TridiagonalSchedule> selected = getTridiagonalSchedule(op);
+      if (failed(selected)) {
+        op->emitError(
+            "REF-TIER-PHYS-1 requires a static fp32 tridiagonal system on "
+            "Zen 5 AVX-512, or a power-of-two N<=256 system on gfx1151");
+        return signalPassFailure();
+      }
+      std::string digest = tridiagonalScheduleDigest(*selected);
+      op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
+      builder.setInsertionPointAfter(op);
+      OperationState state(op->getLoc(), "schedule.tridiagonal_solve");
+      state.addOperands(op->getResult(0));
+      state.addTypes(op->getResult(0).getType());
+      state.addAttribute("artifact_hash", builder.getStringAttr(digest));
+      state.addAttribute("arch", builder.getStringAttr(selected->arch));
+      state.addAttribute("storage", builder.getStringAttr(selected->storage));
+      state.addAttribute("accum", builder.getStringAttr(selected->accum));
+      state.addAttribute("batch", builder.getI64IntegerAttr(selected->batch));
+      state.addAttribute(
+          "system_size", builder.getI64IntegerAttr(selected->systemSize));
+      state.addAttribute(
+          "workgroup_size", builder.getI64IntegerAttr(selected->workgroupSize));
+      state.addAttribute("algorithm", builder.getStringAttr(selected->algorithm));
+      Operation *scheduled = builder.create(state);
+      for (OpOperand &use :
+           llvm::make_early_inc_range(op->getResult(0).getUses()))
+        if (use.getOwner() != scheduled)
+          use.set(scheduled->getResult(0));
+
+      builder.setInsertionPointAfter(scheduled);
+      OperationState artifact(op->getLoc(), "schedule.artifact");
+      artifact.addAttribute("hash", builder.getStringAttr(digest));
+      artifact.addAttribute("arch", builder.getStringAttr(selected->arch));
+      artifact.addAttribute(
+          "shape_key",
+          builder.getStringAttr((Twine("family=tridiagonal_solve;batch=") +
+                                 Twine(selected->batch) + ";n=" +
+                                 Twine(selected->systemSize))
+                                    .str()));
+      artifact.addAttribute(
+          "tile",
+          builder.getDictionaryAttr({builder.getNamedAttr(
+              "workgroup_size",
+              builder.getI64IntegerAttr(selected->workgroupSize))}));
+      artifact.addAttribute(
+          "numeric_policy",
+          builder.getStringAttr((Twine(selected->storage) + "->" +
+                                 selected->accum + ";algorithm=" +
+                                 selected->algorithm)
+                                    .str()));
+      builder.create(artifact);
+    }
+
+    SmallVector<Operation *> coalitionButterflies;
+    mod.walk([&](Operation *op) {
+      StringRef name = op->getName().getStringRef();
+      if (name == "tessera.game_subset_zeta" ||
+          name == "tessera.game_subset_mobius" ||
+          name == "tessera.game_superset_zeta" ||
+          name == "tessera.game_superset_mobius")
+        coalitionButterflies.push_back(op);
+    });
+    for (Operation *op : coalitionButterflies) {
+      FailureOr<CoalitionButterflySchedule> selected =
+          getCoalitionButterflySchedule(op);
+      if (failed(selected)) {
+        op->emitError(
+            "REF-TIER-PHYS-1 requires a static power-of-two fp32 coalition "
+            "axis on Zen 5 AVX-512, or an axis no larger than the 64 KiB "
+            "gfx1151 fp64 LDS envelope");
+        return signalPassFailure();
+      }
+      std::string digest = coalitionButterflyDigest(*selected);
+      op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
+      builder.setInsertionPointAfter(op);
+      OperationState state(op->getLoc(), "schedule.coalition_butterfly");
+      state.addOperands(op->getResult(0));
+      state.addTypes(op->getResult(0).getType());
+      state.addAttribute("artifact_hash", builder.getStringAttr(digest));
+      state.addAttribute("arch", builder.getStringAttr(selected->arch));
+      state.addAttribute("storage", builder.getStringAttr(selected->storage));
+      state.addAttribute("accum", builder.getStringAttr(selected->accum));
+      state.addAttribute("batch", builder.getI64IntegerAttr(selected->batch));
+      state.addAttribute(
+          "lattice_size", builder.getI64IntegerAttr(selected->latticeSize));
+      state.addAttribute("players",
+                         builder.getI64IntegerAttr(selected->players));
+      state.addAttribute("half", builder.getI64IntegerAttr(selected->half));
+      state.addAttribute("sign", builder.getI64IntegerAttr(selected->sign));
+      state.addAttribute(
+          "workgroup_size", builder.getI64IntegerAttr(selected->workgroupSize));
+      state.addAttribute("stage_order",
+                         builder.getStringAttr(selected->stageOrder));
+      Operation *scheduled = builder.create(state);
+      for (OpOperand &use :
+           llvm::make_early_inc_range(op->getResult(0).getUses()))
+        if (use.getOwner() != scheduled)
+          use.set(scheduled->getResult(0));
+
+      builder.setInsertionPointAfter(scheduled);
+      OperationState artifact(op->getLoc(), "schedule.artifact");
+      artifact.addAttribute("hash", builder.getStringAttr(digest));
+      artifact.addAttribute("arch", builder.getStringAttr(selected->arch));
+      artifact.addAttribute(
+          "shape_key",
+          builder.getStringAttr((Twine("family=coalition_butterfly;batch=") +
+                                 Twine(selected->batch) + ";size=" +
+                                 Twine(selected->latticeSize) + ";half=" +
+                                 Twine(selected->half) + ";sign=" +
+                                 Twine(selected->sign))
+                                    .str()));
+      artifact.addAttribute(
+          "tile",
+          builder.getDictionaryAttr({builder.getNamedAttr(
+              "workgroup_size",
+              builder.getI64IntegerAttr(selected->workgroupSize))}));
+      artifact.addAttribute(
+          "numeric_policy",
+          builder.getStringAttr((Twine(selected->storage) + "->" +
+                                 selected->accum + ";stage_order=" +
+                                 selected->stageOrder)
+                                    .str()));
+      builder.create(artifact);
+    }
+
     SmallVector<Operation *> matmuls;
     mod.walk([&](Operation *op) {
       if (op->getName().getStringRef() == "tessera.matmul")
@@ -2174,6 +2455,203 @@ struct ScheduleToTilePass
   void runOnOperation() override {
     ModuleOp mod = getOperation();
     OpBuilder builder(mod.getContext());
+
+    SmallVector<Operation *> scheduledTridiagonalSolves;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "schedule.tridiagonal_solve")
+        scheduledTridiagonalSolves.push_back(op);
+    });
+    for (Operation *scheduled : scheduledTridiagonalSolves) {
+      Operation *graph = scheduled->getOperand(0).getDefiningOp();
+      FailureOr<TridiagonalSchedule> selected =
+          graph ? getTridiagonalSchedule(graph)
+                : FailureOr<TridiagonalSchedule>(failure());
+      auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
+      auto arch = scheduled->getAttrOfType<StringAttr>("arch");
+      auto storage = scheduled->getAttrOfType<StringAttr>("storage");
+      auto accum = scheduled->getAttrOfType<StringAttr>("accum");
+      auto batch = scheduled->getAttrOfType<IntegerAttr>("batch");
+      auto systemSize = scheduled->getAttrOfType<IntegerAttr>("system_size");
+      auto workgroup = scheduled->getAttrOfType<IntegerAttr>("workgroup_size");
+      auto algorithm = scheduled->getAttrOfType<StringAttr>("algorithm");
+      if (!graph || failed(selected) || !hash || !arch || !storage || !accum ||
+          !batch || !systemSize || !workgroup || !algorithm ||
+          tridiagonalScheduleDigest(*selected) != hash.getValue() ||
+          arch.getValue() != selected->arch ||
+          storage.getValue() != selected->storage ||
+          accum.getValue() != selected->accum ||
+          batch.getInt() != selected->batch ||
+          systemSize.getInt() != selected->systemSize ||
+          workgroup.getInt() != selected->workgroupSize ||
+          algorithm.getValue() != selected->algorithm) {
+        scheduled->emitError(
+            "tridiagonal Schedule contract was altered or lost its Graph subject");
+        return signalPassFailure();
+      }
+      auto graphHash =
+          graph->getAttrOfType<StringAttr>("schedule.artifact_hash");
+      SmallVector<schedule::ArtifactOp> matchingArtifacts;
+      mod.walk([&](schedule::ArtifactOp artifact) {
+        if (artifact.getHash() == hash.getValue())
+          matchingArtifacts.push_back(artifact);
+      });
+      if (!graphHash || graphHash.getValue() != hash.getValue() ||
+          matchingArtifacts.size() != 1) {
+        scheduled->emitError(
+            "requires exactly one matching Graph hash and schedule.artifact");
+        return signalPassFailure();
+      }
+
+      Location loc = scheduled->getLoc();
+      builder.setInsertionPoint(scheduled);
+      auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      auto toPointer = [&](Value tensor) -> Value {
+        auto type = cast<RankedTensorType>(tensor.getType());
+        auto memrefType = MemRefType::get(type.getShape(), type.getElementType());
+        Value buffer =
+            builder.create<bufferization::ToBufferOp>(loc, memrefType, tensor);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer = builder.create<arith::IndexCastOp>(
+            loc, builder.getI64Type(), index);
+        return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      };
+      SmallVector<Value> operands;
+      for (Value value : graph->getOperands())
+        operands.push_back(toPointer(value));
+      auto outputType = cast<RankedTensorType>(graph->getResult(0).getType());
+      auto outputMemref =
+          MemRefType::get(outputType.getShape(), outputType.getElementType());
+      Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      Value outputIndex =
+          builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      Value outputInteger = builder.create<arith::IndexCastOp>(
+          loc, builder.getI64Type(), outputIndex);
+      operands.push_back(
+          builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger));
+      operands.push_back(builder.create<arith::ConstantIntOp>(
+          loc, selected->batch, 64));
+      operands.push_back(builder.create<arith::ConstantIntOp>(
+          loc, selected->systemSize, 64));
+      OperationState kernel(loc, "tile.tridiagonal_solve_kernel");
+      kernel.addOperands(operands);
+      kernel.addAttribute("arch", arch);
+      kernel.addAttribute("storage", storage);
+      kernel.addAttribute("accum", accum);
+      kernel.addAttribute("algorithm", algorithm);
+      kernel.addAttribute("workgroup_size", workgroup);
+      kernel.addAttribute("tessera.schedule_hash", hash);
+      builder.create(kernel);
+      Value result = builder.create<bufferization::ToTensorOp>(
+          loc, outputType, outputBuffer);
+      scheduled->getResult(0).replaceAllUsesWith(result);
+      scheduled->erase();
+      if (graph->use_empty())
+        graph->erase();
+      for (schedule::ArtifactOp artifact : matchingArtifacts)
+        artifact.erase();
+    }
+
+    SmallVector<Operation *> scheduledButterflies;
+    mod.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "schedule.coalition_butterfly")
+        scheduledButterflies.push_back(op);
+    });
+    for (Operation *scheduled : scheduledButterflies) {
+      Operation *graph = scheduled->getOperand(0).getDefiningOp();
+      FailureOr<CoalitionButterflySchedule> selected =
+          graph ? getCoalitionButterflySchedule(graph)
+                : FailureOr<CoalitionButterflySchedule>(failure());
+      auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
+      auto arch = scheduled->getAttrOfType<StringAttr>("arch");
+      auto storage = scheduled->getAttrOfType<StringAttr>("storage");
+      auto accum = scheduled->getAttrOfType<StringAttr>("accum");
+      auto batch = scheduled->getAttrOfType<IntegerAttr>("batch");
+      auto latticeSize = scheduled->getAttrOfType<IntegerAttr>("lattice_size");
+      auto players = scheduled->getAttrOfType<IntegerAttr>("players");
+      auto half = scheduled->getAttrOfType<IntegerAttr>("half");
+      auto sign = scheduled->getAttrOfType<IntegerAttr>("sign");
+      auto workgroup = scheduled->getAttrOfType<IntegerAttr>("workgroup_size");
+      auto stageOrder = scheduled->getAttrOfType<StringAttr>("stage_order");
+      if (!graph || failed(selected) || !hash || !arch || !storage || !accum ||
+          !batch || !latticeSize || !players || !half || !sign || !workgroup ||
+          !stageOrder || coalitionButterflyDigest(*selected) != hash.getValue() ||
+          arch.getValue() != selected->arch ||
+          storage.getValue() != selected->storage ||
+          accum.getValue() != selected->accum || batch.getInt() != selected->batch ||
+          latticeSize.getInt() != selected->latticeSize ||
+          players.getInt() != selected->players || half.getInt() != selected->half ||
+          sign.getInt() != selected->sign ||
+          workgroup.getInt() != selected->workgroupSize ||
+          stageOrder.getValue() != selected->stageOrder) {
+        scheduled->emitError(
+            "coalition butterfly Schedule contract was altered or lost its Graph subject");
+        return signalPassFailure();
+      }
+      auto graphHash =
+          graph->getAttrOfType<StringAttr>("schedule.artifact_hash");
+      SmallVector<schedule::ArtifactOp> matchingArtifacts;
+      mod.walk([&](schedule::ArtifactOp artifact) {
+        if (artifact.getHash() == hash.getValue())
+          matchingArtifacts.push_back(artifact);
+      });
+      if (!graphHash || graphHash.getValue() != hash.getValue() ||
+          matchingArtifacts.size() != 1) {
+        scheduled->emitError(
+            "requires exactly one matching Graph hash and schedule.artifact");
+        return signalPassFailure();
+      }
+      Location loc = scheduled->getLoc();
+      builder.setInsertionPoint(scheduled);
+      auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      auto inputType = cast<RankedTensorType>(graph->getOperand(0).getType());
+      auto inputMemref =
+          MemRefType::get(inputType.getShape(), inputType.getElementType());
+      Value inputBuffer = builder.create<bufferization::ToBufferOp>(
+          loc, inputMemref, graph->getOperand(0));
+      Value inputIndex =
+          builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, inputBuffer);
+      Value inputInteger = builder.create<arith::IndexCastOp>(
+          loc, builder.getI64Type(), inputIndex);
+      Value inputPointer =
+          builder.create<LLVM::IntToPtrOp>(loc, pointerType, inputInteger);
+      auto outputType = cast<RankedTensorType>(graph->getResult(0).getType());
+      auto outputMemref =
+          MemRefType::get(outputType.getShape(), outputType.getElementType());
+      Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      Value outputIndex =
+          builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      Value outputInteger = builder.create<arith::IndexCastOp>(
+          loc, builder.getI64Type(), outputIndex);
+      Value outputPointer =
+          builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger);
+      Value batchValue = builder.create<arith::ConstantIntOp>(
+          loc, selected->batch, 64);
+      Value sizeValue = builder.create<arith::ConstantIntOp>(
+          loc, selected->latticeSize, 64);
+      OperationState kernel(loc, "tile.coalition_butterfly_kernel");
+      kernel.addOperands(
+          {inputPointer, outputPointer, batchValue, sizeValue});
+      kernel.addAttribute("arch", arch);
+      kernel.addAttribute("storage", storage);
+      kernel.addAttribute("accum", accum);
+      kernel.addAttribute("players", players);
+      kernel.addAttribute("half", half);
+      kernel.addAttribute("sign", sign);
+      kernel.addAttribute("workgroup_size", workgroup);
+      kernel.addAttribute("stage_order", stageOrder);
+      kernel.addAttribute("tessera.schedule_hash", hash);
+      builder.create(kernel);
+      Value result = builder.create<bufferization::ToTensorOp>(
+          loc, outputType, outputBuffer);
+      scheduled->getResult(0).replaceAllUsesWith(result);
+      scheduled->erase();
+      if (graph->use_empty())
+        graph->erase();
+      for (schedule::ArtifactOp artifact : matchingArtifacts)
+        artifact.erase();
+    }
+
     SmallVector<schedule::MatmulOp> scheduledMatmuls;
     mod.walk([&](schedule::MatmulOp op) { scheduledMatmuls.push_back(op); });
     for (schedule::MatmulOp scheduled : scheduledMatmuls) {

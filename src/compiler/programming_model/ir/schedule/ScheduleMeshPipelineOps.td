@@ -274,6 +274,49 @@ def Schedule_DepthAttentionOp : Op<ScheduleDialect, "depth_attention", [Pure]> {
   let hasVerifier = 1;
 }
 
+// REF-TIER-PHYS-1.  The logical system shares its three diagonals across the
+// leading RHS batch.  The algorithm attribute is architecture-owned but is
+// hashed with the common shape/numeric contract: x86 chooses batch-vector
+// Thomas, while gfx1151 chooses cooperative PCR rather than serializing one
+// recurrence inside a wave.
+def Schedule_TridiagonalSolveOp : Op<ScheduleDialect, "tridiagonal_solve", [Pure]> {
+  let summary = "Content-addressed batched tridiagonal solve";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$arch,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       I64Attr:$batch,
+                       I64Attr:$system_size,
+                       I64Attr:$workgroup_size,
+                       StrAttr:$algorithm);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+}
+
+// One shared radix-2/Yates schedule for all coalition-lattice transforms.
+// `half` selects the updated butterfly half and `sign` selects zeta versus
+// Mobius.  Higher game operations compose this carrier with contractions,
+// softmax reductions, or segment operations instead of adding one emitter per
+// public name.
+def Schedule_CoalitionButterflyOp : Op<ScheduleDialect, "coalition_butterfly", [Pure]> {
+  let summary = "Content-addressed coalition-lattice butterfly";
+  let arguments = (ins AnyType:$subject,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$arch,
+                       StrAttr:$storage,
+                       StrAttr:$accum,
+                       I64Attr:$batch,
+                       I64Attr:$lattice_size,
+                       I64Attr:$players,
+                       I64Attr:$half,
+                       I64Attr:$sign,
+                       I64Attr:$workgroup_size,
+                       StrAttr:$stage_order);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+}
+
 def Schedule_AttentionBackwardOp : Op<ScheduleDialect, "attention_backward", [Pure]> {
   let summary = "Scheduled canonical tensor-valued attention VJP";
   let arguments = (ins AnyType:$dq_subject,

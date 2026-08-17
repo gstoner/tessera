@@ -17,8 +17,8 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | 406 | backend_pathway_owned=391, multi_gpu_deferred=15 | backend_codegen=391, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
 | `sharding_rule` | 50 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=47 | compiler_middle_end=1, distributed_validation=2, primitive_registry=47 |
-| `target_ir` | 15 | architecture_evidence_gated=11, multi_gpu_deferred=4 | backend_codegen=11, distributed_validation=4 |
-| `tile_ir` | 11 | architecture_evidence_gated=11 | backend_codegen=11 |
+| `target_ir` | 10 | architecture_evidence_gated=6, multi_gpu_deferred=4 | backend_codegen=6, distributed_validation=4 |
+| `tile_ir` | 6 | architecture_evidence_gated=6 | backend_codegen=6 |
 
 ## Rows
 
@@ -489,21 +489,11 @@ test, ABI, and surface dashboards.
 | `target_ir` | `game_boltzmann_value` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_coalition_excess` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_semivalue` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
-| `target_ir` | `tridiagonal_solve` | loop_nest | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: PDE_STENCIL_CAPABILITY_PLAN.md §III.1 owns the per-target solver lane (TSOL-A1 op-set admission); hold until that phase lands. |
 | `target_ir` | `game_mex` | segment_reduce | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_coalition_marginal` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
-| `target_ir` | `game_subset_mobius` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
-| `target_ir` | `game_subset_zeta` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
-| `target_ir` | `game_superset_mobius` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
-| `target_ir` | `game_superset_zeta` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `tile_ir` | `depth_attn` | attention | partial | `architecture_evidence_gated` | backend_codegen | Shared Graph/AD contract is closed; wait for the named architecture-owned physical phase and device packet. |
 | `tile_ir` | `game_boltzmann_value` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_coalition_excess` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_semivalue` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
-| `tile_ir` | `tridiagonal_solve` | loop_nest | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: PDE_STENCIL_CAPABILITY_PLAN.md §III.1 owns the Thomas-recurrence Tile lowering (TSOL-A1 op-set admission); hold until that phase lands. |
 | `tile_ir` | `game_mex` | segment_reduce | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_coalition_marginal` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
-| `tile_ir` | `game_subset_mobius` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
-| `tile_ir` | `game_subset_zeta` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
-| `tile_ir` | `game_superset_mobius` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
-| `tile_ir` | `game_superset_zeta` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |

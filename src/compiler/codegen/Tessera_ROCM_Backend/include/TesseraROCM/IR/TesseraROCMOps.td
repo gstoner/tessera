@@ -275,6 +275,38 @@ def ROCM_DepthAttentionOp : TesseraROCM_Op<"depth_attention"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_TridiagonalSolveOp : TesseraROCM_Op<"tridiagonal_solve"> {
+  let summary = "Cooperative gfx1151 LDS PCR tridiagonal solve";
+  let arguments = (ins StrAttr:$name,
+                       StrAttr:$arch,
+                       StrAttr:$artifact_hash,
+                       I64Attr:$batch,
+                       I64Attr:$system_size,
+                       I64Attr:$workgroup_size,
+                       StrAttr:$algorithm,
+                       StrAttr:$accum,
+                       StrAttr:$status_abi,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
+def ROCM_CoalitionButterflyOp : TesseraROCM_Op<"coalition_butterfly"> {
+  let summary = "Shared gfx1151 coalition-lattice Yates butterfly";
+  let arguments = (ins StrAttr:$name,
+                       StrAttr:$arch,
+                       StrAttr:$artifact_hash,
+                       I64Attr:$batch,
+                       I64Attr:$lattice_size,
+                       I64Attr:$players,
+                       I64Attr:$half,
+                       I64Attr:$sign,
+                       I64Attr:$workgroup_size,
+                       StrAttr:$stage_order,
+                       StrAttr:$accum,
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
+  let assemblyFormat = "attr-dict";
+}
+
 def ROCM_SolverIFTOp : TesseraROCM_Op<"solver_ift"> {
   let summary = "Matrix-free residual/solve/residual-adjoint IFT kernel";
   let description = [{

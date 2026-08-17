@@ -178,6 +178,21 @@ static Value findPipelineStateOperand(Operation *op) {
   return {};
 }
 
+static tessera::tile::PipelineInitOp pipelineInitRoot(Value state) {
+  llvm::SmallPtrSet<Operation *, 8> seen;
+  while (Operation *def = state.getDefiningOp()) {
+    if (!seen.insert(def).second)
+      return {};
+    if (auto init = dyn_cast<tessera::tile::PipelineInitOp>(def))
+      return init;
+    auto advance = dyn_cast<tessera::tile::PipelineAdvanceOp>(def);
+    if (!advance || advance.getInputs().empty())
+      return {};
+    state = advance.getInputs().front();
+  }
+  return {};
+}
+
 static Value allocationRoot(Value buffer) {
   while (buffer) {
     Operation *def = buffer.getDefiningOp();
@@ -246,13 +261,35 @@ static Value createLdsAllocation(OpBuilder &builder, FunctionOpInterface func,
   return builder.create(state)->getResult(0);
 }
 
-static Value createPipelineState(OpBuilder &builder, FunctionOpInterface func,
-                                 StringRef role, int64_t phase) {
+static Value createLogicalRole(OpBuilder &builder, FunctionOpInterface func,
+                               StringRef name, StringRef kind,
+                               ArrayRef<StringRef> members) {
   if (func.getFunctionBody().empty())
     return {};
   builder.setInsertionPointToStart(&func.getFunctionBody().front());
+  OperationState state(func.getLoc(), tessera::tile::RoleOp::getOperationName());
+  state.addAttribute("name", builder.getStringAttr(name));
+  state.addAttribute("kind", builder.getStringAttr(kind));
+  SmallVector<Attribute> memberAttrs;
+  llvm::transform(members, std::back_inserter(memberAttrs),
+                  [&](StringRef member) { return builder.getStringAttr(member); });
+  state.addAttribute("members", builder.getArrayAttr(memberAttrs));
+  state.addTypes(tessera::tile::RoleType::get(builder.getContext()));
+  return builder.create(state)->getResult(0);
+}
+
+static Value createPipelineState(OpBuilder &builder, FunctionOpInterface func,
+                                 Value logicalRole, StringRef role,
+                                 int64_t phase) {
+  if (func.getFunctionBody().empty())
+    return {};
+  if (Operation *roleDef = logicalRole.getDefiningOp())
+    builder.setInsertionPointAfter(roleDef);
+  else
+    builder.setInsertionPointToStart(&func.getFunctionBody().front());
   OperationState state(func.getLoc(),
                        tessera::tile::PipelineInitOp::getOperationName());
+  state.addOperands(logicalRole);
   state.addAttribute("depth", builder.getI64IntegerAttr(2));
   state.addAttribute("stage", builder.getI64IntegerAttr(0));
   state.addAttribute("phase", builder.getI64IntegerAttr(phase));
@@ -544,13 +581,21 @@ struct ROCMWaveLdsPipelinePass
             return !findPipelineStateOperand(entry.first);
           });
       Value producerRoot;
-      if (needsProducerState)
-        producerRoot =
-            createPipelineState(builder, func, "producer", /*phase=*/1);
+      if (needsProducerState) {
+        Value role = createLogicalRole(
+            builder, func, "rocm.wave_lds.producer", "producer",
+            {StringRef("wave_group.phase_producer")});
+        producerRoot = createPipelineState(builder, func, role, "producer",
+                                           /*phase=*/1);
+      }
       Value consumerRoot;
-      if (needsConsumerState)
-        consumerRoot =
-            createPipelineState(builder, func, "consumer", /*phase=*/0);
+      if (needsConsumerState) {
+        Value role = createLogicalRole(
+            builder, func, "rocm.wave_lds.consumer", "consumer",
+            {StringRef("wave_group.phase_consumer")});
+        consumerRoot = createPipelineState(builder, func, role, "consumer",
+                                           /*phase=*/0);
+      }
       llvm::DenseMap<Block *, Value> producerByBlock;
       llvm::DenseMap<Block *, Value> consumerByBlock;
       SmallVector<Operation *> ordered;
@@ -665,6 +710,20 @@ struct ROCMWaveLdsLegalityPass
           llvm::any_of(op->getOperands(), [](Value value) {
             return isa<tessera::tile::PipelineStateType>(value.getType());
           });
+      if (Value state = findPipelineStateOperand(op)) {
+        auto init = pipelineInitRoot(state);
+        tessera::tile::RoleOp role;
+        if (init)
+          if (Value logicalRole = init.getLogicalRole())
+            role = logicalRole.getDefiningOp<tessera::tile::RoleOp>();
+        if (!init || !role || role.getKind() != init.getRole()) {
+          op->emitOpError(
+              "ROCM_WAVE_LDS_ROLE_UNRESOLVED: structured ROCm LDS execution "
+              "requires a pipeline state rooted at tile.pipeline_init and a "
+              "matching producer/consumer tile.role SSA declaration");
+          anyError = true;
+        }
+      }
       if (name == "tile.async_copy" &&
           (!hasBuffer || !hasTokenResult || !hasPipelineState)) {
         op->emitOpError(

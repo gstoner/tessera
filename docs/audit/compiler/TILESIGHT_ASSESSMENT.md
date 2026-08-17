@@ -240,8 +240,9 @@ Three foundation items have landed — see
   and the ROCm GEMM path still compute `blockIdx` directly. Wiring them needs a
   measurement on the NR2 Pro / Strix Halo boxes to mean anything, and neither was
   available at the time. The default is the identity, so nothing changed.
-- **The calibration sweeps: gfx1151 is DONE (2026-08-15); sm_120 and Apple
-  remain.** `benchmarks/calibration/calibrate_gfx1151.py` measured
+- **The provisional gfx1151 pruning sweep ran on 2026-08-15; selector
+  calibration remains open, as do sm_120 and Apple.**
+  `benchmarks/calibration/calibrate_gfx1151.py` measured under WSL
   `dram_bw_gbps = 186.8` (73% of the 256 spec — the APU shares LPDDR5X with the
   CPU, exactly the binding-constraint note in the profile),
   `peak_tflops.fp16:matrix = 47.3`, and `peak_tflops.bf16:matrix = 50.2`
@@ -251,11 +252,13 @@ Three foundation items have landed — see
   deliberately not used); WMMA peak is an 8-chain register-resident
   microbenchmark, zero memory traffic in the timed loop. Corpus:
   `benchmarks/baselines/rocm_gfx1151_calibration_2026_08_15.json`
-  (apply_corpus schema v1); after `target_perf.load_corpus()` the previously
-  raising `SchedulePlanner.for_target("rocm_gfx1151")` succeeds. **Still
-  open:** the corpus is not auto-loaded at import — consumers must
-  `load_corpus()` the baselines file (wiring is a small follow-up); Zen5 and
-  sm_120/Apple peaks stay deliberately absent until their boxes run the sweep.
+  (apply_corpus-shaped schema v1), now explicitly stamped
+  `provisional_pruning_only`. `target_perf.load_corpus()` rejects it;
+  `load_pruning_corpus()` validates the values without mutating selector state.
+  **Still open:** rerun through HIP events plus fresh-process ROCprofiler
+  dispatch/activity on clean bare-metal gfx1151, then commit that independently
+  reviewed packet. Zen5 and sm_120/Apple peaks stay deliberately absent until
+  their boxes run the equivalent sweep.
 - **Only T1 v1 is built.** T3 resource/action-DAG ordering and T4
   resident-tile/prologue/steady/epilogue overlap remain follow-ons. The T1
   implementation intentionally assigns no warp/stage bonus and does not select

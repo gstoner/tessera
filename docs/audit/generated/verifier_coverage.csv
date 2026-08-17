@@ -81,6 +81,10 @@ src/compiler/ir/TesseraOps.td,FlashAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,FlattenOp,1,1,real
 src/compiler/ir/TesseraOps.td,FusedEpilogueOp,1,1,real
 src/compiler/ir/TesseraOps.td,GQAAttentionOp,1,1,real
+src/compiler/ir/TesseraOps.td,GameSubsetMobiusOp,1,1,real
+src/compiler/ir/TesseraOps.td,GameSubsetZetaOp,1,1,real
+src/compiler/ir/TesseraOps.td,GameSupersetMobiusOp,1,1,real
+src/compiler/ir/TesseraOps.td,GameSupersetZetaOp,1,1,real
 src/compiler/ir/TesseraOps.td,GatedAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,GatedDeltaNetOp,1,1,real
 src/compiler/ir/TesseraOps.td,GeOp,1,1,real
@@ -210,6 +214,7 @@ src/compiler/ir/TesseraOps.td,TrainingLossAdamWOp,1,1,real
 src/compiler/ir/TesseraOps.td,TrainingLossSGDOp,1,1,real
 src/compiler/ir/TesseraOps.td,TransposeOp,1,1,real
 src/compiler/ir/TesseraOps.td,TriSolveOp,1,1,real
+src/compiler/ir/TesseraOps.td,TridiagonalSolveOp,1,1,real
 src/compiler/ir/TesseraOps.td,UnsqueezeOp,1,1,real
 src/compiler/ir/TesseraOps.td,VarlenSdpaOp,1,1,real
 src/compiler/ir/TesseraOps.td,ViewOp,1,1,real

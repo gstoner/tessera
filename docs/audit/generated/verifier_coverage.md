@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 231 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 236 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 231 | |
+| **Total** | 236 | |
 
 ## Per-dialect details
 
@@ -100,6 +100,10 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `FlattenOp` | `real` |
 | `FusedEpilogueOp` | `real` |
 | `GQAAttentionOp` | `real` |
+| `GameSubsetMobiusOp` | `real` |
+| `GameSubsetZetaOp` | `real` |
+| `GameSupersetMobiusOp` | `real` |
+| `GameSupersetZetaOp` | `real` |
 | `GatedAttentionOp` | `real` |
 | `GatedDeltaNetOp` | `real` |
 | `GeOp` | `real` |
@@ -229,6 +233,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `TrainingLossSGDOp` | `real` |
 | `TransposeOp` | `real` |
 | `TriSolveOp` | `real` |
+| `TridiagonalSolveOp` | `real` |
 | `UnsqueezeOp` | `real` |
 | `VarlenSdpaOp` | `real` |
 | `ViewOp` | `real` |

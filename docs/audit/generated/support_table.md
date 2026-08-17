@@ -207,7 +207,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `matmul` | loop_nest | public | public | registered | complete | fused | device_verified_abi | ready | benchmarked |
 | `moe_swiglu_block` | loop_nest | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `quantized_matmul` | loop_nest | public | public | registered | complete | fused | device_verified_abi | ready | none |
-| `tridiagonal_solve` | loop_nest | public | public | registered | complete | partial | reference | ready | none |
+| `tridiagonal_solve` | loop_nest | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `asymmetric_bce` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `binary_cross_entropy_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `contrastive_divergence_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -308,10 +308,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `dct` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `fft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `game_coalition_marginal` | spectral | public | public | registered | complete | partial | reference | ready | none |
-| `game_subset_mobius` | spectral | public | public | registered | complete | partial | reference | ready | none |
-| `game_subset_zeta` | spectral | public | public | registered | complete | partial | reference | ready | none |
-| `game_superset_mobius` | spectral | public | public | registered | complete | partial | reference | ready | none |
-| `game_superset_zeta` | spectral | public | public | registered | complete | partial | reference | ready | none |
+| `game_subset_mobius` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `game_subset_zeta` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `game_superset_mobius` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `game_superset_zeta` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `ifft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `irfft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `istft` | spectral | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
@@ -374,7 +374,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_decomposition | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | linalg_solver | 2 | PPGCFCN· PPGCFCN· |
 | logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
-| loop_nest | 14 | PPGCFFN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· PPGCpRN· |
+| loop_nest | 14 | PPGCFFN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· PPGCFCN· |
 | loss | 20 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | model_layer | 1 | PPGCFCN· |
 | moe | 1 | PPGCFCN· |
@@ -393,7 +393,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | segment_reduce | 2 | PPGCpRN· PPGCnnN· |
 | sort | 3 | PPGCFCN· PPGCFCN· PPGCFCN· |
 | sparse | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
-| spectral | 14 | PPGCFCNB PPGCFCNB PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB |
+| spectral | 14 | PPGCFCNB PPGCFCNB PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB PPGCFCNB |
 | stable_reduction | 7 | PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFHNB PPGCFHN· PPGCFCNB |
 | state_space | 1 | PPGCFCN· |
 | state_update | 5 | PPGCnnN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFFNB |

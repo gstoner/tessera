@@ -204,7 +204,7 @@ each row into a single E2E tier.
 | ``matmul`` | loop_nest | public | public | registered | fused | device_verified_abi | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
 | ``quantized_matmul`` | loop_nest | public | public | registered | fused | device_verified_abi | ready | none |
-| ``tridiagonal_solve`` | loop_nest | public | public | registered | fused | device_verified_abi | ready | none |
+| ``tridiagonal_solve`` | loop_nest | public | public | registered | fused | device_verified_jit | ready | none |
 | ``asymmetric_bce`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``binary_cross_entropy_loss`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``contrastive_divergence_loss`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
@@ -297,10 +297,10 @@ each row into a single E2E tier.
 | ``spmm_csr`` | sparse | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dct`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``fft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
-| ``game_subset_mobius`` | spectral | public | public | registered | fused | device_verified_abi | ready | none |
-| ``game_subset_zeta`` | spectral | public | public | registered | fused | device_verified_abi | ready | none |
-| ``game_superset_mobius`` | spectral | public | public | registered | fused | device_verified_abi | ready | none |
-| ``game_superset_zeta`` | spectral | public | public | registered | fused | device_verified_abi | ready | none |
+| ``game_subset_mobius`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
+| ``game_subset_zeta`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
+| ``game_superset_mobius`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
+| ``game_superset_zeta`` | spectral | public | public | registered | fused | device_verified_jit | ready | none |
 | ``ifft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``irfft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``istft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |

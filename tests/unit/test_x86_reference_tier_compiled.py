@@ -114,9 +114,13 @@ def test_shared_coalition_butterfly_rejects_non_power_of_two() -> None:
         ("game_subset_zeta", "tessera_x86_avx512_coalition_butterfly_f32"),
     ],
 )
-def test_reference_tier_manifest_records_stable_abi_evidence(
+def test_reference_tier_manifest_records_jit_and_stable_symbol_evidence(
     op_name: str, symbol: str
 ) -> None:
     entry = next(item for item in manifest_for(op_name) if item.target == "x86")
-    assert entry.status == "device_verified_abi"
+    # A shipped symbol plus a numerical fixture proves the executable JIT
+    # lane.  ABI promotion remains gated on a clean exact-device packet and
+    # the repository-wide hardware-evidence allow-list.
+    assert entry.status == "device_verified_jit"
     assert entry.runtime_symbol == symbol
+    assert entry.execute_compare_fixture == "tests/unit/test_x86_reference_tier_compiled.py"

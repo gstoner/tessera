@@ -540,7 +540,7 @@ quantized_matmul,tessera.quantized_matmul,loop_nest,no,bf16,bf16,fp32,public,reg
 quantized_matmul,tessera.quantized_matmul,loop_nest,no,fp16,fp16,fp32,public,registered,complete,fused,unsupported,unsupported,unsupported,device_verified_abi,absent,absent,absent,absent,absent,
 quantized_matmul,tessera.quantized_matmul,loop_nest,no,fp32,fp32,fp32,public,registered,complete,fused,reference,legal_only,reference,device_verified_abi,absent,absent,absent,absent,absent,
 tridiagonal_solve,tessera.tridiagonal_solve,loop_nest,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
-tridiagonal_solve,tessera.tridiagonal_solve,loop_nest,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_abi,reference,absent,absent,absent,absent,absent,absent,
+tridiagonal_solve,tessera.tridiagonal_solve,loop_nest,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,absent,absent,absent,absent,
 asymmetric_bce,tessera.loss.asymmetric_bce,loss,no,bf16,bf16,fp32,public,registered,complete,fused,unsupported,unsupported,unsupported,unsupported,absent,device_verified_jit,absent,absent,absent,
 asymmetric_bce,tessera.loss.asymmetric_bce,loss,no,fp16,fp16,fp32,public,registered,complete,fused,unsupported,unsupported,unsupported,unsupported,absent,device_verified_jit,absent,absent,absent,
 asymmetric_bce,tessera.loss.asymmetric_bce,loss,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,device_verified_jit,absent,device_verified_jit,absent,absent,absent,
@@ -793,13 +793,13 @@ fft,tessera.fft,spectral,yes,fp32,fp32,fp32,public,registered,complete,fused,ref
 game_coalition_marginal,tessera.game_coalition_marginal,spectral,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,legal_only,unsupported,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
 game_coalition_marginal,tessera.game_coalition_marginal,spectral,no,fp32,fp32,fp32,public,registered,complete,reference,reference,legal_only,reference,absent,absent,absent,absent,absent,absent,physical/direct_test
 game_subset_mobius,tessera.game_subset_mobius,spectral,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
-game_subset_mobius,tessera.game_subset_mobius,spectral,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_abi,reference,absent,absent,absent,absent,absent,absent,
+game_subset_mobius,tessera.game_subset_mobius,spectral,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,absent,absent,absent,absent,
 game_subset_zeta,tessera.game_subset_zeta,spectral,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
-game_subset_zeta,tessera.game_subset_zeta,spectral,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_abi,reference,absent,absent,absent,absent,absent,absent,
+game_subset_zeta,tessera.game_subset_zeta,spectral,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,absent,absent,absent,absent,
 game_superset_mobius,tessera.game_superset_mobius,spectral,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
-game_superset_mobius,tessera.game_superset_mobius,spectral,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_abi,reference,absent,absent,absent,absent,absent,absent,
+game_superset_mobius,tessera.game_superset_mobius,spectral,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,absent,absent,absent,absent,
 game_superset_zeta,tessera.game_superset_zeta,spectral,no,bf16,bf16,fp32,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
-game_superset_zeta,tessera.game_superset_zeta,spectral,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_abi,reference,absent,absent,absent,absent,absent,absent,
+game_superset_zeta,tessera.game_superset_zeta,spectral,no,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,absent,absent,absent,absent,
 ifft,tessera.ifft,spectral,yes,complex64,fp32x2_interleaved,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,
 ifft,tessera.ifft,spectral,yes,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,
 irfft,tessera.irfft,spectral,yes,complex64,fp32x2_interleaved,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,

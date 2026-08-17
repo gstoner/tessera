@@ -159,6 +159,13 @@ def Tile_MBarrierTokenType : Tile_Type<"MBarrierToken", "mbarrier_token"> {
   let summary = "SSA token returned by an mbarrier arrival";
 }
 
+// SO-2 — target-neutral logical role identity. The defining tile.role op
+// carries the semantic kind and member set; physical warp/wave ids are never
+// part of shared Tile IR.
+def Tile_RoleType : Tile_Type<"Role", "role"> {
+  let summary = "Logical producer or consumer role in a scheduled pipeline";
+}
+
 def Tile_TMEMType : Tile_Type<"TMEM", "tmem"> {
   let summary = "Opaque SSA handle for datacenter-Blackwell tensor memory";
 }
@@ -198,10 +205,11 @@ def Tile_DeallocOp : Tile_Op<"dealloc"> {
 
 def Tile_PipelineInitOp : Tile_Op<"pipeline_init"> {
   let summary = "Create an SSA-owned producer or consumer pipeline state";
-  let arguments = (ins I64Attr:$depth, I64Attr:$stage, I64Attr:$phase,
+  let arguments = (ins Optional<Tile_RoleType>:$logical_role,
+                        I64Attr:$depth, I64Attr:$stage, I64Attr:$phase,
                         StrAttr:$role);
   let results = (outs Tile_PipelineStateType:$state);
-  let assemblyFormat = "attr-dict `:` type($state)";
+  let assemblyFormat = "($logical_role^)? attr-dict `:` type($state)";
   let hasVerifier = 1;
 }
 
@@ -286,11 +294,21 @@ def Tile_TMACopyAsyncOp
   let hasVerifier = 1;
 }
 
+def Tile_RoleOp : Tile_Op<"role"> {
+  let summary = "Declare one named logical scheduling role";
+  let arguments = (ins StrAttr:$name, StrAttr:$kind,
+                        ArrayAttr:$members);
+  let results = (outs Tile_RoleType:$role);
+  let assemblyFormat = "attr-dict `:` type($role)";
+  let hasVerifier = 1;
+}
+
 def Tile_MBarrierInitOp : Tile_Op<"mbarrier.init"> {
-  let summary = "Create an SSA transaction-barrier array";
-  let arguments = (ins I64Attr:$slots, I64Attr:$phase_bits);
+  let summary = "Create an SSA transaction-barrier array with logical roles";
+  let arguments = (ins Variadic<Tile_RoleType>:$roles,
+                        I64Attr:$slots, I64Attr:$phase_bits);
   let results = (outs Tile_MBarrierType:$barrier);
-  let assemblyFormat = "attr-dict `:` type($barrier)";
+  let assemblyFormat = "(`with` $roles^)? attr-dict `:` type($barrier)";
   let hasVerifier = 1;
 }
 
@@ -962,6 +980,24 @@ def Tile_DepthAttentionKernelOp : Tile_Op<"depth_attention_kernel"> {
   let results = (outs);
   let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
   let hasVerifier = 1;
+}
+
+// Shared launch envelope for a batch of systems with common lower/main/upper
+// diagonals. Inputs are dl, d, du, rhs, output, batch, and system_size.
+def Tile_TridiagonalSolveKernelOp : Tile_Op<"tridiagonal_solve_kernel"> {
+  let summary = "Launch-level batched tridiagonal solve";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+}
+
+// Shared Yates butterfly. Inputs are source, output, batch and lattice_size;
+// half/sign/stage_order bind the precise subset/superset zeta/Mobius map.
+def Tile_CoalitionButterflyKernelOp : Tile_Op<"coalition_butterfly_kernel"> {
+  let summary = "Launch-level coalition-lattice radix-2 butterfly";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
 }
 
 // Launch-level scaled dot-product attention VJP envelope. Inputs are dO, Q,

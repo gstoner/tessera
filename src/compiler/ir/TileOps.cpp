@@ -1598,6 +1598,13 @@ LogicalResult PipelineInitOp::verify() {
   if (getPhase() != expected)
     return emitOpError(
         "initial producer phase must be 1 and consumer phase must be 0");
+  if (Value logicalRole = getLogicalRole()) {
+    // A loop-carried !tile.role has no direct defining op; the shared
+    // TileDataflowLegalityPass resolves that provenance across the back-edge.
+    if (auto declaration = logicalRole.getDefiningOp<RoleOp>();
+        declaration && declaration.getKind() != getRole())
+      return emitOpError("logical role kind must match pipeline role");
+  }
   return success();
 }
 
@@ -2370,6 +2377,28 @@ LogicalResult TMACopyAsyncOp::verify() {
   return success();
 }
 
+LogicalResult RoleOp::verify() {
+  auto name = getOperation()->getAttrOfType<StringAttr>("name");
+  auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
+  auto members = getOperation()->getAttrOfType<ArrayAttr>("members");
+  if (!name || name.getValue().empty())
+    return emitOpError("requires a non-empty logical role name");
+  if (!kind || !llvm::is_contained({"producer", "consumer"}, kind.getValue()))
+    return emitOpError("kind must be producer or consumer");
+  if (!members || members.empty())
+    return emitOpError("requires at least one logical member");
+  llvm::DenseSet<StringRef> seen;
+  for (Attribute memberAttr : members) {
+    auto member = dyn_cast<StringAttr>(memberAttr);
+    if (!member || member.getValue().empty())
+      return emitOpError(
+          "logical role members must be non-empty symbolic names");
+    if (!seen.insert(member.getValue()).second)
+      return emitOpError("logical role members must be unique");
+  }
+  return success();
+}
+
 LogicalResult MBarrierInitOp::verify() {
   auto slots = getOperation()->getAttrOfType<IntegerAttr>("slots");
   auto phaseBits = getOperation()->getAttrOfType<IntegerAttr>("phase_bits");
@@ -2377,6 +2406,28 @@ LogicalResult MBarrierInitOp::verify() {
     return emitOpError("requires slots > 0");
   if (!phaseBits || phaseBits.getInt() < 1 || phaseBits.getInt() > 32)
     return emitOpError("requires phase_bits in [1, 32]");
+  if (!getRoles().empty()) {
+    bool producer = false, consumer = false, unresolved = false;
+    llvm::DenseSet<StringRef> names;
+    for (Value value : getRoles()) {
+      auto role = value.getDefiningOp<RoleOp>();
+      // Loop-carried roles are legal at the operation boundary. The shared
+      // dataflow verifier follows their init/back-edge sources and rejects an
+      // unresolved or mixed-kind root before lowering.
+      if (!role) {
+        unresolved = true;
+        continue;
+      }
+      StringRef name = role.getName();
+      if (!names.insert(name).second)
+        return emitOpError("logical role names must be unique per barrier");
+      producer |= role.getKind() == "producer";
+      consumer |= role.getKind() == "consumer";
+    }
+    if (!unresolved && (!producer || !consumer))
+      return emitOpError(
+          "a role-bearing barrier requires both producer and consumer roles");
+  }
   return success();
 }
 

@@ -188,6 +188,7 @@ if(TARGET TesseraSpectralHIP)
 endif()
 
 set(TESSERA_COMPILER_FOUNDATION_DEPS
+    tessera_layout_algebra
     TesseraIRTableGen
     TesseraAttnTableGen
     TesseraIR
@@ -220,6 +221,10 @@ add_custom_target(TesseraCompilerFoundation
 if(TESSERA_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+    if(TARGET tessera-layout-algebra-test)
+        add_test(NAME tessera_layout_algebra_test
+                 COMMAND tessera-layout-algebra-test)
+    endif()
     if(TESSERA_ENABLE_RCCL_LSA_DEVICE_TEST AND
        TARGET tessera-rccl-lsa-smoke)
         add_test(NAME tessera-rccl-lsa-smoke-root

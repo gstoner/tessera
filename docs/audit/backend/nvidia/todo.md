@@ -3,10 +3,52 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-14
+last_updated: 2026-08-16
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `GFX1151-CALIB-BAREMETAL-2026-08-16` — **shared calibration
+authority parity validated; no CUDA evidence transfers.** `target_perf` now
+rejects explicitly provisional and WSL-hosted corpora from its measured
+selector registry while exposing a non-mutating pruning reader. NVIDIA code,
+SM120 selectors, and CUDA packets are unchanged. A future SM120 corpus still
+requires its own CUDA-event/CUPTI-correlated evidence.
+
+Cross-backend sync `REF-TIER-PHYS-2026-08-16` — **shared Schedule contract
+received; CUDA physical follow-up required.** Batched tridiagonal solve and
+the four coalition zeta/Mobius transforms now have content-addressed
+Schedule→Tile carriers. The coalition transforms share one parameterized
+Yates butterfly rather than four emitters. NVIDIA gains no PTX consumer or
+SM120 claim in this slice; a future lane must select an architecture-owned
+parallel solver/butterfly schedule and provide independent device evidence.
+The shared Schedule Object now snapshots nested resource metadata before
+digesting, and dynamic rearrange/GQA-fold inference preserves ranked `?`
+dimensions; parity is validated without transferring a physical schedule.
+
+Cross-backend sync `LAYOUT-SCHEDULE-OBJECT-2026-08-16` — **shared carrier
+parity validated; physical producer follow-up required.** The native layout ABI
+and GQA fold transfer no CUDA layout or raster decision. SO-1 now owns the
+content-addressed action/edge/role/residency value; SO-2 registers symbolic
+producer/consumer roles on Tile mbarriers and proves the Hopper split with the
+same rule as AMD ping-pong. Shared loop-carried role provenance and role-bearing
+pipeline state are implemented, but NVIDIA still owns barrier-at-birth emission
+and deletion of the legacy WarpSpec ancestor-role marker. No PTX, raster output,
+selector, or SM120 evidence changed.
+
+Cross-backend sync `ATTN-BWD-ARCH-2026-08-16` — **no NVIDIA result transfers.**
+ROCm's canonical split backward program was re-audited and x86 gained a
+deterministic parallel implementation. The SM120 architecture-owned backward
+package and performance evidence remain independent.
+
+Cross-backend sync `X86-PASS-DIALECT-DEPENDENCY-2026-08-16` — **parity
+validated; no NVIDIA physical follow-up.** The shared pass library now models
+the optional hardware-free x86 Target dialect as a declared MLIR pass
+dependency and fails closed when it is absent. No NVIDIA dialect, pipeline,
+CUDA ABI, schedule, selector, or SM evidence changed.
+The same closeout removes a private permissive `schedule` dialect from the
+shared transform library; all transforms now consume the canonical ODS
+`TesseraScheduleIR` authority. NVIDIA receives the build-parity fix only.
 
 Cross-backend sync `PDE-EXACT-CONTRACT-2026-08-14` — **shared semantic parity
 validated; CUDA physical follow-up required.** Exact-rational PDE

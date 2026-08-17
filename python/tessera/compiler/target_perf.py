@@ -75,18 +75,29 @@ class TargetPerfError(KeyError):
 # no ad-hoc ``bf16_tensor`` spellings creep in.
 
 #: Functional units a peak can be quoted against.
-UNIT_VECTOR = "vector"   # SIMD / CUDA-core / VALU / CPU SIMD lanes
-UNIT_MATRIX = "matrix"   # tensor core / MFMA / WMMA / AMX / simdgroup_matrix
+UNIT_VECTOR = "vector"  # SIMD / CUDA-core / VALU / CPU SIMD lanes
+UNIT_MATRIX = "matrix"  # tensor core / MFMA / WMMA / AMX / simdgroup_matrix
 _UNITS = frozenset({UNIT_VECTOR, UNIT_MATRIX})
 
 #: Canonical dtype names accepted in a peak key. Mirrors ``dtype._CANONICAL_DTYPES``
 #: restricted to those a FLOP rate is meaningful for; kept literal to preserve the
 #: leaf-module property (no ``tessera.dtype`` import).
-_PEAK_DTYPES = frozenset({
-    "fp64", "fp32", "bf16", "fp16",
-    "fp8_e4m3", "fp8_e5m2", "fp6_e2m3", "fp6_e3m2", "fp4_e2m1", "nvfp4",
-    "int8", "int4",
-})
+_PEAK_DTYPES = frozenset(
+    {
+        "fp64",
+        "fp32",
+        "bf16",
+        "fp16",
+        "fp8_e4m3",
+        "fp8_e5m2",
+        "fp6_e2m3",
+        "fp6_e3m2",
+        "fp4_e2m1",
+        "nvfp4",
+        "int8",
+        "int4",
+    }
+)
 
 
 def peak_key(dtype: str, unit: str = UNIT_MATRIX) -> str:
@@ -97,18 +108,23 @@ def peak_key(dtype: str, unit: str = UNIT_MATRIX) -> str:
     """
     if dtype not in _PEAK_DTYPES:
         raise ValueError(
-            f"peak dtype {dtype!r} is not a canonical FLOP-rate dtype; "
-            f"expected one of {sorted(_PEAK_DTYPES)}")
+            f"peak dtype {dtype!r} is not a canonical FLOP-rate dtype; expected one of {sorted(_PEAK_DTYPES)}"
+        )
     if unit not in _UNITS:
         raise ValueError(f"peak unit {unit!r} must be one of {sorted(_UNITS)}")
     return f"{dtype}:{unit}"
 
 
 #: Scalar (non-peak) fields a ``measured`` overlay may override.
-_SCALAR_FIELDS = frozenset({
-    "clock_ghz", "dram_bw_gbps", "llc_bytes",
-    "compute_units", "smem_bytes_per_cu",
-})
+_SCALAR_FIELDS = frozenset(
+    {
+        "clock_ghz",
+        "dram_bw_gbps",
+        "llc_bytes",
+        "compute_units",
+        "smem_bytes_per_cu",
+    }
+)
 
 
 def _check_field_name(key: str, *, what: str) -> None:
@@ -121,13 +137,13 @@ def _check_field_name(key: str, *, what: str) -> None:
         dtype, _, unit = spec.partition(":")
         if not unit:
             raise ValueError(
-                f"{what} peak key {key!r} must be "
-                f"'peak_tflops.<dtype>:<unit>', e.g. 'peak_tflops.bf16:matrix'")
+                f"{what} peak key {key!r} must be 'peak_tflops.<dtype>:<unit>', e.g. 'peak_tflops.bf16:matrix'"
+            )
         peak_key(dtype, unit)  # raises on a bad dtype/unit
         return
     raise ValueError(
-        f"unknown {what} field {key!r}; expected one of "
-        f"{sorted(_SCALAR_FIELDS)} or 'peak_tflops.<dtype>:<unit>'")
+        f"unknown {what} field {key!r}; expected one of {sorted(_SCALAR_FIELDS)} or 'peak_tflops.<dtype>:<unit>'"
+    )
 
 
 def _validate_measured(measured: Mapping[str, float]) -> None:
@@ -156,12 +172,12 @@ class TargetPerf:
     #: indistinguishable from a guess.
     source: str
 
-    compute_units: int | None = None          # SMs / CUs / GPU cores / CPU cores
-    clock_ghz: float | None = None            # boost/sustained clock
+    compute_units: int | None = None  # SMs / CUs / GPU cores / CPU cores
+    clock_ghz: float | None = None  # boost/sustained clock
     peak_tflops: Mapping[str, float] = field(default_factory=dict)
     dram_bw_gbps: float | None = None
-    llc_bytes: int | None = None              # L2 / Infinity Cache / SLC
-    smem_bytes_per_cu: int | None = None      # SMEM / LDS / threadgroup memory
+    llc_bytes: int | None = None  # L2 / Infinity Cache / SLC
+    smem_bytes_per_cu: int | None = None  # SMEM / LDS / threadgroup memory
 
     #: Default provenance for populated spec-side values, used for any field with
     #: no :attr:`field_provenance` entry.
@@ -190,23 +206,23 @@ class TargetPerf:
         for key in self.peak_tflops:
             dtype, _, unit = key.partition(":")
             if not unit:
-                raise ValueError(
-                    f"peak_tflops key {key!r} must be '<dtype>:<unit>'")
+                raise ValueError(f"peak_tflops key {key!r} must be '<dtype>:<unit>'")
             peak_key(dtype, unit)
         _validate_measured(self.measured)
         for key, prov in self.field_provenance.items():
             _check_field_name(key, what="field_provenance")
             if not isinstance(prov, Provenance):
-                raise ValueError(
-                    f"field_provenance[{key!r}] must be a Provenance, got {prov!r}")
+                raise ValueError(f"field_provenance[{key!r}] must be a Provenance, got {prov!r}")
             if prov is Provenance.UNKNOWN:
                 raise ValueError(
                     f"field_provenance[{key!r}] cannot be UNKNOWN — omit the "
-                    "field entirely rather than labelling it unknown")
+                    "field entirely rather than labelling it unknown"
+                )
         if self.measured and not self.measured_on:
             raise ValueError(
                 f"{self.device}: a measured overlay requires measured_on "
-                "(an undated measurement cannot be judged stale)")
+                "(an undated measurement cannot be judged stale)"
+            )
 
     # --- access ---------------------------------------------------------------
 
@@ -226,7 +242,8 @@ class TargetPerf:
             return None if got is None else float(got)
         raise TargetPerfError(
             f"unknown TargetPerf field {field_name!r}; expected one of "
-            f"{sorted(_SCALAR_FIELDS)} or 'peak_tflops.<dtype>:<unit>'")
+            f"{sorted(_SCALAR_FIELDS)} or 'peak_tflops.<dtype>:<unit>'"
+        )
 
     def provenance_of(self, field_name: str) -> Provenance:
         """Which kind of number :meth:`value` would return for ``field_name``.
@@ -254,7 +271,8 @@ class TargetPerf:
             raise TargetPerfError(
                 f"{self.device} ({self.target}) has no {field_name!r}. "
                 f"Populate it in target_perf.py with a citation, or run a "
-                f"calibration sweep and merge the result via apply_corpus().")
+                f"calibration sweep and merge the result via apply_corpus()."
+            )
         return got
 
     # --- derived quantities ---------------------------------------------------
@@ -273,8 +291,7 @@ class TargetPerf:
             return None
         return (tflops * 1e12) / (bw * 1e9)
 
-    def roofline_ms(self, flops: float, bytes_moved: float, dtype: str,
-                    unit: str = UNIT_MATRIX) -> float | None:
+    def roofline_ms(self, flops: float, bytes_moved: float, dtype: str, unit: str = UNIT_MATRIX) -> float | None:
         """Classic roofline lower bound in milliseconds: ``max(compute, memory)``.
 
         Deliberately minimal — it is a *bound*, not a predictor. It models neither
@@ -292,8 +309,7 @@ class TargetPerf:
         memory_ms = bytes_moved / (bw * 1e9) * 1e3
         return max(compute_ms, memory_ms)
 
-    def attainment(self, achieved_tflops: float, dtype: str,
-                   unit: str = UNIT_MATRIX) -> float | None:
+    def attainment(self, achieved_tflops: float, dtype: str, unit: str = UNIT_MATRIX) -> float | None:
         """Fraction of peak achieved (**W7**: absolute performance truth).
 
         ``None`` when the peak is unpopulated — an attainment figure against an
@@ -306,31 +322,29 @@ class TargetPerf:
 
     # --- calibration ----------------------------------------------------------
 
-    def with_measured(self, measured: Mapping[str, float], *, on: str,
-                      host: str | None = None) -> "TargetPerf":
+    def with_measured(self, measured: Mapping[str, float], *, on: str, host: str | None = None) -> "TargetPerf":
         """A copy with ``measured`` merged over any existing overlay. Raises on an
         unknown field key so a typo'd sweep fails loudly rather than no-ops."""
         merged = {**self.measured, **{k: float(v) for k, v in measured.items()}}
         _validate_measured(merged)
-        return replace(self, measured=merged, measured_on=on,
-                       measured_host=host or self.measured_host)
+        return replace(self, measured=merged, measured_on=on, measured_host=host or self.measured_host)
 
     # --- serialization --------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
-            "device": self.device, "target": self.target, "source": self.source,
+            "device": self.device,
+            "target": self.target,
+            "source": self.source,
             "spec_provenance": self.spec_provenance.value,
             "peak_tflops": dict(self.peak_tflops),
         }
-        for name in ("compute_units", "clock_ghz", "dram_bw_gbps", "llc_bytes",
-                     "smem_bytes_per_cu"):
+        for name in ("compute_units", "clock_ghz", "dram_bw_gbps", "llc_bytes", "smem_bytes_per_cu"):
             got = getattr(self, name)
             if got is not None:
                 out[name] = got
         if self.field_provenance:
-            out["field_provenance"] = {k: v.value
-                                       for k, v in self.field_provenance.items()}
+            out["field_provenance"] = {k: v.value for k, v in self.field_provenance.items()}
         if self.measured:
             out["measured"] = dict(self.measured)
             out["measured_on"] = self.measured_on
@@ -343,7 +357,8 @@ class TargetPerf:
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "TargetPerf":
         return cls(
-            device=str(d["device"]), target=str(d["target"]),
+            device=str(d["device"]),
+            target=str(d["target"]),
             source=str(d["source"]),
             compute_units=d.get("compute_units"),
             clock_ghz=d.get("clock_ghz"),
@@ -352,8 +367,7 @@ class TargetPerf:
             llc_bytes=d.get("llc_bytes"),
             smem_bytes_per_cu=d.get("smem_bytes_per_cu"),
             spec_provenance=Provenance(d.get("spec_provenance", "spec")),
-            field_provenance={k: Provenance(v) for k, v
-                              in dict(d.get("field_provenance", {})).items()},
+            field_provenance={k: Provenance(v) for k, v in dict(d.get("field_provenance", {})).items()},
             measured=dict(d.get("measured", {})),
             measured_on=d.get("measured_on"),
             measured_host=d.get("measured_host"),
@@ -391,219 +405,212 @@ def _register_all(entries: Iterable[TargetPerf]) -> None:
         register_perf(entry)
 
 
-_register_all([
-    # --- fleet: NR2 Pro (NVIDIA Blackwell consumer) --------------------------
-    TargetPerf(
-        device="rtx_5070_ti",
-        target="nvidia_sm120",
-        source=(
-            "NVIDIA GeForce RTX 5070 Ti published configuration: 70 SMs / 8960 "
-            "CUDA cores, 2.452 GHz boost, 256-bit GDDR7 @ 28 Gbps. SMEM/SM "
-            "confirmed on-silicon 2026-06-25 (see gpu_target._SMEM_BYTES)."
+_register_all(
+    [
+        # --- fleet: NR2 Pro (NVIDIA Blackwell consumer) --------------------------
+        TargetPerf(
+            device="rtx_5070_ti",
+            target="nvidia_sm120",
+            source=(
+                "NVIDIA GeForce RTX 5070 Ti published configuration: 70 SMs / 8960 "
+                "CUDA cores, 2.452 GHz boost, 256-bit GDDR7 @ 28 Gbps. SMEM/SM "
+                "confirmed on-silicon 2026-06-25 (see gpu_target._SMEM_BYTES)."
+            ),
+            compute_units=70,
+            clock_ghz=2.452,
+            peak_tflops={
+                # 8960 x 2 x 2.452e9 = 43.9 TFLOP/s
+                "fp32:vector": 43.9,
+            },
+            dram_bw_gbps=896.0,  # 256/8 x 28 = 896
+            llc_bytes=50_331_648,  # cudaDevAttrL2CacheSize, RTX 5070 Ti
+            smem_bytes_per_cu=102400,  # 100 KiB/SM, CC 12.0
+            spec_provenance=Provenance.DERIVED,
+            field_provenance={
+                "compute_units": Provenance.SPEC,
+                "clock_ghz": Provenance.SPEC,
+                # Live CUDA 13.3 query on the owning RTX 5070 Ti, 2026-07-30:
+                # cudaDevAttrL2CacheSize = 50,331,648 bytes.  The same query saw
+                # 70 SMs, a 2.497 GHz core clock, 14.001 GHz memory clock, and a
+                # 256-bit bus; the latter corroborates the 896 GB/s derived peak.
+                "llc_bytes": Provenance.MEASURED,
+                # Confirmed on-silicon 2026-06-25 (RTX 5070 Ti, CUDA 13.3):
+                # sharedMemPerMultiprocessor == 102400. Reporting this as merely
+                # DERIVED would understate the one value here that touched hardware.
+                "smem_bytes_per_cu": Provenance.MEASURED,
+            },
+            notes=(
+                "Matrix peaks intentionally omitted: consumer Blackwell dense "
+                "tensor rates depend on accumulate width and the vendor's headline "
+                "figure is FP4 *sparse* AI TOPS, which is not a dense matmul peak. "
+                "Populate bf16:matrix / fp8_e4m3:matrix from a calibration sweep. "
+                "sm_120 has no wgmma and no tcgen05/TMEM (matrix path is mma.sync)."
+            ),
         ),
-        compute_units=70,
-        clock_ghz=2.452,
-        peak_tflops={
-            # 8960 x 2 x 2.452e9 = 43.9 TFLOP/s
-            "fp32:vector": 43.9,
-        },
-        dram_bw_gbps=896.0,          # 256/8 x 28 = 896
-        llc_bytes=50_331_648,        # cudaDevAttrL2CacheSize, RTX 5070 Ti
-        smem_bytes_per_cu=102400,    # 100 KiB/SM, CC 12.0
-        spec_provenance=Provenance.DERIVED,
-        field_provenance={
-            "compute_units": Provenance.SPEC,
-            "clock_ghz": Provenance.SPEC,
-            # Live CUDA 13.3 query on the owning RTX 5070 Ti, 2026-07-30:
-            # cudaDevAttrL2CacheSize = 50,331,648 bytes.  The same query saw
-            # 70 SMs, a 2.497 GHz core clock, 14.001 GHz memory clock, and a
-            # 256-bit bus; the latter corroborates the 896 GB/s derived peak.
-            "llc_bytes": Provenance.MEASURED,
-            # Confirmed on-silicon 2026-06-25 (RTX 5070 Ti, CUDA 13.3):
-            # sharedMemPerMultiprocessor == 102400. Reporting this as merely
-            # DERIVED would understate the one value here that touched hardware.
-            "smem_bytes_per_cu": Provenance.MEASURED,
-        },
-        notes=(
-            "Matrix peaks intentionally omitted: consumer Blackwell dense "
-            "tensor rates depend on accumulate width and the vendor's headline "
-            "figure is FP4 *sparse* AI TOPS, which is not a dense matmul peak. "
-            "Populate bf16:matrix / fp8_e4m3:matrix from a calibration sweep. "
-            "sm_120 has no wgmma and no tcgen05/TMEM (matrix path is mma.sync)."
+        # --- fleet: Strix Halo (AMD RDNA 3.5 APU) --------------------------------
+        TargetPerf(
+            device="radeon_8060s",
+            target="rocm_gfx1151",
+            source=(
+                "AMD Ryzen AI Max+ 395 (Strix Halo) integrated Radeon 8060S: 40 "
+                "RDNA 3.5 CUs, 2.9 GHz boost, 256-bit LPDDR5X-8000 unified memory, "
+                "32 MB MALL (Infinity Cache). LDS/CU from rocm_target._LDS_BYTES."
+            ),
+            compute_units=40,
+            clock_ghz=2.9,
+            peak_tflops={
+                # 40 x 64 x 2 x 2.9e9 = 14.85 TFLOP/s, single-issue.
+                "fp32:vector": 14.85,
+            },
+            dram_bw_gbps=256.0,  # 256/8 x 8.0 GT/s = 256
+            llc_bytes=32 * 1024 * 1024,
+            smem_bytes_per_cu=65536,  # 64 KiB LDS/CU (RDNA 3/3.5)
+            spec_provenance=Provenance.DERIVED,
+            field_provenance={
+                "compute_units": Provenance.SPEC,
+                "clock_ghz": Provenance.SPEC,
+                "llc_bytes": Provenance.SPEC,
+                # From the RDNA3.5 ISA guide, not an identity we can rederive.
+                "smem_bytes_per_cu": Provenance.SPEC,
+            },
+            notes=(
+                "fp32:vector is the SINGLE-issue rate. RDNA 3.x VOPD dual-issue can "
+                "approach 2x on favourable code; quoting the dual-issue number as "
+                "'peak' makes every attainment figure look half as good as it is. "
+                "Calibrate rather than pick a convention. APU: this DRAM bandwidth "
+                "is SHARED with the 16 Zen5 cores (see ryzen_ai_max_395_cpu) — "
+                "concurrent CPU traffic reduces what the GPU actually gets, which "
+                "is the binding constraint on this box. WMMA is F16/BF16/IU8/IU4; "
+                "no FP8/BF8 WMMA on RDNA 3.5."
+            ),
         ),
-    ),
-
-    # --- fleet: Strix Halo (AMD RDNA 3.5 APU) --------------------------------
-    TargetPerf(
-        device="radeon_8060s",
-        target="rocm_gfx1151",
-        source=(
-            "AMD Ryzen AI Max+ 395 (Strix Halo) integrated Radeon 8060S: 40 "
-            "RDNA 3.5 CUs, 2.9 GHz boost, 256-bit LPDDR5X-8000 unified memory, "
-            "32 MB MALL (Infinity Cache). LDS/CU from rocm_target._LDS_BYTES."
+        TargetPerf(
+            device="ryzen_ai_max_395_cpu",
+            target="x86",
+            source=(
+                "AMD Ryzen AI Max+ 395 CPU complex: 16 Zen 5 cores / 32 threads, "
+                "AVX-512 (no AMX), shared 256-bit LPDDR5X-8000 with the iGPU."
+            ),
+            compute_units=16,
+            dram_bw_gbps=256.0,
+            spec_provenance=Provenance.SPEC,
+            field_provenance={"dram_bw_gbps": Provenance.DERIVED},  # 256/8 x 8.0 GT/s
+            notes=(
+                "Peak FLOP/s deliberately UNPOPULATED. Zen 5's AVX-512 throughput "
+                "depends on the 512-bit vs double-pumped-256 datapath and on "
+                "sustained all-core clocks under AVX-512 load; no published figure "
+                "is trustworthy enough to derive from. This entry is the worked "
+                "example of the module's rule: an absent number, not a guess. "
+                "Fill via calibration. The NR2 Pro's Core Ultra 7 265F is NOT an "
+                "x86 lane target — it has neither AVX-512 nor AMX."
+            ),
         ),
-        compute_units=40,
-        clock_ghz=2.9,
-        peak_tflops={
-            # 40 x 64 x 2 x 2.9e9 = 14.85 TFLOP/s, single-issue.
-            "fp32:vector": 14.85,
-        },
-        dram_bw_gbps=256.0,          # 256/8 x 8.0 GT/s = 256
-        llc_bytes=32 * 1024 * 1024,
-        smem_bytes_per_cu=65536,     # 64 KiB LDS/CU (RDNA 3/3.5)
-        spec_provenance=Provenance.DERIVED,
-        field_provenance={
-            "compute_units": Provenance.SPEC,
-            "clock_ghz": Provenance.SPEC,
-            "llc_bytes": Provenance.SPEC,
-            # From the RDNA3.5 ISA guide, not an identity we can rederive.
-            "smem_bytes_per_cu": Provenance.SPEC,
-        },
-        notes=(
-            "fp32:vector is the SINGLE-issue rate. RDNA 3.x VOPD dual-issue can "
-            "approach 2x on favourable code; quoting the dual-issue number as "
-            "'peak' makes every attainment figure look half as good as it is. "
-            "Calibrate rather than pick a convention. APU: this DRAM bandwidth "
-            "is SHARED with the 16 Zen5 cores (see ryzen_ai_max_395_cpu) — "
-            "concurrent CPU traffic reduces what the GPU actually gets, which "
-            "is the binding constraint on this box. WMMA is F16/BF16/IU8/IU4; "
-            "no FP8/BF8 WMMA on RDNA 3.5."
+        # --- fleet: Mac (Apple M1 Max) ------------------------------------------
+        TargetPerf(
+            device="m1_max",
+            target="apple_gpu",
+            source=(
+                "Apple M1 Max: 32 GPU cores (4096 ALUs) @ 1.296 GHz, 512-bit "
+                "LPDDR5-6400 unified memory, 48 MB system level cache."
+            ),
+            compute_units=32,
+            clock_ghz=1.296,
+            peak_tflops={
+                # 4096 x 2 x 1.296e9 = 10.62 TFLOP/s
+                "fp32:vector": 10.62,
+            },
+            dram_bw_gbps=400.0,  # Apple's published figure
+            llc_bytes=48 * 1024 * 1024,
+            smem_bytes_per_cu=32768,  # 32 KiB threadgroup memory
+            spec_provenance=Provenance.DERIVED,
+            field_provenance={
+                "compute_units": Provenance.SPEC,
+                "clock_ghz": Provenance.SPEC,
+                # The 512-bit x 6.4 GT/s identity gives 409.6; Apple publishes 400.
+                # This is their number, not ours — SPEC, not DERIVED.
+                "dram_bw_gbps": Provenance.SPEC,
+                "llc_bytes": Provenance.SPEC,
+                "smem_bytes_per_cu": Provenance.SPEC,
+            },
+            notes=(
+                "fp32:vector is DERIVED from the 1.296 GHz clock. Apple publishes "
+                "10.4 TFLOPS, which implies ~1.269 GHz — a ~2% clock-convention "
+                "gap, not a disagreement about the machine. The derived value is "
+                "used so the identity in `source` is checkable; either way this is "
+                "a ceiling no kernel reaches, which is what calibration is for. "
+                "Apple7 (M1) has native bf16 on the GPU and simdgroup_matrix MMA, "
+                "but publishes no matrix-unit FLOP rate — bf16:matrix must be "
+                "measured, not derived. Unified memory: this bandwidth is shared "
+                "with the CPU. The 48 MB SLC is not an L2 in the discrete-GPU "
+                "sense; a cache model must not treat it as one."
+            ),
         ),
-    ),
-    TargetPerf(
-        device="ryzen_ai_max_395_cpu",
-        target="x86",
-        source=(
-            "AMD Ryzen AI Max+ 395 CPU complex: 16 Zen 5 cores / 32 threads, "
-            "AVX-512 (no AMX), shared 256-bit LPDDR5X-8000 with the iGPU."
+        TargetPerf(
+            device="m1_max_cpu",
+            target="apple_cpu",
+            source="Apple M1 Max: 8 performance + 2 efficiency cores, shared 400 GB/s.",
+            compute_units=10,
+            dram_bw_gbps=400.0,
+            spec_provenance=Provenance.SPEC,
+            notes="Peak FLOP/s unpopulated — calibrate against the Accelerate lane.",
         ),
-        compute_units=16,
-        dram_bw_gbps=256.0,
-        spec_provenance=Provenance.SPEC,
-        field_provenance={"dram_bw_gbps": Provenance.DERIVED},  # 256/8 x 8.0 GT/s
-        notes=(
-            "Peak FLOP/s deliberately UNPOPULATED. Zen 5's AVX-512 throughput "
-            "depends on the 512-bit vs double-pumped-256 datapath and on "
-            "sustained all-core clocks under AVX-512 load; no published figure "
-            "is trustworthy enough to derive from. This entry is the worked "
-            "example of the module's rule: an absent number, not a guess. "
-            "Fill via calibration. The NR2 Pro's Core Ultra 7 265F is NOT an "
-            "x86 lane target — it has neither AVX-512 nor AMX."
+        # --- reference parts (not in the fleet; hardware-gated lanes) ------------
+        TargetPerf(
+            device="a100_sxm4_80gb",
+            target="nvidia_sm80",
+            source=(
+                "NVIDIA A100 SXM4 80GB datasheet: 108 SMs, 1.41 GHz boost, 5120-bit "
+                "HBM2e. Dense (non-sparse) tensor rates."
+            ),
+            compute_units=108,
+            clock_ghz=1.41,
+            peak_tflops={"fp32:vector": 19.5, "bf16:matrix": 312.0, "fp16:matrix": 312.0},
+            dram_bw_gbps=2039.0,
+            llc_bytes=40 * 1024 * 1024,
+            smem_bytes_per_cu=166912,
+            spec_provenance=Provenance.SPEC,
+            notes=(
+                "The 312.0 here is the origin of schedule_planner's hardcoded "
+                "peak_tflops=312.0 default, which was being applied to every "
+                "target including CPUs. Dense figures; sparse are 2x and must "
+                "never be used as a dense matmul ceiling."
+            ),
         ),
-    ),
-
-    # --- fleet: Mac (Apple M1 Max) ------------------------------------------
-    TargetPerf(
-        device="m1_max",
-        target="apple_gpu",
-        source=(
-            "Apple M1 Max: 32 GPU cores (4096 ALUs) @ 1.296 GHz, 512-bit "
-            "LPDDR5-6400 unified memory, 48 MB system level cache."
+        TargetPerf(
+            device="h100_sxm5",
+            target="nvidia_sm90",
+            source=("NVIDIA H100 SXM5 datasheet: 132 SMs, 1.98 GHz max clock, HBM3. Dense (non-sparse) tensor rates."),
+            compute_units=132,
+            clock_ghz=1.98,
+            peak_tflops={"fp32:vector": 67.0, "bf16:matrix": 989.0, "fp16:matrix": 989.0, "fp8_e4m3:matrix": 1979.0},
+            dram_bw_gbps=3350.0,
+            llc_bytes=50 * 1024 * 1024,
+            smem_bytes_per_cu=233472,
+            spec_provenance=Provenance.SPEC,
+            notes=(
+                "TileSight Table 3 measures the H200 sibling at 928 of 989 bf16 "
+                "TFLOP/s and 4.2 of 4.8 TB/s — expect a similar spec-to-silicon gap "
+                "here. Default clock is 1.83 GHz, not the 1.98 GHz max."
+            ),
         ),
-        compute_units=32,
-        clock_ghz=1.296,
-        peak_tflops={
-            # 4096 x 2 x 1.296e9 = 10.62 TFLOP/s
-            "fp32:vector": 10.62,
-        },
-        dram_bw_gbps=400.0,          # Apple's published figure
-        llc_bytes=48 * 1024 * 1024,
-        smem_bytes_per_cu=32768,     # 32 KiB threadgroup memory
-        spec_provenance=Provenance.DERIVED,
-        field_provenance={
-            "compute_units": Provenance.SPEC,
-            "clock_ghz": Provenance.SPEC,
-            # The 512-bit x 6.4 GT/s identity gives 409.6; Apple publishes 400.
-            # This is their number, not ours — SPEC, not DERIVED.
-            "dram_bw_gbps": Provenance.SPEC,
-            "llc_bytes": Provenance.SPEC,
-            "smem_bytes_per_cu": Provenance.SPEC,
-        },
-        notes=(
-            "fp32:vector is DERIVED from the 1.296 GHz clock. Apple publishes "
-            "10.4 TFLOPS, which implies ~1.269 GHz — a ~2% clock-convention "
-            "gap, not a disagreement about the machine. The derived value is "
-            "used so the identity in `source` is checkable; either way this is "
-            "a ceiling no kernel reaches, which is what calibration is for. "
-            "Apple7 (M1) has native bf16 on the GPU and simdgroup_matrix MMA, "
-            "but publishes no matrix-unit FLOP rate — bf16:matrix must be "
-            "measured, not derived. Unified memory: this bandwidth is shared "
-            "with the CPU. The 48 MB SLC is not an L2 in the discrete-GPU "
-            "sense; a cache model must not treat it as one."
+        TargetPerf(
+            device="mi300x",
+            target="rocm_gfx942",
+            source=(
+                "AMD Instinct MI300X datasheet: 304 CDNA 3 CUs, 2.1 GHz peak "
+                "engine clock, 8192-bit HBM3, 256 MB Infinity Cache. Dense rates."
+            ),
+            compute_units=304,
+            clock_ghz=2.1,
+            peak_tflops={"fp32:vector": 163.4, "bf16:matrix": 1307.4, "fp16:matrix": 1307.4, "fp8_e4m3:matrix": 2614.9},
+            dram_bw_gbps=5300.0,
+            llc_bytes=256 * 1024 * 1024,
+            smem_bytes_per_cu=65536,
+            spec_provenance=Provenance.SPEC,
+            notes="Dense figures; sparse are 2x. Hardware-gated lane (Phase G/H).",
         ),
-    ),
-    TargetPerf(
-        device="m1_max_cpu",
-        target="apple_cpu",
-        source="Apple M1 Max: 8 performance + 2 efficiency cores, shared 400 GB/s.",
-        compute_units=10,
-        dram_bw_gbps=400.0,
-        spec_provenance=Provenance.SPEC,
-        notes="Peak FLOP/s unpopulated — calibrate against the Accelerate lane.",
-    ),
-
-    # --- reference parts (not in the fleet; hardware-gated lanes) ------------
-    TargetPerf(
-        device="a100_sxm4_80gb",
-        target="nvidia_sm80",
-        source=(
-            "NVIDIA A100 SXM4 80GB datasheet: 108 SMs, 1.41 GHz boost, 5120-bit "
-            "HBM2e. Dense (non-sparse) tensor rates."
-        ),
-        compute_units=108,
-        clock_ghz=1.41,
-        peak_tflops={"fp32:vector": 19.5, "bf16:matrix": 312.0,
-                     "fp16:matrix": 312.0},
-        dram_bw_gbps=2039.0,
-        llc_bytes=40 * 1024 * 1024,
-        smem_bytes_per_cu=166912,
-        spec_provenance=Provenance.SPEC,
-        notes=(
-            "The 312.0 here is the origin of schedule_planner's hardcoded "
-            "peak_tflops=312.0 default, which was being applied to every "
-            "target including CPUs. Dense figures; sparse are 2x and must "
-            "never be used as a dense matmul ceiling."
-        ),
-    ),
-    TargetPerf(
-        device="h100_sxm5",
-        target="nvidia_sm90",
-        source=(
-            "NVIDIA H100 SXM5 datasheet: 132 SMs, 1.98 GHz max clock, HBM3. "
-            "Dense (non-sparse) tensor rates."
-        ),
-        compute_units=132,
-        clock_ghz=1.98,
-        peak_tflops={"fp32:vector": 67.0, "bf16:matrix": 989.0,
-                     "fp16:matrix": 989.0, "fp8_e4m3:matrix": 1979.0},
-        dram_bw_gbps=3350.0,
-        llc_bytes=50 * 1024 * 1024,
-        smem_bytes_per_cu=233472,
-        spec_provenance=Provenance.SPEC,
-        notes=(
-            "TileSight Table 3 measures the H200 sibling at 928 of 989 bf16 "
-            "TFLOP/s and 4.2 of 4.8 TB/s — expect a similar spec-to-silicon gap "
-            "here. Default clock is 1.83 GHz, not the 1.98 GHz max."
-        ),
-    ),
-    TargetPerf(
-        device="mi300x",
-        target="rocm_gfx942",
-        source=(
-            "AMD Instinct MI300X datasheet: 304 CDNA 3 CUs, 2.1 GHz peak "
-            "engine clock, 8192-bit HBM3, 256 MB Infinity Cache. Dense rates."
-        ),
-        compute_units=304,
-        clock_ghz=2.1,
-        peak_tflops={"fp32:vector": 163.4, "bf16:matrix": 1307.4,
-                     "fp16:matrix": 1307.4, "fp8_e4m3:matrix": 2614.9},
-        dram_bw_gbps=5300.0,
-        llc_bytes=256 * 1024 * 1024,
-        smem_bytes_per_cu=65536,
-        spec_provenance=Provenance.SPEC,
-        notes="Dense figures; sparse are 2x. Hardware-gated lane (Phase G/H).",
-    ),
-])
+    ]
+)
 
 
 # --- lookup ------------------------------------------------------------------
@@ -634,8 +641,8 @@ def perf_for_device(device: str) -> TargetPerf:
         return _REGISTRY[device]
     except KeyError:
         raise TargetPerfError(
-            f"no performance profile for device {device!r}; registered: "
-            f"{sorted(_REGISTRY)}") from None
+            f"no performance profile for device {device!r}; registered: {sorted(_REGISTRY)}"
+        ) from None
 
 
 def devices_for_target(target: str) -> list[TargetPerf]:
@@ -659,15 +666,16 @@ def perf_for_target(target: str, *, device: str | None = None) -> TargetPerf | N
         chosen = [p for p in matches if p.device == device]
         if not chosen:
             raise TargetPerfError(
-                f"device {device!r} does not serve target {target!r}; "
-                f"candidates: {[p.device for p in matches]}")
+                f"device {device!r} does not serve target {target!r}; candidates: {[p.device for p in matches]}"
+            )
         return chosen[0]
     if not matches:
         return None
     if len(matches) > 1:
         raise TargetPerfError(
             f"target {target!r} is served by several registered devices "
-            f"{[p.device for p in matches]}; pass device= to disambiguate")
+            f"{[p.device for p in matches]}; pass device= to disambiguate"
+        )
     return matches[0]
 
 
@@ -709,7 +717,8 @@ def _check_kind(payload: Mapping[str, Any], expected: str, other: str) -> None:
             f"this is a {other!r} payload, not a {expected!r}. Registry "
             f"snapshots hold whole profiles and load via "
             f"apply_registry_snapshot(); calibration corpora hold measured "
-            f"field overlays and load via apply_corpus().")
+            f"field overlays and load via apply_corpus()."
+        )
     if kind != expected:
         raise ValueError(f"unknown payload kind {kind!r}; expected {expected!r}")
 
@@ -724,12 +733,14 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
          "version": 1,
          "measured_on": "2026-07-28",
          "host": "strix-halo",
+         "selector_eligible": true,
          "devices": {"radeon_8060s": {"dram_bw_gbps": 214.3,
                                       "peak_tflops.bf16:matrix": 51.2}}}
 
-    A row for an unregistered device, an unknown field, or a mismatched version
-    raises — a calibration run that silently lands nowhere is worse than one that
-    fails.
+    A row for an unregistered device, an unknown field, a mismatched version,
+    a WSL host, or an explicitly selector-ineligible packet raises — a
+    calibration run that silently lands nowhere or promotes provisional timing
+    is worse than one that fails. Use :func:`load_pruning_corpus` for the latter.
 
     **Atomic.** Every replacement profile is built and validated before any is
     registered, so a corpus whose third row names an unknown device leaves the
@@ -740,13 +751,23 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
     _check_kind(corpus, KIND_CORPUS, KIND_SNAPSHOT)
     version = corpus.get("version")
     if version != CORPUS_VERSION:
-        raise ValueError(
-            f"calibration corpus version {version!r} != expected "
-            f"{CORPUS_VERSION}; regenerate the sweep")
+        raise ValueError(f"calibration corpus version {version!r} != expected {CORPUS_VERSION}; regenerate the sweep")
     on = corpus.get("measured_on")
     if not on:
         raise ValueError("calibration corpus requires a 'measured_on' date")
     host = corpus.get("host")
+    selector_eligible = corpus.get("selector_eligible", True)
+    if selector_eligible is not True:
+        raise ValueError(
+            "calibration corpus is pruning-only and cannot become selector "
+            "authority; use load_pruning_corpus() to inspect it without "
+            "mutating the measured registry"
+        )
+    if isinstance(host, str) and ("wsl" in host.lower() or "dxg" in host.lower()):
+        raise ValueError(
+            "WSL calibration cannot become selector authority; collect "
+            "bare-metal device-event and profiler-correlated evidence"
+        )
     # Phase 1 — build and validate everything. perf_for_device() raises on an
     # unknown device, with_measured() raises on an unknown field.
     staged: list[TargetPerf] = [
@@ -762,6 +783,31 @@ def apply_corpus(corpus: Mapping[str, Any]) -> list[str]:
 def load_corpus(path: str | Path) -> list[str]:
     """Read a calibration corpus JSON file and :func:`apply_corpus` it."""
     return apply_corpus(_read_json(path, "calibration corpus"))
+
+
+def load_pruning_corpus(path: str | Path) -> dict[str, dict[str, float]]:
+    """Validate a provisional corpus without changing the measured registry.
+
+    WSL/host-wall packets are useful as candidate-pruning inputs, but they must
+    never acquire :class:`Provenance.MEASURED` through the selector registry.
+    """
+    corpus = _read_json(path, "calibration corpus")
+    _check_kind(corpus, KIND_CORPUS, KIND_SNAPSHOT)
+    if corpus.get("version") != CORPUS_VERSION:
+        raise ValueError(
+            f"calibration corpus version {corpus.get('version')!r} != expected {CORPUS_VERSION}; regenerate the sweep"
+        )
+    if not corpus.get("measured_on"):
+        raise ValueError("calibration corpus requires a 'measured_on' date")
+    fields_by_device: dict[str, dict[str, float]] = {}
+    for device, fields in dict(corpus.get("devices", {})).items():
+        if not isinstance(fields, Mapping):
+            raise ValueError(f"calibration row {device!r} must be a mapping")
+        # Reuse complete device/field/value validation without registering the
+        # temporary profile.
+        perf_for_device(device).with_measured(fields, on=str(corpus["measured_on"]), host=corpus.get("host"))
+        fields_by_device[device] = {str(field): float(value) for field, value in fields.items()}
+    return fields_by_device
 
 
 def registry_snapshot() -> dict[str, Any]:
@@ -791,22 +837,16 @@ def apply_registry_snapshot(snapshot: Mapping[str, Any]) -> list[str]:
     _check_kind(snapshot, KIND_SNAPSHOT, KIND_CORPUS)
     version = snapshot.get("version")
     if version != SNAPSHOT_VERSION:
-        raise ValueError(
-            f"registry snapshot version {version!r} != expected "
-            f"{SNAPSHOT_VERSION}; regenerate it")
+        raise ValueError(f"registry snapshot version {version!r} != expected {SNAPSHOT_VERSION}; regenerate it")
     rows = dict(snapshot.get("devices", {}))
     staged: list[TargetPerf] = []
     for name, row in rows.items():
         try:
             perf = TargetPerf.from_dict(row)
         except (KeyError, ValueError) as exc:
-            raise ValueError(
-                f"registry snapshot row {name!r} is not a valid profile: "
-                f"{exc}") from None
+            raise ValueError(f"registry snapshot row {name!r} is not a valid profile: {exc}") from None
         if perf.device != name:
-            raise ValueError(
-                f"registry snapshot key {name!r} does not match its row's "
-                f"device {perf.device!r}")
+            raise ValueError(f"registry snapshot key {name!r} does not match its row's device {perf.device!r}")
         staged.append(perf)
     for perf in staged:
         register_perf(perf)
@@ -823,8 +863,7 @@ def _read_json(path: str | Path, what: str) -> Mapping[str, Any]:
     try:
         payload = json.loads(p.read_text())
     except FileNotFoundError:
-        raise TargetPerfError(
-            f"{what} {p} not found; generate it first") from None
+        raise TargetPerfError(f"{what} {p} not found; generate it first") from None
     except json.JSONDecodeError as exc:
         raise ValueError(f"{what} {p} is not valid JSON: {exc}") from None
     if not isinstance(payload, dict):
@@ -846,6 +885,7 @@ __all__ = [
     "apply_registry_snapshot",
     "devices_for_target",
     "load_corpus",
+    "load_pruning_corpus",
     "load_registry_snapshot",
     "peak_key",
     "registry_snapshot",

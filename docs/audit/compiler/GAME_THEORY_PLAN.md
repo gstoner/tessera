@@ -506,6 +506,14 @@ metadata included. Follow it literally.
 
 ### G1b — Butterfly IR consolidation · M — *the sanctioned IR override (§4.6.2)*
 
+**2026-08-16 checkpoint (`REF-TIER-PHYS-2026-08-16`):** the four coalition
+transforms now share a parameterized, content-addressed
+`schedule.coalition_butterfly` → `tile.coalition_butterfly_kernel` boundary and
+independent AVX-512/fp64-workspace and gfx1151/fp64-LDS consumers. This closes
+the coalition-side emitter duplication. G1b itself remains open: the carrier
+has not yet replaced FFT-only tiling/sharding, gained the `coalition` layout
+value, or passed the required FFT bit-identity gate.
+
 C++/MLIR. **This is a Decision #31 consolidation, and it must not be started
 before G1's Python reference exists** — the W0→W1 ordering caveat in
 `INTEGRATED_COMPILER_PLAN.md` applies verbatim: do not collapse the duplication

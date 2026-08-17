@@ -106,6 +106,8 @@ add_library(tessera_x86_backend
   src/kernels/avx512_moe_f32.cpp
   src/kernels/avx512_optimizer_f32.cpp
   src/kernels/avx512_solver_ift_f32.cpp
+  src/kernels/avx512_tridiagonal_f32.cpp
+  src/kernels/avx512_coalition_f32.cpp
   src/kernels/avx512_es_low_rank_f32.cpp
   src/kernels/avx512_predicate_f32.cpp
   src/kernels/kv_cache_f32.cpp
@@ -228,6 +230,8 @@ add_library(tessera_x86_elementwise SHARED
   src/kernels/avx512_moe_f32.cpp
   src/kernels/avx512_optimizer_f32.cpp
   src/kernels/avx512_solver_ift_f32.cpp
+  src/kernels/avx512_tridiagonal_f32.cpp
+  src/kernels/avx512_coalition_f32.cpp
   src/kernels/avx512_es_low_rank_f32.cpp
   src/kernels/avx512_predicate_f32.cpp
   src/kernels/kv_cache_f32.cpp
@@ -266,7 +270,9 @@ endif()
 # dependency, so the dialect is guarded: it builds only when configured from
 # the main tree, where MLIR's CMake helpers are available.
 # ------------------------------------------------------------------
-if(COMMAND add_mlir_library AND COMMAND mlir_tablegen)
+if(TARGET TesseraX86IR)
+  message(STATUS "tessera_x86 Target IR dialect already provided by the main compiler tree")
+elseif(COMMAND add_mlir_library AND COMMAND mlir_tablegen)
   add_subdirectory(lib/IR)
 else()
   message(STATUS "tessera_x86 Target IR dialect skipped (MLIR helpers unavailable)")

@@ -3,6 +3,18 @@
   "version": 1,
   "measured_on": "2026-08-15",
   "host": "strix-halo-wsl2",
+  "evidence_tier": "provisional_pruning_only",
+  "selector_eligible": false,
+  "ineligibility_reasons": [
+    "BARE_METAL_REQUIRED",
+    "HIP_DEVICE_EVENT_INVALID_UNDER_WSL",
+    "ROCPROFILER_ACTIVITY_NOT_COLLECTED"
+  ],
+  "timing_domains": {
+    "host_wall": "measured",
+    "hip_event": "invalid",
+    "rocprofiler_activity": "unavailable"
+  },
   "method": "wall-clock median-of-reps (WSL /dev/dxg device events return garbage); WMMA peak = 8-chain register-resident microbenchmark; BW = grid-stride vector<4xf32> copy, read+write bytes over 256 MiB",
   "devices": {
     "radeon_8060s": {

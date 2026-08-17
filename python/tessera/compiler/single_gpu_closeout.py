@@ -35,11 +35,13 @@ CSV_COLUMNS: tuple[str, ...] = (
     "source",
 )
 
-_MULTI_GPU_FAMILIES = frozenset({
-    "collective",
-    "moe_transport",
-    "sharding",
-})
+_MULTI_GPU_FAMILIES = frozenset(
+    {
+        "collective",
+        "moe_transport",
+        "sharding",
+    }
+)
 
 _MULTI_GPU_OP_PREFIXES = (
     "all_gather",
@@ -51,24 +53,28 @@ _MULTI_GPU_OP_PREFIXES = (
     "reduce_scatter",
 )
 
-_LOCAL_LAYOUT_FAMILIES = frozenset({
-    "indexing",
-    "layout_transform",
-    "loop_nest",
-    "stencil",
-})
+_LOCAL_LAYOUT_FAMILIES = frozenset(
+    {
+        "indexing",
+        "layout_transform",
+        "loop_nest",
+        "stencil",
+    }
+)
 
-_DOMAIN_SHARDING_FAMILIES = frozenset({
-    "attention",
-    "ebm",
-    "linalg_decomposition",
-    "linalg_solver",
-    "moe",
-    "sparse",
-    "spectral",
-    "state_space",
-    "state_update",
-})
+_DOMAIN_SHARDING_FAMILIES = frozenset(
+    {
+        "attention",
+        "ebm",
+        "linalg_decomposition",
+        "linalg_solver",
+        "moe",
+        "sparse",
+        "spectral",
+        "state_space",
+        "state_update",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -114,10 +120,9 @@ _PHASED_ARTIFACT_ONLY_OPS = frozenset({"depth_attn"})
 # shared string sends every op to whichever plan happened to be first.
 # ``(tile_rationale, target_rationale)``.
 _PHASED_REFERENCE_RATIONALE: dict[str, tuple[str, str]] = {
-    # Coalition-lattice family: G1b owns the shared butterfly Tile
-    # lowering; G5 registers the per-target arbiter lanes (SubsetZetaRegion
-    # beside SpectralFFTRegion; boltzmann_value on the online-softmax
-    # emitter).
+    # Remaining coalition compositions. The four zeta/Mobius transforms left
+    # this reference-only override under REF-TIER-PHYS-1; G1b still owns their
+    # later FFT-tiling consolidation.
     **{
         op: (
             "Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared "
@@ -126,22 +131,13 @@ _PHASED_REFERENCE_RATIONALE: dict[str, tuple[str, str]] = {
             "per-target arbiter lanes; hold until that phase lands.",
         )
         for op in (
-            "game_subset_zeta", "game_subset_mobius",
-            "game_superset_zeta", "game_superset_mobius",
-            "game_coalition_marginal", "game_semivalue",
-            "game_boltzmann_value", "game_coalition_excess", "game_mex",
+            "game_coalition_marginal",
+            "game_semivalue",
+            "game_boltzmann_value",
+            "game_coalition_excess",
+            "game_mex",
         )
     },
-    # PDE solver: the butterfly/arbiter phases above own neither half of
-    # this op. Its backend phase is the PDE op-set admission.
-    "tridiagonal_solve": (
-        "Reference tier by plan: PDE_STENCIL_CAPABILITY_PLAN.md §III.1 owns "
-        "the Thomas-recurrence Tile lowering (TSOL-A1 op-set admission); "
-        "hold until that phase lands.",
-        "Reference tier by plan: PDE_STENCIL_CAPABILITY_PLAN.md §III.1 owns "
-        "the per-target solver lane (TSOL-A1 op-set admission); hold until "
-        "that phase lands.",
-    ),
 }
 
 _PHASED_REFERENCE_OPS = frozenset(_PHASED_REFERENCE_RATIONALE)
@@ -281,73 +277,83 @@ def collect_closeout_rows() -> tuple[CloseoutRow, ...]:
         tile_status = row.cells["tile_ir"].status
         if tile_status == "partial":
             bucket, owner, action = _tile_bucket(row)
-            rows.append(CloseoutRow(
-                "tile_ir",
-                row.op_name,
-                row.family,
-                tile_status,
-                bucket,
-                owner,
-                action,
-                "support_table.csv",
-            ))
+            rows.append(
+                CloseoutRow(
+                    "tile_ir",
+                    row.op_name,
+                    row.family,
+                    tile_status,
+                    bucket,
+                    owner,
+                    action,
+                    "support_table.csv",
+                )
+            )
 
         target_status = row.cells["target_ir"].status
         if target_status == "reference":
             bucket, owner, action = _target_bucket(row)
-            rows.append(CloseoutRow(
-                "target_ir",
-                row.op_name,
-                row.family,
-                target_status,
-                bucket,
-                owner,
-                action,
-                "support_table.csv",
-            ))
+            rows.append(
+                CloseoutRow(
+                    "target_ir",
+                    row.op_name,
+                    row.family,
+                    target_status,
+                    bucket,
+                    owner,
+                    action,
+                    "support_table.csv",
+                )
+            )
 
         bench_status = row.cells["bench"].status
         if row.cells["target_ir"].status == "fused" and bench_status == "none":
             bucket, owner, action = _benchmark_bucket(row)
-            rows.append(CloseoutRow(
-                "benchmark_evidence",
-                row.op_name,
-                row.family,
-                bench_status,
-                bucket,
-                owner,
-                action,
-                "support_table.csv",
-            ))
+            rows.append(
+                CloseoutRow(
+                    "benchmark_evidence",
+                    row.op_name,
+                    row.family,
+                    bench_status,
+                    bucket,
+                    owner,
+                    action,
+                    "support_table.csv",
+                )
+            )
 
     for entry in pc.all_primitive_coverages().values():
         sharding_status = entry.contract_status.get("sharding_rule", "planned")
         if sharding_status in {"partial", "planned"}:
             bucket, owner, action = _sharding_bucket(entry)
-            rows.append(CloseoutRow(
-                "sharding_rule",
-                entry.name,
-                entry.category or "uncategorized",
-                sharding_status,
-                bucket,
-                owner,
-                action,
-                "primitive_coverage.contract_status.sharding_rule",
-            ))
+            rows.append(
+                CloseoutRow(
+                    "sharding_rule",
+                    entry.name,
+                    entry.category or "uncategorized",
+                    sharding_status,
+                    bucket,
+                    owner,
+                    action,
+                    "primitive_coverage.contract_status.sharding_rule",
+                )
+            )
 
         backend_status = entry.contract_status.get("backend_kernel", "planned")
         if backend_status in {"partial", "planned"}:
             bucket, owner, action = _backend_bucket(entry)
-            rows.append(CloseoutRow(
-                "backend_kernel",
-                entry.name,
-                entry.category or "uncategorized",
-                backend_status,
-                bucket,
-                owner,
-                action,
-                "primitive_coverage.contract_status.backend_kernel",
-            ))
+            rows.append(
+                CloseoutRow(
+                    "backend_kernel",
+                    entry.name,
+                    entry.category or "uncategorized",
+                    backend_status,
+                    bucket,
+                    owner,
+                    action,
+                    "primitive_coverage.contract_status.backend_kernel",
+                )
+            )
 
     return tuple(sorted(rows, key=lambda r: (r.area, r.family, r.op, r.bucket)))
 
@@ -394,16 +400,17 @@ def render_markdown(rows: tuple[CloseoutRow, ...] | None = None) -> str:
     for area in sorted(by_area):
         area_rows = tuple(by_area[area])
         lines.append(
-            f"| `{area}` | {len(area_rows)} | {_breakdown(area_rows, 'bucket')} | "
-            f"{_breakdown(area_rows, 'owner')} |"
+            f"| `{area}` | {len(area_rows)} | {_breakdown(area_rows, 'bucket')} | {_breakdown(area_rows, 'owner')} |"
         )
-    lines.extend([
-        "",
-        "## Rows",
-        "",
-        "| Area | Op | Family | Status | Bucket | Owner | Next action |",
-        "|---|---|---|---|---|---|---|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Rows",
+            "",
+            "| Area | Op | Family | Status | Bucket | Owner | Next action |",
+            "|---|---|---|---|---|---|---|",
+        ]
+    )
     for row in rows:
         action = row.next_action.replace("|", "\\|")
         lines.append(

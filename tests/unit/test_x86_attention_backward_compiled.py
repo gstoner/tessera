@@ -146,6 +146,26 @@ def test_attention_backward_preserves_bias_window_softcap_semantics():
         np.testing.assert_allclose(actual, reference, rtol=4e-5, atol=4e-5)
 
 
+def test_parallel_attention_backward_reduction_is_bit_deterministic():
+    runtime = _runtime()
+    rng = np.random.default_rng(701)
+    b, hq, hkv, sq, sk, d = 1, 8, 2, 32, 35, 16
+    q = rng.standard_normal((b, hq, sq, d)).astype(np.float32)
+    k = rng.standard_normal((b, hkv, sk, d)).astype(np.float32)
+    v = rng.standard_normal((b, hkv, sk, d)).astype(np.float32)
+    dout = rng.standard_normal((b, hq, sq, d)).astype(np.float32)
+    artifact = _artifact(
+        runtime,
+        scale=1.0 / np.sqrt(d),
+        causal=True,
+        lse_checkpoint="recompute",
+    )
+    first = runtime.launch(artifact, (dout, q, k, v))["output"]
+    second = runtime.launch(artifact, (dout, q, k, v))["output"]
+    for lhs, rhs in zip(first, second):
+        np.testing.assert_array_equal(lhs, rhs)
+
+
 def test_exact_zen5_lse_packet_selects_saved_checkpoint():
     packet = json.loads(
         (

@@ -725,6 +725,7 @@ x86,tessera_x86_avx512_binary_f32,avx512_binary,f32,src/compiler/codegen/tessera
 x86,tessera_x86_avx512_binary_loss_bwd_f32,avx512_binary_loss_bwd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_loss_f32.cpp
 x86,tessera_x86_avx512_binary_loss_f32,avx512_binary_loss,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_loss_f32.cpp
 x86,tessera_x86_avx512_bitwise_i32,avx512_bitwise,i32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_bitwise_i32.cpp
+x86,tessera_x86_avx512_coalition_butterfly_f32,avx512_coalition_butterfly,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_coalition_f32.cpp
 x86,tessera_x86_avx512_compare_f32,avx512_compare,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_compare_f32.cpp
 x86,tessera_x86_avx512_compare_i32,avx512_compare,i32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_compare_f32.cpp
 x86,tessera_x86_avx512_compare_u32,avx512_compare_u32,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_compare_f32.cpp
@@ -766,6 +767,7 @@ x86,tessera_x86_avx512_spmm_csr_f32,avx512_spmm_csr,f32,src/compiler/codegen/tes
 x86,tessera_x86_avx512_training_loss_adamw_f32,avx512_training_loss_adamw,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_loss_f32.cpp
 x86,tessera_x86_avx512_training_loss_sgd_f32,avx512_training_loss_sgd,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_loss_f32.cpp
 x86,tessera_x86_avx512_transcendental_f32,avx512_transcendental,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_transcendental_f32.cpp
+x86,tessera_x86_avx512_tridiagonal_solve_f32,avx512_tridiagonal_solve,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_tridiagonal_f32.cpp
 x86,tessera_x86_avx512_unary_f32,avx512_unary,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_unary_f32.cpp
 x86,tessera_x86_avx512_vnni_gemm_u8s8_s32,avx512_vnni_gemm_u8s8_s32,,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_vnni_gemm_int8.cpp
 x86,tessera_x86_avx512_welford_f32,avx512_welford,f32,src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_reduce_f32.cpp

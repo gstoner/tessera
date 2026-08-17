@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-15
+last_updated: 2026-08-16
 audit_role: plan
 plan_state: open
 ---
@@ -10,8 +10,8 @@ plan_state: open
 > schedule representation's contract; global ordering lives only in
 > [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md). It is P3 of
 > [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md)'s build sequence (S2),
-> written *before* any of its three consumers lands separately — that is the
-> point.
+> originally written *before* any of its three consumers landed separately;
+> the implementation checkpoint in section 6 is now the live status.
 >
 > **Reads against:** [`compiler_enhancement.md`](compiler_enhancement.md)
 > Phases 2–3 (roles + stated entry point),
@@ -25,13 +25,13 @@ plan_state: open
 
 ## 0. Why one object, and why a design doc first
 
-Three landed-or-planned workstreams each need "the schedule" as data, and each
-currently has (or plans) its own shape:
+Three workstreams need "the schedule" as data. The table records the boundary
+that SO-1/SO-2 now consolidate and the public entry point that remains:
 
 | Workstream | Its schedule datum today |
 |---|---|
-| CAKE Phase 2/3 | Roles + barrier producer/consumer sets as new Tile IR; a Python builder that *states* a schedule (does not exist yet) |
-| TileRT E5 / W5.2 | `pipeline_planner.ScheduleStep` — "the only real schedule data structure in the repo," **discarded at `to_mlir_attrs()`** and re-derived from scalars downstream; separately, W5.2c/e's `CompositionCandidate` action DAG with R2 resource vectors, host-side only |
+| CAKE Phase 2/3 | SO-2's typed role/barrier ownership is landing; SO-1's Python `ScheduleObject` constructor exists, while the public `@tessera.schedule` stated entry point remains SO-5 |
+| TileRT E5 / W5.2 | W5.2c/e `CompositionCandidate` and inferred action DAGs now own a `ScheduleObject`; the remaining SO-3 work is deleting scalar reconstruction after `to_mlir_attrs()` |
 | FORGE W2 | `tessera.residency` as a value property a boundary verifier checks — a schedule-visible fact with no schedule to live on |
 
 Decision #31 says one boundary gets one representation. Landing any of the
@@ -148,12 +148,29 @@ IR), and physical warp identity (derived at lowering, per CAKE's own rule).
 
 ## 6. Build order (proposal — the integrated plan owns the slot)
 
-1. **SO-1**: the Python-side object + digest + validation, with
+**Implementation checkpoint (2026-08-16).** SO-1 is implemented:
+`ScheduleObject` is a validated, deterministic content-addressed value and
+`CompositionCandidate`/`infer_action_dag` now carry that object rather than a
+parallel anonymous action tuple. Its digest binds action resource vectors,
+reasoned edges, logical roles, and residency. SO-2 now has registered
+`!tile.role` SSA values, role-bearing `tile.pipeline_init` and
+`tile.mbarrier.init`, and loop-carry-aware provenance. Both CDNA-style
+ping-pong and Hopper-style producer/consumer splits pass the same host-free
+verifier, while unresolved roles, missing role halves, kind mismatches, and
+duplicate symbolic membership fail closed. The ROCm wave/LDS producer emits
+the role-bearing pipeline and its legality pass consumes it; x86 declares
+`no_async_noop` for every family plugin. The plan-named gfx1151 §5.5 cohort
+passed 8/8 on this changed tree. Roles carry symbolic members, never physical
+warp/wave IDs. SO-2 remains landing only for NVIDIA's barrier-at-birth producer
+and retirement of WarpSpecLegality's legacy ancestor-role marker path.
+
+1. **SO-1 — implemented**: the Python-side object + digest + validation, with
    `CompositionCandidate`/`infer_action_dag` re-based onto it (pure
    refactor-with-tests; no IR change).
-2. **SO-2**: CAKE Phase 2's role/barrier IR (producer/consumer role operands
-   on `tile.mbarrier.init`), verified by extending the P1a derivation pass;
-   the ping-pong/Hopper one-rule gate lives here.
+2. **SO-2 — landing**: CAKE Phase 2's role/barrier IR (producer/consumer role
+   operands on pipeline and mbarrier ownership), verified by the P1a
+   derivation pass; the ping-pong/Hopper one-rule gate and gfx1151 numerical
+   reconciliation are closed, while NVIDIA barrier-at-birth remains.
 3. **SO-3**: digest stamping + the E5 migration (delete the scalar
    re-derivation in `PipelineStageInsertionPass`).
 4. **SO-4**: residency attribute + the generalized materialization-proof pass

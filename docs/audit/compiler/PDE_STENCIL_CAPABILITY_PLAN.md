@@ -290,7 +290,7 @@ admissions. Proposed category **"PDE And Stencil Operators"**, each entering the
 | `pde.discretize` | `(operator, fd_scheme, order, bc) → stencil` | **The seam** to `neighbors.stencil.define` / `tpp.stencil.apply`; folds `1/Πh^α` into taps |
 | `pde.laplacian` / `gradient` / `divergence` / `curl` | typed, N-d | Replace the untyped `tpp.grad` scaffold |
 | `stencil_apply`, `halo_exchange` | existing IR, new TSOL rows | Admission forces the single-surface question (§III.3 [GAP-4]) |
-| `tridiagonal_solve` | `(dl,d,du,b) → x` | Required for Crank–Nicolson; missing everywhere today |
+| `tridiagonal_solve` | `(dl,d,du,b) → x` | Required for Crank–Nicolson; shared Schedule→Tile plus x86 batch-vector Thomas and gfx1151 cooperative-PCR correctness lanes landed under `REF-TIER-PHYS-1`; target performance evidence remains open |
 | `heat_kernel`, `advect`, `dalembert` | closed-form | Contract-rich (semigroup, shift-composition, reversibility) |
 
 Spectral additions: DST/DCT aligned to BC selection, and **Chebyshev** — the

@@ -946,6 +946,23 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="TILE-SYNC-TYPED-2026-08-15",
     ),
     DiagnosticCode(
+        code="TILE_ROLE_RELATION_INVALID",
+        pass_origin="TileDataflowLegality",
+        severity="error",
+        summary=(
+            "A logical producer/consumer role cannot be resolved to registered "
+            "tile.role declarations, disagrees with its pipeline role, or "
+            "leaves a role-bearing barrier without both role sets."
+        ),
+        fix_hint=(
+            "Create producer and consumer tile.role SSA values, thread roles "
+            "through supported scf.for iter_args, and bind them to the owning "
+            "pipeline or mbarrier rather than using string role markers."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §6.2–§6.4",
+        sprint="LAYOUT-SCHEDULE-OBJECT-2026-08-16",
+    ),
+    DiagnosticCode(
         code="TILE_PIPELINE_RING_STALE",
         pass_origin="TileDataflowLegality",
         severity="error",
@@ -2370,6 +2387,21 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         summary="ROCm Tile-IR legality saw NVIDIA-only TMA/TCGen05/mbarrier completion semantics.",
         fix_hint="Use AMD waitcnt for counter waits or s_barrier for true workgroup synchronization.",
         spec="docs/audit/compiler/COMPILER_AUDIT.md §ROCm Tile-IR convergence", sprint="ROCm Tile-IR convergence",
+    ),
+    DiagnosticCode(
+        code="ROCM_WAVE_LDS_ROLE_UNRESOLVED",
+        pass_origin="ROCMWaveLdsLegalityPass",
+        severity="error",
+        summary=(
+            "A structured ROCm LDS operation has no pipeline state rooted in "
+            "a matching producer/consumer tile.role SSA declaration."
+        ),
+        fix_hint=(
+            "Run rocm-wave-lds-pipeline and preserve the role-bearing "
+            "tile.pipeline_init/advance chain into the physical consumer."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md §6.2–§6.4",
+        sprint="LAYOUT-SCHEDULE-OBJECT-2026-08-16",
     ),
     DiagnosticCode(
         code="ROCM_TILE_UNSUPPORTED_DTYPE", pass_origin="LowerTileToROCMPass",

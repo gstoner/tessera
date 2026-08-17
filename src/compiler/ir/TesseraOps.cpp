@@ -5012,6 +5012,67 @@ static LogicalResult verifySpectralTypes(Operation *op, Value x, Value y,
            << name << " result extent disagrees with logical_length";
   return success();
 }
+
+LogicalResult TridiagonalSolveOp::verify() {
+  auto dl = dyn_cast<RankedTensorType>(getDl().getType());
+  auto diagonal = dyn_cast<RankedTensorType>(getDiagonal().getType());
+  auto du = dyn_cast<RankedTensorType>(getDu().getType());
+  auto rhs = dyn_cast<RankedTensorType>(getRhs().getType());
+  auto output = dyn_cast<RankedTensorType>(getOutput().getType());
+  if (!dl || !diagonal || !du || !rhs || !output)
+    return success();
+  if (dl.getRank() != 1 || diagonal.getRank() != 1 || du.getRank() != 1 ||
+      rhs.getRank() < 1)
+    return emitOpError(
+        "requires rank-1 diagonals and a rank-1-or-higher RHS");
+  Type element = diagonal.getElementType();
+  if (!isa<FloatType>(element) || dl.getElementType() != element ||
+      du.getElementType() != element || rhs.getElementType() != element ||
+      output.getElementType() != element)
+    return emitOpError("requires one matching floating element type");
+  auto agrees = [](int64_t lhs, int64_t rhs) {
+    return ShapedType::isDynamic(lhs) || ShapedType::isDynamic(rhs) ||
+           lhs == rhs;
+  };
+  if (!agrees(dl.getDimSize(0), diagonal.getDimSize(0)) ||
+      !agrees(du.getDimSize(0), diagonal.getDimSize(0)) ||
+      !agrees(rhs.getDimSize(rhs.getRank() - 1), diagonal.getDimSize(0)) ||
+      !compatibleShape(rhs, output))
+    return emitOpError(
+        "requires equal diagonal extents and RHS/result trailing extent N");
+  return success();
+}
+
+static LogicalResult verifyCoalitionButterfly(Operation *op) {
+  auto input = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+  auto output = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  if (!input || !output)
+    return success();
+  if (input.getRank() < 1 || !compatibleShape(input, output) ||
+      !isa<FloatType>(input.getElementType()))
+    return op->emitOpError(
+        "requires matching floating tensors with a coalition trailing axis");
+  int64_t extent = input.getDimSize(input.getRank() - 1);
+  if (!ShapedType::isDynamic(extent) &&
+      (extent <= 0 || (extent & (extent - 1)) != 0))
+    return op->emitOpError(
+        "requires a power-of-two coalition trailing extent");
+  return success();
+}
+
+LogicalResult GameSubsetZetaOp::verify() {
+  return verifyCoalitionButterfly(getOperation());
+}
+LogicalResult GameSubsetMobiusOp::verify() {
+  return verifyCoalitionButterfly(getOperation());
+}
+LogicalResult GameSupersetZetaOp::verify() {
+  return verifyCoalitionButterfly(getOperation());
+}
+LogicalResult GameSupersetMobiusOp::verify() {
+  return verifyCoalitionButterfly(getOperation());
+}
+
 LogicalResult FFTOp::verify() {
   if (failed(verifySpectralContract(getOperation(), getX(), getAxis(), "fft", false)))
     return failure();

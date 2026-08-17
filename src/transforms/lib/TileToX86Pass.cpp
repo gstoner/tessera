@@ -35,8 +35,12 @@
 #include "Tessera/Common/Lowering.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
+#ifdef TESSERA_HAS_X86_TARGET_IR
+#include "TesseraX86/IR/TesseraX86Dialect.h"
+#endif
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -371,11 +375,20 @@ struct TileToX86PassImpl
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<arith::ArithDialect, bufferization::BufferizationDialect,
-                    func::FuncDialect, LLVM::LLVMDialect,
+                    cf::ControlFlowDialect, func::FuncDialect, LLVM::LLVMDialect,
                     memref::MemRefDialect>();
+#ifdef TESSERA_HAS_X86_TARGET_IR
+    registry.insert<mlir::tessera_x86::TesseraX86Dialect>();
+#endif
   }
 
   void runOnOperation() override {
+#ifndef TESSERA_HAS_X86_TARGET_IR
+    getOperation().emitError(
+        "tessera_x86 Target IR is unavailable; rebuild with "
+        "TESSERA_BUILD_X86_BACKEND=ON");
+    return signalPassFailure();
+#endif
     if (architectureOpt != "avx512" && architectureOpt != "base") {
       getOperation().emitError("x86 architecture must be avx512 or base");
       return signalPassFailure();
@@ -409,6 +422,8 @@ struct TileToX86PassImpl
           name == "tile.attention_backward_kernel" ||
           name == "tile.spectral_backward_kernel" ||
           name == "tile.solver_ift_kernel" ||
+          name == "tile.tridiagonal_solve_kernel" ||
+          name == "tile.coalition_butterfly_kernel" ||
           name == "tile.es_low_rank_correction_kernel" ||
           name == "tile.elementwise_kernel" ||
           name == "tile.argreduce_kernel" || name == "tile.scan_kernel" ||
@@ -451,6 +466,84 @@ struct TileToX86PassImpl
           opName != "tile.reduce_kernel") {
         op->emitError("x86 base architecture currently supports only softmax and reduction launch envelopes");
         return signalPassFailure();
+      }
+      if (opName == "tile.tridiagonal_solve_kernel") {
+        auto arch = op->getAttrOfType<StringAttr>("arch");
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto algorithm = op->getAttrOfType<StringAttr>("algorithm");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto workgroup = op->getAttrOfType<IntegerAttr>("workgroup_size");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        if (op->getNumOperands() != 7 || !arch ||
+            arch.getValue() != "zen5-avx512" || !storage ||
+            storage.getValue() != "f32" || !algorithm ||
+            algorithm.getValue() != "batch_vector_thomas_v1" || !accum ||
+            accum.getValue() != "f64" || !workgroup ||
+            workgroup.getInt() != 1 || !hash || hash.getValue().size() != 64) {
+          op->emitError(
+              "x86 tridiagonal solve requires the batch-vector Thomas contract");
+          return signalPassFailure();
+        }
+        StringRef symbol =
+            "tessera_x86_avx512_tridiagonal_solve_f32";
+        ensureExternalDecl(
+            module, symbol,
+            FunctionType::get(ctx,
+                              {ptrTy, ptrTy, ptrTy, ptrTy, ptrTy, i64Ty, i64Ty},
+                              {i32Ty}));
+        auto call = builder.create<func::CallOp>(loc, symbol, TypeRange{i32Ty},
+                                                 op->getOperands());
+        Value ok = builder.create<arith::CmpIOp>(
+            loc, arith::CmpIPredicate::eq, call.getResult(0),
+            builder.create<arith::ConstantIntOp>(loc, 0, 32));
+        builder.create<cf::AssertOp>(
+            loc, ok,
+            "x86 tridiagonal solve rejected an invalid or singular system");
+        op->erase();
+        continue;
+      }
+      if (opName == "tile.coalition_butterfly_kernel") {
+        auto arch = op->getAttrOfType<StringAttr>("arch");
+        auto half = op->getAttrOfType<IntegerAttr>("half");
+        auto sign = op->getAttrOfType<IntegerAttr>("sign");
+        auto order = op->getAttrOfType<StringAttr>("stage_order");
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto accum = op->getAttrOfType<StringAttr>("accum");
+        auto workgroup = op->getAttrOfType<IntegerAttr>("workgroup_size");
+        auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        if (op->getNumOperands() != 4 || !arch ||
+            arch.getValue() != "zen5-avx512" || !half ||
+            (half.getInt() != 0 && half.getInt() != 1) || !sign ||
+            (sign.getInt() != -1 && sign.getInt() != 1) || !order ||
+            order.getValue() != "ascending_bit_yates_v1" || !accum ||
+            accum.getValue() != "f64" || !storage ||
+            storage.getValue() != "f32" || !workgroup ||
+            workgroup.getInt() != 1 || !hash || hash.getValue().size() != 64) {
+          op->emitError(
+              "x86 coalition butterfly requires the shared Yates contract");
+          return signalPassFailure();
+        }
+        StringRef symbol =
+            "tessera_x86_avx512_coalition_butterfly_f32";
+        ensureExternalDecl(
+            module, symbol,
+            FunctionType::get(ctx,
+                              {ptrTy, ptrTy, i64Ty, i64Ty, i32Ty, i32Ty},
+                              {i32Ty}));
+        SmallVector<Value> operands(op->getOperands());
+        operands.push_back(builder.create<arith::ConstantIntOp>(
+            loc, half.getInt(), 32));
+        operands.push_back(builder.create<arith::ConstantIntOp>(
+            loc, sign.getInt(), 32));
+        auto call =
+            builder.create<func::CallOp>(loc, symbol, TypeRange{i32Ty}, operands);
+        Value ok = builder.create<arith::CmpIOp>(
+            loc, arith::CmpIPredicate::eq, call.getResult(0),
+            builder.create<arith::ConstantIntOp>(loc, 0, 32));
+        builder.create<cf::AssertOp>(
+            loc, ok, "x86 coalition butterfly rejected its runtime contract");
+        op->erase();
+        continue;
       }
       if (opName == "tile.es_low_rank_correction_kernel") {
         auto arch = op->getAttrOfType<StringAttr>("arch");
@@ -1042,10 +1135,6 @@ struct TileToX86PassImpl
     // has a registered tessera_x86 marker instead of disappearing into the
     // generic func dialect.  This lets the family pipeline verify and hash the
     // Target consumer without changing the native calling convention.
-    if (!getContext().getOrLoadDialect("tessera_x86")) {
-      module.emitError("tessera_x86 dialect is required by typed x86 lowering");
-      return signalPassFailure();
-    }
     SmallVector<func::CallOp> nativeCalls;
     module.walk([&](func::CallOp call) {
       if (call.getCallee().starts_with("tessera_x86_"))

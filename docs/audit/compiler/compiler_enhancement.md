@@ -749,6 +749,17 @@ Ordered, and each is necessary:
    > Phase G/H — so for that family the evidence remains lowering + pipeline
    > legality (gates 1–4); the gfx1151 numerics cover the shared token
    > contract, which is what this fleet can execute.
+
+   > **SO-2 reconciliation (2026-08-16).** The gate was rerun after the shared
+   > role carrier became executable rather than inferred from the older sweep.
+   > `rocm-wave-lds-pipeline` now emits producer/consumer `tile.role` SSA and
+   > binds it to `tile.pipeline_init`; `rocm-wave-lds-legality` consumes and
+   > verifies that relationship. On the visible gfx1151, the exact named cohort
+   > (`test_rocm_async_copy_runnable.py`,
+   > `test_rocm_gemm_staged_async_copy.py`, and
+   > `test_rocm_pipeline_tile_lowering.py`) passed **8/8**, with no skips. The
+   > prior 1,569-test sweep remains broader parity evidence, but is no longer
+   > used as a substitute for this particular gate.
 6. **No-regression gate.** `ninja -C build` (all targets, not `tessera-opt`
    alone), `lit tests/tessera-ir/`, and `ninja -C build check-tessera-rocm` —
    the second lit suite CI runs and `check-tessera` does not.

@@ -3304,6 +3304,23 @@ def _shape_layout_permute(operand_types: List[IRType],
     """
     first = operand_types[0]
     layout = (attrs or {}).get("layout")
+    if isinstance(layout, str) and "->" in layout and first.rank is not None:
+        symbolic_shape: list[int] = []
+        for dim in first.shape:
+            value = _dim(dim)
+            symbolic_shape.append(-1 if value is None else value)
+        from .layout_algebra import rearrange_shape_plan
+
+        plan = rearrange_shape_plan(
+            symbolic_shape,
+            layout,
+            axes_lengths=(attrs or {}).get("axes_lengths"),
+        )
+        return tensor_ir_type(
+            tuple("?" if dim < 0 else str(dim) for dim in plan.output_shape),
+            first.dtype,
+            layout=first.layout,
+        )
     if not isinstance(layout, (tuple, list)):
         return first
     if first.rank is None or len(layout) != len(first.shape):

@@ -85,7 +85,8 @@ struct DeclareROCMPipelineContractPass
         "position_alibi", "position_rope", "quant_dequant_gemm", "quant_fp",
         "quant_int4_pack", "reduction_arg", "rng_philox", "scan",
         "spectral_dft", "spectral_backward", "matmul", "softmax",
-        "depth_attention", "reduction", "paged_kv", "attention",
+        "depth_attention", "tridiagonal_solve", "coalition_butterfly",
+        "reduction", "paged_kv", "attention",
         "attention_backward", "moe_dispatch", "scalar_activation",
         "scalar_binary", "scalar_bitwise", "scalar_compare", "scalar_logical",
         "scalar_predicate", "scalar_unary", "scalar_where", "sequence_deltanet",
@@ -252,6 +253,10 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
     pm.addPass(createGenerateROCMSoftmaxKernelPass());
   } else if (family == "depth_attention") {
     pm.addPass(createGenerateROCMDepthAttentionKernelPass());
+  } else if (family == "tridiagonal_solve") {
+    pm.addPass(createGenerateROCMTridiagonalKernelPass());
+  } else if (family == "coalition_butterfly") {
+    pm.addPass(createGenerateROCMCoalitionButterflyKernelPass());
   } else if (family == "reduction") {
     pm.addPass(createGenerateROCMReduceKernelPass());
   } else if (family == "paged_kv") {
@@ -439,6 +444,8 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMSelectiveSsmBwdKernelPass(); });
   registerPass([]() { return createGenerateROCMCholeskyKernelPass(); });
   registerPass([]() { return createGenerateROCMTriSolveKernelPass(); });
+  registerPass([]() { return createGenerateROCMTridiagonalKernelPass(); });
+  registerPass([]() { return createGenerateROCMCoalitionButterflyKernelPass(); });
   registerPass([]() { return createGenerateROCMLuKernelPass(); });
   registerPass([]() { return createGenerateROCMQrKernelPass(); });
   registerPass([]() { return createGenerateROCMSvdKernelPass(); });

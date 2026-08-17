@@ -13,8 +13,8 @@ module {
 // CHECK: gpu.func @normal(%{{.*}}: memref<?xf32>, %{{.*}}: index, %{{.*}}: i32, %{{.*}}: i32, %{{.*}}: i32, %{{.*}}: i32, %{{.*}}: f32, %{{.*}}: f32) kernel
 // CHECK: math.log
 // CHECK: math.sqrt
-// CHECK: math.sin
 // CHECK: math.cos
+// CHECK: math.sin
 // CHECK: gpu.module @dropout_mod
 // CHECK: gpu.func @dropout(%{{.*}}: memref<?xf32>, %{{.*}}: memref<?xf32>, %{{.*}}: index, %{{.*}}: i32, %{{.*}}: i32, %{{.*}}: i32, %{{.*}}: i32, %{{.*}}: f32) kernel
 // CHECK: arith.cmpf oge

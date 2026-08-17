@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-15
+last_updated: 2026-08-16
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,38 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `GFX1151-CALIB-BAREMETAL-2026-08-16` — **shared calibration
+authority parity validated; no x86 evidence transfers.** `target_perf` now
+rejects explicitly provisional and WSL-hosted corpora from its measured
+selector registry while exposing a non-mutating pruning reader. AVX-512 code
+and selectors are unchanged; clean Zen 5 perf/IBS evidence remains the x86
+promotion authority.
+
+Cross-backend sync `LAYOUT-SCHEDULE-OBJECT-2026-08-16` — **shared layout and
+SO-1 parity validated; SO-2 no-async proof explicit.** The versioned C++
+layout ABI is host-free and the GQA-fold consumer is common. Schedule Object
+digests now bind R3 actions, edges, roles, residency, and resource vectors. x86
+has no asynchronous-copy/mbarrier lane, so every typed family plugin declares
+`async_role_policy = no_async_noop`; the SO-2 role carrier remains a verified
+no-op for AVX-512 lowering. No x86 index template or raster output is
+changed until L4, and no Zen 5/AMX evidence transfers.
+Nested Schedule resource metadata is now frozen before hashing, and dynamic
+rearrange/GQA-fold inference preserves ranked `?` dimensions. Neither change
+selects a new x86 layout or raster policy.
+
+Cross-backend sync `ATTN-BWD-ARCH-2026-08-16` — **deterministic parallel VJP
+implemented; bare-metal selector packet remains open.** AVX-512 attention
+backward partitions query rows into deterministic contiguous worker ranges,
+uses bounded private dK/dV partials, and reduces workers in fixed order. MHA,
+GQA/MQA, saved/recomputed LSE, bias, window, softcap, ragged shapes, and repeated
+bit-determinism pass. An equal-flags Zen 5 WSL comparison measured 1.85x median
+speedup at B2/Hq8/Hkv2/S128/D64 with 1.67e-6 maximum absolute delta. This is
+regression evidence only; clean bare-metal timing remains required for a
+selector-grade claim.
+Allocation and thread-construction failures are contained inside the C ABI:
+started workers are joined, outputs reset, and the deterministic serial path
+replayed, so no exception or joinable-thread destructor can terminate a caller.
 
 Cross-backend sync `PDE-EXACT-CONTRACT-2026-08-14` — **shared exact semantic
 authority landed; AVX-512 physical follow-up required.** The compiler now owns
@@ -83,7 +115,7 @@ from operation lowering, so a future `TileType` registration failure cannot hide
 behind the larger lit suite. Acceptance evidence for this fix is the green
 `Validate / lit` lane on a non-AVX-512 runner, not a local rebuild.
 
-## P0 open — `TileToX86Pass` loads a dialect during pass execution
+## P0 fixed 2026-08-16 — `TileToX86Pass` declares its dialect dependency
 
 Found while verifying the fix above, on an **assertions-enabled** LLVM/MLIR 23.
 Distinct defect, same code path, and **CI structurally cannot see it**.
@@ -107,25 +139,35 @@ whole x86 lit suite is currently unrunnable on a normal assert-enabled developer
 toolchain, which is the second reason this backend's Decision #19 claim has been
 easy to overstate.
 
-Not fixed here, because the fix is a layering decision rather than a bug edit:
-the canonical remedy is declaring the dialect in `getDependentDialects()`, which
-needs the C++ type and therefore couples `TesseraPasses` to the optional
-`TesseraX86IR`. `TesseraPasses` links **no** backend Target IR library today, so
-this would establish a new dependency direction (core passes → optional backend)
-and wants an explicit owner decision under Decisions #19/#31. The narrower
-alternative — a `TESSERA_HAS_X86_TARGET_IR` compile guard around both the
-`registry.insert<TesseraX86Dialect>()` and the existing fail-closed diagnostic —
-keeps the coupling optional and is the recommended shape.
+The layering decision is now explicit. The hardware-free `TesseraX86IR` target
+is created before `TesseraPasses` when x86 is enabled; the pass links that small
+IR library, declares `TesseraX86Dialect` from `getDependentDialects()`, and is
+compiled with `TESSERA_HAS_X86_TARGET_IR`. Native AVX-512/AMX kernel targets
+remain later and do not enter the shared pass dependency. Builds without x86
+retain the pass registration but fail before rewriting with an instruction to
+enable `TESSERA_BUILD_X86_BACKEND`; there is no permissive unregistered marker
+path. The forbidden `getOrLoadDialect("tessera_x86")` call is deleted.
 
-Note for whoever picks this up: `Pass::initialize(MLIRContext*)` is **not** an
-escape hatch. Its contract explicitly forbids loading dialects and redirects to
-`getDependentDialects()`.
+The final composite-pipeline failure was a second namespace-authority defect:
+`DistributionLoweringPass` defined a permissive private `schedule` dialect in
+parallel with the ODS Schedule dialect. Composite x86 pipelines attempted to
+register both classes and aborted. The canonical dialect is now isolated in
+`TesseraScheduleIR`, both the programming-model and transform libraries link
+that one target, and the private dialect is deleted.
+
+Host LLVM/MLIR 23 validation rebuilt both x86-present and x86-absent drivers.
+The positive Target fixture, negative verifier fixture, direct dialect-load
+fixture, and executable family pipeline pass 4/4; the absent driver returns the
+named fail-closed diagnostic before mutation. The installed WSL LLVM reports
+assertions `OFF`, so an assertions-enabled toolchain rerun remains required as
+the final external evidence packet; the source regression test independently
+forbids reintroducing a runtime dialect load.
 
 The production HIP build was also rebuilt with both
 `TESSERA_BUILD_ROCM_BACKEND=ON` and `TESSERA_BUILD_X86_BACKEND=ON`. Its feature
 ledger reports both `rocm-backend` and `x86-target-ir`; the complete shared lit
-suite reports 321 enabled passes, 52 configuration-gated tests, and zero
-failures across 373 discovered tests; the x86 verifier pair plus all twelve explicitly
+suite reports 329 enabled passes, 52 configuration-gated tests, and zero
+failures across 381 discovered tests; the x86 verifier pair plus all twelve explicitly
 gated ROCm fixtures execute 14/14 rather than becoming unsupported. This is
 host-free compiler proof, not clean Zen 5 performance or AMX evidence.
 
@@ -1397,15 +1439,22 @@ PDE plan §III.1 / TSOL-A1) and the nine-op coalition-lattice family
 is a shared contract, so this queue records the outcome per AGENTS.md
 "Cross-backend work coordination"; PR #568 itself landed without these records.
 
-**Follow-up required — no x86 lane exists for any of the ten.** Both families
-are Python numpy references today; `TileToX86Pass` has no pattern for either,
-and the generated closeout carries them as `target_ir=reference` /
-`tile_ir=partial` under their owning plan phase, not as an unclassified
-single-GPU gap. The relevant x86 shape when that phase opens: the Thomas
-reference is serial in the system dimension `n` and vectorized only across the
-leading batch axes, so the batch axis is the sole AVX-512 parallel axis — an
-x86 lane is a batch-blocked recurrence, not a vectorization of the sweep. No
-AVX-512 or AMX evidence is claimed or transfers.
+**2026-08-16 physical follow-up (`REF-TIER-PHYS-2026-08-16`): implemented for
+the solver and four lattice transforms.** `schedule.tridiagonal_solve` selects
+`batch_vector_thomas_v1`; the native kernel packs recurrence rows and executes
+eight independent systems per AVX-512 fp64 vector before the final fp32 store.
+`schedule.coalition_butterfly` carries `(half, sign, stage_order)` and one
+AVX-512 Yates consumer implements all subset/superset zeta/Mobius variants in
+fp64 working storage. Direct numerical tests cover scalar/tail/full SIMD
+batches, non-power-of-two rejection, zero-pivot rejection, and all four
+butterfly modes. This is a correctness retain, not a performance promotion;
+a clean Zen 5 benchmark packet remains open. Coalition marginal, semivalue,
+Boltzmann value, excess, and MEX remain reference/composition follow-ups rather
+than five new one-off emitters. No AMX evidence is claimed.
+Native solver and butterfly calls now assert their returned status in Target
+IR, and the manifest records the shipped C symbols as `device_verified_abi`
+rather than overclaiming generated-JIT proof. This is ABI/package evidence;
+the existing direct fixtures remain the numerical authority.
 
 ## APPLE-SCHEDULED-REDUCE-NAN-2026-08-16 — shared reduce NaN semantics (PR #571)
 
@@ -1432,7 +1481,7 @@ buffer. Both are Apple-guarded — the shared `scheduled_kernel` gate adds an
 `apple_gpu` branch beside the existing x86/ROCm ones and changes neither — and
 the runtime edit is in `apple_gpu_runtime.mm`, which no sibling links.
 
-## APPLE-ATTN-BWD-PERF-1-2026-08-16 — backward row-prepass assessment (PR pending)
+## APPLE-ATTN-BWD-PERF-1-2026-08-16 — backward row-prepass assessment (PR #572 merged)
 
 **Outcome: not applicable to this architecture — no shared contract changed.**
 Apple's attention-backward dK/dV split kernel became key-parallel by finally

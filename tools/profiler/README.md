@@ -125,6 +125,31 @@ python3 tools/profiler/scripts/tprof_rocm_native_capture.py \
   -- ./path/to/application
 ```
 
+The target-performance calibration uses the same fresh-process boundary. Run
+the calibration as the profiled child, then finalize the raw multi-clock record
+against that capture:
+
+```bash
+python3 tools/profiler/scripts/tprof_rocm_native_capture.py \
+  --provider rocprofiler \
+  --output-directory /tmp/tessera-gfx1151-calibration-trace \
+  --output /tmp/tessera-gfx1151-calibration-capture.json \
+  --kernel-include-regex 'copy_bw|wmma_peak' \
+  -- .venv/bin/python benchmarks/calibration/calibrate_gfx1151.py \
+       --measurement-only /tmp/tessera-gfx1151-calibration-raw.json
+
+.venv/bin/python benchmarks/calibration/calibrate_gfx1151.py \
+  --finalize-measurement /tmp/tessera-gfx1151-calibration-raw.json \
+  --native-capture /tmp/tessera-gfx1151-calibration-capture.json \
+  --output benchmarks/baselines/rocm_gfx1151_calibration_YYYY_MM_DD.json
+```
+
+Finalization fails closed unless the host is bare metal, all three HIP-event
+domains are valid and agree with host wall within 10%, ROCprofiler recorded a
+dispatch plus a HIP/HSA callback, and the measured source tree was clean. WSL
+can emit a diagnostic packet only with `--allow-provisional`; that packet is
+rejected by `target_perf.load_corpus()` and cannot promote a selector.
+
 Pass that artifact to `tprof_rocm_timing.py --native-capture` to calibrate the
 instrumented grid clock against the actual ROCprofiler dispatch envelope. Then
 bind the clean and timestamp-instrumented application image records with

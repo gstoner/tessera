@@ -2422,6 +2422,40 @@ def Tessera_ReduceScatterOp : Tessera_CollectiveOp<"reduce_scatter", "Single-ran
 def Tessera_AllGatherOp : Tessera_CollectiveOp<"all_gather", "Single-rank/reference all-gather semantic op">;
 def Tessera_AllToAllOp : Tessera_CollectiveOp<"all_to_all", "Single-rank/reference all-to-all semantic op">;
 
+// REF-TIER-PHYS-1 — compiler-owned Graph contracts for the PR #568 solver
+// and coalition-lattice families.  Target algorithms are deliberately absent
+// here; Schedule IR selects batch-vector Thomas or cooperative PCR, while one
+// parameterized butterfly carrier serves the four lattice transforms.
+def Tessera_TridiagonalSolveOp : Op<
+  Tessera_Dialect, "tridiagonal_solve", [Pure]
+> {
+  let summary = "Batched tridiagonal linear solve with shared diagonals";
+  let arguments = (ins TensorType:$dl, TensorType:$diagonal,
+                       TensorType:$du, TensorType:$rhs);
+  let results = (outs TensorType:$output);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+class Tessera_CoalitionButterflyOp<string mnemonic, string summaryText> : Op<
+  Tessera_Dialect, mnemonic, [Pure]
+> {
+  let summary = summaryText;
+  let arguments = (ins TensorType:$input);
+  let results = (outs TensorType:$output);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_GameSubsetZetaOp : Tessera_CoalitionButterflyOp<
+  "game_subset_zeta", "Subset zeta transform over a coalition lattice">;
+def Tessera_GameSubsetMobiusOp : Tessera_CoalitionButterflyOp<
+  "game_subset_mobius", "Subset Mobius transform over a coalition lattice">;
+def Tessera_GameSupersetZetaOp : Tessera_CoalitionButterflyOp<
+  "game_superset_zeta", "Superset zeta transform over a coalition lattice">;
+def Tessera_GameSupersetMobiusOp : Tessera_CoalitionButterflyOp<
+  "game_superset_mobius", "Superset Mobius transform over a coalition lattice">;
+
 class Tessera_SpectralUnaryOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic,
   [Pure, DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,

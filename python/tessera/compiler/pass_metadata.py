@@ -173,6 +173,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "ROCM_WAVE_LDS_MISSING_WAITCNT",
             "ROCM_WAVE_LDS_OVERLAPPING_WRITE",
             "ROCM_WAVE_LDS_UNSUPPORTED_BARRIER_KIND",
+            "ROCM_WAVE_LDS_ROLE_UNRESOLVED",
         ),
         must_run_after=("rocm-wave-lds-pipeline",),
         pass_kind="verifier",

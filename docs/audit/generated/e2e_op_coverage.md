@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 290 |
-| ``runnable_reference`` | 15 |
+| ``complete`` | 295 |
+| ``runnable_reference`` | 10 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
 | **total** | **339** |
 
-## complete (290)
+## complete (295)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -204,6 +204,7 @@ each row into a single E2E tier.
 | ``matmul`` | loop_nest | public | public | registered | fused | device_verified_abi | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
 | ``quantized_matmul`` | loop_nest | public | public | registered | fused | device_verified_abi | ready | none |
+| ``tridiagonal_solve`` | loop_nest | public | public | registered | fused | device_verified_abi | ready | none |
 | ``asymmetric_bce`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``binary_cross_entropy_loss`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``contrastive_divergence_loss`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
@@ -296,6 +297,10 @@ each row into a single E2E tier.
 | ``spmm_csr`` | sparse | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dct`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``fft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
+| ``game_subset_mobius`` | spectral | public | public | registered | fused | device_verified_abi | ready | none |
+| ``game_subset_zeta`` | spectral | public | public | registered | fused | device_verified_abi | ready | none |
+| ``game_superset_mobius`` | spectral | public | public | registered | fused | device_verified_abi | ready | none |
+| ``game_superset_zeta`` | spectral | public | public | registered | fused | device_verified_abi | ready | none |
 | ``ifft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``irfft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``istft`` | spectral | public | public | registered | fused | device_verified_jit | ready | benchmarked |
@@ -326,7 +331,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (15)
+## runnable_reference (10)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -338,13 +343,8 @@ each row into a single E2E tier.
 | ``game_boltzmann_value`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_excess`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``game_semivalue`` | contraction | public | public | registered | partial | reference | ready | none |
-| ``tridiagonal_solve`` | loop_nest | public | public | registered | partial | reference | ready | none |
 | ``game_mex`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_marginal`` | spectral | public | public | registered | partial | reference | ready | none |
-| ``game_subset_mobius`` | spectral | public | public | registered | partial | reference | ready | none |
-| ``game_subset_zeta`` | spectral | public | public | registered | partial | reference | ready | none |
-| ``game_superset_mobius`` | spectral | public | public | registered | partial | reference | ready | none |
-| ``game_superset_zeta`` | spectral | public | public | registered | partial | reference | ready | none |
 
 ## partial (34)
 

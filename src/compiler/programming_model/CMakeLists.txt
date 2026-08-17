@@ -35,8 +35,25 @@ add_public_tablegen_target(TesseraPMTableGen)
 # ------------------------------------------------------------------
 # PassPipelines compiler driver
 # ------------------------------------------------------------------
-add_library(TesseraPM
+add_library(TesseraScheduleIR
     ir/ScheduleDialect.cpp
+)
+
+target_include_directories(TesseraScheduleIR
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+target_link_libraries(TesseraScheduleIR
+    PUBLIC
+        TesseraIR
+        MLIRIR
+)
+
+add_dependencies(TesseraScheduleIR TesseraPMTableGen)
+
+add_library(TesseraPM
     lib/PMPasses.cpp
 )
 
@@ -48,6 +65,7 @@ target_include_directories(TesseraPM
 
 target_link_libraries(TesseraPM
     PUBLIC
+        TesseraScheduleIR
         TesseraIR
         MLIRArithDialect
         MLIRBufferizationDialect

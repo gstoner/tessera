@@ -22,6 +22,10 @@
 
 #include <cstdint>
 #include <cmath>
+#include <algorithm>
+#include <new>
+#include <thread>
+#include <vector>
 
 #if defined(__AVX512F__)
 #include <immintrin.h>
@@ -207,9 +211,10 @@ inline float attention_score(const float* q, const float* k, float bias,
 }  // namespace
 
 // Deterministic rank-4 f32 attention VJP. Query heads map to KV heads by
-// floor(hq * Hkv / Hq), so MHA/GQA/MQA all use one ABI. dK/dV accumulation is
-// deliberately ascending in (B,Hq,Sq,Sk) order; CPU execution therefore needs
-// no atomics while preserving the shared fixed-reduction contract. If
+// floor(hq * Hkv / Hq), so MHA/GQA/MQA all use one ABI. Query rows are split
+// into deterministic contiguous worker ranges; dK/dV use bounded private
+// partials followed by a fixed worker-order reduction, so execution needs no
+// atomics and is bit-deterministic across repeated launches. If
 // `saved_lse` is null each row recomputes logsumexp; otherwise it consumes the
 // forward-owned [B,Hq,Sq] checkpoint.
 extern "C" void tessera_x86_flash_attn_bwd_f32(
@@ -225,73 +230,143 @@ extern "C" void tessera_x86_flash_attn_bwd_f32(
     for (int64_t i = 0; i < k_count; ++i) dK[i] = 0.0f;
     for (int64_t i = 0; i < v_count; ++i) dV[i] = 0.0f;
 
-    for (int64_t batch = 0; batch < B; ++batch) {
-        for (int64_t qh = 0; qh < Hq; ++qh) {
+    const int64_t query_rows = B * Hq * sq;
+    // Query rows are independent for dQ but collide in dK/dV under GQA/MQA.
+    // Give each worker private K/V partials, then reduce workers in ascending
+    // order.  The partition is a deterministic contiguous split, independent
+    // of OS scheduling.  Bound scratch to 256 MiB; shapes above that envelope
+    // reduce the worker count and eventually use the original serial path.
+    constexpr size_t kPartialBudgetBytes = size_t{256} << 20;
+    const size_t partial_elems = static_cast<size_t>(k_count + v_count);
+    const size_t bytes_per_worker = partial_elems * sizeof(float);
+    int64_t workers = query_rows >= 16 ? std::min<int64_t>(8, query_rows) : 1;
+    if (bytes_per_worker > 0)
+        workers = std::min<int64_t>(
+            workers, std::max<size_t>(1, kPartialBudgetBytes / bytes_per_worker));
+
+    std::vector<float> partials;
+    if (workers > 1) {
+        try {
+            partials.assign(static_cast<size_t>(workers) * partial_elems, 0.0f);
+        } catch (...) {
+            // No allocation exception may cross this extern "C" boundary.
+            workers = 1;
+        }
+    }
+
+    auto process_rows = [&](int64_t worker, int64_t begin, int64_t end) {
+        float* worker_dk = workers == 1
+            ? dK : partials.data() + static_cast<size_t>(worker) * partial_elems;
+        float* worker_dv = workers == 1
+            ? dV : worker_dk + k_count;
+        for (int64_t flat_row = begin; flat_row < end; ++flat_row) {
+            const int64_t qi = flat_row % sq;
+            const int64_t head_row = flat_row / sq;
+            const int64_t qh = head_row % Hq;
+            const int64_t batch = head_row / Hq;
             const int64_t kh = qh * Hkv / Hq;
             const float* Qh = Q + ((batch * Hq + qh) * sq) * d;
             const float* Kh = K + ((batch * Hkv + kh) * sk) * d;
             const float* Vh = V + ((batch * Hkv + kh) * sk) * dv;
             const float* dOh = dO + ((batch * Hq + qh) * sq) * dv;
             float* dQh = dQ + ((batch * Hq + qh) * sq) * d;
-            float* dKh = dK + ((batch * Hkv + kh) * sk) * d;
-            float* dVh = dV + ((batch * Hkv + kh) * sk) * dv;
+            float* dKh = worker_dk + ((batch * Hkv + kh) * sk) * d;
+            float* dVh = worker_dv + ((batch * Hkv + kh) * sk) * dv;
             const float* Bh =
                 bias ? bias + ((batch * Hq + qh) * sq) * sk : nullptr;
-            for (int64_t qi = 0; qi < sq; ++qi) {
-                int64_t j0 = 0, j1 = -1;
-                attention_bounds(qi, sq, sk, causal, window, &j0, &j1);
-                const float* q = Qh + qi * d;
-                const float* dout = dOh + qi * dv;
-                float row_lse;
-                if (saved_lse) {
-                    row_lse = saved_lse[(batch * Hq + qh) * sq + qi];
-                } else {
-                    float row_max = -INFINITY;
-                    float row_sum = 0.0f;
-                    for (int64_t kj = j0; kj <= j1; ++kj) {
-                        float derivative;
-                        const float score = attention_score(
-                            q, Kh + kj * d, Bh ? Bh[qi * sk + kj] : 0.0f,
-                            d, scale, softcap, &derivative);
-                        if (score > row_max) {
-                            row_sum = (row_max == -INFINITY)
-                                          ? 1.0f
-                                          : row_sum * std::exp(row_max - score)
-                                                + 1.0f;
-                            row_max = score;
-                        } else {
-                            row_sum += std::exp(score - row_max);
-                        }
-                    }
-                    row_lse = row_max + std::log(row_sum);
-                }
-                float weighted_dpv = 0.0f;
+            int64_t j0 = 0, j1 = -1;
+            attention_bounds(qi, sq, sk, causal, window, &j0, &j1);
+            const float* q = Qh + qi * d;
+            const float* dout = dOh + qi * dv;
+            float row_lse;
+            if (saved_lse) {
+                row_lse = saved_lse[(batch * Hq + qh) * sq + qi];
+            } else {
+                float row_max = -INFINITY;
+                float row_sum = 0.0f;
                 for (int64_t kj = j0; kj <= j1; ++kj) {
                     float derivative;
                     const float score = attention_score(
                         q, Kh + kj * d, Bh ? Bh[qi * sk + kj] : 0.0f,
                         d, scale, softcap, &derivative);
-                    const float probability = std::exp(score - row_lse);
-                    weighted_dpv += probability
-                        * dot_f32(dout, Vh + kj * dv, dv);
-                }
-                for (int64_t kj = j0; kj <= j1; ++kj) {
-                    float cap_derivative;
-                    const float score = attention_score(
-                        q, Kh + kj * d, Bh ? Bh[qi * sk + kj] : 0.0f,
-                        d, scale, softcap, &cap_derivative);
-                    const float probability = std::exp(score - row_lse);
-                    const float dpv = dot_f32(dout, Vh + kj * dv, dv);
-                    const float ds =
-                        probability * (dpv - weighted_dpv) * cap_derivative;
-                    const float* key = Kh + kj * d;
-                    for (int64_t x = 0; x < d; ++x) {
-                        dQh[qi * d + x] += scale * ds * key[x];
-                        dKh[kj * d + x] += scale * ds * q[x];
+                    if (score > row_max) {
+                        row_sum = (row_max == -INFINITY)
+                                      ? 1.0f
+                                      : row_sum * std::exp(row_max - score)
+                                            + 1.0f;
+                        row_max = score;
+                    } else {
+                        row_sum += std::exp(score - row_max);
                     }
-                    for (int64_t x = 0; x < dv; ++x)
-                        dVh[kj * dv + x] += probability * dout[x];
                 }
+                row_lse = row_max + std::log(row_sum);
+            }
+            float weighted_dpv = 0.0f;
+            for (int64_t kj = j0; kj <= j1; ++kj) {
+                float derivative;
+                const float score = attention_score(
+                    q, Kh + kj * d, Bh ? Bh[qi * sk + kj] : 0.0f,
+                    d, scale, softcap, &derivative);
+                const float probability = std::exp(score - row_lse);
+                weighted_dpv += probability
+                    * dot_f32(dout, Vh + kj * dv, dv);
+            }
+            for (int64_t kj = j0; kj <= j1; ++kj) {
+                float cap_derivative;
+                const float score = attention_score(
+                    q, Kh + kj * d, Bh ? Bh[qi * sk + kj] : 0.0f,
+                    d, scale, softcap, &cap_derivative);
+                const float probability = std::exp(score - row_lse);
+                const float dpv = dot_f32(dout, Vh + kj * dv, dv);
+                const float ds =
+                    probability * (dpv - weighted_dpv) * cap_derivative;
+                const float* key = Kh + kj * d;
+                for (int64_t x = 0; x < d; ++x) {
+                    dQh[qi * d + x] += scale * ds * key[x];
+                    dKh[kj * d + x] += scale * ds * q[x];
+                }
+                for (int64_t x = 0; x < dv; ++x)
+                    dVh[kj * dv + x] += probability * dout[x];
+            }
+        }
+    };
+
+    if (workers == 1) {
+        process_rows(0, 0, query_rows);
+    } else {
+        std::vector<std::thread> threads;
+        bool all_workers_started = true;
+        try {
+            threads.reserve(static_cast<size_t>(workers));
+            for (int64_t worker = 0; worker < workers; ++worker) {
+                const int64_t begin = query_rows * worker / workers;
+                const int64_t end = query_rows * (worker + 1) / workers;
+                threads.emplace_back(process_rows, worker, begin, end);
+            }
+        } catch (...) {
+            // Join every worker that did start before the vector is destroyed;
+            // destroying a joinable std::thread would terminate the process.
+            all_workers_started = false;
+        }
+        for (std::thread& thread : threads)
+            if (thread.joinable()) thread.join();
+        if (!all_workers_started) {
+            // Started workers have already written disjoint dQ rows. Reset all
+            // outputs before replaying the complete deterministic serial path.
+            for (int64_t i = 0; i < q_count; ++i) dQ[i] = 0.0f;
+            for (int64_t i = 0; i < k_count; ++i) dK[i] = 0.0f;
+            for (int64_t i = 0; i < v_count; ++i) dV[i] = 0.0f;
+            workers = 1;
+            process_rows(0, 0, query_rows);
+        } else {
+            for (int64_t worker = 0; worker < workers; ++worker) {
+                const float* worker_dk =
+                    partials.data() + static_cast<size_t>(worker) * partial_elems;
+                const float* worker_dv = worker_dk + k_count;
+                for (int64_t i = 0; i < k_count; ++i)
+                    dK[i] += worker_dk[i];
+                for (int64_t i = 0; i < v_count; ++i)
+                    dV[i] += worker_dv[i];
             }
         }
     }

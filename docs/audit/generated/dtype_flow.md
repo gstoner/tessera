@@ -12,7 +12,7 @@ interleaved-component ABI explicitly.
 
 - Operators: **339**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **925**
+- Operator/logical-dtype rows: **927**
 - Rows retaining at least one compiler/evidence gap: **350**
 
 The CSV companion is the canonical normalized matrix: one row per
@@ -63,13 +63,13 @@ and selected exact targets.
 | `sddmm` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
 | `spmm_coo` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
 | `spmm_csr` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
-| `dct` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,fp16,fp32 | - | - | device_verified_jit: bf16,fp16,fp32 | - | - | - |
+| `dct` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
 | `fft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
 | `ifft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
 | `irfft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
 | `istft` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
 | `rfft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
-| `spectral_conv` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,fp16,fp32 | - | - | device_verified_jit: bf16,fp16,fp32 | - | - | - |
+| `spectral_conv` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
 | `spectral_filter` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
 | `stft` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
 | `softmax` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_abi: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | - | - | - |

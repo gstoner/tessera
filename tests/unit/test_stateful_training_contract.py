@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -28,6 +29,59 @@ _needs_opt = pytest.mark.skipif(
 
 
 _KWARGS = {"lr": 1.0e-4, "beta2": 0.99, "weight_decay": 0.01}
+
+
+def _native_lion_metadata(target: str, shape: tuple[int, ...]) -> dict:
+    from tessera.compiler.frontend_authority import (
+        certify_frontends_non_reexecuting,
+    )
+    from tessera.compiler.graph_ir import (
+        GraphIRFunction,
+        GraphIRModule,
+        IRArg,
+        IROp,
+        tensor_ir_type,
+    )
+    from tessera.compiler.native_lion_vjp import build_native_lion_vjp_package
+
+    tensor_type = tensor_ir_type(shape, "fp32")
+    operation = IROp(
+        result="new_param,new_moment",
+        op_name="tessera.lion",
+        operands=["%p", "%g", "%m"],
+        operand_types=[str(tensor_type)] * 3,
+        result_type=f"({tensor_type}, {tensor_type})",
+        inferred_type=tensor_type,
+        inferred_types=(tensor_type, tensor_type),
+        kwargs=dict(_KWARGS),
+    )
+    function = GraphIRFunction(
+        name="lion",
+        args=[IRArg(name, tensor_type) for name in ("p", "g", "m")],
+        result_types=[tensor_type, tensor_type],
+        body=[operation],
+        return_values=["%new_param", "%new_moment"],
+    )
+    legacy = GraphIRModule(functions=[function])
+    tracer = copy.deepcopy(legacy)
+    tracer.module_attrs["tessera.frontend.authority"] = '"tracer"'
+    certificate = certify_frontends_non_reexecuting(
+        legacy_module=legacy,
+        tracer_module=tracer,
+        graph_consumers=("tessera.lion",),
+    )
+    values = tuple(np.zeros(shape, np.float32) for _ in range(3))
+    cotangents = tuple(np.zeros(shape, np.float32) for _ in range(2))
+    package = build_native_lion_vjp_package(
+        source_graph_ir=tracer.to_mlir(canonical=True),
+        source=SimpleNamespace(op_name="tessera.lion", kwargs=dict(_KWARGS)),
+        target=target,
+        ordered_inputs=values,
+        arg_names=("p", "g", "m"),
+        out_cotangents=cotangents,
+        frontend_certificate=certificate,
+    )
+    return package.runtime_metadata()
 
 
 @pytest.mark.parametrize("target", ["x86", "rocm_gfx1151"])
@@ -232,31 +286,16 @@ def test_sequence_mixer_backward_rejects_workspace_tampering() -> None:
         ("rocm_lion_bwd_compiled", "rocm_gfx1151"),
     ],
 )
+@_needs_opt
 def test_lion_runtime_rejects_stale_contract_before_backend_launch(
     compiler_path: str, target: str
 ) -> None:
     shape = (5, 19)
-    contract = build_lion_vjp_state_contract(
-        target=target, shape=shape, kwargs=_KWARGS
-    )
-    contract["outputs"][0]["version"] = 0
-    artifact = runtime.RuntimeArtifact(
-        metadata={
-            "target": "x86" if target == "x86" else "rocm",
-            "compiler_path": compiler_path,
-            "executable": True,
-            "arg_names": ["p", "g", "m", "dparam_out", "dmoment_out"],
-            "out_cotangents": ["dparam_out", "dmoment_out"],
-            "state_contract": contract,
-            "ops": [
-                {
-                    "op_name": "tessera.lion",
-                    "operands": ["p", "g", "m"],
-                    "kwargs": _KWARGS,
-                }
-            ],
-        }
-    )
+    runtime_target = "x86" if target == "x86" else "rocm"
+    metadata = _native_lion_metadata(runtime_target, shape)
+    assert metadata["compiler_path"] == compiler_path
+    metadata["state_contract"]["outputs"][0]["version"] = 0
+    artifact = runtime.RuntimeArtifact(metadata=metadata)
     values = tuple(np.zeros(shape, dtype=np.float32) for _ in range(5))
     result = runtime.launch(artifact, values)
 
@@ -271,23 +310,18 @@ def test_lion_runtime_rejects_stale_contract_before_backend_launch(
         ("rocm_lion_bwd_compiled", "rocm"),
     ],
 )
+@_needs_opt
 def test_lion_runtime_rejects_missing_lineage(
     compiler_path: str, target: str
 ) -> None:
     shape = (7,)
-    artifact = runtime.RuntimeArtifact(
-        metadata={
-            "target": target,
-            "compiler_path": compiler_path,
-            "executable": True,
-            "arg_names": ["p", "g", "m", "dparam_out", "dmoment_out"],
-            "out_cotangents": ["dparam_out", "dmoment_out"],
-            "ops": [{"op_name": "tessera.lion", "kwargs": _KWARGS}],
-        }
-    )
+    metadata = _native_lion_metadata(target, shape)
+    assert metadata["compiler_path"] == compiler_path
+    metadata.pop("state_contract")
+    artifact = runtime.RuntimeArtifact(metadata=metadata)
     result = runtime.launch(
         artifact, tuple(np.zeros(shape, dtype=np.float32) for _ in range(5))
     )
 
     assert result["ok"] is False
-    assert "requires explicit state/buffer lineage" in result["reason"]
+    assert "state lineage is stale" in result["reason"]

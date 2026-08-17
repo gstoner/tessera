@@ -3,10 +3,47 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-16
+last_updated: 2026-08-17
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `E2E-REAL-6E-STATEFUL-VJP-2026-08-17` — **shared
+Adafactor/sequence-mixer authority validated; Apple target follow-up
+required.** The shared compiler now binds factored/full Adafactor and causal
+DeltaNet backward to a one-execution frontend certificate plus exact
+state/workspace, Schedule, and Tile lineage. Apple has no Adafactor reverse
+consumer; its existing sequence-mixer implementation is not reclassified by
+x86/gfx1151 evidence. A Metal plugin must consume the shared package and carry
+independent Mac correctness/performance proof.
+
+Cross-backend sync `E2E-REAL-6D-LION-VJP-2026-08-17` — **shared flat Lion
+Graph and non-reexecuting state-lineage proof validated; Apple physical
+follow-up required.** Apple has no architecture-owned Lion reverse package to
+attach to the new plugin, so its Target consumer remains undeclared rather
+than inheriting AVX-512 or gfx1151 execution. A future Metal package must
+consume `schedule.lion_vjp` → `tile.training_kernel` and provide independent
+Mac correctness and performance evidence.
+
+Cross-backend sync `E2E-REAL-6C-ATTENTION-VJP-2026-08-17` — **shared
+rank-4 authority and bottom-right ragged-causal semantics validated; Apple
+plugin follow-up required.** The shared family registry now owns
+`flash_attn`/GQA/MQA reverse through tracer Graph →
+`schedule.attention_backward` → `tile.attention_backward_kernel`. Apple’s
+existing Metal backward package is unchanged and receives no x86/gfx1151
+evidence. Apple must bind that architecture-owned package to the public
+non-reexecuting plugin and rerun its Mac numerical packet. The rank-3
+`multi_head_attention` wrapper remains outside the migrated rank-4 envelope;
+active dropout also needs keyed, non-reexecuting replay proof.
+
+Cross-backend sync `E2E-REAL-6B-SPECTRAL-VJP-2026-08-17` — **shared tracer
+and package-contract parity validated; Apple physical follow-up required.**
+Concrete AST specialization now resolves the same shape-derived spectral
+identity as tracing, and compound spectral reverse products have one declared
+Graph/Schedule/Tile/Target family-plugin boundary. Apple is deliberately not a
+Target consumer in this slice: no MSL package, Metal runtime path, or Mac
+evidence was added. A future Apple consumer must build its own package from the
+shared contract and provide independent exact-device proof.
 
 Cross-backend sync `GFX1151-CALIB-BAREMETAL-2026-08-16` — **shared calibration
 authority parity validated; no Apple evidence transfers.** `target_perf` now

@@ -3,10 +3,46 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-16
+last_updated: 2026-08-17
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `E2E-REAL-6E-STATEFUL-VJP-2026-08-17` — **shared
+Adafactor/sequence-mixer authority validated; NVIDIA target follow-up
+required.** Factored/full Adafactor and causal DeltaNet backward now have a
+non-reexecuting Graph→Schedule→Tile package for x86/gfx1151. The existing
+SM120 DeltaNet path remains a compatibility consumer and NVIDIA has no
+Adafactor Target owner. Neither inherits sibling numerical evidence; each must
+adopt the shared lineage carrier and produce CUDA exact-device proof.
+
+Cross-backend sync `E2E-REAL-6D-LION-VJP-2026-08-17` — **shared flat Lion
+Graph and non-reexecuting proof parity validated; CUDA plugin follow-up
+required.** The existing SM120 PTX Lion VJP remains numerically valid, but it
+still constructs its package in the retained `JitFn` compatibility branch and
+does not consume the shared `schedule.lion_vjp` state-lineage artifact. A CUDA
+follow-up must extend that typed package to SM120, move construction into the
+family plugin, and rerun its owning-device packet. No x86/gfx1151 evidence
+transfers.
+
+Cross-backend sync `E2E-REAL-6C-ATTENTION-VJP-2026-08-17` — **shared
+rank-4 authority and bottom-right ragged-causal semantics validated; CUDA
+plugin follow-up required.** The shared family registry now owns
+`flash_attn`/GQA/MQA reverse through tracer Graph →
+`schedule.attention_backward` → `tile.attention_backward_kernel`. NVIDIA’s
+existing SM120 package is unchanged and inherits no x86/gfx1151 evidence. A
+CUDA plugin consumer and independent SM120 numerical packet are still required.
+The rank-3 `multi_head_attention` wrapper remains outside this bounded rank-4
+migration, and active dropout needs keyed, non-reexecuting replay proof.
+
+Cross-backend sync `E2E-REAL-6B-SPECTRAL-VJP-2026-08-17` — **shared tracer
+and package-contract parity validated; CUDA physical follow-up required.**
+Concrete AST specialization now resolves the same shape-derived spectral
+identity as tracing, and compound spectral reverse products have one declared
+Graph/Schedule/Tile/Target family-plugin boundary. NVIDIA is deliberately not
+a Target consumer in this slice: no PTX package, CUDA runtime path, or SM120
+evidence was added. A future CUDA consumer must own its package and independent
+device proof.
 
 Cross-backend sync `GFX1151-CALIB-BAREMETAL-2026-08-16` — **shared calibration
 authority parity validated; no CUDA evidence transfers.** `target_perf` now

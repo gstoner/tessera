@@ -460,6 +460,13 @@ def test_rocm_lion_backward_runs_shared_stop_sign_policy_on_gfx1151():
         "rocm_lion_bwd_compiled"
     )
     assert _rocm_lion.last_backward_execution["residual_policy"] == "none"
+    assert _rocm_lion.last_backward_execution["implementation"] == "family_plugin"
+    assert _rocm_lion.last_backward_execution["target_consumer"] == (
+        "rocm.gfx1151_lion_backward"
+    )
+    assert _rocm_lion.last_backward_execution["proof_mode"] == (
+        "structural_non_reexecuting"
+    )
 
 
 def test_x86_lion_backward_runs_shared_stop_sign_policy_on_avx512():
@@ -485,6 +492,10 @@ def test_x86_lion_backward_runs_shared_stop_sign_policy_on_avx512():
         np.testing.assert_allclose(got, want, atol=2e-6, rtol=2e-6)
     assert _x86_lion.last_backward_execution["compiler_path"] == (
         "x86_lion_bwd_compiled"
+    )
+    assert _x86_lion.last_backward_execution["implementation"] == "family_plugin"
+    assert _x86_lion.last_backward_execution["proof_mode"] == (
+        "structural_non_reexecuting"
     )
 
 

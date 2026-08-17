@@ -786,6 +786,7 @@ spmm_coo,tessera.spmm_coo,sparse,yes,fp32,fp32,fp32,public,registered,complete,f
 spmm_csr,tessera.spmm_csr,sparse,yes,bf16,bf16,fp32,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,unsupported,absent,absent,absent,tile/physical/direct_test
 spmm_csr,tessera.spmm_csr,sparse,yes,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,device_verified_jit,absent,device_verified_jit,absent,absent,absent,
 dct,tessera.dct,spectral,yes,bf16,bf16,fp32,public,registered,complete,fused,unsupported,device_verified_jit,unsupported,absent,absent,device_verified_jit,absent,absent,absent,
+dct,tessera.dct,spectral,yes,complex64,fp32x2_interleaved,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,
 dct,tessera.dct,spectral,yes,fp16,fp16,fp32,public,registered,complete,fused,unsupported,device_verified_jit,unsupported,absent,absent,device_verified_jit,absent,absent,absent,
 dct,tessera.dct,spectral,yes,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,
 fft,tessera.fft,spectral,yes,complex64,fp32x2_interleaved,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,
@@ -811,6 +812,7 @@ istft,tessera.istft,spectral,yes,fp32,fp32,fp32,public,registered,complete,fused
 rfft,tessera.rfft,spectral,yes,complex64,fp32x2_interleaved,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,
 rfft,tessera.rfft,spectral,yes,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,
 spectral_conv,tessera.spectral_conv,spectral,yes,bf16,bf16,fp32,public,registered,complete,fused,unsupported,device_verified_jit,unsupported,absent,absent,device_verified_jit,absent,absent,absent,
+spectral_conv,tessera.spectral_conv,spectral,yes,complex64,fp32x2_interleaved,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,
 spectral_conv,tessera.spectral_conv,spectral,yes,fp16,fp16,fp32,public,registered,complete,fused,unsupported,device_verified_jit,unsupported,absent,absent,device_verified_jit,absent,absent,absent,
 spectral_conv,tessera.spectral_conv,spectral,yes,fp32,fp32,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,
 spectral_filter,tessera.spectral_filter,spectral,yes,complex64,fp32x2_interleaved,fp32,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,

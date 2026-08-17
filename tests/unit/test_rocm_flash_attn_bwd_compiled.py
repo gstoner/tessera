@@ -110,7 +110,8 @@ def _fwd_bwd_ref(Q, K, V, dO, scale, causal):
     S = scale * np.einsum("bhqd,bhkd->bhqk", Qf, Kf)
     B, H, Sq, Sk = S.shape
     if causal:
-        i = np.arange(Sq)[:, None]; j = np.arange(Sk)[None, :]
+        i = np.arange(Sq)[:, None] + max(Sk - Sq, 0)
+        j = np.arange(Sk)[None, :]
         S = np.where((j > i)[None, None], -1e30, S)
     S = S - S.max(axis=-1, keepdims=True)
     P = np.exp(S)

@@ -35,7 +35,10 @@ def _dense_forward(q, key, value, bias, *, dropout_p=0.0, dropout_seed=0):
             raw = 0.5 * (q[batch, head] @ key[batch, kv_head].T)
             raw += bias[batch, head]
             scores = 2.0 * np.tanh(raw / 2.0)
-            qpos = np.arange(q.shape[2])[:, None]
+            qpos = (
+                np.arange(q.shape[2])[:, None]
+                + max(key.shape[2] - q.shape[2], 0)
+            )
             kpos = np.arange(key.shape[2])[None, :]
             valid = (kpos <= qpos) & (kpos >= qpos - 3)
             scores = np.where(valid, scores, -np.inf)
@@ -69,7 +72,10 @@ def _dense_backward(
             raw += bias[batch, head]
             tanh = np.tanh(raw / 2.0)
             scores = 2.0 * tanh
-            qpos = np.arange(q.shape[2])[:, None]
+            qpos = (
+                np.arange(q.shape[2])[:, None]
+                + max(key.shape[2] - q.shape[2], 0)
+            )
             kpos = np.arange(key.shape[2])[None, :]
             valid = (kpos <= qpos) & (kpos >= qpos - 3)
             scores = np.where(valid, scores, -np.inf)

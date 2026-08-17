@@ -672,6 +672,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "overlap-add, complex multiply, and bounded workspace "
                             "are package-owned, as are arbitrary-axis packing "
                             "and f16/bf16 conversion around f32 accumulation.",
+    "x86_spectral_backward_compiled": "x86 AVX-512 compound spectral VJP "
+                            "package for complex64 filtering and unbroadcast "
+                            "float32 full convolution; consumes tracer, "
+                            "Schedule, and Tile digests without Graph re-entry.",
     "x86_sparse_compiled": "x86 CPU sparse linear algebra (spmm_csr / spmm_coo / "
                             "sddmm / bsmm) — GENUINELY sparse AVX-512 kernels "
                             "(spmm = row-wise AXPY over CSR nonzeros, sddmm = "
@@ -859,6 +863,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "istft / spectral_conv / spectral_filter) — "
                             "content-addressed device package around persistent "
                             "digest-bound child FFT plans. f32",
+    "rocm_spectral_backward_compiled": "gfx1151 compound spectral VJP "
+                            "package for complex64 filtering and unbroadcast "
+                            "float32 full convolution; the family plugin "
+                            "prebuilds the exact HSACO consumed by runtime.",
     "rocm_sparse_compiled": "AMD GPU RDNA sparse linear algebra (spmm_csr / "
                             "spmm_coo / sddmm / bsmm) — COMPILER-GENERATED gfx1151 "
                             "sparse kernels (generate-rocm-spmm/sddmm-kernel: row-"
@@ -1739,6 +1747,20 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "and bounded digest-keyed workspace are package-owned. f32, "
                "matches np.fft.",
         execution_mode="cpu_avx512"),
+    ("x86", "x86_spectral_backward_compiled"): ExecutionRow(
+        target="x86", compiler_path="x86_spectral_backward_compiled",
+        execution_kind="native_cpu", executable=True,
+        executor_id="x86_spectral_backward_compiled", runtime_status="success",
+        reason="The native-VJP family plugin binds traced Graph identity to "
+               "the content-addressed spectral_backward Schedule/Tile contract "
+               "and launches the AVX-512 compound adjoint ABI.",
+        execution_mode="cpu_avx512", direction="backward",
+        op_family="spectral_filter", backward_aliases=("spectral_conv",),
+        device_proof="device_verified_abi", evidence_target="x86_avx512",
+        numerical_fixture="tests/unit/test_autodiff_spectral_target_binding.py",
+        proof_build="LLVM/MLIR 23; Ryzen AI MAX+ 395 AVX-512",
+        residual_policy="save_inputs",
+        residual_tradeoff="Retains both immutable forward operands."),
     ("x86", "x86_spectral_jvp_compiled"): ExecutionRow(
         target="x86", compiler_path="x86_spectral_jvp_compiled",
         execution_kind="native_cpu", executable=True,
@@ -2937,6 +2959,20 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "conversion around f32 device accumulation. The public "
                "host-pointer ABI stages inputs/output. Matches np.fft.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_spectral_backward_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_spectral_backward_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_spectral_backward_compiled", runtime_status="success",
+        reason="The native-VJP family plugin binds traced Graph identity to "
+               "the spectral_backward Schedule/Tile contract, prebuilds exact "
+               "gfx1151 HSACO, and runtime launches that image without Graph re-entry.",
+        execution_mode="hip_runtime", direction="backward",
+        op_family="spectral_filter", backward_aliases=("spectral_conv",),
+        device_proof="device_verified_jit", evidence_target="rocm_gfx1151",
+        numerical_fixture="tests/unit/test_rocm_spectral_backward_exec.py",
+        proof_build="LLVM/MLIR 23; gfx1151 HIP module launch",
+        residual_policy="save_inputs",
+        residual_tradeoff="Retains both immutable forward operands."),
     ("rocm", "rocm_spectral_jvp_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_spectral_jvp_compiled",
         execution_kind="native_gpu", executable=True,

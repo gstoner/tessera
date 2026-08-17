@@ -116,7 +116,8 @@ def _ref(q, k, v, scale, causal):
     s = scale * np.einsum("bhqd,bhkd->bhqk", qf, kf)
     _, _, sq, sk = s.shape
     if causal:
-        i = np.arange(sq)[:, None]; j = np.arange(sk)[None, :]
+        i = np.arange(sq)[:, None] + max(sk - sq, 0)
+        j = np.arange(sk)[None, :]
         s = np.where((j > i)[None, None], -1e30, s)
     s = s - s.max(axis=-1, keepdims=True)
     p = np.exp(s); p = p / p.sum(axis=-1, keepdims=True)

@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import tessera as ts
 from tessera import optim
 from tessera.autodiff.vjp import get_vjp
 
@@ -35,6 +36,13 @@ def _art(rt, op, operands, extras, kw):
 
 
 SHAPE = (3, 7)
+
+
+@ts.jit(target="x86", autodiff="reverse", wrt=("p", "g", "m"))
+def _x86_lion_vjp(p, g, m):
+    return ts.ops.lion(
+        p, g, m, lr=1e-4, beta2=0.99, weight_decay=0.01
+    )
 
 
 def test_adamw_multistep():
@@ -140,31 +148,20 @@ def test_lion():
 
 
 def test_lion_backward_stop_sign_vjp():
-    rt = _rt_or_skip()
+    _rt_or_skip()
     rng = np.random.default_rng(8)
     dp = rng.standard_normal(SHAPE).astype(np.float32)
     dm = rng.standard_normal(SHAPE).astype(np.float32)
-    from tessera.compiler.stateful_training import lower_scheduled_lion_vjp
-
-    lion_kwargs = {"lr": 1e-4, "beta2": 0.99, "weight_decay": 0.01}
-    scheduled_lion = lower_scheduled_lion_vjp(
-        target="x86", shape=SHAPE, kwargs=lion_kwargs
-    )
-    artifact = rt.RuntimeArtifact(metadata={
-        "target": "x86", "compiler_path": "x86_lion_bwd_compiled",
-        "executable": True, "execution_kind": "native_cpu",
-        "arg_names": ["p", "g", "m", "dp", "dm"],
-        "out_cotangents": ["dp", "dm"],
-        "state_contract": dict(scheduled_lion.state_contract),
-        "scheduled_training": scheduled_lion.metadata(),
-    })
     zeros = np.zeros(SHAPE, np.float32)
-    result = rt.launch(artifact, (zeros, zeros, zeros, dp, dm))
-    assert result["ok"] is True, result.get("reason")
-    got = tuple(np.asarray(value) for value in result["output"])
+    got = _x86_lion_vjp.native_backward(
+        zeros, zeros, zeros, out_cotangents=(dp, dm)
+    )
     np.testing.assert_allclose(got[0], (1.0 - 1e-4 * 0.01) * dp, atol=1e-6)
     np.testing.assert_allclose(got[1], (1.0 - 0.99) * dm, atol=1e-6)
     np.testing.assert_allclose(got[2], 0.99 * dm, atol=1e-6)
+    assert _x86_lion_vjp.last_backward_execution["implementation"] == (
+        "family_plugin"
+    )
 
 
 def _adafactor_artifact(rt, *, backward: bool, factored: bool, shape):

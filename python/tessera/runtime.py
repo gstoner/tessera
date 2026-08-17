@@ -7926,6 +7926,126 @@ def _execute_rocm_compiled_flash_attn_bwd(
 _X86_FA_OPS = ("tessera.flash_attn", "tessera.gqa_attention", "tessera.mqa_attention", "tessera.attn_sliding_window")
 
 
+def _execute_native_attention_vjp_package(
+    package: Any,
+    *,
+    values: Mapping[str, Any],
+    out_cotangent: Any,
+) -> tuple[Any, Any, Any]:
+    """Consume an E2E-REAL-6C package without receiving source Graph IR."""
+    import numpy as np
+
+    from tessera.compiler.native_attention_vjp import NativeAttentionVJPPackage
+    from tessera.compiler.rocm_native import ROCMNativeProgram
+    from tessera.compiler.x86_native import X86NativePackage
+
+    if not isinstance(package, NativeAttentionVJPPackage):
+        raise TypeError("native attention VJP runtime requires its typed package")
+    package.validate()
+    scheduled = package.scheduled
+    q_name, key_name, value_name = package.operand_names
+    q = np.ascontiguousarray(_as_numpy(values[q_name]))
+    key = np.ascontiguousarray(_as_numpy(values[key_name]))
+    value = np.ascontiguousarray(_as_numpy(values[value_name]))
+    dout = np.ascontiguousarray(_as_numpy(out_cotangent))
+    bias = (
+        np.ascontiguousarray(_as_numpy(values[package.bias_name]))
+        if package.bias_name is not None
+        else None
+    )
+    dq = np.empty(q.shape, dtype=np.float32)
+    dk = np.empty(key.shape, dtype=np.float32)
+    dv = np.empty(value.shape, dtype=np.float32)
+    do_name, scheduled_q, scheduled_k, scheduled_v = scheduled.input_names
+    dq_name, dk_name, dv_name = scheduled.output_names
+    buffers: dict[str, Any] = {
+        do_name: dout,
+        scheduled_q: q,
+        scheduled_k: key,
+        scheduled_v: value,
+        dq_name: dq,
+        dk_name: dk,
+        dv_name: dv,
+    }
+    if scheduled.bias_name is not None:
+        if bias is None:
+            raise ValueError("native attention VJP package requires its bias operand")
+        buffers[scheduled.bias_name] = bias
+
+    if package.target == "rocm":
+        if not isinstance(package.native, ROCMNativeProgram):
+            raise TypeError("gfx1151 attention VJP requires a resident native program")
+        result = _submit_rocm_gfx1151_attention_backward_program(
+            package.native, buffers, warmup=0, iterations=1
+        )
+        outputs = result.get("outputs")
+        if not isinstance(outputs, tuple) or len(outputs) != 3:
+            raise RuntimeError("gfx1151 attention VJP program returned an invalid product")
+        return outputs
+
+    if package.target != "x86" or not isinstance(package.native, X86NativePackage):
+        raise TypeError("native attention VJP package has a mismatched target image")
+    if any(array.dtype != np.float32 for array in (dout, q, key, value)):
+        raise ValueError("AVX-512 attention VJP requires fp32 dO/Q/K/V")
+    if bias is not None and bias.dtype != np.float32:
+        raise ValueError("AVX-512 attention VJP bias must be fp32")
+    b, hq, hkv, sq, sk, d, value_dim = scheduled.dims
+    row_lse = np.empty((b, hq, sq), dtype=np.float32)
+    forward_output = np.empty((b, hq, sq, value_dim), dtype=np.float32)
+    library = _load_x86_native_image(package.native.image)
+    forward = getattr(library, "tessera_x86_flash_attn_ext_lse_f32", None)
+    if forward is None:
+        raise RuntimeError("AVX-512 attention package is missing its saved-LSE producer")
+    pointer = ctypes.POINTER(ctypes.c_float)
+    null = pointer()
+    forward.argtypes = (
+        [pointer] * 4
+        + [ctypes.c_int64] * 7
+        + [ctypes.c_float, ctypes.c_int, ctypes.c_int64, ctypes.c_float]
+        + [pointer] * 2
+    )
+    forward.restype = None
+    forward(
+        q.ctypes.data_as(pointer),
+        key.ctypes.data_as(pointer),
+        value.ctypes.data_as(pointer),
+        bias.ctypes.data_as(pointer) if bias is not None else null,
+        ctypes.c_int64(b),
+        ctypes.c_int64(hq),
+        ctypes.c_int64(hkv),
+        ctypes.c_int64(sq),
+        ctypes.c_int64(sk),
+        ctypes.c_int64(d),
+        ctypes.c_int64(value_dim),
+        ctypes.c_float(scheduled.scale),
+        ctypes.c_int(int(scheduled.causal)),
+        ctypes.c_int64(max(0, scheduled.window_left)),
+        ctypes.c_float(scheduled.softcap),
+        forward_output.ctypes.data_as(pointer),
+        row_lse.ctypes.data_as(pointer),
+    )
+    buffers["row_lse"] = row_lse
+    scalars = {
+        "B": b,
+        "Hq": hq,
+        "Hkv": hkv,
+        "Sq": sq,
+        "Sk": sk,
+        "D": d,
+        "Dv": value_dim,
+    }
+    outputs = _submit_x86_native(
+        package.native.image,
+        package.native.descriptor,
+        buffers,
+        scalars,
+        None,
+    )
+    if not isinstance(outputs, tuple) or len(outputs) != 3:
+        raise RuntimeError("AVX-512 attention VJP package returned an invalid product")
+    return outputs
+
+
 def _execute_x86_compiled_flash_attn(artifact: RuntimeArtifact, args: Any) -> Any:
     """The ``target="x86"`` flash_attn lane (AVX-512 online-softmax FA forward).
     Q/K/V are ``[..., S, D]`` (leading dims = B*H). f32, scale + causal."""
@@ -10901,6 +11021,13 @@ def _load_x86_elementwise() -> ctypes.CDLL | None:
         ],
         "tessera_x86_istft_jvp_f32": [
             ctypes.c_char_p, c_f32, c_f32, c_f32, c_f32, c_f32, c_f32,
+            i64, i64, i64, i64, ctypes.c_float,
+        ],
+        "tessera_x86_avx512_spectral_filter_bwd_c64": [
+            c_f32, c_f32, c_f32, c_f32, c_f32, i64,
+        ],
+        "tessera_x86_avx512_spectral_conv_bwd_f32": [
+            c_f32, c_f32, c_f32, c_f32, c_f32,
             i64, i64, i64, i64, ctypes.c_float,
         ],
         "tessera_x86_dct_storage": [
@@ -14244,6 +14371,15 @@ def _execute_x86_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
     return output
 
 
+def _execute_x86_compiled_spectral_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Consume the native-VJP package; never reconstruct its source Graph."""
+    from .compiler.native_spectral_vjp import execute_x86_native_spectral_vjp
+
+    return execute_x86_native_spectral_vjp(artifact.metadata or {}, args)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Sparse linear algebra (S-series `sparse`) — GENUINELY sparse kernels (iterate
 # the nonzero structure, not densify-then-GEMM). spmm_csr/coo = row-wise SpMM;
@@ -14662,6 +14798,11 @@ def _execute_x86_compiled_lion_backward(
     import numpy as np
 
     metadata = artifact.metadata or {}
+    from .compiler.native_lion_vjp import (
+        validate_native_lion_vjp_runtime_metadata,
+    )
+
+    validate_native_lion_vjp_runtime_metadata(metadata)
     names = list(metadata.get("arg_names") or [])
     values = _bind_launch_args(args, names)
     cotangent_names = list(
@@ -14824,6 +14965,12 @@ def _execute_x86_compiled_adafactor_backward(
     import numpy as np
 
     metadata = artifact.metadata or {}
+    from .compiler.native_stateful_vjp import (
+        validate_native_stateful_vjp_runtime_metadata,
+    )
+
+    if "native_stateful_vjp_package" in metadata:
+        validate_native_stateful_vjp_runtime_metadata(metadata)
     names = list(metadata.get("arg_names") or [])
     values = _bind_launch_args(args, names)
     cotangent_name = str(metadata.get("out_cotangent", "dy"))
@@ -25103,6 +25250,18 @@ def _execute_rocm_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any
         raise _RocmCompiledUnavailable(str(exc)) from exc
 
 
+def _execute_rocm_compiled_spectral_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    """Launch the plugin-prebuilt gfx1151 image without Graph re-entry."""
+    from .compiler.native_spectral_vjp import execute_rocm_native_spectral_vjp
+
+    try:
+        return execute_rocm_native_spectral_vjp(artifact.metadata or {}, args)
+    except (RuntimeError, ValueError) as exc:
+        raise _RocmCompiledUnavailable(str(exc)) from exc
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # ROCm COMPILED sparse lane (Sparse PR) — genuinely sparse kernels: spmm (CSR
 # row-wise) + sddmm (sampled dense-dense). compiler_path="rocm_sparse_compiled".
@@ -26964,6 +27123,12 @@ def _execute_rocm_compiled_adafactor_backward(
     import numpy as np
 
     metadata = artifact.metadata or {}
+    from .compiler.native_stateful_vjp import (
+        validate_native_stateful_vjp_runtime_metadata,
+    )
+
+    if "native_stateful_vjp_package" in metadata:
+        validate_native_stateful_vjp_runtime_metadata(metadata)
     arg_names = list(metadata.get("arg_names") or [])
     values = _bind_launch_args(args, arg_names)
     cotangent_name = str(metadata.get("out_cotangent", "dy"))
@@ -27307,6 +27472,11 @@ def _execute_rocm_compiled_lion_backward(
     import numpy as np
 
     metadata = artifact.metadata or {}
+    from .compiler.native_lion_vjp import (
+        validate_native_lion_vjp_runtime_metadata,
+    )
+
+    validate_native_lion_vjp_runtime_metadata(metadata)
     names = list(metadata.get("arg_names") or [])
     values = _bind_launch_args(args, names)
     cotangent_names = list(
@@ -28491,6 +28661,12 @@ def _execute_rocm_compiled_deltanet_backward(
     import numpy as np
 
     metadata = artifact.metadata or {}
+    from .compiler.native_stateful_vjp import (
+        validate_native_stateful_vjp_runtime_metadata,
+    )
+
+    if "native_stateful_vjp_package" in metadata:
+        validate_native_stateful_vjp_runtime_metadata(metadata)
     arg_names = list(metadata.get("arg_names") or [])
     contract = metadata.get("state_contract")
     scheduled = metadata.get("scheduled_training")
@@ -28911,6 +29087,12 @@ def _execute_x86_compiled_deltanet_backward(
             "libtessera_x86_elementwise.so not loadable"
         )
     metadata = artifact.metadata or {}
+    from .compiler.native_stateful_vjp import (
+        validate_native_stateful_vjp_runtime_metadata,
+    )
+
+    if "native_stateful_vjp_package" in metadata:
+        validate_native_stateful_vjp_runtime_metadata(metadata)
     arg_names = list(metadata.get("arg_names") or [])
     contract = metadata.get("state_contract")
     scheduled = metadata.get("scheduled_training")
@@ -29956,6 +30138,7 @@ def _executor_table():
         "x86_stable_reduce_compiled": _execute_x86_compiled_stable_reduce,
         "x86_fft_compiled": _execute_x86_compiled_fft,
         "x86_spectral_compiled": _execute_x86_compiled_spectral,
+        "x86_spectral_backward_compiled": _execute_x86_compiled_spectral_backward,
         "x86_sparse_compiled": _execute_x86_compiled_sparse,
         "x86_moe_compiled": _execute_x86_compiled_moe,
         "x86_optimizer_compiled": _execute_x86_compiled_optimizer,
@@ -30042,6 +30225,7 @@ def _executor_table():
         "rocm_stable_reduce_compiled": _execute_rocm_compiled_stable_reduce,
         "rocm_fft_compiled": _execute_rocm_compiled_fft,
         "rocm_spectral_compiled": _execute_rocm_compiled_spectral,
+        "rocm_spectral_backward_compiled": _execute_rocm_compiled_spectral_backward,
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_sparse_attn_compiled": _execute_rocm_compiled_sparse_attention,
         "rocm_moe_compiled": _execute_rocm_compiled_moe,

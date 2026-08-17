@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-14
+last_updated: 2026-08-17
 audit_role: index
 ---
 
@@ -35,7 +35,62 @@ References and surveys explain *why*. Archived and historical-design documents
 explain *how a decision was reached*. Neither is a live status or priority
 surface.
 
-## Current execution path
+## Re-indexed live tree
+
+The 2026-08-17 re-index found **33 live Markdown documents** in this directory
+and **11 archived documents**. The live set has one index, one narrative theme,
+16 scoped or integrated plans, and 15 references. Six plans are `landing` and
+ten are `open`; no live plan currently satisfies the lifecycle rule for moving
+to `archive/`.
+
+| Class | Count | What it may decide |
+|---|---:|---|
+| Index | 1 | Routes readers and records the authority hierarchy; it does not sequence implementation. |
+| Theme/audit | 1 | Summarizes architectural findings and current truth; it is not a queue. |
+| Plans | 16 | Own domain contracts and acceptance gates. Only the integrated plan may order work across domains. |
+| References | 15 | Preserve design rationale, inventories, theory, and source assessments. They cannot establish completion. |
+| Archive | 11 | Preserves point-in-time evidence only; archived files are never active work queues. |
+
+The complete file-by-file catalog is below. Its practical summary is:
+
+- [`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md) now contains the
+  one ordered **compiler + TSOL + tools** development queue.
+- [`generated/compiler_progress.md`](../generated/compiler_progress.md) owns
+  compiler-layer, proof, ABI, benchmark, and target-map status.
+- [`generated/tsol_coverage.md`](../generated/tsol_coverage.md) shows that all
+  canonical TSOL operations have semantic, shape, dtype/layout, lowering, and
+  explicit AD dispositions. TSOL's live work is physical execution, sharding,
+  policy breadth, performance, and architecture-owned proof—not another op
+  registration sweep.
+- [`generated/surface_status.md`](../generated/surface_status.md) owns the
+  readiness state of compiler drivers, profiler tools, benchmarks, and test
+  surfaces. `compile_only` and `scaffold` are not native-execution claims.
+- The four backend `todo.md` files own promotion on Apple, NVIDIA, ROCm, and
+  x86. A shared contract can land host-free; exact-device evidence cannot move
+  between architectures.
+
+## Central plan at a glance
+
+Work proceeds through three connected tracks, in this order:
+
+1. **Compiler authority and executable IR:** finish E2E-REAL-6 family-plugin
+   migration, native multi-block region products, Schedule Object SO-3/SO-4,
+   inferred-DAG adoption, layout algebra L3/L4, and explicit reshard SSA.
+2. **TSOL physical closure:** make native STFT/ISTFT backward and the expanded
+   spectral policy envelope consume the same artifact boundary, then add
+   ND/strided/large-transform execution, close the remaining TSOL sharding
+   contracts, and promote high-value solver/sparse/segment rows per target.
+   Apple/NVIDIA and new AMD generations remain independent physical consumers.
+3. **Tools and selector evidence:** graduate the profiler's native providers,
+   standardize selector-grade benchmark packets, and make `tessera-opt` plus
+   integration/numerical test surfaces reproducibly runnable.
+
+The detailed dependency order, PR cuts, and acceptance gates live in
+[`INTEGRATED_COMPILER_PLAN.md`](INTEGRATED_COMPILER_PLAN.md#central-development-plan--2026-08-17).
+Generated totals are triage inputs to that queue, never an alternate priority
+list.
+
+## Landed foundation and active-boundary ledger
 
 The next compiler work should move down one semantic spine and leave executable
 proof at every boundary:

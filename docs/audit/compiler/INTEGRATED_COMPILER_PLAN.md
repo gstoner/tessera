@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-16
+last_updated: 2026-08-17
 audit_role: plan
 plan_state: open
 supersedes_queues_in:
@@ -31,6 +31,91 @@ work.
 Status truth remains `MASTER_AUDIT.md` and `docs/audit/generated/`
 (Decision #26). Nothing here reclassifies a row. Effort figures are engineering
 estimates for a single track with no hardware gates, not commitments.
+
+## Central development plan — 2026-08-17
+
+This is the executable center of the compiler, TSOL, and compiler-tools work.
+The wave tables and scoped plans below remain the detailed design record, but
+they do not create parallel queues. Generated gap counts are inventories: a
+backend-kernel, direct-test, ABI, or benchmark count is not a list of equally
+urgent implementations.
+
+### Current baseline
+
+- The public API, frontend disposition, Graph registration, Schedule lowering,
+  runtime dispatch, batching, transpose, and lowering-rule axes are closed in
+  the generated dashboards. Tile, Target, sharding, direct proof, ABI, and
+  benchmark evidence remain mixed.
+- All 51 canonical TSOL operations have registered math, shape, dtype/layout,
+  lowering, and explicit VJP/JVP dispositions. TSOL work therefore starts at
+  physical consumption, sharding, policy breadth, and evidence—not at another
+  semantic inventory.
+- `ScheduleObject` SO-1 is complete and SO-2 is bounded/landing. The inferred
+  action DAG and scalable list scheduler exist, but most physical producers do
+  not consume them yet.
+- The profiler has provider, timing, packet, and reporting contracts. Native
+  ROCprofiler/CUPTI/Metal/perf evidence and the C++ `tprof` surface are not all
+  release-grade runnable surfaces yet.
+
+Use
+[`generated/compiler_progress.md`](../generated/compiler_progress.md),
+[`generated/tsol_coverage.md`](../generated/tsol_coverage.md), and
+[`generated/surface_status.md`](../generated/surface_status.md) for live counts.
+This section owns what to do with those counts.
+
+### Ordered queue
+
+| Order | Work item | Deliverable | Acceptance gate | Depends on |
+|---:|---|---|---|---|
+| 1 | **E2E-REAL-6B — native VJP authority migration** | Move compound spectral backward from `JitFn` dispatch/package construction into an explicit family plugin declaring Graph, Schedule, Tile, and Target consumers. Repeat one family per PR until `JitFn` contains call binding only; retain `_OpExtractor` solely for named compatibility/oracle use until every affected family passes its differential gate. | Content-addressed non-reexecuting trace proof; legacy-versus-plugin numerical differential test; effectful/stochastic inputs fail closed; x86 and gfx1151 packages consume the traced artifact without Graph resynthesis. | Existing normalization plugin and E2E-REAL-6 certificates. |
+| 2 | **W4-PRODUCT-1 — executable multi-block regions** | Carry general source CFG into native multi-block Graph/MLIR regions, propagate typed Presburger facts, and materialize SAVE/HYBRID residual operands/results for `if`, `for`, `while`, and `control_scan`. | Region verifier negatives; predicate replay identity; paired forward/JVP/VJP CPU oracle; native x86/gfx1151 correctness packets for at least one loop and one data-dependent branch. | W2.1 dataflow, W2.2 effects, current bounded W4 carrier. |
+| 3 | **SO-3 + W5.2e-PRODUCER-1 — one schedule authority** | Stamp the Schedule Object digest through lowering, delete scalar pipeline reconstruction, and make two representative physical producers—spectral and collective/MoE—consume inferred dependence edges. | Generated DAG covers hand-authored oracle edges; unknown facts conservatively serialize; emitted artifact preserves digest/roles/resources; numerical output is unchanged on x86 and gfx1151. | SO-1/SO-2 and W5.2e inference. |
+| 4 | **LAYOUT-ALG-1 L3/L4 + SO-4 — physical layout decisions** | Add the locality/residency decision procedure, consolidate duplicated x86/ROCm index calculations behind the shared algebra, and attach proved residency to the Schedule Object. | Existing raster/index outputs bit-identical; dynamic/unknown layouts fail closed; materialization proof covers alias, capacity, and lifetime; no architecture's schedule is promoted by another architecture's evidence. | Order 3, W2.1 alias/liveness, current L1/L2 algebra. |
+| 5 | **W5.4-RESHARD-1 — executable placement** | Consume the remaining domain/axis-changing sharding contracts, derive typed local-shard shapes, insert explicit reshard SSA through nested regions, and execute on a deterministic mock mesh. | Fixed-point convergence and join tests; exact local result types; subgroup/region negatives; all four collective forms and `collective_permute` execute without hidden host composition. | Orders 2–4. Native transports are a later evidence gate. |
+| 6 | **DIST-NATIVE-1 — real multi-rank execution** | Bind explicit reshard/collective SSA to NCCL/RCCL and MPI/OFI/SHMEM launchers, including subgroup communicators and process-rank ownership. Keep ROCm LSA, GIN/RMA, Copy Engine, and gfx1250 DDA as independent advanced gates. | Two-rank then multi-rank numerical packets; deterministic ordering; communicator/topology digest match; fail-closed missing transport; no mock result may satisfy the native gate. | Order 5. |
+| 7 | **AD-TSOL-STFT-BWD-1 — native spectral products** | Add native STFT/ISTFT backward packages on AVX-512 and gfx1151, including signal/window tangents, overlap-add identity, packed-real lineage, and normalization. | Directional and duality properties; aligned/ragged and fp32/fp16/bf16 storage; content-addressed Schedule→Tile→Target lineage; exact-host/device correctness. | Order 1 plugin boundary and existing spectral VJP carriers. |
+| 8 | **TSOL-POLICY-PHYS-1 — complete the spectral policy envelope** | Physically adopt centered padding, explicit transform length, one-sided/full spectrum, ISTFT output length, arbitrary axes/strides, broadcasting, and streaming/chunk state on x86 and gfx1151. | Differential oracle for every policy combination; bounded-dynamic legality; workspace/state lineage; no silent fallback to a full-complex or host-composed path. | Order 7. |
+| 9 | **TSOL-SCALE-1 — ND and large transforms** | Add 2D/ND, batched nontrivial-stride, large-transform six-step/Bailey, and large-prime execution behind selector-visible algorithm identities. | Correctness across prime/composite/ragged shapes; plan/twiddle/workspace cache identity; packed-vs-full and library comparisons; retain/promote/reject per architecture. | Order 8 and evidence tooling below. |
+| 10 | **TSOL-SHARD-1 — distributed TSOL contracts** | Close the 18 partial TSOL sharding rows by routing spectral, solver, sparse/segment, and layout families through W5.4 placement and explicit reshard operations. | Registry totality, mock-mesh numerical tests, and no claim of native transport before exact multi-rank proof. | Orders 5–6. |
+| 11 | **TSOL-PHYS-TAIL-1 — high-value physical families** | Use per-target maps—not the all-target aggregate—to promote the remaining high-use solver, sparse/segment, and layout rows. Start with `tri_solve` and PDE/solver consumers, then sparse/segment families; compose coalition-lattice operations through the shared butterfly rather than creating one-off emitters. | Independent x86 and gfx1151 correctness/performance verdicts; dtype/shape envelopes; no reference execution relabeled as native; Apple/NVIDIA remain separate consumers. | Orders 3–5 and the relevant scoped family plan. |
+| 12 | **TPROF-NATIVE-1 — trustworthy clocks and sampling** | Graduate ROCm dispatch/activity/counter/PC-sampling capture and x86 perf/IBS symbol correlation; retain independent host, device/event, and profiler clocks with validity/provenance. | Fresh-process collection; no clock substitution; clean-image/instrumented-image overhead comparison; bare-metal gfx1151 and Zen 5 calibration packets. WSL packets remain regression-only. | Can run in parallel with Orders 1–8; blocks selector promotion. |
+| 13 | **EVIDENCE-PACKET-1 — one selector packet contract** | Make every physical benchmark emit the same schema for semantic/artifact/image digests, dtype/shape/policy envelope, resources, clocks, warm/cold state, samples, source cleanliness, and eligibility. | Schema validator and replay test; packets with missing native clocks, dirty sources, mismatched digests, or unsupported architectures are promotion-ineligible rather than silently downgraded. | Order 12. |
+| 14 | **COMPILER-DEVEX-1 — runnable compiler tools** | Promote `tprof` and `tessera-opt` from `compile_only` only after installed-driver smoke, dialect/pass inventory, negative target-load tests, and reproducible integration/numerical entry points exist. | Clean-build host smoke, `--version`/build provenance, positive and fail-closed fixtures, and generated surface-status promotion through its owning registry. | Orders 1–4 and 12. |
+
+### Architecture expansion after the shared gates
+
+- **ROCm:** gfx1151 owns the first exact-device correctness and calibrated
+  performance packets. gfx1200, gfx1250/MI455X, and gfx1251/MI430X remain
+  fail-closed until their own Target operations, dtype paths, packages, and
+  device packets exist. FP8/BF8, IU8, sparse SWMMAC, FP4/MX scaling, and
+  gfx1251 FP64 WMMA remain separate typed-execution work, not capability-table
+  promotion.
+- **x86:** AVX-512 owns the no-async Schedule Object proof and clean Zen 5
+  packets. AMX remains a separately access-gated lane.
+- **Apple and NVIDIA:** consume the same shared Graph/Schedule/Tile contracts
+  through architecture-owned plugins. NVIDIA's remaining typed-fragment and
+  barrier-at-birth work precedes its SO-2/SO-4 and TSOL promotion; Apple keeps
+  independent Metal policy and evidence decisions.
+
+### PR and promotion rules
+
+1. A PR changes one shared boundary or one architecture's physical evidence,
+   not both unless the exact hardware is available in that same validation
+   environment.
+2. Every migrated family declares its Graph, Schedule, Tile, and Target owner;
+   package construction cannot move back into `JitFn` or runtime dispatch.
+3. Every schedule/layout optimization lands first as rank/prune-only and keeps
+   the old path as an oracle. Selector authority requires clean exact-device
+   packets from `EVIDENCE-PACKET-1`.
+4. Shared IR, ABI, dtype, numerical policy, benchmark-schema, or runtime changes
+   update all four backend queues with parity, follow-up, or not-applicable
+   outcomes.
+5. Generated dashboards are regenerated by their owning generator. Plans link
+   to them and do not hand-maintain competing totals.
+
+The immediate implementation PR is **E2E-REAL-6B**. Orders 12 and 13 may
+proceed independently because they are evidence infrastructure; they do not
+authorize promotion until the corresponding architecture packet exists.
 
 ## How to execute this plan now
 

@@ -7,6 +7,14 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+`E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **bounded gfx1151 optimizer reverse
+authority complete.** Explicit plugins now own SGD, Momentum/Nesterov, and
+Adam/AdamW. Each package binds the one-execution tracer certificate, functional
+state/cotangent lineage, typed `schedule.optimizer_vjp`, exact
+`tile.training_kernel`, and existing HIP physical consumer. Runtime receives
+no Graph operation dictionary. gfx1200/gfx1250 remain fail closed and
+bare-metal selector timing remains independent.
+
 `E2E-REAL-6E-STATEFUL-VJP-2026-08-17` — **bounded gfx1151 Adafactor and
 sequence-mixer reverse authority complete.** Explicit plugins now own
 factored/full Adafactor and causal gated/Kimi/modified DeltaNet backward; the

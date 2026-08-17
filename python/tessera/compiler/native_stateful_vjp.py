@@ -1,7 +1,8 @@
 """Non-reexecuting native packages for stateful training reverse products.
 
 E2E-REAL-6E moves Adafactor and sequence-mixer package construction out of
-``JitFn``.  The runtime sees a content-addressed physical package, never the
+``JitFn``. E2E-REAL-6F extends that authority to the remaining optimizer VJPs.
+The runtime sees a content-addressed physical package, never the
 source Graph program, while the package binds the one-execution frontend proof
 to the existing state, Schedule, and exact Tile identities.
 """
@@ -16,10 +17,13 @@ from typing import Any, Mapping, Sequence
 from .frontend_authority import NonReexecutingFrontendCertificate
 from .stateful_training import (
     ScheduledAdafactorVJPArtifact,
+    ScheduledOptimizerVJPArtifact,
     ScheduledSequenceMixerBackwardArtifact,
     lower_scheduled_adafactor_vjp,
+    lower_scheduled_optimizer_vjp,
     lower_scheduled_sequence_mixer_backward,
     validate_scheduled_adafactor_vjp_metadata,
+    validate_scheduled_optimizer_vjp_metadata,
     validate_scheduled_sequence_mixer_backward_metadata,
 )
 
@@ -46,7 +50,7 @@ class NativeStatefulVJPPackage:
     source_graph_ir: str
     source_graph_ir_digest: str
     frontend_certificate: NonReexecutingFrontendCertificate
-    scheduled: ScheduledAdafactorVJPArtifact | ScheduledSequenceMixerBackwardArtifact
+    scheduled: ScheduledAdafactorVJPArtifact | ScheduledOptimizerVJPArtifact | ScheduledSequenceMixerBackwardArtifact
     target: str
     graph_consumer: str
     argument_names: tuple[str, ...]
@@ -205,6 +209,55 @@ def build_native_adafactor_vjp_package(
     return package
 
 
+def build_native_optimizer_vjp_package(
+    *, source_graph_ir: str, source: Any, target: str,
+    ordered_inputs: Sequence[Any], arg_names: Sequence[str],
+    out_cotangents: Sequence[Any], frontend_certificate: Any,
+) -> NativeStatefulVJPPackage:
+    certificate = _require_common(
+        source_graph_ir=source_graph_ir, source=source, target=target,
+        frontend_certificate=frontend_certificate)
+    optimizer = source.op_name.removeprefix("tessera.")
+    expected = {"sgd": (2, 1), "momentum": (3, 2), "nesterov": (3, 2),
+                "adam": (4, 3), "adamw": (4, 3)}
+    if optimizer not in expected or (target == "x86" and optimizer in {"adam", "adamw"}):
+        raise ValueError(f"{optimizer} VJP has no physical consumer on {target}")
+    input_count, cotangent_count = expected[optimizer]
+    if len(ordered_inputs) != input_count or len(arg_names) != input_count:
+        raise ValueError(f"{optimizer} VJP has a stale forward operand ABI")
+    if len(out_cotangents) != cotangent_count:
+        raise ValueError(f"{optimizer} VJP has a stale output-cotangent ABI")
+    values = (*ordered_inputs, *out_cotangents)
+    shapes = [tuple(int(dim) for dim in getattr(value, "shape", ())) for value in values]
+    if not shapes[0] or any(shape != shapes[0] for shape in shapes):
+        raise ValueError(f"{optimizer} VJP requires one positive static shape")
+    if {str(getattr(value, "dtype", "")) for value in values} != {"float32"}:
+        raise ValueError(f"{optimizer} native VJP currently requires f32 storage")
+    scheduled = lower_scheduled_optimizer_vjp(
+        target="x86" if target == "x86" else "rocm_gfx1151",
+        optimizer=optimizer, shape=shapes[0], kwargs=dict(source.kwargs))
+    cotangent_names = {
+        "sgd": ("dy",),
+        "momentum": ("dparam_out", "dvelocity_out"),
+        "nesterov": ("dparam_out", "dvelocity_out"),
+        "adam": ("dparam_out", "dmoment1_out", "dmoment2_out"),
+        "adamw": ("dparam_out", "dmoment1_out", "dmoment2_out"),
+    }[optimizer]
+    package = NativeStatefulVJPPackage(
+        source_graph_ir=source_graph_ir,
+        source_graph_ir_digest=_digest(source_graph_ir),
+        frontend_certificate=certificate, scheduled=scheduled, target=target,
+        graph_consumer=source.op_name,
+        argument_names=tuple(str(name) for name in arg_names),
+        cotangent_names=cotangent_names,
+        output_names=tuple(f"d_{name}" for name in arg_names),
+        compiler_path=("rocm_adam_bwd_compiled" if optimizer in {"adam", "adamw"}
+                       else f"{target}_{'momentum' if optimizer in {'momentum', 'nesterov'} else 'sgd'}_bwd_compiled"),
+    )
+    package.validate()
+    return package
+
+
 def build_native_sequence_mixer_vjp_package(
     *,
     source_graph_ir: str,
@@ -308,6 +361,16 @@ def validate_native_stateful_vjp_runtime_metadata(metadata: Mapping[str, Any]) -
             topology=str(scheduled.get("topology", "")),
             state_contract=state_contract,
         )
+    elif graph_consumer.removeprefix("tessera.") in {
+        "sgd", "momentum", "nesterov", "adam", "adamw"
+    }:
+        validate_scheduled_optimizer_vjp_metadata(
+            scheduled,
+            target=physical_target,
+            shape=tuple(scheduled.get("shape", ())),
+            optimizer=graph_consumer.removeprefix("tessera."),
+            state_contract=state_contract,
+        )
     elif graph_consumer.removeprefix("tessera.") in _SEQUENCE_FAMILIES:
         validate_scheduled_sequence_mixer_backward_metadata(
             scheduled,
@@ -325,6 +388,7 @@ __all__ = [
     "NativeStatefulVJPPackage",
     "SCHEMA",
     "build_native_adafactor_vjp_package",
+    "build_native_optimizer_vjp_package",
     "build_native_sequence_mixer_vjp_package",
     "validate_native_stateful_vjp_runtime_metadata",
 ]

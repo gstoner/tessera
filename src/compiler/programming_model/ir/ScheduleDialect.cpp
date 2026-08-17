@@ -479,6 +479,57 @@ LogicalResult LionVJPOp::verify() {
   return success();
 }
 
+LogicalResult OptimizerVJPOp::verify() {
+  StringRef optimizer = getOptimizer();
+  unsigned inputCount = 0, resultCount = 0;
+  if (optimizer == "sgd") {
+    inputCount = 3;
+    resultCount = 2;
+  } else if (optimizer == "momentum" || optimizer == "nesterov") {
+    inputCount = 5;
+    resultCount = 3;
+  } else if (optimizer == "adam" || optimizer == "adamw") {
+    inputCount = 7;
+    resultCount = 4;
+  } else {
+    return emitOpError("requires sgd, momentum, nesterov, adam, or adamw");
+  }
+  if (getInputs().size() != inputCount || getResults().size() != resultCount)
+    return emitOpError("operand/result count disagrees with optimizer ABI");
+  auto tensor = dyn_cast<RankedTensorType>(getInputs().front().getType());
+  if (!tensor || !tensor.hasStaticShape() || !tensor.getElementType().isF32())
+    return emitOpError("initial optimizer VJP requires a static f32 tensor");
+  for (Value value : llvm::concat<Value>(getInputs(), getResults()))
+    if (value.getType() != tensor)
+      return emitOpError("requires one tensor type for state and cotangents");
+  if (getArtifactHash().size() != 64 ||
+      !llvm::all_of(getArtifactHash(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }))
+    return emitOpError("requires a lowercase SHA-256 artifact_hash");
+  if (getLineagePayload().empty() ||
+      (getArch() != "zen5-avx512" && getArch() != "gfx1151"))
+    return emitOpError("requires lineage and a promoted architecture identity");
+  for (const APFloat &value : {getLearningRate(), getBeta1(), getBeta2(),
+                               getEpsilon(), getMomentum(), getWeightDecay()})
+    if (!value.isFinite())
+      return emitOpError("requires finite optimizer coefficients");
+  if ((optimizer == "nesterov") != getNesterov())
+    return emitOpError("nesterov identity disagrees with optimizer family");
+  if (getMutationMode() != "functional" ||
+      getAliasPolicy() != "no_input_output_alias" ||
+      getStateTransition() != "state@0-read-only;d_state@1-fresh")
+    return emitOpError("requires the functional no-alias VJP transition");
+  if (getOrderedWrites().size() != resultCount)
+    return emitOpError("requires one ordered write per cotangent result");
+  for (auto [index, value] : llvm::enumerate(getOrderedWrites()))
+    if (value != static_cast<int64_t>(index))
+      return emitOpError("requires ascending deterministic write order");
+  if (getWorkgroupSize() <= 0)
+    return emitOpError("requires workgroup_size > 0");
+  return success();
+}
+
 LogicalResult SolverIFTOp::verify() {
   Type expected = getParameter().getType();
   if (getSolution().getType() != expected ||

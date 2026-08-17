@@ -101,7 +101,7 @@ _SPECS = [
     OpSpec("clip", "tessera.clip", 1, 1),
     OpSpec("masked_fill", "tessera.masked_fill", 2, 2, lowering="layout_transform"),
     OpSpec("adam", "tessera.adam", 4, 4, lowering="functional_optimizer_step"),
-    OpSpec("adamw", "tessera.adamw", 2, 3, lowering="functional_optimizer_step"),
+    OpSpec("adamw", "tessera.adamw", 2, 4, lowering="functional_optimizer_step"),
     OpSpec("momentum", "tessera.momentum", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("nesterov", "tessera.nesterov", 2, 3, lowering="functional_optimizer_step"),
     OpSpec("adafactor", "tessera.adafactor", 2, 4, lowering="functional_optimizer_step"),
@@ -824,8 +824,9 @@ OP_SHAPE_RULE: dict = {
     # as "deliberately undeclared"; that was a vocabulary gap, not a genuine
     # exception, and the exemption also silently covered an optimizer wrongly
     # rounding its state DOWN to the param dtype.
-    **{f"tessera.{n}": "optimizer_step" for n in
-       ("adam", "adamw", "momentum", "nesterov", "adafactor", "sgd")},
+    **{f"tessera.{n}": "optimizer_step" for n in ("adam", "adamw")},
+    **{f"tessera.{n}": "optimizer_pair_step" for n in ("momentum", "nesterov")},
+    "tessera.sgd": "same_as_first",
     # Lion's flat compiler ABI returns exactly (new_param, new_moment).  It is
     # not the three-result Adam-style contract used by optimizer_step.
     "tessera.lion": "optimizer_pair_step",

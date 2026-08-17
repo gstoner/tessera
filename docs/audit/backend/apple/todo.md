@@ -8,6 +8,15 @@ last_updated: 2026-08-17
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **shared
+optimizer lineage validated; Apple not applicable for the bounded physical
+set.** SGD, Momentum/Nesterov, and Adam/AdamW now use one typed
+`schedule.optimizer_vjp` contract, but this slice declares consumers only
+where physical reverse packages already exist: x86/gfx1151 for SGD and
+Momentum/Nesterov, and gfx1151 for Adam/AdamW. Apple remains fail closed and
+inherits no sibling evidence; a future Metal package requires its own queue
+item and exact-device proof.
+
 Cross-backend sync `E2E-REAL-6E-STATEFUL-VJP-2026-08-17` — **shared
 Adafactor/sequence-mixer authority validated; Apple target follow-up
 required.** The shared compiler now binds factored/full Adafactor and causal

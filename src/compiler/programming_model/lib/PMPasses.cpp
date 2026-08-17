@@ -4179,6 +4179,115 @@ struct ScheduleToTilePass
         artifact.erase();
     }
 
+    SmallVector<schedule::OptimizerVJPOp> scheduledOptimizers;
+    mod.walk([&](schedule::OptimizerVJPOp op) {
+      scheduledOptimizers.push_back(op);
+    });
+    for (schedule::OptimizerVJPOp scheduled : scheduledOptimizers) {
+      std::string payloadHash = llvm::toHex(
+          llvm::SHA256::hash(
+              llvm::arrayRefFromStringRef(scheduled.getLineagePayload())),
+          /*LowerCase=*/true);
+      if (payloadHash != scheduled.getArtifactHash()) {
+        scheduled.emitError(
+            "optimizer VJP lineage payload does not match artifact_hash");
+        return signalPassFailure();
+      }
+      SmallVector<schedule::ArtifactOp> matchingArtifacts;
+      mod.walk([&](schedule::ArtifactOp artifact) {
+        if (artifact.getHash() == scheduled.getArtifactHash())
+          matchingArtifacts.push_back(artifact);
+      });
+      if (matchingArtifacts.size() != 1) {
+        scheduled.emitError("requires exactly one matching schedule.artifact");
+        return signalPassFailure();
+      }
+      auto tensorType =
+          dyn_cast<RankedTensorType>(scheduled.getInputs().front().getType());
+      if (!tensorType || !tensorType.hasStaticShape() ||
+          !tensorType.getElementType().isF32()) {
+        scheduled.emitError(
+            "initial optimizer VJP lowering requires static f32 tensors");
+        return signalPassFailure();
+      }
+
+      Location loc = scheduled.getLoc();
+      builder.setInsertionPoint(scheduled);
+      auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+      auto toPointer = [&](Value tensor) -> Value {
+        auto memrefType =
+            MemRefType::get(tensorType.getShape(), tensorType.getElementType());
+        Value buffer = builder.create<bufferization::ToBufferOp>(
+            loc, memrefType, tensor);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer = builder.create<arith::IndexCastOp>(
+            loc, builder.getI64Type(), index);
+        return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      };
+      auto allocatePointer = [&]() {
+        auto memrefType =
+            MemRefType::get(tensorType.getShape(), tensorType.getElementType());
+        Value buffer = builder.create<memref::AllocOp>(loc, memrefType);
+        Value index =
+            builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+        Value integer = builder.create<arith::IndexCastOp>(
+            loc, builder.getI64Type(), index);
+        Value pointer =
+            builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+        return std::make_pair(buffer, pointer);
+      };
+
+      SmallVector<Value> operands;
+      for (Value input : scheduled.getInputs())
+        operands.push_back(toPointer(input));
+      SmallVector<Value> outputBuffers;
+      for (Type ignored : scheduled.getResultTypes()) {
+        (void)ignored;
+        auto [buffer, pointer] = allocatePointer();
+        outputBuffers.push_back(buffer);
+        operands.push_back(pointer);
+      }
+      operands.push_back(builder.create<arith::ConstantIntOp>(
+          loc, tensorType.getNumElements(), 64));
+
+      OperationState kernelState(loc, "tile.training_kernel");
+      kernelState.addOperands(operands);
+      kernelState.addAttribute("family", builder.getStringAttr("optimizer_vjp"));
+      kernelState.addAttribute("optimizer", scheduled.getOptimizerAttr());
+      kernelState.addAttribute("storage", builder.getStringAttr("f32"));
+      kernelState.addAttribute("arch", scheduled.getArchAttr());
+      kernelState.addAttribute("learning_rate", scheduled.getLearningRateAttr());
+      kernelState.addAttribute("beta1", scheduled.getBeta1Attr());
+      kernelState.addAttribute("beta2", scheduled.getBeta2Attr());
+      kernelState.addAttribute("epsilon", scheduled.getEpsilonAttr());
+      kernelState.addAttribute("momentum", scheduled.getMomentumAttr());
+      kernelState.addAttribute("weight_decay", scheduled.getWeightDecayAttr());
+      kernelState.addAttribute("step", scheduled.getStepAttr());
+      kernelState.addAttribute("nesterov", scheduled.getNesterovAttr());
+      kernelState.addAttribute("mutation_mode", scheduled.getMutationModeAttr());
+      kernelState.addAttribute("alias_policy", scheduled.getAliasPolicyAttr());
+      kernelState.addAttribute("state_transition",
+                               scheduled.getStateTransitionAttr());
+      kernelState.addAttribute("ordered_writes",
+                               scheduled.getOrderedWritesAttr());
+      kernelState.addAttribute("tessera.workgroup_size",
+                               scheduled.getWorkgroupSizeAttr());
+      kernelState.addAttribute("tessera.schedule_hash",
+                               scheduled.getArtifactHashAttr());
+      builder.create(kernelState);
+
+      for (auto [result, buffer] :
+           llvm::zip_equal(scheduled.getResults(), outputBuffers)) {
+        Value tensor = builder.create<bufferization::ToTensorOp>(
+            loc, tensorType, buffer);
+        result.replaceAllUsesWith(tensor);
+      }
+      scheduled.erase();
+      for (schedule::ArtifactOp artifact : matchingArtifacts)
+        artifact.erase();
+    }
+
     SmallVector<schedule::AdafactorVJPOp> scheduledAdafactors;
     mod.walk([&](schedule::AdafactorVJPOp op) {
       scheduledAdafactors.push_back(op);

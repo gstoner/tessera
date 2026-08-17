@@ -1,0 +1,99 @@
+"""E2E-REAL-6F remaining optimizer reverse-authority migration."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+import tessera as ts
+from tessera.compiler.jit import JitFn
+from tessera.compiler.native_stateful_vjp import (
+    validate_native_stateful_vjp_runtime_metadata,
+)
+from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+
+@ts.jit(target="x86", autodiff="reverse", wrt=("p", "g"))
+def _x86_sgd(p, g):
+    return ts.ops.sgd(p, g, lr=0.05)
+
+
+@ts.jit(target="x86", autodiff="reverse", wrt=("p", "g", "velocity"))
+def _x86_nesterov(p, g, velocity):
+    return ts.ops.nesterov(p, g, velocity, lr=0.05, momentum=0.8)
+
+
+@ts.jit(target="rocm", autodiff="reverse", wrt=("p", "g", "m1", "m2"))
+def _rocm_adamw(p, g, m1, m2):
+    return ts.ops.adamw(
+        p, g, m1, m2, lr=0.01, beta1=0.8, beta2=0.9,
+        eps=1.0e-6, weight_decay=0.02, step=3,
+    )
+
+
+def test_optimizer_plugins_declare_exact_target_owners() -> None:
+    from tessera.compiler.native_vjp_plugins import native_vjp_plugin_declarations
+
+    declarations = native_vjp_plugin_declarations()
+    for name in ("sgd", "momentum", "nesterov"):
+        declaration = declarations[name]
+        assert declaration.family == "optimizer_vjp"
+        assert declaration.schedule_consumer == "schedule.optimizer_vjp"
+        assert declaration.tile_consumer == "tile.training_kernel"
+        assert declaration.differential_policy == "non_reexecuting_state_lineage"
+        assert set(declaration.target_consumers) == {"x86", "rocm"}
+    for name in ("adam", "adamw"):
+        assert set(declarations[name].target_consumers) == {"rocm"}
+
+
+def test_jitfn_optimizer_compatibility_helpers_are_retired() -> None:
+    assert not hasattr(JitFn, "_native_sgd_backward")
+    assert not hasattr(JitFn, "_native_momentum_backward")
+    assert not hasattr(JitFn, "_native_rocm_adam_backward")
+
+
+@pytest.mark.parametrize(
+    ("function", "values", "cotangents", "mode"),
+    [
+        (_x86_sgd, 2, 1, "cpu_avx512"),
+        (_x86_nesterov, 3, 2, "cpu_avx512"),
+        (_rocm_adamw, 4, 3, "hip_runtime"),
+    ],
+)
+def test_optimizer_source_executes_once_and_runtime_receives_no_graph(
+    monkeypatch: pytest.MonkeyPatch,
+    function,
+    values: int,
+    cotangents: int,
+    mode: str,
+) -> None:
+    if find_tessera_opt() is None:
+        pytest.skip("production tessera-opt is required")
+    from tessera import runtime as rt
+
+    shape = (7,)
+    operands = tuple(np.full(shape, index + 1, np.float32) for index in range(values))
+    cots = tuple(np.ones(shape, np.float32) for _ in range(cotangents))
+    captured: dict = {}
+
+    def fake_launch(artifact, launch_values):
+        captured.update(artifact.metadata or {})
+        validate_native_stateful_vjp_runtime_metadata(captured)
+        return {
+            "ok": True,
+            "execution_mode": mode,
+            "output": tuple(np.ones_like(value) for value in operands),
+        }
+
+    monkeypatch.setattr(rt, "launch", fake_launch)
+    actual = function.native_backward(
+        *operands, out_cotangents=cots[0] if cotangents == 1 else cots
+    )
+    assert len(actual) == values
+    assert "source_graph_ir" not in captured
+    assert "ops" not in captured
+    assert captured["scheduled_training"]["family"] == "optimizer_vjp"
+    assert function.last_backward_execution["implementation"] == "family_plugin"
+    assert function.last_backward_execution["proof_mode"] == (
+        "structural_non_reexecuting"
+    )

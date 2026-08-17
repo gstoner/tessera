@@ -376,6 +376,31 @@ def Schedule_LionVJPOp : Op<ScheduleDialect, "lion_vjp", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Schedule_OptimizerVJPOp : Op<ScheduleDialect, "optimizer_vjp", [Pure]> {
+  let summary = "Content-addressed SGD, momentum, or Adam-family VJP";
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       StrAttr:$artifact_hash,
+                       StrAttr:$lineage_payload,
+                       StrAttr:$arch,
+                       StrAttr:$optimizer,
+                       F32Attr:$learning_rate,
+                       F32Attr:$beta1,
+                       F32Attr:$beta2,
+                       F32Attr:$epsilon,
+                       F32Attr:$momentum,
+                       F32Attr:$weight_decay,
+                       I64Attr:$step,
+                       BoolAttr:$nesterov,
+                       StrAttr:$mutation_mode,
+                       StrAttr:$alias_policy,
+                       StrAttr:$state_transition,
+                       DenseI64ArrayAttr:$ordered_writes,
+                       I64Attr:$workgroup_size);
+  let results = (outs Variadic<AnyType>:$results);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs) `->` type($results)";
+  let hasVerifier = 1;
+}
+
 // First executable AD-SOLVER-IFT-1 family.  The shared solver dialect owns the
 // general residual/linear-solve/residual-adjoint semantics; this operation
 // freezes one structurally verified physical specialization at the artifact

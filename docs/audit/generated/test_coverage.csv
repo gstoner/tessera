@@ -4,7 +4,7 @@ absolute,6,0,0,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 acos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 adafactor,18,0,0,18,0,fp32 fp64,directly_tested,18 direct test references
 adam,22,5,1,27,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,27 direct test references
-adamw,15,5,0,20,0,fp32 fp64,directly_tested,20 direct test references
+adamw,16,5,0,21,0,fp32 fp64,directly_tested,21 direct test references
 adaptive_pool,6,0,0,6,0,,directly_tested,6 direct test references
 add,152,41,11,193,0,bf16 f16 f32 f64 fp16 fp32 int8,directly_tested,193 direct test references
 add_decoupled_weight_decay,2,0,0,2,0,,directly_tested,2 direct test references
@@ -321,7 +321,7 @@ multi_head_attention,9,0,1,9,0,,directly_tested,9 direct test references
 muon,13,0,0,13,0,,directly_tested,13 direct test references
 named_sharding,0,0,0,0,1,,structural_only,category default for 'sharding'
 ne,3,0,0,3,0,bf16 f32 fp32 int32 int64 int8,directly_tested,3 direct test references
-nesterov,11,3,0,14,0,fp64,directly_tested,14 direct test references
+nesterov,12,3,0,15,0,fp64,directly_tested,15 direct test references
 nonzero,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 normalize_group_advantages,12,0,0,12,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,12 direct test references
 nt_xent_loss,8,0,0,8,0,,directly_tested,8 direct test references
@@ -365,7 +365,7 @@ rearrange,13,0,1,13,0,fp16 fp32,directly_tested,13 direct test references
 reciprocal,5,0,0,5,0,bf16 f32 fp16 fp32,directly_tested,5 direct test references
 reduce,109,17,8,126,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,126 direct test references
 reduce_scatter,3,0,0,3,0,fp32,directly_tested,3 direct test references
-relu,118,37,9,155,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,155 direct test references
+relu,120,37,9,157,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,157 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,14,20,1,34,0,fp32,directly_tested,34 direct test references

@@ -1045,29 +1045,59 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         from . import optim as _optim
         return _optim.adamw(params, grads, state, **kwargs)
 
-    def momentum(params, grads, state=None, **kwargs):
+    def momentum(
+        params,
+        grads,
+        state=None,
+        *,
+        lr: float = 1.0e-3,
+        momentum: float = 0.9,
+        compute_dtype: str = "fp32",
+        state_dtype: str = "fp32",
+        master_dtype: str | None = None,
+        cast_updates_to_param_dtype: bool = True,
+    ):
         if isinstance(state, np.ndarray):
             p = np.asarray(params)
             g = np.asarray(grads, dtype=np.float32)
-            velocity = float(kwargs.get("momentum", 0.9)) * np.asarray(
-                state, dtype=np.float32
-            ) + g
-            updated = p.astype(np.float32) - float(kwargs.get("lr", 1.0e-3)) * velocity
+            velocity = float(momentum) * np.asarray(state, dtype=np.float32) + g
+            updated = p.astype(np.float32) - float(lr) * velocity
             return updated.astype(p.dtype, copy=False), velocity
         from . import optim as _optim
-        return _optim.momentum(params, grads, state, **kwargs)
+        return _optim.momentum(
+            params, grads, state, lr=lr, momentum=momentum,
+            compute_dtype=compute_dtype, state_dtype=state_dtype,
+            master_dtype=master_dtype,
+            cast_updates_to_param_dtype=cast_updates_to_param_dtype,
+        )
 
-    def nesterov(params, grads, state=None, **kwargs):
+    def nesterov(
+        params,
+        grads,
+        state=None,
+        *,
+        lr: float = 1.0e-3,
+        momentum: float = 0.9,
+        compute_dtype: str = "fp32",
+        state_dtype: str = "fp32",
+        master_dtype: str | None = None,
+        cast_updates_to_param_dtype: bool = True,
+    ):
         if isinstance(state, np.ndarray):
             p = np.asarray(params)
             g = np.asarray(grads, dtype=np.float32)
-            coefficient = float(kwargs.get("momentum", 0.9))
+            coefficient = float(momentum)
             velocity = coefficient * np.asarray(state, dtype=np.float32) + g
             update = g + coefficient * velocity
-            updated = p.astype(np.float32) - float(kwargs.get("lr", 1.0e-3)) * update
+            updated = p.astype(np.float32) - float(lr) * update
             return updated.astype(p.dtype, copy=False), velocity
         from . import optim as _optim
-        return _optim.nesterov(params, grads, state, **kwargs)
+        return _optim.nesterov(
+            params, grads, state, lr=lr, momentum=momentum,
+            compute_dtype=compute_dtype, state_dtype=state_dtype,
+            master_dtype=master_dtype,
+            cast_updates_to_param_dtype=cast_updates_to_param_dtype,
+        )
 
     def adafactor(params, grads, state=None, column_state=None, **kwargs):
         # Compiler-visible flat ABIs keep optimizer state as explicit tensor

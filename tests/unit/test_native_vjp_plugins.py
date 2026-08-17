@@ -109,7 +109,7 @@ def test_normalization_vjp_package_is_constructed_by_family_plugin(
 
 
 def test_unmigrated_vjp_family_remains_a_compatibility_path() -> None:
-    source = SimpleNamespace(op_name="tessera.sgd", result="out", kwargs={})
+    source = SimpleNamespace(op_name="tessera.relu", result="out", kwargs={})
     assert execute_native_vjp_family(
         source=source,
         target="x86",
@@ -118,7 +118,8 @@ def test_unmigrated_vjp_family_remains_a_compatibility_path() -> None:
         out_cotangents=(),
         wrt_names=(),
     ) is None
-    assert not native_vjp_plugin_available("tessera.sgd", "x86")
+    assert not native_vjp_plugin_available("tessera.relu", "x86")
+    assert native_vjp_plugin_available("tessera.sgd", "x86")
     assert native_vjp_plugin_available("tessera.flash_attn", "x86")
     assert not native_vjp_plugin_available("tessera.flash_attn", "apple_gpu")
 

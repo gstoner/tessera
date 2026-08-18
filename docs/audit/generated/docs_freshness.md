@@ -6,9 +6,9 @@ Reference date for staleness: **2026-08-18**.
 
 ## Headline
 
-- **144** docs catalogued across the canonical doc tree.
-- **143** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **63** updated within the last 30 days.
+- **145** docs catalogued across the canonical doc tree.
+- **144** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **64** updated within the last 30 days.
 - **15** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -160,6 +160,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/x86/todo.md` | - | 2026-08-18 | 0 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-07-28 | 21 | ✓ |
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-08-18 | 0 | ✓ |
+| `compiler/AUTODIFF_NEXTGEN_PLAN.md` | - | 2026-08-18 | 0 | ✓ |
 | `compiler/AUTODIFF_UNIFICATION_PLAN.md` | - | 2026-08-18 | 0 | ✓ |
 | `compiler/BLOCK_ATTNRES_ROCM_PLAN.md` | - | 2026-08-13 | 5 | ✓ |
 | `compiler/COMPILER_ARCHITECTURE_SWEEP.md` | - | 2026-08-11 | 7 | ✓ |
@@ -167,7 +168,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/COMPILER_REFACTOR_PLAN.md` | - | 2026-08-08 | 10 | ✓ |
 | `compiler/COMPILER_THEORY_OF_OPERATION.md` | - | 2026-07-28 | 21 | ✓ |
 | `compiler/CORE_SUBSTRATE_VIEW.md` | - | 2026-08-15 | 3 | ✓ |
-| `compiler/CUTE_IR_ASSESSMENT.md` | - | 2026-08-16 | 2 | ✓ |
+| `compiler/CUTE_IR_ASSESSMENT.md` | - | 2026-08-18 | 0 | ✓ |
 | `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-08-08 | 10 | ✓ |
 | `compiler/EGGROLL_SUPPORT_PLAN.md` | - | 2026-08-09 | 9 | ✓ |
 | `compiler/EVALUATOR_PLAN.md` | - | 2026-08-08 | 10 | ✓ |

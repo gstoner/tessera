@@ -493,6 +493,459 @@ def test_rmsnorm_eps_defaults_match_forward():
     assert j_safe == v_safe == 1e-6
 
 
+# ── positional-call conventions (the tape's replay contract) ────────────────
+#
+# `_swallowed_kwarg_mismatches` above compares the two *rules* against each
+# other. It cannot see the other half of the same bug class: a canonical key
+# the FORWARD accepts that neither rule reads, and a canonical key passed
+# POSITIONALLY, which the tape used to record nowhere at all. Both of those
+# fail open — the rule runs on its own default and returns a wrong gradient
+# with no error — so they get an executable gate, not just a signature scan.
+
+
+def _tape_grads(name, args, kwargs, diff_idx):
+    """Forward + backward one op through the tape; return the input cotangents."""
+    from tessera import ops
+    from tessera.autodiff.tape import tape
+
+    with tape() as t:
+        out = getattr(ops, name)(*args, **kwargs)
+        if isinstance(out, tuple):
+            out = out[0]
+        arr = np.asarray(out)
+        t.backward(out, cotangent=np.ones_like(arr, dtype=arr.dtype))
+    return [
+        None if t.cotangent.get(id(args[i])) is None
+        else np.asarray(t.cotangent[id(args[i])])
+        for i in diff_idx
+    ]
+
+
+def _positionalize(sig_names, args, kwargs):
+    """Move as many kwargs as possible into positional slots, in the forward's
+    own parameter order. Stops at the first gap — a later parameter cannot be
+    passed positionally once an earlier one is missing."""
+    pos, rest, moved = list(args), dict(kwargs), []
+    for i in range(len(args), len(sig_names)):
+        if sig_names[i] not in rest:
+            break
+        pos.append(rest.pop(sig_names[i]))
+        moved.append(sig_names[i])
+    return pos, rest, moved
+
+
+# Forwards that genuinely refuse the positional spelling — the call is not
+# legal, so there is no gradient to compare and nothing for autodiff to fix.
+# Pinned exactly: an addition means a rule regressed, a removal means a
+# forward's signature opened up and the pin is stale.
+_KNOWN_POSITIONAL_REFUSALS = {
+    ("softmax", "axis"): (
+        "the canonical forward declares `axis` keyword-only "
+        "(`softmax(x, *, axis=-1, ...)`), so the positional call never reaches "
+        "autodiff at all"
+    ),
+}
+
+
+def _positional_equivalence_findings():
+    from tessera.autodiff.tape import _positional_params
+    from tessera import ops
+
+    diffs, raised, skipped, compared = [], {}, [], []
+    for name in sorted(LAW_INPUT_SPECS):
+        if name not in _VJPS_TABLE():
+            continue
+        fwd = getattr(ops, name, None)
+        names = _positional_params(fwd) if fwd is not None else None
+        if names is None:
+            continue
+        try:
+            args, kwargs = LAW_INPUT_SPECS[name].make(np.random.default_rng(7))
+        except Exception as exc:  # pragma: no cover - a broken spec, not a finding
+            skipped.append((name, f"spec.make: {exc}"))
+            continue
+        pos, rest, moved = _positionalize(names, args, kwargs)
+        if not moved:
+            continue
+        spec = LAW_INPUT_SPECS[name]
+        diff_idx = spec.diff_args if spec.diff_args is not None else tuple(
+            i for i, a in enumerate(args) if isinstance(a, np.ndarray))
+        try:
+            base = _tape_grads(name, list(args), kwargs, diff_idx)
+        except Exception as exc:  # pragma: no cover - keyword form must work
+            skipped.append((name, f"keyword form failed: {type(exc).__name__}: {exc}"))
+            continue
+        try:
+            alt = _tape_grads(name, pos, rest, diff_idx)
+        except Exception as exc:
+            for key in moved:
+                raised[(name, key)] = f"{type(exc).__name__}: {exc}"
+            continue
+        compared.append(name)
+        for b, a in zip(base, alt):
+            if (b is None) != (a is None):
+                diffs.append((name, moved, "one form produced no cotangent"))
+                break
+            if b is not None and not np.allclose(
+                np.asarray(b, dtype=np.complex128),
+                np.asarray(a, dtype=np.complex128),
+                rtol=1e-10, atol=1e-12,
+            ):
+                diffs.append((name, moved, "gradients differ"))
+                break
+    return diffs, raised, skipped, compared
+
+
+def _VJPS_TABLE():
+    from tessera.autodiff.vjp import _VJPS
+
+    return _VJPS
+
+
+def test_positional_call_matches_keyword_call():
+    """Passing a configuration argument positionally must not change the
+    gradient. It used to: `_describe` recorded a str/bool positional nowhere
+    (so a positionally-spelled `"mean"` reduction got the *sum* adjoint —
+    silently) and turned an
+    int positional into a float64 literal that was then handed to the forward
+    (`np.sum(x, axis=array(0.0))`) and replayed as an extra positional the
+    keyword-only rule could not bind. The tape now routes positional
+    configuration into the recorded kwargs under its canonical parameter name.
+
+    This grows with `LAW_INPUT_SPECS`: one new spec entry extends the gate."""
+    diffs, raised, skipped, compared = _positional_equivalence_findings()
+    # A gate that silently stops exercising anything is worse than no gate:
+    # every op here has a spec whose kwargs the forward also takes positionally.
+    assert len(compared) >= 10, (
+        f"the positional-equivalence gate only exercised {compared} — it has "
+        "gone vacuous (a spec or signature-resolution change, not a fix)")
+    assert not diffs, (
+        "positional and keyword forms of the SAME call disagree on the "
+        f"gradient (fail-open — the worst class): {diffs}")
+    unexpected = {k: v for k, v in raised.items() if k not in _KNOWN_POSITIONAL_REFUSALS}
+    assert not unexpected, (
+        "the positional form of a canonical call raises where the keyword form "
+        f"works: {unexpected}")
+    stale = set(_KNOWN_POSITIONAL_REFUSALS) - set(raised)
+    assert not stale, (
+        "a pinned positional refusal no longer reproduces — record the fix by "
+        f"removing it from _KNOWN_POSITIONAL_REFUSALS: {sorted(stale)}")
+    assert not skipped, f"an op's own keyword form is broken: {skipped}"
+
+
+def test_reduce_positional_semantic_key_reaches_the_rule():
+    """The finding that motivated the routing, pinned directly (#10a negative
+    fixture): a positionally-spelled reduction key is a *semantic key*.
+    It was `_NON_ARRAY`, so it reached the forward but was recorded nowhere,
+    and `vjp_reduce` ran on its own `op="sum"` default — a mean forward with a
+    sum gradient, no error (Decision #21a: a semantic key may not default)."""
+    from tessera import ops
+    from tessera.autodiff.tape import tape
+
+    x = np.arange(12, dtype=np.float64).reshape(3, 4)
+    grads = {}
+    for label, call in (
+        ("keyword", lambda t_x: ops.reduce(t_x, op="mean")),
+        ("positional", lambda t_x: ops.reduce(t_x, "mean")),
+    ):
+        buf = x.copy()
+        with tape() as t:
+            y = call(buf)
+            t.backward(y, cotangent=np.ones_like(np.asarray(y), dtype=np.float64))
+        grads[label] = np.asarray(t.cotangent[id(buf)])
+    np.testing.assert_allclose(grads["positional"], grads["keyword"])
+    # The mean adjoint is 1/n, NOT the sum adjoint's 1.0 that the drop produced.
+    np.testing.assert_allclose(grads["positional"], np.full((3, 4), 1.0 / 12.0))
+
+
+def test_tri_solve_rules_honor_lower():
+    """`tri_solve`'s canonical key is `lower`; both rules declared `upper` — a
+    vocabulary no caller produces — so `lower=False` silently got the *lower*
+    solve's adjoint. The rules also solved against the raw matrix instead of
+    the triangle the forward selects. Checked against finite differences on a
+    FULL matrix, which separates both halves (#10a negative fixture)."""
+    from tessera import ops
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.tape import tape
+
+    rng = np.random.default_rng(11)
+    A = rng.standard_normal((4, 4)) + 4.0 * np.eye(4)  # NOT triangular
+    b = rng.standard_normal(4)
+    fwd = getattr(ops.tri_solve, "__wrapped__", ops.tri_solve)
+
+    for lower in (True, False):
+        buf = A.copy()
+        with tape() as t:
+            y = ops.tri_solve(buf, b, lower=lower)
+            t.backward(y, cotangent=np.ones_like(np.asarray(y)))
+        got = np.asarray(t.cotangent[id(buf)])
+        fd = np.zeros_like(A)
+        eps = 1e-6
+        for i in range(4):
+            for j in range(4):
+                up, dn = A.copy(), A.copy()
+                up[i, j] += eps
+                dn[i, j] -= eps
+                fd[i, j] = (np.asarray(fwd(up, b, lower=lower)).sum()
+                            - np.asarray(fwd(dn, b, lower=lower)).sum()) / (2 * eps)
+        np.testing.assert_allclose(got, fd, rtol=1e-5, atol=1e-6)
+
+        dA = rng.standard_normal((4, 4))
+        primal, tangent = _JVPS["tri_solve"]((A, b), (dA, np.zeros(4)), lower=lower)
+        np.testing.assert_allclose(primal, np.asarray(fwd(A, b, lower=lower)))
+        fd_dir = (np.asarray(fwd(A + eps * dA, b, lower=lower))
+                  - np.asarray(fwd(A - eps * dA, b, lower=lower))) / (2 * eps)
+        np.testing.assert_allclose(tangent, fd_dir, rtol=1e-5, atol=1e-7)
+
+
+def test_segment_reduce_rules_honor_op():
+    """Same class as `tri_solve`: the forward's key is `op`, both rules
+    declared `reduce`, so every `op="max"`/`"mean"` call took the *sum* branch
+    and returned 1.0 everywhere. The non-sum handling existed but was
+    unreachable — and, once reached, forwarded `reduce=` to a forward that
+    only knows `op=` and finite-differenced the integer segment ids. Now exact
+    for every mode, including non-contiguous segment ids (#10a fixture)."""
+    from tessera import ops
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.tape import tape
+
+    fwd = getattr(ops.segment_reduce, "__wrapped__", ops.segment_reduce)
+    rng = np.random.default_rng(2)
+    for shape, seg in (((4,), np.array([0, 0, 1, 1])),
+                       ((4, 3), np.array([0, 1, 1, 2])),
+                       ((4,), np.array([0, 0, 7, 7]))):  # ids need not be dense
+        x = rng.standard_normal(shape) + 2.0
+        for op in ("sum", "mean", "max", "min", "prod"):
+            buf = x.copy()
+            with tape() as t:
+                y = ops.segment_reduce(buf, seg, op=op)
+                t.backward(y, cotangent=np.ones_like(np.asarray(y), dtype=np.float64))
+            got = np.asarray(t.cotangent[id(buf)])
+            fd = np.zeros(x.shape)
+            eps = 1e-6
+            for idx in np.ndindex(x.shape):
+                up, dn = x.copy(), x.copy()
+                up[idx] += eps
+                dn[idx] -= eps
+                fd[idx] = (np.asarray(fwd(up, seg, op=op)).sum()
+                           - np.asarray(fwd(dn, seg, op=op)).sum()) / (2 * eps)
+            np.testing.assert_allclose(got, fd, rtol=1e-5, atol=1e-5,
+                                       err_msg=f"vjp {op} {shape}")
+            dx = rng.standard_normal(x.shape)
+            primal, tangent = _JVPS["segment_reduce"]((x, seg), (dx, None), op=op)
+            np.testing.assert_allclose(primal, np.asarray(fwd(x, seg, op=op)))
+            fd_dir = (np.asarray(fwd(x + eps * dx, seg, op=op))
+                      - np.asarray(fwd(x - eps * dx, seg, op=op))) / (2 * eps)
+            np.testing.assert_allclose(tangent, fd_dir, rtol=1e-5, atol=1e-5,
+                                       err_msg=f"jvp {op} {shape}")
+
+
+def test_scalar_operands_stay_positional():
+    """The routing must not over-reach: a python scalar that is a genuine
+    differentiable *operand* (a scalar factor in a product) still has to arrive as a
+    positional input, including for the rules that rename their operands
+    (`vjp_mod(dout, a, b)` over `mod(x, y)`) — the name mismatch is why this
+    needs its own fixture."""
+    from tessera import ops
+    from tessera.autodiff.tape import tape
+
+    cases = {
+        "mul": (lambda t_x: ops.mul(t_x, -0.5), -0.5),
+        "mod": (lambda t_x: ops.mod(t_x, 3), 1.0),
+        "pow": (lambda t_x: ops.pow(t_x, 2.0), None),
+    }
+    x = np.array([[1.5, 2.5, 3.5]])
+    for name, (call, expected) in cases.items():
+        buf = x.copy()
+        with tape() as t:
+            y = call(buf)
+            t.backward(y, cotangent=np.ones_like(np.asarray(y), dtype=np.float64))
+        got = t.cotangent.get(id(buf))
+        assert got is not None, f"{name}: scalar operand lost its cotangent"
+        if expected is not None:
+            np.testing.assert_allclose(np.asarray(got), np.full(x.shape, expected))
+    # pow's gradient is 2x — spelled out rather than pinned to a constant.
+    buf = x.copy()
+    with tape() as t:
+        y = ops.pow(buf, 2.0)
+        t.backward(y, cotangent=np.ones_like(np.asarray(y), dtype=np.float64))
+    np.testing.assert_allclose(np.asarray(t.cotangent[id(buf)]), 2.0 * x)
+
+
+def test_forward_mode_positional_config_matches_keyword():
+    """Forward mode had the same hole with a different face: a positional
+    configuration argument became an extra *primal*, so a rule's `(x,) =
+    primals` unpack raised `too many values to unpack` — which also masked the
+    op's own diagnostic. Both modes now make the same operand/config split."""
+    from tessera import ops
+    from tessera.autodiff.jvp import _ACTIVE_JVP, _JVPTrace
+
+    def tangent_of(call, x, dx):
+        trace = _JVPTrace()
+        trace.bind(x, dx)
+        token = _ACTIVE_JVP.set(trace)
+        try:
+            return trace.tangents.get(id(call(x)))
+        finally:
+            _ACTIVE_JVP.reset(token)
+
+    x = np.arange(12.0).reshape(3, 4)
+    dx = np.ones_like(x)
+    pairs = (
+        (lambda t_x: ops.sum(t_x, axis=0), lambda t_x: ops.sum(t_x, 0)),
+        (lambda t_x: ops.cumsum(t_x, axis=0), lambda t_x: ops.cumsum(t_x, 0)),
+        (lambda t_x: ops.mean(t_x, axis=0, keepdims=True),
+         lambda t_x: ops.mean(t_x, 0, True)),
+    )
+    for kw_call, positional_call in pairs:
+        np.testing.assert_allclose(tangent_of(positional_call, x, dx),
+                                   tangent_of(kw_call, x, dx))
+
+    # A rejected configuration must still reach the caller as the op's own
+    # diagnostic, not as an unpack error from the rule's signature.
+    with pytest.raises(Exception, match="reduce"):
+        tangent_of(lambda t_x: ops.reduce(t_x, "mean"), x, dx)
+
+
+# A forward configuration key that NEITHER rule reads: it is not in the rule's
+# named parameters and the rule catches unknowns with `**_` (the repo's
+# convention for *ignore*, vs `**kwargs` for *forward*). This is the
+# forward-vs-rule half of the `jvp_clamp` class, and it is what `tri_solve`
+# and `segment_reduce` were. Every entry below is an OPEN finding awaiting a
+# body read — some are benign (a storage-dtype key cannot change a gradient),
+# but benign is a conclusion you reach by reading, not by assuming. Do not add
+# entries: fix the rule, or move it to a named-benign set with the reason.
+_OPEN_FORWARD_KEY_SWALLOWS = {
+    ("adam", "jvp", "cast_updates_to_param_dtype"),
+    ("adam", "jvp", "compute_dtype"),
+    ("adam", "jvp", "state_dtype"),
+    ("adam", "vjp", "cast_updates_to_param_dtype"),
+    ("adam", "vjp", "compute_dtype"),
+    ("adam", "vjp", "state_dtype"),
+    ("all_reduce", "jvp", "axis"),
+    ("all_reduce", "vjp", "axis"),
+    ("all_to_all", "jvp", "axis"),
+    ("all_to_all", "vjp", "axis"),
+    ("conv2d", "vjp", "layout"),
+    ("conv3d", "vjp", "layout"),
+    ("dequant_matmul", "vjp", "backend"),
+    ("dequantize_fp4", "jvp", "format"),
+    ("dequantize_fp4", "vjp", "format"),
+    ("dequantize_fp6", "jvp", "format"),
+    ("dequantize_fp6", "vjp", "format"),
+    ("dequantize_fp8", "vjp", "format"),
+    ("dequantize_nvfp4", "jvp", "block_size"),
+    ("dequantize_nvfp4", "vjp", "block_size"),
+    ("fft", "jvp", "norm"),
+    ("grouped_gemm", "jvp", "kind"),
+    ("grouped_gemm", "vjp", "kind"),
+    ("ifft", "jvp", "norm"),
+    ("image_resize", "jvp", "antialias"),
+    ("irfft", "jvp", "norm"),
+    ("istft", "jvp", "axis"),
+    ("istft", "jvp", "center"),
+    ("istft", "jvp", "norm"),
+    ("istft", "jvp", "onesided"),
+    ("momentum", "jvp", "cast_updates_to_param_dtype"),
+    ("momentum", "jvp", "compute_dtype"),
+    ("momentum", "jvp", "state_dtype"),
+    ("momentum", "vjp", "cast_updates_to_param_dtype"),
+    ("momentum", "vjp", "compute_dtype"),
+    ("momentum", "vjp", "state_dtype"),
+    ("nesterov", "jvp", "cast_updates_to_param_dtype"),
+    ("nesterov", "jvp", "compute_dtype"),
+    ("nesterov", "jvp", "state_dtype"),
+    ("nesterov", "vjp", "cast_updates_to_param_dtype"),
+    ("nesterov", "vjp", "compute_dtype"),
+    ("nesterov", "vjp", "state_dtype"),
+    ("online_softmax_state", "jvp", "axis"),
+    ("online_softmax_state", "vjp", "axis"),
+    ("quantize_fp4", "jvp", "format"),
+    ("quantize_fp4", "vjp", "format"),
+    ("quantize_fp6", "jvp", "format"),
+    ("quantize_fp6", "vjp", "format"),
+    ("quantize_fp8", "vjp", "format"),
+    ("quantize_nvfp4", "jvp", "block_size"),
+    ("quantize_nvfp4", "vjp", "block_size"),
+    ("rfft", "jvp", "norm"),
+    ("spectral_conv", "jvp", "axis"),
+    ("spectral_conv", "jvp", "norm"),
+    ("stft", "jvp", "axis"),
+    ("stft", "jvp", "center"),
+    ("stft", "jvp", "norm"),
+    ("stft", "jvp", "onesided"),
+    ("stft", "jvp", "pad_mode"),
+}
+
+
+def _forward_key_swallow_mismatches():
+    from tessera import ops
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.tape import _innermost
+    from tessera.autodiff.vjp import _VJPS
+
+    VK, VP = inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITIONAL
+
+    def sig_of(fn):
+        try:
+            return inspect.signature(_innermost(fn), follow_wrapped=False)
+        except (TypeError, ValueError):
+            return None
+
+    found = set()
+    for op in sorted(set(_VJPS) | set(_JVPS)):
+        fwd = getattr(ops, op, None)
+        fsig = sig_of(fwd) if fwd is not None else None
+        if fsig is None:
+            continue
+        keys = []
+        for i, p in enumerate(fsig.parameters.values()):
+            if i == 0 or p.kind in (VK, VP):
+                continue
+            ann, default = p.annotation, p.default
+            scalarish = (
+                ann in (int, float, str, bool)
+                or (isinstance(ann, str)
+                    and ann.split("|")[0].strip() in ("int", "float", "str", "bool"))
+                or isinstance(default, (int, float, str, bool))
+            )
+            if scalarish:
+                keys.append(p.name)
+        if not keys:
+            continue
+        for registry, table in (("vjp", _VJPS), ("jvp", _JVPS)):
+            rule = table.get(op)
+            rsig = sig_of(rule) if rule is not None else None
+            if rsig is None:
+                continue
+            params = list(rsig.parameters.values())
+            var_kw = next((p.name for p in params if p.kind == VK), None)
+            if var_kw != "_":
+                continue  # `**kwargs` forwards; only `**_` means *ignore*
+            named = {p.name for p in params if p.kind not in (VK, VP)}
+            for key in keys:
+                if key not in named:
+                    found.add((op, registry, key))
+    return found
+
+
+def test_forward_key_swallow_findings_are_pinned():
+    """The forward-vs-rule scan. `_swallowed_kwarg_mismatches` compares the two
+    rules against each other and so is blind to a key BOTH of them ignore —
+    which is exactly what `tri_solve` (`lower` vs a declared-but-unproduced
+    `upper`) and `segment_reduce` (`op` vs `reduce`) were, both silently
+    returning a different function's gradient."""
+    found = _forward_key_swallow_mismatches()
+    new = found - _OPEN_FORWARD_KEY_SWALLOWS
+    fixed = _OPEN_FORWARD_KEY_SWALLOWS - found
+    assert not new, (
+        "NEW forward-key swallow — the canonical forward accepts a key that "
+        f"neither rule reads, so the rule differentiates something else: {sorted(new)}")
+    assert not fixed, (
+        "forward-key swallow finding fixed — remove it from "
+        f"_OPEN_FORWARD_KEY_SWALLOWS to record the triage outcome: {sorted(fixed)}")
+
+
 # ── dashboard determinism ────────────────────────────────────────────────────
 
 

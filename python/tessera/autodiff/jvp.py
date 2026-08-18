@@ -72,7 +72,17 @@ class _JVPTrace:
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
-        primals = tuple(_forward_value(arg) for arg in args)
+        # Same split reverse mode makes: a positionally-passed *configuration*
+        # argument is not a primal. Without this, `ops.sum(x, 0)` handed the
+        # rule a second primal and its `(x,) = primals` unpack raised an
+        # unpack error instead of the op's own diagnostic — the forward-mode
+        # face of the tape's positional-replay bug (see `tape._route_positional`).
+        from .tape import split_positional_config
+
+        call_args, routed = split_positional_config(name, original, args)
+        if routed:
+            kwargs = {**routed, **kwargs}
+        primals = tuple(_forward_value(arg) for arg in call_args)
         tangent_inputs: list[Any] = []
         active = False
         for primal in primals:
@@ -2914,15 +2924,23 @@ def jvp_bsmm(primals, tangents, **_):
 
 
 @_jvp("tri_solve")
-def jvp_tri_solve(primals, tangents, *, upper=False, **_):
-    """L x = b. dx = L^{-1} (db - dL x)."""
+def jvp_tri_solve(primals, tangents, *, lower=True, **_):
+    """T x = b for T = tril(L) (or triu(L)). dx = T^{-1} (dT - dT x).
+
+    Paired with ``vjp_tri_solve``: ``lower`` is the canonical forward key
+    (the old ``upper`` was declared here but never read, and never produced by
+    any caller — Decision #29), and the tangent must be projected onto the
+    same triangle the forward selects.
+    """
     L = np.asarray(primals[0], dtype=np.float64)
     b = np.asarray(primals[1], dtype=np.float64)
     dL = np.asarray(tangents[0], dtype=np.float64)
     db = np.asarray(tangents[1], dtype=np.float64)
-    x = np.linalg.solve(L, b)
-    rhs = db - dL @ x
-    dx = np.linalg.solve(L, rhs)
+    tri = np.tril(L) if lower else np.triu(L)
+    dtri = np.tril(dL) if lower else np.triu(dL)
+    x = np.linalg.solve(tri, b)
+    rhs = db - dtri @ x
+    dx = np.linalg.solve(tri, rhs)
     return x, dx
 
 
@@ -3932,22 +3950,52 @@ def jvp_qkv_projection(primals, tangents, **kwargs):
 
 
 @_jvp("segment_reduce")
-def jvp_segment_reduce(primals, tangents, *, reduce="sum", **_):
-    """y[segment_id] = ⊕_{i: seg[i]=segment_id} x[i].  Linear when reduce='sum';
-    other modes (mean/max) require segment-aware handling.  We implement
-    'sum' analytically and route the rest via numeric jvp."""
-    if reduce != "sum":
-        return _conv_via_op("segment_reduce", primals, tangents, reduce=reduce)
+def jvp_segment_reduce(primals, tangents, *, op=None, reduce="sum", **_):
+    """y[segment_id] = ⊕_{i: seg[i]=segment_id} x[i].  Linear when the reduction
+    is 'sum'; other modes (mean/max) require segment-aware handling.  We
+    implement 'sum' analytically and route the rest via numeric jvp.
+
+    ``op`` is the canonical forward key, coalesced with this rule's older
+    ``reduce`` alias — see ``vjp_segment_reduce`` for why the alias alone made
+    the non-sum branch unreachable.
+    """
+    reduce = op if op is not None else reduce
     x, seg = primals
     dx, _ = tangents
     x_arr = np.asarray(x, dtype=np.float64)
     seg_arr = np.asarray(seg, dtype=np.int64)
     dx_arr = np.asarray(dx, dtype=np.float64)
-    num_segments = int(seg_arr.max()) + 1
-    primal = np.zeros((num_segments,) + x_arr.shape[1:], dtype=np.float64)
+    groups = np.unique(seg_arr)
+    primal = np.zeros((groups.shape[0],) + x_arr.shape[1:], dtype=np.float64)
     tan = np.zeros_like(primal)
-    np.add.at(primal, seg_arr, x_arr)
-    np.add.at(tan, seg_arr, dx_arr)
+    for pos, gid in enumerate(groups):
+        mask = seg_arr == gid
+        values, tangent_values = x_arr[mask], dx_arr[mask]
+        if reduce == "sum":
+            primal[pos] = values.sum(axis=0)
+            tan[pos] = tangent_values.sum(axis=0)
+        elif reduce == "mean":
+            primal[pos] = values.mean(axis=0)
+            tan[pos] = tangent_values.mean(axis=0)
+        elif reduce in ("max", "min"):
+            pick = np.argmax(values, axis=0) if reduce == "max" else np.argmin(values, axis=0)
+            primal[pos] = values.max(axis=0) if reduce == "max" else values.min(axis=0)
+            if values.ndim == 1:
+                tan[pos] = tangent_values[int(pick)]
+            else:
+                for idx in np.ndindex(values.shape[1:]):
+                    tan[(pos,) + idx] = tangent_values[(int(pick[idx]),) + idx]
+        elif reduce == "prod":
+            primal[pos] = np.prod(values, axis=0)
+            others = np.stack(
+                [np.prod(np.delete(values, i, axis=0), axis=0) for i in range(values.shape[0])]
+            )
+            tan[pos] = (others * tangent_values).sum(axis=0)
+        else:
+            raise ValueError(
+                f"segment_reduce JVP: unknown reduction {reduce!r}; "
+                "expected one of sum, mean, max, min, prod"
+            )
     return primal, tan
 
 

@@ -193,14 +193,11 @@ privileges for whole-program memory activity.
 
 ### A6. The measured residual-policy boundary exists; complete family packets remain open
 
-[`AutodiffPairedPass.cpp`](../../../src/transforms/lib/AutodiffPairedPass.cpp)
-header:
-
-> Residual policy — RECOMPUTE_ALL (first cut). The backward function takes the
-> forward *inputs* as arguments and recomputes any forward intermediates it needs
-
 `recompute_all` remains the generic paired-pass default, which is honest for an
-artifact without evidence. It is no longer the only compiler policy. The
+artifact without evidence. It is no longer the only compiler policy or only
+paired ABI: SAVE `control_scan` now returns a compact state tape, while
+data-dependent `scf.if` and canonical `scf.while` return branch and trip-count
+identity for backward consumption. The
 execution-derived residual evaluator represents SAVE, RECOMPUTE, HYBRID, and
 TREEVERSE candidates per `(op, shape-bucket, dtype, target)`, measures complete
 backward work and unique retained bytes, and permits only exact-device evidence

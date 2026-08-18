@@ -7,6 +7,15 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+`W4-PRODUCT-1-RESIDUAL-CONTRACT-2026-08-17` — **shared carrier landed;
+gfx1151 consumer remains open.** SAVE/HYBRID checkpoint sets, CFG identity,
+and residual identity now survive Graph→SCF validation. Shared paired AD now
+consumes SAVE and compact HYBRID scan tapes plus explicit `if` predicate/`while`
+trip count; HYBRID replays only from the nearest checkpoint. Generic counted
+loops now retain independent typed state tapes. The next ROCm slice is a native
+loop and data-dependent-branch region-product package; generic/HYBRID state
+tapes and bare-metal performance proof remain separate.
+
 `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **bounded gfx1151 optimizer reverse
 authority complete.** Explicit plugins now own SGD, Momentum/Nesterov, and
 Adam/AdamW. Each package binds the one-execution tracer certificate, functional

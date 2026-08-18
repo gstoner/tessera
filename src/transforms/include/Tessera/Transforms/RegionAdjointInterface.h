@@ -41,6 +41,7 @@ public:
   static mlir::LogicalResult buildAdjoint(
       mlir::Operation *op, mlir::OpBuilder &builder,
       mlir::ValueRange outputCotangents,
+      mlir::ValueRange explicitResiduals,
       RegionPullbackBuilder buildRegionPullback,
       llvm::SmallVectorImpl<RegionCotangent> &captureCotangents);
 };

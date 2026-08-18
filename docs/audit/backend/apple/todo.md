@@ -8,6 +8,16 @@ last_updated: 2026-08-17
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `W4-PRODUCT-1-RESIDUAL-CONTRACT-2026-08-17` — **shared
+contract parity validated; Apple physical follow-up required.** SAVE/HYBRID
+selection now crosses Graph→SCF with exact checkpoint, CFG, and residual
+identity and cannot silently become recompute-all. Shared paired AD now carries
+the SAVE scan tape, taken `if` predicate, and executed `while` trip count as
+explicit SSA. Shared scan-form HYBRID now performs nearest-checkpoint bounded
+replay. Generic counted loops now use independent typed tapes per carried
+tensor. A Metal region-product consumer, branch-local residuals, and bounded
+`while` state tapes remain open; no x86 or gfx1151 evidence transfers.
+
 Cross-backend sync `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **shared
 optimizer lineage validated; Apple not applicable for the bounded physical
 set.** SGD, Momentum/Nesterov, and Adam/AdamW now use one typed

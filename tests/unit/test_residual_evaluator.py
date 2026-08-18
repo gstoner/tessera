@@ -202,3 +202,52 @@ def test_counted_region_executes_save_recompute_hybrid_cohort() -> None:
     assert rows[0].retained_residual_bytes < rows[1].retained_residual_bytes < rows[2].retained_residual_bytes
     assert all(row.backward_steps == 5 for row in rows)
     assert not any(row.selector_eligible for row in rows)
+
+
+def test_save_residual_tape_matches_nonlinear_finite_difference_without_replay() -> None:
+    steps = 4
+    initial = np.array([0.2, -0.35], dtype=np.float64)
+    shifts = np.array([0.05, -0.1, 0.2, 0.03], dtype=np.float64)
+    (candidate,) = treeverse_candidates(
+        steps=steps,
+        state_bytes=initial.nbytes,
+        measured_step_work_ns=1,
+        memory_budgets=(initial.nbytes * (steps - 1),),
+    )
+    assert candidate.checkpoint_indices == (1, 2, 3)
+
+    def forward_step(index, state):
+        return np.tanh(state + shifts[index])
+
+    def backward_step(index, before, after, cotangent):
+        del index, before
+        return cotangent * (1.0 - after * after)
+
+    capture = capture_treeverse_forward(
+        candidate=candidate,
+        initial_state=initial,
+        forward_step=forward_step,
+    )
+    execution = execute_treeverse_region_adjoint(
+        cotangent=np.ones_like(initial),
+        residuals=capture.residuals,
+        forward_step=forward_step,
+        backward_step=backward_step,
+    )
+
+    epsilon = 1.0e-6
+    numerical = np.empty_like(initial)
+    for component in range(initial.size):
+        delta = np.zeros_like(initial)
+        delta[component] = epsilon
+        plus = initial + delta
+        minus = initial - delta
+        for index in range(steps):
+            plus = forward_step(index, plus)
+            minus = forward_step(index, minus)
+        numerical[component] = (plus.sum() - minus.sum()) / (2.0 * epsilon)
+
+    np.testing.assert_allclose(
+        execution.input_cotangent, numerical, rtol=1.0e-7, atol=1.0e-9
+    )
+    assert execution.replayed_steps == 0

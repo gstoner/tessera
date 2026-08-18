@@ -9,6 +9,15 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `W4-PRODUCT-1-RESIDUAL-CONTRACT-2026-08-17` — **shared
+carrier landed; AVX-512 consumer remains open.** SAVE/HYBRID selection now
+retains its exact checkpoint, CFG, and residual identity through Graph→SCF.
+Shared paired AD consumes SAVE and compact HYBRID scan tapes plus explicit `if`
+predicate and `while` trip-count residuals. Generic counted loops now retain
+independent typed tapes; branch-local intermediates and bounded `while` state
+tapes remain open. x86 owns the first CPU native loop packet and must not infer
+physical execution from the shared numerical oracle.
+
 Cross-backend sync `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **bounded
 AVX-512 SGD and Momentum/Nesterov reverse authority complete.** The plugins
 bind one-execution tracer proof and functional state lineage through typed

@@ -24,10 +24,17 @@ module {
     return %out : tensor<4xf32>
   }
 
-  // CHECK-LABEL: func.func @bounded_while__bwd
+  // The executed trip count crosses the paired ABI explicitly.
+  // CHECK-LABEL: func.func @bounded_while(
+  // CHECK-SAME: -> (tensor<4xf32>, index)
+  // CHECK-SAME: tessera.autodiff.residual_sources = ["scf.while:trip_count"]
+  // CHECK: return {{.*}} : tensor<4xf32>, index
+  // CHECK-LABEL: func.func @bounded_while__bwd(
+  // CHECK-SAME: %[[TRIP:[^:]+]]: index)
+  // CHECK-SAME: tessera.autodiff.residual_sources = ["scf.while:trip_count"]
   // CHECK: scf.while
   // The actual count controls a reverse counted loop.
-  // CHECK: scf.for
+  // CHECK: scf.for {{.*}} to %[[TRIP]]
   // CHECK: scf.for
   // CHECK: tessera.mul
   // CHECK: arith.addf

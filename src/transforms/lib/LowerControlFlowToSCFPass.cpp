@@ -25,11 +25,15 @@
 //
 // Standalone `--tessera-control-flow-to-scf`. Runs BEFORE the CF0
 // control-flow-target-guard in a backend pipeline, so a successfully lowered
-// loop never trips the guard; anything this pass leaves (control_if / while, or
-// a malformed for) is still caught loudly. control_if / control_while lowering
-// (scf.if / scf.while) is the CF2b follow-up.
+// loop never trips the guard; anything this pass leaves is still caught
+// loudly. The pass now also lowers the supported control_if, bounded
+// control_while, and control_scan forms. SAVE scan lowering materializes a
+// compact interior carry-state tape; unsupported payload forms remain guarded.
 
 #include "Tessera/Transforms/Passes.h"
+
+#include <algorithm>
+
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -40,6 +44,8 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
 
 using namespace mlir;
 
@@ -65,6 +71,87 @@ struct LowerControlFlowToSCF
 
   // Outcome of trying to lower one control op.
   enum class Outcome { Lowered, Skipped, Malformed };
+
+  struct ResidualContract {
+    StringRef policy = "recompute_all";
+    DenseI64ArrayAttr checkpointIndices;
+    StringAttr schema;
+    StringAttr cfgDigest;
+    StringAttr residualDigest;
+  };
+
+  FailureOr<ResidualContract> readResidualContract(Operation *op,
+                                                    int64_t trip) {
+    ResidualContract contract;
+    auto policy = op->getAttrOfType<StringAttr>(
+        "tessera.autodiff.checkpoint_policy");
+    if (!policy)
+      return contract;
+    contract.policy = policy.getValue();
+    if (contract.policy == "recompute")
+      contract.policy = "recompute_all";
+    if (contract.policy != "recompute_all" && contract.policy != "save" &&
+        contract.policy != "hybrid") {
+      op->emitError() << "unsupported control_scan checkpoint policy '"
+                      << policy.getValue()
+                      << "'; expected recompute_all, save, or hybrid";
+      return failure();
+    }
+
+    contract.checkpointIndices = op->getAttrOfType<DenseI64ArrayAttr>(
+        "tessera.autodiff.checkpoint_indices");
+    if (contract.policy == "recompute_all") {
+      if (contract.checkpointIndices && !contract.checkpointIndices.empty()) {
+        op->emitError() << "recompute_all control_scan cannot retain checkpoint "
+                          "indices";
+        return failure();
+      }
+      return contract;
+    }
+
+    contract.schema = op->getAttrOfType<StringAttr>(
+        "tessera.autodiff.residual_schema");
+    contract.cfgDigest = op->getAttrOfType<StringAttr>(
+        "tessera.structured_cfg.digest");
+    contract.residualDigest = op->getAttrOfType<StringAttr>(
+        "tessera.autodiff.residual_digest");
+    auto validDigest = [](StringAttr digest) {
+      return digest && digest.getValue().size() == 64 &&
+             llvm::all_of(digest.getValue(), llvm::isHexDigit);
+    };
+    if (!contract.schema ||
+        contract.schema.getValue() != "tessera.region_residual_abi.v1" ||
+        !validDigest(contract.cfgDigest) ||
+        !validDigest(contract.residualDigest) ||
+        !contract.checkpointIndices) {
+      op->emitError()
+          << contract.policy
+          << " control_scan requires residual_schema=v1, CFG/residual "
+             "SHA-256 digests, and explicit checkpoint_indices";
+      return failure();
+    }
+
+    ArrayRef<int64_t> indices = contract.checkpointIndices.asArrayRef();
+    if (!llvm::is_sorted(indices) ||
+        std::adjacent_find(indices.begin(), indices.end()) != indices.end() ||
+        llvm::any_of(indices, [trip](int64_t index) {
+          return index <= 0 || index >= trip;
+        })) {
+      op->emitError() << "control_scan checkpoint_indices must be sorted, "
+                        "unique, interior step indices";
+      return failure();
+    }
+    const size_t allInterior = static_cast<size_t>(trip - 1);
+    if ((contract.policy == "save" &&
+         (allInterior == 0 || indices.size() != allInterior)) ||
+        (contract.policy == "hybrid" &&
+         (indices.empty() || indices.size() >= allInterior))) {
+      op->emitError() << "control_scan checkpoint policy '" << contract.policy
+                      << "' disagrees with its retained checkpoint set";
+      return failure();
+    }
+    return contract;
+  }
 
   // True iff @sym resolves to a func.func whose signature is exactly
   // (argTypes) -> (resultTypes). Unknown symbols (extern) return true (we trust
@@ -376,21 +463,17 @@ struct LowerControlFlowToSCF
       return Outcome::Skipped;
     auto bodySym = op->getAttrOfType<FlatSymbolRefAttr>("body");
     auto tripAttr = op->getAttrOfType<IntegerAttr>("trip");
-    auto checkpointPolicy = op->getAttrOfType<StringAttr>(
-        "tessera.autodiff.checkpoint_policy");
-    if (checkpointPolicy && checkpointPolicy.getValue() != "recompute_all") {
-      op->emitError()
-          << "control_scan checkpoint policy '" << checkpointPolicy.getValue()
-          << "' is not executable in the C++ region adjoint; expected "
-             "'recompute_all' until saved residual ABI lowering lands";
-      signalPassFailure();
-      return Outcome::Malformed;
-    }
     auto bodyFn = dyn_cast_or_null<func::FuncOp>(
         bodySym ? SymbolTable::lookupNearestSymbolFrom(op, bodySym) : nullptr);
     if (!bodySym || !tripAttr || tripAttr.getInt() <= 0 || !bodyFn ||
         bodyFn.isDeclaration() || !bodyFn.getBody().hasOneBlock())
       return Outcome::Skipped;
+    FailureOr<ResidualContract> residual =
+        readResidualContract(op, tripAttr.getInt());
+    if (failed(residual)) {
+      signalPassFailure();
+      return Outcome::Malformed;
+    }
 
     auto xsType = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
     auto ysType = dyn_cast<RankedTensorType>(op->getResult(1).getType());
@@ -424,13 +507,54 @@ struct LowerControlFlowToSCF
     Location loc = op->getLoc();
     Value empty = tensor::EmptyOp::create(
         b, loc, ysType.getShape(), ysType.getElementType());
+    auto carryType = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    const bool materializeResidual =
+        residual->policy == "save" || residual->policy == "hybrid";
+    if (materializeResidual && (!carryType || !carryType.hasStaticShape())) {
+      op->emitError()
+          << residual->policy
+          << " control_scan requires a statically shaped tensor carry";
+      signalPassFailure();
+      return Outcome::Malformed;
+    }
+    Value residualTape;
+    RankedTensorType residualTapeType;
+    if (materializeResidual) {
+      SmallVector<int64_t> tapeShape{
+          static_cast<int64_t>(residual->checkpointIndices.size())};
+      llvm::append_range(tapeShape, carryType.getShape());
+      residualTapeType = RankedTensorType::get(
+          tapeShape, carryType.getElementType(), carryType.getEncoding());
+      residualTape = tensor::EmptyOp::create(
+          b, loc, residualTapeType.getShape(), residualTapeType.getElementType());
+    }
     Value lb = arith::ConstantIndexOp::create(b, loc, 0);
     Value ub = arith::ConstantIndexOp::create(b, loc, tripAttr.getInt());
     Value step = arith::ConstantIndexOp::create(b, loc, 1);
-    auto loop = scf::ForOp::create(
-        b, loc, lb, ub, step, ValueRange{op->getOperand(0), empty});
+    SmallVector<Value> initArgs{op->getOperand(0), empty};
+    if (materializeResidual)
+      initArgs.push_back(residualTape);
+    auto loop = scf::ForOp::create(b, loc, lb, ub, step, initArgs);
     loop->setAttr("tessera.autodiff.checkpoint_policy",
-                  b.getStringAttr("recompute_all"));
+                  b.getStringAttr(residual->policy));
+    if (residual->checkpointIndices) {
+      loop->setAttr("tessera.autodiff.checkpoint_indices",
+                    residual->checkpointIndices);
+      loop->setAttr("tessera.autodiff.residual_schema", residual->schema);
+      loop->setAttr("tessera.structured_cfg.digest", residual->cfgDigest);
+      loop->setAttr("tessera.autodiff.residual_digest",
+                    residual->residualDigest);
+    }
+    if (materializeResidual) {
+      loop->setAttr("tessera.autodiff.residual_materialized",
+                    b.getBoolAttr(true));
+      loop->setAttr("tessera.autodiff.residual_owner",
+                    b.getStringAttr("control_scan"));
+      loop->setAttr("tessera.autodiff.residual_result_indices",
+                    b.getDenseI64ArrayAttr({2}));
+      loop->setAttr("tessera.autodiff.residual_primal_iter_arg_indices",
+                    b.getDenseI64ArrayAttr({0}));
+    }
     {
       OpBuilder::InsertionGuard guard(b);
       b.setInsertionPointToStart(loop.getBody());
@@ -465,9 +589,49 @@ struct LowerControlFlowToSCF
       }
       Value nextYs = tensor::InsertSliceOp::create(
           b, loc, y, loop.getRegionIterArg(1), yOffsets, ySizes, yStrides);
-      scf::YieldOp::create(b, loc, ValueRange{nextCarry, nextYs});
+      SmallVector<Value> yields{nextCarry, nextYs};
+      if (materializeResidual) {
+        Value nextTape = loop.getRegionIterArg(2);
+        for (auto [slot, checkpoint] :
+             llvm::enumerate(residual->checkpointIndices.asArrayRef())) {
+          Value retainAt = arith::ConstantIndexOp::create(
+              b, loc, checkpoint - 1);
+          Value retain = arith::CmpIOp::create(
+              b, loc, arith::CmpIPredicate::eq, loop.getInductionVar(),
+              retainAt);
+          auto retainIf = scf::IfOp::create(
+              b, loc, TypeRange{residualTapeType}, retain,
+              /*withElseRegion=*/true);
+          {
+            OpBuilder::InsertionGuard retainGuard(b);
+            b.setInsertionPointToStart(retainIf.thenBlock());
+            SmallVector<OpFoldResult> offsets{
+                b.getIndexAttr(static_cast<int64_t>(slot))};
+            SmallVector<OpFoldResult> sizes{b.getIndexAttr(1)};
+            SmallVector<OpFoldResult> strides(carryType.getRank() + 1,
+                                             b.getIndexAttr(1));
+            for (int64_t dim : carryType.getShape()) {
+              offsets.push_back(b.getIndexAttr(0));
+              sizes.push_back(b.getIndexAttr(dim));
+            }
+            Value retained = tensor::InsertSliceOp::create(
+                b, loc, nextCarry, nextTape, offsets, sizes, strides);
+            scf::YieldOp::create(b, loc, retained);
+          }
+          {
+            OpBuilder::InsertionGuard retainGuard(b);
+            b.setInsertionPointToStart(retainIf.elseBlock());
+            scf::YieldOp::create(b, loc, nextTape);
+          }
+          nextTape = retainIf.getResult(0);
+        }
+        yields.push_back(nextTape);
+      }
+      scf::YieldOp::create(b, loc, yields);
     }
-    op->replaceAllUsesWith(loop.getResults());
+    for (auto [oldResult, newResult] :
+         llvm::zip_equal(op->getResults(), loop.getResults().take_front(2)))
+      oldResult.replaceAllUsesWith(newResult);
     op->erase();
     return Outcome::Lowered;
   }

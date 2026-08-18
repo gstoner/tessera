@@ -21,7 +21,7 @@ the same PR: `jvp_rmsnorm` eps default (1e-6 → the forward's 1e-5) and
 `eps` explicitly and VJP-side defaults did not move, so no Zen 5 retest is
 required; no device evidence is produced or claimed by this gate. Open
 shared follow-up: 20 pinned swallowed-kwarg findings
-(`test_autodiff_laws.py::_KNOWN_SWALLOWED_KWARGS`) await triage.
+(`test_autodiff_laws.py`) await triage. *Triage update, same key (AD-LAW-1b):* reference JVP fixes landed for `clip` alias deafness, `add`/`mul` unary-`scalar`, and fft/ifft/rfft/irfft `norm` handling (√n-wrong under `norm="ortho"`); five entries benign-classified with recorded reasons; the open set is now the stft/istft/spectral_conv and quantize families only, riding their owning family reviews.
 
 Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
 contract parity; AVX-512 evidence unchanged.** Dynamic region state now uses

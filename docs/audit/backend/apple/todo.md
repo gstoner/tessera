@@ -20,7 +20,7 @@ and `jvp_clamp` swallowing the canonical `min`/`max` kwargs. Apple impact:
 `vjp_rmsnorm` (default unchanged), so no Apple retest is required and no
 Metal evidence is produced or claimed by this gate. Open follow-up shared
 with all backends: 20 pinned swallowed-kwarg findings
-(`test_autodiff_laws.py::_KNOWN_SWALLOWED_KWARGS`) await triage; Apple-side
+(`test_autodiff_laws.py`) await triage. *Triage update, same key (AD-LAW-1b):* reference JVP fixes landed for `clip` alias deafness, `add`/`mul` unary-`scalar`, and fft/ifft/rfft/irfft `norm` handling (√n-wrong under `norm="ortho"`); five entries benign-classified with recorded reasons; the open set is now the stft/istft/spectral_conv and quantize families only, riding their owning family reviews; Apple-side
 impact, if any, is limited to families whose reference oracles change when
 fixed (fft/stft norm handling is the family most likely to matter here).
 

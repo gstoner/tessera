@@ -16,9 +16,18 @@ plan_state: open
 > This is a design and build-sequence document, not a status claim.
 > **Binding status (2026-08-18):** W6.3 now names this document as its design
 > owner and carries §7's estimates; the E2E-REAL-6 Law-3 gate is recorded as
-> *pending AD-LAW-1*. No slice has started — every status word here is design
-> intent, not implementation. §5 tracks which bindings are accepted and which
-> remain proposed.
+> *pending AD-LAW-1*. §5 tracks which bindings are accepted and which remain
+> proposed.
+> **Execution status (2026-08-18): AD-LAW-1's first slice is merged** (PR
+> #584 + the swallowed-kwarg triage follow-up): the §3 math harness (11/11
+> incl. the #10a negative fixture), Laws 1+3 over the live registries with
+> canonical-forward anchoring, the byte-gated `autodiff_law_audit`
+> dashboard, and the first findings fixed (`jvp_rmsnorm` eps default,
+> `jvp_clamp`/`jvp_clip` kwarg deafness, `add`/`mul` unary-`scalar`,
+> fft-family `norm`). Remaining AD-LAW-1 scope: spec growth toward the
+> unswept ops (dashboard-owned count), the stft/istft + quantize swallow
+> findings (pinned in `test_autodiff_laws.py`), and the Law-5 kink
+> extension. Later slices (AD-WEIL-1 onward) have not started.
 
 **Date:** 2026-08-18 · **Sources read:** [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md)
 (complete), [`vjp.py`](../../../python/tessera/autodiff/vjp.py) /

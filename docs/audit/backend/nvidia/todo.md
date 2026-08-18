@@ -17,8 +17,11 @@ shared numpy reference JVP/VJP registries and the byte-gated
 fixed reference rules (`jvp_rmsnorm` eps default, `jvp_clamp` kwarg names),
 so nothing retests; future sm_120 backward family migrations inherit the
 law-checked oracle lane and the E2E-REAL-6 Law-3 gate (#583). Open shared
-follow-up: 20 pinned swallowed-kwarg findings in
-`test_autodiff_laws.py::_KNOWN_SWALLOWED_KWARGS` await triage.
+follow-up: the pinned swallowed-kwarg findings in `test_autodiff_laws.py`.
+*Triage update, same key (AD-LAW-1b):* reference JVP fixes landed for
+`clip` alias deafness, `add`/`mul` unary-`scalar`, and fft/ifft/rfft/irfft
+`norm` handling; five entries benign-classified; the open set is now the
+stft/istft/spectral_conv and quantize families only.
 
 Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
 contract parity; CUDA follow-up required.** Dynamic saved-slot data/shape

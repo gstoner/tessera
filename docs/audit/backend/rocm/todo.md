@@ -20,7 +20,7 @@ dashboard. Reference-rule fixes in the same PR: `jvp_rmsnorm` eps default
 at explicit eps=1e-6 (unchanged), and VJP-side defaults did not move, so no
 gfx1151 retest is required; no device evidence is produced or claimed by
 this gate. Open shared follow-up: 20 pinned swallowed-kwarg findings
-(`test_autodiff_laws.py::_KNOWN_SWALLOWED_KWARGS`) await triage — the
+(`test_autodiff_laws.py`) await triage. *Triage update, same key (AD-LAW-1b):* reference JVP fixes landed for `clip` alias deafness, `add`/`mul` unary-`scalar`, and fft/ifft/rfft/irfft `norm` handling (√n-wrong under `norm="ortho"`); five entries benign-classified with recorded reasons; the open set is now the stft/istft/spectral_conv and quantize families only, riding their owning family reviews — the
 fft/stft `norm` swallowing is the family most relevant to the ROCm spectral
 backward packages if its triage changes reference outputs.
 

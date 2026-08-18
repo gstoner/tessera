@@ -158,6 +158,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 
 | Document | Owns |
 |---|---|
+| [`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md) | Next-generation autodiff design (the W6.3 design content, proposed): one `DerivativeContract` datum per primitive under a parametric `DifferentialAlgebra` codomain (dual / Weil jets / Clifford / operator tangents / Taylor models), executable-law correctness oracles, and the AD-LAW-1 → AD-JET-IR-1 slice sequence. Cross-checked against `CORE_SUBSTRATE_VIEW.md` (§5a) and `CUTE_IR_ASSESSMENT.md` (§6). Global order defers to `INTEGRATED_COMPILER_PLAN.md`. |
 | [`AUTODIFF_UNIFICATION_PLAN.md`](AUTODIFF_UNIFICATION_PLAN.md) | Compiler-owned differentiation boundary and proof ledger. |
 | [`BLOCK_ATTNRES_ROCM_PLAN.md`](BLOCK_ATTNRES_ROCM_PLAN.md) | Block AttnRes mathematical contract, portable oracle, and ROCm-first physical acceptance criteria. |
 | [`COMPILER_REFACTOR_PLAN.md`](COMPILER_REFACTOR_PLAN.md) | Shared spine, plugin, packaging, and backend reconciliation details. |

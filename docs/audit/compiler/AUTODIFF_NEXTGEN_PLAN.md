@@ -1,7 +1,7 @@
 ---
 last_updated: 2026-08-18
 audit_role: plan
-plan_state: draft — proposed, not yet bound to INTEGRATED_COMPILER_PLAN
+plan_state: open
 ---
 
 # Autodiff next generation — one derivative functor, algebra as a parameter
@@ -14,6 +14,8 @@ plan_state: draft — proposed, not yet bound to INTEGRATED_COMPILER_PLAN
 > Global ordering lives only in `INTEGRATED_COMPILER_PLAN.md`;
 > `MASTER_AUDIT.md` + generated dashboards stay status truth (Decision #26).
 > This is a design and build-sequence document, not a status claim.
+> **Binding status:** proposed — no integrated-plan row exists yet for these
+> slices; §5 lists the proposed bindings awaiting the repo owner's decision.
 
 **Date:** 2026-08-18 · **Sources read:** [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md)
 (complete), [`vjp.py`](../../../python/tessera/autodiff/vjp.py) /
@@ -89,7 +91,8 @@ class DerivativeContract:
     # (4) Nonsmooth semantic key (#21a) — shipped today in nonsmooth.py:
     kink_policy: str | None                  # SUBGRAD_ZERO / SUBGRAD_SPLIT / ...
     # (5) Definability certificate for §3.6 (semialgebraic / o-minimal):
-    definable: bool                          # fail-closed for exotic customs
+    pd_witness: str | None                   # "smooth" | "definable:<structure>";
+                                             #   fail-closed for exotic customs (§3.6)
 ```
 
 The registry rejects conflicting registrations structurally (the same
@@ -138,7 +141,7 @@ defaulted silently:
 |---|---|---|
 | `coefficient_scaling` | `taylor` (÷k!) \| `derivative` | The same buffer means different numbers under each convention (JAX's `factorial_scaled` made this a boolean default; here it is a declared key on the jet type) |
 | `kink_policy` | `nonsmooth.py`'s named policies | Already shipped; enters the *forward* of higher-order kernels (§3.4) |
-| `definable` | `true`/`false` | Hypothesis of the §3.6 convergence guarantee |
+| `pd_witness` | `smooth` \| `definable:<structure>` | Per-primitive witness for the §3.6 convergence guarantee — a bare boolean cannot carry the hypothesis (see §3.6's correction) |
 | `control_at_order` | `0` (only legal value in v1) | Data-dependent control flow (branch predicates, `while` trip counts, `max` selections) evaluates on the **primal coefficient only**; coefficients follow the primal's trace. Matches W4-PRODUCT's predicate-replay identity, stated for jets |
 | cotangent/coefficient `numeric_policy` | per Decision #15a | Higher coefficients shrink like 1/k!; accumulator and storage dtype per coefficient is a declared contract, not an accident. (Today the tape seeds backward at float64 regardless of model dtype per the spec's mechanism section — an implicitly chosen accumulation dtype this key makes explicit.) **Carrying this key below Graph IR depends on the S5 generalized `numeric_policy` carrier (`CORE_SUBSTRATE_VIEW.md` S5 — fragment-only today, no owning row); AD-JET-IR-1 is its fourth mandating consumer, §5a** |
 
@@ -161,11 +164,29 @@ f(x̂) = Σ_{j=0}^{k} f^{(j)}(x)/j! · (x̂ − x)^j        (exact in W)
 
 and `f ↦ f(·on W-points)` is an ℝ-algebra homomorphism — the chain rule at
 every order simultaneously. k-times-nested forward mode is evaluation in
-`⊗ᵢ ℝ[εᵢ]/(εᵢ²)` (dim **2ᵏ**); jet mode is the quotient (dim **k+1**). The
-canonical surjection `⊗ᵢ ℝ[εᵢ]/(εᵢ²) ↠ ℝ[ε]/(ε^{k+1})` (all `εᵢ ↦ ε`) proves
-nesting computes the right value and computes `2ᵏ/(k+1)` times too much of it.
-That surjection is Law 4's test statement and the retirement argument for
-"run AutodiffPass twice."
+`⊗ᵢ ℝ[εᵢ]/(εᵢ²)` (dim **2ᵏ**); jet mode is evaluation in `ℝ[ε]/(ε^{k+1})`
+(dim **k+1**). The two are related by the **diagonal embedding**
+
+```
+Δ : ℝ[ε]/(ε^{k+1}) ↪ ⊗ᵢ ℝ[εᵢ]/(εᵢ²),    ε ↦ ε₁ + ε₂ + … + ε_k
+```
+
+which is well-defined because `(ε₁+…+ε_k)^{k+1} = 0` (any k+1 factors over k
+square-zero generators repeat one, by pigeonhole) and injective because
+`(Σεᵢ)^j = j!·e_j(ε₁,…,ε_k) ≠ 0` for `j ≤ k`. Evaluating the nested tower on
+the diagonal seed and reading coefficients back through `Δ` (the top mixed
+term `ε₁⋯ε_k` of the degree-j image carries `j!` times the jet coefficient)
+recovers the jet exactly — that is what proves nesting computes the right
+value while carrying `2ᵏ` dimensions for a `k+1`-dimensional answer. That
+embedding, with its factorial bookkeeping, is Law 4's test statement and the
+retirement argument for "run AutodiffPass twice."
+
+> *Corrected in review (2026-08-18):* an earlier draft stated this as a
+> surjection `εᵢ ↦ ε` out of the nested algebra. That map does not exist —
+> `εᵢ² = 0` would have to map to `ε² = 0`, false in `ℝ[ε]/(ε^{k+1})` for
+> `k ≥ 2`. The relationship runs the other way (small algebra embeds in
+> big), and the AD-LAW-1 math harness pins the wrong map as a negative
+> fixture (#10a) so it cannot be reintroduced.
 
 ### 3.2 Pointwise family: the holonomic ODE is the whole rule
 
@@ -223,10 +244,18 @@ package rules (E2E-REAL-5B), including the LSE checkpoint identity.
 For the linearization `J = ∂f(x)`, reverse mode is `Jᵀ`, characterized
 completely by `⟨Jv, u⟩ = ⟨v, Jᵀu⟩`. Three engineering consequences:
 
-1. The adjoint law is a **complete correctness test** for a VJP against its
-   JVP with no reference implementation (Law 3) — runnable over the entire
-   existing `_VJPS`×`_JVPS` overlap today, including
-   `_VJPS_GEO`×`_JVPS_GEO` under the multivector inner product.
+1. The adjoint law is a **complete test of the transpose relationship** —
+   that the VJP is the adjoint of the supplied JVP (Law 3) — runnable over
+   the entire existing `_VJPS`×`_JVPS` overlap today, including
+   `_VJPS_GEO`×`_JVPS_GEO` under the multivector inner product. It is **not**
+   by itself a derivative-correctness test: a matched-wrong pair (e.g. an
+   all-zero JVP with an all-zero VJP) satisfies the identity on every probe.
+   Derivative correctness is carried by the independent oracles — Law 2
+   against the registered ODE/analytic datum, Law 4's jet-vs-nested proof,
+   Law 1 composition, and the existing per-op numerical-Jacobian tests,
+   which remain in force. Law 3's value is that it localizes a
+   *disagreement* between the mode pair with no reference implementation
+   and completes the pointwise checks on the transpose axis.
 2. `Jᵀ` need not be materialized. `OperatorTangent` (composition as product,
    `.T` as involution) turns `implicit.py`'s IFT, iHVP, Newton–Krylov, and
    Gauss–Newton into compositions consumed by matrix-free solves — the
@@ -246,14 +275,36 @@ the right shape — never assumed from smoothness of the residual.
 
 `nonsmooth.py` pins *which* Clarke subgradient each kink returns. The
 conservative-field results (Bolte & Pauwels) supply the missing top plate:
-for programs of **definable** primitives, tape AD with any fixed selection
-yields a conservative field; the loss is path-differentiable; subgradient
-descent on AD output converges to the correct stationary set. Every catalog
-primitive is semialgebraic-definable; the certificate becomes the `definable`
-registry axis (fail-closed for exotic `custom_primitive` registrations). This
-gives the spec a citable training-convergence contract that neither JAX nor
-PyTorch states — PyTorch's historical `clamp`-vs-`clip` kink inconsistency is
-the exact bug class the policy registry already fixed in-tree.
+for **path-differentiable** programs, tape AD with any fixed selection
+yields a conservative field; subgradient descent on AD output converges to
+the correct stationary set.
+
+*Corrected in review (2026-08-18):* an earlier draft claimed every catalog
+primitive is semialgebraic-definable, which is false — `exp` is not
+semialgebraic, and unrestricted `sin`/`cos` are not definable in **any**
+o-minimal structure (infinitely many zeros). A bare `definable: bool` cannot
+carry the hypothesis. The honest certificate is a per-primitive
+**path-differentiability witness** (`pd_witness`, §2.1/§2.3 — a semantic key,
+fail-closed for exotic `custom_primitive` registrations):
+
+- **`smooth`** — C¹ primitives (`exp`, `sin`, `cos`, `tanh`, `erf`, …) are
+  path-differentiable trivially; the conservative field is the singleton
+  gradient. No definability claim is made or needed.
+- **`definable:<structure>`** — the nonsmooth primitives (`relu`, `max`/`min`
+  ties, `clip`, `abs`, sort/top-k selections) are piecewise-polynomial, hence
+  **semialgebraic** — the definability claim is made exactly where it is true,
+  with the structure named. Here the declared kink policy selects the element
+  of the conservative field.
+- **Compositions inherit path-differentiability by the conservative-field
+  chain rule** (the central Bolte–Pauwels result) — which is precisely what
+  tape composition implements. The program-level guarantee therefore needs no
+  single o-minimal structure containing every primitive; it needs each
+  primitive to carry a valid witness and the chain rule to compose them.
+
+This gives the spec a citable training-convergence contract that neither JAX
+nor PyTorch states — PyTorch's historical `clamp`-vs-`clip` kink
+inconsistency is the exact bug class the policy registry already fixed
+in-tree.
 
 ### 3.7 Stochastic derivative estimators, deterministic by construction
 
@@ -295,8 +346,8 @@ dashboard and drift-gated:
 |---|---|---|---|
 | 1 | Functoriality | `D(g∘f) = Dg ∘ Df` on randomly composed primitive pairs | metamorphic; exact on polynomial pieces |
 | 2 | Homomorphism | evaluation in `W` commutes with `+`/`×`/composition | **exact (tolerance 0)** for polynomial primitives by nilpotency; tight-tolerance for transcendental |
-| 3 | Adjoint | `⟨Jv,u⟩ = ⟨v,Jᵀu⟩` per primitive, dimension-scaled probe count | complete for linearity; runs over today's registries **before any refactor**, incl. geometric |
-| 4 | Quotient consistency | jet order-k ≡ k-nested `Dual()` (§3.1 surjection) | the differential proof that gates every hand-rule retirement (Decision #31) |
+| 3 | Adjoint | `⟨Jv,u⟩ = ⟨v,Jᵀu⟩` per primitive, dimension-scaled probe count | complete for the **transpose relationship** (not derivative correctness — a matched-wrong pair passes; Laws 1/2/4 + existing FD tests carry that, §3.5); runs over today's registries **before any refactor**, incl. geometric |
+| 4 | Quotient consistency | jet order-k ≡ k-nested `Dual()` on the diagonal seed (§3.1 embedding, factorial bookkeeping) | the differential proof that gates every hand-rule retirement (Decision #31) |
 | 5 | Kink policy | probe exactly at ties/bounds; assert declared policy + mass conservation for `SUBGRAD_SPLIT` | extends `nonsmooth.py`'s existing drift test |
 | 6 | Enclosure / unbiasedness | `TaylorModel` interval contains the exact jet; estimator mean → exact operator under fixed seeds | certified / stochastic modes only |
 
@@ -342,9 +393,10 @@ create a queue.** Proposed bindings, for the repo owner to accept:
    `CliffordTangent` instance (W3-class collapse, gated on the substrate
    proof + Law 3/4 green on the geometric registry).
 5. **E2E-REAL-6 gate strengthening:** the Law-3 adjoint check joins the
-   standard family-migration acceptance checklist — it is the "numeric
-   identity" those packages already bind, made complete rather than
-   pointwise.
+   standard family-migration acceptance checklist — completing the existing
+   pointwise "numeric identity" binding on the transpose axis. It composes
+   with, and does not replace, the per-family derivative oracles (§3.5's
+   completeness caveat: Law 3 alone cannot certify the derivative).
 
 **Funding table (OT-style re-scope).** Most of the program is already paid
 for by landed or landing work:
@@ -389,7 +441,7 @@ above:
 | **S4 keys + certificates** | Full alignment: §2.3's semantic keys are S4 instances; `LinearSolveInfo`, the Law dashboard, the measured conditioning envelope (§3.8), and `TaylorModel` enclosures follow the certificates-not-booleans discipline |
 | **S3 calibration + arbiter** | `TaylorModel` enclosures are the strongest available form of the **accuracy certificate** the Decision #28 accuracy-budgeted arbiter needs (CAKE capability #4: accuracy budget as a search axis). Named as AD-CERT-1's candidate consumer (§7) |
 | **S2 schedule object** | Jet kernel packages ride the Schedule Object digest (`SCHEDULE_OBJECT_DESIGN.md`) like every other content-addressed carrier; no new mechanism |
-| **§0.1 verification discipline** | Adopted: the substrate view machine-checks every prose-only mathematical claim it inherits (13/13). This plan's §3 recurrences, cost counts, and the quotient surjection get the same treatment — an executable math-verification harness is an AD-LAW-1 acceptance criterion (§7), so no slice builds on unverified prose |
+| **§0.1 verification discipline** | Adopted: the substrate view machine-checks every prose-only mathematical claim it inherits (13/13). This plan's §3 recurrences, cost counts, and the diagonal embedding get the same treatment — an executable math-verification harness is an AD-LAW-1 acceptance criterion (§7), so no slice builds on unverified prose |
 
 ---
 
@@ -453,7 +505,9 @@ finding, reported per claim-integrity rules); dashboard drift-gated via
 `verify_autodiff_math.py`-style harness (the §0.1 discipline from
 `CORE_SUBSTRATE_VIEW.md`): the exp/tanh/sin-cos recurrences against numpy
 derivatives at small k, the `(k+1)(k+2)/2` jet-matmul count, and the §3.1
-quotient surjection on small instances — no slice builds on unverified prose.
+diagonal embedding on small instances — including the **negative fixture**
+that the naive `εᵢ ↦ ε` "surjection" is not an algebra map (#10a, per the
+§3.1 review correction) — no slice builds on unverified prose.
 *Consumers:* E2E-REAL-6 migration gates (§5 item 5); every later slice. **Do
 not land any AD-WEIL-1 code before this exists** — the oracles are what make
 the migration provable.

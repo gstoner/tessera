@@ -192,25 +192,41 @@ def _single_leaf(x: Any) -> bool:
 
 def chain_check(op: str, spec, jvp_fn: Callable,
                 registry: str = "tensor") -> LawResult:
-    """Chained-JVP tangent of tanh∘f vs central FD of the composed primal.
+    """Chained-JVP tangent of tanh∘f vs central FD of the **canonical** primal.
 
     This is the derivative-correctness complement to the adjoint law: a
     matched-zero JVP/VJP pair passes Law 3 and fails here.
+
+    The finite difference is anchored on the *registered forward op*
+    (resolved via ``linear._resolve_forward``), never on the JVP's own
+    primal output — a JVP that self-consistently implements the derivative
+    of the wrong function (say ``exp(2x)`` with tangent ``2·dx·exp(2x)``)
+    agrees with an FD of its own primal on every probe, so a
+    self-referential check would certify exactly the matched-wrong class
+    this law exists to catch. When no canonical forward resolves for the
+    op name, the check reports ``not_applicable`` rather than silently
+    degrading to self-consistency. The JVP's primal output is additionally
+    required to match the canonical forward at the base point.
     """
     from .jvp import get_jvp
+    from .linear import _resolve_forward
 
     g_jvp = get_jvp("tanh")
     if g_jvp is None:  # cannot happen in-tree; keep the sweep honest anyway
         return LawResult(op, registry, "chain", "not_applicable", 0, None,
                          "no tanh JVP to chain with")
+    forward = _resolve_forward(op)
+    if forward is None:
+        return LawResult(op, registry, "chain", "not_applicable", 0, None,
+                         "no canonical forward resolved — a self-consistency "
+                         "FD would not anchor the primal")
     rng = op_rng(op, "chain")
     try:
         primals, kwargs = spec.make(rng)
         diff = spec.diff_args if spec.diff_args is not None else tuple(range(len(primals)))
 
         def primal_out(ps: tuple) -> Any:
-            zeros = tuple(_zero_like(p) for p in ps)
-            return jvp_fn(ps, zeros, **kwargs)[0]
+            return forward(*ps, **kwargs)
 
         # Scale the output into tanh's active region before composing —
         # a large primal (e.g. an unreduced loss ≈ ±15) saturates tanh,
@@ -220,6 +236,17 @@ def chain_check(op: str, spec, jvp_fn: Callable,
         # to differentiation.
         y0 = np.asarray(primal_out(primals), dtype=np.float64)
         s = 1.0 / (1.0 + float(np.max(np.abs(y0))))
+
+        # Primal-consistency gate: the JVP's own primal output must be the
+        # canonical forward. A JVP whose primal half already disagrees is
+        # differentiating some other function, whatever its tangent says.
+        zeros = tuple(_zero_like(p) for p in primals)
+        y_jvp = np.asarray(jvp_fn(primals, zeros, **kwargs)[0], dtype=np.float64)
+        if y_jvp.shape != y0.shape or not np.allclose(y_jvp, y0, rtol=1e-9, atol=1e-12):
+            return LawResult(op, registry, "chain", "fail", 1, None,
+                             "JVP primal output disagrees with the canonical "
+                             "forward — the rule differentiates a different "
+                             "function")
 
         max_res = 0.0
         for _ in range(max(2, spec.probes // 2)):

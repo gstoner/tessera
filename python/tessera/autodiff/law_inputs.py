@@ -119,8 +119,9 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
     "sign": S(_unary(kink=0.0), zero_tangent_ok=True, chain=False,
               note="derivative 0 a.e. — zero tangents are correct"),
     "clamp": S(lambda rng: ((rng.standard_normal((3, 4)) * 0.3,),
-                            {"min_val": -1.0, "max_val": 1.0}),
-               note="interior samples; bound behaviour is Law 5"),
+                            {"min": -1.0, "max": 1.0}),
+               note="interior samples (canonical `min`/`max` kwargs); "
+                    "bound behaviour is Law 5"),
 
     # ── binary pointwise ─────────────────────────────────────────────────────
     "add": S(_binary()),

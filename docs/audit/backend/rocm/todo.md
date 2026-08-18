@@ -7,6 +7,23 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `AD-LAW-1-SHARED-ORACLE-2026-08-18` — **shared test
+infrastructure; ROCm outcome: parity validated, no gfx1151 evidence
+changed.** AD-LAW-1 (PR #584) adds law oracles (adjoint `⟨Jv,u⟩ = ⟨v,Jᵀu⟩` +
+canonical-forward chain check) over the shared numpy reference JVP/VJP
+registries — the oracle lane the gfx1151 `bwd_hardware_proven` rows
+(flash_attn, selective_ssm) and norm/attention backward packages
+differentially compare against — plus the byte-gated `autodiff_law_audit`
+dashboard. Reference-rule fixes in the same PR: `jvp_rmsnorm` eps default
+(1e-6 → the forward's 1e-5) and `jvp_clamp` swallowing canonical
+`min`/`max`. ROCm impact: `test_rocm_norm_compiled.py` pins `rmsnorm_safe`
+at explicit eps=1e-6 (unchanged), and VJP-side defaults did not move, so no
+gfx1151 retest is required; no device evidence is produced or claimed by
+this gate. Open shared follow-up: 20 pinned swallowed-kwarg findings
+(`test_autodiff_laws.py::_KNOWN_SWALLOWED_KWARGS`) await triage — the
+fft/stft `norm` swallowing is the family most relevant to the ROCm spectral
+backward packages if its triage changes reference outputs.
+
 Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
 contract parity; gfx1151 evidence unchanged.** Dynamic region state now uses
 bounded per-slot data tapes plus recorded logical-shape tapes. Polynomial shape

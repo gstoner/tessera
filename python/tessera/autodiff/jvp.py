@@ -276,15 +276,23 @@ def jvp_sin(primals, tangents, **_):
 
 
 @_jvp("clamp")
-def jvp_clamp(primals, tangents, *, min_val=None, max_val=None, **_):
+def jvp_clamp(primals, tangents, *, min=None, max=None, **_):
+    # Kwarg names MUST match the forward's and vjp_clamp's (`min`/`max`,
+    # shadowing the builtins deliberately) — this rule previously spelled
+    # them `min_val`/`max_val`, so bounds recorded by the canonical forward
+    # fell into `**_` and the JVP silently computed the *unclamped identity*
+    # for both primal and tangent. Caught by AD-LAW-1's canonical-forward
+    # chain anchoring; pinned by test_autodiff_laws.py.
     (x,) = primals
     (dx,) = tangents
-    y = np.clip(x, -np.inf if min_val is None else min_val, np.inf if max_val is None else max_val)
+    lo = -np.inf if min is None else min
+    hi = np.inf if max is None else max
+    y = np.clip(x, lo, hi)
     mask = np.ones_like(x, dtype=np.float64)
-    if min_val is not None:
-        mask = mask * (x > min_val)
-    if max_val is not None:
-        mask = mask * (x < max_val)
+    if min is not None:
+        mask = mask * (x > min)
+    if max is not None:
+        mask = mask * (x < max)
     return y, dx * mask
 
 

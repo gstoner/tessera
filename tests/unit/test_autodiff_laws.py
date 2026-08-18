@@ -136,8 +136,36 @@ def test_matched_zero_pair_demonstrates_law3_caveat():
     spec = _spec_unary()
     r3 = adjoint_check("exp<matched-zero>", spec, _zero_jvp, _zero_vjp)
     assert r3.status == "fail" and "vacuous" in r3.detail, r3
-    r1 = chain_check("exp<matched-zero>", spec, _zero_jvp)
+    # The chain law anchors its FD on the canonical forward resolved from the
+    # op name, so the synthetic pair borrows the real name: its primal half
+    # (np.exp) matches the canonical forward — only the tangent is wrong,
+    # which is exactly what the FD anchor must catch.
+    r1 = chain_check("exp", spec, _zero_jvp)
     assert r1.status == "fail", r1
+
+
+def test_chain_requires_canonical_forward():
+    """Review hardening (#584): with no canonical forward to anchor the FD,
+    the chain law must refuse (`not_applicable`) rather than silently degrade
+    to self-consistency — a JVP that is the correct derivative of the wrong
+    function would pass a self-anchored FD."""
+    r = chain_check("no-such-op<synthetic>", _spec_unary(), _exp_jvp)
+    assert r.status == "not_applicable" and "canonical forward" in r.detail, r
+
+
+def test_chain_catches_wrong_function_jvp():
+    """A JVP that self-consistently implements exp(2x) — right shape, right
+    internal consistency, wrong function — must fail against the canonical
+    exp forward (the P2 review scenario, executable)."""
+
+    def wrong_fn_jvp(primals, tangents, **_):
+        (x,) = primals
+        (dx,) = tangents
+        e = np.exp(2.0 * x)
+        return e, 2.0 * dx * e
+
+    r = chain_check("exp", _spec_unary(), wrong_fn_jvp)
+    assert r.status == "fail", r
 
 
 def test_zero_tangent_ok_respected():
@@ -206,6 +234,116 @@ def test_paired_rule_defaults_agree():
     assert none_side == _KNOWN_NONE_CONVENTION, (
         "the None-convention mismatch set changed — additions are new findings "
         f"to triage, removals are fixes to record here: {sorted(none_side)}")
+
+
+# A paired rule "swallows" a kwarg when the sibling mode declares it
+# keyword-only but this rule has no named parameter for it and catches
+# unknowns as `**_` (the repo convention for *ignore*, vs `**kwargs` for
+# *forward*). That is the `jvp_clamp` bug class: the canonical caller's
+# kwargs silently vanish and the rule computes something else. The clamp
+# instance is FIXED; every entry below is an OPEN AD-LAW-1 FINDING awaiting
+# triage (some may be benign — `_output_index` is vjp-side multi-output
+# plumbing — but each needs a body read). Do not add entries: fix the rule
+# or record why it is benign and move it to a named-benign set.
+_KNOWN_SWALLOWED_KWARGS = {
+    ("adam", "jvp", "_output_index"),
+    ("add", "jvp", "scalar"),
+    ("clip", "jvp", "max"),
+    ("clip", "jvp", "min"),
+    ("fft", "jvp", "norm"),
+    ("fft", "jvp", "normalization"),
+    ("ifft", "jvp", "norm"),
+    ("ifft", "jvp", "normalization"),
+    ("irfft", "jvp", "norm"),
+    ("irfft", "jvp", "normalization"),
+    ("istft", "jvp", "axis"),
+    ("istft", "jvp", "center"),
+    ("istft", "jvp", "hop_length"),
+    ("istft", "jvp", "length"),
+    ("istft", "jvp", "norm"),
+    ("istft", "jvp", "normalization"),
+    ("istft", "jvp", "onesided"),
+    ("moe_dispatch", "jvp", "transport"),
+    ("mul", "jvp", "scalar"),
+    ("pow", "vjp", "exponent"),
+    ("quantize_fp4", "jvp", "scale"),
+    ("quantize_fp6", "jvp", "scale"),
+    ("quantize_int4", "jvp", "symmetric"),
+    ("quantize_int8", "jvp", "symmetric"),
+    ("quantize_nvfp4", "jvp", "scale"),
+    ("rfft", "jvp", "norm"),
+    ("rfft", "jvp", "normalization"),
+    ("rope_split", "jvp", "_output_index"),
+    ("spectral_conv", "jvp", "axis"),
+    ("spectral_conv", "jvp", "norm"),
+    ("spectral_conv", "jvp", "normalization"),
+    ("stft", "jvp", "axis"),
+    ("stft", "jvp", "center"),
+    ("stft", "jvp", "hop_length"),
+    ("stft", "jvp", "norm"),
+    ("stft", "jvp", "normalization"),
+    ("stft", "jvp", "onesided"),
+    ("stft", "jvp", "pad_mode"),
+    ("sub", "vjp", "scalar"),
+}
+
+
+def _swallowed_kwarg_mismatches():
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.vjp import _VJPS
+
+    KW = inspect.Parameter.KEYWORD_ONLY
+    VK = inspect.Parameter.VAR_KEYWORD
+    VP = inspect.Parameter.VAR_POSITIONAL
+
+    def info(fn):
+        ps = list(inspect.signature(fn).parameters.values())
+        kwonly = {p.name for p in ps if p.kind == KW}
+        named = {p.name for p in ps if p.kind not in (VK, VP)}
+        var = next((p.name for p in ps if p.kind == VK), None)
+        return kwonly, named, var
+
+    found = set()
+    for op in sorted(set(_JVPS) & set(_VJPS)):
+        try:
+            jk, jn, jv = info(_JVPS[op])
+            vk, vn, vv = info(_VJPS[op])
+        except (ValueError, TypeError):
+            continue
+        if jv == "_":
+            for name in vk - jn:
+                found.add((op, "jvp", name))
+        if vv == "_":
+            for name in jk - vn:
+                found.add((op, "vjp", name))
+    return found
+
+
+def test_swallowed_kwarg_findings_are_pinned():
+    found = _swallowed_kwarg_mismatches()
+    new = found - _KNOWN_SWALLOWED_KWARGS
+    fixed = _KNOWN_SWALLOWED_KWARGS - found
+    assert not new, (
+        "NEW swallowed-kwarg mismatch (the jvp_clamp bug class — a canonical "
+        f"caller's kwargs silently vanish into `**_`): {sorted(new)}")
+    assert not fixed, (
+        "swallowed-kwarg finding fixed — remove it from _KNOWN_SWALLOWED_KWARGS "
+        f"to record the triage outcome: {sorted(fixed)}")
+
+
+def test_clamp_jvp_honors_canonical_kwargs():
+    """The fixed instance, pinned directly: jvp_clamp used `min_val`/`max_val`
+    while the forward and vjp_clamp use `min`/`max`, so canonical kwargs fell
+    into `**_` and the JVP silently computed the unclamped identity (primal
+    AND tangent) — a matched-degenerate pair the adjoint law alone could not
+    see (#10a negative fixture for the fix)."""
+    from tessera.autodiff.jvp import _JVPS
+
+    x = np.array([[-2.0, -0.5, 0.5, 2.0]])
+    dx = np.ones_like(x)
+    y, dy = _JVPS["clamp"]((x,), (dx,), min=-1.0, max=1.0)
+    np.testing.assert_allclose(y, np.clip(x, -1.0, 1.0))
+    np.testing.assert_allclose(dy, np.array([[0.0, 1.0, 1.0, 0.0]]))
 
 
 def test_rmsnorm_eps_defaults_match_forward():

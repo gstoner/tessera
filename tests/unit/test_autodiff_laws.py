@@ -258,12 +258,16 @@ _BENIGN_SWALLOWS = {
     ("moe_dispatch", "jvp", "transport"):
         "reference forward is value-identity for every transport; the "
         "kwarg selects a mechanism, not a function",
+    # NOTE: reasons must not spell out `ops.<name>` — the test_coverage
+    # scanner regex-matches that pattern in strings/comments and would count
+    # prose as a direct test reference, overstating coverage (Codex review
+    # on the AD-LAW-1b PR).
     ("pow", "vjp", "exponent"):
-        "canonical `ops.pow(x, y)` is binary positional; the jvp-side "
+        "the canonical forward `(x, y)` is binary positional; the jvp-side "
         "unary `exponent` form is a non-canonical extra entry point the "
         "tape never records",
     ("sub", "vjp", "scalar"):
-        "canonical `ops.sub(x, y)` is binary with no scalar kwarg; the "
+        "the canonical forward `(x, y)` is binary with no scalar kwarg; the "
         "jvp-side `scalar` param is dead vocabulary",
 }
 

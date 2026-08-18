@@ -9,6 +9,20 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `AD-LAW-1-SHARED-ORACLE-2026-08-18` — **shared test
+infrastructure; x86 outcome: parity validated, no AVX-512 evidence
+changed.** AD-LAW-1 (PR #584) adds law oracles (adjoint `⟨Jv,u⟩ = ⟨v,Jᵀu⟩` +
+canonical-forward chain check) over the shared numpy reference JVP/VJP
+registries — the oracle lane the AVX-512 backward packages (incl. the
+selective_ssm `bwd_hardware_proven` row) differentially compare against —
+plus the byte-gated `autodiff_law_audit` dashboard. Reference-rule fixes in
+the same PR: `jvp_rmsnorm` eps default (1e-6 → the forward's 1e-5) and
+`jvp_clamp` swallowing canonical `min`/`max`. x86 impact: norm bindings pass
+`eps` explicitly and VJP-side defaults did not move, so no Zen 5 retest is
+required; no device evidence is produced or claimed by this gate. Open
+shared follow-up: 20 pinned swallowed-kwarg findings
+(`test_autodiff_laws.py::_KNOWN_SWALLOWED_KWARGS`) await triage.
+
 Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
 contract parity; AVX-512 evidence unchanged.** Dynamic region state now uses
 bounded per-slot data tapes plus recorded logical-shape tapes. Polynomial shape

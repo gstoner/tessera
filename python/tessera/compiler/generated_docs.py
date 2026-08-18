@@ -284,6 +284,16 @@ def _r_docs_freshness() -> str:
     return docs_manifest.render_dashboard()
 
 
+def _r_autodiff_law_audit() -> str:
+    from . import law_audit
+    return law_audit.render_markdown()
+
+
+def _r_autodiff_law_audit_csv() -> str:
+    from . import law_audit
+    return law_audit.render_csv()
+
+
 def _r_autodiff_ledger() -> str:
     from . import autodiff_ledger
     return autodiff_ledger.render_markdown()
@@ -564,6 +574,13 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
     GeneratedDoc(
         "dtype_flow", "specialized", _GEN / "dtype_flow.md", _r_dtype_flow,
         csv_path=_GEN / "dtype_flow.csv", render_csv=_r_dtype_flow_csv,
+        also_gate_md=True,
+    ),
+    GeneratedDoc(
+        "autodiff_law_audit", "specialized", _GEN / "autodiff_law_audit.md",
+        _r_autodiff_law_audit,
+        csv_path=_GEN / "autodiff_law_audit.csv",
+        render_csv=_r_autodiff_law_audit_csv,
         also_gate_md=True,
     ),
     GeneratedDoc(

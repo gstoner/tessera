@@ -8,6 +8,18 @@ last_updated: 2026-08-18
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `AD-LAW-1-SHARED-ORACLE-2026-08-18` — **shared test
+infrastructure; NVIDIA outcome: not applicable today, parity by
+construction for future migrations; no sm_120 evidence changed.** AD-LAW-1
+(PR #584) adds law oracles (adjoint + canonical-forward chain) over the
+shared numpy reference JVP/VJP registries and the byte-gated
+`autodiff_law_audit` dashboard. NVIDIA has no native binding to the two
+fixed reference rules (`jvp_rmsnorm` eps default, `jvp_clamp` kwarg names),
+so nothing retests; future sm_120 backward family migrations inherit the
+law-checked oracle lane and the E2E-REAL-6 Law-3 gate (#583). Open shared
+follow-up: 20 pinned swallowed-kwarg findings in
+`test_autodiff_laws.py::_KNOWN_SWALLOWED_KWARGS` await triage.
+
 Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
 contract parity; CUDA follow-up required.** Dynamic saved-slot data/shape
 tapes, exact polynomial witness guards, and variadic branch CFG state are

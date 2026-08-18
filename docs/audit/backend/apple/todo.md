@@ -8,6 +8,22 @@ last_updated: 2026-08-18
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `AD-LAW-1-SHARED-ORACLE-2026-08-18` — **shared test
+infrastructure; Apple outcome: parity validated, no Metal evidence changed.**
+AD-LAW-1 (PR #584) adds executable law oracles (adjoint `⟨Jv,u⟩ = ⟨v,Jᵀu⟩` +
+canonical-forward chain check) over the shared numpy reference JVP/VJP
+registries — the oracle lane Apple backward bindings differentially compare
+against — plus the byte-gated `autodiff_law_audit` dashboard. Reference-rule
+fixes in the same PR: `jvp_rmsnorm` eps default (1e-6 → the forward's 1e-5)
+and `jvp_clamp` swallowing the canonical `min`/`max` kwargs. Apple impact:
+`test_apple_normalization_vjp.py` passes `eps` explicitly and consumes
+`vjp_rmsnorm` (default unchanged), so no Apple retest is required and no
+Metal evidence is produced or claimed by this gate. Open follow-up shared
+with all backends: 20 pinned swallowed-kwarg findings
+(`test_autodiff_laws.py::_KNOWN_SWALLOWED_KWARGS`) await triage; Apple-side
+impact, if any, is limited to families whose reference oracles change when
+fixed (fft/stft norm handling is the family most likely to matter here).
+
 Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
 contract parity; Metal follow-up required.** Dynamic saved-slot data/shape
 tapes, exact polynomial witness guards, and variadic branch CFG state are

@@ -3560,8 +3560,15 @@ def jvp_layer_norm(primals, tangents, *, eps=1e-5, **_):
 
 
 @_jvp("rmsnorm")
-def jvp_rmsnorm(primals, tangents, *, eps=1e-6, **_):
-    """y = x / sqrt(mean(x²) + eps).  Closed-form JVP."""
+def jvp_rmsnorm(primals, tangents, *, eps=1e-5, **_):
+    """y = x / sqrt(mean(x²) + eps).  Closed-form JVP.
+
+    The ``eps`` default must equal the forward's and ``vjp_rmsnorm``'s
+    (both 1e-5) — AD-LAW-1's adjoint sweep caught this pair disagreeing
+    (jvp at 1e-6, the ``rmsnorm_safe`` value), which made J and Jᵀ
+    derivatives of two *different* functions at default arguments.
+    Pinned by ``test_autodiff_laws.py::test_paired_rule_defaults_agree``.
+    """
     (x,) = primals
     (dx,) = tangents
     x_arr = np.asarray(x, dtype=np.float64)
@@ -3570,7 +3577,6 @@ def jvp_rmsnorm(primals, tangents, *, eps=1e-6, **_):
     inv = 1.0 / np.sqrt(ms + eps)
     y = x_arr * inv
     dms = 2.0 * (x_arr * dx_arr).mean(axis=-1, keepdims=True)
-    dy = dx_arr * inv - 0.5 * y * inv * inv * dms / inv
     dy = dx_arr * inv - 0.5 * x_arr * inv * inv * inv * dms
     return y, dy
 

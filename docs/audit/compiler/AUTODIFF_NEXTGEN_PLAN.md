@@ -14,8 +14,11 @@ plan_state: open
 > Global ordering lives only in `INTEGRATED_COMPILER_PLAN.md`;
 > `MASTER_AUDIT.md` + generated dashboards stay status truth (Decision #26).
 > This is a design and build-sequence document, not a status claim.
-> **Binding status:** proposed — no integrated-plan row exists yet for these
-> slices; §5 lists the proposed bindings awaiting the repo owner's decision.
+> **Binding status (2026-08-18):** W6.3 now names this document as its design
+> owner and carries §7's estimates; the E2E-REAL-6 Law-3 gate is recorded as
+> *pending AD-LAW-1*. No slice has started — every status word here is design
+> intent, not implementation. §5 tracks which bindings are accepted and which
+> remain proposed.
 
 **Date:** 2026-08-18 · **Sources read:** [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md)
 (complete), [`vjp.py`](../../../python/tessera/autodiff/vjp.py) /
@@ -372,10 +375,12 @@ free.
 ## 5. Relationship to INTEGRATED_COMPILER_PLAN
 
 **This document is the design + acceptance detail for W6.3 and does not
-create a queue.** Proposed bindings, for the repo owner to accept:
+create a queue.** Bindings 1, 5, and the `CUTE_IR_ASSESSMENT.md` §3 row
+(§6) were **accepted and applied 2026-08-18**; 2–4 remain proposed.
 
-1. **W6.3's "research estimate required" is replaced** by §7's phased
-   estimates. The W6.4-note hypothesis ("a generic algebra representation…
+1. **Accepted (2026-08-18) — W6.3's "research estimate required" is
+   replaced** by §7's phased estimates, and the W6 exit criterion now carries
+   this plan's falsifiable stop condition (§10). The W6.4-note hypothesis ("a generic algebra representation…
    treat reuse as a design hypothesis to prove") is resolved by a concrete
    proof obligation: implement `TruncatedJet(k)` and `Cl(3,0)` over the same
    finite-multiplication-table substrate and cross-check the Clifford
@@ -392,11 +397,14 @@ create a queue.** Proposed bindings, for the repo owner to accept:
    `geometric/` parallel tape + `_VJPS_GEO`/`_JVPS_GEO` → absorbed as
    `CliffordTangent` instance (W3-class collapse, gated on the substrate
    proof + Law 3/4 green on the geometric registry).
-5. **E2E-REAL-6 gate strengthening:** the Law-3 adjoint check joins the
-   standard family-migration acceptance checklist — completing the existing
-   pointwise "numeric identity" binding on the transpose axis. It composes
-   with, and does not replace, the per-family derivative oracles (§3.5's
-   completeness caveat: Law 3 alone cannot certify the derivative).
+5. **Accepted (2026-08-18) — E2E-REAL-6 gate strengthening**, recorded in
+   the integrated plan as a **pending** gate: the Law-3 adjoint check joins
+   the family-migration checklist *once AD-LAW-1 lands*, completing the
+   existing pointwise "numeric identity" binding on the transpose axis. It
+   composes with, and does not replace, the per-family derivative oracles
+   (§3.5's completeness caveat: Law 3 alone cannot certify the derivative).
+   No current migration is gated on it, because the oracle does not exist
+   yet.
 
 **Funding table (OT-style re-scope).** Most of the program is already paid
 for by landed or landing work:
@@ -478,8 +486,12 @@ Consequences:
   measurement — the same blocker class as `raster_order`
   (ROCM-CALIB-1's lesson; assessment §3.2).
 
-A one-line sixth-consumer row in `CUTE_IR_ASSESSMENT.md` §3 is proposed so
-the algebra's justification record stays complete.
+**Applied 2026-08-18:** `CUTE_IR_ASSESSMENT.md` §3 now carries this as its
+sixth consumer row, and its counts (§0 bottom line, §3 lead-in, §4 "For")
+were updated to match. That document notes the row is different in kind from
+the first five: it was found during design, before any code existed, which
+is the layout-algebra argument working prospectively rather than as
+archaeology.
 
 ---
 

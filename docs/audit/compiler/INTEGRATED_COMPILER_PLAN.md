@@ -182,6 +182,15 @@ E2E-REAL-0:
    General MLIR region adjoints and broader exact-family packets remain open.
 7. **E2E-REAL-6:** remove duplicate lowering authorities only after migrated
    families satisfy lineage, correctness, and architecture-owned evidence.
+   **Pending gate addition (not yet active):** once AD-LAW-1 lands
+   ([`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md) §7), a migrated
+   differentiable family also clears the Law-3 adjoint sweep
+   (`⟨Jv,u⟩ = ⟨v,Jᵀu⟩` at dimension-scaled probe counts) before its duplicate
+   authority is deleted. That check completes the existing pointwise numeric
+   identity on the transpose axis; it does **not** replace per-family
+   derivative oracles, since a matched-wrong JVP/VJP pair satisfies the
+   adjoint identity on every probe. The oracle does not exist yet, so no
+   current migration is gated on it.
 8. **COLLECTIVE-NATIVE-FOUNDATION-1 — landing:** the C++ NCCL/RCCL adapters
    issue real NCCL-compatible calls, query initialized communicator properties,
    and own symmetric registrations through move-only RAII windows. Target
@@ -998,16 +1007,25 @@ constant; sharding a model requires O(few) annotations, not O(layers).
 |---|---|---|---|
 | W6.1 | **Bounded native products plus exact compiler HVP composition landed (`AD-FWD-CORE-1` / `AD-FWD-PRODUCT-2` / `AD-FWD-NATIVE-1` / `AD-FWD-DIST-3` / `AD-HIGHER-1`).** `TangentInterface`, paired functions, public request/provenance, stable `wrt_indices`, and direct tangent families are live. `--tessera-autodiff-hvp-pipeline` now emits the paired reverse program, marks only original differentiable primals tangent-active, and applies the exact forward transform to produce `@f__bwd__jvp`; the emitted product is numerically executed against an independent quadratic oracle. `JitFn.compiled_hvp_ir` exposes that fail-closed compiler product without finite-difference substitution. The eager `tessera.autodiff.hvp` compatibility helper still uses finite differences and is not this compiler proof. Remaining: broaden second-order TangentInterface coverage, broader ISTFT layouts/dtypes, MPI/OFI/SHMEM and subgroup transport, native multi-rank packets, clean performance packets, and Apple/NVIDIA packages. | Autodiff D2 | landing |
 | W6.2 | Sparse AD — sparsity detection + coloring (client of W2.1/W4.2). PyTorch, TF, and JAX all lack this | Autodiff D7 | 5w |
-| W6.3 | Taylor/jet mode over Weil algebras on a **new generic finite-multiplication-table substrate** potentially shared with GA. The current `ga/signature.py` is Clifford-specific (blade XOR, metric signs, anti-commutation) and cannot represent arbitrary commutative nilpotent Weil algebras | Autodiff D6 | research estimate required |
+| W6.3 | **Taylor/jet mode over Weil algebras — design landed, estimate supplied.** [`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md) owns the design and acceptance detail: one `DerivativeContract` datum per primitive evaluated under an explicit `DifferentialAlgebra` codomain parameter, so `Dual`, `TruncatedJet(k)` (Weil, dim k+1 vs nested 2ᵏ), `CliffordTangent`, `OperatorTangent`, and `TaylorModel` are instances of one interpreter rather than parallel registries. That protocol is the generic algebra representation this row asked for; the W6.4 shared-substrate hypothesis becomes a falsifiable acceptance criterion (run `Cl(3,0)` over the same multiplication-table substrate with `ga/signature.py` as oracle) rather than a sequencing assumption. Correctness is executable algebraic law (adjoint, homomorphism-exact-by-nilpotency, jet-vs-nested differential proof) with a machine-checked math harness per `CORE_SUBSTRATE_VIEW.md` §0.1. Slices: **AD-LAW-1** (~1–1.5w, host-free, no dependencies — law oracles over today's registries; may start in parallel like Orders 12–13), **AD-WEIL-1** (~3w, host-free), **AD-JET-STRUCT-1** (~4w), **AD-JET-IR-1** (~5–6w, research-adjacent; depends on W4-PRODUCT-1, LAYOUT-ALG-1 L1/L5, real `batching_rule`s, and the S5 `numeric_policy` carrier), plus **AD-OPERATOR-1** (~2w, independent — absorbs S8's unowned implicit-diff strict-complementarity item) and consumer-gated **AD-CERT-1**. No hand rule is retired before its jet-vs-nested proof is green (Decision #31 ordering). | Autodiff D6 | ~10w excl. AD-JET-IR-1 (open) |
 | W6.4 | Table-driven GA kernel synthesis via `emit/`; then PGA `Cl(3,0,1)` | GA/EBM §2.3–2.4 | 5w |
 
 **Exit:** a defensible "exceeds SOTA" claim with a benchmark behind it — sparse
 Jacobian scaling `O(colors)` not `O(rows)`; order-`k` derivatives sharing the
-tuned GA kernels.
+tuned GA kernels. W6.3's half of that exit is sharpened by its plan to a
+measured curve: order-`k` directional derivatives of a real workload via fused
+jets versus nested forward-over-forward on the same hardware and numerics
+budget. If the curve does not separate by `k = 3`, the IR descent is not worth
+its cost and the program stops at the reference + law infrastructure — a
+falsifiable stop condition, not an open-ended track.
 
-> W6.4 can supply useful table-lowering machinery, but W6.3 still requires a
-> generic algebra representation and AD semantics. Treat reuse as a design
-> hypothesis to prove, not as a sequencing-based cost reduction.
+> W6.4 can supply useful table-lowering machinery, and W6.3's generic algebra
+> representation and AD semantics are now specified in
+> [`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md). **The reuse
+> hypothesis is still a hypothesis to prove, not a sequencing-based cost
+> reduction** — it is now an explicit AD-WEIL-1 acceptance criterion
+> (`Cl(3,0)` over the shared multiplication-table substrate, `ga/signature.py`
+> as oracle), so it is settled early and cheaply rather than assumed.
 
 ### Riemannian OT — re-scoped as validation, not a track
 

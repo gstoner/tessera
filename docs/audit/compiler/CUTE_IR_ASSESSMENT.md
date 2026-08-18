@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-16
+last_updated: 2026-08-18
 audit_role: plan
 plan_state: open
 ---
@@ -38,8 +38,9 @@ structure** — because the two are independent and neither implies the other.
 **Bottom line:** the algebra is mathematically sound and its documentation has
 three defects. The surface is 63 ops but the mathematics is **four primitives
 plus regrouping**. Tessera does not need CuTe IR, but it does need layout
-algebra — because five independent in-tree assessments each ask for a different,
-weaker mechanism for the same question, and none of them names it.
+algebra — because six independent in-tree consumers each ask for a different,
+weaker mechanism for the same question, and none of them names it (the sixth,
+added 2026-08-18, is the only one identified *before* it was built).
 
 ---
 
@@ -199,10 +200,16 @@ ops.
 
 ## 3. How this fits the existing assessments
 
-This is the finding that matters. **Four assessments and one plan independently
-ask for a piece of layout reasoning, and each proposes a different, weaker
-mechanism.** None names layout algebra, because none was looking at the others
-through that lens.
+This is the finding that matters. **Four assessments and two plans
+independently ask for a piece of layout reasoning, and each proposes a
+different, weaker mechanism.** None names layout algebra, because none was
+looking at the others through that lens.
+
+The sixth row is different in kind and is the argument's strongest form: it was
+found **during design, before any code existed** — the autodiff plan's
+coefficient axis was checked against this document and turned out to be six
+layout-algebra operations wearing a new name. The first five are archaeology;
+this one is the mechanism working prospectively.
 
 | Source | What it asks for | What the question actually is |
 |---|---|---|
@@ -211,6 +218,7 @@ through that lens.
 | [`SPARDA_REVIEW.md`](SPARDA_REVIEW.md) §III.3 item 3 | "GQA-fold-to-rows layout transform… expressible with the Decision #15a `layout` attribute" | Folding a head group into the sequence axis is `group_modes` / `logical_divide`. It is **not** expressible today — see §3.1 |
 | [`TILESIGHT_ASSESSMENT.md`](TILESIGHT_ASSESSMENT.md) §3.2 | block-rasterization knob; "the cheapest large lever in GEMM codegen and we are not pulling it" | A rasterization **is** a layout: `composition(grid_identity, raster_layout)`. Written once, not once per emitter |
 | [`GAME_THEORY_PLAN.md`](GAME_THEORY_PLAN.md) G1b | generic `butterfly_transform` + `coalition` layout value + **one** shared butterfly/FFT tiling pass (the sanctioned Decision #31 consolidation) | A butterfly's exchange pattern is a stride permutation — a layout composition. A shared pass needs a shared representation to be shared *in* |
+| [`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md) §6 (added 2026-08-18) | a length-`(k+1)` **derivative-coefficient axis** carried on tiles, with planar-vs-interleaved storage, a footprint ceiling, jet-epilogue fusion legality, and one triangular Cauchy-convolution index expression per backend | Every clause is this algebra: attach the axis = `logical_product`; storage form = **mode regrouping** (§2's product-variant result); footprint = `cosize`; fusion legality = the same `⊑` factorization FORGE asks for; digest equality = `coalesce`; the emitted index math = `crd2idx`. Written against today's substrate (a two-valued `LayoutOrder` enum + ~25 string-template index sites, §3.1) a jet emitter would hand-roll coefficient indexing **per backend** — reproducing the duplication L4 exists to consolidate |
 
 Against [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md): layout algebra is
 **not a tenth investment — it is the missing implementation under S9**, and the
@@ -301,9 +309,11 @@ first hands a capability to the compiler that **does not emit code**, widening
 the seam. (c) NVIDIA's is backed by a mature vendored library; Tessera builds
 from zero.
 
-**For.** (a) Five independent asks already written down, with five different
+**For.** (a) Six independent asks already written down, with six different
 proposed mechanisms — the Decision #30 "eighth bespoke walker" anti-pattern,
-before any of them is built. (b) It is **entirely host-free**: pure integer
+before any of them is built. The sixth (autodiff's coefficient axis) arrived
+after this assessment and was caught by it, which is the counter-argument to
+(a) below: the algebra is no longer a day-1-zero-consumer investment. (b) It is **entirely host-free**: pure integer
 functions, exhaustively checkable over small domains. NVIDIA's whole algebra was
 validated here in ~40 lines with no hardware, which is Decision #19's discipline
 applied to index arithmetic. (c) The scope is four primitives, not 63 ops.

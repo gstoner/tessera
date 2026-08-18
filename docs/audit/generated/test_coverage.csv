@@ -347,7 +347,7 @@ pmin,2,0,0,2,0,,directly_tested,2 direct test references
 polyak_avg,1,0,0,1,1,,structural_only,category default for 'grad_transform'
 polynomial_lr,1,0,0,1,1,,structural_only,category default for 'schedule'
 popcount,15,0,0,15,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int16 int32 int64 int8,directly_tested,15 direct test references
-pow,14,0,2,14,0,bf16 f32 fp32,directly_tested,14 direct test references
+pow,13,0,2,13,0,bf16 f32 fp32,directly_tested,13 direct test references
 power_attn,12,0,1,12,0,fp16,directly_tested,12 direct test references
 ppo_policy_loss,19,11,1,30,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,30 direct test references
 prod,4,0,0,4,0,bf16,directly_tested,4 direct test references
@@ -458,7 +458,7 @@ std,8,0,0,8,0,bf16 f32,directly_tested,8 direct test references
 stereographic,11,0,0,11,0,fp32,directly_tested,11 direct test references
 stft,30,2,2,32,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,32 direct test references
 stop_gradient,1,5,0,6,0,fp32,directly_tested,6 direct test references
-sub,30,7,3,37,0,bf16 f16 f32 fp16 fp32,directly_tested,37 direct test references
+sub,29,7,3,36,0,bf16 f16 f32 fp16 fp32,directly_tested,36 direct test references
 sum,19,0,2,19,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,19 direct test references
 svd,20,5,0,25,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,25 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'

@@ -240,22 +240,44 @@ def test_paired_rule_defaults_agree():
 # keyword-only but this rule has no named parameter for it and catches
 # unknowns as `**_` (the repo convention for *ignore*, vs `**kwargs` for
 # *forward*). That is the `jvp_clamp` bug class: the canonical caller's
-# kwargs silently vanish and the rule computes something else. The clamp
-# instance is FIXED; every entry below is an OPEN AD-LAW-1 FINDING awaiting
-# triage (some may be benign — `_output_index` is vjp-side multi-output
-# plumbing — but each needs a body read). Do not add entries: fix the rule
-# or record why it is benign and move it to a named-benign set.
-_KNOWN_SWALLOWED_KWARGS = {
-    ("adam", "jvp", "_output_index"),
-    ("add", "jvp", "scalar"),
-    ("clip", "jvp", "max"),
-    ("clip", "jvp", "min"),
-    ("fft", "jvp", "norm"),
-    ("fft", "jvp", "normalization"),
-    ("ifft", "jvp", "norm"),
-    ("ifft", "jvp", "normalization"),
-    ("irfft", "jvp", "norm"),
-    ("irfft", "jvp", "normalization"),
+# kwargs silently vanish and the rule computes something else.
+#
+# Triage record (2026-08-18). FIXED in the same sweep: clamp, clip (alias
+# deafness), add/mul unary-`scalar` (unshifted/unscaled primal), and the
+# fft/ifft/rfft/irfft `norm` family (√n-wrong under `norm="ortho"`). Each
+# fix carries a pinned regression test below.
+#
+# _BENIGN_SWALLOWS: verified against the canonical forward's signature —
+# the swallowed name can never be sent by a canonical caller, or is
+# side-internal protocol. Keyed with the recorded reason.
+_BENIGN_SWALLOWS = {
+    ("adam", "jvp", "_output_index"):
+        "vjp-side multi-output cotangent selector, not a forward kwarg",
+    ("rope_split", "jvp", "_output_index"):
+        "vjp-side multi-output cotangent selector, not a forward kwarg",
+    ("moe_dispatch", "jvp", "transport"):
+        "reference forward is value-identity for every transport; the "
+        "kwarg selects a mechanism, not a function",
+    # NOTE: reasons must not spell out `ops.<name>` — the test_coverage
+    # scanner regex-matches that pattern in strings/comments and would count
+    # prose as a direct test reference, overstating coverage (Codex review
+    # on the AD-LAW-1b PR).
+    ("pow", "vjp", "exponent"):
+        "the canonical forward `(x, y)` is binary positional; the jvp-side "
+        "unary `exponent` form is a non-canonical extra entry point the "
+        "tape never records",
+    ("sub", "vjp", "scalar"):
+        "the canonical forward `(x, y)` is binary with no scalar kwarg; the "
+        "jvp-side `scalar` param is dead vocabulary",
+}
+
+# _OPEN_SWALLOW_FINDINGS: still awaiting triage/fix. stft/istft/
+# spectral_conv ride the spectral-family review (AD-TSOL-STFT-BWD-1 is the
+# owning queue item for that family's backward contracts); the quantize
+# family rides the quantization-semantics review (STE primal conventions).
+# Do not add entries — fix the rule, or move to _BENIGN_SWALLOWS with a
+# recorded reason.
+_OPEN_SWALLOW_FINDINGS = {
     ("istft", "jvp", "axis"),
     ("istft", "jvp", "center"),
     ("istft", "jvp", "hop_length"),
@@ -263,17 +285,11 @@ _KNOWN_SWALLOWED_KWARGS = {
     ("istft", "jvp", "norm"),
     ("istft", "jvp", "normalization"),
     ("istft", "jvp", "onesided"),
-    ("moe_dispatch", "jvp", "transport"),
-    ("mul", "jvp", "scalar"),
-    ("pow", "vjp", "exponent"),
     ("quantize_fp4", "jvp", "scale"),
     ("quantize_fp6", "jvp", "scale"),
     ("quantize_int4", "jvp", "symmetric"),
     ("quantize_int8", "jvp", "symmetric"),
     ("quantize_nvfp4", "jvp", "scale"),
-    ("rfft", "jvp", "norm"),
-    ("rfft", "jvp", "normalization"),
-    ("rope_split", "jvp", "_output_index"),
     ("spectral_conv", "jvp", "axis"),
     ("spectral_conv", "jvp", "norm"),
     ("spectral_conv", "jvp", "normalization"),
@@ -284,8 +300,9 @@ _KNOWN_SWALLOWED_KWARGS = {
     ("stft", "jvp", "normalization"),
     ("stft", "jvp", "onesided"),
     ("stft", "jvp", "pad_mode"),
-    ("sub", "vjp", "scalar"),
 }
+
+_KNOWN_SWALLOWED_KWARGS = _OPEN_SWALLOW_FINDINGS | set(_BENIGN_SWALLOWS)
 
 
 def _swallowed_kwarg_mismatches():
@@ -344,6 +361,57 @@ def test_clamp_jvp_honors_canonical_kwargs():
     y, dy = _JVPS["clamp"]((x,), (dx,), min=-1.0, max=1.0)
     np.testing.assert_allclose(y, np.clip(x, -1.0, 1.0))
     np.testing.assert_allclose(dy, np.array([[0.0, 1.0, 1.0, 0.0]]))
+
+
+def test_clip_jvp_honors_alias_kwargs():
+    """`ops.clip` documents `min`/`max` as aliases for `min_val`/`max_val`
+    and vjp_clip coalesces both — jvp_clip was deaf to the aliases, giving
+    alias callers an unclipped primal and ungated tangent (#10a fixture)."""
+    from tessera.autodiff.jvp import _JVPS
+
+    x = np.array([[-2.0, -0.5, 0.5, 2.0]])
+    dx = np.ones_like(x)
+    for kw in ({"min": -1.0, "max": 1.0}, {"min_val": -1.0, "max_val": 1.0}):
+        y, dy = _JVPS["clip"]((x,), (dx,), **kw)
+        np.testing.assert_allclose(y, np.clip(x, -1.0, 1.0))
+        np.testing.assert_allclose(dy, np.array([[0.0, 1.0, 1.0, 0.0]]))
+
+
+def test_add_mul_unary_scalar_jvp_matches_forward():
+    """`add(x, scalar=c)` / `mul(x, scalar=c)` — the JVPs swallowed `scalar`
+    and returned unshifted/unscaled primals (mul's tangent was wrong too)."""
+    from tessera.autodiff.jvp import _JVPS
+
+    x = np.array([1.0, -2.0, 3.0])
+    dx = np.array([0.5, 1.0, -1.0])
+    y, dy = _JVPS["add"]((x,), (dx,), scalar=2.5)
+    np.testing.assert_allclose(y, x + 2.5)
+    np.testing.assert_allclose(dy, dx)
+    y, dy = _JVPS["mul"]((x,), (dx,), scalar=-3.0)
+    np.testing.assert_allclose(y, x * -3.0)
+    np.testing.assert_allclose(dy, dx * -3.0)
+
+
+@pytest.mark.parametrize("op", ["fft", "ifft", "rfft", "irfft"])
+def test_fft_family_jvp_honors_norm(op):
+    """The fft-family JVPs swallowed `norm`/`normalization`, so
+    `norm="ortho"` callers got backward-normalized results — wrong by √n
+    on both primal and tangent (#10a fixture)."""
+    from tessera.autodiff.jvp import _JVPS
+
+    rng = np.random.default_rng(11)
+    if op in ("fft", "ifft"):
+        x = rng.standard_normal((3, 8)) + 1j * rng.standard_normal((3, 8))
+    elif op == "rfft":
+        x = rng.standard_normal((3, 8))
+    else:  # irfft consumes a half-spectrum
+        x = rng.standard_normal((3, 5)) + 1j * rng.standard_normal((3, 5))
+    dx = x * 0.0 + 1.0
+    ref = getattr(np.fft, op)
+    for kw in ({"norm": "ortho"}, {"normalization": "ortho"}):
+        y, dy = _JVPS[op]((x,), (dx,), **kw)
+        np.testing.assert_allclose(y, ref(x, norm="ortho"), atol=1e-12)
+        np.testing.assert_allclose(dy, ref(dx, norm="ortho"), atol=1e-12)
 
 
 def test_rmsnorm_eps_defaults_match_forward():

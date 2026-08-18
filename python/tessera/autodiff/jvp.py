@@ -179,18 +179,31 @@ def jvp_dequant_matmul(primals, tangents, **kwargs):
 
 
 @_jvp("add")
-def jvp_add(primals, tangents, **_):
+def jvp_add(primals, tangents, *, scalar=None, **_):
+    # Unary form: forward is `add(x, scalar=c)` — the JVP previously swallowed
+    # `scalar` into `**_` and returned the primal UNSHIFTED (AD-LAW-1 swallow
+    # triage, same class as jvp_clamp). The tangent is unaffected (constant
+    # shift), but the primal half must be the canonical forward.
     if len(primals) == 1:
-        return primals[0], tangents[0]
+        x, dx = primals[0], tangents[0]
+        if scalar is not None:
+            return x + scalar, dx
+        return x, dx
     a, b = primals
     da, db = tangents
     return a + b, da + db
 
 
 @_jvp("mul")
-def jvp_mul(primals, tangents, **_):
+def jvp_mul(primals, tangents, *, scalar=None, **_):
+    # Unary form: forward is `mul(x, scalar=c)` — previously both the primal
+    # (unscaled x) and the tangent (unscaled dx) were wrong when `scalar` fell
+    # into `**_` (AD-LAW-1 swallow triage).
     if len(primals) == 1:
-        return primals[0], tangents[0]
+        x, dx = primals[0], tangents[0]
+        if scalar is not None:
+            return x * scalar, dx * scalar
+        return x, dx
     a, b = primals
     da, db = tangents
     return a * b, da * b + a * db
@@ -2617,39 +2630,56 @@ del _name
 
 
 @_jvp("fft")
-def jvp_fft(primals, tangents, *, axis=-1, axes=None, **_):
-    """FFT is linear — JVP is FFT applied to the tangent on the same axis."""
+def jvp_fft(primals, tangents, *, axis=-1, axes=None, norm="backward",
+            normalization=None, **_):
+    """FFT is linear — JVP is FFT applied to the tangent on the same axis.
+
+    `norm`/`normalization` (the vjp_fft alias pair) previously fell into
+    `**_`, so `norm="ortho"` callers got backward-normalized primal AND
+    tangent — wrong by a factor of √n (AD-LAW-1 swallow triage).
+    """
     x = np.asarray(primals[0], dtype=np.complex128)
     dx = np.asarray(tangents[0], dtype=np.complex128)
     ax = axes[-1] if axes is not None else axis
-    return np.fft.fft(x, axis=ax), np.fft.fft(dx, axis=ax)
+    nrm = normalization or norm
+    return np.fft.fft(x, axis=ax, norm=nrm), np.fft.fft(dx, axis=ax, norm=nrm)
 
 
 @_jvp("ifft")
-def jvp_ifft(primals, tangents, *, axis=-1, axes=None, **_):
-    """Inverse FFT is linear — JVP is iFFT applied to the tangent."""
+def jvp_ifft(primals, tangents, *, axis=-1, axes=None, norm="backward",
+             normalization=None, **_):
+    """Inverse FFT is linear — JVP is iFFT applied to the tangent.
+    Norm handling per jvp_fft (AD-LAW-1 swallow triage)."""
     x = np.asarray(primals[0], dtype=np.complex128)
     dx = np.asarray(tangents[0], dtype=np.complex128)
     ax = axes[-1] if axes is not None else axis
-    return np.fft.ifft(x, axis=ax), np.fft.ifft(dx, axis=ax)
+    nrm = normalization or norm
+    return np.fft.ifft(x, axis=ax, norm=nrm), np.fft.ifft(dx, axis=ax, norm=nrm)
 
 
 @_jvp("rfft")
-def jvp_rfft(primals, tangents, *, axis=-1, axes=None, **_):
-    """Real FFT is linear — JVP is rfft applied to the tangent."""
+def jvp_rfft(primals, tangents, *, axis=-1, axes=None, norm="backward",
+             normalization=None, **_):
+    """Real FFT is linear — JVP is rfft applied to the tangent.
+    Norm handling per jvp_fft (AD-LAW-1 swallow triage)."""
     x = np.asarray(primals[0], dtype=np.float64)
     dx = np.asarray(tangents[0], dtype=np.float64)
     ax = axes[-1] if axes is not None else axis
-    return np.fft.rfft(x, axis=ax), np.fft.rfft(dx, axis=ax)
+    nrm = normalization or norm
+    return np.fft.rfft(x, axis=ax, norm=nrm), np.fft.rfft(dx, axis=ax, norm=nrm)
 
 
 @_jvp("irfft")
-def jvp_irfft(primals, tangents, *, axis=-1, axes=None, n=None, **_):
-    """Inverse real FFT is linear — JVP is irfft applied to the tangent."""
+def jvp_irfft(primals, tangents, *, axis=-1, axes=None, n=None, norm="backward",
+              normalization=None, **_):
+    """Inverse real FFT is linear — JVP is irfft applied to the tangent.
+    Norm handling per jvp_fft (AD-LAW-1 swallow triage)."""
     x = np.asarray(primals[0], dtype=np.complex128)
     dx = np.asarray(tangents[0], dtype=np.complex128)
     ax = axes[-1] if axes is not None else axis
-    return np.fft.irfft(x, n=n, axis=ax), np.fft.irfft(dx, n=n, axis=ax)
+    nrm = normalization or norm
+    return (np.fft.irfft(x, n=n, axis=ax, norm=nrm),
+            np.fft.irfft(dx, n=n, axis=ax, norm=nrm))
 
 
 @_jvp("stft")
@@ -3485,7 +3515,17 @@ def jvp_mor_scatter(primals, tangents, **kwargs):
 
 
 @_jvp("clip")
-def jvp_clip(primals, tangents, *, min_val=None, max_val=None, **_):
+def jvp_clip(primals, tangents, *, min_val=None, max_val=None,
+             min=None, max=None, **_):
+    # `ops.clip` accepts `min`/`max` as documented aliases for the canonical
+    # `min_val`/`max_val`, and `vjp_clip` coalesces both spellings — this JVP
+    # was deaf to the aliases, so alias callers got an UNclipped primal and an
+    # ungated tangent (AD-LAW-1 swallow triage, jvp_clamp class). Coalesce
+    # identically to vjp_clip.
+    if min_val is None:
+        min_val = min
+    if max_val is None:
+        max_val = max
     (x,) = primals
     (dx,) = tangents
     y = np.clip(np.asarray(x), -np.inf if min_val is None else min_val, np.inf if max_val is None else max_val)

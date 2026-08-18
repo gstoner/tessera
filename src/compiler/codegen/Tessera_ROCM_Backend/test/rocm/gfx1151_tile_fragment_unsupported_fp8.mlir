@@ -37,4 +37,7 @@ module {
   }
 }
 
-// CHECK: ROCM_TILE_UNSUPPORTED_DTYPE: gfx1151 RDNA 3.5 WMMA has no FP8/BF8 matrix form
+// The typed fragment is rejected at its first physical boundary.  Requiring
+// this architecture-keyed diagnostic ensures an unsupported FP8 fragment can
+// never survive to MMA lowering as an unresolved Tile value.
+// CHECK: ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: no exact gfx1151 fragment layout accepts the typed fragment

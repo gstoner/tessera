@@ -204,6 +204,28 @@ class RegionResidualABI:
         payload = json.dumps(self.as_dict(), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode()).hexdigest()
 
+    def compiler_attributes(self) -> dict[str, object]:
+        """Return the lossless Graph/MLIR checkpoint carrier.
+
+        SAVE and HYBRID are not selector labels: the lowering must receive the
+        exact structured-CFG identity and retained step set that the evaluator
+        executed.  Keep these names synchronized with
+        ``LowerControlFlowToSCFPass``; that pass rejects incomplete or
+        contradictory contracts instead of falling back to recomputation.
+        """
+
+        return {
+            "tessera.autodiff.checkpoint_policy": (
+                "recompute_all" if self.policy == "recompute" else self.policy
+            ),
+            "tessera.autodiff.checkpoint_indices": list(self.checkpoint_indices),
+            "tessera.autodiff.residual_schema": self.schema,
+            "tessera.autodiff.residual_digest": self.digest,
+            "tessera.structured_cfg.digest": self.cfg_digest,
+            "tessera.autodiff.residual_state_dtype": self.state_dtype,
+            "tessera.autodiff.residual_state_shape": list(self.state_shape),
+        }
+
 
 def build_region_residual_abi(
     candidate: TreeverseCandidate,

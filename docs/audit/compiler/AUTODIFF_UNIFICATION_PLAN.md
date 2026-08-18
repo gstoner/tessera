@@ -390,14 +390,14 @@ silently counted as done.
 forward/backward/residual ABI, verifiable independently of Python tape state — a
 lit fixture checks the backward signature + body, no Python needed.
 
-**Landed (first cut — recompute-all residual policy):**
+**Landed (recompute default plus explicit control residuals):**
 - New **`--tessera-autodiff-paired`** pass
   ([`src/transforms/lib/AutodiffPairedPass.cpp`](../../../src/transforms/lib/AutodiffPairedPass.cpp),
   a `ModuleOp` pass; additive — the in-place `--tessera-autodiff` stays as the
   bootstrap). For each `tessera.autodiff="reverse"` function it emits a **separate
   backward function**:
   ```
-  @f__bwd(inputs..., out_cotangents...) -> (input_cotangents...)
+  @f__bwd(inputs..., out_cotangents..., residuals...) -> (input_cotangents...)
     attributes { tessera.autodiff.role = "backward",
                  tessera.autodiff.forward = @f,
                  tessera.autodiff.residual_policy = "recompute_all" }
@@ -406,12 +406,17 @@ lit fixture checks the backward signature + body, no Python needed.
   forward ops into the backward body (recompute-all), reverse-walks them, and
   returns one cotangent per input (zero-splat for inputs off the gradient path,
   so the ABI is total for uniform Phase 4 buffer binding).
-- **Residual policy = RECOMPUTE_ALL** for the first cut. This is not a toy choice:
+- **Residual policy defaults to RECOMPUTE_ALL.** SAVE `control_scan` products
+  now return and consume a compact interior-state tape; `scf.if` and canonical
+  bounded `scf.while` similarly carry the taken predicate and executed trip
+  count. Scan-form HYBRID now retains only selected checkpoints and performs
+  bounded replay from the nearest predecessor; generic multi-state HYBRID
+  remains fail-closed. The
+  recompute default is not a toy choice:
   the shipped ROCm gfx1151 flash-attention backward takes `(dO, Q, K, V)` and
   **recomputes** the softmax rather than saving the logsumexp `L` (see §9). A
-  SAVE policy (return selected forward values as explicit residual outputs, e.g.
-  flash-attn's `L`) is an optimization the same ABI already carries via
-  `tessera.autodiff.residual_policy`.
+  Further SAVE policies (for example flash-attn's `L`) remain independently
+  selectable alternatives under the same ABI.
 - **The paired form is an ABI, not an implementation.** A hand-emitted backward
   kernel (ROCm WMMA flash-attn bwd) satisfies the same
   `@f__bwd(inputs, out_cotangents) -> input_cotangents` contract and is a

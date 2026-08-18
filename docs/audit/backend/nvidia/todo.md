@@ -8,6 +8,14 @@ last_updated: 2026-08-17
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `W4-PRODUCT-1-RESIDUAL-CONTRACT-2026-08-17` — **shared
+contract parity validated; CUDA physical follow-up required.** SAVE/HYBRID
+selection now has a digest-bound Graph→SCF carrier. Shared paired AD consumes
+an explicit SAVE scan tape plus `if` predicate and `while` trip-count residuals;
+scan-form HYBRID now executes bounded nearest-checkpoint replay, and generic
+counted loops use one typed tape per carried tensor. SM120 still needs its
+own region-product correctness/performance packet.
+
 Cross-backend sync `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **shared
 optimizer lineage validated; NVIDIA not applicable for the bounded physical
 set.** The new `schedule.optimizer_vjp` → `tile.training_kernel` authority

@@ -429,16 +429,17 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="AutodiffPairedPass",
         summary=(
             "Emits paired forward and backward functions under the explicit "
-            "recompute-all residual policy, including effect-safe region "
-            "adjoints for scf.if, counted scf.for, and canonical bounded "
-            "scf.while."
+            "residual ABI: recompute-all by default, SAVE state tapes for "
+            "control_scan and generic multi-state counted loops, plus saved "
+            "branch/trip identity for scf.if and canonical bounded scf.while."
         ),
-        input_dialects=("tessera", "func", "arith"),
-        output_dialects=("tessera", "func", "arith"),
+        input_dialects=("tessera", "func", "arith", "scf", "tensor"),
+        output_dialects=("tessera", "func", "arith", "scf", "tensor"),
         required_attrs=("tessera.autodiff",),
         preserved_attrs=(
             "tessera.autodiff.activity",
             "tessera.autodiff.residual_policy",
+            "tessera.autodiff.residual_sources",
         ),
         diagnostic_codes=(
             "AUTODIFF_STOCHASTIC_EFFECT",

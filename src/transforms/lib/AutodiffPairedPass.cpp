@@ -4,23 +4,25 @@
 // in-place `--tessera-autodiff` pass fuses the backward into the forward
 // function's return (a bootstrap), this pass emits the **paired-program model**:
 //
-//   forward(inputs)                       -> primals            (unchanged)
-//   @f__bwd(inputs, out_cotangents...)    -> input_cotangents   (new function)
+//   forward(inputs) -> (primals, explicit residuals...)
+//   @f__bwd(inputs, out_cotangents..., residuals...)
+//                   -> input_cotangents
 //
 // This is the deterministic forward/backward/residual ABI the rest of the plan
 // (runtime binding in Phase 4, per-op-family expansion in Phase 5, distributed +
 // accelerator promotion in Phase 6) keys off. It is verifiable independently of
 // Python tape state — a lit fixture checks the backward signature + body.
 //
-// Residual policy — RECOMPUTE_ALL (first cut). The backward function takes the
-// forward *inputs* as arguments and recomputes any forward intermediates it
-// needs by cloning the forward ops into the backward body (CSE later collapses
-// redundant recompute). This is not a toy choice: the shipped ROCm gfx1151
+// RECOMPUTE_ALL remains the default. SAVE regions append typed, named residual
+// values to the paired ABI; backward must consume those values and cannot
+// silently relabel SAVE/HYBRID as recomputation. The backward still clones the
+// forward cone for unsaved intermediates (CSE later collapses redundant work).
+// This is not a toy default: the shipped ROCm gfx1151
 // flash-attention backward lane (`_execute_rocm_compiled_flash_attn_bwd`) takes
 // `(dO, Q, K, V)` and likewise *recomputes* the softmax rather than saving the
-// logsumexp. A future SAVE policy (return selected forward values as explicit
-// residual outputs of the forward, e.g. flash-attn's `L`) is an optimization the
-// same ABI already accommodates via `tessera.autodiff.residual_policy`.
+// logsumexp. SAVE currently carries scan state tapes, branch identity, and
+// executed while trip counts; scan-form HYBRID performs bounded replay from
+// the nearest explicitly retained checkpoint.
 //
 // The paired backward is an **ABI, not an implementation**: a hand-emitted
 // backward kernel (ROCm WMMA flash-attn bwd) satisfies the same
@@ -36,11 +38,15 @@
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
+
+#include <algorithm>
 
 #include "Tessera/AdjointInterface.h.inc"
 #include "Tessera/LinearTransposeInterface.h.inc"
@@ -71,6 +77,174 @@ void eraseStopGradientBarriers(mlir::func::FuncOp func) {
       op->erase();
     }
   }
+}
+
+static mlir::FailureOr<mlir::RankedTensorType>
+getResidualTapeType(mlir::Type stateType, int64_t slots) {
+  auto ranked = mlir::dyn_cast<mlir::RankedTensorType>(stateType);
+  if (!ranked || !ranked.hasStaticShape() || slots <= 0)
+    return mlir::failure();
+  llvm::SmallVector<int64_t> shape{slots};
+  llvm::append_range(shape, ranked.getShape());
+  return mlir::RankedTensorType::get(shape, ranked.getElementType(),
+                                     ranked.getEncoding());
+}
+
+// Materialize the generic counted-loop residual contract before activity
+// analysis. Every loop-carried value receives its own typed tape; this keeps
+// mixed shapes/dtypes lossless and makes unknown state fail closed.
+static mlir::LogicalResult materializeGenericForResiduals(
+    mlir::func::FuncOp function) {
+  llvm::SmallVector<mlir::scf::ForOp> loops;
+  function.getBody().walk([&](mlir::scf::ForOp loop) {
+    auto policy = loop->getAttrOfType<mlir::StringAttr>(
+        "tessera.autodiff.checkpoint_policy");
+    if (policy && (policy.getValue() == "save" ||
+                   policy.getValue() == "hybrid") &&
+        !loop->hasAttr("tessera.autodiff.residual_materialized"))
+      loops.push_back(loop);
+  });
+  for (mlir::scf::ForOp loop : loops) {
+    llvm::APInt lbValue, ubValue, stepValue;
+    if (!mlir::matchPattern(loop.getLowerBound(),
+                            mlir::m_ConstantInt(&lbValue)) ||
+        !mlir::matchPattern(loop.getUpperBound(),
+                            mlir::m_ConstantInt(&ubValue)) ||
+        !mlir::matchPattern(loop.getStep(),
+                            mlir::m_ConstantInt(&stepValue)) ||
+        !stepValue.isStrictlyPositive() ||
+        ubValue.getSExtValue() <= lbValue.getSExtValue()) {
+      loop.emitError() << "generic saved scf.for requires positive static "
+                          "bounds and step";
+      return mlir::failure();
+    }
+    int64_t span = ubValue.getSExtValue() - lbValue.getSExtValue();
+    int64_t step = stepValue.getSExtValue();
+    int64_t trip = (span + step - 1) / step;
+    auto checkpoints = loop->getAttrOfType<mlir::DenseI64ArrayAttr>(
+        "tessera.autodiff.checkpoint_indices");
+    if (!checkpoints || checkpoints.empty()) {
+      loop.emitError() << "generic saved scf.for requires checkpoint_indices";
+      return mlir::failure();
+    }
+    llvm::ArrayRef<int64_t> indices = checkpoints.asArrayRef();
+    if (!llvm::is_sorted(indices) ||
+        std::adjacent_find(indices.begin(), indices.end()) != indices.end() ||
+        llvm::any_of(indices,
+                     [trip](int64_t index) { return index <= 0 || index >= trip; })) {
+      loop.emitError() << "generic scf.for checkpoints must be sorted, unique, "
+                          "interior ordinals";
+      return mlir::failure();
+    }
+    auto policy = loop->getAttrOfType<mlir::StringAttr>(
+        "tessera.autodiff.checkpoint_policy");
+    if ((policy.getValue() == "save" &&
+         indices.size() != static_cast<size_t>(trip - 1)) ||
+        (policy.getValue() == "hybrid" &&
+         indices.size() >= static_cast<size_t>(trip - 1))) {
+      loop.emitError() << "generic scf.for checkpoint cardinality disagrees "
+                          "with its policy";
+      return mlir::failure();
+    }
+
+    llvm::SmallVector<mlir::RankedTensorType> tapeTypes;
+    llvm::SmallVector<mlir::Value> tapeInits;
+    mlir::OpBuilder builder(loop);
+    for (mlir::Value init : loop.getInitArgs()) {
+      auto tapeType = getResidualTapeType(init.getType(), indices.size());
+      if (mlir::failed(tapeType)) {
+        loop.emitError() << "generic saved scf.for requires statically shaped "
+                            "ranked-tensor iter_args";
+        return mlir::failure();
+      }
+      tapeTypes.push_back(*tapeType);
+      tapeInits.push_back(mlir::tensor::EmptyOp::create(
+          builder, loop.getLoc(), tapeType->getShape(),
+          tapeType->getElementType()));
+    }
+    llvm::SmallVector<mlir::Value> inits(loop.getInitArgs().begin(),
+                                         loop.getInitArgs().end());
+    llvm::append_range(inits, tapeInits);
+    auto replacement = mlir::scf::ForOp::create(
+        builder, loop.getLoc(), loop.getLowerBound(), loop.getUpperBound(),
+        loop.getStep(), inits);
+    replacement->setAttrs(loop->getAttrs());
+    mlir::Block &oldBody = loop.getRegion().front();
+    mlir::Block &newBody = replacement.getRegion().front();
+    mlir::IRMapping mapping;
+    mapping.map(loop.getInductionVar(), replacement.getInductionVar());
+    for (auto [source, destination] : llvm::zip_equal(
+             loop.getRegionIterArgs().take_front(loop.getNumResults()),
+             replacement.getRegionIterArgs().take_front(loop.getNumResults())))
+      mapping.map(source, destination);
+    builder.setInsertionPointToStart(&newBody);
+    for (mlir::Operation &source : oldBody.without_terminator())
+      builder.clone(source, mapping);
+    auto oldYield = mlir::cast<mlir::scf::YieldOp>(oldBody.getTerminator());
+    llvm::SmallVector<mlir::Value> yields;
+    for (mlir::Value value : oldYield.getOperands())
+      yields.push_back(mapping.lookupOrDefault(value));
+    for (auto [stateIndex, tapeType] : llvm::enumerate(tapeTypes)) {
+      mlir::Value tape = replacement.getRegionIterArg(loop.getNumResults() +
+                                                       stateIndex);
+      auto stateType = mlir::cast<mlir::RankedTensorType>(
+          loop.getInitArgs()[stateIndex].getType());
+      for (auto [slot, checkpoint] : llvm::enumerate(indices)) {
+        mlir::Value retainIv = mlir::arith::ConstantIndexOp::create(
+            builder, loop.getLoc(),
+            lbValue.getSExtValue() + (checkpoint - 1) * step);
+        mlir::Value retain = mlir::arith::CmpIOp::create(
+            builder, loop.getLoc(), mlir::arith::CmpIPredicate::eq,
+            replacement.getInductionVar(), retainIv);
+        auto retainIf = mlir::scf::IfOp::create(
+            builder, loop.getLoc(), mlir::TypeRange{tapeType}, retain, true);
+        {
+          mlir::OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPointToStart(retainIf.thenBlock());
+          llvm::SmallVector<mlir::OpFoldResult> offsets{
+              builder.getIndexAttr(static_cast<int64_t>(slot))};
+          llvm::SmallVector<mlir::OpFoldResult> sizes{builder.getIndexAttr(1)};
+          llvm::SmallVector<mlir::OpFoldResult> strides(
+              stateType.getRank() + 1, builder.getIndexAttr(1));
+          for (int64_t dim : stateType.getShape()) {
+            offsets.push_back(builder.getIndexAttr(0));
+            sizes.push_back(builder.getIndexAttr(dim));
+          }
+          mlir::Value retained = mlir::tensor::InsertSliceOp::create(
+              builder, loop.getLoc(), yields[stateIndex], tape, offsets, sizes,
+              strides);
+          mlir::scf::YieldOp::create(builder, loop.getLoc(), retained);
+        }
+        {
+          mlir::OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPointToStart(retainIf.elseBlock());
+          mlir::scf::YieldOp::create(builder, loop.getLoc(), tape);
+        }
+        tape = retainIf.getResult(0);
+      }
+      yields.push_back(tape);
+    }
+    mlir::scf::YieldOp::create(builder, loop.getLoc(), yields);
+    unsigned primalCount = loop.getNumResults();
+    for (auto [oldResult, newResult] : llvm::zip_equal(
+             loop.getResults(), replacement.getResults().take_front(primalCount)))
+      oldResult.replaceAllUsesWith(newResult);
+    llvm::SmallVector<int64_t> resultIndices, primalIndices;
+    for (unsigned index = 0; index < primalCount; ++index) {
+      resultIndices.push_back(primalCount + index);
+      primalIndices.push_back(index);
+    }
+    replacement->setAttr("tessera.autodiff.residual_materialized",
+                         builder.getBoolAttr(true));
+    replacement->setAttr("tessera.autodiff.residual_owner",
+                         builder.getStringAttr("generic_for"));
+    replacement->setAttr("tessera.autodiff.residual_result_indices",
+                         builder.getDenseI64ArrayAttr(resultIndices));
+    replacement->setAttr("tessera.autodiff.residual_primal_iter_arg_indices",
+                         builder.getDenseI64ArrayAttr(primalIndices));
+    loop.erase();
+  }
+  return mlir::success();
 }
 
 /// Accumulate `g` into `cotan[v]` (float → addf, integer → addi). Shared shape
@@ -128,7 +302,11 @@ public:
   }
 
 private:
+  llvm::DenseMap<mlir::Operation *, llvm::SmallVector<mlir::Value>>
+      explicitRegionResiduals;
+
   mlir::LogicalResult buildBackward(mlir::func::FuncOp fwd) {
+    explicitRegionResiduals.clear();
     auto module = fwd->getParentOfType<mlir::ModuleOp>();
     mlir::MLIRContext *ctx = &getContext();
 
@@ -136,6 +314,8 @@ private:
       fwd.emitError() << "[AUTODIFF_PAIRED] cannot differentiate a declaration";
       return mlir::failure();
     }
+    if (mlir::failed(materializeGenericForResiduals(fwd)))
+      return mlir::failure();
     mlir::Block &fwdBlock = fwd.getBody().front();
 
     auto returnOp = mlir::dyn_cast<mlir::func::ReturnOp>(fwdBlock.getTerminator());
@@ -172,6 +352,22 @@ private:
                         << op->getName().getStringRef() << "')";
         return mlir::failure();
       }
+      if (auto policy = op->getAttrOfType<mlir::StringAttr>(
+              "tessera.autodiff.checkpoint_policy");
+          policy && policy.getValue() != "recompute_all") {
+        auto materialized = op->getAttrOfType<mlir::BoolAttr>(
+            "tessera.autodiff.residual_materialized");
+        if ((policy.getValue() != "save" && policy.getValue() != "hybrid") ||
+            !materialized ||
+            !materialized.getValue()) {
+          op->emitError()
+              << "paired reverse-mode cannot consume checkpoint policy '"
+              << policy.getValue()
+              << "' until its explicit residual operands/results have been "
+                 "materialized";
+          return mlir::failure();
+        }
+      }
       if (hasStochasticEffect(op)) {
         op->emitError()
             << "AUTODIFF_STOCHASTIC_EFFECT: active stochastic op "
@@ -190,13 +386,85 @@ private:
     llvm::SmallVector<mlir::Type> fwdResTypes(
         fwd.getResultTypes().begin(), fwd.getResultTypes().end());
 
+    llvm::SmallVector<mlir::Value> forwardResiduals;
+    llvm::SmallVector<mlir::Attribute> residualSources;
+    bool hasHybridResidual = false;
+    llvm::DenseMap<mlir::Operation *, llvm::SmallVector<mlir::Value>>
+        residualValues;
+    for (mlir::Operation *op : forwardOps) {
+      if (auto checkpointPolicy = op->getAttrOfType<mlir::StringAttr>(
+              "tessera.autodiff.checkpoint_policy"))
+        hasHybridResidual |= checkpointPolicy.getValue() == "hybrid";
+      auto materialized = op->getAttrOfType<mlir::BoolAttr>(
+          "tessera.autodiff.residual_materialized");
+      llvm::SmallVector<mlir::Value> values;
+      if (materialized && materialized.getValue()) {
+        auto indices = op->getAttrOfType<mlir::DenseI64ArrayAttr>(
+            "tessera.autodiff.residual_result_indices");
+        if (!indices || indices.empty()) {
+          op->emitError()
+              << "materialized region residual has no result indices";
+          return mlir::failure();
+        }
+        auto owner = op->getAttrOfType<mlir::StringAttr>(
+            "tessera.autodiff.residual_owner");
+        for (auto [residualOrdinal, index] :
+             llvm::enumerate(indices.asArrayRef())) {
+          if (index < 0 || index >= op->getNumResults()) {
+            op->emitError() << "region residual result index " << index
+                            << " is outside the operation result range";
+            return mlir::failure();
+          }
+          values.push_back(op->getResult(index));
+          residualSources.push_back(mlir::StringAttr::get(
+              ctx, owner ? (owner.getValue() + ":state_tape" +
+                            (indices.size() == 1
+                                 ? llvm::Twine()
+                                 : ":" + llvm::Twine(residualOrdinal)))
+                               .str()
+                         : (op->getName().getStringRef() + ":result:" +
+                            llvm::Twine(index))
+                               .str()));
+        }
+      } else if (auto ifOp = mlir::dyn_cast<mlir::scf::IfOp>(op)) {
+        values.push_back(ifOp.getCondition());
+        residualSources.push_back(
+            mlir::StringAttr::get(ctx, "scf.if:predicate"));
+      } else if (auto whileOp = mlir::dyn_cast<mlir::scf::WhileOp>(op)) {
+        // Canonical bounded while result zero is the exact number of executed
+        // body iterations.  Expose it rather than trusting backward replay to
+        // rediscover a data-dependent path.
+        values.push_back(whileOp.getResult(0));
+        residualSources.push_back(
+            mlir::StringAttr::get(ctx, "scf.while:trip_count"));
+      }
+      if (!values.empty()) {
+        llvm::append_range(forwardResiduals, values);
+        residualValues.try_emplace(op, std::move(values));
+      }
+    }
+
+    if (!forwardResiduals.empty()) {
+      llvm::SmallVector<mlir::Type> publicResultTypes(fwdResTypes);
+      for (mlir::Value residual : forwardResiduals)
+        publicResultTypes.push_back(residual.getType());
+      fwd.setType(mlir::FunctionType::get(ctx, fwdInTypes, publicResultTypes));
+      returnOp->insertOperands(returnOp.getNumOperands(), forwardResiduals);
+    }
+
     llvm::SmallVector<mlir::Type> bwdInTypes(fwdInTypes);
     for (mlir::Type rt : fwdResTypes)
       bwdInTypes.push_back(rt);
+    for (mlir::Value residual : forwardResiduals)
+      bwdInTypes.push_back(residual.getType());
     // Input cotangents mirror the input types (one per forward argument).
     llvm::SmallVector<mlir::Type> bwdResTypes(fwdInTypes);
 
     mlir::OpBuilder builder(ctx);
+    llvm::StringRef pairedResidualPolicy =
+        forwardResiduals.empty()
+            ? "recompute_all"
+            : hasHybridResidual ? "hybrid" : "save";
     builder.setInsertionPointToEnd(module.getBody());
     auto bwdName = (fwd.getName() + "__bwd").str();
     auto bwdType = builder.getFunctionType(bwdInTypes, bwdResTypes);
@@ -205,7 +473,10 @@ private:
     bwd->setAttr("tessera.autodiff.forward",
                  mlir::FlatSymbolRefAttr::get(ctx, fwd.getName()));
     bwd->setAttr("tessera.autodiff.residual_policy",
-                 builder.getStringAttr("recompute_all"));
+                 builder.getStringAttr(pairedResidualPolicy));
+    if (!residualSources.empty())
+      bwd->setAttr("tessera.autodiff.residual_sources",
+                   builder.getArrayAttr(residualSources));
 
     mlir::Block *bwdBlock = bwd.addEntryBlock();
     builder.setInsertionPointToStart(bwdBlock);
@@ -222,6 +493,7 @@ private:
     // Recompute the forward ops inside the backward body (clones), so each
     // adjoint's `getX()` resolves to a value that lives in this function.
     llvm::SmallVector<mlir::Operation *> clones;
+    unsigned residualArgument = nIn + nRes;
     for (mlir::Operation *op : forwardOps) {
       // Recompute-all can preserve a stopped primal only when its operand is
       // already a backward argument.  Recomputing an inactive producer cone
@@ -237,6 +509,13 @@ private:
       }
       mlir::Operation *clone = builder.clone(*op, map);
       clones.push_back(clone);
+      auto residualIt = residualValues.find(op);
+      if (residualIt != residualValues.end()) {
+        llvm::SmallVector<mlir::Value> values;
+        for ([[maybe_unused]] mlir::Value residual : residualIt->second)
+          values.push_back(bwdBlock->getArgument(residualArgument++));
+        explicitRegionResiduals.try_emplace(clone, std::move(values));
+      }
     }
 
     // Seed cotangents: forward result j ↦ backward out-cotangent argument
@@ -304,7 +583,10 @@ private:
     fwd->setAttr("tessera.autodiff.paired",
                  mlir::FlatSymbolRefAttr::get(ctx, bwdName));
     fwd->setAttr("tessera.autodiff.residual_policy",
-                 builder.getStringAttr("recompute_all"));
+                 builder.getStringAttr(pairedResidualPolicy));
+    if (!residualSources.empty())
+      fwd->setAttr("tessera.autodiff.residual_sources",
+                   builder.getArrayAttr(residualSources));
     eraseStopGradientBarriers(bwd);
     eraseStopGradientBarriers(fwd);
     return mlir::success();
@@ -422,8 +704,13 @@ private:
                                    captures, nestedBuilder, blockResults,
                                    results);
       };
+      mlir::ValueRange residuals;
+      auto residualIt = explicitRegionResiduals.find(op);
+      if (residualIt != explicitRegionResiduals.end())
+        residuals = residualIt->second;
       if (failed(RegionAdjointInterface::buildAdjoint(
-              op, builder, outputCotangents, callback, regionCotangents))) {
+              op, builder, outputCotangents, residuals, callback,
+              regionCotangents))) {
         op->emitError() << "[AUTODIFF_REGION_ADJOINT] structured pullback "
                            "construction failed";
         return mlir::failure();

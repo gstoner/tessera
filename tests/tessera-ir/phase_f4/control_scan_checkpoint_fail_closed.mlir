@@ -17,5 +17,5 @@ module {
   }
 }
 
-// CHECK: control_scan checkpoint policy 'save' is not executable
-// CHECK-SAME: expected 'recompute_all'
+// CHECK: save control_scan requires residual_schema=v1, CFG/residual SHA-256
+// CHECK-SAME: digests, and explicit checkpoint_indices

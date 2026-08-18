@@ -92,6 +92,17 @@ def test_save_and_hybrid_residual_abis_execute_against_cfg_identity() -> None:
     assert hybrid_abi.policy == "hybrid"
     assert save_abi.policy == "save"
     assert hybrid_abi.digest != save_abi.digest
+    assert hybrid_abi.compiler_attributes() == {
+        "tessera.autodiff.checkpoint_policy": "hybrid",
+        "tessera.autodiff.checkpoint_indices": list(
+            hybrid_abi.checkpoint_indices
+        ),
+        "tessera.autodiff.residual_schema": "tessera.region_residual_abi.v1",
+        "tessera.autodiff.residual_digest": hybrid_abi.digest,
+        "tessera.structured_cfg.digest": cfg_digest,
+        "tessera.autodiff.residual_state_dtype": "f32",
+        "tessera.autodiff.residual_state_shape": [4],
+    }
 
     initial = np.arange(1, 5, dtype=np.float32)
 

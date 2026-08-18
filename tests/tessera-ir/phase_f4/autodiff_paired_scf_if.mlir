@@ -19,10 +19,18 @@ module {
     return %out : tensor<4xf32>
   }
 
-  // CHECK-LABEL: func.func @branch__bwd
+  // The taken predicate is an explicit residual result, not an implicit
+  // promise that backward can rediscover a data-dependent branch.
+  // CHECK-LABEL: func.func @branch(
+  // CHECK-SAME: -> (tensor<4xf32>, i1)
+  // CHECK-SAME: tessera.autodiff.residual_sources = ["scf.if:predicate"]
+  // CHECK: return {{.*}}, %arg0 : tensor<4xf32>, i1
+  // CHECK-LABEL: func.func @branch__bwd(
+  // CHECK-SAME: %[[PRED:[^:]+]]: i1)
+  // CHECK-SAME: tessera.autodiff.residual_sources = ["scf.if:predicate"]
   // Recomputed primal branch followed by the branch-selecting pullback.
   // CHECK: %[[PRIMAL:.+]] = scf.if
-  // CHECK: %[[DX:.+]] = scf.if
+  // CHECK: %[[DX:.+]] = scf.if %[[PRED]]
   // CHECK: tessera.mul
   // CHECK: arith.addf
   // The predicate remains nondifferentiable; %x receives the region capture.

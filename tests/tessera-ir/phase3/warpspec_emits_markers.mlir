@@ -16,12 +16,13 @@
 // CHECK: tile.pipeline_init
 // CHECK-SAME: phase = 1
 // CHECK-SAME: role = "producer"
-// CHECK: }) {tile.pipeline = "warpspec.0", tile.warp_role = "producer"}
+// CHECK: }) {tile.pipeline = "warpspec.0"}
 // CHECK: "schedule.warp"() <{role = "consumer"}> ({
 // CHECK: tile.pipeline_init
 // CHECK-SAME: phase = 0
 // CHECK-SAME: role = "consumer"
-// CHECK: }) {tile.pipeline = "warpspec.0", tile.warp_role = "consumer"}
+// CHECK: }) {tile.pipeline = "warpspec.0"}
+// CHECK-NOT: tile.warp_role
 // CHECK-NOT: tile.pipeline_state = #tile.pipeline_state
 
 // The legality gates pass → the IR is still emitted (func survives).

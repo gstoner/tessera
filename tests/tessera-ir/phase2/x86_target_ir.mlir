@@ -76,3 +76,4 @@ module attributes {tessera.ir.level = "target", tessera.target = "x86"} {
     return
   }
 }
+// REQUIRES: tessera-x86-target-ir

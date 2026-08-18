@@ -42,17 +42,18 @@
 // freedom gate for the FA-4 warp-spec lowering once WarpSpecialization emits
 // these markers.
 //
-// Convention-driven (works on the value lane and unregistered husks). A "warp-
-// role region" is any ancestor op carrying `tile.warp_role` / `tile.warp_guard`
-// / `tile.wg_id`. Op classes are recognized by a marker attribute or op-name
-// substring (so a fixture can use `tile.cta_sync` / `tile.mbarrier_init` / etc.).
+// Warp divergence is declaration-driven: a "warp-role region" is a registered
+// schedule.warp ancestor.  Tile operations used by these checks are registered
+// classes except for the explicitly tracked pre-SM90 compatibility husks.
 //
 // All seven structural + lifetime invariants from the appendix are now checked.
 
 #include "TileValueProvenance.h"
+#include "TileRelationalLegality.h"
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
+#include "tessera/ProgrammingModel/ScheduleDialect.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -66,12 +67,13 @@ using namespace mlir;
 
 namespace {
 
-// An op is inside a warp-role-guarded region if any ancestor (up to the func)
-// carries a warp-role marker.
+// An op is inside a divergent warp-role region only when its ancestor is the
+// registered Schedule IR carrier.  Attribute ancestry was a legacy escape
+// hatch: any unrelated op could acquire `tile.warp_role` and silently change
+// legality, while a producer that forgot the marker failed open.
 static bool isUnderWarpRoleGuard(Operation *op, Operation *funcOp) {
   for (Operation *p = op->getParentOp(); p && p != funcOp; p = p->getParentOp())
-    if (p->hasAttr("tile.warp_role") || p->hasAttr("tile.warp_guard") ||
-        p->hasAttr("tile.wg_id"))
+    if (isa<tessera::schedule::WarpOp>(p))
       return true;
   return false;
 }
@@ -117,9 +119,8 @@ static bool isAsyncDataProducer(Operation *op) {
   StringRef n = op->getName().getStringRef();
   if (n == "tile.async_copy" || n == "tile.tma.copy_async")
     return true;
-  if (n == "schedule.warp")
-    if (auto role = op->getAttrOfType<StringAttr>("role"))
-      return role.getValue() == "producer";
+  if (auto warp = dyn_cast<tessera::schedule::WarpOp>(op))
+    return warp.getRole() == "producer";
   return false;
 }
 
@@ -134,8 +135,7 @@ struct WarpSpecLegality
            "and TMA-store visibility fences.";
   }
 
-  void runOnOperation() override {
-    ModuleOp module = getOperation();
+  LogicalResult verify(ModuleOp module) {
     bool anyError = false;
 
     module.walk([&](func::FuncOp func) {
@@ -315,7 +315,11 @@ struct WarpSpecLegality
       });
     });
 
-    if (anyError)
+    return failure(anyError);
+  }
+
+  void runOnOperation() override {
+    if (failed(verify(getOperation())))
       signalPassFailure();
   }
 };
@@ -323,6 +327,11 @@ struct WarpSpecLegality
 } // namespace
 
 namespace tessera {
+LogicalResult verifyWarpSpecializationRelations(ModuleOp module) {
+  WarpSpecLegality verifier;
+  return verifier.verify(module);
+}
+
 std::unique_ptr<Pass> createWarpSpecLegalityPass() {
   return std::make_unique<WarpSpecLegality>();
 }

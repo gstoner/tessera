@@ -120,9 +120,6 @@ LogicalResult verifyDeclaredShapeConstraint(Operation *op) {
             "requires halo.width to contain non-negative integers");
     }
   }
-  if (auto kind = op->getAttrOfType<StringAttr>("kind");
-      kind && kind.getValue().empty())
-    return op->emitOpError("requires a non-empty topology kind");
   return success();
 }
 

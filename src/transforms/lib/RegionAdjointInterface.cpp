@@ -10,6 +10,7 @@
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
 
 using namespace mlir;
@@ -50,6 +51,21 @@ static bool isReplayable(Region &region) {
   region.walk([&](Operation *op) {
     if (op->hasTrait<OpTrait::IsTerminator>())
       return;
+    // Structured containers are replayable exactly when their recursively
+    // visited contents are replayable. Treating the container itself as an
+    // opaque effect rejects every canonicalized multi-block state machine even
+    // though each selected block is pure and its path is explicit SSA.
+    if (isa<scf::IfOp, scf::ForOp, scf::WhileOp>(op))
+      return;
+    // Compiler-generated assertions are idempotent observations of replayed
+    // SSA and carry no mutable state. Admit only the named cf.assert contract;
+    // arbitrary operations cannot self-declare away their effects.
+    if (op->getName().getStringRef() == "cf.assert") {
+      auto guard = op->getAttrOfType<BoolAttr>(
+          "tessera.autodiff.replay_safe_guard");
+      if (guard && guard.getValue())
+        return;
+    }
     if (getRegisteredSemanticEffect(op) != SemanticEffectLevel::Pure)
       replayable = false;
   });
@@ -93,26 +109,66 @@ static LogicalResult buildIfAdjoint(
     RegionPullbackBuilder buildRegionPullback,
     SmallVectorImpl<RegionCotangent> &captureCotangents) {
   if (ifOp.getElseRegion().empty() ||
+      !isReplayable(ifOp.getThenRegion()) ||
+      !isReplayable(ifOp.getElseRegion()) ||
       outputCotangents.size() != ifOp.getNumResults() ||
-      explicitResiduals.size() != 1 ||
-      !explicitResiduals.front().getType().isInteger(1))
+      (!explicitResiduals.empty() &&
+       !explicitResiduals.front().getType().isInteger(1)))
     return failure();
 
+  // Top-level data-dependent branches receive their forward predicate through
+  // the public paired residual ABI. Nested pure branches created by bounded CFG
+  // structurization are deterministically recomputed with their enclosing
+  // state step, so their local SSA condition is the exact path identity.
+  Value predicate = explicitResiduals.empty() ? ifOp.getCondition()
+                                               : explicitResiduals.front();
+
   SmallVector<Value> captures = collectIfCaptures(ifOp);
+  SmallVector<Value> thenSaved, elseSaved;
+  auto thenCount = ifOp->getAttrOfType<IntegerAttr>(
+      "tessera.autodiff.then_saved_count");
+  auto elseCount = ifOp->getAttrOfType<IntegerAttr>(
+      "tessera.autodiff.else_saved_count");
+  if (explicitResiduals.size() > 1) {
+    if (!thenCount || !elseCount || thenCount.getInt() < 0 ||
+        elseCount.getInt() < 0 ||
+        static_cast<size_t>(1 + thenCount.getInt() + elseCount.getInt()) !=
+            explicitResiduals.size())
+      return failure();
+    thenSaved.append(explicitResiduals.begin() + 1,
+                     explicitResiduals.begin() + 1 + thenCount.getInt());
+    elseSaved.append(explicitResiduals.begin() + 1 + thenCount.getInt(),
+                     explicitResiduals.end());
+  }
+  int64_t primalResultCount =
+      ifOp.getNumResults() - thenSaved.size() - elseSaved.size();
+  if (primalResultCount < 0)
+    return failure();
   SmallVector<Type> resultTypes;
   for (Value capture : captures)
     resultTypes.push_back(capture.getType());
 
   auto backwardIf = scf::IfOp::create(builder, ifOp.getLoc(), resultTypes,
-                                      explicitResiduals.front(),
+                                      predicate,
                                       /*withElseRegion=*/true);
-  auto buildBranch = [&](Region &source, Block *destination) -> LogicalResult {
+  auto buildBranch = [&](Region &source, Block *destination, ValueRange saved,
+                         int64_t savedOffset) -> LogicalResult {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(destination);
     SmallVector<Value> branchCotangents;
     SmallVector<Value> blockCotangents;
+    llvm::DenseMap<Value, Value> savedValues;
+    auto sourceYield = dyn_cast<scf::YieldOp>(source.front().getTerminator());
+    if (!sourceYield || savedOffset < 0 ||
+        static_cast<size_t>(savedOffset) + saved.size() >
+            sourceYield.getNumOperands())
+      return failure();
+    ValueRange candidates =
+        sourceYield.getOperands().slice(savedOffset, saved.size());
+    for (auto [sourceValue, savedValue] : llvm::zip_equal(candidates, saved))
+      savedValues.try_emplace(sourceValue, savedValue);
     if (failed(buildRegionPullback(source, outputCotangents, {}, captures,
-                                   builder, blockCotangents,
+                                   savedValues, builder, blockCotangents,
                                    branchCotangents)) ||
         !blockCotangents.empty() ||
         branchCotangents.size() != captures.size())
@@ -121,8 +177,11 @@ static LogicalResult buildIfAdjoint(
     return success();
   };
 
-  if (failed(buildBranch(ifOp.getThenRegion(), backwardIf.thenBlock())) ||
-      failed(buildBranch(ifOp.getElseRegion(), backwardIf.elseBlock()))) {
+  if (failed(buildBranch(ifOp.getThenRegion(), backwardIf.thenBlock(),
+                         thenSaved, primalResultCount)) ||
+      failed(buildBranch(ifOp.getElseRegion(), backwardIf.elseBlock(),
+                         elseSaved,
+                         primalResultCount + thenSaved.size()))) {
     backwardIf.erase();
     return failure();
   }
@@ -151,6 +210,7 @@ static LogicalResult buildForAdjoint(
       policy && (policy.getValue() == "save" || policy.getValue() == "hybrid");
   unsigned primalResultCount = forOp.getNumResults();
   DenseI64ArrayAttr checkpointIndices;
+  DenseI64ArrayAttr shapeTapeOrdinals;
   SmallVector<int64_t> residualStateIndices;
   StringRef residualOwner;
   if (materializedPolicy) {
@@ -164,31 +224,48 @@ static LogicalResult buildForAdjoint(
         "tessera.autodiff.checkpoint_indices");
     auto primalIndices = forOp->getAttrOfType<DenseI64ArrayAttr>(
         "tessera.autodiff.residual_primal_iter_arg_indices");
+    shapeTapeOrdinals = forOp->getAttrOfType<DenseI64ArrayAttr>(
+        "tessera.autodiff.residual_shape_tape_ordinals");
     if (!materialized || !materialized.getValue() || !owner || !resultIndices ||
         !checkpointIndices || checkpointIndices.empty() || !primalIndices ||
-        resultIndices.size() != primalIndices.size() ||
-        explicitResiduals.size() !=
-            static_cast<size_t>(resultIndices.size()))
+        explicitResiduals.size() != static_cast<size_t>(resultIndices.size()))
       return failure();
     residualOwner = owner.getValue();
     residualStateIndices.assign(primalIndices.asArrayRef().begin(),
                                 primalIndices.asArrayRef().end());
     if (residualOwner == "control_scan") {
-      if (resultIndices.size() != 1 ||
+      if (resultIndices.size() != 1 || primalIndices.size() != 1 ||
           resultIndices[0] != forOp.getNumResults() - 1 ||
           residualStateIndices != SmallVector<int64_t>{0})
         return failure();
       primalResultCount = forOp.getNumResults() - 1;
     } else if (residualOwner == "generic_for") {
-      if (forOp.getNumResults() % 2 != 0 ||
-          resultIndices.size() != forOp.getNumResults() / 2)
+      if (resultIndices.empty() || primalIndices.empty() ||
+          !shapeTapeOrdinals ||
+          shapeTapeOrdinals.size() != primalIndices.size() ||
+          resultIndices.size() < primalIndices.size() ||
+          resultIndices.size() >= forOp.getNumResults())
         return failure();
-      primalResultCount = forOp.getNumResults() / 2;
-      for (auto [ordinal, resultIndex] :
-           llvm::enumerate(resultIndices.asArrayRef()))
-        if (resultIndex != static_cast<int64_t>(primalResultCount + ordinal) ||
-            residualStateIndices[ordinal] != static_cast<int64_t>(ordinal))
+      primalResultCount = forOp.getNumResults() - resultIndices.size();
+      llvm::SmallDenseSet<int64_t> seenStates;
+      for (auto [ordinal, resultIndex] : llvm::enumerate(
+               resultIndices.asArrayRef()))
+        if (resultIndex != static_cast<int64_t>(primalResultCount + ordinal))
           return failure();
+      llvm::SmallDenseSet<int64_t> seenShapeTapes;
+      for (auto [ordinal, stateIndex] :
+           llvm::enumerate(residualStateIndices)) {
+        int64_t shapeOrdinal = shapeTapeOrdinals[ordinal];
+        if (stateIndex < 0 ||
+            residualStateIndices[ordinal] >=
+                static_cast<int64_t>(primalResultCount) ||
+            !seenStates.insert(stateIndex).second || shapeOrdinal < -1 ||
+            shapeOrdinal >= static_cast<int64_t>(resultIndices.size()) ||
+            (shapeOrdinal >= 0 &&
+             (!seenShapeTapes.insert(shapeOrdinal).second ||
+              shapeOrdinal < static_cast<int64_t>(primalIndices.size()))))
+          return failure();
+      }
     } else {
       return failure();
     }
@@ -250,15 +327,41 @@ static LogicalResult buildForAdjoint(
           forOp.getResults().take_front(primalResultCount).end());
       for (auto [tapeOrdinal, stateIndex] :
            llvm::enumerate(residualStateIndices)) {
-        auto stateType = dyn_cast<RankedTensorType>(
-            forOp.getInitArgs()[stateIndex].getType());
+        Type stateType = forOp.getInitArgs()[stateIndex].getType();
+        auto rankedStateType = dyn_cast<RankedTensorType>(stateType);
         auto tapeType =
             dyn_cast<RankedTensorType>(explicitResiduals[tapeOrdinal].getType());
-        if (!stateType || !stateType.hasStaticShape() || !tapeType ||
-            tapeType.getRank() != stateType.getRank() + 1 ||
+        if (!tapeType ||
+            tapeType.getRank() != (rankedStateType ? rankedStateType.getRank() + 1
+                                                   : 1) ||
             tapeType.getDimSize(0) !=
-                static_cast<int64_t>(checkpointIndices.size()))
+                static_cast<int64_t>(checkpointIndices.size()) ||
+            tapeType.getElementType() != getElementTypeOrSelf(stateType))
           return failure();
+        Value shapeTape;
+        // control_scan predates the generic per-state shape-tape ABI and its
+        // retained state is statically shaped.  Only generic_for requires the
+        // total ordinal vector; never index a null DenseArrayAttr.
+        int64_t shapeOrdinal = shapeTapeOrdinals
+                                   ? shapeTapeOrdinals[tapeOrdinal]
+                                   : -1;
+        if (shapeOrdinal >= 0) {
+          shapeTape = explicitResiduals[shapeOrdinal];
+          auto shapeTapeType = dyn_cast<RankedTensorType>(shapeTape.getType());
+          if (!rankedStateType || !shapeTapeType ||
+              shapeTapeType.getShape() !=
+                  ArrayRef<int64_t>{
+                      static_cast<int64_t>(checkpointIndices.size()),
+                      rankedStateType.getRank()} ||
+              !shapeTapeType.getElementType().isIndex())
+            return failure();
+        }
+        for (int64_t dim = 0;
+             rankedStateType && dim < rankedStateType.getRank(); ++dim)
+          if (!rankedStateType.isDynamicDim(dim) &&
+              tapeType.getDimSize(dim + 1) !=
+                  rankedStateType.getDimSize(dim))
+            return failure();
         Value checkpointState = forOp.getInitArgs()[stateIndex];
         for (auto [slot, checkpoint] :
              llvm::enumerate(checkpointIndices.asArrayRef())) {
@@ -267,18 +370,39 @@ static LogicalResult buildForAdjoint(
           Value available = arith::CmpIOp::create(
               builder, loc, arith::CmpIPredicate::ule, checkpointValue,
               ordinal);
-          SmallVector<OpFoldResult> offsets{
-              builder.getIndexAttr(static_cast<int64_t>(slot))};
-          SmallVector<OpFoldResult> sizes{builder.getIndexAttr(1)};
-          SmallVector<OpFoldResult> strides(stateType.getRank() + 1,
-                                            builder.getIndexAttr(1));
-          for (int64_t dim : stateType.getShape()) {
-            offsets.push_back(builder.getIndexAttr(0));
-            sizes.push_back(builder.getIndexAttr(dim));
+          Value retained;
+          if (rankedStateType) {
+            SmallVector<OpFoldResult> offsets{
+                builder.getIndexAttr(static_cast<int64_t>(slot))};
+            SmallVector<OpFoldResult> sizes{builder.getIndexAttr(1)};
+            SmallVector<OpFoldResult> strides(rankedStateType.getRank() + 1,
+                                              builder.getIndexAttr(1));
+            for (auto [dimIndex, dim] :
+                 llvm::enumerate(rankedStateType.getShape())) {
+              offsets.push_back(builder.getIndexAttr(0));
+              if (ShapedType::isDynamic(dim)) {
+                if (!shapeTape)
+                  return failure();
+                Value slotIndex = arith::ConstantIndexOp::create(
+                    builder, loc, static_cast<int64_t>(slot));
+                Value dimIndexValue = arith::ConstantIndexOp::create(
+                    builder, loc, dimIndex);
+                sizes.push_back(OpFoldResult(tensor::ExtractOp::create(
+                    builder, loc, shapeTape,
+                    ValueRange{slotIndex, dimIndexValue})));
+              } else {
+                sizes.push_back(OpFoldResult(builder.getIndexAttr(dim)));
+              }
+            }
+            retained = tensor::ExtractSliceOp::create(
+                builder, loc, rankedStateType,
+                explicitResiduals[tapeOrdinal], offsets, sizes, strides);
+          } else {
+            Value slotIndex = arith::ConstantIndexOp::create(
+                builder, loc, static_cast<int64_t>(slot));
+            retained = tensor::ExtractOp::create(
+                builder, loc, explicitResiduals[tapeOrdinal], slotIndex);
           }
-          Value retained = tensor::ExtractSliceOp::create(
-              builder, loc, stateType, explicitResiduals[tapeOrdinal], offsets,
-              sizes, strides);
           auto selectState = scf::IfOp::create(
               builder, loc, TypeRange{stateType}, available, true);
           {
@@ -320,7 +444,13 @@ static LogicalResult buildForAdjoint(
           SmallVector<Value> replayYields;
           for (Value value : yield.getOperands())
             replayYields.push_back(mapping.lookupOrDefault(value));
-          scf::YieldOp::create(builder, loc, replayYields);
+          if (auto replayYield = dyn_cast<scf::YieldOp>(
+                  replay.getBody()->getTerminator()))
+            replayYield.getResultsMutable().assign(replayYields);
+          else {
+            builder.setInsertionPointToEnd(replay.getBody());
+            scf::YieldOp::create(builder, loc, replayYields);
+          }
         }
         llvm::append_range(blockValues, replay.getResults());
       }
@@ -343,7 +473,13 @@ static LogicalResult buildForAdjoint(
         SmallVector<Value> replayYields;
         for (Value value : yield.getOperands())
           replayYields.push_back(mapping.lookupOrDefault(value));
-        scf::YieldOp::create(builder, loc, replayYields);
+        if (auto replayYield =
+                dyn_cast<scf::YieldOp>(replay.getBody()->getTerminator()))
+          replayYield.getResultsMutable().assign(replayYields);
+        else {
+          builder.setInsertionPointToEnd(replay.getBody());
+          scf::YieldOp::create(builder, loc, replayYields);
+        }
       }
       llvm::append_range(blockValues, replay.getResults());
     }
@@ -356,8 +492,9 @@ static LogicalResult buildForAdjoint(
       regionSeeds.append(explicitResiduals.size(), Value{});
     SmallVector<Value> blockCotangents;
     SmallVector<Value> captureStepCotangents;
+    llvm::DenseMap<Value, Value> noSavedValues;
     if (failed(buildRegionPullback(
-            region, regionSeeds, blockValues, captures, builder,
+            region, regionSeeds, blockValues, captures, noSavedValues, builder,
             blockCotangents, captureStepCotangents)) ||
         blockCotangents.size() != blockValues.size() ||
         captureStepCotangents.size() != captures.size()) {
@@ -365,16 +502,31 @@ static LogicalResult buildForAdjoint(
       return failure();
     }
 
+    // Nested region pullbacks may leave the shared builder in their final
+    // branch. Continue construction in the reverse loop body, and make the
+    // mixed-state contract total: control/index slots deliberately receive no
+    // analytical cotangent, but scf.for still requires a typed value for every
+    // carried slot.
+    builder.setInsertionPointToEnd(backward.getBody());
     SmallVector<Value> nextCotangents;
     // The induction variable is integer-valued and deliberately has no
     // cotangent. Remaining block arguments are loop-carried primals.
-    nextCotangents.append(blockCotangents.begin() + 1,
-                          blockCotangents.begin() + 1 + primalResultCount);
+    for (auto [stateIndex, cotangent] : llvm::enumerate(
+             llvm::ArrayRef(blockCotangents).slice(1, primalResultCount)))
+      nextCotangents.push_back(
+          cotangent ? cotangent
+                    : buildZeroLike(builder, forOp.getInitArgs()[stateIndex]));
     for (auto [accumulator, stepCotangent] : llvm::zip_equal(
              captureAccumulators, captureStepCotangents))
       nextCotangents.push_back(
           addCotangents(builder, loc, accumulator, stepCotangent));
-    scf::YieldOp::create(builder, loc, nextCotangents);
+    if (auto existing = dyn_cast<scf::YieldOp>(
+            backward.getBody()->getTerminator())) {
+      existing.getResultsMutable().assign(nextCotangents);
+    } else {
+      builder.setInsertionPointToEnd(backward.getBody());
+      scf::YieldOp::create(builder, loc, nextCotangents);
+    }
   }
 
   for (auto [init, cotangent] : llvm::zip_equal(
@@ -427,23 +579,81 @@ static bool isCanonicalBoundedWhile(scf::WhileOp whileOp) {
           constant.isOne());
 }
 
+static FailureOr<Value> extractWhileTapeState(OpBuilder &builder, Location loc,
+                                              Value tape,
+                                              RankedTensorType stateType,
+                                              OpFoldResult slot) {
+  auto tapeType = dyn_cast<RankedTensorType>(tape.getType());
+  if (!tapeType || tapeType.getRank() != stateType.getRank() + 1)
+    return failure();
+  SmallVector<OpFoldResult> offsets{slot};
+  SmallVector<OpFoldResult> sizes{builder.getIndexAttr(1)};
+  SmallVector<OpFoldResult> strides(stateType.getRank() + 1,
+                                    builder.getIndexAttr(1));
+  for (auto [dimIndex, dim] : llvm::enumerate(stateType.getShape())) {
+    offsets.push_back(builder.getIndexAttr(0));
+    sizes.push_back(ShapedType::isDynamic(dim)
+                        ? OpFoldResult(tensor::DimOp::create(
+                                           builder, loc, tape, dimIndex + 1)
+                                           .getResult())
+                        : OpFoldResult(builder.getIndexAttr(dim)));
+  }
+  return tensor::ExtractSliceOp::create(builder, loc, stateType, tape,
+                                        offsets, sizes, strides)
+      .getResult();
+}
+
 static LogicalResult buildWhileAdjoint(
     scf::WhileOp whileOp, OpBuilder &builder, ValueRange outputCotangents,
     ValueRange explicitResiduals,
     RegionPullbackBuilder buildRegionPullback,
     SmallVectorImpl<RegionCotangent> &regionCotangents) {
+  auto materialized = whileOp->getAttrOfType<BoolAttr>(
+      "tessera.autodiff.residual_materialized");
+  auto owner = whileOp->getAttrOfType<StringAttr>(
+      "tessera.autodiff.residual_owner");
+  auto resultIndices = whileOp->getAttrOfType<DenseI64ArrayAttr>(
+      "tessera.autodiff.residual_result_indices");
+  auto primalIndices = whileOp->getAttrOfType<DenseI64ArrayAttr>(
+      "tessera.autodiff.residual_primal_iter_arg_indices");
+  auto checkpointPolicy = whileOp->getAttrOfType<StringAttr>(
+      "tessera.autodiff.checkpoint_policy");
+  auto checkpoints = whileOp->getAttrOfType<DenseI64ArrayAttr>(
+      "tessera.autodiff.checkpoint_indices");
+  const bool savedStateTape = materialized && materialized.getValue();
+  const bool hybridStateTape =
+      savedStateTape && checkpointPolicy &&
+      checkpointPolicy.getValue() == "hybrid";
+  unsigned primalResultCount = whileOp.getNumResults();
+  if (savedStateTape) {
+    if (!owner || owner.getValue() != "scf_while" || !resultIndices ||
+        !primalIndices || resultIndices.size() != primalIndices.size() ||
+        explicitResiduals.size() !=
+            static_cast<size_t>(resultIndices.size() + 1) ||
+        whileOp.getNumResults() < resultIndices.size() ||
+        (hybridStateTape && (!checkpoints || checkpoints.empty())))
+      return failure();
+    primalResultCount = whileOp.getNumResults() - resultIndices.size();
+    for (auto [ordinal, resultIndex] :
+         llvm::enumerate(resultIndices.asArrayRef()))
+      if (resultIndex != static_cast<int64_t>(primalResultCount + ordinal) ||
+          primalIndices[ordinal] <= 0 ||
+          primalIndices[ordinal] >= primalResultCount)
+        return failure();
+  }
   if (!isCanonicalBoundedWhile(whileOp) ||
       !isReplayable(whileOp.getBefore()) ||
       !isReplayable(whileOp.getAfter()) ||
       outputCotangents.size() != whileOp.getNumResults() ||
-      explicitResiduals.size() != 1 ||
+      (!savedStateTape && explicitResiduals.size() != 1) ||
       !isa<IndexType>(explicitResiduals.front().getType()))
     return failure();
 
   Region &body = whileOp.getAfter();
   auto yield = dyn_cast<scf::YieldOp>(body.front().getTerminator());
   SmallVector<unsigned> differentiableState;
-  for (auto [index, init] : llvm::enumerate(whileOp.getInits()))
+  for (auto [index, init] : llvm::enumerate(
+           whileOp.getInits().take_front(primalResultCount)))
     if (isDifferentiableType(init.getType()))
       differentiableState.push_back(index);
   if (differentiableState.empty())
@@ -473,22 +683,133 @@ static LogicalResult buildWhileAdjoint(
     Value reverseOrdinal = arith::SubIOp::create(
         builder, loc, last, backward.getInductionVar());
 
-    auto replay = scf::ForOp::create(builder, loc, zero, reverseOrdinal, one,
-                                     whileOp.getInits());
-    {
-      OpBuilder::InsertionGuard replayGuard(builder);
-      builder.setInsertionPointToStart(replay.getBody());
-      IRMapping mapping;
-      for (auto [source, destination] : llvm::zip_equal(
-               body.front().getArguments(), replay.getRegionIterArgs()))
-        mapping.map(source, destination);
-      for (Operation &source : body.front().without_terminator())
-        builder.clone(source, mapping);
-      SmallVector<Value> replayYields;
-      for (Value value : yield.getOperands())
-        replayYields.push_back(mapping.lookupOrDefault(value));
-      scf::YieldOp::create(builder, loc, replayYields);
+    SmallVector<Value> primalBlockValues;
+    if (savedStateTape) {
+      llvm::SmallDenseMap<unsigned, unsigned, 4> stateToTape;
+      for (auto [tapeOrdinal, stateIndex] :
+           llvm::enumerate(primalIndices.asArrayRef()))
+        stateToTape.try_emplace(stateIndex, tapeOrdinal);
+      auto extractState = [&](unsigned stateIndex,
+                              OpFoldResult slot) -> FailureOr<Value> {
+        auto tapeIt = stateToTape.find(stateIndex);
+        auto stateType = dyn_cast<RankedTensorType>(
+            whileOp.getInits()[stateIndex].getType());
+        if (tapeIt == stateToTape.end() || !stateType)
+          return failure();
+        return extractWhileTapeState(
+            builder, loc, explicitResiduals[1 + tapeIt->second], stateType,
+            slot);
+      };
+      if (!hybridStateTape) {
+        primalBlockValues.resize(primalResultCount);
+        primalBlockValues[0] = reverseOrdinal;
+        for (unsigned stateIndex = 1; stateIndex < primalResultCount;
+             ++stateIndex) {
+          FailureOr<Value> state = extractState(stateIndex, reverseOrdinal);
+          if (failed(state)) {
+            backward.erase();
+            return failure();
+          }
+          primalBlockValues[stateIndex] = *state;
+        }
+      } else {
+        SmallVector<Value> selected(
+            whileOp.getInits().take_front(primalResultCount));
+        for (auto [slot, checkpoint] :
+             llvm::enumerate(checkpoints.asArrayRef())) {
+          Value checkpointValue =
+              arith::ConstantIndexOp::create(builder, loc, checkpoint);
+          Value checkpointApplies = arith::CmpIOp::create(
+              builder, loc, arith::CmpIPredicate::ule, checkpointValue,
+              reverseOrdinal);
+          SmallVector<Type> selectedTypes;
+          for (Value value : selected)
+            selectedTypes.push_back(value.getType());
+          auto select = scf::IfOp::create(builder, loc, selectedTypes,
+                                          checkpointApplies, true);
+          {
+            OpBuilder::InsertionGuard selectGuard(builder);
+            builder.setInsertionPointToStart(select.thenBlock());
+            SmallVector<Value> retained{checkpointValue};
+            for (unsigned stateIndex = 1; stateIndex < primalResultCount;
+                 ++stateIndex) {
+              FailureOr<Value> state = extractState(
+                  stateIndex,
+                  builder.getIndexAttr(static_cast<int64_t>(slot)));
+              if (failed(state)) {
+                select.erase();
+                backward.erase();
+                return failure();
+              }
+              retained.push_back(*state);
+            }
+            scf::YieldOp::create(builder, loc, retained);
+          }
+          {
+            OpBuilder::InsertionGuard selectGuard(builder);
+            builder.setInsertionPointToStart(select.elseBlock());
+            scf::YieldOp::create(builder, loc, selected);
+          }
+          selected.assign(select.getResults().begin(),
+                          select.getResults().end());
+        }
+
+        auto primalOpCount = whileOp->getAttrOfType<IntegerAttr>(
+            "tessera.autodiff.residual_primal_op_count");
+        if (!primalOpCount || primalOpCount.getInt() < 0 ||
+            primalOpCount.getInt() >
+                std::distance(body.front().begin(),
+                              body.front().getTerminator()->getIterator())) {
+          backward.erase();
+          return failure();
+        }
+        auto replay = scf::ForOp::create(builder, loc, selected.front(),
+                                         reverseOrdinal, one, selected);
+        {
+          OpBuilder::InsertionGuard replayGuard(builder);
+          builder.setInsertionPointToStart(replay.getBody());
+          IRMapping mapping;
+          for (auto [source, destination] : llvm::zip_equal(
+                   body.front().getArguments().take_front(primalResultCount),
+                   replay.getRegionIterArgs()))
+            mapping.map(source, destination);
+          auto source = body.front().begin();
+          for (int64_t ordinal = 0; ordinal < primalOpCount.getInt();
+               ++ordinal, ++source)
+            builder.clone(*source, mapping);
+          SmallVector<Value> replayYields;
+          for (Value value :
+               yield.getOperands().take_front(primalResultCount))
+            replayYields.push_back(mapping.lookupOrDefault(value));
+          scf::YieldOp::create(builder, loc, replayYields);
+        }
+        llvm::append_range(primalBlockValues, replay.getResults());
+      }
+    } else {
+      auto replay = scf::ForOp::create(
+          builder, loc, zero, reverseOrdinal, one,
+          whileOp.getInits().take_front(primalResultCount));
+      {
+        OpBuilder::InsertionGuard replayGuard(builder);
+        builder.setInsertionPointToStart(replay.getBody());
+        IRMapping mapping;
+        for (auto [source, destination] : llvm::zip_equal(
+                 body.front().getArguments().take_front(primalResultCount),
+                 replay.getRegionIterArgs()))
+          mapping.map(source, destination);
+        for (Operation &source : body.front().without_terminator())
+          builder.clone(source, mapping);
+        SmallVector<Value> replayYields;
+        for (Value value : yield.getOperands().take_front(primalResultCount))
+          replayYields.push_back(mapping.lookupOrDefault(value));
+        scf::YieldOp::create(builder, loc, replayYields);
+      }
+      llvm::append_range(primalBlockValues, replay.getResults());
     }
+    SmallVector<Value> blockValues(primalBlockValues.begin(),
+                                   primalBlockValues.end());
+    if (savedStateTape)
+      llvm::append_range(blockValues, explicitResiduals.drop_front());
 
     ValueRange carried = backward.getRegionIterArgs();
     ValueRange stateCotangents =
@@ -500,8 +821,10 @@ static LogicalResult buildWhileAdjoint(
       outputSeeds[stateIndex] = stateCotangents[ordinal];
     SmallVector<Value> blockCotangents;
     SmallVector<Value> captureStepCotangents;
+    llvm::DenseMap<Value, Value> noSavedValues;
     if (failed(buildRegionPullback(
-            body, outputSeeds, replay.getResults(), captures, builder,
+            body, outputSeeds, blockValues, captures, noSavedValues,
+            builder,
             blockCotangents, captureStepCotangents)) ||
         blockCotangents.size() != whileOp.getInits().size() ||
         captureStepCotangents.size() != captures.size()) {

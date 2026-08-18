@@ -2,8 +2,9 @@
 //
 // C6 (2026-06-23, TIRx review / COMPILER_AUDIT item C6): structural warp-spec
 // diagnostics from the "Debugging Warp-Specialized Kernels" appendix,
-// complementing C3's phase-asymmetry check. A warp-role region is modeled by an
-// ancestor carrying `tile.warp_role`.
+// complementing C3's phase-asymmetry check. A warp-role region is the
+// registered schedule.warp carrier; legacy ancestor marker attributes are not
+// a legality authority.
 //
 // Ported to the REGISTERED vocabulary (P1a second increment, CAKE §5.4,
 // 2026-08-15): no `--allow-unregistered-dialect`, no husk spellings, and the
@@ -25,12 +26,12 @@ func.func @well_formed() {
   scf.for %i = %c0 to %c8 step %c1 {
     scf.yield
   } {tile.pipeline = "kv", tile.trip_count = 8 : i64}
-  scf.execute_region {
+  "schedule.warp"() <{role = "consumer"}> ({
     scf.for %j = %c0 to %c8 step %c1 {
       scf.yield
     } {tile.pipeline = "kv", tile.trip_count = 8 : i64}
-    scf.yield
-  } {tile.warp_role = "consumer"}
+    schedule.yield
+  }) : () -> ()
   tile.fence {scope = "shared::cta"}
   tile.tma.store
   return
@@ -38,11 +39,10 @@ func.func @well_formed() {
 
 // -----
 
-// Barrier init nested inside a producer-role region → never initializes for the
-// other roles → hang.
-func.func @init_under_guard() {
+// A legacy marker on an arbitrary ancestor is metadata, not a divergence
+// authority.  Only schedule.warp establishes a warp-role region.
+func.func @legacy_ancestor_marker_is_ignored() {
   scf.execute_region {
-    // expected-error @+1 {{WARPSPEC_INIT_UNDER_GUARD}}
     %bar = tile.mbarrier.init {slots = 1 : i64, phase_bits = 1 : i64} : !tile.mbarrier
     scf.yield
   } {tile.warp_role = "producer"}
@@ -51,13 +51,26 @@ func.func @init_under_guard() {
 
 // -----
 
+// Barrier init nested inside a producer-role region → never initializes for the
+// other roles → hang.
+func.func @init_under_guard() {
+  "schedule.warp"() <{role = "producer"}> ({
+    // expected-error @+1 {{WARPSPEC_INIT_UNDER_GUARD}}
+    %bar = tile.mbarrier.init {slots = 1 : i64, phase_bits = 1 : i64} : !tile.mbarrier
+    schedule.yield
+  }) : () -> ()
+  return
+}
+
+// -----
+
 // A cta_sync inside a warp-role branch → partial participation hangs.
 func.func @collective_in_branch() {
-  scf.execute_region {
+  "schedule.warp"() <{role = "producer"}> ({
     // expected-error @+1 {{WARPSPEC_COLLECTIVE_IN_DIVERGENT_BRANCH}}
     tile.cta_sync
-    scf.yield
-  } {tile.warp_role = "producer"}
+    schedule.yield
+  }) : () -> ()
   return
 }
 

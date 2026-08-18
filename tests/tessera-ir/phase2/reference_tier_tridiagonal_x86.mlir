@@ -18,3 +18,4 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
 // CHECK: cf.assert {{.*}}, "x86 tridiagonal solve rejected an invalid or singular system"
 // CHECK-NOT: tile.tridiagonal_solve_kernel
 // CHECK-NOT: schedule.tridiagonal_solve
+// REQUIRES: tessera-x86-target-ir

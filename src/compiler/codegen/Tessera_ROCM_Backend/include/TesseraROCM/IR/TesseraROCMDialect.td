@@ -164,6 +164,43 @@ def ROCM_ReductionAttr
     : ROCM_EnumStrAttr<["none", "sum", "mean"],
                        "ROCm reduction policy: 'none', 'sum', or 'mean'">;
 
+def ROCM_SpectralBackwardKindAttr
+    : ROCM_EnumStrAttr<["tessera.spectral_filter", "tessera.spectral_conv"],
+                       "ROCm compound spectral backward kind">;
+def ROCM_ActivationKindAttr
+    : ROCM_EnumStrAttr<["gelu", "silu", "relu"], "ROCm activation kind">;
+def ROCM_NormKindAttr
+    : ROCM_EnumStrAttr<["rmsnorm", "layer_norm"], "ROCm normalization kind">;
+def ROCM_Int4PackKindAttr
+    : ROCM_EnumStrAttr<["pack", "unpack", "relu", "sparse_gather",
+                        "cache_append"], "ROCm packed-int4 operation kind">;
+def ROCM_ReduceKindAttr
+    : ROCM_EnumStrAttr<["sum", "mean", "max", "min", "prod", "var", "std"],
+                       "ROCm reduction kind">;
+def ROCM_ArgReduceKindAttr
+    : ROCM_EnumStrAttr<["argmax", "argmin"], "ROCm arg-reduction kind">;
+def ROCM_ScanKindAttr
+    : ROCM_EnumStrAttr<["cumsum", "cumprod", "cummax", "cummin"],
+                       "ROCm inclusive scan kind">;
+def ROCM_UnaryKindAttr
+    : ROCM_EnumStrAttr<["exp", "log", "sqrt", "rsqrt", "reciprocal", "abs",
+                        "neg", "sign", "erf", "tanh", "sigmoid", "log1p",
+                        "expm1", "softplus", "sin", "cos", "tan", "sinh",
+                        "cosh", "asin", "acos", "atan", "erfc", "floor",
+                        "ceil", "round", "trunc", "lgamma", "digamma"],
+                       "ROCm unary math kind">;
+def ROCM_BinaryKindAttr
+    : ROCM_EnumStrAttr<["sub", "div", "pow", "maximum", "minimum", "add",
+                        "mul", "mod", "floor_div"], "ROCm binary math kind">;
+def ROCM_CompareKindAttr
+    : ROCM_EnumStrAttr<["eq", "ne", "lt", "le", "gt", "ge"],
+                       "ROCm comparison kind">;
+def ROCM_LogicalKindAttr
+    : ROCM_EnumStrAttr<["and", "or", "xor", "not"], "ROCm logical kind">;
+def ROCM_BitwiseKindAttr
+    : ROCM_EnumStrAttr<["and", "or", "xor", "not", "popcount"],
+                       "ROCm bitwise kind">;
+
 def ROCM_PhiloxModeAttr
     : ROCM_EnumStrAttr<["uniform_core", "uniform_range", "normal", "dropout"],
                        "ROCm Philox kernel mode: core bits, scaled uniform, "

@@ -4,6 +4,7 @@
 #define TESSERA_TARGET_APPLE_OPS
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def TesseraApple_Dialect : Dialect {
@@ -22,6 +23,17 @@ def TesseraApple_Dialect : Dialect {
 
 class TesseraApple_Op<string mnemonic, list<Trait> traits = []> :
     Op<TesseraApple_Dialect, mnemonic, traits>;
+
+class Apple_EnumStrAttr<list<string> cases, string summaryText>
+    : StringBasedAttr<
+        CPred<"::llvm::is_contained(::llvm::ArrayRef<::llvm::StringRef>({"
+              # !interleave(!foreach(c, cases, "\"" # c # "\""), ", ") #
+              "}), ::llvm::cast<::mlir::StringAttr>($_self).getValue())">,
+        summaryText>;
+def Apple_KVCacheKindAttr
+    : Apple_EnumStrAttr<["tessera.kv_cache.create", "tessera.kv_cache.append",
+                         "tessera.kv_cache.prune", "tessera.kv_cache.read"],
+                        "canonical KV-cache operation kind">;
 
 def AppleCPU_AccelerateGemmOp : TesseraApple_Op<"cpu.accelerate_gemm", [Pure]> {
   let summary = "Accelerate/CBLAS GEMM artifact for Apple Silicon CPU";
@@ -178,7 +190,7 @@ def AppleCPU_KVCacheCPUOp : TesseraApple_Op<"cpu.kv_cache_cpu", [Pure]> {
                        I64Attr:$ordinal,
                        OptionalAttr<StrAttr>:$framework,
                        OptionalAttr<StrAttr>:$abi,
-                       StrAttr:$kind);
+                       Apple_KVCacheKindAttr:$kind);
   let assemblyFormat = "attr-dict";
 }
 
@@ -189,7 +201,7 @@ def AppleGPU_KVCacheGPUOp : TesseraApple_Op<"gpu.kv_cache_gpu"> {
                        I64Attr:$ordinal,
                        OptionalAttr<StrAttr>:$framework,
                        OptionalAttr<StrAttr>:$abi,
-                       StrAttr:$kind);
+                       Apple_KVCacheKindAttr:$kind);
   let assemblyFormat = "attr-dict";
 }
 

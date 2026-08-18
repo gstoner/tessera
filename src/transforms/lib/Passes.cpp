@@ -122,19 +122,16 @@ static void addCUDA13PipelineForSM(
   pm.addPass(createVerifyMetadataObligationPass());
   pm.addPass(createControlFlowTargetGuardPass(target));
   pm.addPass(createWarpSpecializationPass());
-  pm.addPass(createTilePipelineLegalityPass());
-  pm.addPass(createWarpSpecLegalityPass());
-  pm.addPass(createTileBarrierReuseLegalityPass());
+  pm.addPass(
+      createTileDataflowLegalityPass(TileRelationalStage::PreLowering));
   pm.addPass(createAsyncCopyLoweringPass(sm));
   if (sm == 90)
     pm.addPass(createNVWGMMALoweringPass(sm));
   pm.addNestedPass<func::FuncOp>(createNVTMADescriptorPass());
-  pm.addPass(createTilePipelineLegalityPass());
-  pm.addPass(createWarpSpecLegalityPass());
   // P1a (2026-08-15): derived sync legality over the fully retrofitted
   // barriers/tokens — arrive→wait pairing, barrier origin, ring advancement,
   // SSA-keyed expect agreement across block-argument edges.
-  pm.addPass(createTileDataflowLegalityPass());
+  pm.addPass(createTileDataflowLegalityPass(TileRelationalStage::Final));
   if (sm == 90)
     pm.addPass(createNVFlashAttnKernelEmitterPass(sm));
   if (storageLegalizationEnabled(opts, target)) {
@@ -700,20 +697,17 @@ void registerTesseraPasses() {
         // C2/C3/C6 (2026-06-23): warp-spec legality gates run on the markers
         // WarpSpecialization now emits — phase asymmetry + barrier-kind (C3),
         // reuse hazards (C2), and structural invariants (C6). Pure checks.
-        pm.addPass(createTilePipelineLegalityPass());
-        pm.addPass(createWarpSpecLegalityPass());
-        pm.addPass(createTileBarrierReuseLegalityPass());
+        pm.addPass(
+            createTileDataflowLegalityPass(TileRelationalStage::PreLowering));
         pm.addPass(createAsyncCopyLoweringPass());
         pm.addPass(createNVWGMMALoweringPass());
         pm.addNestedPass<func::FuncOp>(createNVTMADescriptorPass());
         // C3/C6 again — now over the typed #tile.barrier markers
         // NVTMADescriptor emits (kind consistency + arrival-count == init-count).
-        pm.addPass(createTilePipelineLegalityPass());
-        pm.addPass(createWarpSpecLegalityPass());
         // P1a (2026-08-15): derived sync legality over the retrofitted
         // barriers/tokens (arrive→wait pairing, barrier origin, ring
         // advancement, SSA-keyed expect agreement).
-        pm.addPass(createTileDataflowLegalityPass());
+        pm.addPass(createTileDataflowLegalityPass(TileRelationalStage::Final));
         pm.addPass(createNVFlashAttnKernelEmitterPass());
         // C4 terminal storage-legalize (gated).
         if (storageLegalizationEnabled(opts, "nvidia_sm90")) {

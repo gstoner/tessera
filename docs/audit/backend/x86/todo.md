@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-17
+last_updated: 2026-08-18
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -9,14 +9,44 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
+contract parity; AVX-512 evidence unchanged.** Dynamic region state now uses
+bounded per-slot data tapes plus recorded logical-shape tapes. Polynomial shape
+guards require complete concrete witnesses and do not enter Presburger proofs.
+Variadic branch state reaches the structured CFG carrier. Only compiler-owned
+extent assertions are replay-safe; mutation/RNG/I/O/ordered collectives remain
+fail closed. A clean Zen 5 irreducible/dynamic-state packet is still required.
+
+Cross-backend sync `W2.4-E2E6-SYMBOLIC-2026-08-18` — **shared parity
+validated; AVX-512 evidence unchanged.** Relational Tile legality now has one
+staged production authority, while old CLI passes are wrappers. Pure static
+annotations abstract-trace before AST compatibility capture. NVIDIA
+Lion/DeltaNet dispatch moved into family plugins; x86 keeps its independent
+AVX-512 state-lineage packages and inherits no CUDA evidence.
+
+Cross-backend sync `W1-W3-AUTHORITY-CLOSEOUT-2026-08-18` — **shared and x86
+plugin parity validated; no Zen 5 timing claim.** Bare Tile fragments and unknown
+semantic selectors fail closed, whole-program memory activity is conservative,
+and regression/BCE/class-loss VJPs use explicit x86 plugins. The x86 no-async
+path is unchanged. Remaining public-module/frontend decomposition and clean
+AVX-512 evidence are independent follow-ups.
+
 Cross-backend sync `W4-PRODUCT-1-RESIDUAL-CONTRACT-2026-08-17` — **shared
-carrier landed; AVX-512 consumer remains open.** SAVE/HYBRID selection now
+carrier and bounded AVX-512 correctness consumer landed.** SAVE/HYBRID selection now
 retains its exact checkpoint, CFG, and residual identity through Graph→SCF.
-Shared paired AD consumes SAVE and compact HYBRID scan tapes plus explicit `if`
-predicate and `while` trip-count residuals. Generic counted loops now retain
-independent typed tapes; branch-local intermediates and bounded `while` state
-tapes remain open. x86 owns the first CPU native loop packet and must not infer
-physical execution from the shared numerical oracle.
+Shared paired AD now consumes dynamic branch-local residual extents through
+zero-extent inactive sentinels, bounded SAVE and sparse HYBRID `while` state
+tapes, and bounded-dynamic counted-loop tapes. Source-CFG SCC analysis now
+distinguishes acyclic, reducible, and true multi-entry irreducible graphs.
+Bounded pure native graphs lower to a typed program-counter state machine with
+nested canonical structured bodies and mixed control/tensor state. Saved
+dynamic slots now require total data/shape-tape envelopes; unbounded,
+unsupported-region, and unrecorded effectful forms remain fail closed. The committed Zen 5
+WSL packet binds paired-IR/CFG/residual digests and executes AVX-512 children
+without Graph re-entry or predicate replay. It is correctness evidence only;
+clean bare-metal timing remains required for performance promotion. An exact
+Zen 5 irreducible-state-machine row remains required before physical x86
+execution of that new form is claimed.
 
 Cross-backend sync `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **bounded
 AVX-512 SGD and Momentum/Nesterov reverse authority complete.** The plugins

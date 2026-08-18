@@ -1026,6 +1026,14 @@ struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
     auto bTy = dyn_cast<tessera::tile::FragmentType>(dataTypes[1]);
     if (!aTy || !bTy)
       return rewriter.notifyMatchFailure(op, "A/B operand is not a fragment");
+    // Resolve the instruction family from an INPUT fragment, which owns the
+    // matrix dtype.  The accumulator type intentionally carries only its
+    // accumulator dtype; resolving it probes a representative input merely to
+    // determine the per-lane result width.  Reusing that representative here
+    // mislabeled bf16/FP8/IU matrix records as f16.
+    physical = converter->layoutFor(aTy);
+    if (!physical || !physical->materializationReady)
+      return emitUnresolvableFragment(op, aTy, converter->getArch());
     // `MMAOp::verify` deliberately does NOT require A and B to agree on `elem`
     // -- `#tile.mma_desc` has always carried aType/bType separately, so a mixed
     // pair is well-formed Tile IR. ROCm cannot execute one:

@@ -108,4 +108,4 @@ def test_argreduce_codegen_bad_kind_rejected():
     d = ('module {\n  "tessera_rocm.argreduce"() {name = "ar", kind = "zz"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-argreduce-kernel")
-    assert r.returncode != 0 and "argmax or argmin" in r.stderr
+    assert r.returncode != 0 and "ROCm arg-reduction kind" in r.stderr

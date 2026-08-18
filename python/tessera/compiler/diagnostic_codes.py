@@ -1101,6 +1101,58 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
 
     # ── W1.1 step 2 — the type-based tile.mma contract ─────────────────────
     DiagnosticCode(
+        code="TILE_MMA_BARE_FRAGMENT_REMOVED",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary=(
+            "A tile.mma operand uses the historical all-unknown !tile.fragment spelling after the permissive producer-chasing contract was removed."
+        ),
+        fix_hint=(
+            "Parameterize the fragment with m/n/k, elem, acc, role, layout, and family."
+        ),
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_VALUE_ARITY",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary="The temporary tensor value lane has an invalid operand/result arity.",
+        fix_hint="Use A, B, optional accumulator, and exactly one result; migrate physical producers to typed fragments.",
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_VALUE_ACCUMULATOR",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary="A tensor-valued tile.mma accumulator disagrees with its result type.",
+        fix_hint="Make the accumulator and result types identical.",
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_MMA_VALUE_TYPE",
+        pass_origin="MMAOp::verify",
+        severity="error",
+        summary="A non-fragment tile.mma value operand is not a ranked tensor.",
+        fix_hint="Use the tile.matmul value lane or parameterized !tile.fragment operands.",
+        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
+        sprint="W1.1",
+    ),
+    DiagnosticCode(
+        code="TILE_TCGEN05_FRAGMENT_CONTRACT",
+        pass_origin="TCGen05MMAOp::verify",
+        severity="error",
+        summary="TCGen05 operands do not carry the required typed fragment ABI.",
+        fix_hint=(
+            "Pack parameterized role-a/role-b tcgen05 fragments matching the "
+            "MMA descriptor."
+        ),
+        spec="docs/audit/compiler/compiler_enhancement.md#52-ods-tightening",
+        sprint="W1.1/CAKE-P1",
+    ),
+    DiagnosticCode(
         code="TILE_MMA_MIXED_FRAGMENT_FORMS",
         pass_origin="MMAOp::verify",
         severity="error",
@@ -1585,6 +1637,33 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         ),
         spec="docs/spec/SHAPE_SYSTEM.md §11.2",
         sprint="W4.2-2026-08-12",
+    ),
+    DiagnosticCode(
+        code="SYMDIM_NONLINEAR_GUARD_MALFORMED",
+        pass_origin="SymbolicDimEqualityPass",
+        severity="error",
+        summary="A typed polynomial shape-guard carrier is malformed or overflows exact i64 evaluation.",
+        fix_hint="Regenerate the carrier through NonlinearWitnessSystem with total power rows and bounded powers.",
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="W4-PRODUCT-1-2026-08-18",
+    ),
+    DiagnosticCode(
+        code="SYMDIM_NONLINEAR_GUARD_INCOMPLETE",
+        pass_origin="SymbolicDimEqualityPass",
+        severity="error",
+        summary="A polynomial shape guard lacks a concrete witness for one or more symbols.",
+        fix_hint="Specialize every guard symbol through tessera.dim_sizes or omit the unproved nonlinear guard.",
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="W4-PRODUCT-1-2026-08-18",
+    ),
+    DiagnosticCode(
+        code="SYMDIM_NONLINEAR_GUARD_VIOLATION",
+        pass_origin="SymbolicDimEqualityPass",
+        severity="error",
+        summary="A fully witnessed polynomial shape guard evaluates false.",
+        fix_hint="Correct the specialization dimensions or the polynomial relation before lowering.",
+        spec="docs/spec/SHAPE_SYSTEM.md §11.2",
+        sprint="W4-PRODUCT-1-2026-08-18",
     ),
     DiagnosticCode(
         code="SYMDIM_RESHAPE_VIOLATION",
@@ -2594,6 +2673,17 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         fix_hint="Give one extent per named axis in the mesh declaration.",
         spec="docs/spec/GRAPH_IR_SPEC.md", sprint="Phase 2",
         language="python", status="implemented",
+    ),
+    DiagnosticCode(
+        code="NEIGHBORS_TOPOLOGY_UNKNOWN_KIND",
+        pass_origin="CreateTopologyOp::verify",
+        severity="error",
+        summary="A topology.create operation names an unregistered topology kind.",
+        fix_hint=(
+            "Use 2d_mesh, 3d_mesh, hex_2d, custom_graph, dynamic, adaptive, or fault."
+        ),
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
+        sprint="W1.1b",
     ),
 )
 

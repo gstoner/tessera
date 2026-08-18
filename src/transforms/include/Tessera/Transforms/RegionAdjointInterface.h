@@ -4,6 +4,7 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/FunctionExtras.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 
 namespace tessera {
@@ -24,7 +25,9 @@ struct RegionCotangent {
 using RegionPullbackBuilder = llvm::function_ref<mlir::LogicalResult(
     mlir::Region &region, mlir::ValueRange outputCotangents,
     mlir::ValueRange blockArgumentValues,
-    llvm::ArrayRef<mlir::Value> captures, mlir::OpBuilder &builder,
+    llvm::ArrayRef<mlir::Value> captures,
+    const llvm::DenseMap<mlir::Value, mlir::Value> &savedValues,
+    mlir::OpBuilder &builder,
     llvm::SmallVectorImpl<mlir::Value> &blockArgumentCotangents,
     llvm::SmallVectorImpl<mlir::Value> &captureCotangents)>;
 

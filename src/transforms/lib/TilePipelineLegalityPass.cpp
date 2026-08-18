@@ -26,6 +26,7 @@
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
+#include "TileRelationalLegality.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -49,8 +50,7 @@ struct TilePipelineLegality
            "phase=0 asymmetry and per-barrier kind consistency across ops.";
   }
 
-  void runOnOperation() override {
-    ModuleOp module = getOperation();
+  LogicalResult verify(ModuleOp module) {
     bool anyError = false;
 
     module.walk([&](func::FuncOp func) {
@@ -101,7 +101,11 @@ struct TilePipelineLegality
       });
     });
 
-    if (anyError)
+    return failure(anyError);
+  }
+
+  void runOnOperation() override {
+    if (failed(verify(getOperation())))
       signalPassFailure();
   }
 };
@@ -109,6 +113,11 @@ struct TilePipelineLegality
 } // namespace
 
 namespace tessera {
+LogicalResult verifyTilePipelineRelations(ModuleOp module) {
+  TilePipelineLegality verifier;
+  return verifier.verify(module);
+}
+
 std::unique_ptr<Pass> createTilePipelineLegalityPass() {
   return std::make_unique<TilePipelineLegality>();
 }

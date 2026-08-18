@@ -14,6 +14,7 @@ from typing import Any, Iterable, Literal, Mapping, Sequence
 
 
 PRESBURGER_SCHEMA = "tessera.presburger_constraints.v1"
+NONLINEAR_GUARD_SCHEMA = "tessera.nonlinear_shape_guards.v1"
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,129 @@ class PresburgerSystem:
         return True if all(result is True for result in results) else None
 
 
+@dataclass(frozen=True)
+class PolynomialTerm:
+    """One exact integer monomial in a nonlinear witness guard."""
+
+    coefficient: int
+    powers: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "coefficient", int(self.coefficient))
+        object.__setattr__(self, "powers", tuple(map(int, self.powers)))
+        if not self.powers or any(power < 0 or power > 16 for power in self.powers):
+            raise ValueError("polynomial powers must be present and lie in [0, 16]")
+        if not any(self.powers):
+            raise ValueError("constant polynomial terms belong in constraint.constant")
+
+
+@dataclass(frozen=True)
+class NonlinearWitnessConstraint:
+    """A polynomial relation checked only against a complete concrete witness."""
+
+    relation: Literal["eq", "ge"]
+    terms: tuple[PolynomialTerm, ...]
+    constant: int = 0
+
+    def __post_init__(self) -> None:
+        if self.relation not in {"eq", "ge"}:
+            raise ValueError("nonlinear witness relation must be 'eq' or 'ge'")
+        if not self.terms:
+            raise ValueError("nonlinear witness constraints require terms")
+        arity = len(self.terms[0].powers)
+        if any(len(term.powers) != arity for term in self.terms):
+            raise ValueError("every polynomial term must cover every symbol")
+        object.__setattr__(self, "constant", int(self.constant))
+
+    def evaluate(self, symbols: Sequence[str], bindings: Mapping[str, int]) -> bool | None:
+        if any(symbol not in bindings for symbol in symbols):
+            return None
+        value = self.constant
+        for term in self.terms:
+            monomial = term.coefficient
+            for symbol, power in zip(symbols, term.powers):
+                monomial *= int(bindings[symbol]) ** power
+            value += monomial
+        return value == 0 if self.relation == "eq" else value >= 0
+
+
+@dataclass(frozen=True)
+class NonlinearWitnessSystem:
+    """Content-addressed polynomial guards outside the Presburger proof domain.
+
+    These rows deliberately require complete concrete witnesses.  They may
+    validate a selected specialization, but they never become facts used by
+    affine scheduling or legality proofs.
+    """
+
+    symbols: tuple[str, ...]
+    constraints: tuple[NonlinearWitnessConstraint, ...]
+
+    def __post_init__(self) -> None:
+        if not self.symbols or len(set(self.symbols)) != len(self.symbols):
+            raise ValueError("nonlinear guard symbols must be non-empty and unique")
+        if not self.constraints:
+            raise ValueError("nonlinear guard systems require constraints")
+        if any(len(row.terms[0].powers) != len(self.symbols) for row in self.constraints):
+            raise ValueError("every nonlinear guard row must cover every symbol")
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "schema": NONLINEAR_GUARD_SCHEMA,
+            "symbols": list(self.symbols),
+            "constraints": [
+                {
+                    "relation": row.relation,
+                    "constant": row.constant,
+                    "terms": [
+                        {"coefficient": term.coefficient, "powers": list(term.powers)}
+                        for term in row.terms
+                    ],
+                }
+                for row in self.constraints
+            ],
+        }
+
+    @property
+    def digest(self) -> str:
+        encoded = json.dumps(self.as_dict(), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode()).hexdigest()
+
+    def to_mlir_attr(self) -> str:
+        constraints = ", ".join(
+            '{relation = "'
+            + row.relation
+            + '", constant = '
+            + str(row.constant)
+            + " : i64, terms = ["
+            + ", ".join(
+                "{coefficient = "
+                + str(term.coefficient)
+                + " : i64, powers = array<i64: "
+                + ", ".join(map(str, term.powers))
+                + ">}"
+                for term in row.terms
+            )
+            + "]}"
+            for row in self.constraints
+        )
+        symbols = ", ".join(json.dumps(symbol) for symbol in self.symbols)
+        return "{version = 1 : i64, symbols = [" + symbols + "], constraints = [" + constraints + "]}"
+
+    def check_witness(self, bindings: Mapping[str, int]) -> bool | None:
+        results = [row.evaluate(self.symbols, bindings) for row in self.constraints]
+        if any(result is False for result in results):
+            return False
+        return True if all(result is True for result in results) else None
+
+
+def attach_nonlinear_witness_system(function: Any, system: NonlinearWitnessSystem) -> None:
+    """Attach specialization guards without changing affine CFG proof identity."""
+
+    function.fn_attrs["tessera.nonlinear_shape_guards"] = system.to_mlir_attr()
+    function.fn_attrs["tessera.nonlinear_shape_guard_digest"] = json.dumps(system.digest)
+
+
 def attach_presburger_system(function: Any, system: PresburgerSystem) -> None:
     """Attach the typed carrier and its content digest to a Graph function."""
 
@@ -192,9 +316,14 @@ def presburger_system_from_constraints(
 
 
 __all__ = [
+    "NONLINEAR_GUARD_SCHEMA",
     "PRESBURGER_SCHEMA",
+    "NonlinearWitnessConstraint",
+    "NonlinearWitnessSystem",
+    "PolynomialTerm",
     "PresburgerConstraint",
     "PresburgerSystem",
     "attach_presburger_system",
+    "attach_nonlinear_witness_system",
     "presburger_system_from_constraints",
 ]

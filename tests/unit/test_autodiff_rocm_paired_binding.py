@@ -35,7 +35,7 @@ def test_rocm_mse_backward_binds_compiled_vjp(monkeypatch):
     assert len(gradients) == 2
     assert seen["metadata"]["compiler_path"] == "rocm_regression_loss_bwd_compiled"
     assert seen["metadata"]["ops"][0]["kwargs"]["reduction"] == "mean"
-    assert _mse.last_backward_execution["implementation"] == "dedicated"
+    assert _mse.last_backward_execution["implementation"] == "family_plugin"
 
 
 @ts.jit(target="rocm", autodiff="reverse", wrt=("q", "k", "v"))
@@ -112,4 +112,6 @@ def test_rocm_matmul_backward_is_two_forward_gemm_launches(monkeypatch):
     assert all(call[0]["compiler_path"] == "rocm_compiled" for call in calls)
     np.testing.assert_array_equal(da, dout.astype(np.float32) @ b.astype(np.float32).T)
     np.testing.assert_array_equal(db, a.astype(np.float32).T @ dout.astype(np.float32))
-    assert _matmul.last_backward_execution["implementation"] == "composition"
+    assert _matmul.last_backward_execution["implementation"] == (
+        "family_plugin_composition"
+    )

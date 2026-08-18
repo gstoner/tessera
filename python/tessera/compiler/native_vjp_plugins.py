@@ -313,6 +313,7 @@ def _execute_compound_spectral(
     target_consumers={
         "x86": "x86.avx512_lion_backward",
         "rocm": "rocm.gfx1151_lion_backward",
+        "nvidia_sm120": "nvidia.sm120_lion_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
 )
@@ -334,15 +335,83 @@ def _execute_lion(
 
     from tessera.runtime import RuntimeArtifact, launch
 
-    from .native_lion_vjp import build_native_lion_vjp_package
-
-    if not source_graph_ir:
-        raise TesseraJitError("Lion VJP requires tracer-owned source Graph IR")
     cotangents = (
         tuple(out_cotangents)
         if isinstance(out_cotangents, (tuple, list))
         else (out_cotangents,)
     )
+    if target == "nvidia_sm120":
+        if len(ordered_inputs) != 3 or len(arg_names) != 3:
+            raise TesseraJitError(
+                "NVIDIA Lion backward requires param, grad, and moment"
+            )
+        if len(cotangents) != 2:
+            raise TesseraJitError(
+                "NVIDIA Lion backward requires parameter and moment cotangents"
+            )
+        cotangent_names = ["dparam_out", "dmoment_out"]
+        path = "nvidia_lion_bwd_compiled"
+        result = launch(
+            RuntimeArtifact(metadata={
+                "target": target,
+                "compiler_path": path,
+                "executable": True,
+                "execution_kind": "native_gpu",
+                "execution_mode": "cuda_driver",
+                "autodiff_phase": "backward",
+                "native_vjp_family": declaration.family,
+                "native_vjp_schedule_consumer": declaration.schedule_consumer,
+                "native_vjp_tile_consumer": declaration.tile_consumer,
+                "native_vjp_target_consumer": declaration.target_consumers[target],
+                "out_cotangents": cotangent_names,
+                "arg_names": [*arg_names, *cotangent_names],
+                "output_names": [f"d_{name}" for name in arg_names],
+                "ops": [{
+                    "op_name": source.op_name,
+                    "result": source.result,
+                    "operands": list(arg_names),
+                    "kwargs": dict(source.kwargs),
+                }],
+            }),
+            tuple(
+                np.ascontiguousarray(np.asarray(value), dtype=np.float32)
+                for value in (*ordered_inputs, *cotangents)
+            ),
+        )
+        if not result.get("ok") or result.get("execution_mode") != "cuda_driver":
+            raise TesseraJitError(
+                "verified SM120 Lion backward launch failed: "
+                + str(result.get("reason"))
+            )
+        by_name = dict(zip(arg_names, tuple(result["output"]), strict=True))
+        missing = [name for name in wrt_names if name not in by_name]
+        if missing:
+            raise TesseraJitError(
+                "Lion VJP requested unknown operands: " + ", ".join(missing)
+            )
+        return NativeVJPResult(
+            gradients=tuple(by_name[name] for name in wrt_names),
+            execution={
+                "compiler_path": path,
+                "execution_kind": "native_gpu",
+                "execution_mode": "cuda_driver",
+                "evidence_target": "nvidia_sm120",
+                "implementation": "family_plugin",
+                "residual_policy": "none",
+                "family": declaration.family,
+                "graph_consumer": source.op_name,
+                "schedule_consumer": declaration.schedule_consumer,
+                "tile_consumer": declaration.tile_consumer,
+                "target_consumer": declaration.target_consumers[target],
+                "frontend_authority": "tracer",
+                "proof_mode": "structural_non_reexecuting",
+            },
+        )
+
+    from .native_lion_vjp import build_native_lion_vjp_package
+
+    if not source_graph_ir:
+        raise TesseraJitError("Lion VJP requires tracer-owned source Graph IR")
     try:
         package = build_native_lion_vjp_package(
             source_graph_ir=source_graph_ir,
@@ -588,6 +657,7 @@ def _execute_adafactor(
     target_consumers={
         "x86": "x86.avx512_sequence_mixer_backward",
         "rocm": "rocm.gfx1151_sequence_mixer_backward",
+        "nvidia_sm120": "nvidia.sm120_sequence_mixer_backward",
     },
     differential_policy="non_reexecuting_state_lineage",
 )
@@ -604,6 +674,107 @@ def _execute_sequence_mixer(
     source_graph_ir: str | None,
     frontend_certificate: Any | None,
 ) -> NativeVJPResult:
+    if target == "nvidia_sm120":
+        import numpy as np
+
+        from tessera.runtime import RuntimeArtifact, launch
+
+        flags = dict(source.kwargs)
+        source_operands = tuple(getattr(source, "operands", ()))
+        optional_labels = {
+            str(name).lstrip("%").lower() for name in source_operands[3:]
+        }
+        for key, label in (
+            ("has_gate", "gate"),
+            ("has_beta", "beta"),
+            ("has_decay", "decay"),
+        ):
+            if key not in flags:
+                flags[key] = label in optional_labels
+        if not optional_labels.intersection({"gate", "beta", "decay"}) and len(
+            source_operands
+        ) > 3:
+            for index, key in enumerate(("has_gate", "has_beta", "has_decay")):
+                flags[key] = index < len(source_operands) - 3
+        expected_inputs = 3 + sum(
+            int(bool(flags.get(key, False)))
+            for key in ("has_gate", "has_beta", "has_decay")
+        )
+        cotangents = (
+            tuple(out_cotangents)
+            if isinstance(out_cotangents, (tuple, list))
+            else (out_cotangents,)
+        )
+        if len(ordered_inputs) != expected_inputs or not bool(
+            flags.get("causal", True)
+        ):
+            raise TesseraJitError(
+                "SM120 DeltaNet backward requires causal Q/K/V with optional "
+                "gate/beta/decay inputs"
+            )
+        if len(cotangents) != 1:
+            raise TesseraJitError(
+                "SM120 DeltaNet backward requires one output cotangent"
+            )
+        path = "nvidia_deltanet_bwd_compiled"
+        result = launch(
+            RuntimeArtifact(metadata={
+                "target": target,
+                "compiler_path": path,
+                "executable": True,
+                "execution_kind": "native_gpu",
+                "execution_mode": "cuda_driver",
+                "autodiff_phase": "backward",
+                "native_vjp_family": declaration.family,
+                "native_vjp_schedule_consumer": declaration.schedule_consumer,
+                "native_vjp_tile_consumer": declaration.tile_consumer,
+                "native_vjp_target_consumer": declaration.target_consumers[target],
+                "out_cotangents": ["dy"],
+                "arg_names": [*arg_names, "dy"],
+                "output_names": [f"d_{name}" for name in arg_names],
+                "ops": [{
+                    "op_name": source.op_name,
+                    "result": source.result,
+                    "operands": list(arg_names),
+                    "kwargs": flags,
+                }],
+            }),
+            tuple(
+                np.ascontiguousarray(np.asarray(value), dtype=np.float32)
+                for value in (*ordered_inputs, cotangents[0])
+            ),
+        )
+        if not result.get("ok") or result.get("execution_mode") != "cuda_driver":
+            raise TesseraJitError(
+                "verified SM120 DeltaNet backward launch failed: "
+                + str(result.get("reason"))
+            )
+        by_name = dict(zip(arg_names, tuple(result["output"]), strict=True))
+        missing = [name for name in wrt_names if name not in by_name]
+        if missing:
+            raise TesseraJitError(
+                "sequence-mixer VJP requested unknown operands: "
+                + ", ".join(missing)
+            )
+        return NativeVJPResult(
+            gradients=tuple(by_name[name] for name in wrt_names),
+            execution={
+                "compiler_path": path,
+                "execution_kind": "native_gpu",
+                "execution_mode": "cuda_driver",
+                "evidence_target": "nvidia_sm120",
+                "implementation": "family_plugin",
+                "residual_policy": "recompute",
+                "family": declaration.family,
+                "graph_consumer": source.op_name,
+                "schedule_consumer": declaration.schedule_consumer,
+                "tile_consumer": declaration.tile_consumer,
+                "target_consumer": declaration.target_consumers[target],
+                "frontend_authority": "tracer",
+                "proof_mode": "structural_non_reexecuting",
+            },
+        )
+
     from .native_stateful_vjp import build_native_sequence_mixer_vjp_package
 
     return _execute_stateful_package(
@@ -707,6 +878,384 @@ def _execute_attention(
             "tile_program_digest": package.tile_program_digest,
             "native_image_digest": package.native_image_digest,
             "artifact_hash": package.artifact_hash,
+            "frontend_authority": "tracer",
+        },
+    )
+
+
+def _execute_loss_family(
+    *,
+    source: Any,
+    target: str,
+    ordered_inputs: Sequence[Any],
+    arg_names: Sequence[str],
+    out_cotangents: Any,
+    wrt_names: Sequence[str],
+    declaration: NativeVJPPluginDeclaration,
+    loss_kind: str,
+    source_arg_names: Sequence[str] | None = None,
+    source_graph_ir: str | None = None,
+    frontend_certificate: Any | None = None,
+) -> NativeVJPResult:
+    """Package a traced loss product without returning to ``JitFn`` dispatch."""
+    del source_arg_names, source_graph_ir, frontend_certificate
+    import numpy as np
+
+    from tessera.runtime import RuntimeArtifact, launch
+
+    if len(ordered_inputs) != 2:
+        raise TesseraJitError(f"{loss_kind} backward requires two operands")
+    cotangents = (
+        tuple(out_cotangents)
+        if isinstance(out_cotangents, (tuple, list))
+        else (out_cotangents,)
+    )
+    if len(cotangents) != 1:
+        raise TesseraJitError(f"{loss_kind} backward requires one output cotangent")
+    if loss_kind == "class_loss" and any(name != arg_names[0] for name in wrt_names):
+        raise TesseraJitError(
+            "integer class-index targets are explicitly nondifferentiable"
+        )
+
+    nvidia = target == "nvidia_sm120"
+    gpu = target in {"rocm", "nvidia_sm120"}
+    execution_mode = (
+        "cuda_driver"
+        if nvidia
+        else "hip_runtime" if target == "rocm" else "cpu_avx512"
+    )
+    path_stem = {
+        "regression_loss": "regression_loss_bwd_compiled",
+        "binary_loss": "binary_loss_bwd_compiled",
+        "class_loss": "class_loss_bwd_compiled",
+        "distribution_loss": "distribution_loss_bwd_compiled",
+    }[loss_kind]
+    path = f"nvidia_{path_stem}" if nvidia else f"{target}_{path_stem}"
+    source_kwargs = dict(source.kwargs)
+    if loss_kind == "class_loss" and "smoothing" in source_kwargs:
+        source_kwargs["label_smoothing"] = source_kwargs.pop("smoothing")
+    output_names = (
+        [f"d_{arg_names[0]}"]
+        if loss_kind == "class_loss"
+        else [f"d_{name}" for name in arg_names]
+    )
+    inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered_inputs]
+    dy = np.ascontiguousarray(np.asarray(cotangents[0]))
+    if loss_kind == "distribution_loss":
+        inputs = [np.ascontiguousarray(value, dtype=np.float32) for value in inputs]
+        dy = np.ascontiguousarray(dy, dtype=np.float32)
+    artifact = RuntimeArtifact(
+        metadata={
+            "target": target,
+            "compiler_path": path,
+            "executable": True,
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
+            "execution_mode": execution_mode,
+            "autodiff_phase": "backward",
+            "native_vjp_family": declaration.family,
+            "native_vjp_schedule_consumer": declaration.schedule_consumer,
+            "native_vjp_tile_consumer": declaration.tile_consumer,
+            "native_vjp_target_consumer": declaration.target_consumers[target],
+            "out_cotangent": "dy",
+            "arg_names": [*arg_names, "dy"],
+            "output_names": output_names,
+            "ops": [
+                {
+                    "op_name": source.op_name,
+                    "result": source.result,
+                    "operands": list(arg_names),
+                    "kwargs": source_kwargs,
+                }
+            ],
+        }
+    )
+    launched = launch(artifact, tuple([*inputs, dy]))
+    if not launched.get("ok") or launched.get("execution_mode") != execution_mode:
+        raise TesseraJitError(
+            f"verified {target} {loss_kind} backward launch failed: "
+            + str(launched.get("reason"))
+        )
+    raw_output = launched["output"]
+    gradients = (
+        tuple(raw_output)
+        if isinstance(raw_output, (tuple, list))
+        else (raw_output,)
+    )
+    gradient_names = arg_names[:1] if loss_kind == "class_loss" else arg_names
+    by_name = dict(zip(gradient_names, gradients, strict=True))
+    missing = [name for name in wrt_names if name not in by_name]
+    if missing:
+        raise TesseraJitError(
+            f"{loss_kind} VJP has no physical gradient for: " + ", ".join(missing)
+        )
+    return NativeVJPResult(
+        gradients=tuple(by_name[name] for name in wrt_names),
+        execution={
+            "compiler_path": path,
+            "execution_kind": "native_gpu" if gpu else "native_cpu",
+            "execution_mode": execution_mode,
+            "evidence_target": (
+                "nvidia_sm120"
+                if nvidia
+                else "rocm_gfx1151" if target == "rocm" else "x86_avx512"
+            ),
+            "implementation": "family_plugin",
+            "residual_policy": "save_inputs",
+            "family": declaration.family,
+            "graph_consumer": source.op_name,
+            "schedule_consumer": declaration.schedule_consumer,
+            "tile_consumer": declaration.tile_consumer,
+            "target_consumer": declaration.target_consumers[target],
+            "frontend_authority": "tracer",
+        },
+    )
+
+
+@register_native_vjp_plugin(
+    "loss.mse",
+    "mse_loss",
+    "loss.mae",
+    "mae_loss",
+    "loss.huber",
+    "huber_loss",
+    "loss.smooth_l1",
+    "smooth_l1_loss",
+    family="regression_loss_backward",
+    schedule_consumer="schedule.loss_backward",
+    tile_consumer="tile.loss_backward_kernel",
+    target_consumers={
+        "x86": "x86.avx512_regression_loss_backward",
+        "rocm": "rocm.gfx1151_regression_loss_backward",
+        "nvidia_sm120": "nvidia.sm120_regression_loss_backward",
+    },
+)
+def _execute_regression_loss(**kwargs: Any) -> NativeVJPResult:
+    return _execute_loss_family(**kwargs, loss_kind="regression_loss")
+
+
+@register_native_vjp_plugin(
+    "loss.binary_cross_entropy",
+    "binary_cross_entropy_loss",
+    family="binary_loss_backward",
+    schedule_consumer="schedule.loss_backward",
+    tile_consumer="tile.loss_backward_kernel",
+    target_consumers={
+        "x86": "x86.avx512_binary_loss_backward",
+        "rocm": "rocm.gfx1151_binary_loss_backward",
+        "nvidia_sm120": "nvidia.sm120_binary_loss_backward",
+    },
+)
+def _execute_binary_loss(**kwargs: Any) -> NativeVJPResult:
+    return _execute_loss_family(**kwargs, loss_kind="binary_loss")
+
+
+@register_native_vjp_plugin(
+    "loss.cross_entropy",
+    "cross_entropy_loss",
+    "label_smoothed_cross_entropy",
+    family="class_loss_backward",
+    schedule_consumer="schedule.loss_backward",
+    tile_consumer="tile.loss_backward_kernel",
+    target_consumers={
+        "x86": "x86.avx512_class_loss_backward",
+        "rocm": "rocm.gfx1151_class_loss_backward",
+        "nvidia_sm120": "nvidia.sm120_class_loss_backward",
+    },
+)
+def _execute_class_loss(**kwargs: Any) -> NativeVJPResult:
+    return _execute_loss_family(**kwargs, loss_kind="class_loss")
+
+
+@register_native_vjp_plugin(
+    "loss.kl_divergence",
+    "kl_divergence",
+    "loss.js_divergence",
+    "js_divergence",
+    family="distribution_loss_backward",
+    schedule_consumer="schedule.loss_backward",
+    tile_consumer="tile.loss_backward_kernel",
+    target_consumers={"rocm": "rocm.gfx1151_distribution_loss_backward"},
+)
+def _execute_distribution_loss(**kwargs: Any) -> NativeVJPResult:
+    return _execute_loss_family(**kwargs, loss_kind="distribution_loss")
+
+
+@register_native_vjp_plugin(
+    "matmul",
+    family="matmul_backward",
+    schedule_consumer="schedule.matmul_backward",
+    tile_consumer="tile.matmul",
+    target_consumers={"rocm": "rocm.gfx1151_composed_matmul_backward"},
+)
+def _execute_rocm_matmul_backward(
+    *,
+    source: Any,
+    target: str,
+    ordered_inputs: Sequence[Any],
+    arg_names: Sequence[str],
+    source_arg_names: Sequence[str],
+    out_cotangents: Any,
+    wrt_names: Sequence[str],
+    declaration: NativeVJPPluginDeclaration,
+    source_graph_ir: str | None,
+    frontend_certificate: Any | None,
+) -> NativeVJPResult:
+    """Compose dA/dB from the two target-owned forward GEMM packages."""
+    del source, source_arg_names, source_graph_ir, frontend_certificate
+    import numpy as np
+
+    from tessera.runtime import RuntimeArtifact, launch
+
+    if target != "rocm" or len(ordered_inputs) != 2 or len(arg_names) != 2:
+        raise TesseraJitError("ROCm matmul VJP requires exactly A and B")
+    cotangents = (
+        tuple(out_cotangents)
+        if isinstance(out_cotangents, (tuple, list))
+        else (out_cotangents,)
+    )
+    if len(cotangents) != 1:
+        raise TesseraJitError("ROCm matmul VJP requires one output cotangent")
+    a, b = (np.ascontiguousarray(np.asarray(value)) for value in ordered_inputs)
+    dout = np.ascontiguousarray(np.asarray(cotangents[0]))
+
+    def launch_gemm(lhs: Any, rhs: Any) -> Any:
+        artifact = RuntimeArtifact(
+            metadata={
+                "target": "rocm",
+                "compiler_path": "rocm_compiled",
+                "executable": True,
+                "execution_kind": "native_gpu",
+                "execution_mode": "hip_runtime",
+                "arg_names": ["a", "b"],
+                "output_name": "c",
+                "ops": [
+                    {
+                        "op_name": "tessera.matmul",
+                        "result": "c",
+                        "operands": ["a", "b"],
+                        "kwargs": {},
+                    }
+                ],
+            }
+        )
+        result = launch(
+            artifact,
+            (np.ascontiguousarray(lhs), np.ascontiguousarray(rhs)),
+        )
+        if not result.get("ok") or result.get("execution_mode") != "hip_runtime":
+            raise TesseraJitError(
+                "ROCm composed matmul backward failed: " + str(result.get("reason"))
+            )
+        return result["output"]
+
+    gradients = (launch_gemm(dout, b.T), launch_gemm(a.T, dout))
+    by_name = dict(zip(arg_names, gradients, strict=True))
+    return NativeVJPResult(
+        gradients=tuple(by_name[name] for name in wrt_names),
+        execution={
+            "compiler_path": "rocm_compiled+rocm_compiled",
+            "execution_kind": "native_gpu",
+            "execution_mode": "hip_runtime",
+            "evidence_target": "rocm_gfx1151",
+            "implementation": "family_plugin_composition",
+            "residual_policy": "save_inputs",
+            "family": declaration.family,
+            "graph_consumer": "tessera.matmul",
+            "schedule_consumer": declaration.schedule_consumer,
+            "tile_consumer": declaration.tile_consumer,
+            "target_consumer": declaration.target_consumers[target],
+            "frontend_authority": "tracer",
+        },
+    )
+
+
+@register_native_vjp_plugin(
+    "selective_ssm",
+    family="selective_ssm_backward",
+    schedule_consumer="schedule.sequence_mixer_backward",
+    tile_consumer="tile.training_kernel",
+    target_consumers={"rocm": "rocm.gfx1151_selective_ssm_backward"},
+    differential_policy="non_reexecuting_state_lineage",
+)
+def _execute_rocm_selective_ssm_backward(
+    *,
+    source: Any,
+    target: str,
+    ordered_inputs: Sequence[Any],
+    arg_names: Sequence[str],
+    source_arg_names: Sequence[str],
+    out_cotangents: Any,
+    wrt_names: Sequence[str],
+    declaration: NativeVJPPluginDeclaration,
+    source_graph_ir: str | None,
+    frontend_certificate: Any | None,
+) -> NativeVJPResult:
+    """Bind the retained physical kernel to the non-reexecuting plugin seam."""
+    del source, source_arg_names, source_graph_ir
+    import numpy as np
+
+    from tessera.runtime import RuntimeArtifact, launch
+
+    if target != "rocm" or frontend_certificate is None:
+        raise TesseraJitError(
+            "ROCm selective-SSM VJP requires non-reexecuting frontend proof"
+        )
+    cotangents = (
+        tuple(out_cotangents)
+        if isinstance(out_cotangents, (tuple, list))
+        else (out_cotangents,)
+    )
+    launch_values = [
+        *(np.ascontiguousarray(np.asarray(value)) for value in cotangents),
+        *(np.ascontiguousarray(np.asarray(value)) for value in ordered_inputs),
+    ]
+    names = [f"arg{index}" for index in range(len(launch_values))]
+    artifact = RuntimeArtifact(
+        metadata={
+            "target": "rocm",
+            "compiler_path": "rocm_selective_ssm_bwd_compiled",
+            "executable": True,
+            "execution_kind": "native_gpu",
+            "execution_mode": "hip_runtime",
+            "native_vjp_family": declaration.family,
+            "native_vjp_schedule_consumer": declaration.schedule_consumer,
+            "native_vjp_tile_consumer": declaration.tile_consumer,
+            "native_vjp_target_consumer": declaration.target_consumers[target],
+            "arg_names": names,
+            "output_name": "grads",
+            "ops": [
+                {
+                    "op_name": "tessera.selective_ssm_bwd",
+                    "result": "grads",
+                    "operands": names,
+                    "kwargs": {},
+                }
+            ],
+        }
+    )
+    result = launch(artifact, tuple(launch_values))
+    if not result.get("ok") or result.get("execution_mode") != "hip_runtime":
+        raise TesseraJitError(
+            "verified ROCm selective-SSM backward launch failed: "
+            + str(result.get("reason"))
+        )
+    output = result["output"]
+    gradients = tuple(output) if isinstance(output, (tuple, list)) else (output,)
+    by_name = dict(zip(arg_names, gradients, strict=True))
+    return NativeVJPResult(
+        gradients=tuple(by_name[name] for name in wrt_names),
+        execution={
+            "compiler_path": "rocm_selective_ssm_bwd_compiled",
+            "execution_kind": "native_gpu",
+            "execution_mode": "hip_runtime",
+            "evidence_target": "rocm_gfx1151",
+            "implementation": "family_plugin",
+            "residual_policy": "recompute_all",
+            "family": declaration.family,
+            "graph_consumer": "tessera.selective_ssm",
+            "schedule_consumer": declaration.schedule_consumer,
+            "tile_consumer": declaration.tile_consumer,
+            "target_consumer": declaration.target_consumers[target],
             "frontend_authority": "tracer",
         },
     )

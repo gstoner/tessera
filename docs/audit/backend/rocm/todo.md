@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-17
+last_updated: 2026-08-18
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
@@ -7,14 +7,47 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
-`W4-PRODUCT-1-RESIDUAL-CONTRACT-2026-08-17` — **shared carrier landed;
-gfx1151 consumer remains open.** SAVE/HYBRID checkpoint sets, CFG identity,
+Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
+contract parity; gfx1151 evidence unchanged.** Dynamic region state now uses
+bounded per-slot data tapes plus recorded logical-shape tapes. Polynomial shape
+guards require complete concrete witnesses and do not enter Presburger proofs.
+Variadic branch state reaches the structured CFG carrier. Only compiler-owned
+extent assertions are replay-safe; mutation/RNG/I/O/ordered collectives remain
+fail closed. A bare-metal gfx1151 irreducible/dynamic-state packet is still
+required.
+
+Cross-backend sync `W2.4-E2E6-SYMBOLIC-2026-08-18` — **shared parity
+validated; gfx1151 evidence unchanged.** Relational Tile legality now has one
+staged production authority, while old CLI passes are wrappers. Pure static
+annotations abstract-trace before AST compatibility capture. NVIDIA
+Lion/DeltaNet dispatch moved into family plugins; ROCm keeps its independent
+gfx1151 state-lineage packages and inherits no CUDA evidence.
+
+`W1-W3-AUTHORITY-CLOSEOUT-2026-08-18` — **gfx1151 shared-contract parity and
+current reverse-package ownership closed; no new device evidence.** ROCm
+semantic selectors are ODS-owned, bare Tile fragments are rejected, WarpSpec
+uses typed Schedule ancestry, and whole-program memory activity is conservative.
+All currently admitted single-op ROCm VJPs—including losses, matmul composition,
+and selective SSM—resolve through explicit plugins; unmatched families fail
+closed. Forward producer ownership and gfx1200/gfx1250 physical proof remain
+open and architecture-gated.
+
+`W4-PRODUCT-1-RESIDUAL-CONTRACT-2026-08-17` — **shared carrier and bounded
+gfx1151 correctness consumer landed.** SAVE/HYBRID checkpoint sets, CFG identity,
 and residual identity now survive Graph→SCF validation. Shared paired AD now
-consumes SAVE and compact HYBRID scan tapes plus explicit `if` predicate/`while`
-trip count; HYBRID replays only from the nearest checkpoint. Generic counted
-loops now retain independent typed state tapes. The next ROCm slice is a native
-loop and data-dependent-branch region-product package; generic/HYBRID state
-tapes and bare-metal performance proof remain separate.
+consumes dynamic branch-local residual extents through zero-extent inactive
+sentinels, bounded SAVE and sparse HYBRID `while` state tapes, and
+bounded-dynamic counted-loop tapes. Source-CFG SCC analysis now distinguishes
+acyclic, reducible, and true multi-entry irreducible graphs. Bounded pure
+native graphs lower to a typed program-counter state machine with nested
+canonical structured bodies and mixed control/tensor state. Saved dynamic slots
+now require total data/shape-tape envelopes; unbounded, unsupported-region, and
+unrecorded effectful forms remain fail closed. The existing gfx1151 WSL packet binds
+paired-IR/CFG/residual digests and executes native HIP children without Graph
+re-entry or predicate replay. It is correctness evidence only; bare-metal
+device-clock/profiler timing remains required for selector promotion. An
+exact-device irreducible-state-machine row remains required before physical
+ROCm execution of that new form is claimed.
 
 `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **bounded gfx1151 optimizer reverse
 authority complete.** Explicit plugins now own SGD, Momentum/Nesterov, and

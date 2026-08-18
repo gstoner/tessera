@@ -199,4 +199,4 @@ def test_binary_codegen_bad_kind_rejected():
     d = ('module {\n  "tessera_rocm.binary"() {name = "b", kind = "floof"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-binary-kernel")
-    assert r.returncode != 0 and "unknown kind" in r.stderr
+    assert r.returncode != 0 and "ROCm binary math kind" in r.stderr

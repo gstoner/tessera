@@ -36,6 +36,7 @@
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
+#include "TileRelationalLegality.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -140,8 +141,7 @@ struct TileBarrierReuseLegality
            "barrier emit TILE_BARRIER_REUSE_MISSING_BARRIER.";
   }
 
-  void runOnOperation() override {
-    ModuleOp module = getOperation();
+  LogicalResult verify(ModuleOp module) {
     bool anyError = false;
 
     module.walk([&](func::FuncOp func) {
@@ -208,7 +208,11 @@ struct TileBarrierReuseLegality
       });
     });
 
-    if (anyError)
+    return failure(anyError);
+  }
+
+  void runOnOperation() override {
+    if (failed(verify(getOperation())))
       signalPassFailure();
   }
 };
@@ -216,6 +220,11 @@ struct TileBarrierReuseLegality
 } // namespace
 
 namespace tessera {
+LogicalResult verifyTileBarrierReuseRelations(ModuleOp module) {
+  TileBarrierReuseLegality verifier;
+  return verifier.verify(module);
+}
+
 std::unique_ptr<Pass> createTileBarrierReuseLegalityPass() {
   return std::make_unique<TileBarrierReuseLegality>();
 }

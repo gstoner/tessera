@@ -129,6 +129,29 @@ if _opt_help_contains("tessera-lower-to-rocm"):
 if _opt_help_contains("tessera-lower-to-apple_gpu"):
     config.available_features.add("tessera-apple-backend")
 
+# The x86 executable pass is always registered so it can fail closed with a
+# useful rebuild diagnostic.  Help-text probing therefore cannot distinguish a
+# build that actually registered TesseraX86Dialect.  Probe the dialect directly
+# with the smallest load-time fixture; this also guards the assertions-enabled
+# regression that motivated the optional registration boundary.
+def _x86_target_ir_available() -> bool:
+    if not (os.path.isfile(_TESSERA_OPT) and os.access(_TESSERA_OPT, os.X_OK)):
+        return False
+    probe = (
+        'module { func.func @probe(%tile: !tessera_x86.tile) { return } }\n'
+    )
+    try:
+        return subprocess.run(
+            [_TESSERA_OPT, "-"], input=probe, capture_output=True, text=True,
+            timeout=10,
+        ).returncode == 0
+    except Exception:
+        return False
+
+
+if _x86_target_ir_available():
+    config.available_features.add("tessera-x86-target-ir")
+
 # The NVIDIA control-flow fixtures invoke the NVIDIA tile→target pass
 # (`--lower-tile-to-nvidia`, which emits tessera_nvidia.control_*) AND the core
 # pipelines that feed it (`--tessera-tile-ir-lowering` /

@@ -58,7 +58,7 @@ def test_stateful_plugins_declare_complete_owned_spines() -> None:
         assert sequence.schedule_consumer == "schedule.sequence_mixer_backward"
         assert sequence.tile_consumer == "tile.training_kernel"
         assert sequence.differential_policy == "non_reexecuting_state_lineage"
-        assert set(sequence.target_consumers) == {"x86", "rocm"}
+        assert set(sequence.target_consumers) == {"x86", "rocm", "nvidia_sm120"}
 
 
 def test_jitfn_no_longer_constructs_stateful_family_packages() -> None:

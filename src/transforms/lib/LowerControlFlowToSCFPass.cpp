@@ -92,7 +92,7 @@ struct LowerControlFlowToSCF
       contract.policy = "recompute_all";
     if (contract.policy != "recompute_all" && contract.policy != "save" &&
         contract.policy != "hybrid") {
-      op->emitError() << "unsupported control_scan checkpoint policy '"
+      op->emitError() << "unsupported control-region checkpoint policy '"
                       << policy.getValue()
                       << "'; expected recompute_all, save, or hybrid";
       return failure();
@@ -102,7 +102,7 @@ struct LowerControlFlowToSCF
         "tessera.autodiff.checkpoint_indices");
     if (contract.policy == "recompute_all") {
       if (contract.checkpointIndices && !contract.checkpointIndices.empty()) {
-        op->emitError() << "recompute_all control_scan cannot retain checkpoint "
+        op->emitError() << "recompute_all control region cannot retain checkpoint "
                           "indices";
         return failure();
       }
@@ -126,7 +126,7 @@ struct LowerControlFlowToSCF
         !contract.checkpointIndices) {
       op->emitError()
           << contract.policy
-          << " control_scan requires residual_schema=v1, CFG/residual "
+          << " control region requires residual_schema=v1, CFG/residual "
              "SHA-256 digests, and explicit checkpoint_indices";
       return failure();
     }
@@ -137,7 +137,7 @@ struct LowerControlFlowToSCF
         llvm::any_of(indices, [trip](int64_t index) {
           return index <= 0 || index >= trip;
         })) {
-      op->emitError() << "control_scan checkpoint_indices must be sorted, "
+      op->emitError() << "control-region checkpoint_indices must be sorted, "
                         "unique, interior step indices";
       return failure();
     }
@@ -146,7 +146,7 @@ struct LowerControlFlowToSCF
          (allInterior == 0 || indices.size() != allInterior)) ||
         (contract.policy == "hybrid" &&
          (indices.empty() || indices.size() >= allInterior))) {
-      op->emitError() << "control_scan checkpoint policy '" << contract.policy
+      op->emitError() << "control-region checkpoint policy '" << contract.policy
                       << "' disagrees with its retained checkpoint set";
       return failure();
     }
@@ -363,6 +363,10 @@ struct LowerControlFlowToSCF
     auto maxA = op->getAttrOfType<IntegerAttr>("max_iters");
     if (!bodySym || !condSym || !idxA || !maxA)
       return Outcome::Malformed;
+    FailureOr<ResidualContract> residual =
+        readResidualContract(op, maxA.getInt());
+    if (failed(residual))
+      return Outcome::Malformed;
 
     SmallVector<Value> operands(op->getOperands().begin(),
                                 op->getOperands().end());
@@ -403,6 +407,17 @@ struct LowerControlFlowToSCF
     SmallVector<Value> inits{i0, carryInit};
     SmallVector<Location> locs(stateTys.size(), loc);
     auto whileOp = scf::WhileOp::create(b, loc, stateTys, inits);
+    whileOp->setAttr("tessera.autodiff.max_iters", maxA);
+    whileOp->setAttr("tessera.autodiff.checkpoint_policy",
+                     b.getStringAttr(residual->policy));
+    if (residual->checkpointIndices) {
+      whileOp->setAttr("tessera.autodiff.checkpoint_indices",
+                       residual->checkpointIndices);
+      whileOp->setAttr("tessera.autodiff.residual_schema", residual->schema);
+      whileOp->setAttr("tessera.structured_cfg.digest", residual->cfgDigest);
+      whileOp->setAttr("tessera.autodiff.residual_digest",
+                       residual->residualDigest);
+    }
 
     {
       OpBuilder::InsertionGuard g(b);

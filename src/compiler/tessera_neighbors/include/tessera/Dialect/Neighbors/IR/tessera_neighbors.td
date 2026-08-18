@@ -1,6 +1,7 @@
 //===- tessera_neighbors.td - Tessera Neighbors Dialect -------*- tablegen -*-===//
 // This is a minimal ODS surface for directions, Δ, stencil, and pipeline ops.
 include "mlir/IR/OpBase.td"
+include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -34,18 +35,27 @@ def StrAttr : AttrDef<Tessera_Neighbors_Dialect, "Str"> {
   let assemblyFormat = "`<` $value `>`";
 }
 
+def TopologyKindAttr : StringBasedAttr<
+    CPred<"::llvm::is_contained(::llvm::ArrayRef<::llvm::StringRef>({"
+          "\"1d_mesh\", \"2d_mesh\", \"3d_mesh\", \"4d_mesh\", "
+          "\"hex_2d\", \"custom_graph\", "
+          "\"dynamic\", \"adaptive\", \"fault\"}), "
+          "::llvm::cast<::mlir::StringAttr>($_self).getValue())">,
+    "NEIGHBORS_TOPOLOGY_UNKNOWN_KIND: registered topology kind">;
+
 // --- Ops ---
 
 def CreateTopologyOp : Op<Tessera_Neighbors_Dialect, "topology.create", []> {
   let summary = "Create a topology object";
   let arguments = (ins
-    StrAttr:$kind,               // e.g., "2d_mesh","3d_mesh","hex_2d","custom_graph"
+    TopologyKindAttr:$kind,
     OptionalAttr<StrAttr>:$axes, // e.g., "y,x" or "z,y,x"
     OptionalAttr<StrAttr>:$wrap, // "none","all","[y]"
     OptionalAttr<StrAttr>:$defaults // default neighbor set
   );
   let results = (outs TopologyType:$topo);
   let assemblyFormat = "`kind` `(` $kind `)` (`,` `axes` `(` $axes `)`)? (`,` `wrap` `(` $wrap `)`)? (`,` `defaults` `(` $defaults `)`)? attr-dict";
+  let hasVerifier = 1;
 }
 
 def HaloRegionOp : Op<Tessera_Neighbors_Dialect, "halo.region", []> {

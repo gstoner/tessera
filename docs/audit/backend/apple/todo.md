@@ -3,20 +3,45 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-17
+last_updated: 2026-08-18
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
+contract parity; Metal follow-up required.** Dynamic saved-slot data/shape
+tapes, exact polynomial witness guards, and variadic branch CFG state are
+target-neutral contracts. Effectful replay remains fail closed except for
+compiler-owned extent assertions. Apple has no native region-product consumer
+or Mac evidence and inherits no x86/gfx1151 proof.
+
+Cross-backend sync `W2.4-E2E6-SYMBOLIC-2026-08-18` — **shared parity
+validated; no Metal execution change.** Relational Tile legality has one staged
+production authority and pure static annotations can abstract-trace before AST
+compatibility capture. SM120 Lion/DeltaNet dispatch moved into family plugins;
+Apple has no corresponding consumer and remains fail closed pending its own
+typed package and Mac evidence.
+
+Cross-backend sync `W1-W3-AUTHORITY-CLOSEOUT-2026-08-18` — **shared contract
+parity validated; no Apple physical claim.** Bare Tile fragments are rejected,
+semantic selectors including Apple KV-cache kinds are ODS-owned, WarpSpec uses
+registered Schedule ancestry, and whole-program memory activity is conservative.
+Loss VJP plugins have no Apple consumer and therefore fail closed; Metal family
+migration remains an architecture-owned follow-up.
 
 Cross-backend sync `W4-PRODUCT-1-RESIDUAL-CONTRACT-2026-08-17` — **shared
 contract parity validated; Apple physical follow-up required.** SAVE/HYBRID
 selection now crosses Graph→SCF with exact checkpoint, CFG, and residual
 identity and cannot silently become recompute-all. Shared paired AD now carries
-the SAVE scan tape, taken `if` predicate, and executed `while` trip count as
-explicit SSA. Shared scan-form HYBRID now performs nearest-checkpoint bounded
-replay. Generic counted loops now use independent typed tapes per carried
-tensor. A Metal region-product consumer, branch-local residuals, and bounded
-`while` state tapes remain open; no x86 or gfx1151 evidence transfers.
+dynamic branch-local residual extents, bounded SAVE and sparse HYBRID `while`
+state tapes, and bounded-dynamic counted-loop tapes as explicit SSA. The
+target-neutral compiler now classifies source-CFG SCCs and structurizes bounded
+pure reducible or irreducible native CFGs as a typed program-counter state
+machine. Nested canonical structured bodies and mixed control/tensor state are
+admitted. Saved dynamic slots require total data/shape-tape envelopes;
+unbounded, unsupported-region, and unrecorded effectful forms remain fail
+closed. A Metal region-product consumer remains open; the
+x86/gfx1151 correctness packets do not transfer.
 
 Cross-backend sync `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **shared
 optimizer lineage validated; Apple not applicable for the bounded physical

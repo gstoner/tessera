@@ -8,6 +8,7 @@
 #define TESSERA_NVIDIA_DIALECT
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/CommonAttrConstraints.td"
 
 def TesseraNVIDIADialect : Dialect {
   let name = "tessera_nvidia";
@@ -68,6 +69,23 @@ class TesseraNVIDIA_Op<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
+class NVIDIA_EnumStrAttr<list<string> cases, string summaryText>
+    : StringBasedAttr<
+        CPred<"::llvm::is_contained(::llvm::ArrayRef<::llvm::StringRef>({"
+              # !interleave(!foreach(c, cases, "\"" # c # "\""), ", ") #
+              "}), ::llvm::cast<::mlir::StringAttr>($_self).getValue())">,
+        summaryText>;
+def NVIDIA_CudaMathKindAttr
+    : NVIDIA_EnumStrAttr<[
+        "abs_i32", "min_i32", "max_i32", "brev_u32", "byte_perm_u32",
+        "clz_u32", "ffs_u32", "popc_u32", "funnelshift_l_wrap_u32",
+        "dp2a_lo_s32", "dp4a_s32", "bitcast_f32_i32", "bitcast_i32_f32",
+        "cvt_f32_i32_rn", "cvt_f32_i32_rd", "cvt_f32_i32_ru",
+        "cvt_f32_i32_rz", "vadd2_u16x2", "vadd4_u8x4", "vadd4_s8x4",
+        "vaddss4_s8x4", "vsub4_u8x4", "vsub4_s8x4", "vsubss4_s8x4",
+        "vabsdiff4_u8x4", "vcmpeq4_u8x4_mask", "vcmpeq4_u8x4_pred"],
+        "typed CUDA math operation kind">;
+
 def NVIDIA_MmaSyncOp : TesseraNVIDIA_Op<"mma_sync"> {
   let summary = "Consumer Blackwell (sm_120) warp-level mma.sync contract";
 }
@@ -123,7 +141,7 @@ def NVIDIA_CudaMathKernelOp : Op<TesseraNVIDIADialect, "cuda_math_kernel"> {
   let summary = "Typed NVIDIA CUDA integer, bitcast, and packed-SIMD kernel";
   let arguments = (ins
       Variadic<AnyType>:$inputs,
-      StrAttr:$kind,
+      NVIDIA_CudaMathKindAttr:$kind,
       StrAttr:$input_storage,
       StrAttr:$output_storage,
       StrAttr:$rounding,

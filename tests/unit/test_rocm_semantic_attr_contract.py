@@ -48,22 +48,21 @@ def _cases(attr_name: str) -> set[str]:
 def test_the_semantic_attrs_are_declared_with_a_legal_set():
     for name in ("ROCM_FloatDTypeAttr", "ROCM_NumericDTypeAttr",
                  "ROCM_GemmDTypeAttr",
-                 "ROCM_ReductionAttr", "ROCM_CombineModeAttr"):
+                 "ROCM_ReductionAttr", "ROCM_CombineModeAttr",
+                 "ROCM_SpectralBackwardKindAttr", "ROCM_ActivationKindAttr",
+                 "ROCM_NormKindAttr", "ROCM_Int4PackKindAttr",
+                 "ROCM_ReduceKindAttr", "ROCM_ArgReduceKindAttr",
+                 "ROCM_ScanKindAttr", "ROCM_UnaryKindAttr",
+                 "ROCM_BinaryKindAttr", "ROCM_CompareKindAttr",
+                 "ROCM_LogicalKindAttr", "ROCM_BitwiseKindAttr"):
         assert _cases(name), f"{name} declares no cases"
 
 
 def test_no_semantic_key_is_still_a_bare_strattr():
-    """The ratchet: `dtype`/`reduction`/`mode` must not regress to `StrAttr`.
-
-    Scoped to these three deliberately. `kind` (14 ops) is NOT included because
-    each op uses it for a DIFFERENT closed set — optimizer kinds, predicate
-    kinds, GA product kinds — so one shared enum would be wrong and per-op
-    enums are separate work. Claiming it here would make the gate assert
-    something untrue.
-    """
+    """The ratchet: semantic selectors use per-operation closed sets."""
     text = _OPS.read_text()
     offenders = [
-        key for key in ("dtype", "reduction", "mode")
+        key for key in ("dtype", "reduction", "mode", "kind")
         if f"StrAttr:${key}" in text
         or re.search(rf"DefaultValuedAttr<StrAttr,[^>]*>:\${key}", text)
     ]

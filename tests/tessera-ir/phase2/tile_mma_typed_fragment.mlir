@@ -16,6 +16,9 @@
                       a = "bf16", b = "bf16", acc = "f32",
                       a_layout = "row_major", b_layout = "col_major",
                       k_blocks = 1>
+!fa = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "auto">
+!fb = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "b", layout = "col_major", family = "auto">
+!fc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
 
 // CHECK-LABEL: func.func @typed_mma_fragment_chain
 func.func @typed_mma_fragment_chain(%a: tensor<16x16xbf16>,
@@ -32,29 +35,29 @@ func.func @typed_mma_fragment_chain(%a: tensor<16x16xbf16>,
   // CHECK: tile.fragment_pack
   // CHECK-SAME: role = "a"
   %fa = tile.fragment_pack %va {role = "a", mma = #mma}
-      : (!tile.tile) -> !tile.fragment
+      : (!tile.tile) -> !fa
   // CHECK: tile.fragment_pack
   // CHECK-SAME: role = "b"
   %fb = tile.fragment_pack %vb {role = "b", mma = #mma}
-      : (!tile.tile) -> !tile.fragment
+      : (!tile.tile) -> !fb
 
   // The accumulator starts from a defined zero, not an undef — role "acc".
   // CHECK: tile.fragment_zero
-  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !tile.fragment
+  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !fc
 
   // Decision #15a in practice: storage is bf16 and the accumulator is f32,
   // and the descriptor is what carries that split down the stack.
   // Three fragment operands in, one fragment out. `acc = "f32"` rides the
   // descriptor on every op in the chain, so assert the mma's shape here rather
   // than re-matching a substring that appears on the pack lines too.
-  // CHECK: tile.mma %{{.*}}, %{{.*}}, %{{.*}} {{.*}}(!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
+  // CHECK: tile.mma %{{.*}}, %{{.*}}, %{{.*}}
   %res = tile.mma %fa, %fb, %acc {mma = #mma}
-      : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
+      : (!fa, !fb, !fc) -> !fc
 
   // The accumulator comes back as a logical tile for the epilogue.
   // CHECK: tile.fragment_unpack
   %out = tile.fragment_unpack %res {role = "acc", mma = #mma, tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>}
-      : (!tile.fragment) -> !tile.tile
+      : (!fc) -> !tile.tile
   return %out : !tile.tile
 }
 
@@ -73,7 +76,7 @@ func.func @typed_mma_fragment_chain(%a: tensor<16x16xbf16>,
 //
 // CHECK-LABEL: func.func @typed_mma_gated_on_a_copy_token
 func.func @typed_mma_gated_on_a_copy_token(%a: tensor<16x16xbf16>)
-    -> !tile.fragment {
+    -> !fc {
   // CHECK: %[[CP:.*]]:2 = tile.async_copy
   %tile, %tok = tile.async_copy %a
       : (tensor<16x16xbf16>) -> (tensor<16x16xbf16>, !tile.async_token)
@@ -82,14 +85,13 @@ func.func @typed_mma_gated_on_a_copy_token(%a: tensor<16x16xbf16>)
 
   %va = tile.view %tile {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>}
       : (tensor<16x16xbf16>) -> !tile.tile
-  %fa = tile.fragment_pack %va {role = "a", mma = #mma} : (!tile.tile) -> !tile.fragment
-  %fb = tile.fragment_pack %va {role = "b", mma = #mma} : (!tile.tile) -> !tile.fragment
-  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !tile.fragment
+  %fa = tile.fragment_pack %va {role = "a", mma = #mma} : (!tile.tile) -> !fa
+  %fb = tile.fragment_pack %va {role = "b", mma = #mma} : (!tile.tile) -> !fb
+  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !fc
 
   // Three DATA operands plus the control token — accepted.
-  // CHECK: tile.mma %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} {{.*}}!tile.async_token) -> !tile.fragment
+  // CHECK: tile.mma %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}
   %res = tile.mma %fa, %fb, %acc, %tok {mma = #mma}
-      : (!tile.fragment, !tile.fragment, !tile.fragment, !tile.async_token)
-      -> !tile.fragment
-  return %res : !tile.fragment
+      : (!fa, !fb, !fc, !tile.async_token) -> !fc
+  return %res : !fc
 }

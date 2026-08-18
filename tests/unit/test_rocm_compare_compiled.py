@@ -152,4 +152,4 @@ def test_compare_codegen_bad_kind_rejected():
     d = ('module {\n  "tessera_rocm.compare"() {name = "c", kind = "zz"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-compare-kernel")
-    assert r.returncode != 0 and "unknown kind" in r.stderr
+    assert r.returncode != 0 and "ROCm comparison kind" in r.stderr

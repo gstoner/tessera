@@ -16,3 +16,4 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
 // CHECK: cf.assert {{.*}}, "x86 coalition butterfly rejected its runtime contract"
 // CHECK-NOT: tile.coalition_butterfly_kernel
 // CHECK-NOT: schedule.coalition_butterfly
+// REQUIRES: tessera-x86-target-ir

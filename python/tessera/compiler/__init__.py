@@ -28,18 +28,25 @@ from .effects import EffectLattice, Effect, TesseraEffectError
 from .graph_ir import GraphIRConstructionContext, KVCacheSpec, NumericPolicy, construct_mlir_module
 from .graph_dataflow import GraphDataflow, ValueFact, analyze_graph_dataflow
 from .presburger import (
+    NONLINEAR_GUARD_SCHEMA,
     PRESBURGER_SCHEMA,
+    NonlinearWitnessConstraint,
+    NonlinearWitnessSystem,
+    PolynomialTerm,
     PresburgerConstraint,
     PresburgerSystem,
     attach_presburger_system,
+    attach_nonlinear_witness_system,
     presburger_system_from_constraints,
 )
 from .structured_cfg import (
+    CFGAnalysis,
     STRUCTURED_CFG_SCHEMA,
     StructuredBlock,
     StructuredCFG,
     StructuredEdge,
     StructuredOperation,
+    analyze_structured_cfg,
     recover_structured_cfg,
 )
 from .sharding_propagation import (

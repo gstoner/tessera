@@ -97,11 +97,10 @@ def Tile_TileValueType : Tile_Type<"TileValue", "tile"> {
 // `wgmma`, with the types comparing equal. "The op chooses it" does not imply
 // "the value does not carry it".
 //
-// The BARE spelling `!tile.fragment` remains legal and means all-unknown, so
-// the existing fixtures and the Python text emitters keep parsing while
-// producers migrate (W1.1 steps 3-4). `family = "auto"` is the legal
-// pre-resolution value and compares equal only to itself, which reproduces
-// today's descriptor-equality semantics rather than approximating them.
+// The BARE spelling `!tile.fragment` remains parseable only so stored historical
+// artifacts can produce a named migration diagnostic. It is not legal on
+// `tile.mma`; W1.1 step 5 removed the producer-chasing contract. `family =
+// "auto"` is the legal pre-resolution value and compares equal only to itself.
 def Tile_FragmentType : Tile_Type<"Fragment", "fragment"> {
   let summary = "Cooperative-matrix fragment and its instruction contract";
   let parameters = (ins "int64_t":$m, "int64_t":$n, "int64_t":$k,
@@ -118,9 +117,8 @@ def Tile_FragmentType : Tile_Type<"Fragment", "fragment"> {
   // therefore treat as a stated contract.
   let genVerifyDecl = 1;
   let extraClassDeclaration = [{
-    /// The legacy all-unknown fragment, spelled `!tile.fragment`. Producers
-    /// that have not migrated yet still emit this; `MMAOp::verify()` falls back
-    /// to producer-chasing for it.
+    /// The historical all-unknown fragment, spelled `!tile.fragment`. It is
+    /// parseable for artifact diagnostics but rejected by `MMAOp::verify()`.
     static FragmentType getUnknown(::mlir::MLIRContext *ctx) {
       return get(ctx, 0, 0, 0, "", "", "", "", "");
     }
@@ -436,7 +434,8 @@ def Tile_TMEMStoreOp : Tile_Op<"tmem.store"> {
 
 def Tile_TCGen05MMAOp : Tile_Op<"tcgen05.mma"> {
   let summary = "Typed datacenter-Blackwell TCGen05 MMA contract";
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs, Tile_TMEMType:$accumulator,
+  let arguments = (ins Tile_FragmentType:$lhs, Tile_FragmentType:$rhs,
+                        Tile_TMEMType:$accumulator,
                         I64Attr:$cta_group, AnyAttr:$mma);
   let results = (outs Tile_TMEMType:$result);
   let assemblyFormat =

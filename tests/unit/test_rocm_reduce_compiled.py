@@ -134,8 +134,7 @@ def test_reduce_codegen_bad_kind_rejected():
     d = ('module {\n  "tessera_rocm.reduce"() {name = "rd", kind = "zzz"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-reduce-kernel")
-    assert r.returncode != 0 and \
-        "kind must be sum, mean, max, min, prod, var, or std" in r.stderr
+    assert r.returncode != 0 and "ROCm reduction kind" in r.stderr
 
 
 @pytest.mark.parametrize("op_name", ["tessera.var", "tessera.std"])

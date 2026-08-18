@@ -2,8 +2,9 @@
 
 module {
   func.func @typed_async_and_sm100_contract(
-      %src: tensor<64x64xbf16>, %lhs: tensor<64x64xbf16>,
-      %rhs: tensor<64x64xbf16>) {
+      %src: tensor<64x64xbf16>,
+      %lhs: !tile.fragment<m = 64, n = 64, k = 32, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "tcgen05">,
+      %rhs: !tile.fragment<m = 64, n = 64, k = 32, elem = "bf16", acc = "f32", role = "b", layout = "col_major", family = "tcgen05">) {
     %barrier = tile.mbarrier.init {
       slots = 1 : i64, phase_bits = 2 : i64
     } : !tile.mbarrier
@@ -38,7 +39,9 @@ module {
       mma = #tile.mma_desc<family = "tcgen05", m = 64, n = 64, k = 32,
         a = "bf16", b = "bf16", acc = "f32",
         a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-    } : tensor<64x64xbf16>, tensor<64x64xbf16>, !tile.tmem -> !tile.tmem
+    } : !tile.fragment<m = 64, n = 64, k = 32, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "tcgen05">,
+        !tile.fragment<m = 64, n = 64, k = 32, elem = "bf16", acc = "f32", role = "b", layout = "col_major", family = "tcgen05">,
+        !tile.tmem -> !tile.tmem
     %value = tile.tmem.load %next : (!tile.tmem) -> f32
     tile.tmem.store %value, %next : f32, !tile.tmem
     return

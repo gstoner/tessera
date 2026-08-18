@@ -127,6 +127,11 @@ def _flatten_bounded_regions(
                 local[original_result] = carry
                 continue
             if op.op_name == "tessera.control_if":
+                if len(op.result_names) != 1:
+                    raise ValueError(
+                        "automatic residual packaging requires a native variadic "
+                        "region product for multi-state control_if"
+                    )
                 then_body = op.kwargs.get("_then_body")
                 else_body = op.kwargs.get("_else_body")
                 then_ssa = str(op.kwargs.get("_then_ssa", ""))

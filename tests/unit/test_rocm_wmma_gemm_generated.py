@@ -353,6 +353,9 @@ def test_typed_tile_fragment_fixture_executes_and_matches_numpy(dtype):
         fixture = fixture.replace("memref<256xf16>", "memref<256xi8>")
         fixture = fixture.replace("memref<256xf32>", "memref<256xi32>")
         fixture = fixture.replace('a = "f16", b = "f16", acc = "f32"', f'a = "{dtype}", b = "{dtype}", acc = "i32"')
+        fixture = fixture.replace('elem = "f16"', f'elem = "{dtype}"')
+        fixture = fixture.replace('elem = "f32"', 'elem = "i32"')
+        fixture = fixture.replace('acc = "f32"', 'acc = "i32"')
         storage_dtype = np.int8
     lowered = subprocess.run(
         [

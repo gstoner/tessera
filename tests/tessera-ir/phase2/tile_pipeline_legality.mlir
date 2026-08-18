@@ -14,7 +14,7 @@ func.func @well_formed_pipeline() {
     phase = 0 : i64, role = "consumer"} : !tile.pipeline_state
   "tile.tma_load"(%producer) {tile.barrier_id = "tma2mma",
     tile.barrier = #tile.barrier<kind = "tma", expect = 16384>} : (!tile.pipeline_state) -> ()
-  "tile.mma"(%consumer) {tile.barrier_id = "tma2mma",
+  "test.pipeline_consumer"(%consumer) {tile.barrier_id = "tma2mma",
     tile.barrier = #tile.barrier<kind = "tma", expect = 16384>} : (!tile.pipeline_state) -> ()
   return
 }
@@ -38,7 +38,7 @@ func.func @barrier_kind_mismatch() {
   "tile.tma_load"() {tile.barrier_id = "b0",
     tile.barrier = #tile.barrier<kind = "tma", expect = 256>} : () -> ()
   // expected-error @+1 {{TILE_PIPELINE_BARRIER_KIND_MISMATCH}}
-  "tile.mma"() {tile.barrier_id = "b0",
+  "test.pipeline_consumer"() {tile.barrier_id = "b0",
     tile.barrier = #tile.barrier<kind = "tcgen05", expect = 1>} : () -> ()
   return
 }

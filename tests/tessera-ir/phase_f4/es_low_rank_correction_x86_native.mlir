@@ -21,3 +21,4 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
 // CHECK-NOT: tile.es_low_rank_correction_kernel
 // CHECK-NOT: schedule.es_low_rank_correction
 // CHECK-NOT: tessera.es_low_rank_correction
+// REQUIRES: tessera-x86-target-ir

@@ -436,7 +436,12 @@ std::unique_ptr<mlir::Pass> createStoragePackConsumePass();
 std::unique_ptr<mlir::Pass> createWarpSpecLegalityPass();
 
 // ── 2026-08-15 — P1a / CAKE Phase 1 §5.3 — derived Tile sync legality ────
-// W2.4's TileDataflowLegalityPass, first increment. Derives (never
+// W2.4's single production relational-legality authority. The pre-lowering
+// stage runs relations whose source operations may be erased; the final stage
+// additionally derives token/barrier/ring provenance. Legacy standalone pass
+// names are compatibility aliases over the same shared implementations.
+enum class TileRelationalStage { All, PreLowering, Final };
+// Derives (never
 // name-matches) across scf.for block-argument edges: arrive→wait token
 // pairing with slot identity (TILE_WAIT_TOKEN_UNPAIRED /
 // TILE_WAIT_SLOT_MISMATCH / TILE_WAIT_BARRIER_DISAGREES), barrier origin
@@ -445,6 +450,8 @@ std::unique_ptr<mlir::Pass> createWarpSpecLegalityPass();
 // agreement (TILE_TMA_EXPECT_MISMATCH). Fails closed on the underivable
 // (Decision #30). --tessera-tile-dataflow-legality.
 std::unique_ptr<mlir::Pass> createTileDataflowLegalityPass();
+std::unique_ptr<mlir::Pass>
+createTileDataflowLegalityPass(TileRelationalStage stage);
 
 // ── 2026-06-23 — pipeline-parallel layer: real stage partitioning + 1F1B proof ──
 // PipelineStagePartition: cost-balanced, program-order-monotonic partition of

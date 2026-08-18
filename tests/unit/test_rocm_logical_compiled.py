@@ -133,4 +133,4 @@ def test_logical_codegen_bad_kind_rejected():
     d = ('module {\n  "tessera_rocm.logical"() {name = "l", kind = "zz"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-logical-kernel")
-    assert r.returncode != 0 and "unknown kind" in r.stderr
+    assert r.returncode != 0 and "ROCm logical kind" in r.stderr

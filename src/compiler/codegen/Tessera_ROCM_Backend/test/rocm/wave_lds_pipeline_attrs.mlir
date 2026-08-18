@@ -2,15 +2,15 @@
 // RUN: %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality,lower-tile-to-rocm{arch=gfx1151})' %s | FileCheck %s --check-prefix=LOWER
 
 module {
-  func.func @pipeline_attrs(%dst: !llvm.ptr, %src: !llvm.ptr, %bytes: i64, %a: f16, %b: f16) -> f16 {
+  func.func @pipeline_attrs(%dst: !llvm.ptr, %src: !llvm.ptr, %bytes: i64, %a: tensor<16x16xf16>, %b: tensor<16x16xf16>) -> tensor<16x16xf16> {
     %tok = "tile.async_copy"(%dst, %src, %bytes) {
       tile_rows = 64 : i64,
       tile_cols = 32 : i64,
       numeric_policy = {storage = "f16", accum = "f32"}
     } : (!llvm.ptr, !llvm.ptr, i64) -> !tessera_rocm.token
     "tile.wait_async"() : () -> ()
-    %m = "tile.mma"(%a, %b) : (f16, f16) -> f16
-    return %m : f16
+    %m = "tile.mma"(%a, %b) : (tensor<16x16xf16>, tensor<16x16xf16>) -> tensor<16x16xf16>
+    return %m : tensor<16x16xf16>
   }
 }
 

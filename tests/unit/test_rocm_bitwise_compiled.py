@@ -118,4 +118,4 @@ def test_bitwise_codegen_bad_kind_rejected():
     d = ('module {\n  "tessera_rocm.bitwise"() {name = "w", kind = "zz"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-bitwise-kernel")
-    assert r.returncode != 0 and "unknown kind" in r.stderr
+    assert r.returncode != 0 and "ROCm bitwise kind" in r.stderr

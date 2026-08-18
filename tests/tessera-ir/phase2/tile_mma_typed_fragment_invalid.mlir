@@ -11,20 +11,23 @@
                       a = "bf16", b = "bf16", acc = "f32",
                       a_layout = "row_major", b_layout = "col_major",
                       k_blocks = 1>
+!fa = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "auto">
+!fb = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "b", layout = "col_major", family = "auto">
+!fc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
 #layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
                        replica = [] : [] on [], offset = 0>
 
 // The B operand carries role "a" — a transposed-operand bug that produces a
 // numerically wrong matmul, not a crash.
-func.func @swapped_operand_roles(%a: tensor<16x16xbf16>) -> !tile.fragment {
+func.func @swapped_operand_roles(%a: tensor<16x16xbf16>) -> !fc {
   %va = tile.view %a {tile.layout = #layout} : (tensor<16x16xbf16>) -> !tile.tile
-  %fa = tile.fragment_pack %va {role = "a", mma = #mma} : (!tile.tile) -> !tile.fragment
-  %fb = tile.fragment_pack %va {role = "a", mma = #mma} : (!tile.tile) -> !tile.fragment
-  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !tile.fragment
-  // CHECK: error: 'tile.mma' op expects a fragment with role "b"
+  %fa = tile.fragment_pack %va {role = "a", mma = #mma} : (!tile.tile) -> !fa
+  %fb = tile.fragment_pack %va {role = "a", mma = #mma} : (!tile.tile) -> !fa
+  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !fc
+  // CHECK: error: 'tile.mma' op TILE_MMA_OPERAND_ROLE: operand 1 must have role "b", got "a"
   %res = tile.mma %fa, %fb, %acc {mma = #mma}
-      : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
-  return %res : !tile.fragment
+      : (!fa, !fa, !fc) -> !fc
+  return %res : !fc
 }
 
 // -----
@@ -38,20 +41,23 @@ func.func @swapped_operand_roles(%a: tensor<16x16xbf16>) -> !tile.fragment {
                          a = "bf16", b = "bf16", acc = "f32",
                          a_layout = "row_major", b_layout = "col_major",
                          k_blocks = 1>
+!fa8 = !tile.fragment<m = 16, n = 16, k = 8, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "auto">
+!fb8 = !tile.fragment<m = 16, n = 16, k = 8, elem = "bf16", acc = "f32", role = "b", layout = "col_major", family = "auto">
+!fc16 = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
 #layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
                        replica = [] : [] on [], offset = 0>
 
 // Fragments packed for one instruction shape fed to an mma declaring another.
 // The register layouts genuinely differ, so this is a real miscompile.
-func.func @mismatched_descriptor(%a: tensor<16x16xbf16>) -> !tile.fragment {
+func.func @mismatched_descriptor(%a: tensor<16x16xbf16>) -> !fc16 {
   %va = tile.view %a {tile.layout = #layout} : (tensor<16x16xbf16>) -> !tile.tile
-  %fa = tile.fragment_pack %va {role = "a", mma = #mma_k8} : (!tile.tile) -> !tile.fragment
-  %fb = tile.fragment_pack %va {role = "b", mma = #mma_k8} : (!tile.tile) -> !tile.fragment
-  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !tile.fragment
-  // CHECK: error: 'tile.mma' op fragment descriptor must match tile.mma
+  %fa = tile.fragment_pack %va {role = "a", mma = #mma_k8} : (!tile.tile) -> !fa8
+  %fb = tile.fragment_pack %va {role = "b", mma = #mma_k8} : (!tile.tile) -> !fb8
+  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !fc16
+  // CHECK: error: 'tile.mma' op TILE_MMA_SHAPE_MISMATCH:
   %res = tile.mma %fa, %fb, %acc {mma = #mma}
-      : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
-  return %res : !tile.fragment
+      : (!fa8, !fb8, !fc16) -> !fc16
+  return %res : !fc16
 }
 
 // -----
@@ -60,33 +66,38 @@ func.func @mismatched_descriptor(%a: tensor<16x16xbf16>) -> !tile.fragment {
                       a = "bf16", b = "bf16", acc = "f32",
                       a_layout = "row_major", b_layout = "col_major",
                       k_blocks = 1>
+!fa = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "auto">
+!fb = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "b", layout = "col_major", family = "auto">
+!fc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
 #layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
                        replica = [] : [] on [], offset = 0>
 
 // A typed mma with no accumulator: the non-NVFP4 form is exactly A, B, acc.
-func.func @typed_form_missing_accumulator(%a: tensor<16x16xbf16>) -> !tile.fragment {
+func.func @typed_form_missing_accumulator(%a: tensor<16x16xbf16>) -> !fc {
   %va = tile.view %a {tile.layout = #layout} : (tensor<16x16xbf16>) -> !tile.tile
-  %fa = tile.fragment_pack %va {role = "a", mma = #mma} : (!tile.tile) -> !tile.fragment
-  %fb = tile.fragment_pack %va {role = "b", mma = #mma} : (!tile.tile) -> !tile.fragment
-  // CHECK: error: 'tile.mma' op typed fragment form expects A, B, accumulator -> !tile.fragment
+  %fa = tile.fragment_pack %va {role = "a", mma = #mma} : (!tile.tile) -> !fa
+  %fb = tile.fragment_pack %va {role = "b", mma = #mma} : (!tile.tile) -> !fb
+  // CHECK: error: 'tile.mma' op TILE_MMA_ARITY: expected 3 data operands
   %res = tile.mma %fa, %fb {mma = #mma}
-      : (!tile.fragment, !tile.fragment) -> !tile.fragment
-  return %res : !tile.fragment
+      : (!fa, !fb) -> !fc
+  return %res : !fc
 }
 
 // -----
 
 #layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
                        replica = [] : [] on [], offset = 0>
+!fa = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "auto">
+!fc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
 
 // Fragments present but no descriptor on the mma: the typed form cannot be
 // lowered to a physical cooperative-matrix instruction without one.
-func.func @typed_form_without_descriptor(%a: tensor<16x16xbf16>) -> !tile.fragment {
+func.func @typed_form_without_descriptor(%a: tensor<16x16xbf16>) -> !fc {
   %va = tile.view %a {tile.layout = #layout} : (tensor<16x16xbf16>) -> !tile.tile
-  %fa = tile.fragment_pack %va {role = "a"} : (!tile.tile) -> !tile.fragment
+  %fa = tile.fragment_pack %va {role = "a"} : (!tile.tile) -> !fa
   // CHECK: error
-  %res = tile.mma %fa, %fa, %fa : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
-  return %res : !tile.fragment
+  %res = tile.mma %fa, %fa, %fa : (!fa, !fa, !fa) -> !fc
+  return %res : !fc
 }
 
 // -----
@@ -97,6 +108,9 @@ func.func @typed_form_without_descriptor(%a: tensor<16x16xbf16>) -> !tile.fragme
                      k_blocks = 1>
 #kllayout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
                          replica = [] : [] on [], offset = 0>
+!kla = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "auto">
+!klb = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "b", layout = "col_major", family = "auto">
+!klc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
 
 // ── A LIMITATION, not a contract. This case must FLIP to accepting. ─────────
 //
@@ -120,20 +134,19 @@ func.func @typed_form_without_descriptor(%a: tensor<16x16xbf16>) -> !tile.fragme
 // check: that would drop the contract for the straight-line case too.
 func.func @kloop_accumulator_is_a_block_argument(
     %a: tensor<16x16xbf16>, %b: tensor<16x16xbf16>, %n: index)
-    -> !tile.fragment {
+    -> !klc {
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
-  %acc0 = tile.fragment_zero {role = "acc", mma = #kl} : !tile.fragment
+  %acc0 = tile.fragment_zero {role = "acc", mma = #kl} : !klc
   %r = scf.for %i = %c0 to %n step %c1 iter_args(%acc = %acc0)
-      -> (!tile.fragment) {
+      -> (!klc) {
     %va = tile.view %a {tile.layout = #kllayout} : (tensor<16x16xbf16>) -> !tile.tile
     %vb = tile.view %b {tile.layout = #kllayout} : (tensor<16x16xbf16>) -> !tile.tile
-    %fa = tile.fragment_pack %va {role = "a", mma = #kl} : (!tile.tile) -> !tile.fragment
-    %fb = tile.fragment_pack %vb {role = "b", mma = #kl} : (!tile.tile) -> !tile.fragment
-    // CHECK: error: 'tile.mma' op accumulator descriptor must match tile.mma
+    %fa = tile.fragment_pack %va {role = "a", mma = #kl} : (!tile.tile) -> !kla
+    %fb = tile.fragment_pack %vb {role = "b", mma = #kl} : (!tile.tile) -> !klb
     %res = tile.mma %fa, %fb, %acc {mma = #kl}
-        : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
-    scf.yield %res : !tile.fragment
+        : (!kla, !klb, !klc) -> !klc
+    scf.yield %res : !klc
   }
-  return %r : !tile.fragment
+  return %r : !klc
 }

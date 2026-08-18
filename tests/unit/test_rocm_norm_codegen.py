@@ -75,7 +75,7 @@ def test_rmsnorm_has_no_mean_subtraction():
 def test_unknown_kind_is_named_error():
     r = _opt(_directive("groupnorm"), "--generate-rocm-norm-kernel")
     assert r.returncode != 0
-    assert "kind must be rmsnorm or layer_norm" in r.stderr
+    assert "ROCm normalization kind" in r.stderr
 
 
 def test_softcap_epilogue_is_canonical_tanh_and_validated():

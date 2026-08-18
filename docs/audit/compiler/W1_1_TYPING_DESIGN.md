@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-04
+last_updated: 2026-08-18
 audit_role: reference
 owning_plan_item: W1.1
 ---
@@ -11,9 +11,10 @@ and the plan asks for written scoping before code. This is that scoping.
 [`W1_1_TYPING_INVENTORY.md`](W1_1_TYPING_INVENTORY.md) is the precondition —
 *what exists*; this is *what to build and in what order*.
 
-Status truth stays `MASTER_AUDIT.md` + `docs/audit/generated/` (Decision #26).
-Every claim below was measured on 2026-08-03 against the working tree, and the
-two decisive ones are reproducible experiments (§2), not readings of the source.
+Status truth stays `INTEGRATED_COMPILER_PLAN.md` + `docs/audit/generated/`
+(Decision #26). Sections 1–4 retain the measurements that selected the design;
+the 2026-08-18 resolution in §4 and the completion ledger in §7 supersede their
+historical open-state wording.
 
 ---
 
@@ -192,7 +193,7 @@ producer migration rather than after it.
 | **2b** | **Bigger than "accept a block argument" — see §4.2.** Both backends **materialize a zero constant** as the MMA's C operand and never read the accumulator value, so relaxing the `FragmentZeroOp` check alone would emit a silently WRONG GEMM. The real work is threading the loop-carried accumulator through the lowering, which means type-converting the `scf.for` region signature | the §2 K-loop **lowers** AND is numerically verified on gfx1151 (this box executes) — a lowering fixture alone cannot catch the wrong-answer failure mode |
 | **3** | **Landing: 3 of 5 sites migrated.** ROCm GEMM uses the full view/pack/mma/unpack/store chain; ROCm flash/linear attention use exact-ABI typed bridges for computed register fragments. The two tensor-valued `TileIRLoweringPass` sites remain NVIDIA-owned. | per-producer typed structure plus backend lowering; exact-device where the host exists |
 | **4** | **Landed by convergence, 2026-08-04.** The five old text sites emit `tile.matmul_kernel`, not `tile.mma`. The structured Python Tile builder now emits logical `tile.matmul`; target lowering owns physical fragment construction. Compatibility consumers may still read historical `tile.mma`, but no Python lowering constructs one. | Tile→Target spine tests across ROCm/NVIDIA/Apple/x86 |
-| **5** | Delete `MMAOp::verify()`'s permissive branch and the bare-type fallback | inventory step 4's gate: the contract becomes binding |
+| **5** | **Landed 2026-08-18.** `MMAOp::verify()` no longer producer-chases or admits bare `!tile.fragment`. The spelling remains parseable only so the verifier can emit `TILE_MMA_BARE_FRAGMENT_REMOVED`. The retained tensor-value lane is rank/arity/accumulator checked and is not a fragment compatibility path. | positive typed K-loop plus negative bare-fragment fixture |
 | **6** | **Apple half landed 2026-08-04; NVIDIA half is NOT verifiable on the primary box.** `tessera_apple` had 12 `Variadic<AnyType>`: 6 are the runtime-call ops (`cpu.call`, `gpu.kernel_call`, `gpu.package_call`) and are now `Variadic<AppleTarget_Buffer>` (ranked tensor or memref) — those lower to an Accelerate/LAPACK entry point or a compiled MSL kernel, which take buffers; scalar parameters ride as attributes, so nothing is lost. The other 6 are `gpu.control_{if,loop,while}` `iter_args`/`results`, where `AnyType` is **explained and correct** (loop-carried values are polymorphic, exactly as `scf.for`'s are) and is now documented as such so a later audit does not read them as leftovers. All 303 pre-existing fixtures passed unchanged, so no producer relied on the wider set; a negative fixture proves the constraint bites on a scalar operand and a scalar result. **NVIDIA half deferred with a reason:** the `tessera_nvidia` dialect is **not registered in the default build** — `tessera-opt` rejects its ops as an unregistered dialect and its lit fixtures run under `-allow-unregistered-dialect`. Tightening its ODS here would be unverifiable, and its 3 occurrences are 2 on a shared `TesseraNVIDIA_Op` base class (deliberately generic to tolerate per-SM attribute combinations, per its own header comment) plus `cuda_math_kernel`. Needs `-DTESSERA_ENABLE_CUDA=ON`. | per inventory §4 step 5 |
 
 **Steps 1–2b are the design risk, and 2b is now the largest of them (§4.2).
@@ -235,7 +236,14 @@ Both are coherent; they are different models.
 * Step 5 ("delete `MMAOp::verify()`'s permissive branch") is **unreachable as
   written**: deleting it breaks every existing producer.
 
-**Three options; this is an architectural choice, not a task:**
+**2026-08-18 resolution.** The historical option analysis below is superseded.
+The ROCm producers were restructured onto the typed view/pack/mma/unpack/store
+boundary, and the remaining tensor-valued producers are NVIDIA-owned migration
+work. The shared verifier no longer preserves a bare-fragment compatibility
+envelope. This keeps architecture closure open without leaving a hole in the
+shared type contract.
+
+**Historical options considered:**
 
   a. **Restructure the producers** to `tile.view → fragment_pack`. Rewrites
      proven kernels for no measured performance benefit.
@@ -246,7 +254,7 @@ Both are coherent; they are different models.
      treat the permissive branch as the documented boundary between two
      legitimate models rather than debt awaiting deletion.
 
-**Recommendation: (c).** The typed contract earns its keep where the compiler
+**Historical recommendation: (c).** The typed contract earns its keep where the compiler
 owns the lane mapping — exactly the synthesizer's job. The hand-written
 generators are a separate working lane whose operands are physical by design.
 Under (c) step 5 becomes "the permissive branch is a declared compatibility
@@ -838,14 +846,19 @@ verifier will correctly reject it as
 
 ## 7. Done
 
-W1.1 is complete when:
+W1.1 shared-contract completion ledger:
 
 1. A `tile.mma` whose operand types disagree fails **type** verification, with no
    producer chase.
-2. The §2 K-loop fixture — accumulator as `scf.for` `iter_args` — both
-   **verifies and lowers**, with a per-backend lowering fixture on NVIDIA and
-   ROCm (§4.1: verifying alone leaves the motivating GEMM uncompilable).
-3. `MMAOp::verify()` has no permissive branch.
-4. Every `tile.mma` producer in `src/` and `python/` emits the typed form.
-5. `tessera_nvidia` and `tessera_apple` have no unexplained `AnyType` on true
-   primitives (`tessera_x86`'s 0/0 is the reference).
+2. The §2 K-loop fixture — accumulator as `scf.for` `iter_args` — verifies and
+   lowers on the typed ROCm path. NVIDIA lowering evidence remains open.
+3. **Closed.** `MMAOp::verify()` has no permissive bare-fragment branch.
+4. ROCm and Python producers use the typed/logical boundary. NVIDIA's final two
+   tensor producers remain the architecture-owned open item.
+5. Apple has no unexplained `AnyType` on true primitives. NVIDIA's generic
+   Target base and CUDA-enabled proof remain independently gated; x86 is the
+   reference shape.
+
+The shared contract is therefore closed; W1.1 remains `landing` only for the
+NVIDIA producer/Target proof and eventual removal of the separately checked
+tensor-value migration lane.

@@ -5,9 +5,9 @@
 // Halo) has NO FP8 WMMA instruction (the load-bearing distinction from gfx1200).
 
 module {
-  func.func @fp8_mma(%a: f8E4M3FN, %b: f8E4M3FN) -> f8E4M3FN {
-    %m = "tile.mma"(%a, %b) : (f8E4M3FN, f8E4M3FN) -> f8E4M3FN
-    return %m : f8E4M3FN
+  func.func @fp8_mma(%a: tensor<16x16xf8E4M3FN>, %b: tensor<16x16xf8E4M3FN>) -> tensor<16x16xf8E4M3FN> {
+    %m = "tile.mma"(%a, %b) : (tensor<16x16xf8E4M3FN>, tensor<16x16xf8E4M3FN>) -> tensor<16x16xf8E4M3FN>
+    return %m : tensor<16x16xf8E4M3FN>
   }
 }
 

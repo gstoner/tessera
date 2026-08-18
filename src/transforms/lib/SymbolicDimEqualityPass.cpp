@@ -295,6 +295,97 @@ static LogicalResult checkTypedPresburger(func::FuncOp fn) {
   return success();
 }
 
+// Polynomial shape relations are not Presburger facts.  They are exact
+// specialization guards and therefore require a complete concrete witness;
+// accepting a partial witness would let downstream affine analyses assume a
+// relation this pass never proved.
+static LogicalResult checkNonlinearShapeGuards(func::FuncOp fn) {
+  auto carrier =
+      fn->getAttrOfType<DictionaryAttr>("tessera.nonlinear_shape_guards");
+  if (!carrier)
+    return success();
+  auto malformed = [&](Twine detail) {
+    fn.emitOpError("SYMDIM_NONLINEAR_GUARD_MALFORMED: ") << detail;
+    return failure();
+  };
+  auto version = carrier.getAs<IntegerAttr>("version");
+  auto symbolsAttr = carrier.getAs<ArrayAttr>("symbols");
+  auto constraintsAttr = carrier.getAs<ArrayAttr>("constraints");
+  if (!version || version.getInt() != 1 || !symbolsAttr ||
+      symbolsAttr.empty() || !constraintsAttr || constraintsAttr.empty())
+    return malformed("expected version 1 with non-empty symbols and constraints");
+
+  SmallVector<std::string> symbols;
+  llvm::StringSet<> uniqueSymbols;
+  auto sizes = readDimSizes(fn);
+  SmallVector<int64_t> witnesses;
+  for (Attribute attr : symbolsAttr) {
+    auto symbol = dyn_cast<StringAttr>(attr);
+    if (!symbol || symbol.getValue().empty() ||
+        !uniqueSymbols.insert(symbol.getValue()).second)
+      return malformed("symbols must be unique, non-empty strings");
+    auto witness = sizes.find(symbol.getValue());
+    if (witness == sizes.end()) {
+      fn.emitOpError("SYMDIM_NONLINEAR_GUARD_INCOMPLETE: symbol '")
+          << symbol.getValue()
+          << "' has no concrete tessera.dim_sizes witness";
+      return failure();
+    }
+    if (witness->second < 0)
+      return malformed("dimension witnesses must be nonnegative");
+    symbols.push_back(symbol.str());
+    witnesses.push_back(witness->second);
+  }
+
+  auto checkedAdd = [](int64_t lhs, int64_t rhs,
+                       int64_t &result) -> bool {
+    return !__builtin_add_overflow(lhs, rhs, &result);
+  };
+  auto checkedMul = [](int64_t lhs, int64_t rhs,
+                       int64_t &result) -> bool {
+    return !__builtin_mul_overflow(lhs, rhs, &result);
+  };
+  for (Attribute attr : constraintsAttr) {
+    auto row = dyn_cast<DictionaryAttr>(attr);
+    auto relation = row ? row.getAs<StringAttr>("relation") : nullptr;
+    auto constant = row ? row.getAs<IntegerAttr>("constant") : nullptr;
+    auto terms = row ? row.getAs<ArrayAttr>("terms") : nullptr;
+    if (!row || !relation || !constant || !terms || terms.empty() ||
+        (relation != "eq" && relation != "ge"))
+      return malformed("rows require eq/ge relation, constant, and terms");
+    int64_t value = constant.getInt();
+    for (Attribute termAttr : terms) {
+      auto term = dyn_cast<DictionaryAttr>(termAttr);
+      auto coefficient = term ? term.getAs<IntegerAttr>("coefficient") : nullptr;
+      auto powers = term ? term.getAs<DenseI64ArrayAttr>("powers") : nullptr;
+      if (!term || !coefficient || !powers ||
+          powers.size() != static_cast<int64_t>(symbols.size()))
+        return malformed("every term requires a coefficient and total power row");
+      int64_t monomial = coefficient.getInt();
+      bool hasVariable = false;
+      for (auto [witness, power] : llvm::zip_equal(witnesses, powers.asArrayRef())) {
+        if (power < 0 || power > 16)
+          return malformed("term powers must lie in [0, 16]");
+        hasVariable |= power != 0;
+        for (int64_t exponent = 0; exponent < power; ++exponent)
+          if (!checkedMul(monomial, witness, monomial))
+            return malformed("polynomial witness evaluation overflowed i64");
+      }
+      if (!hasVariable)
+        return malformed("constant terms belong in the row constant");
+      if (!checkedAdd(value, monomial, value))
+        return malformed("polynomial witness evaluation overflowed i64");
+    }
+    const bool satisfied = relation == "eq" ? value == 0 : value >= 0;
+    if (!satisfied) {
+      fn.emitOpError("SYMDIM_NONLINEAR_GUARD_VIOLATION: polynomial ")
+          << relation.getValue() << " row evaluated to " << value;
+      return failure();
+    }
+  }
+  return success();
+}
+
 // Read an op-level dim-name list attribute.  Returns nullopt when
 // absent — the verifier silently skips ops without annotations.
 static std::optional<SmallVector<std::string, 4>>
@@ -891,6 +982,8 @@ struct SymbolicDimEquality
       auto sizes = readDimSizes(fn);
       auto bindings = readBindings(fn);
       if (failed(checkTypedPresburger(fn)))
+        anyFailure = true;
+      if (failed(checkNonlinearShapeGuards(fn)))
         anyFailure = true;
       // Function-level binding equation check.
       if (failed(checkBindings(fn, bindings, sizes)))

@@ -3754,6 +3754,7 @@ class GraphIRBuilder:
         effect_tag: Optional[str] = None,
         target_attr: Optional[str] = None,
         source_text: Optional[str] = None,
+        prefer_abstract_trace: bool = False,
     ) -> "GraphIRFunction":
         """
         Lower fn to a GraphIRFunction and add it to the module.
@@ -3798,7 +3799,59 @@ class GraphIRBuilder:
 
             args.append(IRArg(name=param_name, ir_type=ir_type, effect=effect, dim_names=dim_names, layout=layout))
 
-        # Extract ops from AST
+        # Pure, statically shaped programs can be traced from annotations
+        # without concrete values. This is the delayed/symbolic frontend
+        # boundary needed to retire `_OpExtractor`: unsupported annotations or
+        # operations fall back to the explicitly retained AST candidate.
+        if prefer_abstract_trace:
+            specs: list[tuple[tuple[int, ...], str]] = []
+            for argument in args:
+                shape = argument.ir_type.shape
+                dtype = argument.ir_type.dtype
+                if (
+                    not shape
+                    or "*" in shape
+                    or any(not str(dim).isdigit() for dim in shape)
+                    or dtype is None
+                ):
+                    break
+                specs.append((tuple(int(dim) for dim in shape), dtype))
+            else:
+                try:
+                    import hashlib
+
+                    from .trace import trace, to_graph_ir_module
+
+                    traced = trace(
+                        fn,
+                        *specs,
+                        arg_names=tuple(argument.name for argument in args),
+                    )
+                    source_identity = source_text or fn.__qualname__
+                    traced_module = to_graph_ir_module(
+                        traced,
+                        name=fn.__name__,
+                        source_hash=hashlib.sha256(
+                            source_identity.encode("utf-8")
+                        ).hexdigest(),
+                    )
+                    if target_attr is not None:
+                        self.context.module.module_attrs["tessera.target"] = target_attr
+                    if effect_tag:
+                        traced_module.functions[0].fn_attrs["tessera.effect"] = (
+                            f'"{effect_tag}"'
+                        )
+                    self.context.add_function(traced_module.functions[0])
+                    self.context.module.module_attrs.update(
+                        traced_module.module_attrs
+                    )
+                    return traced_module.functions[0]
+                except Exception:
+                    # Compatibility capture stays fail-soft until the tracer's
+                    # operation vocabulary covers every AST-supported family.
+                    pass
+
+        # Extract ops from the retained AST compatibility frontend.
         arg_names = [a.name for a in args]
         ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args}, source_text=source_text)
 

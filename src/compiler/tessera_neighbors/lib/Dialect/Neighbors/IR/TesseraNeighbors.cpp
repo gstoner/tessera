@@ -40,6 +40,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Casting.h"
@@ -210,9 +211,18 @@ struct CreateTopologyOp
     p.printOptionalAttrDict((*this)->getAttrs());
   }
   LogicalResult verify() {
-    // kind attr is required
-    if (!(*this)->getAttr("kind"))
+    auto kind = (*this)->getAttrOfType<StringAttr>("kind");
+    if (!kind)
       return emitOpError("requires 'kind' string attribute");
+    if (!llvm::is_contained(
+            ArrayRef<StringRef>{"1d_mesh", "2d_mesh", "3d_mesh", "4d_mesh",
+                                "hex_2d", "custom_graph", "dynamic",
+                                "adaptive", "fault"},
+            kind.getValue()))
+      return emitOpError(
+          "NEIGHBORS_TOPOLOGY_UNKNOWN_KIND: kind must be one of "
+          "1d_mesh|2d_mesh|3d_mesh|4d_mesh|hex_2d|custom_graph|dynamic|"
+          "adaptive|fault");
     return success();
   }
 };

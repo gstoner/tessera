@@ -752,6 +752,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         preserved_attrs=(
             "tessera.presburger_constraints",
             "tessera.presburger_digest",
+            "tessera.nonlinear_shape_guards",
+            "tessera.nonlinear_shape_guard_digest",
             "tessera.dim_bindings",
             "tessera.dim_sizes",
             "tessera.arg_dim_names",
@@ -765,6 +767,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "SYMDIM_MATMUL_CONTRACT_VIOLATION",
             "SYMDIM_PRESBURGER_MALFORMED",
             "SYMDIM_PRESBURGER_UNSATISFIABLE",
+            "SYMDIM_NONLINEAR_GUARD_MALFORMED",
+            "SYMDIM_NONLINEAR_GUARD_INCOMPLETE",
+            "SYMDIM_NONLINEAR_GUARD_VIOLATION",
             "SYMDIM_RESHAPE_VIOLATION",
             "SYMDIM_TRANSPOSE_VIOLATION",
         ),

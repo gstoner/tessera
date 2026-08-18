@@ -371,9 +371,31 @@ class JitFn:
         differentiation_request: Optional[Any] = None,
         differentiation_provenance: Optional[Any] = None,
         backward_provenance: Optional[Any] = None,
+        source_text: Optional[str] = None,
     ) -> None:
         self._fn = fn
         self.graph_ir = graph_ir
+        # Decoration-time AST capture is a differential/compatibility oracle,
+        # never the post-specialization compiler authority.  The first concrete
+        # trace replaces ``graph_ir`` while this immutable candidate remains
+        # available only to explicit frontend certificates.
+        self._legacy_graph_ir = (
+            None
+            if graph_ir.module_attrs.get("tessera.frontend.authority") == '"tracer"'
+            else graph_ir
+        )
+        self._frontend_source_text = source_text
+        self._call_arg_names = tuple(
+            argument.name for argument in graph_ir.functions[0].args
+        ) if graph_ir.functions else ()
+        # Call-time constraint binding belongs to the stable Python ABI, not to
+        # the post-specialization tracer module.  Tracer authority may replace
+        # ``self.graph_ir`` with canonical a0/a1/... arguments after the first
+        # call; retain the decoration-time symbolic names/dimensions so every
+        # subsequent shape is checked and cached independently.
+        self._constraint_ir_args = tuple(
+            graph_ir.functions[0].args
+        ) if graph_ir.functions else ()
         self.inferred_effect = inferred_effect
         self.constraints = constraints
         self.deterministic = deterministic
@@ -454,6 +476,14 @@ class JitFn:
         self._frontend_nonreexecuting_certificates: Dict[Any, Any] = {}
         self.last_backward_execution: Optional[Dict[str, Any]] = None
         functools.update_wrapper(self, fn)
+
+    def _ensure_legacy_graph_ir(self) -> GraphIRModule:
+        """Materialize the AST oracle only when a differential gate asks for it."""
+        if self._legacy_graph_ir is None:
+            builder = GraphIRBuilder()
+            builder.lower(self._fn, source_text=self._frontend_source_text)
+            self._legacy_graph_ir = builder.module()
+        return self._legacy_graph_ir
 
     # PK8a (2026-06-02) — Graph IR → `.mtlpackage` AOT emission.
     def emit_package(
@@ -764,9 +794,9 @@ class JitFn:
         was already satisfied at decoration time with concrete ``bindings=``.
         Cached per-shape to avoid re-checking on every call.
         """
-        if not self.graph_ir.functions:
+        if not self._constraint_ir_args:
             return
-        ir_args = self.graph_ir.functions[0].args
+        ir_args = self._constraint_ir_args
         # Resolve dim_name → concrete int by walking positional + keyword args
         resolved: Dict[str, int] = {}
         # Build a name → value map first
@@ -933,16 +963,20 @@ class JitFn:
         ):
             self.frontend_authority = "legacy_candidate_non_tensor_signature"
             return
-        effect, _ = infer_graph_effects(self.graph_ir.functions[0].body)
+        legacy = self._legacy_graph_ir
+        effect = self.inferred_effect
+        if legacy is not None:
+            effect, _ = infer_graph_effects(legacy.functions[0].body)
         if effect != Effect.pure:
             self.frontend_authority = "legacy_candidate_effectful_signature"
             return
         try:
-            self._trace_frontend_capture(args, kwargs)
+            traced_module, _ = self._trace_frontend_capture(args, kwargs)
         except TesseraJitError as exc:
             self.frontend_authority = "legacy_candidate_unmigrated"
             self.frontend_authority_error = str(exc)
             return
+        self.graph_ir = traced_module
         self.frontend_authority = "tracer"
         self.frontend_authority_error = None
 
@@ -980,7 +1014,7 @@ class JitFn:
         if not traced.output_values or any(value is None for value in traced.output_values):
             raise TesseraJitError("tracer produced no concrete differential outputs")
         legacy_module = specialize_module_from_values(
-            self.graph_ir, dict(zip(self.arg_names, ordered))
+            self._ensure_legacy_graph_ir(), dict(zip(self.arg_names, ordered))
         )
         legacy_result = self._fn(*args, **kwargs)
         legacy_outputs = legacy_result if isinstance(legacy_result, tuple) else (legacy_result,)
@@ -1032,7 +1066,7 @@ class JitFn:
         # here would execute a stateful source a second time.
         tracer_module, _ = self._trace_frontend_capture(args, kwargs)
         legacy_module = specialize_module_from_values(
-            self.graph_ir, dict(zip(self.arg_names, ordered))
+            self._ensure_legacy_graph_ir(), dict(zip(self.arg_names, ordered))
         )
         try:
             certificate = certify_frontends_non_reexecuting(
@@ -1349,43 +1383,27 @@ class JitFn:
                 self.last_backward_execution = dict(plugin_result.execution)
                 return plugin_result.gradients
         if target_kind == "rocm":
-            return self._native_rocm_backward(
-                args, kwargs, out_cotangents=out_cotangents)
-        if target_kind == "nvidia_sm120":
-            return self._native_nvidia_backward(
-                args, kwargs, out_cotangents=out_cotangents)
-        if target_kind == "x86":
-            loss_ops = {
-                "loss.mse", "mse_loss", "loss.mae", "mae_loss",
-                "loss.huber", "huber_loss", "loss.smooth_l1",
-                "smooth_l1_loss",
-            }
-            if (
-                len(graph_ops) == 1
-                and graph_ops[0].op_name.removeprefix("tessera.") in loss_ops
-            ):
-                return self._native_regression_loss_backward(
-                    "x86", args, kwargs, out_cotangents=out_cotangents)
-            if (
-                len(graph_ops) == 1
-                and graph_ops[0].op_name.removeprefix("tessera.")
-                in {"loss.binary_cross_entropy", "binary_cross_entropy_loss"}
-            ):
-                return self._native_binary_loss_backward(
-                    "x86", args, kwargs, out_cotangents=out_cotangents)
-            if (
-                len(graph_ops) == 1
-                and graph_ops[0].op_name.removeprefix("tessera.")
-                in {
-                    "loss.cross_entropy", "cross_entropy_loss",
-                    "label_smoothed_cross_entropy",
-                }
-            ):
-                return self._native_class_loss_backward(
-                    "x86", args, kwargs, out_cotangents=out_cotangents)
             if len(graph_ops) == 1:
                 raise TesseraJitError(
-                    "no x86 native backward candidate for "
+                    "no registered ROCm native VJP plugin for "
+                    f"{graph_ops[0].op_name.removeprefix('tessera.')!r}"
+                )
+            raise TesseraJitError(
+                "ROCm native backward requires one registered Graph op"
+            )
+        if target_kind == "nvidia_sm120":
+            if len(graph_ops) == 1:
+                raise TesseraJitError(
+                    "no registered NVIDIA SM120 native VJP plugin for "
+                    f"{graph_ops[0].op_name.removeprefix('tessera.')!r}"
+                )
+            raise TesseraJitError(
+                "NVIDIA SM120 native backward requires one registered Graph op"
+            )
+        if target_kind == "x86":
+            if len(graph_ops) == 1:
+                raise TesseraJitError(
+                    "no registered x86 native VJP plugin for "
                     f"{graph_ops[0].op_name.removeprefix('tessera.')!r}"
                 )
             raise TesseraJitError(
@@ -1457,655 +1475,6 @@ class JitFn:
             "invocation_delta": after - before,
         }
         return tuple(result["output"])
-
-    def _native_regression_loss_backward(
-        self,
-        target: str,
-        args: Tuple[Any, ...],
-        kwargs: Dict[str, Any],
-        *,
-        out_cotangents: Any,
-    ) -> tuple[Any, ...]:
-        """Package one registered regression loss into its paired target ABI."""
-        import numpy as np
-        from tessera.runtime import RuntimeArtifact, launch
-
-        ordered = self._ordered_inputs(args, kwargs)
-        if ordered is None or len(ordered) != 2:
-            raise TesseraJitError(
-                f"{target} regression-loss backward requires prediction and target"
-            )
-        inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
-        cotangents = (out_cotangents if isinstance(out_cotangents, (tuple, list))
-                      else (out_cotangents,))
-        if len(cotangents) != 1:
-            raise TesseraJitError(
-                "regression-loss backward requires one output cotangent"
-            )
-        dy = np.ascontiguousarray(np.asarray(cotangents[0]))
-        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
-        if len(graph_ops) != 1:
-            raise TesseraJitError(
-                "compiled regression-loss backward requires a single-op graph"
-            )
-        source_op = graph_ops[0]
-        bare = source_op.op_name.removeprefix("tessera.")
-        aliases = {
-            "loss.mse": "mse_loss", "mse_loss": "mse_loss",
-            "loss.mae": "mae_loss", "mae_loss": "mae_loss",
-            "loss.huber": "huber_loss", "huber_loss": "huber_loss",
-            "loss.smooth_l1": "smooth_l1_loss",
-            "smooth_l1_loss": "smooth_l1_loss",
-        }
-        family = aliases.get(bare)
-        if family is None:
-            raise TesseraJitError(
-                f"no {target} regression-loss backward candidate for {bare!r}"
-            )
-        operand_names = list(self.arg_names)
-        nvidia = target == "nvidia_sm120"
-        gpu = target in {"rocm", "nvidia_sm120"}
-        path = (
-            "nvidia_regression_loss_bwd_compiled"
-            if nvidia
-            else f"{target}_regression_loss_bwd_compiled"
-        )
-        execution_mode = (
-            "cuda_driver" if nvidia
-            else "hip_runtime" if target == "rocm"
-            else "cpu_avx512"
-        )
-        artifact = RuntimeArtifact(metadata={
-            "target": target,
-            "compiler_path": path,
-            "executable": True,
-            "execution_kind": "native_gpu" if gpu else "native_cpu",
-            "execution_mode": execution_mode,
-            "autodiff_phase": "backward",
-            "out_cotangent": "dy",
-            "arg_names": operand_names + ["dy"],
-            "output_names": [f"d_{name}" for name in operand_names],
-            "ops": [{
-                "op_name": source_op.op_name,
-                "result": source_op.result,
-                "operands": operand_names,
-                "kwargs": dict(source_op.kwargs),
-            }],
-        })
-        launched = launch(artifact, tuple([*inputs, dy]))
-        expected_mode = execution_mode
-        if not launched.get("ok") or launched.get("execution_mode") != expected_mode:
-            raise TesseraJitError(
-                f"verified {target} {family} backward launch failed: "
-                + str(launched.get("reason"))
-            )
-        evidence_target = (
-            "nvidia_sm120" if nvidia
-            else "rocm_gfx1151" if target == "rocm"
-            else "x86_avx512"
-        )
-        self.last_backward_execution = {
-            "compiler_path": path,
-            "execution_kind": "native_gpu" if gpu else "native_cpu",
-            "execution_mode": expected_mode,
-            "evidence_target": evidence_target,
-            "implementation": "dedicated",
-            "residual_policy": "save_inputs",
-            "op_family": family,
-        }
-        output = launched["output"]
-        gradients = tuple(output) if isinstance(output, (tuple, list)) else (output,)
-        by_name = dict(zip(operand_names, gradients))
-        request = self.differentiation_request
-        if request is None:
-            raise TesseraJitError("native backward requires autodiff request")
-        return tuple(by_name[name] for name in request.wrt)
-
-    def _native_rocm_distribution_loss_backward(
-        self,
-        args: Tuple[Any, ...],
-        kwargs: Dict[str, Any],
-        *,
-        out_cotangents: Any,
-    ) -> tuple[Any, ...]:
-        """Launch the paired KL/JS carrier through one gfx1151 kernel."""
-        import numpy as np
-        from tessera.runtime import RuntimeArtifact, launch
-
-        ordered = self._ordered_inputs(args, kwargs)
-        if ordered is None or len(ordered) != 2:
-            raise TesseraJitError(
-                "ROCm distribution backward requires two operands"
-            )
-        cotangents = (
-            out_cotangents
-            if isinstance(out_cotangents, (tuple, list))
-            else (out_cotangents,)
-        )
-        if len(cotangents) != 1:
-            raise TesseraJitError(
-                "ROCm distribution backward requires one output cotangent"
-            )
-        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
-        if len(graph_ops) != 1:
-            raise TesseraJitError(
-                "compiled distribution backward requires a single-op graph"
-            )
-        source = graph_ops[0]
-        bare = source.op_name.removeprefix("tessera.")
-        if bare not in {
-            "loss.kl_divergence",
-            "kl_divergence",
-            "loss.js_divergence",
-            "js_divergence",
-        }:
-            raise TesseraJitError("expected KL or JS distribution loss")
-        path = "rocm_distribution_loss_bwd_compiled"
-        artifact = RuntimeArtifact(
-            metadata={
-                "target": "rocm",
-                "compiler_path": path,
-                "executable": True,
-                "execution_kind": "native_gpu",
-                "execution_mode": "hip_runtime",
-                "autodiff_phase": "backward",
-                "out_cotangent": "dy",
-                "arg_names": list(self.arg_names) + ["dy"],
-                "output_names": [f"d_{name}" for name in self.arg_names],
-                "ops": [
-                    {
-                        "op_name": source.op_name,
-                        "result": source.result,
-                        "operands": list(self.arg_names),
-                        "kwargs": dict(source.kwargs),
-                    }
-                ],
-            }
-        )
-        result = launch(
-            artifact,
-            tuple(
-                [
-                    *(
-                        np.ascontiguousarray(
-                            np.asarray(value), dtype=np.float32
-                        )
-                        for value in ordered
-                    ),
-                    np.ascontiguousarray(
-                        np.asarray(cotangents[0]), dtype=np.float32
-                    ),
-                ]
-            ),
-        )
-        if (
-            not result.get("ok")
-            or result.get("execution_mode") != "hip_runtime"
-        ):
-            raise TesseraJitError(
-                "verified ROCm distribution backward launch failed: "
-                + str(result.get("reason"))
-            )
-        gradients = tuple(result["output"])
-        by_name = dict(zip(self.arg_names, gradients))
-        request = self.differentiation_request
-        if request is None:
-            raise TesseraJitError(
-                "native backward requires differentiation request"
-            )
-        self.last_backward_execution = {
-            "compiler_path": path,
-            "execution_kind": "native_gpu",
-            "execution_mode": "hip_runtime",
-            "evidence_target": "rocm_gfx1151",
-            "implementation": "dedicated",
-            "residual_policy": "save_inputs",
-            "op_family": bare,
-        }
-        return tuple(by_name[name] for name in request.wrt)
-
-    def _native_binary_loss_backward(
-        self,
-        target: str,
-        args: Tuple[Any, ...],
-        kwargs: Dict[str, Any],
-        *,
-        out_cotangents: Any,
-    ) -> tuple[Any, ...]:
-        """Package Graph-native BCE into the dedicated paired target ABI."""
-        import numpy as np
-        from tessera.runtime import RuntimeArtifact, launch
-
-        ordered = self._ordered_inputs(args, kwargs)
-        if ordered is None or len(ordered) != 2:
-            raise TesseraJitError(
-                f"{target} BCE backward requires logits and target"
-            )
-        inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
-        cotangents = (
-            out_cotangents
-            if isinstance(out_cotangents, (tuple, list))
-            else (out_cotangents,)
-        )
-        if len(cotangents) != 1:
-            raise TesseraJitError("BCE backward requires one output cotangent")
-        dy = np.ascontiguousarray(np.asarray(cotangents[0]))
-        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
-        if len(graph_ops) != 1:
-            raise TesseraJitError(
-                "compiled BCE backward requires a single-op graph"
-            )
-        source_op = graph_ops[0]
-        operand_names = list(self.arg_names)
-        nvidia = target == "nvidia_sm120"
-        gpu = target in {"rocm", "nvidia_sm120"}
-        path = (
-            "nvidia_binary_loss_bwd_compiled"
-            if nvidia
-            else f"{target}_binary_loss_bwd_compiled"
-        )
-        expected = (
-            "cuda_driver" if nvidia
-            else "hip_runtime" if target == "rocm"
-            else "cpu_avx512"
-        )
-        artifact = RuntimeArtifact(metadata={
-            "target": target,
-            "compiler_path": path,
-            "executable": True,
-            "execution_kind": "native_gpu" if gpu else "native_cpu",
-            "execution_mode": expected,
-            "autodiff_phase": "backward",
-            "out_cotangent": "dy",
-            "arg_names": operand_names + ["dy"],
-            "output_names": [f"d_{name}" for name in operand_names],
-            "ops": [{
-                "op_name": source_op.op_name,
-                "result": source_op.result,
-                "operands": operand_names,
-                "kwargs": dict(source_op.kwargs),
-            }],
-        })
-        launched = launch(artifact, tuple([*inputs, dy]))
-        if not launched.get("ok") or launched.get("execution_mode") != expected:
-            raise TesseraJitError(
-                f"verified {target} BCE backward launch failed: "
-                + str(launched.get("reason"))
-            )
-        self.last_backward_execution = {
-            "compiler_path": path,
-            "execution_kind": "native_gpu" if gpu else "native_cpu",
-            "execution_mode": expected,
-            "evidence_target": (
-                "nvidia_sm120" if nvidia
-                else "rocm_gfx1151" if target == "rocm"
-                else "x86_avx512"
-            ),
-            "implementation": "dedicated",
-            "residual_policy": "save_inputs",
-            "op_family": "binary_cross_entropy_loss",
-        }
-        output = launched["output"]
-        gradients = (
-            tuple(output) if isinstance(output, (tuple, list)) else (output,)
-        )
-        by_name = dict(zip(operand_names, gradients))
-        request = self.differentiation_request
-        if request is None:
-            raise TesseraJitError("native backward requires autodiff request")
-        return tuple(by_name[name] for name in request.wrt)
-
-    def _native_class_loss_backward(
-        self,
-        target: str,
-        args: Tuple[Any, ...],
-        kwargs: Dict[str, Any],
-        *,
-        out_cotangents: Any,
-    ) -> tuple[Any, ...]:
-        """Bind indexed cross entropy to the target-owned dLogits ABI."""
-        import numpy as np
-        from tessera.runtime import RuntimeArtifact, launch
-
-        ordered = self._ordered_inputs(args, kwargs)
-        if ordered is None or len(ordered) != 2:
-            raise TesseraJitError(
-                f"{target} class loss backward requires logits and target")
-        request = self.differentiation_request
-        if request is None:
-            raise TesseraJitError("native backward requires autodiff request")
-        if any(name != self.arg_names[0] for name in request.wrt):
-            raise TesseraJitError(
-                "integer class-index targets are explicitly nondifferentiable")
-        cotangents = (
-            out_cotangents if isinstance(out_cotangents, (tuple, list))
-            else (out_cotangents,))
-        if len(cotangents) != 1:
-            raise TesseraJitError("class loss backward requires one cotangent")
-        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
-        source_op = graph_ops[0]
-        source_kwargs = dict(source_op.kwargs)
-        if "smoothing" in source_kwargs:
-            source_kwargs["label_smoothing"] = source_kwargs.pop("smoothing")
-        nvidia = target == "nvidia_sm120"
-        gpu = target in {"rocm", "nvidia_sm120"}
-        path = (
-            "nvidia_class_loss_bwd_compiled"
-            if nvidia
-            else f"{target}_class_loss_bwd_compiled"
-        )
-        expected = (
-            "cuda_driver" if nvidia
-            else "hip_runtime" if target == "rocm"
-            else "cpu_avx512"
-        )
-        artifact = RuntimeArtifact(metadata={
-            "target": target, "compiler_path": path, "executable": True,
-            "execution_kind": "native_gpu" if gpu else "native_cpu",
-            "execution_mode": expected, "autodiff_phase": "backward",
-            "out_cotangent": "dy",
-            "arg_names": list(self.arg_names) + ["dy"],
-            "output_names": [f"d_{self.arg_names[0]}"],
-            "ops": [{
-                "op_name": source_op.op_name, "result": source_op.result,
-                "operands": list(self.arg_names), "kwargs": source_kwargs,
-            }],
-        })
-        launched = launch(
-            artifact,
-            tuple([*(np.ascontiguousarray(np.asarray(v)) for v in ordered),
-                   np.ascontiguousarray(np.asarray(cotangents[0]))]),
-        )
-        if not launched.get("ok") or launched.get("execution_mode") != expected:
-            raise TesseraJitError(
-                f"verified {target} class loss backward launch failed: "
-                + str(launched.get("reason")))
-        self.last_backward_execution = {
-            "compiler_path": path,
-            "execution_kind": "native_gpu" if gpu else "native_cpu",
-            "execution_mode": expected,
-            "evidence_target": (
-                "nvidia_sm120" if nvidia
-                else "rocm_gfx1151" if target == "rocm"
-                else "x86_avx512"),
-            "implementation": "dedicated",
-            "residual_policy": "save_inputs",
-            "op_family": "cross_entropy_loss",
-        }
-        return (launched["output"],)
-
-    def _native_nvidia_backward(
-        self,
-        args: Tuple[Any, ...],
-        kwargs: Dict[str, Any],
-        *,
-        out_cotangents: Any,
-    ) -> tuple[Any, ...]:
-        """Bind shared paired adjoints to the verified SM120 PTX packages."""
-        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
-        ops = {op.op_name.removeprefix("tessera.") for op in graph_ops}
-        if len(graph_ops) != 1:
-            raise TesseraJitError(
-                "SM120 native training backward currently requires one Graph op"
-            )
-        if ops <= {"gated_deltanet", "kimi_delta_attention", "modified_delta_attention"}:
-            import numpy as np
-            from tessera.runtime import RuntimeArtifact, launch
-            ordered = self._ordered_inputs(args, kwargs)
-            source = graph_ops[0]
-            flags = dict(source.kwargs)
-            # Graph IR preserves optional DeltaNet tensors as operands, while
-            # older front-ends did not serialize their presence booleans.  Map
-            # canonical operand labels into the v2 physical ABI flags here;
-            # retain the positional fallback for already-lowered anonymous IR.
-            optional_labels = {
-                str(name).lstrip("%").lower() for name in source.operands[3:]
-            }
-            for key, label in (
-                ("has_gate", "gate"), ("has_beta", "beta"),
-                ("has_decay", "decay"),
-            ):
-                if key not in flags:
-                    flags[key] = label in optional_labels
-            if not optional_labels.intersection({"gate", "beta", "decay"}) and len(source.operands) > 3:
-                for index, key in enumerate(("has_gate", "has_beta", "has_decay")):
-                    flags[key] = index < len(source.operands) - 3
-            affine_inputs = 3 + sum(
-                int(bool(flags.get(key, False)))
-                for key in ("has_gate", "has_beta", "has_decay")
-            )
-            if (ordered is None or len(ordered) != affine_inputs or len(graph_ops) != 1
-                    or not bool(flags.get("causal", True))):
-                raise TesseraJitError(
-                    "SM120 DeltaNet backward requires causal Q/K/V with optional "
-                    "gate/beta/decay inputs"
-                )
-            cotangents = out_cotangents if isinstance(out_cotangents, (tuple, list)) else (out_cotangents,)
-            if len(cotangents) != 1:
-                raise TesseraJitError("SM120 DeltaNet backward requires one output cotangent")
-            path = "nvidia_deltanet_bwd_compiled"
-            artifact = RuntimeArtifact(metadata={
-                "target": "nvidia_sm120", "compiler_path": path,
-                "executable": True, "execution_kind": "native_gpu",
-                "execution_mode": "cuda_driver", "autodiff_phase": "backward",
-                "out_cotangents": ["dy"],
-                "arg_names": list(self.arg_names) + ["dy"],
-                "output_names": [f"d_{name}" for name in self.arg_names],
-                "ops": [{"op_name": source.op_name, "result": source.result,
-                         "operands": list(self.arg_names), "kwargs": flags}],
-            })
-            launched = launch(artifact, tuple([
-                *(np.ascontiguousarray(np.asarray(value), dtype=np.float32) for value in ordered),
-                np.ascontiguousarray(np.asarray(cotangents[0]), dtype=np.float32),
-            ]))
-            if not launched.get("ok"):
-                raise TesseraJitError("verified SM120 DeltaNet backward launch failed: " + str(launched.get("reason")))
-            request = self.differentiation_request
-            if request is None:
-                raise TesseraJitError("native backward requires differentiation request")
-            gradients = dict(zip(self.arg_names, launched["output"]))
-            self.last_backward_execution = {"compiler_path": path, "execution_kind": "native_gpu", "execution_mode": "cuda_driver", "evidence_target": "nvidia_sm120", "implementation": "dedicated", "residual_policy": "recompute", "op_family": "deltanet"}
-            return tuple(gradients[name] for name in request.wrt)
-        if ops == {"lion"}:
-            import numpy as np
-            from tessera.runtime import RuntimeArtifact, launch
-
-            ordered = self._ordered_inputs(args, kwargs)
-            if ordered is None or len(ordered) != 3:
-                raise TesseraJitError(
-                    "NVIDIA Lion backward requires param, grad, and moment"
-                )
-            cotangents = (
-                out_cotangents
-                if isinstance(out_cotangents, (tuple, list))
-                else (out_cotangents,)
-            )
-            if len(cotangents) != 2:
-                raise TesseraJitError(
-                    "Lion backward requires parameter and moment output cotangents"
-                )
-            source = graph_ops[0]
-            cotangent_names = ["dparam_out", "dmoment_out"]
-            path = "nvidia_lion_bwd_compiled"
-            artifact = RuntimeArtifact(metadata={
-                "target": "nvidia_sm120", "compiler_path": path,
-                "executable": True, "execution_kind": "native_gpu",
-                "execution_mode": "cuda_driver", "autodiff_phase": "backward",
-                "out_cotangents": cotangent_names,
-                "arg_names": list(self.arg_names) + cotangent_names,
-                "output_names": [f"d_{name}" for name in self.arg_names],
-                "ops": [{"op_name": source.op_name, "result": source.result,
-                         "operands": list(self.arg_names),
-                         "kwargs": dict(source.kwargs)}],
-            })
-            result = launch(artifact, tuple([
-                *(np.ascontiguousarray(np.asarray(value), dtype=np.float32)
-                  for value in ordered),
-                *(np.ascontiguousarray(np.asarray(value), dtype=np.float32)
-                  for value in cotangents),
-            ]))
-            if not result.get("ok") or result.get("execution_mode") != "cuda_driver":
-                raise TesseraJitError(
-                    "verified SM120 Lion backward launch failed: "
-                    + str(result.get("reason"))
-                )
-            request = self.differentiation_request
-            if request is None:
-                raise TesseraJitError("native backward requires differentiation request")
-            gradients = dict(zip(self.arg_names, result["output"]))
-            self.last_backward_execution = {
-                "compiler_path": path, "execution_kind": "native_gpu",
-                "execution_mode": "cuda_driver", "evidence_target": "nvidia_sm120",
-                "implementation": "dedicated", "residual_policy": "none",
-                "op_family": "lion",
-            }
-            return tuple(gradients[name] for name in request.wrt)
-        if ops <= {
-            "loss.mse", "mse_loss", "loss.mae", "mae_loss",
-            "loss.huber", "huber_loss", "loss.smooth_l1", "smooth_l1_loss",
-        }:
-            return self._native_regression_loss_backward(
-                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
-            )
-        if ops <= {
-            "loss.binary_cross_entropy", "binary_cross_entropy_loss",
-        }:
-            return self._native_binary_loss_backward(
-                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
-            )
-        if ops <= {
-            "loss.kl_divergence",
-            "kl_divergence",
-            "loss.js_divergence",
-            "js_divergence",
-        }:
-            return self._native_regression_loss_backward(
-                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
-            )
-        if ops <= {
-            "loss.cross_entropy", "cross_entropy_loss",
-            "label_smoothed_cross_entropy",
-        }:
-            return self._native_class_loss_backward(
-                "nvidia_sm120", args, kwargs, out_cotangents=out_cotangents
-            )
-        raise TesseraJitError(
-            f"no verified SM120 paired training candidate for ops {sorted(ops)}"
-        )
-
-    def _native_rocm_backward(
-        self,
-        args: Tuple[Any, ...],
-        kwargs: Dict[str, Any],
-        *,
-        out_cotangents: Any,
-    ) -> tuple[Any, ...]:
-        """Bind the paired backward contract to existing verified ROCm lanes."""
-        import numpy as np
-        from tessera.runtime import RuntimeArtifact, launch
-
-        ordered = self._ordered_inputs(args, kwargs)
-        if ordered is None:
-            raise TesseraJitError("ROCm native backward requires every forward argument")
-        inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
-        cots = out_cotangents if isinstance(out_cotangents, (tuple, list)) \
-            else (out_cotangents,)
-        cotangents = [np.ascontiguousarray(np.asarray(value)) for value in cots]
-        graph_ops = [op for fn in self._specialized_autodiff_module(args, kwargs).functions for op in fn.body]
-        ops = {op.op_name.removeprefix("tessera.") for op in graph_ops}
-
-        regression_losses = {
-            "loss.mse", "mse_loss", "loss.mae", "mae_loss",
-            "loss.huber", "huber_loss", "loss.smooth_l1", "smooth_l1_loss",
-        }
-        if len(graph_ops) == 1 and ops <= regression_losses:
-            return self._native_regression_loss_backward(
-                "rocm", args, kwargs, out_cotangents=out_cotangents)
-
-        if len(graph_ops) == 1 and ops <= {
-            "loss.binary_cross_entropy", "binary_cross_entropy_loss",
-        }:
-            return self._native_binary_loss_backward(
-                "rocm", args, kwargs, out_cotangents=out_cotangents)
-
-        if len(graph_ops) == 1 and ops <= {
-            "loss.cross_entropy", "cross_entropy_loss",
-            "label_smoothed_cross_entropy",
-        }:
-            return self._native_class_loss_backward(
-                "rocm", args, kwargs, out_cotangents=out_cotangents)
-        if len(graph_ops) == 1 and ops <= {
-            "loss.kl_divergence",
-            "kl_divergence",
-            "loss.js_divergence",
-            "js_divergence",
-        }:
-            return self._native_rocm_distribution_loss_backward(
-                args, kwargs, out_cotangents=out_cotangents)
-
-        if ops == {"matmul"} and len(inputs) == 2 and len(cotangents) == 1:
-            # Matmul has no standalone backward kernel. Its paired ABI is the
-            # honest composition dA=dO@B.T, dB=A.T@dO through two generated
-            # forward-GEMM launches.
-            a, b = inputs
-            dout = cotangents[0]
-
-            def launch_gemm(lhs: Any, rhs: Any) -> Any:
-                artifact = RuntimeArtifact(metadata={
-                    "target": "rocm", "compiler_path": "rocm_compiled",
-                    "executable": True, "execution_kind": "native_gpu",
-                    "execution_mode": "hip_runtime", "arg_names": ["a", "b"],
-                    "output_name": "c", "ops": [{"op_name": "tessera.matmul",
-                        "result": "c", "operands": ["a", "b"], "kwargs": {}}],
-                })
-                launched = launch(artifact, (np.ascontiguousarray(lhs),
-                                             np.ascontiguousarray(rhs)))
-                if (not launched.get("ok")
-                        or launched.get("execution_mode") != "hip_runtime"):
-                    raise TesseraJitError("ROCm composed matmul backward failed: "
-                                          + str(launched.get("reason")))
-                return launched["output"]
-
-            output = (launch_gemm(dout, b.T), launch_gemm(a.T, dout))
-            path = "rocm_compiled+rocm_compiled"
-            self.last_backward_execution = {
-                "compiler_path": path, "execution_kind": "native_gpu",
-                "execution_mode": "hip_runtime", "evidence_target": "rocm_gfx1151",
-                "implementation": "composition", "residual_policy": "save_inputs",
-            }
-            return output
-        if "selective_ssm" in ops:
-            path = "rocm_selective_ssm_bwd_compiled"
-            op_name = "tessera.selective_ssm_bwd"
-            launch_args = [*cotangents, *inputs]
-            op_kwargs: dict[str, Any] = {}
-        else:
-            raise TesseraJitError(
-                f"no verified ROCm paired backward candidate for ops {sorted(ops)}")
-
-        names = [f"arg{i}" for i in range(len(launch_args))]
-        artifact = RuntimeArtifact(metadata={
-            "target": "rocm", "compiler_path": path,
-            "executable": True, "execution_kind": "native_gpu",
-            "execution_mode": "hip_runtime", "arg_names": names,
-            "output_name": "grads",
-            "ops": [{"op_name": op_name, "result": "grads",
-                     "operands": names, "kwargs": op_kwargs}],
-        })
-        result = launch(artifact, tuple(launch_args))
-        if not result.get("ok") or result.get("execution_mode") != "hip_runtime":
-            raise TesseraJitError(
-                "verified ROCm backward launch failed: " + str(result.get("reason")))
-        self.last_backward_execution = {
-            "compiler_path": path,
-            "execution_kind": "native_gpu",
-            "execution_mode": "hip_runtime",
-            "evidence_target": "rocm_gfx1151",
-            "implementation": "dedicated",
-            "residual_policy": "recompute_all",
-        }
-        output = result["output"]
-        return tuple(output) if isinstance(output, (tuple, list)) else (output,)
 
     def _try_tessera_jit_call(self, args: Tuple[Any, ...],
                               kwargs: Dict[str, Any]) -> Any:
@@ -2342,9 +1711,10 @@ class JitFn:
 
     @property
     def arg_names(self) -> List[str]:
-        if not self.graph_ir.functions:
-            return []
-        return [arg.name for arg in self.graph_ir.functions[0].args]
+        # The Python call ABI is stable even when the post-specialization
+        # tracer canonicalizes parameter symbols to a0/a1/... . Physical
+        # package builders receive tracer source names separately.
+        return list(self._call_arg_names)
 
     @property
     def schedule_ir(self) -> Optional[str]:
@@ -3097,6 +2467,7 @@ def _jit_emit_graph_ir(
             builder.lower(
                 fn, effect_tag=effect_tag,
                 target_attr=target_attr, source_text=source_text,
+                prefer_abstract_trace=inferred_effect == Effect.pure,
             )
             module = builder.module()
             for frontend_diag in builder.diagnostics:
@@ -3433,6 +2804,7 @@ def jit(
             differentiation_request=diff_request,
             differentiation_provenance=differentiation_prov,
             backward_provenance=backward_prov,
+            source_text=source_text,
         )
         if _trace_deferred:
             # AST emission failed → the tracer is the only execution path. Force

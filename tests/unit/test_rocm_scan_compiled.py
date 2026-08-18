@@ -157,4 +157,4 @@ def test_scan_codegen_bad_kind_rejected():
     d = ('module {\n  "tessera_rocm.scan"() {name = "sc", kind = "zz"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-scan-kernel")
-    assert r.returncode != 0 and "cumsum" in r.stderr
+    assert r.returncode != 0 and "ROCm inclusive scan kind" in r.stderr

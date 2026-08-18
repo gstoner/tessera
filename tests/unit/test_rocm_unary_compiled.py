@@ -282,4 +282,4 @@ def test_unary_codegen_bad_kind_rejected():
     d = ('module {\n  "tessera_rocm.unary"() {name = "u", kind = "floof"} '
          ': () -> ()\n}\n')
     r = _opt(d, "--generate-rocm-unary-kernel")
-    assert r.returncode != 0 and "unknown kind" in r.stderr
+    assert r.returncode != 0 and "ROCm unary math kind" in r.stderr

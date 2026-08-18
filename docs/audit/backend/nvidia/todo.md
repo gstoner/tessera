@@ -3,18 +3,49 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-17
+last_updated: 2026-08-18
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
+contract parity; CUDA follow-up required.** Dynamic saved-slot data/shape
+tapes, exact polynomial witness guards, and variadic branch CFG state are
+target-neutral contracts. Effectful replay remains fail closed except for
+compiler-owned extent assertions. NVIDIA has no native region-product consumer
+or SM120 evidence and inherits no x86/gfx1151 proof.
+
+Cross-backend sync `W2.4-E2E6-SYMBOLIC-2026-08-18` — **shared legality and
+frontend authority landed; CUDA evidence unchanged.** Production pipeline,
+WarpSpec, barrier-reuse, and derived Tile dataflow relations now run through
+one staged `TileDataflowLegalityPass`; legacy CLI names are wrappers. Pure
+static annotations abstract-trace before AST compatibility capture. The
+existing SM120 Lion and causal DeltaNet launchers are now selected by explicit
+family plugins instead of `JitFn` target dispatch. This is an ownership move,
+not new device evidence; CUDA state-lineage package unification and an exact
+SM120 packet remain open.
+
+Cross-backend sync `W1-W3-AUTHORITY-CLOSEOUT-2026-08-18` — **shared contracts
+landed; CUDA producer proof remains open.** CUDA-math kinds and TCGen05 operands
+are ODS-typed, bare Tile fragments are rejected, and WarpSpec no longer trusts
+legacy ancestor markers. Existing SM120 loss packages are reached through
+explicit VJP plugins. The final tensor-valued MMA producers, barrier-at-birth
+emission, SM120 Target proof, and Lion/DeltaNet shared-lineage proof remain
+NVIDIA-owned; host-free verification transfers no device evidence.
+
 Cross-backend sync `W4-PRODUCT-1-RESIDUAL-CONTRACT-2026-08-17` — **shared
 contract parity validated; CUDA physical follow-up required.** SAVE/HYBRID
 selection now has a digest-bound Graph→SCF carrier. Shared paired AD consumes
-an explicit SAVE scan tape plus `if` predicate and `while` trip-count residuals;
-scan-form HYBRID now executes bounded nearest-checkpoint replay, and generic
-counted loops use one typed tape per carried tensor. SM120 still needs its
-own region-product correctness/performance packet.
+dynamic branch-local residual extents, bounded SAVE and sparse HYBRID `while`
+state tapes, and bounded-dynamic counted-loop tapes. The target-neutral
+compiler now classifies source-CFG SCCs and structurizes bounded pure reducible
+or irreducible native CFGs as a typed program-counter state machine while
+preserving CFG/Presburger identity. Nested canonical structured bodies and
+mixed control/tensor state are admitted. Saved dynamic slots require total
+data/shape-tape envelopes; unbounded, unsupported-region, and unrecorded
+effectful forms remain fail closed. SM120
+still needs its own region-product correctness/performance packet and inherits
+no sibling proof.
 
 Cross-backend sync `E2E-REAL-6F-OPTIMIZER-VJP-2026-08-17` — **shared
 optimizer lineage validated; NVIDIA not applicable for the bounded physical
@@ -27,17 +58,17 @@ Cross-backend sync `E2E-REAL-6E-STATEFUL-VJP-2026-08-17` — **shared
 Adafactor/sequence-mixer authority validated; NVIDIA target follow-up
 required.** Factored/full Adafactor and causal DeltaNet backward now have a
 non-reexecuting Graph→Schedule→Tile package for x86/gfx1151. The existing
-SM120 DeltaNet path remains a compatibility consumer and NVIDIA has no
+SM120 DeltaNet path is now plugin-owned but remains a compatibility package;
+NVIDIA has no
 Adafactor Target owner. Neither inherits sibling numerical evidence; each must
 adopt the shared lineage carrier and produce CUDA exact-device proof.
 
 Cross-backend sync `E2E-REAL-6D-LION-VJP-2026-08-17` — **shared flat Lion
 Graph and non-reexecuting proof parity validated; CUDA plugin follow-up
 required.** The existing SM120 PTX Lion VJP remains numerically valid, but it
-still constructs its package in the retained `JitFn` compatibility branch and
-does not consume the shared `schedule.lion_vjp` state-lineage artifact. A CUDA
-follow-up must extend that typed package to SM120, move construction into the
-family plugin, and rerun its owning-device packet. No x86/gfx1151 evidence
+is now selected by the family plugin but does not yet consume the shared
+`schedule.lion_vjp` state-lineage artifact. A CUDA follow-up must extend that
+typed package to SM120 and rerun its owning-device packet. No x86/gfx1151 evidence
 transfers.
 
 Cross-backend sync `E2E-REAL-6C-ATTENTION-VJP-2026-08-17` — **shared

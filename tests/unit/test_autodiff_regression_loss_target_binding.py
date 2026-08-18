@@ -88,5 +88,5 @@ def test_public_sgd_backward_composes_native_optimizer(
         parameter, gradient, out_cotangents=seed)
     np.testing.assert_allclose(dp, seed, atol=1e-7, rtol=1e-7)
     np.testing.assert_allclose(dg, -0.125 * seed, atol=1e-7, rtol=1e-7)
-    assert compiled.last_backward_execution["implementation"] == "dedicated"
+    assert compiled.last_backward_execution["implementation"] == "family_plugin"
     assert compiled.last_backward_execution["evidence_target"] == evidence

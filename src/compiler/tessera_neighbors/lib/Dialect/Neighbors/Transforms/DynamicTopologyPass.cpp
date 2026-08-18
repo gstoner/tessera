@@ -47,8 +47,8 @@ namespace neighbors {
 
 /// Return true when a topology kind string signals dynamic / adaptive topology.
 static bool isMutableKind(StringRef kind) {
-  return kind.contains("dynamic") || kind.contains("adaptive") ||
-         kind.contains("fault")   || kind.contains("custom_graph");
+  return kind == "dynamic" || kind == "adaptive" || kind == "fault" ||
+         kind == "custom_graph";
 }
 
 // ---------------------------------------------------------------------------

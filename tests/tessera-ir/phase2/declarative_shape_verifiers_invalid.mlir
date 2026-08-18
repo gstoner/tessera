@@ -6,8 +6,8 @@
 
 func.func @bad_topology(%x: tensor<4xf32>) {
   // expected-error@+1 {{expects 0 operand(s); got 1}}
-  %bad_topology = "tessera.neighbors.topology.create"(%x)
-      : (tensor<4xf32>) -> index
+  %bad_topology = "tessera.neighbors.topology.create"(%x) {kind = "2d_mesh"}
+      : (tensor<4xf32>) -> !tessera.neighbors.topology
   return
 }
 

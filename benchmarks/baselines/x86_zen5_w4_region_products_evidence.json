@@ -1,0 +1,126 @@
+{
+  "architecture": "zen5_avx512",
+  "device": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+  "environment": {
+    "python": "3.11.15"
+  },
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "host_clean": false,
+  "promotion": {
+    "correctness_eligible": true,
+    "performance_eligible": false,
+    "reason": "WSL synchronized-wall packet; clean native timing remains required"
+  },
+  "rows": [
+    {
+      "artifact_digest": "7c393d3de403004f17fb7afb97ba22e46565203182a5a913991d4cc876a30804",
+      "cfg_digest": "dac26d23279ebfd2d794cb1e2459bcd92808e787780dd51630af3c2a25fbe216",
+      "name": "dynamic_if_saved_activation_vjp",
+      "numerical": {
+        "max_abs_error": 5.960464477539063e-08,
+        "passed": true
+      },
+      "paired_ir_digest": "3c498386c89bd0f1d35d4e2185c949f97df63a76355a6b292c59c596a957466b",
+      "residual_abi_digest": "5beb189cc1f524948e0e7823f51d9f2e485d61b4106382dc9d32526d26dda124",
+      "resources": {
+        "graph_reentry": false,
+        "inactive_residual_elements": 0,
+        "native_child_launches": 5,
+        "predicate_replay": false,
+        "selected_residual_elements": 257
+      },
+      "timing": {
+        "device_clock": {
+          "valid": false,
+          "value_ns": null
+        },
+        "eligible_for_promotion": false,
+        "median_ns": 50543,
+        "minimum_ns": 46555,
+        "samples_ns": [
+          54344,
+          72747,
+          46555,
+          50054,
+          53463,
+          49283,
+          54256,
+          51065,
+          52737,
+          52572,
+          51022,
+          51351,
+          49261,
+          50064,
+          49833,
+          49569,
+          48129,
+          52726,
+          47413,
+          47754
+        ],
+        "source": "synchronized_host_wall"
+      }
+    },
+    {
+      "artifact_digest": "9f6b436a01d2cc6fdef9bed3362e3eaf4c508859b9f9f28fbbc6314a1a68da0a",
+      "cfg_digest": "5d33e503e68edbe13517a0939bc725441329dd90a6b0cb3a9b1538910230839d",
+      "name": "hybrid_while_sparse_tape_vjp",
+      "numerical": {
+        "max_abs_error": 0.0,
+        "passed": true
+      },
+      "paired_ir_digest": "2db0dd9abf3e6975b9a07cadf8313c80657053caf22b49243549af4e158b2f2c",
+      "residual_abi_digest": "3198820543828660ee1cee67d52e4019c6b18cd76876b8e067c8c5d140d4f30f",
+      "resources": {
+        "backward_steps": 5,
+        "checkpoint_indices": [
+          2,
+          4
+        ],
+        "forward_steps": 7,
+        "graph_reentry": false,
+        "predicate_replay": false,
+        "replayed_steps": 2,
+        "retained_residual_bytes": 4096
+      },
+      "timing": {
+        "device_clock": {
+          "valid": false,
+          "value_ns": null
+        },
+        "eligible_for_promotion": false,
+        "median_ns": 195004,
+        "minimum_ns": 179553,
+        "samples_ns": [
+          258967,
+          195923,
+          186659,
+          206219,
+          197782,
+          236746,
+          182985,
+          181644,
+          179553,
+          182018,
+          181192,
+          258637,
+          241103,
+          183546,
+          258087,
+          194085,
+          183777,
+          206857,
+          186385,
+          223039
+        ],
+        "source": "synchronized_host_wall"
+      }
+    }
+  ],
+  "schema": "tessera.w4_region_products.evidence.v1",
+  "target": "x86",
+  "tessera_opt_sha256": "340f65c537a23318167ed8dc000ac98c45869e53576edc141cf38a7937e815ce",
+  "work_item": "W4-PRODUCT-1",
+  "wsl": true
+}

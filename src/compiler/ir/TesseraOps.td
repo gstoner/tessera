@@ -25,6 +25,33 @@ def Tessera_Dialect : Dialect {
   }];
 }
 
+// Semantic string selectors are closed at the Graph IR boundary. Keep the
+// textual StringAttr ABI while moving each operation's legal vocabulary out of
+// handwritten verifier branches and into the declaration consumed by every
+// parser and builder.
+class Tessera_EnumStrAttr<list<string> cases, string summaryText>
+    : StringBasedAttr<
+        CPred<"::llvm::is_contained(::llvm::ArrayRef<::llvm::StringRef>({"
+              # !interleave(!foreach(c, cases, "\"" # c # "\""), ", ") #
+              "}), ::llvm::cast<::mlir::StringAttr>($_self).getValue())">,
+        summaryText>;
+
+def Tessera_DistributionBackwardKindAttr
+    : Tessera_EnumStrAttr<["kl", "js"], "distribution loss backward kind">;
+def Tessera_RegressionBackwardKindAttr
+    : Tessera_EnumStrAttr<["mae", "huber", "smooth_l1"],
+                          "regression loss backward kind">;
+def Tessera_ReductionKindAttr
+    : Tessera_EnumStrAttr<["sum", "max", "min", "mean"],
+                          "single-axis reduction kind">;
+def Tessera_SpectralCompoundKindAttr
+    : Tessera_EnumStrAttr<["tessera.stft", "tessera.istft",
+                           "tessera.spectral_filter", "tessera.spectral_conv"],
+                          "compound spectral operation kind">;
+def Tessera_TrainingLossKindAttr
+    : Tessera_EnumStrAttr<["mse", "bce", "mae", "huber", "smooth_l1"],
+                          "fused training loss kind">;
+
 def Tessera_EpilogueKind : I32EnumAttr<
   "EpilogueKind",
   "Which post-op is fused",
@@ -550,7 +577,8 @@ def Tessera_DistributionLossBackwardOp : Op<
 > {
   let summary = "KL/JS gradients with explicit stable-log clamp semantics";
   let arguments = (ins TensorType:$lhs, TensorType:$rhs,
-                        TensorType:$cotangent, StrAttr:$kind,
+                        TensorType:$cotangent,
+                        Tessera_DistributionBackwardKindAttr:$kind,
                         DefaultValuedAttr<I64Attr, "-1">:$axis,
                         DefaultValuedAttr<F64Attr, "1.0e-12">:$epsilon,
                         DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
@@ -605,7 +633,8 @@ def Tessera_RegressionLossBackwardOp : Op<
 > {
   let summary = "Piecewise regression-loss gradients for prediction and target";
   let arguments = (ins TensorType:$prediction, TensorType:$target,
-                        TensorType:$cotangent, StrAttr:$kind,
+                        TensorType:$cotangent,
+                        Tessera_RegressionBackwardKindAttr:$kind,
                         DefaultValuedAttr<F64Attr, "1.0">:$parameter,
                         DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
   let results = (outs TensorType:$prediction_grad, TensorType:$target_grad);
@@ -1742,7 +1771,8 @@ def Tessera_ReduceOp : Op<
    DeclareOpInterfaceMethods<Tessera_TangentInterface>]
 > {
   let summary = "Reduction over a single axis (sum/max/min/mean)";
-  let arguments = (ins TensorType:$input, StrAttr:$kind, I64Attr:$axis);
+  let arguments = (ins TensorType:$input, Tessera_ReductionKindAttr:$kind,
+                       I64Attr:$axis);
   let results = (outs TensorType:$result);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
@@ -1759,7 +1789,8 @@ def Tessera_ReduceBackwardOp : Op<
 > {
   let summary = "Runtime-aware single-axis reduction adjoint";
   let arguments = (ins TensorType:$input, TensorType:$reduced,
-                       TensorType:$cotangent, StrAttr:$kind, I64Attr:$axis,
+                       TensorType:$cotangent, Tessera_ReductionKindAttr:$kind,
+                       I64Attr:$axis,
                        DefaultValuedAttr<StrAttr, "\"equal\"">:$tie_policy);
   let results = (outs TensorType:$grad);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
@@ -2566,7 +2597,7 @@ def Tessera_SpectralBackwardOp : Op<Tessera_Dialect, "spectral_backward", [Pure]
     Schedule lowering hashes this carrier as one fused spectral artifact.
   }];
   let arguments = (ins Variadic<TensorType>:$inputs,
-                       StrAttr:$kind,
+                       Tessera_SpectralCompoundKindAttr:$kind,
                        OptionalAttr<I64Attr>:$axis,
                        OptionalAttr<I64Attr>:$logical_length,
                        DefaultValuedAttr<StrAttr, "\"backward\"">:$normalization,
@@ -2661,7 +2692,7 @@ def Tessera_TrainingLossSGDOp : Op<
   let summary = "Fused loss backward and SGD parameter update";
   let arguments = (ins TensorType:$prediction, TensorType:$target,
                        TensorType:$cotangent, TensorType:$param,
-                       StrAttr:$kind,
+                       Tessera_TrainingLossKindAttr:$kind,
                        DefaultValuedAttr<F64Attr, "1.0">:$parameter,
                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction,
                        F64Attr:$lr);
@@ -2680,7 +2711,7 @@ def Tessera_TrainingLossAdamWOp : Op<
   let arguments = (ins TensorType:$prediction, TensorType:$target,
                        TensorType:$cotangent, TensorType:$param,
                        TensorType:$moment1, TensorType:$moment2,
-                       StrAttr:$kind,
+                       Tessera_TrainingLossKindAttr:$kind,
                        DefaultValuedAttr<F64Attr, "1.0">:$parameter,
                        DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction,
                        DefaultValuedAttr<F64Attr, "1.0e-3">:$lr,
@@ -2958,8 +2989,18 @@ class Tessera_NeighborsGenericOp<string mnemonic>
   let hasVerifier = 1;
 }
 
+def Tessera_NeighborsTopologyKindAttr : Tessera_EnumStrAttr<
+    ["1d_mesh", "2d_mesh", "3d_mesh", "4d_mesh", "hex_2d",
+     "custom_graph", "dynamic", "adaptive", "fault"],
+    "NEIGHBORS_TOPOLOGY_UNKNOWN_KIND: registered topology kind">;
+
 def Tessera_NeighborsTopologyCreateOp
-    : Tessera_NeighborsGenericOp<"neighbors.topology.create">;
+    : Op<Tessera_Dialect, "neighbors.topology.create", []> {
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       Tessera_NeighborsTopologyKindAttr:$kind);
+  let results = (outs Variadic<AnyType>:$outputs);
+  let hasVerifier = 1;
+}
 def Tessera_NeighborsHaloRegionOp
     : Tessera_NeighborsGenericOp<"neighbors.halo.region">;
 def Tessera_NeighborsHaloExchangeOp

@@ -105,24 +105,6 @@ TileMmaDescAttr mmaDescAttr(Operation *op) {
   return op->getAttrOfType<TileMmaDescAttr>("mma");
 }
 
-LogicalResult requireFragmentProducer(Operation *op, Value value,
-                                      llvm::StringRef expectedRole,
-                                      TileMmaDescAttr expectedDesc) {
-  if (!isa<FragmentType>(value.getType()))
-    return op->emitOpError() << "expects !tile.fragment operands";
-  Operation *producer = value.getDefiningOp();
-  if (!producer)
-    return op->emitOpError() << "fragment operand must have a Tile producer";
-  auto role = producer->getAttrOfType<StringAttr>("role");
-  auto desc = mmaDescAttr(producer);
-  if (!role || role.getValue() != expectedRole)
-    return op->emitOpError() << "expects a fragment with role \"" << expectedRole
-                             << "\"";
-  if (!desc || desc != expectedDesc)
-    return op->emitOpError() << "fragment descriptor must match tile.mma";
-  return success();
-}
-
 // W1.1 step 2 — the parameterized fragment, if this value carries one.
 // Null for a bare `!tile.fragment` (legacy) or a non-fragment.
 FragmentType typedFragment(Value v) {
@@ -963,69 +945,44 @@ LogicalResult WaitAsyncOp::verify() {
 }
 
 LogicalResult MMAOp::verify() {
-  // W1.1 step 2 — prefer the TYPE.
-  //
-  // If any data operand carries a parameterized fragment, the contract is read
-  // from the types and no producer is chased. That is what makes the canonical
-  // K-loop expressible: its accumulator is an `scf.for` iter-arg, so it has no
-  // defining op for the legacy path below to interrogate.
-  {
-    SmallVector<Value> typedData = dataOperands(getOperation());
-    if (llvm::any_of(typedData,
-                     [](Value v) { return (bool)typedFragment(v); }))
-      return verifyMMAFromTypes(getOperation(), typedData);
+  SmallVector<Value> data = dataOperands(getOperation());
+  const bool hasAnyFragment = llvm::any_of(data, [](Value value) {
+    return isa<FragmentType>(value.getType());
+  });
+  if (hasAnyFragment) {
+    // W1.1 step 5: there is no producer-chasing or bare-fragment contract any
+    // more. A cooperative-matrix value states its complete ABI in its type,
+    // including across block arguments and loop-carried accumulator edges.
+    for (auto [index, value] : llvm::enumerate(data))
+      if (auto fragment = dyn_cast<FragmentType>(value.getType());
+          fragment && fragment.isUnknown())
+        return emitOpError()
+               << "TILE_MMA_BARE_FRAGMENT_REMOVED: operand " << index
+               << " uses bare !tile.fragment; parameterize m/n/k, element and "
+                  "accumulator dtypes, role, layout, and family";
+    return verifyMMAFromTypes(getOperation(), data);
   }
 
-  // Preserve the legacy permissive form during migration. Only the typed
-  // fragment form is eligible for physical cooperative-matrix lowering.
-  bool hasFragment = llvm::any_of(getInputs(), [](Value v) {
-    return isa<FragmentType>(v.getType());
-  });
-  if (!hasFragment)
-    return success();
-  auto desc = mmaDescAttr(getOperation());
-  if (!desc)
-    return emitOpError("typed fragment form requires a #tile.mma_desc mma attribute");
-  bool isNVFP4 = desc.getAType() == "nvfp4" || desc.getAType() == "fp4_e2m1";
-  unsigned expectedInputs = isNVFP4 ? 5 : 3;
-  // Count DATA operands, not raw ones.
-  //
-  // `tile.mma` legitimately carries control operands alongside its data:
-  // `WarpSpecLegalityPass` REQUIRES a consumer mma that reads an async-staged
-  // tile to also read that producer's `!tile.async_token`
-  // (`WARPSPEC_MMA_NOT_TOKEN_SYNCED`), and `TileIRLoweringPass` duly emits
-  // A, B, and two tokens. Counting raw operands made that token edge look like
-  // a fourth data operand, so the typed fragment form and warp-spec token sync
-  // were mutually exclusive -- a producer could satisfy one or the other, never
-  // both. That, not neglect, is why no C++ producer emitted the typed form.
-  //
-  // The ROCm lowering already applied this rule via a file-local `dataOperands`
-  // helper; the verifier simply never learned it. The helper is now shared
-  // (`tessera::tile::dataOperands`), so both sides count the same way.
-  SmallVector<Value> data = dataOperands(getOperation());
-  if (data.size() != expectedInputs || getOutputs().size() != 1 ||
-      !isa<FragmentType>(getOutputs().front().getType()))
-    return emitOpError(isNVFP4
-        ? "typed NVFP4 fragment form expects A, B, accumulator, scale_a, scale_b -> !tile.fragment"
-        : "typed fragment form expects A, B, accumulator -> !tile.fragment");
-  if (failed(requireFragmentProducer(getOperation(), data[0], "a", desc)) ||
-      failed(requireFragmentProducer(getOperation(), data[1], "b", desc)))
+  // Historical tensor-valued producers are a distinct, explicitly verified
+  // value lane while W3 moves them to tile.matmul. They are not eligible for
+  // fragment lowering, but retaining a shape-checked lane avoids replacing one
+  // permissive compatibility path with a flag-day frontend break.
+  if ((data.size() != 2 && data.size() != 3) || getOutputs().size() != 1)
+    return emitOpError(
+        "TILE_MMA_VALUE_ARITY: tensor value form expects A, B, optional "
+        "accumulator, and exactly one result");
+  SmallVector<Value> productInputs{data[0], data[1]};
+  if (failed(verifyRank2Matmul(getOperation(), productInputs, getOutputs())))
     return failure();
-  Value accumulator = data[2];
-  if (!isa<FragmentType>(accumulator.getType()))
-    return emitOpError("accumulator must be a !tile.fragment");
-  Operation *accProducer = accumulator.getDefiningOp();
-  if (!accProducer || !mmaDescAttr(accProducer) || mmaDescAttr(accProducer) != desc)
-    return emitOpError("accumulator descriptor must match tile.mma");
-  auto role = accProducer->getAttrOfType<StringAttr>("role");
-  if (role && role.getValue() != "acc")
-    return emitOpError("accumulator fragment must have role acc");
-  if (isNVFP4 &&
-      (failed(requireFragmentProducer(getOperation(), data[3],
-                                      "scale_a", desc)) ||
-       failed(requireFragmentProducer(getOperation(), data[4],
-                                      "scale_b", desc))))
-    return failure();
+  if (data.size() == 3 && data[2].getType() != getOutputs().front().getType())
+    return emitOpError(
+        "TILE_MMA_VALUE_ACCUMULATOR: tensor accumulator type must equal the "
+        "result type");
+  if (llvm::any_of(data, [](Value value) {
+        return !isa<RankedTensorType>(value.getType());
+      }))
+    return emitOpError(
+        "TILE_MMA_VALUE_TYPE: non-fragment value form requires ranked tensors");
   return success();
 }
 
@@ -2530,6 +2487,26 @@ LogicalResult TCGen05MMAOp::verify() {
     return emitOpError("requires cta_group in [1, 4]");
   if (!descriptor || descriptor.getFamily() != "tcgen05")
     return emitOpError("requires a #tile.mma_desc with family=\"tcgen05\"");
+  FragmentType lhs = typedFragment(getLhs());
+  FragmentType rhs = typedFragment(getRhs());
+  if (!lhs || !rhs)
+    return emitOpError(
+        "TILE_TCGEN05_FRAGMENT_CONTRACT: lhs/rhs require parameterized "
+        "!tile.fragment values; the bare migration type is illegal");
+  if (lhs.getRole() != "a" || rhs.getRole() != "b")
+    return emitOpError(
+        "TILE_TCGEN05_FRAGMENT_CONTRACT: lhs/rhs fragment roles must be a/b");
+  if (lhs.getFamily() != "tcgen05" || rhs.getFamily() != "tcgen05")
+    return emitOpError(
+        "TILE_TCGEN05_FRAGMENT_CONTRACT: lhs/rhs family must be tcgen05");
+  if (lhs.getM() != rhs.getM() || lhs.getN() != rhs.getN() ||
+      lhs.getK() != rhs.getK() || lhs.getAcc() != rhs.getAcc())
+    return emitOpError(
+        "TILE_TCGEN05_FRAGMENT_CONTRACT: lhs/rhs shape and accumulator "
+        "contracts must agree");
+  if (failed(descriptorAgreesWithFragment(getOperation(), descriptor, lhs)) ||
+      failed(descriptorAgreesWithFragment(getOperation(), descriptor, rhs)))
+    return failure();
   return success();
 }
 

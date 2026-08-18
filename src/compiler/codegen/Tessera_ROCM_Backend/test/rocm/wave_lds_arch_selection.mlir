@@ -2,9 +2,9 @@
 // RUN: %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(rocm-wave-lds-pipeline,rocm-wave-lds-legality,lower-tile-to-rocm{arch=gfx942})' %s | FileCheck %s --check-prefix=CDNA
 
 module {
-  func.func @matrix_path(%a: f16, %b: f16) -> f16 {
-    %m = "tile.mma"(%a, %b) : (f16, f16) -> f16
-    return %m : f16
+  func.func @matrix_path(%a: tensor<16x16xf16>, %b: tensor<16x16xf16>) -> tensor<16x16xf16> {
+    %m = "tile.mma"(%a, %b) : (tensor<16x16xf16>, tensor<16x16xf16>) -> tensor<16x16xf16>
+    return %m : tensor<16x16xf16>
   }
 }
 

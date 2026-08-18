@@ -19,3 +19,4 @@ func.func @dpbf16ps_rejects_non_tile_operands(%v: vector<16xf32>) {
       -> !tessera_x86.tile
   return
 }
+// REQUIRES: tessera-x86-target-ir

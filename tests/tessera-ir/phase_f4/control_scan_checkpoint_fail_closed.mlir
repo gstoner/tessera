@@ -17,5 +17,5 @@ module {
   }
 }
 
-// CHECK: save control_scan requires residual_schema=v1, CFG/residual SHA-256
+// CHECK: save control region requires residual_schema=v1, CFG/residual SHA-256
 // CHECK-SAME: digests, and explicit checkpoint_indices

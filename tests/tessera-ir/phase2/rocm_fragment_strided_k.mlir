@@ -29,6 +29,9 @@
                       a = "f16", b = "f16", acc = "f32",
                       a_layout = "row_major", b_layout = "col_major",
                       k_blocks = 1>
+!fa = !tile.fragment<m = 16, n = 16, k = 16, elem = "f16", acc = "f32", role = "a", layout = "row_major", family = "wmma">
+!fb = !tile.fragment<m = 16, n = 16, k = 16, elem = "f16", acc = "f32", role = "b", layout = "col_major", family = "wmma">
+!fc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
 #layA = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
                      replica = [] : [] on [], offset = 0>
 #layB = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
@@ -61,14 +64,14 @@ func.func @row_major_b_gathers_at_stride_ld(
   %vb = tile.view %b, %r, %c {tile.layout = #layB, tile.memory = #memRow}
       : (memref<?xf16>, index, index) -> !tile.tile
   %fa = tile.fragment_pack %va {role = "a", mma = #mma}
-      : (!tile.tile) -> !tile.fragment
+      : (!tile.tile) -> !fa
   %fb = tile.fragment_pack %vb {role = "b", mma = #mma}
-      : (!tile.tile) -> !tile.fragment
-  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !tile.fragment
+      : (!tile.tile) -> !fb
+  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !fc
   %res = tile.mma %fa, %fb, %acc {mma = #mma}
-      : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
+      : (!fa, !fb, !fc) -> !fc
   %o = tile.fragment_unpack %res {role = "acc", mma = #mma, tile.layout = #layA}
-      : (!tile.fragment) -> !tile.tile
+      : (!fc) -> !tile.tile
   tile.store %o, %out, %r, %c {tile.layout = #layA, tile.memory = #memRow}
       : !tile.tile, memref<?xf32>, index, index
   return
@@ -80,6 +83,9 @@ func.func @row_major_b_gathers_at_stride_ld(
                       a = "f16", b = "f16", acc = "f32",
                       a_layout = "row_major", b_layout = "col_major",
                       k_blocks = 1>
+!fa = !tile.fragment<m = 16, n = 16, k = 16, elem = "f16", acc = "f32", role = "a", layout = "row_major", family = "wmma">
+!fb = !tile.fragment<m = 16, n = 16, k = 16, elem = "f16", acc = "f32", role = "b", layout = "col_major", family = "wmma">
+!fc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
 #layA = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
                      replica = [] : [] on [], offset = 0>
 #layB = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"],
@@ -118,14 +124,14 @@ func.func @ragged_row_major_b_guards_every_element(
       {tile.layout = #layB, tile.memory = #memRow}
       : (memref<?xf16>, index, index, index, index) -> !tile.tile
   %fa = tile.fragment_pack %va {role = "a", mma = #mma}
-      : (!tile.tile) -> !tile.fragment
+      : (!tile.tile) -> !fa
   %fb = tile.fragment_pack %vb {role = "b", mma = #mma}
-      : (!tile.tile) -> !tile.fragment
-  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !tile.fragment
+      : (!tile.tile) -> !fb
+  %acc = tile.fragment_zero {role = "acc", mma = #mma} : !fc
   %res = tile.mma %fa, %fb, %acc {mma = #mma}
-      : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
+      : (!fa, !fb, !fc) -> !fc
   %o = tile.fragment_unpack %res {role = "acc", mma = #mma, tile.layout = #layA}
-      : (!tile.fragment) -> !tile.tile
+      : (!fc) -> !tile.tile
   tile.store %o, %out, %r, %c {tile.layout = #layA, tile.memory = #memRow}
       : !tile.tile, memref<?xf32>, index, index
   return

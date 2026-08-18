@@ -363,29 +363,68 @@ GraphDataflowAnalysis::computeActivity(ValueRange roots) const {
   ActiveOpSet active;
   if (!impl->valid)
     return active;
-  SmallVector<Value, 16> worklist(roots.begin(), roots.end());
   llvm::SmallDenseSet<Value, 32> visited;
-  while (!worklist.empty()) {
-    Value value = worklist.pop_back_val();
-    if (!visited.insert(value).second)
-      continue;
-    Operation *producer = value.getDefiningOp();
-    if (!producer || !active.insert(producer).second)
-      continue;
-    if (producer->getName().getStringRef() == "tessera.stop_gradient")
-      continue;
-    // Activity inside an unknown region is represented by the parent op, but
-    // the parent's explicit SSA operands (bounds, predicates, iter-inits) are
-    // and implicit captures are still required to replay the structured
-    // operation. Do not drop their producer cone merely because internal block
-    // activity is not yet known.
-    worklist.append(producer->operand_begin(), producer->operand_end());
-    for (Region &region : producer->getRegions()) {
-      llvm::SetVector<Value> captures;
-      getUsedValuesDefinedAbove(region, region, captures);
-      worklist.append(captures.begin(), captures.end());
+  auto addValueCone = [&](ValueRange seeds) {
+    SmallVector<Value, 16> worklist(seeds.begin(), seeds.end());
+    while (!worklist.empty()) {
+      Value value = worklist.pop_back_val();
+      if (!visited.insert(value).second)
+        continue;
+      Operation *producer = value.getDefiningOp();
+      if (!producer || !active.insert(producer).second)
+        continue;
+      if (producer->getName().getStringRef() == "tessera.stop_gradient")
+        continue;
+      // Activity inside an unknown region is represented by the parent op,
+      // but the parent's explicit SSA operands and implicit captures remain
+      // required to replay the structured operation.
+      worklist.append(producer->operand_begin(), producer->operand_end());
+      for (Region &region : producer->getRegions()) {
+        llvm::SetVector<Value> captures;
+        getUsedValuesDefinedAbove(region, region, captures);
+        worklist.append(captures.begin(), captures.end());
+      }
     }
-  }
+  };
+  addValueCone(roots);
+
+  // SSA-only activity misses state written by an operation with no result and
+  // read by an active operation later. Close that hole with a backward memory
+  // fixed point over the whole function. Within one block only preceding
+  // writes can influence the sink. Across blocks/regions reachability is not
+  // yet uniquely ordered, so fail closed and retain every dependent write.
+  SmallVector<Operation *, 64> operations;
+  impl->function.walk([&](Operation *op) {
+    if (op != impl->function.getOperation())
+      operations.push_back(op);
+  });
+  bool changed;
+  do {
+    changed = false;
+    SmallVector<Operation *, 32> sinks(active.begin(), active.end());
+    for (Operation *candidate : operations) {
+      if (active.contains(candidate))
+        continue;
+      MemorySummary summary = summarizeMemory(candidate);
+      bool mayWrite = summary.top || llvm::any_of(
+          summary.accesses, [](const MemoryAccess &access) {
+            return access.write;
+          });
+      if (!mayWrite)
+        continue;
+      bool required = llvm::any_of(sinks, [&](Operation *sink) {
+        if (candidate->getBlock() == sink->getBlock() &&
+            !candidate->isBeforeInBlock(sink))
+          return false;
+        return hasMemoryDependence(candidate, sink);
+      });
+      if (!required)
+        continue;
+      active.insert(candidate);
+      addValueCone(candidate->getOperands());
+      changed = true;
+    }
+  } while (changed);
   return active;
 }
 
@@ -421,6 +460,9 @@ public:
     Builder builder(&getContext());
 
     function.walk([&](Operation *op) {
+      op->setAttr("tessera.dataflow.activity",
+                  builder.getStringAttr(active.contains(op) ? "active"
+                                                            : "inactive"));
       if (op->getNumResults() == 0)
         return;
       SmallVector<Attribute, 4> shapes;
@@ -460,9 +502,6 @@ public:
       op->setAttr("tessera.dataflow.aliases_operands",
                   builder.getArrayAttr(aliasesOperands));
       op->setAttr("tessera.dataflow.live", builder.getArrayAttr(live));
-      op->setAttr("tessera.dataflow.activity",
-                  builder.getStringAttr(active.contains(op) ? "active"
-                                                            : "inactive"));
     });
     function->setAttr("tessera.dataflow.schema_version",
                       builder.getI64IntegerAttr(1));

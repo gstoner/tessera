@@ -29,20 +29,21 @@
 // WARP-SAME: space = "smem"
 // WARP: %[[TMEM:.*]] = tile.alloc
 // WARP-SAME: space = "tmem"
-// WARP: %[[PROD:.*]]:4 = "schedule.warp"
+// WARP: %[[PROD:.*]]:4 = "schedule.warp"() <{role = "producer"}>
 // WARP:   %[[PSTATE:.*]] = tile.pipeline_init
 // WARP-SAME: phase = 1
 // WARP:   tile.async_copy
 // WARP-SAME: -> (tensor<64x64xbf16>, !tile.async_token)
 // WARP:   tile.pipeline_advance %[[PSTATE]]
-// WARP: role = "producer"
+// WARP:   schedule.yield
+// WARP: }) {tile.pipeline
 // WARP-SAME: -> (tensor<64x64xbf16>, tensor<64x64xbf16>, !tile.async_token, !tile.async_token)
+// WARP: "schedule.warp"() <{role = "consumer"}>
 // WARP: %[[CSTATE:.*]] = tile.pipeline_init
 // WARP-SAME: phase = 0
 // WARP: tile.mma %[[PROD]]#0, %[[PROD]]#1, %[[PROD]]#2, %[[PROD]]#3, %[[TMEM]]
 // WARP-SAME: (tensor<64x64xbf16>, tensor<64x64xbf16>, !tile.async_token, !tile.async_token, !tile.buffer)
 // WARP: tile.pipeline_advance %[[CSTATE]]
-// WARP: role = "consumer"
 // WARP: tile.cta_sync
 // WARP-NEXT: tile.dealloc %[[SMEMA]]
 // WARP-NEXT: tile.dealloc %[[SMEMB]]

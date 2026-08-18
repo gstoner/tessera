@@ -15,3 +15,4 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
 // CHECK-NOT: schedule.
 // CHECK-NOT: tile.matmul_kernel
 // CHECK: call @tessera_x86_avx512_gemm_f32
+// REQUIRES: tessera-x86-target-ir

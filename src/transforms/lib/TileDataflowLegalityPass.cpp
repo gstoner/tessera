@@ -41,6 +41,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "TileValueProvenance.h"
+#include "TileRelationalLegality.h"
 
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Transforms/Passes.h"
@@ -73,6 +74,10 @@ struct TileDataflowLegality
     : public PassWrapper<TileDataflowLegality, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileDataflowLegality)
 
+  explicit TileDataflowLegality(
+      tessera::TileRelationalStage stage = tessera::TileRelationalStage::All)
+      : stage(stage) {}
+
   StringRef getArgument() const override {
     return "tessera-tile-dataflow-legality";
   }
@@ -84,6 +89,7 @@ struct TileDataflowLegality
   }
 
   bool anyError = false;
+  tessera::TileRelationalStage stage;
 
   InFlightDiagnostic err(Operation *op, const Twine &message) {
     anyError = true;
@@ -288,8 +294,22 @@ struct TileDataflowLegality
   }
 
   void runOnOperation() override {
+    ModuleOp module = getOperation();
+    bool relationalFailure = false;
+    relationalFailure |= failed(tessera::verifyTilePipelineRelations(module));
+    relationalFailure |=
+        failed(tessera::verifyWarpSpecializationRelations(module));
+    relationalFailure |=
+        failed(tessera::verifyTileBarrierReuseRelations(module));
+    if (relationalFailure) {
+      signalPassFailure();
+      return;
+    }
+    if (stage == tessera::TileRelationalStage::PreLowering)
+      return;
+
     anyError = false;
-    getOperation().walk([&](func::FuncOp func) {
+    module.walk([&](func::FuncOp func) {
       func.walk([&](Operation *op) {
         if (auto wait = dyn_cast<tessera::tile::MBarrierWaitOp>(op))
           checkWaitTokenPairing(wait);
@@ -314,5 +334,10 @@ struct TileDataflowLegality
 namespace tessera {
 std::unique_ptr<mlir::Pass> createTileDataflowLegalityPass() {
   return std::make_unique<TileDataflowLegality>();
+}
+
+std::unique_ptr<mlir::Pass>
+createTileDataflowLegalityPass(TileRelationalStage stage) {
+  return std::make_unique<TileDataflowLegality>(stage);
 }
 } // namespace tessera

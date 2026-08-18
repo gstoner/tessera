@@ -12,9 +12,10 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, replace
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 from .graph_ir import IROp
+from .effects import Effect, registered_op_effect
 from .presburger import PresburgerSystem
 
 
@@ -27,6 +28,11 @@ class StructuredOperation:
     op_name: str
     operands: tuple[str, ...]
     results: tuple[str, ...]
+    effect: str
+    stochastic_identity: str | None = None
+    aliasing: str | None = None
+    mutation_operands: tuple[str, ...] = ()
+    ordered_collective: bool = False
 
 
 @dataclass(frozen=True)
@@ -45,6 +51,25 @@ class StructuredEdge:
     kind: str
     values: tuple[str, ...] = ()
     condition: str | None = None
+
+
+@dataclass(frozen=True)
+class CFGAnalysis:
+    """Deterministic structural classification for imported source CFGs.
+
+    An SCC is irreducible when control can enter two or more distinct blocks
+    in that component from outside it.  Cyclic graphs require an explicit
+    execution bound before the C++ state-machine lowering may execute them.
+    """
+
+    classification: Literal["acyclic", "reducible", "irreducible"]
+    strongly_connected_components: tuple[tuple[str, ...], ...]
+    cyclic_components: tuple[tuple[str, ...], ...]
+    irreducible_components: tuple[tuple[str, ...], ...]
+
+    @property
+    def requires_bounded_state_machine(self) -> bool:
+        return bool(self.cyclic_components)
 
 
 @dataclass(frozen=True)
@@ -125,6 +150,89 @@ class StructuredCFG:
         payload = json.dumps(self.as_dict(), sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(payload.encode()).hexdigest()
 
+    def analyze(self) -> CFGAnalysis:
+        """Classify reducibility without assuming a privileged loop header."""
+
+        return analyze_structured_cfg(self)
+
+
+def analyze_structured_cfg(cfg: StructuredCFG) -> CFGAnalysis:
+    """Return stable SCC and irreducibility facts for a source CFG carrier."""
+
+    successors: dict[str, list[str]] = {
+        block.block_id: [] for block in cfg.blocks
+    }
+    for edge in cfg.edges:
+        successors[edge.source].append(edge.target)
+    for targets in successors.values():
+        targets.sort()
+
+    next_index = 0
+    indices: dict[str, int] = {}
+    lowlinks: dict[str, int] = {}
+    stack: list[str] = []
+    on_stack: set[str] = set()
+    components: list[tuple[str, ...]] = []
+
+    def visit(block_id: str) -> None:
+        nonlocal next_index
+        indices[block_id] = next_index
+        lowlinks[block_id] = next_index
+        next_index += 1
+        stack.append(block_id)
+        on_stack.add(block_id)
+        for target in successors[block_id]:
+            if target not in indices:
+                visit(target)
+                lowlinks[block_id] = min(lowlinks[block_id], lowlinks[target])
+            elif target in on_stack:
+                lowlinks[block_id] = min(lowlinks[block_id], indices[target])
+        if lowlinks[block_id] != indices[block_id]:
+            return
+        component: list[str] = []
+        while True:
+            member = stack.pop()
+            on_stack.remove(member)
+            component.append(member)
+            if member == block_id:
+                break
+        components.append(tuple(sorted(component)))
+
+    for block_id in sorted(successors):
+        if block_id not in indices:
+            visit(block_id)
+    components.sort(key=lambda component: component[0])
+
+    self_edges = {(edge.source, edge.target) for edge in cfg.edges}
+    cyclic = tuple(
+        component
+        for component in components
+        if len(component) > 1 or (component[0], component[0]) in self_edges
+    )
+    irreducible: list[tuple[str, ...]] = []
+    for component in cyclic:
+        members = set(component)
+        entry_blocks = {
+            edge.target
+            for edge in cfg.edges
+            if edge.source not in members and edge.target in members
+        }
+        if len(entry_blocks) > 1:
+            irreducible.append(component)
+    classification: Literal["acyclic", "reducible", "irreducible"]
+    if irreducible:
+        classification = "irreducible"
+    elif cyclic:
+        classification = "reducible"
+    else:
+        classification = "acyclic"
+    return CFGAnalysis(
+        classification=classification,
+        strongly_connected_components=tuple(components),
+        cyclic_components=cyclic,
+        irreducible_components=tuple(irreducible),
+    )
+
 
 class _CFGBuilder:
     def __init__(self, system: PresburgerSystem | None) -> None:
@@ -145,11 +253,28 @@ class _CFGBuilder:
 
     def append(self, block_id: str, op: IROp) -> None:
         operations: list[StructuredOperation] = self._blocks[block_id]["operations"]
+        effect = registered_op_effect(op.op_name, op.kwargs)
+        stochastic_identity = op.kwargs.get(
+            "tessera.stochastic_identity", op.kwargs.get("rng_identity")
+        )
+        aliasing = op.kwargs.get("tessera.aliasing", op.kwargs.get("aliasing"))
+        mutation_operands = (
+            tuple(op.operands)
+            if effect in {Effect.state, Effect.memory, Effect.io, Effect.top}
+            else ()
+        )
         operations.append(StructuredOperation(
             operation_id=f"{block_id}.op{len(operations)}",
             op_name=op.op_name,
             operands=tuple(op.operands),
             results=tuple(f"%{name}" for name in op.result_names),
+            effect=effect.name,
+            stochastic_identity=(
+                str(stochastic_identity) if stochastic_identity is not None else None
+            ),
+            aliasing=str(aliasing) if aliasing is not None else None,
+            mutation_operands=mutation_operands,
+            ordered_collective=effect == Effect.collective,
         ))
 
     def terminate(self, block_id: str, terminator: str) -> None:
@@ -195,8 +320,20 @@ class _CFGBuilder:
         else_exit = self.lower_sequence(tuple(kwargs["_else_body"]), else_block)
         self.terminate(then_exit, "br")
         self.terminate(else_exit, "br")
-        self.edge(then_exit, merge, "yield", values=(f"%{kwargs['_then_ssa']}",))
-        self.edge(else_exit, merge, "yield", values=(f"%{kwargs['_else_ssa']}",))
+        then_ssas = kwargs.get("_then_ssas", (kwargs.get("_then_ssa"),))
+        else_ssas = kwargs.get("_else_ssas", (kwargs.get("_else_ssa"),))
+        self.edge(
+            then_exit,
+            merge,
+            "yield",
+            values=tuple(f"%{value}" for value in then_ssas),
+        )
+        self.edge(
+            else_exit,
+            merge,
+            "yield",
+            values=tuple(f"%{value}" for value in else_ssas),
+        )
         return merge
 
     def _lower_counted(self, op: IROp, current: str) -> str:
@@ -286,9 +423,11 @@ def recover_structured_cfg(
 
 __all__ = [
     "STRUCTURED_CFG_SCHEMA",
+    "CFGAnalysis",
     "StructuredBlock",
     "StructuredCFG",
     "StructuredEdge",
     "StructuredOperation",
+    "analyze_structured_cfg",
     "recover_structured_cfg",
 ]

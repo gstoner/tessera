@@ -20,3 +20,4 @@ module attributes {tessera.target = "x86", tessera.arch = "zen5-avx512"} {
 // CHECK: call @tessera_x86_avx512_spectral_filter_bwd_c64
 // CHECK-NOT: tile.spectral_backward_kernel
 // CHECK-NOT: schedule.spectral_backward
+// REQUIRES: tessera-x86-target-ir

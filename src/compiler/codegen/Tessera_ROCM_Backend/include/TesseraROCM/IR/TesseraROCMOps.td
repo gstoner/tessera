@@ -334,7 +334,7 @@ def ROCM_SpectralBackwardOp : TesseraROCM_Op<"spectral_backward"> {
   }];
   let arguments = (ins StrAttr:$name,
                        StrAttr:$artifact_hash,
-                       StrAttr:$kind,
+                       ROCM_SpectralBackwardKindAttr:$kind,
                        DefaultValuedAttr<I64Attr, "0">:$elements,
                        DefaultValuedAttr<I64Attr, "0">:$batch,
                        DefaultValuedAttr<I64Attr, "0">:$cotangent_length,
@@ -377,7 +377,7 @@ def ROCM_ActivationKernelOp : TesseraROCM_Op<"activation"> {
     a runtime `index` arg; `dtype` is the f16/bf16/f32 storage.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"gelu\"">:$kind,
+                       DefaultValuedAttr<ROCM_ActivationKindAttr, "\"gelu\"">:$kind,
                        DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
@@ -923,7 +923,7 @@ def ROCM_NormKernelOp : TesseraROCM_Op<"norm"> {
     represented by the forward operand list are returned.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"rmsnorm\"">:$kind,
+                       DefaultValuedAttr<ROCM_NormKindAttr, "\"rmsnorm\"">:$kind,
                        DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$backward);
   let assemblyFormat = "attr-dict";
@@ -939,7 +939,7 @@ def ROCM_Int4PackKernelOp : TesseraROCM_Op<"int4_pack"> {
     The logical element count is a runtime kernel argument, so one generated
     binary covers static, ragged, and odd-sized tensors.
   }];
-  let arguments = (ins StrAttr:$name, StrAttr:$kind);
+  let arguments = (ins StrAttr:$name, ROCM_Int4PackKindAttr:$kind);
   let assemblyFormat = "attr-dict";
 }
 
@@ -962,7 +962,7 @@ def ROCM_ReduceKernelOp : TesseraROCM_Op<"reduce"> {
     `dtype` is the f16/bf16/f32 storage. Validated vs numpy on gfx1151.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"sum\"">:$kind,
+                       DefaultValuedAttr<ROCM_ReduceKindAttr, "\"sum\"">:$kind,
                        DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
@@ -1015,7 +1015,7 @@ def ROCM_ArgReduceKernelOp : TesseraROCM_Op<"argreduce"> {
     gfx1151.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"argmax\"">:$kind,
+                       DefaultValuedAttr<ROCM_ArgReduceKindAttr, "\"argmax\"">:$kind,
                        DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
@@ -1038,7 +1038,7 @@ def ROCM_ScanKernelOp : TesseraROCM_Op<"scan"> {
     shape). `M`/`K` are runtime `index` args. Validated vs numpy on gfx1151.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"cumsum\"">:$kind,
+                       DefaultValuedAttr<ROCM_ScanKindAttr, "\"cumsum\"">:$kind,
                        DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
@@ -1061,7 +1061,7 @@ def ROCM_UnaryKernelOp : TesseraROCM_Op<"unary"> {
     Validated vs numpy on gfx1151.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"exp\"">:$kind,
+                       DefaultValuedAttr<ROCM_UnaryKindAttr, "\"exp\"">:$kind,
                        DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
@@ -1083,7 +1083,7 @@ def ROCM_BinaryKernelOp : TesseraROCM_Op<"binary"> {
     Validated vs numpy on gfx1151.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"sub\"">:$kind,
+                       DefaultValuedAttr<ROCM_BinaryKindAttr, "\"sub\"">:$kind,
                        DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
@@ -1106,7 +1106,7 @@ def ROCM_CompareKernelOp : TesseraROCM_Op<"compare"> {
     arg. Validated vs numpy on gfx1151.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"eq\"">:$kind,
+                       DefaultValuedAttr<ROCM_CompareKindAttr, "\"eq\"">:$kind,
                        DefaultValuedAttr<ROCM_NumericDTypeAttr, "\"f32\"">:$dtype);
   let assemblyFormat = "attr-dict";
 }
@@ -1128,7 +1128,7 @@ def ROCM_LogicalKernelOp : TesseraROCM_Op<"logical"> {
     on gfx1151.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"and\"">:$kind);
+                       DefaultValuedAttr<ROCM_LogicalKindAttr, "\"and\"">:$kind);
   let assemblyFormat = "attr-dict";
 }
 
@@ -1148,7 +1148,7 @@ def ROCM_BitwiseKernelOp : TesseraROCM_Op<"bitwise"> {
     a runtime `index` arg. Validated vs numpy on gfx1151.
   }];
   let arguments = (ins StrAttr:$name,
-                       DefaultValuedAttr<StrAttr, "\"and\"">:$kind);
+                       DefaultValuedAttr<ROCM_BitwiseKindAttr, "\"and\"">:$kind);
   let assemblyFormat = "attr-dict";
 }
 

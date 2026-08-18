@@ -8,6 +8,7 @@ from tessera.compiler.presburger import (
     PresburgerSystem,
     attach_presburger_system,
 )
+from tessera.compiler.graph_ir import IROp
 from tessera.compiler.residual_evaluator import (
     build_region_residual_abi,
     capture_treeverse_forward,
@@ -15,6 +16,12 @@ from tessera.compiler.residual_evaluator import (
     treeverse_candidates,
 )
 from tessera.compiler.trace import to_graph_ir_module, trace
+from tessera.compiler.structured_cfg import (
+    StructuredBlock,
+    StructuredCFG,
+    StructuredEdge,
+    recover_structured_cfg,
+)
 
 
 def _traced_cond_module():
@@ -49,6 +56,119 @@ def test_tracer_recovers_explicit_multiblock_cfg_without_ast_markers() -> None:
     result_name = function.return_values[0].lstrip("%")
     assert any(block.arguments == (result_name,) for block in cfg.blocks)
     assert function.fn_attrs["tessera.structured_cfg.digest"] == f'"{cfg.digest}"'
+
+
+def test_tracer_recovers_variadic_branch_state_without_ast_reexecution() -> None:
+    def program(flag, x, y):
+        return ts.control.cond(
+            flag,
+            lambda: (ts.ops.tanh(x), ts.ops.relu(y)),
+            lambda: (ts.ops.relu(x), ts.ops.tanh(y)),
+        )
+
+    traced = trace(
+        program,
+        np.ones((1,), dtype=np.float32),
+        np.ones((4,), dtype=np.float32),
+        np.ones((4,), dtype=np.float32),
+    )
+    function = to_graph_ir_module(traced, name="variadic_cond").functions[0]
+    cfg = function.structured_cfg
+    merge = next(block for block in cfg.blocks if block.block_id.endswith("if_merge"))
+    yields = [edge for edge in cfg.edges if edge.target == merge.block_id]
+
+    assert len(function.return_values) == 2
+    assert len(merge.arguments) == 2
+    assert len(yields) == 2
+    assert all(len(edge.values) == 2 for edge in yields)
+    assert function.fn_attrs["tessera.structured_cfg.digest"] == f'"{cfg.digest}"'
+
+
+def test_cfg_digest_carries_effect_alias_mutation_and_stochastic_identity() -> None:
+    stateful = IROp(
+        result="next_cache",
+        op_name="tessera.kv_cache.append",
+        operands=["%cache", "%key", "%value"],
+        operand_types=["!tessera.kv_cache", "tensor<4xf32>", "tensor<4xf32>"],
+        result_type="!tessera.kv_cache",
+        kwargs={"tessera.aliasing": "operand_0"},
+    )
+    random = IROp(
+        result="sample",
+        op_name="tessera.rng_philox_uniform",
+        operands=["%key"],
+        operand_types=["tensor<2xi64>"],
+        result_type="tensor<4xf32>",
+        kwargs={"tessera.stochastic_identity": "philox:key0:counter0"},
+    )
+
+    cfg = recover_structured_cfg((stateful, random))
+    operations = [operation for block in cfg.blocks for operation in block.operations]
+
+    assert operations[0].effect == "state"
+    assert operations[0].aliasing == "operand_0"
+    assert operations[0].mutation_operands == ("%cache", "%key", "%value")
+    # Keyed/counter-based Philox is replayable and therefore pure.  Its
+    # stochastic identity remains an independent scheduling/AD constraint.
+    assert operations[1].effect == "pure"
+    assert operations[1].stochastic_identity == "philox:key0:counter0"
+
+
+def test_source_cfg_analysis_detects_a_true_two_entry_irreducible_scc() -> None:
+    block_ids = ("entry", "left", "right", "exit")
+    cfg = StructuredCFG(
+        entry_block="entry",
+        exit_block="exit",
+        blocks=tuple(
+            StructuredBlock(block_id, (), (), "branch")
+            for block_id in block_ids
+        ),
+        edges=(
+            StructuredEdge("entry", "left", "true"),
+            StructuredEdge("entry", "right", "false"),
+            StructuredEdge("left", "right", "backedge"),
+            StructuredEdge("right", "left", "backedge"),
+            StructuredEdge("right", "exit", "exit"),
+        ),
+    )
+
+    analysis = cfg.analyze()
+
+    assert analysis.classification == "irreducible"
+    assert analysis.cyclic_components == (("left", "right"),)
+    assert analysis.irreducible_components == (("left", "right"),)
+    assert analysis.requires_bounded_state_machine
+
+
+def test_source_cfg_analysis_distinguishes_reducible_and_acyclic_graphs() -> None:
+    reducible = StructuredCFG(
+        entry_block="entry",
+        exit_block="exit",
+        blocks=tuple(
+            StructuredBlock(block_id, (), (), "branch")
+            for block_id in ("entry", "header", "body", "exit")
+        ),
+        edges=(
+            StructuredEdge("entry", "header", "enter"),
+            StructuredEdge("header", "body", "body"),
+            StructuredEdge("body", "header", "backedge"),
+            StructuredEdge("header", "exit", "exit"),
+        ),
+    )
+    acyclic = StructuredCFG(
+        entry_block="entry",
+        exit_block="exit",
+        blocks=(
+            StructuredBlock("entry", (), (), "branch"),
+            StructuredBlock("exit", (), (), "return"),
+        ),
+        edges=(StructuredEdge("entry", "exit", "return"),),
+    )
+
+    assert reducible.analyze().classification == "reducible"
+    assert reducible.analyze().requires_bounded_state_machine
+    assert acyclic.analyze().classification == "acyclic"
+    assert not acyclic.analyze().requires_bounded_state_machine
 
 
 def test_typed_presburger_system_propagates_through_every_region_block() -> None:

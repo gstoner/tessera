@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-10
+last_updated: 2026-08-18
 audit_role: plan
 plan_state: landing
 ---
@@ -134,10 +134,11 @@ unbounded family checklist:
    independent performance evidence.
 3. **AD-REGION-1 — bounded core landed.** Region activity,
    `RegionAdjointInterface`, and compiler-owned tangent construction now execute
-   single-block `scf.if`, positive-step `scf.for`, and canonical bounded
-   `scf.while`. Primal and tangent state share one control path. General
-   multi-block regions, `scan`, and effectful/stochastic region products remain
-   fail-closed.
+   `scf.if`, positive-step `scf.for`, canonical bounded `scf.while`, lowered
+   `control_scan`, and bounded pure reducible/irreducible native CFG state
+   machines. Primal and tangent state share one control path. Saved dynamic CFG
+   slots, effectful/stochastic bodies, and unsupported nested regions remain
+   fail-closed pending explicit contracts.
 4. **AD-TREEVERSE-1.** Turn measured counted-region candidates into an
    executable checkpoint/replay schedule and report actual backward work plus
    retained bytes.
@@ -407,11 +408,22 @@ lit fixture checks the backward signature + body, no Python needed.
   returns one cotangent per input (zero-splat for inputs off the gradient path,
   so the ABI is total for uniform Phase 4 buffer binding).
 - **Residual policy defaults to RECOMPUTE_ALL.** SAVE `control_scan` products
-  now return and consume a compact interior-state tape; `scf.if` and canonical
-  bounded `scf.while` similarly carry the taken predicate and executed trip
-  count. Scan-form HYBRID now retains only selected checkpoints and performs
-  bounded replay from the nearest predecessor; generic multi-state HYBRID
-  remains fail-closed. The
+  return and consume a compact interior-state tape. SAVE `scf.if` products now
+  carry the taken predicate and branch-local static intermediates, which replace
+  recomputed values in the selected pullback. Canonical bounded SAVE
+  `scf.while` carries the trip count plus one predecessor-state tape per
+  differentiable state; counted-loop tapes support bounded-dynamic tensor
+  extents and retain every replay-relevant scalar/tensor slot in mixed-state
+  loops while producing cotangents only for differentiable values.
+  Bounded pure reducible and irreducible native CFGs lower to a typed
+  program-counter state machine; residual tapes retain PC/done/integer state at
+  each checkpoint, while reverse replay supplies typed zero cotangents for
+  those non-differentiable slots and preserves exact state indices. Nested
+  canonical pure structured bodies are admitted. Saved dynamic CFG slots,
+  effects, and unsupported nested regions remain fail closed. Dynamic branch
+  residuals use initialized zero-extent inactive sentinels, and scan/while
+  HYBRID retains selected checkpoints and performs bounded replay from the
+  nearest predecessor. The
   recompute default is not a toy choice:
   the shipped ROCm gfx1151 flash-attention backward takes `(dO, Q, K, V)` and
   **recomputes** the softmax rather than saving the logsumexp `L` (see §9). A

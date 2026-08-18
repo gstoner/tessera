@@ -234,22 +234,28 @@ def test_paired_comparison_survives_absolute_clock_drift():
 def test_production_promotions_are_exact_device_shape_and_domain(tmp_path):
     ledger = tmp_path / "ledger.json"
     ledger.write_text(json.dumps(_strict_payload()), encoding="utf-8")
+    # Evidence expiry is part of the contract under test. Pin this test inside
+    # the fixture's validity interval instead of coupling it to wall time.
+    now = datetime(2026, 8, 1, tzinfo=timezone.utc)
     assert production_route_for(
         op="softmax", shape="128x257", dtype="f32", device="apple7",
-        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT) == "mpsgraph"
+        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT,
+        now=now) == "mpsgraph"
     assert production_route_for(
         op="softmax", shape="128x257", dtype="f32", device="apple8",
-        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT) == "msl"
+        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT,
+        now=now) == "msl"
     assert production_route_for(
         op="softmax", shape="128x257", dtype="f16", device="apple7",
-        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT) == "msl"
+        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT,
+        now=now) == "msl"
     assert production_route_for(
         op="softmax", shape="128x257", dtype="f32", device="apple7",
         timing_domain="device", incumbent_route="msl", ledger_path=ledger,
-        context=_CONTEXT) == "msl"
+        context=_CONTEXT, now=now) == "msl"
     decision = production_route_decision(
         op="softmax", shape="128x257", dtype="f32", device="apple7",
-        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT)
+        incumbent_route="msl", ledger_path=ledger, context=_CONTEXT, now=now)
     assert decision.selected_from_ledger is True
     assert decision.citation == f"{ledger}#decision[0]"
     assert decision.rejected_evidence == ()

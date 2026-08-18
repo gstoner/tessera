@@ -1,5 +1,9 @@
 // RUN: not %trop --allow-unregistered-dialect --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1151})' %s 2>&1 | FileCheck %s
 
+!frag_a = !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "a", layout = "row_major", family = "auto">
+!frag_b = !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "b", layout = "col_major", family = "auto">
+!frag_acc = !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
+
 module {
   gpu.module @fragment_mod {
     gpu.func @unsupported_fp8(%a_mem: memref<256xf8E4M3FN>,
@@ -16,21 +20,24 @@ module {
       %a = tile.fragment_pack %a_tile {
         role = "a",
         mma = #tile.mma_desc<family = "auto", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-      } : (!tile.tile) -> !tile.fragment
+      } : (!tile.tile) -> !frag_a
       %b = tile.fragment_pack %b_tile {
         role = "b",
         mma = #tile.mma_desc<family = "auto", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-      } : (!tile.tile) -> !tile.fragment
+      } : (!tile.tile) -> !frag_b
       %c = tile.fragment_zero {
         role = "acc",
         mma = #tile.mma_desc<family = "auto", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-      } : !tile.fragment
+      } : !frag_acc
       %d = tile.mma %a, %b, %c {
         mma = #tile.mma_desc<family = "auto", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-      } : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
+      } : (!frag_a, !frag_b, !frag_acc) -> !frag_acc
       gpu.return
     }
   }
 }
 
-// CHECK: ROCM_TILE_UNSUPPORTED_DTYPE: gfx1151 RDNA 3.5 WMMA has no FP8/BF8 matrix form
+// The typed fragment is rejected at its first physical boundary.  Requiring
+// this architecture-keyed diagnostic ensures an unsupported FP8 fragment can
+// never survive to MMA lowering as an unresolved Tile value.
+// CHECK: ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR: no exact gfx1151 fragment layout accepts the typed fragment

@@ -111,4 +111,5 @@ def test_lion_plugin_declares_non_reexecuting_state_lineage_policy() -> None:
     assert declaration.target_consumers == {
         "x86": "x86.avx512_lion_backward",
         "rocm": "rocm.gfx1151_lion_backward",
+        "nvidia_sm120": "nvidia.sm120_lion_backward",
     }

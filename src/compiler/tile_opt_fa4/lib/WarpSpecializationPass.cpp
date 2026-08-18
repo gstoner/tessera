@@ -16,12 +16,12 @@
 //
 // Output IR structure:
 //
-//   schedule.warp {tile.warp_role = "producer", tile.pipeline = ...} {
+//   schedule.warp role="producer" {tile.pipeline = ...} {
 //     %ps = tile.pipeline_init {role = "producer", ...}
 //     %tok = tile.async_copy(...)
 //     %ps' = tile.pipeline_advance %ps, %tok
 //   }
-//   schedule.warp {tile.warp_role = "consumer", tile.pipeline = ...} {
+//   schedule.warp role="consumer" {tile.pipeline = ...} {
 //     %ps = tile.pipeline_init {role = "consumer", ...}
 //     tile.mma(...)
 //     %ps' = tile.pipeline_advance %ps, ...
@@ -98,12 +98,12 @@ static bool isConsumerOp(Operation *op) {
   return name.starts_with("tessera_attn.") || name == "tile.mma";
 }
 
-// Warp-role and logical pipeline identity remain scheduling attributes. Pipeline
-// state itself is exclusively SSA: tile.pipeline_init/advance carry ownership
-// and ordering, so no annotation-only #tile.pipeline_state is emitted.
+// Logical pipeline identity remains an extensible scheduling attribute.  Warp
+// role is the required property of the registered schedule.warp op; do not
+// duplicate it as the legacy tile.warp_role ancestor marker. Pipeline state is
+// exclusively SSA: tile.pipeline_init/advance carry ownership and ordering.
 static void stampPipelineMarkers(OpBuilder &b, Operation *warpOp,
-                                 StringRef pipelineId, StringRef role) {
-  warpOp->setAttr("tile.warp_role", b.getStringAttr(role));
+                                 StringRef pipelineId) {
   warpOp->setAttr("tile.pipeline", b.getStringAttr(pipelineId));
 }
 
@@ -362,7 +362,7 @@ struct WarpSpecializationPass
       for (Value v : prodCross)
         prodSt.addTypes(v.getType());
       Operation *prodWarp = b.create(prodSt);
-      stampPipelineMarkers(b, prodWarp, pipelineId, "producer");
+      stampPipelineMarkers(b, prodWarp, pipelineId);
 
       // Hoist the consumer-needed "other" ops (e.g. constants) above the warp
       // regions so they dominate both — they only depend on region-external
@@ -434,7 +434,7 @@ struct WarpSpecializationPass
       for (Value v : consCross)
         consSt.addTypes(v.getType());
       Operation *consWarp = b.create(consSt);
-      stampPipelineMarkers(b, consWarp, pipelineId, "consumer");
+      stampPipelineMarkers(b, consWarp, pipelineId);
 
       Block *consBody = b.createBlock(&consWarp->getRegion(0));
       b.setInsertionPointToEnd(consBody);

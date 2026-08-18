@@ -14,13 +14,11 @@
 // RUN:   %s | FileCheck %s
 
 // CHECK: @gemm_kernel
-// CHECK: schedule.warp
+// CHECK: "schedule.warp"() <{role = "producer"}>
 // CHECK: tile.async_copy
 // CHECK: schedule.yield
-// CHECK: role = "producer"
-// CHECK: schedule.warp
+// CHECK: "schedule.warp"() <{role = "consumer"}>
 // CHECK: tile.mma
-// CHECK: role = "consumer"
 
 module attributes {tessera.ir.version = "1.0"} {
   func.func @gemm_kernel(

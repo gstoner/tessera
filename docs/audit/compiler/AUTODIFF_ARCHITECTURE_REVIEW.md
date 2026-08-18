@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-09
+last_updated: 2026-08-18
 audit_role: reference
 scope: python/tessera/autodiff, src/compiler/ir/AdjointInterface.*, src/transforms/lib/Autodiff*.cpp, ActivationRematerializationPass, AdjointCollectiveInsertionPass, solvers/core NewtonAutodiff
 companions: AUTODIFF_UNIFICATION_PLAN.md (sequencing) · ../../spec/AUTODIFF_SPEC.md (normative surface) · RIEMANNIAN_OT_PLAN.md · ../domain/GA_EBM_ARCHITECTURE_REVIEW.md · DIFFERENTIABLE_PROGRAMMING_REVIEW.md (book delta)
@@ -129,10 +129,17 @@ if (op->getNumRegions() != 0) {
 Both reverse passes compute the backward-reachable active cone first. The paired
 pass now delegates active `scf.if`, positive-step counted `scf.for`, and the
 tracer's canonical bounded `scf.while` to `RegionAdjointInterface`. It returns
-cotangents for implicit captures, reverses loop order, and replays pure primal
-prefixes under the current recompute-all policy. Noncanonical while forms,
-effectful replay, multi-block regions, and `tessera.control_scan` remain
-fail-closed; inactive regions are still pruned.
+cotangents for implicit captures and reverses loop order. SAVE products now
+substitute explicit branch-local intermediates into the selected `if`
+pullback, including dynamic extents through never-selected zero-extent
+sentinels; consume predecessor-state tapes for bounded SAVE `while`; and select
+the nearest sparse checkpoint for bounded HYBRID replay. A verified native
+four-block diamond uses compact `scf.if`; other bounded pure reducible or true
+multi-entry irreducible CFGs use a typed program-counter state machine. Mixed
+control/tensor state has a total reverse ABI, and nested canonical pure
+structured bodies replay recursively. Unbounded graphs, effects, unsupported
+nested regions, and saved dynamic CFG slots remain fail closed; inactive
+regions are still pruned.
 
 The comment is honest about why — reverse-iterating a flat nested walk would
 interleave parent and child adjoints — and the restriction was correct as a
@@ -195,9 +202,10 @@ privileges for whole-program memory activity.
 
 `recompute_all` remains the generic paired-pass default, which is honest for an
 artifact without evidence. It is no longer the only compiler policy or only
-paired ABI: SAVE `control_scan` now returns a compact state tape, while
-data-dependent `scf.if` and canonical `scf.while` return branch and trip-count
-identity for backward consumption. The
+paired ABI: SAVE `control_scan` returns a compact state tape, data-dependent
+`scf.if` returns its predicate plus branch-local static intermediates, and a
+canonical bounded SAVE `scf.while` returns its trip count plus typed predecessor
+state tapes for backward consumption. The
 execution-derived residual evaluator represents SAVE, RECOMPUTE, HYBRID, and
 TREEVERSE candidates per `(op, shape-bucket, dtype, target)`, measures complete
 backward work and unique retained bytes, and permits only exact-device evidence
@@ -405,7 +413,7 @@ not ecosystem packages or a performance comparison.
 | Capability | Tessera | JAX | Enzyme / EnzymeMLIR | LAGrad |
 |---|---|---|---|---|
 | Reverse mode, straight-line | ✅ bounded: 51 native IR adjoints; 36 CPU-oracle and 29 exact-target proven | ✅ | ✅ | ✅ |
-| Reverse mode through structured control flow | partial — paired reverse supports single-block `scf.if`, counted `scf.for`, and canonical bounded `scf.while`; general/effectful regions fail closed (A3) | partial — `cond`/`scan` and static loops; `while_loop` is forward-only | ✅ | ✅ stated scope |
+| Reverse mode through structured control flow | partial — paired reverse supports `scf.if`, counted `scf.for`, bounded `scf.while`, `control_scan`, and bounded pure reducible/irreducible native CFG state machines; unbounded/effectful/unsupported-region forms fail closed (A3) | partial — `cond`/`scan` and static loops; `while_loop` is forward-only | ✅ | ✅ stated scope |
 | Forward mode in the compiler | partial — public paired Graph JVP ABI, exact `jacfwd`, 35 native tangent families, bounded `if`/`for`/`while`, and native x86/gfx1151 products for normalization, spectral, and diagonal solver families; general regions, higher-order composition, broader packages, and native collective evidence remain open | ✅ | ✅ | partial |
 | Higher-order (`grad∘grad`) | ❌ structurally blocked (A2) | ✅ | ✅ | — |
 | Exact HVP | ❌ finite differences (B4) | ✅ fwd-over-rev | ✅ | — |
@@ -571,12 +579,14 @@ Maps to: P2 (foundation complete) and D4 (region extension).
 
 ### D4 — Structured control-flow adjoints  *(~6 weeks — hardest, highest value)*
 
-`RegionAdjointInterface` now implements reverse mode over single-block
-`scf.for` / `scf.if` / canonical bounded `scf.while`. The current construction
-recomputes pure prefixes, reuses the executed branch predicate, and carries the
-actual while trip count. Remaining work is native/CPU numerical execution,
-measured checkpoint-plan lowering, multi-block regions, and
-`tessera.control_scan`.
+`RegionAdjointInterface` now implements reverse mode over `scf.for`, `scf.if`,
+canonical bounded `scf.while`, lowered `control_scan`, and a bounded pure
+multi-block state machine that handles reducible and irreducible CFGs
+uniformly. The construction recomputes pure prefixes, reuses executed branch
+predicates, carries actual while trip counts, and records exact scalar/tensor
+state indices for mixed-state SAVE/HYBRID products. Remaining work is saved dynamic
+CFG shape envelopes, effect-aware region execution, exact-device
+irreducible-state-machine packets, and measured policy promotion.
 
 Everything with a loop is blocked on this: SSM/linear-attention scans, diffusion
 samplers, solver iterations, the EBM Langevin loop, the RNOT `c`-transform. It is

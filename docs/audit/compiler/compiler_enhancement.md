@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-15
+last_updated: 2026-08-18
 audit_role: plan
 plan_state: open
 ---
@@ -553,7 +553,7 @@ Ordered by risk, lowest first. Each row is independently landable.
 | 5 | `tile.alloc`: `AnyAttr:$layout` → `TileLayoutAttr` | Low | Decision #21a — an unvalidated attribute where a typed one states the legal set |
 | 6 | `tile.pipeline_advance`: require at least one `Tile_PipelineStateType` input | **Medium** | This is the ring closure. Depends on 5.1's second experiment |
 | 7 | `tile.tma.copy_async`: `Variadic<AnyType> $outputs` → typed buffer results | **Medium** | Connects a copy to the buffer it filled — the precondition for a data-consistency check |
-| 8 | `tile.tcgen05.mma`: `AnyType $lhs/$rhs` → `!tile.fragment<…, family="tcgen05">` | **Deferred** | Sequence *after* W1.1 step 5, or it forks the fragment contract (§3.5) |
+| 8 | `tile.tcgen05.mma`: `AnyType $lhs/$rhs` → `!tile.fragment<…, family="tcgen05">` | **Landed host-free 2026-08-18** | ODS requires typed operands and the verifier checks roles, family, shape/accumulator, and descriptor agreement. Positive and negative fixtures are green; SM120 physical proof remains architecture-owned. |
 
 Rows 1–5 are the phase's floor: they are mechanical, they each admit a two-line
 negative fixture, and they are worth landing even if 6–8 stall.
@@ -663,9 +663,11 @@ The rest of §5.3 and all of §5.4, in one change:
   its own derivation gate**, the dogfood result that makes the wiring safe.
   One cosmetic fixture fix: registered `tile.cta_sync` prints unquoted.
 
-**Remaining for Phase 1 exit:** the §5.5 gate 5 numerical run on gfx1151, the
-barrier-at-birth emission restructure (revised rows 6–7), and row 8 after
-W1.1 step 5. The verifier-derivation scope of §5.3 is **closed**.
+**Remaining for Phase 1 exit:** NVIDIA barrier-at-birth emission and its SM120
+exact-device proof. The §5.5 gfx1151 numerical cohort and row 8's shared typed
+contract are closed; neither host-free verification nor sibling-device evidence
+is an SM120 performance claim. The verifier-derivation scope of §5.3 is
+**closed**.
 
 The original scope, kept for the record:
 

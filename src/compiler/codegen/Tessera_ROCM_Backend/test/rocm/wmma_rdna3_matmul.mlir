@@ -7,9 +7,9 @@
 // (gfx9xx -> tessera_rocm.mfma) is covered by tile_matmul_to_rocm.mlir.
 
 module {
-  func.func @wmma_matmul_rdna3(%a: f16, %b: f16) -> f16 {
-    %m = "tile.mma"(%a, %b) : (f16, f16) -> f16
-    return %m : f16
+  func.func @wmma_matmul_rdna3(%a: tensor<16x16xf16>, %b: tensor<16x16xf16>) -> tensor<16x16xf16> {
+    %m = "tile.mma"(%a, %b) : (tensor<16x16xf16>, tensor<16x16xf16>) -> tensor<16x16xf16>
+    return %m : tensor<16x16xf16>
   }
 }
 

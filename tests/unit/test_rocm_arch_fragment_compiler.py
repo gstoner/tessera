@@ -62,6 +62,8 @@ def _typed_source(dtype: str) -> str:
             "memref<256xf16>", f"memref<256x{mlir_dtype}>"
         ).replace(
             'a = "f16", b = "f16"', f'a = "{dtype}", b = "{dtype}"'
+        ).replace(
+            'elem = "f16"', f'elem = "{dtype}"'
         )
     if dtype in ("int8", "int4"):
         source = source.replace("memref<256xf16>", "memref<256xi8>")
@@ -70,6 +72,9 @@ def _typed_source(dtype: str) -> str:
             'a = "f16", b = "f16", acc = "f32"',
             f'a = "{dtype}", b = "{dtype}", acc = "i32"',
         )
+        source = source.replace('elem = "f16"', f'elem = "{dtype}"')
+        source = source.replace('elem = "f32"', 'elem = "i32"')
+        source = source.replace('acc = "f32"', 'acc = "i32"')
         if dtype == "int4":
             source = source.replace("memref<256xi8>", "memref<512xi8>")
             source = source.replace("k = 16", "k = 32")

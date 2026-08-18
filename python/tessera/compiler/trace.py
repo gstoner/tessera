@@ -20,7 +20,7 @@ import contextlib
 import inspect
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple
 
 import numpy as np
 
@@ -346,33 +346,59 @@ class TraceBuilder:
         ))
         return Tracer(init_carry.shape, init_carry.dtype, res)
 
-    def record_cond(self, pred, true_fun, false_fun, operands) -> "Tracer":
+    def record_cond(self, pred, true_fun, false_fun, operands) -> Any:
         """Trace a ``cond`` into a ``tessera.control_if`` IROp."""
         if not isinstance(pred, Tracer):
             raise TesseraTraceError("traced cond: pred must be a Tracer")
         then_body, tval = self._trace_region(lambda: true_fun(*operands))
         else_body, fval = self._trace_region(lambda: false_fun(*operands))
-        if not (isinstance(tval, Tracer) and isinstance(fval, Tracer)):
-            raise TesseraTraceError("traced cond: branches must return a Tracer")
-        if tval.shape != fval.shape:
-            raise TesseraTraceError("traced cond: branches must share a shape")
-        # CF1: match ControlIfOp's merged-result contract — both branches must
-        # yield the same dtype, not just the same shape.
-        if tval.dtype != fval.dtype:
-            raise TesseraTraceError(
-                "traced cond: branches must share a dtype "
-                f"(then {tval.dtype}, else {fval.dtype})")
-        res = self._fresh()
+        then_values = tval if isinstance(tval, tuple) else (tval,)
+        else_values = fval if isinstance(fval, tuple) else (fval,)
+        if not then_values or not all(isinstance(value, Tracer) for value in then_values):
+            raise TesseraTraceError("traced cond: branches must return Tracers")
+        if len(then_values) != len(else_values) or not all(
+            isinstance(value, Tracer) for value in else_values
+        ):
+            raise TesseraTraceError("traced cond: branches must return equal-arity state")
+        for index, (then_value, else_value) in enumerate(zip(then_values, else_values)):
+            if then_value.shape != else_value.shape:
+                raise TesseraTraceError(
+                    "traced cond: branch result "
+                    f"{index} must share a shape "
+                    f"(then {then_value.shape}/{then_value.dtype}, "
+                    f"else {else_value.shape}/{else_value.dtype})"
+                )
+            if then_value.dtype != else_value.dtype:
+                raise TesseraTraceError(
+                    "traced cond: branch result "
+                    f"{index} must share a dtype "
+                    f"(then {then_value.shape}/{then_value.dtype}, "
+                    f"else {else_value.shape}/{else_value.dtype})"
+                )
+        results = tuple(self._fresh() for _ in then_values)
+        result_types = tuple(_ty(value.shape, value.dtype) for value in then_values)
         self.body.append(IROp(
-            result=res, op_name="tessera.control_if",
+            result=",".join(results), op_name="tessera.control_if",
             operands=[f"%{pred.ssa}"],
             operand_types=[_ty(pred.shape, pred.dtype)],
-            result_type=_ty(tval.shape, tval.dtype),
+            result_type=(
+                result_types[0]
+                if len(result_types) == 1
+                else "(" + ", ".join(result_types) + ")"
+            ),
             kwargs={"_region": "if", "_flag_ssa": pred.ssa,
-                    "_then_body": then_body, "_then_ssa": tval.ssa,
-                    "_else_body": else_body, "_else_ssa": fval.ssa},
+                    "_then_body": then_body,
+                    "_then_ssas": tuple(value.ssa for value in then_values),
+                    "_then_ssa": then_values[0].ssa,
+                    "_else_body": else_body,
+                    "_else_ssas": tuple(value.ssa for value in else_values),
+                    "_else_ssa": else_values[0].ssa},
         ))
-        return Tracer(tval.shape, tval.dtype, res)
+        traced_results = tuple(
+            Tracer(value.shape, value.dtype, result)
+            for value, result in zip(then_values, results)
+        )
+        return traced_results[0] if len(traced_results) == 1 else traced_results
 
     def record_while(self, cond_fun, body_fun, init, max_steps) -> "Tracer":
         """Trace a bounded ``while_loop`` into a ``tessera.control_while`` IROp."""
@@ -498,18 +524,25 @@ def _np_dtype_to_elem(dt) -> str:
     return "f32"
 
 
-def trace(fn: Callable, *example_specs: Any) -> TracedFunction:
+def trace(
+    fn: Callable,
+    *example_specs: Any,
+    arg_names: Sequence[str] | None = None,
+) -> TracedFunction:
     """Interpret ``fn`` over ``Tracer`` args, returning the recorded
     :class:`TracedFunction`. ``example_specs`` are arrays (concrete tracing —
     shapes/dtypes come from real numpy execution, full vocab), ``(shape, dtype)``
     pairs, or bare shape tuples (abstract tracing — shape rules, executable
     subset only)."""
+    if arg_names is not None and len(arg_names) != len(example_specs):
+        raise TesseraTraceError("trace arg_names must match the example arity")
     tb = TraceBuilder()
     arg_tracers = []
     for i, spec in enumerate(example_specs):
         shape, dtype = _spec_shape_dtype(spec)
         value = np.ascontiguousarray(spec) if isinstance(spec, np.ndarray) else None
-        arg_tracers.append(tb.arg(f"a{i}", shape, dtype, value))
+        name = str(arg_names[i]) if arg_names is not None else f"a{i}"
+        arg_tracers.append(tb.arg(name, shape, dtype, value))
     token = _trace_hook.set_active_tracer(tb)
     try:
         result = fn(*arg_tracers)
@@ -629,6 +662,10 @@ def to_graphfn(traced: TracedFunction, *, elem: str = "f32",
 
             env[op.result] = g.for_loop(kw["_trip"], init=init, body=_body)
         elif op.op_name == "tessera.control_if":
+            if len(op.result_names) != 1:
+                raise TesseraJitError(
+                    "trace→GraphFn requires a native variadic control_if consumer"
+                )
             kw = op.kwargs
             flag = env[kw["_flag_ssa"]]
             env[op.result] = g.cond(
@@ -784,6 +821,10 @@ def execute_traced(traced: TracedFunction, arrays: List[np.ndarray]):
                 carry = benv[kw["_next_ssa"]]
             return carry
         if nm == "tessera.control_if":
+            if len(op.result_names) != 1:
+                raise TesseraTraceError(
+                    "traced execution requires a native variadic control_if consumer"
+                )
             kw = op.kwargs
             flag_ssa = kw["_flag_ssa"]
             if _region_flat(kw["_then_body"]) and _region_flat(kw["_else_body"]):

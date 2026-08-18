@@ -28,3 +28,4 @@ module {
 // CHECK-NOT: tile.matmul_kernel
 
 // MISMATCH: x86 family plugin 'softmax' cannot consume tile.matmul_kernel
+// REQUIRES: tessera-x86-target-ir

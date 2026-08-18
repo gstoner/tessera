@@ -62,6 +62,27 @@ def test_attention_vjp_declares_only_canonical_rank4_consumers() -> None:
     assert "multi_head_attention" not in declarations
 
 
+def test_loss_vjps_declare_explicit_family_and_target_ownership() -> None:
+    declarations = native_vjp_plugin_declarations()
+    for op_name in (
+        "mse_loss",
+        "smooth_l1_loss",
+        "binary_cross_entropy_loss",
+        "cross_entropy_loss",
+    ):
+        declaration = declarations[op_name]
+        declaration.validate()
+        assert declaration.schedule_consumer == "schedule.loss_backward"
+        assert declaration.tile_consumer == "tile.loss_backward_kernel"
+        assert set(declaration.target_consumers) == {
+            "x86",
+            "rocm",
+            "nvidia_sm120",
+        }
+    distribution = declarations["kl_divergence"]
+    assert set(distribution.target_consumers) == {"rocm"}
+
+
 def test_normalization_vjp_package_is_constructed_by_family_plugin(
     monkeypatch,
 ) -> None:
@@ -145,6 +166,56 @@ def test_lion_never_enters_the_reexecuting_differential_gate() -> None:
     lion = SimpleNamespace(op_name="tessera.lion", kwargs={})
     assert not native_vjp_differential_safe(lion, "x86", "pure")
     assert not native_vjp_differential_effect_exemptions(lion, "x86", "pure")
+
+
+def test_nvidia_stateful_products_are_owned_by_family_plugins() -> None:
+    declarations = native_vjp_plugin_declarations()
+    assert declarations["lion"].target_consumers["nvidia_sm120"] == (
+        "nvidia.sm120_lion_backward"
+    )
+    for family in (
+        "gated_deltanet",
+        "kimi_delta_attention",
+        "modified_delta_attention",
+    ):
+        assert declarations[family].target_consumers["nvidia_sm120"] == (
+            "nvidia.sm120_sequence_mixer_backward"
+        )
+        assert native_vjp_plugin_available(f"tessera.{family}", "nvidia_sm120")
+
+
+def test_nvidia_lion_package_is_constructed_by_family_plugin(monkeypatch) -> None:
+    import tessera.runtime as runtime
+
+    captured = {}
+
+    def fake_launch(artifact, values):
+        captured["metadata"] = artifact.metadata
+        captured["values"] = values
+        return {
+            "ok": True,
+            "execution_mode": "cuda_driver",
+            "output": tuple(np.ones(4, np.float32) for _ in range(3)),
+        }
+
+    monkeypatch.setattr(runtime, "launch", fake_launch)
+    source = SimpleNamespace(
+        op_name="tessera.lion", result="out", kwargs={"beta1": 0.9}
+    )
+    result = execute_native_vjp_family(
+        source=source,
+        target="nvidia_sm120",
+        ordered_inputs=tuple(np.ones(4, np.float32) for _ in range(3)),
+        arg_names=("param", "grad", "moment"),
+        out_cotangents=tuple(np.ones(4, np.float32) for _ in range(2)),
+        wrt_names=("param", "moment"),
+        source_graph_ir="module { /* tracer authority */ }",
+    )
+    assert result is not None
+    assert result.execution["implementation"] == "family_plugin"
+    assert result.execution["target_consumer"] == "nvidia.sm120_lion_backward"
+    assert captured["metadata"]["compiler_path"] == "nvidia_lion_bwd_compiled"
+    assert len(captured["values"]) == 5
 
 
 def test_spectral_vjp_package_binds_source_schedule_and_tile_lineage() -> None:

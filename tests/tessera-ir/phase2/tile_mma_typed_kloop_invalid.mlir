@@ -78,16 +78,15 @@ func.func @role_in_the_wrong_slot(
 
 !ja = !tile.fragment<m = 16, n = 16, k = 16, elem = "bf16", acc = "f32", role = "a", layout = "row_major", family = "auto">
 
-// The typed form is all-or-nothing. A half-migrated op would otherwise get the
-// weaker contract on whichever operand still carried the bare type — the same
-// "legacy spelling is a hole through the new contract" hazard the bare-form
-// wildcard case guards at the type level.
+// W1.1 step 5 removed the bare-fragment producer-chasing contract entirely.
+// Stored historical IR still parses so it can receive this named migration
+// diagnostic rather than an opaque parser failure.
 func.func @mixed_typed_and_bare(
     %x: !ja,
     %y: !tile.fragment,
     %z: !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">)
     -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto"> {
-  // CHECK: TILE_MMA_MIXED_FRAGMENT_FORMS
+  // CHECK: TILE_MMA_BARE_FRAGMENT_REMOVED
   %r = tile.mma %x, %y, %z : (!ja, !tile.fragment, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
   return %r : !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "auto">
 }

@@ -180,10 +180,11 @@ class _Interp:
                     )
                 matrix = basis.T if "transpose_basis = true" in rhs else basis
                 result = moved @ matrix
+                logical_length = 2 * (n - 1) if dct_type == 1 else 2 * n
                 if norm == "forward":
-                    result /= n
+                    result /= logical_length
                 elif norm == "ortho":
-                    result /= np.sqrt(n)
+                    result /= np.sqrt(logical_length)
                 env[dst] = np.moveaxis(result, -1, axis)
             elif op == "tessera.tanh":
                 env[dst] = np.tanh(env[operands[0]]).astype(np.float32)

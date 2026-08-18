@@ -48,7 +48,7 @@ bsmm,7,0,0,7,0,,directly_tested,7 direct test references
 cache_commit,2,0,1,2,0,,directly_tested,2 direct test references
 cache_rollback,3,0,1,3,0,,directly_tested,3 direct test references
 calibration_observer,0,0,0,0,1,,structural_only,stateful observer; tested via fake_quantize loop
-cast,24,61,1,85,0,bf16 fp16 fp32 int8,directly_tested,85 direct test references
+cast,25,61,1,86,0,bf16 fp16 fp32 int8,directly_tested,86 direct test references
 cat,14,0,0,14,0,,directly_tested,14 direct test references
 ceil,4,0,0,4,0,bf16 f32 fp16 fp32,directly_tested,4 direct test references
 center_crop,10,0,1,10,0,fp16,directly_tested,10 direct test references
@@ -148,7 +148,7 @@ dequantize_fp8,4,0,1,4,0,f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_test
 dequantize_int4,5,0,0,5,0,,directly_tested,5 direct test references
 dequantize_int8,4,0,1,4,0,,directly_tested,4 direct test references
 dequantize_nvfp4,9,0,2,9,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,9 direct test references
-digamma,11,0,0,11,0,bf16 f32,directly_tested,11 direct test references
+digamma,13,0,0,13,0,bf16 f32 fp32,directly_tested,13 direct test references
 div,9,2,1,11,0,bf16 f16 f32 fp16 fp32,directly_tested,11 direct test references
 dropout,30,13,3,43,0,f32 fp32 fp64,directly_tested,43 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

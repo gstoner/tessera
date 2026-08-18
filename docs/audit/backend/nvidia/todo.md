@@ -21,7 +21,7 @@ follow-up: the pinned swallowed-kwarg findings in `test_autodiff_laws.py`.
 *Triage update, same key (AD-LAW-1b):* reference JVP fixes landed for
 `clip` alias deafness, `add`/`mul` unary-`scalar`, and fft/ifft/rfft/irfft
 `norm` handling; five entries benign-classified; the open set is now the
-stft/istft/spectral_conv and quantize families only.
+stft/istft/spectral_conv and quantize families only. *Spec-growth update, same key (AD-LAW-1c):* law coverage roughly doubled (109 adjoint / 87 chain rows green incl. attention, spectral-complex, structural, and loss families); two more silent reference JVP defects found and fixed — `lgamma` (derivative was a dead stub returning 0) and `digamma` (whole JVP was an identity placeholder) — plus `jvp_cast` crashing on canonical dtype strings. Forward-mode reference oracles for those three ops changed; reverse-mode VJPs are untouched, so no backend backward package is affected.
 
 Cross-backend sync `W4-DYNAMIC-EFFECT-NONLINEAR-CFG-2026-08-18` — **shared
 contract parity; CUDA follow-up required.** Dynamic saved-slot data/shape

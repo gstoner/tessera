@@ -410,6 +410,40 @@ def test_fft_family_jvp_honors_norm(op):
         np.testing.assert_allclose(dy, ref(dx, norm="ortho"), atol=1e-12)
 
 
+def test_lgamma_digamma_jvps_are_no_longer_placeholders():
+    """AD-LAW-1c findings (#10a fixtures): jvp_lgamma's derivative was a dead
+    `if False` stub returning identically 0.0, and jvp_digamma was a literal
+    `# placeholder` computing identity-with-slope-1 — forward mode through
+    either op silently returned garbage while reverse mode was correct. Both
+    now derive from the same polygamma helpers as their VJPs (one datum)."""
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.vjp import _digamma_positive, _trigamma_positive
+    from tessera import ops
+
+    x = np.array([0.7, 1.3, 2.9, 6.1])
+    dx = np.ones_like(x)
+
+    y, dy = _JVPS["lgamma"]((x,), (dx,))
+    assert np.any(dy != 0.0), "lgamma JVP derivative is still the zero stub"
+    np.testing.assert_allclose(dy, _digamma_positive(x), rtol=1e-12)
+
+    y, dy = _JVPS["digamma"]((x,), (dx,))
+    fwd = getattr(ops.digamma, "__wrapped__", ops.digamma)
+    np.testing.assert_allclose(y, fwd(x), rtol=1e-12)
+    np.testing.assert_allclose(dy, _trigamma_positive(x), rtol=1e-12)
+    assert not np.allclose(y, x), "digamma JVP primal is still the identity placeholder"
+
+
+def test_cast_jvp_accepts_canonical_dtype_strings():
+    """The tape records `ops.cast`'s canonical dtype STRING; jvp_cast fed it
+    to `np.astype` and crashed on every canonically-spelled cast (#10a)."""
+    from tessera.autodiff.jvp import _JVPS
+
+    x = np.array([1.0, 2.0], dtype=np.float64)
+    y, dy = _JVPS["cast"]((x,), (np.ones_like(x),), dtype="fp32")
+    assert y.dtype == np.float32 and dy.dtype == np.float32
+
+
 def test_rmsnorm_eps_defaults_match_forward():
     """The sweep's first finding, pinned directly: jvp_rmsnorm defaulted
     eps=1e-6 (the rmsnorm_safe value) against the forward's and the VJP's

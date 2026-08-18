@@ -148,7 +148,7 @@ dequantize_fp8,4,0,1,4,0,f32 fp16 fp4_e2m1 fp6_e2m3 fp8_e4m3 nvfp4,directly_test
 dequantize_int4,5,0,0,5,0,,directly_tested,5 direct test references
 dequantize_int8,4,0,1,4,0,,directly_tested,4 direct test references
 dequantize_nvfp4,9,0,2,9,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,9 direct test references
-digamma,13,0,0,13,0,bf16 f32 fp32,directly_tested,13 direct test references
+digamma,15,0,0,15,0,bf16 f32 fp32,directly_tested,15 direct test references
 div,9,2,1,11,0,bf16 f16 f32 fp16 fp32,directly_tested,11 direct test references
 dropout,30,13,3,43,0,f32 fp32 fp64,directly_tested,43 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only

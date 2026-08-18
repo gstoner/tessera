@@ -2617,9 +2617,35 @@ def vjp_erfc(dout, x, **_):
     return (-np.asarray(dout) * (2.0 / math.sqrt(math.pi)) * np.exp(-(a * a)),)
 
 
+# ── polygamma helpers ────────────────────────────────────────────────────────
+# Shared by the lgamma/digamma VJPs *and* (since AD-LAW-1c) their JVPs, so both
+# modes derive from one datum. Names kept for compatibility; the domain is now
+# the whole real line, not just x > 0.
+#
+# Negative arguments go through the reflection formulas rather than the upward
+# recurrence — the recurrence advances by 1 per iteration, so a valid input like
+# -1e9 + 0.5 would have spun for ~10⁹ steps while the canonical forward returns
+# immediately (Codex review on the AD-LAW-1c PR). This was a live defect in the
+# *reverse* path too, not only the newly wired forward one. Poles (non-positive
+# integers) return nan, matching `ops.digamma`'s scalar implementation.
+
+
+def _reflect_negative(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Split into (needs-reflection mask, pole mask, safe positive argument)."""
+    neg = x <= 0.0
+    pole = neg & (np.abs(x - np.round(x)) < 1e-12)
+    # 1 − x maps (−∞, 0] into [1, ∞); poles are masked out afterwards.
+    safe = np.where(neg, 1.0 - x, x)
+    return neg, pole, safe
+
+
 def _digamma_positive(a: np.ndarray) -> np.ndarray:
-    x = np.asarray(a, dtype=np.float64).copy()
+    """ψ(x) over the whole real line (reflection for x ≤ 0)."""
+    x0 = np.asarray(a, dtype=np.float64)
+    neg, pole, x = _reflect_negative(x0)
+    x = x.copy()
     result = np.zeros_like(x, dtype=np.float64)
+    # At most 8 iterations now: `x` is ≥ 1 everywhere by construction.
     while np.any(x < 8.0):
         mask = x < 8.0
         result[mask] -= 1.0 / x[mask]
@@ -2635,11 +2661,20 @@ def _digamma_positive(a: np.ndarray) -> np.ndarray:
         - inv2 * inv2 * inv2 / 252.0
         + inv2 * inv2 * inv2 * inv2 / 240.0
     )
+    if np.any(neg):
+        # ψ(x) = ψ(1−x) − π/tan(πx)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            reflected = result - np.pi / np.tan(np.pi * x0)
+        result = np.where(neg, reflected, result)
+        result = np.where(pole, np.nan, result)
     return result
 
 
 def _trigamma_positive(a: np.ndarray) -> np.ndarray:
-    x = np.asarray(a, dtype=np.float64).copy()
+    """ψ′(x) over the whole real line (reflection for x ≤ 0)."""
+    x0 = np.asarray(a, dtype=np.float64)
+    neg, pole, x = _reflect_negative(x0)
+    x = x.copy()
     result = np.zeros_like(x, dtype=np.float64)
     while np.any(x < 8.0):
         mask = x < 8.0
@@ -2657,6 +2692,12 @@ def _trigamma_positive(a: np.ndarray) -> np.ndarray:
         + inv2 * inv2 * inv2 * inv / 42.0
         - inv2 * inv2 * inv2 * inv2 * inv / 30.0
     )
+    if np.any(neg):
+        # ψ′(x) = π²/sin²(πx) − ψ′(1−x)  (differentiating the ψ reflection)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            reflected = (np.pi / np.sin(np.pi * x0)) ** 2 - result
+        result = np.where(neg, reflected, result)
+        result = np.where(pole, np.nan, result)
     return result.astype(np.asarray(a).dtype, copy=False)
 
 

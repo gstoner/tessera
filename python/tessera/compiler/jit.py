@@ -388,6 +388,14 @@ class JitFn:
         self._call_arg_names = tuple(
             argument.name for argument in graph_ir.functions[0].args
         ) if graph_ir.functions else ()
+        # Call-time constraint binding belongs to the stable Python ABI, not to
+        # the post-specialization tracer module.  Tracer authority may replace
+        # ``self.graph_ir`` with canonical a0/a1/... arguments after the first
+        # call; retain the decoration-time symbolic names/dimensions so every
+        # subsequent shape is checked and cached independently.
+        self._constraint_ir_args = tuple(
+            graph_ir.functions[0].args
+        ) if graph_ir.functions else ()
         self.inferred_effect = inferred_effect
         self.constraints = constraints
         self.deterministic = deterministic
@@ -786,9 +794,9 @@ class JitFn:
         was already satisfied at decoration time with concrete ``bindings=``.
         Cached per-shape to avoid re-checking on every call.
         """
-        if not self.graph_ir.functions:
+        if not self._constraint_ir_args:
             return
-        ir_args = self.graph_ir.functions[0].args
+        ir_args = self._constraint_ir_args
         # Resolve dim_name → concrete int by walking positional + keyword args
         resolved: Dict[str, int] = {}
         # Build a name → value map first

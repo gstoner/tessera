@@ -17,6 +17,14 @@ CFG_DIGEST = hashlib.sha256(b"w4-physical-region-cfg").hexdigest()
 PAIRED_IR = "paired<scf.if,scf.while,residual-ssa>"
 
 
+def _exact_gfx1151_compiled_lane_available(runtime) -> bool:
+    """Require the live device and compiler, not the compile-default chip tag."""
+    return (
+        runtime._rocm_live_arch() == "gfx1151"
+        and runtime._tessera_opt_path() is not None
+    )
+
+
 def test_w4_region_product_contract_is_content_addressed_and_fail_closed() -> None:
     product = build_hybrid_while_product(
         target="x86",
@@ -45,8 +53,8 @@ def test_dynamic_branch_product_consumes_selected_saved_activation(target: str) 
 
     if target == "x86" and not runtime._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
-    if target == "rocm_gfx1151" and runtime._rocm_chip() != "gfx1151":
-        pytest.skip("exact gfx1151 device unavailable")
+    if target == "rocm_gfx1151" and not _exact_gfx1151_compiled_lane_available(runtime):
+        pytest.skip("exact gfx1151 compiled lane unavailable")
     product = build_dynamic_if_product(
         target=target, paired_ir=PAIRED_IR, cfg_digest=CFG_DIGEST,
         state_shape_bound=(64,),
@@ -76,8 +84,8 @@ def test_hybrid_while_product_consumes_sparse_tape_on_native_target(target: str)
 
     if target == "x86" and not runtime._x86_elementwise_available():
         pytest.skip("AVX-512 production image unavailable")
-    if target == "rocm_gfx1151" and runtime._rocm_chip() != "gfx1151":
-        pytest.skip("exact gfx1151 device unavailable")
+    if target == "rocm_gfx1151" and not _exact_gfx1151_compiled_lane_available(runtime):
+        pytest.skip("exact gfx1151 compiled lane unavailable")
     product = build_hybrid_while_product(
         target=target, paired_ir=PAIRED_IR, cfg_digest=CFG_DIGEST,
         state_shape_bound=(64,), steps=5, checkpoint_indices=(2, 4),

@@ -361,10 +361,17 @@ class TraceBuilder:
         ):
             raise TesseraTraceError("traced cond: branches must return equal-arity state")
         for index, (then_value, else_value) in enumerate(zip(then_values, else_values)):
-            if then_value.shape != else_value.shape or then_value.dtype != else_value.dtype:
+            if then_value.shape != else_value.shape:
                 raise TesseraTraceError(
                     "traced cond: branch result "
-                    f"{index} must share shape and dtype "
+                    f"{index} must share a shape "
+                    f"(then {then_value.shape}/{then_value.dtype}, "
+                    f"else {else_value.shape}/{else_value.dtype})"
+                )
+            if then_value.dtype != else_value.dtype:
+                raise TesseraTraceError(
+                    "traced cond: branch result "
+                    f"{index} must share a dtype "
                     f"(then {then_value.shape}/{then_value.dtype}, "
                     f"else {else_value.shape}/{else_value.dtype})"
                 )

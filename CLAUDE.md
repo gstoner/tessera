@@ -526,9 +526,12 @@ lit tests/tessera-ir/phase8/ -q                 # one phase
 # python3, which has no pytest).
 #
 # **Run it locally — CI no longer does by default (changed 2026-08-19).** The
-# "rocm compiler" lane is now opt-in (PR label `rocm-smoke`, or manual
-# dispatch) and is no longer part of `validate-required`, so a ROCm backend
-# fixture regression will NOT be caught by a normal PR. This suite is that
+# "rocm compiler" lane still runs as a required job (it must, or the
+# `validate-required` aggregator breaks — see `tests/unit/test_ci_workflow.py`),
+# but its HEAVY steps (LLVM/MLIR 23 install + `tessera-rocm-opt` build + this
+# suite) are now opt-in: add the `rocm-smoke` label to a PR, or dispatch the
+# workflow manually. On an ordinary PR the job is a fast successful no-op, so
+# a ROCm backend fixture regression will NOT be caught. This suite is that
 # backend's only automated fixture coverage: run `ninja -C build
 # check-tessera-rocm` before pushing ROCm backend work, or apply the label.
 ninja -C build check-tessera-ir                  # == lit tests/tessera-ir/

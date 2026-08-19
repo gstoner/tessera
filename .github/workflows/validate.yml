@@ -392,25 +392,27 @@ jobs:
   # a successful required check but bypass the LLVM install and compiler build.
   # ────────────────────────────────────────────────────────────────────
   rocm-compiler:
-    name: rocm compiler (host-free LLVM/MLIR 23 — opt-in)
+    name: rocm compiler (host-free LLVM/MLIR 23 — heavy steps opt-in)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    # Opt-in via PR label `rocm-smoke`, or manual dispatch. Removed from the
-    # PR critical path 2026-08-19 at the repo owner's direction: the lane
-    # installs LLVM/MLIR 23 from apt and builds `tessera-rocm-opt` from
-    # scratch (~12 min, the longest lane), and the suite it runs is normally
-    # exercised locally on the primary box.
+    # The JOB always runs and always reports success — `test_ci_workflow.py`
+    # requires exactly that ("the required ROCm job must always run; gate its
+    # heavy steps instead"), because a job-level `if:` reports `skipped` and
+    # breaks the `validate-required` aggregator that branch protection uses.
     #
-    # COST, recorded so it is not rediscovered: this is the ONLY automated
-    # coverage for `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`.
-    # `check-tessera` does not include that suite, and `lit tests/tessera-ir/`
-    # runs a different one through a different driver. With this lane opt-in,
-    # a ROCm backend fixture regression reaches main unless someone runs
-    # `ninja -C build check-tessera-rocm` locally or applies the label.
-    if: >-
-      (github.event_name == 'workflow_dispatch')
-      || (github.event_name == 'pull_request'
-          && contains(github.event.pull_request.labels.*.name, 'rocm-smoke'))
+    # What changed 2026-08-19, at the repo owner's direction: the HEAVY steps
+    # (apt LLVM/MLIR 23 install + a from-scratch `tessera-rocm-opt` build,
+    # ~12 min and the longest lane) are now opt-in via the `rocm-smoke` PR
+    # label or manual dispatch, instead of running on every PR. The suite is
+    # normally exercised locally on the primary box.
+    #
+    # COST, recorded so it is not rediscovered: those steps are the ONLY
+    # automated coverage for
+    # `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`. `check-tessera`
+    # does not include that suite and `lit tests/tessera-ir/` runs a different
+    # one through a different driver, so a ROCm backend fixture regression now
+    # reaches main unless someone runs `ninja -C build check-tessera-rocm`
+    # locally or applies the label.
     steps:
       - uses: actions/checkout@v5
         with:
@@ -424,7 +426,27 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
+          # Opt-in gate (2026-08-19). The heavy steps run only on manual
+          # dispatch or when a PR carries the `rocm-smoke` label; otherwise
+          # the job completes as a successful no-op so `validate-required`
+          # still fans in. Routine coverage is local:
+          #   ninja -C build check-tessera-rocm
+          opted_in=false
+          case ",${PR_LABELS}," in
+            *,rocm-smoke,*) opted_in=true ;;
+          esac
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            opted_in=true
+          fi
+          if [ "$opted_in" != "true" ]; then
+            echo "required=false" >> "$GITHUB_OUTPUT"
+            echo "ROCm compiler heavy steps skipped: not opted in (add the"
+            echo "'rocm-smoke' label or dispatch manually; run"
+            echo "'ninja -C build check-tessera-rocm' locally)."
+            exit 0
+          fi
           required=true
           reason="non-PR validation"
           if [ "$EVENT_NAME" = "pull_request" ]; then
@@ -616,7 +638,7 @@ jobs:
   validate-required:
     name: validate-required
     runs-on: ubuntu-latest
-    needs: [lint, unit, audit, build]
+    needs: [lint, unit, audit, build, rocm-compiler]
     if: always()
     steps:
       - name: Verify required lanes succeeded
@@ -628,6 +650,7 @@ jobs:
             "${{ needs.unit.result }}"
             "${{ needs.audit.result }}"
             "${{ needs.build.result }}"
+            "${{ needs.rocm-compiler.result }}"
           )
           fail=0
           for r in "${required[@]}"; do
@@ -636,7 +659,7 @@ jobs:
             fi
           done
           if [ "$fail" -ne 0 ]; then
-            echo "::error ::Required validation lane failed: lint=${{ needs.lint.result }} unit=${{ needs.unit.result }} audit=${{ needs.audit.result }} build=${{ needs.build.result }}"
+            echo "::error ::Required validation lane failed: lint=${{ needs.lint.result }} unit=${{ needs.unit.result }} audit=${{ needs.audit.result }} build=${{ needs.build.result }} rocm-compiler=${{ needs.rocm-compiler.result }}"
             exit 1
           fi
           echo "All required lanes passed."

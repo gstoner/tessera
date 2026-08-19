@@ -37,6 +37,7 @@ __all__ = [
     "LawResult",
     "adjoint_check",
     "chain_check",
+    "kink_check",
     "op_rng",
     "run_law_sweep",
 ]
@@ -333,7 +334,7 @@ def run_law_sweep() -> list[LawResult]:
     """
     from .jvp import _JVPS
     from .vjp import _VJPS
-    from .law_inputs import LAW_INPUT_SPECS
+    from .law_inputs import KINK_SPECS, LAW_INPUT_SPECS
 
     results: list[LawResult] = []
 
@@ -352,6 +353,21 @@ def run_law_sweep() -> list[LawResult]:
         if spec.chain:
             results.append(chain_check(op, spec, jvp_fn))
 
+    # Law 5 — at-the-kink policy for every declared-nonsmooth op. Ops with a
+    # declared policy but no probe are reported, not skipped.
+    from .nonsmooth import NONSMOOTH_SELECTION
+    for op in sorted(NONSMOOTH_SELECTION):
+        vjp_fn = _VJPS.get(op)
+        if vjp_fn is None:
+            results.append(LawResult(op, "tensor", "kink", "vjp_only", 0, None,
+                                     "declared nonsmooth but no VJP registered"))
+            continue
+        kspec = KINK_SPECS.get(op)
+        if kspec is None:
+            results.append(LawResult(op, "tensor", "kink", "no_spec", 0, None))
+            continue
+        results.append(kink_check(op, kspec, vjp_fn, _JVPS.get(op)))
+
     try:
         from .geometric.registry import _JVPS_GEO, _VJPS_GEO
         for op in sorted(set(_VJPS_GEO) | set(_JVPS_GEO)):
@@ -365,3 +381,128 @@ def run_law_sweep() -> list[LawResult]:
                                  "rule_error", 0, None, f"{type(e).__name__}: {e}"))
 
     return results
+
+
+# ── Law 5: kink policy ───────────────────────────────────────────────────────
+
+
+def kink_check(op: str, spec, vjp_fn: Callable, jvp_fn: Optional[Callable],
+               registry: str = "tensor") -> LawResult:
+    """Evaluate a nonsmooth rule **exactly at** its kink against the declared
+    policy in ``nonsmooth.py`` (Decision #21a).
+
+    Laws 1/3 deliberately sample inside a smooth piece — a finite difference
+    straddling a kink is meaningless. This law covers the one input where a
+    legal-but-different Clarke selection is observable, which is exactly where
+    a backend kernel and the numpy reference can silently disagree. It asserts
+    the *declared* selection, not "a" subgradient: which element is returned
+    is a semantic choice, so an undeclared op fails closed rather than
+    defaulting.
+
+    Both modes are checked when the op has both: a JVP that picks a different
+    kink element than its VJP is the same defect class as the paired-default
+    drift, and neither the adjoint law (both sides agree on a wrong pick) nor
+    the chain law (which avoids kinks) can see it.
+    """
+    from .nonsmooth import SUBGRAD_SPLIT, SUBGRAD_ZERO, selection_policy
+
+    try:
+        policy = selection_policy(op)          # fail-closed on absence (#21a)
+    except KeyError as e:
+        return LawResult(op, registry, "kink", "rule_error", 0, None,
+                         f"undeclared nonsmooth policy: {e}")
+    try:
+        primals, kwargs = spec.make()
+        masks = spec.kink_mask(primals)
+
+        # Reverse mode: seed a unit cotangent so the returned gradient IS the
+        # selected subgradient (SUBGRAD_ZERO) or the tie share (SUBGRAD_SPLIT).
+        out = vjp_fn(*(_unit_cotangent(jvp_fn, primals, kwargs),), *primals,
+                     **kwargs)
+        grads = out if isinstance(out, tuple) else (out,)
+
+        detail = []
+        if spec.expected == "split":
+            if policy != SUBGRAD_SPLIT:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 f"spec expects a tie split but policy is {policy}")
+            # Mass conservation: the tied elements' shares sum to 1.
+            shares = []
+            for g, m in zip(grads, masks):
+                if g is None:
+                    continue
+                sel = np.asarray(g)[np.asarray(m)]
+                if sel.size:
+                    shares.append(sel)
+            if not shares:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 "no tied elements found in the probe")
+            stacked = np.concatenate([s.ravel() for s in shares])
+            total = float(np.sum(stacked))
+            n_tied = stacked.size
+            equal = np.allclose(stacked, stacked[0], atol=1e-12)
+            # Mass conservation is the whole point of SUBGRAD_SPLIT: a unit
+            # cotangent arriving at one output must leave as shares summing to
+            # 1 across the tie group. A KinkSpec probe therefore contains
+            # exactly ONE tie group, so the target is 1.0 exactly.
+            # (An earlier form also accepted `total == n_tied * share`, which
+            # is vacuously true whenever the shares are equal — it let a rule
+            # giving every tied element the FULL mass pass. Caught by the
+            # mutation test in test_autodiff_laws.py.)
+            conserved = abs(total - 1.0) < 1e-9
+            if not equal:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 f"tie shares not equal: {stacked.tolist()}")
+            if not conserved:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 f"tie mass not conserved: sum={total}")
+            detail.append(f"{n_tied} tied elements share {float(stacked[0]):.4g}")
+        else:
+            if policy != SUBGRAD_ZERO:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 f"spec expects a fixed value but policy is {policy}")
+            for g, m in zip(grads, masks):
+                if g is None:
+                    continue
+                sel = np.asarray(g)[np.asarray(m)]
+                if sel.size and not np.allclose(sel, spec.expected, atol=1e-12):
+                    return LawResult(
+                        op, registry, "kink", "fail", 1, None,
+                        f"at-kink value {sel.tolist()} != declared "
+                        f"{spec.expected} ({policy})")
+
+        # Forward mode must select the same element as reverse mode.
+        if jvp_fn is not None:
+            tangents = tuple(np.ones_like(np.asarray(p), dtype=np.float64)
+                             if _is_float(p) else _zero_like(p) for p in primals)
+            try:
+                _, t_out = jvp_fn(primals, tangents, **kwargs)
+            except Exception as e:  # noqa: BLE001
+                return LawResult(op, registry, "kink", "rule_error", 1, None,
+                                 f"jvp at kink: {type(e).__name__}: {e}")
+            if spec.expected != "split":
+                # With a unit tangent the JVP tangent equals the selection.
+                for m in masks[:1]:
+                    sel = np.asarray(t_out)[np.asarray(m)] \
+                        if np.shape(t_out) == np.shape(m) else np.array([])
+                    if sel.size and not np.allclose(sel, spec.expected, atol=1e-12):
+                        return LawResult(
+                            op, registry, "kink", "fail", 1, None,
+                            f"forward mode selects {sel.tolist()} at the kink, "
+                            f"reverse mode selects {spec.expected} — the modes "
+                            f"disagree on the declared policy")
+            detail.append("both modes agree")
+
+        return LawResult(op, registry, "kink", "pass", 1, None, "; ".join(detail))
+    except Exception as e:  # noqa: BLE001
+        return LawResult(op, registry, "kink", "rule_error", 0, None,
+                         f"{type(e).__name__}: {e}")
+
+
+def _unit_cotangent(jvp_fn: Optional[Callable], primals: tuple, kwargs: dict):
+    """A ones-cotangent shaped like the op's output."""
+    if jvp_fn is not None:
+        zeros = tuple(_zero_like(p) for p in primals)
+        out = jvp_fn(primals, zeros, **kwargs)[0]
+        return np.ones_like(np.asarray(out), dtype=np.float64)
+    return np.ones_like(np.asarray(primals[0]), dtype=np.float64)

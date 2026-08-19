@@ -966,3 +966,77 @@ def test_law_dashboard_carries_no_floats():
         assert status in ("pass", "fail", "rule_error", "no_spec",
                           "jvp_only", "vjp_only", "not_applicable"), line
         int(probes)
+
+
+# ── Law 5: kink policy (AD-LAW-1e) ───────────────────────────────────────────
+
+
+def test_every_declared_nonsmooth_op_has_a_kink_probe(sweep):
+    """Decision #29: `NONSMOOTH_SELECTION` declares a policy per op; Law 5 is
+    its consumer. An op that declares a policy nobody probes is an unconsumed
+    declaration."""
+    from tessera.autodiff.nonsmooth import NONSMOOTH_SELECTION
+
+    kink_rows = {r.op: r for r in sweep if r.law == "kink"}
+    for op in NONSMOOTH_SELECTION:
+        assert op in kink_rows, f"{op} declares a policy but has no Law-5 row"
+        assert kink_rows[op].status == "pass", (
+            f"{op}: kink law {kink_rows[op].status} — {kink_rows[op].detail}")
+
+
+def test_kink_law_catches_wrong_side_selection():
+    """A rule that returns grad 1 AT the relu kink violates the declared
+    SUBGRAD_ZERO policy — legal as *a* Clarke element, wrong as *the declared*
+    one, and invisible to Laws 1/3 which sample away from the kink."""
+    from tessera.autodiff.law_inputs import KINK_SPECS
+    from tessera.autodiff.laws import kink_check
+
+    def inclusive_relu_vjp(dout, x, **_):
+        return (np.asarray(dout) * (np.asarray(x) >= 0).astype(np.float64),)
+
+    r = kink_check("relu", KINK_SPECS["relu"], inclusive_relu_vjp, None)
+    assert r.status == "fail" and "declared" in r.detail, r
+
+
+def test_kink_law_catches_hard_select_instead_of_split():
+    """SUBGRAD_SPLIT requires an equal share among tied arguments; a hard
+    argmax select passes every smooth-point test but breaks the declared
+    policy."""
+    from tessera.autodiff.law_inputs import KINK_SPECS
+    from tessera.autodiff.laws import kink_check
+
+    def hard_select_vjp(dout, x, *, axis=None, **_):
+        a = np.asarray(x)
+        first = np.zeros_like(a)
+        np.put_along_axis(first, np.argmax(a, axis=-1)[..., None], 1.0, axis=-1)
+        return (np.asarray(dout) * first,)
+
+    r = kink_check("amax", KINK_SPECS["amax"], hard_select_vjp, None)
+    assert r.status == "fail" and "not equal" in r.detail, r
+
+
+def test_kink_law_catches_unconserved_tie_mass():
+    """Regression for a flaw in the law itself: an earlier conservation check
+    accepted `total == n_tied * share`, which is vacuous when the shares are
+    equal — so a rule handing EVERY tied element the full cotangent passed.
+    The target is 1.0 exactly (one tie group per probe)."""
+    from tessera.autodiff.law_inputs import KINK_SPECS
+    from tessera.autodiff.laws import kink_check
+
+    def full_mass_vjp(dout, x, *, axis=None, **_):
+        a = np.asarray(x)
+        m = (a == np.max(a, axis=-1, keepdims=True)).astype(np.float64)
+        return (np.asarray(dout) * m,)
+
+    r = kink_check("amax", KINK_SPECS["amax"], full_mass_vjp, None)
+    assert r.status == "fail" and "mass not conserved" in r.detail, r
+
+
+def test_kink_law_fails_closed_on_undeclared_policy():
+    """#21a: an op with no declared selection must error, never default."""
+    from tessera.autodiff.law_inputs import KINK_SPECS
+    from tessera.autodiff.laws import kink_check
+
+    r = kink_check("not_a_nonsmooth_op", KINK_SPECS["relu"],
+                   lambda dout, x, **_: (dout,), None)
+    assert r.status == "rule_error" and "undeclared" in r.detail, r

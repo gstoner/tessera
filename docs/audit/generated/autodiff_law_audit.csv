@@ -17,8 +17,10 @@ geometric,sub,adjoint,no_spec,0
 geometric,wedge,adjoint,no_spec,0
 tensor,abs,adjoint,pass,4
 tensor,abs,chain,pass,2
+tensor,abs,kink,pass,1
 tensor,absolute,adjoint,pass,4
 tensor,absolute,chain,pass,2
+tensor,absolute,kink,pass,1
 tensor,acos,adjoint,pass,4
 tensor,acos,chain,pass,2
 tensor,adafactor,adjoint,no_spec,0
@@ -33,8 +35,10 @@ tensor,all_reduce,adjoint,no_spec,0
 tensor,all_to_all,adjoint,no_spec,0
 tensor,amax,adjoint,pass,4
 tensor,amax,chain,pass,2
+tensor,amax,kink,pass,1
 tensor,amin,adjoint,pass,4
 tensor,amin,chain,pass,2
+tensor,amin,kink,pass,1
 tensor,asin,adjoint,pass,4
 tensor,asin,chain,pass,2
 tensor,asymmetric_bce,adjoint,no_spec,0
@@ -65,6 +69,7 @@ tensor,chunk,adjoint,no_spec,0
 tensor,cispo_policy_loss,adjoint,no_spec,0
 tensor,clamp,adjoint,pass,4
 tensor,clamp,chain,pass,2
+tensor,clamp,kink,pass,1
 tensor,clifford_codiff,adjoint,no_spec,0
 tensor,clifford_conjugate,adjoint,no_spec,0
 tensor,clifford_exp,adjoint,no_spec,0
@@ -83,6 +88,7 @@ tensor,clifford_rotor_sandwich,adjoint,no_spec,0
 tensor,clifford_vec_deriv,adjoint,no_spec,0
 tensor,clifford_wedge,adjoint,no_spec,0
 tensor,clip,adjoint,no_spec,0
+tensor,clip,kink,pass,1
 tensor,collective_permute,adjoint,no_spec,0
 tensor,contrastive_divergence_loss,adjoint,no_spec,0
 tensor,contrastive_loss,adjoint,no_spec,0
@@ -235,9 +241,11 @@ tensor,matmul,adjoint,pass,4
 tensor,matmul,chain,pass,2
 tensor,max,adjoint,pass,4
 tensor,max,chain,pass,2
+tensor,max,kink,pass,1
 tensor,max_pool,adjoint,no_spec,0
 tensor,maximum,adjoint,pass,4
 tensor,maximum,chain,pass,2
+tensor,maximum,kink,pass,1
 tensor,mean,adjoint,pass,4
 tensor,mean,chain,pass,2
 tensor,memory_index_score,adjoint,no_spec,0
@@ -245,9 +253,11 @@ tensor,memory_index_select_ste,adjoint,vjp_only,0
 tensor,memory_read,adjoint,no_spec,0
 tensor,min,adjoint,pass,4
 tensor,min,chain,pass,2
+tensor,min,kink,pass,1
 tensor,min_pool,adjoint,no_spec,0
 tensor,minimum,adjoint,pass,4
 tensor,minimum,chain,pass,2
+tensor,minimum,kink,pass,1
 tensor,mla_decode,adjoint,no_spec,0
 tensor,mla_decode_fused,adjoint,no_spec,0
 tensor,mod,adjoint,pass,4
@@ -311,6 +321,7 @@ tensor,reduce,adjoint,no_spec,0
 tensor,reduce_scatter,adjoint,no_spec,0
 tensor,relu,adjoint,pass,4
 tensor,relu,chain,pass,2
+tensor,relu,kink,pass,1
 tensor,repeat,adjoint,pass,4
 tensor,repeat,chain,pass,2
 tensor,reshape,adjoint,pass,4
@@ -345,6 +356,7 @@ tensor,sigmoid,chain,pass,2
 tensor,sigmoid_safe,adjoint,pass,4
 tensor,sigmoid_safe,chain,pass,2
 tensor,sign,adjoint,pass,4
+tensor,sign,kink,pass,1
 tensor,silu,adjoint,pass,4
 tensor,silu,chain,pass,2
 tensor,silu_mul,adjoint,pass,4

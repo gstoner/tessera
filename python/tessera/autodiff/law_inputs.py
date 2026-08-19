@@ -339,3 +339,95 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
                              + 1j * rng.standard_normal((3, 5)),), {"norm": "ortho"}),
                chain=False),
 }
+
+
+# ── Law 5: kink probes ───────────────────────────────────────────────────────
+# The specs above deliberately sample *inside* a smooth piece, because Laws 1/3
+# compare against finite differences that straddle a kink. Law 5 is the
+# complement: it evaluates the rules **exactly at** the kink, where the Clarke
+# subdifferential is a set and `nonsmooth.py` declares which element is
+# returned (Decision #21a). A kink probe therefore asserts a *policy*, not a
+# derivative — the only input where a legal-but-different selection is visible.
+
+
+@dataclass(frozen=True)
+class KinkSpec:
+    """One at-the-kink probe for a declared-nonsmooth op.
+
+    ``make`` returns ``(primals, kwargs)`` where at least one entry sits
+    exactly on the kink/tie. ``kink_mask`` marks, per differentiable operand,
+    which elements are at the kink (the only elements the policy governs).
+    ``expected`` is the policy-mandated derivative value at those elements:
+    a scalar for SUBGRAD_ZERO, or the string ``"split"`` for the
+    mass-conserving SUBGRAD_SPLIT family (checked as an equal share whose
+    total is 1).
+    """
+
+    make: Callable[[], tuple[tuple, dict]]
+    kink_mask: Callable[[tuple], tuple]
+    expected: object
+    note: str = ""
+
+
+def _at_zero_unary():
+    def make():
+        # Deliberately includes the kink itself plus both smooth sides, so a
+        # rule that is right at 0 but wrong nearby still fails.
+        return (np.array([[-1.5, -0.5, 0.0, 0.5, 1.5]]),), {}
+    return make
+
+
+def _mask_where_zero(primals):
+    (x,) = primals
+    return (np.asarray(x) == 0.0,)
+
+
+KINK_SPECS: dict[str, KinkSpec] = {
+    # SUBGRAD_ZERO family — one flat side; the declared selection is 0 at the
+    # kink, matching a central-difference oracle that sees a flat plateau.
+    "relu": KinkSpec(_at_zero_unary(), _mask_where_zero, 0.0),
+    "abs": KinkSpec(_at_zero_unary(), _mask_where_zero, 0.0,
+                    note="subdifferential at 0 is [-1,1]; midpoint declared"),
+    "absolute": KinkSpec(_at_zero_unary(), _mask_where_zero, 0.0),
+    "sign": KinkSpec(_at_zero_unary(), _mask_where_zero, 0.0),
+    # clip/clamp: the kink is at each bound, not at 0.
+    "clip": KinkSpec(
+        lambda: ((np.array([[-2.0, -1.0, 0.0, 1.0, 2.0]]),),
+                 {"min_val": -1.0, "max_val": 1.0}),
+        lambda p: (np.isin(np.asarray(p[0]), (-1.0, 1.0)),), 0.0,
+        note="strict interior only; grad 0 AT either bound"),
+    "clamp": KinkSpec(
+        lambda: ((np.array([[-2.0, -1.0, 0.0, 1.0, 2.0]]),),
+                 {"min": -1.0, "max": 1.0}),
+        lambda p: (np.isin(np.asarray(p[0]), (-1.0, 1.0)),), 0.0),
+    # SUBGRAD_SPLIT family — a tie among competing arguments; the cotangent
+    # is shared equally so the total mass is conserved.
+    "maximum": KinkSpec(
+        lambda: ((np.array([[1.0, 2.0, 3.0]]), np.array([[1.0, 5.0, 0.0]])), {}),
+        lambda p: tuple(np.asarray(p[0]) == np.asarray(p[1]) for _ in range(2)),
+        "split", note="element 0 is an exact tie"),
+    "minimum": KinkSpec(
+        lambda: ((np.array([[1.0, 2.0, 3.0]]), np.array([[1.0, 5.0, 0.0]])), {}),
+        lambda p: tuple(np.asarray(p[0]) == np.asarray(p[1]) for _ in range(2)),
+        "split"),
+    "amax": KinkSpec(
+        lambda: ((np.array([[3.0, 1.0, 3.0, 2.0]]),), {"axis": -1}),
+        lambda p: (np.asarray(p[0]) == np.max(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split", note="two-way tie for the maximum"),
+    "max": KinkSpec(
+        lambda: ((np.array([[3.0, 1.0, 3.0, 2.0]]),), {"axis": -1}),
+        lambda p: (np.asarray(p[0]) == np.max(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split", note="reduction form of the amax tie"),
+    "min": KinkSpec(
+        lambda: ((np.array([[1.0, 3.0, 1.0, 2.0]]),), {"axis": -1}),
+        lambda p: (np.asarray(p[0]) == np.min(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split", note="reduction form of the amin tie"),
+    "amin": KinkSpec(
+        lambda: ((np.array([[1.0, 3.0, 1.0, 2.0]]),), {"axis": -1}),
+        lambda p: (np.asarray(p[0]) == np.min(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split"),
+}

@@ -2733,68 +2733,6 @@ def jvp_irfft(primals, tangents, *, axis=-1, axes=None, n=None, norm="backward",
             np.fft.irfft(dx, n=n, axis=ax, norm=nrm))
 
 
-@_jvp("stft")
-def jvp_stft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
-    """STFT is linear in the input signal — JVP = STFT(tangent)."""
-    from numpy.lib.stride_tricks import sliding_window_view
-
-    def _stft(sig):
-        sig = np.asarray(sig, dtype=np.float64)
-        win = np.asarray(window, dtype=np.float64) if window is not None else np.ones(n_fft, dtype=np.float64)
-        frames = sliding_window_view(sig, n_fft, axis=-1)[..., ::hop, :]
-        return np.fft.rfft(frames * win, axis=-1)
-
-    return _stft(primals[0]), _stft(tangents[0])
-
-
-@_jvp("istft")
-def jvp_istft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
-    """Exact ISTFT product, including the overlap-add window quotient.
-
-    ISTFT is linear in its spectrum only while the window is fixed.  For an
-    active window both the overlap-add numerator and the quadratic window-
-    energy denominator contribute to the tangent.
-    """
-    frames = np.asarray(primals[0], dtype=np.complex128)
-    dframes = np.asarray(tangents[0], dtype=np.complex128)
-    win = (
-        np.asarray(primals[1], dtype=np.float64)
-        if len(primals) > 1
-        else np.asarray(window, dtype=np.float64)
-        if window is not None
-        else np.ones(n_fft, dtype=np.float64)
-    )
-    dwin = (
-        np.asarray(tangents[1], dtype=np.float64)
-        if len(tangents) > 1 and tangents[1] is not None
-        else np.zeros_like(win)
-    )
-    if win.ndim != 1 or dwin.shape != win.shape:
-        raise ValueError("ISTFT JVP requires matching rank-one window/tangent")
-    n_fft = int(win.shape[0])
-    time_frames = np.fft.irfft(frames, n=n_fft, axis=-1)
-    dtime_frames = np.fft.irfft(dframes, n=n_fft, axis=-1)
-    n_frames = frames.shape[-2]
-    out_len = (n_frames - 1) * hop + n_fft
-    prefix = frames.shape[:-2]
-    numerator = np.zeros(prefix + (out_len,), dtype=np.float64)
-    dnumerator = np.zeros_like(numerator)
-    denominator = np.zeros((out_len,), dtype=np.float64)
-    ddenominator = np.zeros_like(denominator)
-    for frame in range(n_frames):
-        start = frame * hop
-        sl = slice(start, start + n_fft)
-        numerator[..., sl] += time_frames[..., frame, :] * win
-        dnumerator[..., sl] += (
-            dtime_frames[..., frame, :] * win
-            + time_frames[..., frame, :] * dwin
-        )
-        denominator[sl] += win * win
-        ddenominator[sl] += 2.0 * win * dwin
-    safe = np.maximum(denominator, 1.0e-12)
-    primal = numerator / safe
-    tangent = dnumerator / safe - numerator * ddenominator / (safe * safe)
-    return primal, tangent
 
 
 @_jvp("dct")
@@ -2863,21 +2801,6 @@ def jvp_spectral_filter(primals, tangents, **_):
     )
     return out, dout
 
-
-@_jvp("spectral_conv")
-def jvp_spectral_conv(primals, tangents, **_):
-    """y = ifft(fft(x) * fft(kernel)). Bilinear in (x, kernel)."""
-    x = np.asarray(primals[0], dtype=np.float64)
-    k = np.asarray(primals[1], dtype=np.float64)
-    dx = np.asarray(tangents[0], dtype=np.float64)
-    dk = np.asarray(tangents[1], dtype=np.float64)
-    X = np.fft.rfft(x, axis=-1)
-    K = np.fft.rfft(k, axis=-1)
-    dX = np.fft.rfft(dx, axis=-1)
-    dK = np.fft.rfft(dk, axis=-1)
-    out = np.fft.irfft(X * K, n=x.shape[-1], axis=-1)
-    dout = np.fft.irfft(dX * K + X * dK, n=x.shape[-1], axis=-1)
-    return out, dout
 
 
 # ── Sparse matmul — linear in the dense operand ────────────────────────────
@@ -4153,3 +4076,92 @@ from . import jvps  # noqa: F401, E402 — import-side-effect registration hook
 
 
 __all__ = ["register_jvp", "get_jvp", "jvp"]
+
+
+# ── Spectral transforms: derived from the forward, not hand-written ──────────
+# AD-LAW-1f. These three had hand-written JVPs that reimplemented the transform
+# from scratch and honored NONE of the forward's configuration: `jvp_stft`
+# hardcoded n_fft=512/hop=128 and ignored the positional `win`/`hop` entirely
+# (so it raised on any canonical call), and ignored axis/center/pad_mode/
+# onesided/norm; `jvp_spectral_conv` and `jvp_istft` likewise pinned axis=-1
+# and norm="backward". Their VJPs, by contrast, are faithful transposes that
+# honor every key — so J and Jᵀ were derivatives of different functions.
+#
+# All three are (multi)linear, verified numerically: `stft` and
+# `spectral_conv` are bilinear in (signal, window/kernel), `istft` is linear
+# in the spectrum. So the rule IS the forward (Decision #30 — derive, don't
+# ask), and every configuration key is honored by construction because the
+# forward honors it. This also gives `MULTILINEAR_PRIMITIVES` a second
+# consumer beyond the structural-view family.
+def _register_derived_spectral_jvps() -> None:
+    from .linear import MULTILINEAR_PRIMITIVES, _resolve_forward, make_linear_jvp
+
+    # istft is NOT multilinear (its normalized overlap-add divides by a
+    # window-energy term), so it keeps a hand-written JVP — see below.
+    for name in ("stft", "spectral_conv"):
+        forward = _resolve_forward(name)
+        if forward is None:  # pragma: no cover - ops namespace always resolves
+            continue
+        _JVPS[name] = make_linear_jvp(forward, MULTILINEAR_PRIMITIVES[name])
+
+
+_register_derived_spectral_jvps()
+
+
+# AD-LAW-1f: `istft` was briefly derived from the forward alongside stft and
+# spectral_conv; that was wrong. It is linear in the spectrum but NOT in the
+# window — the normalized overlap-add divides by a window-energy denominator —
+# so derivation silently zeroed the window tangent that this rule computes and
+# `test_jax_transforms.py::test_istft_window_jvp_matches_centered_difference`
+# pins. Restored. Its configuration-key swallows (axis/center/onesided/norm/
+# length) remain OPEN findings in test_autodiff_laws.py: closing them needs a
+# config-honoring rewrite that PRESERVES this window quotient, which is its
+# own slice, not a mechanical derivation.
+@_jvp("istft")
+def jvp_istft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
+    """Exact ISTFT product, including the overlap-add window quotient.
+
+    ISTFT is linear in its spectrum only while the window is fixed.  For an
+    active window both the overlap-add numerator and the quadratic window-
+    energy denominator contribute to the tangent.
+    """
+    frames = np.asarray(primals[0], dtype=np.complex128)
+    dframes = np.asarray(tangents[0], dtype=np.complex128)
+    win = (
+        np.asarray(primals[1], dtype=np.float64)
+        if len(primals) > 1
+        else np.asarray(window, dtype=np.float64)
+        if window is not None
+        else np.ones(n_fft, dtype=np.float64)
+    )
+    dwin = (
+        np.asarray(tangents[1], dtype=np.float64)
+        if len(tangents) > 1 and tangents[1] is not None
+        else np.zeros_like(win)
+    )
+    if win.ndim != 1 or dwin.shape != win.shape:
+        raise ValueError("ISTFT JVP requires matching rank-one window/tangent")
+    n_fft = int(win.shape[0])
+    time_frames = np.fft.irfft(frames, n=n_fft, axis=-1)
+    dtime_frames = np.fft.irfft(dframes, n=n_fft, axis=-1)
+    n_frames = frames.shape[-2]
+    out_len = (n_frames - 1) * hop + n_fft
+    prefix = frames.shape[:-2]
+    numerator = np.zeros(prefix + (out_len,), dtype=np.float64)
+    dnumerator = np.zeros_like(numerator)
+    denominator = np.zeros((out_len,), dtype=np.float64)
+    ddenominator = np.zeros_like(denominator)
+    for frame in range(n_frames):
+        start = frame * hop
+        sl = slice(start, start + n_fft)
+        numerator[..., sl] += time_frames[..., frame, :] * win
+        dnumerator[..., sl] += (
+            dtime_frames[..., frame, :] * win
+            + time_frames[..., frame, :] * dwin
+        )
+        denominator[sl] += win * win
+        ddenominator[sl] += 2.0 * win * dwin
+    safe = np.maximum(denominator, 1.0e-12)
+    primal = numerator / safe
+    tangent = dnumerator / safe - numerator * ddenominator / (safe * safe)
+    return primal, tangent

@@ -379,7 +379,7 @@ tensor,softmax_safe,chain,pass,2
 tensor,softplus,adjoint,pass,4
 tensor,softplus,chain,pass,2
 tensor,sparsemax,adjoint,vjp_only,0
-tensor,spectral_conv,adjoint,no_spec,0
+tensor,spectral_conv,adjoint,pass,4
 tensor,spectral_filter,adjoint,no_spec,0
 tensor,spectral_norm,adjoint,no_spec,0
 tensor,split,adjoint,no_spec,0
@@ -392,7 +392,7 @@ tensor,squeeze,chain,pass,2
 tensor,stack,adjoint,no_spec,0
 tensor,std,adjoint,pass,4
 tensor,std,chain,pass,2
-tensor,stft,adjoint,no_spec,0
+tensor,stft,adjoint,pass,4
 tensor,stop_gradient,adjoint,vjp_only,0
 tensor,sub,adjoint,pass,4
 tensor,sub,chain,pass,2

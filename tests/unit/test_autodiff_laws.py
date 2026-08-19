@@ -191,12 +191,13 @@ def test_zero_tangent_ok_respected():
 # makes J and Jᵀ derivatives of two different functions). Pinned exactly: if
 # this set changes, a human looks — additions are new findings, removals are
 # fixes to record.
+# The stft/istft entries left this set in AD-LAW-1f: their hand-written
+# JVPs were deleted in favour of derivation from the forward, so there
+# is no second signature to disagree with.
 _KNOWN_NONE_CONVENTION = {
     ("istft", "hop"),
     ("istft", "n_fft"),
     ("masked_fill", "value"),
-    ("stft", "hop"),
-    ("stft", "n_fft"),
     ("unsqueeze", "axis"),
 }
 
@@ -277,7 +278,15 @@ _BENIGN_SWALLOWS = {
 # family rides the quantization-semantics review (STE primal conventions).
 # Do not add entries — fix the rule, or move to _BENIGN_SWALLOWS with a
 # recorded reason.
+# Triage outcome 2026-08-19 (AD-LAW-1f): the stft/istft/spectral_conv
+# entries left this set because their hand-written JVPs were DELETED —
+# all three are (multi)linear, so the JVP is now derived from the
+# forward (linear.py) and honors every configuration key by
+# construction. See test_spectral_jvps_are_derived_from_the_forward.
 _OPEN_SWALLOW_FINDINGS = {
+    # istft only — stft/spectral_conv left via derivation (see note above);
+    # istft keeps a hand rule for its window quotient, so closing these
+    # needs a config-honoring rewrite that preserves it (own slice).
     ("istft", "jvp", "axis"),
     ("istft", "jvp", "center"),
     ("istft", "jvp", "hop_length"),
@@ -290,16 +299,6 @@ _OPEN_SWALLOW_FINDINGS = {
     ("quantize_int4", "jvp", "symmetric"),
     ("quantize_int8", "jvp", "symmetric"),
     ("quantize_nvfp4", "jvp", "scale"),
-    ("spectral_conv", "jvp", "axis"),
-    ("spectral_conv", "jvp", "norm"),
-    ("spectral_conv", "jvp", "normalization"),
-    ("stft", "jvp", "axis"),
-    ("stft", "jvp", "center"),
-    ("stft", "jvp", "hop_length"),
-    ("stft", "jvp", "norm"),
-    ("stft", "jvp", "normalization"),
-    ("stft", "jvp", "onesided"),
-    ("stft", "jvp", "pad_mode"),
 }
 
 _KNOWN_SWALLOWED_KWARGS = _OPEN_SWALLOW_FINDINGS | set(_BENIGN_SWALLOWS)
@@ -820,6 +819,10 @@ def test_forward_mode_positional_config_matches_keyword():
 # (the JVPs now accept `norm`/`normalization` and normalize like the
 # forward), so they leave this set rather than being re-pinned.
 _OPEN_FORWARD_KEY_SWALLOWS = {
+    ("istft", "jvp", "axis"),
+    ("istft", "jvp", "center"),
+    ("istft", "jvp", "norm"),
+    ("istft", "jvp", "onesided"),
     ("adam", "jvp", "cast_updates_to_param_dtype"),
     ("adam", "jvp", "compute_dtype"),
     ("adam", "jvp", "state_dtype"),
@@ -843,10 +846,6 @@ _OPEN_FORWARD_KEY_SWALLOWS = {
     ("grouped_gemm", "jvp", "kind"),
     ("grouped_gemm", "vjp", "kind"),
     ("image_resize", "jvp", "antialias"),
-    ("istft", "jvp", "axis"),
-    ("istft", "jvp", "center"),
-    ("istft", "jvp", "norm"),
-    ("istft", "jvp", "onesided"),
     ("momentum", "jvp", "cast_updates_to_param_dtype"),
     ("momentum", "jvp", "compute_dtype"),
     ("momentum", "jvp", "state_dtype"),
@@ -868,13 +867,6 @@ _OPEN_FORWARD_KEY_SWALLOWS = {
     ("quantize_fp8", "vjp", "format"),
     ("quantize_nvfp4", "jvp", "block_size"),
     ("quantize_nvfp4", "vjp", "block_size"),
-    ("spectral_conv", "jvp", "axis"),
-    ("spectral_conv", "jvp", "norm"),
-    ("stft", "jvp", "axis"),
-    ("stft", "jvp", "center"),
-    ("stft", "jvp", "norm"),
-    ("stft", "jvp", "onesided"),
-    ("stft", "jvp", "pad_mode"),
 }
 
 
@@ -1040,3 +1032,102 @@ def test_kink_law_fails_closed_on_undeclared_policy():
     r = kink_check("not_a_nonsmooth_op", KINK_SPECS["relu"],
                    lambda dout, x, **_: (dout,), None)
     assert r.status == "rule_error" and "undeclared" in r.detail, r
+
+
+# ── AD-LAW-1f: spectral JVPs derived from the forward ────────────────────────
+
+
+@pytest.mark.parametrize("op,linear_args", [
+    ("stft", (0, 1)), ("spectral_conv", (0, 1)),
+])
+def test_spectral_ops_are_declared_multilinear(op, linear_args):
+    """The declaration that makes derivation legal — verified numerically,
+    not assumed: f(a+s·a′, b) == f(a,b) + s·f(a′,b) for each linear slot."""
+    from tessera import ops
+    from tessera.autodiff.linear import MULTILINEAR_PRIMITIVES
+
+    assert MULTILINEAR_PRIMITIVES[op] == linear_args
+    fwd = getattr(getattr(ops, op), "__wrapped__", getattr(ops, op))
+    rng = np.random.default_rng(17)
+    if op == "stft":
+        args, kw = [rng.standard_normal(64), np.hanning(16)], {"hop": 4}
+        alt = [rng.standard_normal(64), np.hanning(16) * 0.7]
+    elif op == "spectral_conv":
+        args, kw = [rng.standard_normal(32), rng.standard_normal(32)], {}
+        alt = [rng.standard_normal(32), rng.standard_normal(32)]
+    s = 2.7
+    for i in linear_args:
+        shifted = list(args)
+        shifted[i] = args[i] + s * alt[i]
+        swapped = list(args)
+        swapped[i] = alt[i]
+        np.testing.assert_allclose(
+            fwd(*shifted, **kw), fwd(*args, **kw) + s * fwd(*swapped, **kw),
+            atol=1e-9, err_msg=f"{op} is not linear in arg {i}")
+
+
+def test_spectral_jvps_are_derived_from_the_forward():
+    """AD-LAW-1f: the hand-written spectral JVPs reimplemented the transform
+    and honored NONE of the forward's configuration — `jvp_stft` hardcoded
+    n_fft=512/hop=128 and ignored the positional window and hop entirely, so
+    it RAISED on any canonical call, while `vjp_stft` was a faithful
+    transpose honoring every key. J and Jᵀ were derivatives of different
+    functions. Now derived from the forward, so the keys are honored by
+    construction."""
+    from tessera import ops
+    from tessera.autodiff.jvp import _JVPS
+
+    rng = np.random.default_rng(3)
+    x, win, hop = rng.standard_normal(64), np.hanning(16), 4
+    fwd = getattr(ops.stft, "__wrapped__", ops.stft)
+
+    # 1. The canonical call no longer raises, and the primal IS the forward.
+    y, _ = _JVPS["stft"]((x, win), (np.zeros_like(x), np.zeros_like(win)),
+                         hop=hop)
+    np.testing.assert_allclose(y, fwd(x, win, hop=hop), atol=1e-12)
+
+    # 2. Non-default keys are honored — the exact thing the old rule ignored.
+    kw = {"hop": hop, "center": True, "norm": "ortho"}
+    dx, dw = rng.standard_normal(64), rng.standard_normal(16)
+    y, dy = _JVPS["stft"]((x, win), (dx, dw), **kw)
+    np.testing.assert_allclose(y, fwd(x, win, **kw), atol=1e-12)
+    eps = 1e-6
+    fd = (fwd(x + eps * dx, win + eps * dw, **kw)
+          - fwd(x - eps * dx, win - eps * dw, **kw)) / (2 * eps)
+    np.testing.assert_allclose(dy, fd, atol=1e-7)
+
+
+def test_spectral_ops_pass_the_adjoint_law(sweep):
+    """The hand-written VJPs are faithful transposes; the derived JVPs must
+    pair with them exactly."""
+    rows = {r.op: r for r in sweep if r.law == "adjoint"}
+    for op in ("stft", "spectral_conv"):
+        assert rows[op].status == "pass", f"{op}: {rows[op].status} {rows[op].detail}"
+
+
+def test_istft_keeps_a_hand_rule_and_its_findings_stay_open():
+    """AD-LAW-1f negative result, recorded rather than papered over: `istft`
+    was briefly derived from the forward alongside stft/spectral_conv, and
+    that was WRONG — it is linear in the spectrum but its normalized
+    overlap-add divides by a window-energy term, so derivation silently
+    zeroed the window tangent that `jvp_istft` computes and
+    test_jax_transforms.py pins. It therefore keeps its hand-written rule,
+    is NOT declared multilinear, and its configuration-key swallows stay
+    pinned open — closing them needs a config-honoring rewrite that
+    preserves the window quotient."""
+    from tessera.autodiff.linear import MULTILINEAR_PRIMITIVES
+
+    assert "istft" not in MULTILINEAR_PRIMITIVES
+    assert ("istft", "jvp", "norm") in _OPEN_SWALLOW_FINDINGS
+    assert ("istft", "jvp", "center") in _OPEN_FORWARD_KEY_SWALLOWS
+
+    # The window tangent the derivation would have lost is still computed.
+    from tessera.autodiff.jvp import _JVPS
+
+    rng = np.random.default_rng(411)
+    X = rng.normal(size=(3, 5)) + 1j * rng.normal(size=(3, 5))
+    win = np.hanning(8) + 0.25
+    _, tangent = _JVPS["istft"]((X, win),
+                                (np.zeros_like(X), rng.normal(size=win.shape)),
+                                n_fft=8, hop=4)
+    assert np.any(np.abs(tangent) > 1e-9), "window tangent is identically zero"

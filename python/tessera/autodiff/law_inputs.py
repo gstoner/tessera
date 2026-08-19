@@ -338,6 +338,21 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
     "irfft": S(lambda rng: ((rng.standard_normal((3, 5))
                              + 1j * rng.standard_normal((3, 5)),), {"norm": "ortho"}),
                chain=False),
+    # ── AD-LAW-1f: spectral transforms (JVPs now derived from the forward) ──
+    # Non-default keys on purpose: the old hand-written JVPs ignored
+    # axis/center/norm/onesided entirely, so a default-only probe would not
+    # have caught them.
+    "stft": S(lambda rng: ((rng.standard_normal(64), np.hanning(16)),
+                           {"hop": 4, "center": True, "norm": "ortho"}),
+              diff_args=(0, 1), chain=False,
+              note="bilinear in (signal, window). `hop` travels as a kwarg: it "
+                   "is the forward's 3rd positional but CONFIG, and the rules "
+                   "declare it keyword-only — the AD-LAW-1d split"),
+    "spectral_conv": S(lambda rng: ((rng.standard_normal(32),
+                                     rng.standard_normal(32)),
+                                    {"norm": "ortho"}),
+                       diff_args=(0, 1), chain=False,
+                       note="bilinear in (signal, kernel)"),
 }
 
 

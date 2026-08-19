@@ -46,6 +46,7 @@ __all__ = [
     "apple_gpu_available",
     "apple_gpu_skip_reason",
     "apple_gpu_runtime_handle",
+    "apple_gpu_prebuilt_skips",
     "bind_symbol",
     "bind_registered",
     "expected_symbols",
@@ -66,6 +67,11 @@ _loaded: bool = False
 _dylib_path: Optional[Path] = None
 # Per-(symbol, argtypes-tuple, restype) binding cache.
 _symbol_cache: dict[tuple, Callable] = {}
+# Prebuilt candidates rejected as stale, with the reason. Surfaced by
+# `apple_gpu_prebuilt_skips()` so "why did it rebuild from source?" is
+# answerable without re-deriving it -- a stale CMake build is a normal dev
+# state (`ninja -C build TesseraAppleRuntimeShared`), not a silent one.
+_prebuilt_skips: list[str] = []
 
 
 def _is_darwin() -> bool:
@@ -116,6 +122,61 @@ _SENTINEL_SYMBOLS = (
 )
 
 
+def _defined_symbols(path: Path) -> Optional[set[str]]:
+    """The symbols ``path`` defines, read from the file WITHOUT loading it.
+
+    ``None`` when it cannot be determined (no ``nm``, unreadable file, ...);
+    the caller then falls back to the load-and-probe path.
+    """
+    tool = shutil.which("nm") or shutil.which("llvm-nm")
+    if tool is None:
+        return None
+    try:
+        proc = subprocess.run(
+            [tool, "-gU", str(path)], capture_output=True, text=True, timeout=120
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    defined: set[str] = set()
+    for line in proc.stdout.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        name = parts[-1]
+        # Mach-O prefixes C symbols with an underscore.
+        defined.add(name[1:] if name.startswith("_") else name)
+    return defined
+
+
+def _prebuilt_is_current(path: Path) -> Optional[bool]:
+    """Whether ``path`` exports every staleness sentinel, decided from the file.
+
+    Deciding this WITHOUT ``dlopen`` is the whole point. ``ctypes.CDLL`` on a
+    candidate registers the runtime's Objective-C classes process-wide, and
+    rejecting it afterwards does not unregister them -- the ObjC runtime pins an
+    image that has defined classes, so there is nothing to undo. A stale
+    candidate probed that way therefore stayed resident, and the from-source
+    dylib compiled next registered the same classes again:
+
+        objc[...]: Class TesseraMlpkgPipeline is implemented in both
+        build/.../libTesseraAppleRuntime.dylib and
+        /tmp/tessera_apple_gpu_runtime/libtessera_apple_gpu_runtime.<stamp>.dylib
+
+    Two images of one runtime is not just noise: they hold separate copies of
+    the thread_local last-error channel and every other file-static, so which
+    one a symbol resolves to decides what the caller observes.
+
+    ``None`` means undecidable, and the caller keeps the old behaviour rather
+    than rejecting a candidate it cannot actually fault.
+    """
+    defined = _defined_symbols(path)
+    if defined is None:
+        return None
+    return all(sentinel in defined for sentinel in _SENTINEL_SYMBOLS)
+
+
 def _prebuilt_candidate() -> Optional[ctypes.CDLL]:
     """Return a loaded handle for a prebuilt Apple GPU runtime, if one is
     available and current: ``$TESSERA_APPLE_GPU_RUNTIME_LIB`` first, then a
@@ -134,14 +195,30 @@ def _prebuilt_candidate() -> Optional[ctypes.CDLL]:
     backend = repo_root / "build/src/compiler/codegen/Tessera_Apple_Backend"
     candidates.append(backend / "libTesseraAppleRuntime.dylib")
     candidates.append(backend / "libTesseraAppleRuntime.so")
+    _prebuilt_skips.clear()
     for cand in candidates:
         if not cand.exists():
             continue
+        # Staleness first, from the file: loading a stale candidate to probe it
+        # leaves it resident (see `_prebuilt_is_current`).
+        if _prebuilt_is_current(cand) is False:
+            missing = sorted(
+                set(_SENTINEL_SYMBOLS) - (_defined_symbols(cand) or set())
+            )
+            _prebuilt_skips.append(
+                f"{cand}: stale, missing {len(missing)} sentinel symbol(s) "
+                f"({', '.join(missing[:3])}{', ...' if len(missing) > 3 else ''}); "
+                "rebuild with `ninja -C build TesseraAppleRuntimeShared`"
+            )
+            continue
         try:
             lib = ctypes.CDLL(str(cand))
+            # Re-check after loading: `nm` may be unavailable (undecidable
+            # above), and a symbol the table lists can still fail to bind.
             for sentinel in _SENTINEL_SYMBOLS:  # staleness gate
                 getattr(lib, sentinel)
-        except (OSError, AttributeError):
+        except (OSError, AttributeError) as exc:
+            _prebuilt_skips.append(f"{cand}: rejected after load ({exc})")
             continue
         return lib
     return None
@@ -241,6 +318,16 @@ def apple_gpu_runtime_handle() -> tuple[Optional[ctypes.CDLL], Optional[Path],
     callers that want to log / report the dylib location."""
     apple_gpu_runtime()
     return _handle, _dylib_path, _skip_reason
+
+
+def apple_gpu_prebuilt_skips() -> tuple[str, ...]:
+    """Prebuilt runtime candidates that were rejected, and why.
+
+    Empty when a prebuilt was accepted, or when none existed. A non-empty
+    result explains a from-source rebuild -- usually a stale `build/` dylib.
+    """
+    apple_gpu_runtime()  # trigger lazy load
+    return tuple(_prebuilt_skips)
 
 
 def bind_symbol(

@@ -8,6 +8,37 @@ last_updated: 2026-08-19
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `APPLE-RUNTIME-SINGLE-IMAGE-2026-08-19` — **Apple runtime
+loading; Apple outcome: parity validated, no Metal evidence changed.**
+The single-image slice fixes duplicate loading of the Apple GPU runtime.
+`_apple_gpu_dispatch._prebuilt_candidate` decided whether a prebuilt dylib was
+current by `ctypes.CDLL`-ing it and probing sentinel symbols. Loading is not a
+read-only probe: it registers the runtime's Objective-C classes process-wide,
+and skipping the candidate afterwards does not unregister them (the ObjC
+runtime pins an image that has defined classes). A stale candidate therefore
+stayed resident and the from-source dylib compiled next registered the same
+classes again -- two images of one runtime, each with its own copy of every
+file-static, including the thread_local last-error channel that
+`_apple_gpu_run_checked` reads to decide whether a kernel failed. Staleness is
+now read from the file's symbol table via `nm`, so a stale candidate is never
+loaded; an undecidable probe (no `nm`) keeps the previous load-and-probe
+behaviour rather than rejecting a library it cannot fault.
+Apple impact: this is the Apple runtime loader. Measured on the M1 Max with a
+stale `build/libTesseraAppleRuntime.dylib` (2026-08-16, missing the four
+low-precision `*_bwd_{f16,bf16}` sentinels): two resident images and a
+duplicate-class warning on every run before, one image and no warning after,
+with a current prebuilt still accepted without a from-source rebuild. No Metal
+kernel, `.metallib`, or exact-device row changes — the change is which image is
+loaded, not what it computes — so no Apple GPU proof is re-run or re-claimed.
+`apple_gpu_prebuilt_skips()` now reports a rejected candidate and names the
+remedy (`ninja -C build TesseraAppleRuntimeShared`), so a from-source rebuild
+caused by a stale build is explainable instead of looking like "no prebuilt
+existed". Note for anyone reading old logs: because the two images held
+separate statics, an error set in one was invisible to a reader bound to the
+other, so pre-fix runs on a host with a stale `build/` could report a clean
+last-error channel that had never been consulted.
+
+
 Cross-backend sync `APPLE-STUB-BINARY-OPCODES-2026-08-19` — **shared runtime
 contract; Apple outcome: parity validated off-device, exact-device evidence
 unchanged.** The portable-stub opcode slice fixes a silent wrong-answer class in the Apple

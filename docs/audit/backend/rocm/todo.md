@@ -7,6 +7,27 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `APPLE-RUNTIME-SINGLE-IMAGE-2026-08-19` — **Apple runtime
+loading; ROCm outcome: not applicable.** The single-image slice fixes duplicate loading of the Apple GPU runtime.
+`_apple_gpu_dispatch._prebuilt_candidate` decided whether a prebuilt dylib was
+current by `ctypes.CDLL`-ing it and probing sentinel symbols. Loading is not a
+read-only probe: it registers the runtime's Objective-C classes process-wide,
+and skipping the candidate afterwards does not unregister them (the ObjC
+runtime pins an image that has defined classes). A stale candidate therefore
+stayed resident and the from-source dylib compiled next registered the same
+classes again -- two images of one runtime, each with its own copy of every
+file-static, including the thread_local last-error channel that
+`_apple_gpu_run_checked` reads to decide whether a kernel failed. Staleness is
+now read from the file's symbol table via `nm`, so a stale candidate is never
+loaded; an undecidable probe (no `nm`) keeps the previous load-and-probe
+behaviour rather than rejecting a library it cannot fault.
+ROCm impact: none. gfx1151 loads HIP/hsaco through its own path, not through
+`_apple_gpu_dispatch`. Worth noting for symmetry: the duplicate-image class of
+defect needs an ObjC/Mach-O runtime that registers classes at load, which the
+ROCm lane does not have. No gfx1151 retest required and no device evidence is
+produced or claimed.
+
+
 Cross-backend sync `APPLE-STUB-BINARY-OPCODES-2026-08-19` — **shared runtime
 contract; ROCm outcome: not applicable.** The portable-stub opcode slice fixes a silent wrong-answer class in the Apple
 GPU elementwise-binary lane. `apple_gpu_runtime_stub.cpp` — compiled on every

@@ -252,6 +252,17 @@ def test_paired_rule_defaults_agree():
 # the swallowed name can never be sent by a canonical caller, or is
 # side-internal protocol. Keyed with the recorded reason.
 _BENIGN_SWALLOWS = {
+    # AD-LAW-1g: straight-through estimators. The tangent flows through
+    # unchanged, so the derivative is identically 1 no matter what these keys
+    # say — verified for both modes across both settings of each key
+    # (test_quantize_ste_derivative_is_key_invariant). The keys select the
+    # quantization grid, which an STE deliberately does not see.
+    ("quantize_fp4", "jvp", "scale"): "STE derivative is key-invariant (=1)",
+    ("quantize_fp6", "jvp", "scale"): "STE derivative is key-invariant (=1)",
+    ("quantize_nvfp4", "jvp", "scale"): "STE derivative is key-invariant (=1)",
+    ("quantize_int4", "jvp", "symmetric"): "STE derivative is key-invariant (=1)",
+    ("quantize_int8", "jvp", "symmetric"): "STE derivative is key-invariant (=1)",
+
     ("adam", "jvp", "_output_index"):
         "vjp-side multi-output cotangent selector, not a forward kwarg",
     ("rope_split", "jvp", "_output_index"):
@@ -294,11 +305,6 @@ _OPEN_SWALLOW_FINDINGS = {
     ("istft", "jvp", "norm"),
     ("istft", "jvp", "normalization"),
     ("istft", "jvp", "onesided"),
-    ("quantize_fp4", "jvp", "scale"),
-    ("quantize_fp6", "jvp", "scale"),
-    ("quantize_int4", "jvp", "symmetric"),
-    ("quantize_int8", "jvp", "symmetric"),
-    ("quantize_nvfp4", "jvp", "scale"),
 }
 
 _KNOWN_SWALLOWED_KWARGS = _OPEN_SWALLOW_FINDINGS | set(_BENIGN_SWALLOWS)
@@ -818,6 +824,9 @@ def test_forward_mode_positional_config_matches_keyword():
 # ("fft"/"ifft"/"rfft"/"irfft", "jvp", "norm") were fixed by AD-LAW-1b
 # (the JVPs now accept `norm`/`normalization` and normalize like the
 # forward), so they leave this set rather than being re-pinned.
+# AD-LAW-1g: the dequantize_nvfp4 block_size entries left this set —
+# both modes now READ the key so the per-block scale expands exactly
+# as the canonical forward blocks it (before, both crashed outright).
 _OPEN_FORWARD_KEY_SWALLOWS = {
     ("istft", "jvp", "axis"),
     ("istft", "jvp", "center"),
@@ -841,8 +850,6 @@ _OPEN_FORWARD_KEY_SWALLOWS = {
     ("dequantize_fp6", "jvp", "format"),
     ("dequantize_fp6", "vjp", "format"),
     ("dequantize_fp8", "vjp", "format"),
-    ("dequantize_nvfp4", "jvp", "block_size"),
-    ("dequantize_nvfp4", "vjp", "block_size"),
     ("grouped_gemm", "jvp", "kind"),
     ("grouped_gemm", "vjp", "kind"),
     ("image_resize", "jvp", "antialias"),
@@ -1131,3 +1138,87 @@ def test_istft_keeps_a_hand_rule_and_its_findings_stay_open():
                                 (np.zeros_like(X), rng.normal(size=win.shape)),
                                 n_fft=8, hop=4)
     assert np.any(np.abs(tangent) > 1e-9), "window tangent is identically zero"
+
+
+# ── AD-LAW-1g: the quantize family ───────────────────────────────────────────
+
+
+@pytest.mark.parametrize("op,key,values", [
+    ("quantize_int8", "symmetric", (True, False)),
+    ("quantize_int4", "symmetric", (True, False)),
+    ("quantize_fp4", "scale", (None, 4.0)),
+    ("quantize_fp6", "scale", (None, 4.0)),
+    ("quantize_nvfp4", "scale", (None, 4.0)),
+])
+def test_quantize_ste_derivative_is_key_invariant(op, key, values):
+    """The evidence behind classifying these swallows benign: a
+    straight-through estimator's derivative is identically 1, so the keys
+    that select the quantization grid cannot change it. Verified in BOTH
+    modes across both settings — not argued from the docstring."""
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.vjp import _VJPS
+
+    x = np.random.default_rng(11).standard_normal(8) * 3
+    seen_j, seen_v = [], []
+    for v in values:
+        _, dy = _JVPS[op]((x,), (np.ones_like(x),), **{key: v})
+        (g,) = _VJPS[op](np.ones_like(x), x, **{key: v})
+        seen_j.append(np.asarray(dy, dtype=np.float64))
+        seen_v.append(np.asarray(g, dtype=np.float64))
+    np.testing.assert_allclose(seen_j[0], seen_j[1], atol=0)
+    np.testing.assert_allclose(seen_v[0], seen_v[1], atol=0)
+    np.testing.assert_allclose(seen_j[0], np.ones_like(x), atol=0)
+
+
+def test_dequantize_nvfp4_handles_per_block_scales():
+    """AD-LAW-1g's hard defect: nvfp4's canonical forward takes a per-block
+    scale array, but both rules reached `float(scale)` and raised
+    `TypeError: only 0-dimensional arrays ...` — so every canonical
+    multi-block call was unusable in either mode. Now broadcast per block,
+    with `block_size` read rather than swallowed."""
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.vjp import _VJPS
+
+    q = np.ones(32)
+    scales = (np.arange(4) + 1).astype(np.float64)   # 4 blocks of 8
+    (g,) = (_VJPS["dequantize_nvfp4"](np.ones_like(q), q, scales,
+                                      block_size=8)[:1])
+    _, dy = _JVPS["dequantize_nvfp4"]((q, scales),
+                                      (np.ones_like(q), np.zeros_like(scales)),
+                                      block_size=8)
+    # Each block carries its own scale, and the modes agree.
+    np.testing.assert_allclose(np.asarray(g)[::8], scales)
+    np.testing.assert_allclose(np.asarray(dy)[::8], scales)
+    # The scalar-scale path is unchanged.
+    (gs,) = _VJPS["dequantize_fp4"](np.ones(6), np.arange(6.0),
+                                    np.float32(0.5))[:1]
+    np.testing.assert_allclose(np.asarray(gs), np.full(6, 0.5))
+
+
+def test_dequantize_rule_contradicts_stub_forward():
+    """Recorded open question, NOT silently resolved (claim integrity).
+
+    Every `dequantize_*` reference forward is an identity stub: it validates
+    the format key and returns the container as fp32, ignoring `scale`. The
+    AD rules instead implement the true scaled inverse (d/dq = scale). Both
+    cannot be right, and which one moves is a quantization-track decision
+    about completing the forward — not something the autodiff layer should
+    invent. This test PINS the contradiction so it stays visible: it fails
+    the day either side changes, which is exactly when a human should look.
+    """
+    from tessera import ops
+    from tessera.autodiff.vjp import _VJPS
+
+    # eps is deliberately coarse: the stub forward casts to float32, so a
+    # 1e-4 step lands in cancellation noise.
+    q, scale, eps = np.arange(6.0), np.float32(0.5), 1e-2
+    fwd = getattr(ops.dequantize_fp4, "__wrapped__", ops.dequantize_fp4)
+
+    # The stub forward is the identity in the container.
+    np.testing.assert_allclose(fwd(q, scale), q.astype(np.float32))
+    fd = (fwd(q + eps, scale) - fwd(q - eps, scale)) / (2 * eps)
+    np.testing.assert_allclose(fd, np.ones_like(q), atol=1e-2)
+
+    # The rule assumes the scaled inverse.
+    (g,) = _VJPS["dequantize_fp4"](np.ones_like(q), q, scale)[:1]
+    np.testing.assert_allclose(np.asarray(g), np.full(6, float(scale)))

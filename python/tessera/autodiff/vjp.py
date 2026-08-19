@@ -4870,11 +4870,40 @@ def _ste_quant_vjp(dout, x, **_):
     return (np.asarray(dout, dtype=np.float64),)
 
 
-def _ste_dequant_vjp(dout, q, scale=None, **_):
+def _ste_dequant_vjp(dout, q, scale=None, *, block_size=None, **_):
+    """Cotangent of a scaled dequantization.
+
+    `scale` may be a scalar (fp4/fp6/fp8) or a PER-BLOCK array (nvfp4, whose
+    canonical forward takes `scales.shape == x.shape[:-1] + (num_blocks,)`).
+    The array case previously reached `float(scale)` and raised
+    `TypeError: only 0-dimensional arrays can be converted to Python
+    scalars`, so BOTH modes were unusable for every canonical multi-block
+    nvfp4 call — found by AD-LAW-1g. Broadcasting per block is correct under
+    either reading of the scale convention, so it is fixed here; whether the
+    factor should be `scale` at all is a separate, recorded open question
+    (see test_autodiff_laws.py::test_dequantize_rule_contradicts_stub_forward).
+    """
     if scale is None:
         return (None, None)
     do = np.asarray(dout, dtype=np.float64)
-    return (do * float(scale), None)
+    return (do * _broadcast_block_scale(scale, do.shape, block_size), None)
+
+
+def _broadcast_block_scale(scale, shape, block_size=None) -> np.ndarray:
+    """Expand a scalar or per-block scale to `shape`'s last axis."""
+    s = np.asarray(scale, dtype=np.float64)
+    if s.ndim == 0:
+        return s
+    n = shape[-1]
+    if s.shape[-1] == n:
+        return s
+    reps = block_size or -(-n // s.shape[-1])   # ceil-div when unspecified
+    expanded = np.repeat(s, reps, axis=-1)
+    if expanded.shape[-1] < n:
+        raise ValueError(
+            f"block scale of shape {s.shape} with block_size={reps} cannot "
+            f"cover {n} elements")
+    return expanded[..., :n]
 
 
 @_vjp("quantize_fp4")
@@ -4903,8 +4932,10 @@ def vjp_quantize_nvfp4(dout, x, *, scale=None, **_):
 
 
 @_vjp("dequantize_nvfp4")
-def vjp_dequantize_nvfp4(dout, q, scale, **_):
-    return _ste_dequant_vjp(dout, q, scale=scale)
+def vjp_dequantize_nvfp4(dout, q, scale, *, block_size=None, **_):
+    # `block_size` is read (not swallowed) so the per-block scale expands
+    # exactly as the canonical forward blocks it — AD-LAW-1g.
+    return _ste_dequant_vjp(dout, q, scale=scale, block_size=block_size)
 
 
 @_vjp("dequantize_int4")

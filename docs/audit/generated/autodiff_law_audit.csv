@@ -125,7 +125,7 @@ tensor,dequantize_fp6,adjoint,no_spec,0
 tensor,dequantize_fp8,adjoint,no_spec,0
 tensor,dequantize_int4,adjoint,no_spec,0
 tensor,dequantize_int8,adjoint,no_spec,0
-tensor,dequantize_nvfp4,adjoint,no_spec,0
+tensor,dequantize_nvfp4,adjoint,pass,4
 tensor,digamma,adjoint,pass,4
 tensor,digamma,chain,pass,2
 tensor,div,adjoint,pass,4
@@ -308,12 +308,12 @@ tensor,psum,adjoint,no_spec,0
 tensor,qkv_projection,adjoint,pass,4
 tensor,qkv_projection,chain,not_applicable,0
 tensor,qr,adjoint,no_spec,0
-tensor,quantize_fp4,adjoint,no_spec,0
-tensor,quantize_fp6,adjoint,no_spec,0
+tensor,quantize_fp4,adjoint,pass,4
+tensor,quantize_fp6,adjoint,pass,4
 tensor,quantize_fp8,adjoint,no_spec,0
-tensor,quantize_int4,adjoint,no_spec,0
-tensor,quantize_int8,adjoint,no_spec,0
-tensor,quantize_nvfp4,adjoint,no_spec,0
+tensor,quantize_int4,adjoint,pass,4
+tensor,quantize_int8,adjoint,pass,4
+tensor,quantize_nvfp4,adjoint,pass,4
 tensor,quantized_matmul,adjoint,vjp_only,0
 tensor,reciprocal,adjoint,pass,4
 tensor,reciprocal,chain,pass,2

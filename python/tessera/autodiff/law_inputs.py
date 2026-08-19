@@ -353,6 +353,31 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
                                     {"norm": "ortho"}),
                        diff_args=(0, 1), chain=False,
                        note="bilinear in (signal, kernel)"),
+
+    # ── AD-LAW-1g: quantize family (straight-through estimator) ─────────────
+    # STE rules: the tangent flows through unchanged, so the derivative is
+    # identically 1 regardless of scale/symmetric/format — verified, which is
+    # what makes those swallowed keys benign. `chain=False`: an STE primal is
+    # deliberately NOT the canonical forward's output (the forward returns a
+    # (q, scale, zero_point) tuple), so the chain law's primal anchor does not
+    # apply — this is a declared convention, not a defect.
+    "quantize_int8": S(lambda rng: ((rng.standard_normal((3, 4)) * 3,), {}),
+                       chain=False, note="STE; derivative is identity"),
+    "quantize_int4": S(lambda rng: ((rng.standard_normal((3, 4)) * 3,), {}),
+                       chain=False, note="STE; derivative is identity"),
+    "quantize_fp4": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                      chain=False, note="STE; derivative is identity"),
+    "quantize_fp6": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                      chain=False, note="STE; derivative is identity"),
+    "quantize_nvfp4": S(lambda rng: ((rng.standard_normal((2, 16)),), {}),
+                        chain=False, note="STE; derivative is identity"),
+    # dequantize: linear in the container, with a per-block scale for nvfp4.
+    "dequantize_nvfp4": S(
+        lambda rng: ((rng.standard_normal(32),
+                      (np.arange(4) + 1).astype(np.float64)), {"block_size": 8}),
+        diff_args=(0,), chain=False,
+        note="per-block scale array — the shape that crashed both modes "
+             "before AD-LAW-1g"),
 }
 
 

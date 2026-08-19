@@ -2643,14 +2643,21 @@ def _ste_quant_jvp_unary(primals, tangents):
     return x, dx
 
 
-def _ste_dequant_jvp(primals, tangents, scale_arg_idx=1):
+def _ste_dequant_jvp(primals, tangents, scale_arg_idx=1, block_size=None):
+    """Forward twin of `_ste_dequant_vjp`; same per-block scale handling.
+
+    `float(scale)` crashed on nvfp4's per-block scale array (AD-LAW-1g).
+    """
+    from .vjp import _broadcast_block_scale
+
     q = primals[0]
     scale = primals[scale_arg_idx] if len(primals) > scale_arg_idx else None
     dq = np.asarray(tangents[0], dtype=np.float64)
+    q_arr = np.asarray(q, dtype=np.float64)
     if scale is None:
-        return np.asarray(q, dtype=np.float64), dq
-    s = float(scale)
-    return np.asarray(q, dtype=np.float64) * s, dq * s
+        return q_arr, dq
+    s = _broadcast_block_scale(scale, q_arr.shape, block_size)
+    return q_arr * s, dq * s
 
 
 for _name in ("quantize_fp4", "quantize_fp6", "quantize_nvfp4"):
@@ -2664,7 +2671,10 @@ for _name in ("quantize_fp4", "quantize_fp6", "quantize_nvfp4"):
 
     _make()
 
-for _name in ("dequantize_fp4", "dequantize_fp6", "dequantize_nvfp4", "dequantize_int4"):
+# Only nvfp4's canonical forward declares `block_size` (per-block scales);
+# the others take a scalar scale, so declaring the key on their rules would
+# invent vocabulary the forward does not have (AD-LAW-1g).
+for _name in ("dequantize_fp4", "dequantize_fp6", "dequantize_int4"):
 
     def _make(_n=_name):
         @_jvp(_n)
@@ -2675,6 +2685,13 @@ for _name in ("dequantize_fp4", "dequantize_fp6", "dequantize_nvfp4", "dequantiz
 
     _make()
 del _name
+
+
+@_jvp("dequantize_nvfp4")
+def jvp_dequantize_nvfp4(primals, tangents, *, block_size=None, **_):
+    """Per-block scales: `block_size` is read, not swallowed, so the scale
+    expands exactly as the canonical forward blocks it (AD-LAW-1g)."""
+    return _ste_dequant_jvp(primals, tangents, block_size=block_size)
 
 
 # ── Spectral family — linear in primal input ───────────────────────────────

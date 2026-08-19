@@ -392,9 +392,27 @@ jobs:
   # a successful required check but bypass the LLVM install and compiler build.
   # ────────────────────────────────────────────────────────────────────
   rocm-compiler:
-    name: rocm compiler (host-free LLVM/MLIR 23)
+    name: rocm compiler (host-free LLVM/MLIR 23 — heavy steps opt-in)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # The JOB always runs and always reports success — `test_ci_workflow.py`
+    # requires exactly that ("the required ROCm job must always run; gate its
+    # heavy steps instead"), because a job-level `if:` reports `skipped` and
+    # breaks the `validate-required` aggregator that branch protection uses.
+    #
+    # What changed 2026-08-19, at the repo owner's direction: the HEAVY steps
+    # (apt LLVM/MLIR 23 install + a from-scratch `tessera-rocm-opt` build,
+    # ~12 min and the longest lane) are now opt-in via the `rocm-smoke` PR
+    # label or manual dispatch, instead of running on every PR. The suite is
+    # normally exercised locally on the primary box.
+    #
+    # COST, recorded so it is not rediscovered: those steps are the ONLY
+    # automated coverage for
+    # `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`. `check-tessera`
+    # does not include that suite and `lit tests/tessera-ir/` runs a different
+    # one through a different driver, so a ROCm backend fixture regression now
+    # reaches main unless someone runs `ninja -C build check-tessera-rocm`
+    # locally or applies the label.
     steps:
       - uses: actions/checkout@v5
         with:
@@ -408,7 +426,27 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
+          # Opt-in gate (2026-08-19). The heavy steps run only on manual
+          # dispatch or when a PR carries the `rocm-smoke` label; otherwise
+          # the job completes as a successful no-op so `validate-required`
+          # still fans in. Routine coverage is local:
+          #   ninja -C build check-tessera-rocm
+          opted_in=false
+          case ",${PR_LABELS}," in
+            *,rocm-smoke,*) opted_in=true ;;
+          esac
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            opted_in=true
+          fi
+          if [ "$opted_in" != "true" ]; then
+            echo "required=false" >> "$GITHUB_OUTPUT"
+            echo "ROCm compiler heavy steps skipped: not opted in (add the"
+            echo "'rocm-smoke' label or dispatch manually; run"
+            echo "'ninja -C build check-tessera-rocm' locally)."
+            exit 0
+          fi
           required=true
           reason="non-PR validation"
           if [ "$EVENT_NAME" = "pull_request" ]; then

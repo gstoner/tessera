@@ -9,6 +9,24 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `AD-LAW-SERIES-2026-08-19` — **shared reference rules and
+test infrastructure; X86 outcome: parity validated, no AVX-512 evidence changed.** The AD-LAW series (PR #588)
+closes the swallowed-kwarg class registry-wide and adds the AD-WEIL-1 algebra
+substrate plus all six executable laws. Reference-rule changes in this slice:
+`stft`/`spectral_conv` JVPs **deleted** in favour of derivation from the
+forward (both are bilinear, so every configuration key is honored by
+construction); `jvp_istft` rewritten to honor axis/center/length/onesided/norm
+while preserving its window quotient; `dequantize_nvfp4` fixed to accept the
+per-block scale array its canonical forward takes (both modes previously
+crashed); `jvp_lgamma`/`jvp_digamma` replaced (a dead zero-returning stub and
+an identity placeholder); `jvp_cast` fixed for canonical dtype strings; the
+shared polygamma helpers given reflection formulas (previously an O(n) loop
+that hung on valid negative input — a live defect in the REVERSE path too).
+x86 impact: the AVX-512 backward packages (incl. the selective_ssm `bwd_hardware_proven` row) compare against these oracles. Same split as ROCm — forward-mode references moved, VJP-side values did not. No Zen 5 retest required; no device evidence produced or claimed. The previously recorded open spectral/quantize swallow findings are
+therefore CLOSED; `_OPEN_FORWARD_KEY_SWALLOWS` (42 entries from the tape
+positional-routing scan) remains the open set.
+
+
 Cross-backend sync `AD-LAW-1-SHARED-ORACLE-2026-08-18` — **shared test
 infrastructure; x86 outcome: parity validated, no AVX-512 evidence
 changed.** AD-LAW-1 (PR #584) adds law oracles (adjoint `⟨Jv,u⟩ = ⟨v,Jᵀu⟩` +

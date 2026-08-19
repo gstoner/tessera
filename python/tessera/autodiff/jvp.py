@@ -72,7 +72,17 @@ class _JVPTrace:
         args: tuple[Any, ...],
         kwargs: dict[str, Any],
     ) -> Any:
-        primals = tuple(_forward_value(arg) for arg in args)
+        # Same split reverse mode makes: a positionally-passed *configuration*
+        # argument is not a primal. Without this, `ops.sum(x, 0)` handed the
+        # rule a second primal and its `(x,) = primals` unpack raised an
+        # unpack error instead of the op's own diagnostic — the forward-mode
+        # face of the tape's positional-replay bug (see `tape._route_positional`).
+        from .tape import split_positional_config
+
+        call_args, routed = split_positional_config(name, original, args)
+        if routed:
+            kwargs = {**routed, **kwargs}
+        primals = tuple(_forward_value(arg) for arg in call_args)
         tangent_inputs: list[Any] = []
         active = False
         for primal in primals:
@@ -2633,14 +2643,21 @@ def _ste_quant_jvp_unary(primals, tangents):
     return x, dx
 
 
-def _ste_dequant_jvp(primals, tangents, scale_arg_idx=1):
+def _ste_dequant_jvp(primals, tangents, scale_arg_idx=1, block_size=None):
+    """Forward twin of `_ste_dequant_vjp`; same per-block scale handling.
+
+    `float(scale)` crashed on nvfp4's per-block scale array (AD-LAW-1g).
+    """
+    from .vjp import _broadcast_block_scale
+
     q = primals[0]
     scale = primals[scale_arg_idx] if len(primals) > scale_arg_idx else None
     dq = np.asarray(tangents[0], dtype=np.float64)
+    q_arr = np.asarray(q, dtype=np.float64)
     if scale is None:
-        return np.asarray(q, dtype=np.float64), dq
-    s = float(scale)
-    return np.asarray(q, dtype=np.float64) * s, dq * s
+        return q_arr, dq
+    s = _broadcast_block_scale(scale, q_arr.shape, block_size)
+    return q_arr * s, dq * s
 
 
 for _name in ("quantize_fp4", "quantize_fp6", "quantize_nvfp4"):
@@ -2654,7 +2671,10 @@ for _name in ("quantize_fp4", "quantize_fp6", "quantize_nvfp4"):
 
     _make()
 
-for _name in ("dequantize_fp4", "dequantize_fp6", "dequantize_nvfp4", "dequantize_int4"):
+# Only nvfp4's canonical forward declares `block_size` (per-block scales);
+# the others take a scalar scale, so declaring the key on their rules would
+# invent vocabulary the forward does not have (AD-LAW-1g).
+for _name in ("dequantize_fp4", "dequantize_fp6", "dequantize_int4"):
 
     def _make(_n=_name):
         @_jvp(_n)
@@ -2665,6 +2685,13 @@ for _name in ("dequantize_fp4", "dequantize_fp6", "dequantize_nvfp4", "dequantiz
 
     _make()
 del _name
+
+
+@_jvp("dequantize_nvfp4")
+def jvp_dequantize_nvfp4(primals, tangents, *, block_size=None, **_):
+    """Per-block scales: `block_size` is read, not swallowed, so the scale
+    expands exactly as the canonical forward blocks it (AD-LAW-1g)."""
+    return _ste_dequant_jvp(primals, tangents, block_size=block_size)
 
 
 # ── Spectral family — linear in primal input ───────────────────────────────
@@ -2723,68 +2750,6 @@ def jvp_irfft(primals, tangents, *, axis=-1, axes=None, n=None, norm="backward",
             np.fft.irfft(dx, n=n, axis=ax, norm=nrm))
 
 
-@_jvp("stft")
-def jvp_stft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
-    """STFT is linear in the input signal — JVP = STFT(tangent)."""
-    from numpy.lib.stride_tricks import sliding_window_view
-
-    def _stft(sig):
-        sig = np.asarray(sig, dtype=np.float64)
-        win = np.asarray(window, dtype=np.float64) if window is not None else np.ones(n_fft, dtype=np.float64)
-        frames = sliding_window_view(sig, n_fft, axis=-1)[..., ::hop, :]
-        return np.fft.rfft(frames * win, axis=-1)
-
-    return _stft(primals[0]), _stft(tangents[0])
-
-
-@_jvp("istft")
-def jvp_istft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
-    """Exact ISTFT product, including the overlap-add window quotient.
-
-    ISTFT is linear in its spectrum only while the window is fixed.  For an
-    active window both the overlap-add numerator and the quadratic window-
-    energy denominator contribute to the tangent.
-    """
-    frames = np.asarray(primals[0], dtype=np.complex128)
-    dframes = np.asarray(tangents[0], dtype=np.complex128)
-    win = (
-        np.asarray(primals[1], dtype=np.float64)
-        if len(primals) > 1
-        else np.asarray(window, dtype=np.float64)
-        if window is not None
-        else np.ones(n_fft, dtype=np.float64)
-    )
-    dwin = (
-        np.asarray(tangents[1], dtype=np.float64)
-        if len(tangents) > 1 and tangents[1] is not None
-        else np.zeros_like(win)
-    )
-    if win.ndim != 1 or dwin.shape != win.shape:
-        raise ValueError("ISTFT JVP requires matching rank-one window/tangent")
-    n_fft = int(win.shape[0])
-    time_frames = np.fft.irfft(frames, n=n_fft, axis=-1)
-    dtime_frames = np.fft.irfft(dframes, n=n_fft, axis=-1)
-    n_frames = frames.shape[-2]
-    out_len = (n_frames - 1) * hop + n_fft
-    prefix = frames.shape[:-2]
-    numerator = np.zeros(prefix + (out_len,), dtype=np.float64)
-    dnumerator = np.zeros_like(numerator)
-    denominator = np.zeros((out_len,), dtype=np.float64)
-    ddenominator = np.zeros_like(denominator)
-    for frame in range(n_frames):
-        start = frame * hop
-        sl = slice(start, start + n_fft)
-        numerator[..., sl] += time_frames[..., frame, :] * win
-        dnumerator[..., sl] += (
-            dtime_frames[..., frame, :] * win
-            + time_frames[..., frame, :] * dwin
-        )
-        denominator[sl] += win * win
-        ddenominator[sl] += 2.0 * win * dwin
-    safe = np.maximum(denominator, 1.0e-12)
-    primal = numerator / safe
-    tangent = dnumerator / safe - numerator * ddenominator / (safe * safe)
-    return primal, tangent
 
 
 @_jvp("dct")
@@ -2854,21 +2819,6 @@ def jvp_spectral_filter(primals, tangents, **_):
     return out, dout
 
 
-@_jvp("spectral_conv")
-def jvp_spectral_conv(primals, tangents, **_):
-    """y = ifft(fft(x) * fft(kernel)). Bilinear in (x, kernel)."""
-    x = np.asarray(primals[0], dtype=np.float64)
-    k = np.asarray(primals[1], dtype=np.float64)
-    dx = np.asarray(tangents[0], dtype=np.float64)
-    dk = np.asarray(tangents[1], dtype=np.float64)
-    X = np.fft.rfft(x, axis=-1)
-    K = np.fft.rfft(k, axis=-1)
-    dX = np.fft.rfft(dx, axis=-1)
-    dK = np.fft.rfft(dk, axis=-1)
-    out = np.fft.irfft(X * K, n=x.shape[-1], axis=-1)
-    dout = np.fft.irfft(dX * K + X * dK, n=x.shape[-1], axis=-1)
-    return out, dout
-
 
 # ── Sparse matmul — linear in the dense operand ────────────────────────────
 
@@ -2914,15 +2864,23 @@ def jvp_bsmm(primals, tangents, **_):
 
 
 @_jvp("tri_solve")
-def jvp_tri_solve(primals, tangents, *, upper=False, **_):
-    """L x = b. dx = L^{-1} (db - dL x)."""
+def jvp_tri_solve(primals, tangents, *, lower=True, **_):
+    """T x = b for T = tril(L) (or triu(L)). dx = T^{-1} (dT - dT x).
+
+    Paired with ``vjp_tri_solve``: ``lower`` is the canonical forward key
+    (the old ``upper`` was declared here but never read, and never produced by
+    any caller — Decision #29), and the tangent must be projected onto the
+    same triangle the forward selects.
+    """
     L = np.asarray(primals[0], dtype=np.float64)
     b = np.asarray(primals[1], dtype=np.float64)
     dL = np.asarray(tangents[0], dtype=np.float64)
     db = np.asarray(tangents[1], dtype=np.float64)
-    x = np.linalg.solve(L, b)
-    rhs = db - dL @ x
-    dx = np.linalg.solve(L, rhs)
+    tri = np.tril(L) if lower else np.triu(L)
+    dtri = np.tril(dL) if lower else np.triu(dL)
+    x = np.linalg.solve(tri, b)
+    rhs = db - dtri @ x
+    dx = np.linalg.solve(tri, rhs)
     return x, dx
 
 
@@ -3932,22 +3890,52 @@ def jvp_qkv_projection(primals, tangents, **kwargs):
 
 
 @_jvp("segment_reduce")
-def jvp_segment_reduce(primals, tangents, *, reduce="sum", **_):
-    """y[segment_id] = ⊕_{i: seg[i]=segment_id} x[i].  Linear when reduce='sum';
-    other modes (mean/max) require segment-aware handling.  We implement
-    'sum' analytically and route the rest via numeric jvp."""
-    if reduce != "sum":
-        return _conv_via_op("segment_reduce", primals, tangents, reduce=reduce)
+def jvp_segment_reduce(primals, tangents, *, op=None, reduce="sum", **_):
+    """y[segment_id] = ⊕_{i: seg[i]=segment_id} x[i].  Linear when the reduction
+    is 'sum'; other modes (mean/max) require segment-aware handling.  We
+    implement 'sum' analytically and route the rest via numeric jvp.
+
+    ``op`` is the canonical forward key, coalesced with this rule's older
+    ``reduce`` alias — see ``vjp_segment_reduce`` for why the alias alone made
+    the non-sum branch unreachable.
+    """
+    reduce = op if op is not None else reduce
     x, seg = primals
     dx, _ = tangents
     x_arr = np.asarray(x, dtype=np.float64)
     seg_arr = np.asarray(seg, dtype=np.int64)
     dx_arr = np.asarray(dx, dtype=np.float64)
-    num_segments = int(seg_arr.max()) + 1
-    primal = np.zeros((num_segments,) + x_arr.shape[1:], dtype=np.float64)
+    groups = np.unique(seg_arr)
+    primal = np.zeros((groups.shape[0],) + x_arr.shape[1:], dtype=np.float64)
     tan = np.zeros_like(primal)
-    np.add.at(primal, seg_arr, x_arr)
-    np.add.at(tan, seg_arr, dx_arr)
+    for pos, gid in enumerate(groups):
+        mask = seg_arr == gid
+        values, tangent_values = x_arr[mask], dx_arr[mask]
+        if reduce == "sum":
+            primal[pos] = values.sum(axis=0)
+            tan[pos] = tangent_values.sum(axis=0)
+        elif reduce == "mean":
+            primal[pos] = values.mean(axis=0)
+            tan[pos] = tangent_values.mean(axis=0)
+        elif reduce in ("max", "min"):
+            pick = np.argmax(values, axis=0) if reduce == "max" else np.argmin(values, axis=0)
+            primal[pos] = values.max(axis=0) if reduce == "max" else values.min(axis=0)
+            if values.ndim == 1:
+                tan[pos] = tangent_values[int(pick)]
+            else:
+                for idx in np.ndindex(values.shape[1:]):
+                    tan[(pos,) + idx] = tangent_values[(int(pick[idx]),) + idx]
+        elif reduce == "prod":
+            primal[pos] = np.prod(values, axis=0)
+            others = np.stack(
+                [np.prod(np.delete(values, i, axis=0), axis=0) for i in range(values.shape[0])]
+            )
+            tan[pos] = (others * tangent_values).sum(axis=0)
+        else:
+            raise ValueError(
+                f"segment_reduce JVP: unknown reduction {reduce!r}; "
+                "expected one of sum, mean, max, min, prod"
+            )
     return primal, tan
 
 
@@ -4105,3 +4093,211 @@ from . import jvps  # noqa: F401, E402 — import-side-effect registration hook
 
 
 __all__ = ["register_jvp", "get_jvp", "jvp"]
+
+
+# ── Spectral transforms: derived from the forward, not hand-written ──────────
+# AD-LAW-1f. These three had hand-written JVPs that reimplemented the transform
+# from scratch and honored NONE of the forward's configuration: `jvp_stft`
+# hardcoded n_fft=512/hop=128 and ignored the positional `win`/`hop` entirely
+# (so it raised on any canonical call), and ignored axis/center/pad_mode/
+# onesided/norm; `jvp_spectral_conv` and `jvp_istft` likewise pinned axis=-1
+# and norm="backward". Their VJPs, by contrast, are faithful transposes that
+# honor every key — so J and Jᵀ were derivatives of different functions.
+#
+# All three are (multi)linear, verified numerically: `stft` and
+# `spectral_conv` are bilinear in (signal, window/kernel), `istft` is linear
+# in the spectrum. So the rule IS the forward (Decision #30 — derive, don't
+# ask), and every configuration key is honored by construction because the
+# forward honors it. This also gives `MULTILINEAR_PRIMITIVES` a second
+# consumer beyond the structural-view family.
+def _register_derived_spectral_jvps() -> None:
+    from .linear import MULTILINEAR_PRIMITIVES, _resolve_forward, make_linear_jvp
+
+    # istft is NOT multilinear (its normalized overlap-add divides by a
+    # window-energy term), so it keeps a hand-written JVP — see below.
+    for name in ("stft", "spectral_conv"):
+        forward = _resolve_forward(name)
+        if forward is None:  # pragma: no cover - ops namespace always resolves
+            continue
+        _JVPS[name] = make_linear_jvp(forward, MULTILINEAR_PRIMITIVES[name])
+
+
+_register_derived_spectral_jvps()
+
+
+# AD-LAW-1f: `istft` was briefly derived from the forward alongside stft and
+# spectral_conv; that was wrong. It is linear in the spectrum but NOT in the
+# window — the normalized overlap-add divides by a window-energy denominator —
+# so derivation silently zeroed the window tangent that this rule computes and
+# `test_jax_transforms.py::test_istft_window_jvp_matches_centered_difference`
+# pins. Restored. Its configuration-key swallows (axis/center/onesided/norm/
+# length) remain OPEN findings in test_autodiff_laws.py: closing them needs a
+# config-honoring rewrite that PRESERVES this window quotient, which is its
+# own slice, not a mechanical derivation.
+@_jvp("istft")
+def jvp_istft(primals, tangents, **kwargs):
+    """Exact ISTFT product that honors every configuration key (AD-LAW-1g/1h).
+
+    The canonical forward is
+
+        y = trim( A(X, w) / B(w) ),
+        A(X, w) = OLA(irfft(X) * w_pad)      -- bilinear in (X, w)
+        B(w)    = max(OLA(w_pad ** 2), 1e-12) -- quadratic in w
+        trim    = the center and length crops
+
+    so the tangent follows by the quotient rule:
+
+        dy = trim( [ A(X, dw) - (A/B) * 2*OLA(w_pad*dw_pad) ] / B(w) )
+             + forward(dX, w)                     # A is linear in X
+
+    **Declared numerical contract at the denominator floor (#21a).** The
+    forward divides by ``max(OLA(w_pad**2), 1e-12)``. That floor is a *kink in
+    the window argument*: where the overlap-add weight is below it the forward
+    divides by a constant, and the window derivative is one-sided. A window
+    with exact zero endpoints — ``np.hanning(n)``, the canonical choice —
+    puts the first and last output positions in exactly that region, where
+    this rule returns a tangent of order ``1/1e-12``. Those values are
+    *correct for the clamped function* (verified to ~1e-16 relative against a
+    central difference in
+    ``test_istft_window_tangent_at_the_denominator_floor``), but their
+    magnitude is an artifact of the floor rather than of the mathematics, so a
+    caller optimizing a window should mask or regularize the clamped
+    positions rather than treat them as ordinary gradients. Stated here
+    because a silent 1e10 gradient component is precisely the kind of
+    semantic choice Decision #21a forbids leaving implicit.
+
+    Every FFT-flavoured key (`axis`, `onesided`, `norm`, `n_fft`) is honored
+    **by construction**, because each term is obtained from the canonical
+    forward itself rather than from a reimplementation — the previous rule
+    reimplemented the transform and silently ignored all of them (it pinned
+    axis=-1, onesided=True, norm="backward" and dropped `center`/`length`).
+    Only the window-only overlap-add sums are computed here, and they involve
+    no FFT: `_window_overlap_sums` needs just the frame geometry.
+    """
+    from .linear import _resolve_forward
+
+    forward = _resolve_forward("istft")
+    if forward is None:  # pragma: no cover - ops always resolves in-tree
+        raise TesseraAutodiffError("istft forward not resolvable")
+
+    X = np.asarray(primals[0])
+    win = np.asarray(primals[1], dtype=np.float64)
+    dX = tangents[0]
+    dwin = tangents[1] if len(tangents) > 1 and tangents[1] is not None else None
+
+    hop = kwargs.get("hop")
+    if hop is None:
+        hop = kwargs.get("hop_length")
+    if hop is None and len(primals) > 2:
+        hop = primals[2]
+    if hop is None:
+        raise TesseraAutodiffError("istft JVP requires `hop`")
+    cfg = {k: v for k, v in kwargs.items()
+           if k in ("axis", "n_fft", "center", "length", "onesided", "norm")}
+    call = dict(cfg)
+    call["hop"] = int(hop)
+
+    primal_out = forward(X, win, **call)
+
+    # Term 1 — linear in the spectrum: the forward IS the derivative.
+    tangent = np.zeros_like(np.asarray(primal_out, dtype=np.float64))
+    if dX is not None and np.any(np.asarray(dX)):
+        tangent = tangent + np.asarray(
+            forward(np.asarray(dX), win, **call), dtype=np.float64)
+
+    # Term 2 — the window quotient. Skipped entirely when the window carries
+    # no perturbation, which is the common case and keeps this free.
+    if dwin is not None and np.any(np.asarray(dwin)):
+        dwin = np.asarray(dwin, dtype=np.float64)
+        # Untrimmed evaluations: the crops are applied once, at the end.
+        raw = dict(call)
+        raw["center"] = False
+        raw["length"] = None
+        y_raw = np.moveaxis(
+            np.asarray(forward(X, win, **raw), dtype=np.float64),
+            _istft_time_axis(X, cfg), -1)
+
+        fft_length = int(call.get("n_fft") or win.shape[0])
+        b_w, b_dw, c_cross, unclamped = _window_overlap_sums(
+            win, dwin, y_raw.shape[-1], int(hop), fft_length)
+
+        # A(X, dw) = forward(X, dw) * B(dw), exact because the forward divides
+        # by exactly that quantity.
+        a_dw = np.moveaxis(
+            np.asarray(forward(X, dwin, **raw), dtype=np.float64),
+            _istft_time_axis(X, cfg), -1) * b_dw
+        # Where the forward's denominator is CLAMPED it is a constant, so its
+        # derivative is 0 there and the cross term must not contribute.
+        # Exact-zero window endpoints hide this (the cross term vanishes on
+        # its own); a small NONZERO endpoint does not.
+        live = (unclamped >= 1e-12).astype(np.float64)
+        window_term = (a_dw - y_raw * 2.0 * c_cross * live) / b_w
+        tangent = tangent + np.moveaxis(
+            _apply_istft_crops(window_term, cfg, fft_length),
+            -1, _istft_time_axis(X, cfg))
+
+    return primal_out, tangent
+
+
+def _istft_time_axis(X, cfg) -> int:
+    """Where the forward puts the time axis in its output.
+
+    `ops.istft` consumes `(…, frames, freq, …)` and transposes the result so
+    the time axis lands at the FRAME axis's position — `axis - 1` — not
+    necessarily last. With `axis=1` on a `(13, 9, 4)` spectrum the output is
+    `(64, 4)`: time first, batch second. Sizing the window sums by
+    `shape[-1]` therefore applied time-domain weights to the batch axis and
+    cropped the wrong dimension (review finding on PR #588).
+    """
+    ndim = np.asarray(X).ndim
+    axis = cfg.get("axis", -1)
+    axis_idx = axis if axis >= 0 else ndim + axis
+    return axis_idx - 1
+
+
+def _window_overlap_sums(win, dwin, out_len, hop, fft_length):
+    """OLA(w**2), OLA(dw**2), OLA(w*dw), and the UNCLAMPED OLA(w**2).
+
+    No FFT and no normalization: these are pure window sums, which is why
+    computing them here does not reintroduce the reimplementation the rule
+    above exists to avoid. The 1e-12 floor mirrors the forward's clamp, so
+    the derivative is 0 exactly where the forward's denominator is clamped
+    flat.
+    """
+    padded = np.zeros(fft_length, dtype=np.float64)
+    offset = (fft_length - win.shape[0]) // 2
+    padded[offset:offset + win.shape[0]] = win
+    padded_d = np.zeros(fft_length, dtype=np.float64)
+    padded_d[offset:offset + dwin.shape[0]] = dwin
+
+    b_w = np.zeros(out_len)
+    b_dw = np.zeros(out_len)
+    cross = np.zeros(out_len)
+    frames = 1 + max(0, (out_len - fft_length)) // hop
+    for idx in range(frames):
+        s = idx * hop
+        e = min(s + fft_length, out_len)
+        n = e - s
+        b_w[s:e] += padded[:n] * padded[:n]
+        b_dw[s:e] += padded_d[:n] * padded_d[:n]
+        cross[s:e] += padded[:n] * padded_d[:n]
+    return (np.maximum(b_w, 1e-12), np.maximum(b_dw, 1e-12), cross, b_w)
+
+
+def _apply_istft_crops(value, cfg, fft_length):
+    """The forward's center and length crops, applied to an untrimmed array."""
+    out = value
+    if cfg.get("center"):
+        width = fft_length // 2
+        out = out[..., width:out.shape[-1] - width]
+    length = cfg.get("length")
+    if length is not None:
+        want = int(length)
+        if out.shape[-1] < want:
+            out = np.pad(out, [(0, 0)] * (out.ndim - 1)
+                         + [(0, want - out.shape[-1])])
+        else:
+            out = out[..., :want]
+    return out
+
+

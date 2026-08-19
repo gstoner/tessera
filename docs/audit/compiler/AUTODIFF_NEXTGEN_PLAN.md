@@ -533,6 +533,27 @@ that the naive `εᵢ ↦ ε` "surjection" is not an algebra map (#10a, per the
 not land any AD-WEIL-1 code before this exists** — the oracles are what make
 the migration provable.
 
+**Triage note (2026-08-18) — the calling convention is part of the datum.**
+Sweeping the registries for the `jvp_clamp` class turned up a second, larger
+one that no rule-vs-rule signature scan can see: what the *tape* hands a rule
+depends on how the canonical forward was *called*. `_describe` recorded
+array-likes and python int/float only, so a configuration argument passed
+positionally either vanished from the record entirely (`str`/`bool`/`None` —
+a mean-reduction forward with a **sum gradient**, no error) or became a
+float64 literal that was handed to the forward itself and then replayed as an
+extra positional the keyword-only rule could not bind. Empirically: **0 of the
+spec-covered ops disagreed silently once routed, 11 of 13 raised before it.**
+The fix is one binding site, not ~100 rule signatures — operands are derived
+from the registered rule's own positional slots (Decision #30), everything
+else is configuration and is recorded under its canonical parameter name.
+Forward mode makes the same split. Two rules were also differentiating a
+different function than the forward *by vocabulary*: `tri_solve` declared
+`upper` where the forward says `lower` (and solved the raw matrix instead of
+the selected triangle), `segment_reduce` declared `reduce` where the forward
+says `op` (so its max/mean handling was unreachable, and broken once
+reached). Both are FD-pinned. The remaining 59 forward-key swallows are
+pinned as open findings in `tests/unit/test_autodiff_laws.py`.
+
 ### AD-WEIL-1 — algebra substrate + `Dual()` + `TruncatedJet(k)` (~3 weeks · after AD-LAW-1 · host-free)
 
 `DifferentialAlgebra` protocol; generic finite-multiplication-table

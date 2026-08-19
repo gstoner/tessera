@@ -4870,11 +4870,40 @@ def _ste_quant_vjp(dout, x, **_):
     return (np.asarray(dout, dtype=np.float64),)
 
 
-def _ste_dequant_vjp(dout, q, scale=None, **_):
+def _ste_dequant_vjp(dout, q, scale=None, *, block_size=None, **_):
+    """Cotangent of a scaled dequantization.
+
+    `scale` may be a scalar (fp4/fp6/fp8) or a PER-BLOCK array (nvfp4, whose
+    canonical forward takes `scales.shape == x.shape[:-1] + (num_blocks,)`).
+    The array case previously reached `float(scale)` and raised
+    `TypeError: only 0-dimensional arrays can be converted to Python
+    scalars`, so BOTH modes were unusable for every canonical multi-block
+    nvfp4 call — found by AD-LAW-1g. Broadcasting per block is correct under
+    either reading of the scale convention, so it is fixed here; whether the
+    factor should be `scale` at all is a separate, recorded open question
+    (see test_autodiff_laws.py::test_dequantize_rule_contradicts_stub_forward).
+    """
     if scale is None:
         return (None, None)
     do = np.asarray(dout, dtype=np.float64)
-    return (do * float(scale), None)
+    return (do * _broadcast_block_scale(scale, do.shape, block_size), None)
+
+
+def _broadcast_block_scale(scale, shape, block_size=None) -> np.ndarray:
+    """Expand a scalar or per-block scale to `shape`'s last axis."""
+    s = np.asarray(scale, dtype=np.float64)
+    if s.ndim == 0:
+        return s
+    n = shape[-1]
+    if s.shape[-1] == n:
+        return s
+    reps = block_size or -(-n // s.shape[-1])   # ceil-div when unspecified
+    expanded = np.repeat(s, reps, axis=-1)
+    if expanded.shape[-1] < n:
+        raise ValueError(
+            f"block scale of shape {s.shape} with block_size={reps} cannot "
+            f"cover {n} elements")
+    return expanded[..., :n]
 
 
 @_vjp("quantize_fp4")
@@ -4903,8 +4932,10 @@ def vjp_quantize_nvfp4(dout, x, *, scale=None, **_):
 
 
 @_vjp("dequantize_nvfp4")
-def vjp_dequantize_nvfp4(dout, q, scale, **_):
-    return _ste_dequant_vjp(dout, q, scale=scale)
+def vjp_dequantize_nvfp4(dout, q, scale, *, block_size=None, **_):
+    # `block_size` is read (not swallowed) so the per-block scale expands
+    # exactly as the canonical forward blocks it — AD-LAW-1g.
+    return _ste_dequant_vjp(dout, q, scale=scale, block_size=block_size)
 
 
 @_vjp("dequantize_int4")
@@ -5234,20 +5265,27 @@ def vjp_bsmm(dout, sparse_blocks, dense_b, **_):
 # ── Linalg solvers / decompositions ────────────────────────────────────────
 
 @_vjp("tri_solve")
-def vjp_tri_solve(dout, L, b, *, upper=False, **_):
-    """L · x = b for triangular L. dL/db = L^{-T} @ dout; dL/dL is the
-    outer-product correction projected onto the triangular pattern.
+def vjp_tri_solve(dout, L, b, *, lower=True, **_):
+    """T · x = b for T = tril(L) (or triu(L) when ``lower=False``).
+
+    ``lower`` is the canonical forward's spelling and its canonical default.
+    The rule previously declared ``upper=False``, a vocabulary no caller ever
+    produced (Decision #29), so ``tri_solve(A, b, lower=False)`` silently got
+    the *lower*-solve adjoint. It must also solve against the same triangular
+    projection the forward applies — using the raw ``L`` differentiates a
+    different function whenever ``L`` is not already triangular.
     """
     L_arr = np.asarray(L, dtype=np.float64)
     b_arr = np.asarray(b, dtype=np.float64)
     do = np.asarray(dout, dtype=np.float64)
-    x = np.linalg.solve(L_arr, b_arr)
-    db = np.linalg.solve(L_arr.T, do)
+    tri = np.tril(L_arr) if lower else np.triu(L_arr)
+    x = np.linalg.solve(tri, b_arr)
+    db = np.linalg.solve(tri.T, do)
     if x.ndim == 1:
         dL = -np.outer(db, x)
     else:
         dL = -db @ x.T
-    dL = np.triu(dL) if upper else np.tril(dL)
+    dL = np.tril(dL) if lower else np.triu(dL)
     return (dL, db)
 
 
@@ -5621,14 +5659,55 @@ def vjp_spectral_norm(dout, w, *, n_iter=1, eps=1e-12, **_):
 
 
 @_vjp("segment_reduce")
-def vjp_segment_reduce(dout, x, seg, *, reduce="sum", **_):
-    """y[g] = ⊕_{i: seg[i]==g} x[i].  For reduce='sum': dx[i] = dout[seg[i]]."""
-    if reduce != "sum":
-        return _numeric_conv_vjp("segment_reduce", dout, x, seg, reduce=reduce)
+def vjp_segment_reduce(dout, x, seg, *, op=None, reduce="sum", **_):
+    """y[g] = ⊕_{i: seg[i]==g} x[i].  For sum: dx[i] = dout[seg[i]].
+
+    ``op`` is the canonical forward's spelling; ``reduce`` is this rule's older
+    alias, kept and coalesced (the ``jvp_clip`` convention). Without the
+    coalescing the canonical key fell into ``**_`` and every ``op="max"`` /
+    ``"mean"`` call silently took the *sum* branch below — the non-sum handling
+    was already written and simply unreachable.
+    """
+    reduce = op if op is not None else reduce
     seg_arr = np.asarray(seg, dtype=np.int64)
+    x_arr = np.asarray(x, dtype=np.float64)
     dout_arr = np.asarray(dout, dtype=np.float64)
-    # broadcast dout[seg[i]] back to x's shape
-    return (dout_arr[seg_arr], None)
+    dx = np.zeros_like(x_arr)
+    # The forward emits one row per *unique* segment id in sorted order, so a
+    # row is addressed by its position in that list, not by the id itself
+    # (`dout[seg]` misindexed any non-contiguous id set).
+    for pos, gid in enumerate(np.unique(seg_arr)):
+        mask = seg_arr == gid
+        g_out = dout_arr[pos]
+        if reduce == "sum":
+            dx[mask] = g_out
+        elif reduce == "mean":
+            dx[mask] = g_out / float(np.count_nonzero(mask))
+        elif reduce in ("max", "min"):
+            # Subgradient at a tie goes to the first occurrence, matching the
+            # selection `np.argmax`/`np.argmin` make in the forward.
+            members = np.nonzero(mask)[0]
+            values = x_arr[members]
+            pick = np.argmax(values, axis=0) if reduce == "max" else np.argmin(values, axis=0)
+            if values.ndim == 1:
+                dx[members[int(pick)]] = g_out
+            else:
+                for idx in np.ndindex(values.shape[1:]):
+                    dx[(members[int(pick[idx])],) + idx] = g_out[idx]
+        elif reduce == "prod":
+            values = x_arr[mask]
+            # d(prod)/dx_i = prod_{j != i} x_j, computed without dividing by a
+            # possibly-zero member.
+            others = np.stack(
+                [np.prod(np.delete(values, i, axis=0), axis=0) for i in range(values.shape[0])]
+            )
+            dx[mask] = g_out * others
+        else:
+            raise ValueError(
+                f"segment_reduce VJP: unknown reduction {reduce!r}; "
+                "expected one of sum, mean, max, min, prod"
+            )
+    return (dx, None)
 
 
 # ── Optimizers + grad_scaler ───────────────────────────────────────────────

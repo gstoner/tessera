@@ -392,6 +392,152 @@ def _describe(arg: Any):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Positional-argument routing — operands stay positional, config becomes kwargs
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The replay contract is `rule(dout, *recorded_inputs, **recorded_kwargs)`, and
+# `_describe` only records array-likes and python int/float. So a canonical
+# forward call that passes a *configuration* argument positionally used to be
+# mishandled two ways, both of which this routing closes:
+#
+#   * `ops.reduce(x, "mean")` — a str/bool/None positional is `_NON_ARRAY`, so
+#     it reached the forward but was recorded nowhere. The rule then ran on its
+#     own default (`op="sum"`) and returned a **silently wrong** gradient.
+#   * `ops.sum(x, 0)` — an int positional became a float64 literal `InputDesc`,
+#     which was then handed to the *forward* (`np.sum(x, axis=array(0.0))`) and
+#     replayed as an extra positional the keyword-only rule could not bind.
+#
+# Which positional slots are genuine differentiable operands is not guessable
+# from the forward signature alone: `mul(x, y=None)` and `clamp(x, min=None,
+# max=None)` are spelled identically and mean opposite things. It IS derivable
+# from the registered rule, which is the consumer of the contract (Decision
+# #30): the rule's own positional slots after `dout` enumerate the operands, in
+# order and by name. Anything a slot does not claim is configuration.
+
+# Keyed by `id(fn)`, and the value keeps a strong reference to `fn` itself:
+# without it a collected temporary (a `custom_rule` lambda) could free its id
+# for reuse and hand the next function a stale signature.
+_FORWARD_SIG_CACHE: dict[int, tuple[Callable, list[str] | None]] = {}
+
+
+def _innermost(fn: Callable) -> Callable:
+    """Unwrap to the implementation the call actually binds against.
+
+    `tessera.ops.<name>` stacks the tape wrapper over the ops-namespace dtype
+    wrapper over the reference implementation, and both use `functools.wraps`.
+    Only the innermost function's signature is the real binding contract —
+    `inspect.signature` alone can report an outer, wider one.
+    """
+    seen: set[int] = set()
+    while True:
+        inner = getattr(fn, "__wrapped__", None)
+        if inner is None or id(inner) in seen:
+            return fn
+        seen.add(id(fn))
+        fn = inner
+
+
+def _positional_params(fn: Callable) -> list[str] | None:
+    """Positional parameter names of `fn`, or None if it takes `*args`/is opaque."""
+    import inspect
+
+    key = id(fn)
+    cached = _FORWARD_SIG_CACHE.get(key)
+    if cached is not None:
+        return cached[1]
+    try:
+        sig = inspect.signature(_innermost(fn), follow_wrapped=False)
+    except (TypeError, ValueError):
+        names = None
+    else:
+        params = list(sig.parameters.values())
+        if any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params):
+            names = None  # `*args` — no stable name for a positional slot
+        else:
+            names = [
+                p.name
+                for p in params
+                if p.kind
+                in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            ]
+    _FORWARD_SIG_CACHE[key] = (fn, names)
+    return names
+
+
+def _route_positional(name: str, original: Callable, args: tuple, vjp_fn: Callable | None):
+    """Split `args` into (forward_args, recorded input descs, routed kwargs).
+
+    Arrays are always operands. A non-array positional (int/float literal, str,
+    bool, None, ...) stays an operand only when the rule declares a positional
+    slot of that name at that operand index; otherwise it is configuration and
+    is returned as a kwarg keyed by its canonical forward parameter name.
+    """
+    fwd_names = _positional_params(original)
+    rule_slots = _positional_params(vjp_fn) if vjp_fn is not None else None
+    # `rule_slots[0]` is `dout`; operand k sits at `rule_slots[k + 1]`.
+    operand_slots = rule_slots[1:] if rule_slots else None
+
+    forward_args: list[Any] = []
+    array_descs: list[InputDesc] = []
+    routed: dict[str, Any] = {}
+    for i, a in enumerate(args):
+        d = _describe(a)
+        if d is not _NON_ARRAY and not d.is_literal:
+            forward_args.append(d.array)  # a real array is always an operand
+            array_descs.append(d)
+            continue
+        pname = fwd_names[i] if fwd_names is not None and i < len(fwd_names) else None
+        k = len(array_descs)  # the operand index this arg would occupy
+        claimed = (
+            pname is not None
+            and operand_slots is not None
+            and k < len(operand_slots)
+            # The slot is this arg's iff the rule names it the same way, or —
+            # for the many rules that rename operands (`vjp_mod(dout, a, b)`
+            # over `mod(x, y)`) — iff no earlier positional arg was skipped, so
+            # the two index spaces still line up. Requiring `i == k` after a
+            # skip is what stops `conv2d(x, w, None, 1, 0)` from binding the
+            # stride to the rule's `bias` slot.
+            and (operand_slots[k] == pname or i == k)
+        )
+        if claimed or pname is None:
+            # A differentiable scalar operand (`ops.mul(x, -0.5)`), or an op
+            # whose binding contract we cannot read — keep the legacy handling.
+            if d is _NON_ARRAY:
+                forward_args.append(a)
+            else:
+                forward_args.append(d.array)
+                array_descs.append(d)
+            continue
+        # Configuration: the forward gets the ORIGINAL value in its original
+        # position (an int stays an int), and the rule gets it by name.
+        forward_args.append(a)
+        routed[pname] = a
+    return forward_args, array_descs, routed
+
+
+def split_positional_config(name: str, original: Callable, args: tuple):
+    """Forward-mode view of the same split: `(operands, config_kwargs)`.
+
+    Reverse mode keeps configuration in its positional place for the forward
+    call and records it by name; forward mode has no separate record, so the
+    configuration is *moved* out of the primal tuple and into the kwargs the
+    rule (and the forward itself) already accept by name.
+    """
+    from .vjp import get_vjp
+
+    _, _, routed = _route_positional(name, original, args, get_vjp(name))
+    if not routed:
+        return args, {}
+    fwd_names = _positional_params(original) or []
+    operands = tuple(
+        a for i, a in enumerate(args)
+        if not (i < len(fwd_names) and fwd_names[i] in routed)
+    )
+    return operands, routed
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Op wrapping — install tape-aware wrappers on tessera.ops.<name>
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -444,15 +590,13 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
 
         # Tape active — describe each positional arg, pre-convert to numpy
         # for the forward call, and record only the array-like ones on the tape.
-        descs_full = tuple(_describe(a) for a in args)
-        forward_args: list[Any] = []
-        array_descs: list[InputDesc] = []
-        for a, d in zip(args, descs_full):
-            if d is _NON_ARRAY:
-                forward_args.append(a)
-            else:
-                forward_args.append(d.array)
-                array_descs.append(d)
+        # Positionally-passed *configuration* arguments are routed into the
+        # recorded kwargs under their canonical parameter name so the rule
+        # sees them exactly as it would from a keyword call.
+        vjp_fn = get_vjp(name)
+        forward_args, array_descs, routed_kwargs = _route_positional(
+            name, original, args, vjp_fn
+        )
 
         cast_dtype = autocast_dtype()
         if cast_dtype is not None:
@@ -462,10 +606,12 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
                 forward_args = list(_autocast_args(forward_args, cast_dtype))
 
         out = original(*forward_args, **kwargs)
-        # Look up the VJP at call time so that `custom_rule` can register/override
-        # after the wrapper was installed. `vjp_fn=None` is allowed; backward
-        # raises only if this entry actually lies on the gradient path.
-        vjp_fn = get_vjp(name)
+        # `vjp_fn` was looked up above, at call time, so that `custom_rule` can
+        # register/override after the wrapper was installed. `vjp_fn=None` is
+        # allowed; backward raises only if this entry actually lies on the
+        # gradient path.
+        if routed_kwargs:
+            kwargs = {**routed_kwargs, **kwargs}
         if isinstance(out, tuple):
             for i, component in enumerate(out):
                 if isinstance(component, (np.ndarray, np.generic)):

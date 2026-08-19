@@ -47,6 +47,13 @@ __all__ = [
 # arguments (axes, shape, indices) travel as kwargs and are held fixed. Every op
 # here satisfies ∂f[v] = Σ over these indices of f(with vᵢ swapped in).
 MULTILINEAR_PRIMITIVES: Mapping[str, tuple[int, ...]] = {
+    # Spectral transforms. Bilinear in (signal, window) / (signal, kernel):
+    # verified numerically — f(a+s·a′,b) = f(a,b)+s·f(a′,b) and likewise in b.
+    # `istft` is deliberately ABSENT: it is linear in the spectrum but its
+    # normalized overlap-add divides by a window-energy term, so it is not
+    # multilinear and keeps a hand-written JVP (see jvp.py, AD-LAW-1f).
+    "stft": (0, 1),
+    "spectral_conv": (0, 1),
     # Unary linear reshaping / reindexing (linear in arg 0).
     "transpose": (0,),
     "permute": (0,),

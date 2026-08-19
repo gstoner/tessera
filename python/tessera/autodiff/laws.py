@@ -37,6 +37,11 @@ __all__ = [
     "LawResult",
     "adjoint_check",
     "chain_check",
+    "enclosure_check",
+    "homomorphism_check",
+    "kink_check",
+    "quotient_check",
+    "unbiasedness_check",
     "op_rng",
     "run_law_sweep",
 ]
@@ -333,7 +338,7 @@ def run_law_sweep() -> list[LawResult]:
     """
     from .jvp import _JVPS
     from .vjp import _VJPS
-    from .law_inputs import LAW_INPUT_SPECS
+    from .law_inputs import KINK_SPECS, LAW_INPUT_SPECS
 
     results: list[LawResult] = []
 
@@ -352,6 +357,31 @@ def run_law_sweep() -> list[LawResult]:
         if spec.chain:
             results.append(chain_check(op, spec, jvp_fn))
 
+    # Law 5 — at-the-kink policy for every declared-nonsmooth op. Ops with a
+    # declared policy but no probe are reported, not skipped.
+    from .nonsmooth import NONSMOOTH_SELECTION
+    for op in sorted(NONSMOOTH_SELECTION):
+        vjp_fn = _VJPS.get(op)
+        if vjp_fn is None:
+            results.append(LawResult(op, "tensor", "kink", "vjp_only", 0, None,
+                                     "declared nonsmooth but no VJP registered"))
+            continue
+        kspec = KINK_SPECS.get(op)
+        if kspec is None:
+            results.append(LawResult(op, "tensor", "kink", "no_spec", 0, None))
+            continue
+        results.append(kink_check(op, kspec, vjp_fn, _JVPS.get(op)))
+
+    # Laws 2 and 4 — algebra-level, the AD-WEIL-1 gate. These are keyed by
+    # the codomain (W1..W4), not by op: they assert that the *substrate* a
+    # future jet mode would run on is a faithful algebra, and that order-k
+    # jets agree with the k-nested route they would replace.
+    for _order in (1, 2, 3, 4):
+        results.append(homomorphism_check(_order))
+        results.append(quotient_check(_order))
+        results.append(enclosure_check(_order))
+    results.append(unbiasedness_check())
+
     try:
         from .geometric.registry import _JVPS_GEO, _VJPS_GEO
         for op in sorted(set(_VJPS_GEO) | set(_JVPS_GEO)):
@@ -365,3 +395,481 @@ def run_law_sweep() -> list[LawResult]:
                                  "rule_error", 0, None, f"{type(e).__name__}: {e}"))
 
     return results
+
+
+# ── Law 5: kink policy ───────────────────────────────────────────────────────
+
+
+def kink_check(op: str, spec, vjp_fn: Callable, jvp_fn: Optional[Callable],
+               registry: str = "tensor") -> LawResult:
+    """Evaluate a nonsmooth rule **exactly at** its kink against the declared
+    policy in ``nonsmooth.py`` (Decision #21a).
+
+    Laws 1/3 deliberately sample inside a smooth piece — a finite difference
+    straddling a kink is meaningless. This law covers the one input where a
+    legal-but-different Clarke selection is observable, which is exactly where
+    a backend kernel and the numpy reference can silently disagree. It asserts
+    the *declared* selection, not "a" subgradient: which element is returned
+    is a semantic choice, so an undeclared op fails closed rather than
+    defaulting.
+
+    Both modes are checked when the op has both: a JVP that picks a different
+    kink element than its VJP is the same defect class as the paired-default
+    drift, and neither the adjoint law (both sides agree on a wrong pick) nor
+    the chain law (which avoids kinks) can see it.
+    """
+    from .nonsmooth import SUBGRAD_SPLIT, SUBGRAD_ZERO, selection_policy
+
+    try:
+        policy = selection_policy(op)          # fail-closed on absence (#21a)
+    except KeyError as e:
+        return LawResult(op, registry, "kink", "rule_error", 0, None,
+                         f"undeclared nonsmooth policy: {e}")
+    try:
+        primals, kwargs = spec.make()
+        masks = spec.kink_mask(primals)
+
+        # Reverse mode: seed a unit cotangent so the returned gradient IS the
+        # selected subgradient (SUBGRAD_ZERO) or the tie share (SUBGRAD_SPLIT).
+        out = vjp_fn(*(_unit_cotangent(jvp_fn, primals, kwargs),), *primals,
+                     **kwargs)
+        grads = out if isinstance(out, tuple) else (out,)
+
+        detail = []
+        if spec.expected == "split":
+            if policy != SUBGRAD_SPLIT:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 f"spec expects a tie split but policy is {policy}")
+            # Mass conservation: the tied elements' shares sum to 1.
+            shares = []
+            for g, m in zip(grads, masks):
+                if g is None:
+                    continue
+                sel = np.asarray(g)[np.asarray(m)]
+                if sel.size:
+                    shares.append(sel)
+            if not shares:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 "no tied elements found in the probe")
+            stacked = np.concatenate([s.ravel() for s in shares])
+            total = float(np.sum(stacked))
+            n_tied = stacked.size
+            equal = np.allclose(stacked, stacked[0], atol=1e-12)
+            # Mass conservation is the whole point of SUBGRAD_SPLIT: a unit
+            # cotangent arriving at one output must leave as shares summing to
+            # 1 across its tie group. The probe declares how many independent
+            # groups it contains, so the target is that count — hardcoding 1
+            # would fail a correct rule on any multi-group probe.
+            # (An earlier form also accepted `total == n_tied * share`, which
+            # is vacuously true whenever the shares are equal — it let a rule
+            # giving every tied element the FULL mass pass. Caught by the
+            # mutation test in test_autodiff_laws.py.)
+            groups = getattr(spec, "tie_groups", 1)
+            conserved = abs(total - float(groups)) < 1e-9
+            if not equal:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 f"tie shares not equal: {stacked.tolist()}")
+            if not conserved:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 f"tie mass not conserved: sum={total} "
+                                 f"over {groups} declared group(s)")
+            detail.append(f"{n_tied} tied elements share {float(stacked[0]):.4g}")
+        else:
+            if policy != SUBGRAD_ZERO:
+                return LawResult(op, registry, "kink", "fail", 1, None,
+                                 f"spec expects a fixed value but policy is {policy}")
+            for g, m in zip(grads, masks):
+                if g is None:
+                    continue
+                sel = np.asarray(g)[np.asarray(m)]
+                if sel.size and not np.allclose(sel, spec.expected, atol=1e-12):
+                    return LawResult(
+                        op, registry, "kink", "fail", 1, None,
+                        f"at-kink value {sel.tolist()} != declared "
+                        f"{spec.expected} ({policy})")
+
+        # Forward mode must select the same element as reverse mode.
+        if jvp_fn is not None:
+            if spec.expected == "split":
+                verdict = _check_split_forward_mode(op, spec, jvp_fn, primals,
+                                                    kwargs, masks, registry)
+                if verdict is not None:
+                    return verdict
+            else:
+                tangents = tuple(
+                    np.ones_like(np.asarray(p), dtype=np.float64)
+                    if _is_float(p) else _zero_like(p) for p in primals)
+                try:
+                    _, t_out = jvp_fn(primals, tangents, **kwargs)
+                except Exception as e:  # noqa: BLE001
+                    return LawResult(op, registry, "kink", "rule_error", 1,
+                                     None,
+                                     f"jvp at kink: {type(e).__name__}: {e}")
+                # With a unit tangent the JVP tangent equals the selection.
+                for m in masks[:1]:
+                    sel = np.asarray(t_out)[np.asarray(m)] \
+                        if np.shape(t_out) == np.shape(m) else np.array([])
+                    if sel.size and not np.allclose(sel, spec.expected, atol=1e-12):
+                        return LawResult(
+                            op, registry, "kink", "fail", 1, None,
+                            f"forward mode selects {sel.tolist()} at the kink, "
+                            f"reverse mode selects {spec.expected} — the modes "
+                            f"disagree on the declared policy")
+            detail.append("both modes agree")
+
+        return LawResult(op, registry, "kink", "pass", 1, None, "; ".join(detail))
+    except Exception as e:  # noqa: BLE001
+        return LawResult(op, registry, "kink", "rule_error", 0, None,
+                         f"{type(e).__name__}: {e}")
+
+
+def _check_split_forward_mode(op, spec, jvp_fn, primals, kwargs, masks,
+                              registry):
+    """Forward-mode conformance for SUBGRAD_SPLIT (review finding, PR #588).
+
+    An all-ones tangent cannot distinguish an equal share from a hard select
+    — every candidate returns the same number — so the split branch used to
+    skip forward mode entirely while still recording "both modes agree". A
+    JVP for `maximum` that always took the first tied operand passed.
+
+    The discriminating probe perturbs ONE tied operand at a time: with a unit
+    tangent on operand i and zero elsewhere, an equal m-way split yields
+    ``1/m`` at the tie, a first-select yields ``1`` or ``0`` depending on i,
+    and a last-select yields the mirror image. Returns a failing LawResult,
+    or None when forward mode conforms.
+    """
+    n_diff = sum(1 for p in primals if _is_float(p))
+    if n_diff < 2:
+        # A reduction tie lives inside ONE operand: perturb a single tied
+        # element instead of a whole argument.
+        arr = np.asarray(primals[0], dtype=np.float64)
+        mask = np.asarray(masks[0])
+        idx = np.argwhere(mask)
+        if len(idx) < 2:
+            return None
+        target = tuple(idx[0])
+        tangent = np.zeros_like(arr)
+        tangent[target] = 1.0
+        try:
+            _, t_out = jvp_fn((arr,), (tangent,), **kwargs)
+        except Exception as e:  # noqa: BLE001
+            return LawResult(op, registry, "kink", "rule_error", 1, None,
+                             f"jvp at kink: {type(e).__name__}: {e}")
+        # The share is over the perturbed element's OWN tie group — the tied
+        # entries sharing its leading indices — not over every tied element in
+        # the probe. A two-row probe has two independent groups, and using the
+        # total would demand 1/4 where 1/2 is correct.
+        group = mask[target[:-1]] if mask.ndim > 1 else mask
+        share = 1.0 / float(np.count_nonzero(group))
+        got = float(np.max(np.abs(np.asarray(t_out))))
+        if not np.isclose(got, share, atol=1e-12):
+            return LawResult(
+                op, registry, "kink", "fail", 1, None,
+                f"forward mode gives {got:.6g} for a single perturbed tie "
+                f"element; the declared equal split of "
+                f"{np.count_nonzero(group)} requires {share:.6g} "
+                f"(a hard select would give 1 or 0)")
+        return None
+
+    # Elementwise tie across operands: perturb each operand alone.
+    for i, p in enumerate(primals):
+        if not _is_float(p):
+            continue
+        tangents = tuple(
+            (np.ones_like(np.asarray(q), dtype=np.float64) if j == i
+             else _zero_like(q)) for j, q in enumerate(primals))
+        try:
+            _, t_out = jvp_fn(primals, tangents, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            return LawResult(op, registry, "kink", "rule_error", 1, None,
+                             f"jvp at kink: {type(e).__name__}: {e}")
+        m = np.asarray(masks[i])
+        out = np.asarray(t_out)
+        if out.shape != m.shape:
+            return None
+        sel = out[m]
+        if sel.size and not np.allclose(sel, 1.0 / n_diff, atol=1e-12):
+            return LawResult(
+                op, registry, "kink", "fail", 1, None,
+                f"forward mode gives {sel.tolist()} when only operand {i} is "
+                f"perturbed; the declared equal split requires "
+                f"{1.0 / n_diff:.6g} (a hard select would give 1 or 0)")
+    return None
+
+
+def _unit_cotangent(jvp_fn: Optional[Callable], primals: tuple, kwargs: dict):
+    """A ones-cotangent shaped like the op's output."""
+    if jvp_fn is not None:
+        zeros = tuple(_zero_like(p) for p in primals)
+        out = jvp_fn(primals, zeros, **kwargs)[0]
+        return np.ones_like(np.asarray(out), dtype=np.float64)
+    return np.ones_like(np.asarray(primals[0]), dtype=np.float64)
+
+
+# ── Laws 2 and 4: the algebra laws that gate AD-WEIL-1 ───────────────────────
+
+
+def _random_program(rng: np.random.Generator, depth: int):
+    """A random straight-line program over +, x and (optionally) scalar fns.
+
+    Returned as a closure taking (value, algebra-ops) so the SAME program text
+    can be evaluated in any codomain — which is the whole point being tested.
+    """
+    from .algebra import SCALAR_RECURRENCES
+
+    names = list(SCALAR_RECURRENCES)
+    ops: list[tuple[str, Any]] = []
+    for _ in range(depth):
+        roll = rng.random()
+        if roll < 0.4:
+            ops.append(("add_const", float(rng.standard_normal())))
+        elif roll < 0.8:
+            ops.append(("square", None))
+        else:
+            ops.append(("fn", names[int(rng.integers(len(names)))]))
+    return ops
+
+
+def _eval_program(ops, x, W):
+    """Evaluate a program in algebra `W` starting from lifted value `x`."""
+    cur = x
+    for kind, arg in ops:
+        if kind == "add_const":
+            const = W.lift(np.asarray(arg, dtype=np.float64),
+                           np.zeros_like(np.asarray(arg, dtype=np.float64)))
+            cur = W.add(cur, const)
+        elif kind == "square":
+            cur = W.mul(cur, cur)
+        else:
+            cur = _guard_jet(W, arg, cur)
+            cur = W.scalar_fn(arg, cur)
+    return cur
+
+
+class _JetOps:
+    """`_Ops` over a jet algebra, so a declared guard evaluates here too."""
+
+    def __init__(self, W):
+        self.W = W
+
+    def apply(self, name, x):
+        return self.W.scalar_fn(name, x)
+
+    def mul(self, a, b):
+        return self.W.mul(self._lift(a), self._lift(b))
+
+    def add(self, a, b):
+        return self.W.add(self._lift(a), self._lift(b))
+
+    def neg(self, a):
+        return self.mul(-1.0, a)
+
+    def reciprocal(self, a):
+        return self.W.scalar_fn("reciprocal", self._lift(a))
+
+    def _lift(self, v):
+        if isinstance(v, (list, tuple)):
+            return v
+        return self.W.lift(np.asarray(float(v)), np.asarray(0.0))
+
+
+def _guard_jet(W, name, cur):
+    from .algebra import SCALAR_RECURRENCES
+
+    guard = SCALAR_RECURRENCES[name].guard_expr
+    return cur if guard is None else guard(_JetOps(W), cur)
+
+
+def homomorphism_check(order: int, trials: int = 8,
+                       registry: str = "algebra") -> LawResult:
+    """Law 2 — evaluation in ``W`` is an ℝ-algebra homomorphism.
+
+    Tested against **analytically known** Taylor coefficients: a random
+    polynomial is evaluated using only the algebra's `add`/`mul`, and its jet
+    is compared with the exact derivatives obtained by differentiating the
+    polynomial's coefficient vector. That is the substantive claim — the
+    algebra's ring operations reproduce the true derivative tower — and it is
+    where nilpotency does the work: for a polynomial of degree ≤ k there is no
+    truncation error at all, so the only residual is float rounding.
+
+    (An earlier draft compared ``W.mul(f, g)`` against ``W.mul(f, g)`` and was
+    vacuously true, and used an absolute threshold on values that a random
+    program can make large. Both are pinned by the tests.)
+    """
+    import math
+
+    from .algebra import TruncatedJet
+
+    W = TruncatedJet(order)
+    rng = op_rng(f"W{order}", "homomorphism")
+    try:
+        worst = 0.0
+        for _ in range(trials):
+            deg = int(rng.integers(2, 6))
+            coeffs = rng.standard_normal(deg + 1)      # c[0] + c[1]x + ...
+            x0 = float(rng.standard_normal())
+
+            # Evaluate by Horner using ONLY the algebra's ring operations.
+            x = W.lift(np.asarray(x0), np.asarray(1.0))
+            acc = W.lift(np.asarray(coeffs[-1]), np.asarray(0.0))
+            for c in coeffs[-2::-1]:
+                acc = W.add(W.mul(acc, x),
+                            W.lift(np.asarray(c), np.asarray(0.0)))
+
+            # Exact reference: differentiate the coefficient vector.
+            for j in range(order + 1):
+                d = coeffs.copy()
+                for _ in range(j):
+                    d = np.array([i * d[i] for i in range(1, len(d))]) \
+                        if len(d) > 1 else np.array([0.0])
+                exact = float(np.polyval(d[::-1], x0)) / math.factorial(j)
+                got = float(np.asarray(acc[j]))
+                worst = max(worst, abs(got - exact) / max(abs(exact), 1.0))
+
+        status = "pass" if worst <= 1e-12 else "fail"
+        return LawResult(f"W{order}", registry, "homomorphism", status,
+                         trials, worst,
+                         "polynomial jets == exact Taylor coefficients "
+                         "(no truncation error by nilpotency)")
+    except Exception as e:  # noqa: BLE001
+        return LawResult(f"W{order}", registry, "homomorphism", "rule_error",
+                         0, None, f"{type(e).__name__}: {e}")
+
+
+def quotient_check(order: int, trials: int = 6,
+                   registry: str = "algebra") -> LawResult:
+    """Law 4 — order-k jet ≡ k-nested duals on the diagonal seed.
+
+    This is the differential proof that licenses retiring the nested route
+    (Decision #31: the survivor must carry what the deleted path carried).
+    The two algebras are related by the diagonal embedding
+    ``ε ↦ ε₁+…+ε_k``; reading the jet's order-j coefficient back requires the
+    factorial scaling ``j!`` (the coefficient-convention semantic key).
+    """
+    import math
+
+    from .algebra import TruncatedJet, nested_dual_derivative
+
+    W = TruncatedJet(order)
+    rng = op_rng(f"W{order}", "quotient")
+    try:
+        worst = 0.0
+        for _ in range(trials):
+            x0 = float(rng.standard_normal()) * 0.4
+            ops = _random_program(rng, 3)
+            jet = _eval_program(ops, W.lift(np.asarray(x0), np.asarray(1.0)), W)
+
+            def program(t, scalar_ops, _ops=ops):
+                from .algebra import Dual  # noqa: F401  (documents the pair)
+                cur = t
+                for kind, arg in _ops:
+                    if kind == "add_const":
+                        cur = cur + arg
+                    elif kind == "square":
+                        cur = cur * cur
+                    else:
+                        from .algebra import SCALAR_RECURRENCES
+                        guard = SCALAR_RECURRENCES[arg].guard_expr
+                        if guard is not None:
+                            cur = guard(scalar_ops, cur)
+                        cur = scalar_ops._apply(arg, cur)
+                return cur
+
+            for j in range(1, order + 1):
+                ref = nested_dual_derivative(program, x0, j)
+                got = float(np.asarray(jet[j])) * math.factorial(j)
+                if not (np.isfinite(got) and np.isfinite(ref)):
+                    return LawResult(f"W{order}", registry, "quotient", "fail",
+                                     trials, None,
+                                     "non-finite value in the comparison — a "
+                                     "domain guard is missing or wrong")
+                denom = max(abs(ref), 1.0)
+                worst = max(worst, abs(got - ref) / denom)
+
+        status = "pass" if worst <= 1e-9 else "fail"
+        return LawResult(f"W{order}", registry, "quotient", status, trials,
+                         worst, f"jet(k={order}) == {order}-nested duals")
+    except Exception as e:  # noqa: BLE001
+        return LawResult(f"W{order}", registry, "quotient", "rule_error", 0,
+                         None, f"{type(e).__name__}: {e}")
+
+
+# ── Law 6: enclosures and unbiasedness ───────────────────────────────────────
+# These change the TYPE of the correctness claim. Laws 1-5 assert equalities;
+# here the claims are "the exact value lies in this interval" and "this is an
+# unbiased estimator of the operator". Both are testable, and neither is
+# expressible as an equality — which is why the plan gives them their own row.
+
+
+def enclosure_check(order: int, trials: int = 60,
+                    registry: str = "algebra") -> LawResult:
+    """Law 6a — a `TaylorModel` interval provably contains the exact jet.
+
+    Runs the same program through the exact jet algebra and the outward-
+    rounded interval algebra and asserts containment coefficient by
+    coefficient. A certificate that did not contain the truth would be worse
+    than no certificate, so a single escape is a failure.
+    """
+    from .algebra import TaylorModel, TruncatedJet
+
+    TM, W = TaylorModel(order), TruncatedJet(order)
+    rng = op_rng(f"W{order}", "enclosure")
+    try:
+        escapes = 0
+        widest = 0.0
+        for _ in range(trials):
+            x = float(rng.standard_normal())
+            c = float(rng.standard_normal())
+            m = TM.mul(TM.add(TM.lift(x, 1.0), TM.lift(c, 0.0)), TM.lift(x, 1.0))
+            j = W.mul(W.add(W.lift(np.asarray(x), np.asarray(1.0)),
+                            W.lift(np.asarray(c), np.asarray(0.0))),
+                      W.lift(np.asarray(x), np.asarray(1.0)))
+            for i in range(order + 1):
+                if not TM.contains(m, float(j[i]), i):
+                    escapes += 1
+                widest = max(widest, float(m[1][i] - m[0][i]))
+        status = "pass" if escapes == 0 else "fail"
+        return LawResult(f"W{order}", registry, "enclosure", status, trials,
+                         widest,
+                         f"{escapes} escape(s); widest interval {widest:.2e}")
+    except Exception as e:  # noqa: BLE001
+        return LawResult(f"W{order}", registry, "enclosure", "rule_error", 0,
+                         None, f"{type(e).__name__}: {e}")
+
+
+def unbiasedness_check(registry: str = "algebra") -> LawResult:
+    """Law 6b — the randomized-jet Laplacian estimator is unbiased.
+
+    Asserts the property that actually defines the estimator, not a
+    tolerance: the error must fall like ``1/sqrt(N)``. A *biased* estimator
+    would plateau instead, which a single-N tolerance check would happily
+    accept. Draws come from the Philox stream, so this is deterministic and
+    replayable (Decision #18) rather than a flaky statistical test.
+    """
+    from ..rng import RNGKey
+    from .algebra import hutchinson_laplacian
+
+    try:
+        n = 6
+        x = np.zeros(n)
+        exact = 2.0 * n           # f = sum(x^2) + 3 sum(x)  =>  Laplacian 2n
+
+        def quad(lifted, W):
+            sq = W.mul(lifted, lifted)
+            return [sq[i] + 3.0 * lifted[i] for i in range(len(lifted))]
+
+        errs = []
+        for s in (64, 1024):
+            est = hutchinson_laplacian(quad, x, RNGKey(0), s)
+            errs.append(abs(est - exact))
+        # 16x the samples should cut the error ~4x; allow a wide factor so the
+        # test checks the SHAPE of convergence, not a lucky draw.
+        ratio = errs[0] / max(errs[1], 1e-12)
+        status = "pass" if ratio > 2.0 else "fail"
+        return LawResult("hutchinson", registry, "unbiasedness", status, 2,
+                         ratio,
+                         f"error {errs[0]:.3f} -> {errs[1]:.3f} over 16x "
+                         f"samples (ratio {ratio:.2f}, 1/sqrt(N) predicts 4)")
+    except Exception as e:  # noqa: BLE001
+        return LawResult("hutchinson", registry, "unbiasedness", "rule_error",
+                         0, None, f"{type(e).__name__}: {e}")

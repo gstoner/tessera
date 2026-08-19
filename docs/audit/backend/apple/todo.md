@@ -8,6 +8,24 @@ last_updated: 2026-08-18
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `AD-LAW-SERIES-2026-08-19` — **shared reference rules and
+test infrastructure; Apple outcome: parity validated, no Metal evidence changed.** The AD-LAW series (PR #588)
+closes the swallowed-kwarg class registry-wide and adds the AD-WEIL-1 algebra
+substrate plus all six executable laws. Reference-rule changes in this slice:
+`stft`/`spectral_conv` JVPs **deleted** in favour of derivation from the
+forward (both are bilinear, so every configuration key is honored by
+construction); `jvp_istft` rewritten to honor axis/center/length/onesided/norm
+while preserving its window quotient; `dequantize_nvfp4` fixed to accept the
+per-block scale array its canonical forward takes (both modes previously
+crashed); `jvp_lgamma`/`jvp_digamma` replaced (a dead zero-returning stub and
+an identity placeholder); `jvp_cast` fixed for canonical dtype strings; the
+shared polygamma helpers given reflection formulas (previously an O(n) loop
+that hung on valid negative input — a live defect in the REVERSE path too).
+Apple impact: forward-mode reference oracles moved for the spectral and gamma families; VJP-side values are unchanged except `dequantize_nvfp4` (previously a crash, so nothing could have depended on it) and the polygamma negative domain (previously a hang). `test_apple_normalization_vjp.py` passes eps explicitly and is unaffected. No Apple retest required and no Metal evidence is produced or claimed. The previously recorded open spectral/quantize swallow findings are
+therefore CLOSED; `_OPEN_FORWARD_KEY_SWALLOWS` (42 entries from the tape
+positional-routing scan) remains the open set.
+
+
 Cross-backend sync `AD-LAW-1-SHARED-ORACLE-2026-08-18` — **shared test
 infrastructure; Apple outcome: parity validated, no Metal evidence changed.**
 AD-LAW-1 (PR #584) adds executable law oracles (adjoint `⟨Jv,u⟩ = ⟨v,Jᵀu⟩` +

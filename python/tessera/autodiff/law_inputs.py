@@ -338,4 +338,152 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
     "irfft": S(lambda rng: ((rng.standard_normal((3, 5))
                              + 1j * rng.standard_normal((3, 5)),), {"norm": "ortho"}),
                chain=False),
+    # ── AD-LAW-1f: spectral transforms (JVPs now derived from the forward) ──
+    # Non-default keys on purpose: the old hand-written JVPs ignored
+    # axis/center/norm/onesided entirely, so a default-only probe would not
+    # have caught them.
+    "stft": S(lambda rng: ((rng.standard_normal(64), np.hanning(16)),
+                           {"hop": 4, "center": True, "norm": "ortho"}),
+              diff_args=(0, 1), chain=False,
+              note="bilinear in (signal, window). `hop` travels as a kwarg: it "
+                   "is the forward's 3rd positional but CONFIG, and the rules "
+                   "declare it keyword-only — the AD-LAW-1d split"),
+    "spectral_conv": S(lambda rng: ((rng.standard_normal(32),
+                                     rng.standard_normal(32)),
+                                    {"norm": "ortho"}),
+                       diff_args=(0, 1), chain=False,
+                       note="bilinear in (signal, kernel)"),
+    "istft": S(lambda rng: ((rng.standard_normal((13, 9))
+                             + 1j * rng.standard_normal((13, 9)),
+                             np.hanning(16) + 0.25),
+                            {"hop": 4, "center": True, "norm": "ortho"}),
+               diff_args=(0, 1), chain=False, rtol=1e-6,
+               note="non-default config on purpose (AD-LAW-1h): the old JVP "
+                    "pinned axis/onesided/norm and dropped center/length"),
+
+    # ── AD-LAW-1g: quantize family (straight-through estimator) ─────────────
+    # STE rules: the tangent flows through unchanged, so the derivative is
+    # identically 1 regardless of scale/symmetric/format — verified, which is
+    # what makes those swallowed keys benign. `chain=False`: an STE primal is
+    # deliberately NOT the canonical forward's output (the forward returns a
+    # (q, scale, zero_point) tuple), so the chain law's primal anchor does not
+    # apply — this is a declared convention, not a defect.
+    "quantize_int8": S(lambda rng: ((rng.standard_normal((3, 4)) * 3,), {}),
+                       chain=False, note="STE; derivative is identity"),
+    "quantize_int4": S(lambda rng: ((rng.standard_normal((3, 4)) * 3,), {}),
+                       chain=False, note="STE; derivative is identity"),
+    "quantize_fp4": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                      chain=False, note="STE; derivative is identity"),
+    "quantize_fp6": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                      chain=False, note="STE; derivative is identity"),
+    "quantize_nvfp4": S(lambda rng: ((rng.standard_normal((2, 16)),), {}),
+                        chain=False, note="STE; derivative is identity"),
+    # dequantize: linear in the container, with a per-block scale for nvfp4.
+    "dequantize_nvfp4": S(
+        lambda rng: ((rng.standard_normal(32),
+                      (np.arange(4) + 1).astype(np.float64)), {"block_size": 8}),
+        diff_args=(0,), chain=False,
+        note="per-block scale array — the shape that crashed both modes "
+             "before AD-LAW-1g"),
+}
+
+
+# ── Law 5: kink probes ───────────────────────────────────────────────────────
+# The specs above deliberately sample *inside* a smooth piece, because Laws 1/3
+# compare against finite differences that straddle a kink. Law 5 is the
+# complement: it evaluates the rules **exactly at** the kink, where the Clarke
+# subdifferential is a set and `nonsmooth.py` declares which element is
+# returned (Decision #21a). A kink probe therefore asserts a *policy*, not a
+# derivative — the only input where a legal-but-different selection is visible.
+
+
+@dataclass(frozen=True)
+class KinkSpec:
+    """One at-the-kink probe for a declared-nonsmooth op.
+
+    ``make`` returns ``(primals, kwargs)`` where at least one entry sits
+    exactly on the kink/tie. ``kink_mask`` marks, per differentiable operand,
+    which elements are at the kink (the only elements the policy governs).
+    ``expected`` is the policy-mandated derivative value at those elements:
+    a scalar for SUBGRAD_ZERO, or the string ``"split"`` for the
+    mass-conserving SUBGRAD_SPLIT family (checked as an equal share whose
+    total is 1).
+    """
+
+    make: Callable[[], tuple[tuple, dict]]
+    kink_mask: Callable[[tuple], tuple]
+    expected: object
+    tie_groups: int = 1
+    """How many independent tie groups the probe contains.
+
+    SUBGRAD_SPLIT conserves one unit of cotangent mass PER GROUP, so the
+    engine compares the summed shares against this count. It defaulted to a
+    hardcoded 1 before, which meant a probe with two tied rows would have
+    summed to 2.0 and failed a correct rule — declared here so a future spec
+    can carry more than one group.
+    """
+    note: str = ""
+
+
+def _at_zero_unary():
+    def make():
+        # Deliberately includes the kink itself plus both smooth sides, so a
+        # rule that is right at 0 but wrong nearby still fails.
+        return (np.array([[-1.5, -0.5, 0.0, 0.5, 1.5]]),), {}
+    return make
+
+
+def _mask_where_zero(primals):
+    (x,) = primals
+    return (np.asarray(x) == 0.0,)
+
+
+KINK_SPECS: dict[str, KinkSpec] = {
+    # SUBGRAD_ZERO family — one flat side; the declared selection is 0 at the
+    # kink, matching a central-difference oracle that sees a flat plateau.
+    "relu": KinkSpec(_at_zero_unary(), _mask_where_zero, 0.0),
+    "abs": KinkSpec(_at_zero_unary(), _mask_where_zero, 0.0,
+                    note="subdifferential at 0 is [-1,1]; midpoint declared"),
+    "absolute": KinkSpec(_at_zero_unary(), _mask_where_zero, 0.0),
+    "sign": KinkSpec(_at_zero_unary(), _mask_where_zero, 0.0),
+    # clip/clamp: the kink is at each bound, not at 0.
+    "clip": KinkSpec(
+        lambda: ((np.array([[-2.0, -1.0, 0.0, 1.0, 2.0]]),),
+                 {"min_val": -1.0, "max_val": 1.0}),
+        lambda p: (np.isin(np.asarray(p[0]), (-1.0, 1.0)),), 0.0,
+        note="strict interior only; grad 0 AT either bound"),
+    "clamp": KinkSpec(
+        lambda: ((np.array([[-2.0, -1.0, 0.0, 1.0, 2.0]]),),
+                 {"min": -1.0, "max": 1.0}),
+        lambda p: (np.isin(np.asarray(p[0]), (-1.0, 1.0)),), 0.0),
+    # SUBGRAD_SPLIT family — a tie among competing arguments; the cotangent
+    # is shared equally so the total mass is conserved.
+    "maximum": KinkSpec(
+        lambda: ((np.array([[1.0, 2.0, 3.0]]), np.array([[1.0, 5.0, 0.0]])), {}),
+        lambda p: tuple(np.asarray(p[0]) == np.asarray(p[1]) for _ in range(2)),
+        "split", note="element 0 is an exact tie"),
+    "minimum": KinkSpec(
+        lambda: ((np.array([[1.0, 2.0, 3.0]]), np.array([[1.0, 5.0, 0.0]])), {}),
+        lambda p: tuple(np.asarray(p[0]) == np.asarray(p[1]) for _ in range(2)),
+        "split"),
+    "amax": KinkSpec(
+        lambda: ((np.array([[3.0, 1.0, 3.0, 2.0]]),), {"axis": -1}),
+        lambda p: (np.asarray(p[0]) == np.max(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split", note="two-way tie for the maximum"),
+    "max": KinkSpec(
+        lambda: ((np.array([[3.0, 1.0, 3.0, 2.0]]),), {"axis": -1}),
+        lambda p: (np.asarray(p[0]) == np.max(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split", note="reduction form of the amax tie"),
+    "min": KinkSpec(
+        lambda: ((np.array([[1.0, 3.0, 1.0, 2.0]]),), {"axis": -1}),
+        lambda p: (np.asarray(p[0]) == np.min(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split", note="reduction form of the amin tie"),
+    "amin": KinkSpec(
+        lambda: ((np.array([[1.0, 3.0, 1.0, 2.0]]),), {"axis": -1}),
+        lambda p: (np.asarray(p[0]) == np.min(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split"),
 }

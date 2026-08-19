@@ -74,8 +74,16 @@ def op_rng(op: str, law: str) -> np.random.Generator:
 # ── tree helpers ─────────────────────────────────────────────────────────────
 
 
+def _is_diff_dtype(arr: np.ndarray) -> bool:
+    return (np.issubdtype(arr.dtype, np.floating)
+            or np.issubdtype(arr.dtype, np.complexfloating))
+
+
 def _leaves(x: Any) -> list[np.ndarray]:
-    """Flatten an op output (array / tuple / list / dict) to float arrays."""
+    """Flatten an op output (array / tuple / list / dict) to float/complex
+    arrays. Complex arrays are first-class leaves — the pairing treats ℂ as
+    ℝ² via Re⟨a, conj b⟩ (see `_dot`), which is the inner product under
+    which the fft-family adjoint conventions are stated."""
     if x is None:
         return []
     if isinstance(x, (tuple, list)):
@@ -89,7 +97,7 @@ def _leaves(x: Any) -> list[np.ndarray]:
             out.extend(_leaves(x[k]))
         return out
     arr = np.asarray(x)
-    return [arr] if np.issubdtype(arr.dtype, np.floating) else []
+    return [arr] if _is_diff_dtype(arr) else []
 
 
 def _like_leaves(x: Any, make: Callable[[np.ndarray], np.ndarray]) -> Any:
@@ -103,17 +111,33 @@ def _like_leaves(x: Any, make: Callable[[np.ndarray], np.ndarray]) -> Any:
     if isinstance(x, dict):
         return {k: _like_leaves(v, make) for k, v in x.items()}
     arr = np.asarray(x)
-    if np.issubdtype(arr.dtype, np.floating):
+    if _is_diff_dtype(arr):
         return make(arr)
     return np.zeros_like(arr)
 
 
 def _dot(a: Any, b: Any) -> float:
+    """Real inner product; ℂ is paired as ℝ² via Re⟨a, conj b⟩."""
     la, lb = _leaves(a), _leaves(b)
     if len(la) != len(lb):
         raise ValueError(f"structure mismatch: {len(la)} vs {len(lb)} leaves")
-    return float(sum(np.sum(np.asarray(x, dtype=np.float64) * np.asarray(y, dtype=np.float64))
-                     for x, y in zip(la, lb)))
+    total = 0.0
+    for x, y in zip(la, lb):
+        xa, ya = np.asarray(x), np.asarray(y)
+        if (np.issubdtype(xa.dtype, np.complexfloating)
+                or np.issubdtype(ya.dtype, np.complexfloating)):
+            total += float(np.real(np.sum(xa.astype(np.complex128)
+                                          * np.conj(ya.astype(np.complex128)))))
+        else:
+            total += float(np.sum(xa.astype(np.float64) * ya.astype(np.float64)))
+    return total
+
+
+def _rand_like(rng: np.random.Generator, arr: np.ndarray) -> np.ndarray:
+    if np.issubdtype(np.asarray(arr).dtype, np.complexfloating):
+        return (rng.standard_normal(np.shape(arr))
+                + 1j * rng.standard_normal(np.shape(arr)))
+    return rng.standard_normal(np.shape(arr))
 
 
 def _scale(*xs: Any) -> float:
@@ -135,15 +159,16 @@ def adjoint_check(op: str, spec, jvp_fn: Callable, vjp_fn: Callable,
         primals, kwargs = spec.make(rng)
         diff = spec.diff_args if spec.diff_args is not None else tuple(range(len(primals)))
 
+        tol = spec.rtol if spec.rtol is not None else ADJOINT_RTOL
         max_res = 0.0
         for _ in range(spec.probes):
             tangents = tuple(
-                rng.standard_normal(np.shape(p)) if i in diff and _is_float(p)
+                _rand_like(rng, p) if i in diff and _is_float(p)
                 else _zero_like(p)
                 for i, p in enumerate(primals)
             )
             _, t_out = jvp_fn(primals, tangents, **kwargs)
-            u = _like_leaves(t_out, lambda leaf: rng.standard_normal(leaf.shape))
+            u = _like_leaves(t_out, lambda leaf: _rand_like(rng, leaf))
             lhs = _dot(t_out, u)
 
             grads = vjp_fn(u if not _single_leaf(t_out) else _leaves(u)[0],
@@ -155,10 +180,10 @@ def adjoint_check(op: str, spec, jvp_fn: Callable, vjp_fn: Callable,
                 if i < len(grads) and grads[i] is not None:
                     rhs += _dot(tangents[i], grads[i])
 
-            res = abs(lhs - rhs) / max(abs(lhs) + abs(rhs), ADJOINT_RTOL * _scale(t_out, u))
+            res = abs(lhs - rhs) / max(abs(lhs) + abs(rhs), tol * _scale(t_out, u))
             max_res = max(max_res, res)
 
-        status = "pass" if max_res <= ADJOINT_RTOL * 10 else "fail"
+        status = "pass" if max_res <= tol * 10 else "fail"
         # A degenerate all-zero tangent stream would vacuously pass; flag it —
         # unless the spec declares the derivative genuinely 0 a.e. (`sign`).
         if status == "pass" and not spec.zero_tangent_ok and all(
@@ -175,7 +200,7 @@ def adjoint_check(op: str, spec, jvp_fn: Callable, vjp_fn: Callable,
 
 
 def _is_float(p: Any) -> bool:
-    return np.issubdtype(np.asarray(p).dtype, np.floating)
+    return _is_diff_dtype(np.asarray(p))
 
 
 def _zero_like(p: Any) -> np.ndarray:
@@ -234,7 +259,15 @@ def chain_check(op: str, spec, jvp_fn: Callable,
         # cancellation noise and turning the residual into garbage. The scale
         # is a constant computed once at the base point, so it is transparent
         # to differentiation.
-        y0 = np.asarray(primal_out(primals), dtype=np.float64)
+        y0_raw = primal_out(primals)
+        if not _single_leaf(y0_raw):
+            return LawResult(op, registry, "chain", "not_applicable", 0, None,
+                             "multi-output op; chain check needs one output")
+        if np.issubdtype(np.asarray(y0_raw).dtype, np.complexfloating):
+            return LawResult(op, registry, "chain", "not_applicable", 0, None,
+                             "complex output; the chain anchor composes a real "
+                             "tanh — adjoint law still applies via Re⟨·,conj·⟩")
+        y0 = np.asarray(y0_raw, dtype=np.float64)
         s = 1.0 / (1.0 + float(np.max(np.abs(y0))))
 
         # Primal-consistency gate: the JVP's own primal output must be the
@@ -242,7 +275,9 @@ def chain_check(op: str, spec, jvp_fn: Callable,
         # differentiating some other function, whatever its tangent says.
         zeros = tuple(_zero_like(p) for p in primals)
         y_jvp = np.asarray(jvp_fn(primals, zeros, **kwargs)[0], dtype=np.float64)
-        if y_jvp.shape != y0.shape or not np.allclose(y_jvp, y0, rtol=1e-9, atol=1e-12):
+        primal_rtol = spec.rtol if spec.rtol is not None else 1e-9
+        if y_jvp.shape != y0.shape or not np.allclose(y_jvp, y0, rtol=primal_rtol,
+                                                      atol=primal_rtol * 1e-3):
             return LawResult(op, registry, "chain", "fail", 1, None,
                              "JVP primal output disagrees with the canonical "
                              "forward — the rule differentiates a different "
@@ -275,7 +310,8 @@ def chain_check(op: str, spec, jvp_fn: Callable,
             den = float(np.max(np.abs(fd))) + float(np.max(np.abs(np.asarray(dz)))) + 1e-12
             max_res = max(max_res, num / den)
 
-        status = "pass" if max_res <= CHAIN_RTOL else "fail"
+        chain_tol = max(CHAIN_RTOL, spec.rtol or 0.0)
+        status = "pass" if max_res <= chain_tol else "fail"
         return LawResult(op, registry, "chain", status,
                          max(2, spec.probes // 2), max_res)
     except Exception as e:  # noqa: BLE001

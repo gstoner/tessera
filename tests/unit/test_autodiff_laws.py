@@ -414,6 +414,70 @@ def test_fft_family_jvp_honors_norm(op):
         np.testing.assert_allclose(dy, ref(dx, norm="ortho"), atol=1e-12)
 
 
+def test_lgamma_digamma_jvps_are_no_longer_placeholders():
+    """AD-LAW-1c findings (#10a fixtures): jvp_lgamma's derivative was a dead
+    `if False` stub returning identically 0.0, and jvp_digamma was a literal
+    `# placeholder` computing identity-with-slope-1 — forward mode through
+    either op silently returned garbage while reverse mode was correct. Both
+    now derive from the same polygamma helpers as their VJPs (one datum)."""
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.vjp import _digamma_positive, _trigamma_positive
+    from tessera import ops
+
+    x = np.array([0.7, 1.3, 2.9, 6.1])
+    dx = np.ones_like(x)
+
+    y, dy = _JVPS["lgamma"]((x,), (dx,))
+    assert np.any(dy != 0.0), "lgamma JVP derivative is still the zero stub"
+    np.testing.assert_allclose(dy, _digamma_positive(x), rtol=1e-12)
+
+    y, dy = _JVPS["digamma"]((x,), (dx,))
+    fwd = getattr(ops.digamma, "__wrapped__", ops.digamma)
+    np.testing.assert_allclose(y, fwd(x), rtol=1e-12)
+    np.testing.assert_allclose(dy, _trigamma_positive(x), rtol=1e-12)
+    assert not np.allclose(y, x), "digamma JVP primal is still the identity placeholder"
+
+
+def test_polygamma_helpers_handle_negative_domain_without_recurrence():
+    """Codex review on #586: the polygamma helpers advanced by 1 per iteration
+    until reaching 8, so a valid input like -1e9+0.5 spun for ~10^9 steps —
+    a live defect in the *reverse* path (vjp_lgamma/vjp_digamma already used
+    these) that the new forward wiring would have inherited. Reflection
+    formulas now handle x <= 0, matching the canonical forward exactly."""
+    from tessera import ops
+    from tessera.autodiff.vjp import _digamma_positive, _trigamma_positive
+
+    far_negative = np.array([-1e9 + 0.5])
+    # Correctness (not just speed): psi(1-x) ~ log(1e9), and -pi/tan(pi*x) -> 0.
+    np.testing.assert_allclose(_digamma_positive(far_negative),
+                               [np.log(1e9)], rtol=1e-6)
+    # psi'(x) = pi^2/sin^2(pi x) - psi'(1-x); sin^2 = 1 at the half-integer.
+    np.testing.assert_allclose(_trigamma_positive(far_negative),
+                               [np.pi ** 2], rtol=1e-6)
+
+    fwd = getattr(ops.digamma, "__wrapped__", ops.digamma)
+    xs = np.array([-7.3, -2.5, -0.4, 0.3, 1.0, 2.5, 7.9, 8.1, 50.0])
+    np.testing.assert_allclose(_digamma_positive(xs), fwd(xs), rtol=1e-12)
+
+    h = 1e-5
+    fd = (fwd(xs + h) - fwd(xs - h)) / (2 * h)
+    np.testing.assert_allclose(_trigamma_positive(xs), fd, rtol=1e-5)
+
+    # Poles (non-positive integers) are nan, per the canonical scalar impl.
+    assert np.all(np.isnan(_digamma_positive(np.array([-3.0, 0.0]))))
+    assert np.all(np.isnan(_trigamma_positive(np.array([-3.0, 0.0]))))
+
+
+def test_cast_jvp_accepts_canonical_dtype_strings():
+    """The tape records `ops.cast`'s canonical dtype STRING; jvp_cast fed it
+    to `np.astype` and crashed on every canonically-spelled cast (#10a)."""
+    from tessera.autodiff.jvp import _JVPS
+
+    x = np.array([1.0, 2.0], dtype=np.float64)
+    y, dy = _JVPS["cast"]((x,), (np.ones_like(x),), dtype="fp32")
+    assert y.dtype == np.float32 and dy.dtype == np.float32
+
+
 def test_rmsnorm_eps_defaults_match_forward():
     """The sweep's first finding, pinned directly: jvp_rmsnorm defaulted
     eps=1e-6 (the rmsnorm_safe value) against the forward's and the VJP's

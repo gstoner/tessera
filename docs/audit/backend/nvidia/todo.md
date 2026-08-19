@@ -8,6 +8,25 @@ last_updated: 2026-08-19
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `APPLE-STUB-BINARY-OPCODES-2026-08-19` — **shared runtime
+contract; NVIDIA outcome: not applicable.** The portable-stub opcode slice fixes a silent wrong-answer class in the Apple
+GPU elementwise-binary lane. `apple_gpu_runtime_stub.cpp` — compiled on every
+NON-Darwin host so the C symbol exists — implemented opcodes 0-8 and its
+`default:` arm assigned `out[i] = x`, so `mod`(9), `floor_div`(10), the six
+comparisons(11-16), and the logical/bitwise ops(17-22) returned the LEFT operand
+instead of computing. Because the symbol exists,
+`_apple_gpu_dispatch_mpsgraph_binary` takes the kernel branch rather than its
+numpy fallback, so those values came back as if computed, with no diagnostic
+(Decision #21). Fixed by implementing opcodes 9-22 to match
+`mpsg_binary_node` and the declared host reference
+`runtime._apple_gpu_binary_numpy`, and by rejecting an unknown opcode through
+the stub's last-error channel (new kind 3) so it routes to the host fallback
+instead of returning a plausible buffer.
+NVIDIA impact: none. `tessera_apple_gpu_mpsgraph_binary_f32` is referenced only
+by Apple files (`runtime.py`, `_apple_gpu_backend.py`, `_apple_gpu_dispatch.py`,
+`apple_exact_device_proofs.py`, the two Apple runtime TUs, and
+`SiluMulToAppleGPU.cpp`); no NVIDIA lowering or runtime path reaches it. No
+sm_120 retest required and no device evidence is produced or claimed.
 Cross-backend sync `ZERO-FUNCTION-CANDIDATE-2026-08-19` — **shared frontend ABI
 and diagnostics; NVIDIA outcome: not applicable today; parity by construction
 for future migrations.** The zero-function-candidate slice (PR #590) changes `JitFn`'s call ABI recovery

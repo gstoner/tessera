@@ -9,6 +9,37 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `APPLE-STUB-BINARY-OPCODES-2026-08-19` — **shared runtime
+contract; x86 outcome: not applicable today, but one follow-up recorded.**
+The portable-stub opcode slice fixes a silent wrong-answer class in the Apple
+GPU elementwise-binary lane. `apple_gpu_runtime_stub.cpp` — compiled on every
+NON-Darwin host so the C symbol exists — implemented opcodes 0-8 and its
+`default:` arm assigned `out[i] = x`, so `mod`(9), `floor_div`(10), the six
+comparisons(11-16), and the logical/bitwise ops(17-22) returned the LEFT operand
+instead of computing. Because the symbol exists,
+`_apple_gpu_dispatch_mpsgraph_binary` takes the kernel branch rather than its
+numpy fallback, so those values came back as if computed, with no diagnostic
+(Decision #21). Fixed by implementing opcodes 9-22 to match
+`mpsg_binary_node` and the declared host reference
+`runtime._apple_gpu_binary_numpy`, and by rejecting an unknown opcode through
+the stub's last-error channel (new kind 3) so it routes to the host fallback
+instead of returning a plausible buffer.
+x86 impact: none from this change. The AVX-512 elementwise binary lane is
+separate code (`_execute_x86_compiled_binary` →
+`tessera_x86_avx512_binary_f32` / `tessera_x86_reference_binary_f32` in
+`src/compiler/codegen/tessera_x86_backend/src/kernels/avx512_binary_f32.cpp`)
+and does not call the Apple symbol.
+
+**Follow-up recorded (not fixed here):** that kernel carries the SAME
+silent-fallthrough shape — `scalar_binary` ends `default: return a;` and the
+vector loop ends `default: y = a; break;`, both returning operand A for an
+unrecognised kind. It is **latent, not live**: the kernel implements kinds 0-7
+(`kSub`/`kDiv`/`kMax`/`kMin`/`kAdd`/`kMul`/`kMod`/`kFloorDiv`) and
+`_X86_BINARY_OPS` maps exactly onto that range, so no reachable call hits the
+default today. It becomes live the moment an opcode is added on one side only —
+which is precisely how the Apple stub defect arose. Fixing it belongs in an x86
+change with AVX-512 evidence from the Zen 5 box; no Zen 5 retest is required for
+the present change and no device evidence is produced or claimed.
 Cross-backend sync `ZERO-FUNCTION-CANDIDATE-2026-08-19` — **shared frontend ABI
 and diagnostics; x86 outcome: not applicable today; parity by construction.**
 The zero-function-candidate slice (PR #590) changes `JitFn`'s call ABI recovery

@@ -274,7 +274,7 @@ logical_xor,4,0,0,4,0,f32 fp32 int32 int64 int8,directly_tested,4 direct test re
 logsumexp,6,3,0,9,0,bf16,directly_tested,9 direct test references
 lookahead_sparse_attention,19,4,1,23,0,fp16,directly_tested,23 direct test references
 lora_linear,8,0,0,8,0,fp16,directly_tested,8 direct test references
-lt,9,5,2,14,0,bf16 f32 fp16 fp32 fp4_e2m1 fp8_e4m3 int32 int64 int8,directly_tested,14 direct test references
+lt,11,5,2,16,0,bf16 f32 fp16 fp32 fp4_e2m1 fp8_e4m3 int32 int64 int8,directly_tested,16 direct test references
 lu,9,1,0,10,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,10 direct test references
 mae_loss,12,0,0,12,0,f32,directly_tested,12 direct test references
 map,0,0,0,0,1,,structural_only,category default for 'control_flow'

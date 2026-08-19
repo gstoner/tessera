@@ -8,6 +8,36 @@ last_updated: 2026-08-19
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `APPLE-STUB-BINARY-OPCODES-2026-08-19` — **shared runtime
+contract; Apple outcome: parity validated off-device, exact-device evidence
+unchanged.** The portable-stub opcode slice fixes a silent wrong-answer class in the Apple
+GPU elementwise-binary lane. `apple_gpu_runtime_stub.cpp` — compiled on every
+NON-Darwin host so the C symbol exists — implemented opcodes 0-8 and its
+`default:` arm assigned `out[i] = x`, so `mod`(9), `floor_div`(10), the six
+comparisons(11-16), and the logical/bitwise ops(17-22) returned the LEFT operand
+instead of computing. Because the symbol exists,
+`_apple_gpu_dispatch_mpsgraph_binary` takes the kernel branch rather than its
+numpy fallback, so those values came back as if computed, with no diagnostic
+(Decision #21). Fixed by implementing opcodes 9-22 to match
+`mpsg_binary_node` and the declared host reference
+`runtime._apple_gpu_binary_numpy`, and by rejecting an unknown opcode through
+the stub's last-error channel (new kind 3) so it routes to the host fallback
+instead of returning a plausible buffer.
+Apple impact: this is the Apple backend's own non-Darwin reference path. Metal
+was always correct — `mpsg_binary_node` implements the full table — so no Metal
+kernel, `.metallib`, dylib, or exact-device row changes, and no Apple GPU proof
+is re-run or re-claimed. What changes is that the portable path now agrees with
+Metal instead of silently disagreeing on 14 of 23 opcodes. Evidence:
+`tests/unit/test_apple_gpu_binary_opcodes.py` extracts the stub's opcode switch
+and error channel VERBATIM, compiles them with the host C++ compiler, and
+compares every opcode against the numpy reference — 74 passing on the M1 Max,
+including negative inputs that separate floor-mod from C `fmod` and int32
+truncation, plus the unknown-opcode diagnosis. That compiled lane is the only
+coverage that executes the stub, since a Mac loads the real Metal symbol and
+never reaches it; the structural drift gates in the same file run on any host so
+a newly declared opcode missing from the stub fails immediately.
+
+
 Cross-backend sync `SCALAR-SIDE-ORDERING-2026-08-19` — **shared Graph IR
 runtime contract; Apple outcome: parity validated on Metal, plus one
 follow-up required (portable stub).** The `scalar_side` slice (PR #589) makes the Graph IR lifted-scalar form carry

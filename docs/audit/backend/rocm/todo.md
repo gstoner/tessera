@@ -7,6 +7,29 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `APPLE-STUB-BINARY-OPCODES-2026-08-19` — **shared runtime
+contract; ROCm outcome: not applicable.** The portable-stub opcode slice fixes a silent wrong-answer class in the Apple
+GPU elementwise-binary lane. `apple_gpu_runtime_stub.cpp` — compiled on every
+NON-Darwin host so the C symbol exists — implemented opcodes 0-8 and its
+`default:` arm assigned `out[i] = x`, so `mod`(9), `floor_div`(10), the six
+comparisons(11-16), and the logical/bitwise ops(17-22) returned the LEFT operand
+instead of computing. Because the symbol exists,
+`_apple_gpu_dispatch_mpsgraph_binary` takes the kernel branch rather than its
+numpy fallback, so those values came back as if computed, with no diagnostic
+(Decision #21). Fixed by implementing opcodes 9-22 to match
+`mpsg_binary_node` and the declared host reference
+`runtime._apple_gpu_binary_numpy`, and by rejecting an unknown opcode through
+the stub's last-error channel (new kind 3) so it routes to the host fallback
+instead of returning a plausible buffer.
+ROCm impact: none. The gfx1151 elementwise binary lane is separate code
+(`_execute_rocm_compiled_binary` over a compiler-generated hsaco, dispatched by
+`_ROCM_BINARY_OPS`) and does not call the Apple symbol. Checked for the same
+defect shape: that lane binds both operands positionally and raises
+`"binary requires two operands (a, b)"` rather than falling through, so it has
+no silent-default arm. No gfx1151 retest required and no device evidence is
+produced or claimed.
+
+
 Cross-backend sync `SCALAR-SIDE-ORDERING-2026-08-19` — **shared Graph IR
 runtime contract; ROCm outcome: not applicable today, fails closed by
 construction.** The `scalar_side` slice (PR #589) makes the Graph IR lifted-scalar form carry

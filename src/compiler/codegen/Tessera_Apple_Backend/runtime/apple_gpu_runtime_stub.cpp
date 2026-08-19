@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <string>
 #include <vector>
 
 #if !defined(__APPLE__)
@@ -2049,9 +2050,61 @@ extern "C" int32_t tessera_apple_gpu_mpsgraph_unary_f32_status(
     int32_t, const float*, float*, int64_t) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mpsgraph_unary_f16_status(
     int32_t, const uint16_t*, uint16_t*, int64_t) { return 0; }
+// ── Portable last-error state (see the C-ABI getters near the end of this TU) ──
+// thread_local, matching apple_gpu_runtime.mm's `g_last_gpu_error_kind`.
+//   kind: 0 = ok, 3 = operation not implemented by this portable stub.
+// (1 = timeout and 2 = command-buffer error are Metal-only and unreachable here.)
+static thread_local int32_t g_stub_last_error_kind = 0;
+static thread_local std::string g_stub_last_error_msg;
+
+static void stub_set_last_error(int32_t kind, const char *op_name,
+                                const char *detail) {
+  g_stub_last_error_kind = kind;
+  std::string msg = op_name ? op_name : "<unknown>";
+  if (detail && *detail) {
+    msg += ": ";
+    msg += detail;
+  }
+  g_stub_last_error_msg = std::move(msg);
+}
+
+// The opcodes this TU actually computes. Kept as an explicit predicate rather
+// than a `default:` arm so that adding an opcode to the switch without adding
+// it here fails closed (diagnosed) instead of silently returning an operand.
+static inline bool stub_binary_opcode_supported(int32_t op) {
+  return op >= 0 && op <= 22;
+}
+
+// Opcode table: `python/tessera/compiler/apple_gpu_envelope.py`
+// `_APPLE_GPU_BINARY_OPCODES` (0-5, 7-22) plus 6 = silu_mul, which the
+// AppleGPUToMPS lowering emits directly and the Python table therefore omits.
+// Every arm mirrors `mpsg_binary_node` in apple_gpu_runtime.mm and the declared
+// host reference `runtime._apple_gpu_binary_numpy`; the three must agree, and
+// `tests/unit/test_apple_gpu_binary_opcodes.py` compares them.
+//
+// Until 2026-08-19 this switch stopped at case 8 and its `default:` arm
+// assigned `out[i] = x`, so opcodes 9-22 (mod, floor_div, the six comparisons,
+// and the logical/bitwise ops) silently returned the LEFT operand on every
+// non-Darwin host. That was not an envelope miss the caller could see: because
+// this symbol exists, `_apple_gpu_dispatch_mpsgraph_binary` takes the kernel
+// branch instead of its numpy fallback, so a wrong value came back as if it
+// had been computed (Decision #21 — a lowering the backend cannot carry must
+// diagnose, never silently fall through).
 extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a,
                                                       const float* b, float* out,
                                                       int64_t n) {
+  // Reject once, before touching the output: an unimplemented opcode must not
+  // produce a buffer that reads as a result. The last-error channel routes the
+  // caller to its host fallback (`_apple_gpu_run_checked`), and the poison fill
+  // makes the failure obvious to any path that ignores the channel.
+  if (!stub_binary_opcode_supported(op)) {
+    stub_set_last_error(3, "tessera_apple_gpu_mpsgraph_binary_f32",
+                        ("unsupported binary opcode " + std::to_string(op) +
+                         " on the non-Darwin portable stub").c_str());
+    for (int64_t i = 0; i < n; ++i)
+      out[i] = std::numeric_limits<float>::quiet_NaN();
+    return;
+  }
   for (int64_t i = 0; i < n; ++i) {
     float x = a[i], y = b[i];
     switch (op) {
@@ -2064,7 +2117,41 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a
       case 6: out[i] = x * (y / (1.0f + std::exp(-y))); break;
       case 7: out[i] = std::pow(x, y); break;
       case 8: out[i] = std::atan2(x, y); break;
-      default: out[i] = x; break;
+      // Batch 1 — floor-mod and floor-division (numpy semantics: the sign
+      // follows the divisor), NOT C `fmod`/truncation.
+      case 9: out[i] = x - y * std::floor(x / y); break;
+      case 10: out[i] = std::floor(x / y); break;
+      // Comparisons → f32 0/1 mask.
+      case 11: out[i] = (x == y) ? 1.0f : 0.0f; break;
+      case 12: out[i] = (x != y) ? 1.0f : 0.0f; break;
+      case 13: out[i] = (x < y) ? 1.0f : 0.0f; break;
+      case 14: out[i] = (x <= y) ? 1.0f : 0.0f; break;
+      case 15: out[i] = (x > y) ? 1.0f : 0.0f; break;
+      case 16: out[i] = (x >= y) ? 1.0f : 0.0f; break;
+      // Batch 2 — logical on (x != 0, y != 0) → f32 mask.
+      case 17: out[i] = ((x != 0.0f) && (y != 0.0f)) ? 1.0f : 0.0f; break;
+      case 18: out[i] = ((x != 0.0f) || (y != 0.0f)) ? 1.0f : 0.0f; break;
+      case 19: out[i] = ((x != 0.0f) != (y != 0.0f)) ? 1.0f : 0.0f; break;
+      // Batch 2 — bitwise on integer-valued f32. The int32 conversion
+      // truncates toward zero, matching numpy's `.astype(np.int32)` and
+      // MPSGraph's `castTensor:toType:MPSDataTypeInt32`.
+      case 20:
+        out[i] = static_cast<float>(static_cast<int32_t>(x) & static_cast<int32_t>(y));
+        break;
+      case 21:
+        out[i] = static_cast<float>(static_cast<int32_t>(x) | static_cast<int32_t>(y));
+        break;
+      case 22:
+        out[i] = static_cast<float>(static_cast<int32_t>(x) ^ static_cast<int32_t>(y));
+        break;
+      default:
+        // Unreachable: the guard above rejects anything not listed here. Kept
+        // so a newly added opcode cannot fall through silently if the guard and
+        // this switch ever drift apart.
+        stub_set_last_error(3, "tessera_apple_gpu_mpsgraph_binary_f32",
+                            "opcode accepted by the guard but not implemented");
+        out[i] = std::numeric_limits<float>::quiet_NaN();
+        break;
     }
   }
 }
@@ -2185,13 +2272,27 @@ extern "C" void *tessera_apple_gpu_mlpkg_compile_with_dims(
 extern "C" void tessera_apple_gpu_mlpkg_destroy(void *) {}
 extern "C" int32_t tessera_apple_gpu_mlpkg_is_compiled(void *) { return 0; }
 extern "C" int32_t tessera_apple_gpu_mlpkg_last_error_kind(void) { return -1; }
-// GPU dispatch last-error channel (audit 2026-06-10) — the non-Darwin stub
-// computes on the host and never hits the Metal command-buffer choke point,
-// so it never sets an error. Parity symbols so the Python getter binds on any
-// platform.
-extern "C" int32_t tessera_apple_gpu_last_error_kind(void) { return 0; }
-extern "C" const char *tessera_apple_gpu_last_error_message(void) { return ""; }
-extern "C" void tessera_apple_gpu_clear_last_error(void) {}
+// GPU dispatch last-error channel (audit 2026-06-10) — mirrors the .mm's
+// thread_local errno-style pattern (`g_last_gpu_error_kind`), which is correct
+// and lock-free here for the same reason: a ctypes dispatch and the post-call
+// error read happen on one Python thread.
+//
+// The stub computes on the host and never hits a Metal command-buffer, so it
+// cannot report kind 1 (timeout) or 2 (command-buffer error). It reports
+// kind 3 = "operation not implemented by the portable stub". These were fixed
+// no-op parity symbols until 2026-08-19; that left the stub unable to say it
+// had not computed anything, which is what let unimplemented binary opcodes
+// return a value that read as a result.
+extern "C" int32_t tessera_apple_gpu_last_error_kind(void) {
+  return g_stub_last_error_kind;
+}
+extern "C" const char *tessera_apple_gpu_last_error_message(void) {
+  return g_stub_last_error_msg.c_str();
+}
+extern "C" void tessera_apple_gpu_clear_last_error(void) {
+  g_stub_last_error_kind = 0;
+  g_stub_last_error_msg.clear();
+}
 // PK8 — package authoring needs a real Metal device + MPSGraph; unavailable
 // off-Darwin. Return the "OS unavailable" code so callers skip cleanly.
 extern "C" int32_t tessera_apple_gpu_mlpkg_author_matmul(const char *, int32_t,

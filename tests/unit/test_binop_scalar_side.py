@@ -37,6 +37,7 @@ import numpy as np
 import pytest
 
 import tessera
+import tessera.runtime as runtime_mod
 from tessera import ops
 from tessera.compiler import trace as trace_mod
 from tessera.compiler.graph_ir import GraphIRBuilder
@@ -71,11 +72,44 @@ def _build(body: str, name: str = "f"):
     return builder.lower(namespace[name], source_text=source), builder
 
 
+#: The two dispatcher lanes each contract assertion runs through.
+#:
+#: `host_reference` forces the compiled-symbol lookup to miss, which is the
+#: dispatcher's own documented fallback. It is deterministic on every host, so
+#: operand ordering stays covered in CI. The ordering swap happens before the
+#: lane split, so this exercises exactly the code under test.
+#:
+#: `live_kernel` carries `hardware_apple_gpu`, so the centralized
+#: `require_apple_metal()` boundary in `tests/conftest.py` owns the gate (an
+#: inline Apple capability skip here would be APPLE-TEST-1 migration debt --
+#: `test_apple_test_inventory.py` enforces that). Metal implements the whole
+#: opcode table; the non-Darwin portable stub
+#: (`runtime/apple_gpu_runtime_stub.cpp`) implements opcodes 0-8 and its
+#: `default:` arm assigns `out[i] = x`, so `mod`, `floor_div`, the six
+#: comparisons, and the logical/bitwise ops return the LEFT operand there
+#: rather than computing anything. That is a pre-existing defect independent of
+#: the operand ordering under test, tracked separately; it is why this lane is
+#: hardware-gated rather than probed, since probing would mean asserting the
+#: very thing these tests assert.
+_LANES = [
+    "host_reference",
+    pytest.param("live_kernel", marks=pytest.mark.hardware_apple_gpu),
+]
+
+
+@pytest.fixture(params=_LANES)
+def lane(request, monkeypatch):
+    """Run each contract assertion through both dispatcher lanes; they must agree."""
+    if request.param == "host_reference":
+        monkeypatch.setattr(runtime_mod, "_apple_gpu_mpsgraph_binary_f32", lambda: None)
+    return request.param
+
+
 class TestConsumerContract:
     """``runtime._apple_gpu_dispatch_mpsgraph_binary`` — the one consumer."""
 
     @pytest.mark.parametrize("short", sorted(NONCOMMUTATIVE))
-    def test_left_side_scalar_is_the_left_operand(self, short):
+    def test_left_side_scalar_is_the_left_operand(self, short, lane):
         """The negative fixture: a left-side scalar on a NON-commutative op.
 
         Every one of these returned the right-side answer before the fix.
@@ -88,7 +122,7 @@ class TestConsumerContract:
         )
 
     @pytest.mark.parametrize("short", sorted(NONCOMMUTATIVE))
-    def test_left_and_right_actually_differ(self, short):
+    def test_left_and_right_actually_differ(self, short, lane):
         """Guards the fixtures themselves: if these two agreed, the parametrized
         cases above would pass under a consumer that ignored the side."""
         left = np.asarray(
@@ -100,7 +134,7 @@ class TestConsumerContract:
         assert not np.allclose(left, right)
 
     @pytest.mark.parametrize("short", sorted(NONCOMMUTATIVE))
-    def test_right_side_scalar_is_the_right_operand(self, short):
+    def test_right_side_scalar_is_the_right_operand(self, short, lane):
         got = dispatch_binary(
             f"tessera.{short}", [X], {"scalar": S, "scalar_side": "right"}, np
         )
@@ -109,7 +143,7 @@ class TestConsumerContract:
         )
 
     @pytest.mark.parametrize("short", sorted(NONCOMMUTATIVE))
-    def test_absent_side_means_right(self, short):
+    def test_absent_side_means_right(self, short, lane):
         """``runtime.py``'s own ``{"scalar": s}`` call sites (softcap, clamp,
         the unary-with-scalar helper, ...) omit the key and mean the right
         operand. Absence must stay pinned to that reading."""
@@ -118,11 +152,11 @@ class TestConsumerContract:
             np.asarray(got), NONCOMMUTATIVE[short](X, S), rtol=1e-6, atol=1e-6
         )
 
-    def test_unknown_side_is_rejected_not_guessed(self):
+    def test_unknown_side_is_rejected_not_guessed(self, lane):
         with pytest.raises(ValueError, match="scalar_side must be"):
             dispatch_binary("tessera.sub", [X], {"scalar": S, "scalar_side": "middle"}, np)
 
-    def test_two_real_operands_ignore_the_side(self):
+    def test_two_real_operands_ignore_the_side(self, lane):
         """With both operands materialized, order is carried by the dataflow and
         the attribute is irrelevant (it describes the lifted form only)."""
         y = np.array([5.0, 6.0, 7.0], dtype=np.float32)
@@ -181,7 +215,7 @@ class TestProducerConsumerRoundTrip:
             ("return 2.0 * x", lambda x: 2.0 * x),
         ],
     )
-    def test_extracted_kwargs_dispatch_to_the_right_answer(self, body, truth):
+    def test_extracted_kwargs_dispatch_to_the_right_answer(self, body, truth, lane):
         fn_ir, _ = _build(body)
         op = fn_ir.body[0]
         got = dispatch_binary(op.op_name, [X], dict(op.kwargs), np)

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-18
+last_updated: 2026-08-19
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,25 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `SCALAR-SIDE-ORDERING-2026-08-19` — **shared Graph IR
+runtime contract; x86 outcome: not applicable today, fails closed by
+construction.** The `scalar_side` slice (PR #589) makes the Graph IR lifted-scalar form carry
+operand order. `graph_ir._OpExtractor._try_map_binop` lifts a literal out of
+either side of a `BinOp` into the `scalar` attribute and records the side; until
+now no code in `python/`, `src/`, or `tools/` read that record (Decision #29), so
+`2.0 - x` and `x - 2.0` emitted indistinguishable IR and any consumer binding
+`scalar` as the right operand computed `x - 2.0` for both — sign-flipped for
+`sub`, reciprocal for `div`, with no diagnostic. Shared contract changed: a lone
+`scalar` means the RIGHT operand, `scalar_side="left"` requests the mirrored
+binding, and any other value is rejected rather than guessed (Decision #21).
+x86 impact: none. `runtime._execute_x86_compiled_binary` binds both operands
+positionally and raises `"binary math requires two operands (a, b)"` when fewer
+are present, so the lifted-scalar form cannot reach the AVX-512 elementwise
+kernel. No Zen 5 retest required and no device evidence is produced or claimed.
+Follow-up: `_X86_BINARY_OPS` covers sub/div/mod/floor_div, so if that lane later
+accepts a scalar kwarg form it must honor `scalar_side` first.
+
 
 Cross-backend sync `AD-LAW-SERIES-2026-08-19` — **shared reference rules and
 test infrastructure; X86 outcome: parity validated, no AVX-512 evidence changed.** The AD-LAW series (PR #588)

@@ -3,10 +3,30 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-18
+last_updated: 2026-08-19
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `SCALAR-SIDE-ORDERING-2026-08-19` — **shared Graph IR
+runtime contract; NVIDIA outcome: not applicable today.** The `scalar_side` slice (PR #589) makes the Graph IR lifted-scalar form carry
+operand order. `graph_ir._OpExtractor._try_map_binop` lifts a literal out of
+either side of a `BinOp` into the `scalar` attribute and records the side; until
+now no code in `python/`, `src/`, or `tools/` read that record (Decision #29), so
+`2.0 - x` and `x - 2.0` emitted indistinguishable IR and any consumer binding
+`scalar` as the right operand computed `x - 2.0` for both — sign-flipped for
+`sub`, reciprocal for `div`, with no diagnostic. Shared contract changed: a lone
+`scalar` means the RIGHT operand, `scalar_side="left"` requests the mirrored
+binding, and any other value is rejected rather than guessed (Decision #21).
+NVIDIA impact: none. No NVIDIA lowering or runtime path consumes the `scalar`
+kwarg — an exhaustive sweep for `get("scalar"`/`["scalar"]`/`get("other"` across
+`python/tessera/` finds consumers only in `runtime._apple_gpu_dispatch_mpsgraph_binary`,
+`runtime._execute_runtime_cpu_op`, and `matmul_pipeline._execute_op`, none of them
+NVIDIA-specific. No sm_120 retest required and no device evidence is produced or
+claimed. If an NVIDIA elementwise lane later accepts the lifted-scalar form, it
+inherits this contract and must honor `scalar_side` for its non-commutative
+opcodes.
+
 
 Cross-backend sync `AD-LAW-SERIES-2026-08-19` — **shared reference rules and
 test infrastructure; Nvidia outcome: not applicable today; parity by construction for future migrations.** The AD-LAW series (PR #588)

@@ -3,10 +3,36 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-18
+last_updated: 2026-08-19
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `SCALAR-SIDE-ORDERING-2026-08-19` — **shared Graph IR
+runtime contract; Apple outcome: parity validated on Metal, plus one
+follow-up required (portable stub).** The `scalar_side` slice (PR #589) makes the Graph IR lifted-scalar form carry
+operand order. `graph_ir._OpExtractor._try_map_binop` lifts a literal out of
+either side of a `BinOp` into the `scalar` attribute and records the side; until
+now no code in `python/`, `src/`, or `tools/` read that record (Decision #29), so
+`2.0 - x` and `x - 2.0` emitted indistinguishable IR and any consumer binding
+`scalar` as the right operand computed `x - 2.0` for both — sign-flipped for
+`sub`, reciprocal for `div`, with no diagnostic. Shared contract changed: a lone
+`scalar` means the RIGHT operand, `scalar_side="left"` requests the mirrored
+binding, and any other value is rejected rather than guessed (Decision #21).
+Apple impact: `runtime._apple_gpu_dispatch_mpsgraph_binary` is the only consumer
+that needed changing — its opcode table is mostly non-commutative (sub, div,
+pow, mod, floor_div, atan2 and all six comparisons). It now swaps the operands
+before the Metal/host lane split, so both lanes agree. Evidence: M1 Max, real
+`tessera_apple_gpu_mpsgraph_binary_f32` symbol loaded, `tests/unit/test_binop_scalar_side.py`
+123 passed across both lanes; reverting only the consumer fix fails 23.
+**Follow-up required (not fixed here):** `runtime/apple_gpu_runtime_stub.cpp:2067`
+— the non-Darwin portable stub implements opcodes 0-8 and its `default:` arm
+assigns `out[i] = x`, so `mod`, `floor_div`, the six comparisons, and the
+logical/bitwise ops silently return the LEFT operand on every non-Apple host
+instead of computing or diagnosing. Pre-existing and independent of operand
+ordering; surfaced by the new tests, which Darwin-gate the live-kernel lane and
+name the gap in the skip reason. Needs its own change (Decision #21).
+
 
 Cross-backend sync `AD-LAW-SERIES-2026-08-19` — **shared reference rules and
 test infrastructure; Apple outcome: parity validated, no Metal evidence changed.** The AD-LAW series (PR #588)

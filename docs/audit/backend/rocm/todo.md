@@ -7,6 +7,26 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `ZERO-FUNCTION-CANDIDATE-2026-08-19` — **shared frontend ABI
+and diagnostics; ROCm outcome: not applicable today; parity by construction.**
+The zero-function-candidate slice (PR #590) changes `JitFn`'s call ABI recovery
+and adds one diagnostic code. A `@jit` function whose AST lowering produced no
+function raised a bare `IndexError` from `_establish_tracer_authority`, and the
+same absence left `_call_arg_names`/`_constraint_ir_args` empty — silently
+mis-binding keyword calls and skipping call-time constraint re-checking. The ABI
+is now derived from the Python signature via the shared
+`graph_ir.ir_args_from_signature` (Decisions #30/#31), and the apple_gpu tracer
+lane lifts foreign interpreter exceptions into the new registered
+`JIT_APPLE_GPU_TRACE_FAILED` code (Decision #21). `TesseraTraceError` passes
+through unwrapped.
+ROCm impact: none today. On a non-apple_gpu target an AST emission failure
+re-raises `TesseraJitError` at decoration rather than deferring to the tracer,
+so gfx1151 programs never reach the new code path or the new diagnostic. The ABI
+recovery only replaces an empty tuple with the signature-derived one, so no
+gfx1151 behaviour changes. No gfx1151 retest required and no device evidence is
+produced or claimed.
+
+
 Cross-backend sync `SCALAR-SIDE-ORDERING-2026-08-19` — **shared Graph IR
 runtime contract; ROCm outcome: not applicable today, fails closed by
 construction.** The `scalar_side` slice (PR #589) makes the Graph IR lifted-scalar form carry

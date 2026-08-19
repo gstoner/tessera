@@ -122,6 +122,15 @@ class JitDiagnosticCode(str, Enum):
     #: the unused AST Graph IR emission was skipped (the tracer runs the body).
     APPLE_GPU_AUTO_BATCH = "JIT_APPLE_GPU_AUTO_BATCH"
 
+    #: Error-level: the apple_gpu tracer -- the only execution path for a
+    #: function whose AST Graph IR emission was deferred -- could not execute
+    #: the body. Lifts a foreign interpreter exception (``AttributeError`` on
+    #: an unmodelled ``Tracer`` method, ``TypeError`` on an unmodelled
+    #: coercion) into a stable Tessera diagnostic per Decision #21, carrying
+    #: the decoration-time reason the function was routed to the tracer.
+    #: ``TesseraTraceError`` is NOT lifted -- it already names the construct.
+    APPLE_GPU_TRACE_FAILED = "JIT_APPLE_GPU_TRACE_FAILED"
+
 
 class FrontendDiagnosticCode(str, Enum):
     """Textual-DSL frontend (``tessera.compiler.frontend.parser``).

@@ -8,6 +8,26 @@ last_updated: 2026-08-19
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `ZERO-FUNCTION-CANDIDATE-2026-08-19` — **shared frontend ABI
+and diagnostics; NVIDIA outcome: not applicable today; parity by construction
+for future migrations.** The zero-function-candidate slice (PR #590) changes `JitFn`'s call ABI recovery
+and adds one diagnostic code. A `@jit` function whose AST lowering produced no
+function raised a bare `IndexError` from `_establish_tracer_authority`, and the
+same absence left `_call_arg_names`/`_constraint_ir_args` empty — silently
+mis-binding keyword calls and skipping call-time constraint re-checking. The ABI
+is now derived from the Python signature via the shared
+`graph_ir.ir_args_from_signature` (Decisions #30/#31), and the apple_gpu tracer
+lane lifts foreign interpreter exceptions into the new registered
+`JIT_APPLE_GPU_TRACE_FAILED` code (Decision #21). `TesseraTraceError` passes
+through unwrapped.
+NVIDIA impact: none today. The diagnostic is apple_gpu-scoped, and the
+trace-defer route that reaches it is gated on `target == "apple_gpu"`. The ABI
+recovery is target-independent and strictly widens what was previously an empty
+tuple, so no NVIDIA behaviour changes. No sm_120 retest required and no device
+evidence is produced or claimed. Future sm_120 frontends inherit the corrected
+keyword binding and constraint re-check.
+
+
 Cross-backend sync `SCALAR-SIDE-ORDERING-2026-08-19` — **shared Graph IR
 runtime contract; NVIDIA outcome: not applicable today.** The `scalar_side` slice (PR #589) makes the Graph IR lifted-scalar form carry
 operand order. `graph_ir._OpExtractor._try_map_binop` lifts a literal out of

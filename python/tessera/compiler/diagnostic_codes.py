@@ -640,6 +640,30 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         status="implemented",
     ),
     DiagnosticCode(
+        code="JIT_APPLE_GPU_TRACE_FAILED",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="error",
+        summary=(
+            "The apple_gpu tracer could not execute the function body. The "
+            "tracer is the only execution path for a body whose AST Graph IR "
+            "emission was deferred (JIT_APPLE_GPU_TRACE_DEFERRED), so a "
+            "construct the tracer does not model -- calling an unmodelled "
+            "method on a Tracer, coercing one to a Python scalar -- would "
+            "otherwise escape as a raw interpreter exception. Decision #21: "
+            "an unsupported lowering names the construct and the target."
+        ),
+        fix_hint=(
+            "Read the quoted decoration-time reason: it names what the AST "
+            "front end could not lower. Rewrite that construct in terms of "
+            "`tessera.ops.*` / `tessera.control.*`, or drop it from the "
+            "jitted region."
+        ),
+        spec=None,
+        sprint="phase-f-followon",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
         code="JIT_APPLE_GPU_AUTO_BATCH",
         pass_origin="tessera.compiler.JitDiagnosticCode",
         # Registry severity is warning per the registry's accepted set; the

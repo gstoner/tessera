@@ -27,6 +27,7 @@ import inspect
 import json
 import re
 import textwrap
+import typing
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, cast
 
@@ -3746,6 +3747,49 @@ def _parse_mlir_tensor_type(text: str) -> IRType:
 # GraphIRBuilder
 # ─────────────────────────────────────────────────────────────────────────────
 
+def ir_args_from_signature(fn: Callable) -> List[IRArg]:
+    """The Graph IR argument list a Python function's signature implies.
+
+    The single derivation of the call ABI from a Python signature. Both
+    consumers need exactly this mapping and must agree on it:
+    ``GraphIRBuilder.lower`` emits the function's IR args from it, and
+    ``JitFn`` recovers the call ABI from it when emission produced no function
+    to read the args back off (Decision #31 -- the alternative was a second
+    copy of the annotation rules that could drift from this one).
+
+    Unannotated parameters yield opaque tensors, which is what ``lower``
+    already produced for them; the names and their order are exact either way.
+    """
+    sig = inspect.signature(fn)
+    hints: Dict[str, Any] = {}
+    try:
+        hints = typing.get_type_hints(fn)
+    except Exception:
+        # An unresolvable forward reference must not sink the whole signature;
+        # the per-parameter annotation below still applies.
+        pass
+
+    args: List[IRArg] = []
+    for param_name, param in sig.parameters.items():
+        ann = hints.get(param_name) or param.annotation
+
+        # Detect RegionType, Tensor[...] and dtype annotations.
+        effect = None
+        ir_type = _annotation_to_ir_type(ann)
+        dim_names: Tuple[str, ...] = ()
+        layout = ir_type.layout
+        if ann is not inspect.Parameter.empty:
+            # RegionType from tessera.distributed.region
+            if hasattr(ann, "mode"):
+                effect = ann.mode
+            if hasattr(ann, "__dims__"):
+                dim_names = tuple(str(dim) for dim in getattr(ann, "__dims__"))
+
+        args.append(IRArg(name=param_name, ir_type=ir_type, effect=effect,
+                          dim_names=dim_names, layout=layout))
+    return args
+
+
 class GraphIRBuilder:
     """
     Lowers a Python function (decorated with @jit) into a GraphIRFunction.
@@ -3790,32 +3834,8 @@ class GraphIRBuilder:
         """
         if target_attr is not None:
             self.context.module.module_attrs["tessera.target"] = target_attr
-        import typing
 
-        sig = inspect.signature(fn)
-        hints = {}
-        try:
-            hints = typing.get_type_hints(fn)
-        except Exception:
-            pass
-
-        args = []
-        for param_name, param in sig.parameters.items():
-            ann = hints.get(param_name) or param.annotation
-
-            # Detect RegionType, Tensor[...] and dtype annotations.
-            effect = None
-            ir_type = _annotation_to_ir_type(ann)
-            dim_names: Tuple[str, ...] = ()
-            layout = ir_type.layout
-            if ann is not inspect.Parameter.empty:
-                # RegionType from tessera.distributed.region
-                if hasattr(ann, "mode"):
-                    effect = ann.mode
-                if hasattr(ann, "__dims__"):
-                    dim_names = tuple(str(dim) for dim in getattr(ann, "__dims__"))
-
-            args.append(IRArg(name=param_name, ir_type=ir_type, effect=effect, dim_names=dim_names, layout=layout))
+        args = ir_args_from_signature(fn)
 
         # Pure, statically shaped programs can be traced from annotations
         # without concrete values. This is the delayed/symbolic frontend

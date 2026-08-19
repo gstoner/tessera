@@ -815,6 +815,10 @@ def test_forward_mode_positional_config_matches_keyword():
 # body read — some are benign (a storage-dtype key cannot change a gradient),
 # but benign is a conclusion you reach by reading, not by assuming. Do not add
 # entries: fix the rule, or move it to a named-benign set with the reason.
+# Triage outcome recorded 2026-08-19 (AD-LAW-1d rebased onto main):
+# ("fft"/"ifft"/"rfft"/"irfft", "jvp", "norm") were fixed by AD-LAW-1b
+# (the JVPs now accept `norm`/`normalization` and normalize like the
+# forward), so they leave this set rather than being re-pinned.
 _OPEN_FORWARD_KEY_SWALLOWS = {
     ("adam", "jvp", "cast_updates_to_param_dtype"),
     ("adam", "jvp", "compute_dtype"),
@@ -836,12 +840,9 @@ _OPEN_FORWARD_KEY_SWALLOWS = {
     ("dequantize_fp8", "vjp", "format"),
     ("dequantize_nvfp4", "jvp", "block_size"),
     ("dequantize_nvfp4", "vjp", "block_size"),
-    ("fft", "jvp", "norm"),
     ("grouped_gemm", "jvp", "kind"),
     ("grouped_gemm", "vjp", "kind"),
-    ("ifft", "jvp", "norm"),
     ("image_resize", "jvp", "antialias"),
-    ("irfft", "jvp", "norm"),
     ("istft", "jvp", "axis"),
     ("istft", "jvp", "center"),
     ("istft", "jvp", "norm"),
@@ -867,7 +868,6 @@ _OPEN_FORWARD_KEY_SWALLOWS = {
     ("quantize_fp8", "vjp", "format"),
     ("quantize_nvfp4", "jvp", "block_size"),
     ("quantize_nvfp4", "vjp", "block_size"),
-    ("rfft", "jvp", "norm"),
     ("spectral_conv", "jvp", "axis"),
     ("spectral_conv", "jvp", "norm"),
     ("stft", "jvp", "axis"),

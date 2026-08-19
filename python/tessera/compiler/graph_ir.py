@@ -1944,6 +1944,24 @@ class _OpExtractor(ast.NodeVisitor):
         operand_types: list[str] = []
         kwargs: dict[str, Any] = {}
 
+        # A literal operand is lifted out of the dataflow into the ``scalar``
+        # attribute, leaving a one-operand IROp. ``scalar_side`` records which
+        # side of the original BinOp the literal came from, and it is
+        # load-bearing for `sub`/`div`: without it `2.0 - x` and `x - 2.0`
+        # lower to IROps that are identical, and every backend computes the
+        # right-side reading of both.
+        #
+        # The consumer is ``runtime._apple_gpu_dispatch_mpsgraph_binary``, whose
+        # opcode set is mostly non-commutative (sub, div, pow, mod, floor_div,
+        # atan2, and all six comparisons); it swaps the operands when this says
+        # "left". The two commutative-only consumers
+        # (``matmul_pipeline._execute_op`` and
+        # ``runtime._execute_runtime_cpu_op``, which handle the scalar form for
+        # `add`/`mul` alone) do not need it. Absence means "right" -- that is
+        # the definition of the ``scalar=`` kwarg on the eager op surface, which
+        # the hand-written ``{"scalar": s}`` call sites in ``runtime.py`` rely
+        # on -- so this emitter states the side on BOTH branches rather than
+        # leaning on that default.
         for side, expr in (("left", node.left), ("right", node.right)):
             try:
                 literal = ast.literal_eval(expr)

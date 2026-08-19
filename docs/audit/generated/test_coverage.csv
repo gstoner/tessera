@@ -281,7 +281,7 @@ map,0,0,0,0,1,,structural_only,category default for 'control_flow'
 masked_categorical,10,0,0,10,0,,directly_tested,10 direct test references
 masked_fill,11,4,0,15,0,fp16 fp32 fp4_e2m1 fp6_e3m2 fp8_e4m3 fp8_e5m2 nvfp4,directly_tested,15 direct test references
 masked_scatter,14,0,1,14,0,fp16,directly_tested,14 direct test references
-matmul,478,277,21,755,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,755 direct test references
+matmul,479,277,22,756,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,756 direct test references
 max,9,0,2,9,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,9 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
 maximum,11,0,2,11,0,bf16 f32 fp16 fp32,directly_tested,11 direct test references
@@ -365,7 +365,7 @@ rearrange,13,0,1,13,0,fp16 fp32,directly_tested,13 direct test references
 reciprocal,5,0,0,5,0,bf16 f32 fp16 fp32,directly_tested,5 direct test references
 reduce,112,17,9,129,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,129 direct test references
 reduce_scatter,3,0,0,3,0,fp32,directly_tested,3 direct test references
-relu,122,37,9,159,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,159 direct test references
+relu,131,37,10,168,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,168 direct test references
 remat,0,0,0,0,1,,structural_only,category default for 'transform'
 repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,14,20,1,34,0,fp32,directly_tested,34 direct test references
@@ -421,7 +421,7 @@ sharded_dataset,2,0,0,2,0,,directly_tested,2 direct test references
 sigmoid,15,9,1,24,0,bf16 f16 f32 fp32,directly_tested,24 direct test references
 sigmoid_safe,6,0,0,6,0,bf16,directly_tested,6 direct test references
 sign,6,0,1,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
-silu,90,8,5,98,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,98 direct test references
+silu,91,8,6,99,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp8_e4m3 int8 nvfp4,directly_tested,99 direct test references
 silu_mul,18,13,1,31,0,bf16 fp32,directly_tested,31 direct test references
 simple_rnn_cell,10,0,0,10,0,bf16 f16 f32 fp16,directly_tested,10 direct test references
 sin,6,1,0,7,0,bf16 f16 f32,directly_tested,7 direct test references

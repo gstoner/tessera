@@ -1395,7 +1395,7 @@ def test_istft_window_tangent_at_the_denominator_floor():
     assert win[0] == 0.0 and win[-1] == 0.0
 
     # The floor is genuinely active at position 0.
-    b_w, _, _ = _window_overlap_sums(win, dwin, 64, 4, 16)
+    b_w, _, _, _ = _window_overlap_sums(win, dwin, 64, 4, 16)
     assert b_w[0] == 1e-12, "probe no longer reaches the clamped region"
 
     _, dy = _JVPS["istft"]((X, win), (np.zeros_like(X), dwin), hop=4)
@@ -1701,3 +1701,114 @@ def test_mathematical_correctness_pass():
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "12/12 independent checks passed" in proc.stdout
+
+
+# ── PR #588 review fixes ─────────────────────────────────────────────────────
+
+
+def test_istft_jvp_honors_a_non_last_time_axis():
+    """Review finding: the window algebra used `shape[-1]` and cropped the
+    last dimension, but `ops.istft` transposes its result so the time axis
+    lands at the FRAME axis's position. With `axis=1` on a `(13, 9, 4)`
+    spectrum the output is `(64, 4)` — time first, batch second — so the old
+    code applied time-domain window weights and center/length crops to the
+    BATCH axis. The earlier test could not see it: for its rank-3 input
+    `axis=-1` and `axis=2` are the same axis."""
+    import itertools
+
+    from tessera import ops
+    from tessera.autodiff.jvp import _JVPS
+
+    fwd = getattr(ops.istft, "__wrapped__", ops.istft)
+    rng = np.random.default_rng(21)
+    X = rng.standard_normal((13, 9, 4)) + 1j * rng.standard_normal((13, 9, 4))
+    dX = rng.standard_normal((13, 9, 4)) + 1j * rng.standard_normal((13, 9, 4))
+    win, dwin, eps = np.hanning(16) + 0.25, rng.standard_normal(16), 1e-6
+
+    # The axis genuinely is not last: time comes first in the output.
+    assert fwd(X, win, hop=4, axis=1).shape == (64, 4)
+
+    for center, length in itertools.product((False, True), (None, 40)):
+        cfg = {"hop": 4, "axis": 1, "center": center, "length": length}
+        y, dy = _JVPS["istft"]((X, win), (dX, dwin), **cfg)
+        np.testing.assert_allclose(y, fwd(X, win, **cfg), atol=1e-12)
+        fd = (fwd(X + eps * dX, win + eps * dwin, **cfg)
+              - fwd(X - eps * dX, win - eps * dwin, **cfg)) / (2 * eps)
+        rel = np.max(np.abs(dy - fd)) / (np.max(np.abs(fd)) + 1e-12)
+        assert rel < 1e-6, f"rel={rel:.2e} at {cfg}"
+
+
+def test_istft_masks_the_clamped_denominator_derivative():
+    """Review finding: where the overlap weight is nonzero but BELOW the
+    forward's 1e-12 floor, the denominator is a constant, so its derivative
+    is zero — yet the rule still subtracted the unclamped cross term.
+
+    Exact-zero Hann endpoints hide this because the cross term vanishes on
+    its own; a small NONZERO endpoint does not. That is the probe here."""
+    from tessera import ops
+    from tessera.autodiff.jvp import _JVPS, _window_overlap_sums
+
+    fwd = getattr(ops.istft, "__wrapped__", ops.istft)
+    rng = np.random.default_rng(9)
+    win = np.hanning(16).copy()
+    win[0] = win[-1] = 5e-7          # small but NONZERO
+
+    b_w, _, cross, unclamped = _window_overlap_sums(win, np.ones(16), 64, 4, 16)
+    assert unclamped[0] < 1e-12, "probe no longer reaches the clamped region"
+    assert abs(cross[0]) > 0.0, "probe does not exercise a nonzero cross term"
+
+    X = rng.standard_normal((13, 9)) + 1j * rng.standard_normal((13, 9))
+    dwin, eps = rng.standard_normal(16), 1e-7
+    _, dy = _JVPS["istft"]((X, win), (np.zeros_like(X), dwin), hop=4)
+    fd = (fwd(X, win + eps * dwin, hop=4)
+          - fwd(X, win - eps * dwin, hop=4)) / (2 * eps)
+    rel = abs(dy[0] - fd[0]) / (abs(fd[0]) + 1e-30)
+    assert rel < 1e-6, f"clamped position wrong by rel={rel:.2e}"
+
+
+def test_kink_law_catches_hard_select_in_forward_mode():
+    """Review finding: for SUBGRAD_SPLIT the law skipped forward mode
+    entirely and still recorded 'both modes agree', so a JVP that always took
+    the first tied operand passed as long as the VJP split correctly. An
+    all-ones tangent cannot tell the cases apart — the fix perturbs ONE tied
+    operand at a time, which does."""
+    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.law_inputs import KINK_SPECS
+    from tessera.autodiff.laws import kink_check
+    from tessera.autodiff.vjp import _VJPS
+
+    # Elementwise: always take the first operand.
+    def hard_first(primals, tangents, **_):
+        a, b = (np.asarray(v, dtype=np.float64) for v in primals)
+        da, db = (np.asarray(v, dtype=np.float64) for v in tangents)
+        return np.maximum(a, b), np.where(a >= b, da, db)
+
+    r = kink_check("maximum", KINK_SPECS["maximum"], _VJPS["maximum"], hard_first)
+    assert r.status == "fail" and "hard select" in r.detail, r
+
+    # Reduction: hard argmax select, matching the real rule's output shape.
+    def hard_amax(primals, tangents, *, axis=None, **_):
+        x = np.asarray(primals[0], dtype=np.float64)
+        t = np.asarray(tangents[0], dtype=np.float64)
+        i = np.argmax(x, axis=-1)
+        return np.max(x, axis=-1), np.take_along_axis(t, i[..., None], -1)[..., 0]
+
+    r2 = kink_check("amax", KINK_SPECS["amax"], _VJPS["amax"], hard_amax)
+    assert r2.status == "fail" and "equal split" in r2.detail, r2
+
+    # And the real rules still pass.
+    for op in ("maximum", "amax"):
+        assert kink_check(op, KINK_SPECS[op], _VJPS[op],
+                          _JVPS[op]).status == "pass"
+
+
+def test_hutchinson_has_no_unnormalized_scale_knob():
+    """Review finding: a `radius` parameter scaled each direction but not the
+    returned mean, so the function silently estimated `radius^2 * laplacian`.
+    It had no caller; removed rather than patched, since unbiasedness is a
+    property of the draw distribution."""
+    import inspect
+
+    from tessera.autodiff.algebra import hutchinson_laplacian
+
+    assert "radius" not in inspect.signature(hutchinson_laplacian).parameters

@@ -490,14 +490,21 @@ def kink_check(op: str, spec, vjp_fn: Callable, jvp_fn: Optional[Callable],
 
         # Forward mode must select the same element as reverse mode.
         if jvp_fn is not None:
-            tangents = tuple(np.ones_like(np.asarray(p), dtype=np.float64)
-                             if _is_float(p) else _zero_like(p) for p in primals)
-            try:
-                _, t_out = jvp_fn(primals, tangents, **kwargs)
-            except Exception as e:  # noqa: BLE001
-                return LawResult(op, registry, "kink", "rule_error", 1, None,
-                                 f"jvp at kink: {type(e).__name__}: {e}")
-            if spec.expected != "split":
+            if spec.expected == "split":
+                verdict = _check_split_forward_mode(op, spec, jvp_fn, primals,
+                                                    kwargs, masks, registry)
+                if verdict is not None:
+                    return verdict
+            else:
+                tangents = tuple(
+                    np.ones_like(np.asarray(p), dtype=np.float64)
+                    if _is_float(p) else _zero_like(p) for p in primals)
+                try:
+                    _, t_out = jvp_fn(primals, tangents, **kwargs)
+                except Exception as e:  # noqa: BLE001
+                    return LawResult(op, registry, "kink", "rule_error", 1,
+                                     None,
+                                     f"jvp at kink: {type(e).__name__}: {e}")
                 # With a unit tangent the JVP tangent equals the selection.
                 for m in masks[:1]:
                     sel = np.asarray(t_out)[np.asarray(m)] \
@@ -514,6 +521,80 @@ def kink_check(op: str, spec, vjp_fn: Callable, jvp_fn: Optional[Callable],
     except Exception as e:  # noqa: BLE001
         return LawResult(op, registry, "kink", "rule_error", 0, None,
                          f"{type(e).__name__}: {e}")
+
+
+def _check_split_forward_mode(op, spec, jvp_fn, primals, kwargs, masks,
+                              registry):
+    """Forward-mode conformance for SUBGRAD_SPLIT (review finding, PR #588).
+
+    An all-ones tangent cannot distinguish an equal share from a hard select
+    — every candidate returns the same number — so the split branch used to
+    skip forward mode entirely while still recording "both modes agree". A
+    JVP for `maximum` that always took the first tied operand passed.
+
+    The discriminating probe perturbs ONE tied operand at a time: with a unit
+    tangent on operand i and zero elsewhere, an equal m-way split yields
+    ``1/m`` at the tie, a first-select yields ``1`` or ``0`` depending on i,
+    and a last-select yields the mirror image. Returns a failing LawResult,
+    or None when forward mode conforms.
+    """
+    n_diff = sum(1 for p in primals if _is_float(p))
+    if n_diff < 2:
+        # A reduction tie lives inside ONE operand: perturb a single tied
+        # element instead of a whole argument.
+        arr = np.asarray(primals[0], dtype=np.float64)
+        mask = np.asarray(masks[0])
+        idx = np.argwhere(mask)
+        if len(idx) < 2:
+            return None
+        target = tuple(idx[0])
+        tangent = np.zeros_like(arr)
+        tangent[target] = 1.0
+        try:
+            _, t_out = jvp_fn((arr,), (tangent,), **kwargs)
+        except Exception as e:  # noqa: BLE001
+            return LawResult(op, registry, "kink", "rule_error", 1, None,
+                             f"jvp at kink: {type(e).__name__}: {e}")
+        # The share is over the perturbed element's OWN tie group — the tied
+        # entries sharing its leading indices — not over every tied element in
+        # the probe. A two-row probe has two independent groups, and using the
+        # total would demand 1/4 where 1/2 is correct.
+        group = mask[target[:-1]] if mask.ndim > 1 else mask
+        share = 1.0 / float(np.count_nonzero(group))
+        got = float(np.max(np.abs(np.asarray(t_out))))
+        if not np.isclose(got, share, atol=1e-12):
+            return LawResult(
+                op, registry, "kink", "fail", 1, None,
+                f"forward mode gives {got:.6g} for a single perturbed tie "
+                f"element; the declared equal split of "
+                f"{np.count_nonzero(group)} requires {share:.6g} "
+                f"(a hard select would give 1 or 0)")
+        return None
+
+    # Elementwise tie across operands: perturb each operand alone.
+    for i, p in enumerate(primals):
+        if not _is_float(p):
+            continue
+        tangents = tuple(
+            (np.ones_like(np.asarray(q), dtype=np.float64) if j == i
+             else _zero_like(q)) for j, q in enumerate(primals))
+        try:
+            _, t_out = jvp_fn(primals, tangents, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            return LawResult(op, registry, "kink", "rule_error", 1, None,
+                             f"jvp at kink: {type(e).__name__}: {e}")
+        m = np.asarray(masks[i])
+        out = np.asarray(t_out)
+        if out.shape != m.shape:
+            return None
+        sel = out[m]
+        if sel.size and not np.allclose(sel, 1.0 / n_diff, atol=1e-12):
+            return LawResult(
+                op, registry, "kink", "fail", 1, None,
+                f"forward mode gives {sel.tolist()} when only operand {i} is "
+                f"perturbed; the declared equal split requires "
+                f"{1.0 / n_diff:.6g} (a hard select would give 1 or 0)")
+    return None
 
 
 def _unit_cotangent(jvp_fn: Optional[Callable], primals: tuple, kwargs: dict):

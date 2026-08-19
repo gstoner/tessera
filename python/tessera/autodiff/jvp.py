@@ -4213,24 +4213,50 @@ def jvp_istft(primals, tangents, **kwargs):
         raw = dict(call)
         raw["center"] = False
         raw["length"] = None
-        y_raw = np.asarray(forward(X, win, **raw), dtype=np.float64)
+        y_raw = np.moveaxis(
+            np.asarray(forward(X, win, **raw), dtype=np.float64),
+            _istft_time_axis(X, cfg), -1)
 
-        b_w, b_dw, c_cross = _window_overlap_sums(
-            win, dwin, y_raw.shape[-1], int(hop),
-            int(call.get("n_fft") or win.shape[0]))
+        fft_length = int(call.get("n_fft") or win.shape[0])
+        b_w, b_dw, c_cross, unclamped = _window_overlap_sums(
+            win, dwin, y_raw.shape[-1], int(hop), fft_length)
 
         # A(X, dw) = forward(X, dw) * B(dw), exact because the forward divides
         # by exactly that quantity.
-        a_dw = np.asarray(forward(X, dwin, **raw), dtype=np.float64) * b_dw
-        window_term = (a_dw - y_raw * 2.0 * c_cross) / b_w
-        tangent = tangent + _apply_istft_crops(
-            window_term, cfg, int(call.get("n_fft") or win.shape[0]))
+        a_dw = np.moveaxis(
+            np.asarray(forward(X, dwin, **raw), dtype=np.float64),
+            _istft_time_axis(X, cfg), -1) * b_dw
+        # Where the forward's denominator is CLAMPED it is a constant, so its
+        # derivative is 0 there and the cross term must not contribute.
+        # Exact-zero window endpoints hide this (the cross term vanishes on
+        # its own); a small NONZERO endpoint does not.
+        live = (unclamped >= 1e-12).astype(np.float64)
+        window_term = (a_dw - y_raw * 2.0 * c_cross * live) / b_w
+        tangent = tangent + np.moveaxis(
+            _apply_istft_crops(window_term, cfg, fft_length),
+            -1, _istft_time_axis(X, cfg))
 
     return primal_out, tangent
 
 
+def _istft_time_axis(X, cfg) -> int:
+    """Where the forward puts the time axis in its output.
+
+    `ops.istft` consumes `(…, frames, freq, …)` and transposes the result so
+    the time axis lands at the FRAME axis's position — `axis - 1` — not
+    necessarily last. With `axis=1` on a `(13, 9, 4)` spectrum the output is
+    `(64, 4)`: time first, batch second. Sizing the window sums by
+    `shape[-1]` therefore applied time-domain weights to the batch axis and
+    cropped the wrong dimension (review finding on PR #588).
+    """
+    ndim = np.asarray(X).ndim
+    axis = cfg.get("axis", -1)
+    axis_idx = axis if axis >= 0 else ndim + axis
+    return axis_idx - 1
+
+
 def _window_overlap_sums(win, dwin, out_len, hop, fft_length):
-    """OLA(w**2), OLA(dw**2) and OLA(w*dw) over the frame geometry.
+    """OLA(w**2), OLA(dw**2), OLA(w*dw), and the UNCLAMPED OLA(w**2).
 
     No FFT and no normalization: these are pure window sums, which is why
     computing them here does not reintroduce the reimplementation the rule
@@ -4255,7 +4281,7 @@ def _window_overlap_sums(win, dwin, out_len, hop, fft_length):
         b_w[s:e] += padded[:n] * padded[:n]
         b_dw[s:e] += padded_d[:n] * padded_d[:n]
         cross[s:e] += padded[:n] * padded_d[:n]
-    return (np.maximum(b_w, 1e-12), np.maximum(b_dw, 1e-12), cross)
+    return (np.maximum(b_w, 1e-12), np.maximum(b_dw, 1e-12), cross, b_w)
 
 
 def _apply_istft_crops(value, cfg, fft_length):

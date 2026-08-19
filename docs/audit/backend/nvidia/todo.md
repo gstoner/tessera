@@ -8,6 +8,24 @@ last_updated: 2026-08-18
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `AD-LAW-SERIES-2026-08-19` — **shared reference rules and
+test infrastructure; Nvidia outcome: not applicable today; parity by construction for future migrations.** The AD-LAW series (PR #588)
+closes the swallowed-kwarg class registry-wide and adds the AD-WEIL-1 algebra
+substrate plus all six executable laws. Reference-rule changes in this slice:
+`stft`/`spectral_conv` JVPs **deleted** in favour of derivation from the
+forward (both are bilinear, so every configuration key is honored by
+construction); `jvp_istft` rewritten to honor axis/center/length/onesided/norm
+while preserving its window quotient; `dequantize_nvfp4` fixed to accept the
+per-block scale array its canonical forward takes (both modes previously
+crashed); `jvp_lgamma`/`jvp_digamma` replaced (a dead zero-returning stub and
+an identity placeholder); `jvp_cast` fixed for canonical dtype strings; the
+shared polygamma helpers given reflection formulas (previously an O(n) loop
+that hung on valid negative input — a live defect in the REVERSE path too).
+NVIDIA impact: no native binding consumes these reference rules yet, so nothing retests. Future sm_120 backward family migrations inherit the law-checked oracle lane and the E2E-REAL-6 Law-3 gate. The previously recorded open spectral/quantize swallow findings are
+therefore CLOSED; `_OPEN_FORWARD_KEY_SWALLOWS` (42 entries from the tape
+positional-routing scan) remains the open set.
+
+
 Cross-backend sync `AD-LAW-1-SHARED-ORACLE-2026-08-18` — **shared test
 infrastructure; NVIDIA outcome: not applicable today, parity by
 construction for future migrations; no sm_120 evidence changed.** AD-LAW-1

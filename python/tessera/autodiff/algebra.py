@@ -698,7 +698,7 @@ class TaylorModel:
         return bool(model[0][index] <= exact <= model[1][index])
 
 
-def hutchinson_laplacian(fn, x, key, samples: int, *, radius: float = 1.0):
+def hutchinson_laplacian(fn, x, key, samples: int):
     """Randomized-jet estimator of the Laplacian (the STDE shape, §3.7).
 
     For ``v`` with i.i.d. zero-mean unit-variance components,
@@ -719,8 +719,6 @@ def hutchinson_laplacian(fn, x, key, samples: int, *, radius: float = 1.0):
     for s in range(samples):
         v = np.asarray(normal(key.fold_in(s) if hasattr(key, "fold_in") else key,
                               (n,), dtype="fp64"), dtype=np.float64)
-        if radius != 1.0:
-            v = v * radius
         total = total + 2.0 * _second_order_coefficient(fn, np.asarray(x), v)
     return float(total / samples)
 

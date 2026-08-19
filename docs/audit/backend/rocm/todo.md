@@ -7,6 +7,24 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `AD-LAW-SERIES-2026-08-19` — **shared reference rules and
+test infrastructure; Rocm outcome: parity validated, no gfx1151 evidence changed.** The AD-LAW series (PR #588)
+closes the swallowed-kwarg class registry-wide and adds the AD-WEIL-1 algebra
+substrate plus all six executable laws. Reference-rule changes in this slice:
+`stft`/`spectral_conv` JVPs **deleted** in favour of derivation from the
+forward (both are bilinear, so every configuration key is honored by
+construction); `jvp_istft` rewritten to honor axis/center/length/onesided/norm
+while preserving its window quotient; `dequantize_nvfp4` fixed to accept the
+per-block scale array its canonical forward takes (both modes previously
+crashed); `jvp_lgamma`/`jvp_digamma` replaced (a dead zero-returning stub and
+an identity placeholder); `jvp_cast` fixed for canonical dtype strings; the
+shared polygamma helpers given reflection formulas (previously an O(n) loop
+that hung on valid negative input — a live defect in the REVERSE path too).
+ROCm impact: the gfx1151 `bwd_hardware_proven` rows (flash_attn, selective_ssm) and the spectral backward packages differentially compare against these oracles. The spectral JVP changes affect FORWARD-mode reference values only; the hand-written spectral VJPs those packages are compared against are untouched. `test_rocm_norm_compiled.py` pins explicit eps and is unaffected. No gfx1151 retest required; no device evidence produced or claimed. Follow-up: if the spectral family later adopts derived forward references on device, re-run the AVX-512/gfx1151 spectral packets. The previously recorded open spectral/quantize swallow findings are
+therefore CLOSED; `_OPEN_FORWARD_KEY_SWALLOWS` (42 entries from the tape
+positional-routing scan) remains the open set.
+
+
 Cross-backend sync `AD-LAW-1-SHARED-ORACLE-2026-08-18` — **shared test
 infrastructure; ROCm outcome: parity validated, no gfx1151 evidence
 changed.** AD-LAW-1 (PR #584) adds law oracles (adjoint `⟨Jv,u⟩ = ⟨v,Jᵀu⟩` +

@@ -8,6 +8,28 @@ last_updated: 2026-08-19
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `ZERO-FUNCTION-CANDIDATE-2026-08-19` — **shared frontend ABI
+and diagnostics; Apple outcome: parity validated, no Metal evidence changed.**
+The zero-function-candidate slice (PR #590) changes `JitFn`'s call ABI recovery
+and adds one diagnostic code. A `@jit` function whose AST lowering produced no
+function raised a bare `IndexError` from `_establish_tracer_authority`, and the
+same absence left `_call_arg_names`/`_constraint_ir_args` empty — silently
+mis-binding keyword calls and skipping call-time constraint re-checking. The ABI
+is now derived from the Python signature via the shared
+`graph_ir.ir_args_from_signature` (Decisions #30/#31), and the apple_gpu tracer
+lane lifts foreign interpreter exceptions into the new registered
+`JIT_APPLE_GPU_TRACE_FAILED` code (Decision #21). `TesseraTraceError` passes
+through unwrapped.
+Apple impact: `JIT_APPLE_GPU_TRACE_FAILED` is apple_gpu-specific — the tracer is
+the only execution path for a body whose AST emission was deferred, which is an
+apple_gpu-only route (`_trace_deferred` forces `_needs_trace`). Verified on M1
+Max: the previously-crashing body now executes correctly through the tracer, and
+an unmodelled `Tracer` attribute surfaces as
+`TesseraJitError [JIT_APPLE_GPU_TRACE_FAILED]` quoting the decoration-time
+reason. No Metal kernel, dylib, or device evidence is changed or claimed — the
+change is entirely above the runtime boundary.
+
+
 Cross-backend sync `SCALAR-SIDE-ORDERING-2026-08-19` — **shared Graph IR
 runtime contract; Apple outcome: parity validated on Metal, plus one
 follow-up required (portable stub).** The `scalar_side` slice (PR #589) makes the Graph IR lifted-scalar form carry

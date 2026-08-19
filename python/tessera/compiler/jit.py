@@ -34,6 +34,7 @@ from .attn_lower import FlashAttnLoweringConfig, SM90_DEFAULT  # noqa: F401
 from .driver import CompileArtifactBundle, compile_graph_module
 from .canonical_compile import CompileResult, compile_result_from_bundle
 from .matmul_pipeline import JitDiagnostic, CPUPlan, normalize_target_kind
+from .diagnostics import JitDiagnosticCode
 from .fallback import FallbackReason, TesseraNativeRequiredError
 
 
@@ -325,6 +326,22 @@ def _nvidia_mma_lane_available() -> bool:
         return False
 
 
+def _signature_ir_args(fn: Callable) -> Tuple[Any, ...]:
+    """The call ABI recovered from the Python signature, or () if unreadable.
+
+    Only reached when Graph IR emission produced no function to read the args
+    back off. Fail-soft because this recovers a *better* answer than the empty
+    tuple it replaces -- if the signature is unreadable too (a builtin, a C
+    extension), the old degraded behaviour stands rather than a new failure.
+    """
+    from .graph_ir import ir_args_from_signature
+
+    try:
+        return tuple(ir_args_from_signature(fn))
+    except Exception:
+        return ()
+
+
 class JitFn:
     """
     A @jit-decorated Tessera function.
@@ -385,17 +402,25 @@ class JitFn:
             else graph_ir
         )
         self._frontend_source_text = source_text
-        self._call_arg_names = tuple(
-            argument.name for argument in graph_ir.functions[0].args
-        ) if graph_ir.functions else ()
         # Call-time constraint binding belongs to the stable Python ABI, not to
         # the post-specialization tracer module.  Tracer authority may replace
         # ``self.graph_ir`` with canonical a0/a1/... arguments after the first
         # call; retain the decoration-time symbolic names/dimensions so every
         # subsequent shape is checked and cached independently.
-        self._constraint_ir_args = tuple(
-            graph_ir.functions[0].args
-        ) if graph_ir.functions else ()
+        #
+        # A zero-function module is reachable (apple_gpu trace-defer,
+        # auto_batch skip), and an empty ABI is NOT the right answer for it:
+        # ``arg_names`` is how keyword arguments are ordered for the tracer and
+        # how ``_constraint_ir_args`` re-checks shapes, so falling back to ()
+        # silently dropped keyword calls and skipped constraint enforcement.
+        # The signature is the source `lower` reads these off anyway, so derive
+        # them rather than accept their absence (Decision #30).
+        ir_args = (
+            tuple(graph_ir.functions[0].args) if graph_ir.functions
+            else _signature_ir_args(fn)
+        )
+        self._call_arg_names = tuple(argument.name for argument in ir_args)
+        self._constraint_ir_args = ir_args
         self.inferred_effect = inferred_effect
         self.constraints = constraints
         self.deterministic = deterministic
@@ -478,8 +503,21 @@ class JitFn:
         functools.update_wrapper(self, fn)
 
     def _ensure_legacy_graph_ir(self) -> GraphIRModule:
-        """Materialize the AST oracle only when a differential gate asks for it."""
-        if self._legacy_graph_ir is None:
+        """Materialize the AST oracle only when a differential gate asks for it.
+
+        Two states mean "not materialized", and both must rebuild. ``None`` is
+        the tracer-authored module that never stored a candidate. A module with
+        no functions is the emission-failure trace-defer / auto_batch skip,
+        which stores an EMPTY ``GraphIRModule()`` -- returning that unchanged
+        handed the differential gates a module they could only reject
+        ("requires one Graph function"), when the oracle they wanted was one
+        ``lower`` call away. ``GraphIRBuilder.lower`` returns its function even
+        when the module later fails verification, so the recovered candidate is
+        exactly the AST behaviour under test -- and a certificate that reports
+        it as a MISMATCH is the true answer, where refusing to build one was
+        merely an absent answer dressed as a failure.
+        """
+        if self._legacy_graph_ir is None or not self._legacy_graph_ir.functions:
             builder = GraphIRBuilder()
             builder.lower(self._fn, source_text=self._frontend_source_text)
             self._legacy_graph_ir = builder.module()
@@ -707,7 +745,8 @@ class JitFn:
                 from .trace import jit_trace_enabled, run_jit_traced
 
                 if jit_trace_enabled():
-                    return run_jit_traced(self, args, kwargs)
+                    return self._run_traced_with_diagnostic(
+                        run_jit_traced, args, kwargs)
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
                 if self.execution_kind == "native_cpu":
                     return self._native_cpu_fast_call(args, kwargs)
@@ -751,6 +790,66 @@ class JitFn:
             from . import compile_report as _cr
             if _cr.active_sink_is_capturing():
                 _cr.emit_compile_report(self.compile_report())
+
+    def _run_traced_with_diagnostic(
+        self, run_jit_traced: Callable, args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+    ) -> Any:
+        """Execute the apple_gpu tracer lane behind a stable diagnostic.
+
+        Decision #21: a lowering the backend cannot carry names the op and the
+        target -- it never surfaces as a raw Python exception. The tracer runs
+        the user body directly, so anything the body does to a ``Tracer`` that
+        the tracer does not model (``AttributeError`` for an unmodelled method,
+        ``TypeError`` for an unmodelled coercion) escapes as an unhandled
+        interpreter error unless it is lifted here.
+
+        Tessera-level errors pass through untouched: ``TesseraTraceError``
+        already names the construct and the remedy (``use tessera.control.*``),
+        and rewrapping it would break its stability contract. Only a foreign
+        exception is lifted, and it carries the decoration-time reason this
+        function was routed to the tracer at all -- which is where the
+        unlowerable construct is named.
+        """
+        from .trace import TesseraTraceError
+
+        try:
+            return run_jit_traced(self, args, kwargs)
+        except (TesseraJitError, TesseraTraceError):
+            # Already a stable Tessera diagnostic; re-wrapping would only
+            # bury the message that names the construct.
+            raise
+        except Exception as exc:
+            raise TesseraJitError(
+                f"[{JitDiagnosticCode.APPLE_GPU_TRACE_FAILED.value}] "
+                f"the apple_gpu tracer could not execute {self._fn.__name__!r}: "
+                f"{type(exc).__name__}: {exc}"
+                + self._trace_defer_context()
+            ) from exc
+
+    def _trace_defer_context(self) -> str:
+        """Why this function reached the tracer, quoted from decoration.
+
+        Empty when the tracer is the ordinary route (a control-flow body the
+        AST lane lowered fine). Non-empty when AST emission failed, in which
+        case the recorded diagnostics name the construct the AST front end
+        could not lower -- the fact a reader needs and the raw exception on its
+        own never carries.
+        """
+        reasons = [
+            d.format() for d in self.lowering_diagnostics
+            if d.code in (
+                JitDiagnosticCode.APPLE_GPU_TRACE_DEFERRED.value,
+                "PY_FRONTEND_UNSUPPORTED",
+            )
+        ]
+        if not reasons:
+            return ""
+        joined = "".join(f"\n  - {reason}" for reason in reasons)
+        return (
+            "\n  this function was routed to the tracer because the AST "
+            f"front end could not lower it:{joined}"
+        )
 
     def _enforce_call_time_stochastic_certificate(
         self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
@@ -924,11 +1023,23 @@ class JitFn:
             return cached, None
         try:
             traced = trace(self._fn, *ordered)
-            source_hash = self.graph_ir.functions[0].source_hash or hashlib.sha256(
+            # The AST module is a naming convenience here, not an input to the
+            # trace: a zero-function one (apple_gpu trace-defer, auto_batch
+            # skip) must not fail a capture that never needed it. Both fields
+            # already have their fallback in scope -- the qualname hash this
+            # line computes anyway, and the function's own name.
+            emitted = (
+                self.graph_ir.functions[0] if self.graph_ir.functions else None
+            )
+            source_hash = (
+                emitted.source_hash if emitted is not None else None
+            ) or hashlib.sha256(
                 self._fn.__qualname__.encode("utf-8")
             ).hexdigest()
             module = to_graph_ir_module(
-                traced, name=self.graph_ir.functions[0].name, source_hash=source_hash
+                traced,
+                name=emitted.name if emitted is not None else self._fn.__name__,
+                source_hash=source_hash,
             )
             if self.differentiation_request is not None:
                 intent = self.differentiation_request.module_intent_attrs()
@@ -963,9 +1074,29 @@ class JitFn:
         ):
             self.frontend_authority = "legacy_candidate_non_tensor_signature"
             return
+        # A module with no functions is a REACHABLE state, not a bug: both
+        # non-emitting paths in ``_jit_emit_graph_ir`` hand ``JitFn`` an empty
+        # ``GraphIRModule()`` -- the apple_gpu emission-failure trace-defer and
+        # the auto_batch skip. Reading ``functions[0]`` unguarded turned that
+        # into a bare ``IndexError`` out of ``__call__``.
+        #
+        # Guarding the read is not enough, because there is nothing here to
+        # settle either. This routine exists to let the tracer SUPERSEDE an
+        # emitted module; with no emitted function there is nothing to
+        # supersede, and the probe's only remaining effect is its cost --
+        # ``_trace_frontend_capture`` traces by RUNNING the body, which on the
+        # auto_batch route is a second GPU execution of a decode chain before
+        # the real call. That aborted inside MPSGraph rather than failing.
+        # Stop here: both routes trace on their own at call time and never read
+        # ``graph_ir``. (``self.graph_ir`` is the gate, not
+        # ``_legacy_graph_ir`` -- the latter is ``None`` for a tracer-authored
+        # module, which HAS a function and must still be probed.)
+        if not self.graph_ir.functions:
+            self.frontend_authority = "legacy_candidate_no_emitted_function"
+            return
         legacy = self._legacy_graph_ir
         effect = self.inferred_effect
-        if legacy is not None:
+        if legacy is not None and legacy.functions:
             effect, _ = infer_graph_effects(legacy.functions[0].body)
         if effect != Effect.pure:
             self.frontend_authority = "legacy_candidate_effectful_signature"
@@ -2420,6 +2551,43 @@ def _jit_analyze_frontend(
     return _FrontendAnalysis(solver=solver, inferred_effect=inferred_effect)
 
 
+def _frontend_jit_diagnostics(builder: GraphIRBuilder) -> List[JitDiagnostic]:
+    """Lift a builder's AST-lowering diagnostics into JitDiagnostics."""
+    return [
+        JitDiagnostic(d.severity, d.code, d.format())
+        for d in builder.diagnostics
+    ]
+
+
+def _recover_frontend_diagnostics(
+    fn: Callable, *, source_text: Optional[str],
+    effect_tag: Optional[str], target_attr: Optional[str],
+    prefer_abstract_trace: bool,
+) -> List[JitDiagnostic]:
+    """Re-derive the AST front end's diagnostics on the emission-failure path.
+
+    The Graph IR cache stores the module but not the diagnostics that were
+    produced alongside it, so on a cache HIT the frontend diagnostics naming
+    the unlowerable construct are simply absent. Deriving them here -- a cold
+    path reached only once emission has already failed -- makes the deferral
+    message identical on the first decoration and the thousandth, instead of
+    silently better the first time.
+
+    Returns an empty list if the re-lowering itself fails: this exists to
+    enrich an error that is already being reported, and must never replace it.
+    """
+    try:
+        builder = GraphIRBuilder()
+        builder.lower(
+            fn, effect_tag=effect_tag, target_attr=target_attr,
+            source_text=source_text,
+            prefer_abstract_trace=prefer_abstract_trace,
+        )
+        return _frontend_jit_diagnostics(builder)
+    except Exception:
+        return []
+
+
 def _jit_emit_graph_ir(
     fn: Callable,
     *,
@@ -2439,29 +2607,38 @@ def _jit_emit_graph_ir(
     (auto_batch skip, apple_gpu emission-failure trace-defer). A faithful
     relocation of the inline try/except — same control flow and diagnostics."""
     trace_deferred = False
+    # Frontend (AST -> Graph IR) diagnostics live OUTSIDE the try because the
+    # trace-defer handler below needs them: they are the only record of which
+    # construct the AST front end could not lower, and the verifier error that
+    # actually raises names only the dangling operand it left behind.
+    frontend_diagnostics: list[JitDiagnostic] = []
+    # Hoisted out of the try so the trace-defer handler can re-lower with the
+    # same inputs rather than recomputing them. Safe to move: both are total
+    # over an already-validated ``target`` (``normalize_target_kind`` ran and
+    # raised at the call site), and a ``GPUTargetProfile`` always normalizes to
+    # ``nvidia_*`` -- never to the ``apple_gpu`` kind that reaches the handler.
+    effect_tag = (
+        inferred_effect.name
+        if deterministic or inferred_effect != Effect.pure
+        else None
+    )
+    # Attach GPU target attrs to the module when target is provided.
+    if isinstance(target, GPUTargetProfile):
+        target_attr = target.to_mlir_attr()
+    elif target is not None:
+        target_attr = f'{{name = "{target_kind}"}}'
+    else:
+        target_attr = None
     try:
         if skip_graph_ir:
             # The auto_batch tracer runs the body directly — the AST Graph IR
             # it would emit here is never consulted, so don't pay to build it.
             raise _AutoBatchSkipEmission
-        effect_tag = (
-            inferred_effect.name
-            if deterministic or inferred_effect != Effect.pure
-            else None
-        )
-        # Attach GPU target attrs to the module when target is provided.
-        if isinstance(target, GPUTargetProfile):
-            target_attr = target.to_mlir_attr()
-        elif target is not None:
-            target_attr = f'{{name = "{target_kind}"}}'
-        else:
-            target_attr = None
         # G4 memoization (2026-05-19) — process-local cache keyed on
         # source_text + effect_tag + target_attr.
         from . import graph_ir_cache as _gic
         module = _gic.lookup(
             source_text, effect_tag=effect_tag, target_attr=target_attr)
-        diagnostics: list[JitDiagnostic] = []
         if module is None:
             builder = GraphIRBuilder()
             builder.lower(
@@ -2470,16 +2647,13 @@ def _jit_emit_graph_ir(
                 prefer_abstract_trace=inferred_effect == Effect.pure,
             )
             module = builder.module()
-            for frontend_diag in builder.diagnostics:
-                diagnostics.append(JitDiagnostic(
-                    frontend_diag.severity,
-                    frontend_diag.code,
-                    frontend_diag.format(),
-                ))
+            frontend_diagnostics.extend(
+                _frontend_jit_diagnostics(builder))
             _gic.store(
                 source_text, module,
                 effect_tag=effect_tag, target_attr=target_attr,
             )
+        diagnostics: list[JitDiagnostic] = list(frontend_diagnostics)
         if source_text is None:
             diagnostics.append(JitDiagnostic(
                 "warning",
@@ -2559,10 +2733,21 @@ def _jit_emit_graph_ir(
             raise TesseraJitError(
                 f"Graph IR emission failed for {fn.__name__!r}: {exc}"
             ) from exc
+        # Carry the frontend diagnostics through the defer. They name the
+        # construct the AST front end dropped; the verifier error that
+        # actually raised names only the dangling operand that drop left
+        # behind, which is the symptom, not the cause. `JitFn` quotes these
+        # back if the tracer then fails too (JIT_APPLE_GPU_TRACE_FAILED).
+        if not frontend_diagnostics:
+            frontend_diagnostics = _recover_frontend_diagnostics(
+                fn, source_text=source_text, effect_tag=effect_tag,
+                target_attr=target_attr,
+                prefer_abstract_trace=inferred_effect == Effect.pure,
+            )
         return _GraphIREmission(
             module=GraphIRModule(), cpu_plan=None, compile_bundle=None,
             compile_result=None, trace_deferred=True,
-            diagnostics=[JitDiagnostic(
+            diagnostics=frontend_diagnostics + [JitDiagnostic(
                 "warning", "JIT_APPLE_GPU_TRACE_DEFERRED",
                 f"AST Graph IR emission failed ({exc}); deferring to the "
                 "Phase-F tracer at call time")])

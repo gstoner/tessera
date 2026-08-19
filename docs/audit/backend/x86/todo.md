@@ -9,6 +9,23 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `ZERO-FUNCTION-CANDIDATE-2026-08-19` — **shared frontend ABI
+and diagnostics; x86 outcome: not applicable today; parity by construction.**
+The zero-function-candidate slice (PR #590) changes `JitFn`'s call ABI recovery
+and adds one diagnostic code. A `@jit` function whose AST lowering produced no
+function raised a bare `IndexError` from `_establish_tracer_authority`, and the
+same absence left `_call_arg_names`/`_constraint_ir_args` empty — silently
+mis-binding keyword calls and skipping call-time constraint re-checking. The ABI
+is now derived from the Python signature via the shared
+`graph_ir.ir_args_from_signature` (Decisions #30/#31), and the apple_gpu tracer
+lane lifts foreign interpreter exceptions into the new registered
+`JIT_APPLE_GPU_TRACE_FAILED` code (Decision #21). `TesseraTraceError` passes
+through unwrapped.
+x86 impact: none today, for the same reason as ROCm — a non-apple_gpu target
+re-raises at decoration instead of deferring to the tracer. No Zen 5 retest
+required and no device evidence is produced or claimed.
+
+
 Cross-backend sync `SCALAR-SIDE-ORDERING-2026-08-19` — **shared Graph IR
 runtime contract; x86 outcome: not applicable today, fails closed by
 construction.** The `scalar_side` slice (PR #589) makes the Graph IR lifted-scalar form carry

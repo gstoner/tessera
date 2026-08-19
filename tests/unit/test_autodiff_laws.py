@@ -1682,3 +1682,22 @@ def test_estimator_is_deterministic_under_a_fixed_seed():
     a = hutchinson_laplacian(quad, np.zeros(5), RNGKey(7), 32)
     b = hutchinson_laplacian(quad, np.zeros(5), RNGKey(7), 32)
     assert a == b
+
+
+def test_mathematical_correctness_pass():
+    """The independent-oracle verification of the series mathematics.
+
+    Distinct from `test_nextgen_math_harness_passes`, which checks the
+    *plan's* §3 claims: this one checks the shipped recurrences, the Clifford
+    substrate, the istft decomposition, the Hutchinson identity, the interval
+    algebra and the Clarke policies against oracles that share no machinery
+    with them — arbitrary-precision Taylor coefficients, Cauchy contour
+    integrals, and hand-derived closed forms. Run as a subprocess so it keeps
+    its standalone exit semantics.
+    """
+    proc = subprocess.run(
+        [sys.executable, str(REPO / "research/autodiff_nextgen/verify_series_math.py")],
+        capture_output=True, text=True, timeout=600,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "12/12 independent checks passed" in proc.stdout

@@ -33,8 +33,6 @@ What each section pins:
   outright rather than lifting them to an unordered attribute.
 """
 
-import sys
-
 import numpy as np
 import pytest
 
@@ -74,40 +72,36 @@ def _build(body: str, name: str = "f"):
     return builder.lower(namespace[name], source_text=source), builder
 
 
-def _live_kernel_available() -> bool:
-    """Whether the compiled binary kernel implements the ops under test here.
+#: The two dispatcher lanes each contract assertion runs through.
+#:
+#: `host_reference` forces the compiled-symbol lookup to miss, which is the
+#: dispatcher's own documented fallback. It is deterministic on every host, so
+#: operand ordering stays covered in CI. The ordering swap happens before the
+#: lane split, so this exercises exactly the code under test.
+#:
+#: `live_kernel` carries `hardware_apple_gpu`, so the centralized
+#: `require_apple_metal()` boundary in `tests/conftest.py` owns the gate (an
+#: inline Apple capability skip here would be APPLE-TEST-1 migration debt --
+#: `test_apple_test_inventory.py` enforces that). Metal implements the whole
+#: opcode table; the non-Darwin portable stub
+#: (`runtime/apple_gpu_runtime_stub.cpp`) implements opcodes 0-8 and its
+#: `default:` arm assigns `out[i] = x`, so `mod`, `floor_div`, the six
+#: comparisons, and the logical/bitwise ops return the LEFT operand there
+#: rather than computing anything. That is a pre-existing defect independent of
+#: the operand ordering under test, tracked separately; it is why this lane is
+#: hardware-gated rather than probed, since probing would mean asserting the
+#: very thing these tests assert.
+_LANES = [
+    "host_reference",
+    pytest.param("live_kernel", marks=pytest.mark.hardware_apple_gpu),
+]
 
-    On Darwin the MPSGraph/MSL implementation covers the whole opcode table. On
-    every other host `_load_apple_gpu_runtime` compiles the portable stub
-    (`apple_gpu_runtime_stub.cpp`), whose switch implements opcodes 0-8 and
-    whose `default:` arm assigns `out[i] = x` — so `mod`, `floor_div`, the six
-    comparisons, and the logical/bitwise ops silently return the LEFT operand
-    instead of computing anything. That is a pre-existing defect in the stub,
-    independent of the operand-ordering contract under test here, and it is why
-    the live-kernel lane is Darwin-gated rather than probed: probing for it
-    would mean asserting the very thing these tests assert.
-    """
-    return sys.platform == "darwin" and runtime_mod._apple_gpu_mpsgraph_binary_f32() is not None
 
-
-@pytest.fixture(params=["host_reference", "live_kernel"])
+@pytest.fixture(params=_LANES)
 def lane(request, monkeypatch):
-    """Run each contract assertion through both dispatcher lanes.
-
-    The ordering swap happens before the lane split, so both must agree. The
-    host-reference lane is forced by making the symbol lookup miss, which is
-    the dispatcher's own documented fallback and is deterministic on every
-    host — so operand ordering stays covered in CI even where the compiled
-    kernel is not.
-    """
+    """Run each contract assertion through both dispatcher lanes; they must agree."""
     if request.param == "host_reference":
         monkeypatch.setattr(runtime_mod, "_apple_gpu_mpsgraph_binary_f32", lambda: None)
-    elif not _live_kernel_available():
-        pytest.skip(
-            "compiled binary kernel unavailable or incomplete on this host "
-            "(non-Darwin uses apple_gpu_runtime_stub.cpp, which implements "
-            "opcodes 0-8 only and returns operand A for the rest)"
-        )
     return request.param
 
 

@@ -521,10 +521,16 @@ lit tests/tessera-ir/phase8/ -q                 # one phase
 
 # `lit tests/tessera-ir/` IS NOT THE WHOLE LIT GATE. There is a second suite —
 # `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/`, run through
-# `tessera-rocm-opt`, not `tessera-opt` — and CI's "rocm compiler" lane runs it.
-# `check-tessera` does NOT include it (that target is IR + Python unit only, and
-# its unit half shells out to system python3, which has no pytest). A backend
-# change that passes tests/tessera-ir/ can still fail CI here.
+# `tessera-rocm-opt`, not `tessera-opt`. `check-tessera` does NOT include it
+# (that target is IR + Python unit only, and its unit half shells out to system
+# python3, which has no pytest).
+#
+# **Run it locally — CI no longer does by default (changed 2026-08-19).** The
+# "rocm compiler" lane is now opt-in (PR label `rocm-smoke`, or manual
+# dispatch) and is no longer part of `validate-required`, so a ROCm backend
+# fixture regression will NOT be caught by a normal PR. This suite is that
+# backend's only automated fixture coverage: run `ninja -C build
+# check-tessera-rocm` before pushing ROCm backend work, or apply the label.
 ninja -C build check-tessera-ir                  # == lit tests/tessera-ir/
 ninja -C build check-tessera-rocm                # the ROCm backend suite
 

@@ -41508,7 +41508,20 @@ def _apple_gpu_binary_numpy(op_name: str, a: Any, b: Any, np: Any) -> Any:
 def _apple_gpu_dispatch_mpsgraph_binary(op_name: str, operands: list[Any], kwargs: dict, np: Any) -> Any:
     """Elementwise binary via the MPSGraph lane. Broadcasts the two operands on
     the host, runs the f32 kernel element-wise (comparison ops → f32 0/1 mask).
-    The scalar second-operand form (`add(x, scalar=s)`) is supported."""
+    The scalar second-operand form (`add(x, scalar=s)`) is supported.
+
+    ``scalar`` binds as the RIGHT operand (``x <op> s``) unless the op carries
+    ``scalar_side="left"``, in which case the operands are swapped and this
+    computes ``s <op> x``. That distinction is not cosmetic here: most of
+    ``_APPLE_GPU_BINARY_OPCODES`` does not commute (sub, div, pow, mod,
+    floor_div, atan2, and every comparison), and the Python AST frontend lifts
+    literals out of either side of a BinOp
+    (``graph_ir._OpExtractor._try_map_binop``). Ignoring the side silently
+    computed ``x - 2.0`` for ``2.0 - x`` -- sign-flipped for `sub`, reciprocal
+    for `div`. Absence of the key means "right", which is the definition of the
+    ``scalar=`` kwarg on the eager op surface that this module's own
+    ``{"scalar": s}`` call sites use; any other value is rejected rather than
+    guessed (Decision #21 -- no silent wrong lowering)."""
     op = _APPLE_GPU_BINARY_OPCODES[op_name]
     a = np.asarray(operands[0], dtype=np.float32)
     if len(operands) >= 2:
@@ -41518,6 +41531,14 @@ def _apple_gpu_dispatch_mpsgraph_binary(op_name: str, operands: list[Any], kwarg
         if sc is None:
             raise ValueError(f"{op_name!r} needs a second operand or a scalar= kwarg")
         b = np.asarray(sc, dtype=np.float32)
+        side = str(kwargs.get("scalar_side", "right"))
+        if side not in ("left", "right"):
+            raise ValueError(
+                f"{op_name!r}: scalar_side must be 'left' or 'right'; got {side!r}"
+            )
+        if side == "left":
+            # The literal was the BinOp's left operand: compute `scalar <op> x`.
+            a, b = b, a
     a, b = np.broadcast_arrays(a, b)
     shape = a.shape
     n = int(a.size)

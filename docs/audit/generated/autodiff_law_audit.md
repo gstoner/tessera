@@ -15,10 +15,11 @@ are real unswept debt, not exclusions.
 
 | Law | Status | Ops |
 |---|---|---:|
-| adjoint | no_spec | 237 |
-| adjoint | pass | 54 |
+| adjoint | no_spec | 182 |
+| adjoint | pass | 109 |
 | adjoint | vjp_only | 17 |
-| chain | pass | 52 |
+| chain | not_applicable | 1 |
+| chain | pass | 87 |
 
 ## `geometric` registry
 
@@ -28,4 +29,4 @@ are real unswept debt, not exclusions.
 
 ## Checked tensor ops
 
-`abs`, `absolute`, `acos`, `add`, `amax`, `amin`, `asin`, `atan`, `atan2`, `clamp`, `cos`, `cosh`, `cross_entropy_loss`, `cumsum`, `erf`, `erfc`, `exp`, `expm1`, `gelu`, `gemm`, `kl_divergence`, `layer_norm`, `log`, `log1p`, `log_softmax`, `logsumexp`, `matmul`, `maximum`, `mean`, `minimum`, `mse_loss`, `mul`, `prod`, `reciprocal`, `relu`, `reshape`, `rmsnorm`, `sigmoid`, `sigmoid_safe`, `sign`, `silu`, `sin`, `sinh`, `softcap`, `softmax`, `softmax_safe`, `softplus`, `sqrt`, `std`, `sum`, `tan`, `tanh`, `transpose`, `var`
+`abs`, `absolute`, `acos`, `add`, `amax`, `amin`, `asin`, `atan`, `atan2`, `attn_sliding_window`, `batched_gemm`, `binary_cross_entropy_loss`, `cast`, `clamp`, `cos`, `cosh`, `cross_entropy_loss`, `cummax`, `cummin`, `cumprod`, `cumsum`, `digamma`, `div`, `einsum`, `erf`, `erfc`, `exp`, `expand`, `expm1`, `fft`, `flash_attn`, `flatten`, `flip`, `gather`, `gelu`, `gemm`, `group_norm`, `huber_loss`, `ifft`, `index_select`, `instance_norm`, `irfft`, `js_divergence`, `kl_divergence`, `label_smoothed_cross_entropy`, `layer_norm`, `lgamma`, `linear_attn`, `log`, `log1p`, `log_cosh_loss`, `log_softmax`, `logsumexp`, `mae_loss`, `masked_fill`, `matmul`, `max`, `maximum`, `mean`, `min`, `minimum`, `mod`, `mse_loss`, `mul`, `pad`, `permute`, `pow`, `power_attn`, `prod`, `qkv_projection`, `reciprocal`, `relu`, `repeat`, `reshape`, `retention`, `rfft`, `rmsnorm`, `rmsnorm_safe`, `roll`, `rope`, `rope_merge`, `rsqrt`, `segment_reduce`, `sigmoid`, `sigmoid_safe`, `sign`, `silu`, `silu_mul`, `sin`, `sinh`, `smooth_l1_loss`, `softcap`, `softmax`, `softmax_safe`, `softplus`, `sqrt`, `squeeze`, `std`, `sub`, `sum`, `take`, `tan`, `tanh`, `tile`, `transpose`, `unsqueeze`, `var`, `where`, `z_loss`

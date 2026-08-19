@@ -216,13 +216,26 @@ def jvp_transpose(primals, tangents, *, axes=None, **_):
     return np.transpose(x, axes=axes), np.transpose(dx, axes=axes)
 
 
+_CAST_DTYPE_MAP = {
+    # Mirrors the canonical `ops.cast` string map — the tape records the
+    # caller's canonical dtype STRING, and `np.astype("fp32")` raises, so
+    # this rule previously crashed on every canonically-spelled cast
+    # (AD-LAW-1c triage).
+    "bf16": np.float32,
+    "fp16": np.float16,
+    "fp32": np.float32,
+    "fp64": np.float64,
+}
+
+
 @_jvp("cast")
 def jvp_cast(primals, tangents, *, dtype=None, **_):
     (x,) = primals
     (dx,) = tangents
     if dtype is None:
         return x, dx
-    return x.astype(dtype, copy=False), dx.astype(dtype, copy=False)
+    np_dtype = _CAST_DTYPE_MAP.get(dtype, dtype) if isinstance(dtype, str) else dtype
+    return x.astype(np_dtype, copy=False), dx.astype(np_dtype, copy=False)
 
 
 @_jvp("relu")
@@ -2242,12 +2255,40 @@ _register_unary_elementwise_jvp(
 _register_unary_elementwise_jvp(
     "erfc", lambda x: np.vectorize(__import__("math").erfc)(x), lambda x: -(2.0 / np.sqrt(np.pi)) * np.exp(-x * x)
 )
+# lgamma / digamma reuse the VJP-side polygamma helpers so both modes derive
+# from ONE datum. The previous registrations were silent placeholders caught
+# by the AD-LAW-1 sweep (lgamma's derivative was a dead `if False` stub
+# returning identically 0.0; digamma's whole JVP was identity-with-slope-1),
+# so forward-mode through either op computed garbage while reverse mode was
+# correct — invisible to reverse-only pointwise tests, fatal to jacfwd/HVP.
+# Pinned by test_autodiff_laws.py; the helpers are positive-domain (as are
+# the paired VJPs).
+def _lgamma_jvp_derivative(x):
+    from .vjp import _digamma_positive
+    return _digamma_positive(x)
+
+
+def _digamma_jvp_forward(x):
+    from .linear import _resolve_forward
+    fwd = _resolve_forward("digamma")
+    if fwd is None:  # pragma: no cover — ops namespace always resolves in-tree
+        raise TesseraAutodiffError("digamma forward not resolvable")
+    return fwd(x)
+
+
+def _digamma_jvp_derivative(x):
+    from .vjp import _trigamma_positive
+    return _trigamma_positive(x)
+
+
 _register_unary_elementwise_jvp(
     "lgamma",
     lambda x: np.vectorize(__import__("math").lgamma)(x),
-    lambda x: np.vectorize(lambda v: __import__("scipy.special").special.digamma(v) if False else 0.0)(x),
-)  # placeholder
-_register_unary_elementwise_jvp("digamma", lambda x: x, lambda x: np.ones_like(x))  # placeholder
+    _lgamma_jvp_derivative,
+)
+_register_unary_elementwise_jvp(
+    "digamma", _digamma_jvp_forward, _digamma_jvp_derivative
+)
 _register_unary_elementwise_jvp("reciprocal", lambda x: 1.0 / x, lambda x: -1.0 / (x * x))
 _register_unary_elementwise_jvp(
     "softplus", lambda x: np.maximum(x, 0) + np.log1p(np.exp(-np.abs(x))), lambda x: 1.0 / (1.0 + np.exp(-x))

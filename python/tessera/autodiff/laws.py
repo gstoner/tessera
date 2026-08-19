@@ -37,7 +37,9 @@ __all__ = [
     "LawResult",
     "adjoint_check",
     "chain_check",
+    "homomorphism_check",
     "kink_check",
+    "quotient_check",
     "op_rng",
     "run_law_sweep",
 ]
@@ -368,6 +370,14 @@ def run_law_sweep() -> list[LawResult]:
             continue
         results.append(kink_check(op, kspec, vjp_fn, _JVPS.get(op)))
 
+    # Laws 2 and 4 — algebra-level, the AD-WEIL-1 gate. These are keyed by
+    # the codomain (W1..W4), not by op: they assert that the *substrate* a
+    # future jet mode would run on is a faithful algebra, and that order-k
+    # jets agree with the k-nested route they would replace.
+    for _order in (1, 2, 3, 4):
+        results.append(homomorphism_check(_order))
+        results.append(quotient_check(_order))
+
     try:
         from .geometric.registry import _JVPS_GEO, _VJPS_GEO
         for op in sorted(set(_VJPS_GEO) | set(_JVPS_GEO)):
@@ -506,3 +516,156 @@ def _unit_cotangent(jvp_fn: Optional[Callable], primals: tuple, kwargs: dict):
         out = jvp_fn(primals, zeros, **kwargs)[0]
         return np.ones_like(np.asarray(out), dtype=np.float64)
     return np.ones_like(np.asarray(primals[0]), dtype=np.float64)
+
+
+# ── Laws 2 and 4: the algebra laws that gate AD-WEIL-1 ───────────────────────
+
+
+def _random_program(rng: np.random.Generator, depth: int, transcendental: bool):
+    """A random straight-line program over +, x and (optionally) scalar fns.
+
+    Returned as a closure taking (value, algebra-ops) so the SAME program text
+    can be evaluated in any codomain — which is the whole point being tested.
+    """
+    from .algebra import SCALAR_RECURRENCES
+
+    names = list(SCALAR_RECURRENCES)
+    ops: list[tuple[str, Any]] = []
+    for _ in range(depth):
+        roll = rng.random()
+        if roll < 0.4:
+            ops.append(("add_const", float(rng.standard_normal())))
+        elif roll < 0.8:
+            ops.append(("square", None))
+        elif transcendental:
+            ops.append(("fn", names[int(rng.integers(len(names)))]))
+        else:
+            ops.append(("add_const", float(rng.standard_normal())))
+    return ops
+
+
+def _eval_program(ops, x, W):
+    """Evaluate a program in algebra `W` starting from lifted value `x`."""
+    cur = x
+    for kind, arg in ops:
+        if kind == "add_const":
+            const = W.lift(np.asarray(arg, dtype=np.float64),
+                           np.zeros_like(np.asarray(arg, dtype=np.float64)))
+            cur = W.add(cur, const)
+        elif kind == "square":
+            cur = W.mul(cur, cur)
+        else:
+            # Keep transcendental arguments in a sane range.
+            if arg == "log":
+                shift = W.lift(np.asarray(4.0), np.asarray(0.0))
+                cur = W.mul(cur, cur)
+                cur = W.add(cur, shift)
+            cur = W.scalar_fn(arg, cur)
+    return cur
+
+
+def homomorphism_check(order: int, trials: int = 8,
+                       registry: str = "algebra") -> LawResult:
+    """Law 2 — evaluation in ``W`` is an ℝ-algebra homomorphism.
+
+    Tested against **analytically known** Taylor coefficients: a random
+    polynomial is evaluated using only the algebra's `add`/`mul`, and its jet
+    is compared with the exact derivatives obtained by differentiating the
+    polynomial's coefficient vector. That is the substantive claim — the
+    algebra's ring operations reproduce the true derivative tower — and it is
+    where nilpotency does the work: for a polynomial of degree ≤ k there is no
+    truncation error at all, so the only residual is float rounding.
+
+    (An earlier draft compared ``W.mul(f, g)`` against ``W.mul(f, g)`` and was
+    vacuously true, and used an absolute threshold on values that a random
+    program can make large. Both are pinned by the tests.)
+    """
+    import math
+
+    from .algebra import TruncatedJet
+
+    W = TruncatedJet(order)
+    rng = op_rng(f"W{order}", "homomorphism")
+    try:
+        worst = 0.0
+        for _ in range(trials):
+            deg = int(rng.integers(2, 6))
+            coeffs = rng.standard_normal(deg + 1)      # c[0] + c[1]x + ...
+            x0 = float(rng.standard_normal())
+
+            # Evaluate by Horner using ONLY the algebra's ring operations.
+            x = W.lift(np.asarray(x0), np.asarray(1.0))
+            acc = W.lift(np.asarray(coeffs[-1]), np.asarray(0.0))
+            for c in coeffs[-2::-1]:
+                acc = W.add(W.mul(acc, x),
+                            W.lift(np.asarray(c), np.asarray(0.0)))
+
+            # Exact reference: differentiate the coefficient vector.
+            for j in range(order + 1):
+                d = coeffs.copy()
+                for _ in range(j):
+                    d = np.array([i * d[i] for i in range(1, len(d))]) \
+                        if len(d) > 1 else np.array([0.0])
+                exact = float(np.polyval(d[::-1], x0)) / math.factorial(j)
+                got = float(np.asarray(acc[j]))
+                worst = max(worst, abs(got - exact) / max(abs(exact), 1.0))
+
+        status = "pass" if worst <= 1e-12 else "fail"
+        return LawResult(f"W{order}", registry, "homomorphism", status,
+                         trials, worst,
+                         "polynomial jets == exact Taylor coefficients "
+                         "(no truncation error by nilpotency)")
+    except Exception as e:  # noqa: BLE001
+        return LawResult(f"W{order}", registry, "homomorphism", "rule_error",
+                         0, None, f"{type(e).__name__}: {e}")
+
+
+def quotient_check(order: int, trials: int = 6,
+                   registry: str = "algebra") -> LawResult:
+    """Law 4 — order-k jet ≡ k-nested duals on the diagonal seed.
+
+    This is the differential proof that licenses retiring the nested route
+    (Decision #31: the survivor must carry what the deleted path carried).
+    The two algebras are related by the diagonal embedding
+    ``ε ↦ ε₁+…+ε_k``; reading the jet's order-j coefficient back requires the
+    factorial scaling ``j!`` (the coefficient-convention semantic key).
+    """
+    import math
+
+    from .algebra import TruncatedJet, nested_dual_derivative
+
+    W = TruncatedJet(order)
+    rng = op_rng(f"W{order}", "quotient")
+    try:
+        worst = 0.0
+        for _ in range(trials):
+            x0 = float(rng.standard_normal()) * 0.4
+            ops = _random_program(rng, 3, transcendental=True)
+            jet = _eval_program(ops, W.lift(np.asarray(x0), np.asarray(1.0)), W)
+
+            def program(t, scalar_ops, _ops=ops):
+                from .algebra import Dual  # noqa: F401  (documents the pair)
+                cur = t
+                for kind, arg in _ops:
+                    if kind == "add_const":
+                        cur = cur + arg
+                    elif kind == "square":
+                        cur = cur * cur
+                    else:
+                        if arg == "log":
+                            cur = cur * cur + 4.0
+                        cur = scalar_ops._apply(arg, cur)
+                return cur
+
+            for j in range(1, order + 1):
+                ref = nested_dual_derivative(program, x0, j)
+                got = float(np.asarray(jet[j])) * math.factorial(j)
+                denom = max(abs(ref), 1.0)
+                worst = max(worst, abs(got - ref) / denom)
+
+        status = "pass" if worst <= 1e-9 else "fail"
+        return LawResult(f"W{order}", registry, "quotient", status, trials,
+                         worst, f"jet(k={order}) == {order}-nested duals")
+    except Exception as e:  # noqa: BLE001
+        return LawResult(f"W{order}", registry, "quotient", "rule_error", 0,
+                         None, f"{type(e).__name__}: {e}")

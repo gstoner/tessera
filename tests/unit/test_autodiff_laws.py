@@ -1248,3 +1248,115 @@ def test_dequantize_rule_contradicts_stub_forward():
     # The rule assumes the scaled inverse.
     (g,) = _VJPS["dequantize_fp4"](np.ones_like(q), q, scale)[:1]
     np.testing.assert_allclose(np.asarray(g), np.full(6, float(scale)))
+
+
+# ── AD-LAW-2: Laws 2 and 4, the AD-WEIL-1 gate ───────────────────────────────
+
+
+@pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
+def test_law2_homomorphism_is_exact_on_polynomials(order):
+    """Law 2: evaluating a polynomial with only the algebra's ring operations
+    reproduces its EXACT Taylor coefficients. Nilpotency removes truncation
+    error entirely for degree <= k, so the only residual is float rounding —
+    machine precision, not a tuned tolerance."""
+    from tessera.autodiff.laws import homomorphism_check
+
+    r = homomorphism_check(order)
+    assert r.status == "pass", r
+    assert r.max_rel_residual < 1e-13, r.max_rel_residual
+
+
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+def test_law4_jet_equals_nested_duals(order):
+    """Law 4: order-k jets agree with the k-nested dual tower they would
+    replace, through random programs including exp/log/tanh/sin/cos. This is
+    the differential proof Decision #31 requires before the nested route can
+    ever be retired."""
+    from tessera.autodiff.laws import quotient_check
+
+    r = quotient_check(order)
+    assert r.status == "pass", r
+
+
+def test_law2_is_not_vacuous():
+    """Regression for a flaw in the law itself: the first draft compared
+    `W.mul(f, g)` against `W.mul(f, g)` — trivially equal — and used an
+    absolute threshold on values a random program can make large. A corrupted
+    `mul` must now fail."""
+    from tessera.autodiff import laws as L
+    from tessera.autodiff.algebra import TruncatedJet
+
+    real = L.homomorphism_check(3)
+    assert real.status == "pass"
+
+    original = TruncatedJet.mul
+
+    def corrupted_mul(self, a, b):
+        """Truncated Cauchy product with the top coefficient scaled — the
+        kind of subtle product error a vacuous law would miss."""
+        k = self.order
+        out = [np.zeros_like(np.asarray(a[0])) for _ in range(k + 1)]
+        for i in range(k + 1):
+            for j in range(k + 1 - i):
+                out[i + j] = out[i + j] + a[i] * b[j]
+        out[-1] = out[-1] * 0.5
+        return out
+
+    try:
+        TruncatedJet.mul = corrupted_mul           # type: ignore[assignment]
+        broken = L.homomorphism_check(3)
+    finally:
+        TruncatedJet.mul = original                # type: ignore[assignment]
+    assert broken.status == "fail", "Law 2 did not catch a corrupted product"
+
+
+def test_law4_catches_a_wrong_recurrence():
+    """A jet recurrence that is subtly wrong must fail against the nested
+    reference — that is what makes Law 4 a migration gate rather than a
+    smoke test."""
+    from tessera.autodiff import algebra as A
+    from tessera.autodiff.laws import quotient_check
+
+    good = SCALAR = A.SCALAR_RECURRENCES["tanh"]
+
+    def wrong_jet(W, u):
+        w = good.jet(W, u)
+        if len(w) > 2:
+            w[2] = w[2] * 1.05                    # 5% error at order 2
+        return w
+
+    A.SCALAR_RECURRENCES["tanh"] = A.ScalarRecurrence(good.pointwise, wrong_jet)
+    try:
+        r = quotient_check(3)
+    finally:
+        A.SCALAR_RECURRENCES["tanh"] = good
+    assert r.status == "fail", "Law 4 did not catch a wrong recurrence"
+
+
+def test_jet_dimension_is_k_plus_one_not_two_to_the_k():
+    """The cost claim behind the whole program, measured rather than asserted:
+    an order-k jet carries k+1 coefficients, while the k-nested dual tower it
+    replaces carries 2^k. This is why 'run AutodiffPass twice' is the wrong
+    higher-order path."""
+    from tessera.autodiff.algebra import TruncatedJet, _NestedDual
+
+    for k in (1, 2, 3, 4, 5):
+        jet = TruncatedJet(k).lift(np.asarray(0.5), np.asarray(1.0))
+        assert len(jet) == k + 1
+
+        # A GENERIC element of the k-fold tensor product is a full binary
+        # tree of depth k — one component per subset of {ε₁..ε_k}. (An
+        # earlier version built a left-spine, which has only k+1 leaves and
+        # would have "confirmed" the claim for the wrong reason.)
+        def generic(depth):
+            if depth == 0:
+                return 1.0
+            return _NestedDual(generic(depth - 1), generic(depth - 1))
+
+        def count(node):
+            if isinstance(node, _NestedDual):
+                return count(node.a) + count(node.b)
+            return 1
+
+        assert count(generic(k)) == 2 ** k
+    # At k=5 that is 6 coefficients versus 32 — a 5.3x gap that widens.

@@ -1,4 +1,12 @@
 registry,op,law,status,probes
+algebra,W1,homomorphism,pass,8
+algebra,W1,quotient,pass,6
+algebra,W2,homomorphism,pass,8
+algebra,W2,quotient,pass,6
+algebra,W3,homomorphism,pass,8
+algebra,W3,quotient,pass,6
+algebra,W4,homomorphism,pass,8
+algebra,W4,quotient,pass,6
 geometric,add,adjoint,no_spec,0
 geometric,conjugate,adjoint,no_spec,0
 geometric,geometric_product,adjoint,no_spec,0

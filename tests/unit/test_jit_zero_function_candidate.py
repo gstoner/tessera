@@ -301,3 +301,77 @@ def test_authority_probe_does_not_trace_when_there_is_nothing_to_supersede():
 
     assert calls == [], "the authority probe traced an empty-module function"
     assert batched.frontend_authority == "legacy_candidate_no_emitted_function"
+
+
+class TestRecoveredABIPreservesPythonCallSemantics:
+    """Codex review on PR #591 (P2), confirmed and fixed here.
+
+    Recovering the call ABI made keyword calls work, but `run_jit_traced`
+    rebuilds the tracer's positional inputs by matching keyword NAMES against
+    that ABI — so a keyword matching no parameter was simply never appended and
+    the trace silently ran against the parameter's default. Measured before the
+    fix: `f(x=X, bogus=9)` on `def f(x, iters=2)` returned `[4, 8, 16]`, the
+    `iters=2` answer, where plain Python raises `TypeError`.
+
+    That is a regression this PR introduced, not a pre-existing one: on `main`
+    the same call raised `TypeError: f() missing 1 required positional argument`
+    — the right outcome for the wrong reason, because the empty ABI dropped
+    every keyword. Trading a spurious error for a silently wrong number is not
+    an improvement, so the binding is now validated against the real signature.
+    """
+
+    @staticmethod
+    def _fn():
+        import tessera
+        from tessera import control, ops
+
+        @tessera.jit(target="apple_gpu")
+        def f(x, iters=2):
+            def body(i, carry):
+                return ops.add(carry, carry)
+
+            return control.fori_loop(0, iters, body, x)
+
+        return f
+
+    def test_valid_positional_and_keyword_calls_still_run(self):
+        f = self._fn()
+        x = np.array([1.0, 2.0, 4.0], dtype=np.float32)
+        np.testing.assert_allclose(np.asarray(f(x)), x * 4.0)
+        np.testing.assert_allclose(np.asarray(f(x=x)), x * 4.0)
+
+    @pytest.mark.parametrize(
+        "call,expected",
+        [
+            (lambda f, x: f(x=x, bogus=9), "unexpected keyword argument"),
+            (lambda f, x: f(x=x, iterss=3), "unexpected keyword argument"),
+            (lambda f, x: f(x, x=x), "multiple values"),
+            (lambda f, x: f(), "missing a required argument"),
+        ],
+    )
+    def test_invalid_calls_raise_typeerror_like_python(self, call, expected):
+        f = self._fn()
+        x = np.array([1.0, 2.0, 4.0], dtype=np.float32)
+        # A plain TypeError, so existing `except TypeError` handling is unchanged.
+        with pytest.raises(TypeError, match=expected):
+            call(f, x)
+
+    def test_binding_error_is_not_reported_as_a_tracer_failure(self):
+        """A misspelled keyword is a caller error. Reporting it as
+        JIT_APPLE_GPU_TRACE_FAILED would name the wrong culprit, so the
+        diagnostic wrapper must let it through unwrapped."""
+        f = self._fn()
+        x = np.array([1.0, 2.0, 4.0], dtype=np.float32)
+        with pytest.raises(TypeError) as excinfo:
+            f(x=x, bogus=9)
+        assert "JIT_APPLE_GPU_TRACE_FAILED" not in str(excinfo.value)
+
+    def test_unintrospectable_callable_is_not_newly_rejected(self):
+        """Fail-soft on introspection: a signature that cannot be read leaves
+        the call exactly as permissive as before, rather than newly erroring."""
+        from tessera.compiler.trace import _reject_invalid_call_binding
+
+        # A C builtin with no introspectable signature.
+        _reject_invalid_call_binding(len, ([1, 2],), {})
+        # A *args/**kwargs wrapper accepts anything, as Python would.
+        _reject_invalid_call_binding(lambda *a, **k: None, (1,), {"anything": 2})

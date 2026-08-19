@@ -811,13 +811,15 @@ class JitFn:
         function was routed to the tracer at all -- which is where the
         unlowerable construct is named.
         """
-        from .trace import TesseraTraceError
+        from .trace import TesseraCallBindingError, TesseraTraceError
 
         try:
             return run_jit_traced(self, args, kwargs)
-        except (TesseraJitError, TesseraTraceError):
-            # Already a stable Tessera diagnostic; re-wrapping would only
-            # bury the message that names the construct.
+        except (TesseraJitError, TesseraTraceError, TesseraCallBindingError):
+            # Already a stable Tessera diagnostic, or a caller error that must
+            # keep Python's own semantics. Re-wrapping either would bury the
+            # message that names the real culprit -- and a misspelled keyword is
+            # not a tracer failure.
             raise
         except Exception as exc:
             raise TesseraJitError(

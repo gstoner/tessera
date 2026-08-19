@@ -4135,50 +4135,127 @@ _register_derived_spectral_jvps()
 # config-honoring rewrite that PRESERVES this window quotient, which is its
 # own slice, not a mechanical derivation.
 @_jvp("istft")
-def jvp_istft(primals, tangents, *, n_fft=512, hop=128, window=None, **_):
-    """Exact ISTFT product, including the overlap-add window quotient.
+def jvp_istft(primals, tangents, **kwargs):
+    """Exact ISTFT product that honors every configuration key (AD-LAW-1g/1h).
 
-    ISTFT is linear in its spectrum only while the window is fixed.  For an
-    active window both the overlap-add numerator and the quadratic window-
-    energy denominator contribute to the tangent.
+    The canonical forward is
+
+        y = trim( A(X, w) / B(w) ),
+        A(X, w) = OLA(irfft(X) * w_pad)      -- bilinear in (X, w)
+        B(w)    = max(OLA(w_pad ** 2), 1e-12) -- quadratic in w
+        trim    = the center and length crops
+
+    so the tangent follows by the quotient rule:
+
+        dy = trim( [ A(X, dw) - (A/B) * 2*OLA(w_pad*dw_pad) ] / B(w) )
+             + forward(dX, w)                     # A is linear in X
+
+    Every FFT-flavoured key (`axis`, `onesided`, `norm`, `n_fft`) is honored
+    **by construction**, because each term is obtained from the canonical
+    forward itself rather than from a reimplementation — the previous rule
+    reimplemented the transform and silently ignored all of them (it pinned
+    axis=-1, onesided=True, norm="backward" and dropped `center`/`length`).
+    Only the window-only overlap-add sums are computed here, and they involve
+    no FFT: `_window_overlap_sums` needs just the frame geometry.
     """
-    frames = np.asarray(primals[0], dtype=np.complex128)
-    dframes = np.asarray(tangents[0], dtype=np.complex128)
-    win = (
-        np.asarray(primals[1], dtype=np.float64)
-        if len(primals) > 1
-        else np.asarray(window, dtype=np.float64)
-        if window is not None
-        else np.ones(n_fft, dtype=np.float64)
-    )
-    dwin = (
-        np.asarray(tangents[1], dtype=np.float64)
-        if len(tangents) > 1 and tangents[1] is not None
-        else np.zeros_like(win)
-    )
-    if win.ndim != 1 or dwin.shape != win.shape:
-        raise ValueError("ISTFT JVP requires matching rank-one window/tangent")
-    n_fft = int(win.shape[0])
-    time_frames = np.fft.irfft(frames, n=n_fft, axis=-1)
-    dtime_frames = np.fft.irfft(dframes, n=n_fft, axis=-1)
-    n_frames = frames.shape[-2]
-    out_len = (n_frames - 1) * hop + n_fft
-    prefix = frames.shape[:-2]
-    numerator = np.zeros(prefix + (out_len,), dtype=np.float64)
-    dnumerator = np.zeros_like(numerator)
-    denominator = np.zeros((out_len,), dtype=np.float64)
-    ddenominator = np.zeros_like(denominator)
-    for frame in range(n_frames):
-        start = frame * hop
-        sl = slice(start, start + n_fft)
-        numerator[..., sl] += time_frames[..., frame, :] * win
-        dnumerator[..., sl] += (
-            dtime_frames[..., frame, :] * win
-            + time_frames[..., frame, :] * dwin
-        )
-        denominator[sl] += win * win
-        ddenominator[sl] += 2.0 * win * dwin
-    safe = np.maximum(denominator, 1.0e-12)
-    primal = numerator / safe
-    tangent = dnumerator / safe - numerator * ddenominator / (safe * safe)
-    return primal, tangent
+    from .linear import _resolve_forward
+
+    forward = _resolve_forward("istft")
+    if forward is None:  # pragma: no cover - ops always resolves in-tree
+        raise TesseraAutodiffError("istft forward not resolvable")
+
+    X = np.asarray(primals[0])
+    win = np.asarray(primals[1], dtype=np.float64)
+    dX = tangents[0]
+    dwin = tangents[1] if len(tangents) > 1 and tangents[1] is not None else None
+
+    hop = kwargs.get("hop")
+    if hop is None:
+        hop = kwargs.get("hop_length")
+    if hop is None and len(primals) > 2:
+        hop = primals[2]
+    if hop is None:
+        raise TesseraAutodiffError("istft JVP requires `hop`")
+    cfg = {k: v for k, v in kwargs.items()
+           if k in ("axis", "n_fft", "center", "length", "onesided", "norm")}
+    call = dict(cfg)
+    call["hop"] = int(hop)
+
+    primal_out = forward(X, win, **call)
+
+    # Term 1 — linear in the spectrum: the forward IS the derivative.
+    tangent = np.zeros_like(np.asarray(primal_out, dtype=np.float64))
+    if dX is not None and np.any(np.asarray(dX)):
+        tangent = tangent + np.asarray(
+            forward(np.asarray(dX), win, **call), dtype=np.float64)
+
+    # Term 2 — the window quotient. Skipped entirely when the window carries
+    # no perturbation, which is the common case and keeps this free.
+    if dwin is not None and np.any(np.asarray(dwin)):
+        dwin = np.asarray(dwin, dtype=np.float64)
+        # Untrimmed evaluations: the crops are applied once, at the end.
+        raw = dict(call)
+        raw["center"] = False
+        raw["length"] = None
+        y_raw = np.asarray(forward(X, win, **raw), dtype=np.float64)
+
+        b_w, b_dw, c_cross = _window_overlap_sums(
+            win, dwin, y_raw.shape[-1], int(hop),
+            int(call.get("n_fft") or win.shape[0]))
+
+        # A(X, dw) = forward(X, dw) * B(dw), exact because the forward divides
+        # by exactly that quantity.
+        a_dw = np.asarray(forward(X, dwin, **raw), dtype=np.float64) * b_dw
+        window_term = (a_dw - y_raw * 2.0 * c_cross) / b_w
+        tangent = tangent + _apply_istft_crops(
+            window_term, cfg, int(call.get("n_fft") or win.shape[0]))
+
+    return primal_out, tangent
+
+
+def _window_overlap_sums(win, dwin, out_len, hop, fft_length):
+    """OLA(w**2), OLA(dw**2) and OLA(w*dw) over the frame geometry.
+
+    No FFT and no normalization: these are pure window sums, which is why
+    computing them here does not reintroduce the reimplementation the rule
+    above exists to avoid. The 1e-12 floor mirrors the forward's clamp, so
+    the derivative is 0 exactly where the forward's denominator is clamped
+    flat.
+    """
+    padded = np.zeros(fft_length, dtype=np.float64)
+    offset = (fft_length - win.shape[0]) // 2
+    padded[offset:offset + win.shape[0]] = win
+    padded_d = np.zeros(fft_length, dtype=np.float64)
+    padded_d[offset:offset + dwin.shape[0]] = dwin
+
+    b_w = np.zeros(out_len)
+    b_dw = np.zeros(out_len)
+    cross = np.zeros(out_len)
+    frames = 1 + max(0, (out_len - fft_length)) // hop
+    for idx in range(frames):
+        s = idx * hop
+        e = min(s + fft_length, out_len)
+        n = e - s
+        b_w[s:e] += padded[:n] * padded[:n]
+        b_dw[s:e] += padded_d[:n] * padded_d[:n]
+        cross[s:e] += padded[:n] * padded_d[:n]
+    return (np.maximum(b_w, 1e-12), np.maximum(b_dw, 1e-12), cross)
+
+
+def _apply_istft_crops(value, cfg, fft_length):
+    """The forward's center and length crops, applied to an untrimmed array."""
+    out = value
+    if cfg.get("center"):
+        width = fft_length // 2
+        out = out[..., width:out.shape[-1] - width]
+    length = cfg.get("length")
+    if length is not None:
+        want = int(length)
+        if out.shape[-1] < want:
+            out = np.pad(out, [(0, 0)] * (out.ndim - 1)
+                         + [(0, want - out.shape[-1])])
+        else:
+            out = out[..., :want]
+    return out
+
+

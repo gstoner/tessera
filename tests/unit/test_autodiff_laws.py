@@ -195,8 +195,6 @@ def test_zero_tangent_ok_respected():
 # JVPs were deleted in favour of derivation from the forward, so there
 # is no second signature to disagree with.
 _KNOWN_NONE_CONVENTION = {
-    ("istft", "hop"),
-    ("istft", "n_fft"),
     ("masked_fill", "value"),
     ("unsqueeze", "axis"),
 }
@@ -283,29 +281,22 @@ _BENIGN_SWALLOWS = {
         "jvp-side `scalar` param is dead vocabulary",
 }
 
-# _OPEN_SWALLOW_FINDINGS: still awaiting triage/fix. stft/istft/
-# spectral_conv ride the spectral-family review (AD-TSOL-STFT-BWD-1 is the
-# owning queue item for that family's backward contracts); the quantize
-# family rides the quantization-semantics review (STE primal conventions).
-# Do not add entries — fix the rule, or move to _BENIGN_SWALLOWS with a
-# recorded reason.
-# Triage outcome 2026-08-19 (AD-LAW-1f): the stft/istft/spectral_conv
-# entries left this set because their hand-written JVPs were DELETED —
-# all three are (multi)linear, so the JVP is now derived from the
-# forward (linear.py) and honors every configuration key by
-# construction. See test_spectral_jvps_are_derived_from_the_forward.
-_OPEN_SWALLOW_FINDINGS = {
-    # istft only — stft/spectral_conv left via derivation (see note above);
-    # istft keeps a hand rule for its window quotient, so closing these
-    # needs a config-honoring rewrite that preserves it (own slice).
-    ("istft", "jvp", "axis"),
-    ("istft", "jvp", "center"),
-    ("istft", "jvp", "hop_length"),
-    ("istft", "jvp", "length"),
-    ("istft", "jvp", "norm"),
-    ("istft", "jvp", "normalization"),
-    ("istft", "jvp", "onesided"),
-}
+# _OPEN_SWALLOW_FINDINGS: rules where one mode declares a keyword-only key
+# the sibling swallows via `**_`. **This class is now CLOSED** across the
+# registry — the triage record:
+#   * AD-LAW-1b: clamp/clip alias deafness, add/mul unary-`scalar`, and the
+#     fft/ifft/rfft/irfft `norm` family, fixed in place.
+#   * AD-LAW-1f: stft and spectral_conv hand JVPs DELETED — both are
+#     bilinear, so the JVP is derived from the forward (linear.py) and
+#     honors every key by construction.
+#   * AD-LAW-1g: the five quantize STE keys, verified derivative-invariant
+#     and moved to _BENIGN_SWALLOWS with evidence.
+#   * AD-LAW-1h: jvp_istft rewritten to honor every key by construction
+#     (each term comes from the canonical forward) while preserving its
+#     window quotient — see test_istft_jvp_honors_every_config_key.
+# Do not add entries: fix the rule, or move it to _BENIGN_SWALLOWS with a
+# recorded reason. A NEW entry here means the gate caught a fresh instance.
+_OPEN_SWALLOW_FINDINGS: set[tuple[str, str, str]] = set()
 
 _KNOWN_SWALLOWED_KWARGS = _OPEN_SWALLOW_FINDINGS | set(_BENIGN_SWALLOWS)
 
@@ -828,10 +819,6 @@ def test_forward_mode_positional_config_matches_keyword():
 # both modes now READ the key so the per-block scale expands exactly
 # as the canonical forward blocks it (before, both crashed outright).
 _OPEN_FORWARD_KEY_SWALLOWS = {
-    ("istft", "jvp", "axis"),
-    ("istft", "jvp", "center"),
-    ("istft", "jvp", "norm"),
-    ("istft", "jvp", "onesided"),
     ("adam", "jvp", "cast_updates_to_param_dtype"),
     ("adam", "jvp", "compute_dtype"),
     ("adam", "jvp", "state_dtype"),
@@ -1112,32 +1099,71 @@ def test_spectral_ops_pass_the_adjoint_law(sweep):
         assert rows[op].status == "pass", f"{op}: {rows[op].status} {rows[op].detail}"
 
 
-def test_istft_keeps_a_hand_rule_and_its_findings_stay_open():
-    """AD-LAW-1f negative result, recorded rather than papered over: `istft`
-    was briefly derived from the forward alongside stft/spectral_conv, and
-    that was WRONG — it is linear in the spectrum but its normalized
-    overlap-add divides by a window-energy term, so derivation silently
-    zeroed the window tangent that `jvp_istft` computes and
-    test_jax_transforms.py pins. It therefore keeps its hand-written rule,
-    is NOT declared multilinear, and its configuration-key swallows stay
-    pinned open — closing them needs a config-honoring rewrite that
-    preserves the window quotient."""
-    from tessera.autodiff.linear import MULTILINEAR_PRIMITIVES
+def test_istft_jvp_honors_every_config_key():
+    """AD-LAW-1h closes the last pinned swallow group.
 
-    assert "istft" not in MULTILINEAR_PRIMITIVES
-    assert ("istft", "jvp", "norm") in _OPEN_SWALLOW_FINDINGS
-    assert ("istft", "jvp", "center") in _OPEN_FORWARD_KEY_SWALLOWS
+    `jvp_istft` used to reimplement the transform: it pinned axis=-1,
+    onesided=True, norm="backward" and dropped `center`/`length`, so it
+    differentiated a different function than the forward for any non-default
+    configuration — while `vjp_istft` honored all of them. It could not
+    simply be derived (as stft/spectral_conv were in AD-LAW-1f) because
+    istft's normalized overlap-add is NOT linear in the window.
 
-    # The window tangent the derivation would have lost is still computed.
+    The rewrite takes each term from the canonical forward itself — the
+    spectrum term is the forward applied to the tangent (exact, since the
+    map is linear there), and the window term is the quotient rule with only
+    the FFT-free window overlap sums computed locally. So every key is
+    honored by construction, and the window quotient is preserved.
+    """
+    import itertools
+
+    from tessera import ops
     from tessera.autodiff.jvp import _JVPS
 
-    rng = np.random.default_rng(411)
-    X = rng.normal(size=(3, 5)) + 1j * rng.normal(size=(3, 5))
-    win = np.hanning(8) + 0.25
-    _, tangent = _JVPS["istft"]((X, win),
-                                (np.zeros_like(X), rng.normal(size=win.shape)),
-                                n_fft=8, hop=4)
-    assert np.any(np.abs(tangent) > 1e-9), "window tangent is identically zero"
+    fwd = getattr(ops.istft, "__wrapped__", ops.istft)
+    rng = np.random.default_rng(21)
+    X = rng.standard_normal((13, 9)) + 1j * rng.standard_normal((13, 9))
+    win = np.hanning(16) + 0.25
+    dX = rng.standard_normal((13, 9)) + 1j * rng.standard_normal((13, 9))
+    dwin = rng.standard_normal(16)
+    eps = 1e-6
+
+    # The keys must actually change the answer, or this proves nothing.
+    assert not np.allclose(fwd(X, win, hop=4, norm="backward"),
+                           fwd(X, win, hop=4, norm="ortho"))
+    assert (fwd(X, win, hop=4, center=True).shape
+            != fwd(X, win, hop=4).shape)
+
+    for center, norm, length in itertools.product(
+            (False, True), ("backward", "ortho"), (None, 40)):
+        cfg = {"hop": 4, "center": center, "norm": norm, "length": length}
+        y, dy = _JVPS["istft"]((X, win), (dX, dwin), **cfg)
+        np.testing.assert_allclose(y, fwd(X, win, **cfg), atol=1e-12,
+                                   err_msg=f"primal mismatch at {cfg}")
+        fd = (fwd(X + eps * dX, win + eps * dwin, **cfg)
+              - fwd(X - eps * dX, win - eps * dwin, **cfg)) / (2 * eps)
+        rel = np.max(np.abs(dy - fd)) / (np.max(np.abs(fd)) + 1e-12)
+        assert rel < 1e-6, f"tangent vs FD rel={rel:.2e} at {cfg}"
+
+    # The window tangent — which a naive derivation would have zeroed — is
+    # still computed, and a non-default `axis` on rank-3 input works.
+    _, dy = _JVPS["istft"]((X, win), (np.zeros_like(X), dwin), hop=4)
+    assert np.any(np.abs(dy) > 1e-9), "window tangent is identically zero"
+
+    X3 = rng.standard_normal((2, 13, 9)) + 1j * rng.standard_normal((2, 13, 9))
+    dX3 = rng.standard_normal((2, 13, 9)) + 1j * rng.standard_normal((2, 13, 9))
+    for axis in (-1, 2):
+        cfg = {"hop": 4, "axis": axis}
+        y, dy = _JVPS["istft"]((X3, win), (dX3, dwin), **cfg)
+        fd = (fwd(X3 + eps * dX3, win + eps * dwin, **cfg)
+              - fwd(X3 - eps * dX3, win - eps * dwin, **cfg)) / (2 * eps)
+        assert np.max(np.abs(dy - fd)) / (np.max(np.abs(fd)) + 1e-12) < 1e-6
+
+
+def test_swallow_class_is_closed():
+    """The headline of AD-LAW-1b/f/g/h: no rule in either registry now
+    swallows a key its sibling declares. A new entry means a regression."""
+    assert _OPEN_SWALLOW_FINDINGS == set()
 
 
 # ── AD-LAW-1g: the quantize family ───────────────────────────────────────────

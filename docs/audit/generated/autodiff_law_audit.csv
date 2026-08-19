@@ -197,7 +197,7 @@ tensor,info_nce_loss,adjoint,no_spec,0
 tensor,instance_norm,adjoint,pass,4
 tensor,interpolate,adjoint,no_spec,0
 tensor,irfft,adjoint,pass,4
-tensor,istft,adjoint,no_spec,0
+tensor,istft,adjoint,pass,4
 tensor,js_divergence,adjoint,pass,4
 tensor,js_divergence,chain,pass,2
 tensor,kimi_delta_attention,adjoint,no_spec,0

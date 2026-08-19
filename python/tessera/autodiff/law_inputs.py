@@ -353,6 +353,13 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
                                     {"norm": "ortho"}),
                        diff_args=(0, 1), chain=False,
                        note="bilinear in (signal, kernel)"),
+    "istft": S(lambda rng: ((rng.standard_normal((13, 9))
+                             + 1j * rng.standard_normal((13, 9)),
+                             np.hanning(16) + 0.25),
+                            {"hop": 4, "center": True, "norm": "ortho"}),
+               diff_args=(0, 1), chain=False, rtol=1e-6,
+               note="non-default config on purpose (AD-LAW-1h): the old JVP "
+                    "pinned axis/onesided/norm and dropped center/length"),
 
     # ── AD-LAW-1g: quantize family (straight-through estimator) ─────────────
     # STE rules: the tangent flows through unchanged, so the derivative is

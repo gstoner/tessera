@@ -235,7 +235,7 @@ is_concyclic,3,0,0,3,0,,directly_tested,3 direct test references
 isfinite,7,0,0,7,0,f32 fp16 fp32,directly_tested,7 direct test references
 isinf,4,0,0,4,0,f32 fp16 fp32,directly_tested,4 direct test references
 isnan,7,0,0,7,0,bf16 f32 fp16 fp32 fp4_e2m1 fp8_e4m3 int32,directly_tested,7 direct test references
-istft,33,5,1,38,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,38 direct test references
+istft,35,5,1,40,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,40 direct test references
 iterable_dataset,1,0,0,1,1,,structural_only,category default for 'data'
 js_divergence,13,1,1,14,0,,directly_tested,14 direct test references
 jvp,0,3,0,3,0,,directly_tested,3 direct test references

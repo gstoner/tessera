@@ -15,8 +15,8 @@ are real unswept debt, not exclusions.
 
 | Law | Status | Ops |
 |---|---|---:|
-| adjoint | no_spec | 174 |
-| adjoint | pass | 117 |
+| adjoint | no_spec | 173 |
+| adjoint | pass | 118 |
 | adjoint | vjp_only | 17 |
 | chain | not_applicable | 1 |
 | chain | pass | 87 |
@@ -30,4 +30,4 @@ are real unswept debt, not exclusions.
 
 ## Checked tensor ops
 
-`abs`, `absolute`, `acos`, `add`, `amax`, `amin`, `asin`, `atan`, `atan2`, `attn_sliding_window`, `batched_gemm`, `binary_cross_entropy_loss`, `cast`, `clamp`, `clip`, `cos`, `cosh`, `cross_entropy_loss`, `cummax`, `cummin`, `cumprod`, `cumsum`, `dequantize_nvfp4`, `digamma`, `div`, `einsum`, `erf`, `erfc`, `exp`, `expand`, `expm1`, `fft`, `flash_attn`, `flatten`, `flip`, `gather`, `gelu`, `gemm`, `group_norm`, `huber_loss`, `ifft`, `index_select`, `instance_norm`, `irfft`, `js_divergence`, `kl_divergence`, `label_smoothed_cross_entropy`, `layer_norm`, `lgamma`, `linear_attn`, `log`, `log1p`, `log_cosh_loss`, `log_softmax`, `logsumexp`, `mae_loss`, `masked_fill`, `matmul`, `max`, `maximum`, `mean`, `min`, `minimum`, `mod`, `mse_loss`, `mul`, `pad`, `permute`, `pow`, `power_attn`, `prod`, `qkv_projection`, `quantize_fp4`, `quantize_fp6`, `quantize_int4`, `quantize_int8`, `quantize_nvfp4`, `reciprocal`, `relu`, `repeat`, `reshape`, `retention`, `rfft`, `rmsnorm`, `rmsnorm_safe`, `roll`, `rope`, `rope_merge`, `rsqrt`, `segment_reduce`, `sigmoid`, `sigmoid_safe`, `sign`, `silu`, `silu_mul`, `sin`, `sinh`, `smooth_l1_loss`, `softcap`, `softmax`, `softmax_safe`, `softplus`, `spectral_conv`, `sqrt`, `squeeze`, `std`, `stft`, `sub`, `sum`, `take`, `tan`, `tanh`, `tile`, `transpose`, `unsqueeze`, `var`, `where`, `z_loss`
+`abs`, `absolute`, `acos`, `add`, `amax`, `amin`, `asin`, `atan`, `atan2`, `attn_sliding_window`, `batched_gemm`, `binary_cross_entropy_loss`, `cast`, `clamp`, `clip`, `cos`, `cosh`, `cross_entropy_loss`, `cummax`, `cummin`, `cumprod`, `cumsum`, `dequantize_nvfp4`, `digamma`, `div`, `einsum`, `erf`, `erfc`, `exp`, `expand`, `expm1`, `fft`, `flash_attn`, `flatten`, `flip`, `gather`, `gelu`, `gemm`, `group_norm`, `huber_loss`, `ifft`, `index_select`, `instance_norm`, `irfft`, `istft`, `js_divergence`, `kl_divergence`, `label_smoothed_cross_entropy`, `layer_norm`, `lgamma`, `linear_attn`, `log`, `log1p`, `log_cosh_loss`, `log_softmax`, `logsumexp`, `mae_loss`, `masked_fill`, `matmul`, `max`, `maximum`, `mean`, `min`, `minimum`, `mod`, `mse_loss`, `mul`, `pad`, `permute`, `pow`, `power_attn`, `prod`, `qkv_projection`, `quantize_fp4`, `quantize_fp6`, `quantize_int4`, `quantize_int8`, `quantize_nvfp4`, `reciprocal`, `relu`, `repeat`, `reshape`, `retention`, `rfft`, `rmsnorm`, `rmsnorm_safe`, `roll`, `rope`, `rope_merge`, `rsqrt`, `segment_reduce`, `sigmoid`, `sigmoid_safe`, `sign`, `silu`, `silu_mul`, `sin`, `sinh`, `smooth_l1_loss`, `softcap`, `softmax`, `softmax_safe`, `softplus`, `spectral_conv`, `sqrt`, `squeeze`, `std`, `stft`, `sub`, `sum`, `take`, `tan`, `tanh`, `tile`, `transpose`, `unsqueeze`, `var`, `where`, `z_loss`

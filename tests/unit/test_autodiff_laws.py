@@ -1325,12 +1325,18 @@ def test_law4_catches_a_wrong_recurrence():
             w[2] = w[2] * 1.05                    # 5% error at order 2
         return w
 
-    A.SCALAR_RECURRENCES["tanh"] = A.ScalarRecurrence(
-        good.value, good.derivative_expr, wrong_jet)
+    saved = dict(A.SCALAR_RECURRENCES)
     try:
+        # Restrict the table so the random program MUST select the corrupted
+        # primitive — with a dozen entries it might otherwise never pick it,
+        # and the mutation test would pass for the wrong reason.
+        A.SCALAR_RECURRENCES.clear()
+        A.SCALAR_RECURRENCES["tanh"] = A.ScalarRecurrence(
+            good.value, good.derivative_expr, wrong_jet)
         r = quotient_check(3)
     finally:
-        A.SCALAR_RECURRENCES["tanh"] = good
+        A.SCALAR_RECURRENCES.clear()
+        A.SCALAR_RECURRENCES.update(saved)
     assert r.status == "fail", "Law 4 did not catch a wrong recurrence"
 
 
@@ -1425,6 +1431,14 @@ def test_derivative_datum_is_declared_once():
             "tanh": 1.0 - _np.tanh(x) ** 2,
             "sin": _np.cos(x),
             "cos": -_np.sin(x),
+            "sqrt": 0.5 / _np.sqrt(x),
+            "reciprocal": -1.0 / x ** 2,
+            "sinh": _np.cosh(x),
+            "cosh": _np.sinh(x),
+            "atan": 1.0 / (1.0 + x * x),
+            "expm1": _np.exp(x),
+            "log1p": 1.0 / (1.0 + x),
+            "sigmoid": (lambda s: s * (1 - s))(1.0 / (1.0 + _np.exp(-x))),
         }[name]
         _np.testing.assert_allclose(df(x), analytic, rtol=1e-14)
 
@@ -1443,14 +1457,17 @@ def test_derivative_datum_is_declared_once():
             w[n] = acc / (2 * w[0])
         return w
 
-    A.SCALAR_RECURRENCES["sqrt"] = A.ScalarRecurrence(
+    # A name deliberately NOT already in the table, so this probes
+    # extensibility rather than mutating a shipped entry.
+    A.SCALAR_RECURRENCES["synthetic_root"] = A.ScalarRecurrence(
         _np.sqrt,
-        lambda o, x: o.mul(0.5, o.reciprocal(o.apply("sqrt", x))),
+        lambda o, x: o.mul(0.5, o.reciprocal(
+            o.apply("synthetic_root", x))),
         _jet_sqrt)
     try:
         r = quotient_check(3)
     finally:
-        del A.SCALAR_RECURRENCES["sqrt"]
+        del A.SCALAR_RECURRENCES["synthetic_root"]
     assert r.status == "pass", f"new primitive broke Law 4: {r.detail}"
 
 
@@ -1490,3 +1507,178 @@ def test_tie_mass_target_follows_the_declared_group_count():
     wrong = KinkSpec(two_row_probe, spec.kink_mask, "split", tie_groups=1)
     r2 = kink_check("amax", wrong, _VJPS["amax"], _JVPS.get("amax"))
     assert r2.status == "fail" and "mass not conserved" in r2.detail, r2
+
+
+# ── AD-WEIL-1 + Law 6 ────────────────────────────────────────────────────────
+
+
+def test_generic_substrate_reproduces_clifford_exactly():
+    """W6.3's named open question, answered with evidence.
+
+    The integrated plan asks whether one finite-multiplication-table
+    substrate can carry both arbitrary commutative nilpotent Weil algebras
+    and the Clifford algebras `ga/signature.py` implements, and W6.4 says to
+    treat the reuse as a hypothesis to PROVE. Both families are monomial —
+    a product of basis elements is one basis element times a scalar — so a
+    single structure-constant table serves both. Cross-checked against `ga`'s
+    own `geometric_product` as oracle on every allowed signature.
+    """
+    from tessera.autodiff.algebra import (TruncatedJet, clifford_table,
+                                          weil_table)
+    from tessera.ga import Multivector, geometric_product
+    from tessera.ga.signature import V1_ALLOWED_SIGNATURES, Cl
+
+    rng = np.random.default_rng(11)
+
+    # Weil half: the generic table reproduces TruncatedJet's product exactly.
+    for k in (1, 2, 3, 4, 5):
+        A, W = weil_table(k), TruncatedJet(k)
+        a = [np.asarray(v) for v in rng.standard_normal(k + 1)]
+        b = [np.asarray(v) for v in rng.standard_normal(k + 1)]
+        for lhs, rhs in zip(A.mul(a, b), W.mul(a, b)):
+            assert float(lhs) == float(rhs)
+
+    # Clifford half: exact against the GA oracle, on both allowed signatures.
+    for (p, q, r) in sorted(V1_ALLOWED_SIGNATURES):
+        alg, A = Cl(p, q, r), clifford_table(p, q, r)
+        assert A.dim == alg.dim
+        for _ in range(10):
+            ca, cb = rng.standard_normal(alg.dim), rng.standard_normal(alg.dim)
+            ref = np.asarray(
+                geometric_product(Multivector(ca, alg),
+                                  Multivector(cb, alg)).coefficients,
+                dtype=np.float64)
+            got = np.array([float(v) for v in
+                            A.mul([np.asarray(v) for v in ca],
+                                  [np.asarray(v) for v in cb])])
+            np.testing.assert_allclose(got, ref, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("name", sorted(__import__(
+    "tessera.autodiff.algebra", fromlist=["x"]).SCALAR_RECURRENCES))
+def test_ode_table_entry_matches_registered_jvp_and_nested_duals(name):
+    """AD-WEIL-1's core claim, per primitive: ONE datum reproduces the
+    existing first-order rule AND extends to every order.
+
+    k=1 is checked against the *registered production JVP* (so the table
+    cannot drift from what the compiler actually uses), and k=2..4 against
+    the nested-dual tower (so the higher orders are not self-certified).
+    """
+    import math
+
+    from tessera.autodiff.algebra import (SCALAR_RECURRENCES, TruncatedJet,
+                                          _NestedScalarOps,
+                                          nested_dual_derivative)
+    from tessera.autodiff.jvp import _JVPS
+
+    # Domain-aware evaluation points.
+    x = {"log": 1.7, "log1p": 0.6, "sqrt": 2.3, "reciprocal": 1.9,
+         "sigmoid": 0.4, "atan": 0.5}.get(name, 0.37)
+
+    W = TruncatedJet(4)
+    w = SCALAR_RECURRENCES[name].jet(
+        W, W.lift(np.asarray(x), np.asarray(1.0)))
+
+    jvp = _JVPS.get(name)
+    if jvp is not None:
+        _, dy = jvp((np.asarray([x]),), (np.asarray([1.0]),))
+        np.testing.assert_allclose(float(np.ravel(dy)[0]), float(w[1]),
+                                   rtol=1e-12,
+                                   err_msg=f"{name}: k=1 differs from the "
+                                           f"registered JVP")
+
+    ops = _NestedScalarOps()
+    for n in (2, 3, 4):
+        ref = nested_dual_derivative(
+            lambda t, o, _n=name: o._apply(_n, t), x, n)
+        got = float(w[n]) * math.factorial(n)
+        np.testing.assert_allclose(got, ref, rtol=1e-10,
+                                   err_msg=f"{name}: order {n} differs from "
+                                           f"the nested tower")
+
+
+def test_conditioning_envelope_is_measured_not_assumed():
+    """The plan's §3.8 gates IR investment on this measurement, and the
+    measurement CORRECTS the plan: monomial jets were expected to go
+    conditioning-limited "past ~order 10-15". They do not — the Taylor
+    convention keeps the recurrences on scaled coefficients, so relative
+    accuracy holds at ~1e-16 through k=30. The real limits are elsewhere:
+    recovering `k! * w_k` overflows float64 near k=175, and a small radius of
+    convergence inflates the coefficients themselves.
+    """
+    import math
+
+    from tessera.autodiff.algebra import SCALAR_RECURRENCES, TruncatedJet
+
+    for k in (4, 12, 20, 30):
+        W = TruncatedJet(k)
+        w = SCALAR_RECURRENCES["exp"].jet(
+            W, W.lift(np.asarray(0.7), np.asarray(1.0)))
+        got = float(w[k]) * math.factorial(k)
+        rel = abs(got - math.exp(0.7)) / math.exp(0.7)
+        assert rel < 1e-13, f"order {k} degraded to {rel:.2e}"
+
+    # Accuracy holds even where the coefficients are huge (small radius).
+    W = TruncatedJet(20)
+    w = SCALAR_RECURRENCES["reciprocal"].jet(
+        W, W.lift(np.asarray(0.15), np.asarray(1.0)))
+    exact = [(-1) ** n / 0.15 ** (n + 1) for n in range(21)]
+    assert abs(float(w[20])) > 1e16          # dynamic range, not error
+    for n in range(21):
+        assert abs(float(w[n]) - exact[n]) / abs(exact[n]) < 1e-13
+
+
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+def test_law6_enclosure_contains_the_exact_jet(order):
+    """Law 6a: an outward-rounded interval is a certificate — the exact jet
+    must lie inside it. One escape is a failure, because a certificate that
+    can miss the truth is worse than none."""
+    from tessera.autodiff.laws import enclosure_check
+
+    r = enclosure_check(order)
+    assert r.status == "pass", r
+    assert r.max_rel_residual < 1e-12, f"interval too loose: {r.detail}"
+
+
+def test_law6_unbiasedness_checks_convergence_not_tolerance():
+    """Law 6b: the randomized-jet Laplacian estimator is unbiased, asserted
+    through the SHAPE of its convergence (error falls like 1/sqrt(N)). A
+    biased estimator plateaus, which a single-N tolerance check would
+    accept."""
+    from tessera.autodiff.laws import unbiasedness_check
+
+    r = unbiasedness_check()
+    assert r.status == "pass", r
+
+
+def test_law6_enclosure_catches_an_unsound_interval():
+    """Mutation: an interval algebra that rounds INWARD produces intervals
+    that can miss the exact value — exactly the failure a certificate must
+    never have."""
+    from tessera.autodiff import algebra as A
+    from tessera.autodiff.laws import enclosure_check
+
+    original = A.TaylorModel._widen
+    try:
+        # Round inward instead of outward.
+        A.TaylorModel._widen = lambda self, lo, hi: (
+            np.nextafter(lo, np.inf), np.nextafter(hi, -np.inf))
+        r = enclosure_check(3, trials=200)
+    finally:
+        A.TaylorModel._widen = original
+    assert r.status == "fail", "unsound (inward-rounded) intervals passed"
+
+
+def test_estimator_is_deterministic_under_a_fixed_seed():
+    """Decision #18: Philox streams make the estimator replayable, which is
+    what turns 'unbiased estimator' from folklore into a testable contract."""
+    from tessera.autodiff.algebra import hutchinson_laplacian
+    from tessera.rng import RNGKey
+
+    def quad(lifted, W):
+        sq = W.mul(lifted, lifted)
+        return [sq[i] + 3.0 * lifted[i] for i in range(len(lifted))]
+
+    a = hutchinson_laplacian(quad, np.zeros(5), RNGKey(7), 32)
+    b = hutchinson_laplacian(quad, np.zeros(5), RNGKey(7), 32)
+    assert a == b

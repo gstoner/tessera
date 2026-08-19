@@ -37,9 +37,11 @@ __all__ = [
     "LawResult",
     "adjoint_check",
     "chain_check",
+    "enclosure_check",
     "homomorphism_check",
     "kink_check",
     "quotient_check",
+    "unbiasedness_check",
     "op_rng",
     "run_law_sweep",
 ]
@@ -377,6 +379,8 @@ def run_law_sweep() -> list[LawResult]:
     for _order in (1, 2, 3, 4):
         results.append(homomorphism_check(_order))
         results.append(quotient_check(_order))
+        results.append(enclosure_check(_order))
+    results.append(unbiasedness_check())
 
     try:
         from .geometric.registry import _JVPS_GEO, _VJPS_GEO
@@ -556,13 +560,43 @@ def _eval_program(ops, x, W):
         elif kind == "square":
             cur = W.mul(cur, cur)
         else:
-            # Keep transcendental arguments in a sane range.
-            if arg == "log":
-                shift = W.lift(np.asarray(4.0), np.asarray(0.0))
-                cur = W.mul(cur, cur)
-                cur = W.add(cur, shift)
+            cur = _guard_jet(W, arg, cur)
             cur = W.scalar_fn(arg, cur)
     return cur
+
+
+class _JetOps:
+    """`_Ops` over a jet algebra, so a declared guard evaluates here too."""
+
+    def __init__(self, W):
+        self.W = W
+
+    def apply(self, name, x):
+        return self.W.scalar_fn(name, x)
+
+    def mul(self, a, b):
+        return self.W.mul(self._lift(a), self._lift(b))
+
+    def add(self, a, b):
+        return self.W.add(self._lift(a), self._lift(b))
+
+    def neg(self, a):
+        return self.mul(-1.0, a)
+
+    def reciprocal(self, a):
+        return self.W.scalar_fn("reciprocal", self._lift(a))
+
+    def _lift(self, v):
+        if isinstance(v, (list, tuple)):
+            return v
+        return self.W.lift(np.asarray(float(v)), np.asarray(0.0))
+
+
+def _guard_jet(W, name, cur):
+    from .algebra import SCALAR_RECURRENCES
+
+    guard = SCALAR_RECURRENCES[name].guard_expr
+    return cur if guard is None else guard(_JetOps(W), cur)
 
 
 def homomorphism_check(order: int, trials: int = 8,
@@ -653,14 +687,21 @@ def quotient_check(order: int, trials: int = 6,
                     elif kind == "square":
                         cur = cur * cur
                     else:
-                        if arg == "log":
-                            cur = cur * cur + 4.0
+                        from .algebra import SCALAR_RECURRENCES
+                        guard = SCALAR_RECURRENCES[arg].guard_expr
+                        if guard is not None:
+                            cur = guard(scalar_ops, cur)
                         cur = scalar_ops._apply(arg, cur)
                 return cur
 
             for j in range(1, order + 1):
                 ref = nested_dual_derivative(program, x0, j)
                 got = float(np.asarray(jet[j])) * math.factorial(j)
+                if not (np.isfinite(got) and np.isfinite(ref)):
+                    return LawResult(f"W{order}", registry, "quotient", "fail",
+                                     trials, None,
+                                     "non-finite value in the comparison — a "
+                                     "domain guard is missing or wrong")
                 denom = max(abs(ref), 1.0)
                 worst = max(worst, abs(got - ref) / denom)
 
@@ -670,3 +711,84 @@ def quotient_check(order: int, trials: int = 6,
     except Exception as e:  # noqa: BLE001
         return LawResult(f"W{order}", registry, "quotient", "rule_error", 0,
                          None, f"{type(e).__name__}: {e}")
+
+
+# ── Law 6: enclosures and unbiasedness ───────────────────────────────────────
+# These change the TYPE of the correctness claim. Laws 1-5 assert equalities;
+# here the claims are "the exact value lies in this interval" and "this is an
+# unbiased estimator of the operator". Both are testable, and neither is
+# expressible as an equality — which is why the plan gives them their own row.
+
+
+def enclosure_check(order: int, trials: int = 60,
+                    registry: str = "algebra") -> LawResult:
+    """Law 6a — a `TaylorModel` interval provably contains the exact jet.
+
+    Runs the same program through the exact jet algebra and the outward-
+    rounded interval algebra and asserts containment coefficient by
+    coefficient. A certificate that did not contain the truth would be worse
+    than no certificate, so a single escape is a failure.
+    """
+    from .algebra import TaylorModel, TruncatedJet
+
+    TM, W = TaylorModel(order), TruncatedJet(order)
+    rng = op_rng(f"W{order}", "enclosure")
+    try:
+        escapes = 0
+        widest = 0.0
+        for _ in range(trials):
+            x = float(rng.standard_normal())
+            c = float(rng.standard_normal())
+            m = TM.mul(TM.add(TM.lift(x, 1.0), TM.lift(c, 0.0)), TM.lift(x, 1.0))
+            j = W.mul(W.add(W.lift(np.asarray(x), np.asarray(1.0)),
+                            W.lift(np.asarray(c), np.asarray(0.0))),
+                      W.lift(np.asarray(x), np.asarray(1.0)))
+            for i in range(order + 1):
+                if not TM.contains(m, float(j[i]), i):
+                    escapes += 1
+                widest = max(widest, float(m[1][i] - m[0][i]))
+        status = "pass" if escapes == 0 else "fail"
+        return LawResult(f"W{order}", registry, "enclosure", status, trials,
+                         widest,
+                         f"{escapes} escape(s); widest interval {widest:.2e}")
+    except Exception as e:  # noqa: BLE001
+        return LawResult(f"W{order}", registry, "enclosure", "rule_error", 0,
+                         None, f"{type(e).__name__}: {e}")
+
+
+def unbiasedness_check(registry: str = "algebra") -> LawResult:
+    """Law 6b — the randomized-jet Laplacian estimator is unbiased.
+
+    Asserts the property that actually defines the estimator, not a
+    tolerance: the error must fall like ``1/sqrt(N)``. A *biased* estimator
+    would plateau instead, which a single-N tolerance check would happily
+    accept. Draws come from the Philox stream, so this is deterministic and
+    replayable (Decision #18) rather than a flaky statistical test.
+    """
+    from ..rng import RNGKey
+    from .algebra import hutchinson_laplacian
+
+    try:
+        n = 6
+        x = np.zeros(n)
+        exact = 2.0 * n           # f = sum(x^2) + 3 sum(x)  =>  Laplacian 2n
+
+        def quad(lifted, W):
+            sq = W.mul(lifted, lifted)
+            return [sq[i] + 3.0 * lifted[i] for i in range(len(lifted))]
+
+        errs = []
+        for s in (64, 1024):
+            est = hutchinson_laplacian(quad, x, RNGKey(0), s)
+            errs.append(abs(est - exact))
+        # 16x the samples should cut the error ~4x; allow a wide factor so the
+        # test checks the SHAPE of convergence, not a lucky draw.
+        ratio = errs[0] / max(errs[1], 1e-12)
+        status = "pass" if ratio > 2.0 else "fail"
+        return LawResult("hutchinson", registry, "unbiasedness", status, 2,
+                         ratio,
+                         f"error {errs[0]:.3f} -> {errs[1]:.3f} over 16x "
+                         f"samples (ratio {ratio:.2f}, 1/sqrt(N) predicts 4)")
+    except Exception as e:  # noqa: BLE001
+        return LawResult("hutchinson", registry, "unbiasedness", "rule_error",
+                         0, None, f"{type(e).__name__}: {e}")

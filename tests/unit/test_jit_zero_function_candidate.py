@@ -334,7 +334,12 @@ class TestRecoveredABIPreservesPythonCallSemantics:
 
         return f
 
+    @pytest.mark.hardware_apple_gpu
     def test_valid_positional_and_keyword_calls_still_run(self):
+        """Hardware-gated: this one actually EXECUTES the `fori_loop`, so it
+        needs a real Apple control-flow lane. The invalid-call tests below are
+        not gated — binding is rejected before execution, so they carry the
+        regression protection on every host, which is where it matters."""
         f = self._fn()
         x = np.array([1.0, 2.0, 4.0], dtype=np.float32)
         np.testing.assert_allclose(np.asarray(f(x)), x * 4.0)

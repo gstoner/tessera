@@ -1029,6 +1029,45 @@ def jit_trace(on: bool = True):
         _JIT_TRACE[0] = prev
 
 
+class TesseraCallBindingError(TypeError):
+    """A call the function's own signature rejects.
+
+    Subclasses ``TypeError`` so ``except TypeError`` keeps working exactly as it
+    does for a plain Python call -- the point is to preserve those semantics,
+    not to invent a new contract. It is a distinct type only so the apple_gpu
+    tracer's diagnostic wrapper can tell a caller error from a tracer failure
+    and let it through unwrapped; reporting "the tracer could not execute this"
+    for a misspelled keyword would name the wrong culprit.
+    """
+
+
+def _reject_invalid_call_binding(fn: Callable, args: tuple, kwargs: dict) -> None:
+    """Raise for a call Python itself would reject, before the tracer sees it.
+
+    ``run_jit_traced`` rebuilds the tracer's positional inputs by matching
+    keyword names against the recovered ABI, and a keyword matching no parameter
+    is simply never appended. On its own that turns a misspelled option into a
+    silent trace against the parameter's DEFAULT — ``f(x=x, scael=2)`` on
+    ``def f(x, scale=1)`` returned a result computed with ``scale=1`` where a
+    plain Python call raises ``TypeError``. A wrong number is worse than an
+    error, so bind against the real signature first: that restores unexpected
+    keyword, duplicate, missing-required, and positional-/keyword-only errors in
+    one step instead of re-deriving each rule here (Decision #30).
+
+    Fail-soft on introspection only. A callable whose signature cannot be read
+    (a builtin, a C extension, a ``*args``-only wrapper) is left exactly as
+    permissive as it was rather than newly rejected.
+    """
+    try:
+        signature = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return
+    try:
+        signature.bind(*args, **kwargs)
+    except TypeError as exc:
+        raise TesseraCallBindingError(str(exc)) from None
+
+
 def run_jit_traced(jitfn: Any, args: tuple, kwargs: dict):
     """Execute a control-flow `@jit(target="apple_gpu")` function via the tracer
     (F5). Reached only for functions ``function_needs_tracer`` flagged — straight-
@@ -1036,6 +1075,7 @@ def run_jit_traced(jitfn: Any, args: tuple, kwargs: dict):
     ``jitfn._fn`` (concrete, full vocab); explicit ``tessera.control.*`` runs via
     ``execute_traced`` (fused ``run_graph_*``); a raw ``for _ in range(N)``
     unrolls to a straight-line trace and runs via the GraphFn lane."""
+    _reject_invalid_call_binding(jitfn._fn, args, kwargs)
     names = list(getattr(jitfn, "arg_names", []) or [])
     ordered: List[Any] = list(args)
     for nm in names[len(ordered):]:

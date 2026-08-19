@@ -4150,6 +4150,22 @@ def jvp_istft(primals, tangents, **kwargs):
         dy = trim( [ A(X, dw) - (A/B) * 2*OLA(w_pad*dw_pad) ] / B(w) )
              + forward(dX, w)                     # A is linear in X
 
+    **Declared numerical contract at the denominator floor (#21a).** The
+    forward divides by ``max(OLA(w_pad**2), 1e-12)``. That floor is a *kink in
+    the window argument*: where the overlap-add weight is below it the forward
+    divides by a constant, and the window derivative is one-sided. A window
+    with exact zero endpoints — ``np.hanning(n)``, the canonical choice —
+    puts the first and last output positions in exactly that region, where
+    this rule returns a tangent of order ``1/1e-12``. Those values are
+    *correct for the clamped function* (verified to ~1e-16 relative against a
+    central difference in
+    ``test_istft_window_tangent_at_the_denominator_floor``), but their
+    magnitude is an artifact of the floor rather than of the mathematics, so a
+    caller optimizing a window should mask or regularize the clamped
+    positions rather than treat them as ordinary gradients. Stated here
+    because a silent 1e10 gradient component is precisely the kind of
+    semantic choice Decision #21a forbids leaving implicit.
+
     Every FFT-flavoured key (`axis`, `onesided`, `norm`, `n_fft`) is honored
     **by construction**, because each term is obtained from the canonical
     forward itself rather than from a reimplementation — the previous rule

@@ -1317,7 +1317,7 @@ def test_law4_catches_a_wrong_recurrence():
     from tessera.autodiff import algebra as A
     from tessera.autodiff.laws import quotient_check
 
-    good = SCALAR = A.SCALAR_RECURRENCES["tanh"]
+    good = A.SCALAR_RECURRENCES["tanh"]
 
     def wrong_jet(W, u):
         w = good.jet(W, u)
@@ -1325,7 +1325,8 @@ def test_law4_catches_a_wrong_recurrence():
             w[2] = w[2] * 1.05                    # 5% error at order 2
         return w
 
-    A.SCALAR_RECURRENCES["tanh"] = A.ScalarRecurrence(good.pointwise, wrong_jet)
+    A.SCALAR_RECURRENCES["tanh"] = A.ScalarRecurrence(
+        good.value, good.derivative_expr, wrong_jet)
     try:
         r = quotient_check(3)
     finally:
@@ -1360,3 +1361,132 @@ def test_jet_dimension_is_k_plus_one_not_two_to_the_k():
 
         assert count(generic(k)) == 2 ** k
     # At k=5 that is 6 coefficients versus 32 — a 5.3x gap that widens.
+
+
+def test_istft_window_tangent_at_the_denominator_floor():
+    """Covers the region every other istft test dodges (review finding).
+
+    The forward divides by `max(OLA(w**2), 1e-12)`. A window with exact zero
+    endpoints — `np.hanning(n)`, the canonical choice — puts the first and
+    last output positions inside that floor, where the window derivative is
+    one-sided and enormous. Every other test here uses `hanning + 0.25`,
+    which avoids the region entirely, so nothing exercised it.
+
+    Two things are pinned: the tangent is *correct for the clamped function*
+    (machine-precision relative agreement with a central difference, which is
+    the claim the rule's docstring makes), and its magnitude really is
+    floor-driven — so a future change that quietly regularizes the floor will
+    show up here rather than in a user's optimizer.
+    """
+    from tessera import ops
+    from tessera.autodiff.jvp import _JVPS, _window_overlap_sums
+
+    fwd = getattr(ops.istft, "__wrapped__", ops.istft)
+    rng = np.random.default_rng(5)
+    X = rng.standard_normal((13, 9)) + 1j * rng.standard_normal((13, 9))
+    win = np.hanning(16)                     # exact zeros at both ends
+    dwin = rng.standard_normal(16)
+    assert win[0] == 0.0 and win[-1] == 0.0
+
+    # The floor is genuinely active at position 0.
+    b_w, _, _ = _window_overlap_sums(win, dwin, 64, 4, 16)
+    assert b_w[0] == 1e-12, "probe no longer reaches the clamped region"
+
+    _, dy = _JVPS["istft"]((X, win), (np.zeros_like(X), dwin), hop=4)
+    eps = 1e-6
+    fd = (fwd(X, win + eps * dwin, hop=4)
+          - fwd(X, win - eps * dwin, hop=4)) / (2 * eps)
+
+    rel = np.abs(dy - fd) / (np.abs(fd) + 1e-30)
+    assert rel.max() < 1e-6, f"relative disagreement {rel.max():.2e}"
+
+    # Floor-driven magnitude: orders of magnitude above the interior.
+    assert abs(dy[0]) > 1e6 > abs(dy[8:-8]).max()
+
+
+def test_derivative_datum_is_declared_once():
+    """Review finding: `_NestedScalarOps._derivative` used to restate every
+    derivative as a hardcoded if-chain, duplicating what the registry already
+    declared — inside the module whose thesis is one datum per primitive. It
+    now evaluates the registry's single `derivative_expr`, so the scalar and
+    tower paths cannot drift, and the table is extensible.
+    """
+    import numpy as _np
+
+    from tessera.autodiff import algebra as A
+
+    # One declaration, two evaluations: scalar `pointwise` is derived from it.
+    for name, rec in A.SCALAR_RECURRENCES.items():
+        _, df = rec.pointwise
+        x = 0.6
+        analytic = {
+            "exp": _np.exp(x),
+            "log": 1.0 / x,
+            "tanh": 1.0 - _np.tanh(x) ** 2,
+            "sin": _np.cos(x),
+            "cos": -_np.sin(x),
+        }[name]
+        _np.testing.assert_allclose(df(x), analytic, rtol=1e-14)
+
+    # Registering a NEW primitive extends the nested reference automatically;
+    # the old if-chain raised KeyError, which degraded Law 4 to `rule_error`.
+    from tessera.autodiff.laws import quotient_check
+
+    def _jet_sqrt(W, u):
+        k = W.order
+        w = [_np.sqrt(u[0])] + [_np.zeros_like(_np.asarray(u[0]))
+                                for _ in range(k)]
+        for n in range(1, k + 1):
+            acc = u[n]
+            for j in range(1, n):
+                acc = acc - w[j] * w[n - j]
+            w[n] = acc / (2 * w[0])
+        return w
+
+    A.SCALAR_RECURRENCES["sqrt"] = A.ScalarRecurrence(
+        _np.sqrt,
+        lambda o, x: o.mul(0.5, o.reciprocal(o.apply("sqrt", x))),
+        _jet_sqrt)
+    try:
+        r = quotient_check(3)
+    finally:
+        del A.SCALAR_RECURRENCES["sqrt"]
+    assert r.status == "pass", f"new primitive broke Law 4: {r.detail}"
+
+
+def test_no_dead_nested_apply_helper():
+    """`_nd_apply` was dead AND wrong (it passed `dfn` as its own derivative,
+    valid only for exp). Deleted; this pins that it stays deleted rather than
+    being resurrected as a plausible-looking helper."""
+    from tessera.autodiff import algebra as A
+
+    assert not hasattr(A, "_nd_apply")
+
+
+def test_tie_mass_target_follows_the_declared_group_count():
+    """Review finding: the SPLIT branch hardcoded a target of 1.0, so a probe
+    with two tie groups would sum to 2.0 and fail a correct rule. The count is
+    now declared per probe."""
+    from tessera.autodiff.law_inputs import KinkSpec
+    from tessera.autodiff.laws import kink_check
+
+    def two_row_probe():
+        return (np.array([[3.0, 1.0, 3.0], [2.0, 2.0, 0.5]]),), {"axis": -1}
+
+    spec = KinkSpec(
+        two_row_probe,
+        lambda p: (np.asarray(p[0]) == np.max(np.asarray(p[0]), axis=-1,
+                                              keepdims=True),),
+        "split",
+        tie_groups=2,          # one tie per row
+    )
+    from tessera.autodiff.vjp import _VJPS
+    from tessera.autodiff.jvp import _JVPS
+
+    r = kink_check("amax", spec, _VJPS["amax"], _JVPS.get("amax"))
+    assert r.status == "pass", r
+
+    # Declaring the wrong count must fail — the check still has teeth.
+    wrong = KinkSpec(two_row_probe, spec.kink_mask, "split", tie_groups=1)
+    r2 = kink_check("amax", wrong, _VJPS["amax"], _JVPS.get("amax"))
+    assert r2.status == "fail" and "mass not conserved" in r2.detail, r2

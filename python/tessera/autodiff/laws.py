@@ -453,19 +453,22 @@ def kink_check(op: str, spec, vjp_fn: Callable, jvp_fn: Optional[Callable],
             equal = np.allclose(stacked, stacked[0], atol=1e-12)
             # Mass conservation is the whole point of SUBGRAD_SPLIT: a unit
             # cotangent arriving at one output must leave as shares summing to
-            # 1 across the tie group. A KinkSpec probe therefore contains
-            # exactly ONE tie group, so the target is 1.0 exactly.
+            # 1 across its tie group. The probe declares how many independent
+            # groups it contains, so the target is that count — hardcoding 1
+            # would fail a correct rule on any multi-group probe.
             # (An earlier form also accepted `total == n_tied * share`, which
             # is vacuously true whenever the shares are equal — it let a rule
             # giving every tied element the FULL mass pass. Caught by the
             # mutation test in test_autodiff_laws.py.)
-            conserved = abs(total - 1.0) < 1e-9
+            groups = getattr(spec, "tie_groups", 1)
+            conserved = abs(total - float(groups)) < 1e-9
             if not equal:
                 return LawResult(op, registry, "kink", "fail", 1, None,
                                  f"tie shares not equal: {stacked.tolist()}")
             if not conserved:
                 return LawResult(op, registry, "kink", "fail", 1, None,
-                                 f"tie mass not conserved: sum={total}")
+                                 f"tie mass not conserved: sum={total} "
+                                 f"over {groups} declared group(s)")
             detail.append(f"{n_tied} tied elements share {float(stacked[0]):.4g}")
         else:
             if policy != SUBGRAD_ZERO:
@@ -521,7 +524,7 @@ def _unit_cotangent(jvp_fn: Optional[Callable], primals: tuple, kwargs: dict):
 # ── Laws 2 and 4: the algebra laws that gate AD-WEIL-1 ───────────────────────
 
 
-def _random_program(rng: np.random.Generator, depth: int, transcendental: bool):
+def _random_program(rng: np.random.Generator, depth: int):
     """A random straight-line program over +, x and (optionally) scalar fns.
 
     Returned as a closure taking (value, algebra-ops) so the SAME program text
@@ -537,10 +540,8 @@ def _random_program(rng: np.random.Generator, depth: int, transcendental: bool):
             ops.append(("add_const", float(rng.standard_normal())))
         elif roll < 0.8:
             ops.append(("square", None))
-        elif transcendental:
-            ops.append(("fn", names[int(rng.integers(len(names)))]))
         else:
-            ops.append(("add_const", float(rng.standard_normal())))
+            ops.append(("fn", names[int(rng.integers(len(names)))]))
     return ops
 
 
@@ -640,7 +641,7 @@ def quotient_check(order: int, trials: int = 6,
         worst = 0.0
         for _ in range(trials):
             x0 = float(rng.standard_normal()) * 0.4
-            ops = _random_program(rng, 3, transcendental=True)
+            ops = _random_program(rng, 3)
             jet = _eval_program(ops, W.lift(np.asarray(x0), np.asarray(1.0)), W)
 
             def program(t, scalar_ops, _ops=ops):

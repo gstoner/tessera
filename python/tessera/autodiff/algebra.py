@@ -117,10 +117,62 @@ class TruncatedJet:
 # rather than from two hand-written rules.
 
 
+class _Ops(Protocol):
+    """The arithmetic a derivative expression is written against."""
+
+    def apply(self, name: str, x: Any) -> Any: ...
+    def mul(self, a: Any, b: Any) -> Any: ...
+    def add(self, a: Any, b: Any) -> Any: ...
+    def neg(self, a: Any) -> Any: ...
+    def reciprocal(self, a: Any) -> Any: ...
+
+
 @dataclass(frozen=True)
 class ScalarRecurrence:
-    pointwise: tuple[Callable[[Any], Any], Callable[[Any], Any]]
+    """One primitive, declared once.
+
+    ``value``            the function itself.
+    ``derivative_expr``  its derivative, expressed in terms of *registered*
+                         functions and ring operations — evaluated with plain
+                         numpy for first-order use, and with tower arithmetic
+                         for the nested-dual reference. Declaring it once is
+                         what keeps the two from drifting; an earlier version
+                         restated it as a hardcoded if-chain in
+                         ``_NestedScalarOps`` and would have silently gone
+                         stale (and KeyError'd) as this table grew.
+    ``jet``              the order-k coefficient recurrence.
+    """
+
+    value: Callable[[Any], Any]
+    derivative_expr: Callable[[_Ops, Any], Any]
     jet: Callable[["TruncatedJet", Sequence[Any]], list]
+
+    @property
+    def pointwise(self) -> tuple[Callable[[Any], Any], Callable[[Any], Any]]:
+        """(f, f') with the derivative DERIVED from `derivative_expr`."""
+        return (self.value, lambda x: self.derivative_expr(_SCALAR_OPS, x))
+
+
+class _ScalarOps:
+    """`_Ops` over plain numpy scalars/arrays."""
+
+    def apply(self, name, x):
+        return SCALAR_RECURRENCES[name].value(x)
+
+    def mul(self, a, b):
+        return a * b
+
+    def add(self, a, b):
+        return a + b
+
+    def neg(self, a):
+        return -a
+
+    def reciprocal(self, a):
+        return 1.0 / a
+
+
+_SCALAR_OPS = _ScalarOps()
 
 
 def _jet_exp(W: "TruncatedJet", u):
@@ -188,11 +240,21 @@ def _jet_sin_cos(W: "TruncatedJet", u):
 
 
 SCALAR_RECURRENCES: dict[str, ScalarRecurrence] = {
-    "exp": ScalarRecurrence((np.exp, np.exp), _jet_exp),
-    "log": ScalarRecurrence((np.log, lambda x: 1.0 / x), _jet_log),
-    "tanh": ScalarRecurrence((np.tanh, lambda x: 1.0 - np.tanh(x) ** 2), _jet_tanh),
-    "sin": ScalarRecurrence((np.sin, np.cos), _jet_sin),
-    "cos": ScalarRecurrence((np.cos, lambda x: -np.sin(x)), _jet_cos),
+    # d/dx exp = exp
+    "exp": ScalarRecurrence(np.exp, lambda o, x: o.apply("exp", x), _jet_exp),
+    # d/dx log = 1/x
+    "log": ScalarRecurrence(np.log, lambda o, x: o.reciprocal(x), _jet_log),
+    # d/dx tanh = 1 - tanh^2
+    "tanh": ScalarRecurrence(
+        np.tanh,
+        lambda o, x: o.add(1.0, o.neg(o.mul(o.apply("tanh", x),
+                                            o.apply("tanh", x)))),
+        _jet_tanh),
+    # d/dx sin = cos
+    "sin": ScalarRecurrence(np.sin, lambda o, x: o.apply("cos", x), _jet_sin),
+    # d/dx cos = -sin
+    "cos": ScalarRecurrence(np.cos,
+                            lambda o, x: o.neg(o.apply("sin", x)), _jet_cos),
 }
 
 
@@ -235,14 +297,6 @@ def _nd_mul(x, y):
     return x * y
 
 
-def _nd_apply(fn, dfn, x):
-    """Lift a scalar function into the nested-dual tower."""
-    if isinstance(x, _NestedDual):
-        return _NestedDual(_nd_apply(fn, dfn, x.a),
-                           _nd_mul(x.b, _nd_apply(dfn, dfn, x.a)))
-    return fn(x)
-
-
 def nested_dual_derivative(program: Callable, x0: float, order: int) -> float:
     """``d^order/dt^order program(x0 + t)`` via `order`-times-nested duals.
 
@@ -262,34 +316,38 @@ def nested_dual_derivative(program: Callable, x0: float, order: int) -> float:
 
 
 class _NestedScalarOps:
-    """Scalar functions lifted to the nested tower, keyed like SCALAR_RECURRENCES."""
+    """`_Ops` over the nested-dual tower — Law 4's reference arithmetic.
 
-    def __call__(self, name: str, x):
-        f, df = SCALAR_RECURRENCES[name].pointwise
+    Its `_derivative` evaluates the primitive's declared `derivative_expr`
+    with tower arithmetic, so the derivative datum lives in exactly one place
+    (the registry) and adding a primitive extends the reference automatically
+    instead of raising.
+    """
+
+    def apply(self, name, x):
         return self._apply(name, x)
 
+    def mul(self, a, b):
+        return _nd_mul(a, b)
+
+    def add(self, a, b):
+        return _nd_add(a, b)
+
+    def neg(self, a):
+        return _nd_mul(-1.0, a)
+
+    def reciprocal(self, a):
+        return _nd_reciprocal(a)
+
     def _apply(self, name, x):
-        f, df = SCALAR_RECURRENCES[name].pointwise
         if isinstance(x, _NestedDual):
-            inner = self._apply(name, x.a)
-            deriv = self._derivative(name, x.a)
-            return _NestedDual(inner, _nd_mul(x.b, deriv))
-        return f(x)
+            return _NestedDual(self._apply(name, x.a),
+                               _nd_mul(x.b, self._derivative(name, x.a)))
+        return SCALAR_RECURRENCES[name].value(x)
 
     def _derivative(self, name, x):
-        """d/dx of `name`, itself lifted (needed for higher orders)."""
-        if name == "exp":
-            return self._apply("exp", x)
-        if name == "log":
-            return _nd_reciprocal(x)
-        if name == "tanh":
-            t = self._apply("tanh", x)
-            return _nd_add(1.0, _nd_mul(-1.0, _nd_mul(t, t)))
-        if name == "sin":
-            return self._apply("cos", x)
-        if name == "cos":
-            return _nd_mul(-1.0, self._apply("sin", x))
-        raise KeyError(name)
+        """d/dx of `name`, lifted — from the registry's one declaration."""
+        return SCALAR_RECURRENCES[name].derivative_expr(self, x)
 
 
 def _nd_reciprocal(x):

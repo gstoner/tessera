@@ -413,6 +413,15 @@ class KinkSpec:
     make: Callable[[], tuple[tuple, dict]]
     kink_mask: Callable[[tuple], tuple]
     expected: object
+    tie_groups: int = 1
+    """How many independent tie groups the probe contains.
+
+    SUBGRAD_SPLIT conserves one unit of cotangent mass PER GROUP, so the
+    engine compares the summed shares against this count. It defaulted to a
+    hardcoded 1 before, which meant a probe with two tied rows would have
+    summed to 2.0 and failed a correct rule — declared here so a future spec
+    can carry more than one group.
+    """
     note: str = ""
 
 

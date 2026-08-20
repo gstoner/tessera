@@ -4284,3 +4284,61 @@ agent worked the shared tree. Five e2e-spine failures during the sweep were
 traced to `TESSERA_OPT` pointing at a `tessera-opt` the worktree had never built —
 an environment artifact, not a regression; the same tests passed against main
 throughout, and passed here once the worktree's compiler was built.
+
+---
+
+## Cross-backend record — MC1 matrix-function family (PR #596, 2026-08-20)
+
+**Owning item:** MATRIX-CALCULUS-MC1 · **synchronization key:** `MC1-LINALG-FAMILY`
+
+**Shared contracts changed.** Ten public op registrations (`det`, `logdet`,
+`inv`, `solve`, `trace`, `eigh`, `kron`, `vec`, `matrix_power`, `norm`); two
+new Graph IR lowering kinds (`linalg_function`, `linalg_multilinear`) with four
+new shape rules (`matrix_scalar`, `vec`, `kron`, `eigh`); numeric-policy
+entries for both kinds; two diagnostic codes (`E_LINALG_CONTRACT`,
+`E_METRIC_CONTRACT`); the `degeneracy_policy` semantic key extended to
+eigenvalue gaps and to the nuclear norm's rank condition.
+
+**Outcome for this backend: `not applicable — no lane attempted or implied`.**
+
+The family landed as a *derivative contract* — closed-form VJP+JVP pairs under
+the AD law sweep — because that was the gap in the AD stack. No Tile IR
+lowering, Target IR op, or kernel was added for any backend, and none is
+implied: every one of the ten is registered `backend_kernel: partial` /
+reference tier, and each is listed in the Apple no-lane golden and the
+single-GPU closeout classifier as an *intentional* reference-only decision with
+a stated rationale, so none of them appears on this backend's promote queue as
+a phantom blocker.
+
+**What a sibling picking this up would need to decide, per op.** The reference
+implementations delegate to LAPACK through numpy, so a native lane is a
+vendor-library question rather than a codegen one for `eigh`/`inv`/`solve`
+(rocSOLVER / cuSOLVER / Accelerate / MKL), and a "probably never worth it"
+question for `det`/`logdet`/`trace`/`matrix_power`, which reduce a small matrix
+to one number. `kron` and `vec` are layout/contraction shaped and would ride
+existing lanes if anything.
+
+**Numeric policy this backend must match if it does build a lane.**
+`linalg_function` and `linalg_solver` declare **f64 accumulate with f32 storage
+admitted** — the same conditioning-sensitive policy `linalg_decomposition`
+already carries, because `det`/`logdet`/`inv`/`matrix_power` carry a factor of
+the condition number. `linalg_multilinear` (`trace`, `kron`) declares the
+ordinary f32 accumulator, since neither carries one. A lane that accumulates in
+storage precision would silently lose the digits these rules exist to keep.
+
+**Degeneracy contract that travels with the rules.** `eigh`'s eigenvector
+coupling `1/(w_j - w_i)` and `svd`'s `1/(s_j^2 - s_i^2)` have no limit at a
+crossing; both fail closed under the declared `degeneracy_policy` rather than
+emitting `inf`/`NaN`. Any native lane must reproduce that refusal, not paper
+over it with an epsilon — a damped coupling returns a finite, plausible, wrong
+gradient, which is the failure mode the key exists to prevent.
+
+**Exact-device evidence: none, and none claimed.** Everything in PR #596 was
+validated on the host-independent Python reference lane on an M1 Max, where no
+AMD GPU, no CUDA device and no AVX-512 exist. No parity claim is made for any
+backend.
+
+**Apple-specific note.** `Accelerate`/`LAPACK` already backs the numpy
+reference here, so an "Apple lane" for this family would mean routing through
+the existing CPU shim rather than writing MSL — the GPU question is separate and
+not opened by this PR.

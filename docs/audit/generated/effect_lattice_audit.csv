@@ -96,6 +96,7 @@ dequantize_fp4,pure,,1,1,0
 dequantize_fp6,pure,,1,1,0
 dequantize_fp8,pure,,1,1,0
 dequantize_nvfp4,pure,,1,1,0
+det,pure,,1,1,0
 digamma,pure,,1,1,0
 div,pure,,1,1,0
 dropout,random,random,1,1,0
@@ -107,6 +108,7 @@ ebm_inner_step,pure,,1,1,0
 ebm_langevin_step,pure,,1,1,0
 ebm_refinement,pure,,1,1,0
 ebm_self_verify,pure,,1,1,0
+eigh,pure,,1,1,0
 einsum,pure,,1,1,0
 entmax15,pure,,1,1,0
 eq,pure,,1,1,0
@@ -152,6 +154,7 @@ implicit_score_matching_loss,pure,,1,1,0
 index_select,pure,,1,1,0
 index_update,pure,,1,1,0
 instance_norm,pure,,1,1,0
+inv,pure,,1,1,0
 irfft,pure,pure,1,1,0
 is_concyclic,pure,,1,1,0
 isfinite,pure,,1,1,0
@@ -161,6 +164,7 @@ istft,pure,,1,1,0
 js_divergence,pure,,1,1,0
 kimi_delta_attention,state,,1,1,1
 kl_divergence,pure,,1,1,0
+kron,pure,,1,1,0
 kv_cache_append,state,,1,1,0
 kv_cache_prune,state,,1,1,0
 kv_cache_read,state,,1,1,0
@@ -182,6 +186,7 @@ log,pure,,1,1,0
 log1p,pure,,1,1,0
 log_cosh_loss,pure,,1,1,0
 log_softmax,pure,,1,1,1
+logdet,pure,,1,1,0
 logical_and,pure,,1,1,0
 logical_not,pure,,1,1,0
 logical_or,pure,,1,1,0
@@ -194,6 +199,7 @@ mae_loss,pure,,1,1,0
 masked_categorical,random,,1,1,0
 masked_fill,pure,,1,1,0
 matmul,pure,pure,1,1,0
+matrix_power,pure,,1,1,0
 max,pure,,1,1,0
 maximum,pure,,1,1,0
 mean,pure,,1,1,0
@@ -226,6 +232,7 @@ multi_head_attention,state,,1,1,1
 ne,pure,,1,1,0
 nesterov,pure,,1,1,0
 nonzero,pure,,1,1,0
+norm,pure,,1,1,0
 normalize_group_advantages,pure,,1,1,0
 ntk_rope,pure,,1,1,0
 pack,movement,,1,1,0
@@ -290,6 +297,7 @@ softcap,pure,,1,1,0
 softmax,pure,pure,1,1,1
 softmax_safe,pure,,1,1,1
 softplus,pure,,1,1,0
+solve,pure,,1,1,0
 sort,pure,,1,1,0
 sparsemax,pure,,1,1,0
 spec_accept,pure,,1,1,0
@@ -317,6 +325,7 @@ target_verify,pure,,1,1,0
 tile,pure,,1,1,0
 tile_view,pure,,1,1,0
 top_k,pure,,1,1,0
+trace,pure,,1,1,0
 training.loss_adamw,pure,,1,1,0
 training.loss_sgd,pure,,1,1,0
 transpose,pure,pure,1,1,0
@@ -327,6 +336,7 @@ unpack,movement,,1,1,0
 unsqueeze,pure,,1,1,0
 var,pure,,1,1,0
 varlen_sdpa,pure,,1,1,0
+vec,pure,,1,1,0
 view,pure,,1,1,0
 vlb_loss,pure,,1,1,0
 weight_norm,pure,,1,1,0

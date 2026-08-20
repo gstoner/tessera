@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 0 | 505 |
-| `transpose_rule` | 0 | 505 |
-| `sharding_rule` | 50 | 455 |
-| `lowering_rule` | 0 | 505 |
-| `backend_kernel` | 406 | 99 |
+| `batching_rule` | 0 | 515 |
+| `transpose_rule` | 0 | 515 |
+| `sharding_rule` | 59 | 456 |
+| `lowering_rule` | 0 | 515 |
+| `backend_kernel` | 416 | 99 |
 
 ## Backend Proof By Target
 
@@ -26,15 +26,15 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 | Target | Declared | Exact-device verified | Implementation present | Reference | Open artifact/planned | Other | Missing target row |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `cpu` | 356 | 0 | 0 | 356 | 0 | 0 | 149 |
-| `x86` | 349 | 294 | 49 | 6 | 0 | 0 | 156 |
-| `apple_cpu` | 388 | 0 | 4 | 384 | 0 | 0 | 117 |
-| `apple_gpu` | 207 | 148 | 51 | 4 | 4 | 0 | 298 |
-| `rocm` | 352 | 346 | 0 | 2 | 4 | 0 | 153 |
-| `nvidia_sm80` | 72 | 0 | 0 | 0 | 72 | 0 | 433 |
-| `nvidia_sm90` | 104 | 0 | 0 | 2 | 102 | 0 | 401 |
-| `nvidia_sm100` | 72 | 0 | 0 | 0 | 72 | 0 | 433 |
-| `nvidia_sm120` | 96 | 31 | 0 | 0 | 65 | 0 | 409 |
+| `cpu` | 366 | 0 | 0 | 366 | 0 | 0 | 149 |
+| `x86` | 349 | 294 | 49 | 6 | 0 | 0 | 166 |
+| `apple_cpu` | 398 | 0 | 4 | 394 | 0 | 0 | 117 |
+| `apple_gpu` | 207 | 148 | 51 | 4 | 4 | 0 | 308 |
+| `rocm` | 352 | 346 | 0 | 2 | 4 | 0 | 163 |
+| `nvidia_sm80` | 72 | 0 | 0 | 0 | 72 | 0 | 443 |
+| `nvidia_sm90` | 104 | 0 | 0 | 2 | 102 | 0 | 411 |
+| `nvidia_sm100` | 72 | 0 | 0 | 0 | 72 | 0 | 443 |
+| `nvidia_sm120` | 96 | 31 | 0 | 0 | 65 | 0 | 419 |
 
 ## Per-category breakdown
 
@@ -70,9 +70,11 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `functional_optimizer_step` | 7 | — | — | — | — | 7 |
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
 | other | `indexing` | 15 | — | — | — | — | 15 |
-| other | `layout_transform` | 17 | — | — | — | — | 16 |
-| other | `linalg_decomposition` | 4 | — | — | 4 | — | 4 |
-| other | `linalg_solver` | 2 | — | — | 2 | — | 2 |
+| other | `layout_transform` | 18 | — | — | — | — | 17 |
+| other | `linalg_decomposition` | 5 | — | — | 5 | — | 5 |
+| other | `linalg_function` | 5 | — | — | 5 | — | 5 |
+| other | `linalg_multilinear` | 2 | — | — | 2 | — | 2 |
+| other | `linalg_solver` | 3 | — | — | 3 | — | 3 |
 | other | `logical` | 8 | — | — | — | — | 8 |
 | other | `loop_nest` | 12 | — | — | 1 | — | 12 |
 | other | `model_layer` | 4 | — | — | — | — | 4 |
@@ -113,7 +115,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S11 | 33 | 0 | 0 | 0 | 33 |
 | S15 | 16 | 0 | 0 | 0 | 0 |
 | M6 | 14 | 0 | 0 | 6 | 14 |
-| other | 295 | 0 | 0 | 28 | 243 |
+| other | 305 | 0 | 0 | 37 | 253 |
 
 ## Closure trajectory
 

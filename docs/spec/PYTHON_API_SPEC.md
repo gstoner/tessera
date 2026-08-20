@@ -1404,6 +1404,16 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `lu(A)` | `(array) → tuple` | `pure` | LAPACK `getrf`-style `(packed_lu, pivots)` via `scipy.linalg.lu_factor` |
 | `qr(A)` | `(array) → tuple` | `pure` | `np.linalg.qr` reference |
 | `svd(A)` | `(array) → tuple` | `pure` | `np.linalg.svd(..., full_matrices=False)` reference |
+| `eigh(S)` | `(array) → tuple` | `pure` | Symmetric eigendecomposition `(w, Q)`; input symmetrized. Eigenvector coupling `1/(w_j - w_i)` fails closed at a crossing under the declared `degeneracy_policy` |
+| `det(A)` | `(array) → array` | `pure` | Determinant; `d(det A) = det(A)·tr(A⁻¹ dA)`, so `∇det = det(A)·A⁻ᵀ` |
+| `logdet(A)` | `(array) → array` | `pure` | `log det A` for positive determinant; `∇ = A⁻ᵀ`. A negative determinant is an error, not `log|det|` |
+| `inv(A)` | `(array) → array` | `pure` | Matrix inverse; the derivative is the operator `-A⁻¹ dA A⁻¹`, never the `n²×n²` Jacobian `-(A⁻ᵀ⊗A⁻¹)` |
+| `solve(A, b)` | `(array, array) → array` | `pure` | `A x = b`; the adjoint is one transposed solve plus an outer product |
+| `trace(A)` | `(array) → array` | `pure` | Matrix trace over the last two axes; linear, so its VJP is its transpose |
+| `kron(A, B)` | `(array, array) → array` | `pure` | Kronecker product, batch-aware. Never materialize it against a `vec`: `(B⊗C)vec(Y) = vec(C Y Bᵀ)` turns `Θ(n⁴)` into two GEMMs |
+| `vec(A)` | `(array) → array` | `pure` | **Column-major** vectorization `(..., m, n) → (..., m·n)` — the convention that makes the Kronecker identity hold as written |
+| `matrix_power(A, n=1)` | `(array) → array` | `pure` | Integer matrix power, negative `n` via the inverse |
+| `norm(A, ord="fro")` | `(array) → array` | `pure` | Matrix norm; `ord` is a semantic key (`fro`, `nuc`) and never defaults to another norm. `∇‖A‖_F = A/‖A‖_F` |
 | `layer_norm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy layer norm |
 | `group_norm(x, num_groups, weight=None, bias=None, eps=1e-5)` | `(array) → array` | `pure` | GroupNorm; Graph IR op `tessera.group_norm`; apple_gpu folds the normalized axes to last + runs the layer_norm row-op on GPU |
 | `instance_norm(x, weight=None, bias=None, eps=1e-5)` | `(array) → array` | `pure` | InstanceNorm; Graph IR op `tessera.instance_norm`; apple_gpu composes it from the rowop + reduce lanes |

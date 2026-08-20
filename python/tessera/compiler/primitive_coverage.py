@@ -1201,6 +1201,9 @@ _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
     # — Linear algebra solvers: sophisticated partition rules —
     "linalg_solver":       "partial",
     "linalg_decomposition":"partial",
+    # MC1: a sharding rule for a matrix function is not worked out.
+    "linalg_function":     "partial",
+    "linalg_multilinear":  "partial",
     "sparse":              "partial",
 
     # — Transforms: sharding-aware by nature —
@@ -1437,6 +1440,10 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
     # semantics; sparse batches the dense operand, structure shared per elem).
     "linalg_solver":       "complete",   # tri_solve
     "linalg_decomposition": "complete",  # cholesky / qr / svd
+    # MC1: every member broadcasts over leading axes (kron via an explicit
+    # einsum, the rest via numpy's own batched linalg).
+    "linalg_function":      "complete",
+    "linalg_multilinear":   "complete",
     "sparse":              "complete",   # spmm_coo/csr, sddmm, bsmm
     # — Non-tensor categories —
     "state_tree":          "not_applicable",
@@ -1599,6 +1606,11 @@ _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
     # nonlinear matrix factorizations — no linear-transpose rule; the
     # backward is the registered (structured) VJP.  N/A.
     "linalg_decomposition":"not_applicable",
+    # MC1: det/logdet/inv/matrix_power/norm are nonlinear, so a linear
+    # transpose does not apply; trace and kron ARE (bi)linear and their VJP is
+    # exactly the transpose, which is why they are a separate category.
+    "linalg_function":     "not_applicable",
+    "linalg_multilinear":  "complete",
     # sparse (transpose, 2026-06-02): spmm_coo/spmm_csr/bsmm are linear in
     # their dense operand (transpose = spmm against the transposed sparse
     # operand); sddmm is bilinear ⇒ linear in each dense operand
@@ -1730,6 +1742,8 @@ _SEMANTIC_RULES_BY_CATEGORY: dict[str, str] = {
     "recurrent":           "complete",
     "sparse":              "complete",
     "linalg_decomposition":"complete",
+    "linalg_function":     "complete",
+    "linalg_multilinear":  "complete",
     "linalg_solver":       "complete",
     "moe":                 "complete",
     "moe_transport":       "complete",
@@ -1916,6 +1930,8 @@ _GRAPH_IR_LOWERING_BY_CATEGORY: dict[str, str] = {
     "segment_reduce":      "registered",
     "linalg_solver":       "registered",
     "linalg_decomposition":"registered",
+    "linalg_function":     "registered",
+    "linalg_multilinear":  "registered",
     "sparse":              "registered",
 
     # Domain dialects/decompositions were omitted from this classifier even
@@ -2250,9 +2266,18 @@ LOWERING_NUMERIC_POLICY: dict = {
         "clifford", "geometric",
     )},
     # Conditioning-sensitive: f64 accumulate, and f64 storage admitted.
+    # `linalg_function` joins them because its dominant members — det, logdet,
+    # inv, matrix_power — carry a factor of the condition number, exactly like a
+    # decomposition. `trace` and `kron` are along for the ride and lose nothing
+    # by it: a wider accumulator on an op that needs no accumulator is
+    # conservative, where the reverse would silently cost digits.
     **{k: _f64_accum_policy for k in (
-        "linalg_decomposition", "linalg_solver",
+        "linalg_decomposition", "linalg_solver", "linalg_function",
     )},
+    # `linalg_multilinear` (trace, kron) carries no condition number, so it
+    # takes the ordinary arithmetic policy rather than borrowing f64 from its
+    # neighbours.
+    **{k: _f32_accum_policy for k in ("linalg_multilinear",)},
     # Non-float results.
     **{k: _integer_policy for k in ("logical", "comparison", "indexing")},
     # Pure data movement — no accumulator ceiling.
@@ -2557,6 +2582,8 @@ _TESTS_BY_CATEGORY: dict[str, str] = {
     "segment_reduce":      "complete",
     "linalg_solver":       "complete",
     "linalg_decomposition":"complete",
+    "linalg_function":     "complete",
+    "linalg_multilinear":  "complete",
     "sparse":              "complete",
     "sort":                "complete",
     "fused_epilogue":      "complete",

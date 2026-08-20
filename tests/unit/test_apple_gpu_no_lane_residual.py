@@ -75,6 +75,15 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         # Tridiagonal Thomas solve: PDE plan §III.1 reference tier; Apple
         # lane arrives with the PDE backend phase, not before.
         "tridiagonal_solve",
+        # MC1 matrix-function family (MATRIX_CALCULUS_REVIEW.md): Python
+        # reference tier by design. These land as *derivative contracts* first
+        # — closed-form VJP/JVP pairs under the law sweep — because that is
+        # what the AD stack was missing; a Metal lane is a separate decision
+        # per op, and several (det, logdet, matrix_power) are small enough that
+        # a GPU lane may never be the right answer. `svd`/`qr`/`cholesky` sit
+        # in the same position today.
+        "det", "logdet", "inv", "solve", "trace", "eigh",
+        "kron", "vec", "matrix_power", "norm",
         # Optimizer step ops without an Apple GPU lane.
         "adafactor", "nesterov",
         # EGGROLL rank-1 correction has gfx1151 and Zen 5 packages; Metal owns

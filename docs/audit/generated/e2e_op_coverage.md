@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 295 |
-| ``runnable_reference`` | 10 |
+| ``runnable_reference`` | 20 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **339** |
+| **total** | **349** |
 
 ## complete (295)
 
@@ -331,7 +331,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (10)
+## runnable_reference (20)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -343,6 +343,16 @@ each row into a single E2E tier.
 | ``game_boltzmann_value`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_excess`` | contraction | public | public | registered | partial | reference | ready | none |
 | ``game_semivalue`` | contraction | public | public | registered | partial | reference | ready | none |
+| ``vec`` | layout_transform | public | public | registered | partial | reference | ready | none |
+| ``eigh`` | linalg_decomposition | public | public | registered | partial | reference | ready | none |
+| ``det`` | linalg_function | public | public | registered | partial | reference | ready | none |
+| ``inv`` | linalg_function | public | public | registered | partial | reference | ready | none |
+| ``logdet`` | linalg_function | public | public | registered | partial | reference | ready | none |
+| ``matrix_power`` | linalg_function | public | public | registered | partial | reference | ready | none |
+| ``norm`` | linalg_function | public | public | registered | partial | reference | ready | none |
+| ``kron`` | linalg_multilinear | public | public | registered | partial | reference | ready | none |
+| ``trace`` | linalg_multilinear | public | public | registered | partial | reference | ready | none |
+| ``solve`` | linalg_solver | public | public | registered | partial | reference | ready | none |
 | ``game_mex`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_marginal`` | spectral | public | public | registered | partial | reference | ready | none |
 

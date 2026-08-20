@@ -528,6 +528,12 @@ def run_law_sweep() -> list[LawResult]:
         results.append(quotient_check(_order))
         results.append(enclosure_check(_order))
     results.append(unbiasedness_check())
+    # Laws 6c/6d — second-derivative structure. Like Laws 2/4 these are
+    # keyed by the derivative *path*, not by op: any Hessian-vector
+    # implementation must be a symmetric bilinear map and must agree with
+    # the AD-free four-point oracle.
+    results.append(hessian_symmetry_check())
+    results.append(hessian_second_difference_check())
 
     try:
         from .geometric.registry import _JVPS_GEO, _VJPS_GEO
@@ -990,6 +996,119 @@ def enclosure_check(order: int, trials: int = 60,
     except Exception as e:  # noqa: BLE001
         return LawResult(f"W{order}", registry, "enclosure", "rule_error", 0,
                          None, f"{type(e).__name__}: {e}")
+
+
+_SECOND_DERIVATIVE_PROBES = (
+    # (name, scalar fn over ops.*, closed-form Hessian at x)
+    ("quadratic_coupled", lambda z: _probe_quadratic(z)),
+    ("sin_times_sumsq", lambda z: _probe_sin_sumsq(z)),
+)
+
+
+def _probe_quadratic(z):
+    from .. import ops as _ops
+    # sum(z)^2 — a genuinely non-diagonal Hessian (all-ones times 2).
+    t = _ops.reduce(z, op="sum")
+    return _ops.mul(t, t)
+
+
+def _probe_sin_sumsq(z):
+    from .. import ops as _ops
+    return _ops.mul(_ops.reduce(_ops.sin(z), op="sum"),
+                    _ops.reduce(_ops.mul(z, z), op="sum"))
+
+
+def second_difference(fn, x, u, v, step: float) -> float:
+    """AD-free second directional derivative (Bright/Edelman/Johnson §12.2).
+
+        f''(x)[u, v] ~ [ f(x+su+sv) + f(x) - f(x+su) - f(x+sv) ] / s^2
+
+    Four function evaluations, no derivative rule of any kind. That
+    independence is the point: it anchors a Hessian-vector product against
+    something that shares none of its machinery.
+    """
+    return float(
+        np.asarray(fn(x + step * u + step * v))
+        + np.asarray(fn(x))
+        - np.asarray(fn(x + step * u))
+        - np.asarray(fn(x + step * v))
+    ) / (step * step)
+
+
+def hessian_symmetry_check(registry: str = "algebra") -> LawResult:
+    """Law 6c — the second derivative is a SYMMETRIC bilinear map.
+
+    ``f''(x)[u, v] = f''(x)[v, u]`` for every ``u, v`` — which §12.2 derives
+    from nothing stronger than commutativity of ``+`` on the input vector
+    space. Two properties make it valuable here:
+
+    * It needs **no reference implementation**, so it applies to any
+      Hessian-vector path (eager finite-difference `hvp`, the compiled
+      forward-over-reverse `compiled_hvp_ir`, a future jet mode) without one
+      having to be trusted first.
+    * Unlike the adjoint law it cannot be satisfied by a matched-wrong pair
+      *and* a nonzero magnitude, because `hessian_second_difference_check`
+      pins the magnitude independently.
+    """
+    from .grad import hvp
+
+    try:
+        residuals = []
+        for name, fn in _SECOND_DERIVATIVE_PROBES:
+            rng = op_rng(name, "hessian_symmetry")
+            n = 6
+            x = rng.standard_normal(n)
+            u = rng.standard_normal(n)
+            v = rng.standard_normal(n)
+            uHv = float(u @ np.asarray(hvp(fn, x, v)))
+            vHu = float(v @ np.asarray(hvp(fn, x, u)))
+            denom = abs(uHv) + abs(vHu) + 1e-12
+            residuals.append(2.0 * abs(uHv - vHu) / denom)
+        worst = max(residuals)
+        status = "pass" if worst <= 1e-5 else "fail"
+        return LawResult("hvp", registry, "hessian_symmetry", status,
+                         len(residuals), worst,
+                         f"max relative asymmetry {worst:.3e} over "
+                         f"{len(residuals)} probes")
+    except Exception as e:  # noqa: BLE001
+        return LawResult("hvp", registry, "hessian_symmetry", "rule_error",
+                         0, None, f"{type(e).__name__}: {e}")
+
+
+def hessian_second_difference_check(registry: str = "algebra") -> LawResult:
+    """Law 6d — the Hessian-vector product against an AD-free oracle.
+
+    ``<u, H v>`` must match §12.2's four-point second difference, which uses
+    no derivative rule at all. Symmetry alone would accept a uniformly scaled
+    Hessian; this pins the magnitude, and together the two laws bound a
+    second-order path from both sides.
+    """
+    from .grad import hvp
+
+    try:
+        residuals = []
+        for name, fn in _SECOND_DERIVATIVE_PROBES:
+            rng = op_rng(name, "hessian_second_difference")
+            n = 6
+            x = rng.standard_normal(n)
+            u = rng.standard_normal(n)
+            v = rng.standard_normal(n)
+            exact = float(u @ np.asarray(hvp(fn, x, v)))
+            # The oracle divides by step^2, so it needs a much larger step
+            # than a first derivative: eps^(1/4) is its own crossover.
+            step = float(np.finfo(np.float64).eps ** 0.25)
+            approx = second_difference(fn, x, u, v, step)
+            denom = abs(exact) + abs(approx) + 1e-12
+            residuals.append(2.0 * abs(exact - approx) / denom)
+        worst = max(residuals)
+        status = "pass" if worst <= 1e-3 else "fail"
+        return LawResult("hvp", registry, "hessian_second_difference", status,
+                         len(residuals), worst,
+                         f"max relative residual {worst:.3e} vs the four-point "
+                         f"oracle over {len(residuals)} probes")
+    except Exception as e:  # noqa: BLE001
+        return LawResult("hvp", registry, "hessian_second_difference",
+                         "rule_error", 0, None, f"{type(e).__name__}: {e}")
 
 
 def unbiasedness_check(registry: str = "algebra") -> LawResult:

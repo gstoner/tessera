@@ -15,6 +15,12 @@ from typing import Any, Callable, Literal
 
 import numpy as np
 
+from .degeneracy import (
+    DEGENERACY_DIAGNOSTIC_CODE,
+    TesseraDegeneracyError,
+    check_factor_rank,
+    svd_coupling,
+)
 from .nonsmooth import (
     gate_mask as _gate_mask,
     heaviside_subgrad as _heaviside_subgrad,
@@ -5302,6 +5308,7 @@ def vjp_tri_solve(dout, L, b, *, lower=True, **_):
     b_arr = np.asarray(b, dtype=np.float64)
     do = np.asarray(dout, dtype=np.float64)
     tri = np.tril(L_arr) if lower else np.triu(L_arr)
+    check_factor_rank(np.diag(tri), op="tri_solve", factor="T")
     x = np.linalg.solve(tri, b_arr)
     db = np.linalg.solve(tri.T, do)
     if x.ndim == 1:
@@ -5314,8 +5321,24 @@ def vjp_tri_solve(dout, L, b, *, lower=True, **_):
 
 @_vjp("cholesky")
 def vjp_cholesky(dout, A, **_):
-    """A = L · L^T, L lower-triangular. Murray (2016) closed-form VJP."""
-    L = np.linalg.cholesky(np.asarray(A, dtype=np.float64))
+    """A = L · L^T, L lower-triangular. Murray (2016) closed-form VJP.
+
+    The rule inverts ``L``, so it is defined only while ``A`` is positive
+    definite. A non-PD or numerically rank-deficient ``A`` fails closed with a
+    Tessera diagnostic rather than a raw numpy error or a plausible-but-wrong
+    gradient (see ``degeneracy.py``).
+    """
+    try:
+        L = np.linalg.cholesky(np.asarray(A, dtype=np.float64))
+    except np.linalg.LinAlgError as exc:
+        raise TesseraDegeneracyError(
+            f"{DEGENERACY_DIAGNOSTIC_CODE}: cholesky backward is not defined at "
+            f"this input — the forward factorization itself failed "
+            f"({exc}). A = L·Lᵀ requires a positive-definite A; the derivative "
+            f"of the factorization does not exist where the factorization does "
+            f"not."
+        ) from exc
+    check_factor_rank(np.diag(L), op="cholesky", factor="L")
     dL = np.asarray(dout, dtype=np.float64)
     Lt = L.T
     M = Lt @ dL
@@ -5332,6 +5355,7 @@ def vjp_qr(dout, A, **_):
     """A = Q · R. Reference handles square-A with full-rank R."""
     A_arr = np.asarray(A, dtype=np.float64)
     Q, R = np.linalg.qr(A_arr)
+    check_factor_rank(np.diag(R), op="qr", factor="R")
     if isinstance(dout, tuple) and len(dout) == 2:
         dQ, dR = (np.asarray(t, dtype=np.float64) for t in dout)
     else:
@@ -5347,28 +5371,67 @@ def vjp_qr(dout, A, **_):
 
 
 @_vjp("svd")
-def vjp_svd(dout, A, **_):
-    """A = U · diag(s) · V^T. Reference handles distinct singular values."""
+def vjp_svd(dout, A, *, _output_index=None, **_):
+    """A = U · diag(s) · V^T; defined for a **simple** spectrum.
+
+    The coupling term is ``1/(s_j^2 - s_i^2)``, which has no limit when two
+    singular values coincide — there the individual singular vectors are not
+    differentiable at all (Bright/Edelman/Johnson §14). Which of {refuse,
+    restrict to the rotation-invariant part, regularize} happens is a declared
+    semantic key; see ``degeneracy.py``.
+
+    History: this rule used to write ``1/(s2[None,:] - s2[:,None] +
+    np.eye(n)*1e-12)`` and then zero the diagonal — so the guard covered only
+    the entries it immediately erased, and a repeated singular value produced
+    an all-NaN gradient behind bare numpy warnings.
+    """
     A_arr = np.asarray(A, dtype=np.float64)
     U, s, Vt = np.linalg.svd(A_arr, full_matrices=False)
     if isinstance(dout, tuple) and len(dout) == 3:
         dU, ds, dVt = (np.asarray(t, dtype=np.float64) for t in dout)
     else:
+        # The tape replays a multi-output op once per component, passing that
+        # component's cotangent alone plus `_output_index`. Swallowing the key
+        # in `**_` made every component look like the singular-value cotangent:
+        # `grad` through `ops.svd(A)[0]` then returned a (n, n, n) array for an
+        # (n, n) input — a silently wrong shape, not an error. Declaring the
+        # key is what `laws._declares_output_index` checks for.
+        d_arr = np.asarray(dout, dtype=np.float64)
         dU = np.zeros_like(U)
-        ds = np.asarray(dout, dtype=np.float64)
+        ds = np.zeros_like(s)
         dVt = np.zeros_like(Vt)
+        if _output_index == 0:
+            dU = d_arr
+        elif _output_index == 1:
+            ds = d_arr
+        elif _output_index == 2:
+            dVt = d_arr
+        elif d_arr.shape == np.shape(s):
+            ds = d_arr          # direct call with only a singular-value cotangent
+        else:
+            raise TesseraDegeneracyError(
+                f"{DEGENERACY_DIAGNOSTIC_CODE}: svd backward received a "
+                f"cotangent of shape {d_arr.shape} with no `_output_index`. It "
+                f"matches neither the singular values {np.shape(s)} nor an "
+                f"unambiguous factor; pass a (dU, ds, dVt) tuple, or call "
+                f"through the tape so the component is identified."
+            )
     # Batch-aware over leading dims (PR #594 review, matching the JVP and
     # the batch-capable canonical forward): last-two-axis transposes,
     # broadcast S-scaling, and an einsum-built diagonal.
     mT = lambda x: np.swapaxes(x, -1, -2)  # noqa: E731 — local adjoint spelling
-    s2 = s ** 2
     eye = np.eye(s.shape[-1])
-    F = (1.0 - eye) / (s2[..., None, :] - s2[..., :, None] + eye)
     UtdU = mT(U) @ dU
     VdVt = Vt @ mT(dVt)
-    inner = ((F * (UtdU - mT(UtdU))) * s[..., None, :]
+    anti_U = UtdU - mT(UtdU)
+    anti_V = VdVt - mT(VdVt)
+    # The coupling `1/(s_j^2 - s_i^2)` has no limit at a repeated singular
+    # value; `svd_coupling` decides what happens there from the declared
+    # `degeneracy_policy` semantic key instead of emitting inf/NaN.
+    F = svd_coupling(s, ds=ds, antisymmetric_parts=(anti_U, anti_V), op="svd")
+    inner = ((F * anti_U) * s[..., None, :]
              + eye * ds[..., None, :]
-             + s[..., :, None] * (F * (VdVt - mT(VdVt))))
+             + s[..., :, None] * (F * anti_V))
     dA = U @ inner @ Vt
     # Projector-term adjoints for non-square A (thin SVD): the JVP's
     # out-of-range components (I − UUᵀ) dA V S⁻¹ (tall) and

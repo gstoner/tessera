@@ -35,6 +35,13 @@ from typing import Any, Callable, Dict, Tuple
 
 import numpy as np
 
+from .degeneracy import (
+    DEGENERACY_DIAGNOSTIC_CODE,
+    TesseraDegeneracyError,
+    check_factor_rank,
+    svd_coupling,
+)
+
 from .tape import TesseraAutodiffError
 
 
@@ -55,6 +62,31 @@ def _forward_value(value: Any) -> Any:
         if isinstance(inner, np.ndarray):
             return inner
     return value
+
+
+def _sequence_tangents(trace: "_JVPTrace", primal: Any):
+    """Per-element tangents for a sequence operand, or `None` if not one.
+
+    Returns `(tangents, any_tracked)`. Untracked elements get an explicit zero
+    tangent so the rule always receives one tangent per element — a rule that
+    saw a ragged list would have to guess, and guessing here is how the zero
+    tangent got through in the first place.
+    """
+    if not isinstance(primal, (list, tuple)) or not primal:
+        return None
+    values = [_forward_value(e) for e in primal]
+    if not all(isinstance(v, (np.ndarray, np.generic)) for v in values):
+        return None
+    tangents: list[Any] = []
+    tracked = False
+    for v in values:
+        t = trace.tangents.get(id(v))
+        if t is not None:
+            tracked = True
+            tangents.append(t)
+        else:
+            tangents.append(np.zeros_like(np.asarray(v), dtype=np.float64))
+    return tangents, tracked
 
 
 @dataclass
@@ -90,7 +122,19 @@ class _JVPTrace:
             if tangent is not None:
                 active = True
                 tangent_inputs.append(tangent)
-            elif isinstance(primal, (np.ndarray, np.generic, int, float)) and not isinstance(primal, bool):
+                continue
+            seq = _sequence_tangents(self, primal)
+            if seq is not None:
+                # A sequence operand (`ops.cat([a, b])`). Its elements are not
+                # the argument, so `id(primal)` never matched and the whole
+                # argument fell into the `None` branch below — which made the
+                # trace inactive and returned a silently ZERO tangent through
+                # cat/stack. Look the elements up individually instead.
+                elem_tangents, seq_active = seq
+                active = active or seq_active
+                tangent_inputs.append(elem_tangents)
+                continue
+            if isinstance(primal, (np.ndarray, np.generic, int, float)) and not isinstance(primal, bool):
                 tangent_inputs.append(np.zeros_like(np.asarray(primal), dtype=np.float64))
             else:
                 tangent_inputs.append(None)
@@ -2904,6 +2948,8 @@ def jvp_tri_solve(primals, tangents, *, lower=True, **_):
     dL = np.asarray(tangents[0], dtype=np.float64)
     db = np.asarray(tangents[1], dtype=np.float64)
     tri = np.tril(L) if lower else np.triu(L)
+    check_factor_rank(np.diag(tri), op="tri_solve", factor="T",
+                      mode="forward-mode")
     dtri = np.tril(dL) if lower else np.triu(dL)
     x = np.linalg.solve(tri, b)
     rhs = db - dtri @ x
@@ -2913,10 +2959,23 @@ def jvp_tri_solve(primals, tangents, *, lower=True, **_):
 
 @_jvp("cholesky")
 def jvp_cholesky(primals, tangents, **_):
-    """A = L L^T. dL = L · phi(L^{-1} dA L^{-T})_strictly_lower_plus_half_diag."""
+    """A = L L^T. dL = L · phi(L^{-1} dA L^{-T})_strictly_lower_plus_half_diag.
+
+    Defined only while ``A`` is positive definite; a non-PD or numerically
+    rank-deficient ``A`` fails closed (see ``degeneracy.py``).
+    """
     A = np.asarray(primals[0], dtype=np.float64)
     dA = np.asarray(tangents[0], dtype=np.float64)
-    L = np.linalg.cholesky(A)
+    try:
+        L = np.linalg.cholesky(A)
+    except np.linalg.LinAlgError as exc:
+        raise TesseraDegeneracyError(
+            f"{DEGENERACY_DIAGNOSTIC_CODE}: cholesky forward-mode is not "
+            f"defined at this input — the factorization itself failed "
+            f"({exc}). A = L·Lᵀ requires a positive-definite A."
+        ) from exc
+    check_factor_rank(np.diag(L), op="cholesky", factor="L",
+                      mode="forward-mode")
     Linv = np.linalg.inv(L)
     M = Linv @ dA @ Linv.T
     n = L.shape[0]
@@ -2942,6 +3001,7 @@ def jvp_qr(primals, tangents, **_):
     A = np.asarray(primals[0], dtype=np.float64)
     dA = np.asarray(tangents[0], dtype=np.float64)
     Q, R = np.linalg.qr(A)
+    check_factor_rank(np.diag(R), op="qr", factor="R", mode="forward-mode")
     Rinv = np.linalg.inv(R)
     M = Q.T @ dA @ Rinv
     low = np.tril(M, -1)
@@ -2951,7 +3011,7 @@ def jvp_qr(primals, tangents, **_):
 
 
 @_jvp("svd")
-def jvp_svd(primals, tangents, **_):
+def jvp_svd(primals, tangents, *, _output_index=None, **_):
     """A = U diag(s) V^T (thin). Full tangent for distinct singular values.
 
     With ``dP = Uᵀ dA Vᵀᵀ`` and ``F_ij = 1/(s_j² − s_i²)`` off-diagonal:
@@ -2971,6 +3031,20 @@ def jvp_svd(primals, tangents, **_):
     ``ops.svd`` forward accepts stacked matrices, so the rule pair must
     too — all transposes are last-two-axis swaps and the diagonal /
     S-scaling operations broadcast over the batch.
+
+    ``_output_index`` is accepted and deliberately unused. Forward mode
+    produces **every** component in one call, so there is nothing to select —
+    unlike the VJP, which the tape replays once per component. It is named
+    rather than left to ``**_`` because a kwarg a canonical caller emits must
+    be visibly considered, not silently absorbed (the ``jvp_clamp`` bug class
+    that ``test_swallowed_kwarg_findings_are_pinned`` guards).
+
+    "Distinct singular values" is a contract, not an aside: at a repeated
+    value ``F`` has no limit and no individual ``s_i``/``u_i``/``v_i`` is
+    differentiable. Every output of this rule is per-component, so there is
+    no restricted form to fall back on — `svd_coupling(admit_generalized=
+    False)` refuses under both `fail_closed` and `generalized`, rather than
+    returning a plausible-looking number (see ``degeneracy.py``).
     """
     A = np.asarray(primals[0], dtype=np.float64)
     dA = np.asarray(tangents[0], dtype=np.float64)
@@ -2978,9 +3052,9 @@ def jvp_svd(primals, tangents, **_):
     mT = lambda x: np.swapaxes(x, -1, -2)  # noqa: E731 — local adjoint spelling
     dP = mT(U) @ dA @ mT(Vt)
     ds = np.einsum("...ii->...i", dP).copy()
-    s2 = s ** 2
     eye = np.eye(s.shape[-1])
-    F = (1.0 - eye) / (s2[..., None, :] - s2[..., :, None] + eye)
+    F = svd_coupling(s, op="svd", admit_generalized=False,
+                     mode="forward-mode")
     m, n = A.shape[-2], A.shape[-1]
     dU = U @ (F * (dP * s[..., None, :] + s[..., :, None] * mT(dP)))
     dV = mT(Vt) @ (F * (s[..., :, None] * dP + mT(dP) * s[..., None, :]))

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -307,6 +308,210 @@ def save_replay_manifest(path: str | os.PathLike[str], value=None, **metadata: A
     return manifest
 
 
+def fd_step(x, *, dtype=np.float64) -> float:
+    """Scale-aware finite-difference step: ``sqrt(machine eps) * max(1, ||x||)``.
+
+    The notes' rule of thumb (§4.6): truncation error falls with the step while
+    roundoff grows as ``eps/step``, and the two cross near ``sqrt(eps)`` — about
+    half the significant digits, which is the most it is safe to rely on. A
+    fixed step ignores the scale of ``x`` and is therefore wrong on every input
+    except the one it was tuned for.
+
+    ``x`` may be an array or a sequence of arrays (the norm is taken over all).
+    """
+    arrays = x if isinstance(x, (list, tuple)) else [x]
+    norm_sq = 0.0
+    for a in arrays:
+        arr = np.asarray(_as_numpy(a), dtype=np.float64)
+        norm_sq += float(np.sum(arr * arr))
+    scale = max(1.0, float(np.sqrt(norm_sq)))
+    return float(np.sqrt(np.finfo(np.dtype(dtype)).eps) * scale)
+
+
+@dataclass(frozen=True)
+class DirectionalCheckResult:
+    """Basis-free directional-derivative check (§2.2.1)."""
+
+    passed: bool
+    max_rel_error: float
+    probes: int
+    eps: float
+    rtol: float
+
+    def format(self) -> str:
+        status = "passed" if self.passed else "failed"
+        return (f"Directional derivative check {status} "
+                f"({self.probes} probes, max relative error "
+                f"{self.max_rel_error:.3g})")
+
+
+@dataclass(frozen=True)
+class OrderOfAccuracyResult:
+    """Measured convergence order of a finite-difference scheme (§4.4–4.5)."""
+
+    passed: bool
+    measured_order: float
+    expected_order: float
+    scheme: str
+    steps: tuple[float, ...]
+    errors: tuple[float, ...]
+    exact: bool = False
+
+    def format(self) -> str:
+        status = "passed" if self.passed else "failed"
+        if self.exact:
+            return (f"Order-of-accuracy check {status}: {self.scheme} "
+                    f"differences are EXACT for this function (error at the "
+                    f"roundoff floor at every step), so there is no truncation "
+                    f"slope to measure")
+        return (f"Order-of-accuracy check {status}: {self.scheme} differences "
+                f"converged at order {self.measured_order:.2f} "
+                f"(expected {self.expected_order:.0f})")
+
+
+def check_grad_directional(
+    fn: Callable[..., object],
+    inputs: Sequence[object],
+    directional_derivative: Callable[..., object],
+    *,
+    probes: int = 3,
+    eps: Optional[float] = None,
+    rtol: float = 1e-6,
+    seed: int = 0,
+) -> DirectionalCheckResult:
+    """Check ``f'(x)[v]`` against a central difference along random ``v``.
+
+    The linear-operator view (§2.2.1): ``f'(x)[v]`` *is* the directional
+    derivative ``d/da f(x + a v)`` at ``a = 0``. So one random direction tests
+    the entire operator in **two** function evaluations, regardless of how many
+    components ``x`` has — and it works unchanged when ``x`` is a matrix, where
+    "one coordinate at a time" is not the natural unit.
+
+    ``directional_derivative(*inputs, *directions)`` must return the operator
+    applied to the directions, i.e. the same shape as ``fn``'s output. Both
+    ``fn``'s output and the derivative may be arrays; the comparison is on the
+    relative norm of the difference.
+    """
+    arrays = [np.asarray(_as_numpy(x), dtype=np.float64) for x in inputs]
+    if eps is None:
+        eps = fd_step(arrays)
+    rng = np.random.default_rng(seed)
+    worst = 0.0
+    for _ in range(max(1, probes)):
+        dirs = [rng.standard_normal(a.shape) for a in arrays]
+        exact = np.asarray(
+            _as_numpy(directional_derivative(*arrays, *dirs)), dtype=np.float64
+        )
+        plus = [a + eps * d for a, d in zip(arrays, dirs)]
+        minus = [a - eps * d for a, d in zip(arrays, dirs)]
+        fd = (
+            np.asarray(_as_numpy(fn(*plus)), dtype=np.float64)
+            - np.asarray(_as_numpy(fn(*minus)), dtype=np.float64)
+        ) / (2.0 * eps)
+        denom = float(np.linalg.norm(exact)) + float(np.linalg.norm(fd))
+        if denom == 0.0:
+            continue
+        worst = max(worst, 2.0 * float(np.linalg.norm(fd - exact)) / denom)
+    return DirectionalCheckResult(
+        passed=worst <= rtol, max_rel_error=worst, probes=probes,
+        eps=float(eps), rtol=rtol,
+    )
+
+
+def check_order_of_accuracy(
+    fn: Callable[..., object],
+    inputs: Sequence[object],
+    directional_derivative: Callable[..., object],
+    *,
+    scheme: str = "central",
+    decades: int = 5,
+    start: float = 1e-1,
+    seed: int = 0,
+    tolerance: float = 0.25,
+) -> OrderOfAccuracyResult:
+    """Measure the *rate* at which a finite difference converges.
+
+    A fixed tolerance is a weak test: a derivative rule that is wrong by a
+    constant factor still passes a loose one. The convergence **order** is
+    scale-free and dtype-honest — forward differences must converge at order 1
+    and central differences at order 2 (§4.4–4.5), and a rule that is subtly
+    wrong flattens the slope immediately even when its absolute error looks
+    small.
+
+    Sweeps the step over ``decades`` powers of ten starting at ``start``,
+    staying above the roundoff floor, and fits the log-log slope. Returns the
+    measured order and whether it is within ``tolerance`` of the expected one.
+    """
+    if scheme not in ("central", "forward"):
+        raise ValueError(f"unknown scheme {scheme!r}; use 'central' or 'forward'")
+    expected = 2.0 if scheme == "central" else 1.0
+
+    arrays = [np.asarray(_as_numpy(x), dtype=np.float64) for x in inputs]
+    rng = np.random.default_rng(seed)
+    dirs = [rng.standard_normal(a.shape) for a in arrays]
+    exact = np.asarray(
+        _as_numpy(directional_derivative(*arrays, *dirs)), dtype=np.float64
+    )
+    scale = float(np.linalg.norm(exact))
+    if scale == 0.0:
+        raise ValueError(
+            "order-of-accuracy needs a nonzero directional derivative to "
+            "normalize against; pick a different point or direction"
+        )
+
+    def evaluate(step: float) -> np.ndarray:
+        plus = np.asarray(
+            _as_numpy(fn(*[a + step * d for a, d in zip(arrays, dirs)])),
+            dtype=np.float64,
+        )
+        if scheme == "forward":
+            base = np.asarray(_as_numpy(fn(*arrays)), dtype=np.float64)
+            return (plus - base) / step
+        minus = np.asarray(
+            _as_numpy(fn(*[a - step * d for a, d in zip(arrays, dirs)])),
+            dtype=np.float64,
+        )
+        return (plus - minus) / (2.0 * step)
+
+    steps: list[float] = []
+    errors: list[float] = []
+    for k in range(max(2, decades)):
+        step = start * (10.0 ** -k)
+        steps.append(step)
+        errors.append(float(np.linalg.norm(evaluate(step) - exact)) / scale)
+
+    # A function the scheme reproduces exactly — any linear map for either
+    # scheme, any quadratic for central differences — has NO truncation term,
+    # so every step sits on the roundoff floor and the "slope" is noise. That is
+    # a pass with no order to report, not an order-0 failure.
+    # Test the LARGEST step: truncation error is biggest there, so if even it
+    # sits at machine noise there is no truncation term at all. (Testing the
+    # max over all steps would fail, because the smallest steps have already
+    # started climbing back up on roundoff.)
+    _FLOOR = 1e-11
+    if errors[0] < _FLOOR:
+        return OrderOfAccuracyResult(
+            passed=True, measured_order=expected, expected_order=expected,
+            scheme=scheme, steps=tuple(steps), errors=tuple(errors), exact=True,
+        )
+
+    # Fit only the truncation-dominated prefix: once roundoff takes over the
+    # error stops falling, and including that region would drag the slope
+    # toward zero and report a correct rule as broken.
+    slopes: list[float] = []
+    for i in range(len(steps) - 1):
+        e0, e1 = errors[i], errors[i + 1]
+        if e0 <= 0.0 or e1 <= 0.0 or e1 >= e0:
+            break
+        slopes.append(math.log(e0 / e1) / math.log(steps[i] / steps[i + 1]))
+    measured = float(np.median(slopes)) if slopes else 0.0
+    return OrderOfAccuracyResult(
+        passed=abs(measured - expected) <= tolerance,
+        measured_order=measured, expected_order=expected, scheme=scheme,
+        steps=tuple(steps), errors=tuple(errors), exact=False,
+    )
+
+
 @dataclass(frozen=True)
 class GradientCheckResult:
     """Finite-difference gradient check result."""
@@ -328,7 +533,7 @@ def check_grad(
     inputs: Sequence[object],
     *,
     analytic_grads: Optional[Sequence[object]] = None,
-    eps: float = 1e-4,
+    eps: Optional[float] = None,
     atol: float = 1e-3,
     rtol: float = 1e-3,
 ) -> GradientCheckResult:
@@ -337,9 +542,25 @@ def check_grad(
     If ``analytic_grads`` is omitted, the helper returns the finite-difference
     gradient magnitudes as errors. Supplying analytic gradients turns the helper
     into a pass/fail validator.
+
+    ``eps`` defaults to a **scale-aware** step, :func:`fd_step` — about
+    ``sqrt(machine eps) * ||x||``, which is where truncation error and roundoff
+    cross (MC5; Bright/Edelman/Johnson §4.6). The previous hard-coded ``1e-4``
+    was right only when ``||x|| ~ 1e4``: on well-scaled inputs it sits four
+    orders above the optimum, and in fp32 it sits below the roundoff floor.
+    Pass ``eps`` explicitly to pin a step.
+
+    This probes **one coordinate at a time**, which costs ``2n`` evaluations and
+    is the wrong unit for matrix- or operator-valued inputs. For the basis-free
+    form — one random direction, two evaluations, the whole linear operator
+    tested at once — use :func:`check_grad_directional`. To test the *rate* at
+    which the approximation converges rather than a fixed tolerance, use
+    :func:`check_order_of_accuracy`.
     """
 
     arrays = [np.asarray(_as_numpy(x), dtype=np.float64).copy() for x in inputs]
+    if eps is None:
+        eps = fd_step(arrays)
     analytic = None if analytic_grads is None else [
         np.asarray(_as_numpy(g), dtype=np.float64) for g in analytic_grads
     ]
@@ -507,11 +728,16 @@ def _stable_hash(text: str) -> str:
 __all__ = [
     "DebugTrace",
     "DeterminismCheckResult",
+    "DirectionalCheckResult",
     "GradientCheckResult",
+    "OrderOfAccuracyResult",
     "GraphTrace",
     "TensorSummary",
     "check_determinism",
     "check_grad",
+    "check_grad_directional",
+    "check_order_of_accuracy",
+    "fd_step",
     "debug_artifact",
     "debug_barrier",
     "debug_trace",

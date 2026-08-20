@@ -6,6 +6,7 @@ This directory contains examples and tutorials for using Tessera.
 
 - [`basic_tensor_ops.py`](getting_started/basic_tensor_ops.py) - Basic tensor operations
 - [`tessera_flash_attention_demo/`](getting_started/tessera_flash_attention_demo/) - Flash Attention usage
+- [`matrix_calculus/`](matrix_calculus/) - matrix calculus in Tessera: derivatives as linear operators, forward vs reverse cost, and the adjoint method (companion to arXiv:2501.14787)
 
 ## Compiler Examples
 

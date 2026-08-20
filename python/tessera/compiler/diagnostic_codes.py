@@ -132,6 +132,74 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="AD-CORE-EFFECT-CONTROL-1",
     ),
     DiagnosticCode(
+        code="E_LINALG_CONTRACT",
+        pass_origin="tessera.linalg_ops",
+        severity="error",
+        summary=(
+            "A matrix-function primitive was called outside its domain: a "
+            "non-square operand, a numerically singular matrix, a negative "
+            "determinant under logdet, or an unsupported `ord` for norm."
+        ),
+        fix_hint=(
+            "Supply an operand in the op's domain. `ord` is a semantic key and "
+            "is never defaulted to another norm; a singular matrix has neither "
+            "a value nor a derivative here."
+        ),
+        spec="docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md MC1",
+        sprint="MATRIX-CALCULUS-MC1", language="python",
+    ),
+    DiagnosticCode(
+        code="E_METRIC_CONTRACT",
+        pass_origin="tessera.metric",
+        severity="error",
+        summary=(
+            "An object used as a metric is not one: weights that are not "
+            "positive, a metric matrix that is not symmetric positive "
+            "definite, or a value not implementing the Metric protocol."
+        ),
+        fix_hint=(
+            "Use tessera.metric.Euclidean/Weighted/Sphere/Orthogonal, or a type "
+            "providing inner/sharp/project_tangent/retract. An indefinite W is "
+            "not an inner product and its 'gradient' can point uphill."
+        ),
+        spec="docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md MC3",
+        sprint="MATRIX-CALCULUS-MC3", language="python",
+    ),
+    DiagnosticCode(
+        code="E_DEGENERATE_FACTORIZATION",
+        pass_origin="tessera.autodiff.degeneracy",
+        severity="error",
+        summary=(
+            "A matrix-factorization derivative (svd/qr/cholesky/tri_solve) was "
+            "requested at an input where it does not exist: coincident singular "
+            "values, or a numerically rank-deficient triangular factor."
+        ),
+        fix_hint=(
+            "Supply a regular input, or select the degeneracy policy explicitly "
+            "with tessera.autodiff.degeneracy.degeneracy_policy('generalized' | "
+            "'damped:<tau>' | 'unchecked')."
+        ),
+        spec="docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md MC2",
+        sprint="MATRIX-CALCULUS-MC2", language="python",
+    ),
+    DiagnosticCode(
+        code="E_TENSOR_UNWRAP",
+        pass_origin="tessera.ops",
+        severity="error",
+        summary=(
+            "An operand could not be unwrapped to numeric data — a wrapper "
+            "chain that does not reach an ndarray, or a non-tensor element "
+            "inside a sequence operand such as ops.cat/ops.stack."
+        ),
+        fix_hint=(
+            "Pass a Tensor, nn.Parameter, DistributedArray, or numpy array. "
+            "The message names the op and, for sequence operands, the index of "
+            "the offending element."
+        ),
+        spec="docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md MC8",
+        sprint="MATRIX-CALCULUS-MC8", language="python",
+    ),
+    DiagnosticCode(
         code="E_FUSED_EPILOGUE_BAD_DTYPE",
         pass_origin="tessera.compiler.fusion_core.FusedRegion",
         severity="error",

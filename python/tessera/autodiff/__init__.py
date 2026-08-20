@@ -28,6 +28,12 @@ from .tape import (
     count_primitive_executions,
 )
 from .vjp import register_vjp, get_vjp, _VJPS
+from . import degeneracy
+from .degeneracy import (
+    TesseraDegeneracyError,
+    degeneracy_policy,
+    FACTORIZATION_DEGENERACY,
+)
 from .mixed_precision import autocast, autocast_dtype, GradScaler
 from .rematerialize import rematerialize, checkpoint
 from .grad import grad, hvp, elementwise_grad

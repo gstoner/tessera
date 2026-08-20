@@ -181,6 +181,7 @@ metadata do not acquire artificial device benchmarks merely to reduce a count.
 |---|---|
 | [`AUTODIFF_ARCHITECTURE_REVIEW.md`](AUTODIFF_ARCHITECTURE_REVIEW.md) | Compiler autodiff gaps and algorithmic review. |
 | [`DIFFERENTIABLE_PROGRAMMING_REVIEW.md`](DIFFERENTIABLE_PROGRAMMING_REVIEW.md) | Book-derived delta; distinguishes Python reference work from compiled support. |
+| [`MATRIX_CALCULUS_REVIEW.md`](MATRIX_CALCULUS_REVIEW.md) | Book-derived delta against Edelman & Johnson's matrix-calculus notes (arXiv:2501.14787): the missing matrix-function/factorization derivative family, a verified `svd` VJP NaN at repeated singular values, the metric-parameterized gradient as the `manifold` key's consumer, and the Kronecker/`vec` cost identity. Companion runnable tutorial at `examples/matrix_calculus/`. |
 | [`COMPILER_ARCHITECTURE_SWEEP.md`](COMPILER_ARCHITECTURE_SWEEP.md) | Cross-layer findings feeding the integrated plan. |
 | [`CORE_SUBSTRATE_VIEW.md`](CORE_SUBSTRATE_VIEW.md) | Integrated read across SparDA/TileRT/TileSight/PDE/game-theory/CAKE: the eight shared core-compiler substrate investments, their consumers, and their owning rows (flags the unowned ones). |
 | [`FRONTEND_GRAPH_SCHEDULE_REVIEW.md`](FRONTEND_GRAPH_SCHEDULE_REVIEW.md) | Frontend, Graph, and Schedule ownership findings. |

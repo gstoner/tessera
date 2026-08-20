@@ -3182,6 +3182,88 @@ def _shape_svd(operand_types: List[IRType],
             tensor_ir_type(a.shape[:-2] + (n, n), a.dtype, layout=a.layout))
 
 
+def _shape_matrix_scalar(operand_types: List[IRType],
+                         attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """A matrix reduced to one number: `(..., m, n) -> (...)`.
+
+    `det`, `logdet`, `trace` and `norm` all consume the last two axes and keep
+    any leading batch axes. This is NOT `reduce_all` (which collapses
+    everything) nor `reduce_trailing` (which drops one axis).
+    """
+    a = operand_types[0]
+    if a.rank is None or len(a.shape) < 2:
+        return _unknown_like(a)
+    return tensor_ir_type(a.shape[:-2], a.dtype, layout=a.layout)
+
+
+def _broadcast_batch(x: Tuple[str, ...], y: Tuple[str, ...]) -> Tuple[str, ...]:
+    """Numpy broadcasting over leading axes, on string extents.
+
+    Right-aligned; `1` stretches; anything not statically decidable is `?`.
+    """
+    out: list[str] = []
+    n = max(len(x), len(y))
+    for k in range(n):
+        a = x[len(x) - n + k] if len(x) - n + k >= 0 else "1"
+        b = y[len(y) - n + k] if len(y) - n + k >= 0 else "1"
+        if a == b:
+            out.append(a)
+        elif a == "1":
+            out.append(b)
+        elif b == "1":
+            out.append(a)
+        else:
+            out.append("?")
+    return tuple(out)
+
+
+def _dim_product(x: str, y: str) -> str:
+    """Multiply two extents. Dims are stored as STRINGS in this IR, so a
+    symbolic or unknown extent (`?`, `*`, a symbol name) propagates as `?`
+    rather than being silently treated as a number."""
+    if x.isdigit() and y.isdigit():
+        return str(int(x) * int(y))
+    return "?"
+
+
+def _shape_vec(operand_types: List[IRType],
+               attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """Column-major vectorization: `(..., m, n) -> (..., m*n)`."""
+    a = operand_types[0]
+    if a.rank is None or len(a.shape) < 2:
+        return _unknown_like(a)
+    return tensor_ir_type(
+        a.shape[:-2] + (_dim_product(a.shape[-2], a.shape[-1]),),
+        a.dtype, layout=a.layout)
+
+
+def _shape_kron(operand_types: List[IRType],
+                attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """`(p, q) kron (r, s) -> (p*r, q*s)` — the shape that makes it a cost trap."""
+    a, b = operand_types[0], operand_types[1]
+    if (a.rank is None or b.rank is None
+            or len(a.shape) < 2 or len(b.shape) < 2):
+        return _unknown_like(a)
+    # The eager op broadcasts leading axes, so the IR rule must too — dropping
+    # them would hand downstream IR an output rank the reference operation does
+    # not produce.
+    batch = _broadcast_batch(a.shape[:-2], b.shape[:-2])
+    dims = batch + (_dim_product(a.shape[-2], b.shape[-2]),
+                    _dim_product(a.shape[-1], b.shape[-1]))
+    return tensor_ir_type(dims, a.dtype, layout=a.layout)
+
+
+def _shape_eigh(operand_types: List[IRType],
+                attrs: Optional[Dict[str, Any]] = None):
+    """Symmetric eigendecomposition: eigenvalues `(..., n)`, vectors `(..., n, n)`."""
+    a = operand_types[0]
+    if a.rank is None or len(a.shape) < 2:
+        return (_unknown_like(a), _unknown_like(a))
+    n = a.shape[-1]
+    return (tensor_ir_type(a.shape[:-2] + (n,), a.dtype, layout=a.layout),
+            tensor_ir_type(a.shape[:-2] + (n, n), a.dtype, layout=a.layout))
+
+
 def _shape_nonzero(operand_types: List[IRType],
                    attrs: Optional[Dict[str, Any]] = None):
     """One rank-1 index vector per input axis; the LENGTH is data-dependent.
@@ -3460,6 +3542,10 @@ def _shape_depth_attention(operand_types: List[IRType],
 
 _SHAPE_RULES = {
     "same_as_first": _shape_same_as_first,
+    "matrix_scalar": _shape_matrix_scalar,
+    "vec": _shape_vec,
+    "kron": _shape_kron,
+    "eigh": _shape_eigh,
     "matmul_2d": _shape_matmul_2d,
     "es_population_features": _shape_es_population_features,
     "coalition_marginal": _shape_coalition_marginal,

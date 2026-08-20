@@ -5617,23 +5617,32 @@ def _numeric_conv_vjp(op_name, dout, *primals, **kwargs):
 
 
 @_vjp("conv2d")
-def vjp_conv2d(dout, x, weight, bias=None, *, stride=1, padding=0, **_):
+def vjp_conv2d(dout, x, weight, bias=None, *, stride=1, padding=0,
+               layout="nhwc", **_):
+    # `layout` must reach the numeric probe: differentiating the nhwc map
+    # for an nchw caller is a silently-wrong gradient, not a fallback
+    # (AD-LAW-1 forward-key swallow triage, 2026-08-19).
     if bias is None:
         grads = _numeric_conv_vjp("conv2d", dout, x, weight,
-                                  stride=stride, padding=padding)
+                                  stride=stride, padding=padding,
+                                  layout=layout)
         return grads + (None,)
     return _numeric_conv_vjp("conv2d", dout, x, weight, bias,
-                             stride=stride, padding=padding)
+                             stride=stride, padding=padding, layout=layout)
 
 
 @_vjp("conv3d")
-def vjp_conv3d(dout, x, weight, bias=None, *, stride=1, padding=0, **_):
+def vjp_conv3d(dout, x, weight, bias=None, *, stride=1, padding=0,
+               layout="ndhwc", **_):
+    # See vjp_conv2d: the caller's layout must reach the numeric probe
+    # (AD-LAW-1 forward-key swallow triage, 2026-08-19).
     if bias is None:
         grads = _numeric_conv_vjp("conv3d", dout, x, weight,
-                                  stride=stride, padding=padding)
+                                  stride=stride, padding=padding,
+                                  layout=layout)
         return grads + (None,)
     return _numeric_conv_vjp("conv3d", dout, x, weight, bias,
-                             stride=stride, padding=padding)
+                             stride=stride, padding=padding, layout=layout)
 
 
 @_vjp("conv_transpose")

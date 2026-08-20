@@ -905,49 +905,64 @@ def test_forward_mode_positional_config_matches_keyword():
 # AD-LAW-1g: the dequantize_nvfp4 block_size entries left this set —
 # both modes now READ the key so the per-block scale expands exactly
 # as the canonical forward blocks it (before, both crashed outright).
-_OPEN_FORWARD_KEY_SWALLOWS = {
-    ("adam", "jvp", "cast_updates_to_param_dtype"),
-    ("adam", "jvp", "compute_dtype"),
-    ("adam", "jvp", "state_dtype"),
-    ("adam", "vjp", "cast_updates_to_param_dtype"),
-    ("adam", "vjp", "compute_dtype"),
-    ("adam", "vjp", "state_dtype"),
-    ("all_reduce", "jvp", "axis"),
-    ("all_reduce", "vjp", "axis"),
-    ("all_to_all", "jvp", "axis"),
-    ("all_to_all", "vjp", "axis"),
-    ("conv2d", "vjp", "layout"),
-    ("conv3d", "vjp", "layout"),
-    ("dequant_matmul", "vjp", "backend"),
-    ("dequantize_fp4", "jvp", "format"),
-    ("dequantize_fp4", "vjp", "format"),
-    ("dequantize_fp6", "jvp", "format"),
-    ("dequantize_fp6", "vjp", "format"),
-    ("dequantize_fp8", "vjp", "format"),
-    ("grouped_gemm", "jvp", "kind"),
-    ("grouped_gemm", "vjp", "kind"),
-    ("image_resize", "jvp", "antialias"),
-    ("momentum", "jvp", "cast_updates_to_param_dtype"),
-    ("momentum", "jvp", "compute_dtype"),
-    ("momentum", "jvp", "state_dtype"),
-    ("momentum", "vjp", "cast_updates_to_param_dtype"),
-    ("momentum", "vjp", "compute_dtype"),
-    ("momentum", "vjp", "state_dtype"),
-    ("nesterov", "jvp", "cast_updates_to_param_dtype"),
-    ("nesterov", "jvp", "compute_dtype"),
-    ("nesterov", "jvp", "state_dtype"),
-    ("nesterov", "vjp", "cast_updates_to_param_dtype"),
-    ("nesterov", "vjp", "compute_dtype"),
-    ("nesterov", "vjp", "state_dtype"),
-    ("online_softmax_state", "jvp", "axis"),
-    ("online_softmax_state", "vjp", "axis"),
-    ("quantize_fp4", "jvp", "format"),
-    ("quantize_fp4", "vjp", "format"),
-    ("quantize_fp6", "jvp", "format"),
-    ("quantize_fp6", "vjp", "format"),
-    ("quantize_fp8", "vjp", "format"),
-    ("quantize_nvfp4", "jvp", "block_size"),
-    ("quantize_nvfp4", "vjp", "block_size"),
+_OPEN_FORWARD_KEY_SWALLOWS: set[tuple[str, str, str]] = set()
+
+# Triage complete (AD-LAW-1m, 2026-08-19): every remaining forward-key
+# swallow was body-read and is benign FOR A NAMED REASON — the key cannot
+# change the reference gradient. conv2d/conv3d `layout` was the one real
+# defect in the set (the numeric VJP probed the nhwc map for nchw callers)
+# and is FIXED, not excused. A benign entry must still BE a swallow — the
+# gate flags a stale reason the moment a rule starts reading the key.
+_DTYPE_KEY_REASON = (
+    "precision-envelope key: selects storage/compute rounding, not the "
+    "mathematical map; dtype casts are AD-transparent by the same "
+    "convention that gives `cast` an identity derivative"
+)
+_MESH_AXIS_REASON = (
+    "mesh-axis name: value-neutral in the single-rank reference the rules "
+    "implement"
+)
+_STE_FORMAT_REASON = (
+    "quantization-grid key: the forward validates it and the STE identity "
+    "derivative is grid-independent by the STE convention"
+)
+_BENIGN_FORWARD_KEY_SWALLOWS: dict[tuple[str, str, str], str] = {
+    **{(op, mode, key): _DTYPE_KEY_REASON
+       for op in ("adam", "momentum", "nesterov")
+       for mode in ("jvp", "vjp")
+       for key in ("cast_updates_to_param_dtype", "compute_dtype",
+                   "state_dtype")},
+    **{(op, mode, "axis"): _MESH_AXIS_REASON
+       for op in ("all_reduce", "all_to_all")
+       for mode in ("jvp", "vjp")},
+    ("online_softmax_state", "jvp", "axis"):
+        "rule returns declared-zero tangents for every axis",
+    ("online_softmax_state", "vjp", "axis"):
+        "rule returns declared-zero cotangents for every axis",
+    **{(op, mode, "format"): _STE_FORMAT_REASON
+       for op, mode in (("dequantize_fp4", "jvp"), ("dequantize_fp4", "vjp"),
+                        ("dequantize_fp6", "jvp"), ("dequantize_fp6", "vjp"),
+                        ("dequantize_fp8", "vjp"),
+                        ("quantize_fp4", "jvp"), ("quantize_fp4", "vjp"),
+                        ("quantize_fp6", "jvp"), ("quantize_fp6", "vjp"),
+                        ("quantize_fp8", "vjp"))},
+    ("quantize_nvfp4", "jvp", "block_size"):
+        "STE identity for the value output regardless of block size; the "
+        "scale output is non-differentiable",
+    ("quantize_nvfp4", "vjp", "block_size"):
+        "STE identity for the value output regardless of block size; the "
+        "scale output is non-differentiable",
+    ("grouped_gemm", "jvp", "kind"):
+        "grouped-layout family key: the forward validates it, and the "
+        "reference rules implement the only executable kind's math",
+    ("grouped_gemm", "vjp", "kind"):
+        "grouped-layout family key: the forward validates it, and the "
+        "reference rules implement the only executable kind's math",
+    ("dequant_matmul", "vjp", "backend"):
+        "performance key (#21a): backend lane selection, same math",
+    ("image_resize", "jvp", "antialias"):
+        "the forward fails closed on antialias=True (not modeled in the "
+        "numpy reference), so the key never reaches the rule non-default",
 }
 
 
@@ -1009,14 +1024,18 @@ def test_forward_key_swallow_findings_are_pinned():
     `upper`) and `segment_reduce` (`op` vs `reduce`) were, both silently
     returning a different function's gradient."""
     found = _forward_key_swallow_mismatches()
-    new = found - _OPEN_FORWARD_KEY_SWALLOWS
-    fixed = _OPEN_FORWARD_KEY_SWALLOWS - found
+    known = _OPEN_FORWARD_KEY_SWALLOWS | set(_BENIGN_FORWARD_KEY_SWALLOWS)
+    new = found - known
+    fixed = known - found
     assert not new, (
         "NEW forward-key swallow — the canonical forward accepts a key that "
-        f"neither rule reads, so the rule differentiates something else: {sorted(new)}")
+        f"neither rule reads, so the rule differentiates something else: "
+        f"{sorted(new)} (fix the rule, or add a named-benign entry WITH the "
+        f"reason you established by reading the bodies)")
     assert not fixed, (
-        "forward-key swallow finding fixed — remove it from "
-        f"_OPEN_FORWARD_KEY_SWALLOWS to record the triage outcome: {sorted(fixed)}")
+        "forward-key swallow entry no longer reproduces — the rule now reads "
+        "the key; record the outcome by removing it from the open/benign "
+        f"set: {sorted(fixed)}")
 
 
 # ── dashboard determinism ────────────────────────────────────────────────────

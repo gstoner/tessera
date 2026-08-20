@@ -7,11 +7,11 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 ## Headline
 
 - **505** ops in `primitive_coverage` registry.
-- **5448** total Python-test references, **1331** total lit-fixture references.
+- **5480** total Python-test references, **1331** total lit-fixture references.
 - **70** ops have **zero** references in either test surface.
 - **113** ops have ≤1 reference ("thinly tested").
-- **180** ops have ≥10 references ("well tested").
-- **166** ops have at least one associated `pytest.raises` negative test.
+- **181** ops have ≥10 references ("well tested").
+- **168** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
@@ -22,8 +22,8 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `add` |  156 |   46 |  202 |  11 | `bf16`, `f16`, `f32`, `f64` … |
 | `softmax` |  149 |   50 |  199 |  31 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  132 |   37 |  169 |  11 | `bf16`, `f16`, `f32`, `f64` … |
-| `mul` |  117 |   41 |  158 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `reduce` |  112 |   17 |  129 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `mul` |  125 |   41 |  166 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `reduce` |  119 |   17 |  136 |   9 | `bf16`, `f16`, `f32`, `f64` … |
 | `rmsnorm` |  110 |   18 |  128 |   6 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   91 |    8 |   99 |   6 | `bf16`, `f16`, `f32`, `f64` … |
 | `layer_norm` |   73 |   16 |   89 |   3 | `bf16`, `f16`, `f32`, `fp16` … |

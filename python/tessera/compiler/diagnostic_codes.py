@@ -132,6 +132,40 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="AD-CORE-EFFECT-CONTROL-1",
     ),
     DiagnosticCode(
+        code="E_DEGENERATE_FACTORIZATION",
+        pass_origin="tessera.autodiff.degeneracy",
+        severity="error",
+        summary=(
+            "A matrix-factorization derivative (svd/qr/cholesky/tri_solve) was "
+            "requested at an input where it does not exist: coincident singular "
+            "values, or a numerically rank-deficient triangular factor."
+        ),
+        fix_hint=(
+            "Supply a regular input, or select the degeneracy policy explicitly "
+            "with tessera.autodiff.degeneracy.degeneracy_policy('generalized' | "
+            "'damped:<tau>' | 'unchecked')."
+        ),
+        spec="docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md MC2",
+        sprint="MATRIX-CALCULUS-MC2", language="python",
+    ),
+    DiagnosticCode(
+        code="E_TENSOR_UNWRAP",
+        pass_origin="tessera.ops",
+        severity="error",
+        summary=(
+            "An operand could not be unwrapped to numeric data — a wrapper "
+            "chain that does not reach an ndarray, or a non-tensor element "
+            "inside a sequence operand such as ops.cat/ops.stack."
+        ),
+        fix_hint=(
+            "Pass a Tensor, nn.Parameter, DistributedArray, or numpy array. "
+            "The message names the op and, for sequence operands, the index of "
+            "the offending element."
+        ),
+        spec="docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md MC8",
+        sprint="MATRIX-CALCULUS-MC8", language="python",
+    ),
+    DiagnosticCode(
         code="E_FUSED_EPILOGUE_BAD_DTYPE",
         pass_origin="tessera.compiler.fusion_core.FusedRegion",
         severity="error",

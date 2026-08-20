@@ -220,6 +220,18 @@ def _register_lowering(name: str, fn: Callable[..., Any], **metadata: Any) -> _O
 def _register_runtime_kernel(name: str, fn: Callable[..., Any], **metadata: Any) -> _OperatorEntry:
     return _ops_registry.register_runtime_kernel(name, fn, **metadata)
 
+#: Longest `._data` wrapper chain any Tessera tensor type presents
+#: (`nn.Parameter` -> `DistributedArray` -> ndarray is two hops); the
+#: limit turns a cyclic or unknown wrapper into a diagnostic instead of
+#: an infinite loop.
+_UNWRAP_DEPTH_LIMIT = 8
+
+#: Stable diagnostic code for "this value is not a tensor Tessera can operate
+#: on". Registered in `tessera.compiler.diagnostic_codes` and drift-gated by
+#: `tests/unit/test_diagnostic_code_registry.py`.
+_UNWRAP_DIAGNOSTIC_CODE = "E_TENSOR_UNWRAP"
+
+
 def _make_ops_namespace() -> types.SimpleNamespace:
     """Build the tessera.ops namespace with Phase 1 numpy-backed stubs."""
     import numpy as np
@@ -3943,7 +3955,97 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     # ─────────────────────────────────────────────────────────────────────
 
     def _unwrap(x):
-        return np.asarray(x._data if hasattr(x, "_data") else x)
+        """Peel tensor wrappers down to the underlying numpy buffer.
+
+        Peels **transitively**: a ``nn.Parameter`` wraps a ``DistributedArray``
+        which wraps the ndarray, so a single ``x._data`` stops one level short
+        and ``np.asarray`` then produces a 0-d *object* array. That was silent —
+        `ops.stack([Parameter, Parameter])` returned a ``dtype=object`` array
+        and reported success on a gradient path (MC8,
+        ``docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md``).
+
+        Fails closed if the peel does not reach real numeric data, rather than
+        handing back an object array for a downstream op to trip over.
+        """
+        seen = 0
+        value = x
+        while hasattr(value, "_data") and not isinstance(value, np.ndarray):
+            value = value._data
+            seen += 1
+            if seen > _UNWRAP_DEPTH_LIMIT:
+                raise TypeError(
+                    f"{_UNWRAP_DIAGNOSTIC_CODE}: could not reach a numpy buffer after "
+                    f"{_UNWRAP_DEPTH_LIMIT} `._data` hops from a "
+                    f"{type(x).__name__}; the wrapper chain is cyclic or deeper "
+                    f"than any Tessera tensor type."
+                )
+        arr = np.asarray(value)
+        # bool/int/uint/float/complex are the dtypes a Tessera op can compute
+        # on. Anything else — object (the Parameter-in-a-list symptom), strings,
+        # datetimes — is not a tensor, and letting it through produces either a
+        # `dtype=object` result that reports success or a raw numpy error from
+        # deep inside a reduction.
+        if arr.dtype.kind not in "biufc":
+            detail = (
+                "an object array" if arr.dtype == object
+                else f"dtype {arr.dtype!s}"
+            )
+            raise TypeError(
+                f"{_UNWRAP_DIAGNOSTIC_CODE}: unwrapping a {type(x).__name__} produced "
+                f"{detail} (shape {arr.shape}), not numeric data. A Tessera op "
+                f"never operates on non-numeric arrays; this means the value is "
+                f"not a tensor, or its wrapper does not expose `._data`."
+            )
+        return arr
+
+    def _unwrap_sequence(op_name: str, xs, *, param: str = "xs"):
+        """Unwrap every element of a sequence operand, failing closed per element.
+
+        Sequence-valued operands (``cat``/``stack``) bypass the tape's
+        top-level argument conversion, so their elements arrive as whatever the
+        caller passed — including ``nn.Parameter``. Unwrapping them here is what
+        keeps the two paths agreeing, and naming the offending index is what
+        turns numpy's ``"zero-dimensional arrays cannot be concatenated"`` into
+        a diagnostic that says which argument was wrong.
+        """
+        # An ndarray whose leading axis enumerates the operands is a valid
+        # sequence — `np.concatenate`/`np.stack` have always accepted it, and
+        # the autodiff law harness produces exactly this shape when it
+        # perturbs a sequence operand (`np.asarray(list_of_arrays)`). A 0-d or
+        # 1-d array has no such reading: its "elements" are scalars, which
+        # neither op can combine.
+        if isinstance(xs, (np.ndarray, np.generic)):
+            arr = np.asarray(xs)
+            if arr.ndim < 2:
+                raise TypeError(
+                    f"{_UNWRAP_DIAGNOSTIC_CODE}: {op_name} expects a sequence of "
+                    f"tensors for `{param}` — a list/tuple, or an array whose "
+                    f"leading axis enumerates them. Got a {arr.ndim}-d array, "
+                    f"whose elements are scalars."
+                )
+            items = list(arr)
+        elif not hasattr(xs, "__iter__"):
+            raise TypeError(
+                f"{_UNWRAP_DIAGNOSTIC_CODE}: {op_name} expects a sequence of tensors for "
+                f"`{param}`, got {type(xs).__name__}."
+            )
+        else:
+            items = list(xs)
+        if not items:
+            raise ValueError(
+                f"{_UNWRAP_DIAGNOSTIC_CODE}: {op_name} received an empty sequence for "
+                f"`{param}`; there is nothing to combine."
+            )
+        out = []
+        for i, item in enumerate(items):
+            try:
+                out.append(_unwrap(item))
+            except TypeError as exc:
+                raise TypeError(
+                    f"{_UNWRAP_DIAGNOSTIC_CODE}: {op_name}(`{param}`) element {i} is not a "
+                    f"tensor Tessera can operate on ({type(item).__name__}): {exc}"
+                ) from exc
+        return out
 
     # Reductions ----------------------------------------------------------
     def mean(x, axis=None, keepdims: bool = False):
@@ -4246,10 +4348,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return broadcast(x, shape)
 
     def cat(xs, axis: int = 0):
-        return np.concatenate([_unwrap(x) for x in xs], axis=axis)
+        return np.concatenate(_unwrap_sequence("cat", xs), axis=axis)
 
     def stack(xs, axis: int = 0):
-        return np.stack([_unwrap(x) for x in xs], axis=axis)
+        return np.stack(_unwrap_sequence("stack", xs), axis=axis)
 
     def split(x, indices_or_sections, axis: int = 0):
         return tuple(np.array_split(_unwrap(x), indices_or_sections, axis=axis)

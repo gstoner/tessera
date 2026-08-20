@@ -17,16 +17,16 @@ from typing import Any, Callable
 
 import numpy as np
 
-from .vjp import get_vjp
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Errors
 # ─────────────────────────────────────────────────────────────────────────────
+# Defined in the leaf module `errors.py` and re-exported here: `vjp.py` (which
+# this module imports) needs the same class object for the degeneracy guards,
+# and defining it here would make that a circular import. Re-exporting keeps
+# every existing `from .tape import TesseraAutodiffError` naming one class.
+from .errors import TesseraAutodiffError  # noqa: F401  (re-export)
 
-
-class TesseraAutodiffError(RuntimeError):
-    """Raised on misuse of the autodiff machinery (no VJP, scalar shape, etc.)."""
+from .vjp import get_vjp
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -61,6 +61,14 @@ class TapeEntry:
     output_id: int
     output: np.ndarray | np.generic
     vjp: Callable | None
+    #: How `inputs` regroup into the rule's *positional* arguments. `None` (the
+    #: common case) means one input per positional argument. Otherwise one entry
+    #: per positional argument: `None` for a plain operand, or an int `k` for a
+    #: **sequence** operand built from the next `k` inputs — the shape
+    #: `ops.cat`/`ops.stack` need, where one argument carries many tensors.
+    #: Without this the tape recorded a sequence operand as neither an operand
+    #: nor a kwarg, and `vjp_cat` was called with no `xs` at all.
+    input_groups: tuple[int | None, ...] | None = None
 
 
 @dataclass
@@ -79,6 +87,7 @@ class Tape:
         kwargs: dict,
         output: np.ndarray | np.generic,
         vjp: Callable | None,
+        input_groups: tuple[int | None, ...] | None = None,
     ) -> None:
         self.entries.append(
             TapeEntry(
@@ -88,6 +97,7 @@ class Tape:
                 output_id=id(output),
                 output=output,
                 vjp=vjp,
+                input_groups=input_groups,
             )
         )
 
@@ -169,10 +179,12 @@ class Tape:
                     f"See docs/spec/AUTODIFF_SPEC.md."
                 )
 
-            forward_args = tuple(d.array for d in entry.inputs)
+            forward_args = _regroup_inputs(entry)
             d_in = entry.vjp(dout, *forward_args, **entry.kwargs)
             if not isinstance(d_in, tuple):
                 d_in = (d_in,)
+            if entry.input_groups is not None:
+                d_in = _scatter_grouped_cotangents(entry, d_in)
             # Tolerate a VJP that omits cotangents for trailing python-scalar
             # *literal* operands (non-differentiable; e.g. ops.minimum(t, 1.2)).
             # Pad with None so the strict per-array count check below still
@@ -363,6 +375,80 @@ def _accumulate_param_grad(param, grad: np.ndarray) -> None:
 _NON_ARRAY = object()
 
 
+def _describe_sequence(arg: Any) -> list[InputDesc] | None:
+    """Describe a list/tuple **of tensors** as a sequence operand, else `None`.
+
+    Every element must be a real array-like — not a literal. That is what keeps
+    a configuration list (`ops.pad(x, [1, 2])`, whose elements describe as
+    python-scalar literals or not at all) from being mistaken for a sequence of
+    operands.
+    """
+    if not isinstance(arg, (list, tuple)) or not arg:
+        return None
+    descs: list[InputDesc] = []
+    for item in arg:
+        d = _describe(item)
+        if d is _NON_ARRAY or d.is_literal:
+            return None
+        descs.append(d)
+    return descs
+
+
+def _regroup_inputs(entry: "TapeEntry") -> tuple:
+    """Rebuild the rule's positional arguments from the flat `inputs` list.
+
+    Without `input_groups` this is the identity: one input per argument. With
+    it, a sequence operand is handed back to the rule as one list of arrays —
+    which is what `vjp_cat(dout, xs, ...)` reads.
+    """
+    if entry.input_groups is None:
+        return tuple(d.array for d in entry.inputs)
+    args: list[Any] = []
+    cursor = 0
+    for group in entry.input_groups:
+        if group is None:
+            args.append(entry.inputs[cursor].array)
+            cursor += 1
+        else:
+            args.append([entry.inputs[cursor + k].array for k in range(group)])
+            cursor += group
+    return tuple(args)
+
+
+def _scatter_grouped_cotangents(entry: "TapeEntry", d_in: tuple) -> tuple:
+    """Flatten a rule's per-argument cotangents back to one per recorded input.
+
+    A sequence operand gets one cotangent *per element* from the rule (that is
+    what `vjp_cat`/`vjp_stack` already return), so the group is expanded here
+    and the ordinary per-input accumulation downstream needs no special case.
+    """
+    groups = entry.input_groups
+    assert groups is not None
+    if len(d_in) != len(groups):
+        raise TesseraAutodiffError(
+            f"VJP for {entry.op!r} returned {len(d_in)} cotangents, expected "
+            f"{len(groups)} (one per positional operand, counting a sequence "
+            f"operand as one)"
+        )
+    flat: list[Any] = []
+    for g, group in zip(d_in, groups):
+        if group is None:
+            flat.append(g)
+            continue
+        if g is None:
+            flat.extend([None] * group)
+            continue
+        parts = list(g)
+        if len(parts) != group:
+            raise TesseraAutodiffError(
+                f"VJP for {entry.op!r} returned {len(parts)} cotangents for a "
+                f"sequence operand of {group} tensors; it must return exactly "
+                f"one per element so each input receives its own gradient"
+            )
+        flat.extend(parts)
+    return tuple(flat)
+
+
 def _describe(arg: Any):
     """Convert a forward argument into an `InputDesc` (array-like) or `_NON_ARRAY`.
 
@@ -533,12 +619,24 @@ def _route_positional(name: str, original: Callable, args: tuple, vjp_fn: Callab
 
     forward_args: list[Any] = []
     array_descs: list[InputDesc] = []
+    groups: list[int | None] = []
     routed: dict[str, Any] = {}
     for i, a in enumerate(args):
+        seq = _describe_sequence(a)
+        if seq is not None:
+            # A sequence operand (`ops.cat([a, b])`): every element becomes a
+            # recorded input, and `input_groups` remembers they belong to one
+            # positional argument. Before this the whole list was neither an
+            # operand nor a kwarg, so the rule was called without it.
+            forward_args.append([d.array for d in seq])
+            array_descs.extend(seq)
+            groups.append(len(seq))
+            continue
         d = _describe(a)
         if d is not _NON_ARRAY and not d.is_literal:
             forward_args.append(d.array)  # a real array is always an operand
             array_descs.append(d)
+            groups.append(None)
             continue
         pname = fwd_names[i] if fwd_names is not None and i < len(fwd_names) else None
         k = len(array_descs)  # the operand index this arg would occupy
@@ -562,12 +660,15 @@ def _route_positional(name: str, original: Callable, args: tuple, vjp_fn: Callab
             else:
                 forward_args.append(d.array)
                 array_descs.append(d)
+                groups.append(None)
             continue
         # Configuration: the forward gets the ORIGINAL value in its original
         # position (an int stays an int), and the rule gets it by name.
         forward_args.append(a)
         routed[pname] = a
-    return forward_args, array_descs, routed
+    # `None` (the common case) keeps the fast path: one input per argument.
+    input_groups = tuple(groups) if any(g is not None for g in groups) else None
+    return forward_args, array_descs, routed, input_groups
 
 
 def split_positional_config(name: str, original: Callable, args: tuple):
@@ -580,7 +681,7 @@ def split_positional_config(name: str, original: Callable, args: tuple):
     """
     from .vjp import get_vjp
 
-    _, _, routed = _route_positional(name, original, args, get_vjp(name))
+    _, _, routed, _groups = _route_positional(name, original, args, get_vjp(name))
     if not routed:
         return args, {}
     fwd_names = _positional_params(original) or []
@@ -648,7 +749,7 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
         # recorded kwargs under their canonical parameter name so the rule
         # sees them exactly as it would from a keyword call.
         vjp_fn = get_vjp(name)
-        forward_args, array_descs, routed_kwargs = _route_positional(
+        forward_args, array_descs, routed_kwargs, input_groups = _route_positional(
             name, original, args, vjp_fn
         )
 
@@ -677,9 +778,11 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
                         component_kwargs,
                         component,
                         vjp_fn,
+                        input_groups,
                     )
         else:
-            active.record(name, tuple(array_descs), dict(kwargs), out, vjp_fn)
+            active.record(name, tuple(array_descs), dict(kwargs), out, vjp_fn,
+                          input_groups)
         return out
 
     wrapped.__wrapped__ = original  # type: ignore[attr-defined]

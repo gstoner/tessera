@@ -10,10 +10,10 @@ physical backend row says so. Accumulators are listed separately from
 logical tensor dtype. Complex logical values display their physical
 interleaved-component ABI explicitly.
 
-- Operators: **339**
+- Operators: **349**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **927**
-- Rows retaining at least one compiler/evidence gap: **350**
+- Operator/logical-dtype rows: **940**
+- Rows retaining at least one compiler/evidence gap: **363**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -198,7 +198,17 @@ for the complete per-dtype and per-target matrix.
 | `tile_view` | layout_transform | yes | bf16,fp32 | direct_test,physical,tile |
 | `unpack` | layout_transform | yes | bf16,fp32 | direct_test,physical,tile |
 | `unsqueeze` | layout_transform | no | bf16,fp32 | direct_test,physical,tile |
+| `vec` | layout_transform | no | bf16,fp32 | direct_test,physical,tile |
 | `view` | layout_transform | no | bf16,fp32 | direct_test,physical,tile |
+| `eigh` | linalg_decomposition | no | fp32 | direct_test,physical |
+| `det` | linalg_function | no | fp32 | direct_test,physical |
+| `inv` | linalg_function | no | fp32 | direct_test,physical |
+| `logdet` | linalg_function | no | fp32 | direct_test,physical |
+| `matrix_power` | linalg_function | no | fp32 | direct_test,physical |
+| `norm` | linalg_function | no | fp32 | direct_test,physical |
+| `kron` | linalg_multilinear | no | bf16,fp32 | direct_test,physical,tile |
+| `trace` | linalg_multilinear | no | bf16,fp32 | direct_test,physical,tile |
+| `solve` | linalg_solver | no | fp32 | direct_test,physical |
 | `bitwise_and` | logical | no | fp32,int32 | direct_test,physical |
 | `bitwise_not` | logical | no | fp32,int32 | direct_test,physical |
 | `bitwise_or` | logical | no | fp32,int32 | direct_test,physical |

@@ -132,6 +132,40 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="AD-CORE-EFFECT-CONTROL-1",
     ),
     DiagnosticCode(
+        code="E_LINALG_CONTRACT",
+        pass_origin="tessera.linalg_ops",
+        severity="error",
+        summary=(
+            "A matrix-function primitive was called outside its domain: a "
+            "non-square operand, a numerically singular matrix, a negative "
+            "determinant under logdet, or an unsupported `ord` for norm."
+        ),
+        fix_hint=(
+            "Supply an operand in the op's domain. `ord` is a semantic key and "
+            "is never defaulted to another norm; a singular matrix has neither "
+            "a value nor a derivative here."
+        ),
+        spec="docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md MC1",
+        sprint="MATRIX-CALCULUS-MC1", language="python",
+    ),
+    DiagnosticCode(
+        code="E_METRIC_CONTRACT",
+        pass_origin="tessera.metric",
+        severity="error",
+        summary=(
+            "An object used as a metric is not one: weights that are not "
+            "positive, a metric matrix that is not symmetric positive "
+            "definite, or a value not implementing the Metric protocol."
+        ),
+        fix_hint=(
+            "Use tessera.metric.Euclidean/Weighted/Sphere/Orthogonal, or a type "
+            "providing inner/sharp/project_tangent/retract. An indefinite W is "
+            "not an inner product and its 'gradient' can point uphill."
+        ),
+        spec="docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md MC3",
+        sprint="MATRIX-CALCULUS-MC3", language="python",
+    ),
+    DiagnosticCode(
         code="E_DEGENERATE_FACTORIZATION",
         pass_origin="tessera.autodiff.degeneracy",
         severity="error",

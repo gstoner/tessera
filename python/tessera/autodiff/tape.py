@@ -79,6 +79,11 @@ class Tape:
     # `tessera.autodiff.rematerialize` can extract input cotangents from a
     # nested tape's backward pass without re-walking it.
     cotangent: dict[int, np.ndarray] = field(default_factory=dict)
+    #: Set when an `ops.*` call was diverted to an enclosing forward-mode trace
+    #: while this tape was open. The trace is torn down before `backward` runs
+    #: (reverse-over-forward), so liveness alone cannot detect the nesting —
+    #: without this flag that case reported the generic "raw numpy" message.
+    diverted_to_forward_mode: bool = False
 
     def record(
         self,
@@ -142,6 +147,32 @@ class Tape:
         target_id = id(target)
         target_on_tape = any(e.output_id == target_id for e in self.entries)
         if not target_on_tape:
+            from .jvp import active_jvp_trace
+
+            if active_jvp_trace() is not None or self.diverted_to_forward_mode:
+                # Mode nesting, not a raw-numpy loss. Every `ops.*` call inside
+                # this tape was intercepted by the enclosing forward-mode trace,
+                # so the tape is empty and there is nothing to walk back. Saying
+                # "your loss math runs in raw numpy" here sends the reader to
+                # look for a bug that does not exist (MC6).
+                raise TesseraAutodiffError(
+                    "cannot run reverse mode inside an active forward-mode "
+                    "trace: every tessera.ops.* call was captured by the "
+                    "enclosing jvp() trace, so this tape recorded nothing.\n"
+                    "\n"
+                    "This is what blocks forward-over-reverse (`jvp(grad(f), "
+                    "x, v)`) and reverse-over-forward (`grad(lambda x: "
+                    "jvp(f, x, v)[1])`) alike: each mode's rules are numpy "
+                    "functions, not `ops.*` calls, so neither mode can trace "
+                    "through the other's rules. Composing them needs one "
+                    "derivative datum evaluated in a higher-order algebra "
+                    "(AUTODIFF_NEXTGEN_PLAN.md AD-WEIL-1), not a deeper tape.\n"
+                    "\n"
+                    "Available today: `tessera.autodiff.hvp(f, x, v)` for "
+                    "Hessian-vector products (central difference of the "
+                    "gradient), or `JitFn.compiled_hvp_ir` for the exact "
+                    "compiled forward-over-reverse path."
+                )
             raise TesseraAutodiffError(
                 "backward target is not a tape-recorded output. Forward computation "
                 "must produce `target` via tessera.ops.*; if your loss math runs in "
@@ -720,14 +751,21 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
         # makes nested thread/async contexts safe through ContextVar ownership.
         from .jvp import active_jvp_trace
 
-        _jvp_trace = active_jvp_trace()
-        if _jvp_trace is not None:
-            return _jvp_trace.record_op(name, original, args, kwargs)
-
         # R1 cost oracle: count this primitive execution if a counter is bound.
+        # This must happen BEFORE the forward-mode dispatch below: the JVP trace
+        # `return`s, so counting after it made every forward-mode execution
+        # invisible and the Baur-Strassen ratio read ~1x for a `jacfwd` that was
+        # really running one forward pass per input dimension (MC7).
         _exec_box = _EXEC_COUNT.get()
         if _exec_box is not None:
             _exec_box[0] += 1
+
+        _jvp_trace = active_jvp_trace()
+        if _jvp_trace is not None:
+            _open_tape = _ACTIVE_TAPE.get()
+            if _open_tape is not None:
+                _open_tape.diverted_to_forward_mode = True
+            return _jvp_trace.record_op(name, original, args, kwargs)
 
         active = _ACTIVE_TAPE.get()
         if active is None:

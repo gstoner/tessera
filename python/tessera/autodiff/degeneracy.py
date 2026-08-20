@@ -110,7 +110,9 @@ __all__ = [
     "declared_policy",
     "parse_policy",
     "singular_value_clusters",
+    "eigenvalue_clusters",
     "svd_coupling",
+    "eigh_coupling",
     "check_factor_rank",
 ]
 
@@ -128,6 +130,7 @@ DEGENERACY_DIAGNOSTIC_CODE = "E_DEGENERATE_FACTORIZATION"
 # ── Declared policy per op (consumed by vjp.py / jvp.py) ─────────────────────
 FACTORIZATION_DEGENERACY: Mapping[str, str] = {
     "svd": FAIL_CLOSED,
+    "eigh": FAIL_CLOSED,
     "qr": FAIL_CLOSED,
     "cholesky": FAIL_CLOSED,
     "tri_solve": FAIL_CLOSED,
@@ -138,6 +141,7 @@ FACTORIZATION_DEGENERACY: Mapping[str, str] = {
 #: undeclared-but-accepted policy would be a declaration with no consumer).
 SUPPORTED_POLICIES: Mapping[str, frozenset] = {
     "svd": frozenset({FAIL_CLOSED, GENERALIZED, DAMPED, UNCHECKED}),
+    "eigh": frozenset({FAIL_CLOSED, GENERALIZED, DAMPED, UNCHECKED}),
     "qr": frozenset({FAIL_CLOSED, UNCHECKED}),
     "cholesky": frozenset({FAIL_CLOSED, UNCHECKED}),
     "tri_solve": frozenset({FAIL_CLOSED, UNCHECKED}),
@@ -310,6 +314,149 @@ def conditioning_tolerance(dtype=np.float64) -> float:
 
 
 # ── Spectrum analysis ────────────────────────────────────────────────────────
+def _cluster_indices(values: np.ndarray, *, tol: float) -> list[tuple[int, ...]]:
+    """Group indices of `values` that are within `tol` relative to the largest.
+
+    Shared core for singular values (grouped on ``s^2``, the quantity the SVD
+    rule divides by) and eigenvalues (grouped on ``lambda`` itself). Returns
+    only groups with more than one member — exactly the index sets on which the
+    corresponding coupling term is undefined.
+    """
+    v = np.asarray(values, dtype=np.float64).ravel()
+    n = v.size
+    if n < 2:
+        return []
+    scale = float(np.max(np.abs(v)))
+    # An all-zero spectrum has no scale to be relative to; every value coincides.
+    if scale == 0.0:
+        return [tuple(range(n))]
+    atol = tol * scale
+    order = np.argsort(-v, kind="stable")
+    clusters: list[list[int]] = []
+    current = [int(order[0])]
+    for prev, idx in zip(order[:-1], order[1:]):
+        if abs(v[prev] - v[idx]) <= atol:
+            current.append(int(idx))
+        else:
+            clusters.append(current)
+            current = [int(idx)]
+    clusters.append(current)
+    return [tuple(sorted(c)) for c in clusters if len(c) > 1]
+
+
+def eigenvalue_clusters(w: np.ndarray, *, tol: float) -> list[tuple[int, ...]]:
+    """Degenerate eigenvalue groups of a symmetric spectrum.
+
+    The `eigh` coupling is ``1/(lambda_j - lambda_i)``, so the grouping is on
+    the eigenvalues themselves rather than on their squares.
+    """
+    return _cluster_indices(np.asarray(w, dtype=np.float64), tol=tol)
+
+
+def eigh_coupling(
+    w: np.ndarray,
+    *,
+    dw: np.ndarray | None = None,
+    antisymmetric_parts: Iterable[np.ndarray] = (),
+    op: str = "eigh",
+    policy: str | None = None,
+    tol: float | None = None,
+    admit_generalized: bool = True,
+    mode: str = "backward",
+) -> np.ndarray:
+    """``F[i, j] = 1 / (w_j - w_i)`` off-diagonal, zero on the diagonal.
+
+    The symmetric-eigenproblem analogue of :func:`svd_coupling` (notes §13.2.1):
+    eigenvalues are differentiable wherever they are simple (``dlambda_i =
+    q_i^T dS q_i``, the Hellmann-Feynman result), but the *eigenvectors* couple
+    through ``1/(lambda_j - lambda_i)`` and cease to exist at a crossing. Same
+    declared policy, same three thresholds.
+    """
+    name, tau, tol_override = active_policy(op, policy)
+    w_arr = np.asarray(w, dtype=np.float64)
+    if w_arr.ndim == 0:
+        w_arr = w_arr.reshape(1)
+    k = w_arr.shape[-1]
+    eye = np.eye(k)
+    den = w_arr[..., None, :] - w_arr[..., :, None]
+
+    if name == UNCHECKED:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return (1.0 - eye) / (den + eye)
+
+    if tol is None:
+        tol = tol_override
+    if tol is None:
+        tol = existence_tolerance(k, np.float64)
+
+    if name == DAMPED:
+        assert tau is not None
+        scale = np.max(np.abs(w_arr), axis=-1, keepdims=True)[..., None]
+        tau_abs = np.where(scale > 0.0, tau * scale, tau)
+        return (1.0 - eye) * den / (den ** 2 + tau_abs ** 2)
+
+    flat_w = w_arr.reshape(-1, k)
+    flat_dw = None if dw is None else np.asarray(dw, dtype=np.float64).reshape(-1, k)
+    flat_parts = [
+        np.asarray(M, dtype=np.float64).reshape(-1, k, k)
+        for M in antisymmetric_parts
+        if np.asarray(M).shape[-2:] == (k, k)
+    ]
+    admit_tol = admissibility_tolerance(np.float64)
+    masks = np.zeros((flat_w.shape[0], k, k), dtype=bool)
+    for b in range(flat_w.shape[0]):
+        row = flat_w[b]
+        clusters = eigenvalue_clusters(row, tol=tol)
+        if not clusters:
+            continue
+        if name == FAIL_CLOSED or not admit_generalized:
+            extra = "" if admit_generalized else (
+                "This rule returns per-component results (each eigenvalue, each "
+                "eigenvector), none of which are differentiable inside a "
+                "degenerate cluster, so 'generalized' admits nothing."
+            )
+            raise TesseraDegeneracyError(_eigen_message(
+                op, row, clusters, tol, extra, mode=mode,
+                batch=_batch_label(w_arr, b)))
+        _check_generalized_admissible(
+            op, row, clusters, tol, admit_tol, b, flat_dw, flat_parts,
+            batch=_batch_label(w_arr, b), mode=mode,
+        )
+        for cluster in clusters:
+            idx = np.asarray(cluster, dtype=int)
+            masks[b][np.ix_(idx, idx)] = True
+
+    admitted = masks.reshape(w_arr.shape[:-1] + (k, k))
+    safe_den = np.where(admitted, 1.0, den) + eye
+    F = (1.0 - eye) / safe_den
+    return np.where(admitted, 0.0, F)
+
+
+def _eigen_message(op, w, clusters, tol, extra="", mode="backward", batch="") -> str:
+    w = np.asarray(w, dtype=np.float64).ravel()
+    i, j = int(clusters[0][0]), int(clusters[0][1])
+    scale = float(np.max(np.abs(w))) or 1.0
+    rel = abs(w[i] - w[j]) / scale
+    where = f" (batch element {batch})" if batch else ""
+    body = (
+        f"{DEGENERACY_DIAGNOSTIC_CODE}: {op} {mode} is not defined at this "
+        f"input{where}. Eigenvalues {i} and {j} coincide "
+        f"(w[{i}]={w[i]:.6e}, w[{j}]={w[j]:.6e}; relative gap {rel:.3e} <= tol "
+        f"{tol:.3e}), so the coupling term 1/(w_j - w_i) has no limit and the "
+        f"individual eigenvectors are not differentiable. Degenerate clusters "
+        f"(index groups): {list(clusters)}."
+    )
+    if extra:
+        body += " " + extra
+    return body + (
+        " Eigen*values* remain differentiable at a crossing only as symmetric "
+        "functions of the cluster (their sum, not each one). Choose a policy "
+        "explicitly if this input is intended: "
+        "`with tessera.autodiff.degeneracy.degeneracy_policy('generalized')`, "
+        "`'damped:<tau>'`, or `'unchecked'`."
+    )
+
+
 def singular_value_clusters(
     s: np.ndarray, *, tol: float
 ) -> list[tuple[int, ...]]:
@@ -320,28 +467,7 @@ def singular_value_clusters(
     defined.  Grouping is done on ``s^2`` because that is the quantity the rule
     actually divides by.
     """
-    s = np.asarray(s, dtype=np.float64).ravel()
-    n = s.size
-    if n < 2:
-        return []
-    s2 = s ** 2
-    scale = float(s2.max())
-    # An all-zero matrix has no scale to be relative to; every value coincides.
-    atol = tol * scale if scale > 0.0 else 0.0
-    order = np.argsort(-s2, kind="stable")
-    clusters: list[list[int]] = []
-    current = [int(order[0])]
-    for prev, idx in zip(order[:-1], order[1:]):
-        if abs(s2[prev] - s2[idx]) <= atol:
-            current.append(int(idx))
-        else:
-            clusters.append(current)
-            current = [int(idx)]
-    clusters.append(current)
-    if scale == 0.0:
-        # Degenerate by construction: every singular value is zero.
-        return [tuple(sorted(range(n)))]
-    return [tuple(sorted(c)) for c in clusters if len(c) > 1]
+    return _cluster_indices(np.asarray(s, dtype=np.float64) ** 2, tol=tol)
 
 
 def _worst_pair(s: np.ndarray, clusters: Sequence[tuple[int, ...]]) -> tuple[int, int, float]:

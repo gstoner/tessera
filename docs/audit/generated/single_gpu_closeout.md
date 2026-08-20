@@ -14,11 +14,11 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 406 | backend_pathway_owned=391, multi_gpu_deferred=15 | backend_codegen=391, distributed_validation=15 |
+| `backend_kernel` | 416 | backend_pathway_owned=401, multi_gpu_deferred=15 | backend_codegen=401, distributed_validation=15 |
 | `benchmark_evidence` | 1 | benchmark_required=1 | benchmarks=1 |
-| `sharding_rule` | 50 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=47 | compiler_middle_end=1, distributed_validation=2, primitive_registry=47 |
-| `target_ir` | 10 | architecture_evidence_gated=6, multi_gpu_deferred=4 | backend_codegen=6, distributed_validation=4 |
-| `tile_ir` | 6 | architecture_evidence_gated=6 | backend_codegen=6 |
+| `sharding_rule` | 59 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=49, single_device_identity=7 | compiler_middle_end=1, distributed_validation=2, primitive_registry=56 |
+| `target_ir` | 20 | architecture_evidence_gated=16, multi_gpu_deferred=4 | backend_codegen=16, distributed_validation=4 |
+| `tile_ir` | 16 | architecture_evidence_gated=16 | backend_codegen=16 |
 
 ## Rows
 
@@ -201,11 +201,21 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `stop_gradient` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `transpose` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `unpack` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `vec` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `cholesky` | linalg_decomposition | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `eigh` | linalg_decomposition | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `lu` | linalg_decomposition | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `qr` | linalg_decomposition | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `svd` | linalg_decomposition | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `det` | linalg_function | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `inv` | linalg_function | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `logdet` | linalg_function | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `matrix_power` | linalg_function | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `norm` | linalg_function | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `kron` | linalg_multilinear | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `trace` | linalg_multilinear | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `cholesky_solve` | linalg_solver | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `solve` | linalg_solver | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `tri_solve` | linalg_solver | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `bitwise_and` | logical | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `bitwise_not` | logical | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -454,10 +464,19 @@ test, ABI, and surface dashboards.
 | `sharding_rule` | `ebm_sphere_langevin_sample` | ebm | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `ebm_sphere_langevin_step` | ebm | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `cholesky` | linalg_decomposition | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `eigh` | linalg_decomposition | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `lu` | linalg_decomposition | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `qr` | linalg_decomposition | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `svd` | linalg_decomposition | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `det` | linalg_function | partial | `single_device_identity` | primitive_registry | Add direct one-device identity metadata/value test, then promote sharding_rule. |
+| `sharding_rule` | `inv` | linalg_function | partial | `single_device_identity` | primitive_registry | Add direct one-device identity metadata/value test, then promote sharding_rule. |
+| `sharding_rule` | `logdet` | linalg_function | partial | `single_device_identity` | primitive_registry | Add direct one-device identity metadata/value test, then promote sharding_rule. |
+| `sharding_rule` | `matrix_power` | linalg_function | partial | `single_device_identity` | primitive_registry | Add direct one-device identity metadata/value test, then promote sharding_rule. |
+| `sharding_rule` | `norm` | linalg_function | partial | `single_device_identity` | primitive_registry | Add direct one-device identity metadata/value test, then promote sharding_rule. |
+| `sharding_rule` | `kron` | linalg_multilinear | partial | `single_device_identity` | primitive_registry | Add direct one-device identity metadata/value test, then promote sharding_rule. |
+| `sharding_rule` | `trace` | linalg_multilinear | partial | `single_device_identity` | primitive_registry | Add direct one-device identity metadata/value test, then promote sharding_rule. |
 | `sharding_rule` | `cholesky_solve` | linalg_solver | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
+| `sharding_rule` | `solve` | linalg_solver | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `tri_solve` | linalg_solver | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `factorized_matmul` | loop_nest | partial | `local_layout_transform` | compiler_middle_end | Prove local layout/shard metadata preservation on one device. |
 | `sharding_rule` | `moe` | moe | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
@@ -489,11 +508,31 @@ test, ABI, and surface dashboards.
 | `target_ir` | `game_boltzmann_value` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_coalition_excess` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_semivalue` | contraction | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
+| `target_ir` | `vec` | layout_transform | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `eigh` | linalg_decomposition | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `det` | linalg_function | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `inv` | linalg_function | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `logdet` | linalg_function | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `matrix_power` | linalg_function | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `norm` | linalg_function | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `kron` | linalg_multilinear | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `trace` | linalg_multilinear | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `solve` | linalg_solver | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
 | `target_ir` | `game_mex` | segment_reduce | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_coalition_marginal` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `tile_ir` | `depth_attn` | attention | partial | `architecture_evidence_gated` | backend_codegen | Shared Graph/AD contract is closed; wait for the named architecture-owned physical phase and device packet. |
 | `tile_ir` | `game_boltzmann_value` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_coalition_excess` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_semivalue` | contraction | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
+| `tile_ir` | `vec` | layout_transform | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `eigh` | linalg_decomposition | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `det` | linalg_function | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `inv` | linalg_function | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `logdet` | linalg_function | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `matrix_power` | linalg_function | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `norm` | linalg_function | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `kron` | linalg_multilinear | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `trace` | linalg_multilinear | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `solve` | linalg_solver | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
 | `tile_ir` | `game_mex` | segment_reduce | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_coalition_marginal` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |

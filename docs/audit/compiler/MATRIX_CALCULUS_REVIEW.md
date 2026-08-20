@@ -58,15 +58,63 @@ Ordered by confidence × payoff. Costs are rough and **not** a schedule.
 
 | ID | Finding | Notes ref | Kind | Governance hook |
 |---|---|---|---|---|
-| **MC1** | The matrix-function / factorization derivative family is absent from the op surface: no `det`, `logdet`, `inv`, `solve`, `trace`, `eigh`, `expm`, `kron`, `vec`, `pinv`, `matrix_power` | §3, §7, §13 | stdlib + AD | #24 (both registries) |
+| **MC1** | ~~The matrix-function / factorization derivative family is absent from the op surface~~ — **fixed 2026-08-20**: ten primitives added with both modes, law-swept. `expm`/`pinv` deferred with reasons | §3, §7, §13 | stdlib + AD | #24 (both registries) |
 | **MC2** | ~~`svd`'s VJP returns **NaN** at repeated singular values, and its `eps` guard is dead code~~ — **fixed 2026-08-20**, see below | §13.2.1, §14 | correctness defect | #21a, "no silent NaN" |
-| **MC3** | The gradient is `metric⁻¹ ∘ differential`; that is the missing **consumer** for the declared-but-unconsumed `manifold` key, and it is what Muon already is | §5.1, §13.1–13.2 | design | #29, #30 |
-| **MC4** | Kronecker/`vec` is a cost trap: `(B⊗C)vec(Y) = vec(CYBᵀ)` is a rewrite rule, never a materialization | §3.3.3 | canonicalization | #28 (never cap the ceiling) |
-| **MC5** | `check_grad` is coordinate-wise, fixed-ε, fixed-tolerance; the directional + order-of-accuracy test is strictly stronger and cheaper | §2.2.1, §4.4–4.6 | test methodology | #26 (evidence quality) |
-| **MC6** | Forward-over-reverse does not compose in the eager lane — `jvp(grad(f), x, v)` raises | §8.4.1 | sharpens B4 | — |
-| **MC7** | `count_primitive_executions` does not count JVP-mode executions, so the R1 Baur–Strassen oracle under-measures forward mode | §2.5.1 | measurement defect | #29 (consumer sees wrong number) |
+| **MC3** | ~~The gradient is `metric⁻¹ ∘ differential`~~ — **fixed 2026-08-20**: `tessera.metric` + `grad(metric=)` as the consumer. MLIR-side `manifold` lowering still open | §5.1, §13.1–13.2 | design | #29, #30 |
+| **MC4** | Kronecker/`vec` is a cost trap: `(B⊗C)vec(Y) = vec(CYBᵀ)` — **partly closed 2026-08-20**: the ops and the identity exist and are pinned; the Graph IR rewrite is **not** written | §3.3.3 | canonicalization | #28 (never cap the ceiling) |
+| **MC5** | ~~`check_grad` is coordinate-wise, fixed-ε, fixed-tolerance~~ — **fixed 2026-08-20**: scale-aware step, `check_grad_directional`, `check_order_of_accuracy` | §2.2.1, §4.4–4.6 | test methodology | #26 (evidence quality) |
+| **MC6** | Forward-over-reverse does not compose — **and neither does reverse-over-forward, for the same reason**. Diagnostic fixed 2026-08-20; the composition itself is blocked on AD-WEIL-1 | §8.4.1 | sharpens B4 | — |
+| **MC7** | ~~`count_primitive_executions` does not count JVP-mode executions~~ — **fixed 2026-08-20**: the increment sat after the dispatch that returns | §2.5.1 | measurement defect | #29 (consumer sees wrong number) |
 | **MC8** | ~~`ops.stack([Parameter, …])` silently returns a `dtype=object` array; `ops.cat` raises a raw numpy error~~ — **fixed 2026-08-20**, and it was the smaller half of a larger defect; see below | — (found while writing the tutorial) | fail-open defect | fail-closed discipline |
-| **MC9** | Second-derivative symmetry and the second-difference formula are free, AD-independent laws | §12.2 | law harness | AD-LAW-1 Law set |
+| **MC9** | ~~Second-derivative symmetry and the second-difference formula are free laws~~ — **fixed 2026-08-20**: added to the sweep as `hessian_symmetry` and `hessian_second_difference` | §12.2 | law harness | AD-LAW-1 Law set |
+
+---
+
+## Status after the 2026-08-20 remediation pass
+
+Seven of the nine findings are closed and two are partly closed. Everything
+below is code plus an enforcing test; the numbers are from the run recorded in
+the commit message, not from this prose (Decision #26).
+
+| ID | State | What landed | Enforcer |
+|---|---|---|---|
+| MC1 | ✅ closed | `python/tessera/linalg_ops.py` — `det`, `logdet`, `inv`, `solve`, `trace`, `eigh`, `kron`, `vec`, `matrix_power`, `norm`, each with a real VJP **and** JVP, registered in `op_catalog` and (derived from it) `primitive_coverage` | `test_linalg_matrix_functions.py` + `LAW_INPUT_SPECS` entries so all ten are swept by the adjoint and chain laws |
+| MC2 | ✅ closed | `degeneracy_policy` semantic key (see above) | `test_factorization_degeneracy.py` |
+| MC3 | ✅ closed | `python/tessera/metric.py` — `Metric` protocol with `Euclidean`/`Weighted`/`Sphere`/`Orthogonal`, consumed by `grad(..., metric=)` | `test_metric_gradients.py` |
+| MC4 | 🟡 partial | `kron`/`vec` exist with **column-major** `vec`, so `(B⊗C)vec(Y) = vec(CYBᵀ)` holds as written; the identity is pinned by test | `test_linalg_matrix_functions.py::test_kronecker_vec_identity` |
+| MC5 | ✅ closed | `debug.fd_step`, `check_grad_directional`, `check_order_of_accuracy`; `check_grad`'s default step is now scale-aware | `test_derivative_methodology.py` |
+| MC6 | 🟡 partial | the diagnostic now names the real cause; `hvp` is scale-aware | `test_derivative_methodology.py` |
+| MC7 | ✅ closed | the counter increment moved above the forward-mode dispatch | `test_derivative_methodology.py::test_jacfwd_cost_scales_with_the_input_dimension` |
+| MC8 | ✅ closed | transitive unwrap + sequence operands on the tape (see above) | `test_sequence_operand_unwrap.py` |
+| MC9 | ✅ closed | Laws `hessian_symmetry` and `hessian_second_difference` in `run_law_sweep()` | `test_derivative_methodology.py` |
+
+### What is deliberately **not** done, and why
+
+* **MC4's Graph IR rewrite.** `matmul(kron(B, C), vec(Y))` →
+  `vec(matmul(matmul(C, Y), transpose(B)))` is a canonicalization on the C++
+  MLIR side, needs a `tessera-opt` build plus a lit fixture, and per Decision
+  #10a needs a **negative** fixture too (a case where the rewrite must not fire
+  — `B⊗C` consumed elsewhere, where materializing once may genuinely be
+  cheaper). Writing it blind and unverified would be worse than leaving it
+  named. The Python-level ops now exist, which is what the rewrite would need
+  to match against.
+* **MC6's actual composition.** Sharper than the original finding: **both**
+  orders are blocked, and for one structural reason — VJP and JVP rule bodies
+  are numpy functions, not `ops.*` calls, so neither mode can trace through the
+  other's rules. `jvp(grad(f), …)` and `grad(lambda x: jvp(f, x, v)[1])` fail
+  identically. That is not fixable by a deeper tape; it is exactly the problem
+  AD-WEIL-1 exists to solve (one derivative datum evaluated in a higher-order
+  algebra). Upstream landed `derivative_contract.py` on 2026-08-19, but that is
+  a *declaration* registry — 136 lines, no evaluator — so the substrate is not
+  there yet. What did land here is that the failure now says so instead of
+  blaming raw-numpy loss math.
+* **`expm` and `pinv`.** Both are real work rather than a transcription:
+  `expm` needs scaling-and-squaring plus the block-matrix Fréchet-derivative
+  trick (`expm([[A, E], [0, A]])`'s upper-right block), and `pinv`'s VJP
+  carries two extra projector terms for the non-square case. They are named in
+  MC1's table and remain open.
+* **The MLIR-side `manifold` key.** MC3 gives it a Python consumer; making the
+  attribute reach a backend is a lowering concern that this review does not own.
 
 ---
 

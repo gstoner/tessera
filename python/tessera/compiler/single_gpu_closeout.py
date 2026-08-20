@@ -140,6 +140,29 @@ _PHASED_REFERENCE_RATIONALE: dict[str, tuple[str, str]] = {
     },
 }
 
+# MC1 matrix-function family (MATRIX_CALCULUS_REVIEW.md). These landed as
+# *derivative contracts* — closed-form VJP/JVP pairs under the law sweep —
+# because that is the gap the AD stack had, not because a GPU lane was
+# attempted and missed. Whether each gets a native Target IR lane is a separate
+# per-op decision: `det`/`logdet`/`trace`/`matrix_power` reduce a small matrix
+# to a number and may never justify one, while `eigh`/`inv`/`solve` would ride
+# a vendor library rather than generated code. `svd`/`qr`/`cholesky` sit in the
+# same position today. Recording the intent here keeps them off the promote
+# queue as a stated decision rather than as a phantom blocker.
+_MC1_REFERENCE_RATIONALE = (
+    "Reference tier by design: MC1 shipped the derivative contract "
+    "(closed-form VJP+JVP, law-swept), not a device lane; a native Tile "
+    "lowering is a separate per-op decision.",
+    "Reference tier by design: MC1 shipped the derivative contract "
+    "(closed-form VJP+JVP, law-swept), not a device lane; a native Target IR "
+    "lane is a separate per-op decision.",
+)
+_PHASED_REFERENCE_RATIONALE.update({
+    op: _MC1_REFERENCE_RATIONALE
+    for op in ("det", "logdet", "inv", "solve", "trace", "eigh",
+               "kron", "vec", "matrix_power", "norm")
+})
+
 _PHASED_REFERENCE_OPS = frozenset(_PHASED_REFERENCE_RATIONALE)
 
 

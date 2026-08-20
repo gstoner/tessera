@@ -60,6 +60,28 @@ _SPECS = [
     OpSpec("qr", "tessera.qr", 1, 1, lowering="linalg_decomposition"),
     OpSpec("svd", "tessera.svd", 1, 1, lowering="linalg_decomposition"),
     OpSpec("lu", "tessera.lu", 1, 1, lowering="linalg_decomposition"),
+    # ── MC1: the matrix-function family (docs/audit/compiler/MATRIX_CALCULUS_REVIEW.md).
+    # `linalg_function` is a NEW lowering kind and is deliberately absent from
+    # LOWERING_SHAPE_RULE: these ops do not share one shape rule (det/logdet/
+    # trace/norm reduce a matrix to a scalar, inv/matrix_power preserve shape,
+    # vec/kron/solve each reshape differently), so naming a kind-wide default
+    # would be the guess that file warns against. Per-op rules are declared in
+    # OP_SHAPE_RULE below where they can be stated truthfully.
+    OpSpec("det", "tessera.det", 1, 1, lowering="linalg_function"),
+    OpSpec("logdet", "tessera.logdet", 1, 1, lowering="linalg_function"),
+    OpSpec("inv", "tessera.inv", 1, 1, lowering="linalg_function"),
+    OpSpec("solve", "tessera.solve", 2, 2, lowering="linalg_solver"),
+    # trace and kron are (bi)linear, unlike the rest of the family: their VJP
+    # IS their transpose, and they carry no condition number. Declaring them
+    # `linalg_function` would have forced the category to claim
+    # transpose="not_applicable", which is false for a linear map.
+    OpSpec("trace", "tessera.trace", 1, 1, lowering="linalg_multilinear"),
+    OpSpec("eigh", "tessera.eigh", 1, 1, lowering="linalg_decomposition"),
+    OpSpec("kron", "tessera.kron", 2, 2, lowering="linalg_multilinear"),
+    OpSpec("vec", "tessera.vec", 1, 1, lowering="layout_transform"),
+    OpSpec("matrix_power", "tessera.matrix_power", 1, 2,
+           lowering="linalg_function"),
+    OpSpec("norm", "tessera.norm", 1, 1, lowering="linalg_function"),
     OpSpec("conv2d", "tessera.conv2d_nhwc", 2, 4, lowering="stencil"),
     OpSpec("conv3d", "tessera.conv3d_ndhwc", 2, 4, lowering="stencil"),
     # Optional affine operands are gamma and beta, in that order. RMSNorm has
@@ -698,6 +720,23 @@ LOWERING_SHAPE_RULE: dict = {
 #: Per-op rules that override the lowering-kind default.
 OP_SHAPE_RULE: dict = {
     "tessera.matmul": "matmul_2d",
+    # MC1: shape-preserving matrix functions. det/logdet/trace/norm reduce to a
+    # scalar and vec/kron/solve/eigh each have their own rule, so only these two
+    # can honestly claim the kind-wide default.
+    "tessera.inv": "same_as_first",
+    "tessera.matrix_power": "same_as_first",
+    # A matrix consumed down to one number, keeping any batch axes. Not
+    # `reduce_all` (which collapses everything) and not `reduce_trailing`
+    # (which drops one axis).
+    "tessera.det": "matrix_scalar",
+    "tessera.logdet": "matrix_scalar",
+    "tessera.trace": "matrix_scalar",
+    "tessera.norm": "matrix_scalar",
+    # x = A^-1 b takes the right-hand side's shape.
+    "tessera.solve": "same_as_second",
+    "tessera.vec": "vec",
+    "tessera.kron": "kron",
+    "tessera.eigh": "eigh",
     "tessera.batched_gemm": "batched_gemm_3d",
     "tessera.transpose": "transpose",
     "tessera.ebm_energy_quadratic": "reduce_trailing",
@@ -1033,6 +1072,11 @@ COMPUTE_FLOAT_DTYPE = "fp32"
 #: The declared vocabulary. `graph_ir` implements each name; a rule named here
 #: with no implementation (or vice versa) is a drift-gated error.
 SHAPE_RULE_NAMES = frozenset({
+    # MC1 matrix-function family.
+    "matrix_scalar",   # (..., m, n) -> (...)   det/logdet/trace/norm
+    "vec",             # (..., m, n) -> (..., m*n), column-major
+    "kron",            # (p, q) x (r, s) -> (p*r, q*s)
+    "eigh",            # -> ((..., n), (..., n, n))
     "same_as_first",
     "depth_attention",
     "matmul_2d",

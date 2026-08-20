@@ -66,8 +66,9 @@ def test_default_policy_is_fail_closed_everywhere() -> None:
 
 
 def test_undeclared_op_fails_closed() -> None:
+    # `polar` has no factorization rule in-tree, so it has no declared policy.
     with pytest.raises(KeyError, match="no declared degeneracy policy"):
-        deg.declared_policy("eigh")
+        deg.declared_policy("polar")
 
 
 def test_unsupported_policy_is_rejected_not_downgraded() -> None:
@@ -197,6 +198,56 @@ def test_degenerate_input_emits_no_bare_numpy_warning() -> None:
         with pytest.raises(deg.TesseraDegeneracyError):
             _VJPS["svd"](_full_cotangent(), _degenerate_matrix())
     assert [w for w in caught if issubclass(w.category, RuntimeWarning)] == []
+
+
+# ── eigh: the same contract on eigenvalue gaps (notes §13.2.1) ──────────────
+def _degenerate_symmetric() -> np.ndarray:
+    """Eigenvalues (2, 2, 1) — a degenerate pair plus a simple value."""
+    return np.diag([2.0, 2.0, 1.0])
+
+
+def test_eigh_refuses_at_an_eigenvalue_crossing() -> None:
+    with pytest.raises(deg.TesseraDegeneracyError) as excinfo:
+        _VJPS["eigh"]((np.ones(3), np.ones((3, 3))), _degenerate_symmetric())
+    message = str(excinfo.value)
+    assert CODE in message
+    assert "eigh backward" in message
+    assert "Eigenvalues" in message and "coincide" in message
+
+
+def test_eigh_forward_mode_refuses_at_a_crossing() -> None:
+    with pytest.raises(deg.TesseraDegeneracyError, match="eigh forward-mode"):
+        _JVPS["eigh"]((_degenerate_symmetric(),), (np.eye(3),))
+
+
+def test_eigh_generalized_admits_the_eigenvalue_sum() -> None:
+    """sum(eigenvalues) is the trace — differentiable at a crossing, gradient I.
+
+    Individual eigenvalues are not differentiable inside a degenerate cluster,
+    but any symmetric function of the cluster is, and the sum is the cleanest
+    example: it equals `trace(S)`, whose gradient is the identity everywhere.
+    """
+    with deg.degeneracy_policy("generalized"):
+        (grad,) = _VJPS["eigh"](np.ones(3), _degenerate_symmetric())
+    np.testing.assert_allclose(grad, np.eye(3), atol=1e-12)
+
+
+def test_eigh_generalized_refuses_individual_eigenvalues() -> None:
+    # `eigh` returns ascending eigenvalues, so diag([2,2,1]) gives w = [1,2,2]
+    # and the degenerate cluster is indices (1, 2). A cotangent that weights
+    # those two differently asks for an individual eigenvalue inside the
+    # cluster, which is exactly what does not exist.
+    with deg.degeneracy_policy("generalized"):
+        with pytest.raises(deg.TesseraDegeneracyError, match="varies across cluster"):
+            _VJPS["eigh"](np.array([0.0, 1.0, 0.0]), _degenerate_symmetric())
+
+
+def test_eigh_is_silent_on_a_well_separated_spectrum() -> None:
+    S = np.diag([5.0, 3.0, 1.0])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        (grad,) = _VJPS["eigh"](np.ones(3), S)
+    np.testing.assert_allclose(grad, np.eye(3), atol=1e-12)
 
 
 # ── GENERALIZED: admit the rotation-invariant part, refuse the rest ─────────

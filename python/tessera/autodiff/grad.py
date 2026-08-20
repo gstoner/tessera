@@ -57,7 +57,12 @@ def _wrap_as_parameter(arg):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def grad(fn: Callable, argnums: Union[int, Sequence[int]] = 0) -> Callable:
+def grad(
+    fn: Callable,
+    argnums: Union[int, Sequence[int]] = 0,
+    *,
+    metric=None,
+) -> Callable:
     """Return a function that computes ``∇_argnums fn(*args, **kwargs)``.
 
     ``fn`` must produce a scalar output (or a 0-D array). For non-scalar
@@ -71,6 +76,18 @@ def grad(fn: Callable, argnums: Union[int, Sequence[int]] = 0) -> Callable:
       * Does not mutate the caller's parameters' ``.grad`` slots — we
         run backward with ``accumulate_param_grad=False`` and read
         cotangents directly from the tape's final cotangent map.
+
+    ``metric`` selects the geometry the gradient is read in. The *differential*
+    ``df = f'(x)[dx]`` is a linear form and is invariant; a gradient is whatever
+    you take an inner product with to recover it, so a different inner product
+    gives a different vector for the same derivative (Bright/Edelman/Johnson
+    §5.1). Under a weighted product that is ``grad_W f = W^-1 grad f``; on a
+    constraint surface it is the ambient gradient projected onto the tangent
+    space. ``None`` means ``tessera.metric.Euclidean``, which is what "the"
+    gradient normally assumes without saying so::
+
+        from tessera.metric import Sphere
+        g = grad(energy, metric=Sphere())(x)   # tangent to the sphere at x
     """
     argnums_tuple, singleton = _normalize_argnums(argnums)
 
@@ -107,6 +124,13 @@ def grad(fn: Callable, argnums: Union[int, Sequence[int]] = 0) -> Callable:
                 g = np.zeros_like(p._data._data)
             grads.append(g)
 
+        if metric is not None:
+            from ..metric import riemannian_gradient
+            grads = [
+                riemannian_gradient(metric, np.asarray(args[i]), g)
+                for i, g in zip(argnums_tuple, grads)
+            ]
+
         return grads[0] if singleton else tuple(grads)
 
     return wrapped
@@ -122,7 +146,7 @@ def hvp(
     primals,
     tangents,
     *,
-    eps: float = 1e-4,
+    eps: float | None = None,
 ) -> Any:
     """Hessian-vector product: ``H @ v`` where ``H = ∇² fn(primals)``.
 
@@ -130,11 +154,25 @@ def hvp(
 
         hvp(f, x, v) ≈ (∇f(x + ε v) - ∇f(x - ε v)) / (2 ε)
 
-    fp64 primals give ~1e-6 accuracy at ``eps=1e-4``. The compiler's exact
-    forward-over-reverse path is available through ``compiled_hvp_ir`` on a
-    reverse-differentiated ``@jit`` function; this eager finite-difference
-    variant remains the compatibility unblock for
-    second-order optimizers (L-BFGS, natural gradient, GAN penalties).
+    ``eps`` defaults to the scale-aware step ``tessera.debug.fd_step`` —
+    roughly ``sqrt(machine eps) * ||x||``, the crossover between truncation
+    error and roundoff (MC5). The previous hard-coded ``1e-4`` was correct only
+    when ``||x|| ~ 1e4``.
+
+    **Why this is a finite difference and not forward-over-reverse.** The
+    textbook algorithm (Bright/Edelman/Johnson §8.4.1) is reverse mode for
+    ``∇f`` with forward mode differentiating it in ``α``. That composition does
+    not exist in this lane, in *either* order: VJP and JVP rules are numpy
+    functions rather than ``ops.*`` calls, so neither mode can trace through the
+    other's rules, and both ``jvp(grad(f), …)`` and
+    ``grad(lambda x: jvp(f, x, v)[1])`` raise (they now say so precisely).
+    Composing the modes needs one derivative datum evaluated in a higher-order
+    algebra — ``AUTODIFF_NEXTGEN_PLAN.md`` AD-WEIL-1 — not a deeper tape. The
+    exact compiled path is ``JitFn.compiled_hvp_ir``.
+
+    Whatever the mode, the result must satisfy the symmetry of the second
+    derivative, ``⟨u, Hv⟩ = ⟨v, Hu⟩`` (§12.2) — a free law with no reference
+    implementation; see ``tessera.autodiff.laws`` Law 6.
 
     ``primals`` and ``tangents`` may be a single ndarray or a tuple of
     ndarrays of matching shape; the return matches ``primals``.
@@ -143,6 +181,9 @@ def hvp(
     if not is_tuple:
         primals = (primals,)
         tangents = (tangents,)
+    if eps is None:
+        from ..debug import fd_step
+        eps = fd_step([np.asarray(p) for p in primals])
     if len(primals) != len(tangents):
         raise ValueError(
             f"primals/tangents length mismatch: {len(primals)} vs "

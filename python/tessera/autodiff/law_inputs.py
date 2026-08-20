@@ -60,6 +60,23 @@ def _away_from(x: np.ndarray, kink: float = 0.0, margin: float = 0.25) -> np.nda
     return kink + np.where(np.abs(d) < margin, np.sign(d) * margin + d, d)
 
 
+def _symmetric(rng: np.random.Generator, n: int) -> np.ndarray:
+    """A symmetric matrix with well-separated eigenvalues.
+
+    Random symmetric matrices have simple spectra almost surely, but "almost
+    surely" is not a contract; the explicit diagonal offset keeps the sample
+    away from the degeneracy boundary that `eigh`'s rule fails closed at.
+    """
+    M = rng.standard_normal((n, n))
+    return 0.5 * (M + M.T) + np.diag(np.arange(1.0, n + 1.0) * 3.0)
+
+
+def _spd(rng: np.random.Generator, n: int) -> np.ndarray:
+    """Symmetric positive definite — so `logdet`'s determinant is positive."""
+    M = rng.standard_normal((n, n))
+    return M @ M.T + n * np.eye(n)
+
+
 def _unary(shape=(3, 4), lo=None, hi=None, kink=None):
     def make(rng):
         x = rng.standard_normal(shape)
@@ -394,6 +411,34 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
         diff_args=(0,), chain=False,
         note="per-block scale array — the shape that crashed both modes "
              "before AD-LAW-1g"),
+    # ── MC1: the matrix-function / factorization family ──────────────────────
+    # Every entry is sampled well inside its domain — non-singular for the
+    # inverse family, positive-determinant for `logdet`, symmetric with
+    # well-separated eigenvalues for `eigh`. That is not tolerance tuning: these
+    # rules are *defined* on those domains, and `degeneracy.py` fails closed at
+    # the boundary rather than returning a number the law could check.
+    "det": S(lambda rng: ((rng.standard_normal((4, 4)) + 4.0 * np.eye(4),), {}),
+             note="well-conditioned square; d(det A) = det(A) tr(A^-1 dA)"),
+    "logdet": S(lambda rng: ((_spd(rng, 4),), {}),
+                note="SPD so det > 0; grad = A^-T"),
+    "inv": S(lambda rng: ((rng.standard_normal((4, 4)) + 4.0 * np.eye(4),), {}),
+             note="d(A^-1) = -A^-1 dA A^-1 — an operator, never a Jacobian"),
+    "solve": S(lambda rng: ((rng.standard_normal((4, 4)) + 4.0 * np.eye(4),
+                             rng.standard_normal(4)), {}),
+               note="the adjoint method: one transposed solve (notes §6.3)"),
+    "trace": S(lambda rng: ((rng.standard_normal((4, 4)),), {})),
+    "vec": S(lambda rng: ((rng.standard_normal((4, 3)),), {}),
+             note="column-major, so the Kronecker identity holds as written"),
+    "kron": S(lambda rng: ((rng.standard_normal((2, 3)),
+                            rng.standard_normal((3, 2))), {})),
+    "matrix_power": S(lambda rng: ((rng.standard_normal((4, 4))
+                                    + 4.0 * np.eye(4),), {"n": 3})),
+    "norm": S(lambda rng: ((rng.standard_normal((4, 3)),), {"ord": "fro"}),
+              note="grad ||A||_F = A/||A||_F via the Frobenius inner product"),
+    "eigh": S(lambda rng: ((_symmetric(rng, 4),), {}),
+              tangent_project=lambda i, t: 0.5 * (t + t.T),
+              note="S enters only through its symmetric part, so a raw "
+                   "Gaussian tangent leaves the input manifold"),
     # ── AD-LAW-1j spec growth: structural / shape ops ────────────────────────
     "cat": S(lambda rng: (([rng.standard_normal((2, 3)),
                             rng.standard_normal((2, 3))],), {"axis": 0})),

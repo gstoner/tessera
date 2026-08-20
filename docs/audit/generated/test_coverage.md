@@ -6,24 +6,24 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Headline
 
-- **505** ops in `primitive_coverage` registry.
-- **5480** total Python-test references, **1331** total lit-fixture references.
+- **515** ops in `primitive_coverage` registry.
+- **5537** total Python-test references, **1333** total lit-fixture references.
 - **70** ops have **zero** references in either test surface.
-- **113** ops have ≤1 reference ("thinly tested").
-- **181** ops have ≥10 references ("well tested").
-- **168** ops have at least one associated `pytest.raises` negative test.
+- **116** ops have ≤1 reference ("thinly tested").
+- **182** ops have ≥10 references ("well tested").
+- **175** ops have at least one associated `pytest.raises` negative test.
 
 ## Top 20 most-tested ops
 
 | Op | py refs | lit refs | total | neg | dtypes |
 |----|--------:|---------:|------:|----:|--------|
-| `matmul` |  479 |  277 |  756 |  22 | `bf16`, `f16`, `f32`, `f64` … |
+| `matmul` |  483 |  277 |  760 |  23 | `bf16`, `f16`, `f32`, `f64` … |
 | `flash_attn` |  140 |   79 |  219 |  10 | `bf16`, `f16`, `f32`, `f64` … |
 | `add` |  156 |   46 |  202 |  11 | `bf16`, `f16`, `f32`, `f64` … |
 | `softmax` |  149 |   50 |  199 |  31 | `bf16`, `f16`, `f32`, `f64` … |
+| `mul` |  136 |   41 |  177 |  11 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  132 |   37 |  169 |  11 | `bf16`, `f16`, `f32`, `f64` … |
-| `mul` |  125 |   41 |  166 |   9 | `bf16`, `f16`, `f32`, `f64` … |
-| `reduce` |  119 |   17 |  136 |   9 | `bf16`, `f16`, `f32`, `f64` … |
+| `reduce` |  128 |   17 |  145 |  11 | `bf16`, `f16`, `f32`, `f64` … |
 | `rmsnorm` |  110 |   18 |  128 |   6 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   91 |    8 |   99 |   6 | `bf16`, `f16`, `f32`, `f64` … |
 | `layer_norm` |   73 |   16 |   89 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
@@ -40,7 +40,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 
 ## Thinly-tested ops (≤1 reference)
 
-These **113** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
+These **116** ops have at most one test reference across the whole test surface.  Many will be legitimate — variant aliases, structural ops, or category rollups that inherit coverage from a parent family — but each one is a candidate for explicit per-op test coverage.
 
 | Op | py refs | lit refs | total |
 |----|--------:|---------:|------:|
@@ -102,10 +102,10 @@ These **113** ops have at most one test reference across the whole test surface.
 | `ebm_partition_monte_carlo` |    0 |    0 |    0 |
 | `ebm_sphere_langevin_sample` |    0 |    0 |    0 |
 | `ebm_sphere_langevin_step` |    0 |    0 |    0 |
+| `eigh` |    1 |    0 |    1 |
 | `ema_update` |    1 |    0 |    1 |
-| `entmax15` |    1 |    0 |    1 |
 
-_(53 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
+_(56 additional thinly-tested ops omitted; see `collect_op_test_coverage()` for the full list.)_
 
 ---
 
@@ -117,23 +117,24 @@ Companion section to the by-op coverage table above: that section says **which**
 
 ## Headline
 
-**113** ops have ≤1 direct test reference.  They break down as:
+**116** ops have ≤1 direct test reference.  They break down as:
 
 | Bucket | Count | Meaning |
 |--------|------:|---------|
 | `covered_by_family`      |   26 | Tested via a parent op or family wrapper |
-| `structural_only`        |   76 | Registry/metadata/wrapper; no direct numerical test meaningful |
-| `needs_direct_test`      |    0 | **Actionable test debt** — real primitive without direct test |
+| `structural_only`        |   78 | Registry/metadata/wrapper; no direct numerical test meaningful |
+| `needs_direct_test`      |    1 | **Actionable test debt** — real primitive without direct test |
 | `hardware_gated`         |    4 | Blocked on real device hardware (Phase G/H) |
 | `deprecated_or_internal` |    0 | Not public test debt |
 | `directly_tested`         |    7 | Direct proof exists; parameterization/defining surfaces keep the lexical count ≤1 |
 
 ## Actionable: `needs_direct_test` ops
 
-These **0** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
+These **1** ops are real primitives with ≤1 direct test reference.  Each is a candidate for a focused numerical-correctness test.
 
 | Op | py refs | lit refs | reason |
 |----|--------:|---------:|--------|
+| `eigh` |   1 |   0 | category default for 'linalg_decomposition' |
 
 ## Hardware-gated ops
 
@@ -179,7 +180,7 @@ Tested through a parent op or family wrapper.  Sample (first 30):
 | `rng_multinomial` | category default for 'rng' |
 | `rng_permutation` | category default for 'rng' |
 
-## `structural_only` — 76 ops
+## `structural_only` — 78 ops
 
 Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (first 30):
 
@@ -216,4 +217,4 @@ Registry/metadata/wrapper ops; direct numerical tests not meaningful.  Sample (f
 | `dataset_zip` | category default for 'data' |
 | `dynamic_slice` | unclassified — defaults to structural_only |
 
-_(46 additional structural ops omitted.)_
+_(48 additional structural ops omitted.)_

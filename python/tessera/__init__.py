@@ -271,7 +271,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         out = gemm(A, B)
         u, s, vh = np.linalg.svd(out, full_matrices=False)
         r = max(1, min(int(rank), s.shape[-1]))
-        return (u[..., :r] * s[..., :r]) @ vh[..., :r, :]
+        # s needs an explicit row axis so leading batch dims broadcast:
+        # u[..., :r] is (..., M, r) while s[..., :r] is (..., r) — without
+        # the None the batched case mis-broadcasts (PR #594 review).
+        return (u[..., :r] * s[..., None, :r]) @ vh[..., :r, :]
 
     def grouped_gemm(x, weights, group_sizes, *, kind="contiguous", alignment=None,
                      quant=None):

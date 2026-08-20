@@ -150,7 +150,7 @@ dequantize_int8,4,0,1,4,0,,directly_tested,4 direct test references
 dequantize_nvfp4,9,0,2,9,0,fp32 fp4_e2m1 fp8_e4m3 fp8_e5m2 int8 nvfp4,directly_tested,9 direct test references
 digamma,15,0,0,15,0,bf16 f32 fp32,directly_tested,15 direct test references
 div,13,2,2,15,0,bf16 f16 f32 fp16 fp32,directly_tested,15 direct test references
-dropout,30,13,3,43,0,f32 fp32 fp64,directly_tested,43 direct test references
+dropout,31,13,4,44,0,f32 fp32 fp64,directly_tested,44 direct test references
 dynamic_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dynamic_update_slice,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 dz,0,0,0,0,1,,covered_by_family,exercised by complex differential tests
@@ -182,7 +182,7 @@ es_low_rank_correction,3,12,0,15,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tes
 exp,12,0,2,12,0,bf16 f32 fp32,directly_tested,12 direct test references
 expand,6,8,0,14,0,,directly_tested,14 direct test references
 expm1,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
-factorized_matmul,9,0,1,9,0,fp32,directly_tested,9 direct test references
+factorized_matmul,12,0,1,12,0,fp32,directly_tested,12 direct test references
 factorized_pos_emb,12,0,1,12,0,fp16,directly_tested,12 direct test references
 fake_quantize,6,0,1,6,0,,directly_tested,6 direct test references
 fft,38,4,1,42,0,f32 fp32 fp64 int32 int64 int8,directly_tested,42 direct test references
@@ -460,7 +460,7 @@ stft,32,2,2,34,0,bf16 f16 f32 fp32 fp64 int32 int64 int8,directly_tested,34 dire
 stop_gradient,1,5,0,6,0,fp32,directly_tested,6 direct test references
 sub,35,7,4,42,0,bf16 f16 f32 fp16 fp32,directly_tested,42 direct test references
 sum,24,0,3,24,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,24 direct test references
-svd,20,5,0,25,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,25 direct test references
+svd,21,5,1,26,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,directly_tested,26 direct test references
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references

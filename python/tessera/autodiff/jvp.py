@@ -2966,25 +2966,31 @@ def jvp_svd(primals, tangents, **_):
     cotangents, so the pair failed the adjoint law on any probe touching
     the singular vectors — pinned by
     ``test_svd_jvp_matches_finite_differences``.
+
+    Batch-aware over leading dims (PR #594 review): the canonical
+    ``ops.svd`` forward accepts stacked matrices, so the rule pair must
+    too — all transposes are last-two-axis swaps and the diagonal /
+    S-scaling operations broadcast over the batch.
     """
     A = np.asarray(primals[0], dtype=np.float64)
     dA = np.asarray(tangents[0], dtype=np.float64)
     U, s, Vt = np.linalg.svd(A, full_matrices=False)
-    dP = U.T @ dA @ Vt.T
-    ds = np.diag(dP).copy()
+    mT = lambda x: np.swapaxes(x, -1, -2)  # noqa: E731 — local adjoint spelling
+    dP = mT(U) @ dA @ mT(Vt)
+    ds = np.einsum("...ii->...i", dP).copy()
     s2 = s ** 2
-    F = 1.0 / (s2[None, :] - s2[:, None] + np.eye(len(s)))
-    np.fill_diagonal(F, 0.0)
-    S = np.diag(s)
-    Sinv = np.diag(1.0 / s)
-    m, n = A.shape
-    dU = U @ (F * (dP @ S + S @ dP.T))
-    dV = Vt.T @ (F * (S @ dP + dP.T @ S))
+    eye = np.eye(s.shape[-1])
+    F = (1.0 - eye) / (s2[..., None, :] - s2[..., :, None] + eye)
+    m, n = A.shape[-2], A.shape[-1]
+    dU = U @ (F * (dP * s[..., None, :] + s[..., :, None] * mT(dP)))
+    dV = mT(Vt) @ (F * (s[..., :, None] * dP + mT(dP) * s[..., None, :]))
     if m > n:
-        dU = dU + (dA @ Vt.T - U @ (U.T @ (dA @ Vt.T))) @ Sinv
+        dAV = dA @ mT(Vt)
+        dU = dU + (dAV - U @ (mT(U) @ dAV)) / s[..., None, :]
     elif n > m:
-        dV = dV + (dA.T @ U - Vt.T @ (Vt @ (dA.T @ U))) @ Sinv
-    return (U, s, Vt), (dU, ds, dV.T)
+        dAtU = mT(dA) @ U
+        dV = dV + (dAtU - mT(Vt) @ (Vt @ dAtU)) / s[..., None, :]
+    return (U, s, Vt), (dU, ds, mT(dV))
 
 
 # ── bidirectional_scan placeholder ─────────────────────────────────────────
@@ -3999,10 +4005,11 @@ def jvp_factorized_matmul(primals, tangents, *, rank=None, **_):
         r = s.shape[-1]
     else:
         r = max(1, min(int(rank), s.shape[-1]))
-    y = (u[..., :r] * s[..., :r]) @ vt[..., :r, :]
-    dy = ((du[..., :r] * s[..., :r]) @ vt[..., :r, :]
-          + (u[..., :r] * ds[..., :r]) @ vt[..., :r, :]
-          + (u[..., :r] * s[..., :r]) @ dvt[..., :r, :])
+    s_r = s[..., None, :r]  # explicit row axis so batch dims broadcast
+    y = (u[..., :r] * s_r) @ vt[..., :r, :]
+    dy = ((du[..., :r] * s_r) @ vt[..., :r, :]
+          + (u[..., :r] * ds[..., None, :r]) @ vt[..., :r, :]
+          + (u[..., :r] * s_r) @ dvt[..., :r, :])
     return y, dy
 
 
@@ -4475,20 +4482,33 @@ def jvp_lstm_state_c(primals, tangents, **_):
 
 
 @_jvp("dropout")
-def jvp_dropout(primals, tangents, *, p=0.1, training=True, seed=None, **_):
+def jvp_dropout(primals, tangents, *, p=0.1, training=True, seed=None,
+                rng=None, **_):
+    """Forward mode draws the mask ONCE and applies it to primal and
+    tangent together, so — unlike reverse replay, which cannot recover a
+    stateful generator's past draws — a caller-supplied ``rng=`` is a
+    lawful mask source here (PR #594 review). The generator precedence
+    mirrors the canonical forward exactly: ``rng`` wins when given
+    (unwrapping a ``._generator()`` carrier), then ``seed``; with
+    neither, forward mode fails closed the same way the VJP does."""
     (x,) = primals
     x_arr = np.asarray(x, dtype=np.float64)
     dx = _t(0, tangents, x_arr)
     if not training or p == 0.0:
         return x_arr, np.asarray(dx, dtype=np.float64)
-    if seed is None:
+    if rng is not None and hasattr(rng, "_generator"):
+        generator = rng._generator()
+    elif rng is not None:
+        generator = rng
+    elif seed is not None:
+        generator = np.random.default_rng(int(seed))
+    else:
         raise ValueError(
-            "dropout is not differentiable without a reproducible seed — "
-            "the same contract as its VJP; pass seed=… (nn.Dropout assigns "
-            "one automatically while training)."
+            "dropout is not differentiable without a reproducible mask "
+            "source — the same contract as its VJP; pass seed=… or rng=… "
+            "(nn.Dropout assigns a seed automatically while training)."
         )
-    rng = np.random.default_rng(int(seed))
-    mask = rng.binomial(1, 1.0 - p, x_arr.shape) / (1.0 - p)
+    mask = generator.binomial(1, 1.0 - p, x_arr.shape) / (1.0 - p)
     return x_arr * mask, np.asarray(dx, dtype=np.float64) * mask
 
 

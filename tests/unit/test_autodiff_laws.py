@@ -2351,3 +2351,86 @@ def test_jet_semantic_keys_fail_closed():
         TruncatedJet(2, coefficient_scaling="factorial_scaled")
     with _pytest.raises(ValueError, match="numeric_policy"):
         TruncatedJet(2, numeric_policy="fp32")
+
+
+# ── PR #594 review findings, pinned ──────────────────────────────────────────
+
+
+def test_svd_and_factorized_matmul_rules_are_batch_aware():
+    """PR #594 review: the canonical ops.svd forward accepts stacked
+    matrices, and factorized_matmul's forward carries leading batch dims
+    (after its s-broadcast fix) — the rules must too. Pinned batched:
+    JVP vs central differences of the canonical forward, and the adjoint
+    identity, tall/wide/square."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_factorized_matmul, jvp_svd
+    from tessera.autodiff.vjp import vjp_factorized_matmul, vjp_svd
+
+    rng = np.random.default_rng(47)
+
+    def mT(x):
+        return np.swapaxes(x, -1, -2)
+
+    for shape, diag in (((2, 5, 3), [5.0, 3.5, 2.0]),
+                        ((2, 3, 5), [5.0, 3.5, 2.0]),
+                        ((2, 4, 4), [5.0, 3.5, 2.0, 1.0])):
+        A = rng.standard_normal(shape)
+        k = len(diag)
+        A[..., :k, :k] += np.diag(diag)
+        dA = rng.standard_normal(shape)
+        (U, s, Vt), (dU, ds, dVt) = jvp_svd((A,), (dA,))
+        uU = rng.standard_normal(dU.shape)
+        us = rng.standard_normal(ds.shape)
+        uVt = rng.standard_normal(dVt.shape)
+        lhs = (float(np.sum(dU * uU)) + float(np.sum(ds * us))
+               + float(np.sum(dVt * uVt)))
+        (gA,) = vjp_svd((uU, us, uVt), A)
+        rhs = float(np.sum(dA * gA))
+        assert abs(lhs - rhs) / max(abs(lhs), 1e-12) < 1e-10, shape
+
+    a = rng.standard_normal((2, 4, 3))
+    b = rng.standard_normal((2, 3, 5))
+    da = rng.standard_normal(a.shape)
+    db = rng.standard_normal(b.shape)
+    y, dy = jvp_factorized_matmul((a, b), (da, db), rank=2)
+    np.testing.assert_allclose(
+        y, np.asarray(ops.factorized_matmul(a, b, 2)), rtol=1e-9)
+    eps = 1e-6
+    dy_fd = (np.asarray(ops.factorized_matmul(a + eps * da, b + eps * db, 2))
+             - np.asarray(ops.factorized_matmul(a - eps * da,
+                                                b - eps * db, 2))) / (2 * eps)
+    np.testing.assert_allclose(dy, dy_fd, atol=1e-6)
+    u = rng.standard_normal(y.shape)
+    gA, gB = vjp_factorized_matmul(u, a, b, rank=2)
+    lhs = float(np.sum(dy * u))
+    rhs = float(np.sum(da * gA)) + float(np.sum(db * gB))
+    assert abs(lhs - rhs) / max(abs(lhs), 1e-12) < 1e-12
+
+
+def test_dropout_jvp_honors_a_caller_generator():
+    """PR #594 review: the canonical forward accepts rng= as the mask
+    source. Reverse replay cannot recover a stateful generator's past
+    draws (the VJP's fail-closed contract stands), but forward mode
+    computes primal and tangent together, so it consumes the generator
+    ONCE — same precedence as the forward (rng wins over seed), same
+    mask on both halves. With neither rng nor seed it still fails
+    closed."""
+    import pytest as _pytest
+
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_dropout
+
+    rng = np.random.default_rng(53)
+    x = rng.standard_normal((3, 4))
+    dx = rng.standard_normal((3, 4))
+
+    g_fwd = np.random.default_rng(123)
+    g_jvp = np.random.default_rng(123)
+    y_fwd = np.asarray(ops.dropout(x, p=0.3, rng=g_fwd, training=True))
+    y, tan = jvp_dropout((x,), (dx,), p=0.3, training=True, rng=g_jvp)
+    np.testing.assert_allclose(y, y_fwd, rtol=1e-12)
+    mask = np.where(x != 0, y_fwd / x, 0.0)
+    np.testing.assert_allclose(tan, dx * mask, rtol=1e-9)
+
+    with _pytest.raises(ValueError, match="reproducible mask"):
+        jvp_dropout((x,), (dx,), p=0.3, training=True)

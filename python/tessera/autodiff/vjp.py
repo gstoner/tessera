@@ -28,6 +28,12 @@ from .nonsmooth import (
 # decorator) to add or override.
 _VJPS: dict[str, Callable] = {}
 
+
+def _np_mT(x):
+    """Last-two-axis transpose — the batched adjoint spelling of ``.T``."""
+    return np.swapaxes(x, -1, -2)
+
+
 _FFTNorm = Literal["backward", "ortho", "forward"]
 
 
@@ -1074,9 +1080,21 @@ def vjp_sum(dout, x, *, axis=None, keepdims=False, **_):
 
 
 @_vjp("dropout")
-def vjp_dropout(dout, x, *, p=0.1, training=True, seed=None, **_):
+def vjp_dropout(dout, x, *, p=0.1, training=True, seed=None, rng=None, **_):
     if not training or p == 0.0:
         return (dout,)
+    if rng is not None and seed is None:
+        # Declared, not swallowed (PR #594 review): forward mode can
+        # consume a caller generator (it draws the mask once for primal
+        # and tangent together — see jvp_dropout), but reverse replay
+        # runs AFTER the forward advanced the generator's state, so the
+        # mask is unrecoverable. Fail closed with the reason.
+        raise ValueError(
+            "dropout backward cannot replay a stateful rng= generator — "
+            "its state advanced past the forward's draws. Pass seed=… "
+            "for reverse-mode dropout (nn.Dropout does this while "
+            "training); rng= is supported in forward mode only."
+        )
     if seed is None:
         # The mask is not stored on the tape; backward can only reproduce it
         # from a seed. With seed=None we would draw a *fresh, independent*
@@ -5339,14 +5357,19 @@ def vjp_svd(dout, A, **_):
         dU = np.zeros_like(U)
         ds = np.asarray(dout, dtype=np.float64)
         dVt = np.zeros_like(Vt)
+    # Batch-aware over leading dims (PR #594 review, matching the JVP and
+    # the batch-capable canonical forward): last-two-axis transposes,
+    # broadcast S-scaling, and an einsum-built diagonal.
+    mT = lambda x: np.swapaxes(x, -1, -2)  # noqa: E731 — local adjoint spelling
     s2 = s ** 2
-    eps = 1e-12
-    F = 1.0 / (s2[None, :] - s2[:, None] + np.eye(len(s)) * eps)
-    np.fill_diagonal(F, 0.0)
-    UtdU = U.T @ dU
-    VdVt = Vt @ dVt.T
-    S = np.diag(s)
-    dA = U @ ((F * (UtdU - UtdU.T)) @ S + np.diag(ds) + S @ (F * (VdVt - VdVt.T))) @ Vt
+    eye = np.eye(s.shape[-1])
+    F = (1.0 - eye) / (s2[..., None, :] - s2[..., :, None] + eye)
+    UtdU = mT(U) @ dU
+    VdVt = Vt @ mT(dVt)
+    inner = ((F * (UtdU - mT(UtdU))) * s[..., None, :]
+             + eye * ds[..., None, :]
+             + s[..., :, None] * (F * (VdVt - mT(VdVt))))
+    dA = U @ inner @ Vt
     # Projector-term adjoints for non-square A (thin SVD): the JVP's
     # out-of-range components (I − UUᵀ) dA V S⁻¹ (tall) and
     # (I − VVᵀ) dAᵀ U S⁻¹ (wide) carry cotangent mass back into dA.
@@ -5354,12 +5377,11 @@ def vjp_svd(dout, A, **_):
     # adjoint law on any non-square input — surfaced through
     # `factorized_matmul`'s wide product. Pinned by
     # ``test_svd_adjoint_holds_off_square``.
-    m, n = A_arr.shape
-    Sinv = np.diag(1.0 / s)
+    m, n = A_arr.shape[-2], A_arr.shape[-1]
     if m > n:
-        dA = dA + (dU - U @ (U.T @ dU)) @ Sinv @ Vt
+        dA = dA + ((dU - U @ (mT(U) @ dU)) / s[..., None, :]) @ Vt
     elif n > m:
-        dA = dA + U @ Sinv @ (dVt - (dVt @ Vt.T) @ Vt)
+        dA = dA + U @ ((dVt - (dVt @ mT(Vt)) @ Vt) / s[..., :, None])
     return (dA,)
 
 
@@ -5548,6 +5570,7 @@ def vjp_factorized_matmul(dout, a, b, *, rank=None, **_):
     cotangent lands on the kept (U_r, s_r, Vt_r) triple, zero-pads to the
     thin-SVD width, flows through ``vjp_svd`` to the product, then splits
     bilinearly."""
+    mT = _np_mT
     a_arr = np.asarray(a, dtype=np.float64)
     b_arr = np.asarray(b, dtype=np.float64)
     dout_arr = np.asarray(dout, dtype=np.float64)
@@ -5560,12 +5583,12 @@ def vjp_factorized_matmul(dout, a, b, *, rank=None, **_):
     du = np.zeros_like(u)
     ds = np.zeros_like(s)
     dvt = np.zeros_like(vt)
-    du[..., :r] = dout_arr @ vt[..., :r, :].T * s[..., :r]
+    du[..., :r] = dout_arr @ mT(vt[..., :r, :]) * s[..., None, :r]
     ds[..., :r] = np.einsum("...ir,...ij,...rj->...r", u[..., :r],
                             dout_arr, vt[..., :r, :])
-    dvt[..., :r, :] = (u[..., :r] * s[..., :r]).T @ dout_arr
+    dvt[..., :r, :] = s[..., :r, None] * (mT(u[..., :r]) @ dout_arr)
     (dm,) = vjp_svd((du, ds, dvt), m_prod)
-    return dm @ b_arr.T, a_arr.T @ dm
+    return dm @ mT(b_arr), mT(a_arr) @ dm
 
 
 @_vjp("einsum")

@@ -203,14 +203,30 @@ def adjoint_check(op: str, spec, jvp_fn: Callable, vjp_fn: Callable,
             u = _like_leaves(t_out, lambda leaf: _rand_like(rng, leaf))
             lhs = _dot(t_out, u)
 
-            grads = vjp_fn(u if not _single_leaf(t_out) else _leaves(u)[0],
-                           *primals, **kwargs)
-            if not isinstance(grads, tuple):
-                grads = (grads,)
             rhs = 0.0
-            for i in diff:
-                if i < len(grads) and grads[i] is not None:
-                    rhs += _dot(tangents[i], grads[i])
+            if isinstance(t_out, tuple) and _declares_output_index(vjp_fn):
+                # Multi-output op whose VJP follows the tape's per-output
+                # replay convention: one call per output component with
+                # `_output_index=i` and that component's cotangent. The
+                # adjoint law sums over components, mirroring how the tape
+                # actually accumulates.
+                for oi, u_i in enumerate(u):
+                    if u_i is None:
+                        continue
+                    grads = vjp_fn(u_i, *primals, _output_index=oi, **kwargs)
+                    if not isinstance(grads, tuple):
+                        grads = (grads,)
+                    for i in diff:
+                        if i < len(grads) and grads[i] is not None:
+                            rhs += _dot(tangents[i], grads[i])
+            else:
+                grads = vjp_fn(u if not _single_leaf(t_out) else _leaves(u)[0],
+                               *primals, **kwargs)
+                if not isinstance(grads, tuple):
+                    grads = (grads,)
+                for i in diff:
+                    if i < len(grads) and grads[i] is not None:
+                        rhs += _dot(tangents[i], grads[i])
 
             res = abs(lhs - rhs) / max(abs(lhs) + abs(rhs), tol * _scale(t_out, u))
             max_res = max(max_res, res)
@@ -242,6 +258,21 @@ def _zero_like(p: Any) -> np.ndarray:
 
 def _single_leaf(x: Any) -> bool:
     return not isinstance(x, (tuple, list, dict))
+
+
+def _declares_output_index(vjp_fn: Callable) -> bool:
+    """True iff the rule EXPLICITLY declares `_output_index` — the tape's
+    per-output replay convention. A `**_` catch-all does not count: a rule
+    that merely swallows the key would silently return output-0's gradient
+    for every component, which is precisely the bug class the sweep hunts.
+    """
+    import inspect
+
+    try:
+        params = inspect.signature(vjp_fn).parameters
+    except (TypeError, ValueError):  # pragma: no cover — builtins
+        return False
+    return "_output_index" in params
 
 
 # ── Law 3 over the geometric registry ────────────────────────────────────────

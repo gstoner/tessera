@@ -2099,3 +2099,27 @@ def test_tape_differentiates_sequence_operands():
         loss3 = ops.sum(v)
     t3.backward(loss3)
     np.testing.assert_allclose(t3.cotangent[id(a)], np.ones_like(a))
+
+
+def test_spectral_filter_jvp_is_the_complex_product_rule():
+    """The canonical `spectral_filter(Xf, Hf)` is a COMPLEX pointwise
+    product. The JVP previously differentiated a different function
+    entirely — rfft(x)·f → irfft of a real time-domain signal — and cast
+    complex inputs to float64, silently discarding the imaginary part
+    (`vjp_spectral_filter` was always the conj-adjoint of the product).
+    The tri_solve vocabulary class, pinned against the canonical forward
+    and the bilinear product rule."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_spectral_filter
+
+    rng = np.random.default_rng(29)
+    xf = rng.standard_normal((3, 8)) + 1j * rng.standard_normal((3, 8))
+    hf = rng.standard_normal(8) + 1j * rng.standard_normal(8)
+    dxf = rng.standard_normal((3, 8)) + 1j * rng.standard_normal((3, 8))
+    dhf = rng.standard_normal(8) + 1j * rng.standard_normal(8)
+
+    out, dout = jvp_spectral_filter((xf, hf), (dxf, dhf))
+    np.testing.assert_allclose(out, np.asarray(ops.spectral_filter(xf, hf)),
+                               rtol=1e-12)
+    assert np.iscomplexobj(dout), "tangent must stay complex"
+    np.testing.assert_allclose(dout, dxf * hf + xf * dhf, rtol=1e-12)

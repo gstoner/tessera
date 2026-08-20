@@ -736,3 +736,239 @@ GEO_LAW_INPUT_SPECS: dict[str, InputSpec] = {
     # rotor sandwich: a genuine rotor plus a general multivector
     "rotor_sandwich": S(lambda rng: ((_geo_rotor(rng), _mv(rng)), {})),
 }
+
+
+# ── AD-LAW-1k spec growth: losses / RL / EBM / game / collectives / misc ────
+# Chain-law caveats recorded per family: ops whose canonical forward does not
+# resolve get adjoint-only coverage (recorded as `not_applicable`, never
+# hidden); RL rules are numeric (FD-based) so their tolerance is loosened to
+# their measured noise floor, not to make a defect fit.
+
+
+def _binary_targets(rng, shape):
+    return (rng.random(shape) > 0.5).astype(np.float64)
+
+
+LAW_INPUT_SPECS.update({
+    # losses
+    "asymmetric_bce": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      _binary_targets(rng, (3, 4))), {"reduction": "mean"}),
+        diff_args=(0,)),
+    "focal_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.integers(0, 4, (3,))), {"reduction": "mean"}),
+        diff_args=(0,)),
+    "ddpm_noise_pred_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))), {"reduction": "mean"})),
+    "score_matching_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))), {"reduction": "mean"})),
+    "denoising_score_matching_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)), 0.7),
+                     {"reduction": "mean"}),
+        diff_args=(0,)),
+    "implicit_score_matching_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal(3)), {"reduction": "mean"}),
+        diff_args=(0,)),
+    "contrastive_divergence_loss": S(
+        lambda rng: ((rng.standard_normal(4), rng.standard_normal(4)),
+                     {"reduction": "mean"})),
+    "persistent_cd_loss": S(
+        lambda rng: ((rng.standard_normal(4), rng.standard_normal(4)),
+                     {"reduction": "mean"})),
+    "vlb_loss": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                               {"reduction": "mean"})),
+    "wasserstein_distance": S(
+        lambda rng: ((rng.standard_normal(6), rng.standard_normal(6)),
+                     {"reduction": "mean"})),
+    "contrastive_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)),
+                      np.array([1.0, -1.0, 1.0])),
+                     {"margin": 1.0, "reduction": "mean"}),
+        diff_args=(0, 1)),
+    "cosine_embedding_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)),
+                      np.array([1.0, -1.0, 1.0])),
+                     {"margin": 0.0, "reduction": "mean"}),
+        diff_args=(0, 1)),
+    # anchor/positive/negative kept close so the hinge is ACTIVE — a far
+    # negative zeroes the loss plateau-wide and the probe would be vacuous.
+    "triplet_loss": S(
+        lambda rng: ((lambda a: (a,
+                                 a + 0.1 * rng.standard_normal((3, 4)),
+                                 a + 0.2 * rng.standard_normal((3, 4))))(
+            rng.standard_normal((3, 4))),
+            {"margin": 1.0, "reduction": "mean"})),
+    "seq2seq_loss": S(
+        lambda rng: ((rng.standard_normal((2, 3, 5)),
+                      rng.integers(0, 5, (2, 3)), np.ones((2, 3))),
+                     {"reduction": "mean"}),
+        diff_args=(0,)),
+    "info_nce_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 5, 4))),
+                     {"temperature": 0.5, "reduction": "mean"})),
+    "nt_xent_loss": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 0, 1, 1])),
+                     {"temperature": 0.5, "reduction": "mean"}),
+        diff_args=(0,)),
+    "load_balance_loss": S(
+        lambda rng: ((np.abs(rng.standard_normal((4, 3))) + 0.2,),
+                     {"reduction": "mean"}),
+        diff_args=(0,)),
+    "ctc_loss": S(
+        lambda rng: ((np.log(np.abs(rng.standard_normal((5, 2, 4))) + 0.5)
+                      - 2.0,
+                      rng.integers(1, 4, (2, 2)),
+                      np.array([5, 5]), np.array([2, 2])),
+                     {"blank": 0, "reduction": "mean"}),
+        diff_args=(0,), rtol=1e-6),
+    # RL / policy — numeric rules; logp deltas kept small so the PPO clip is
+    # inactive and the probe sits on a smooth piece.
+    "ppo_policy_loss": S(
+        lambda rng: ((rng.standard_normal(6) * 0.05,
+                      rng.standard_normal(6) * 0.05,
+                      rng.standard_normal(6) + 2.0), {}), rtol=1e-4),
+    "grpo_policy_loss": S(
+        lambda rng: ((rng.standard_normal((2, 3)) * 0.05,
+                      rng.standard_normal((2, 3)) * 0.05,
+                      rng.standard_normal((2, 3))), {}), rtol=1e-4),
+    "cispo_policy_loss": S(
+        lambda rng: ((rng.standard_normal((2, 3)) * 0.05,
+                      rng.standard_normal((2, 3)) * 0.05,
+                      rng.standard_normal((2, 3))), {}), rtol=1e-4),
+    "normalize_group_advantages": S(
+        lambda rng: ((rng.standard_normal((2, 3)),), {}), rtol=1e-4),
+    # EBM
+    "ebm_energy_quadratic": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))), {})),
+    "ebm_inner_step": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))),
+                     {"eta": 0.1, "noise_scale": 0.0})),
+    "ebm_refinement": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))), {"eta": 0.1, "T": 3})),
+    "ebm_self_verify": S(
+        lambda rng: ((rng.standard_normal((2, 4)),
+                      rng.standard_normal((2, 4, 3))), {"beta": 2.0})),
+    # game theory — linear lattice transforms over 2^n subsets (n = 3)
+    "game_coalition_excess": S(
+        lambda rng: ((rng.standard_normal(8), rng.standard_normal(3)), {})),
+    "game_coalition_marginal": S(
+        lambda rng: ((rng.standard_normal(8),), {})),
+    "game_semivalue": S(
+        lambda rng: ((rng.standard_normal(8),
+                      np.abs(rng.standard_normal(4)) + 0.1), {}),
+        diff_args=(0,)),
+    "game_subset_zeta": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "game_subset_mobius": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "game_superset_zeta": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "game_superset_mobius": S(lambda rng: ((rng.standard_normal(8),), {})),
+    # collectives — single-rank reference semantics
+    "psum": S(lambda rng: ((rng.standard_normal((3, 4)),), {})),
+    "pmean": S(lambda rng: ((rng.standard_normal((3, 4)),), {})),
+    "pmax": S(lambda rng: ((rng.standard_normal((3, 4)),), {})),
+    "pmin": S(lambda rng: ((rng.standard_normal((3, 4)),), {})),
+    "all_gather": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                                 {"axis": 0})),
+    "all_reduce": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                                 {"op": "sum"})),
+    # the rule speaks split_axis/concat_axis (tensor axes); the forward
+    # speaks a mesh-axis name — no shared chain vocabulary, adjoint-only.
+    "all_to_all": S(lambda rng: ((rng.standard_normal((4, 6)),),
+                                 {"split_axis": 0, "concat_axis": 0}),
+                    chain=False),
+    "reduce_scatter": S(lambda rng: ((rng.standard_normal((4, 6)),),
+                                     {"op": "sum", "axis": 0})),
+    "collective_permute": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      [(0, 1), (1, 2), (2, 0)]), {}),
+        diff_args=(0,)),
+    # reductions / pointwise leftovers
+    "reduce": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                             {"op": "sum", "axis": 0})),
+    "floor_div": S(lambda rng: ((rng.standard_normal((3, 4)) * 5,
+                                 np.abs(rng.standard_normal((3, 4))) + 1.0),
+                                {}),
+                   zero_tangent_ok=True, chain=False,
+                   note="piecewise-constant; derivative 0 a.e. by declaration"),
+    "online_softmax": S(lambda rng: ((rng.standard_normal((3, 5)),),
+                                     {"axis": -1})),
+    "online_softmax_state": S(
+        lambda rng: ((rng.standard_normal((3, 5)),), {}),
+        zero_tangent_ok=True, chain=False,
+        note="declared non-differentiable state extractor"),
+    "grad_scaler_step": S(
+        lambda rng: ((rng.standard_normal((3, 4)),), {}),
+        zero_tangent_ok=True, chain=False,
+        note="declared non-differentiable optimizer step"),
+    "calibration_observer": S(
+        lambda rng: ((rng.standard_normal((3, 4)),), {}), chain=False,
+        note="stats-only observer; cotangent passes through"),
+    "fake_quantize": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                       chain=False, note="STE; derivative is identity"),
+    "quantize_fp8": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                      chain=False, note="STE; derivative is identity"),
+    "dequantize_fp8": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                      np.array(0.5)), {}),
+                        diff_args=(0,), chain=False),
+    "dequantize_fp4": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                      np.array(0.5)), {}),
+                        diff_args=(0,), chain=False),
+    "dequantize_fp6": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                      np.array(0.5)), {}),
+                        diff_args=(0,), chain=False),
+    "dequantize_int8": S(
+        lambda rng: ((rng.integers(-100, 100, (3, 4)).astype(np.float64),
+                      np.array(0.05)), {}),
+        diff_args=(0,), chain=False),
+    "dequantize_int4": S(
+        lambda rng: ((rng.integers(-7, 7, (3, 4)).astype(np.float64),
+                      np.array(0.3)), {}),
+        diff_args=(0,), chain=False),
+    # rope / positional / memory-index
+    "ntk_rope": S(
+        lambda rng: ((rng.standard_normal((2, 4, 8)),
+                      10000.0 ** (-np.arange(4) / 4.0)), {"scale": 1.0}),
+        diff_args=(0,), rtol=1e-5),
+    "rope_split": S(lambda rng: ((rng.standard_normal((2, 4, 8)),),
+                                 {"rope_dim": 4})),
+    "factorized_pos_emb": S(
+        lambda rng: ((rng.standard_normal((3, 5)),
+                      rng.standard_normal((4, 5))),
+                     {"grid_h": 3, "grid_w": 4})),
+    "memory_index_score": S(
+        lambda rng: ((rng.standard_normal((1, 1, 6, 4)),
+                      rng.standard_normal((1, 1, 2, 4))), {})),
+    # spectral / vision / epilogue
+    "spectral_filter": S(
+        lambda rng: ((rng.standard_normal((3, 8))
+                      + 1j * rng.standard_normal((3, 8)),
+                      rng.standard_normal(8)
+                      + 1j * rng.standard_normal(8)), {})),
+    "dct": S(lambda rng: ((rng.standard_normal((3, 8)),),
+                          {"type": 2, "axis": -1, "norm": "backward"})),
+    "image_resize": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)),),
+                                   {"size": (8, 8), "mode": "bilinear",
+                                    "layout": "nchw"})),
+    "interpolate": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)),),
+                                  {"size": (8, 8), "mode": "bilinear",
+                                   "layout": "nchw"})),
+    "fused_epilogue": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                      rng.standard_normal(4)),
+                                     {"activation": "gelu"})),
+    # bias generators / declared non-differentiable
+    "alibi": S(lambda rng: ((2, 4), {}), diff_args=(),
+               zero_tangent_ok=True, chain=False,
+               note="head-slope bias generator; no differentiable inputs"),
+})

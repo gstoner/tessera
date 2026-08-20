@@ -2800,23 +2800,24 @@ def jvp_dct(
 
 @_jvp("spectral_filter")
 def jvp_spectral_filter(primals, tangents, **_):
-    x = np.asarray(primals[0], dtype=np.float64)
-    dx = np.asarray(tangents[0], dtype=np.float64)
-    f = np.asarray(primals[1], dtype=np.float64)
-    df = (
-        np.asarray(tangents[1], dtype=np.float64) if len(tangents) > 1 and tangents[1] is not None else np.zeros_like(f)
-    )
-    spectrum = np.fft.rfft(x, axis=-1)
-    dspectrum = np.fft.rfft(dx, axis=-1)
-    f_truncated = f[..., : spectrum.shape[-1]]
-    df_truncated = df[..., : spectrum.shape[-1]]
-    out = np.fft.irfft(spectrum * f_truncated, n=x.shape[-1], axis=-1)
-    dout = np.fft.irfft(
-        dspectrum * f_truncated + spectrum * df_truncated,
-        n=x.shape[-1],
-        axis=-1,
-    )
-    return out, dout
+    """Y = Xf · Hf — the canonical forward is a COMPLEX pointwise product
+    of two frequency-domain tensors; bilinear ⇒ dY = dXf·Hf + Xf·dHf.
+
+    AD-LAW-1k finding (2026-08-19): this rule previously differentiated a
+    *different function* — rfft(x)·f → irfft of a real time-domain signal
+    — and cast complex inputs to float64, silently discarding the
+    imaginary part (`vjp_spectral_filter` was always the conj-adjoint of
+    the canonical product). The tri_solve vocabulary class. Pinned by
+    ``test_spectral_filter_jvp_is_the_complex_product_rule``.
+    """
+    xf = np.asarray(primals[0], dtype=np.complex128)
+    hf = np.asarray(primals[1], dtype=np.complex128)
+    dxf = (np.asarray(tangents[0], dtype=np.complex128)
+           if tangents[0] is not None else np.zeros_like(xf))
+    dhf = (np.asarray(tangents[1], dtype=np.complex128)
+           if len(tangents) > 1 and tangents[1] is not None
+           else np.zeros_like(hf))
+    return xf * hf, dxf * hf + xf * dhf
 
 
 

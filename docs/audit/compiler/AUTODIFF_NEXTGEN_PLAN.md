@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-18
+last_updated: 2026-08-19
 audit_role: plan
 plan_state: open
 ---
@@ -18,16 +18,27 @@ plan_state: open
 > owner and carries §7's estimates; the E2E-REAL-6 Law-3 gate is recorded as
 > *pending AD-LAW-1*. §5 tracks which bindings are accepted and which remain
 > proposed.
-> **Execution status (2026-08-18): AD-LAW-1's first slice is merged** (PR
-> #584 + the swallowed-kwarg triage follow-up): the §3 math harness (11/11
-> incl. the #10a negative fixture), Laws 1+3 over the live registries with
+> **Execution status (updated 2026-08-19, after the ad-law series — PRs
+> #584–#588):** AD-LAW-1 slices a–h are merged: the §3 math harness (incl.
+> the #10a negative fixture), Laws 1+3+5 over the live registries with
 > canonical-forward anchoring, the byte-gated `autodiff_law_audit`
-> dashboard, and the first findings fixed (`jvp_rmsnorm` eps default,
-> `jvp_clamp`/`jvp_clip` kwarg deafness, `add`/`mul` unary-`scalar`,
-> fft-family `norm`). Remaining AD-LAW-1 scope: spec growth toward the
-> unswept ops (dashboard-owned count), the stft/istft + quantize swallow
-> findings (pinned in `test_autodiff_laws.py`), and the Law-5 kink
-> extension. Later slices (AD-WEIL-1 onward) have not started.
+> dashboard, the tape's positional-call contract (1d), doubled spec
+> coverage (1c), and the swallow triage (1b/1f/1g/1h) — the rule-vs-rule
+> swallowed-kwarg class is **closed**; the forward-vs-rule class keeps
+> ~43 pinned open findings (`_OPEN_FORWARD_KEY_SWALLOWS` in
+> `test_autodiff_laws.py`), each awaiting a body read. **AD-LAW-2 and the
+> AD-WEIL-1 substrate landed ahead of the written sequence** (same series):
+> `DifferentialAlgebra`, `Dual`, `TruncatedJet(k)`, the holonomic ODE table
+> (`SCALAR_RECURRENCES`), the finite multiplication-table substrate with
+> `clifford_table(p,q,r)` cross-checked against `ga` as oracle (the
+> W6.3/W6.4 substrate hypothesis, proven), the measured §3.8 conditioning
+> envelope, and Laws 2+4+6 — all six declared laws execute host-free.
+> Remaining AD-LAW-1 scope is the dashboard's sweep debt: `no_spec` rows
+> (tensor + the whole geometric registry) and `vjp_only` rows — live counts
+> are dashboard-owned. Remaining AD-WEIL-1 scope: `DerivativeContract`
+> registration (§2.1) and the `coefficient_scaling` / jet `numeric_policy`
+> semantic keys (§2.3). The E2E-REAL-6 Law-3 gate stays pending until the
+> spec debt is swept. §5 tracks bindings.
 
 **Date:** 2026-08-18 · **Sources read:** [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md)
 (complete), [`vjp.py`](../../../python/tessera/autodiff/vjp.py) /

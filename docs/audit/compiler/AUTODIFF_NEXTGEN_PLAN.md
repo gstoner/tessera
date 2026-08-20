@@ -631,6 +631,24 @@ named diagnostic, never a silent fall-through (#21/#21a).
 
 ### AD-OPERATOR-1 — operator tangents (~2 weeks · after AD-LAW-1; independent of jets)
 
+> **Landed 2026-08-20** (`autodiff/operator.py` + the `implicit.py`
+> refactor). `OperatorTangent` carries composition, `.T` as an involution,
+> and solve-consumption (CG/GMRES take the operator where they took a bare
+> closure); `ihvp`/`root_vjp`/`root_jvp`/`adjoint_state_grad` are
+> behavior-identical on it (their existing tests unchanged). The #31
+> relationship to the materialized `@f__bwd` ABI is recorded in the module
+> docstring. The S8/H3 well-posedness certificate
+> (`RootConditionCertificate` / `certify_root`) gates `custom_root`
+> differentiation by default: a degenerate root rejects with measured
+> σ_min/σ_max/condition numbers, a non-root rejects on the residual, an
+> unevaluable check fails closed, and `certify=False` is an explicit
+> opt-out. Acceptance swept by `tests/unit/test_operator_tangent.py`
+> (operator-level adjoint law incl. a falsifiability control,
+> involution + `(AB)ᵀ = BᵀAᵀ`, fail-closed edges, certificate
+> positive/negative fixtures, tape-path rejection). Gauss–Newton /
+> Newton–Krylov compositions remain the named future consumers — no such
+> op exists in-tree yet, and inventing one would be #29 in reverse.
+
 Promote `implicit.py`'s matvec pattern to an `OperatorTangent` type
 (composition, `.T`, solve-consumption); refactor `ihvp`/`root_vjp`/
 `root_jvp`/`adjoint_state_grad` onto it; record the declared relationship to

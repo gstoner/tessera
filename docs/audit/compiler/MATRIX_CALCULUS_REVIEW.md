@@ -88,6 +88,69 @@ the commit message, not from this prose (Decision #26).
 | MC8 | ✅ closed | transitive unwrap + sequence operands on the tape (see above) | `test_sequence_operand_unwrap.py` |
 | MC9 | ✅ closed | Laws `hessian_symmetry` and `hessian_second_difference` in `run_law_sweep()` | `test_derivative_methodology.py` |
 
+### Handoff — what to run and build on the Strix Halo box
+
+PR #596 was developed on the Mac, which is the wrong host for finishing it: no
+ROCm, no CUDA, no AVX-512, ~3100 device-lane skips, a `build/` tree without a
+current `tessera-opt`, and two unexplained Metal wedges that cost ~40 minutes
+each. Everything below wants the primary box (Ubuntu 24.04 / Strix Halo, project
+`.venv`, matched LLVM/MLIR 23).
+
+**Pitfall to avoid first — comparing two versions.** `tests/unit/conftest.py:10`
+does `sys.path.insert(0, dirname(__file__)/../../python)`, so the source tree is
+pinned relative to the **test files**. `PYTHONPATH` and `-o pythonpath` are both
+ignored; a comparison that switches them tests one version twice and reports a
+perfectly empty diff, which reads exactly like "no regressions". Run each
+version **in its own directory**:
+
+```bash
+git worktree add /tmp/base origin/main
+( cd /tmp/base && source .venv/bin/activate && pytest tests/unit -m "not slow" -q -rf > /tmp/base.txt )
+( cd .          && source .venv/bin/activate && pytest tests/unit -m "not slow" -q -rf > /tmp/head.txt )
+diff <(grep ^FAILED /tmp/base.txt | sort) <(grep ^FAILED /tmp/head.txt | sort)
+```
+
+Equalise `build/` across the two trees (symlink it) or the skip profiles differ
+by ~190 tests and the diff is noise. Confirm the setup before trusting it: a
+symbol that exists on only one side (e.g. `linalg_ops._adjugate`) must be absent
+in the base worktree.
+
+**1. The regression sweep that is still missing.** Everything in this PR is
+verified per-fix; the full-suite before/after comparison is not. It is the one
+outstanding gate on the PR.
+
+**2. `check-tessera-rocm` — the suite no PR check runs.** `ninja -C build
+check-tessera-rocm` is that backend's only automated fixture coverage and CI
+does not run it (lane removed 2026-08-19). This PR touches `graph_ir.py` shape
+rules, which feed traced Graph IR, so run it before merge.
+
+**3. MC4's Graph IR canonicalization — the open build-dependent work item.**
+`matmul(kron(B, C), vec(Y))` → `vec(matmul(matmul(C, Y), transpose(B)))`. It was
+left unwritten precisely because it needs a `tessera-opt` build to verify, which
+the Mac did not have. Needs a lit fixture and — Decision #10a — a **negative**
+fixture where the rewrite must not fire (`B⊗C` consumed elsewhere, where
+materializing once may genuinely be cheaper). The Python-level `kron`/`vec` now
+exist for it to match against, with column-major `vec` so the identity holds as
+written. §3.2.1 of the notes gives a ready-made 4x4 fixture.
+
+**4. `expm` and `pinv`.** Named in MC1's table and still open. `expm` needs
+scaling-and-squaring plus the block-matrix Fréchet trick
+(`expm([[A, E], [0, A]])`'s upper-right block is the derivative); `pinv`'s VJP
+carries two extra projector terms in the non-square case. Both want the order-of-
+accuracy checker added in MC5 as their acceptance test.
+
+**5. MC6 stays blocked, and should not be attempted as a tape change.** Neither
+mode can trace through the other's rules because the rule bodies are numpy
+functions rather than `ops.*` calls. It is AD-WEIL-1's problem — one derivative
+datum evaluated in a higher-order algebra — and upstream's
+`derivative_contract.py` is a declaration registry with no evaluator yet.
+
+**6. `pytest-timeout` was missing on the Mac.** `pyproject.toml` declares
+`timeout = 300` so a wedged driver fails one test instead of hanging the run;
+without the plugin the ceiling is inert and the `Unknown config option: timeout`
+warning is the only sign. Confirm it is installed in the box's `.venv` before a
+long sweep.
+
 ### What is deliberately **not** done, and why
 
 * **MC4's Graph IR rewrite.** `matmul(kron(B, C), vec(Y))` →

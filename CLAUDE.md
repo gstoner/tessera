@@ -525,15 +525,13 @@ lit tests/tessera-ir/phase8/ -q                 # one phase
 # (that target is IR + Python unit only, and its unit half shells out to system
 # python3, which has no pytest).
 #
-# **Run it locally — CI no longer does by default (changed 2026-08-19).** The
-# "rocm compiler" lane still runs as a required job (it must, or the
-# `validate-required` aggregator breaks — see `tests/unit/test_ci_workflow.py`),
-# but its HEAVY steps (LLVM/MLIR 23 install + `tessera-rocm-opt` build + this
-# suite) are now opt-in: add the `rocm-smoke` label to a PR, or dispatch the
-# workflow manually. On an ordinary PR the job is a fast successful no-op, so
-# a ROCm backend fixture regression will NOT be caught. This suite is that
-# backend's only automated fixture coverage: run `ninja -C build
-# check-tessera-rocm` before pushing ROCm backend work, or apply the label.
+# **Run it locally — CI does not run it at all (lane removed 2026-08-19; too
+# heavy for hosted runners).** The suite now lives in `scripts/validate.sh`,
+# which runs `check-tessera-rocm` when the build tree has the ROCm backend
+# configured, and warns loudly when it does not. A ROCm backend fixture
+# regression will NOT be caught by any PR check — this suite is that backend's
+# only automated fixture coverage: run `ninja -C build check-tessera-rocm` on
+# the primary box before pushing ROCm backend work.
 ninja -C build check-tessera-ir                  # == lit tests/tessera-ir/
 ninja -C build check-tessera-rocm                # the ROCm backend suite
 
@@ -546,8 +544,8 @@ bash scripts/validate.sh                         # CPU validation spine
 
 **Build all targets before pushing, not one.** `ninja -C build tessera-opt`
 links `MLIROptLib`'s broad dependency set and will hide a missing link library
-that the standalone `tessera-rocm-opt` — which CI builds — needs. Use
-`ninja -C build`.
+that the standalone `tessera-rocm-opt` — which the local ROCm gate builds —
+needs. Use `ninja -C build`.
 
 Heavy SuperBench / benchmark-contract tests are marked `slow` and excluded by default.
 

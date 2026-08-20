@@ -1,7 +1,7 @@
 # Branch protection — required CI checks
 
 Tessera's `Validate` workflow (`.github/workflows/validate.yml`) is
-split into 7 lanes plus one aggregator job. The aggregator
+split into 5 lanes plus one aggregator job. The aggregator
 (`validate-required`) is the single status check we wire into branch
 protection — it succeeds iff every required lane succeeds.
 
@@ -12,20 +12,13 @@ status checks to pass before merging":
 
 | Check                | Source            | Why required                    |
 |----------------------|-------------------|---------------------------------|
-| `validate-required`  | `validate.yml`    | Fans in lint / unit / audit / build / ROCm compiler — one check, five lanes. |
+| `validate-required`  | `validate.yml`    | Fans in lint / unit / audit — one check, three lanes. |
 
 Selecting just `validate-required` is sufficient. Each underlying
-lane (`lint (ruff + mypy ratchet)`, `unit (pytest -m "not slow")`,
-`audit (drift + claim_lint + examples)`, `build (runtime +
-collectives)`, and `rocm compiler (host-free LLVM/MLIR 23)` from job
-`rocm-compiler`) is still reported
+lane (`lint (ruff + mypy ratchet)`, `unit (pytest -m "not slow")`, and
+`audit (drift + claim_lint + examples)`) is still reported
 individually in the PR Checks tab so contributors can see which lane failed
-without expanding the aggregator log. The required ROCm compiler lane is a
-host-free artifact and ownership proof; it does not claim AMD GPU execution.
-For a pull request containing only Markdown changes, that lane performs a
-lightweight successful no-op instead of installing LLVM/MLIR and rebuilding the
-compiler. Any non-Markdown change fails closed to the full ROCm lane. Pushes to
-`main` and manual workflow dispatches always run the full lane.
+without expanding the aggregator log.
 
 ## Opt-in lanes (NOT required for merge)
 
@@ -69,10 +62,24 @@ policy.)
 | lint         | ~30s              | ruff + mypy ratchet (defends 0). |
 | unit         | ~2min             | `pytest -m "not slow"`, ~4300 tests. |
 | audit        | ~10s              | support_table drift + claim_lint + examples audit. |
-| build        | ~5min             | CMake runtime + collectives compile-check. |
-| ROCm compiler | ~25min            | LLVM/MLIR 23 ROCm-only build + backend lit + ownership gate. |
 | lit          | ~10min if installed | LLVM/MLIR 23 install + tessera-opt build + lit. |
 | sanitizer    | ~15min per matrix | asan + tsan + ubsan run in parallel. |
+
+The standalone C++ runtime and collectives compile-check are intentionally
+local-only. Run `scripts/validate.sh` on the owning host; it builds and tests
+the standalone CPU runtime and compiles the collectives execution unit without
+making pull-request approval depend on GitHub-hosted apt mirrors.
+
+The ROCm compiler suite is likewise local-only (removed from CI 2026-08-19:
+an apt LLVM/MLIR 23 install plus a from-scratch `tessera-rocm-opt` build is
+~25min — too heavy for hosted runners). `scripts/validate.sh` runs
+`check-tessera-rocm` when the build tree has the ROCm backend configured
+(`-DTESSERA_BUILD_ROCM_BACKEND=ON`); run it on the primary box before merging
+ROCm backend changes. This is the ONLY automated coverage for
+`src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/` — `check-tessera` does
+not include that suite and `lit tests/tessera-ir/` runs a different one
+through a different driver, so skipping it lets a ROCm backend fixture
+regression reach main unnoticed.
 
 The lit + sanitizer lanes are intentionally off the critical path so a
 contributor doesn't have to wait 15+ minutes on every PR.
@@ -81,10 +88,8 @@ contributor doesn't have to wait 15+ minutes on every PR.
 
 `validate-required` uses `if: always()` and pulls `needs.<lane>.result`
 explicitly so a *skipped* required lane (which would normally pass
-GitHub's default status check logic) is treated as a failure. The five named
-lanes must all report `success`; consequently the Markdown-only ROCm bypass is
-implemented as a successful step inside the always-present job, not as a
-job-level `if:` that would produce `skipped`.
+GitHub's default status check logic) is treated as a failure. The three named
+lanes must all report `success`.
 
 ## Adding a new required lane
 

@@ -178,6 +178,29 @@ else
   echo "==> No repo build/ directory; skipping optional monorepo ctest"
 fi
 
+# ROCm backend lit suite — local-only since 2026-08-19 (the CI lane was
+# removed at the repo owner's direction: an apt LLVM/MLIR 23 install plus a
+# from-scratch tessera-rocm-opt build is too heavy for hosted runners; the
+# suite runs on the primary box instead).
+#
+# COST, recorded so it is not rediscovered: this is the ONLY automated
+# coverage for `src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/` —
+# `check-tessera` does not include that suite and `lit tests/tessera-ir/`
+# runs a different one through a different driver. A skipped run here means
+# a ROCm backend fixture regression can reach main unnoticed.
+if [ -f build/build.ninja ] && ninja -C build -t query check-tessera-rocm >/dev/null 2>&1; then
+  echo "==> ROCm backend lit suite (check-tessera-rocm)"
+  ninja -C build check-tessera-rocm tessera-opt
+  echo "==> ROCM-TEST-1 host-free ownership gate"
+  "$PYTHON" scripts/run_rocm_host_free_compiler_tests.py \
+    --build-dir build \
+    --tool build/tools/tessera-opt/tessera-opt \
+    --report "$TMP_ROOT/tessera_rocm_host_free_compiler_report.json"
+else
+  echo "warning: build/ has no check-tessera-rocm target (configure with" >&2
+  echo "  -DTESSERA_BUILD_ROCM_BACKEND=ON) — ROCm backend suite NOT covered" >&2
+fi
+
 # Opt-in MLIR lit smoke.  Skipped by default because lit only works
 # once `tessera-opt` has been built against MLIR 23 and the lit
 # binary is on PATH (lit's package has no `__main__`, so `python -m lit`

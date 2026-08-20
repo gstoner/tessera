@@ -2123,3 +2123,116 @@ def test_spectral_filter_jvp_is_the_complex_product_rule():
                                rtol=1e-12)
     assert np.iscomplexobj(dout), "tangent must stay complex"
     np.testing.assert_allclose(dout, dxf * hf + xf * dhf, rtol=1e-12)
+
+
+# ── AD-LAW-1l findings, pinned ───────────────────────────────────────────────
+
+
+def test_gru_cell_jvp_carries_the_biases():
+    """jvp_gru_cell previously read only the first four primals: a call
+    carrying b_ih/b_hh got a bias-free primal (a different function than
+    vjp_gru_cell, which adds the biases) and the bias tangents were
+    silently dropped."""
+    from tessera.autodiff.jvp import jvp_gru_cell
+
+    rng = np.random.default_rng(31)
+    prims = (rng.standard_normal((2, 3)), rng.standard_normal((2, 4)),
+             rng.standard_normal((3, 12)), rng.standard_normal((4, 12)),
+             rng.standard_normal(12), rng.standard_normal(12))
+    zeros = tuple(np.zeros_like(p) for p in prims)
+    h_new, _ = jvp_gru_cell(prims, zeros)
+    h_no_bias, _ = jvp_gru_cell(prims[:4], zeros[:4])
+    assert not np.allclose(h_new, h_no_bias), (
+        "bias-carrying call must differ from the bias-free primal")
+
+    # bias tangent must reach the output: perturb only b_ih
+    db = tuple(np.zeros_like(p) for p in prims[:4]) + (
+        rng.standard_normal(12), np.zeros(12))
+    _, tan = jvp_gru_cell(prims, db)
+    assert float(np.max(np.abs(tan))) > 0.0, "b_ih tangent was dropped"
+
+    eps = 1e-6
+    plus, _ = jvp_gru_cell(
+        prims[:4] + (prims[4] + eps * db[4], prims[5]), zeros)
+    minus, _ = jvp_gru_cell(
+        prims[:4] + (prims[4] - eps * db[4], prims[5]), zeros)
+    np.testing.assert_allclose(tan, (plus - minus) / (2 * eps), atol=1e-6)
+
+
+def test_mor_partition_jvp_is_the_zero_mask_rule():
+    """jvp_mor_partition previously delegated to jvp_cat (a different op
+    with a different signature — the jvp_mor_scatter delegation class).
+    The canonical forward returns the BOOL mask `depth >= step`,
+    non-differentiable by declaration."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_mor_partition
+
+    rng = np.random.default_rng(37)
+    x = rng.standard_normal((2, 3, 4))
+    depth = np.array([[1, 2, 1], [2, 1, 1]])
+    mask, tan = jvp_mor_partition(
+        (x, depth), (np.zeros_like(x), None), step=2)
+    np.testing.assert_array_equal(mask, ops.mor_partition(x, depth, step=2))
+    assert not np.any(tan), "bool-mask output must carry a zero tangent"
+
+
+def test_sddmm_rules_match_the_canonical_operand_order():
+    """Both sddmm rules previously assumed a (mask, A, B) operand order
+    AND a transposed product A @ Bᵀ; the canonical forward is
+    sddmm(A, B, mask) = (A @ B) * mask, so tape replay bound A to the
+    mask slot and differentiated a different function silently."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_sddmm
+    from tessera.autodiff.vjp import vjp_sddmm
+
+    rng = np.random.default_rng(41)
+    A, B = rng.standard_normal((4, 3)), rng.standard_normal((3, 5))
+    mask = (rng.random((4, 5)) > 0.4).astype(np.float64)
+    dA, dB = rng.standard_normal((4, 3)), rng.standard_normal((3, 5))
+
+    out, dout = jvp_sddmm((A, B, mask), (dA, dB, None))
+    np.testing.assert_allclose(out, np.asarray(ops.sddmm(A, B, mask)),
+                               rtol=1e-12)
+    np.testing.assert_allclose(dout, (dA @ B + A @ dB) * mask, rtol=1e-12)
+
+    # adjoint pairing includes the mask on the cotangent side (derived,
+    # not assumed pre-masked)
+    u = rng.standard_normal((4, 5))
+    gA, gB, gmask = vjp_sddmm(u, A, B, mask)
+    assert gmask is None
+    lhs = float(np.sum(dout * u))
+    rhs = float(np.sum(dA * gA) + np.sum(dB * gB))
+    assert abs(lhs - rhs) / max(abs(lhs), 1e-12) < 1e-12
+
+
+# Rules that exist in the registry but cannot currently produce a lawful
+# result — real unswept debt with a NAMED reason, pinned exactly so a fix
+# (or a regression) shows up as a diff here, never as silence. These are
+# the sweep's remaining tensor no_spec rows.
+_OPEN_UNSWEEPABLE_RULES = {
+    "lamb": "numeric JVP requires tessera.ops.lamb, which does not exist",
+    "muon": "numeric JVP requires tessera.ops.muon, which does not exist",
+    "min_pool": "numeric JVP requires tessera.ops.min_pool (missing)",
+    "adaptive_pool": "numeric JVP requires tessera.ops.adaptive_pool "
+                     "(missing)",
+    "conv_transpose": "numeric JVP requires tessera.ops.conv_transpose "
+                      "(missing)",
+    "bidirectional_scan": "JVP is a declared placeholder returning "
+                          "zeros(1); the op takes a function-valued primal",
+    "dequant_matmul": "forward takes a packed-weight container; the VJP "
+                      "signature expects the unpacked weight — convention "
+                      "must be reconciled before a spec can exercise both",
+    "memory_read": "multi-output MemoryReadResult whose VJP handles only "
+                   "the primary output and swallows _output_index via **_",
+}
+
+
+def test_remaining_no_spec_rows_are_pinned_with_reasons(sweep):
+    """The unswept tensor remainder is exactly the pinned set above —
+    shrinking it means a rule was fixed (remove the entry); growing it
+    means new debt (add the op WITH its reason, or better, spec it)."""
+    no_spec = {r.op for r in sweep
+               if r.registry == "tensor" and r.status == "no_spec"}
+    assert no_spec == set(_OPEN_UNSWEEPABLE_RULES), (
+        f"unswept set drifted: extra={no_spec - set(_OPEN_UNSWEEPABLE_RULES)} "
+        f"fixed={set(_OPEN_UNSWEEPABLE_RULES) - no_spec}")

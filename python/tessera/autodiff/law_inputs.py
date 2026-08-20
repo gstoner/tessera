@@ -972,3 +972,220 @@ LAW_INPUT_SPECS.update({
                zero_tangent_ok=True, chain=False,
                note="head-slope bias generator; no differentiable inputs"),
 })
+
+
+# ── AD-LAW-1l spec growth: optimizers / conv+pool / cells / MoE / sparse /
+# attention. Optimizer probes: state updates are stop-gradient by
+# declaration where noted; multi-output rules follow the tape's per-output
+# `_output_index` convention where declared.
+
+
+def _qkv(rng, b=1, h=2, s=4, d=3):
+    return (rng.standard_normal((b, h, s, d)),
+            rng.standard_normal((b, h, s, d)),
+            rng.standard_normal((b, h, s, d)))
+
+
+LAW_INPUT_SPECS.update({
+    "clip": S(lambda rng: ((rng.standard_normal((3, 4)) * 0.3,),
+                           {"min_val": -0.5, "max_val": 0.5})),
+    # optimizers
+    "sgd": S(lambda rng: ((rng.standard_normal((3, 4)),
+                           rng.standard_normal((3, 4))), {"lr": 0.1}),
+             rtol=1e-6),
+    "adam": S(lambda rng: ((rng.standard_normal((3, 4)),
+                            rng.standard_normal((3, 4)),
+                            rng.standard_normal((3, 4)) * 0.1,
+                            np.abs(rng.standard_normal((3, 4))) * 0.1 + 0.01),
+                           {"lr": 0.01, "step": 2}), rtol=1e-6),
+    "adamw": S(lambda rng: ((rng.standard_normal((3, 4)),
+                             rng.standard_normal((3, 4))),
+                            {"lr": 0.01, "weight_decay": 0.01}), rtol=1e-6),
+    "momentum": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                rng.standard_normal((3, 4))), {"lr": 0.01}),
+                  rtol=1e-6),
+    "nesterov": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                rng.standard_normal((3, 4))), {"lr": 0.01}),
+                  rtol=1e-6),
+    "lion": S(lambda rng: ((rng.standard_normal((3, 4)),
+                            rng.standard_normal((3, 4))), {"lr": 0.01}),
+              rtol=1e-6, zero_tangent_ok=True,
+              note="sign-based update; derivative 0 a.e. by declaration"),
+    # adafactor's forward computes in fp32; its FD-based JVP now uses the
+    # fp32-appropriate step (see jvp_adafactor), measured floor ~2e-5.
+    "adafactor": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                 rng.standard_normal((3, 4))), {"lr": 0.01}),
+                   rtol=2e-4),
+    # conv / pool
+    "conv1d": S(lambda rng: ((rng.standard_normal((1, 2, 6)),
+                              rng.standard_normal((4, 2, 3))),
+                             {"stride": 1, "padding": 1}), rtol=1e-5),
+    "conv2d": S(lambda rng: ((rng.standard_normal((1, 4, 4, 2)),
+                              rng.standard_normal((3, 3, 2, 4))),
+                             {"stride": 1, "padding": 1}), rtol=1e-5),
+    "conv3d": S(lambda rng: ((rng.standard_normal((1, 3, 3, 3, 2)),
+                              rng.standard_normal((2, 2, 2, 2, 3))),
+                             {"stride": 1, "padding": 0}), rtol=1e-5),
+    "depthwise_conv1d": S(
+        lambda rng: ((rng.standard_normal((1, 6, 3)),
+                      rng.standard_normal((6, 4))),
+                     {"kernel_size": 4, "padding": 3, "causal": True}),
+        rtol=1e-5),
+    "avg_pool": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)), 2), {}),
+                  diff_args=(0,)),
+    "max_pool": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)), 2), {}),
+                  diff_args=(0,)),
+    # cells
+    "simple_rnn_cell": S(
+        lambda rng: ((rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 4)),
+                      rng.standard_normal((3, 4)),
+                      rng.standard_normal((4, 4)),
+                      rng.standard_normal(4)), {"activation": "tanh"})),
+    "gru_cell": S(
+        lambda rng: ((rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 4)),
+                      rng.standard_normal((3, 12)),
+                      rng.standard_normal((4, 12)),
+                      rng.standard_normal(12),
+                      rng.standard_normal(12)), {})),
+    # MoE / MoR
+    "moe": S(lambda rng: ((rng.standard_normal((4, 3)),
+                           rng.standard_normal((2, 3, 3))),
+                          {"router": "topk", "k": 1, "scores": None}),
+             diff_args=(0, 1), rtol=1e-6),
+    "moe_dispatch": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                    np.array([1, 0, 1, 0])), {}),
+                      diff_args=(0,)),
+    "moe_combine": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                   np.array([2, 0, 3, 1])),
+                                  {"reduce": "sum"}), diff_args=(0,)),
+    "mor_partition": S(
+        lambda rng: ((rng.standard_normal((2, 3)),
+                      np.array([[1, 2, 1], [2, 1, 1]])), {"step": 2}),
+        diff_args=(0,), zero_tangent_ok=True, chain=False,
+        note="bool-mask output; non-differentiable by declaration"),
+    "mor_router": S(
+        lambda rng: ((rng.standard_normal((1, 2, 3)),
+                      rng.standard_normal((3, 3))), {"max_depth": 3}),
+        zero_tangent_ok=True, chain=False,
+        note="argmax router; gradient declared zero (aux losses train it)"),
+    # sparse — the sparse operand is declared constant (None cotangent),
+    # matching the reference rules; only the dense side is differentiated.
+    "grouped_gemm": S(lambda rng: ((rng.standard_normal((6, 3)),
+                                    rng.standard_normal((2, 3, 4)),
+                                    np.array([4, 2])), {}),
+                      diff_args=(0, 1)),
+    "sddmm": S(lambda rng: ((rng.standard_normal((4, 3)),
+                             rng.standard_normal((3, 5)),
+                             (rng.random((4, 5)) > 0.4).astype(np.float64)),
+                            {}), diff_args=(0, 1)),
+    "spmm_coo": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                rng.standard_normal((3, 5))), {}),
+                  diff_args=(1,)),
+    "spmm_csr": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                rng.standard_normal((3, 5))), {}),
+                  diff_args=(1,)),
+    "bsmm": S(lambda rng: ((rng.standard_normal((4, 3)),
+                            rng.standard_normal((3, 5))), {}),
+              diff_args=(1,),
+              note="block layout opaque; sparse side declared constant"),
+    # clifford field calculus (3-D grid of Cl(3,0) multivectors)
+    "clifford_ext_deriv": S(
+        lambda rng: ((rng.standard_normal((3, 3, 3, 8)),), {}), rtol=1e-6),
+    "clifford_vec_deriv": S(
+        lambda rng: ((rng.standard_normal((3, 3, 3, 8)),), {}), rtol=1e-6),
+    "clifford_codiff": S(
+        lambda rng: ((rng.standard_normal((3, 3, 3, 8)),), {}), rtol=1e-6),
+    # ssm / linear-attention state
+    "selective_ssm": S(
+        lambda rng: ((rng.standard_normal((1, 4, 3)),
+                      np.abs(rng.standard_normal((3, 2))) * 0.5 + 0.2,
+                      rng.standard_normal((1, 4, 2)),
+                      rng.standard_normal((1, 4, 2)),
+                      np.abs(rng.standard_normal((1, 4, 3))) * 0.3 + 0.1),
+                     {}), rtol=1e-6),
+    "linear_attn_state": S(lambda rng: (_qkv(rng), {"feature_map": "elu"}),
+                           rtol=1e-6),
+    # attention family
+    "cross_attention": S(lambda rng: (_qkv(rng), {})),
+    "multi_head_attention": S(
+        lambda rng: ((rng.standard_normal((1, 4, 6)),
+                      rng.standard_normal((1, 4, 6)),
+                      rng.standard_normal((1, 4, 6))), {"num_heads": 2})),
+    "gqa_attention": S(
+        lambda rng: ((rng.standard_normal((1, 4, 4, 3)),
+                      rng.standard_normal((1, 2, 4, 3)),
+                      rng.standard_normal((1, 2, 4, 3))),
+                     {"num_query_heads": 4, "num_kv_heads": 2})),
+    "mqa_attention": S(
+        lambda rng: ((rng.standard_normal((1, 4, 4, 3)),
+                      rng.standard_normal((1, 1, 4, 3)),
+                      rng.standard_normal((1, 1, 4, 3))), {})),
+    "gated_attention": S(
+        lambda rng: (_qkv(rng) + (rng.standard_normal((1, 2, 4, 3)),),
+                     {"causal": True}), diff_args=(0, 1, 2, 3)),
+    "attn_compressed_blocks": S(
+        lambda rng: ((rng.standard_normal((1, 2, 4, 3)),
+                      rng.standard_normal((1, 2, 2, 3)),
+                      rng.standard_normal((1, 2, 2, 3))), {})),
+    "attn_local_window_2d": S(
+        lambda rng: ((rng.standard_normal((1, 2, 3, 3, 2)),
+                      rng.standard_normal((1, 2, 3, 3, 2)),
+                      rng.standard_normal((1, 2, 3, 3, 2))),
+                     {"window": (1, 1)})),
+    "attn_top_k_blocks": S(
+        lambda rng: (_qkv(rng),
+                     {"scores": rng.standard_normal((1, 2, 4, 2)),
+                      "top_k": 1, "block_size": 2, "causal": True}),
+        diff_args=(0, 1, 2)),
+    "deepseek_sparse_attention": S(
+        lambda rng: (_qkv(rng), {"window_size": 2, "block_size": 2,
+                                 "top_k": 1, "causal": True})),
+    "msa_sparse_attention": S(
+        lambda rng: (_qkv(rng), {"block_size": 2, "top_k": 1,
+                                 "causal": True})),
+    "msa_index_scores": S(
+        lambda rng: ((rng.standard_normal((1, 2, 4, 3)),
+                      rng.standard_normal((1, 2, 4, 3))),
+                     {"block_size": 2})),
+    "lookahead_sparse_attention": S(
+        lambda rng: (_qkv(rng), {"window_size": 2, "block_size": 2,
+                                 "tau": 2, "threshold": 0.1,
+                                 "causal": True})),
+    # fp32 statistics contract — central differences bottom out ~1e-2;
+    # the fused JVP's algebra was hand-verified against the rms/softmax
+    # normalizer terms, and the adjoint law holds at ~1e-7.
+    "depth_attn": S(lambda rng: ((rng.standard_normal(3),
+                                  rng.standard_normal((4, 3))),
+                                 {"eps": 1e-6}), rtol=1e-5, chain=False),
+    "lightning_attention": S(lambda rng: (_qkv(rng), {"causal": True}),
+                             rtol=1e-6),
+    "gated_deltanet": S(lambda rng: (_qkv(rng), {"causal": True}),
+                        rtol=1e-6),
+    "kimi_delta_attention": S(lambda rng: (_qkv(rng), {"causal": True}),
+                              rtol=1e-6),
+    "modified_delta_attention": S(lambda rng: (_qkv(rng), {"causal": True}),
+                                  rtol=1e-6),
+    "hybrid_attention": S(
+        lambda rng: (_qkv(rng), {"pattern": "auto", "layer_index": 0,
+                                 "causal": True}), rtol=1e-6),
+    "mla_decode": S(
+        lambda rng: ((rng.standard_normal((1, 2, 4, 3)),
+                      rng.standard_normal((1, 2, 4, 2)),
+                      rng.standard_normal((1, 2, 4, 2)),
+                      rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 3))), {})),
+    "mla_decode_fused": S(
+        lambda rng: ((rng.standard_normal((1, 4, 6)),
+                      rng.standard_normal((6, 2)),
+                      rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 3)),
+                      rng.standard_normal((1, 4, 3))), {"causal": False}),
+        rtol=1e-6),
+    "mrope_2d": S(
+        lambda rng: ((rng.standard_normal((1, 4, 8)),
+                      np.stack([np.arange(4), np.arange(4)]),
+                      10000.0 ** (-np.arange(4) / 4.0)),
+                     {"sections": (2, 2)}), diff_args=(0,)),
+})

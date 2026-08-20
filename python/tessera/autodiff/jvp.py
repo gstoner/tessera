@@ -2070,7 +2070,12 @@ def jvp_adafactor(primals, tangents, *, lr=1e-3, beta2=0.999, eps=1e-30, **kwarg
         return ts_optim.adafactor(p, g, s, lr=lr, beta2=beta2, eps=eps, **kwargs)[0]
 
     primal = forward(params, grads, state)
-    h = 1e-6
+    # The forward's state/compute path is float32 (`compute_dtype="fp32"`),
+    # so the FD step must respect fp32's noise floor: central differences
+    # with h=1e-6 are dominated by ~1e-7 rounding (measured rel error
+    # ~2e-2); h=1e-3 sits near the fp32 optimum (measured ~6e-6).
+    # AD-LAW-1l finding, 2026-08-19.
+    h = 1e-3
     plus = forward(
         np.asarray(params, dtype=np.float64) + h * np.asarray(dparams, dtype=np.float64),
         np.asarray(grads, dtype=np.float64) + h * np.asarray(dgrads, dtype=np.float64),
@@ -2603,13 +2608,26 @@ def jvp_simple_rnn_cell(primals, tangents, *, activation="tanh", **_):
 @_jvp("gru_cell")
 def jvp_gru_cell(primals, tangents, **_):
     """GRU cell forward + tangent. Uses re-forward with tangent propagation
-    through each gate."""
+    through each gate.
+
+    AD-LAW-1l finding (2026-08-19): this rule previously read only the
+    first four primals — a call carrying ``b_ih``/``b_hh`` got a
+    *bias-free* primal (a different function than `vjp_gru_cell`, which
+    adds the biases) and the bias tangents were silently dropped. Pinned
+    by ``test_gru_cell_jvp_carries_the_biases``.
+    """
     x, h, W_ih, W_hh = (np.asarray(p, dtype=np.float64) for p in primals[:4])
     dx, dh, dW_ih, dW_hh = (np.asarray(t, dtype=np.float64) for t in tangents[:4])
     gates_x = x @ W_ih
     gates_h = h @ W_hh
     dgates_x = dx @ W_ih + x @ dW_ih
     dgates_h = dh @ W_hh + h @ dW_hh
+    if len(primals) > 4 and primals[4] is not None:
+        gates_x = gates_x + np.asarray(primals[4], dtype=np.float64)
+        dgates_x = dgates_x + _t(4, tangents, primals[4])
+    if len(primals) > 5 and primals[5] is not None:
+        gates_h = gates_h + np.asarray(primals[5], dtype=np.float64)
+        dgates_h = dgates_h + _t(5, tangents, primals[5])
     x_z, x_r, x_n = np.split(gates_x, 3, axis=-1)
     h_z, h_r, h_n = np.split(gates_h, 3, axis=-1)
     dx_z, dx_r, dx_n = np.split(dgates_x, 3, axis=-1)
@@ -2839,14 +2857,22 @@ def jvp_spmm_csr(primals, tangents, **_):
 
 @_jvp("sddmm")
 def jvp_sddmm(primals, tangents, **_):
-    """y = mask * (A @ B^T) — bilinear in (A, B)."""
-    mask = np.asarray(primals[0], dtype=np.float64)
-    A = np.asarray(primals[1], dtype=np.float64)
-    B = np.asarray(primals[2], dtype=np.float64)
-    dA = np.asarray(tangents[1], dtype=np.float64)
-    dB = np.asarray(tangents[2], dtype=np.float64)
-    out = mask * (A @ B.T)
-    dout = mask * (dA @ B.T + A @ dB.T)
+    """y = (A @ B) * mask — the canonical ``sddmm(A, B, mask)``; bilinear
+    in (A, B), mask non-differentiable.
+
+    AD-LAW-1l finding (2026-08-19): both rules previously assumed a
+    ``(mask, A, B)`` operand order AND a transposed product ``A @ Bᵀ`` —
+    neither matches the canonical forward, so tape replay bound A to the
+    mask slot and differentiated a different function silently. Pinned by
+    ``test_sddmm_rules_match_the_canonical_operand_order``.
+    """
+    A = np.asarray(primals[0], dtype=np.float64)
+    B = np.asarray(primals[1], dtype=np.float64)
+    mask = np.asarray(primals[2], dtype=np.float64)
+    dA = _t(0, tangents, A)
+    dB = _t(1, tangents, B)
+    out = (A @ B) * mask
+    dout = (dA @ B + A @ dB) * mask
     return out, dout
 
 
@@ -3520,9 +3546,20 @@ def jvp_cross_attention(primals, tangents, *, scale=None, mask=None, **_):
 
 
 @_jvp("mor_partition")
-def jvp_mor_partition(primals, tangents, **kwargs):
-    """Mixture-of-recursions partition is linear in the inputs."""
-    return jvp_cat(primals, tangents, **kwargs)
+def jvp_mor_partition(primals, tangents, *, step=None, **_):
+    """The canonical forward returns the BOOL mask ``depth >= step`` —
+    non-differentiable by declaration (`vjp_mor_partition` already says
+    so and returns zeros).
+
+    AD-LAW-1l finding (2026-08-19): this rule previously delegated to
+    ``jvp_cat`` under a "partition is linear" comment — a different op
+    with a different signature; the jvp_mor_scatter delegation class.
+    Pinned by ``test_mor_partition_jvp_is_the_zero_mask_rule``.
+    """
+    x, depth = primals[0], primals[1]
+    del x
+    mask = np.asarray(depth) >= int(step if step is not None else 1)
+    return mask, np.zeros(mask.shape, dtype=np.float64)
 
 
 @_jvp("mor_router")

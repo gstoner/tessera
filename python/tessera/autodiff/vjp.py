@@ -5241,15 +5241,20 @@ def vjp_spmm_csr(dout, sparse_a, dense_b, **_):
 
 
 @_vjp("sddmm")
-def vjp_sddmm(dout, sparse_mask, dense_a, dense_b, **_):
-    """Sampled dense-dense matmul. Treat mask as constant; dout already
-    carries zeros where mask was off."""
-    do = np.asarray(dout, dtype=np.float64)
+def vjp_sddmm(dout, dense_a, dense_b, sparse_mask, **_):
+    """y = (A @ B) * mask — adjoint of the canonical ``sddmm(A, B, mask)``.
+
+    The mask is applied to the cotangent HERE (derived, not assumed
+    pre-masked — Decision #30): dA = (dout∘mask) Bᵀ, dB = Aᵀ (dout∘mask).
+    See ``jvp_sddmm`` for the AD-LAW-1l operand-order finding this fixed.
+    """
+    do = np.asarray(dout, dtype=np.float64) \
+        * np.asarray(sparse_mask, dtype=np.float64)
     A = np.asarray(dense_a, dtype=np.float64)
     B = np.asarray(dense_b, dtype=np.float64)
-    dA = do @ B
-    dB = do.T @ A
-    return (None, dA, dB)
+    dA = do @ B.T
+    dB = A.T @ do
+    return (dA, dB, None)
 
 
 @_vjp("bsmm")

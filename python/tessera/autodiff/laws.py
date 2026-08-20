@@ -182,13 +182,23 @@ def adjoint_check(op: str, spec, jvp_fn: Callable, vjp_fn: Callable,
         diff = spec.diff_args if spec.diff_args is not None else tuple(range(len(primals)))
 
         tol = spec.rtol if spec.rtol is not None else ADJOINT_RTOL
+        proj = getattr(spec, "tangent_project", None)
         max_res = 0.0
         for _ in range(spec.probes):
+            # Structure-preserving tangents: a list/tuple primal (cat's
+            # `xs`) gets a matching list of leaf tangents, so the pairing
+            # against a structured VJP gradient stays leaf-for-leaf.
             tangents = tuple(
-                _rand_like(rng, p) if i in diff and _is_float(p)
+                _like_leaves(p, lambda leaf: _rand_like(rng, leaf))
+                if i in diff and _is_float(p)
                 else _zero_like(p)
                 for i, p in enumerate(primals)
             )
+            if proj is not None:
+                tangents = tuple(
+                    proj(i, t) if i in diff and _is_float(primals[i]) else t
+                    for i, t in enumerate(tangents)
+                )
             _, t_out = jvp_fn(primals, tangents, **kwargs)
             u = _like_leaves(t_out, lambda leaf: _rand_like(rng, leaf))
             lhs = _dot(t_out, u)
@@ -389,12 +399,18 @@ def chain_check(op: str, spec, jvp_fn: Callable,
                              "function")
 
         max_res = 0.0
+        proj = getattr(spec, "tangent_project", None)
         for _ in range(max(2, spec.probes // 2)):
             tangents = tuple(
                 rng.standard_normal(np.shape(p)) if i in diff and _is_float(p)
                 else _zero_like(p)
                 for i, p in enumerate(primals)
             )
+            if proj is not None:
+                tangents = tuple(
+                    proj(i, t) if i in diff and _is_float(primals[i]) else t
+                    for i, t in enumerate(tangents)
+                )
             y, dy = jvp_fn(primals, tangents, **kwargs)
             if not _single_leaf(y):
                 return LawResult(op, registry, "chain", "not_applicable", 0, None,

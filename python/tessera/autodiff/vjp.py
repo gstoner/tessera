@@ -5342,6 +5342,19 @@ def vjp_svd(dout, A, **_):
     VdVt = Vt @ dVt.T
     S = np.diag(s)
     dA = U @ ((F * (UtdU - UtdU.T)) @ S + np.diag(ds) + S @ (F * (VdVt - VdVt.T))) @ Vt
+    # Projector-term adjoints for non-square A (thin SVD): the JVP's
+    # out-of-range components (I − UUᵀ) dA V S⁻¹ (tall) and
+    # (I − VVᵀ) dAᵀ U S⁻¹ (wide) carry cotangent mass back into dA.
+    # AD-LAW-1 finding (2026-08-19): without them the pair fails the
+    # adjoint law on any non-square input — surfaced through
+    # `factorized_matmul`'s wide product. Pinned by
+    # ``test_svd_adjoint_holds_off_square``.
+    m, n = A_arr.shape
+    Sinv = np.diag(1.0 / s)
+    if m > n:
+        dA = dA + (dU - U @ (U.T @ dU)) @ Sinv @ Vt
+    elif n > m:
+        dA = dA + U @ Sinv @ (dVt - (dVt @ Vt.T) @ Vt)
     return (dA,)
 
 
@@ -5525,7 +5538,29 @@ def vjp_grouped_gemm(dout, x, weights, group_sizes, **_):
 
 @_vjp("factorized_matmul")
 def vjp_factorized_matmul(dout, a, b, *, rank=None, **_):
-    return vjp_batched_gemm(dout, a, b)
+    """Adjoint of the rank-r SVD truncation of (a @ b) — see
+    ``jvp_factorized_matmul`` for the AD-LAW-1 finding this fixed. The
+    cotangent lands on the kept (U_r, s_r, Vt_r) triple, zero-pads to the
+    thin-SVD width, flows through ``vjp_svd`` to the product, then splits
+    bilinearly."""
+    a_arr = np.asarray(a, dtype=np.float64)
+    b_arr = np.asarray(b, dtype=np.float64)
+    dout_arr = np.asarray(dout, dtype=np.float64)
+    m_prod = a_arr @ b_arr
+    u, s, vt = np.linalg.svd(m_prod, full_matrices=False)
+    if rank is None:
+        r = s.shape[-1]
+    else:
+        r = max(1, min(int(rank), s.shape[-1]))
+    du = np.zeros_like(u)
+    ds = np.zeros_like(s)
+    dvt = np.zeros_like(vt)
+    du[..., :r] = dout_arr @ vt[..., :r, :].T * s[..., :r]
+    ds[..., :r] = np.einsum("...ir,...ij,...rj->...r", u[..., :r],
+                            dout_arr, vt[..., :r, :])
+    dvt[..., :r, :] = (u[..., :r] * s[..., :r]).T @ dout_arr
+    (dm,) = vjp_svd((du, ds, dvt), m_prod)
+    return dm @ b_arr.T, a_arr.T @ dm
 
 
 @_vjp("einsum")
@@ -5629,11 +5664,19 @@ def vjp_qkv_projection(dout, *primals, **kwargs):
 
 @_vjp("weight_norm")
 def vjp_weight_norm(dout, v, *, axis=-1, eps=1e-12, **_):
-    """w = v / ||v||.  ∂w/∂v = I/||v|| - vv^T / ||v||^3 (single-axis version)."""
+    """w = v / ||v|| with the norm over ALL axes except `axis` (the kept
+    axis — canonical ``nn.functional.weight_norm`` semantics, eps inside
+    the sqrt). ∂w/∂v is the same projection kernel as the JVP, which is
+    self-adjoint. AD-LAW-1 finding (2026-08-19): this rule previously
+    normalized *along* ``axis`` with eps outside the norm — see
+    ``jvp_weight_norm`` for the pinned vocabulary-class regression test.
+    """
     v_arr = np.asarray(v, dtype=np.float64)
     dout_arr = np.asarray(dout, dtype=np.float64)
-    n = np.linalg.norm(v_arr, axis=axis, keepdims=True) + eps
-    inner = (v_arr * dout_arr).sum(axis=axis, keepdims=True)
+    kept = axis if axis >= 0 else v_arr.ndim + axis
+    reduce_axes = tuple(i for i in range(v_arr.ndim) if i != kept)
+    n = np.sqrt(np.sum(v_arr * v_arr, axis=reduce_axes, keepdims=True) + eps)
+    inner = np.sum(v_arr * dout_arr, axis=reduce_axes, keepdims=True)
     dv = dout_arr / n - v_arr * inner / (n ** 3)
     return (dv,)
 

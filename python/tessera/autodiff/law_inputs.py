@@ -43,6 +43,15 @@ class InputSpec:
     rtol: Optional[float] = None   # override for rules that are internally
                                    # numeric (FD-based JVPs can't hit 1e-8)
     note: str = ""
+    # Input-manifold declaration: some ops are only defined (and only
+    # differentiable) on a submanifold — cholesky on symmetric PSD, for
+    # example — so a raw Gaussian tangent leaves the domain and the rule
+    # pair legitimately disagrees off-manifold. `tangent_project(i, t)`
+    # maps a random tangent for primal `i` onto the manifold's tangent
+    # space (e.g. symmetrization). This declares mathematics, not
+    # tolerance: the projected tangents still exercise the full tangent
+    # space of the domain.
+    tangent_project: Optional[Callable[[int, np.ndarray], np.ndarray]] = None
 
 
 def _away_from(x: np.ndarray, kink: float = 0.0, margin: float = 0.25) -> np.ndarray:
@@ -385,7 +394,152 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
         diff_args=(0,), chain=False,
         note="per-block scale array — the shape that crashed both modes "
              "before AD-LAW-1g"),
+    # ── AD-LAW-1j spec growth: structural / shape ops ────────────────────────
+    "cat": S(lambda rng: (([rng.standard_normal((2, 3)),
+                            rng.standard_normal((2, 3))],), {"axis": 0})),
+    "stack": S(lambda rng: (([rng.standard_normal((2, 3)),
+                              rng.standard_normal((2, 3))],), {"axis": 0})),
+    "chunk": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                            {"chunks": 2, "axis": 0})),
+    "split": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                            {"indices_or_sections": 2, "axis": 0})),
+    "view": S(lambda rng: ((rng.standard_normal((2, 6)),),
+                           {"shape": (3, 4)})),
+    "broadcast": S(lambda rng: ((rng.standard_normal((1, 4)),),
+                                {"shape": (3, 4)})),
+    "broadcast_to_axis": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                                        {"axis_size": 2, "axis": 0})),
+    "select": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                             {"index": 1, "axis": 0})),
+    "slice": S(lambda rng: ((rng.standard_normal((4, 5)),),
+                            {"start_indices": (1, 0), "slice_sizes": (2, 3)})),
+    "dynamic_slice": S(lambda rng: ((rng.standard_normal((4, 5)),),
+                                    {"start_indices": (1, 0),
+                                     "slice_sizes": (2, 3)})),
+    "dynamic_update_slice": S(
+        lambda rng: ((rng.standard_normal((4, 5)),
+                      rng.standard_normal((2, 3))),
+                     {"start_indices": (1, 0)})),
+    "index_update": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 2]),
+                      rng.standard_normal((2, 3))), {"axis": 0}),
+        diff_args=(0, 2)),
+    "scatter": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 2]),
+                      rng.standard_normal((2, 3))), {"axis": 0}),
+        diff_args=(0, 2)),
+    "scatter_add": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 2]),
+                      rng.standard_normal((2, 3))), {"axis": 0}),
+        diff_args=(0, 2)),
+    "scatter_reduce": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 2]),
+                      rng.standard_normal((2, 3))),
+                     {"axis": 0, "reduce": "sum"}),
+        diff_args=(0, 2)),
+    "masked_scatter": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      np.tile(np.array([True, False, True, False]), (3, 1)),
+                      rng.standard_normal(6)), {}),
+        diff_args=(0, 2)),
+    "mor_scatter": S(
+        lambda rng: ((rng.standard_normal((2, 3, 4)),
+                      rng.standard_normal((2, 3, 4)),
+                      rng.standard_normal((2, 3)) > 0), {}),
+        diff_args=(0, 1)),
+    # ── AD-LAW-1j: image / vision structural ────────────────────────────────
+    "center_crop": S(lambda rng: ((rng.standard_normal((1, 2, 6, 6)),),
+                                  {"size": (4, 4), "layout": "nchw"})),
+    "patchify": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)),),
+                               {"patch_size": 2, "layout": "nchw"})),
+    "pixel_shuffle": S(lambda rng: ((rng.standard_normal((1, 4, 3, 3)),),
+                                    {"upscale_factor": 2, "layout": "nchw"})),
+    "pixel_unshuffle": S(lambda rng: ((rng.standard_normal((1, 1, 4, 4)),),
+                                      {"downscale_factor": 2,
+                                       "layout": "nchw"})),
+    "image_normalize": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)),),
+                                      {"mean": (0.1, 0.2), "std": (0.9, 1.1),
+                                       "layout": "nchw"})),
+    # ── AD-LAW-1j: linear algebra ────────────────────────────────────────────
+    # cholesky's domain is symmetric PSD; its tangent space is the symmetric
+    # matrices, so the probe tangents are symmetrized (an input-manifold
+    # declaration — the rules are only claimed on that subspace).
+    "cholesky": S(
+        lambda rng: (((lambda a: a @ a.T + 3.0 * np.eye(3))(
+            rng.standard_normal((3, 3))),), {}),
+        tangent_project=lambda i, t: 0.5 * (t + np.swapaxes(t, -1, -2))),
+    "qr": S(lambda rng: ((rng.standard_normal((4, 3))
+                          + np.eye(4, 3) * 3.0,), {})),
+    "svd": S(lambda rng: ((rng.standard_normal((3, 3))
+                           + np.diag([3.0, 2.0, 1.0]),), {})),
+    "tri_solve": S(
+        lambda rng: ((np.tril(rng.standard_normal((3, 3)))
+                      + 3.0 * np.eye(3),
+                      rng.standard_normal((3, 2))), {"lower": True})),
+    "weight_norm": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                                  {"axis": -1}),
+                     rtol=2e-3,
+                     note="float32 reference forward — central-difference "
+                          "noise floor ~1e-3; defects in this rule showed "
+                          "as O(1)"),
+    "spectral_norm": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                                    {"n_iter": 8}), rtol=1e-5),
+    # ── AD-LAW-1j: matmul-family projections ────────────────────────────────
+    "factorized_matmul": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                         rng.standard_normal((3, 5))),
+                                        {"rank": 2})),
+    "linear_general": S(lambda rng: ((rng.standard_normal((2, 4)),
+                                      rng.standard_normal((4, 3)),
+                                      rng.standard_normal(3)), {"axis": -1})),
+    "lora_linear": S(lambda rng: ((rng.standard_normal((2, 4)),
+                                   rng.standard_normal((4, 3)),
+                                   rng.standard_normal((4, 2)),
+                                   rng.standard_normal((2, 3)),
+                                   rng.standard_normal(3)), {"alpha": 1.0})),
+    "latent_kv_compress": S(lambda rng: ((rng.standard_normal((2, 3, 4)),
+                                          rng.standard_normal((4, 2))), {})),
+    "latent_kv_expand_k": S(lambda rng: ((rng.standard_normal((2, 3, 2)),
+                                          rng.standard_normal((2, 4))), {})),
+    "latent_kv_expand_v": S(lambda rng: ((rng.standard_normal((2, 3, 2)),
+                                          rng.standard_normal((2, 4))), {})),
+    # ── AD-LAW-1j: clifford tensor lane (Cl(3,0) coefficient arrays) ────────
+    "clifford_geometric_product": S(lambda rng: ((rng.standard_normal(8),
+                                                  rng.standard_normal(8)),
+                                                 {})),
+    "clifford_wedge": S(lambda rng: ((rng.standard_normal(8),
+                                      rng.standard_normal(8)), {})),
+    "clifford_inner": S(lambda rng: ((rng.standard_normal(8),
+                                      rng.standard_normal(8)), {})),
+    "clifford_left_contraction": S(lambda rng: ((rng.standard_normal(8),
+                                                 rng.standard_normal(8)),
+                                                {})),
+    "clifford_reverse": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "clifford_conjugate": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "clifford_grade_involution": S(lambda rng: ((rng.standard_normal(8),),
+                                                {})),
+    "clifford_grade_projection": S(lambda rng: ((rng.standard_normal(8),),
+                                                {"grade": 1})),
+    "clifford_hodge_star": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "clifford_norm": S(lambda rng: ((rng.standard_normal(8) + 0.5,), {})),
+    "clifford_norm_squared": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "clifford_rotor_sandwich": S(
+        lambda rng: ((_cl30_rotor(rng), rng.standard_normal(8)), {})),
+    "clifford_exp": S(lambda rng: ((0.3 * rng.standard_normal(8),), {})),
+    "clifford_log": S(lambda rng: ((_cl30_rotor(rng),), {})),
 }
+
+
+def _cl30_rotor(rng: np.random.Generator) -> np.ndarray:
+    """Cl(3,0) rotor coefficients: cos θ + sin θ · B̂ on the grade-2 blades
+    (masks 3, 5, 6). Used by the clifford tensor-lane specs whose domain is
+    the rotor manifold (`clifford_log`, `clifford_rotor_sandwich`)."""
+    theta = float(rng.uniform(0.2, 1.0))
+    b = rng.standard_normal(3)
+    b /= np.linalg.norm(b)
+    c = np.zeros(8)
+    c[0] = np.cos(theta)
+    c[[3, 5, 6]] = np.sin(theta) * b
+    return c
 
 
 # ── Law 5: kink probes ───────────────────────────────────────────────────────

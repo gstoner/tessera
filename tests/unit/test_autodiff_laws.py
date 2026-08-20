@@ -1899,3 +1899,203 @@ def test_hutchinson_has_no_unnormalized_scale_knob():
     from tessera.autodiff.algebra import hutchinson_laplacian
 
     assert "radius" not in inspect.signature(hutchinson_laplacian).parameters
+
+
+# ── AD-LAW-1j spec-growth findings, pinned ───────────────────────────────────
+# Six defects surfaced by the first tensor spec-growth batch (structural /
+# linalg / matmul-projection families). Each test pins the fixed behavior
+# against an oracle the defect could not have satisfied (#10a).
+
+
+def _fd_tangent(f, x, dx, eps=1e-6):
+    return (f(x + eps * dx) - f(x - eps * dx)) / (2 * eps)
+
+
+def test_qr_jvp_matches_finite_differences():
+    """jvp_qr's dR previously dropped the strictly-lower-transpose term
+    (its ±0.5·diag correction cancelled itself), leaving dR = triu(M)·R —
+    off by O(1) against central differences."""
+    from tessera.autodiff.jvp import jvp_qr
+
+    rng = np.random.default_rng(3)
+    A = rng.standard_normal((4, 4)) + 4.0 * np.eye(4)
+    dA = rng.standard_normal((4, 4))
+    (_, _), (dQ, dR) = jvp_qr((A,), (dA,))
+    dQ_fd = _fd_tangent(lambda X: np.linalg.qr(X)[0], A, dA)
+    dR_fd = _fd_tangent(lambda X: np.linalg.qr(X)[1], A, dA)
+    np.testing.assert_allclose(dQ, dQ_fd, atol=1e-7)
+    np.testing.assert_allclose(dR, dR_fd, atol=1e-7)
+
+
+def test_svd_jvp_matches_finite_differences():
+    """jvp_svd previously returned ZERO tangents for U and Vt while
+    vjp_svd handles full (dU, ds, dVt) cotangents — the pair failed the
+    adjoint law on any probe touching the singular vectors. The full
+    formula (with projector terms off-square) matches FD."""
+    from tessera.autodiff.jvp import jvp_svd
+
+    rng = np.random.default_rng(5)
+    for shape, diag in (((4, 4), [5.0, 3.5, 2.0, 1.0]),
+                        ((5, 3), [5.0, 3.5, 2.0])):
+        A = rng.standard_normal(shape)
+        A[:len(diag), :len(diag)] += np.diag(diag)
+        dA = rng.standard_normal(shape)
+
+        def svd_gauge(X):
+            u, sv, vt = np.linalg.svd(X, full_matrices=False)
+            signs = np.sign(u[np.argmax(np.abs(u), axis=0),
+                              np.arange(u.shape[1])])
+            return u * signs, sv, vt * signs[:, None]
+
+        (U, s, Vt), (dU, ds, dVt) = jvp_svd((A,), (dA,))
+        signs = np.sign(U[np.argmax(np.abs(U), axis=0),
+                          np.arange(U.shape[1])])
+        np.testing.assert_allclose(
+            ds, _fd_tangent(lambda X: svd_gauge(X)[1], A, dA), atol=1e-6)
+        np.testing.assert_allclose(
+            dU * signs, _fd_tangent(lambda X: svd_gauge(X)[0], A, dA),
+            atol=1e-6)
+        np.testing.assert_allclose(
+            dVt * signs[:, None],
+            _fd_tangent(lambda X: svd_gauge(X)[2], A, dA), atol=1e-6)
+
+
+def test_svd_adjoint_holds_off_square():
+    """vjp_svd previously lacked the projector-term adjoints, so the pair
+    failed ⟨Jv,u⟩=⟨v,Jᵀu⟩ on any non-square input (surfaced through
+    factorized_matmul's wide product)."""
+    from tessera.autodiff.jvp import jvp_svd
+    from tessera.autodiff.laws import adjoint_check
+    from tessera.autodiff.vjp import vjp_svd
+    from tessera.autodiff.law_inputs import InputSpec
+
+    for shape, diag in (((5, 3), [5.0, 3.5, 2.0]),
+                        ((3, 5), [5.0, 3.5, 2.0])):
+        def make(rng, shape=shape, diag=diag):
+            A = rng.standard_normal(shape)
+            A[:len(diag), :len(diag)] += np.diag(diag)
+            return (A,), {}
+
+        r = adjoint_check(f"svd<{shape}>", InputSpec(make=make),
+                          jvp_svd, vjp_svd)
+        assert r.status == "pass", (shape, r)
+
+
+def test_weight_norm_rules_match_the_kept_axis_semantics():
+    """The canonical forward normalizes over ALL axes except `axis` (the
+    kept axis, torch semantics) with eps inside the sqrt. Both rules
+    previously normalized ALONG `axis` with eps outside — the tri_solve
+    vocabulary class: differentiating a different function than the
+    forward. Pinned against the canonical forward directly."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_weight_norm
+    from tessera.autodiff.vjp import vjp_weight_norm
+
+    rng = np.random.default_rng(9)
+    v = rng.standard_normal((4, 3))
+    primal, _ = jvp_weight_norm((v,), (np.zeros_like(v),), axis=-1)
+    np.testing.assert_allclose(primal, np.asarray(ops.weight_norm(v, axis=-1)),
+                               rtol=1e-5)
+
+    # The gradient kernel is a projection: v itself is a fixed point of the
+    # normalization direction, so <v, dw/dv[u]> must vanish for every u —
+    # per kept-axis slice under the CORRECT semantics.
+    dv = rng.standard_normal((4, 3))
+    _, dw = jvp_weight_norm((v,), (dv,), axis=-1)
+    kept = 2  # axis -1 of a 2-D array
+    n2 = (v * v).sum(axis=0, keepdims=True) + 1e-12
+    proj = (v * np.asarray(dw)).sum(axis=0) / np.sqrt(n2[0])
+    np.testing.assert_allclose(proj, np.zeros(3), atol=1e-10)
+
+    (grad,) = vjp_weight_norm(dv, v, axis=-1)
+    proj_v = (v * np.asarray(grad)).sum(axis=0)
+    np.testing.assert_allclose(proj_v, np.zeros(3), atol=1e-10)
+
+
+def test_factorized_matmul_differentiates_the_truncation():
+    """The forward SVD-truncates the product to rank r; both rules
+    previously differentiated the PLAIN product (the chain law's
+    primal-consistency gate caught the JVP emitting a different
+    function's output). The fixed JVP matches central differences of the
+    canonical forward through the truncation."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_factorized_matmul
+
+    rng = np.random.default_rng(13)
+    a = rng.standard_normal((4, 3))
+    b = rng.standard_normal((3, 5))
+    da = rng.standard_normal((4, 3))
+    db = rng.standard_normal((3, 5))
+
+    y, dy = jvp_factorized_matmul((a, b), (da, db), rank=2)
+    np.testing.assert_allclose(y, ops.factorized_matmul(a, b, 2), rtol=1e-9)
+
+    eps = 1e-6
+    dy_fd = (np.asarray(ops.factorized_matmul(a + eps * da, b + eps * db, 2))
+             - np.asarray(ops.factorized_matmul(a - eps * da,
+                                                b - eps * db, 2))) / (2 * eps)
+    np.testing.assert_allclose(dy, dy_fd, atol=1e-6)
+
+
+def test_mor_scatter_jvp_is_the_where_rule():
+    """jvp_mor_scatter previously delegated to jvp_scatter, whose
+    (x, indices, updates) signature put the MoR `updated` tensor in the
+    indices slot — forward mode crashed or gathered garbage. The rule is
+    the where-mask rule, matching vjp_mor_scatter and the canonical
+    forward."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_mor_scatter
+
+    rng = np.random.default_rng(17)
+    full = rng.standard_normal((2, 3, 4))
+    updated = rng.standard_normal((2, 3, 4))
+    mask = rng.standard_normal((2, 3)) > 0
+    d_full = rng.standard_normal((2, 3, 4))
+    d_updated = rng.standard_normal((2, 3, 4))
+
+    out, dout = jvp_mor_scatter((full, updated, mask), (d_full, d_updated))
+    np.testing.assert_allclose(out, ops.mor_scatter(full, updated, mask),
+                               rtol=1e-12)
+    m = np.broadcast_to(mask[..., None], full.shape)
+    np.testing.assert_allclose(dout, np.where(m, d_updated, d_full),
+                               rtol=1e-12)
+
+
+def test_tape_differentiates_sequence_operands():
+    """`_describe` previously returned `_NON_ARRAY` for a list of arrays, so
+    `ops.cat`/`ops.stack` recorded NO operand and replay called
+    `vjp_cat(dout)` — reverse mode through sequence-operand ops was broken
+    outright (surfaced by the positional-equivalence gate the moment cat
+    got an input spec). The list is now one recorded slot whose gradient
+    fans out per element, preserving each element's own producer link."""
+    from tessera import ops
+    from tessera.autodiff.tape import tape
+
+    rng = np.random.default_rng(23)
+    a = rng.standard_normal((2, 3))
+    b = rng.standard_normal((2, 3))
+
+    with tape() as t:
+        y = ops.cat([a, b], axis=0)
+        loss = ops.sum(ops.mul(y, y))
+    t.backward(loss)
+    np.testing.assert_allclose(t.cotangent[id(a)], 2 * a)
+    np.testing.assert_allclose(t.cotangent[id(b)], 2 * b)
+
+    # The producer link must survive: an element that came FROM another op
+    # keeps its upstream gradient path.
+    with tape() as t2:
+        u = ops.mul(a, 2.0)
+        y2 = ops.stack([u, b], axis=0)
+        loss2 = ops.sum(y2)
+    t2.backward(loss2)
+    np.testing.assert_allclose(t2.cotangent[id(a)],
+                               2.0 * np.ones_like(a))
+
+    # Config tuples must NOT be swallowed into sequence operands: a shape
+    # tuple / float pair stays configuration (the ops still work).
+    with tape() as t3:
+        v = ops.view(a, (3, 2))
+        loss3 = ops.sum(v)
+    t3.backward(loss3)
+    np.testing.assert_allclose(t3.cotangent[id(a)], np.ones_like(a))

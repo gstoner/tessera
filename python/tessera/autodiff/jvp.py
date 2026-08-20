@@ -2901,26 +2901,63 @@ def jvp_cholesky(primals, tangents, **_):
 
 @_jvp("qr")
 def jvp_qr(primals, tangents, **_):
-    """A = Q R. Reference handles full-rank square A."""
+    """A = Q R. Reference handles full-rank A (square or tall).
+
+    With ``M = Qᵀ dA R⁻¹``, uniqueness of the decomposition ``M = QᵀdQ +
+    dR R⁻¹`` (skew + upper) gives ``QᵀdQ = L(M) − L(M)ᵀ`` and ``dR R⁻¹ =
+    triu(M,1) + diag(M) + L(M)ᵀ`` where L is the strictly-lower part.
+
+    AD-LAW-1 finding (2026-08-19): the previous dR dropped the ``L(M)ᵀ``
+    term (its ``±0.5·diag`` correction cancelled itself to exactly
+    ``triu(M) @ R``), off by O(1) against central differences — pinned by
+    ``test_qr_jvp_matches_finite_differences``.
+    """
     A = np.asarray(primals[0], dtype=np.float64)
     dA = np.asarray(tangents[0], dtype=np.float64)
     Q, R = np.linalg.qr(A)
-    M = Q.T @ dA @ np.linalg.inv(R)
-    n = R.shape[0]
-    skew = np.tril(M, -1) - np.tril(M, -1).T
-    dQ = Q @ skew + (dA - Q @ Q.T @ dA) @ np.linalg.inv(R)
-    dR = (np.triu(M) + 0.5 * np.diag(np.diag(M).copy()) - 0.5 * np.diag(np.diag(M).copy())) @ R
+    Rinv = np.linalg.inv(R)
+    M = Q.T @ dA @ Rinv
+    low = np.tril(M, -1)
+    dQ = Q @ (low - low.T) + (dA - Q @ (Q.T @ dA)) @ Rinv
+    dR = (np.triu(M, 1) + np.diag(np.diag(M)) + low.T) @ R
     return (Q, R), (dQ, dR)
 
 
 @_jvp("svd")
 def jvp_svd(primals, tangents, **_):
-    """A = U diag(s) V^T. Returns the tuple (U, s, V^T) with its tangent."""
+    """A = U diag(s) V^T (thin). Full tangent for distinct singular values.
+
+    With ``dP = Uᵀ dA Vᵀᵀ`` and ``F_ij = 1/(s_j² − s_i²)`` off-diagonal:
+
+        ds  = diag(dP)
+        dU  = U (F ∘ (dP S + S dPᵀ)) + (I − UUᵀ) dA V S⁻¹
+        dV  = V (F ∘ (S dP + dPᵀ S)) + (I − VVᵀ) dAᵀ U S⁻¹
+
+    the projector terms carrying the out-of-range components for
+    non-square A. AD-LAW-1 finding (2026-08-19): this rule previously
+    returned **zero** dU/dVt while `vjp_svd` handles full (dU, ds, dVt)
+    cotangents, so the pair failed the adjoint law on any probe touching
+    the singular vectors — pinned by
+    ``test_svd_jvp_matches_finite_differences``.
+    """
     A = np.asarray(primals[0], dtype=np.float64)
     dA = np.asarray(tangents[0], dtype=np.float64)
     U, s, Vt = np.linalg.svd(A, full_matrices=False)
-    ds = np.diag(U.T @ dA @ Vt.T)
-    return (U, s, Vt), (np.zeros_like(U), ds, np.zeros_like(Vt))
+    dP = U.T @ dA @ Vt.T
+    ds = np.diag(dP).copy()
+    s2 = s ** 2
+    F = 1.0 / (s2[None, :] - s2[:, None] + np.eye(len(s)))
+    np.fill_diagonal(F, 0.0)
+    S = np.diag(s)
+    Sinv = np.diag(1.0 / s)
+    m, n = A.shape
+    dU = U @ (F * (dP @ S + S @ dP.T))
+    dV = Vt.T @ (F * (S @ dP + dP.T @ S))
+    if m > n:
+        dU = dU + (dA @ Vt.T - U @ (U.T @ (dA @ Vt.T))) @ Sinv
+    elif n > m:
+        dV = dV + (dA.T @ U - Vt.T @ (Vt @ (dA.T @ U))) @ Sinv
+    return (U, s, Vt), (dU, ds, dV.T)
 
 
 # ── bidirectional_scan placeholder ─────────────────────────────────────────
@@ -3506,8 +3543,27 @@ def jvp_mor_router(primals, tangents, **kwargs):
 
 @_jvp("mor_scatter")
 def jvp_mor_scatter(primals, tangents, **kwargs):
-    """Scatter step in MoR — linear in `updates`."""
-    return jvp_scatter(primals, tangents, **kwargs)
+    """y = where(mask, updated, full) over (B, S, D) with a (B, S) mask —
+    linear in both `full` and `updated`; `mask` is non-differentiable.
+
+    AD-LAW-1 finding (2026-08-19): this rule previously delegated to
+    ``jvp_scatter``, whose signature is ``(x, indices, updates)`` — the
+    MoR ``updated`` tensor landed in the *indices* slot and the mask in
+    the *updates* slot, so forward mode either crashed or gathered
+    garbage. `vjp_mor_scatter` (the where-mask rule below it) was always
+    correct; the pair now matches. Pinned by
+    ``test_mor_scatter_jvp_is_the_where_rule``.
+    """
+    full, updated, mask = primals
+    d_full = _t(0, tangents, full)
+    d_updated = _t(1, tangents, updated)
+    full_arr = np.asarray(full, dtype=np.float64)
+    m = np.broadcast_to(np.asarray(mask, dtype=bool)[..., None],
+                        full_arr.shape)
+    out = np.where(m, np.asarray(updated, dtype=np.float64), full_arr)
+    dout = np.where(m, np.asarray(d_updated, dtype=np.float64),
+                    np.asarray(d_full, dtype=np.float64))
+    return out, dout
 
 
 # ── elementwise long-tail ──────────────────────────────────────────────────
@@ -3635,23 +3691,27 @@ def jvp_rmsnorm_safe(primals, tangents, *, eps=1e-6, **_):
 
 @_jvp("weight_norm")
 def jvp_weight_norm(primals, tangents, *, axis=-1, eps=1e-12, **_):
-    """w_norm = g * v / ||v||.  Reference uses g implicit (=1).  JVP via the
-    numeric rule for now — the closed form is straightforward but the
-    reference op accepts variable signatures."""
-    from tessera import ops as _ops
+    """w = v / ||v|| where the norm reduces over ALL axes except `axis`.
 
-    fn = getattr(_ops, "weight_norm", None)
-    if fn is None:
-        (v,) = primals
-        (dv,) = tangents
-        v_arr = np.asarray(v, dtype=np.float64)
-        dv_arr = np.asarray(dv, dtype=np.float64)
-        n = np.linalg.norm(v_arr, axis=axis, keepdims=True) + eps
-        primal = v_arr / n
-        dn = (v_arr * dv_arr).sum(axis=axis, keepdims=True) / n
-        return primal, dv_arr / n - v_arr * dn / (n * n)
-    fn = getattr(fn, "__wrapped__", fn)
-    return _numeric_jvp_rule(lambda *a: fn(*a, axis=axis, eps=eps), primals, tangents)
+    ``axis`` names the **kept** axis (the canonical
+    ``nn.functional.weight_norm`` / torch semantics), and eps sits inside
+    the sqrt: ``n = sqrt(Σ_reduce v² + eps)``. AD-LAW-1 finding
+    (2026-08-19): the closed-form fallback here (and `vjp_weight_norm`)
+    read ``axis`` as the *reduced* axis with eps outside the norm — the
+    tri_solve vocabulary class: differentiating a different function than
+    the canonical forward. Pinned by
+    ``test_weight_norm_rules_match_the_kept_axis_semantics``.
+    """
+    (v,) = primals
+    (dv,) = tangents
+    v_arr = np.asarray(v, dtype=np.float64)
+    dv_arr = np.asarray(dv, dtype=np.float64)
+    kept = axis if axis >= 0 else v_arr.ndim + axis
+    reduce_axes = tuple(i for i in range(v_arr.ndim) if i != kept)
+    n = np.sqrt(np.sum(v_arr * v_arr, axis=reduce_axes, keepdims=True) + eps)
+    primal = v_arr / n
+    dn = np.sum(v_arr * dv_arr, axis=reduce_axes, keepdims=True) / n
+    return primal, dv_arr / n - v_arr * dn / (n * n)
 
 
 @_jvp("spectral_norm")
@@ -3878,8 +3938,34 @@ def jvp_grouped_gemm(primals, tangents, **_):
 
 @_jvp("factorized_matmul")
 def jvp_factorized_matmul(primals, tangents, *, rank=None, **_):
-    """y = (a @ b) when rank is given; bilinear → dy = da@b + a@db."""
-    return jvp_batched_gemm(primals, tangents)
+    """y = rank-r SVD truncation of (a @ b) — the canonical forward
+    recompresses the product, so the derivative must pass through the
+    truncation, not just the bilinear product.
+
+    AD-LAW-1 finding (2026-08-19): this rule (and its VJP) previously
+    differentiated the plain gemm, ignoring the truncation — the chain
+    law's primal-consistency gate caught the JVP producing a different
+    function's output. Both rules now compose the bilinear product rule
+    with the svd rules and reconstruct the truncated triple. Pinned by
+    ``test_factorized_matmul_differentiates_the_truncation``.
+    """
+    a, b = primals
+    a_arr = np.asarray(a, dtype=np.float64)
+    b_arr = np.asarray(b, dtype=np.float64)
+    da = _t(0, tangents, a_arr)
+    db = _t(1, tangents, b_arr)
+    m_prod = a_arr @ b_arr
+    dm = da @ b_arr + a_arr @ db
+    (u, s, vt), (du, ds, dvt) = jvp_svd((m_prod,), (dm,))
+    if rank is None:
+        r = s.shape[-1]
+    else:
+        r = max(1, min(int(rank), s.shape[-1]))
+    y = (u[..., :r] * s[..., :r]) @ vt[..., :r, :]
+    dy = ((du[..., :r] * s[..., :r]) @ vt[..., :r, :]
+          + (u[..., :r] * ds[..., :r]) @ vt[..., :r, :]
+          + (u[..., :r] * s[..., :r]) @ dvt[..., :r, :])
+    return y, dy
 
 
 @_jvp("qkv_projection")

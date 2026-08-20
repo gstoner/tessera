@@ -1189,3 +1189,83 @@ LAW_INPUT_SPECS.update({
                       10000.0 ** (-np.arange(4) / 4.0)),
                      {"sections": (2, 2)}), diff_args=(0,)),
 })
+
+
+# ── AD-LAW-1n spec growth: the former vjp_only ops, now paired ───────────────
+
+
+def _packed_int4_matmul_inputs(rng):
+    from tessera.quantization import quantize_int4_packed
+
+    w = rng.standard_normal((6, 8))  # [N, K]
+    return ((rng.standard_normal((2, 8)),)
+            + tuple(quantize_int4_packed(w, group_size=4)),
+            {"group_size": 4})
+
+
+def _tridiag_inputs(rng, n=5):
+    dl = rng.standard_normal(n)
+    dl[0] = 0.0
+    du = rng.standard_normal(n)
+    du[-1] = 0.0
+    d = rng.standard_normal(n) + 4.0 * np.sign(rng.standard_normal(n) + 0.1)
+    return (dl, d, du, rng.standard_normal(n)), {}
+
+
+LAW_INPUT_SPECS.update({
+    "stop_gradient": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                       zero_tangent_ok=True, chain=False,
+                       note="zero derivative by definition"),
+    "embedding": S(lambda rng: ((rng.standard_normal((5, 3)),
+                                 np.array([0, 2, 4, 2])), {}),
+                   diff_args=(0,)),
+    "lstm_state_h": S(lambda rng: ((rng.standard_normal((2, 8)),), {})),
+    "lstm_state_c": S(lambda rng: ((rng.standard_normal((2, 8)),), {})),
+    "dropout": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                              {"p": 0.3, "training": True, "seed": 7}),
+                 note="seeded mask — the same fail-closed contract as the "
+                      "rules; both modes reproduce the identical mask"),
+    "sparsemax": S(lambda rng: ((rng.standard_normal((3, 5)),), {})),
+    "entmax15": S(lambda rng: ((rng.standard_normal((3, 5)),), {}),
+                  rtol=1e-6),
+    "soft_top_k": S(lambda rng: ((rng.standard_normal((3, 6)),),
+                                 {"k": 2, "tau": 0.7})),
+    "top_k_routing": S(lambda rng: ((rng.standard_normal((3, 6)),),
+                                    {"k": 2})),
+    "gumbel_softmax": S(
+        lambda rng: ((rng.standard_normal((3, 5)),),
+                     {"tau": 0.8, "noise": rng.gumbel(size=(3, 5))}),
+        note="explicit noise so the probe is deterministic"),
+    "perturbed_argmax": S(
+        lambda rng: ((rng.standard_normal((2, 5)),),
+                     {"sigma": 1.0, "n_samples": 100, "seed": 3}),
+        chain=False, rtol=1e-8,
+        note="both modes draw the SAME seeded perturbations, so the "
+             "empirical adjoint identity is exact; FD of the estimator is "
+             "meaningless"),
+    "memory_index_select_ste": S(
+        lambda rng: ((rng.standard_normal((1, 1, 6, 4)),
+                      rng.standard_normal((1, 1, 2, 4))),
+                     {"threshold": 0.5}),
+        chain=False, note="STE: hard selection forward, smooth-score rules"),
+    "quantized_matmul": S(_packed_int4_matmul_inputs, diff_args=(0,),
+                          chain=False, rtol=1e-5,
+                          note="fp32 dequant path bounds the pairing at "
+                               "~1e-7; weights are frozen (STE-constant)"),
+    "tridiagonal_solve": S(_tridiag_inputs),
+    "depthwise_conv2d": S(
+        lambda rng: ((rng.standard_normal((1, 4, 4, 2)),
+                      rng.standard_normal((3, 3, 2))),
+                     {"kernel_size": (3, 3), "padding": (1, 1)})),
+    "game_boltzmann_value": S(
+        lambda rng: ((rng.standard_normal(8),), {"temperature": 1.0}),
+        rtol=1e-5),
+    "lstm_cell": S(
+        lambda rng: ((rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 4)),
+                      rng.standard_normal((2, 4)),
+                      rng.standard_normal((16, 3)),
+                      rng.standard_normal((16, 4)),
+                      rng.standard_normal(16),
+                      rng.standard_normal(16)), {})),
+})

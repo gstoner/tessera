@@ -4425,3 +4425,259 @@ def _apply_istft_crops(value, cfg, fft_length):
     return out
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AD-LAW-1n — vjp_only closure (2026-08-19).
+#
+# Every op below had a registered VJP and no JVP, so forward mode failed on
+# contact. Three patterns close the set:
+#   * symmetric-Jacobian projections (sparsemax family, softmax-style
+#     routing): J = Jᵀ, so the JVP IS the registered VJP applied to the
+#     tangent — one implementation per boundary (Decision #31), the
+#     symmetry recorded here rather than duplicated math;
+#   * seeded stochastic estimators (dropout, perturbed_argmax): the tangent
+#     uses the SAME seed-derived draws as the forward/VJP, so the empirical
+#     adjoint identity holds exactly;
+#   * mechanical mirrors (embedding gather, LSTM step, tridiagonal solve,
+#     bilinear depthwise conv, packed-int4 matmul with frozen weights).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_jvp("stop_gradient")
+def jvp_stop_gradient(primals, tangents, **_):
+    (x,) = primals
+    return np.asarray(x), np.zeros_like(np.asarray(x, dtype=np.float64))
+
+
+@_jvp("embedding")
+def jvp_embedding(primals, tangents, **_):
+    table, ids = primals
+    idx = np.asarray(ids, dtype=np.int64)
+    dtable = _t(0, tangents, table)
+    return np.asarray(table)[idx], np.asarray(dtable)[idx]
+
+
+@_jvp("lstm_state_h")
+def jvp_lstm_state_h(primals, tangents, **_):
+    (packed,) = primals
+    dpacked = _t(0, tangents, packed)
+    H = np.asarray(packed).shape[-1] // 2
+    return np.asarray(packed)[..., :H], np.asarray(dpacked)[..., :H]
+
+
+@_jvp("lstm_state_c")
+def jvp_lstm_state_c(primals, tangents, **_):
+    (packed,) = primals
+    dpacked = _t(0, tangents, packed)
+    H = np.asarray(packed).shape[-1] // 2
+    return np.asarray(packed)[..., H:], np.asarray(dpacked)[..., H:]
+
+
+@_jvp("dropout")
+def jvp_dropout(primals, tangents, *, p=0.1, training=True, seed=None, **_):
+    (x,) = primals
+    x_arr = np.asarray(x, dtype=np.float64)
+    dx = _t(0, tangents, x_arr)
+    if not training or p == 0.0:
+        return x_arr, np.asarray(dx, dtype=np.float64)
+    if seed is None:
+        raise ValueError(
+            "dropout is not differentiable without a reproducible seed — "
+            "the same contract as its VJP; pass seed=… (nn.Dropout assigns "
+            "one automatically while training)."
+        )
+    rng = np.random.default_rng(int(seed))
+    mask = rng.binomial(1, 1.0 - p, x_arr.shape) / (1.0 - p)
+    return x_arr * mask, np.asarray(dx, dtype=np.float64) * mask
+
+
+def _jvp_via_symmetric_vjp(name, extra_note):
+    """JVP for an op whose Jacobian is symmetric (a projection of the form
+    diag(s) − s sᵀ/⟨s,1⟩): J v = Jᵀ v, so the registered VJP applied to the
+    tangent IS the pushforward. One implementation per boundary (#31)."""
+    del extra_note
+
+    @_jvp(name)
+    def _impl(primals, tangents, **kwargs):
+        from tessera import ops as _ops
+        from .vjp import get_vjp
+
+        fwd = getattr(_ops, name)
+        fwd = getattr(fwd, "__wrapped__", fwd)
+        out = np.asarray(fwd(*primals, **kwargs), dtype=np.float64)
+        dz = _t(0, tangents, primals[0])
+        vjp_fn = get_vjp(name)
+        if vjp_fn is None:  # pragma: no cover — registration order guard
+            raise RuntimeError(f"symmetric-Jacobian JVP for {name!r} "
+                               f"requires its VJP to be registered")
+        grads = vjp_fn(dz, *primals, **kwargs)
+        return out, np.asarray(grads[0], dtype=np.float64)
+
+    _impl.__name__ = f"jvp_{name}"
+    return _impl
+
+
+_jvp_via_symmetric_vjp("sparsemax", "J = diag(s) − s sᵀ/|S| on the support")
+_jvp_via_symmetric_vjp("entmax15", "J = diag(s) − s sᵀ/⟨s,1⟩, s = √p")
+_jvp_via_symmetric_vjp("soft_top_k", "J = diag(a) − a aᵀ/Σa (implicit thresh)")
+_jvp_via_symmetric_vjp("top_k_routing",
+                       "softmax Jacobian on the fixed top-k support")
+_jvp_via_symmetric_vjp("gumbel_softmax",
+                       "tempered softmax Jacobian at the drawn noise")
+
+
+@_jvp("perturbed_argmax")
+def jvp_perturbed_argmax(primals, tangents, *, sigma=1.0, n_samples=500,
+                         seed=0, axis=-1, **_):
+    """Score-function pushforward E[y (gᵀv)]/σ with the SAME seeded draws
+    as the forward and the VJP, so ⟨Ĵv, u⟩ = ⟨v, Ĵᵀu⟩ holds exactly for
+    the empirical Jacobian."""
+    from tessera import ops as _ops
+
+    fwd = getattr(_ops.perturbed_argmax, "__wrapped__", _ops.perturbed_argmax)
+    (z,) = primals
+    out = np.asarray(fwd(z, sigma=sigma, n_samples=n_samples, seed=seed,
+                         axis=axis), dtype=np.float64)
+    x = np.moveaxis(np.asarray(z, dtype=np.float64), axis, -1)
+    v = np.moveaxis(np.asarray(_t(0, tangents, z), dtype=np.float64),
+                    axis, -1)
+    rng = np.random.default_rng(seed)
+    n = x.shape[-1]
+    acc = np.zeros_like(x)
+    for _i in range(int(n_samples)):
+        g = rng.standard_normal(x.shape)
+        idx = np.argmax(x + float(sigma) * g, axis=-1)
+        onehot = np.eye(n)[idx]
+        weight = np.sum(g * v, axis=-1, keepdims=True)
+        acc = acc + onehot * weight / float(sigma)
+    dy = acc / int(n_samples)
+    return out, np.moveaxis(dy, -1, axis)
+
+
+@_jvp("memory_index_select_ste")
+def jvp_memory_index_select_ste(primals, tangents, *, threshold=0.5,
+                                scale=None, **_):
+    """STE: the hard selection's tangent is the smooth score's tangent —
+    the forward-mode mirror of `vjp_memory_index_select_ste`."""
+    from tessera import ops as _ops
+
+    fwd = getattr(_ops.memory_index_select_ste, "__wrapped__",
+                  _ops.memory_index_select_ste)
+    out = np.asarray(fwd(*primals, threshold=threshold, scale=scale))
+    _, tan = jvp_memory_index_score(primals, tangents, scale=scale)
+    return out, tan
+
+
+@_jvp("quantized_matmul")
+def jvp_quantized_matmul(primals, tangents, *, group_size=64, **_):
+    """y = x @ dequant(w_packed)ᵀ with frozen quantized weights: linear in
+    x, straight-through-constant in the packed codes/scales/biases —
+    mirroring the VJP's declared coverage."""
+    from ..quantization import dequantize_int4_packed
+
+    x = np.asarray(primals[0], dtype=np.float64)
+    w_packed, scales, biases = primals[1], primals[2], primals[3]
+    K = int(x.shape[-1])
+    Wdq = np.asarray(dequantize_int4_packed(
+        w_packed, scales, biases, k=K, group_size=int(group_size)),
+        dtype=np.float64)
+    dx = np.asarray(_t(0, tangents, x), dtype=np.float64)
+    return x @ Wdq.T, dx @ Wdq.T
+
+
+@_jvp("tridiagonal_solve")
+def jvp_tridiagonal_solve(primals, tangents, **_):
+    """x = A⁻¹b ⇒ dx = A⁻¹(db − dA·x), dA·x assembled from the three
+    diagonal tangents under the same (dl, d, du) storage the VJP uses."""
+    from ..solvers_ops import _thomas
+
+    dl, d, du, b = (np.asarray(p, dtype=np.float64) for p in primals[:4])
+    ddl = np.asarray(_t(0, tangents, dl), dtype=np.float64)
+    dd = np.asarray(_t(1, tangents, d), dtype=np.float64)
+    ddu = np.asarray(_t(2, tangents, du), dtype=np.float64)
+    db = np.asarray(_t(3, tangents, b), dtype=np.float64)
+    x = _thomas(dl, d, du, b)
+    da_x = dd * x
+    da_x[..., 1:] = da_x[..., 1:] + ddl[1:] * x[..., :-1]
+    da_x[..., :-1] = da_x[..., :-1] + ddu[:-1] * x[..., 1:]
+    dx = _thomas(dl, d, du, db - da_x)
+    return x, dx
+
+
+@_jvp("depthwise_conv2d")
+def jvp_depthwise_conv2d(primals, tangents, **kwargs):
+    """Bilinear in (x, w): dy = f(dx, w) + f(x, dw) — two exact forward
+    calls, no finite differences."""
+    from tessera import ops as _ops
+
+    fwd = getattr(_ops.depthwise_conv2d, "__wrapped__",
+                  _ops.depthwise_conv2d)
+    x, w = primals[0], primals[1]
+    dx = _t(0, tangents, x)
+    dw = _t(1, tangents, w)
+    out = np.asarray(fwd(x, w, **kwargs), dtype=np.float64)
+    tan = (np.asarray(fwd(dx, w, **kwargs), dtype=np.float64)
+           + np.asarray(fwd(x, dw, **kwargs), dtype=np.float64))
+    return out, tan
+
+
+@_jvp("game_boltzmann_value")
+def jvp_game_boltzmann_value(primals, tangents, *, temperature, **_):
+    """Smooth Boltzmann value operator — numeric pushforward through the
+    canonical forward (float64, smooth softmax composition)."""
+    from tessera import ops as _ops
+
+    fwd = getattr(_ops.game_boltzmann_value, "__wrapped__",
+                  _ops.game_boltzmann_value)
+    return _numeric_jvp_rule(
+        lambda v: fwd(v, temperature=temperature), primals, tangents)
+
+
+@_jvp("lstm_cell")
+def jvp_lstm_cell(primals, tangents, **_):
+    """Tangent of one LSTM step, mirroring `vjp_lstm_cell`'s conventions:
+    gates = x@W_ihᵀ + h@W_hhᵀ (+biases), gate order i,f,g,o, output
+    concat([h_t, c_t], axis=-1)."""
+    x_t, h_prev, c_prev, W_ih, W_hh = (
+        np.asarray(p, dtype=np.float64) for p in primals[:5])
+    b_ih = primals[5] if len(primals) > 5 else None
+    b_hh = primals[6] if len(primals) > 6 else None
+    dx = np.asarray(_t(0, tangents, x_t), dtype=np.float64)
+    dh = np.asarray(_t(1, tangents, h_prev), dtype=np.float64)
+    dc = np.asarray(_t(2, tangents, c_prev), dtype=np.float64)
+    dW_ih = np.asarray(_t(3, tangents, W_ih), dtype=np.float64)
+    dW_hh = np.asarray(_t(4, tangents, W_hh), dtype=np.float64)
+
+    H = h_prev.shape[-1]
+    gates = x_t @ W_ih.T + h_prev @ W_hh.T
+    dgates = dx @ W_ih.T + x_t @ dW_ih.T + dh @ W_hh.T + h_prev @ dW_hh.T
+    if b_ih is not None:
+        gates = gates + np.asarray(b_ih, dtype=np.float64)
+        dgates = dgates + np.asarray(_t(5, tangents, b_ih),
+                                     dtype=np.float64)
+    if b_hh is not None:
+        gates = gates + np.asarray(b_hh, dtype=np.float64)
+        dgates = dgates + np.asarray(_t(6, tangents, b_hh),
+                                     dtype=np.float64)
+
+    i_g, f_g, g_g, o_g = (gates[..., :H], gates[..., H:2 * H],
+                          gates[..., 2 * H:3 * H], gates[..., 3 * H:])
+    di_g, df_g, dg_g, do_g = (dgates[..., :H], dgates[..., H:2 * H],
+                              dgates[..., 2 * H:3 * H], dgates[..., 3 * H:])
+    i = 1.0 / (1.0 + np.exp(-i_g))
+    f = 1.0 / (1.0 + np.exp(-f_g))
+    g_act = np.tanh(g_g)
+    o = 1.0 / (1.0 + np.exp(-o_g))
+    di = i * (1.0 - i) * di_g
+    df = f * (1.0 - f) * df_g
+    dg = (1.0 - g_act * g_act) * dg_g
+    do = o * (1.0 - o) * do_g
+
+    c_t = f * c_prev + i * g_act
+    dc_t = df * c_prev + f * dc + di * g_act + i * dg
+    tanh_c = np.tanh(c_t)
+    h_t = o * tanh_c
+    dh_t = do * tanh_c + o * (1.0 - tanh_c * tanh_c) * dc_t
+    return (np.concatenate([h_t, c_t], axis=-1),
+            np.concatenate([dh_t, dc_t], axis=-1))

@@ -19,7 +19,7 @@ svd,Linear Algebra,1,complete,complete,complete,complete,complete,partial,partia
 tri_solve,Linear Algebra,1,complete,complete,complete,complete,complete,partial,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 conv2d,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 conv3d,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
-dropout,Neural Network Primitives,1,complete,complete,complete,complete,non_differentiable,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
+dropout,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 flash_attn,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 gelu,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.
 layer_norm,Neural Network Primitives,1,complete,complete,complete,complete,complete,complete,partial,complete,Imported from the supported op catalog; S1 keeps missing semantic rules visible.

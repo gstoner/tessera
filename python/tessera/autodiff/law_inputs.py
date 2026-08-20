@@ -30,7 +30,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-__all__ = ["InputSpec", "LAW_INPUT_SPECS"]
+__all__ = ["GEO_LAW_INPUT_SPECS", "InputSpec", "LAW_INPUT_SPECS"]
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,15 @@ class InputSpec:
     rtol: Optional[float] = None   # override for rules that are internally
                                    # numeric (FD-based JVPs can't hit 1e-8)
     note: str = ""
+    # Input-manifold declaration: some ops are only defined (and only
+    # differentiable) on a submanifold — cholesky on symmetric PSD, for
+    # example — so a raw Gaussian tangent leaves the domain and the rule
+    # pair legitimately disagrees off-manifold. `tangent_project(i, t)`
+    # maps a random tangent for primal `i` onto the manifold's tangent
+    # space (e.g. symmetrization). This declares mathematics, not
+    # tolerance: the projected tangents still exercise the full tangent
+    # space of the domain.
+    tangent_project: Optional[Callable[[int, np.ndarray], np.ndarray]] = None
 
 
 def _away_from(x: np.ndarray, kink: float = 0.0, margin: float = 0.25) -> np.ndarray:
@@ -385,7 +394,152 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
         diff_args=(0,), chain=False,
         note="per-block scale array — the shape that crashed both modes "
              "before AD-LAW-1g"),
+    # ── AD-LAW-1j spec growth: structural / shape ops ────────────────────────
+    "cat": S(lambda rng: (([rng.standard_normal((2, 3)),
+                            rng.standard_normal((2, 3))],), {"axis": 0})),
+    "stack": S(lambda rng: (([rng.standard_normal((2, 3)),
+                              rng.standard_normal((2, 3))],), {"axis": 0})),
+    "chunk": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                            {"chunks": 2, "axis": 0})),
+    "split": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                            {"indices_or_sections": 2, "axis": 0})),
+    "view": S(lambda rng: ((rng.standard_normal((2, 6)),),
+                           {"shape": (3, 4)})),
+    "broadcast": S(lambda rng: ((rng.standard_normal((1, 4)),),
+                                {"shape": (3, 4)})),
+    "broadcast_to_axis": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                                        {"axis_size": 2, "axis": 0})),
+    "select": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                             {"index": 1, "axis": 0})),
+    "slice": S(lambda rng: ((rng.standard_normal((4, 5)),),
+                            {"start_indices": (1, 0), "slice_sizes": (2, 3)})),
+    "dynamic_slice": S(lambda rng: ((rng.standard_normal((4, 5)),),
+                                    {"start_indices": (1, 0),
+                                     "slice_sizes": (2, 3)})),
+    "dynamic_update_slice": S(
+        lambda rng: ((rng.standard_normal((4, 5)),
+                      rng.standard_normal((2, 3))),
+                     {"start_indices": (1, 0)})),
+    "index_update": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 2]),
+                      rng.standard_normal((2, 3))), {"axis": 0}),
+        diff_args=(0, 2)),
+    "scatter": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 2]),
+                      rng.standard_normal((2, 3))), {"axis": 0}),
+        diff_args=(0, 2)),
+    "scatter_add": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 2]),
+                      rng.standard_normal((2, 3))), {"axis": 0}),
+        diff_args=(0, 2)),
+    "scatter_reduce": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 2]),
+                      rng.standard_normal((2, 3))),
+                     {"axis": 0, "reduce": "sum"}),
+        diff_args=(0, 2)),
+    "masked_scatter": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      np.tile(np.array([True, False, True, False]), (3, 1)),
+                      rng.standard_normal(6)), {}),
+        diff_args=(0, 2)),
+    "mor_scatter": S(
+        lambda rng: ((rng.standard_normal((2, 3, 4)),
+                      rng.standard_normal((2, 3, 4)),
+                      rng.standard_normal((2, 3)) > 0), {}),
+        diff_args=(0, 1)),
+    # ── AD-LAW-1j: image / vision structural ────────────────────────────────
+    "center_crop": S(lambda rng: ((rng.standard_normal((1, 2, 6, 6)),),
+                                  {"size": (4, 4), "layout": "nchw"})),
+    "patchify": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)),),
+                               {"patch_size": 2, "layout": "nchw"})),
+    "pixel_shuffle": S(lambda rng: ((rng.standard_normal((1, 4, 3, 3)),),
+                                    {"upscale_factor": 2, "layout": "nchw"})),
+    "pixel_unshuffle": S(lambda rng: ((rng.standard_normal((1, 1, 4, 4)),),
+                                      {"downscale_factor": 2,
+                                       "layout": "nchw"})),
+    "image_normalize": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)),),
+                                      {"mean": (0.1, 0.2), "std": (0.9, 1.1),
+                                       "layout": "nchw"})),
+    # ── AD-LAW-1j: linear algebra ────────────────────────────────────────────
+    # cholesky's domain is symmetric PSD; its tangent space is the symmetric
+    # matrices, so the probe tangents are symmetrized (an input-manifold
+    # declaration — the rules are only claimed on that subspace).
+    "cholesky": S(
+        lambda rng: (((lambda a: a @ a.T + 3.0 * np.eye(3))(
+            rng.standard_normal((3, 3))),), {}),
+        tangent_project=lambda i, t: 0.5 * (t + np.swapaxes(t, -1, -2))),
+    "qr": S(lambda rng: ((rng.standard_normal((4, 3))
+                          + np.eye(4, 3) * 3.0,), {})),
+    "svd": S(lambda rng: ((rng.standard_normal((3, 3))
+                           + np.diag([3.0, 2.0, 1.0]),), {})),
+    "tri_solve": S(
+        lambda rng: ((np.tril(rng.standard_normal((3, 3)))
+                      + 3.0 * np.eye(3),
+                      rng.standard_normal((3, 2))), {"lower": True})),
+    "weight_norm": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                                  {"axis": -1}),
+                     rtol=2e-3,
+                     note="float32 reference forward — central-difference "
+                          "noise floor ~1e-3; defects in this rule showed "
+                          "as O(1)"),
+    "spectral_norm": S(lambda rng: ((rng.standard_normal((4, 3)),),
+                                    {"n_iter": 8}), rtol=1e-5),
+    # ── AD-LAW-1j: matmul-family projections ────────────────────────────────
+    "factorized_matmul": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                         rng.standard_normal((3, 5))),
+                                        {"rank": 2})),
+    "linear_general": S(lambda rng: ((rng.standard_normal((2, 4)),
+                                      rng.standard_normal((4, 3)),
+                                      rng.standard_normal(3)), {"axis": -1})),
+    "lora_linear": S(lambda rng: ((rng.standard_normal((2, 4)),
+                                   rng.standard_normal((4, 3)),
+                                   rng.standard_normal((4, 2)),
+                                   rng.standard_normal((2, 3)),
+                                   rng.standard_normal(3)), {"alpha": 1.0})),
+    "latent_kv_compress": S(lambda rng: ((rng.standard_normal((2, 3, 4)),
+                                          rng.standard_normal((4, 2))), {})),
+    "latent_kv_expand_k": S(lambda rng: ((rng.standard_normal((2, 3, 2)),
+                                          rng.standard_normal((2, 4))), {})),
+    "latent_kv_expand_v": S(lambda rng: ((rng.standard_normal((2, 3, 2)),
+                                          rng.standard_normal((2, 4))), {})),
+    # ── AD-LAW-1j: clifford tensor lane (Cl(3,0) coefficient arrays) ────────
+    "clifford_geometric_product": S(lambda rng: ((rng.standard_normal(8),
+                                                  rng.standard_normal(8)),
+                                                 {})),
+    "clifford_wedge": S(lambda rng: ((rng.standard_normal(8),
+                                      rng.standard_normal(8)), {})),
+    "clifford_inner": S(lambda rng: ((rng.standard_normal(8),
+                                      rng.standard_normal(8)), {})),
+    "clifford_left_contraction": S(lambda rng: ((rng.standard_normal(8),
+                                                 rng.standard_normal(8)),
+                                                {})),
+    "clifford_reverse": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "clifford_conjugate": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "clifford_grade_involution": S(lambda rng: ((rng.standard_normal(8),),
+                                                {})),
+    "clifford_grade_projection": S(lambda rng: ((rng.standard_normal(8),),
+                                                {"grade": 1})),
+    "clifford_hodge_star": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "clifford_norm": S(lambda rng: ((rng.standard_normal(8) + 0.5,), {})),
+    "clifford_norm_squared": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "clifford_rotor_sandwich": S(
+        lambda rng: ((_cl30_rotor(rng), rng.standard_normal(8)), {})),
+    "clifford_exp": S(lambda rng: ((0.3 * rng.standard_normal(8),), {})),
+    "clifford_log": S(lambda rng: ((_cl30_rotor(rng),), {})),
 }
+
+
+def _cl30_rotor(rng: np.random.Generator) -> np.ndarray:
+    """Cl(3,0) rotor coefficients: cos θ + sin θ · B̂ on the grade-2 blades
+    (masks 3, 5, 6). Used by the clifford tensor-lane specs whose domain is
+    the rotor manifold (`clifford_log`, `clifford_rotor_sandwich`)."""
+    theta = float(rng.uniform(0.2, 1.0))
+    b = rng.standard_normal(3)
+    b /= np.linalg.norm(b)
+    c = np.zeros(8)
+    c[0] = np.cos(theta)
+    c[[3, 5, 6]] = np.sin(theta) * b
+    return c
 
 
 # ── Law 5: kink probes ───────────────────────────────────────────────────────
@@ -487,3 +641,631 @@ KINK_SPECS: dict[str, KinkSpec] = {
                                               keepdims=True),),
         "split"),
 }
+
+
+# ── Geometric registry (multivector) specs ──────────────────────────────────
+# Inputs for the Law-3 adjoint sweep over `_VJPS_GEO`/`_JVPS_GEO` — the
+# sweep the plan requires to run BEFORE the `CliffordTangent` absorption
+# (AUTODIFF_NEXTGEN_PLAN §3.5 / §5 item 4). The pairing is the Frobenius
+# inner product on coefficient vectors, which is the convention the VJPs
+# themselves declare (`geometric/vjp.py` module docstring); the algebra is
+# Cl(3, 0), the signature that convention is stated for.
+#
+# The `tessera.ga` import is deliberately lazy (inside each `make`) so
+# importing this module never pulls the GA stack; the sweep already guards
+# the geometric registry import the same way.
+
+
+def _mv(rng: np.random.Generator, grades=None, scale: float = 1.0):
+    from tessera.ga.multivector import Multivector
+    from tessera.ga.signature import Cl
+
+    alg = Cl(3, 0)
+    coeffs = scale * rng.standard_normal(alg.dim)
+    return Multivector(coeffs, alg, grades=grades)
+
+
+def _geo_unary(**mv_kwargs):
+    def make(rng):
+        return (_mv(rng, **mv_kwargs),), {}
+    return make
+
+
+def _geo_binary():
+    def make(rng):
+        return (_mv(rng), _mv(rng)), {}
+    return make
+
+
+def _geo_rotor(rng: np.random.Generator):
+    """A genuine rotor in Cl(3, 0): R = cos θ + sin θ · B̂ for a unit
+    bivector B̂ (every bivector in 3D is simple, so B̂² = −1)."""
+    import numpy as _np
+
+    from tessera.ga.multivector import Multivector
+    from tessera.ga.signature import Cl
+
+    alg = Cl(3, 0)
+    theta = float(rng.uniform(0.2, 1.2))
+    b = rng.standard_normal(3)
+    b = b / _np.linalg.norm(b)
+    coeffs = _np.zeros(alg.dim)
+    coeffs[0] = _np.cos(theta)
+    # Grade-2 blade masks in Cl(3,0): popcount-2 indices 3 (e12), 5 (e13),
+    # 6 (e23).
+    coeffs[[3, 5, 6]] = _np.sin(theta) * b
+    return Multivector(coeffs, alg)
+
+
+def _geo_norm_input():
+    def make(rng):
+        # Keep |a| well away from the norm's declared subgradient-at-zero
+        # convention: a random 8-coefficient Gaussian has |a| ≈ 2.6 a.s.,
+        # but make the floor structural rather than probabilistic.
+        mv = _mv(rng)
+        import numpy as _np
+
+        n = float(_np.sqrt(_np.sum(mv.coefficients ** 2)))
+        if n < 0.5:  # pragma: no cover — measure-zero fallback, kept explicit
+            mv = (1.0 / max(n, 1e-9)) * mv
+        return (mv,), {}
+    return make
+
+
+GEO_LAW_INPUT_SPECS: dict[str, InputSpec] = {
+    # linear, self-adjoint-by-declaration
+    "add": S(_geo_binary()),
+    "sub": S(_geo_binary()),
+    "neg": S(_geo_unary()),
+    "reverse": S(_geo_unary()),
+    "grade_involution": S(_geo_unary()),
+    "conjugate": S(_geo_unary()),
+    "hodge_star": S(_geo_unary()),
+    # a is differentiable; the grade selector is configuration
+    "grade_projection": S(lambda rng: ((_mv(rng), 1), {}), diff_args=(0,)),
+    # both the multivector and the scalar are differentiable
+    "scalar_mul": S(lambda rng: ((_mv(rng), float(rng.uniform(0.5, 2.0))), {})),
+    # bilinear
+    "geometric_product": S(_geo_binary()),
+    "wedge": S(_geo_binary()),
+    "left_contraction": S(_geo_binary()),
+    # scalar-valued
+    "inner": S(_geo_binary()),
+    "norm_squared": S(_geo_norm_input()),
+    "norm": S(_geo_norm_input()),
+    # rotor sandwich: a genuine rotor plus a general multivector
+    "rotor_sandwich": S(lambda rng: ((_geo_rotor(rng), _mv(rng)), {})),
+}
+
+
+# ── AD-LAW-1k spec growth: losses / RL / EBM / game / collectives / misc ────
+# Chain-law caveats recorded per family: ops whose canonical forward does not
+# resolve get adjoint-only coverage (recorded as `not_applicable`, never
+# hidden); RL rules are numeric (FD-based) so their tolerance is loosened to
+# their measured noise floor, not to make a defect fit.
+
+
+def _binary_targets(rng, shape):
+    return (rng.random(shape) > 0.5).astype(np.float64)
+
+
+LAW_INPUT_SPECS.update({
+    # losses
+    "asymmetric_bce": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      _binary_targets(rng, (3, 4))), {"reduction": "mean"}),
+        diff_args=(0,)),
+    "focal_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.integers(0, 4, (3,))), {"reduction": "mean"}),
+        diff_args=(0,)),
+    "ddpm_noise_pred_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))), {"reduction": "mean"})),
+    "score_matching_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))), {"reduction": "mean"})),
+    "denoising_score_matching_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)), 0.7),
+                     {"reduction": "mean"}),
+        diff_args=(0,)),
+    "implicit_score_matching_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal(3)), {"reduction": "mean"}),
+        diff_args=(0,)),
+    "contrastive_divergence_loss": S(
+        lambda rng: ((rng.standard_normal(4), rng.standard_normal(4)),
+                     {"reduction": "mean"})),
+    "persistent_cd_loss": S(
+        lambda rng: ((rng.standard_normal(4), rng.standard_normal(4)),
+                     {"reduction": "mean"})),
+    "vlb_loss": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                               {"reduction": "mean"})),
+    "wasserstein_distance": S(
+        lambda rng: ((rng.standard_normal(6), rng.standard_normal(6)),
+                     {"reduction": "mean"})),
+    "contrastive_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)),
+                      np.array([1.0, -1.0, 1.0])),
+                     {"margin": 1.0, "reduction": "mean"}),
+        diff_args=(0, 1)),
+    "cosine_embedding_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)),
+                      np.array([1.0, -1.0, 1.0])),
+                     {"margin": 0.0, "reduction": "mean"}),
+        diff_args=(0, 1)),
+    # anchor/positive/negative kept close so the hinge is ACTIVE — a far
+    # negative zeroes the loss plateau-wide and the probe would be vacuous.
+    "triplet_loss": S(
+        lambda rng: ((lambda a: (a,
+                                 a + 0.1 * rng.standard_normal((3, 4)),
+                                 a + 0.2 * rng.standard_normal((3, 4))))(
+            rng.standard_normal((3, 4))),
+            {"margin": 1.0, "reduction": "mean"})),
+    "seq2seq_loss": S(
+        lambda rng: ((rng.standard_normal((2, 3, 5)),
+                      rng.integers(0, 5, (2, 3)), np.ones((2, 3))),
+                     {"reduction": "mean"}),
+        diff_args=(0,)),
+    "info_nce_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 5, 4))),
+                     {"temperature": 0.5, "reduction": "mean"})),
+    "nt_xent_loss": S(
+        lambda rng: ((rng.standard_normal((4, 3)), np.array([0, 0, 1, 1])),
+                     {"temperature": 0.5, "reduction": "mean"}),
+        diff_args=(0,)),
+    "load_balance_loss": S(
+        lambda rng: ((np.abs(rng.standard_normal((4, 3))) + 0.2,),
+                     {"reduction": "mean"}),
+        diff_args=(0,)),
+    "ctc_loss": S(
+        lambda rng: ((np.log(np.abs(rng.standard_normal((5, 2, 4))) + 0.5)
+                      - 2.0,
+                      rng.integers(1, 4, (2, 2)),
+                      np.array([5, 5]), np.array([2, 2])),
+                     {"blank": 0, "reduction": "mean"}),
+        diff_args=(0,), rtol=1e-6),
+    # RL / policy — numeric rules; logp deltas kept small so the PPO clip is
+    # inactive and the probe sits on a smooth piece.
+    "ppo_policy_loss": S(
+        lambda rng: ((rng.standard_normal(6) * 0.05,
+                      rng.standard_normal(6) * 0.05,
+                      rng.standard_normal(6) + 2.0), {}), rtol=1e-4),
+    "grpo_policy_loss": S(
+        lambda rng: ((rng.standard_normal((2, 3)) * 0.05,
+                      rng.standard_normal((2, 3)) * 0.05,
+                      rng.standard_normal((2, 3))), {}), rtol=1e-4),
+    "cispo_policy_loss": S(
+        lambda rng: ((rng.standard_normal((2, 3)) * 0.05,
+                      rng.standard_normal((2, 3)) * 0.05,
+                      rng.standard_normal((2, 3))), {}), rtol=1e-4),
+    "normalize_group_advantages": S(
+        lambda rng: ((rng.standard_normal((2, 3)),), {}), rtol=1e-4),
+    # EBM
+    "ebm_energy_quadratic": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))), {})),
+    "ebm_inner_step": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))),
+                     {"eta": 0.1, "noise_scale": 0.0})),
+    "ebm_refinement": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      rng.standard_normal((3, 4))), {"eta": 0.1, "T": 3})),
+    "ebm_self_verify": S(
+        lambda rng: ((rng.standard_normal((2, 4)),
+                      rng.standard_normal((2, 4, 3))), {"beta": 2.0})),
+    # game theory — linear lattice transforms over 2^n subsets (n = 3)
+    "game_coalition_excess": S(
+        lambda rng: ((rng.standard_normal(8), rng.standard_normal(3)), {})),
+    "game_coalition_marginal": S(
+        lambda rng: ((rng.standard_normal(8),), {})),
+    "game_semivalue": S(
+        lambda rng: ((rng.standard_normal(8),
+                      np.abs(rng.standard_normal(4)) + 0.1), {}),
+        diff_args=(0,)),
+    "game_subset_zeta": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "game_subset_mobius": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "game_superset_zeta": S(lambda rng: ((rng.standard_normal(8),), {})),
+    "game_superset_mobius": S(lambda rng: ((rng.standard_normal(8),), {})),
+    # collectives — single-rank reference semantics
+    "psum": S(lambda rng: ((rng.standard_normal((3, 4)),), {})),
+    "pmean": S(lambda rng: ((rng.standard_normal((3, 4)),), {})),
+    "pmax": S(lambda rng: ((rng.standard_normal((3, 4)),), {})),
+    "pmin": S(lambda rng: ((rng.standard_normal((3, 4)),), {})),
+    "all_gather": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                                 {"axis": 0})),
+    "all_reduce": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                                 {"op": "sum"})),
+    # the rule speaks split_axis/concat_axis (tensor axes); the forward
+    # speaks a mesh-axis name — no shared chain vocabulary, adjoint-only.
+    "all_to_all": S(lambda rng: ((rng.standard_normal((4, 6)),),
+                                 {"split_axis": 0, "concat_axis": 0}),
+                    chain=False),
+    "reduce_scatter": S(lambda rng: ((rng.standard_normal((4, 6)),),
+                                     {"op": "sum", "axis": 0})),
+    "collective_permute": S(
+        lambda rng: ((rng.standard_normal((3, 4)),
+                      [(0, 1), (1, 2), (2, 0)]), {}),
+        diff_args=(0,)),
+    # reductions / pointwise leftovers
+    "reduce": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                             {"op": "sum", "axis": 0})),
+    "floor_div": S(lambda rng: ((rng.standard_normal((3, 4)) * 5,
+                                 np.abs(rng.standard_normal((3, 4))) + 1.0),
+                                {}),
+                   zero_tangent_ok=True, chain=False,
+                   note="piecewise-constant; derivative 0 a.e. by declaration"),
+    "online_softmax": S(lambda rng: ((rng.standard_normal((3, 5)),),
+                                     {"axis": -1})),
+    "online_softmax_state": S(
+        lambda rng: ((rng.standard_normal((3, 5)),), {}),
+        zero_tangent_ok=True, chain=False,
+        note="declared non-differentiable state extractor"),
+    "grad_scaler_step": S(
+        lambda rng: ((rng.standard_normal((3, 4)),), {}),
+        zero_tangent_ok=True, chain=False,
+        note="declared non-differentiable optimizer step"),
+    "calibration_observer": S(
+        lambda rng: ((rng.standard_normal((3, 4)),), {}), chain=False,
+        note="stats-only observer; cotangent passes through"),
+    "fake_quantize": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                       chain=False, note="STE; derivative is identity"),
+    "quantize_fp8": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                      chain=False, note="STE; derivative is identity"),
+    "dequantize_fp8": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                      np.array(0.5)), {}),
+                        diff_args=(0,), chain=False),
+    "dequantize_fp4": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                      np.array(0.5)), {}),
+                        diff_args=(0,), chain=False),
+    "dequantize_fp6": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                      np.array(0.5)), {}),
+                        diff_args=(0,), chain=False),
+    "dequantize_int8": S(
+        lambda rng: ((rng.integers(-100, 100, (3, 4)).astype(np.float64),
+                      np.array(0.05)), {}),
+        diff_args=(0,), chain=False),
+    "dequantize_int4": S(
+        lambda rng: ((rng.integers(-7, 7, (3, 4)).astype(np.float64),
+                      np.array(0.3)), {}),
+        diff_args=(0,), chain=False),
+    # rope / positional / memory-index
+    "ntk_rope": S(
+        lambda rng: ((rng.standard_normal((2, 4, 8)),
+                      10000.0 ** (-np.arange(4) / 4.0)), {"scale": 1.0}),
+        diff_args=(0,), rtol=1e-5),
+    "rope_split": S(lambda rng: ((rng.standard_normal((2, 4, 8)),),
+                                 {"rope_dim": 4})),
+    "factorized_pos_emb": S(
+        lambda rng: ((rng.standard_normal((3, 5)),
+                      rng.standard_normal((4, 5))),
+                     {"grid_h": 3, "grid_w": 4})),
+    "memory_index_score": S(
+        lambda rng: ((rng.standard_normal((1, 1, 6, 4)),
+                      rng.standard_normal((1, 1, 2, 4))), {})),
+    # spectral / vision / epilogue
+    "spectral_filter": S(
+        lambda rng: ((rng.standard_normal((3, 8))
+                      + 1j * rng.standard_normal((3, 8)),
+                      rng.standard_normal(8)
+                      + 1j * rng.standard_normal(8)), {})),
+    "dct": S(lambda rng: ((rng.standard_normal((3, 8)),),
+                          {"type": 2, "axis": -1, "norm": "backward"})),
+    "image_resize": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)),),
+                                   {"size": (8, 8), "mode": "bilinear",
+                                    "layout": "nchw"})),
+    "interpolate": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)),),
+                                  {"size": (8, 8), "mode": "bilinear",
+                                   "layout": "nchw"})),
+    "fused_epilogue": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                      rng.standard_normal(4)),
+                                     {"activation": "gelu"})),
+    # bias generators / declared non-differentiable
+    "alibi": S(lambda rng: ((2, 4), {}), diff_args=(),
+               zero_tangent_ok=True, chain=False,
+               note="head-slope bias generator; no differentiable inputs"),
+})
+
+
+# ── AD-LAW-1l spec growth: optimizers / conv+pool / cells / MoE / sparse /
+# attention. Optimizer probes: state updates are stop-gradient by
+# declaration where noted; multi-output rules follow the tape's per-output
+# `_output_index` convention where declared.
+
+
+def _qkv(rng, b=1, h=2, s=4, d=3):
+    return (rng.standard_normal((b, h, s, d)),
+            rng.standard_normal((b, h, s, d)),
+            rng.standard_normal((b, h, s, d)))
+
+
+LAW_INPUT_SPECS.update({
+    "clip": S(lambda rng: ((rng.standard_normal((3, 4)) * 0.3,),
+                           {"min_val": -0.5, "max_val": 0.5})),
+    # optimizers
+    "sgd": S(lambda rng: ((rng.standard_normal((3, 4)),
+                           rng.standard_normal((3, 4))), {"lr": 0.1}),
+             rtol=1e-6),
+    "adam": S(lambda rng: ((rng.standard_normal((3, 4)),
+                            rng.standard_normal((3, 4)),
+                            rng.standard_normal((3, 4)) * 0.1,
+                            np.abs(rng.standard_normal((3, 4))) * 0.1 + 0.01),
+                           {"lr": 0.01, "step": 2}), rtol=1e-6),
+    "adamw": S(lambda rng: ((rng.standard_normal((3, 4)),
+                             rng.standard_normal((3, 4))),
+                            {"lr": 0.01, "weight_decay": 0.01}), rtol=1e-6),
+    "momentum": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                rng.standard_normal((3, 4))), {"lr": 0.01}),
+                  rtol=1e-6),
+    "nesterov": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                rng.standard_normal((3, 4))), {"lr": 0.01}),
+                  rtol=1e-6),
+    "lion": S(lambda rng: ((rng.standard_normal((3, 4)),
+                            rng.standard_normal((3, 4))), {"lr": 0.01}),
+              rtol=1e-6, zero_tangent_ok=True,
+              note="sign-based update; derivative 0 a.e. by declaration"),
+    # adafactor's forward computes in fp32; its FD-based JVP now uses the
+    # fp32-appropriate step (see jvp_adafactor), measured floor ~2e-5.
+    "adafactor": S(lambda rng: ((rng.standard_normal((3, 4)),
+                                 rng.standard_normal((3, 4))), {"lr": 0.01}),
+                   rtol=2e-4),
+    # conv / pool
+    "conv1d": S(lambda rng: ((rng.standard_normal((1, 2, 6)),
+                              rng.standard_normal((4, 2, 3))),
+                             {"stride": 1, "padding": 1}), rtol=1e-5),
+    "conv2d": S(lambda rng: ((rng.standard_normal((1, 4, 4, 2)),
+                              rng.standard_normal((3, 3, 2, 4))),
+                             {"stride": 1, "padding": 1}), rtol=1e-5),
+    "conv3d": S(lambda rng: ((rng.standard_normal((1, 3, 3, 3, 2)),
+                              rng.standard_normal((2, 2, 2, 2, 3))),
+                             {"stride": 1, "padding": 0}), rtol=1e-5),
+    "depthwise_conv1d": S(
+        lambda rng: ((rng.standard_normal((1, 6, 3)),
+                      rng.standard_normal((6, 4))),
+                     {"kernel_size": 4, "padding": 3, "causal": True}),
+        rtol=1e-5),
+    "avg_pool": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)), 2), {}),
+                  diff_args=(0,)),
+    "max_pool": S(lambda rng: ((rng.standard_normal((1, 2, 4, 4)), 2), {}),
+                  diff_args=(0,)),
+    # cells
+    "simple_rnn_cell": S(
+        lambda rng: ((rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 4)),
+                      rng.standard_normal((3, 4)),
+                      rng.standard_normal((4, 4)),
+                      rng.standard_normal(4)), {"activation": "tanh"})),
+    "gru_cell": S(
+        lambda rng: ((rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 4)),
+                      rng.standard_normal((3, 12)),
+                      rng.standard_normal((4, 12)),
+                      rng.standard_normal(12),
+                      rng.standard_normal(12)), {})),
+    # MoE / MoR
+    "moe": S(lambda rng: ((rng.standard_normal((4, 3)),
+                           rng.standard_normal((2, 3, 3))),
+                          {"router": "topk", "k": 1, "scores": None}),
+             diff_args=(0, 1), rtol=1e-6),
+    "moe_dispatch": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                    np.array([1, 0, 1, 0])), {}),
+                      diff_args=(0,)),
+    "moe_combine": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                   np.array([2, 0, 3, 1])),
+                                  {"reduce": "sum"}), diff_args=(0,)),
+    "mor_partition": S(
+        lambda rng: ((rng.standard_normal((2, 3)),
+                      np.array([[1, 2, 1], [2, 1, 1]])), {"step": 2}),
+        diff_args=(0,), zero_tangent_ok=True, chain=False,
+        note="bool-mask output; non-differentiable by declaration"),
+    "mor_router": S(
+        lambda rng: ((rng.standard_normal((1, 2, 3)),
+                      rng.standard_normal((3, 3))), {"max_depth": 3}),
+        zero_tangent_ok=True, chain=False,
+        note="argmax router; gradient declared zero (aux losses train it)"),
+    # sparse — the sparse operand is declared constant (None cotangent),
+    # matching the reference rules; only the dense side is differentiated.
+    "grouped_gemm": S(lambda rng: ((rng.standard_normal((6, 3)),
+                                    rng.standard_normal((2, 3, 4)),
+                                    np.array([4, 2])), {}),
+                      diff_args=(0, 1)),
+    "sddmm": S(lambda rng: ((rng.standard_normal((4, 3)),
+                             rng.standard_normal((3, 5)),
+                             (rng.random((4, 5)) > 0.4).astype(np.float64)),
+                            {}), diff_args=(0, 1)),
+    "spmm_coo": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                rng.standard_normal((3, 5))), {}),
+                  diff_args=(1,)),
+    "spmm_csr": S(lambda rng: ((rng.standard_normal((4, 3)),
+                                rng.standard_normal((3, 5))), {}),
+                  diff_args=(1,)),
+    "bsmm": S(lambda rng: ((rng.standard_normal((4, 3)),
+                            rng.standard_normal((3, 5))), {}),
+              diff_args=(1,),
+              note="block layout opaque; sparse side declared constant"),
+    # clifford field calculus (3-D grid of Cl(3,0) multivectors)
+    "clifford_ext_deriv": S(
+        lambda rng: ((rng.standard_normal((3, 3, 3, 8)),), {}), rtol=1e-6),
+    "clifford_vec_deriv": S(
+        lambda rng: ((rng.standard_normal((3, 3, 3, 8)),), {}), rtol=1e-6),
+    "clifford_codiff": S(
+        lambda rng: ((rng.standard_normal((3, 3, 3, 8)),), {}), rtol=1e-6),
+    # ssm / linear-attention state
+    "selective_ssm": S(
+        lambda rng: ((rng.standard_normal((1, 4, 3)),
+                      np.abs(rng.standard_normal((3, 2))) * 0.5 + 0.2,
+                      rng.standard_normal((1, 4, 2)),
+                      rng.standard_normal((1, 4, 2)),
+                      np.abs(rng.standard_normal((1, 4, 3))) * 0.3 + 0.1),
+                     {}), rtol=1e-6),
+    "linear_attn_state": S(lambda rng: (_qkv(rng), {"feature_map": "elu"}),
+                           rtol=1e-6),
+    # attention family
+    "cross_attention": S(lambda rng: (_qkv(rng), {})),
+    "multi_head_attention": S(
+        lambda rng: ((rng.standard_normal((1, 4, 6)),
+                      rng.standard_normal((1, 4, 6)),
+                      rng.standard_normal((1, 4, 6))), {"num_heads": 2})),
+    "gqa_attention": S(
+        lambda rng: ((rng.standard_normal((1, 4, 4, 3)),
+                      rng.standard_normal((1, 2, 4, 3)),
+                      rng.standard_normal((1, 2, 4, 3))),
+                     {"num_query_heads": 4, "num_kv_heads": 2})),
+    "mqa_attention": S(
+        lambda rng: ((rng.standard_normal((1, 4, 4, 3)),
+                      rng.standard_normal((1, 1, 4, 3)),
+                      rng.standard_normal((1, 1, 4, 3))), {})),
+    "gated_attention": S(
+        lambda rng: (_qkv(rng) + (rng.standard_normal((1, 2, 4, 3)),),
+                     {"causal": True}), diff_args=(0, 1, 2, 3)),
+    "attn_compressed_blocks": S(
+        lambda rng: ((rng.standard_normal((1, 2, 4, 3)),
+                      rng.standard_normal((1, 2, 2, 3)),
+                      rng.standard_normal((1, 2, 2, 3))), {})),
+    "attn_local_window_2d": S(
+        lambda rng: ((rng.standard_normal((1, 2, 3, 3, 2)),
+                      rng.standard_normal((1, 2, 3, 3, 2)),
+                      rng.standard_normal((1, 2, 3, 3, 2))),
+                     {"window": (1, 1)})),
+    "attn_top_k_blocks": S(
+        lambda rng: (_qkv(rng),
+                     {"scores": rng.standard_normal((1, 2, 4, 2)),
+                      "top_k": 1, "block_size": 2, "causal": True}),
+        diff_args=(0, 1, 2)),
+    "deepseek_sparse_attention": S(
+        lambda rng: (_qkv(rng), {"window_size": 2, "block_size": 2,
+                                 "top_k": 1, "causal": True})),
+    "msa_sparse_attention": S(
+        lambda rng: (_qkv(rng), {"block_size": 2, "top_k": 1,
+                                 "causal": True})),
+    "msa_index_scores": S(
+        lambda rng: ((rng.standard_normal((1, 2, 4, 3)),
+                      rng.standard_normal((1, 2, 4, 3))),
+                     {"block_size": 2})),
+    "lookahead_sparse_attention": S(
+        lambda rng: (_qkv(rng), {"window_size": 2, "block_size": 2,
+                                 "tau": 2, "threshold": 0.1,
+                                 "causal": True})),
+    # fp32 statistics contract — central differences bottom out ~1e-2;
+    # the fused JVP's algebra was hand-verified against the rms/softmax
+    # normalizer terms, and the adjoint law holds at ~1e-7.
+    "depth_attn": S(lambda rng: ((rng.standard_normal(3),
+                                  rng.standard_normal((4, 3))),
+                                 {"eps": 1e-6}), rtol=1e-5, chain=False),
+    "lightning_attention": S(lambda rng: (_qkv(rng), {"causal": True}),
+                             rtol=1e-6),
+    "gated_deltanet": S(lambda rng: (_qkv(rng), {"causal": True}),
+                        rtol=1e-6),
+    "kimi_delta_attention": S(lambda rng: (_qkv(rng), {"causal": True}),
+                              rtol=1e-6),
+    "modified_delta_attention": S(lambda rng: (_qkv(rng), {"causal": True}),
+                                  rtol=1e-6),
+    "hybrid_attention": S(
+        lambda rng: (_qkv(rng), {"pattern": "auto", "layer_index": 0,
+                                 "causal": True}), rtol=1e-6),
+    "mla_decode": S(
+        lambda rng: ((rng.standard_normal((1, 2, 4, 3)),
+                      rng.standard_normal((1, 2, 4, 2)),
+                      rng.standard_normal((1, 2, 4, 2)),
+                      rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 3))), {})),
+    "mla_decode_fused": S(
+        lambda rng: ((rng.standard_normal((1, 4, 6)),
+                      rng.standard_normal((6, 2)),
+                      rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 3)),
+                      rng.standard_normal((1, 4, 3))), {"causal": False}),
+        rtol=1e-6),
+    "mrope_2d": S(
+        lambda rng: ((rng.standard_normal((1, 4, 8)),
+                      np.stack([np.arange(4), np.arange(4)]),
+                      10000.0 ** (-np.arange(4) / 4.0)),
+                     {"sections": (2, 2)}), diff_args=(0,)),
+})
+
+
+# ── AD-LAW-1n spec growth: the former vjp_only ops, now paired ───────────────
+
+
+def _packed_int4_matmul_inputs(rng):
+    from tessera.quantization import quantize_int4_packed
+
+    w = rng.standard_normal((6, 8))  # [N, K]
+    return ((rng.standard_normal((2, 8)),)
+            + tuple(quantize_int4_packed(w, group_size=4)),
+            {"group_size": 4})
+
+
+def _tridiag_inputs(rng, n=5):
+    dl = rng.standard_normal(n)
+    dl[0] = 0.0
+    du = rng.standard_normal(n)
+    du[-1] = 0.0
+    d = rng.standard_normal(n) + 4.0 * np.sign(rng.standard_normal(n) + 0.1)
+    return (dl, d, du, rng.standard_normal(n)), {}
+
+
+LAW_INPUT_SPECS.update({
+    "stop_gradient": S(lambda rng: ((rng.standard_normal((3, 4)),), {}),
+                       zero_tangent_ok=True, chain=False,
+                       note="zero derivative by definition"),
+    "embedding": S(lambda rng: ((rng.standard_normal((5, 3)),
+                                 np.array([0, 2, 4, 2])), {}),
+                   diff_args=(0,)),
+    "lstm_state_h": S(lambda rng: ((rng.standard_normal((2, 8)),), {})),
+    "lstm_state_c": S(lambda rng: ((rng.standard_normal((2, 8)),), {})),
+    "dropout": S(lambda rng: ((rng.standard_normal((3, 4)),),
+                              {"p": 0.3, "training": True, "seed": 7}),
+                 note="seeded mask — the same fail-closed contract as the "
+                      "rules; both modes reproduce the identical mask"),
+    "sparsemax": S(lambda rng: ((rng.standard_normal((3, 5)),), {})),
+    "entmax15": S(lambda rng: ((rng.standard_normal((3, 5)),), {}),
+                  rtol=1e-6),
+    "soft_top_k": S(lambda rng: ((rng.standard_normal((3, 6)),),
+                                 {"k": 2, "tau": 0.7})),
+    "top_k_routing": S(lambda rng: ((rng.standard_normal((3, 6)),),
+                                    {"k": 2})),
+    "gumbel_softmax": S(
+        lambda rng: ((rng.standard_normal((3, 5)),),
+                     {"tau": 0.8, "noise": rng.gumbel(size=(3, 5))}),
+        note="explicit noise so the probe is deterministic"),
+    "perturbed_argmax": S(
+        lambda rng: ((rng.standard_normal((2, 5)),),
+                     {"sigma": 1.0, "n_samples": 100, "seed": 3}),
+        chain=False, rtol=1e-8,
+        note="both modes draw the SAME seeded perturbations, so the "
+             "empirical adjoint identity is exact; FD of the estimator is "
+             "meaningless"),
+    "memory_index_select_ste": S(
+        lambda rng: ((rng.standard_normal((1, 1, 6, 4)),
+                      rng.standard_normal((1, 1, 2, 4))),
+                     {"threshold": 0.5}),
+        chain=False, note="STE: hard selection forward, smooth-score rules"),
+    "quantized_matmul": S(_packed_int4_matmul_inputs, diff_args=(0,),
+                          chain=False, rtol=1e-5,
+                          note="fp32 dequant path bounds the pairing at "
+                               "~1e-7; weights are frozen (STE-constant)"),
+    "tridiagonal_solve": S(_tridiag_inputs),
+    "depthwise_conv2d": S(
+        lambda rng: ((rng.standard_normal((1, 4, 4, 2)),
+                      rng.standard_normal((3, 3, 2))),
+                     {"kernel_size": (3, 3), "padding": (1, 1)})),
+    "game_boltzmann_value": S(
+        lambda rng: ((rng.standard_normal(8),), {"temperature": 1.0}),
+        rtol=1e-5),
+    "lstm_cell": S(
+        lambda rng: ((rng.standard_normal((2, 3)),
+                      rng.standard_normal((2, 4)),
+                      rng.standard_normal((2, 4)),
+                      rng.standard_normal((16, 3)),
+                      rng.standard_normal((16, 4)),
+                      rng.standard_normal(16),
+                      rng.standard_normal(16)), {})),
+})

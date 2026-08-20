@@ -40,8 +40,17 @@ class InputDesc:
 
     param: Any  # Parameter | None — typed loosely to avoid import cycle
     array_id: int
-    array: np.ndarray
+    array: Any  # np.ndarray, or list[np.ndarray] for a sequence operand
     is_literal: bool = False  # True for python-scalar operands (non-differentiable)
+    # Sequence operand (`cat`/`stack` take a *list* of arrays as ONE slot):
+    # per-element descriptors so backward can fan the rule's list-valued
+    # gradient out to each element's own producer link. `None` for ordinary
+    # single-array operands. AD-LAW-1j finding (2026-08-19): `_describe`
+    # previously returned `_NON_ARRAY` for a list of arrays, so the tape
+    # recorded NO operand and replay called `vjp_cat(dout)` — reverse mode
+    # through `ops.cat`/`ops.stack` was broken outright. Pinned by
+    # ``test_tape_differentiates_sequence_operands``.
+    elements: "tuple[InputDesc, ...] | None" = None
 
 
 @dataclass
@@ -186,6 +195,31 @@ class Tape:
 
             for desc, g in zip(entry.inputs, d_in):
                 if g is None:
+                    continue
+                if desc.elements is not None:
+                    # Sequence operand: the rule returns one list/tuple of
+                    # per-element gradients for this slot; fan each out to
+                    # its own element's producer link.
+                    if not isinstance(g, (list, tuple)) \
+                            or len(g) != len(desc.elements):
+                        got = (f"a {len(g)}-element sequence"
+                               if isinstance(g, (list, tuple))
+                               else type(g).__name__)
+                        raise TesseraAutodiffError(
+                            f"VJP for {entry.op!r} must return one gradient "
+                            f"per element for its {len(desc.elements)}-element "
+                            f"sequence operand; got {got}"
+                        )
+                    for edesc, eg in zip(desc.elements, g):
+                        if eg is None:
+                            continue
+                        eg = np.asarray(eg)
+                        if edesc.array_id in cotan:
+                            cotan[edesc.array_id] = cotan[edesc.array_id] + eg
+                        else:
+                            cotan[edesc.array_id] = eg
+                        if edesc.param is not None and accumulate_param_grad:
+                            _accumulate_param_grad(edesc.param, eg)
                     continue
                 g = np.asarray(g)
                 # Accumulate into the cotangent dict for downstream backward steps
@@ -387,6 +421,26 @@ def _describe(arg: Any):
     if isinstance(arg, (int, float)) and not isinstance(arg, bool):
         a = np.asarray(arg, dtype=np.float64)
         return InputDesc(param=None, array_id=id(arg), array=a, is_literal=True)
+
+    # Sequence operand: a list/tuple whose elements are ALL genuine
+    # array-likes (not int/float literals — a `(3, 4)` shape tuple or a
+    # `(0.1, 0.2)` mean tuple stays configuration). `cat`/`stack` take one
+    # such slot; the rule returns one list-valued gradient for it, and
+    # backward fans that out per element (see `Tape.backward`).
+    if isinstance(arg, (list, tuple)) and arg:
+        elem_descs = []
+        for e in arg:
+            d = _describe(e)
+            if d is _NON_ARRAY or d.is_literal or d.elements is not None:
+                break
+            elem_descs.append(d)
+        else:
+            return InputDesc(
+                param=None,
+                array_id=id(arg),
+                array=[d.array for d in elem_descs],
+                elements=tuple(elem_descs),
+            )
 
     return _NON_ARRAY
 

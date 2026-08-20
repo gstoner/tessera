@@ -28,6 +28,12 @@ from .nonsmooth import (
 # decorator) to add or override.
 _VJPS: dict[str, Callable] = {}
 
+
+def _np_mT(x):
+    """Last-two-axis transpose — the batched adjoint spelling of ``.T``."""
+    return np.swapaxes(x, -1, -2)
+
+
 _FFTNorm = Literal["backward", "ortho", "forward"]
 
 
@@ -1074,9 +1080,21 @@ def vjp_sum(dout, x, *, axis=None, keepdims=False, **_):
 
 
 @_vjp("dropout")
-def vjp_dropout(dout, x, *, p=0.1, training=True, seed=None, **_):
+def vjp_dropout(dout, x, *, p=0.1, training=True, seed=None, rng=None, **_):
     if not training or p == 0.0:
         return (dout,)
+    if rng is not None and seed is None:
+        # Declared, not swallowed (PR #594 review): forward mode can
+        # consume a caller generator (it draws the mask once for primal
+        # and tangent together — see jvp_dropout), but reverse replay
+        # runs AFTER the forward advanced the generator's state, so the
+        # mask is unrecoverable. Fail closed with the reason.
+        raise ValueError(
+            "dropout backward cannot replay a stateful rng= generator — "
+            "its state advanced past the forward's draws. Pass seed=… "
+            "for reverse-mode dropout (nn.Dropout does this while "
+            "training); rng= is supported in forward mode only."
+        )
     if seed is None:
         # The mask is not stored on the tape; backward can only reproduce it
         # from a seed. With seed=None we would draw a *fresh, independent*
@@ -5241,15 +5259,20 @@ def vjp_spmm_csr(dout, sparse_a, dense_b, **_):
 
 
 @_vjp("sddmm")
-def vjp_sddmm(dout, sparse_mask, dense_a, dense_b, **_):
-    """Sampled dense-dense matmul. Treat mask as constant; dout already
-    carries zeros where mask was off."""
-    do = np.asarray(dout, dtype=np.float64)
+def vjp_sddmm(dout, dense_a, dense_b, sparse_mask, **_):
+    """y = (A @ B) * mask — adjoint of the canonical ``sddmm(A, B, mask)``.
+
+    The mask is applied to the cotangent HERE (derived, not assumed
+    pre-masked — Decision #30): dA = (dout∘mask) Bᵀ, dB = Aᵀ (dout∘mask).
+    See ``jvp_sddmm`` for the AD-LAW-1l operand-order finding this fixed.
+    """
+    do = np.asarray(dout, dtype=np.float64) \
+        * np.asarray(sparse_mask, dtype=np.float64)
     A = np.asarray(dense_a, dtype=np.float64)
     B = np.asarray(dense_b, dtype=np.float64)
-    dA = do @ B
-    dB = do.T @ A
-    return (None, dA, dB)
+    dA = do @ B.T
+    dB = A.T @ do
+    return (dA, dB, None)
 
 
 @_vjp("bsmm")
@@ -5334,14 +5357,31 @@ def vjp_svd(dout, A, **_):
         dU = np.zeros_like(U)
         ds = np.asarray(dout, dtype=np.float64)
         dVt = np.zeros_like(Vt)
+    # Batch-aware over leading dims (PR #594 review, matching the JVP and
+    # the batch-capable canonical forward): last-two-axis transposes,
+    # broadcast S-scaling, and an einsum-built diagonal.
+    mT = lambda x: np.swapaxes(x, -1, -2)  # noqa: E731 — local adjoint spelling
     s2 = s ** 2
-    eps = 1e-12
-    F = 1.0 / (s2[None, :] - s2[:, None] + np.eye(len(s)) * eps)
-    np.fill_diagonal(F, 0.0)
-    UtdU = U.T @ dU
-    VdVt = Vt @ dVt.T
-    S = np.diag(s)
-    dA = U @ ((F * (UtdU - UtdU.T)) @ S + np.diag(ds) + S @ (F * (VdVt - VdVt.T))) @ Vt
+    eye = np.eye(s.shape[-1])
+    F = (1.0 - eye) / (s2[..., None, :] - s2[..., :, None] + eye)
+    UtdU = mT(U) @ dU
+    VdVt = Vt @ mT(dVt)
+    inner = ((F * (UtdU - mT(UtdU))) * s[..., None, :]
+             + eye * ds[..., None, :]
+             + s[..., :, None] * (F * (VdVt - mT(VdVt))))
+    dA = U @ inner @ Vt
+    # Projector-term adjoints for non-square A (thin SVD): the JVP's
+    # out-of-range components (I − UUᵀ) dA V S⁻¹ (tall) and
+    # (I − VVᵀ) dAᵀ U S⁻¹ (wide) carry cotangent mass back into dA.
+    # AD-LAW-1 finding (2026-08-19): without them the pair fails the
+    # adjoint law on any non-square input — surfaced through
+    # `factorized_matmul`'s wide product. Pinned by
+    # ``test_svd_adjoint_holds_off_square``.
+    m, n = A_arr.shape[-2], A_arr.shape[-1]
+    if m > n:
+        dA = dA + ((dU - U @ (mT(U) @ dU)) / s[..., None, :]) @ Vt
+    elif n > m:
+        dA = dA + U @ ((dVt - (dVt @ mT(Vt)) @ Vt) / s[..., :, None])
     return (dA,)
 
 
@@ -5525,7 +5565,30 @@ def vjp_grouped_gemm(dout, x, weights, group_sizes, **_):
 
 @_vjp("factorized_matmul")
 def vjp_factorized_matmul(dout, a, b, *, rank=None, **_):
-    return vjp_batched_gemm(dout, a, b)
+    """Adjoint of the rank-r SVD truncation of (a @ b) — see
+    ``jvp_factorized_matmul`` for the AD-LAW-1 finding this fixed. The
+    cotangent lands on the kept (U_r, s_r, Vt_r) triple, zero-pads to the
+    thin-SVD width, flows through ``vjp_svd`` to the product, then splits
+    bilinearly."""
+    mT = _np_mT
+    a_arr = np.asarray(a, dtype=np.float64)
+    b_arr = np.asarray(b, dtype=np.float64)
+    dout_arr = np.asarray(dout, dtype=np.float64)
+    m_prod = a_arr @ b_arr
+    u, s, vt = np.linalg.svd(m_prod, full_matrices=False)
+    if rank is None:
+        r = s.shape[-1]
+    else:
+        r = max(1, min(int(rank), s.shape[-1]))
+    du = np.zeros_like(u)
+    ds = np.zeros_like(s)
+    dvt = np.zeros_like(vt)
+    du[..., :r] = dout_arr @ mT(vt[..., :r, :]) * s[..., None, :r]
+    ds[..., :r] = np.einsum("...ir,...ij,...rj->...r", u[..., :r],
+                            dout_arr, vt[..., :r, :])
+    dvt[..., :r, :] = s[..., :r, None] * (mT(u[..., :r]) @ dout_arr)
+    (dm,) = vjp_svd((du, ds, dvt), m_prod)
+    return dm @ mT(b_arr), mT(a_arr) @ dm
 
 
 @_vjp("einsum")
@@ -5577,23 +5640,32 @@ def _numeric_conv_vjp(op_name, dout, *primals, **kwargs):
 
 
 @_vjp("conv2d")
-def vjp_conv2d(dout, x, weight, bias=None, *, stride=1, padding=0, **_):
+def vjp_conv2d(dout, x, weight, bias=None, *, stride=1, padding=0,
+               layout="nhwc", **_):
+    # `layout` must reach the numeric probe: differentiating the nhwc map
+    # for an nchw caller is a silently-wrong gradient, not a fallback
+    # (AD-LAW-1 forward-key swallow triage, 2026-08-19).
     if bias is None:
         grads = _numeric_conv_vjp("conv2d", dout, x, weight,
-                                  stride=stride, padding=padding)
+                                  stride=stride, padding=padding,
+                                  layout=layout)
         return grads + (None,)
     return _numeric_conv_vjp("conv2d", dout, x, weight, bias,
-                             stride=stride, padding=padding)
+                             stride=stride, padding=padding, layout=layout)
 
 
 @_vjp("conv3d")
-def vjp_conv3d(dout, x, weight, bias=None, *, stride=1, padding=0, **_):
+def vjp_conv3d(dout, x, weight, bias=None, *, stride=1, padding=0,
+               layout="ndhwc", **_):
+    # See vjp_conv2d: the caller's layout must reach the numeric probe
+    # (AD-LAW-1 forward-key swallow triage, 2026-08-19).
     if bias is None:
         grads = _numeric_conv_vjp("conv3d", dout, x, weight,
-                                  stride=stride, padding=padding)
+                                  stride=stride, padding=padding,
+                                  layout=layout)
         return grads + (None,)
     return _numeric_conv_vjp("conv3d", dout, x, weight, bias,
-                             stride=stride, padding=padding)
+                             stride=stride, padding=padding, layout=layout)
 
 
 @_vjp("conv_transpose")
@@ -5629,11 +5701,19 @@ def vjp_qkv_projection(dout, *primals, **kwargs):
 
 @_vjp("weight_norm")
 def vjp_weight_norm(dout, v, *, axis=-1, eps=1e-12, **_):
-    """w = v / ||v||.  ∂w/∂v = I/||v|| - vv^T / ||v||^3 (single-axis version)."""
+    """w = v / ||v|| with the norm over ALL axes except `axis` (the kept
+    axis — canonical ``nn.functional.weight_norm`` semantics, eps inside
+    the sqrt). ∂w/∂v is the same projection kernel as the JVP, which is
+    self-adjoint. AD-LAW-1 finding (2026-08-19): this rule previously
+    normalized *along* ``axis`` with eps outside the norm — see
+    ``jvp_weight_norm`` for the pinned vocabulary-class regression test.
+    """
     v_arr = np.asarray(v, dtype=np.float64)
     dout_arr = np.asarray(dout, dtype=np.float64)
-    n = np.linalg.norm(v_arr, axis=axis, keepdims=True) + eps
-    inner = (v_arr * dout_arr).sum(axis=axis, keepdims=True)
+    kept = axis if axis >= 0 else v_arr.ndim + axis
+    reduce_axes = tuple(i for i in range(v_arr.ndim) if i != kept)
+    n = np.sqrt(np.sum(v_arr * v_arr, axis=reduce_axes, keepdims=True) + eps)
+    inner = np.sum(v_arr * dout_arr, axis=reduce_axes, keepdims=True)
     dv = dout_arr / n - v_arr * inner / (n ** 3)
     return (dv,)
 

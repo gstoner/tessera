@@ -2070,7 +2070,12 @@ def jvp_adafactor(primals, tangents, *, lr=1e-3, beta2=0.999, eps=1e-30, **kwarg
         return ts_optim.adafactor(p, g, s, lr=lr, beta2=beta2, eps=eps, **kwargs)[0]
 
     primal = forward(params, grads, state)
-    h = 1e-6
+    # The forward's state/compute path is float32 (`compute_dtype="fp32"`),
+    # so the FD step must respect fp32's noise floor: central differences
+    # with h=1e-6 are dominated by ~1e-7 rounding (measured rel error
+    # ~2e-2); h=1e-3 sits near the fp32 optimum (measured ~6e-6).
+    # AD-LAW-1l finding, 2026-08-19.
+    h = 1e-3
     plus = forward(
         np.asarray(params, dtype=np.float64) + h * np.asarray(dparams, dtype=np.float64),
         np.asarray(grads, dtype=np.float64) + h * np.asarray(dgrads, dtype=np.float64),
@@ -2603,13 +2608,26 @@ def jvp_simple_rnn_cell(primals, tangents, *, activation="tanh", **_):
 @_jvp("gru_cell")
 def jvp_gru_cell(primals, tangents, **_):
     """GRU cell forward + tangent. Uses re-forward with tangent propagation
-    through each gate."""
+    through each gate.
+
+    AD-LAW-1l finding (2026-08-19): this rule previously read only the
+    first four primals — a call carrying ``b_ih``/``b_hh`` got a
+    *bias-free* primal (a different function than `vjp_gru_cell`, which
+    adds the biases) and the bias tangents were silently dropped. Pinned
+    by ``test_gru_cell_jvp_carries_the_biases``.
+    """
     x, h, W_ih, W_hh = (np.asarray(p, dtype=np.float64) for p in primals[:4])
     dx, dh, dW_ih, dW_hh = (np.asarray(t, dtype=np.float64) for t in tangents[:4])
     gates_x = x @ W_ih
     gates_h = h @ W_hh
     dgates_x = dx @ W_ih + x @ dW_ih
     dgates_h = dh @ W_hh + h @ dW_hh
+    if len(primals) > 4 and primals[4] is not None:
+        gates_x = gates_x + np.asarray(primals[4], dtype=np.float64)
+        dgates_x = dgates_x + _t(4, tangents, primals[4])
+    if len(primals) > 5 and primals[5] is not None:
+        gates_h = gates_h + np.asarray(primals[5], dtype=np.float64)
+        dgates_h = dgates_h + _t(5, tangents, primals[5])
     x_z, x_r, x_n = np.split(gates_x, 3, axis=-1)
     h_z, h_r, h_n = np.split(gates_h, 3, axis=-1)
     dx_z, dx_r, dx_n = np.split(dgates_x, 3, axis=-1)
@@ -2800,23 +2818,24 @@ def jvp_dct(
 
 @_jvp("spectral_filter")
 def jvp_spectral_filter(primals, tangents, **_):
-    x = np.asarray(primals[0], dtype=np.float64)
-    dx = np.asarray(tangents[0], dtype=np.float64)
-    f = np.asarray(primals[1], dtype=np.float64)
-    df = (
-        np.asarray(tangents[1], dtype=np.float64) if len(tangents) > 1 and tangents[1] is not None else np.zeros_like(f)
-    )
-    spectrum = np.fft.rfft(x, axis=-1)
-    dspectrum = np.fft.rfft(dx, axis=-1)
-    f_truncated = f[..., : spectrum.shape[-1]]
-    df_truncated = df[..., : spectrum.shape[-1]]
-    out = np.fft.irfft(spectrum * f_truncated, n=x.shape[-1], axis=-1)
-    dout = np.fft.irfft(
-        dspectrum * f_truncated + spectrum * df_truncated,
-        n=x.shape[-1],
-        axis=-1,
-    )
-    return out, dout
+    """Y = Xf · Hf — the canonical forward is a COMPLEX pointwise product
+    of two frequency-domain tensors; bilinear ⇒ dY = dXf·Hf + Xf·dHf.
+
+    AD-LAW-1k finding (2026-08-19): this rule previously differentiated a
+    *different function* — rfft(x)·f → irfft of a real time-domain signal
+    — and cast complex inputs to float64, silently discarding the
+    imaginary part (`vjp_spectral_filter` was always the conj-adjoint of
+    the canonical product). The tri_solve vocabulary class. Pinned by
+    ``test_spectral_filter_jvp_is_the_complex_product_rule``.
+    """
+    xf = np.asarray(primals[0], dtype=np.complex128)
+    hf = np.asarray(primals[1], dtype=np.complex128)
+    dxf = (np.asarray(tangents[0], dtype=np.complex128)
+           if tangents[0] is not None else np.zeros_like(xf))
+    dhf = (np.asarray(tangents[1], dtype=np.complex128)
+           if len(tangents) > 1 and tangents[1] is not None
+           else np.zeros_like(hf))
+    return xf * hf, dxf * hf + xf * dhf
 
 
 
@@ -2838,14 +2857,22 @@ def jvp_spmm_csr(primals, tangents, **_):
 
 @_jvp("sddmm")
 def jvp_sddmm(primals, tangents, **_):
-    """y = mask * (A @ B^T) — bilinear in (A, B)."""
-    mask = np.asarray(primals[0], dtype=np.float64)
-    A = np.asarray(primals[1], dtype=np.float64)
-    B = np.asarray(primals[2], dtype=np.float64)
-    dA = np.asarray(tangents[1], dtype=np.float64)
-    dB = np.asarray(tangents[2], dtype=np.float64)
-    out = mask * (A @ B.T)
-    dout = mask * (dA @ B.T + A @ dB.T)
+    """y = (A @ B) * mask — the canonical ``sddmm(A, B, mask)``; bilinear
+    in (A, B), mask non-differentiable.
+
+    AD-LAW-1l finding (2026-08-19): both rules previously assumed a
+    ``(mask, A, B)`` operand order AND a transposed product ``A @ Bᵀ`` —
+    neither matches the canonical forward, so tape replay bound A to the
+    mask slot and differentiated a different function silently. Pinned by
+    ``test_sddmm_rules_match_the_canonical_operand_order``.
+    """
+    A = np.asarray(primals[0], dtype=np.float64)
+    B = np.asarray(primals[1], dtype=np.float64)
+    mask = np.asarray(primals[2], dtype=np.float64)
+    dA = _t(0, tangents, A)
+    dB = _t(1, tangents, B)
+    out = (A @ B) * mask
+    dout = (dA @ B + A @ dB) * mask
     return out, dout
 
 
@@ -2901,26 +2928,69 @@ def jvp_cholesky(primals, tangents, **_):
 
 @_jvp("qr")
 def jvp_qr(primals, tangents, **_):
-    """A = Q R. Reference handles full-rank square A."""
+    """A = Q R. Reference handles full-rank A (square or tall).
+
+    With ``M = Qᵀ dA R⁻¹``, uniqueness of the decomposition ``M = QᵀdQ +
+    dR R⁻¹`` (skew + upper) gives ``QᵀdQ = L(M) − L(M)ᵀ`` and ``dR R⁻¹ =
+    triu(M,1) + diag(M) + L(M)ᵀ`` where L is the strictly-lower part.
+
+    AD-LAW-1 finding (2026-08-19): the previous dR dropped the ``L(M)ᵀ``
+    term (its ``±0.5·diag`` correction cancelled itself to exactly
+    ``triu(M) @ R``), off by O(1) against central differences — pinned by
+    ``test_qr_jvp_matches_finite_differences``.
+    """
     A = np.asarray(primals[0], dtype=np.float64)
     dA = np.asarray(tangents[0], dtype=np.float64)
     Q, R = np.linalg.qr(A)
-    M = Q.T @ dA @ np.linalg.inv(R)
-    n = R.shape[0]
-    skew = np.tril(M, -1) - np.tril(M, -1).T
-    dQ = Q @ skew + (dA - Q @ Q.T @ dA) @ np.linalg.inv(R)
-    dR = (np.triu(M) + 0.5 * np.diag(np.diag(M).copy()) - 0.5 * np.diag(np.diag(M).copy())) @ R
+    Rinv = np.linalg.inv(R)
+    M = Q.T @ dA @ Rinv
+    low = np.tril(M, -1)
+    dQ = Q @ (low - low.T) + (dA - Q @ (Q.T @ dA)) @ Rinv
+    dR = (np.triu(M, 1) + np.diag(np.diag(M)) + low.T) @ R
     return (Q, R), (dQ, dR)
 
 
 @_jvp("svd")
 def jvp_svd(primals, tangents, **_):
-    """A = U diag(s) V^T. Returns the tuple (U, s, V^T) with its tangent."""
+    """A = U diag(s) V^T (thin). Full tangent for distinct singular values.
+
+    With ``dP = Uᵀ dA Vᵀᵀ`` and ``F_ij = 1/(s_j² − s_i²)`` off-diagonal:
+
+        ds  = diag(dP)
+        dU  = U (F ∘ (dP S + S dPᵀ)) + (I − UUᵀ) dA V S⁻¹
+        dV  = V (F ∘ (S dP + dPᵀ S)) + (I − VVᵀ) dAᵀ U S⁻¹
+
+    the projector terms carrying the out-of-range components for
+    non-square A. AD-LAW-1 finding (2026-08-19): this rule previously
+    returned **zero** dU/dVt while `vjp_svd` handles full (dU, ds, dVt)
+    cotangents, so the pair failed the adjoint law on any probe touching
+    the singular vectors — pinned by
+    ``test_svd_jvp_matches_finite_differences``.
+
+    Batch-aware over leading dims (PR #594 review): the canonical
+    ``ops.svd`` forward accepts stacked matrices, so the rule pair must
+    too — all transposes are last-two-axis swaps and the diagonal /
+    S-scaling operations broadcast over the batch.
+    """
     A = np.asarray(primals[0], dtype=np.float64)
     dA = np.asarray(tangents[0], dtype=np.float64)
     U, s, Vt = np.linalg.svd(A, full_matrices=False)
-    ds = np.diag(U.T @ dA @ Vt.T)
-    return (U, s, Vt), (np.zeros_like(U), ds, np.zeros_like(Vt))
+    mT = lambda x: np.swapaxes(x, -1, -2)  # noqa: E731 — local adjoint spelling
+    dP = mT(U) @ dA @ mT(Vt)
+    ds = np.einsum("...ii->...i", dP).copy()
+    s2 = s ** 2
+    eye = np.eye(s.shape[-1])
+    F = (1.0 - eye) / (s2[..., None, :] - s2[..., :, None] + eye)
+    m, n = A.shape[-2], A.shape[-1]
+    dU = U @ (F * (dP * s[..., None, :] + s[..., :, None] * mT(dP)))
+    dV = mT(Vt) @ (F * (s[..., :, None] * dP + mT(dP) * s[..., None, :]))
+    if m > n:
+        dAV = dA @ mT(Vt)
+        dU = dU + (dAV - U @ (mT(U) @ dAV)) / s[..., None, :]
+    elif n > m:
+        dAtU = mT(dA) @ U
+        dV = dV + (dAtU - mT(Vt) @ (Vt @ dAtU)) / s[..., None, :]
+    return (U, s, Vt), (dU, ds, mT(dV))
 
 
 # ── bidirectional_scan placeholder ─────────────────────────────────────────
@@ -3482,9 +3552,20 @@ def jvp_cross_attention(primals, tangents, *, scale=None, mask=None, **_):
 
 
 @_jvp("mor_partition")
-def jvp_mor_partition(primals, tangents, **kwargs):
-    """Mixture-of-recursions partition is linear in the inputs."""
-    return jvp_cat(primals, tangents, **kwargs)
+def jvp_mor_partition(primals, tangents, *, step=None, **_):
+    """The canonical forward returns the BOOL mask ``depth >= step`` —
+    non-differentiable by declaration (`vjp_mor_partition` already says
+    so and returns zeros).
+
+    AD-LAW-1l finding (2026-08-19): this rule previously delegated to
+    ``jvp_cat`` under a "partition is linear" comment — a different op
+    with a different signature; the jvp_mor_scatter delegation class.
+    Pinned by ``test_mor_partition_jvp_is_the_zero_mask_rule``.
+    """
+    x, depth = primals[0], primals[1]
+    del x
+    mask = np.asarray(depth) >= int(step if step is not None else 1)
+    return mask, np.zeros(mask.shape, dtype=np.float64)
 
 
 @_jvp("mor_router")
@@ -3506,8 +3587,27 @@ def jvp_mor_router(primals, tangents, **kwargs):
 
 @_jvp("mor_scatter")
 def jvp_mor_scatter(primals, tangents, **kwargs):
-    """Scatter step in MoR — linear in `updates`."""
-    return jvp_scatter(primals, tangents, **kwargs)
+    """y = where(mask, updated, full) over (B, S, D) with a (B, S) mask —
+    linear in both `full` and `updated`; `mask` is non-differentiable.
+
+    AD-LAW-1 finding (2026-08-19): this rule previously delegated to
+    ``jvp_scatter``, whose signature is ``(x, indices, updates)`` — the
+    MoR ``updated`` tensor landed in the *indices* slot and the mask in
+    the *updates* slot, so forward mode either crashed or gathered
+    garbage. `vjp_mor_scatter` (the where-mask rule below it) was always
+    correct; the pair now matches. Pinned by
+    ``test_mor_scatter_jvp_is_the_where_rule``.
+    """
+    full, updated, mask = primals
+    d_full = _t(0, tangents, full)
+    d_updated = _t(1, tangents, updated)
+    full_arr = np.asarray(full, dtype=np.float64)
+    m = np.broadcast_to(np.asarray(mask, dtype=bool)[..., None],
+                        full_arr.shape)
+    out = np.where(m, np.asarray(updated, dtype=np.float64), full_arr)
+    dout = np.where(m, np.asarray(d_updated, dtype=np.float64),
+                    np.asarray(d_full, dtype=np.float64))
+    return out, dout
 
 
 # ── elementwise long-tail ──────────────────────────────────────────────────
@@ -3635,23 +3735,27 @@ def jvp_rmsnorm_safe(primals, tangents, *, eps=1e-6, **_):
 
 @_jvp("weight_norm")
 def jvp_weight_norm(primals, tangents, *, axis=-1, eps=1e-12, **_):
-    """w_norm = g * v / ||v||.  Reference uses g implicit (=1).  JVP via the
-    numeric rule for now — the closed form is straightforward but the
-    reference op accepts variable signatures."""
-    from tessera import ops as _ops
+    """w = v / ||v|| where the norm reduces over ALL axes except `axis`.
 
-    fn = getattr(_ops, "weight_norm", None)
-    if fn is None:
-        (v,) = primals
-        (dv,) = tangents
-        v_arr = np.asarray(v, dtype=np.float64)
-        dv_arr = np.asarray(dv, dtype=np.float64)
-        n = np.linalg.norm(v_arr, axis=axis, keepdims=True) + eps
-        primal = v_arr / n
-        dn = (v_arr * dv_arr).sum(axis=axis, keepdims=True) / n
-        return primal, dv_arr / n - v_arr * dn / (n * n)
-    fn = getattr(fn, "__wrapped__", fn)
-    return _numeric_jvp_rule(lambda *a: fn(*a, axis=axis, eps=eps), primals, tangents)
+    ``axis`` names the **kept** axis (the canonical
+    ``nn.functional.weight_norm`` / torch semantics), and eps sits inside
+    the sqrt: ``n = sqrt(Σ_reduce v² + eps)``. AD-LAW-1 finding
+    (2026-08-19): the closed-form fallback here (and `vjp_weight_norm`)
+    read ``axis`` as the *reduced* axis with eps outside the norm — the
+    tri_solve vocabulary class: differentiating a different function than
+    the canonical forward. Pinned by
+    ``test_weight_norm_rules_match_the_kept_axis_semantics``.
+    """
+    (v,) = primals
+    (dv,) = tangents
+    v_arr = np.asarray(v, dtype=np.float64)
+    dv_arr = np.asarray(dv, dtype=np.float64)
+    kept = axis if axis >= 0 else v_arr.ndim + axis
+    reduce_axes = tuple(i for i in range(v_arr.ndim) if i != kept)
+    n = np.sqrt(np.sum(v_arr * v_arr, axis=reduce_axes, keepdims=True) + eps)
+    primal = v_arr / n
+    dn = np.sum(v_arr * dv_arr, axis=reduce_axes, keepdims=True) / n
+    return primal, dv_arr / n - v_arr * dn / (n * n)
 
 
 @_jvp("spectral_norm")
@@ -3878,8 +3982,35 @@ def jvp_grouped_gemm(primals, tangents, **_):
 
 @_jvp("factorized_matmul")
 def jvp_factorized_matmul(primals, tangents, *, rank=None, **_):
-    """y = (a @ b) when rank is given; bilinear → dy = da@b + a@db."""
-    return jvp_batched_gemm(primals, tangents)
+    """y = rank-r SVD truncation of (a @ b) — the canonical forward
+    recompresses the product, so the derivative must pass through the
+    truncation, not just the bilinear product.
+
+    AD-LAW-1 finding (2026-08-19): this rule (and its VJP) previously
+    differentiated the plain gemm, ignoring the truncation — the chain
+    law's primal-consistency gate caught the JVP producing a different
+    function's output. Both rules now compose the bilinear product rule
+    with the svd rules and reconstruct the truncated triple. Pinned by
+    ``test_factorized_matmul_differentiates_the_truncation``.
+    """
+    a, b = primals
+    a_arr = np.asarray(a, dtype=np.float64)
+    b_arr = np.asarray(b, dtype=np.float64)
+    da = _t(0, tangents, a_arr)
+    db = _t(1, tangents, b_arr)
+    m_prod = a_arr @ b_arr
+    dm = da @ b_arr + a_arr @ db
+    (u, s, vt), (du, ds, dvt) = jvp_svd((m_prod,), (dm,))
+    if rank is None:
+        r = s.shape[-1]
+    else:
+        r = max(1, min(int(rank), s.shape[-1]))
+    s_r = s[..., None, :r]  # explicit row axis so batch dims broadcast
+    y = (u[..., :r] * s_r) @ vt[..., :r, :]
+    dy = ((du[..., :r] * s_r) @ vt[..., :r, :]
+          + (u[..., :r] * ds[..., None, :r]) @ vt[..., :r, :]
+          + (u[..., :r] * s_r) @ dvt[..., :r, :])
+    return y, dy
 
 
 @_jvp("qkv_projection")
@@ -4301,3 +4432,272 @@ def _apply_istft_crops(value, cfg, fft_length):
     return out
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AD-LAW-1n — vjp_only closure (2026-08-19).
+#
+# Every op below had a registered VJP and no JVP, so forward mode failed on
+# contact. Three patterns close the set:
+#   * symmetric-Jacobian projections (sparsemax family, softmax-style
+#     routing): J = Jᵀ, so the JVP IS the registered VJP applied to the
+#     tangent — one implementation per boundary (Decision #31), the
+#     symmetry recorded here rather than duplicated math;
+#   * seeded stochastic estimators (dropout, perturbed_argmax): the tangent
+#     uses the SAME seed-derived draws as the forward/VJP, so the empirical
+#     adjoint identity holds exactly;
+#   * mechanical mirrors (embedding gather, LSTM step, tridiagonal solve,
+#     bilinear depthwise conv, packed-int4 matmul with frozen weights).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@_jvp("stop_gradient")
+def jvp_stop_gradient(primals, tangents, **_):
+    (x,) = primals
+    return np.asarray(x), np.zeros_like(np.asarray(x, dtype=np.float64))
+
+
+@_jvp("embedding")
+def jvp_embedding(primals, tangents, **_):
+    table, ids = primals
+    idx = np.asarray(ids, dtype=np.int64)
+    dtable = _t(0, tangents, table)
+    return np.asarray(table)[idx], np.asarray(dtable)[idx]
+
+
+@_jvp("lstm_state_h")
+def jvp_lstm_state_h(primals, tangents, **_):
+    (packed,) = primals
+    dpacked = _t(0, tangents, packed)
+    H = np.asarray(packed).shape[-1] // 2
+    return np.asarray(packed)[..., :H], np.asarray(dpacked)[..., :H]
+
+
+@_jvp("lstm_state_c")
+def jvp_lstm_state_c(primals, tangents, **_):
+    (packed,) = primals
+    dpacked = _t(0, tangents, packed)
+    H = np.asarray(packed).shape[-1] // 2
+    return np.asarray(packed)[..., H:], np.asarray(dpacked)[..., H:]
+
+
+@_jvp("dropout")
+def jvp_dropout(primals, tangents, *, p=0.1, training=True, seed=None,
+                rng=None, **_):
+    """Forward mode draws the mask ONCE and applies it to primal and
+    tangent together, so — unlike reverse replay, which cannot recover a
+    stateful generator's past draws — a caller-supplied ``rng=`` is a
+    lawful mask source here (PR #594 review). The generator precedence
+    mirrors the canonical forward exactly: ``rng`` wins when given
+    (unwrapping a ``._generator()`` carrier), then ``seed``; with
+    neither, forward mode fails closed the same way the VJP does."""
+    (x,) = primals
+    x_arr = np.asarray(x, dtype=np.float64)
+    dx = _t(0, tangents, x_arr)
+    if not training or p == 0.0:
+        return x_arr, np.asarray(dx, dtype=np.float64)
+    if rng is not None and hasattr(rng, "_generator"):
+        generator = rng._generator()
+    elif rng is not None:
+        generator = rng
+    elif seed is not None:
+        generator = np.random.default_rng(int(seed))
+    else:
+        raise ValueError(
+            "dropout is not differentiable without a reproducible mask "
+            "source — the same contract as its VJP; pass seed=… or rng=… "
+            "(nn.Dropout assigns a seed automatically while training)."
+        )
+    mask = generator.binomial(1, 1.0 - p, x_arr.shape) / (1.0 - p)
+    return x_arr * mask, np.asarray(dx, dtype=np.float64) * mask
+
+
+def _jvp_via_symmetric_vjp(name, extra_note):
+    """JVP for an op whose Jacobian is symmetric (a projection of the form
+    diag(s) − s sᵀ/⟨s,1⟩): J v = Jᵀ v, so the registered VJP applied to the
+    tangent IS the pushforward. One implementation per boundary (#31)."""
+    del extra_note
+
+    @_jvp(name)
+    def _impl(primals, tangents, **kwargs):
+        from tessera import ops as _ops
+        from .vjp import get_vjp
+
+        fwd = getattr(_ops, name)
+        fwd = getattr(fwd, "__wrapped__", fwd)
+        out = np.asarray(fwd(*primals, **kwargs), dtype=np.float64)
+        dz = _t(0, tangents, primals[0])
+        vjp_fn = get_vjp(name)
+        if vjp_fn is None:  # pragma: no cover — registration order guard
+            raise RuntimeError(f"symmetric-Jacobian JVP for {name!r} "
+                               f"requires its VJP to be registered")
+        grads = vjp_fn(dz, *primals, **kwargs)
+        return out, np.asarray(grads[0], dtype=np.float64)
+
+    _impl.__name__ = f"jvp_{name}"
+    return _impl
+
+
+_jvp_via_symmetric_vjp("sparsemax", "J = diag(s) − s sᵀ/|S| on the support")
+_jvp_via_symmetric_vjp("entmax15", "J = diag(s) − s sᵀ/⟨s,1⟩, s = √p")
+_jvp_via_symmetric_vjp("soft_top_k", "J = diag(a) − a aᵀ/Σa (implicit thresh)")
+_jvp_via_symmetric_vjp("top_k_routing",
+                       "softmax Jacobian on the fixed top-k support")
+_jvp_via_symmetric_vjp("gumbel_softmax",
+                       "tempered softmax Jacobian at the drawn noise")
+
+
+@_jvp("perturbed_argmax")
+def jvp_perturbed_argmax(primals, tangents, *, sigma=1.0, n_samples=500,
+                         seed=0, axis=-1, **_):
+    """Score-function pushforward E[y (gᵀv)]/σ with the SAME seeded draws
+    as the forward and the VJP, so ⟨Ĵv, u⟩ = ⟨v, Ĵᵀu⟩ holds exactly for
+    the empirical Jacobian."""
+    from tessera import ops as _ops
+
+    fwd = getattr(_ops.perturbed_argmax, "__wrapped__", _ops.perturbed_argmax)
+    (z,) = primals
+    out = np.asarray(fwd(z, sigma=sigma, n_samples=n_samples, seed=seed,
+                         axis=axis), dtype=np.float64)
+    x = np.moveaxis(np.asarray(z, dtype=np.float64), axis, -1)
+    v = np.moveaxis(np.asarray(_t(0, tangents, z), dtype=np.float64),
+                    axis, -1)
+    rng = np.random.default_rng(seed)
+    n = x.shape[-1]
+    acc = np.zeros_like(x)
+    for _i in range(int(n_samples)):
+        g = rng.standard_normal(x.shape)
+        idx = np.argmax(x + float(sigma) * g, axis=-1)
+        onehot = np.eye(n)[idx]
+        weight = np.sum(g * v, axis=-1, keepdims=True)
+        acc = acc + onehot * weight / float(sigma)
+    dy = acc / int(n_samples)
+    return out, np.moveaxis(dy, -1, axis)
+
+
+@_jvp("memory_index_select_ste")
+def jvp_memory_index_select_ste(primals, tangents, *, threshold=0.5,
+                                scale=None, **_):
+    """STE: the hard selection's tangent is the smooth score's tangent —
+    the forward-mode mirror of `vjp_memory_index_select_ste`."""
+    from tessera import ops as _ops
+
+    fwd = getattr(_ops.memory_index_select_ste, "__wrapped__",
+                  _ops.memory_index_select_ste)
+    out = np.asarray(fwd(*primals, threshold=threshold, scale=scale))
+    _, tan = jvp_memory_index_score(primals, tangents, scale=scale)
+    return out, tan
+
+
+@_jvp("quantized_matmul")
+def jvp_quantized_matmul(primals, tangents, *, group_size=64, **_):
+    """y = x @ dequant(w_packed)ᵀ with frozen quantized weights: linear in
+    x, straight-through-constant in the packed codes/scales/biases —
+    mirroring the VJP's declared coverage."""
+    from ..quantization import dequantize_int4_packed
+
+    x = np.asarray(primals[0], dtype=np.float64)
+    w_packed, scales, biases = primals[1], primals[2], primals[3]
+    K = int(x.shape[-1])
+    Wdq = np.asarray(dequantize_int4_packed(
+        w_packed, scales, biases, k=K, group_size=int(group_size)),
+        dtype=np.float64)
+    dx = np.asarray(_t(0, tangents, x), dtype=np.float64)
+    return x @ Wdq.T, dx @ Wdq.T
+
+
+@_jvp("tridiagonal_solve")
+def jvp_tridiagonal_solve(primals, tangents, **_):
+    """x = A⁻¹b ⇒ dx = A⁻¹(db − dA·x), dA·x assembled from the three
+    diagonal tangents under the same (dl, d, du) storage the VJP uses."""
+    from ..solvers_ops import _thomas
+
+    dl, d, du, b = (np.asarray(p, dtype=np.float64) for p in primals[:4])
+    ddl = np.asarray(_t(0, tangents, dl), dtype=np.float64)
+    dd = np.asarray(_t(1, tangents, d), dtype=np.float64)
+    ddu = np.asarray(_t(2, tangents, du), dtype=np.float64)
+    db = np.asarray(_t(3, tangents, b), dtype=np.float64)
+    x = _thomas(dl, d, du, b)
+    da_x = dd * x
+    da_x[..., 1:] = da_x[..., 1:] + ddl[1:] * x[..., :-1]
+    da_x[..., :-1] = da_x[..., :-1] + ddu[:-1] * x[..., 1:]
+    dx = _thomas(dl, d, du, db - da_x)
+    return x, dx
+
+
+@_jvp("depthwise_conv2d")
+def jvp_depthwise_conv2d(primals, tangents, **kwargs):
+    """Bilinear in (x, w): dy = f(dx, w) + f(x, dw) — two exact forward
+    calls, no finite differences."""
+    from tessera import ops as _ops
+
+    fwd = getattr(_ops.depthwise_conv2d, "__wrapped__",
+                  _ops.depthwise_conv2d)
+    x, w = primals[0], primals[1]
+    dx = _t(0, tangents, x)
+    dw = _t(1, tangents, w)
+    out = np.asarray(fwd(x, w, **kwargs), dtype=np.float64)
+    tan = (np.asarray(fwd(dx, w, **kwargs), dtype=np.float64)
+           + np.asarray(fwd(x, dw, **kwargs), dtype=np.float64))
+    return out, tan
+
+
+@_jvp("game_boltzmann_value")
+def jvp_game_boltzmann_value(primals, tangents, *, temperature, **_):
+    """Smooth Boltzmann value operator — numeric pushforward through the
+    canonical forward (float64, smooth softmax composition)."""
+    from tessera import ops as _ops
+
+    fwd = getattr(_ops.game_boltzmann_value, "__wrapped__",
+                  _ops.game_boltzmann_value)
+    return _numeric_jvp_rule(
+        lambda v: fwd(v, temperature=temperature), primals, tangents)
+
+
+@_jvp("lstm_cell")
+def jvp_lstm_cell(primals, tangents, **_):
+    """Tangent of one LSTM step, mirroring `vjp_lstm_cell`'s conventions:
+    gates = x@W_ihᵀ + h@W_hhᵀ (+biases), gate order i,f,g,o, output
+    concat([h_t, c_t], axis=-1)."""
+    x_t, h_prev, c_prev, W_ih, W_hh = (
+        np.asarray(p, dtype=np.float64) for p in primals[:5])
+    b_ih = primals[5] if len(primals) > 5 else None
+    b_hh = primals[6] if len(primals) > 6 else None
+    dx = np.asarray(_t(0, tangents, x_t), dtype=np.float64)
+    dh = np.asarray(_t(1, tangents, h_prev), dtype=np.float64)
+    dc = np.asarray(_t(2, tangents, c_prev), dtype=np.float64)
+    dW_ih = np.asarray(_t(3, tangents, W_ih), dtype=np.float64)
+    dW_hh = np.asarray(_t(4, tangents, W_hh), dtype=np.float64)
+
+    H = h_prev.shape[-1]
+    gates = x_t @ W_ih.T + h_prev @ W_hh.T
+    dgates = dx @ W_ih.T + x_t @ dW_ih.T + dh @ W_hh.T + h_prev @ dW_hh.T
+    if b_ih is not None:
+        gates = gates + np.asarray(b_ih, dtype=np.float64)
+        dgates = dgates + np.asarray(_t(5, tangents, b_ih),
+                                     dtype=np.float64)
+    if b_hh is not None:
+        gates = gates + np.asarray(b_hh, dtype=np.float64)
+        dgates = dgates + np.asarray(_t(6, tangents, b_hh),
+                                     dtype=np.float64)
+
+    i_g, f_g, g_g, o_g = (gates[..., :H], gates[..., H:2 * H],
+                          gates[..., 2 * H:3 * H], gates[..., 3 * H:])
+    di_g, df_g, dg_g, do_g = (dgates[..., :H], dgates[..., H:2 * H],
+                              dgates[..., 2 * H:3 * H], dgates[..., 3 * H:])
+    i = 1.0 / (1.0 + np.exp(-i_g))
+    f = 1.0 / (1.0 + np.exp(-f_g))
+    g_act = np.tanh(g_g)
+    o = 1.0 / (1.0 + np.exp(-o_g))
+    di = i * (1.0 - i) * di_g
+    df = f * (1.0 - f) * df_g
+    dg = (1.0 - g_act * g_act) * dg_g
+    do = o * (1.0 - o) * do_g
+
+    c_t = f * c_prev + i * g_act
+    dc_t = df * c_prev + f * dc + di * g_act + i * dg
+    tanh_c = np.tanh(c_t)
+    h_t = o * tanh_c
+    dh_t = do * tanh_c + o * (1.0 - tanh_c * tanh_c) * dc_t
+    return (np.concatenate([h_t, c_t], axis=-1),
+            np.concatenate([dh_t, dc_t], axis=-1))

@@ -45,8 +45,11 @@ def test_in_catalog_and_coverage():
     score = coverage_for("memory_index_score").contract_status
     assert score["vjp"] == "complete" and score["jvp"] == "complete"
     ste = coverage_for("memory_index_select_ste").contract_status
-    # STE: straight-through VJP exists; forward-mode JVP is not_applicable.
-    assert ste["vjp"] == "complete" and ste["jvp"] == "non_differentiable"
+    # STE carries BOTH modes under the same convention since AD-LAW-1n: the
+    # hard selection's tangent is the smooth score's tangent (forward-mode
+    # mirror of the straight-through VJP), law-checked in
+    # test_autodiff_laws.py.
+    assert ste["vjp"] == "complete" and ste["jvp"] == "complete"
 
 
 def test_score_is_sigmoid_of_scaled_qk():

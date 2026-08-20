@@ -182,15 +182,19 @@ E2E-REAL-0:
    General MLIR region adjoints and broader exact-family packets remain open.
 7. **E2E-REAL-6:** remove duplicate lowering authorities only after migrated
    families satisfy lineage, correctness, and architecture-owned evidence.
-   **Pending gate addition (not yet active):** once AD-LAW-1 lands
-   ([`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md) §7), a migrated
-   differentiable family also clears the Law-3 adjoint sweep
-   (`⟨Jv,u⟩ = ⟨v,Jᵀu⟩` at dimension-scaled probe counts) before its duplicate
-   authority is deleted. That check completes the existing pointwise numeric
-   identity on the transpose axis; it does **not** replace per-family
-   derivative oracles, since a matched-wrong JVP/VJP pair satisfies the
-   adjoint identity on every probe. The oracle does not exist yet, so no
-   current migration is gated on it.
+   **Gate ACTIVE (2026-08-20):** a migrated differentiable family also
+   clears the Law-3 adjoint sweep (`⟨Jv,u⟩ = ⟨v,Jᵀu⟩` at dimension-scaled
+   probe counts) before its duplicate authority is deleted. The oracle
+   exists and is swept: AD-LAW-1's spec growth closed
+   ([`AUTODIFF_NEXTGEN_PLAN.md`](AUTODIFF_NEXTGEN_PLAN.md) §7) — 300
+   tensor pairs + the full geometric registry pass, the `vjp_only` class
+   is empty, and the only unswept rows are eight rule-capability gaps
+   pinned with named reasons (`_OPEN_UNSWEEPABLE_RULES` in
+   `tests/unit/test_autodiff_laws.py`); a family touching one of those
+   ops fixes the rule first. The check completes the existing pointwise
+   numeric identity on the transpose axis; it does **not** replace
+   per-family derivative oracles, since a matched-wrong JVP/VJP pair
+   satisfies the adjoint identity on every probe.
 8. **COLLECTIVE-NATIVE-FOUNDATION-1 — landing:** the C++ NCCL/RCCL adapters
    issue real NCCL-compatible calls, query initialized communicator properties,
    and own symmetric registrations through move-only RAII windows. Target

@@ -48,6 +48,7 @@ Recorded here because §3.8 gates IR investment on this measurement.
 
 from __future__ import annotations
 
+import math as _math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Protocol, Sequence
 
@@ -100,9 +101,44 @@ class Dual:
 
 @dataclass(frozen=True)
 class TruncatedJet:
-    """``ℝ[ε]/(ε^{k+1})`` — order-k Taylor coefficients, dimension k+1."""
+    """``ℝ[ε]/(ε^{k+1})`` — order-k Taylor coefficients, dimension k+1.
+
+    Two semantic keys (#21a — they select MEANING and fail closed on an
+    illegal value, never defaulting silently; AUTODIFF_NEXTGEN_PLAN §2.3):
+
+    ``coefficient_scaling``
+        How a coefficient buffer is READ at the `extract` boundary. The
+        internal representation is always Taylor-scaled (aₖ = f⁽ᵏ⁾/k! —
+        the only convention under which `mul`'s truncated Cauchy product
+        is the ring product); ``"taylor"`` extracts the buffer as stored,
+        ``"derivative"`` extracts k!·aₖ (the k-th derivative itself).
+        The same buffer means different numbers under each convention,
+        which is exactly why this is a declared key on the jet type
+        rather than a boolean default.
+
+    ``numeric_policy``
+        The declared coefficient dtype contract. Only ``"fp64"`` is legal
+        today: the §3.8 conditioning envelope is measured for float64
+        only, so a narrower policy would be an unmeasured accuracy claim.
+    """
 
     order: int
+    coefficient_scaling: str = "taylor"
+    numeric_policy: str = "fp64"
+
+    def __post_init__(self) -> None:
+        if self.coefficient_scaling not in ("taylor", "derivative"):
+            raise ValueError(
+                f"coefficient_scaling must be 'taylor' or 'derivative'; got "
+                f"{self.coefficient_scaling!r} — a semantic key fails "
+                f"closed (#21a), it is never guessed"
+            )
+        if self.numeric_policy != "fp64":
+            raise ValueError(
+                f"numeric_policy {self.numeric_policy!r} has no measured "
+                f"conditioning envelope; only 'fp64' is a lawful jet "
+                f"coefficient contract today (§3.8)"
+            )
 
     def lift(self, primal, seed):
         c = [np.zeros_like(np.asarray(primal, dtype=np.float64))
@@ -128,6 +164,8 @@ class TruncatedJet:
         return SCALAR_RECURRENCES[name].jet(self, a)
 
     def extract(self, a, index):
+        if self.coefficient_scaling == "derivative":
+            return a[index] * float(_math.factorial(index))
         return a[index]
 
 

@@ -20,7 +20,7 @@ Counts below are restricted to the 51 TSOL canonical names.  The full 505-primit
 | `shape_rule` |  51 |   0 |   0 |   0 |   0 |
 | `dtype_layout_rule` |  51 |   0 |   0 |   0 |   0 |
 | `vjp` |  43 |   0 |   0 |   8 |   0 |
-| `jvp` |  42 |   0 |   0 |   9 |   0 |
+| `jvp` |  43 |   0 |   0 |   8 |   0 |
 | `lowering_rule` |  51 |   0 |   0 |   0 |   0 |
 | `sharding_rule` |  33 |  18 |   0 |   0 |   0 |
 | `backend_kernel` |   0 |  50 |   0 |   1 |   0 |
@@ -55,7 +55,7 @@ Status legend: ✅ `complete`  • ◐ `partial`  • ◯ `planned`  • — exp
 | `gelu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `relu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `silu` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
-| `dropout` | ✅ | ✅ | ✅ | ✅ | — `non_differentiable` | ✅ | ✅ | ◐ |
+| `dropout` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `qkv_projection` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `flash_attn` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |
 | `rope` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ◐ |

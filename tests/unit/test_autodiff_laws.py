@@ -21,6 +21,7 @@ Covers:
 from __future__ import annotations
 
 import inspect
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -94,6 +95,93 @@ def test_every_spec_op_is_actually_checked(sweep):
 def test_geometric_registry_is_enumerated(sweep):
     geo = [r for r in sweep if r.registry == "geometric"]
     assert len(geo) >= 16, "geometric registry rows missing from the sweep"
+
+
+def test_geometric_registry_is_fully_swept(sweep):
+    """AD-LAW-1 geometric slice: every registered geometric rule pair is
+    actually exercised by the adjoint law — no `no_spec` debt remains.
+    This is the sweep the plan requires BEFORE the `CliffordTangent`
+    absorption may begin (AUTODIFF_NEXTGEN_PLAN §3.5 / §5 item 4)."""
+    geo = [r for r in sweep if r.registry == "geometric"]
+    unswept = [r.op for r in geo if r.status == "no_spec"]
+    assert not unswept, (
+        f"geometric ops without an input spec: {unswept} — add them to "
+        f"GEO_LAW_INPUT_SPECS, do not let the registry grow unswept")
+    for r in geo:
+        assert r.status in ("pass", "fail", "vjp_only", "jvp_only"), (
+            f"{r.op}: {r.status} ({r.detail})")
+
+
+# Geometric-engine teeth: the geo driver must be falsifiable in the same
+# ways the tensor driver is, or its all-green sweep proves nothing.
+
+
+def _geo_spec(op):
+    from tessera.autodiff.law_inputs import GEO_LAW_INPUT_SPECS
+
+    return GEO_LAW_INPUT_SPECS[op]
+
+
+def test_geo_adjoint_catches_planted_wrong_vjp():
+    """An identity 'adjoint' for the geometric product (grad = dout for
+    both args) is the shape a copy-paste rule would take — it must fail."""
+    from tessera.autodiff.geometric.registry import _JVPS_GEO
+    from tessera.autodiff.laws import geo_adjoint_check
+
+    r = geo_adjoint_check(
+        "geometric_product<planted>", _geo_spec("geometric_product"),
+        _JVPS_GEO["geometric_product"], lambda dout, a, b: (dout, dout))
+    assert r.status == "fail", r
+
+
+def test_geo_adjoint_catches_sign_flipped_linear_adjoint():
+    """hodge_star's hand-rolled Cayley transpose is exactly the kind of
+    signed table contraction where one flipped sign hides — the law must
+    see a global sign error."""
+    from tessera.autodiff.geometric.registry import _JVPS_GEO, _VJPS_GEO
+    from tessera.autodiff.laws import geo_adjoint_check
+
+    orig = _VJPS_GEO["hodge_star"]
+    r = geo_adjoint_check(
+        "hodge_star<flipped>", _geo_spec("hodge_star"),
+        _JVPS_GEO["hodge_star"],
+        lambda dout, a: tuple(-g for g in orig(dout, a)))
+    assert r.status == "fail", r
+
+
+def test_geo_adjoint_flags_matched_zero_pair():
+    """The §3.5 completeness caveat holds for multivectors too: a matched
+    all-zero pair satisfies 0 = 0 on every probe, and the engine must call
+    it vacuous rather than pass."""
+    import numpy as np
+
+    from tessera.autodiff.laws import geo_adjoint_check
+    from tessera.ga.multivector import Multivector
+
+    def zero_jvp(tangents, primals, **_):
+        return Multivector(np.zeros(8), primals[0].algebra)
+
+    def zero_vjp(dout, a, b, **_):
+        z = Multivector(np.zeros(8), a.algebra)
+        return z, z
+
+    r = geo_adjoint_check("geometric_product<zeros>",
+                          _geo_spec("geometric_product"), zero_jvp, zero_vjp)
+    assert r.status == "fail", r
+    assert "vacuous" in r.detail
+
+
+def test_geo_adjoint_pairs_the_scalar_slot():
+    """scalar_mul's grad wrt the scalar is a float, not a Multivector; the
+    pairing must include it — a rule that drops it (returns None) fails."""
+    from tessera.autodiff.geometric.registry import _JVPS_GEO
+    from tessera.autodiff.laws import geo_adjoint_check
+
+    r = geo_adjoint_check(
+        "scalar_mul<dropped>", _geo_spec("scalar_mul"),
+        _JVPS_GEO["scalar_mul"],
+        lambda dout, a, s: (float(s) * dout, None))
+    assert r.status == "fail", r
 
 
 # ── the engine's teeth ───────────────────────────────────────────────────────
@@ -818,49 +906,64 @@ def test_forward_mode_positional_config_matches_keyword():
 # AD-LAW-1g: the dequantize_nvfp4 block_size entries left this set —
 # both modes now READ the key so the per-block scale expands exactly
 # as the canonical forward blocks it (before, both crashed outright).
-_OPEN_FORWARD_KEY_SWALLOWS = {
-    ("adam", "jvp", "cast_updates_to_param_dtype"),
-    ("adam", "jvp", "compute_dtype"),
-    ("adam", "jvp", "state_dtype"),
-    ("adam", "vjp", "cast_updates_to_param_dtype"),
-    ("adam", "vjp", "compute_dtype"),
-    ("adam", "vjp", "state_dtype"),
-    ("all_reduce", "jvp", "axis"),
-    ("all_reduce", "vjp", "axis"),
-    ("all_to_all", "jvp", "axis"),
-    ("all_to_all", "vjp", "axis"),
-    ("conv2d", "vjp", "layout"),
-    ("conv3d", "vjp", "layout"),
-    ("dequant_matmul", "vjp", "backend"),
-    ("dequantize_fp4", "jvp", "format"),
-    ("dequantize_fp4", "vjp", "format"),
-    ("dequantize_fp6", "jvp", "format"),
-    ("dequantize_fp6", "vjp", "format"),
-    ("dequantize_fp8", "vjp", "format"),
-    ("grouped_gemm", "jvp", "kind"),
-    ("grouped_gemm", "vjp", "kind"),
-    ("image_resize", "jvp", "antialias"),
-    ("momentum", "jvp", "cast_updates_to_param_dtype"),
-    ("momentum", "jvp", "compute_dtype"),
-    ("momentum", "jvp", "state_dtype"),
-    ("momentum", "vjp", "cast_updates_to_param_dtype"),
-    ("momentum", "vjp", "compute_dtype"),
-    ("momentum", "vjp", "state_dtype"),
-    ("nesterov", "jvp", "cast_updates_to_param_dtype"),
-    ("nesterov", "jvp", "compute_dtype"),
-    ("nesterov", "jvp", "state_dtype"),
-    ("nesterov", "vjp", "cast_updates_to_param_dtype"),
-    ("nesterov", "vjp", "compute_dtype"),
-    ("nesterov", "vjp", "state_dtype"),
-    ("online_softmax_state", "jvp", "axis"),
-    ("online_softmax_state", "vjp", "axis"),
-    ("quantize_fp4", "jvp", "format"),
-    ("quantize_fp4", "vjp", "format"),
-    ("quantize_fp6", "jvp", "format"),
-    ("quantize_fp6", "vjp", "format"),
-    ("quantize_fp8", "vjp", "format"),
-    ("quantize_nvfp4", "jvp", "block_size"),
-    ("quantize_nvfp4", "vjp", "block_size"),
+_OPEN_FORWARD_KEY_SWALLOWS: set[tuple[str, str, str]] = set()
+
+# Triage complete (AD-LAW-1m, 2026-08-19): every remaining forward-key
+# swallow was body-read and is benign FOR A NAMED REASON — the key cannot
+# change the reference gradient. conv2d/conv3d `layout` was the one real
+# defect in the set (the numeric VJP probed the nhwc map for nchw callers)
+# and is FIXED, not excused. A benign entry must still BE a swallow — the
+# gate flags a stale reason the moment a rule starts reading the key.
+_DTYPE_KEY_REASON = (
+    "precision-envelope key: selects storage/compute rounding, not the "
+    "mathematical map; dtype casts are AD-transparent by the same "
+    "convention that gives `cast` an identity derivative"
+)
+_MESH_AXIS_REASON = (
+    "mesh-axis name: value-neutral in the single-rank reference the rules "
+    "implement"
+)
+_STE_FORMAT_REASON = (
+    "quantization-grid key: the forward validates it and the STE identity "
+    "derivative is grid-independent by the STE convention"
+)
+_BENIGN_FORWARD_KEY_SWALLOWS: dict[tuple[str, str, str], str] = {
+    **{(op, mode, key): _DTYPE_KEY_REASON
+       for op in ("adam", "momentum", "nesterov")
+       for mode in ("jvp", "vjp")
+       for key in ("cast_updates_to_param_dtype", "compute_dtype",
+                   "state_dtype")},
+    **{(op, mode, "axis"): _MESH_AXIS_REASON
+       for op in ("all_reduce", "all_to_all")
+       for mode in ("jvp", "vjp")},
+    ("online_softmax_state", "jvp", "axis"):
+        "rule returns declared-zero tangents for every axis",
+    ("online_softmax_state", "vjp", "axis"):
+        "rule returns declared-zero cotangents for every axis",
+    **{(op, mode, "format"): _STE_FORMAT_REASON
+       for op, mode in (("dequantize_fp4", "jvp"), ("dequantize_fp4", "vjp"),
+                        ("dequantize_fp6", "jvp"), ("dequantize_fp6", "vjp"),
+                        ("dequantize_fp8", "vjp"),
+                        ("quantize_fp4", "jvp"), ("quantize_fp4", "vjp"),
+                        ("quantize_fp6", "jvp"), ("quantize_fp6", "vjp"),
+                        ("quantize_fp8", "vjp"))},
+    ("quantize_nvfp4", "jvp", "block_size"):
+        "STE identity for the value output regardless of block size; the "
+        "scale output is non-differentiable",
+    ("quantize_nvfp4", "vjp", "block_size"):
+        "STE identity for the value output regardless of block size; the "
+        "scale output is non-differentiable",
+    ("grouped_gemm", "jvp", "kind"):
+        "grouped-layout family key: the forward validates it, and the "
+        "reference rules implement the only executable kind's math",
+    ("grouped_gemm", "vjp", "kind"):
+        "grouped-layout family key: the forward validates it, and the "
+        "reference rules implement the only executable kind's math",
+    ("dequant_matmul", "vjp", "backend"):
+        "performance key (#21a): backend lane selection, same math",
+    ("image_resize", "jvp", "antialias"):
+        "the forward fails closed on antialias=True (not modeled in the "
+        "numpy reference), so the key never reaches the rule non-default",
 }
 
 
@@ -922,14 +1025,18 @@ def test_forward_key_swallow_findings_are_pinned():
     `upper`) and `segment_reduce` (`op` vs `reduce`) were, both silently
     returning a different function's gradient."""
     found = _forward_key_swallow_mismatches()
-    new = found - _OPEN_FORWARD_KEY_SWALLOWS
-    fixed = _OPEN_FORWARD_KEY_SWALLOWS - found
+    known = _OPEN_FORWARD_KEY_SWALLOWS | set(_BENIGN_FORWARD_KEY_SWALLOWS)
+    new = found - known
+    fixed = known - found
     assert not new, (
         "NEW forward-key swallow — the canonical forward accepts a key that "
-        f"neither rule reads, so the rule differentiates something else: {sorted(new)}")
+        f"neither rule reads, so the rule differentiates something else: "
+        f"{sorted(new)} (fix the rule, or add a named-benign entry WITH the "
+        f"reason you established by reading the bodies)")
     assert not fixed, (
-        "forward-key swallow finding fixed — remove it from "
-        f"_OPEN_FORWARD_KEY_SWALLOWS to record the triage outcome: {sorted(fixed)}")
+        "forward-key swallow entry no longer reproduces — the rule now reads "
+        "the key; record the outcome by removing it from the open/benign "
+        f"set: {sorted(fixed)}")
 
 
 # ── dashboard determinism ────────────────────────────────────────────────────
@@ -1812,3 +1919,518 @@ def test_hutchinson_has_no_unnormalized_scale_knob():
     from tessera.autodiff.algebra import hutchinson_laplacian
 
     assert "radius" not in inspect.signature(hutchinson_laplacian).parameters
+
+
+# ── AD-LAW-1j spec-growth findings, pinned ───────────────────────────────────
+# Six defects surfaced by the first tensor spec-growth batch (structural /
+# linalg / matmul-projection families). Each test pins the fixed behavior
+# against an oracle the defect could not have satisfied (#10a).
+
+
+def _fd_tangent(f, x, dx, eps=1e-6):
+    return (f(x + eps * dx) - f(x - eps * dx)) / (2 * eps)
+
+
+def test_qr_jvp_matches_finite_differences():
+    """jvp_qr's dR previously dropped the strictly-lower-transpose term
+    (its ±0.5·diag correction cancelled itself), leaving dR = triu(M)·R —
+    off by O(1) against central differences."""
+    from tessera.autodiff.jvp import jvp_qr
+
+    rng = np.random.default_rng(3)
+    A = rng.standard_normal((4, 4)) + 4.0 * np.eye(4)
+    dA = rng.standard_normal((4, 4))
+    (_, _), (dQ, dR) = jvp_qr((A,), (dA,))
+    dQ_fd = _fd_tangent(lambda X: np.linalg.qr(X)[0], A, dA)
+    dR_fd = _fd_tangent(lambda X: np.linalg.qr(X)[1], A, dA)
+    np.testing.assert_allclose(dQ, dQ_fd, atol=1e-7)
+    np.testing.assert_allclose(dR, dR_fd, atol=1e-7)
+
+
+def test_svd_jvp_matches_finite_differences():
+    """jvp_svd previously returned ZERO tangents for U and Vt while
+    vjp_svd handles full (dU, ds, dVt) cotangents — the pair failed the
+    adjoint law on any probe touching the singular vectors. The full
+    formula (with projector terms off-square) matches FD."""
+    from tessera.autodiff.jvp import jvp_svd
+
+    rng = np.random.default_rng(5)
+    for shape, diag in (((4, 4), [5.0, 3.5, 2.0, 1.0]),
+                        ((5, 3), [5.0, 3.5, 2.0])):
+        A = rng.standard_normal(shape)
+        A[:len(diag), :len(diag)] += np.diag(diag)
+        dA = rng.standard_normal(shape)
+
+        def svd_gauge(X):
+            u, sv, vt = np.linalg.svd(X, full_matrices=False)
+            signs = np.sign(u[np.argmax(np.abs(u), axis=0),
+                              np.arange(u.shape[1])])
+            return u * signs, sv, vt * signs[:, None]
+
+        (U, s, Vt), (dU, ds, dVt) = jvp_svd((A,), (dA,))
+        signs = np.sign(U[np.argmax(np.abs(U), axis=0),
+                          np.arange(U.shape[1])])
+        np.testing.assert_allclose(
+            ds, _fd_tangent(lambda X: svd_gauge(X)[1], A, dA), atol=1e-6)
+        np.testing.assert_allclose(
+            dU * signs, _fd_tangent(lambda X: svd_gauge(X)[0], A, dA),
+            atol=1e-6)
+        np.testing.assert_allclose(
+            dVt * signs[:, None],
+            _fd_tangent(lambda X: svd_gauge(X)[2], A, dA), atol=1e-6)
+
+
+def test_svd_adjoint_holds_off_square():
+    """vjp_svd previously lacked the projector-term adjoints, so the pair
+    failed ⟨Jv,u⟩=⟨v,Jᵀu⟩ on any non-square input (surfaced through
+    factorized_matmul's wide product)."""
+    from tessera.autodiff.jvp import jvp_svd
+    from tessera.autodiff.laws import adjoint_check
+    from tessera.autodiff.vjp import vjp_svd
+    from tessera.autodiff.law_inputs import InputSpec
+
+    for shape, diag in (((5, 3), [5.0, 3.5, 2.0]),
+                        ((3, 5), [5.0, 3.5, 2.0])):
+        def make(rng, shape=shape, diag=diag):
+            A = rng.standard_normal(shape)
+            A[:len(diag), :len(diag)] += np.diag(diag)
+            return (A,), {}
+
+        r = adjoint_check(f"svd<{shape}>", InputSpec(make=make),
+                          jvp_svd, vjp_svd)
+        assert r.status == "pass", (shape, r)
+
+
+def test_weight_norm_rules_match_the_kept_axis_semantics():
+    """The canonical forward normalizes over ALL axes except `axis` (the
+    kept axis, torch semantics) with eps inside the sqrt. Both rules
+    previously normalized ALONG `axis` with eps outside — the tri_solve
+    vocabulary class: differentiating a different function than the
+    forward. Pinned against the canonical forward directly."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_weight_norm
+    from tessera.autodiff.vjp import vjp_weight_norm
+
+    rng = np.random.default_rng(9)
+    v = rng.standard_normal((4, 3))
+    primal, _ = jvp_weight_norm((v,), (np.zeros_like(v),), axis=-1)
+    np.testing.assert_allclose(primal, np.asarray(ops.weight_norm(v, axis=-1)),
+                               rtol=1e-5)
+
+    # The gradient kernel is a projection: v itself is a fixed point of the
+    # normalization direction, so <v, dw/dv[u]> must vanish for every u —
+    # per kept-axis slice under the CORRECT semantics.
+    dv = rng.standard_normal((4, 3))
+    _, dw = jvp_weight_norm((v,), (dv,), axis=-1)
+    n2 = (v * v).sum(axis=0, keepdims=True) + 1e-12
+    proj = (v * np.asarray(dw)).sum(axis=0) / np.sqrt(n2[0])
+    np.testing.assert_allclose(proj, np.zeros(3), atol=1e-10)
+
+    (grad,) = vjp_weight_norm(dv, v, axis=-1)
+    proj_v = (v * np.asarray(grad)).sum(axis=0)
+    np.testing.assert_allclose(proj_v, np.zeros(3), atol=1e-10)
+
+
+def test_factorized_matmul_differentiates_the_truncation():
+    """The forward SVD-truncates the product to rank r; both rules
+    previously differentiated the PLAIN product (the chain law's
+    primal-consistency gate caught the JVP emitting a different
+    function's output). The fixed JVP matches central differences of the
+    canonical forward through the truncation."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_factorized_matmul
+
+    rng = np.random.default_rng(13)
+    a = rng.standard_normal((4, 3))
+    b = rng.standard_normal((3, 5))
+    da = rng.standard_normal((4, 3))
+    db = rng.standard_normal((3, 5))
+
+    y, dy = jvp_factorized_matmul((a, b), (da, db), rank=2)
+    np.testing.assert_allclose(y, ops.factorized_matmul(a, b, 2), rtol=1e-9)
+
+    eps = 1e-6
+    dy_fd = (np.asarray(ops.factorized_matmul(a + eps * da, b + eps * db, 2))
+             - np.asarray(ops.factorized_matmul(a - eps * da,
+                                                b - eps * db, 2))) / (2 * eps)
+    np.testing.assert_allclose(dy, dy_fd, atol=1e-6)
+
+
+def test_mor_scatter_jvp_is_the_where_rule():
+    """jvp_mor_scatter previously delegated to jvp_scatter, whose
+    (x, indices, updates) signature put the MoR `updated` tensor in the
+    indices slot — forward mode crashed or gathered garbage. The rule is
+    the where-mask rule, matching vjp_mor_scatter and the canonical
+    forward."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_mor_scatter
+
+    rng = np.random.default_rng(17)
+    full = rng.standard_normal((2, 3, 4))
+    updated = rng.standard_normal((2, 3, 4))
+    mask = rng.standard_normal((2, 3)) > 0
+    d_full = rng.standard_normal((2, 3, 4))
+    d_updated = rng.standard_normal((2, 3, 4))
+
+    out, dout = jvp_mor_scatter((full, updated, mask), (d_full, d_updated))
+    np.testing.assert_allclose(out, ops.mor_scatter(full, updated, mask),
+                               rtol=1e-12)
+    m = np.broadcast_to(mask[..., None], full.shape)
+    np.testing.assert_allclose(dout, np.where(m, d_updated, d_full),
+                               rtol=1e-12)
+
+
+def test_tape_differentiates_sequence_operands():
+    """`_describe` previously returned `_NON_ARRAY` for a list of arrays, so
+    `ops.cat`/`ops.stack` recorded NO operand and replay called
+    `vjp_cat(dout)` — reverse mode through sequence-operand ops was broken
+    outright (surfaced by the positional-equivalence gate the moment cat
+    got an input spec). The list is now one recorded slot whose gradient
+    fans out per element, preserving each element's own producer link."""
+    from tessera import ops
+    from tessera.autodiff.tape import tape
+
+    rng = np.random.default_rng(23)
+    a = rng.standard_normal((2, 3))
+    b = rng.standard_normal((2, 3))
+
+    with tape() as t:
+        y = ops.cat([a, b], axis=0)
+        loss = ops.sum(ops.mul(y, y))
+    t.backward(loss)
+    np.testing.assert_allclose(t.cotangent[id(a)], 2 * a)
+    np.testing.assert_allclose(t.cotangent[id(b)], 2 * b)
+
+    # The producer link must survive: an element that came FROM another op
+    # keeps its upstream gradient path.
+    with tape() as t2:
+        u = ops.mul(a, 2.0)
+        y2 = ops.stack([u, b], axis=0)
+        loss2 = ops.sum(y2)
+    t2.backward(loss2)
+    np.testing.assert_allclose(t2.cotangent[id(a)],
+                               2.0 * np.ones_like(a))
+
+    # Config tuples must NOT be swallowed into sequence operands: a shape
+    # tuple / float pair stays configuration (the ops still work).
+    with tape() as t3:
+        v = ops.view(a, (3, 2))
+        loss3 = ops.sum(v)
+    t3.backward(loss3)
+    np.testing.assert_allclose(t3.cotangent[id(a)], np.ones_like(a))
+
+
+def test_spectral_filter_jvp_is_the_complex_product_rule():
+    """The canonical `spectral_filter(Xf, Hf)` is a COMPLEX pointwise
+    product. The JVP previously differentiated a different function
+    entirely — rfft(x)·f → irfft of a real time-domain signal — and cast
+    complex inputs to float64, silently discarding the imaginary part
+    (`vjp_spectral_filter` was always the conj-adjoint of the product).
+    The tri_solve vocabulary class, pinned against the canonical forward
+    and the bilinear product rule."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_spectral_filter
+
+    rng = np.random.default_rng(29)
+    xf = rng.standard_normal((3, 8)) + 1j * rng.standard_normal((3, 8))
+    hf = rng.standard_normal(8) + 1j * rng.standard_normal(8)
+    dxf = rng.standard_normal((3, 8)) + 1j * rng.standard_normal((3, 8))
+    dhf = rng.standard_normal(8) + 1j * rng.standard_normal(8)
+
+    out, dout = jvp_spectral_filter((xf, hf), (dxf, dhf))
+    np.testing.assert_allclose(out, np.asarray(ops.spectral_filter(xf, hf)),
+                               rtol=1e-12)
+    assert np.iscomplexobj(dout), "tangent must stay complex"
+    np.testing.assert_allclose(dout, dxf * hf + xf * dhf, rtol=1e-12)
+
+
+# ── AD-LAW-1l findings, pinned ───────────────────────────────────────────────
+
+
+def test_gru_cell_jvp_carries_the_biases():
+    """jvp_gru_cell previously read only the first four primals: a call
+    carrying b_ih/b_hh got a bias-free primal (a different function than
+    vjp_gru_cell, which adds the biases) and the bias tangents were
+    silently dropped."""
+    from tessera.autodiff.jvp import jvp_gru_cell
+
+    rng = np.random.default_rng(31)
+    prims = (rng.standard_normal((2, 3)), rng.standard_normal((2, 4)),
+             rng.standard_normal((3, 12)), rng.standard_normal((4, 12)),
+             rng.standard_normal(12), rng.standard_normal(12))
+    zeros = tuple(np.zeros_like(p) for p in prims)
+    h_new, _ = jvp_gru_cell(prims, zeros)
+    h_no_bias, _ = jvp_gru_cell(prims[:4], zeros[:4])
+    assert not np.allclose(h_new, h_no_bias), (
+        "bias-carrying call must differ from the bias-free primal")
+
+    # bias tangent must reach the output: perturb only b_ih
+    db = tuple(np.zeros_like(p) for p in prims[:4]) + (
+        rng.standard_normal(12), np.zeros(12))
+    _, tan = jvp_gru_cell(prims, db)
+    assert float(np.max(np.abs(tan))) > 0.0, "b_ih tangent was dropped"
+
+    eps = 1e-6
+    plus, _ = jvp_gru_cell(
+        prims[:4] + (prims[4] + eps * db[4], prims[5]), zeros)
+    minus, _ = jvp_gru_cell(
+        prims[:4] + (prims[4] - eps * db[4], prims[5]), zeros)
+    np.testing.assert_allclose(tan, (plus - minus) / (2 * eps), atol=1e-6)
+
+
+def test_mor_partition_jvp_is_the_zero_mask_rule():
+    """jvp_mor_partition previously delegated to jvp_cat (a different op
+    with a different signature — the jvp_mor_scatter delegation class).
+    The canonical forward returns the BOOL mask `depth >= step`,
+    non-differentiable by declaration."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_mor_partition
+
+    rng = np.random.default_rng(37)
+    x = rng.standard_normal((2, 3, 4))
+    depth = np.array([[1, 2, 1], [2, 1, 1]])
+    mask, tan = jvp_mor_partition(
+        (x, depth), (np.zeros_like(x), None), step=2)
+    np.testing.assert_array_equal(mask, ops.mor_partition(x, depth, step=2))
+    assert not np.any(tan), "bool-mask output must carry a zero tangent"
+
+
+def test_sddmm_rules_match_the_canonical_operand_order():
+    """Both sddmm rules previously assumed a (mask, A, B) operand order
+    AND a transposed product A @ Bᵀ; the canonical forward is
+    sddmm(A, B, mask) = (A @ B) * mask, so tape replay bound A to the
+    mask slot and differentiated a different function silently."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_sddmm
+    from tessera.autodiff.vjp import vjp_sddmm
+
+    rng = np.random.default_rng(41)
+    A, B = rng.standard_normal((4, 3)), rng.standard_normal((3, 5))
+    mask = (rng.random((4, 5)) > 0.4).astype(np.float64)
+    dA, dB = rng.standard_normal((4, 3)), rng.standard_normal((3, 5))
+
+    out, dout = jvp_sddmm((A, B, mask), (dA, dB, None))
+    np.testing.assert_allclose(out, np.asarray(ops.sddmm(A, B, mask)),
+                               rtol=1e-12)
+    np.testing.assert_allclose(dout, (dA @ B + A @ dB) * mask, rtol=1e-12)
+
+    # adjoint pairing includes the mask on the cotangent side (derived,
+    # not assumed pre-masked)
+    u = rng.standard_normal((4, 5))
+    gA, gB, gmask = vjp_sddmm(u, A, B, mask)
+    assert gmask is None
+    lhs = float(np.sum(dout * u))
+    rhs = float(np.sum(dA * gA) + np.sum(dB * gB))
+    assert abs(lhs - rhs) / max(abs(lhs), 1e-12) < 1e-12
+
+
+# Rules that exist in the registry but cannot currently produce a lawful
+# result — real unswept debt with a NAMED reason, pinned exactly so a fix
+# (or a regression) shows up as a diff here, never as silence. These are
+# the sweep's remaining tensor no_spec rows.
+_OPEN_UNSWEEPABLE_RULES = {
+    "lamb": "numeric JVP requires tessera.ops.lamb, which does not exist",
+    "muon": "numeric JVP requires tessera.ops.muon, which does not exist",
+    "min_pool": "numeric JVP requires tessera.ops.min_pool (missing)",
+    "adaptive_pool": "numeric JVP requires tessera.ops.adaptive_pool "
+                     "(missing)",
+    "conv_transpose": "numeric JVP requires tessera.ops.conv_transpose "
+                      "(missing)",
+    "bidirectional_scan": "JVP is a declared placeholder returning "
+                          "zeros(1); the op takes a function-valued primal",
+    "dequant_matmul": "forward takes a packed-weight container; the VJP "
+                      "signature expects the unpacked weight — convention "
+                      "must be reconciled before a spec can exercise both",
+    "memory_read": "multi-output MemoryReadResult whose VJP handles only "
+                   "the primary output and swallows _output_index via **_",
+}
+
+
+def test_remaining_no_spec_rows_are_pinned_with_reasons(sweep):
+    """The unswept tensor remainder is exactly the pinned set above —
+    shrinking it means a rule was fixed (remove the entry); growing it
+    means new debt (add the op WITH its reason, or better, spec it)."""
+    no_spec = {r.op for r in sweep
+               if r.registry == "tensor" and r.status == "no_spec"}
+    assert no_spec == set(_OPEN_UNSWEEPABLE_RULES), (
+        f"unswept set drifted: extra={no_spec - set(_OPEN_UNSWEEPABLE_RULES)} "
+        f"fixed={set(_OPEN_UNSWEEPABLE_RULES) - no_spec}")
+
+
+# ── AD-WEIL-1 acceptance: DerivativeContract + §2.3 semantic keys ────────────
+
+
+def test_derivative_contracts_mirror_the_single_authorities():
+    """The §2.1 registry is DERIVED from the existing single authorities
+    (#30), not restated: every ODE-table entry, every declared kink
+    policy, and every multilinear declaration appears exactly once, with
+    the §3.6 witness that family is entitled to claim."""
+    from tessera.autodiff.algebra import SCALAR_RECURRENCES
+    from tessera.autodiff.derivative_contract import DERIVATIVE_CONTRACTS
+    from tessera.autodiff.linear import MULTILINEAR_PRIMITIVES
+    from tessera.autodiff.nonsmooth import NONSMOOTH_SELECTION
+
+    for name, rec in SCALAR_RECURRENCES.items():
+        c = DERIVATIVE_CONTRACTS[name]
+        assert c.ode is rec and c.pd_witness == "smooth", name
+    for name, policy in NONSMOOTH_SELECTION.items():
+        c = DERIVATIVE_CONTRACTS[name]
+        assert c.kink_policy == policy, name
+        assert c.pd_witness == "definable:semialgebraic", name
+    for name, args in MULTILINEAR_PRIMITIVES.items():
+        c = DERIVATIVE_CONTRACTS[name]
+        assert c.linear_args == tuple(args), name
+        assert c.pd_witness == "smooth", name
+    assert len(DERIVATIVE_CONTRACTS) == (
+        len(SCALAR_RECURRENCES) + len(NONSMOOTH_SELECTION)
+        + len(MULTILINEAR_PRIMITIVES)), "an authority row was dropped"
+
+
+def test_derivative_contract_rejects_conflicting_claims():
+    """Structural rejection is the contract's fail-closed half (#21a/#10a):
+    an ODE (C¹) primitive cannot carry a kink policy, a kink primitive
+    cannot claim smoothness, and an unknown witness never defaults."""
+    import pytest as _pytest
+
+    from tessera.autodiff.algebra import SCALAR_RECURRENCES
+    from tessera.autodiff.derivative_contract import DerivativeContract
+
+    rec = SCALAR_RECURRENCES["tanh"]
+    with _pytest.raises(ValueError, match="conflicting smoothness"):
+        DerivativeContract(ode=rec, kink_policy="subgrad_zero")
+    with _pytest.raises(ValueError, match="smooth"):
+        DerivativeContract(kink_policy="subgrad_zero", pd_witness="smooth")
+    with _pytest.raises(ValueError, match="pd_witness"):
+        DerivativeContract(pd_witness="definable:o-minimal-ish")
+
+
+def test_kink_probes_require_the_semialgebraic_witness():
+    """Law 5's probes are only meaningful under the §3.6 certificate: every
+    op the kink sweep exercises must carry the semialgebraic witness in
+    its contract — the sweep is the witness's consumer (#29)."""
+    from tessera.autodiff.derivative_contract import DERIVATIVE_CONTRACTS
+    from tessera.autodiff.law_inputs import KINK_SPECS
+    from tessera.autodiff.nonsmooth import NONSMOOTH_SELECTION
+
+    for op in KINK_SPECS:
+        assert op in NONSMOOTH_SELECTION, (
+            f"{op} has a kink probe but no declared policy")
+        assert DERIVATIVE_CONTRACTS[op].pd_witness == (
+            "definable:semialgebraic"), op
+
+
+def test_coefficient_scaling_key_reads_the_same_buffer_two_ways():
+    """§2.3: the buffer is invariant (Taylor-scaled — the only convention
+    under which the Cauchy `mul` is the ring product); the key changes the
+    READ. For f = exp at x with seed v: taylor extract(k) = eˣvᵏ/k!,
+    derivative extract(k) = eˣvᵏ — the k-th directional derivative
+    itself, i.e. Law 4's factorial bookkeeping given a first-class name."""
+    from tessera.autodiff.algebra import TruncatedJet
+
+    x, v, k = 0.37, 1.31, 4
+    taylor = TruncatedJet(k)
+    deriv = TruncatedJet(k, coefficient_scaling="derivative")
+    a = taylor.lift(np.asarray(x), np.asarray(v))
+    coeffs = taylor.scalar_fn("exp", a)
+    for j in range(k + 1):
+        expected_taylor = np.exp(x) * v ** j / math.factorial(j)
+        np.testing.assert_allclose(taylor.extract(coeffs, j),
+                                   expected_taylor, rtol=1e-12)
+        np.testing.assert_allclose(deriv.extract(coeffs, j),
+                                   np.exp(x) * v ** j, rtol=1e-12)
+
+
+def test_jet_semantic_keys_fail_closed():
+    """#21a: an illegal value for either key is an error at construction,
+    never a silent fallback."""
+    import pytest as _pytest
+
+    from tessera.autodiff.algebra import TruncatedJet
+
+    with _pytest.raises(ValueError, match="coefficient_scaling"):
+        TruncatedJet(2, coefficient_scaling="factorial_scaled")
+    with _pytest.raises(ValueError, match="numeric_policy"):
+        TruncatedJet(2, numeric_policy="fp32")
+
+
+# ── PR #594 review findings, pinned ──────────────────────────────────────────
+
+
+def test_svd_and_factorized_matmul_rules_are_batch_aware():
+    """PR #594 review: the canonical ops.svd forward accepts stacked
+    matrices, and factorized_matmul's forward carries leading batch dims
+    (after its s-broadcast fix) — the rules must too. Pinned batched:
+    JVP vs central differences of the canonical forward, and the adjoint
+    identity, tall/wide/square."""
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_factorized_matmul, jvp_svd
+    from tessera.autodiff.vjp import vjp_factorized_matmul, vjp_svd
+
+    rng = np.random.default_rng(47)
+
+    def mT(x):
+        return np.swapaxes(x, -1, -2)
+
+    for shape, diag in (((2, 5, 3), [5.0, 3.5, 2.0]),
+                        ((2, 3, 5), [5.0, 3.5, 2.0]),
+                        ((2, 4, 4), [5.0, 3.5, 2.0, 1.0])):
+        A = rng.standard_normal(shape)
+        k = len(diag)
+        A[..., :k, :k] += np.diag(diag)
+        dA = rng.standard_normal(shape)
+        (U, s, Vt), (dU, ds, dVt) = jvp_svd((A,), (dA,))
+        uU = rng.standard_normal(dU.shape)
+        us = rng.standard_normal(ds.shape)
+        uVt = rng.standard_normal(dVt.shape)
+        lhs = (float(np.sum(dU * uU)) + float(np.sum(ds * us))
+               + float(np.sum(dVt * uVt)))
+        (gA,) = vjp_svd((uU, us, uVt), A)
+        rhs = float(np.sum(dA * gA))
+        assert abs(lhs - rhs) / max(abs(lhs), 1e-12) < 1e-10, shape
+
+    a = rng.standard_normal((2, 4, 3))
+    b = rng.standard_normal((2, 3, 5))
+    da = rng.standard_normal(a.shape)
+    db = rng.standard_normal(b.shape)
+    y, dy = jvp_factorized_matmul((a, b), (da, db), rank=2)
+    np.testing.assert_allclose(
+        y, np.asarray(ops.factorized_matmul(a, b, 2)), rtol=1e-9)
+    eps = 1e-6
+    dy_fd = (np.asarray(ops.factorized_matmul(a + eps * da, b + eps * db, 2))
+             - np.asarray(ops.factorized_matmul(a - eps * da,
+                                                b - eps * db, 2))) / (2 * eps)
+    np.testing.assert_allclose(dy, dy_fd, atol=1e-6)
+    u = rng.standard_normal(y.shape)
+    gA, gB = vjp_factorized_matmul(u, a, b, rank=2)
+    lhs = float(np.sum(dy * u))
+    rhs = float(np.sum(da * gA)) + float(np.sum(db * gB))
+    assert abs(lhs - rhs) / max(abs(lhs), 1e-12) < 1e-12
+
+
+def test_dropout_jvp_honors_a_caller_generator():
+    """PR #594 review: the canonical forward accepts rng= as the mask
+    source. Reverse replay cannot recover a stateful generator's past
+    draws (the VJP's fail-closed contract stands), but forward mode
+    computes primal and tangent together, so it consumes the generator
+    ONCE — same precedence as the forward (rng wins over seed), same
+    mask on both halves. With neither rng nor seed it still fails
+    closed."""
+    import pytest as _pytest
+
+    from tessera import ops
+    from tessera.autodiff.jvp import jvp_dropout
+
+    rng = np.random.default_rng(53)
+    x = rng.standard_normal((3, 4))
+    dx = rng.standard_normal((3, 4))
+
+    g_fwd = np.random.default_rng(123)
+    g_jvp = np.random.default_rng(123)
+    y_fwd = np.asarray(ops.dropout(x, p=0.3, rng=g_fwd, training=True))
+    y, tan = jvp_dropout((x,), (dx,), p=0.3, training=True, rng=g_jvp)
+    np.testing.assert_allclose(y, y_fwd, rtol=1e-12)
+    mask = np.where(x != 0, y_fwd / x, 0.0)
+    np.testing.assert_allclose(tan, dx * mask, rtol=1e-9)
+
+    with _pytest.raises(ValueError, match="reproducible mask"):
+        jvp_dropout((x,), (dx,), p=0.3, training=True)

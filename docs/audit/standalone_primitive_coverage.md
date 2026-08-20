@@ -86,7 +86,7 @@ Contract axes distinguish implemented rules from explicit by-design closures; on
 | `shape_rule` | 473 | 26 | 6 | 0 |
 | `dtype_layout_rule` | 479 | 26 | 0 | 0 |
 | `vjp` | 303 | 166 | 1 | 35 |
-| `jvp` | 293 | 168 | 0 | 44 |
+| `jvp` | 304 | 166 | 0 | 35 |
 | `batching_rule` | 449 | 56 | 0 | 0 |
 | `transpose_rule` | 352 | 153 | 0 | 0 |
 | `sharding_rule` | 399 | 56 | 50 | 0 |
@@ -223,7 +223,7 @@ Current open queues derived from the same sources:
 | Tile IR partial | 6 | `depth_attn`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue` |
 | Backend contract planned | 9 | `broadcast_to_axis`, `collective_permute`, `named_sharding`, `partition_spec`, `pmax`, `pmean`, `pmin`, `psum`, `shard_map` |
 | Native/fused aggregate rows without benchmark inventory | 201 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
-| VJP / JVP planned | 35 / 44 | Autodiff rules, not forward compiler execution. |
+| VJP / JVP planned | 35 / 35 | Autodiff rules, not forward compiler execution. |
 | Sharding partial | 50 | Multi-device/domain proof. |
 
 `device_verified_abi` and `device_verified_jit` are exact-target execution proofs. `fused` identifies an owned optimized implementation but still needs its target-specific execute/compare fixture before it is a complete conformance claim. `artifact_only` is compile evidence only. Benchmark presence does not imply selector promotion or timing eligibility.

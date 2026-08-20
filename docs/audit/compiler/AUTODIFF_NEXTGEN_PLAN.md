@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-19
+last_updated: 2026-08-20
 audit_role: plan
 plan_state: open
 ---
@@ -33,12 +33,20 @@ plan_state: open
 > `clifford_table(p,q,r)` cross-checked against `ga` as oracle (the
 > W6.3/W6.4 substrate hypothesis, proven), the measured §3.8 conditioning
 > envelope, and Laws 2+4+6 — all six declared laws execute host-free.
-> Remaining AD-LAW-1 scope is the dashboard's sweep debt: `no_spec` rows
-> (tensor + the whole geometric registry) and `vjp_only` rows — live counts
-> are dashboard-owned. Remaining AD-WEIL-1 scope: `DerivativeContract`
-> registration (§2.1) and the `coefficient_scaling` / jet `numeric_policy`
-> semantic keys (§2.3). The E2E-REAL-6 Law-3 gate stays pending until the
-> spec debt is swept. §5 tracks bindings.
+> **AD-LAW-1 sweep debt closed (2026-08-20, AD-LAW-1i–1n):** the geometric
+> registry is fully swept (16/16), tensor spec growth took `no_spec` from
+> 173 to eight rule-capability gaps pinned with named reasons
+> (`_OPEN_UNSWEEPABLE_RULES`), the forward-key swallow triage is complete
+> (one real defect — conv layout — fixed; 41 named-benign), and the
+> `vjp_only` class is extinct (17 JVPs registered and law-checked). The
+> sweep surfaced and fixed fourteen real rule defects along the way (svd/qr
+> tangents, weight_norm and spectral_filter differentiating different
+> functions, sddmm operand order, gru bias drop, mor delegation pair,
+> sequence-operand tape support, adafactor FD step, conv layout, and
+> friends — each pinned with a negative fixture). The **E2E-REAL-6 Law-3
+> gate is ACTIVE** as of 2026-08-20. Remaining AD-WEIL-1 scope:
+> `DerivativeContract` registration (§2.1) and the `coefficient_scaling` /
+> jet `numeric_policy` semantic keys (§2.3). §5 tracks bindings.
 
 **Date:** 2026-08-18 · **Sources read:** [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md)
 (complete), [`vjp.py`](../../../python/tessera/autodiff/vjp.py) /

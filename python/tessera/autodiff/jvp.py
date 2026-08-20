@@ -3011,7 +3011,7 @@ def jvp_qr(primals, tangents, **_):
 
 
 @_jvp("svd")
-def jvp_svd(primals, tangents, **_):
+def jvp_svd(primals, tangents, *, _output_index=None, **_):
     """A = U diag(s) V^T (thin). Full tangent for distinct singular values.
 
     With ``dP = Uᵀ dA Vᵀᵀ`` and ``F_ij = 1/(s_j² − s_i²)`` off-diagonal:
@@ -3031,6 +3031,13 @@ def jvp_svd(primals, tangents, **_):
     ``ops.svd`` forward accepts stacked matrices, so the rule pair must
     too — all transposes are last-two-axis swaps and the diagonal /
     S-scaling operations broadcast over the batch.
+
+    ``_output_index`` is accepted and deliberately unused. Forward mode
+    produces **every** component in one call, so there is nothing to select —
+    unlike the VJP, which the tape replays once per component. It is named
+    rather than left to ``**_`` because a kwarg a canonical caller emits must
+    be visibly considered, not silently absorbed (the ``jvp_clamp`` bug class
+    that ``test_swallowed_kwarg_findings_are_pinned`` guards).
 
     "Distinct singular values" is a contract, not an aside: at a repeated
     value ``F`` has no limit and no individual ``s_i``/``u_i``/``v_i`` is

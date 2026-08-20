@@ -437,7 +437,7 @@ def _norm_vjp(dout, A, *, ord: str = "fro", **_):
     # `U V^T` is the gradient only at FULL RANK — repeated singular values are
     # fine (unlike the svd factor rules), but a *zero* one is not: there the
     # nuclear norm is not differentiable and its subdifferential is a set.
-    check_full_rank(sv, op="norm_nuclear", what="the matrix")
+    check_full_rank(sv, op="norm", what="the matrix (ord='nuc')")
     return (d[..., None, None] * (U @ Vt),)
 
 
@@ -509,10 +509,13 @@ def _eigh_vjp(dout, S, *, _output_index=None, **_):
     return (0.5 * (dS + _mT(dS)),)
 
 
-def _eigh_jvp(primals, tangents, **_):
+def _eigh_jvp(primals, tangents, *, _output_index=None, **_):
     arr = _square(primals[0], "eigh")
     dS = np.asarray(tangents[0], dtype=np.float64)
     dS = 0.5 * (dS + _mT(dS))
+    # `_output_index` is accepted and deliberately unused: forward mode returns
+    # both components at once, so there is nothing to select. Named rather than
+    # swallowed, for the same reason as `jvp_svd`.
     w, Q = _eigh_impl(arr)
     P = _mT(Q) @ dS @ Q
     idx = np.arange(w.shape[-1])

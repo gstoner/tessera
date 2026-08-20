@@ -132,11 +132,13 @@ DEGENERACY_DIAGNOSTIC_CODE = "E_DEGENERATE_FACTORIZATION"
 FACTORIZATION_DEGENERACY: Mapping[str, str] = {
     "svd": FAIL_CLOSED,
     "eigh": FAIL_CLOSED,
-    # The nuclear norm is a *nonsmooth* member of this family: it is
+    # `norm` is a *nonsmooth* member of this family: with ord='nuc' it is
     # differentiable exactly at full rank, and at a rank-deficient point its
     # subdifferential is a set. Same key, because the question is the same one
-    # — what happens where the derivative does not exist.
-    "norm_nuclear": FAIL_CLOSED,
+    # — what happens where the derivative does not exist. Keyed by the OP name
+    # like every other entry, so the registry's "every declared op has a rule"
+    # invariant holds.
+    "norm": FAIL_CLOSED,
     "qr": FAIL_CLOSED,
     "cholesky": FAIL_CLOSED,
     "tri_solve": FAIL_CLOSED,
@@ -151,7 +153,7 @@ SUPPORTED_POLICIES: Mapping[str, frozenset] = {
     # `generalized` here selects one declared element of the subdifferential
     # (U V^T, the minimal-Frobenius-norm subgradient); `damped` has no meaning
     # for a set-valued derivative and is not offered.
-    "norm_nuclear": frozenset({FAIL_CLOSED, GENERALIZED, UNCHECKED}),
+    "norm": frozenset({FAIL_CLOSED, GENERALIZED, UNCHECKED}),
     "qr": frozenset({FAIL_CLOSED, UNCHECKED}),
     "cholesky": frozenset({FAIL_CLOSED, UNCHECKED}),
     "tri_solve": frozenset({FAIL_CLOSED, UNCHECKED}),

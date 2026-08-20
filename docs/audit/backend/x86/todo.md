@@ -9,6 +9,25 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `APPLE-RUNTIME-SINGLE-IMAGE-2026-08-19` — **Apple runtime
+loading; x86 outcome: not applicable.** The single-image slice fixes duplicate loading of the Apple GPU runtime.
+`_apple_gpu_dispatch._prebuilt_candidate` decided whether a prebuilt dylib was
+current by `ctypes.CDLL`-ing it and probing sentinel symbols. Loading is not a
+read-only probe: it registers the runtime's Objective-C classes process-wide,
+and skipping the candidate afterwards does not unregister them (the ObjC
+runtime pins an image that has defined classes). A stale candidate therefore
+stayed resident and the from-source dylib compiled next registered the same
+classes again -- two images of one runtime, each with its own copy of every
+file-static, including the thread_local last-error channel that
+`_apple_gpu_run_checked` reads to decide whether a kernel failed. Staleness is
+now read from the file's symbol table via `nm`, so a stale candidate is never
+loaded; an undecidable probe (no `nm`) keeps the previous load-and-probe
+behaviour rather than rejecting a library it cannot fault.
+x86 impact: none. The AVX-512 lane loads `libtessera_x86_elementwise.so`
+through its own path, not through `_apple_gpu_dispatch`. No Zen 5 retest
+required and no device evidence is produced or claimed.
+
+
 Cross-backend sync `APPLE-STUB-BINARY-OPCODES-2026-08-19` — **shared runtime
 contract; x86 outcome: not applicable today, but one follow-up recorded.**
 The portable-stub opcode slice fixes a silent wrong-answer class in the Apple

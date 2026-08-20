@@ -44,9 +44,17 @@ plan_state: open
 > functions, sddmm operand order, gru bias drop, mor delegation pair,
 > sequence-operand tape support, adafactor FD step, conv layout, and
 > friends — each pinned with a negative fixture). The **E2E-REAL-6 Law-3
-> gate is ACTIVE** as of 2026-08-20. Remaining AD-WEIL-1 scope:
-> `DerivativeContract` registration (§2.1) and the `coefficient_scaling` /
-> jet `numeric_policy` semantic keys (§2.3). §5 tracks bindings.
+> gate is ACTIVE** as of 2026-08-20. **AD-WEIL-1 acceptance closed
+> (2026-08-20):** `DerivativeContract` (§2.1) is registered — derived from
+> the three single authorities (ODE table, `MULTILINEAR_PRIMITIVES`,
+> `NONSMOOTH_SELECTION`) with structural rejection of conflicting
+> smoothness claims and the §3.6 `pd_witness` certificate per family —
+> and the `coefficient_scaling` / jet `numeric_policy` semantic keys
+> (§2.3) are declared, fail-closed keys on `TruncatedJet`, consumed and
+> negative-fixtured by the law tests. One recorded follow-up: the
+> Decision #24 `primitive_coverage.py` axes for the new fields are not
+> yet wired (a registry-wide integration deserving its own slice). §5
+> tracks bindings.
 
 **Date:** 2026-08-18 · **Sources read:** [`AUTODIFF_SPEC.md`](../../spec/AUTODIFF_SPEC.md)
 (complete), [`vjp.py`](../../../python/tessera/autodiff/vjp.py) /

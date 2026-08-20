@@ -21,6 +21,7 @@ Covers:
 from __future__ import annotations
 
 import inspect
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -2021,7 +2022,6 @@ def test_weight_norm_rules_match_the_kept_axis_semantics():
     # per kept-axis slice under the CORRECT semantics.
     dv = rng.standard_normal((4, 3))
     _, dw = jvp_weight_norm((v,), (dv,), axis=-1)
-    kept = 2  # axis -1 of a 2-D array
     n2 = (v * v).sum(axis=0, keepdims=True) + 1e-12
     proj = (v * np.asarray(dw)).sum(axis=0) / np.sqrt(n2[0])
     np.testing.assert_allclose(proj, np.zeros(3), atol=1e-10)
@@ -2255,3 +2255,99 @@ def test_remaining_no_spec_rows_are_pinned_with_reasons(sweep):
     assert no_spec == set(_OPEN_UNSWEEPABLE_RULES), (
         f"unswept set drifted: extra={no_spec - set(_OPEN_UNSWEEPABLE_RULES)} "
         f"fixed={set(_OPEN_UNSWEEPABLE_RULES) - no_spec}")
+
+
+# ── AD-WEIL-1 acceptance: DerivativeContract + §2.3 semantic keys ────────────
+
+
+def test_derivative_contracts_mirror_the_single_authorities():
+    """The §2.1 registry is DERIVED from the existing single authorities
+    (#30), not restated: every ODE-table entry, every declared kink
+    policy, and every multilinear declaration appears exactly once, with
+    the §3.6 witness that family is entitled to claim."""
+    from tessera.autodiff.algebra import SCALAR_RECURRENCES
+    from tessera.autodiff.derivative_contract import DERIVATIVE_CONTRACTS
+    from tessera.autodiff.linear import MULTILINEAR_PRIMITIVES
+    from tessera.autodiff.nonsmooth import NONSMOOTH_SELECTION
+
+    for name, rec in SCALAR_RECURRENCES.items():
+        c = DERIVATIVE_CONTRACTS[name]
+        assert c.ode is rec and c.pd_witness == "smooth", name
+    for name, policy in NONSMOOTH_SELECTION.items():
+        c = DERIVATIVE_CONTRACTS[name]
+        assert c.kink_policy == policy, name
+        assert c.pd_witness == "definable:semialgebraic", name
+    for name, args in MULTILINEAR_PRIMITIVES.items():
+        c = DERIVATIVE_CONTRACTS[name]
+        assert c.linear_args == tuple(args), name
+        assert c.pd_witness == "smooth", name
+    assert len(DERIVATIVE_CONTRACTS) == (
+        len(SCALAR_RECURRENCES) + len(NONSMOOTH_SELECTION)
+        + len(MULTILINEAR_PRIMITIVES)), "an authority row was dropped"
+
+
+def test_derivative_contract_rejects_conflicting_claims():
+    """Structural rejection is the contract's fail-closed half (#21a/#10a):
+    an ODE (C¹) primitive cannot carry a kink policy, a kink primitive
+    cannot claim smoothness, and an unknown witness never defaults."""
+    import pytest as _pytest
+
+    from tessera.autodiff.algebra import SCALAR_RECURRENCES
+    from tessera.autodiff.derivative_contract import DerivativeContract
+
+    rec = SCALAR_RECURRENCES["tanh"]
+    with _pytest.raises(ValueError, match="conflicting smoothness"):
+        DerivativeContract(ode=rec, kink_policy="subgrad_zero")
+    with _pytest.raises(ValueError, match="smooth"):
+        DerivativeContract(kink_policy="subgrad_zero", pd_witness="smooth")
+    with _pytest.raises(ValueError, match="pd_witness"):
+        DerivativeContract(pd_witness="definable:o-minimal-ish")
+
+
+def test_kink_probes_require_the_semialgebraic_witness():
+    """Law 5's probes are only meaningful under the §3.6 certificate: every
+    op the kink sweep exercises must carry the semialgebraic witness in
+    its contract — the sweep is the witness's consumer (#29)."""
+    from tessera.autodiff.derivative_contract import DERIVATIVE_CONTRACTS
+    from tessera.autodiff.law_inputs import KINK_SPECS
+    from tessera.autodiff.nonsmooth import NONSMOOTH_SELECTION
+
+    for op in KINK_SPECS:
+        assert op in NONSMOOTH_SELECTION, (
+            f"{op} has a kink probe but no declared policy")
+        assert DERIVATIVE_CONTRACTS[op].pd_witness == (
+            "definable:semialgebraic"), op
+
+
+def test_coefficient_scaling_key_reads_the_same_buffer_two_ways():
+    """§2.3: the buffer is invariant (Taylor-scaled — the only convention
+    under which the Cauchy `mul` is the ring product); the key changes the
+    READ. For f = exp at x with seed v: taylor extract(k) = eˣvᵏ/k!,
+    derivative extract(k) = eˣvᵏ — the k-th directional derivative
+    itself, i.e. Law 4's factorial bookkeeping given a first-class name."""
+    from tessera.autodiff.algebra import TruncatedJet
+
+    x, v, k = 0.37, 1.31, 4
+    taylor = TruncatedJet(k)
+    deriv = TruncatedJet(k, coefficient_scaling="derivative")
+    a = taylor.lift(np.asarray(x), np.asarray(v))
+    coeffs = taylor.scalar_fn("exp", a)
+    for j in range(k + 1):
+        expected_taylor = np.exp(x) * v ** j / math.factorial(j)
+        np.testing.assert_allclose(taylor.extract(coeffs, j),
+                                   expected_taylor, rtol=1e-12)
+        np.testing.assert_allclose(deriv.extract(coeffs, j),
+                                   np.exp(x) * v ** j, rtol=1e-12)
+
+
+def test_jet_semantic_keys_fail_closed():
+    """#21a: an illegal value for either key is an error at construction,
+    never a silent fallback."""
+    import pytest as _pytest
+
+    from tessera.autodiff.algebra import TruncatedJet
+
+    with _pytest.raises(ValueError, match="coefficient_scaling"):
+        TruncatedJet(2, coefficient_scaling="factorial_scaled")
+    with _pytest.raises(ValueError, match="numeric_policy"):
+        TruncatedJet(2, numeric_policy="fp32")

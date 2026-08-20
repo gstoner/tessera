@@ -30,7 +30,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-__all__ = ["InputSpec", "LAW_INPUT_SPECS"]
+__all__ = ["GEO_LAW_INPUT_SPECS", "InputSpec", "LAW_INPUT_SPECS"]
 
 
 @dataclass(frozen=True)
@@ -486,4 +486,99 @@ KINK_SPECS: dict[str, KinkSpec] = {
         lambda p: (np.asarray(p[0]) == np.min(np.asarray(p[0]), axis=-1,
                                               keepdims=True),),
         "split"),
+}
+
+
+# ── Geometric registry (multivector) specs ──────────────────────────────────
+# Inputs for the Law-3 adjoint sweep over `_VJPS_GEO`/`_JVPS_GEO` — the
+# sweep the plan requires to run BEFORE the `CliffordTangent` absorption
+# (AUTODIFF_NEXTGEN_PLAN §3.5 / §5 item 4). The pairing is the Frobenius
+# inner product on coefficient vectors, which is the convention the VJPs
+# themselves declare (`geometric/vjp.py` module docstring); the algebra is
+# Cl(3, 0), the signature that convention is stated for.
+#
+# The `tessera.ga` import is deliberately lazy (inside each `make`) so
+# importing this module never pulls the GA stack; the sweep already guards
+# the geometric registry import the same way.
+
+
+def _mv(rng: np.random.Generator, grades=None, scale: float = 1.0):
+    from tessera.ga.multivector import Multivector
+    from tessera.ga.signature import Cl
+
+    alg = Cl(3, 0)
+    coeffs = scale * rng.standard_normal(alg.dim)
+    return Multivector(coeffs, alg, grades=grades)
+
+
+def _geo_unary(**mv_kwargs):
+    def make(rng):
+        return (_mv(rng, **mv_kwargs),), {}
+    return make
+
+
+def _geo_binary():
+    def make(rng):
+        return (_mv(rng), _mv(rng)), {}
+    return make
+
+
+def _geo_rotor(rng: np.random.Generator):
+    """A genuine rotor in Cl(3, 0): R = cos θ + sin θ · B̂ for a unit
+    bivector B̂ (every bivector in 3D is simple, so B̂² = −1)."""
+    import numpy as _np
+
+    from tessera.ga.multivector import Multivector
+    from tessera.ga.signature import Cl
+
+    alg = Cl(3, 0)
+    theta = float(rng.uniform(0.2, 1.2))
+    b = rng.standard_normal(3)
+    b = b / _np.linalg.norm(b)
+    coeffs = _np.zeros(alg.dim)
+    coeffs[0] = _np.cos(theta)
+    # Grade-2 blade masks in Cl(3,0): popcount-2 indices 3 (e12), 5 (e13),
+    # 6 (e23).
+    coeffs[[3, 5, 6]] = _np.sin(theta) * b
+    return Multivector(coeffs, alg)
+
+
+def _geo_norm_input():
+    def make(rng):
+        # Keep |a| well away from the norm's declared subgradient-at-zero
+        # convention: a random 8-coefficient Gaussian has |a| ≈ 2.6 a.s.,
+        # but make the floor structural rather than probabilistic.
+        mv = _mv(rng)
+        import numpy as _np
+
+        n = float(_np.sqrt(_np.sum(mv.coefficients ** 2)))
+        if n < 0.5:  # pragma: no cover — measure-zero fallback, kept explicit
+            mv = (1.0 / max(n, 1e-9)) * mv
+        return (mv,), {}
+    return make
+
+
+GEO_LAW_INPUT_SPECS: dict[str, InputSpec] = {
+    # linear, self-adjoint-by-declaration
+    "add": S(_geo_binary()),
+    "sub": S(_geo_binary()),
+    "neg": S(_geo_unary()),
+    "reverse": S(_geo_unary()),
+    "grade_involution": S(_geo_unary()),
+    "conjugate": S(_geo_unary()),
+    "hodge_star": S(_geo_unary()),
+    # a is differentiable; the grade selector is configuration
+    "grade_projection": S(lambda rng: ((_mv(rng), 1), {}), diff_args=(0,)),
+    # both the multivector and the scalar are differentiable
+    "scalar_mul": S(lambda rng: ((_mv(rng), float(rng.uniform(0.5, 2.0))), {})),
+    # bilinear
+    "geometric_product": S(_geo_binary()),
+    "wedge": S(_geo_binary()),
+    "left_contraction": S(_geo_binary()),
+    # scalar-valued
+    "inner": S(_geo_binary()),
+    "norm_squared": S(_geo_norm_input()),
+    "norm": S(_geo_norm_input()),
+    # rotor sandwich: a genuine rotor plus a general multivector
+    "rotor_sandwich": S(lambda rng: ((_geo_rotor(rng), _mv(rng)), {})),
 }

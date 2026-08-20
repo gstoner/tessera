@@ -26,7 +26,7 @@ are real unswept debt, not exclusions.
 
 | Law | Status | Ops |
 |---|---|---:|
-| adjoint | no_spec | 16 |
+| adjoint | pass | 16 |
 
 ## Checked tensor ops
 

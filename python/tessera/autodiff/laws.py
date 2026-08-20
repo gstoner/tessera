@@ -84,11 +84,26 @@ def _is_diff_dtype(arr: np.ndarray) -> bool:
             or np.issubdtype(arr.dtype, np.complexfloating))
 
 
+def _is_multivector(x: Any) -> bool:
+    """True for `tessera.ga.multivector.Multivector` values, without making
+    this module import the GA stack at module-import time (the sweep guards
+    the geometric registry import the same way)."""
+    if type(x).__name__ != "Multivector":
+        return False
+    try:
+        from tessera.ga.multivector import Multivector
+    except Exception:  # pragma: no cover — GA stack unavailable
+        return False
+    return isinstance(x, Multivector)
+
+
 def _leaves(x: Any) -> list[np.ndarray]:
     """Flatten an op output (array / tuple / list / dict) to float/complex
     arrays. Complex arrays are first-class leaves — the pairing treats ℂ as
     ℝ² via Re⟨a, conj b⟩ (see `_dot`), which is the inner product under
-    which the fft-family adjoint conventions are stated."""
+    which the fft-family adjoint conventions are stated. A `Multivector`
+    leaf contributes its coefficient array — the Frobenius pairing the
+    geometric VJPs declare (`geometric/vjp.py`)."""
     if x is None:
         return []
     if isinstance(x, (tuple, list)):
@@ -101,6 +116,8 @@ def _leaves(x: Any) -> list[np.ndarray]:
         for k in sorted(x):
             out.extend(_leaves(x[k]))
         return out
+    if _is_multivector(x):
+        return [np.asarray(x.coefficients)]
     arr = np.asarray(x)
     return [arr] if _is_diff_dtype(arr) else []
 
@@ -215,6 +232,89 @@ def _zero_like(p: Any) -> np.ndarray:
 
 def _single_leaf(x: Any) -> bool:
     return not isinstance(x, (tuple, list, dict))
+
+
+# ── Law 3 over the geometric registry ────────────────────────────────────────
+
+
+def _geo_rand_like(rng: np.random.Generator, p: Any) -> Any:
+    """A random tangent structurally like `p`: a same-algebra `Multivector`
+    for multivector primals, a float for scalar primals."""
+    if _is_multivector(p):
+        from tessera.ga.multivector import Multivector
+
+        return Multivector(rng.standard_normal(np.shape(p.coefficients)),
+                           p.algebra)
+    return float(rng.standard_normal())
+
+
+def geo_adjoint_check(op: str, spec, jvp_fn: Callable,
+                      vjp_fn: Callable) -> LawResult:
+    """⟨J v, u⟩ = ⟨v, Jᵀ u⟩ for a geometric-registry rule pair.
+
+    Same statement as `adjoint_check`, under the Frobenius inner product
+    on coefficient vectors — the pairing the geometric VJPs themselves
+    declare (`geometric/vjp.py` module docstring). A separate driver
+    because the registries' calling conventions genuinely differ
+    (Decision #31 keeps them both alive until the `CliffordTangent`
+    absorption): geometric JVPs are ``jvp(tangents, primals, **kw) ->
+    tangent_out`` with ``None`` marking non-differentiated slots, and
+    geometric VJPs take the cotangent as a `Multivector` (or scalar for
+    the scalar-valued ops), never a raw coefficient array. Guessing which
+    convention a callable uses from shapes would let a wrong-shaped rule
+    pass by being re-wrapped, so the conventions stay explicit.
+    """
+    rng = op_rng(op, "geo-adjoint")
+    try:
+        primals, kwargs = spec.make(rng)
+        diff = spec.diff_args if spec.diff_args is not None \
+            else tuple(range(len(primals)))
+
+        tol = spec.rtol if spec.rtol is not None else ADJOINT_RTOL
+        max_res = 0.0
+        for _ in range(spec.probes):
+            tangents = tuple(
+                _geo_rand_like(rng, p) if i in diff else None
+                for i, p in enumerate(primals)
+            )
+            t_out = jvp_fn(tangents, primals, **kwargs)
+
+            u: Any
+            if _is_multivector(t_out):
+                from tessera.ga.multivector import Multivector
+
+                u = Multivector(
+                    _rand_like(rng, np.asarray(t_out.coefficients)),
+                    t_out.algebra)
+            else:
+                u = _rand_like(rng, np.asarray(t_out))
+            lhs = _dot(t_out, u)
+
+            grads = vjp_fn(u, *primals, **kwargs)
+            if not isinstance(grads, tuple):
+                grads = (grads,)
+            rhs = 0.0
+            for i in diff:
+                if i < len(grads) and grads[i] is not None:
+                    rhs += _dot(tangents[i], grads[i])
+
+            res = abs(lhs - rhs) / max(abs(lhs) + abs(rhs),
+                                       tol * _scale(t_out, u))
+            max_res = max(max_res, res)
+
+        status = "pass" if max_res <= tol * 10 else "fail"
+        if status == "pass" and not spec.zero_tangent_ok and all(
+            not np.any(np.asarray(leaf)) for leaf in _leaves(t_out)
+        ):
+            return LawResult(op, "geometric", "adjoint", "fail", spec.probes,
+                             max_res,
+                             "tangent output identically zero — vacuous "
+                             "pairing (matched-zero shape; see Law 1)")
+        return LawResult(op, "geometric", "adjoint", status, spec.probes,
+                         max_res)
+    except Exception as e:  # noqa: BLE001 — a sweep must survive any one rule
+        return LawResult(op, "geometric", "adjoint", "rule_error", 0, None,
+                         f"{type(e).__name__}: {e}")
 
 
 # ── Law 1: chain (functoriality vs finite differences) ───────────────────────
@@ -384,12 +484,20 @@ def run_law_sweep() -> list[LawResult]:
 
     try:
         from .geometric.registry import _JVPS_GEO, _VJPS_GEO
+        from .law_inputs import GEO_LAW_INPUT_SPECS
         for op in sorted(set(_VJPS_GEO) | set(_JVPS_GEO)):
             if op not in _JVPS_GEO or op not in _VJPS_GEO:
                 status = "vjp_only" if op not in _JVPS_GEO else "jvp_only"
-            else:
-                status = "no_spec"  # multivector input specs are follow-on work
-            results.append(LawResult(op, "geometric", "adjoint", status, 0, None))
+                results.append(
+                    LawResult(op, "geometric", "adjoint", status, 0, None))
+                continue
+            spec = GEO_LAW_INPUT_SPECS.get(op)
+            if spec is None:
+                results.append(
+                    LawResult(op, "geometric", "adjoint", "no_spec", 0, None))
+                continue
+            results.append(geo_adjoint_check(op, spec,
+                                             _JVPS_GEO[op], _VJPS_GEO[op]))
     except Exception as e:  # noqa: BLE001 — geometric import must not sink the sweep
         results.append(LawResult("<geometric-registry>", "geometric", "adjoint",
                                  "rule_error", 0, None, f"{type(e).__name__}: {e}"))

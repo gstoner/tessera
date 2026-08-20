@@ -96,6 +96,93 @@ def test_geometric_registry_is_enumerated(sweep):
     assert len(geo) >= 16, "geometric registry rows missing from the sweep"
 
 
+def test_geometric_registry_is_fully_swept(sweep):
+    """AD-LAW-1 geometric slice: every registered geometric rule pair is
+    actually exercised by the adjoint law — no `no_spec` debt remains.
+    This is the sweep the plan requires BEFORE the `CliffordTangent`
+    absorption may begin (AUTODIFF_NEXTGEN_PLAN §3.5 / §5 item 4)."""
+    geo = [r for r in sweep if r.registry == "geometric"]
+    unswept = [r.op for r in geo if r.status == "no_spec"]
+    assert not unswept, (
+        f"geometric ops without an input spec: {unswept} — add them to "
+        f"GEO_LAW_INPUT_SPECS, do not let the registry grow unswept")
+    for r in geo:
+        assert r.status in ("pass", "fail", "vjp_only", "jvp_only"), (
+            f"{r.op}: {r.status} ({r.detail})")
+
+
+# Geometric-engine teeth: the geo driver must be falsifiable in the same
+# ways the tensor driver is, or its all-green sweep proves nothing.
+
+
+def _geo_spec(op):
+    from tessera.autodiff.law_inputs import GEO_LAW_INPUT_SPECS
+
+    return GEO_LAW_INPUT_SPECS[op]
+
+
+def test_geo_adjoint_catches_planted_wrong_vjp():
+    """An identity 'adjoint' for the geometric product (grad = dout for
+    both args) is the shape a copy-paste rule would take — it must fail."""
+    from tessera.autodiff.geometric.registry import _JVPS_GEO
+    from tessera.autodiff.laws import geo_adjoint_check
+
+    r = geo_adjoint_check(
+        "geometric_product<planted>", _geo_spec("geometric_product"),
+        _JVPS_GEO["geometric_product"], lambda dout, a, b: (dout, dout))
+    assert r.status == "fail", r
+
+
+def test_geo_adjoint_catches_sign_flipped_linear_adjoint():
+    """hodge_star's hand-rolled Cayley transpose is exactly the kind of
+    signed table contraction where one flipped sign hides — the law must
+    see a global sign error."""
+    from tessera.autodiff.geometric.registry import _JVPS_GEO, _VJPS_GEO
+    from tessera.autodiff.laws import geo_adjoint_check
+
+    orig = _VJPS_GEO["hodge_star"]
+    r = geo_adjoint_check(
+        "hodge_star<flipped>", _geo_spec("hodge_star"),
+        _JVPS_GEO["hodge_star"],
+        lambda dout, a: tuple(-g for g in orig(dout, a)))
+    assert r.status == "fail", r
+
+
+def test_geo_adjoint_flags_matched_zero_pair():
+    """The §3.5 completeness caveat holds for multivectors too: a matched
+    all-zero pair satisfies 0 = 0 on every probe, and the engine must call
+    it vacuous rather than pass."""
+    import numpy as np
+
+    from tessera.autodiff.laws import geo_adjoint_check
+    from tessera.ga.multivector import Multivector
+
+    def zero_jvp(tangents, primals, **_):
+        return Multivector(np.zeros(8), primals[0].algebra)
+
+    def zero_vjp(dout, a, b, **_):
+        z = Multivector(np.zeros(8), a.algebra)
+        return z, z
+
+    r = geo_adjoint_check("geometric_product<zeros>",
+                          _geo_spec("geometric_product"), zero_jvp, zero_vjp)
+    assert r.status == "fail", r
+    assert "vacuous" in r.detail
+
+
+def test_geo_adjoint_pairs_the_scalar_slot():
+    """scalar_mul's grad wrt the scalar is a float, not a Multivector; the
+    pairing must include it — a rule that drops it (returns None) fails."""
+    from tessera.autodiff.geometric.registry import _JVPS_GEO
+    from tessera.autodiff.laws import geo_adjoint_check
+
+    r = geo_adjoint_check(
+        "scalar_mul<dropped>", _geo_spec("scalar_mul"),
+        _JVPS_GEO["scalar_mul"],
+        lambda dout, a, s: (float(s) * dout, None))
+    assert r.status == "fail", r
+
+
 # ── the engine's teeth ───────────────────────────────────────────────────────
 
 

@@ -113,6 +113,7 @@ __all__ = [
     "eigenvalue_clusters",
     "svd_coupling",
     "eigh_coupling",
+    "check_full_rank",
     "check_factor_rank",
 ]
 
@@ -131,6 +132,11 @@ DEGENERACY_DIAGNOSTIC_CODE = "E_DEGENERATE_FACTORIZATION"
 FACTORIZATION_DEGENERACY: Mapping[str, str] = {
     "svd": FAIL_CLOSED,
     "eigh": FAIL_CLOSED,
+    # The nuclear norm is a *nonsmooth* member of this family: it is
+    # differentiable exactly at full rank, and at a rank-deficient point its
+    # subdifferential is a set. Same key, because the question is the same one
+    # — what happens where the derivative does not exist.
+    "norm_nuclear": FAIL_CLOSED,
     "qr": FAIL_CLOSED,
     "cholesky": FAIL_CLOSED,
     "tri_solve": FAIL_CLOSED,
@@ -142,6 +148,10 @@ FACTORIZATION_DEGENERACY: Mapping[str, str] = {
 SUPPORTED_POLICIES: Mapping[str, frozenset] = {
     "svd": frozenset({FAIL_CLOSED, GENERALIZED, DAMPED, UNCHECKED}),
     "eigh": frozenset({FAIL_CLOSED, GENERALIZED, DAMPED, UNCHECKED}),
+    # `generalized` here selects one declared element of the subdifferential
+    # (U V^T, the minimal-Frobenius-norm subgradient); `damped` has no meaning
+    # for a set-valued derivative and is not offered.
+    "norm_nuclear": frozenset({FAIL_CLOSED, GENERALIZED, UNCHECKED}),
     "qr": frozenset({FAIL_CLOSED, UNCHECKED}),
     "cholesky": frozenset({FAIL_CLOSED, UNCHECKED}),
     "tri_solve": frozenset({FAIL_CLOSED, UNCHECKED}),
@@ -698,6 +708,54 @@ def _check_generalized_admissible(
                         f"Individual singular vectors are not differentiable there."
                     ),
                 ))
+
+
+def check_full_rank(
+    s: np.ndarray,
+    *,
+    op: str,
+    what: str,
+    policy: str | None = None,
+    tol: float | None = None,
+    mode: str = "backward",
+) -> bool:
+    """Guard a rule that is differentiable only at full rank.
+
+    Returns True when the caller may proceed with its declared selection.
+    The nuclear norm is the case in hand: `grad ||A||_* = U V^T` is *the*
+    gradient only at full rank. At a rank-deficient point the norm is not
+    Frechet differentiable, its subdifferential is
+    `{U V^T + W : ||W||_2 <= 1, W orthogonal to the range and corange}`, and
+    numpy's arbitrary choice of null-space singular vectors means the returned
+    matrix is an arbitrary element of that set — a silent wrong answer dressed
+    as a gradient.
+    """
+    name, _tau, tol_override = active_policy(op, policy)
+    if name == UNCHECKED:
+        return True
+    if tol is None:
+        tol = tol_override
+    s_arr = np.asarray(s, dtype=np.float64)
+    if tol is None:
+        tol = existence_tolerance(s_arr.shape[-1], np.float64)
+    scale = float(np.max(np.abs(s_arr))) if s_arr.size else 0.0
+    smallest = float(np.min(np.abs(s_arr))) if s_arr.size else 0.0
+    rel = smallest / scale if scale > 0.0 else 0.0
+    if rel > tol:
+        return True
+    if name == GENERALIZED:
+        return True
+    raise TesseraDegeneracyError(
+        f"{DEGENERACY_DIAGNOSTIC_CODE}: {op} {mode} is not defined at this "
+        f"input — {what} is rank deficient (smallest singular value "
+        f"{smallest:.6e}, relative {rel:.3e} <= tol {tol:.3e}). The function is "
+        f"differentiable only at full rank; here its subdifferential is a SET, "
+        f"and the singular vectors spanning the null space are arbitrary, so "
+        f"any single matrix returned would be an arbitrary element of it. "
+        f"Select `degeneracy_policy('generalized')` to accept the declared "
+        f"U·Vᵀ subgradient (the minimal-Frobenius-norm element), or "
+        f"`'unchecked'` to assert full rank yourself."
+    )
 
 
 # ── Rank / conditioning guard for qr, cholesky, tri_solve ────────────────────

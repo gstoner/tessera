@@ -210,6 +210,161 @@ def test_inv_derivative_is_the_operator_form() -> None:
     np.testing.assert_allclose(tangent, -Ainv @ dA @ Ainv, rtol=1e-10)
 
 
+# ── PR #596 review: multi-output routing, broadcasting, and domain edges ────
+def test_eigh_routes_cotangents_by_output_index() -> None:
+    """The tape replays a multi-output op once per component.
+
+    A rule that swallows `_output_index` reads an eigenvector cotangent as if
+    it were an eigenvalue one. `laws._declares_output_index` names this bug
+    class; this pins both components.
+    """
+    import inspect
+
+    assert "_output_index" in inspect.signature(_VJPS["eigh"]).parameters, (
+        "the key must be declared explicitly — a `**_` catch-all silently "
+        "returns output-0's gradient for every component"
+    )
+    S = _spd(3)
+    g_vec = grad(lambda X: ops.reduce(ops.mul(ops.eigh(X)[1], ops.eigh(X)[1]),
+                                      op="sum"))(S)
+    assert g_vec.shape == S.shape
+    g_val = grad(lambda X: ops.reduce(ops.eigh(X)[0], op="sum"))(S)
+    np.testing.assert_allclose(g_val, np.eye(3), atol=1e-9)
+
+
+@pytest.mark.parametrize("index", [0, 1, 2])
+def test_svd_routes_cotangents_by_output_index(index) -> None:
+    """Same defect, found next door: `grad` through `ops.svd(A)[0]` used to
+    return an (n, n, n) array for an (n, n) input — a wrong shape, silently."""
+    A = _rng().standard_normal((4, 4))
+
+    def loss(X):
+        component = ops.svd(X)[index]
+        return ops.reduce(ops.mul(component, component), op="sum")
+
+    assert grad(loss)(A).shape == A.shape
+
+
+def test_svd_singular_value_gradient_is_u_vt() -> None:
+    A = _rng().standard_normal((4, 4))
+    U, _s, Vt = np.linalg.svd(A, full_matrices=False)
+    g = grad(lambda X: ops.reduce(ops.svd(X)[1], op="sum"))(A)
+    np.testing.assert_allclose(g, U @ Vt, atol=1e-10)
+
+
+def test_solve_accepts_a_batched_vector_right_hand_side() -> None:
+    """NumPy 2.x reads `solve(A(..., n, n), b(..., n))` as a MATRIX RHS and
+    raises; the batching claim for the solver family has to survive that."""
+    rng = np.random.default_rng(3)
+    A = rng.standard_normal((3, 4, 4)) + 4.0 * np.eye(4)
+    b = rng.standard_normal((3, 4))
+    x = ops.solve(A, b)
+    assert x.shape == (3, 4)
+    for i in range(3):
+        np.testing.assert_allclose(x[i], np.linalg.solve(A[i], b[i]), rtol=1e-10)
+
+
+def test_batched_solve_gradient_matches_per_slice() -> None:
+    rng = np.random.default_rng(4)
+    A = rng.standard_normal((2, 3, 3)) + 4.0 * np.eye(3)
+    b = rng.standard_normal((2, 3))
+    c = rng.standard_normal((2, 3))
+    dA, db = grad(lambda M, v: ops.reduce(ops.mul(c, ops.solve(M, v)), op="sum"),
+                  argnums=(0, 1))(A, b)
+    for i in range(2):
+        expected_db = np.linalg.solve(A[i].T, c[i])
+        np.testing.assert_allclose(db[i], expected_db, rtol=1e-10)
+        np.testing.assert_allclose(
+            dA[i], -np.outer(expected_db, np.linalg.solve(A[i], b[i])), rtol=1e-10)
+
+
+def test_kron_gradient_reduces_broadcast_batch_axes() -> None:
+    """The adjoint of "broadcast along an axis" is "sum along that axis".
+
+    Without the reduction the gradient of the broadcast operand comes back with
+    the OUTPUT's batch shape — wrong shape, and the contributions never summed.
+    """
+    rng = np.random.default_rng(6)
+    A = rng.standard_normal((2, 3))
+    B = rng.standard_normal((5, 3, 2))
+    g = grad(lambda X: ops.reduce(ops.mul(ops.kron(X, B), ops.kron(X, B)),
+                                  op="sum"))(A)
+    assert g.shape == A.shape
+    # It must equal the sum of the per-slice gradients it was broadcast over.
+    per_slice = sum(
+        grad(lambda X, b=B[i]: ops.reduce(
+            ops.mul(ops.kron(X, b), ops.kron(X, b)), op="sum"))(A)
+        for i in range(B.shape[0])
+    )
+    np.testing.assert_allclose(g, per_slice, rtol=1e-10)
+
+
+def test_kron_graph_ir_shape_keeps_batch_axes() -> None:
+    """The IR rule must agree with the eager op, which broadcasts."""
+    from tessera.compiler.graph_ir import _SHAPE_RULES, tensor_ir_type
+
+    a = tensor_ir_type(("5", "2", "3"), "fp32")
+    b = tensor_ir_type(("5", "3", "2"), "fp32")
+    assert _SHAPE_RULES["kron"]([a, b]).shape == ("5", "6", "6")
+    eager = ops.kron(np.zeros((5, 2, 3)), np.zeros((5, 3, 2)))
+    assert eager.shape == (5, 6, 6)
+
+
+def test_det_is_differentiable_at_a_singular_matrix() -> None:
+    """`det` is a polynomial, so it is smooth everywhere.
+
+    Expressing its rule through `inv` (via `adj(A) = det(A)·A^-1`) would reject
+    inputs at which the derivative plainly exists: this rank-one 2x2 has a
+    nonzero derivative.
+    """
+    singular = np.array([[1.0, 2.0], [2.0, 4.0]])
+    assert np.linalg.det(singular) == pytest.approx(0.0)
+    g = grad(lambda X: ops.det(X))(singular)
+    # grad det = adj(A)^T; for this A the adjugate is [[4, -2], [-2, 1]].
+    np.testing.assert_allclose(g, [[4.0, -2.0], [-2.0, 1.0]], atol=1e-9)
+    step = 1e-6
+    directional = (np.linalg.det(singular + step * np.eye(2))
+                   - np.linalg.det(singular - step * np.eye(2))) / (2 * step)
+    np.testing.assert_allclose(float(np.sum(g * np.eye(2))), directional, rtol=1e-6)
+
+
+def test_det_gradient_still_right_away_from_singularity() -> None:
+    A = _well_conditioned()
+    np.testing.assert_allclose(
+        grad(lambda X: ops.det(X))(A),
+        np.linalg.det(A) * np.linalg.inv(A).T, rtol=1e-9)
+
+
+def test_nuclear_norm_fails_closed_at_rank_deficiency() -> None:
+    """`U V^T` is the gradient only at full rank.
+
+    At a rank-deficient point the nuclear norm is not Frechet differentiable —
+    its subdifferential is a set — and numpy's arbitrary null-space singular
+    vectors make any single answer an arbitrary element of it.
+    """
+    rank_deficient = np.array([[1.0, 0.0], [0.0, 0.0]])
+    with pytest.raises(deg.TesseraDegeneracyError, match="rank deficient"):
+        ops_norm_grad(rank_deficient)
+
+
+def test_nuclear_norm_generalized_returns_the_declared_subgradient() -> None:
+    rank_deficient = np.array([[1.0, 0.0], [0.0, 0.0]])
+    with deg.degeneracy_policy("generalized"):
+        g = ops_norm_grad(rank_deficient)
+    U, _s, Vt = np.linalg.svd(rank_deficient, full_matrices=False)
+    np.testing.assert_allclose(g, U @ Vt, atol=1e-12)
+
+
+def test_nuclear_norm_is_unaffected_at_full_rank() -> None:
+    A = _well_conditioned()
+    U, _s, Vt = np.linalg.svd(A, full_matrices=False)
+    np.testing.assert_allclose(ops_norm_grad(A), U @ Vt, atol=1e-10)
+
+
+def ops_norm_grad(A: np.ndarray) -> np.ndarray:
+    return grad(lambda X: ops.norm(X, ord="nuc"))(A)
+
+
 # ── MC4: the Kronecker identity is a rewrite, not a materialization ─────────
 def test_kronecker_vec_identity() -> None:
     """`(B kron C) vec(Y) == vec(C Y B^T)` (notes §3.3.1).

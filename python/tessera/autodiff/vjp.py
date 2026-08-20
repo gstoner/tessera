@@ -5371,7 +5371,7 @@ def vjp_qr(dout, A, **_):
 
 
 @_vjp("svd")
-def vjp_svd(dout, A, **_):
+def vjp_svd(dout, A, *, _output_index=None, **_):
     """A = U · diag(s) · V^T; defined for a **simple** spectrum.
 
     The coupling term is ``1/(s_j^2 - s_i^2)``, which has no limit when two
@@ -5390,9 +5390,32 @@ def vjp_svd(dout, A, **_):
     if isinstance(dout, tuple) and len(dout) == 3:
         dU, ds, dVt = (np.asarray(t, dtype=np.float64) for t in dout)
     else:
+        # The tape replays a multi-output op once per component, passing that
+        # component's cotangent alone plus `_output_index`. Swallowing the key
+        # in `**_` made every component look like the singular-value cotangent:
+        # `grad` through `ops.svd(A)[0]` then returned a (n, n, n) array for an
+        # (n, n) input — a silently wrong shape, not an error. Declaring the
+        # key is what `laws._declares_output_index` checks for.
+        d_arr = np.asarray(dout, dtype=np.float64)
         dU = np.zeros_like(U)
-        ds = np.asarray(dout, dtype=np.float64)
+        ds = np.zeros_like(s)
         dVt = np.zeros_like(Vt)
+        if _output_index == 0:
+            dU = d_arr
+        elif _output_index == 1:
+            ds = d_arr
+        elif _output_index == 2:
+            dVt = d_arr
+        elif d_arr.shape == np.shape(s):
+            ds = d_arr          # direct call with only a singular-value cotangent
+        else:
+            raise TesseraDegeneracyError(
+                f"{DEGENERACY_DIAGNOSTIC_CODE}: svd backward received a "
+                f"cotangent of shape {d_arr.shape} with no `_output_index`. It "
+                f"matches neither the singular values {np.shape(s)} nor an "
+                f"unambiguous factor; pass a (dU, ds, dVt) tuple, or call "
+                f"through the tape so the component is identified."
+            )
     # Batch-aware over leading dims (PR #594 review, matching the JVP and
     # the batch-capable canonical forward): last-two-axis transposes,
     # broadcast S-scaling, and an einsum-built diagonal.

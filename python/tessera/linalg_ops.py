@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .autodiff.degeneracy import eigh_coupling
+from .autodiff.degeneracy import check_full_rank, eigh_coupling
 from .custom import custom_primitive
 
 _LINALG_DIAGNOSTIC_CODE = "E_LINALG_CONTRACT"
@@ -63,6 +63,22 @@ def _nonsingular(A: np.ndarray, op: str) -> np.ndarray:
 
 def _mT(x: np.ndarray) -> np.ndarray:
     return np.swapaxes(x, -1, -2)
+
+
+def _unbroadcast(grad: np.ndarray, shape: tuple) -> np.ndarray:
+    """Sum `grad` back down to `shape`, undoing numpy broadcasting.
+
+    The adjoint of "broadcast along an axis" is "sum along that axis". Applies
+    to both extra leading axes and size-1 axes that were stretched.
+    """
+    g = np.asarray(grad)
+    extra = g.ndim - len(shape)
+    if extra > 0:
+        g = g.sum(axis=tuple(range(extra)))
+    for axis, size in enumerate(shape):
+        if size == 1 and g.shape[axis] != 1:
+            g = g.sum(axis=axis, keepdims=True)
+    return g.reshape(shape)
 
 
 def _storage_dtype(x) -> np.dtype:
@@ -156,7 +172,11 @@ def _kron_vjp(dout, A, B, **_):
     blocks = d.reshape(d.shape[:-2] + (p, r, q, s_))
     dA = np.einsum("...irjs,...rs->...ij", blocks, b)
     dB = np.einsum("...irjs,...ij->...rs", blocks, a)
-    return (dA, dB)
+    # An operand broadcast across the other's batch axes receives a cotangent
+    # with the *output's* batch shape; the gradient of a broadcast input is the
+    # SUM over the axes it was broadcast along. Without this the result has the
+    # wrong shape and the contributions are never accumulated.
+    return (_unbroadcast(dA, a.shape), _unbroadcast(dB, b.shape))
 
 
 def _kron_jvp(primals, tangents, **_):
@@ -173,20 +193,52 @@ def _det_impl(A):
     return _as_storage(np.linalg.det(_square(A, "det")), A)
 
 
+def _adjugate(A: np.ndarray) -> np.ndarray:
+    """adj(A), valid at **singular** matrices too.
+
+    `det` is a polynomial in the entries, so it is differentiable everywhere —
+    including where `A` is singular — and its gradient is `adj(A)^T`. Writing
+    that as `det(A)·A^-1` is an identity that only holds away from singularity,
+    so expressing the rule through `inv` would reject inputs at which the
+    derivative plainly exists (a rank-one 2x2 has a perfectly good nonzero
+    derivative).
+
+    Fast path: away from singularity `adj(A) = det(A)·A^-1` is exact enough and
+    O(n^3). At or near singularity it is not, so fall back to the definition —
+    cofactor expansion, O(n^2) minors — which has no conditioning problem. The
+    split is on the condition number, not on a tolerance chosen to make a test
+    pass.
+    """
+    n = A.shape[-1]
+    if n == 1:
+        return np.ones_like(A)
+    cond = np.linalg.cond(A)
+    if np.all(np.isfinite(cond)) and np.all(cond < 1.0 / np.sqrt(np.finfo(np.float64).eps)):
+        return np.linalg.det(A)[..., None, None] * np.linalg.inv(A)
+    # Cofactor expansion: adj(A)[j, i] = (-1)^(i+j) · det(A with row i, col j removed).
+    out = np.zeros_like(A)
+    rows = np.arange(n)
+    for i in range(n):
+        for j in range(n):
+            minor = A[..., rows[rows != i], :][..., :, rows[rows != j]]
+            out[..., j, i] = ((-1.0) ** (i + j)) * np.linalg.det(minor)
+    return out
+
+
 def _det_vjp(dout, A, **_):
-    arr = _nonsingular(_square(A, "det"), "det backward")
+    arr = _square(A, "det")
     d = np.asarray(dout, dtype=np.float64)
-    # grad det = det(A) * A^-T  (the adjugate, transposed)
-    return (d[..., None, None] * _det_impl(arr)[..., None, None]
-            * _mT(np.linalg.inv(arr)),)
+    # grad det = adj(A)^T. No `_nonsingular` guard: det is a polynomial, so the
+    # derivative exists at every matrix including the singular ones.
+    return (d[..., None, None] * _mT(_adjugate(arr)),)
 
 
 def _det_jvp(primals, tangents, **_):
-    arr = _nonsingular(_square(primals[0], "det"), "det forward-mode")
+    arr = _square(primals[0], "det")
     dA = np.asarray(tangents[0], dtype=np.float64)
-    value = _det_impl(arr)
-    # d(det A) = det(A) * tr(A^-1 dA)
-    return value, value * np.einsum("...ii->...", np.linalg.solve(arr, dA))
+    # d(det A) = tr(adj(A) dA) — the form that survives at singular A, where
+    # the equivalent det(A)·tr(A^-1 dA) does not.
+    return _det_impl(arr), np.einsum("...ij,...ji->...", _adjugate(arr), dA)
 
 
 det = custom_primitive("det", vjp=_det_vjp, jvp=_det_jvp)(_det_impl)
@@ -244,19 +296,36 @@ def _inv_jvp(primals, tangents, **_):
 inv = custom_primitive("inv", vjp=_inv_vjp, jvp=_inv_jvp)(_inv_impl)
 
 
+def _rhs_is_stacked_vector(A: np.ndarray, b: np.ndarray) -> bool:
+    """True when `b` is one vector per batch element, not a matrix RHS.
+
+    NumPy 2.x no longer guesses: `solve(A(..., n, n), b(..., n))` is read as a
+    *matrix* right-hand side and raises a core-dimension mismatch. The
+    ambiguity is real, so the shape relationship decides it explicitly here
+    rather than being left to the library.
+    """
+    return b.ndim == A.ndim - 1 and b.ndim >= 1
+
+
+def _solve_core(arr: np.ndarray, b: np.ndarray) -> np.ndarray:
+    if _rhs_is_stacked_vector(arr, b):
+        return np.linalg.solve(arr, b[..., :, None])[..., 0]
+    return np.linalg.solve(arr, b)
+
+
 def _solve_impl(A, b):
     arr = _nonsingular(_square(A, "solve"), "solve")
-    return _as_storage(np.linalg.solve(arr, np.asarray(b, dtype=np.float64)), b)
+    return _as_storage(_solve_core(arr, np.asarray(b, dtype=np.float64)), b)
 
 
 def _solve_vjp(dout, A, b, **_):
     arr = _nonsingular(_square(A, "solve"), "solve backward")
-    x = _solve_impl(arr, b)
+    x = np.asarray(_solve_impl(arr, b), dtype=np.float64)
     d = np.asarray(dout, dtype=np.float64)
     # The adjoint solve (notes §6.3): one transposed solve gives db, and dA
     # follows as an outer product — never an explicit dA/dp Jacobian.
-    db = np.linalg.solve(_mT(arr), d)
-    if x.ndim == arr.ndim - 1:
+    db = _solve_core(_mT(arr), d)
+    if _rhs_is_stacked_vector(arr, x):
         dA = -db[..., :, None] * x[..., None, :]
     else:
         dA = -db @ _mT(x)
@@ -267,9 +336,14 @@ def _solve_jvp(primals, tangents, **_):
     A, b = primals
     dA, db = tangents
     arr = _nonsingular(_square(A, "solve"), "solve forward-mode")
-    x = _solve_impl(arr, b)
-    rhs = np.asarray(db, dtype=np.float64) - np.asarray(dA, dtype=np.float64) @ x
-    return x, np.linalg.solve(arr, rhs)
+    x = np.asarray(_solve_impl(arr, b), dtype=np.float64)
+    dA_arr = np.asarray(dA, dtype=np.float64)
+    if _rhs_is_stacked_vector(arr, x):
+        shifted = (dA_arr @ x[..., :, None])[..., 0]
+    else:
+        shifted = dA_arr @ x
+    rhs = np.asarray(db, dtype=np.float64) - shifted
+    return x, _solve_core(arr, rhs)
 
 
 solve = custom_primitive("solve", vjp=_solve_vjp, jvp=_solve_jvp)(_solve_impl)
@@ -359,9 +433,11 @@ def _norm_vjp(dout, A, *, ord: str = "fro", **_):
             )
         # grad ||A||_F = A / ||A||_F  (notes §5.1, via the Frobenius inner product)
         return (d[..., None, None] * arr / value[..., None, None],)
-    U, _s, Vt = np.linalg.svd(arr, full_matrices=False)
-    # grad of the nuclear norm is U V^T — well defined at full rank even when
-    # singular values repeat, which is why it needs no degeneracy policy.
+    U, sv, Vt = np.linalg.svd(arr, full_matrices=False)
+    # `U V^T` is the gradient only at FULL RANK — repeated singular values are
+    # fine (unlike the svd factor rules), but a *zero* one is not: there the
+    # nuclear norm is not differentiable and its subdifferential is a set.
+    check_full_rank(sv, op="norm_nuclear", what="the matrix")
     return (d[..., None, None] * (U @ Vt),)
 
 
@@ -383,20 +459,45 @@ def _eigh_impl(S):
     return _as_storage(w, S), _as_storage(Q, S)
 
 
-def _eigh_vjp(dout, S, **_):
+def _eigh_vjp(dout, S, *, _output_index=None, **_):
     """S = Q diag(w) Q^T for symmetric S.
 
     ``dw_i = q_i^T dS q_i`` (Hellmann-Feynman) is defined for simple
     eigenvalues; the eigenvector term couples through ``1/(w_j - w_i)`` and
     fails closed at a crossing under the declared policy.
+
+    ``_output_index`` is declared **explicitly**, not swallowed by ``**_``:
+    the tape replays a multi-output op once per component, handing this rule
+    the cotangent of *that* component alone. A rule that merely absorbs the key
+    would read an eigenvector cotangent as if it were an eigenvalue one — the
+    exact bug class ``laws._declares_output_index`` exists to catch.
     """
     arr = _square(S, "eigh")
     w, Q = _eigh_impl(arr)
     if isinstance(dout, tuple) and len(dout) == 2:
         dw, dQ = (np.asarray(t, dtype=np.float64) for t in dout)
-    else:
+    elif _output_index == 1:
+        dw = np.zeros_like(np.asarray(w, dtype=np.float64))
+        dQ = np.asarray(dout, dtype=np.float64)
+    elif _output_index == 0:
         dw = np.asarray(dout, dtype=np.float64)
-        dQ = np.zeros_like(Q)
+        dQ = np.zeros_like(np.asarray(Q, dtype=np.float64))
+    else:
+        # No index supplied (a direct call). Infer from rank, and refuse rather
+        # than guess when the two components are shape-indistinguishable.
+        d_arr = np.asarray(dout, dtype=np.float64)
+        if d_arr.shape == np.shape(w):
+            dw, dQ = d_arr, np.zeros_like(np.asarray(Q, dtype=np.float64))
+        elif d_arr.shape == np.shape(Q):
+            dw, dQ = np.zeros_like(np.asarray(w, dtype=np.float64)), d_arr
+        else:
+            raise ValueError(
+                f"{_LINALG_DIAGNOSTIC_CODE}: eigh backward received a cotangent "
+                f"of shape {d_arr.shape}, which matches neither the eigenvalues "
+                f"{np.shape(w)} nor the eigenvectors {np.shape(Q)}. Pass a "
+                f"(dw, dQ) tuple, or call through the tape so `_output_index` "
+                f"identifies the component."
+            )
     QtdQ = _mT(Q) @ dQ
     F = eigh_coupling(w, dw=dw, antisymmetric_parts=(QtdQ - _mT(QtdQ),), op="eigh")
     inner = np.zeros_like(QtdQ)

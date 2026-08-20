@@ -3196,6 +3196,27 @@ def _shape_matrix_scalar(operand_types: List[IRType],
     return tensor_ir_type(a.shape[:-2], a.dtype, layout=a.layout)
 
 
+def _broadcast_batch(x: Tuple[str, ...], y: Tuple[str, ...]) -> Tuple[str, ...]:
+    """Numpy broadcasting over leading axes, on string extents.
+
+    Right-aligned; `1` stretches; anything not statically decidable is `?`.
+    """
+    out: list[str] = []
+    n = max(len(x), len(y))
+    for k in range(n):
+        a = x[len(x) - n + k] if len(x) - n + k >= 0 else "1"
+        b = y[len(y) - n + k] if len(y) - n + k >= 0 else "1"
+        if a == b:
+            out.append(a)
+        elif a == "1":
+            out.append(b)
+        elif b == "1":
+            out.append(a)
+        else:
+            out.append("?")
+    return tuple(out)
+
+
 def _dim_product(x: str, y: str) -> str:
     """Multiply two extents. Dims are stored as STRINGS in this IR, so a
     symbolic or unknown extent (`?`, `*`, a symbol name) propagates as `?`
@@ -3223,8 +3244,12 @@ def _shape_kron(operand_types: List[IRType],
     if (a.rank is None or b.rank is None
             or len(a.shape) < 2 or len(b.shape) < 2):
         return _unknown_like(a)
-    dims = (_dim_product(a.shape[-2], b.shape[-2]),
-            _dim_product(a.shape[-1], b.shape[-1]))
+    # The eager op broadcasts leading axes, so the IR rule must too — dropping
+    # them would hand downstream IR an output rank the reference operation does
+    # not produce.
+    batch = _broadcast_batch(a.shape[:-2], b.shape[:-2])
+    dims = batch + (_dim_product(a.shape[-2], b.shape[-2]),
+                    _dim_product(a.shape[-1], b.shape[-1]))
     return tensor_ir_type(dims, a.dtype, layout=a.layout)
 
 

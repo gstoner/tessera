@@ -337,6 +337,11 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   pm1a.addPass(createCanonicalizerPass());
   pm1a.addPass(createCSEPass());
   pm1a.nest<func::FuncOp>().addPass(tessera::createTesseraToLinalgPass());
+  // Elementwise arith/math ops ON TENSORS (e.g. the paired autodiff pass's
+  // cotangent accumulation `arith.addf : tensor<...>`) have no bufferization
+  // interface of their own; rewrite them to linalg.generic first so
+  // one-shot-bufferize can consume them (W4 x86 state-machine row).
+  pm1a.nest<func::FuncOp>().addPass(createConvertElementwiseToLinalgPass());
   if (failed(pm1a.run(module)))
     return failure();
 

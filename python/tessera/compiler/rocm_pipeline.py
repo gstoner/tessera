@@ -46,6 +46,7 @@ FAMILY_PLUGINS: dict[str, ROCMFamilyPlugin] = {
         "depth_attention",
         "algebra_clifford",
         "attention_mla_decode",
+        "control_state_machine",
         "draft_dspark",
         "ebm_affine_langevin",
         "ebm_decode_init",
@@ -120,6 +121,15 @@ class ROCMExecutablePipeline:
     def __post_init__(self) -> None:
         if self.family not in FAMILY_PLUGINS:
             raise ValueError(f"unknown ROCm family plugin {self.family!r}")
+        if (self.family == "control_state_machine"
+                and self.output_level is not ROCMOutputLevel.BINARY):
+            # The state-machine family is a host-level per-thread lowering
+            # with no tessera_rocm.* Target-IR boundary: output=target would
+            # relabel the untouched host program as Target IR (PR #606
+            # review, P2). Mirrors the C++ contract-pass rejection.
+            raise ValueError(
+                "family 'control_state_machine' has no Target-IR boundary; "
+                "only output=binary is supported")
         if self.arch != "gfx1151":
             raise ValueError(
                 f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "

@@ -39,12 +39,21 @@
 // The structured-CFG digest and residual policy are stamped onto the emitted
 // gpu.func, so the execution row binds the exact CFG identity it claims
 // (W4-PRODUCT-1 acceptance: "native rows must bind the exact CFG and
-// residual digests").
+// residual digests"). The kernel executes the WHOLE function, so its bound
+// identity is every machine inside it: a machine without a digest fails
+// closed, one distinct digest is stamped as a string, and several distinct
+// digests are stamped as the ordered `tessera.structured_cfg.digests` array
+// — never a silently chosen first one.
 //
-// Anything outside the bounded vocabulary — non-elementwise tessera ops,
-// tensors that are not rank-1 f32 of one common size, `cf.assert` below the
-// function's top level, non-splat dense constants — declines with a remark
-// naming the reason (Decision #21) and leaves the function untouched.
+// Function arguments/results are i1 scalars or rank-1 static f32 tensors of
+// one common size (the flat memref ABI). INTERIOR values may additionally be
+// rank-1 tensors of i1 / signless integers over the same size — e.g. an
+// `arith.cmpf` over the data slots feeding `arith.select` (per-element
+// data-dependent selection) — and scalarize to their element type. Anything
+// outside that vocabulary — non-elementwise tessera ops, tensors off the
+// common shape, `cf.assert` below the function's top level, non-splat dense
+// constants — declines with a remark naming the reason (Decision #21) and
+// leaves the function untouched.
 //
 // The tessera→scalar translation table intentionally mirrors
 // GenerateROCMControlForKernel's (CF4b); this pass needs the generic
@@ -69,6 +78,7 @@ using namespace mlir;
 namespace mlir {
 namespace tessera_rocm {
 std::unique_ptr<Pass> createGenerateROCMStateMachineKernelPass();
+std::unique_ptr<Pass> createGenerateROCMStateMachineKernelPass(bool strict);
 }  // namespace tessera_rocm
 }  // namespace mlir
 
@@ -89,6 +99,18 @@ static bool isRank1F32(Type t) {
   auto r = dyn_cast<RankedTensorType>(t);
   return r && r.getRank() == 1 && r.hasStaticShape() &&
          r.getElementType().isF32();
+}
+
+// Interior values may also be rank-1 tensors of i1 or signless integers —
+// e.g. an `arith.cmpf` over the data slots yielding tensor<Nxi1> consumed by
+// `arith.select` (per-element data-dependent selection). Only the FUNCTION
+// boundary is restricted to f32 (the flat memref ABI).
+static bool isScalarizableRank1(Type t) {
+  auto r = dyn_cast<RankedTensorType>(t);
+  if (!r || r.getRank() != 1 || !r.hasStaticShape())
+    return false;
+  Type e = r.getElementType();
+  return e.isF32() || e.isSignlessInteger();
 }
 
 // Scalar equivalent of one elementwise tessera.* op (same vocabulary as the
@@ -152,13 +174,17 @@ static std::string validateFunc(func::FuncOp fn, int64_t &numElems) {
   if (fn.isExternal() || fn.getBody().getBlocks().size() != 1)
     return "function body is not a single block";
   numElems = -1;
-  auto checkTensor = [&](Type t) -> bool {
-    if (!isRank1F32(t))
-      return false;
+  auto checkCommon = [&](Type t) -> bool {
     int64_t n = cast<RankedTensorType>(t).getDimSize(0);
     if (numElems == -1)
       numElems = n;
     return n == numElems;
+  };
+  auto checkTensor = [&](Type t) -> bool {
+    return isRank1F32(t) && checkCommon(t);
+  };
+  auto checkInterior = [&](Type t) -> bool {
+    return isScalarizableRank1(t) && checkCommon(t);
   };
   for (Type t : fn.getFunctionType().getInputs()) {
     if (t.isInteger(1))
@@ -192,8 +218,8 @@ static std::string validateFunc(func::FuncOp fn, int64_t &numElems) {
     }
     if (auto cst = dyn_cast<arith::ConstantOp>(op)) {
       if (auto dense = dyn_cast<DenseElementsAttr>(cst.getValue())) {
-        if (!dense.isSplat() || !isRank1F32(cst.getType())) {
-          reason = "non-splat or non-rank-1-f32 dense constant";
+        if (!dense.isSplat() || !checkInterior(cst.getType())) {
+          reason = "non-splat or non-common-rank-1 dense constant";
           return WalkResult::interrupt();
         }
       }
@@ -202,9 +228,15 @@ static std::string validateFunc(func::FuncOp fn, int64_t &numElems) {
     StringRef dialect = op->getName().getDialectNamespace();
     StringRef name = op->getName().getStringRef();
     if (dialect == "arith" || dialect == "math") {
-      for (Type t : op->getOperandTypes())
-        if (isa<RankedTensorType>(t) && !checkTensor(t)) {
-          reason = ("tensor-typed " + name + " outside the common shape").str();
+      // Both operands AND results must scalarize — an admitted tensor cmpf
+      // yields tensor<Nxi1>, which must convert to i1, not survive as a
+      // tensor result on an op with scalar operands (PR #605 review, P2).
+      for (Type t :
+           llvm::concat<const Type>(op->getOperandTypes(),
+                                    op->getResultTypes()))
+        if (isa<RankedTensorType>(t) && !checkInterior(t)) {
+          reason = ("tensor-typed " + name + " outside the scalarizable "
+                    "common shape").str();
           return WalkResult::interrupt();
         }
       return WalkResult::advance();
@@ -238,8 +270,8 @@ struct Scalarizer {
   Scalarizer(OpBuilder &b) : b(b) {}
 
   Type convertType(Type t) {
-    if (isRank1F32(t))
-      return b.getF32Type();
+    if (isScalarizableRank1(t))
+      return cast<RankedTensorType>(t).getElementType();
     return t;  // index, i1, f32 pass through
   }
 
@@ -264,8 +296,11 @@ struct Scalarizer {
   void cloneOp(Operation *op, Location loc) {
     if (auto cst = dyn_cast<arith::ConstantOp>(op)) {
       if (auto dense = dyn_cast<DenseElementsAttr>(cst.getValue())) {
-        float v = dense.getSplatValue<APFloat>().convertToFloat();
-        map[cst.getResult()] = cstF32(b, loc, v);
+        // Splat over the common shape → one scalar constant of the element
+        // type (f32 or a signless integer — validation admitted only those).
+        auto elem = cast<TypedAttr>(dense.getSplatValue<Attribute>());
+        map[cst.getResult()] =
+            arith::ConstantOp::create(b, loc, elem.getType(), elem);
       } else {
         Operation *cl = b.clone(*op);
         map[cst.getResult()] = cl->getResult(0);
@@ -387,6 +422,21 @@ struct GenerateROCMStateMachineKernelPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(
       GenerateROCMStateMachineKernelPass)
 
+  GenerateROCMStateMachineKernelPass() = default;
+  explicit GenerateROCMStateMachineKernelPass(bool strict) : strict(strict) {}
+  GenerateROCMStateMachineKernelPass(
+      const GenerateROCMStateMachineKernelPass &other)
+      : PassWrapper(other), strict(other.strict) {}
+
+  // Standalone CLI use keeps the CF-family decline-with-remark convention
+  // (the guard/backstop owns what a generator leaves). The CANONICAL
+  // executable pipeline constructs the pass with strict=true: the caller
+  // REQUESTED family=control_state_machine, so a module with no machine or
+  // a machine the vocabulary rejects must FAIL the pipeline rather than
+  // sail through gpu-module-to-binary with no gpu.binary and report
+  // success (PR #606 review, P1).
+  bool strict = false;
+
   StringRef getArgument() const final {
     return "generate-rocm-state-machine-kernel";
   }
@@ -410,13 +460,31 @@ struct GenerateROCMStateMachineKernelPass
       return false;
     }
 
-    // Collect the digest from the (first) state-machine loop for stamping.
-    StringAttr digest;
+    // The kernel executes the ENTIRE function, so its bound identity is the
+    // identity of EVERY machine inside it (PR #605 review, P2): a machine
+    // without a digest fails closed, and multiple distinct digests are
+    // stamped as an ordered composite rather than silently picking one.
+    SmallVector<StringAttr> digests;
+    bool missingDigest = false;
     fn.getBody().walk([&](scf::ForOp forOp) {
-      if (auto exec = forOp->getAttrOfType<StringAttr>(kExecAttr))
-        if (exec.getValue() == kExecForm && !digest)
-          digest = forOp->getAttrOfType<StringAttr>(kDigestAttr);
+      auto exec = forOp->getAttrOfType<StringAttr>(kExecAttr);
+      if (!exec || exec.getValue() != kExecForm)
+        return;
+      auto d = forOp->getAttrOfType<StringAttr>(kDigestAttr);
+      if (!d) {
+        missingDigest = true;
+        return;
+      }
+      if (!llvm::is_contained(digests, d))
+        digests.push_back(d);
     });
+    if (missingDigest || digests.empty()) {
+      fn.emitRemark() << "not lowered to a ROCm state-machine kernel: a "
+                         "bounded state machine carries no structured-CFG "
+                         "digest — the execution row could not bind the "
+                         "exact CFG identity";
+      return false;
+    }
 
     OpBuilder b(module.getBodyRegion());
     b.setInsertionPointToEnd(module.getBody());
@@ -447,8 +515,12 @@ struct GenerateROCMStateMachineKernelPass
     auto gpuFunc =
         gpu::GPUFuncOp::create(b, loc, kname, b.getFunctionType(abi, {}));
     gpuFunc->setAttr(gpu::GPUDialect::getKernelFuncAttrName(), b.getUnitAttr());
-    if (digest)
-      gpuFunc->setAttr(kDigestAttr, digest);
+    if (digests.size() == 1) {
+      gpuFunc->setAttr(kDigestAttr, digests.front());
+    } else {
+      SmallVector<Attribute> all(digests.begin(), digests.end());
+      gpuFunc->setAttr("tessera.structured_cfg.digests", b.getArrayAttr(all));
+    }
     if (auto residual = fn->getAttrOfType<StringAttr>(kResidualAttr))
       gpuFunc->setAttr(kResidualAttr, residual);
 
@@ -530,8 +602,22 @@ struct GenerateROCMStateMachineKernelPass
       if (hasMachine)
         matched.push_back(fn);
     });
+    if (strict && matched.empty()) {
+      module.emitError(
+          "family=control_state_machine requested but the module contains "
+          "no bounded_state_machine_v1 function");
+      return signalPassFailure();
+    }
+    bool allEmitted = true;
     for (func::FuncOp fn : matched)
-      (void)emitKernel(fn, module);
+      allEmitted &= emitKernel(fn, module);
+    if (strict && !allEmitted) {
+      module.emitError(
+          "family=control_state_machine could not realize every bounded "
+          "state machine as a device kernel (see the per-function remarks); "
+          "refusing to emit a binary that silently omits requested kernels");
+      return signalPassFailure();
+    }
   }
 };
 
@@ -540,4 +626,9 @@ struct GenerateROCMStateMachineKernelPass
 std::unique_ptr<Pass>
 mlir::tessera_rocm::createGenerateROCMStateMachineKernelPass() {
   return std::make_unique<GenerateROCMStateMachineKernelPass>();
+}
+
+std::unique_ptr<Pass>
+mlir::tessera_rocm::createGenerateROCMStateMachineKernelPass(bool strict) {
+  return std::make_unique<GenerateROCMStateMachineKernelPass>(strict);
 }

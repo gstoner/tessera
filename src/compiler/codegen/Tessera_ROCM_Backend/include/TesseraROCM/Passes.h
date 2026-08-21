@@ -68,6 +68,10 @@ std::unique_ptr<mlir::Pass> createGenerateROCMControlForKernelPass();
 // W4-PRODUCT-1 — paired-pass bounded_state_machine_v1 function (fwd or bwd)
 // → one per-thread device kernel (gfx1151 exact-device irreducible-CFG row).
 std::unique_ptr<mlir::Pass> createGenerateROCMStateMachineKernelPass();
+// Strict form used by the canonical executable pipeline: a requested family
+// that produces no kernel fails the pipeline instead of silently emitting
+// no gpu.binary.
+std::unique_ptr<mlir::Pass> createGenerateROCMStateMachineKernelPass(bool strict);
 // CF4d-1 — GEMV-recurrence control_for → cooperative-workgroup kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlForGemvKernelPass();
 // CF4d-2 — norm-in-loop control_for → cooperative-workgroup kernel.

@@ -76,7 +76,8 @@ struct DeclareROCMPipelineContractPass
 
   void runOnOperation() override {
     static constexpr StringLiteral families[] = {
-        "algebra_clifford", "attention_mla_decode", "draft_dspark",
+        "algebra_clifford", "attention_mla_decode", "control_state_machine",
+        "draft_dspark",
         "ebm_affine_langevin", "ebm_decode_init", "ebm_ebt_tiny",
         "ebm_energy_quadratic", "ebm_langevin", "ebm_partition",
         "fused_silu_mul", "indexing_gather", "indexing_scatter",
@@ -105,6 +106,16 @@ struct DeclareROCMPipelineContractPass
     }
     if (output != "target" && output != "binary") {
       getOperation().emitError("ROCm pipeline output must be target or binary");
+      return signalPassFailure();
+    }
+    // The state-machine family is a host-level per-thread lowering with no
+    // tessera_rocm.* Target-IR boundary: output=target would return before
+    // the family generator runs and relabel the untouched host program as
+    // Target IR (PR #606 review, P2). Only the binary artifact exists.
+    if (family == "control_state_machine" && output != "binary") {
+      getOperation().emitError(
+          "family 'control_state_machine' has no Target-IR boundary; only "
+          "output=binary is supported");
       return signalPassFailure();
     }
     // gfx1200/gfx1250 remain fail-closed until their family plugins have exact
@@ -187,6 +198,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
     pm.addPass(createGenerateROCMMLAAbsorbDecodeKernelPass());
+  } else if (family == "control_state_machine") {
+    pm.addPass(createGenerateROCMStateMachineKernelPass(/*strict=*/true));
   } else if (family == "draft_dspark") {
     pm.addPass(createGenerateROCMDSparkDraftBlockKernelPass());
   } else if (family == "ebm_affine_langevin") {

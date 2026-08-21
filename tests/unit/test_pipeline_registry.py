@@ -412,3 +412,23 @@ def test_compilation_spine_inventory_is_machine_readable_and_truthful() -> None:
     csv_text = render_compilation_spine_csv()
     assert csv_text.startswith("schema,target,family,runtime_backend,")
     assert "tessera.target_pipeline.v1,nvidia_sm80," in csv_text
+
+
+def test_state_machine_family_rejects_target_output() -> None:
+    """PR #606 review (P2): the state-machine family is a host-level
+    per-thread lowering with no tessera_rocm.* Target-IR boundary —
+    output=target would relabel the untouched host program as Target IR.
+    Python fails closed at construction; the C++ contract pass mirrors it
+    (state_machine_executable_pipeline_reject.mlir)."""
+    import pytest as _pytest
+
+    from tessera.compiler.rocm_pipeline import (
+        ROCMExecutablePipeline,
+        ROCMOutputLevel,
+    )
+
+    ROCMExecutablePipeline(family="control_state_machine",
+                           output_level=ROCMOutputLevel.BINARY)
+    with _pytest.raises(ValueError, match="no Target-IR boundary"):
+        ROCMExecutablePipeline(family="control_state_machine",
+                               output_level=ROCMOutputLevel.TARGET)

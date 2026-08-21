@@ -3,10 +3,24 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-19
+last_updated: 2026-08-20
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
+numerical policy; NVIDIA outcome: follow-up required (sm_120).** PR #600
+retires the ODE-family pointwise hand rules behind the `DerivativeContract`
+datum (dtype-preserving reference rules; unified log/sqrt boundary guard —
+see the rocm entry for the full contract statement). Expected impact on
+sm_120: parity-neutral — the CUDA loss/optimizer backward lanes compare
+against the same updated reference on both sides — but per the
+no-evidence-transfer rule that expectation is not a claim: run the
+CUDA-marked autodiff/loss parity tests on NR2 Pro and record the outcome
+under this sync key. Boundary inputs below 1e-12 are outside every sampled
+parity envelope; the dtype change moves the reference TOWARD the fp32 native
+lanes, not away.
+
 
 Cross-backend sync `APPLE-RUNTIME-SINGLE-IMAGE-2026-08-19` — **Apple runtime
 loading; NVIDIA outcome: not applicable.** The single-image slice fixes duplicate loading of the Apple GPU runtime.

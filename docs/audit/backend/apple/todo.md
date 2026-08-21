@@ -3,10 +3,22 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-19
+last_updated: 2026-08-20
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
+numerical policy; Apple outcome: follow-up required (M1 Max).** PR #600
+retires the ODE-family pointwise hand rules behind the `DerivativeContract`
+datum (dtype-preserving reference rules; unified log/sqrt boundary guard —
+see the rocm entry for the full contract statement). Expected impact:
+parity-neutral for the GA/EBM native-execution smoke and the value-lane
+backward comparisons (both sides read the same updated reference; the MSL
+kernels are fp32 and the reference now stays fp32 alongside them) — but the
+expectation needs the Mac's run: execute the Apple-marked autodiff/GA
+gradient parity tests there and record the outcome under this sync key.
+
 
 Cross-backend sync `APPLE-RUNTIME-SINGLE-IMAGE-2026-08-19` — **Apple runtime
 loading; Apple outcome: parity validated, no Metal evidence changed.**

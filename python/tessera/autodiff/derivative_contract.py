@@ -152,7 +152,14 @@ def derivative_contract(name: str) -> Optional[DerivativeContract]:
 #
 # What the derived path carries (§8's bar — everything the deleted one did):
 #
-# * **dtype behavior** — float64 casts, identical to the displaced factory.
+# * **dtype behavior** — the CANONICAL dtype flow: value and slope are
+#   evaluated at the input's dtype, so a float32 trace keeps float32
+#   primals and tangents (PR #600 review). This matches the displaced
+#   tanh/sin/sigmoid hand rules bit-for-bit; the displaced FACTORY rules
+#   (exp/log/…) force-promoted to float64, which — because forward-mode
+#   dispatch returns the rule's primal instead of re-executing the
+#   canonical op — silently changed a function's result dtype the moment
+#   AD was enabled. That promotion is deliberately fixed, and pinned.
 # * **evaluation guards** — the displaced rules' domain clamps, carried as
 #   EXPLICIT per-op declarations below instead of buried lambdas. One guard
 #   per op for BOTH modes. This *fixes a measured inconsistency*: the
@@ -180,15 +187,15 @@ def _make_derived_pair(name: str, rec: ScalarRecurrence):
     guard = _DERIVATIVE_EVAL_GUARDS.get(name)
 
     def derived_jvp(primals, tangents, **_):
-        x = np.asarray(primals[0], dtype=np.float64)
-        dx = np.asarray(tangents[0], dtype=np.float64)
+        x = np.asarray(primals[0])
+        dx = np.asarray(tangents[0])
         xg = guard(x) if guard is not None else x
         return np.asarray(value(x)), derivative(xg) * dx
 
     def derived_vjp(dout, x, **_):
-        a = np.asarray(x, dtype=np.float64)
+        a = np.asarray(x)
         ag = guard(a) if guard is not None else a
-        return (derivative(ag) * np.asarray(dout, dtype=np.float64),)
+        return (derivative(ag) * np.asarray(dout),)
 
     derived_jvp._derived_from_datum = name  # type: ignore[attr-defined]
     derived_vjp._derived_from_datum = name  # type: ignore[attr-defined]

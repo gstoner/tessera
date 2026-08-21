@@ -132,3 +132,37 @@ def test_boundary_guard_is_one_convention_for_both_modes():
     _, t_old = RETIRED_HAND_RULES["log"][0]((x,), (np.ones(1),))
     np.testing.assert_allclose(t_new, [1e12], rtol=1e-12)
     np.testing.assert_allclose(t_old, [1e30], rtol=1e-12)
+
+
+def test_derived_rules_preserve_the_canonical_dtype():
+    """PR #600 review (P1): forward-mode dispatch returns the RULE's
+    primal instead of re-executing the canonical op, so a promoting rule
+    silently changes a function's result dtype the moment AD is enabled.
+    All 13 derived rules keep float32 primals/tangents/cotangents for
+    float32 inputs — bit-compatible with the dtype-preserving displaced
+    hand rules (tanh/sin/sigmoid), and a deliberate, pinned FIX of the
+    displaced factory's float64 promotion (exp/log/…), which is asserted
+    here as the old behavior so the fix stays visible."""
+    x32 = np.linspace(-1.0, 1.0, 5, dtype=np.float32)
+    d32 = np.ones(5, dtype=np.float32)
+    positive = np.abs(x32) + np.float32(0.5)
+    for name in ODE_FAMILY:
+        xin = positive if name in ("log", "sqrt", "reciprocal",
+                                   "log1p") else x32
+        y, t = _JVPS[name]((xin,), (d32,))
+        (g,) = _VJPS[name](d32, xin)
+        assert np.asarray(y).dtype == np.float32, name
+        assert np.asarray(t).dtype == np.float32, name
+        assert np.asarray(g).dtype == np.float32, name
+
+    # Bit-compat with the displaced rules that already preserved dtype.
+    for name in ("tanh", "sin", "sigmoid"):
+        y, t = _JVPS[name]((x32,), (d32,))
+        y_old, t_old = RETIRED_HAND_RULES[name][0]((x32,), (d32,))
+        np.testing.assert_array_equal(np.asarray(t), np.asarray(t_old))
+        np.testing.assert_array_equal(np.asarray(y), np.asarray(y_old))
+
+    # The documented fix: the displaced factory PROMOTED (old behavior,
+    # asserted so the change stays a decision, not an accident).
+    y_old_exp, _ = RETIRED_HAND_RULES["exp"][0]((x32,), (d32,))
+    assert np.asarray(y_old_exp).dtype == np.float64

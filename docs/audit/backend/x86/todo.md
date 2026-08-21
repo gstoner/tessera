@@ -10,7 +10,17 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 # x86 backend TODO
 
 Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 x86 outcome:
-follow-up required (the sibling exact-device row).** gfx1151 landed the
+VALIDATED (AVX-512 host, 2026-08-21).** The sibling row landed: the same
+paired `bounded_state_machine_v1` functions (forward + recompute_all
+backward, both entry paths of the two-entry irreducible SCC, plus the
+per-element cmpf→select machine) compile through `tessera_jit`'s
+MLIR→LLVM→ORC chain and execute natively — digest/residual-policy bound,
+native `cf.assert` bound trap (stronger than ROCm's host-checked STATUS),
+proof-of-execution counter (`tests/unit/test_x86_state_machine_exec.py`).
+One shared fix rode along: `convert-elementwise-to-linalg` joined the
+tessera_jit pipeline (tensor-typed arith from the paired cotangent
+accumulation had no bufferization interface). Correctness-only rows;
+clean Zen 5 timing remains open per W4.3. Original follow-up text: gfx1151 landed the
 first irreducible-state-machine execution rows (see the rocm entry). The
 W4-PRODUCT-1 acceptance names native x86 rows too: an AVX-512-host
 consumer for the same paired `bounded_state_machine_v1` functions (the

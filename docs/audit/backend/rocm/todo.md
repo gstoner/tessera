@@ -7,6 +7,24 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 exact-device
+irreducible-state-machine row: VALIDATED (gfx1151).** New
+`--generate-rocm-state-machine-kernel` (ROCm backend) lowers any
+`--tessera-autodiff-paired` function carrying a `bounded_state_machine_v1`
+loop — forward and generated backward alike — to one per-thread gpu.func:
+each thread runs the whole PC machine on its element (SIMT divergence
+carries per-element control flow), tensor slots scalarize to f32, the
+structured-CFG digest and residual policy are stamped on the kernel, and
+`cf.assert` becomes a per-thread STATUS conjunction the HOST enforces
+(all-ones or the launch is rejected — max_steps exhaustion cannot pass
+silently). Exact-device rows: both entry paths of a two-entry irreducible
+SCC, forward (tanh∘tanh / tanh) and recompute_all backward vs the analytic
+oracle, n=300 (non-multiple of the 256 block dim), rtol 1e-5
+(`tests/unit/test_rocm_state_machine_exec.py`; lit:
+`tests/tessera-ir/control_flow/w4_state_machine_kernel{,_reject}.mlir`).
+Correctness-only — WSL; bare-metal timing remains open per W4.3.
+
+
 Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
 numerical policy, wave 3; ROCm outcome: parity validated (exact-device,
 gfx1151).** lgamma/digamma switch to datum-derived pairs over the new

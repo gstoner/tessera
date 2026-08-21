@@ -474,6 +474,7 @@ void registerTesseraROCMPasses() {
   registerPass([]() { return createGenerateROCMSpectralBackwardKernelPass(); });
   registerPass([]() { return createGenerateROCMESLowRankKernelPass(); });
   registerPass([]() { return createGenerateROCMControlForKernelPass(); });
+  registerPass([]() { return createGenerateROCMStateMachineKernelPass(); });
   registerPass([]() { return createGenerateROCMControlForGemvKernelPass(); });
   registerPass([]() { return createGenerateROCMControlForNormKernelPass(); });
   registerPass([]() { return createGenerateROCMControlForWmmaKernelPass(); });

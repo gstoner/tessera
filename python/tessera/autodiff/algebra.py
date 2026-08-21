@@ -740,25 +740,28 @@ def hutchinson_laplacian(fn, x, key, samples: int):
     """Randomized-jet estimator of the Laplacian (the STDE shape, §3.7).
 
     For ``v`` with i.i.d. zero-mean unit-variance components,
-    ``E[vᵀ ∇²f v] = tr(∇²f) = Δf``. The quadratic form is read off a
-    **second-order jet** in the direction ``v`` — coefficient 2 of the jet is
-    ``½ vᵀ∇²f v`` — so one order-2 jet per sample replaces an ``n``-fold
-    loop over coordinates.
+    ``E[vᵀ ∇²f v] = tr(∇²f) = Δf`` — coefficient 2 of an order-2 jet in
+    direction ``v`` is ``½ vᵀ∇²f v``, so one jet per sample replaces an
+    ``n``-fold coordinate loop. Deterministic and replayable through the
+    Philox stream (Decision #18).
 
-    The correctness claim is therefore ``E[estimate] = Δf``, an *unbiased
-    estimator*, not an equality. Draws come from the project's Philox stream
-    (`tessera.rng`, Decision #18), so a run is deterministic and replayable
-    and the claim is testable rather than folklore.
+    **One implementation per boundary (#31, AD-JET-STRUCT-1):** this is a
+    declared thin adapter over `jet.hessian_trace_estimate` — the single
+    estimator — translating this module's elementwise-integrand program
+    convention (``fn(lifted, W) -> per-coordinate coefficients``, whose
+    SUM is the scalar being traced) into a scalar-output jet program, with
+    Gaussian probes. New callers should use `jet.hessian_trace_estimate`
+    directly (it also offers the lower-variance Rademacher probes).
     """
-    from ..rng import normal
+    from .jet import hessian_trace_estimate, jet_sum
 
-    n = np.asarray(x).size
-    total = np.float64(0.0)
-    for s in range(samples):
-        v = np.asarray(normal(key.fold_in(s) if hasattr(key, "fold_in") else key,
-                              (n,), dtype="fp64"), dtype=np.float64)
-        total = total + 2.0 * _second_order_coefficient(fn, np.asarray(x), v)
-    return float(total / samples)
+    def scalar_program(W, coeffs):
+        return jet_sum(W, fn(coeffs, W), axis=None)
+
+    return hessian_trace_estimate(
+        scalar_program, np.asarray(x, dtype=np.float64).reshape(-1), key,
+        samples=samples, distribution="normal",
+    )
 
 
 def _second_order_coefficient(fn, x, v):

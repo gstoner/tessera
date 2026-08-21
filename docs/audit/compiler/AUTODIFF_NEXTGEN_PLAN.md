@@ -600,6 +600,38 @@ eager `hvp` replacement as consumers).
 
 ### AD-JET-STRUCT-1 — structured jets + estimator mode (~4 weeks · after AD-WEIL-1)
 
+> **Core landed 2026-08-20** (`autodiff/jet.py` +
+> `tests/unit/test_jet_struct.py`). The §3.3/§3.4 families evaluate in W
+> as the numpy reference lane: `jet_matmul` (truncated Cauchy over the
+> coefficient axis), `jet_softmax`/`jet_logsumexp`, the norm chain
+> (`jet_rmsnorm`/`jet_layer_norm`), and `jet_flash_attn` — genuinely
+> **online** (blockwise, running (m, ℓ, o), never materializing the
+> weights), with the load-bearing observation that softmax's shift
+> invariance makes the order-0 running max (`control_at_order = 0`)
+> EXACT, not approximate — the rescale degenerates to an order-0 factor.
+> Proof obligations landed: order 0 = canonical forward and order 1 =
+> registered hand JVP per family (anchoring, incl. every blocking of the
+> key axis and the attn_bias/causal substrate); the Law-4 jet-vs-nested
+> differential proof per family at k = 2, 3 against an independent
+> nested-dual array tower on the diagonal seed, with §3.1's factorial
+> bookkeeping spelled by `coefficient_scaling="derivative"` and a
+> mutation control (a corrupted coefficient fails); `jet_reduce_max`
+> implements the declared SUBGRAD_SPLIT share at exact ties (Law 5
+> extended upward) and flash_attn is proven exact AT score ties. The
+> §3.7 estimator (`hessian_trace_estimate`/`laplacian_estimate`) is the
+> ONE estimator (#31 — `algebra.hutchinson_laplacian` is now a declared
+> thin adapter over it): Philox-keyed, mandatory explicit key,
+> Rademacher (exact for diagonal quadratics) or normal probes,
+> fail-closed on unknown distributions and non-scalar programs; the
+> Law-6b 1/√N sweep row rides it. W2.2 note recorded in the module: not
+> a catalog op today; promotion MUST register `effect_kind="random"`.
+> **Not exercised, by design:** hand-rule retirement (production
+> authority unchanged — a per-family decision that begins only now that
+> Law-4 proofs exist) and physical carriers (AD-JET-IR-1, x86/gfx1151
+> first). Remaining depth for later sessions: more structured families
+> (attention variants, SSM), dashboard rows for the per-family jet
+> proofs, and the retirement decisions themselves.
+
 Jet rules for the fused/structured families via §3.4: `flash_attn`
 (online-softmax jets), norm chain, `logsumexp`/`softmax`; STDE-style
 Laplacian/Hessian-trace estimator on Philox with the Law-6 unbiasedness

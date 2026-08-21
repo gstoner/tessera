@@ -149,8 +149,8 @@ def test_derived_rules_preserve_the_canonical_dtype():
     d32 = np.ones(5, dtype=np.float32)
     positive = np.abs(x32) + np.float32(0.5)
     for name in ODE_FAMILY:
-        xin = positive if name in ("log", "sqrt", "reciprocal",
-                                   "log1p", "rsqrt") else x32
+        xin = positive if name in ("log", "sqrt", "reciprocal", "log1p",
+                                   "rsqrt", "lgamma", "digamma") else x32
         y, t = _JVPS[name]((xin,), (d32,))
         (g,) = _VJPS[name](d32, xin)
         assert np.asarray(y).dtype == np.float32, name

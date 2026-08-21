@@ -1,11 +1,26 @@
 ---
-last_updated: 2026-08-20
+last_updated: 2026-08-21
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
+numerical policy, wave 3; ROCm outcome: parity validated (exact-device,
+gfx1151).** lgamma/digamma switch to datum-derived pairs over the new
+polygamma tower (k=1 slopes are the displaced hand VJPs' series verbatim;
+values mirror the canonical forwards bit-for-bit; n ≥ 2 rungs are new
+machine-precision capability), and the rmsnorm derived pair gains the
+optional γ operand (tape-reverse with γ was broken before retirement).
+Validated on this box: the four ROCm autodiff/spectral device lanes +
+six x86-shared loss lanes, 95/96 green against the switched registry —
+the 1 failure is the pre-existing `test_autodiff_rocm_matmul_composed`
+provenance-metadata assert (stale `implementation` name from the
+E2E-REAL-6 tracer rename; numerics pass and the lane executes
+`native_gpu`/`hip_runtime`).
+
 
 Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
 policy, wave 2; ROCm outcome: parity validated (exact-device, gfx1151).**

@@ -1553,8 +1553,17 @@ def test_derivative_datum_is_declared_once():
             "erf": (2.0 / _np.sqrt(_np.pi)) * _np.exp(-x * x),
             "erfc": -(2.0 / _np.sqrt(_np.pi)) * _np.exp(-x * x),
             "rsqrt": -0.5 * x ** -1.5,
+            # AD-DATUM-POLYGAMMA — no elementary closed form; anchored at
+            # independently computed constants (scipy.special psi/polygamma,
+            # not any in-tree helper): ψ(0.6) and ψ′(0.6). Their slopes run
+            # the displaced hand VJPs' own shift+asymptotic series, whose
+            # intrinsic precision is ~1e-12 — carried deliberately (§8), so
+            # these two rows get that bar rather than the elementary 1e-14.
+            "lgamma": -1.5406192138931905,
+            "digamma": 3.6362096709023586,
         }[name]
-        _np.testing.assert_allclose(df(x), analytic, rtol=1e-14)
+        rtol = 1e-11 if name in ("lgamma", "digamma") else 1e-14
+        _np.testing.assert_allclose(df(x), analytic, rtol=rtol)
 
     # Registering a NEW primitive extends the nested reference automatically;
     # the old if-chain raised KeyError, which degraded Law 4 to `rule_error`.

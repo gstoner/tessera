@@ -92,7 +92,7 @@ class Dual:
         return (a[0] * b[0], a[0] * b[1] + a[1] * b[0])
 
     def scalar_fn(self, name, a):
-        f, df = SCALAR_RECURRENCES[name].pointwise
+        f, df = recurrence_for(name).pointwise
         return (f(a[0]), df(a[0]) * a[1])
 
     def extract(self, a, index):
@@ -161,7 +161,7 @@ class TruncatedJet:
         return out
 
     def scalar_fn(self, name, a):
-        return SCALAR_RECURRENCES[name].jet(self, a)
+        return recurrence_for(name).jet(self, a)
 
     def extract(self, a, index):
         if self.coefficient_scaling == "derivative":
@@ -223,7 +223,7 @@ class _ScalarOps:
     """`_Ops` over plain numpy scalars/arrays."""
 
     def apply(self, name, x):
-        return SCALAR_RECURRENCES[name].value(x)
+        return recurrence_for(name).value(x)
 
     def mul(self, a, b):
         return a * b
@@ -492,11 +492,9 @@ SCALAR_RECURRENCES.update(_EXTRA_RECURRENCES)
 # Six more primitives join the datum, which unblocks their retirement: the
 # derived production pair, the k=1 oracle check, and the k=2..4 nested-dual
 # proof all follow from these declarations automatically (the ODE-table test
-# parametrizes over this dict). lgamma/digamma stay OUT deliberately: their
-# slope tower is the polygamma family (ψ, ψ′, ψ″, …), which needs its own
-# carefully-tested series machinery — a first-order-only entry would create
-# a datum the jet lane cannot serve, the exact anti-pattern datum growth
-# exists to avoid (recorded in the plan's retirement table).
+# parametrizes over this dict). lgamma/digamma joined in the follow-up
+# wave once the polygamma tower they need existed — see the "polygamma
+# tower" section below, which is that carefully-tested series machinery.
 
 
 def _jet_tan(W, u):
@@ -615,6 +613,254 @@ _GROWTH_RECURRENCES = {
 SCALAR_RECURRENCES.update(_GROWTH_RECURRENCES)
 
 
+# ── Polygamma tower (AD-DATUM-POLYGAMMA wave) ───────────────────────────────
+# lgamma/digamma were the last two datum holdouts: their slope tower is the
+# polygamma family ψ⁽ⁿ⁾ = d^{n+1}/dx^{n+1} ln Γ, so a jet-capable datum needs
+# every order of that tower, not one slope. Three pieces provide it:
+#
+# * `_polygamma(n, x)` — ψ⁽ⁿ⁾ over the whole real line. n = 0/1 reuse the
+#   displaced hand VJPs' own helpers (`vjp._digamma_positive` /
+#   `_trigamma_positive`) VERBATIM, so the k = 1 slope of the derived rules
+#   is the displaced convention bit-for-bit (§8: the survivor carries what
+#   the deleted path carried, numerics included). n ≥ 2 is new capability
+#   with no displaced convention to carry, so it uses a higher-precision
+#   core: shift to x ≥ 10+n, asymptotic series through B₁₄, and the
+#   reflection ψ⁽ⁿ⁾(x) = (−1)ⁿψ⁽ⁿ⁾(1−x) − πⁿ⁺¹·cot⁽ⁿ⁾(πx) with the cot
+#   derivatives generated as polynomials in cot (machine-precision against
+#   the exact anchors ψ″(1) = −2ζ(3), ψ‴(1) = π⁴/15, ψ″(½) = −14ζ(3), …).
+#   Poles (x a non-positive integer) return nan, the canonical convention.
+#
+# * `_jet_from_tower` — f∘u composed from f's derivative tower at u₀ by
+#   Horner in the jet ring over δ = u − u₀ (δ₀ = 0). Exact through order k
+#   because nilpotency truncates identically; the order-0/1 coefficients
+#   reduce to f(u₀) and f′(u₀)·u₁ with no summation, preserving the
+#   pointwise pair's bit patterns.
+#
+# * an AUXILIARY recurrence lookup (`recurrence_for`) — digamma's
+#   derivative is trigamma, whose derivative is ψ⁽²⁾, and so on without
+#   end. Registering the tail in SCALAR_RECURRENCES would turn internal
+#   tower rungs into production ops (swept by the law harness, switched
+#   into `_JVPS`/`_VJPS` by the retirement registration — names no catalog
+#   op owns). Instead `derivative_expr` may name "trigamma"/"polygamma{n}"
+#   and every consumer resolves through `recurrence_for`, which serves
+#   SCALAR_RECURRENCES first and generates unbounded tower entries on
+#   demand. The tower is closed at every depth and nothing leaks into the
+#   production registries (#29: these declarations' consumers are the
+#   nested-dual reference and the jet lane, and only those).
+
+_BERNOULLI_2K = (1.0 / 6.0, -1.0 / 30.0, 1.0 / 42.0, -1.0 / 30.0,
+                 5.0 / 66.0, -691.0 / 2730.0, 7.0 / 6.0)   # B₂ … B₁₄
+
+
+def _cot_derivative_coeffs(n: int) -> np.ndarray:
+    """cot⁽ⁿ⁾(θ) = pₙ(cot θ): ascending coefficients of pₙ, from
+    p₀(t) = t and p_{m+1}(t) = −(1 + t²)·p_m′(t)."""
+    p = np.array([0.0, 1.0])
+    for _ in range(n):
+        dp = np.polynomial.polynomial.polyder(p)
+        p = -np.polynomial.polynomial.polyadd(
+            dp, np.concatenate([np.zeros(2), dp]))
+    return p
+
+
+def _polygamma_higher(n: int, a: np.ndarray) -> np.ndarray:
+    """ψ⁽ⁿ⁾ for n ≥ 2 — shift + asymptotic + reflection (docstring above)."""
+    x0 = np.atleast_1d(np.asarray(a, dtype=np.float64))
+    neg = x0 <= 0.0
+    pole = neg & (np.abs(x0 - np.round(x0)) < 1e-12)
+    x = np.where(neg, 1.0 - x0, x0).astype(np.float64)
+    threshold = 10.0 + float(n)
+    factn = float(_math.factorial(n))
+    # ψ⁽ⁿ⁾(x) = ψ⁽ⁿ⁾(x+1) + (−1)ⁿ⁺¹·n!/xⁿ⁺¹  (differentiate ψ(x+1)−ψ(x)=1/x)
+    shift = factn if (n + 1) % 2 == 0 else -factn
+    result = np.zeros_like(x)
+    while np.any(x < threshold):
+        mask = x < threshold
+        result[mask] += shift / x[mask] ** (n + 1)
+        x[mask] += 1.0
+    inv = 1.0 / x
+    # (−1)ⁿ⁻¹[(n−1)!/xⁿ + n!/(2xⁿ⁺¹) + Σₖ B₂ₖ·(2k+n−1)!/(2k)!·x^{−2k−n}]
+    s = float(_math.factorial(n - 1)) * inv ** n + factn * 0.5 * inv ** (n + 1)
+    for k, b2k in enumerate(_BERNOULLI_2K, start=1):
+        coef = b2k * float(_math.factorial(2 * k + n - 1)
+                           / _math.factorial(2 * k))
+        s = s + coef * inv ** (2 * k + n)
+    result = result + (s if (n - 1) % 2 == 0 else -s)
+    if np.any(neg):
+        coeffs = _cot_derivative_coeffs(n)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            cot_n = np.polynomial.polynomial.polyval(
+                1.0 / np.tan(np.pi * x0), coeffs)
+            reflected = ((result if n % 2 == 0 else -result)
+                         - np.pi ** (n + 1) * cot_n)
+        result = np.where(neg, reflected, result)
+    result = np.where(pole, np.nan, result)
+    return result.reshape(np.shape(a))
+
+
+def _polygamma(n: int, x: Any) -> np.ndarray:
+    """ψ⁽ⁿ⁾(x), float64, whole real line; poles → nan."""
+    from .vjp import _digamma_positive, _trigamma_positive
+    a = np.asarray(x, dtype=np.float64)
+    if n == 0:
+        return _digamma_positive(a)
+    if n == 1:
+        return _trigamma_positive(a)
+    return _polygamma_higher(n, a)
+
+
+def _jet_from_tower(tower_fn):
+    """f∘u from f's derivative tower [f, f′, …, f⁽ᵏ⁾] at u₀ (see above)."""
+    def jet(W, u):
+        k = W.order
+        x0 = np.asarray(u[0], dtype=np.float64)
+        derivs = tower_fn(x0, k)
+        zero = np.zeros_like(x0)
+        coeffs, factorial = [], 1.0
+        for j, d in enumerate(derivs):
+            if j:
+                factorial *= j
+            coeffs.append(np.asarray(d, dtype=np.float64) / factorial)
+        delta = [zero] + [np.asarray(c, dtype=np.float64) for c in u[1:]]
+        acc = [coeffs[k]] + [zero.copy() for _ in range(k)]
+        for j in range(k - 1, -1, -1):
+            acc = W.mul(acc, delta)
+            acc[0] = acc[0] + coeffs[j]
+        return acc
+    return jet
+
+
+def _lgamma_value(x):
+    # Mirrors the canonical ops.lgamma exactly (the PR #600 dtype lesson —
+    # the rule's primal replaces canonical execution under AD): compute in
+    # double via math.lgamma, cast back to the input dtype. Bit-identity
+    # with the canonical op is asserted by test_polygamma_datum.py.
+    a = np.asarray(x)
+    out = np.vectorize(_math.lgamma, otypes=[np.float64])(a)
+    return out.astype(a.dtype, copy=False) if a.dtype.kind == "f" else out
+
+
+def _digamma_scalar_ref(x: float) -> float:
+    # Mirrors the canonical frontend's `_digamma_scalar` line for line
+    # (drift-gated by test_polygamma_datum.py's bit-identity sweep): the
+    # array helper `vjp._digamma_positive` differs from it by ~1 ulp on
+    # some inputs (np.log vs math.log), and the PRIMAL must match the
+    # canonical forward, not the slope helper.
+    x = float(x)
+    if x <= 0.0:
+        if abs(x - round(x)) < 1e-12:
+            return float("nan")
+        return (_digamma_scalar_ref(1.0 - x)
+                - _math.pi / _math.tan(_math.pi * x))
+    result = 0.0
+    while x < 8.0:
+        result -= 1.0 / x
+        x += 1.0
+    inv = 1.0 / x
+    inv2 = inv * inv
+    return (
+        result
+        + _math.log(x)
+        - 0.5 * inv
+        - inv2 / 12.0
+        + inv2 * inv2 / 120.0
+        - inv2 * inv2 * inv2 / 252.0
+        + inv2 * inv2 * inv2 * inv2 / 240.0
+    )
+
+
+def _digamma_value(x):
+    a = np.asarray(x)
+    out = np.vectorize(_digamma_scalar_ref, otypes=[np.float64])(a)
+    return out.astype(a.dtype, copy=False) if a.dtype.kind == "f" else out
+
+
+def _lgamma_tower(x0, k):
+    return [_lgamma_value(x0)] + [_polygamma(j, x0) for j in range(k)]
+
+
+def _digamma_tower(x0, k):
+    return [_digamma_value(x0)] + [_polygamma(j, x0)
+                                   for j in range(1, k + 1)]
+
+
+_POLYGAMMA_RECURRENCES = {
+    # d/dx ln Γ = ψ  (poles at non-positive integers; the guard maps ℝ into
+    # [1, ∞), pole-free — same form as rsqrt's)
+    "lgamma": ScalarRecurrence(
+        _lgamma_value,
+        lambda o, x: o.apply("digamma", x),
+        _jet_from_tower(_lgamma_tower),
+        guard_expr=lambda o, x: o.add(o.mul(x, x), 1.0)),
+    # d/dx ψ = ψ′ (trigamma — an auxiliary tower rung, not a catalog op)
+    "digamma": ScalarRecurrence(
+        _digamma_value,
+        lambda o, x: o.apply("trigamma", x),
+        _jet_from_tower(_digamma_tower),
+        guard_expr=lambda o, x: o.add(o.mul(x, x), 1.0)),
+}
+SCALAR_RECURRENCES.update(_POLYGAMMA_RECURRENCES)
+
+_AUX_RECURRENCES: dict[str, ScalarRecurrence] = {}
+
+
+def _aux_polygamma_recurrence(name: str) -> Optional[ScalarRecurrence]:
+    if name == "trigamma":
+        n = 1
+    elif name.startswith("polygamma"):
+        try:
+            n = int(name[len("polygamma"):])
+        except ValueError:
+            return None
+        if n < 2:
+            return None
+    else:
+        return None
+
+    def value(x, _n=n):
+        a = np.asarray(x)
+        out = _polygamma(_n, a)
+        if getattr(a, "dtype", None) is not None and a.dtype.kind == "f":
+            return out.astype(a.dtype, copy=False)
+        return out
+
+    next_rung = f"polygamma{n + 1}"
+
+    def derivative_expr(o, x):
+        return o.apply(next_rung, x)
+
+    def tower(x0, k, _n=n):
+        return [_polygamma(_n + j, x0) for j in range(k + 1)]
+
+    return ScalarRecurrence(
+        value,
+        derivative_expr,
+        _jet_from_tower(tower),
+        guard_expr=lambda o, x: o.add(o.mul(x, x), 1.0))
+
+
+def recurrence_for(name: str) -> ScalarRecurrence:
+    """Registry lookup that also serves the auxiliary polygamma tower.
+
+    Every by-name dispatch site resolves through here; production sweeps
+    (the law harness, the retirement registration) still iterate
+    SCALAR_RECURRENCES itself, so auxiliary rungs never become ops."""
+    rec = SCALAR_RECURRENCES.get(name)
+    if rec is not None:
+        return rec
+    rec = _AUX_RECURRENCES.get(name)
+    if rec is None:
+        rec = _aux_polygamma_recurrence(name)
+        if rec is None:
+            raise KeyError(
+                f"{name!r} is neither a registered scalar recurrence nor an "
+                f"auxiliary polygamma rung — declare it in "
+                f"SCALAR_RECURRENCES before using it in a derivative "
+                f"expression")
+        _AUX_RECURRENCES[name] = rec
+    return rec
+
+
 
 # ── The nested-dual reference (Law 4's other side) ───────────────────────────
 
@@ -701,11 +947,11 @@ class _NestedScalarOps:
         if isinstance(x, _NestedDual):
             return _NestedDual(self._apply(name, x.a),
                                _nd_mul(x.b, self._derivative(name, x.a)))
-        return SCALAR_RECURRENCES[name].value(x)
+        return recurrence_for(name).value(x)
 
     def _derivative(self, name, x):
         """d/dx of `name`, lifted — from the registry's one declaration."""
-        return SCALAR_RECURRENCES[name].derivative_expr(self, x)
+        return recurrence_for(name).derivative_expr(self, x)
 
 
 def _nd_reciprocal(x):

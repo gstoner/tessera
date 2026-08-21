@@ -119,3 +119,97 @@ def test_symmetric_transpose_delegation_is_a_true_adjoint():
         lhs = float(np.sum(np.asarray(jv) * u))
         rhs = float(np.sum(v * np.asarray(jtu)))
         assert abs(lhs - rhs) / max(abs(lhs), 1e-12) < 1e-12, name
+
+
+# ── rmsnorm γ envelope (AD-DATUM-POLYGAMMA wave) ────────────────────────────
+# The hand pair was x-only while the canonical forward takes an optional
+# broadcast γ, so tape-reverse through `ops.rmsnorm(x, gamma)` was broken
+# BEFORE retirement (the hand VJP swallowed γ and returned one cotangent
+# for two operands). The derived pair now carries γ:
+#   JVP  dy = J_core(dx)·γ + core·dγ ;  VJP  dx = J_core(γ⊙dout),
+#   dγ = Σ_broadcast dout⊙core reduced to γ's shape.
+# There is no displaced oracle for this half — its proof is adjoint +
+# finite differences + tape end-to-end, below.
+
+
+def test_rmsnorm_gamma_adjoint_identity():
+    rng = np.random.default_rng(31)
+    x = rng.standard_normal((3, 4, 8))
+    g = rng.standard_normal(8)
+    dx = rng.standard_normal(x.shape)
+    dg = rng.standard_normal(g.shape)
+    u = rng.standard_normal(x.shape)
+    _, t = _JVPS["rmsnorm"]((x, g), (dx, dg), eps=1e-5)
+    gx, gg = _VJPS["rmsnorm"](u, x, g, eps=1e-5)
+    lhs = float(np.sum(t * u))
+    rhs = float(np.sum(dx * gx) + np.sum(dg * gg))
+    assert abs(lhs - rhs) / max(abs(lhs), 1e-12) < 1e-12
+
+
+def test_rmsnorm_gamma_matches_finite_differences():
+    from tessera import ops
+    rng = np.random.default_rng(32)
+    x = rng.standard_normal((2, 6))
+    g = rng.standard_normal(6)
+    eps = 1e-5
+
+    def loss(xv, gv):
+        return float(np.sum(np.sin(ops.rmsnorm(xv, gv, eps=eps))))
+
+    dout = np.cos(ops.rmsnorm(x, g, eps=eps))
+    gx, gg = _VJPS["rmsnorm"](dout, x, g, eps=eps)
+    h = 1e-6
+    for idx in ((0, 1), (1, 4)):
+        e = np.zeros_like(x)
+        e[idx] = h
+        fd = (loss(x + e, g) - loss(x - e, g)) / (2.0 * h)
+        np.testing.assert_allclose(fd, gx[idx], rtol=1e-6)
+    for j in (0, 5):
+        e = np.zeros_like(g)
+        e[j] = h
+        fd = (loss(x, g + e) - loss(x, g - e)) / (2.0 * h)
+        np.testing.assert_allclose(fd, gg[j], rtol=1e-6)
+
+
+def test_rmsnorm_gamma_tape_reverse_end_to_end():
+    """The original failing repro: before this wave the derived (and hand)
+    VJP raised/returned wrong arity for two operands."""
+    from tessera import ops
+    from tessera.autodiff.tape import tape
+    rng = np.random.default_rng(33)
+    x = rng.standard_normal((2, 5))
+    g = rng.standard_normal(5)
+
+    with tape() as t:
+        y = ops.rmsnorm(x, g)
+        target = ops.sum(y)
+    t.backward(target)
+    gx = t.cotangent[id(x)]
+    gg = t.cotangent[id(g)]
+    h = 1e-6
+
+    def loss(xv, gv):
+        return float(np.sum(np.asarray(ops.rmsnorm(xv, gv))))
+
+    e = np.zeros_like(g)
+    e[2] = h
+    fd = (loss(x, g + e) - loss(x, g - e)) / (2.0 * h)
+    np.testing.assert_allclose(fd, np.asarray(gg)[2], rtol=1e-6)
+    ex = np.zeros_like(x)
+    ex[1, 3] = h
+    fd = (loss(x + ex, g) - loss(x - ex, g)) / (2.0 * h)
+    np.testing.assert_allclose(fd, np.asarray(gx)[1, 3], rtol=1e-6)
+
+
+def test_rmsnorm_gamma_broadcast_shapes_and_dtype():
+    rng = np.random.default_rng(34)
+    x = rng.standard_normal((3, 4, 8)).astype(np.float32)
+    u = rng.standard_normal(x.shape).astype(np.float32)
+    for gshape in [(8,), (1, 1, 8), ()]:
+        g = np.asarray(rng.standard_normal(gshape), dtype=np.float32)
+        gx, gg = _VJPS["rmsnorm"](u, x, g)
+        assert np.shape(gg) == gshape
+        assert gx.dtype == np.float32 and np.asarray(gg).dtype == np.float32
+    # γ-less arity is unchanged — one operand in, one cotangent out.
+    (gx_only,) = _VJPS["rmsnorm"](u, x)
+    assert gx_only.shape == x.shape

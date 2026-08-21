@@ -3,10 +3,21 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-20
+last_updated: 2026-08-21
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
+numerical policy, wave 3; NVIDIA outcome: follow-up required (sm_120).**
+Same contract change as the rocm entry. Expected parity-neutral for the
+same reason as the previous two keys (both sides of every parity
+comparison read the same updated reference; dtype preserved; lgamma/
+digamma primals mirror the canonical forwards bit-for-bit). Run the
+CUDA-marked autodiff/loss parity tests on NR2 Pro and record here — one
+NR2 Pro session can now close all three open keys (this one,
+AD-RETIRE-1-POINTWISE-2026-08-20, AD-RETIRE-2-2026-08-20).
+
 
 Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
 policy, wave 2; NVIDIA outcome: follow-up required (sm_120).** Same contract

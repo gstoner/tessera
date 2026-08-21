@@ -472,7 +472,7 @@ svd,24,5,1,29,0,bf16 f16 f32 fp16 fp32 fp64 fp8_e4m3 int32 int64 int8 nvfp4,dire
 switch,0,0,0,0,1,,structural_only,category default for 'control_flow'
 take,1,0,0,1,1,,structural_only,unclassified — defaults to structural_only
 tan,4,0,0,4,0,bf16 f32,directly_tested,4 direct test references
-tanh,15,23,2,38,0,bf16 f16 f32,directly_tested,38 direct test references
+tanh,16,25,2,41,0,bf16 f16 f32,directly_tested,41 direct test references
 target_verify,3,5,1,8,0,,directly_tested,8 direct test references
 tile,4,0,0,4,0,,directly_tested,4 direct test references
 tile_view,6,0,0,6,0,fp16,directly_tested,6 direct test references

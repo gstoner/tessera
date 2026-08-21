@@ -6,7 +6,7 @@
 // present) so the negative targets exactly this pass.
 //
 // REQUIRES: tessera-rocm-backend
-// RUN: tessera-opt %s --generate-rocm-state-machine-kernel \
+// RUN: tessera-opt %s -split-input-file --generate-rocm-state-machine-kernel \
 // RUN:   --verify-diagnostics --allow-unregistered-dialect | FileCheck %s
 
 module {
@@ -31,3 +31,27 @@ module {
 // CHECK-NOT: gpu.func
 // CHECK: func.func @machine_with_matmul
 // CHECK-NOT: tessera.rocm_kernel
+
+// -----
+// A machine with NO structured-CFG digest fails closed too (PR #605 review,
+// P2): the kernel executes the whole function, so an unstamped machine would
+// break the row's exact-CFG-identity claim. No kernel, named remark.
+
+module {
+  // expected-remark @+1 {{not lowered to a ROCm state-machine kernel: a bounded state machine carries no structured-CFG digest}}
+  func.func @machine_without_digest(%x: tensor<8xf32>) -> tensor<8xf32> {
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c8 = arith.constant 8 : index
+    %r = scf.for %i = %c0 to %c8 step %c1 iter_args(%s = %x)
+        -> (tensor<8xf32>) {
+      %n = "tessera.tanh"(%s) : (tensor<8xf32>) -> tensor<8xf32>
+      scf.yield %n : tensor<8xf32>
+    } {tessera.structured_cfg.execution = "bounded_state_machine_v1",
+       tessera.structured_cfg.max_steps = 8 : i64}
+    return %r : tensor<8xf32>
+  }
+}
+
+// CHECK: func.func @machine_without_digest
+// CHECK-NOT: gpu.module

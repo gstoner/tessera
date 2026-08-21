@@ -23,6 +23,16 @@ oracle, n=300 (non-multiple of the 256 block dim), rtol 1e-5
 (`tests/unit/test_rocm_state_machine_exec.py`; lit:
 `tests/tessera-ir/control_flow/w4_state_machine_kernel{,_reject}.mlir`).
 Correctness-only — WSL; bare-metal timing remains open per W4.3.
+Review follow-up (PR #605 → follow-up PR): the family is now wired into the
+CANONICAL executable pipeline — `control_state_machine` in the C++
+`tessera-rocm-executable` family list + generator chain, `FAMILY_PLUGINS`,
+and the pipeline-registry spec (cross-registry totality test green); the
+exec test compiles through that registered pipeline, not a hand-assembled
+pass list. Digest binding is total (a machine with no digest fails closed;
+multiple distinct digests stamp an ordered `structured_cfg.digests` array),
+and interior rank-1 i1/int tensors (cmpf→select per-element selection)
+scalarize to their element types — proven by a fifth exact-device row
+(data-dependent select machine) plus lit positives/negatives.
 
 
 Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference

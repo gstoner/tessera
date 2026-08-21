@@ -635,6 +635,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             ("attention", ("generate-wmma-flash-attn-kernel",)),
             ("depth_attention", ("generate-rocm-depth-attention-kernel",)),
             ("attention_mla_decode", ("generate-rocm-mla-absorb-decode-kernel",)),
+            ("control_state_machine", ("generate-rocm-state-machine-kernel",)),
             (
                 "attention_backward",
                 (

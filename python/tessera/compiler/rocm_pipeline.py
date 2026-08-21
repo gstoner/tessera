@@ -46,6 +46,7 @@ FAMILY_PLUGINS: dict[str, ROCMFamilyPlugin] = {
         "depth_attention",
         "algebra_clifford",
         "attention_mla_decode",
+        "control_state_machine",
         "draft_dspark",
         "ebm_affine_langevin",
         "ebm_decode_init",

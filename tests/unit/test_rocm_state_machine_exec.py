@@ -6,12 +6,14 @@ the physical packet with one true irreducible state machine"): a two-entry
 SCC — entry may jump into either cycle block — is structurized by
 `--tessera-autodiff-paired` into the typed program-counter state machine
 (`bounded_state_machine_v1`), differentiated (recompute_all), and then
-lowered by `--generate-rocm-state-machine-kernel` to per-thread gpu.func
-kernels that run the WHOLE machine per element. Chain:
+lowered by `generate-rocm-state-machine-kernel` to per-thread gpu.func
+kernels that run the WHOLE machine per element. Binaries come from the
+CANONICAL registered executable pipeline (PR #605 review P1 — the same
+route normal ROCm compilation takes):
 
-  paired → state-machine kernel-gen → convert-scf-to-cf →
-  convert-gpu-to-rocdl → rocdl-attach-target{gfx1151} →
-  gpu-module-to-binary → hsaco → hipModuleLaunchKernel
+  paired → tessera-rocm-executable{family=control_state_machine
+           input=tile output=binary arch=gfx1151} → hsaco →
+  hipModuleLaunchKernel
 
 The row binds the exact CFG identity: the structured-CFG digest stamped on
 the source function must be stamped verbatim on the emitted gpu.func
@@ -160,10 +162,12 @@ def _compile(n: int) -> dict[str, bytes]:
     for kname in ("tessera_state_machine_irreducible",
                   "tessera_state_machine_irreducible__bwd"):
         assert f"gpu.func @{kname}" in gen.stdout, f"missing kernel {kname}"
-    pipe = ("builtin.module(convert-scf-to-cf,gpu.module(convert-gpu-to-rocdl),"
-            f"rocdl-attach-target{{chip={CHIP}}},gpu-module-to-binary)")
-    ser = run_tessera_opt(gen.stdout, f"--pass-pipeline={pipe}",
-                          "--allow-unregistered-dialect")
+    # PR #605 review (P1): serialize through the CANONICAL registered
+    # executable pipeline — the same `family=control_state_machine` route
+    # normal ROCm binary compilation takes — not a hand-assembled pass list.
+    pipe = ("builtin.module(tessera-rocm-executable{family=control_state_machine "
+            f"input=tile output=binary arch={CHIP}}})")
+    ser = run_tessera_opt(paired.stdout, f"--pass-pipeline={pipe}")
     assert ser.returncode == 0, f"serialize failed: {ser.stderr}"
     hsacos = _extract_hsacos(ser.stdout)
     for name, blob in hsacos.items():
@@ -279,3 +283,70 @@ def test_irreducible_state_machine_backward_executes_on_gfx1151(enter_left):
     assert np.all(status == 1.0), "bounded state machine exhausted max_steps"
     ref = _oracle_backward(x, dout, enter_left)
     np.testing.assert_allclose(dx, ref, rtol=1e-5, atol=1e-6)
+
+
+_SELECT_DIGEST = "7" * 64
+
+
+def _select_machine_mlir(n: int) -> str:
+    """A machine whose state update is per-element DATA-dependent:
+    s = select(s > 0, tanh(s), s), three steps — the cmpf/select interior
+    vocabulary the review's P2 named (tensor<Nxi1> intermediates must
+    scalarize to i1, not survive as tensor results)."""
+    return f"""
+module {{
+  func.func @select_machine(%x: tensor<{n}xf32>) -> tensor<{n}xf32> {{
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c3 = arith.constant 3 : index
+    %r = scf.for %i = %c0 to %c3 step %c1 iter_args(%s = %x)
+        -> (tensor<{n}xf32>) {{
+      %zero = arith.constant dense<0.0> : tensor<{n}xf32>
+      %p = arith.cmpf ogt, %s, %zero : tensor<{n}xf32>
+      %t = "tessera.tanh"(%s) : (tensor<{n}xf32>) -> tensor<{n}xf32>
+      %n2 = arith.select %p, %t, %s : tensor<{n}xi1>, tensor<{n}xf32>
+      scf.yield %n2 : tensor<{n}xf32>
+    }} {{tessera.structured_cfg.execution = "bounded_state_machine_v1",
+       tessera.structured_cfg.digest = "{_SELECT_DIGEST}",
+       tessera.structured_cfg.max_steps = 4 : i64}}
+    return %r : tensor<{n}xf32>
+  }}
+}}
+"""
+
+
+def test_data_dependent_select_machine_executes_on_gfx1151():
+    require_tessera_opt()
+    hip = _load_hip()
+    if hip is None:
+        pytest.skip("libamdhip64.so not loadable — no ROCm host")
+    n = 300
+    rng = np.random.default_rng(9)
+    x = rng.standard_normal(n).astype(np.float32)
+
+    src = _select_machine_mlir(n)
+    gen = run_tessera_opt(src, "--generate-rocm-state-machine-kernel")
+    assert gen.returncode == 0, f"kernel-gen failed: {gen.stderr}"
+    assert f'tessera.structured_cfg.digest = "{_SELECT_DIGEST}"' in gen.stdout
+    pipe = ("builtin.module(tessera-rocm-executable{family=control_state_machine "
+            f"input=tile output=binary arch={CHIP}}})")
+    ser = run_tessera_opt(src, f"--pass-pipeline={pipe}")
+    assert ser.returncode == 0, f"serialize failed: {ser.stderr}"
+    hsacos = _extract_hsacos(ser.stdout)
+
+    dev = _Device(hip)
+    if not dev.ok:
+        pytest.skip("hipInit failed — no usable AMD GPU")
+    out = np.zeros(n, dtype=np.float32)
+    status = np.zeros(n, dtype=np.float32)
+    launched = dev.launch(hsacos["tessera_state_machine_select_machine_mod"],
+                          b"tessera_state_machine_select_machine",
+                          [np.zeros(1, dtype=np.float32),  # FLAGS (no i1 args)
+                           x.copy(), out, status], n)
+    if not launched:
+        pytest.skip("no usable AMD GPU (module load / launch unavailable)")
+    assert np.all(status == 1.0)
+    ref = x.copy()
+    for _ in range(3):
+        ref = np.where(ref > 0.0, np.tanh(ref), ref)
+    np.testing.assert_allclose(out, ref, rtol=1e-5, atol=1e-6)

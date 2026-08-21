@@ -76,7 +76,8 @@ struct DeclareROCMPipelineContractPass
 
   void runOnOperation() override {
     static constexpr StringLiteral families[] = {
-        "algebra_clifford", "attention_mla_decode", "draft_dspark",
+        "algebra_clifford", "attention_mla_decode", "control_state_machine",
+        "draft_dspark",
         "ebm_affine_langevin", "ebm_decode_init", "ebm_ebt_tiny",
         "ebm_energy_quadratic", "ebm_langevin", "ebm_partition",
         "fused_silu_mul", "indexing_gather", "indexing_scatter",
@@ -187,6 +188,8 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
     pm.addPass(createGenerateROCMMLAAbsorbDecodeKernelPass());
+  } else if (family == "control_state_machine") {
+    pm.addPass(createGenerateROCMStateMachineKernelPass());
   } else if (family == "draft_dspark") {
     pm.addPass(createGenerateROCMDSparkDraftBlockKernelPass());
   } else if (family == "ebm_affine_langevin") {

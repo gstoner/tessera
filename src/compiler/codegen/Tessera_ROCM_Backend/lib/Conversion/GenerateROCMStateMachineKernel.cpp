@@ -78,6 +78,7 @@ using namespace mlir;
 namespace mlir {
 namespace tessera_rocm {
 std::unique_ptr<Pass> createGenerateROCMStateMachineKernelPass();
+std::unique_ptr<Pass> createGenerateROCMStateMachineKernelPass(bool strict);
 }  // namespace tessera_rocm
 }  // namespace mlir
 
@@ -421,6 +422,21 @@ struct GenerateROCMStateMachineKernelPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(
       GenerateROCMStateMachineKernelPass)
 
+  GenerateROCMStateMachineKernelPass() = default;
+  explicit GenerateROCMStateMachineKernelPass(bool strict) : strict(strict) {}
+  GenerateROCMStateMachineKernelPass(
+      const GenerateROCMStateMachineKernelPass &other)
+      : PassWrapper(other), strict(other.strict) {}
+
+  // Standalone CLI use keeps the CF-family decline-with-remark convention
+  // (the guard/backstop owns what a generator leaves). The CANONICAL
+  // executable pipeline constructs the pass with strict=true: the caller
+  // REQUESTED family=control_state_machine, so a module with no machine or
+  // a machine the vocabulary rejects must FAIL the pipeline rather than
+  // sail through gpu-module-to-binary with no gpu.binary and report
+  // success (PR #606 review, P1).
+  bool strict = false;
+
   StringRef getArgument() const final {
     return "generate-rocm-state-machine-kernel";
   }
@@ -586,8 +602,22 @@ struct GenerateROCMStateMachineKernelPass
       if (hasMachine)
         matched.push_back(fn);
     });
+    if (strict && matched.empty()) {
+      module.emitError(
+          "family=control_state_machine requested but the module contains "
+          "no bounded_state_machine_v1 function");
+      return signalPassFailure();
+    }
+    bool allEmitted = true;
     for (func::FuncOp fn : matched)
-      (void)emitKernel(fn, module);
+      allEmitted &= emitKernel(fn, module);
+    if (strict && !allEmitted) {
+      module.emitError(
+          "family=control_state_machine could not realize every bounded "
+          "state machine as a device kernel (see the per-function remarks); "
+          "refusing to emit a binary that silently omits requested kernels");
+      return signalPassFailure();
+    }
   }
 };
 
@@ -596,4 +626,9 @@ struct GenerateROCMStateMachineKernelPass
 std::unique_ptr<Pass>
 mlir::tessera_rocm::createGenerateROCMStateMachineKernelPass() {
   return std::make_unique<GenerateROCMStateMachineKernelPass>();
+}
+
+std::unique_ptr<Pass>
+mlir::tessera_rocm::createGenerateROCMStateMachineKernelPass(bool strict) {
+  return std::make_unique<GenerateROCMStateMachineKernelPass>(strict);
 }

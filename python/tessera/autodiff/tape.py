@@ -702,6 +702,58 @@ def _route_positional(name: str, original: Callable, args: tuple, vjp_fn: Callab
     return forward_args, array_descs, routed, input_groups
 
 
+def promote_operand_kwargs(
+    original: Callable,
+    args: tuple,
+    kwargs: dict,
+    rule_fn: Callable | None,
+):
+    """Move keyword-spelled operands into the positional operand list.
+
+    `ops.rmsnorm(x, gamma=g)` and `ops.mul(x, y=y)` spell a differentiable
+    operand by keyword. The recording paths only inspect positional args,
+    so a keyword operand was invisible to the record (never a primal, never
+    an `InputDesc`) while the rule still bound it by name from the recorded
+    kwargs and returned a cotangent for it — the measured failure is
+    "VJP returned 2 cotangents, expected 1", and forward mode ran the
+    rule's operand-less branch (PR #604 review, P1).
+
+    Same authority as `_route_positional` (Decision #30): the VJP rule's
+    positional slots after `dout` enumerate the operands. A kwarg is
+    promoted iff it fills the NEXT unfilled slot, its name matches BOTH
+    the rule slot and the forward's positional parameter at that index
+    (so passing it positionally to the forward is meaning-preserving —
+    rules that rename operands simply keep the old behavior), and its
+    value is operand-shaped (an array or a non-bool scalar; None/str/bool
+    stay configuration). Keyword-only rule parameters (`*, eps=...`) are
+    never slots, so configuration can never be promoted.
+    """
+    if not kwargs or rule_fn is None:
+        return args, kwargs
+    slots = _positional_params(rule_fn)
+    fwd_names = _positional_params(original)
+    if not slots or fwd_names is None:
+        return args, kwargs
+    operand_slots = slots[1:]  # slots[0] is `dout`
+    out = list(args)
+    remaining = dict(kwargs)
+    for k in range(len(args), len(operand_slots)):
+        pname = operand_slots[k]
+        if (pname not in remaining
+                or k >= len(fwd_names)
+                or fwd_names[k] != pname):
+            break
+        v = remaining[pname]
+        if v is None or isinstance(v, (bool, str)):
+            break
+        if _describe(v) is _NON_ARRAY:
+            break
+        out.append(remaining.pop(pname))
+    if len(out) == len(args):
+        return args, kwargs
+    return tuple(out), remaining
+
+
 def split_positional_config(name: str, original: Callable, args: tuple):
     """Forward-mode view of the same split: `(operands, config_kwargs)`.
 
@@ -787,6 +839,10 @@ def _make_wrapper(name: str, original: Callable) -> Callable:
         # recorded kwargs under their canonical parameter name so the rule
         # sees them exactly as it would from a keyword call.
         vjp_fn = get_vjp(name)
+        # A keyword-spelled operand (`ops.rmsnorm(x, gamma=g)`) joins the
+        # positional operands first, or it is never recorded while the rule
+        # still answers for it — see `promote_operand_kwargs`.
+        args, kwargs = promote_operand_kwargs(original, args, kwargs, vjp_fn)
         forward_args, array_descs, routed_kwargs, input_groups = _route_positional(
             name, original, args, vjp_fn
         )

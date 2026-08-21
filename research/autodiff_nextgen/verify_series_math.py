@@ -55,7 +55,7 @@ def bad(name: str, detail: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _POINT = {"log": 1.7, "log1p": 0.6, "sqrt": 2.3, "reciprocal": 1.9,
-          "sigmoid": 0.4, "atan": 0.5}
+          "sigmoid": 0.4, "atan": 0.5, "lgamma": 1.5, "digamma": 1.5}
 
 
 def check_recurrences_against_closed_forms(order: int = 8) -> None:
@@ -106,6 +106,14 @@ _NUMPY_FN = {
     "rsqrt": lambda z: 1 / np.sqrt(z),
     "erf": lambda z: __import__("scipy.special", fromlist=["erf"]).erf(z),
     "erfc": lambda z: __import__("scipy.special", fromlist=["erfc"]).erfc(z),
+    # AD-DATUM-POLYGAMMA. loggamma (NOT log(gamma(z)) — the principal
+    # branch matches real lgamma on Re z > 0) and digamma are both
+    # complex-capable in scipy.special; centers sit at 1.5 with the pole
+    # at 0 well outside every contour.
+    "lgamma": lambda z: __import__(
+        "scipy.special", fromlist=["loggamma"]).loggamma(z),
+    "digamma": lambda z: __import__(
+        "scipy.special", fromlist=["digamma"]).digamma(z),
 }
 
 
@@ -126,7 +134,7 @@ def check_recurrences_against_cauchy(order: int = 5) -> None:
     # continuation off the real axis in numpy, so it is covered by SymPy only.
     radius = {"log": 0.5, "log1p": 0.3, "sqrt": 0.7, "reciprocal": 0.5,
               "sigmoid": 0.6, "rsqrt": 0.3, "asin": 0.4, "acos": 0.4,
-              "tan": 0.4}
+              "tan": 0.4, "lgamma": 0.5, "digamma": 0.5}
     W = TruncatedJet(order)
     worst = 0.0
     tested = 0

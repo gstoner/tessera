@@ -421,8 +421,11 @@ def laplacian_estimate(
 #
 # Envelope audit (the §8 bar, PR-recorded): softmax's pair speaks `axis`;
 # logsumexp's speaks `axis` (incl. None) + `keepdims`; rmsnorm's is the
-# gamma-less core over the last axis with `eps` inside the sqrt — all
-# covered by `jet_softmax` / `jet_logsumexp` / `jet_rmsnorm` exactly.
+# last-axis core with `eps` inside the sqrt PLUS the optional broadcast
+# `gamma` operand (dx via the symmetric core kernel on the scaled
+# cotangent, dγ broadcast-reduced) — the hand pair was x-only, so the γ
+# half is a gap CLOSED by retirement, not carried from the oracle; its
+# proof is adjoint + finite-difference + tape-reverse, not differential.
 #
 # Dtype (the PR #600 lesson): production rules must preserve the input
 # dtype, so the derivation feeds NATIVE-dtype coefficient pairs `[x, dx]`
@@ -442,6 +445,11 @@ def laplacian_estimate(
 
 def _order1(name: str):
     W1 = TruncatedJet(1)
+    # The branches deliberately bind different signatures (each op's kwarg
+    # envelope, and rmsnorm's optional γ operand); declare the names as
+    # general callables so the variants type-check.
+    jvp: Callable[..., object]
+    vjp: Callable[..., object]
 
     if name == "softmax":
         def jvp(primals, tangents, *, axis=-1, **_):
@@ -477,15 +485,46 @@ def _order1(name: str):
             return (p * do,)
 
     elif name == "rmsnorm":
-        def jvp(primals, tangents, *, eps=1e-5, **_):
-            x = np.asarray(primals[0])
-            dx = np.asarray(tangents[0])
+        # Envelope: the canonical forward is `core(x) · γ` with γ optional
+        # (broadcast, typically last-dim). The displaced hand pair was
+        # x-only, so tape-reverse through `ops.rmsnorm(x, gamma)` was
+        # ALREADY broken before retirement (the hand VJP swallowed γ via
+        # `**_` and returned one cotangent for two operands); the derived
+        # pair closes that gap rather than reproducing it. With γ:
+        #   JVP   dy = J_core(dx)·γ + core(x)·dγ            (product rule)
+        #   VJP   dx = J_core(γ⊙dout)   (core kernel is symmetric — the
+        #             AD-LAW-1n delegation, applied to the scaled cotangent)
+        #         dγ = Σ_broadcast dout⊙core(x), reduced to γ's shape.
+        def _core_pair(x, dx, eps):
             c = jet_rmsnorm(W1, [x, dx], gamma=None, eps=eps)
             return c[0], c[1]
 
-        def vjp(dout, x, *, eps=1e-5, **_):
-            _, g = jvp((x,), (np.asarray(dout),), eps=eps)
-            return (g,)
+        def jvp(primals, tangents, *, eps=1e-5, **_):
+            x = np.asarray(primals[0])
+            dx = np.asarray(tangents[0])
+            gamma = primals[1] if len(primals) > 1 else None
+            core, dcore = _core_pair(x, dx, eps)
+            if gamma is None:
+                return core, dcore
+            gam = np.asarray(gamma)
+            y = core * gam
+            t = dcore * gam
+            dgamma = tangents[1] if len(tangents) > 1 else None
+            if dgamma is not None:
+                t = t + core * np.asarray(dgamma)
+            return y, t
+
+        def vjp(dout, x, gamma=None, *, eps=1e-5, **_):
+            a = np.asarray(x)
+            do = np.asarray(dout)
+            if gamma is None:
+                _, g = _core_pair(a, do, eps)
+                return (g,)
+            from .vjp import _sum_to_shape
+            gam = np.asarray(gamma)
+            core, g = _core_pair(a, do * gam, eps)
+            dgamma = _sum_to_shape(do * core, gam.shape)
+            return (g, dgamma)
 
     else:  # pragma: no cover — the registration loop is the only caller
         raise KeyError(name)

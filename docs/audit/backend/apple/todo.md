@@ -3,10 +3,18 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-20
+last_updated: 2026-08-21
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
+numerical policy, wave 3; Apple outcome: follow-up required (M1 Max).**
+Same contract change as the rocm entry. Repeat the AD-RETIRE follow-up
+run (PR #602's recipe: GA/EBM smoke + value-lane backward comparisons)
+on the Mac against the wave-3 registry; can share a session with the
+still-open AD-RETIRE-2-2026-08-20 Apple follow-up.
+
 
 Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
 policy, wave 2; Apple outcome: follow-up required (M1 Max).** Same contract

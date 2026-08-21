@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-20
+last_updated: 2026-08-21
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,15 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
+numerical policy, wave 3; x86 outcome: parity validated (AVX-512 host).**
+Same contract change as the rocm entry (lgamma/digamma datum-derived over
+the polygamma tower; rmsnorm γ operand). Validated on the AVX-512 primary
+box: all six `test_x86_*_loss_compiled.py` backward lanes green against
+the switched registry (part of the 95/96 device-lane run recorded in the
+rocm entry).
+
 
 Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
 policy, wave 2; x86 outcome: parity validated (AVX-512 host).** Same

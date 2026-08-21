@@ -8,6 +8,15 @@ last_updated: 2026-08-20
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
+policy, wave 2; NVIDIA outcome: follow-up required (sm_120).** Same contract
+change as the rocm entry. Expected parity-neutral for the same reason as
+`AD-RETIRE-1-POINTWISE-2026-08-20` (both sides of every parity comparison
+read the same updated reference; dtype preserved); run the CUDA-marked
+autodiff/loss parity tests on NR2 Pro and record here. Note this key AND the
+still-open AD-RETIRE-1 key can be closed by one NR2 Pro session.
+
+
 Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
 numerical policy; NVIDIA outcome: follow-up required (sm_120).** PR #600
 retires the ODE-family pointwise hand rules behind the `DerivativeContract`

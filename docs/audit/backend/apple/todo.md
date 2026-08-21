@@ -8,6 +8,13 @@ last_updated: 2026-08-20
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
+policy, wave 2; Apple outcome: follow-up required (M1 Max).** Same contract
+change as the rocm entry. The AD-RETIRE-1 key's Apple follow-up landed as
+PR #602; this wave needs the same run repeated on the Mac (GA/EBM smoke +
+value-lane backward comparisons) against the wave-2 registry.
+
+
 Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
 numerical policy; Apple outcome: parity validated (M1 Max), and neutral by
 construction — stronger than the expected reasoning.** PR #600 retires the 13

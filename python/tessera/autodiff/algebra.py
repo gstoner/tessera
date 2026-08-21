@@ -488,6 +488,133 @@ _EXTRA_RECURRENCES = {
 }
 SCALAR_RECURRENCES.update(_EXTRA_RECURRENCES)
 
+# ── ODE table growth (AD-RETIRE-2 wave) ─────────────────────────────────────
+# Six more primitives join the datum, which unblocks their retirement: the
+# derived production pair, the k=1 oracle check, and the k=2..4 nested-dual
+# proof all follow from these declarations automatically (the ODE-table test
+# parametrizes over this dict). lgamma/digamma stay OUT deliberately: their
+# slope tower is the polygamma family (ψ, ψ′, ψ″, …), which needs its own
+# carefully-tested series machinery — a first-order-only entry would create
+# a datum the jet lane cannot serve, the exact anti-pattern datum growth
+# exists to avoid (recorded in the plan's retirement table).
+
+
+def _jet_tan(W, u):
+    # w' = (1 + w²)·u' — tanh's recurrence with the sign flipped.
+    k = W.order
+    z = np.zeros_like(np.asarray(u[0]))
+    w = [np.tan(u[0])] + [z.copy() for _ in range(k)]
+    for n in range(1, k + 1):
+        sq = [_cauchy(w, w, m) for m in range(n)]
+        acc = z.copy()
+        for j in range(1, n + 1):
+            delta = 1.0 if n - j == 0 else 0.0
+            acc = acc + j * u[j] * (delta + sq[n - j])
+        w[n] = acc / n
+    return w
+
+
+def _jet_rsqrt(W, u):
+    # x^{-1/2} = reciprocal ∘ sqrt — pure composition of registered jets.
+    return W.scalar_fn("reciprocal", W.scalar_fn("sqrt", u))
+
+
+def _one_minus_square(W, u):
+    sq = W.mul(u, u)
+    return [1.0 - sq[0]] + [-c for c in sq[1:]]
+
+
+def _slope_driven(value_fn, slope_coeffs_fn):
+    """w' = g(u)·u' where g's jet composes from registered recurrences:
+    w_n = (1/n) Σ_{j=1..n} j·u_j·g_{n−j}."""
+    def jet(W, u):
+        k = W.order
+        g = slope_coeffs_fn(W, u)
+        z = np.zeros_like(np.asarray(u[0]))
+        w = [value_fn(u[0])] + [z.copy() for _ in range(k)]
+        for n in range(1, k + 1):
+            acc = z.copy()
+            for j in range(1, n + 1):
+                acc = acc + j * u[j] * g[n - j]
+            w[n] = acc / n
+        return w
+    return jet
+
+
+def _asin_slope(W, u):
+    return W.scalar_fn("reciprocal",
+                       W.scalar_fn("sqrt", _one_minus_square(W, u)))
+
+
+def _erf_slope(W, u):
+    sq = W.mul(u, u)
+    e = W.scalar_fn("exp", [-c for c in sq])
+    scale = 2.0 / _math.sqrt(_math.pi)
+    return [scale * c for c in e]
+
+
+def _erf_value(x):
+    # Mirrors the canonical ops.erf exactly: compute in double, cast back
+    # to the input dtype (the PR #600 dtype lesson — the rule's primal
+    # replaces canonical execution under AD, so it must match its dtype).
+    a = np.asarray(x)
+    out = np.vectorize(_math.erf, otypes=[np.float64])(a)
+    return out.astype(a.dtype, copy=False) if a.dtype.kind == "f" else out
+
+
+def _erfc_value(x):
+    a = np.asarray(x)
+    out = np.vectorize(_math.erfc, otypes=[np.float64])(a)
+    return out.astype(a.dtype, copy=False) if a.dtype.kind == "f" else out
+
+_GROWTH_RECURRENCES = {
+    # d/dx tan = 1 + tan²  (defining ODE; poles at ±π/2 — guard maps into
+    # (−1, 1) ⊂ (−π/2, π/2))
+    "tan": ScalarRecurrence(
+        np.tan,
+        lambda o, x: o.add(1.0, o.mul(o.apply("tan", x),
+                                      o.apply("tan", x))),
+        _jet_tan,
+        guard_expr=lambda o, x: o.apply("tanh", x)),
+    # d/dx asin = 1/√(1−x²)  (guard maps ℝ into (−½, ½))
+    "asin": ScalarRecurrence(
+        np.arcsin,
+        lambda o, x: o.reciprocal(
+            o.apply("sqrt", o.add(1.0, o.neg(o.mul(x, x))))),
+        _slope_driven(np.arcsin, _asin_slope),
+        guard_expr=lambda o, x: o.mul(0.5, o.apply("tanh", x))),
+    # d/dx acos = −1/√(1−x²)
+    "acos": ScalarRecurrence(
+        np.arccos,
+        lambda o, x: o.neg(o.reciprocal(
+            o.apply("sqrt", o.add(1.0, o.neg(o.mul(x, x)))))),
+        _slope_driven(np.arccos,
+                      lambda W, u: [-c for c in _asin_slope(W, u)]),
+        guard_expr=lambda o, x: o.mul(0.5, o.apply("tanh", x))),
+    # d/dx erf = (2/√π)·exp(−x²)
+    "erf": ScalarRecurrence(
+        _erf_value,
+        lambda o, x: o.mul(2.0 / _math.sqrt(_math.pi),
+                           o.apply("exp", o.neg(o.mul(x, x)))),
+        _slope_driven(_erf_value, _erf_slope)),
+    # d/dx erfc = −(2/√π)·exp(−x²)
+    "erfc": ScalarRecurrence(
+        _erfc_value,
+        lambda o, x: o.neg(o.mul(2.0 / _math.sqrt(_math.pi),
+                                 o.apply("exp", o.neg(o.mul(x, x))))),
+        _slope_driven(_erfc_value,
+                      lambda W, u: [-c for c in _erf_slope(W, u)])),
+    # d/dx x^{-1/2} = −½·x^{-3/2} = −½·(1/x)·rsqrt(x)
+    "rsqrt": ScalarRecurrence(
+        lambda x: 1.0 / np.sqrt(x),
+        lambda o, x: o.neg(o.mul(0.5, o.mul(o.reciprocal(x),
+                                            o.apply("rsqrt", x)))),
+        _jet_rsqrt,
+        guard_expr=lambda o, x: o.add(o.mul(x, x), 1.0)),
+}
+SCALAR_RECURRENCES.update(_GROWTH_RECURRENCES)
+
+
 
 # ── The nested-dual reference (Law 4's other side) ───────────────────────────
 

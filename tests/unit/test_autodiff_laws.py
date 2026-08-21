@@ -1546,6 +1546,13 @@ def test_derivative_datum_is_declared_once():
             "expm1": _np.exp(x),
             "log1p": 1.0 / (1.0 + x),
             "sigmoid": (lambda s: s * (1 - s))(1.0 / (1.0 + _np.exp(-x))),
+            # AD-RETIRE-2 datum growth
+            "tan": 1.0 + _np.tan(x) ** 2,
+            "asin": 1.0 / _np.sqrt(1.0 - x * x),
+            "acos": -1.0 / _np.sqrt(1.0 - x * x),
+            "erf": (2.0 / _np.sqrt(_np.pi)) * _np.exp(-x * x),
+            "erfc": -(2.0 / _np.sqrt(_np.pi)) * _np.exp(-x * x),
+            "rsqrt": -0.5 * x ** -1.5,
         }[name]
         _np.testing.assert_allclose(df(x), analytic, rtol=1e-14)
 

@@ -9,6 +9,18 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
+`tessera_jit` pipeline change; x86 outcome: parity validated (AVX-512
+host).** `convert-elementwise-to-linalg` joined the pipeline after
+`tessera-to-linalg` (tensor-typed elementwise arith/math — e.g. the
+paired autodiff cotangent accumulation — has no bufferization interface
+and previously failed one-shot-bufferize; the rewrite is additive:
+previously-working modules contained no such ops, since they would have
+failed). Validated on this host: the W4 state-machine rows plus the
+shared JIT regression lanes (native-cpu-jit, production phase 1/3 — 42
+tests) against the extended pipeline.
+
+
 Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 x86 outcome:
 VALIDATED (AVX-512 host, 2026-08-21).** The sibling row landed: the same
 paired `bounded_state_machine_v1` functions (forward + recompute_all

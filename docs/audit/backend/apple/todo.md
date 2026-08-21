@@ -8,6 +8,19 @@ last_updated: 2026-08-21
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
+`tessera_jit` pipeline change; Apple outcome: follow-up required
+(M1 Max).** `_jit_boundary.py` loads `libtessera_jit` on Darwin too, so
+the Mac's `@jit(target="cpu")` lane compiles through the extended
+pipeline (`convert-elementwise-to-linalg` after `tessera-to-linalg`).
+Expected parity-neutral by construction — the new pass only rewrites
+tensor-typed elementwise arith/math that previously FAILED bufferization,
+so no previously-working module changes path — but per the claim rules
+that is an expectation, not Apple evidence: rebuild `tessera_jit` on the
+Mac and run `test_native_cpu_jit.py` + the production JIT phase lanes
+there, then record the outcome here.
+
+
 Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
 numerical policy, wave 3; Apple outcome: follow-up required (M1 Max).**
 Same contract change as the rocm entry. Repeat the AD-RETIRE follow-up

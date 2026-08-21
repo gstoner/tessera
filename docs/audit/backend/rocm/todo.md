@@ -7,6 +7,13 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
+`tessera_jit` pipeline change; ROCm outcome: not applicable (backend);
+host lane validated.** The ROCm device paths (tessera-rocm-executable /
+hsaco lanes) do not consume `tessera_jit`. The host-CPU JIT lane on this
+box IS the x86 lane, validated under the x86 entry on this same host.
+
+
 Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 exact-device
 irreducible-state-machine row: VALIDATED (gfx1151).** New
 `--generate-rocm-state-machine-kernel` (ROCm backend) lowers any

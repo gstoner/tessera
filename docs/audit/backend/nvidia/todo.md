@@ -8,6 +8,14 @@ last_updated: 2026-08-21
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
+`tessera_jit` pipeline change; NVIDIA outcome: not applicable.**
+`tessera_jit` is the host-CPU JIT lane; the NVIDIA backend's device
+paths (NVRTC / tessera-opt pipelines) do not consume it, and NR2 Pro's
+host-CPU lane is the same x86 lane the x86 entry validates. No
+NVIDIA-owned surface compiles through the changed pipeline.
+
+
 Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
 numerical policy, wave 3; NVIDIA outcome: follow-up required (sm_120).**
 Same contract change as the rocm entry. Expected parity-neutral for the

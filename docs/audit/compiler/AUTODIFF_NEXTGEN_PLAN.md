@@ -638,12 +638,27 @@ eager `hvp` replacement as consumers).
 >
 > | Family | Decision | Why |
 > |---|---|---|
-> | **Holonomic-ODE pointwise (13 ops)** | **RETIRED this PR** — production JVP/VJP now derive from `ScalarRecurrence.pointwise` (`derivative_contract.register_datum_derived_rules`); the displaced hand rules are declared oracles (#31) in `RETIRED_HAND_RULES`, bit-identical in-domain, deletion after a soak follow-up | Strongest evidence: AD-WEIL-1's per-primitive k=1..4 proofs; the datum + guards carry everything the hand rules did (§8). Retiring also FIXED a measured boundary inconsistency: jvp_sqrt clamped √x while vjp_sqrt clamped x, and jvp_log had no guard at all — one declared guard now serves both modes, so ⟨Jv,u⟩=⟨v,Jᵀu⟩ holds at the boundary too (pinned in `test_retired_pointwise.py`) |
-> | softmax / logsumexp / rmsnorm (gamma-less core) | **NEXT** — derivable from the jet route at order 1 (VJPs via the symmetric-Jacobian delegation AD-LAW-1n established); their Law-4 structured proofs exist | Needs the same §8 audit first: axis/eps kwarg envelopes and dtype behavior, plus the rmsnorm gamma split |
+> | **Holonomic-ODE pointwise (13 ops)** | **RETIRED (AD-RETIRE-1)** — production JVP/VJP now derive from `ScalarRecurrence.pointwise` (`derivative_contract.register_datum_derived_rules`); the displaced hand rules are declared oracles (#31) in `RETIRED_HAND_RULES`, bit-identical in-domain, deletion after a soak follow-up | Strongest evidence: AD-WEIL-1's per-primitive k=1..4 proofs; the datum + guards carry everything the hand rules did (§8). Retiring also FIXED a measured boundary inconsistency: jvp_sqrt clamped √x while vjp_sqrt clamped x, and jvp_log had no guard at all — one declared guard now serves both modes, so ⟨Jv,u⟩=⟨v,Jᵀu⟩ holds at the boundary too (pinned in `test_retired_pointwise.py`) |
+> | softmax / logsumexp / rmsnorm (gamma-less core) | **RETIRED (AD-RETIRE-2)** — production pairs are first-order specializations of the structured jets (`jet.register_jet_derived_structured_rules`); VJPs by the stated transpose structure (softmax and the rmsnorm kernel are symmetric — pullback = pushforward; logsumexp's transpose is the softmax broadcast-multiply); displaced hand rules join the #31 ledger | Envelope audit recorded in `jet.py`: axis / axis-None+keepdims / eps are the whole pair envelopes, all jet-covered; differential-tested across every combination at 1e-14 with a symmetric-adjoint law check. Observed adjacent gap, NOT touched: the hand `vjp_rmsnorm` was x-only while the canonical forward takes `gamma`, so tape-reverse with gamma predates this work as broken |
 > | flash_attn | **NOT YET** | The jet route covers causal + attn_bias only; the hand rules also carry dropout_p / cache / kv_state / params — §8 forbids retiring until the surviving path carries the whole envelope |
 > | Multilinear (17 declared) | **Already structural** | `linear.py` derives JVPs from the forward and treats `transpose_rule` as the VJP; no change needed here |
-> | tan / asin / acos / erf / erfc / rsqrt / lgamma / digamma | **Blocked on datum growth** | No `ScalarRecurrence` yet — each needs its jet recurrence added (§3.2) before it can retire; first-order-only derivation would create a datum that cannot serve the jet lane |
+> | tan / asin / acos / erf / erfc / rsqrt | **RETIRED (AD-RETIRE-2)** — six new `ScalarRecurrence` entries (defining-ODE recurrence for tan; slope-driven composed jets for asin/acos/erf/erfc; pure composition for rsqrt), auto-flowing into the contract registry, the derived production switch, the k=1..4 ODE-table proofs, and the series-math harness (contour + closed-form + composition oracles extended) | Guards carry the displaced VJP conventions; two more measured mode-pair boundary inconsistencies fixed (rsqrt's jvp clamped x^1.5 while its vjp clamped x; asin/acos's clip-form guard is not even expressible at float32 granularity — their guard is a declared guarded-slope form, exactly the displaced VJPs' `max(1−x², 1e-12)`) |
+> | lgamma / digamma | **Still blocked on datum growth — deliberately** | Their slope tower is the polygamma family (ψ, ψ′, ψ″, …), needing carefully-tested series machinery of its own; a first-order-only entry would create a datum the jet lane cannot serve — the exact anti-pattern datum growth exists to avoid |
 > | geometric registry | **Waits for `CliffordTangent` absorption** | The §5.4 collapse plan; Law 3 over `_VJPS_GEO` is green (AD-LAW-1i) but the substrate swap is the actual retirement vehicle |
+>
+> **Prune protocol (recorded, not yet executed).** The displaced hand
+> bodies and the `RETIRED_HAND_RULES` ledger are deleted in a dedicated
+> follow-up PR once the oracles have actually soaked — the criterion is
+> the NVIDIA parity follow-up landing under the `AD-RETIRE-*` sync keys
+> (Apple's landed as #602), so every fleet architecture has exercised the
+> switched registry against the oracles first. The registration functions
+> are already fill-or-displace, so the prune is a pure deletion: remove
+> the hand bodies from `jvp.py`/`vjp.py`, and repoint the two oracle
+> anchors (the ODE-table k=1 check and the retirement differential tests)
+> at the inline closed-form tables that already exist in
+> `test_autodiff_laws.py`. Pruning in the same PR as a new retirement is
+> forbidden — it would kill the new entries' differential
+> drift-protection at birth.
 
 Jet rules for the fused/structured families via §3.4: `flash_attn`
 (online-softmax jets), norm chain, `logsumexp`/`softmax`; STDE-style

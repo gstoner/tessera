@@ -7,6 +7,18 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
+policy, wave 2; ROCm outcome: parity validated (exact-device, gfx1151).**
+The retirement wave extends: softmax/logsumexp/rmsnorm-core production pairs
+are jet-derived first-order specializations, and six new datum entries
+(tan/asin/acos/erf/erfc/rsqrt) switch those ops to datum-derived pairs —
+all dtype-preserving, with the displaced VJP guard conventions carried (two
+more jvp/vjp boundary-guard inconsistencies fixed: rsqrt and the asin/acos
+guarded-slope form). Validated on this box: native-JVP-compiled + ROCm
+spectral-backward-exec + native-CPU vertical + spectral target binding
+(24 tests) and the full law sweep, all green against the switched registry.
+
+
 Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
 numerical policy; ROCm outcome: parity validated (exact-device, gfx1151).**
 PR #600 retires the 13 holonomic-ODE pointwise hand JVP/VJP pairs behind the

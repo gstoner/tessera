@@ -175,6 +175,26 @@ _DERIVATIVE_EVAL_GUARDS: dict[str, Callable[[Any], Any]] = {
     "log": lambda x: np.where(
         np.abs(x) < 1e-12, np.copysign(1e-12, x + 0.0), x),
     "sqrt": lambda x: np.maximum(x, 1e-12),
+    # AD-RETIRE-2 datum growth — the displaced VJPs' conventions:
+    # asin/acos clamp 1−x² at 1e-12 (spelled here as the equivalent
+    # |x| ≤ √(1−1e-12) clip); rsqrt clamps x at 1e-12. As with sqrt/log,
+    # the displaced jvp_rsqrt used a DIFFERENT clamp (x^1.5 at 1e-12,
+    # i.e. x at 1e-8) — the mode pair disagreed at the boundary again,
+    # and again the VJP convention survives for both modes.
+    "rsqrt": lambda x: np.maximum(x, 1e-12),
+}
+
+# asin/acos cannot carry their displaced guard as an x-map: the clip bound
+# √(1−1e-12) ROUNDS TO EXACTLY 1.0 in float32, so an x-clip is a no-op
+# there and the slope divides by zero (caught by the warning-strict dtype
+# sweep). Their guard lives where the displaced VJPs put it — inside the
+# slope, on 1−x² — declared here as explicit guarded-slope forms. The
+# UNGUARDED mathematics stays in `derivative_expr` (the datum the tower
+# and series harnesses consume); this table only owns production
+# evaluation safety, same role as `_DERIVATIVE_EVAL_GUARDS`.
+_GUARDED_SLOPES: dict[str, Callable[[Any], Any]] = {
+    "asin": lambda x: 1.0 / np.sqrt(np.maximum(1.0 - x * x, 1e-12)),
+    "acos": lambda x: -1.0 / np.sqrt(np.maximum(1.0 - x * x, 1e-12)),
 }
 
 #: The displaced hand rules, kept as declared oracles (#31) for the
@@ -185,6 +205,9 @@ RETIRED_HAND_RULES: dict[str, tuple[Callable, Callable]] = {}
 def _make_derived_pair(name: str, rec: ScalarRecurrence):
     value, derivative = rec.pointwise
     guard = _DERIVATIVE_EVAL_GUARDS.get(name)
+    slope_override = _GUARDED_SLOPES.get(name)
+    if slope_override is not None:
+        derivative, guard = slope_override, None
 
     def derived_jvp(primals, tangents, **_):
         x = np.asarray(primals[0])
@@ -224,14 +247,19 @@ def register_datum_derived_rules() -> list[str]:
             switched.append(name)  # already switched (idempotent re-entry)
             continue
         current_vjp = get_vjp(name)
-        if current_jvp is None or current_vjp is None:
+        if current_jvp is not None and current_vjp is not None:
+            # Displace: the hand pair becomes the #31 oracle.
+            RETIRED_HAND_RULES[name] = (current_jvp, current_vjp)
+        elif current_jvp is not None or current_vjp is not None:
             raise ValueError(
-                f"refusing to retire {name!r}: the hand pair is incomplete "
-                f"(jvp={current_jvp is not None}, "
-                f"vjp={current_vjp is not None}) — the displaced oracle "
-                f"must exist before the switch (#31)"
+                f"refusing to retire {name!r}: exactly one hand rule "
+                f"exists (jvp={current_jvp is not None}, "
+                f"vjp={current_vjp is not None}) — a half-displaced pair "
+                f"would leave one mode anchored and one not (#31)"
             )
-        RETIRED_HAND_RULES[name] = (current_jvp, current_vjp)
+        # else: fill mode — after the soak-gated prune deletes the hand
+        # bodies, the datum-derived pair registers directly and the ledger
+        # stays empty for that op (the prune protocol in the plan).
         derived_jvp, derived_vjp = _make_derived_pair(name, contract.ode)
         register_jvp(name, derived_jvp)
         register_vjp(name, derived_vjp)

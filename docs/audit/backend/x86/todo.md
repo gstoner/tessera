@@ -9,6 +9,14 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
+policy, wave 2; x86 outcome: parity validated (AVX-512 host).** Same
+contract change as the rocm entry (structured trio jet-derived; six ops
+datum-grown and switched). Validated on the AVX-512 primary box: 169 tests
+across the six `test_x86_*_loss_compiled.py` backward lanes green against
+the switched registry. AMX half not applicable (no fleet hardware).
+
+
 Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
 numerical policy; x86 outcome: parity validated (AVX-512 host).** PR #600
 retires the ODE-family pointwise hand rules behind the `DerivativeContract`

@@ -34,7 +34,18 @@ from tessera import ops
 from tessera.autodiff import jet as J
 from tessera.autodiff.algebra import TruncatedJet
 from tessera.autodiff.errors import TesseraAutodiffError
+from tessera.autodiff.derivative_contract import RETIRED_HAND_RULES
 from tessera.autodiff.jvp import _JVPS
+
+
+def _oracle_jvp(name):
+    """The hand JVP as the anchor. Since AD-RETIRE-2 the registered rules
+    for softmax/logsumexp/rmsnorm ARE jet-derived, so anchoring against
+    the registry would be circular; the displaced oracle (#31) is the
+    independent reference. flash_attn is not retired — its registry entry
+    is still the hand rule."""
+    pair = RETIRED_HAND_RULES.get(name)
+    return pair[0] if pair is not None else _JVPS[name]
 from tessera.rng import RNGKey
 
 
@@ -255,13 +266,13 @@ def test_structured_jets_anchor_to_canonical_forward_and_hand_jvp():
 
     c = J.jet_softmax(W, J.jet_lift(W, z, dz))
     np.testing.assert_allclose(c[0], np.asarray(ops.softmax(z)), atol=1e-14)
-    _, t = _JVPS["softmax"]((z,), (dz,))
+    _, t = _oracle_jvp("softmax")((z,), (dz,))
     np.testing.assert_allclose(c[1], t, atol=1e-13)
 
     c = J.jet_logsumexp(W, J.jet_lift(W, z, dz), axis=-1)
     np.testing.assert_allclose(c[0], np.asarray(ops.logsumexp(z, axis=-1)),
                                atol=1e-14)
-    _, t = _JVPS["logsumexp"]((z,), (dz,), axis=-1)
+    _, t = _oracle_jvp("logsumexp")((z,), (dz,), axis=-1)
     np.testing.assert_allclose(c[1], t, atol=1e-13)
 
     c = J.jet_rmsnorm(W, J.jet_lift(W, z, dz), gamma=g, eps=1e-5)
@@ -270,7 +281,7 @@ def test_structured_jets_anchor_to_canonical_forward_and_hand_jvp():
     # The registered hand JVP is the gamma-less core (x-only primal);
     # compare against the jet of the same function.
     c_plain = J.jet_rmsnorm(W, J.jet_lift(W, z, dz), gamma=None, eps=1e-5)
-    _, t = _JVPS["rmsnorm"]((z,), (dz,), eps=1e-5)
+    _, t = _oracle_jvp("rmsnorm")((z,), (dz,), eps=1e-5)
     np.testing.assert_allclose(c_plain[1], t, atol=1e-10)
 
     c = J.jet_layer_norm(W, J.jet_lift(W, z, dz), gamma=g, beta=b, eps=1e-5)

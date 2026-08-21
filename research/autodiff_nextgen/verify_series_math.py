@@ -98,6 +98,14 @@ _NUMPY_FN = {
     "sinh": np.sinh, "cosh": np.cosh, "atan": np.arctan,
     "expm1": np.expm1, "log1p": np.log1p,
     "sigmoid": lambda z: 1 / (1 + np.exp(-z)),
+    # AD-RETIRE-2 datum growth. erf/erfc need a complex-capable reference
+    # for the contour integral; scipy.special provides one (scipy is
+    # already a project dependency). asin/acos branch at ±1 and rsqrt at
+    # 0 — the radius table keeps every contour inside the domain.
+    "tan": np.tan, "asin": np.arcsin, "acos": np.arccos,
+    "rsqrt": lambda z: 1 / np.sqrt(z),
+    "erf": lambda z: __import__("scipy.special", fromlist=["erf"]).erf(z),
+    "erfc": lambda z: __import__("scipy.special", fromlist=["erfc"]).erfc(z),
 }
 
 
@@ -117,7 +125,8 @@ def check_recurrences_against_cauchy(order: int = 5) -> None:
     # `atan` has branch points at ±i and `arctan` is not the analytic
     # continuation off the real axis in numpy, so it is covered by SymPy only.
     radius = {"log": 0.5, "log1p": 0.3, "sqrt": 0.7, "reciprocal": 0.5,
-              "sigmoid": 0.6}
+              "sigmoid": 0.6, "rsqrt": 0.3, "asin": 0.4, "acos": 0.4,
+              "tan": 0.4}
     W = TruncatedJet(order)
     worst = 0.0
     tested = 0

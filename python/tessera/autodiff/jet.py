@@ -409,3 +409,124 @@ def laplacian_estimate(
     return hessian_trace_estimate(
         jet_fn, x, key, samples=samples, distribution=distribution
     )
+
+
+# ── AD-RETIRE-2: the structured family's production rules derive here ────────
+#
+# Second retirement wave (after the ODE family in `derivative_contract`).
+# The production JVP/VJP pairs for softmax / logsumexp / rmsnorm-core are
+# first-order specializations of the structured jets above; the displaced
+# hand rules become declared oracles (#31) in
+# `derivative_contract.RETIRED_HAND_RULES`, same ledger as the ODE family.
+#
+# Envelope audit (the §8 bar, PR-recorded): softmax's pair speaks `axis`;
+# logsumexp's speaks `axis` (incl. None) + `keepdims`; rmsnorm's is the
+# gamma-less core over the last axis with `eps` inside the sqrt — all
+# covered by `jet_softmax` / `jet_logsumexp` / `jet_rmsnorm` exactly.
+#
+# Dtype (the PR #600 lesson): production rules must preserve the input
+# dtype, so the derivation feeds NATIVE-dtype coefficient pairs `[x, dx]`
+# straight into the structured jets (the fp64 cast lives only in
+# `jet_lift`, which these rules bypass; every coefficient op below is
+# dtype-preserving). The jet API's `numeric_policy="fp64"` contract is
+# about jet-order work — a first-order production specialization follows
+# the canonical dtype flow instead.
+#
+# VJP derivations, stated: softmax and the rmsnorm core have SYMMETRIC
+# Jacobians (diag(p) − p pᵀ on the softmax simplex; the I/n − x xᵀ/(d n³)
+# projection kernel), so the pullback IS the pushforward applied to the
+# cotangent — the AD-LAW-1n delegation pattern, now in production.
+# logsumexp's linearization is the softmax row-functional J = pᵀ, so its
+# transpose is broadcast-multiply: Jᵀu = p · u.
+
+
+def _order1(name: str):
+    W1 = TruncatedJet(1)
+
+    if name == "softmax":
+        def jvp(primals, tangents, *, axis=-1, **_):
+            x = np.asarray(primals[0])
+            dx = np.asarray(tangents[0])
+            c = jet_softmax(W1, [x, dx], axis=axis)
+            return c[0], c[1]
+
+        def vjp(dout, x, *, axis=-1, **_):
+            _, g = jvp((x,), (np.asarray(dout),), axis=axis)
+            return (g,)
+
+    elif name == "logsumexp":
+        def jvp(primals, tangents, *, axis=None, keepdims=False, **_):
+            x = np.asarray(primals[0])
+            dx = np.asarray(tangents[0])
+            c = jet_logsumexp(W1, [x, dx], axis=axis, keepdims=keepdims)
+            return c[0], c[1]
+
+        def vjp(dout, x, *, axis=None, keepdims=False, **_):
+            a = np.asarray(x)
+            p = jet_softmax(W1, [a, np.zeros_like(a)],
+                            axis=-1 if axis is None else axis)[0] \
+                if axis is not None else None
+            if axis is None:
+                m = np.max(a)
+                e = np.exp(a - m)
+                p = e / np.sum(e)
+                return (p * np.asarray(dout),)
+            do = np.asarray(dout)
+            if not keepdims:
+                do = np.expand_dims(do, axis=axis)
+            return (p * do,)
+
+    elif name == "rmsnorm":
+        def jvp(primals, tangents, *, eps=1e-5, **_):
+            x = np.asarray(primals[0])
+            dx = np.asarray(tangents[0])
+            c = jet_rmsnorm(W1, [x, dx], gamma=None, eps=eps)
+            return c[0], c[1]
+
+        def vjp(dout, x, *, eps=1e-5, **_):
+            _, g = jvp((x,), (np.asarray(dout),), eps=eps)
+            return (g,)
+
+    else:  # pragma: no cover — the registration loop is the only caller
+        raise KeyError(name)
+
+    jvp._derived_from_jet = name  # type: ignore[attr-defined]
+    vjp._derived_from_jet = name  # type: ignore[attr-defined]
+    jvp.__name__ = f"jvp_{name}__jet"
+    vjp.__name__ = f"vjp_{name}__jet"
+    return jvp, vjp
+
+
+STRUCTURED_RETIREES = ("softmax", "logsumexp", "rmsnorm")
+
+
+def register_jet_derived_structured_rules() -> list[str]:
+    """Switch the structured family's production pairs to the jet-derived
+    first-order specializations; displaced hand rules join the #31 oracle
+    ledger. Idempotent; fails closed on an incomplete hand pair."""
+    from .derivative_contract import RETIRED_HAND_RULES
+    from .jvp import get_jvp, register_jvp
+    from .vjp import get_vjp, register_vjp
+
+    switched: list[str] = []
+    for name in STRUCTURED_RETIREES:
+        current_jvp = get_jvp(name)
+        if current_jvp is not None and getattr(
+                current_jvp, "_derived_from_jet", None) == name:
+            switched.append(name)
+            continue
+        current_vjp = get_vjp(name)
+        if current_jvp is not None and current_vjp is not None:
+            RETIRED_HAND_RULES[name] = (current_jvp, current_vjp)
+        elif current_jvp is not None or current_vjp is not None:
+            raise ValueError(
+                f"refusing to retire {name!r}: exactly one hand rule "
+                f"exists — a half-displaced pair would leave one mode "
+                f"anchored and one not (#31)"
+            )
+        # else: fill mode (post-prune; see derivative_contract).
+        derived_jvp, derived_vjp = _order1(name)
+        register_jvp(name, derived_jvp)
+        register_vjp(name, derived_vjp)
+        switched.append(name)
+    return switched

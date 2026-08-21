@@ -68,6 +68,12 @@ from .operator import (
 from .derivative_contract import register_datum_derived_rules
 register_datum_derived_rules()
 
+# AD-RETIRE-2: the structured family (softmax / logsumexp / rmsnorm-core)
+# switches to jet-derived first-order rules — see jet.py's retirement
+# section for the envelope audit and the symmetric-transpose derivations.
+from .jet import register_jet_derived_structured_rules
+register_jet_derived_structured_rules()
+
 # Wrap every op in `_VJPS` so it's tape-aware.
 install_op_wrappers()
 

@@ -302,6 +302,22 @@ def certify_root(
     matvec, _rmatvec, out_shape, in_shape = _partial_jacobian_matvecs(
         optimality, full_args, 0, eps=eps
     )
+    m = int(np.prod(out_shape)) if out_shape else 1
+    n = int(np.prod(in_shape)) if in_shape else 1
+    if m != n:
+        # PR #597 review: a thin SVD of a WIDE Jacobian returns only
+        # min(m, n) singular values, so the null-space directions an
+        # underdetermined system always has would never be represented —
+        # F([x, y]) = [x + y] at the origin would certify strict while the
+        # root has a free direction. The IFT hypothesis is stated for
+        # square systems; anything else fails closed here rather than
+        # producing a confidently wrong certificate.
+        raise TesseraImplicitDiffError(
+            f"the IFT certificate needs a square residual Jacobian; "
+            f"∂ₓF maps ℝ^{n} → ℝ^{m}. An underdetermined (m < n) root has "
+            f"a free direction and is not locally unique; an overdetermined "
+            f"(m > n) system is a least-squares problem, not an IFT root."
+        )
     A_op = OperatorTangent.from_matvec_pair(
         matvec, None, in_shape=in_shape, out_shape=out_shape,
         label="∂ₓF",
@@ -316,7 +332,11 @@ def certify_root(
     sigma_max = float(svals[0]) if svals.size else 0.0
     sigma_min = float(svals[-1]) if svals.size else 0.0
     tiny = float(np.finfo(np.float64).tiny)
-    condition = float(sigma_max / max(sigma_min, tiny))
+    # PR #597 review: 0/max(0, tiny) reported condition 0 for the MOST
+    # singular Jacobian (the x²−θ-at-0 fixture) — a misleading measurement
+    # even when the verdict was right. Singular means κ = ∞.
+    condition = (float("inf") if sigma_min == 0.0
+                 else float(sigma_max / sigma_min))
 
     residual_ok = residual_norm <= residual_tol * solution_scale
     nondegenerate = sigma_min > degeneracy_tol * max(sigma_max, tiny)

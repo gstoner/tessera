@@ -243,3 +243,30 @@ def test_singular_linear_system_certificate_names_degeneracy():
     x = solver(b)
     with pytest.raises(TesseraImplicitDiffError, match="degenerate"):
         solver.vjp(x, (b,), np.ones(2))
+
+
+# ── PR #597 review findings, pinned ──────────────────────────────────────────
+
+
+def test_certificate_rejects_non_square_jacobians():
+    """A thin SVD of a WIDE Jacobian carries no null-space singular
+    values, so an underdetermined root (a free direction — not locally
+    unique) previously certified strict. The IFT hypothesis is stated for
+    square systems; both non-square shapes now fail closed with the
+    reason."""
+    with pytest.raises(TesseraImplicitDiffError, match="square"):
+        certify_root(lambda x, t: np.array([x[0] + x[1]]),
+                     np.zeros(2), (np.array([0.0]),))
+    with pytest.raises(TesseraImplicitDiffError, match="least-squares"):
+        certify_root(lambda x, t: np.array([x[0], x[0], x[0]]),
+                     np.array([0.0]), (np.array([0.0]),))
+
+
+def test_certificate_reports_infinite_condition_for_singular_jacobian():
+    """κ(∂ₓF) = ∞ when singular — previously 0/tiny reported condition
+    ZERO for the most singular Jacobian, a misleading measurement even
+    with the right verdict."""
+    cert = certify_root(lambda x, t: x * x - t,
+                        np.array([0.0]), (np.array([0.0]),))
+    assert not cert.nondegenerate
+    assert np.isinf(cert.condition_number)

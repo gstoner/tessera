@@ -22,12 +22,19 @@ struct LowerTileCollectivesPass
     return "Lower Tile collectives to asynchronous portable Target IR";
   }
 
+  // The input contains only Tile operations, so lazy dialect loading has not
+  // yet had a reason to initialize the collective type uniquer.  MLIR forbids
+  // loading a dialect from inside `runOnOperation()` -- the pass manager may be
+  // multi-threaded there, and the context's registry is not writable under that
+  // contract (it is a hard `LLVM ERROR` on an assertions-enabled build and
+  // undefined behavior under NDEBUG).  Declare the dependency instead so the
+  // context loads it before the pipeline starts.
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<TesseraCollectiveDialect>();
+  }
+
   void runOnOperation() override {
     ModuleOp module = getOperation();
-    // The input contains only Tile operations, so lazy dialect loading has not
-    // yet had a reason to initialize the collective type uniquer. Load the
-    // Target dialect before constructing its first FutureType.
-    module.getContext()->getOrLoadDialect<TesseraCollectiveDialect>();
     SmallVector<Operation *> work;
     module.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();

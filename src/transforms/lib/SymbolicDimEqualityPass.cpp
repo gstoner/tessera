@@ -865,11 +865,18 @@ struct SymbolicDimEquality
                                            after.getArguments()))) {
         Value forwarded = std::get<0>(pair);
         BlockArgument argument = std::get<1>(pair);
+        // Copy the forwarded names out before inserting `argument`: the
+        // insertion may rehash and invalidate `it`, and LLVM 23's checked
+        // DenseMap iterators abort on any later use of the stale handle
+        // (silently reading freed storage under NDEBUG).
         auto it = valueDims.find(forwarded);
+        std::optional<DimNameList> forwardedNames;
         if (it != valueDims.end())
-          valueDims[argument] = it->second;
+          forwardedNames = it->second;
+        if (forwardedNames)
+          valueDims[argument] = *forwardedNames;
         if (index < expectedNames.size() && expectedNames[index] &&
-            it != valueDims.end() && it->second != *expectedNames[index]) {
+            forwardedNames && *forwardedNames != *expectedNames[index]) {
           condition.emitOpError(
               "SYMDIM_LOOP_YIELD_MISMATCH: scf.while condition operand ")
               << index << " changes the carried state's dim-names";

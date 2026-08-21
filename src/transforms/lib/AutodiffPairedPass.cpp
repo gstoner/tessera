@@ -54,6 +54,7 @@
 #include "Tessera/AdjointInterface.h.inc"
 #include "Tessera/LinearTransposeInterface.h.inc"
 #include "Tessera/Transforms/GraphDataflow.h"
+#include "Tessera/Transforms/LoopBodyYield.h"
 #include "Tessera/Transforms/RegionAdjointInterface.h"
 #include "Tessera/Transforms/SemanticEffects.h"
 
@@ -666,13 +667,7 @@ static mlir::LogicalResult structurizeBoundedNativeCFGs(
       }
       llvm::SmallVector<mlir::Value> activeResults(active.getResults().begin(),
                                                     active.getResults().end());
-      if (auto loopYield = mlir::dyn_cast<mlir::scf::YieldOp>(
-              stateMachine.getBody()->getTerminator())) {
-        loopYield.getResultsMutable().assign(activeResults);
-      } else {
-        builder.setInsertionPointToEnd(stateMachine.getBody());
-        mlir::scf::YieldOp::create(builder, loc, activeResults);
-      }
+      closeBodyWithYield(builder, loc, stateMachine.getBody(), activeResults);
     }
 
     builder.setInsertionPointAfter(stateMachine);
@@ -1694,11 +1689,42 @@ private:
         mlir::Value zero;
         if (auto shaped = llvm::dyn_cast<mlir::ShapedType>(ty)) {
           auto elem = shaped.getElementType();
-          mlir::Attribute z = llvm::isa<mlir::FloatType>(elem)
-                                  ? (mlir::Attribute)mlir::FloatAttr::get(elem, 0.0)
-                                  : (mlir::Attribute)mlir::IntegerAttr::get(elem, 0);
-          zero = builder.create<mlir::arith::ConstantOp>(
-              fwd.getLoc(), mlir::DenseElementsAttr::get(shaped, z));
+          mlir::TypedAttr z =
+              llvm::isa<mlir::FloatType>(elem)
+                  ? (mlir::TypedAttr)mlir::FloatAttr::get(elem, 0.0)
+                  : (mlir::TypedAttr)mlir::IntegerAttr::get(elem, 0);
+          if (shaped.hasStaticShape()) {
+            zero = builder.create<mlir::arith::ConstantOp>(
+                fwd.getLoc(), mlir::DenseElementsAttr::get(shaped, z));
+          } else {
+            // A dynamically shaped input still owes the caller a total
+            // signature, but `DenseElementsAttr` cannot splat an unknown
+            // extent -- asking it to is an assertion under an
+            // assertions-enabled MLIR and undefined behavior under NDEBUG.
+            // The backward function carries the primal in argument slot `i`,
+            // so take the runtime extents from it rather than fabricating a
+            // shape or silently dropping the result.
+            auto ranked = llvm::dyn_cast<mlir::RankedTensorType>(shaped);
+            if (!ranked) {
+              fwd.emitError()
+                  << "autodiff: cannot synthesize a zero cotangent for "
+                     "unranked input "
+                  << i << " of type " << ty;
+              return mlir::failure();
+            }
+            mlir::Value primal = bwdBlock->getArgument(i);
+            llvm::SmallVector<mlir::Value> dynamicSizes =
+                getDynamicTensorSizes(builder, fwd.getLoc(), primal, ranked);
+            mlir::Value empty = mlir::tensor::EmptyOp::create(
+                builder, fwd.getLoc(), ranked.getShape(),
+                ranked.getElementType(), dynamicSizes);
+            mlir::Value scalarZero =
+                mlir::arith::ConstantOp::create(builder, fwd.getLoc(), z);
+            zero = mlir::linalg::FillOp::create(builder, fwd.getLoc(),
+                                                mlir::ValueRange{scalarZero},
+                                                mlir::ValueRange{empty})
+                       .getResult(0);
+          }
         } else {
           zero = builder.create<mlir::arith::ConstantOp>(
               fwd.getLoc(), builder.getZeroAttr(ty));

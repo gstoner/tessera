@@ -1,5 +1,6 @@
 #include "Tessera/Transforms/RegionAdjointInterface.h"
 
+#include "Tessera/Transforms/LoopBodyYield.h"
 #include "Tessera/Transforms/SemanticEffects.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -444,13 +445,7 @@ static LogicalResult buildForAdjoint(
           SmallVector<Value> replayYields;
           for (Value value : yield.getOperands())
             replayYields.push_back(mapping.lookupOrDefault(value));
-          if (auto replayYield = dyn_cast<scf::YieldOp>(
-                  replay.getBody()->getTerminator()))
-            replayYield.getResultsMutable().assign(replayYields);
-          else {
-            builder.setInsertionPointToEnd(replay.getBody());
-            scf::YieldOp::create(builder, loc, replayYields);
-          }
+          closeBodyWithYield(builder, loc, replay.getBody(), replayYields);
         }
         llvm::append_range(blockValues, replay.getResults());
       }
@@ -473,13 +468,7 @@ static LogicalResult buildForAdjoint(
         SmallVector<Value> replayYields;
         for (Value value : yield.getOperands())
           replayYields.push_back(mapping.lookupOrDefault(value));
-        if (auto replayYield =
-                dyn_cast<scf::YieldOp>(replay.getBody()->getTerminator()))
-          replayYield.getResultsMutable().assign(replayYields);
-        else {
-          builder.setInsertionPointToEnd(replay.getBody());
-          scf::YieldOp::create(builder, loc, replayYields);
-        }
+        closeBodyWithYield(builder, loc, replay.getBody(), replayYields);
       }
       llvm::append_range(blockValues, replay.getResults());
     }
@@ -520,13 +509,7 @@ static LogicalResult buildForAdjoint(
              captureAccumulators, captureStepCotangents))
       nextCotangents.push_back(
           addCotangents(builder, loc, accumulator, stepCotangent));
-    if (auto existing = dyn_cast<scf::YieldOp>(
-            backward.getBody()->getTerminator())) {
-      existing.getResultsMutable().assign(nextCotangents);
-    } else {
-      builder.setInsertionPointToEnd(backward.getBody());
-      scf::YieldOp::create(builder, loc, nextCotangents);
-    }
+    closeBodyWithYield(builder, loc, backward.getBody(), nextCotangents);
   }
 
   for (auto [init, cotangent] : llvm::zip_equal(

@@ -31,12 +31,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+import numpy as np
+
 from .algebra import SCALAR_RECURRENCES, ScalarRecurrence
 
 __all__ = [
     "DERIVATIVE_CONTRACTS",
     "DerivativeContract",
+    "RETIRED_HAND_RULES",
     "derivative_contract",
+    "register_datum_derived_rules",
 ]
 
 _PD_WITNESSES = ("smooth", "definable:semialgebraic")
@@ -134,3 +138,95 @@ def derivative_contract(name: str) -> Optional[DerivativeContract]:
     contract: absence of a datum is a fact the caller must handle, not
     paper over (#21a)."""
     return DERIVATIVE_CONTRACTS.get(name)
+
+
+# ── Hand-rule retirement: the datum becomes production (AD-RETIRE-1) ─────────
+#
+# With the Law-4 differential proofs green (AD-WEIL-1 for the scalar family,
+# AD-JET-STRUCT-1 for the structured ones), retirement is an evidence-backed
+# call. This is the first family to take it: the 13 holonomic-ODE primitives'
+# production JVP/VJP pairs are now DERIVED from the one datum
+# (`ScalarRecurrence.pointwise`), and the displaced hand rules become the
+# declared oracles (#31) held in `RETIRED_HAND_RULES` for the differential
+# test — deleted only in a follow-up once the oracle has soaked.
+#
+# What the derived path carries (§8's bar — everything the deleted one did):
+#
+# * **dtype behavior** — float64 casts, identical to the displaced factory.
+# * **evaluation guards** — the displaced rules' domain clamps, carried as
+#   EXPLICIT per-op declarations below instead of buried lambdas. One guard
+#   per op for BOTH modes. This *fixes a measured inconsistency*: the
+#   displaced pair disagreed at the boundary (``jvp_sqrt`` clamped ``√x`` at
+#   1e-12 — slope cap 5e11 — while ``vjp_sqrt`` clamped ``x`` — slope cap
+#   5e5; ``jvp_log`` had NO guard while ``vjp_log`` clamped). J and Jᵀ of
+#   one function cannot disagree at the same point; the VJP's convention
+#   survives (reverse mode is the historically production-critical path),
+#   and the boundary change to forward mode is pinned in
+#   ``test_retired_pointwise.py``.
+
+_DERIVATIVE_EVAL_GUARDS: dict[str, Callable[[Any], Any]] = {
+    "log": lambda x: np.where(
+        np.abs(x) < 1e-12, np.copysign(1e-12, x + 0.0), x),
+    "sqrt": lambda x: np.maximum(x, 1e-12),
+}
+
+#: The displaced hand rules, kept as declared oracles (#31) for the
+#: differential test. Populated by `register_datum_derived_rules`.
+RETIRED_HAND_RULES: dict[str, tuple[Callable, Callable]] = {}
+
+
+def _make_derived_pair(name: str, rec: ScalarRecurrence):
+    value, derivative = rec.pointwise
+    guard = _DERIVATIVE_EVAL_GUARDS.get(name)
+
+    def derived_jvp(primals, tangents, **_):
+        x = np.asarray(primals[0], dtype=np.float64)
+        dx = np.asarray(tangents[0], dtype=np.float64)
+        xg = guard(x) if guard is not None else x
+        return np.asarray(value(x)), derivative(xg) * dx
+
+    def derived_vjp(dout, x, **_):
+        a = np.asarray(x, dtype=np.float64)
+        ag = guard(a) if guard is not None else a
+        return (derivative(ag) * np.asarray(dout, dtype=np.float64),)
+
+    derived_jvp._derived_from_datum = name  # type: ignore[attr-defined]
+    derived_vjp._derived_from_datum = name  # type: ignore[attr-defined]
+    derived_jvp.__name__ = f"jvp_{name}__datum"
+    derived_vjp.__name__ = f"vjp_{name}__datum"
+    return derived_jvp, derived_vjp
+
+
+def register_datum_derived_rules() -> list[str]:
+    """Switch the ODE-family production rules to the datum-derived pair.
+
+    Idempotent; returns the switched names. Fails closed rather than
+    switching a family whose hand pair is incomplete (a datum without a
+    displaced oracle would leave the differential test with nothing to
+    differ against)."""
+    from .jvp import get_jvp, register_jvp
+    from .vjp import get_vjp, register_vjp
+
+    switched: list[str] = []
+    for name, contract in DERIVATIVE_CONTRACTS.items():
+        if contract.ode is None:
+            continue
+        current_jvp = get_jvp(name)
+        if current_jvp is not None and getattr(
+                current_jvp, "_derived_from_datum", None) == name:
+            switched.append(name)  # already switched (idempotent re-entry)
+            continue
+        current_vjp = get_vjp(name)
+        if current_jvp is None or current_vjp is None:
+            raise ValueError(
+                f"refusing to retire {name!r}: the hand pair is incomplete "
+                f"(jvp={current_jvp is not None}, "
+                f"vjp={current_vjp is not None}) — the displaced oracle "
+                f"must exist before the switch (#31)"
+            )
+        RETIRED_HAND_RULES[name] = (current_jvp, current_vjp)
+        derived_jvp, derived_vjp = _make_derived_pair(name, contract.ode)
+        register_jvp(name, derived_jvp)
+        register_vjp(name, derived_vjp)
+        switched.append(name)
+    return switched

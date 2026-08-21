@@ -631,6 +631,19 @@ eager `hvp` replacement as consumers).
 > first). Remaining depth for later sessions: more structured families
 > (attention variants, SSM), dashboard rows for the per-family jet
 > proofs, and the retirement decisions themselves.
+>
+> **AD-RETIRE-1 — the first hand-rule retirement (2026-08-20).** With the
+> Law-4 proofs green, retirement is an evidence-backed per-family call;
+> the decisions, recorded:
+>
+> | Family | Decision | Why |
+> |---|---|---|
+> | **Holonomic-ODE pointwise (13 ops)** | **RETIRED this PR** — production JVP/VJP now derive from `ScalarRecurrence.pointwise` (`derivative_contract.register_datum_derived_rules`); the displaced hand rules are declared oracles (#31) in `RETIRED_HAND_RULES`, bit-identical in-domain, deletion after a soak follow-up | Strongest evidence: AD-WEIL-1's per-primitive k=1..4 proofs; the datum + guards carry everything the hand rules did (§8). Retiring also FIXED a measured boundary inconsistency: jvp_sqrt clamped √x while vjp_sqrt clamped x, and jvp_log had no guard at all — one declared guard now serves both modes, so ⟨Jv,u⟩=⟨v,Jᵀu⟩ holds at the boundary too (pinned in `test_retired_pointwise.py`) |
+> | softmax / logsumexp / rmsnorm (gamma-less core) | **NEXT** — derivable from the jet route at order 1 (VJPs via the symmetric-Jacobian delegation AD-LAW-1n established); their Law-4 structured proofs exist | Needs the same §8 audit first: axis/eps kwarg envelopes and dtype behavior, plus the rmsnorm gamma split |
+> | flash_attn | **NOT YET** | The jet route covers causal + attn_bias only; the hand rules also carry dropout_p / cache / kv_state / params — §8 forbids retiring until the surviving path carries the whole envelope |
+> | Multilinear (17 declared) | **Already structural** | `linear.py` derives JVPs from the forward and treats `transpose_rule` as the VJP; no change needed here |
+> | tan / asin / acos / erf / erfc / rsqrt / lgamma / digamma | **Blocked on datum growth** | No `ScalarRecurrence` yet — each needs its jet recurrence added (§3.2) before it can retire; first-order-only derivation would create a datum that cannot serve the jet lane |
+> | geometric registry | **Waits for `CliffordTangent` absorption** | The §5.4 collapse plan; Law 3 over `_VJPS_GEO` is green (AD-LAW-1i) but the substrate swap is the actual retirement vehicle |
 
 Jet rules for the fused/structured families via §3.4: `flash_attn`
 (online-softmax jets), norm chain, `logsumexp`/`softmax`; STDE-style

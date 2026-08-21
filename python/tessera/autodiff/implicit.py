@@ -36,6 +36,8 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 
+from .operator import OperatorTangent, certify_root
+
 __all__ = [
     "TesseraImplicitDiffError",
     "cg_solve",
@@ -269,10 +271,17 @@ def ihvp(
     x = np.asarray(x, dtype=np.float64)
     u = np.asarray(u, dtype=np.float64)
 
-    def _matvec(v: np.ndarray) -> np.ndarray:
-        return np.asarray(_hvp(fn, x, v.reshape(x.shape), eps=eps), dtype=np.float64)
-
-    return cg_solve(_matvec, u, tol=tol, maxiter=maxiter)
+    # The Hessian as a declared-self-adjoint OperatorTangent: `H.T is H`
+    # by symmetry of second derivatives, and CG consumes the operator
+    # directly (solve-consumption, §3.5). The declaration is checkable —
+    # the operator-level adjoint law holds up to the HVP's FD noise.
+    H = OperatorTangent.self_adjoint_from(
+        lambda v: np.asarray(_hvp(fn, x, v.reshape(x.shape), eps=eps),
+                             dtype=np.float64).reshape(-1),
+        shape=x.shape,
+        label="∇²fn",
+    )
+    return cg_solve(H, u.reshape(-1), tol=tol, maxiter=maxiter).reshape(u.shape)
 
 
 # ── Jacobians of the residual (finite-difference reference matvecs) ──────────
@@ -325,6 +334,56 @@ def _partial_jacobian_matvecs(
     return matvec, rmatvec, out_shape, a.shape
 
 
+# ── operator constructors: the local matvec pattern, promoted (§3.5) ─────────
+def _partial_operator(
+    F: Callable[..., np.ndarray],
+    args: Sequence[np.ndarray],
+    argnum: int,
+    *,
+    eps: float = 1e-6,
+    label: str = "∂F",
+) -> OperatorTangent:
+    """``∂_argnum F(*args)`` as an `OperatorTangent` (FD numerical oracle)."""
+    matvec, rmatvec, out_shape, in_shape = _partial_jacobian_matvecs(
+        F, args, argnum, eps=eps
+    )
+    return OperatorTangent.from_matvec_pair(
+        matvec, rmatvec, in_shape=in_shape, out_shape=out_shape,
+        provenance="numerical_oracle", label=label,
+    )
+
+
+def _linearization_solution_operator(
+    linearization: ResidualLinearization,
+    solution_shape: tuple[int, ...],
+) -> OperatorTangent:
+    """``A = ∂ₓF`` from compiler-supplied exact products."""
+    return OperatorTangent.from_matvec_pair(
+        linearization.solution_jvp,
+        linearization.solution_vjp,
+        in_shape=solution_shape,
+        out_shape=linearization.residual_shape,
+        provenance=linearization.provenance,
+        label="∂ₓF",
+    )
+
+
+def _linearization_parameter_operator(
+    linearization: ResidualLinearization,
+    index: int,
+    param_shape: tuple[int, ...],
+) -> OperatorTangent:
+    """``Bᵢ = ∂_{paramᵢ}F`` from compiler-supplied exact products."""
+    return OperatorTangent.from_matvec_pair(
+        functools.partial(linearization.parameter_jvp, index),
+        functools.partial(linearization.parameter_vjp, index),
+        in_shape=param_shape,
+        out_shape=linearization.residual_shape,
+        provenance=linearization.provenance,
+        label=f"∂θ{index}F",
+    )
+
+
 # ── custom_root: differentiate x*(θ) defined by F(x*, θ) = 0 ─────────────────
 def root_vjp(
     F: Callable[..., np.ndarray],
@@ -354,26 +413,22 @@ def root_vjp(
     full_args = [x, *(np.asarray(p, dtype=np.float64) for p in params)]
     u = np.asarray(cotangent, dtype=np.float64).reshape(-1)
 
-    # A = ∂₁F(x*, params), exposed as matrix-free forward/transposed actions.
+    # A = ∂₁F(x*, params) as an OperatorTangent; its `.T` is the adjoint
+    # the VJP solve consumes (§3.5: composition + transpose + solve).
     if linearization is None:
-        A_matvec, A_rmatvec, out_shape, _ = _partial_jacobian_matvecs(
-            F, full_args, 0, eps=eps
-        )
-        product_source = "numerical_oracle"
+        A_op = _partial_operator(F, full_args, 0, eps=eps, label="∂ₓF")
     else:
-        A_matvec = linearization.solution_jvp
-        A_rmatvec = linearization.solution_vjp
-        out_shape = linearization.residual_shape
-        product_source = linearization.provenance
+        A_op = _linearization_solution_operator(linearization, x.shape)
+    product_source = A_op.provenance
     n = x.size
-    n_out = int(np.prod(out_shape)) if out_shape else 1
+    n_out = A_op.shape[0]
     if n_out != n:
         raise TesseraImplicitDiffError(
             f"root_vjp expects square ∂_xF (got {(n_out, n)}); F must map to the solution space"
         )
     if linear_solver == "gmres":
         r, solve_info = gmres_solve(
-            A_rmatvec,
+            A_op.T,
             u,
             tol=tol,
             maxiter=maxiter,
@@ -381,7 +436,7 @@ def root_vjp(
             return_info=True,
         )
     elif linear_solver == "dense":
-        A = np.column_stack([A_matvec(np.eye(n, dtype=np.float64)[j]) for j in range(n)])
+        A = A_op.materialize()
         try:
             r = np.linalg.solve(A.T, u)
         except np.linalg.LinAlgError as exc:
@@ -409,17 +464,18 @@ def root_vjp(
         idxs = tuple(argnums)
     grads = []
     for an in idxs:
-        # B = ∂_{param an} F ; param an is F-argument (an + 1).
+        # B = ∂_{param an} F ; param an is F-argument (an + 1). The
+        # parameter cotangent is the transposed action Bᵀ r, negated —
+        # i.e. the ∂L/∂θ operator is the composition (−Bᵀ) ∘ A⁻ᵀ.
         if linearization is None:
-            _B_matvec, B_rmatvec, _os, param_shape = _partial_jacobian_matvecs(
-                F, full_args, an + 1, eps=eps
+            B_op = _partial_operator(
+                F, full_args, an + 1, eps=eps, label=f"∂θ{an}F"
             )
-            product = B_rmatvec(r)
         else:
-            param_shape = full_args[an + 1].shape
-            product = linearization.parameter_vjp(an, r)
-        grad = -np.asarray(product, dtype=np.float64).reshape(param_shape)
-        grads.append(grad)
+            B_op = _linearization_parameter_operator(
+                linearization, an, full_args[an + 1].shape
+            )
+        grads.append(-(B_op.T @ np.asarray(r, dtype=np.float64)))
     solve_info = replace(solve_info, product_source=product_source)
     result = grads[0] if single else tuple(grads)
     return (result, solve_info) if return_solve_info else result
@@ -447,16 +503,12 @@ def root_jvp(
     x = np.asarray(solution, dtype=np.float64)
     full_args = [x, *(np.asarray(p, dtype=np.float64) for p in params)]
     if linearization is None:
-        A_matvec, _A_rmatvec, out_shape, _ = _partial_jacobian_matvecs(
-            F, full_args, 0, eps=eps
-        )
-        product_source = "numerical_oracle"
+        A_op = _partial_operator(F, full_args, 0, eps=eps, label="∂ₓF")
     else:
-        A_matvec = linearization.solution_jvp
-        out_shape = linearization.residual_shape
-        product_source = linearization.provenance
+        A_op = _linearization_solution_operator(linearization, x.shape)
+    product_source = A_op.provenance
     n = x.size
-    n_out = int(np.prod(out_shape)) if out_shape else 1
+    n_out = A_op.shape[0]
     if n_out != n:
         raise TesseraImplicitDiffError(f"root_jvp expects square ∂_xF (got {(n_out, n)})")
 
@@ -465,18 +517,17 @@ def root_jvp(
         if v is None:
             continue
         if linearization is None:
-            Bi_matvec, _rm, _os, _ps = _partial_jacobian_matvecs(
-                F, full_args, i + 1, eps=eps
+            B_op = _partial_operator(
+                F, full_args, i + 1, eps=eps, label=f"∂θ{i}F"
             )
-            product = Bi_matvec(np.asarray(v, dtype=np.float64))
         else:
-            product = linearization.parameter_jvp(
-                i, np.asarray(v, dtype=np.float64)
+            B_op = _linearization_parameter_operator(
+                linearization, i, full_args[i + 1].shape
             )
-        rhs = rhs - np.asarray(product, dtype=np.float64).reshape(-1)
+        rhs = rhs - B_op.matvec(np.asarray(v, dtype=np.float64))
     if linear_solver == "gmres":
         t, solve_info = gmres_solve(
-            A_matvec,
+            A_op,
             rhs,
             tol=tol,
             maxiter=maxiter,
@@ -484,7 +535,7 @@ def root_jvp(
             return_info=True,
         )
     elif linear_solver == "dense":
-        A = np.column_stack([A_matvec(np.eye(n, dtype=np.float64)[j]) for j in range(n)])
+        A = A_op.materialize()
         try:
             t = np.linalg.solve(A, rhs)
         except np.linalg.LinAlgError as exc:
@@ -511,6 +562,9 @@ def custom_root(
     *,
     argnums: int | Sequence[int] = 0,
     eps: float = 1e-6,
+    certify: bool = True,
+    residual_tol: float = 1e-6,
+    degeneracy_tol: float = 1e-8,
 ) -> Callable[[Callable[..., np.ndarray]], Callable[..., np.ndarray]]:
     """Wrap a solver so its output is differentiable through the root condition.
 
@@ -519,6 +573,18 @@ def custom_root(
     nonlinear system). The decorated ``solver(*params) -> x*`` gains
     ``.vjp(x*, params, u)`` and ``.jvp(x*, params, tangents)`` methods computing
     the implicit derivatives without unrolling the solver.
+
+    **H3 well-posedness certificate** (AD-OPERATOR-1, `CORE_SUBSTRATE_VIEW.md`
+    S8): with ``certify=True`` (the default) every differentiation of a given
+    solution first *measures* the implicit-function-theorem hypothesis via
+    `operator.certify_root` — the point is actually a root
+    (``‖F(x*, θ)‖ ≤ residual_tol``, scaled) and ``∂ₓF`` is non-degenerate
+    there (``σ_min > degeneracy_tol · σ_max``; for KKT-form residuals this is
+    what strict complementarity guarantees). A degenerate root **rejects with
+    the measured numbers** instead of returning an ill-posed gradient, and a
+    certificate that cannot be evaluated fails closed. ``certify=False`` is
+    an explicit opt-out for callers who have already certified the solution
+    elsewhere — the check is skipped, never silently weakened.
 
     Example::
 
@@ -534,10 +600,44 @@ def custom_root(
         op_name = f"custom_root:{solver.__module__}.{solver.__qualname__}"
         selected_argnums = (argnums,) if isinstance(argnums, int) else tuple(argnums)
 
+        def _certified(solution, params):
+            if not certify:
+                return None
+            certificate = certify_root(
+                optimality, solution, params, eps=eps,
+                residual_tol=residual_tol, degeneracy_tol=degeneracy_tol,
+            )
+            if not certificate.strict:
+                reasons = []
+                if not certificate.residual_ok:
+                    reasons.append(
+                        f"the point is not a root: ‖F(x*, θ)‖ = "
+                        f"{certificate.residual_norm:.3e} exceeds "
+                        f"{residual_tol:.1e} × scale "
+                        f"{certificate.solution_scale:.3e}"
+                    )
+                if not certificate.nondegenerate:
+                    reasons.append(
+                        f"∂ₓF is degenerate at the solution: σ_min = "
+                        f"{certificate.sigma_min:.3e} vs σ_max = "
+                        f"{certificate.sigma_max:.3e} (condition "
+                        f"{certificate.condition_number:.3e}) — for a KKT "
+                        f"residual this is a strict-complementarity failure"
+                    )
+                raise TesseraImplicitDiffError(
+                    f"{op_name}: implicit differentiation is ill-posed here — "
+                    + "; ".join(reasons)
+                    + ". Pass certify=False only if the solution is "
+                    "certified elsewhere."
+                )
+            return certificate
+
         def vjp(solution, params, cotangent):
+            _certified(solution, params)
             return root_vjp(optimality, solution, params, cotangent, argnums=argnums, eps=eps)
 
         def jvp(solution, params, tangents):
+            _certified(solution, params)
             return root_jvp(optimality, solution, params, tangents, eps=eps)
 
         @functools.wraps(solver)
@@ -554,6 +654,13 @@ def custom_root(
                 return solution
 
             def implicit_vjp(dout, *forward_params, **_unused):
+                # H3: certify the recorded solution once per backward —
+                # a degenerate root rejects with measured numbers here,
+                # never propagates an ill-posed gradient onto the tape.
+                if "certificate" not in solution_box:
+                    solution_box["certificate"] = _certified(
+                        solution_box["value"], forward_params
+                    )
                 selected_grads = root_vjp(
                     optimality,
                     solution_box["value"],
@@ -578,6 +685,14 @@ def custom_root(
         wrapped.vjp = vjp  # type: ignore[attr-defined]
         wrapped.jvp = jvp  # type: ignore[attr-defined]
         wrapped.optimality = optimality  # type: ignore[attr-defined]
+        # The measured certificate itself, for callers who want the numbers
+        # (S4 discipline: certificates are data, not just gates).
+        wrapped.certificate = (  # type: ignore[attr-defined]
+            lambda solution, params: certify_root(
+                optimality, solution, params, eps=eps,
+                residual_tol=residual_tol, degeneracy_tol=degeneracy_tol,
+            )
+        )
         return wrapped
 
     return wrap
@@ -625,21 +740,22 @@ def adjoint_state_grad(
     grad1_L = _grad_fd(L, s, w, 0)
     grad2_L = _grad_fd(L, w, s, 1)
 
-    # ∂₁cᵀ and ∂₂cᵀ stay matrix-free. The residual-state Jacobian must be
-    # square for the IFT adjoint system; arbitrary nonlinear residual bodies
-    # are supported through their products rather than dense materialization.
-    _m1, rmat1, out_shape, _ps1 = _partial_jacobian_matvecs(c, [s, w], 0, eps=eps)
-    _m2, rmat2, _os2, _ps2 = _partial_jacobian_matvecs(c, [s, w], 1, eps=eps)
-    residual_size = int(np.prod(out_shape)) if out_shape else 1
+    # ∂₁c and ∂₂c as OperatorTangents — matrix-free; the adjoint system
+    # consumes ∂₁cᵀ through the type's own transpose, and the parameter
+    # pullback is ∂₂cᵀ applied to the multiplier. The residual-state
+    # Jacobian must be square for the IFT adjoint system.
+    C_s = _partial_operator(c, [s, w], 0, eps=eps, label="∂₁c")
+    C_w = _partial_operator(c, [s, w], 1, eps=eps, label="∂₂c")
+    residual_size = C_s.shape[0]
     if residual_size != s.size:
         raise TesseraImplicitDiffError(f"adjoint_state_grad expects square ∂₁c (got {(residual_size, s.size)})")
     r, solve_info = gmres_solve(
-        rmat1,
+        C_s.T,
         -grad1_L.reshape(-1),
         tol=tol,
         maxiter=maxiter,
         restart=restart,
         return_info=True,
     )
-    result = (grad2_L.reshape(-1) + rmat2(r)).reshape(w.shape)
+    result = (grad2_L.reshape(-1) + C_w.T.matvec(r)).reshape(w.shape)
     return (result, solve_info) if return_solve_info else result

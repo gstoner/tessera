@@ -53,6 +53,11 @@ from .implicit import (
     custom_root,
     adjoint_state_grad,
 )
+from .operator import (
+    OperatorTangent,
+    RootConditionCertificate,
+    certify_root,
+)
 
 
 # Wrap every op in `_VJPS` so it's tape-aware.

@@ -213,3 +213,34 @@ def test_rmsnorm_gamma_broadcast_shapes_and_dtype():
     # γ-less arity is unchanged — one operand in, one cotangent out.
     (gx_only,) = _VJPS["rmsnorm"](u, x)
     assert gx_only.shape == x.shape
+
+
+def test_rmsnorm_gamma_keyword_spelling_routes_as_operand():
+    """PR #604 review (P1): `ops.rmsnorm(x, gamma=g)` left γ in kwargs, so
+    the record never saw it — reverse mode rejected the arity ("2
+    cotangents, expected 1") and forward mode ran the rule's γ-less
+    branch, making the PRIMAL silently wrong. `promote_operand_kwargs`
+    now routes a keyword-spelled operand into the positional record; both
+    spellings must be identical end to end."""
+    import tessera.autodiff as ad
+    from tessera import ops
+    from tessera.autodiff.tape import tape
+    rng = np.random.default_rng(35)
+    x = rng.standard_normal((2, 5))
+    g = rng.standard_normal(5)
+    dx = rng.standard_normal(x.shape)
+
+    with tape() as t_kw:
+        target = ops.sum(ops.rmsnorm(x, gamma=g))
+    t_kw.backward(target)
+    with tape() as t_pos:
+        target = ops.sum(ops.rmsnorm(x, g))
+    t_pos.backward(target)
+    for operand in (x, g):
+        np.testing.assert_array_equal(t_kw.cotangent[id(operand)],
+                                      t_pos.cotangent[id(operand)])
+
+    y_kw, dy_kw = ad.jvp(lambda v: ops.rmsnorm(v, gamma=g), (x,), (dx,))
+    y_pos, dy_pos = ad.jvp(lambda v: ops.rmsnorm(v, g), (x,), (dx,))
+    np.testing.assert_array_equal(np.asarray(y_kw), np.asarray(y_pos))
+    np.testing.assert_array_equal(np.asarray(dy_kw), np.asarray(dy_pos))

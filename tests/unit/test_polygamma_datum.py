@@ -157,3 +157,30 @@ def test_aux_jets_match_finite_differences():
             got = float(np.asarray(W.extract(w, k)))
             np.testing.assert_allclose(got, ref, rtol=1e-11,
                                        err_msg=f"{name} k={k}")
+
+
+def test_polygamma_reflection_stable_at_high_order_deep_negative():
+    """PR #604 review (P2): cot(πx) via `1/tan(πx)` leaves an
+    argument-reduction residual that the cotangent-derivative polynomial
+    and π^{n+1} amplify — the naive form was ~1.4% wrong for ψ⁽⁸⁾(−9.5)
+    and sign-wrong for ψ⁽¹⁰⁾. The reduced-phase evaluation makes the
+    reflection EXACT at half-integers: for even n the cot term vanishes
+    identically (ψ⁽ⁿ⁾(−9.5) = ψ⁽ⁿ⁾(10.5) to the last bit), and for odd n
+    the constant p_n(0) = cot⁽ⁿ⁾(π/2) survives exactly."""
+    for n in (2, 4, 8, 10):
+        v = float(_polygamma(n, np.array([-9.5]))[0])
+        ref = float(_polygamma(n, np.array([10.5]))[0])
+        np.testing.assert_array_equal(v, ref)
+    # Odd order: ψ⁽³⁾(−2.5) = −ψ⁽³⁾(3.5) + 2π⁴  (p₃(0) = cot‴(π/2) = −2)
+    v3 = float(_polygamma(3, np.array([-2.5]))[0])
+    ref3 = -float(_polygamma(3, np.array([3.5]))[0]) + 2.0 * math.pi ** 4
+    np.testing.assert_allclose(v3, ref3, rtol=1e-14)
+    # Off the half-integers, high order stays FD-consistent.
+    h = 1e-6
+    for n in (7, 9):
+        for xv in (-9.4, -9.6):
+            fd = (_polygamma(n, np.array([xv + h]))
+                  - _polygamma(n, np.array([xv - h]))) / (2.0 * h)
+            an = _polygamma(n + 1, np.array([xv]))
+            np.testing.assert_allclose(fd, an, rtol=1e-6,
+                                       err_msg=f"n={n} at x={xv}")

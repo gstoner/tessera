@@ -139,3 +139,27 @@ def test_f2_mul_array_operand_still_correct():
     W = ts.nn.Parameter(np.array([[1.0, 2.0]], np.float32))
     g, _ = _grad_of(lambda: ops.reduce(ops.mul(W, np.array([[2.0, 2.0]], np.float32)), op="sum"), W)
     np.testing.assert_array_equal(g, np.array([[2.0, 2.0]], np.float32))
+
+
+def test_keyword_spelled_operand_is_recorded_as_operand():
+    """PR #604 review (P1), the general class: any op whose second operand
+    is spelled by keyword (`ops.mul(x, y=y)`) left it in kwargs, so the
+    record never saw it while the rule bound it by name and answered for
+    it — "VJP returned 2 cotangents, expected 1". `promote_operand_kwargs`
+    routes a kwarg into the positional operand list iff its name is the
+    rule's next positional slot AND the forward's parameter at that index
+    (config like `eps`/`axis` is keyword-only in the rules and can never
+    be promoted)."""
+    import numpy as _np
+
+    from tessera import ops
+    from tessera.autodiff.tape import tape
+
+    rng = _np.random.default_rng(41)
+    x = rng.standard_normal(5)
+    y = rng.standard_normal(5)
+    with tape() as t:
+        loss = ops.sum(ops.mul(x, y=y))
+    t.backward(loss)
+    _np.testing.assert_array_equal(t.cotangent[id(y)], x)
+    _np.testing.assert_array_equal(t.cotangent[id(x)], y)

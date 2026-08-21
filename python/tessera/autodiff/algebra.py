@@ -689,8 +689,21 @@ def _polygamma_higher(n: int, a: np.ndarray) -> np.ndarray:
     if np.any(neg):
         coeffs = _cot_derivative_coeffs(n)
         with np.errstate(divide="ignore", invalid="ignore"):
-            cot_n = np.polynomial.polynomial.polyval(
-                1.0 / np.tan(np.pi * x0), coeffs)
+            # cot(πx) is π-periodic, so evaluate at the REDUCED phase
+            # r = x − round(x) ∈ [−½, ½] instead of at πx directly: the
+            # argument-reduction residual of tan at large |πx| is amplified
+            # by the cotangent-derivative polynomial and π^{n+1} (measured:
+            # the naive form was ~1.4% wrong for ψ⁽⁸⁾(−9.5) and sign-wrong
+            # for ψ⁽¹⁰⁾ — PR #604 review, P2). Near cot's zero (|r| > ¼)
+            # use cot(πr) = −tan(π(r ∓ ½)), which is exact at half-integers
+            # (r = ±½ → −tan(∓0) = 0) and small-argument everywhere.
+            r = x0 - np.round(x0)
+            small = np.abs(r) <= 0.25
+            cot = np.where(
+                small,
+                1.0 / np.tan(np.pi * np.where(small, r, 0.25)),
+                -np.tan(np.pi * (r - np.copysign(0.5, r))))
+            cot_n = np.polynomial.polynomial.polyval(cot, coeffs)
             reflected = ((result if n % 2 == 0 else -result)
                          - np.pi ** (n + 1) * cot_n)
         result = np.where(neg, reflected, result)

@@ -109,8 +109,16 @@ class _JVPTrace:
         # rule a second primal and its `(x,) = primals` unpack raised an
         # unpack error instead of the op's own diagnostic — the forward-mode
         # face of the tape's positional-replay bug (see `tape._route_positional`).
-        from .tape import split_positional_config
+        from .tape import promote_operand_kwargs, split_positional_config
+        from .vjp import get_vjp
 
+        # Keyword-spelled operands join the primals first (same promotion
+        # reverse mode makes; the VJP rule's slots are the operand-naming
+        # authority in both modes) — otherwise `ops.rmsnorm(x, gamma=g)`
+        # runs the rule's operand-less branch and the primal itself is
+        # silently wrong under AD.
+        args, kwargs = promote_operand_kwargs(
+            original, args, kwargs, get_vjp(name))
         call_args, routed = split_positional_config(name, original, args)
         if routed:
             kwargs = {**routed, **kwargs}

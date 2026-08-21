@@ -9,6 +9,17 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 x86 outcome:
+follow-up required (the sibling exact-device row).** gfx1151 landed the
+first irreducible-state-machine execution rows (see the rocm entry). The
+W4-PRODUCT-1 acceptance names native x86 rows too: an AVX-512-host
+consumer for the same paired `bounded_state_machine_v1` functions (the
+per-thread scalarization model ports directly; the x86 lane can execute
+the structurized SCF via the existing compiled-kernel path or an
+LLVM-lowered CPU kernel) plus the same digest-binding and host-enforced
+bound check. Same box as ROCm — schedulable in a follow-up session.
+
+
 Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
 numerical policy, wave 3; x86 outcome: parity validated (AVX-512 host).**
 Same contract change as the rocm entry (lgamma/digamma datum-derived over

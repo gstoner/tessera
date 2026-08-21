@@ -65,6 +65,9 @@ std::unique_ptr<mlir::Pass> createGenerateROCMSpectralBackwardKernelPass();
 std::unique_ptr<mlir::Pass> createGenerateROCMESLowRankKernelPass();
 // CF4b — elementwise-body tessera.control_for → one device control-flow kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlForKernelPass();
+// W4-PRODUCT-1 — paired-pass bounded_state_machine_v1 function (fwd or bwd)
+// → one per-thread device kernel (gfx1151 exact-device irreducible-CFG row).
+std::unique_ptr<mlir::Pass> createGenerateROCMStateMachineKernelPass();
 // CF4d-1 — GEMV-recurrence control_for → cooperative-workgroup kernel.
 std::unique_ptr<mlir::Pass> createGenerateROCMControlForGemvKernelPass();
 // CF4d-2 — norm-in-loop control_for → cooperative-workgroup kernel.

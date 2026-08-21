@@ -188,7 +188,7 @@ factorized_matmul,12,0,1,12,0,fp32,directly_tested,12 direct test references
 factorized_pos_emb,12,0,1,12,0,fp16,directly_tested,12 direct test references
 fake_quantize,6,0,1,6,0,,directly_tested,6 direct test references
 fft,38,4,1,42,0,f32 fp32 fp64 int32 int64 int8,directly_tested,42 direct test references
-flash_attn,140,79,10,219,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,219 direct test references
+flash_attn,142,79,10,221,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,221 direct test references
 flatten,7,5,0,12,0,,directly_tested,12 direct test references
 flip,7,0,0,7,0,,directly_tested,7 direct test references
 floor,6,0,1,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
@@ -255,7 +255,7 @@ laplacian_2d,5,0,0,5,0,,directly_tested,5 direct test references
 latent_kv_compress,9,19,0,28,0,fp16 fp32,directly_tested,28 direct test references
 latent_kv_expand_k,6,8,0,14,0,fp16 fp32,directly_tested,14 direct test references
 latent_kv_expand_v,5,7,0,12,0,fp16 fp32,directly_tested,12 direct test references
-layer_norm,73,16,3,89,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int32 nvfp4,directly_tested,89 direct test references
+layer_norm,74,16,3,90,0,bf16 f16 f32 fp16 fp32 fp4_e2m1 fp6_e2m3 fp8_e4m3 int32 nvfp4,directly_tested,90 direct test references
 le,3,0,0,3,0,bf16 f32 fp32 int32 int64 int8,directly_tested,3 direct test references
 lgamma,6,0,0,6,0,bf16 f32,directly_tested,6 direct test references
 lightning_attention,14,2,0,16,0,,directly_tested,16 direct test references
@@ -276,7 +276,7 @@ logical_and,11,0,2,11,0,bf16 f32 fp16 fp32 fp4_e2m1 fp64 fp8_e4m3 int32 int64 in
 logical_not,7,0,1,7,0,f32 fp32 int32 int64 int8,directly_tested,7 direct test references
 logical_or,6,0,2,6,0,f32 fp32 int32 int64 int8,directly_tested,6 direct test references
 logical_xor,4,0,0,4,0,f32 fp32 int32 int64 int8,directly_tested,4 direct test references
-logsumexp,6,3,0,9,0,bf16,directly_tested,9 direct test references
+logsumexp,7,3,0,10,0,bf16,directly_tested,10 direct test references
 lookahead_sparse_attention,19,4,1,23,0,fp16,directly_tested,23 direct test references
 lora_linear,8,0,0,8,0,fp16,directly_tested,8 direct test references
 lt,11,5,2,16,0,bf16 f32 fp16 fp32 fp4_e2m1 fp8_e4m3 int32 int64 int8,directly_tested,16 direct test references
@@ -378,7 +378,7 @@ repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,14,20,1,34,0,fp32,directly_tested,34 direct test references
 retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,24,2,2,26,0,fp32 fp64 int32 int64 int8,directly_tested,26 direct test references
-rmsnorm,110,18,6,128,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,128 direct test references
+rmsnorm,111,18,6,129,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,129 direct test references
 rmsnorm_safe,10,5,1,15,0,bf16 f16 f32,directly_tested,15 direct test references
 rng_bernoulli,6,0,0,6,0,,directly_tested,6 direct test references
 rng_beta,3,0,0,3,0,,directly_tested,3 direct test references
@@ -437,7 +437,7 @@ slice,11,0,0,11,0,,directly_tested,11 direct test references
 smooth_l1_loss,9,0,0,9,0,f32,directly_tested,9 direct test references
 soft_top_k,1,0,0,1,1,fp64,directly_tested,"public forward plus exact-k, domain, and FD-VJP tests"
 softcap,11,0,1,11,0,bf16,directly_tested,11 direct test references
-softmax,149,50,31,199,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,199 direct test references
+softmax,150,50,31,200,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int64 int8 nvfp4,directly_tested,200 direct test references
 softmax_finalize,6,2,1,8,0,,directly_tested,8 direct test references
 softmax_merge,5,2,0,7,0,,directly_tested,7 direct test references
 softmax_safe,7,4,1,11,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3m2 fp8_e4m3 fp8_e5m2 int32 int8 nvfp4,directly_tested,11 direct test references

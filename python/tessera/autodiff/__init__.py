@@ -60,6 +60,14 @@ from .operator import (
 )
 
 
+# AD-RETIRE-1: switch the ODE-family production rules to the
+# datum-derived pair (the displaced hand rules become declared oracles in
+# `derivative_contract.RETIRED_HAND_RULES` — see that module's retirement
+# section). Runs before the op wrappers so the wrapped ops see the derived
+# registry from the first call.
+from .derivative_contract import register_datum_derived_rules
+register_datum_derived_rules()
+
 # Wrap every op in `_VJPS` so it's tape-aware.
 install_op_wrappers()
 

@@ -1,11 +1,26 @@
 ---
-last_updated: 2026-08-19
+last_updated: 2026-08-20
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
+numerical policy; ROCm outcome: parity validated (exact-device, gfx1151).**
+PR #600 retires the 13 holonomic-ODE pointwise hand JVP/VJP pairs behind the
+`DerivativeContract` datum. Two shared-contract changes: forward/reverse
+reference rules now preserve the input dtype (a float32 trace stays float32;
+the old factory promoted to float64), and log/sqrt carry ONE declared domain
+guard for both modes (|x| < 1e-12 — previously the mode pair disagreed at the
+boundary). ROCm impact: the native lanes compare against this reference and
+both sides of every parity comparison read the same updated rules; validated
+on this box (gfx1151): `test_native_jvp_compiled.py` +
+`test_rocm_spectral_backward_exec.py` + native-CPU vertical, 24 tests green
+against the retired registry. No kernel change; boundary inputs below 1e-12
+are outside every sampled parity envelope.
+
 
 Cross-backend sync `APPLE-RUNTIME-SINGLE-IMAGE-2026-08-19` — **Apple runtime
 loading; ROCm outcome: not applicable.** The single-image slice fixes duplicate loading of the Apple GPU runtime.

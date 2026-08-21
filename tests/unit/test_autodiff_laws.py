@@ -1667,16 +1667,20 @@ def test_ode_table_entry_matches_registered_jvp_and_nested_duals(name):
     """AD-WEIL-1's core claim, per primitive: ONE datum reproduces the
     existing first-order rule AND extends to every order.
 
-    k=1 is checked against the *registered production JVP* (so the table
-    cannot drift from what the compiler actually uses), and k=2..4 against
-    the nested-dual tower (so the higher orders are not self-certified).
+    k=1 is checked against the DISPLACED hand JVP — since AD-RETIRE-1 the
+    registered production rule IS datum-derived, so the registry would be
+    a self-referential anchor; the displaced oracle
+    (`derivative_contract.RETIRED_HAND_RULES`) is the independent
+    first-order reference (#31: that is exactly what the declared oracle
+    exists for). k=2..4 stay anchored to the nested-dual tower.
     """
     import math
 
     from tessera.autodiff.algebra import (SCALAR_RECURRENCES, TruncatedJet,
                                           _NestedScalarOps,
                                           nested_dual_derivative)
-    from tessera.autodiff.jvp import _JVPS
+    from tessera.autodiff.derivative_contract import RETIRED_HAND_RULES
+    _JVPS = {n: pair[0] for n, pair in RETIRED_HAND_RULES.items()}
 
     # Domain-aware evaluation points.
     x = {"log": 1.7, "log1p": 0.6, "sqrt": 2.3, "reciprocal": 1.9,

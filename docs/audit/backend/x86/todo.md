@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-19
+last_updated: 2026-08-20
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,18 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
+numerical policy; x86 outcome: parity validated (AVX-512 host).** PR #600
+retires the ODE-family pointwise hand rules behind the `DerivativeContract`
+datum (dtype-preserving reference rules; unified log/sqrt boundary guard —
+see the rocm entry for the full contract statement). x86 impact: the
+compiled-loss backward lanes compare against this reference; validated on the
+AVX-512 primary box — 169 tests across
+`test_x86_{loss,binary_loss,class_loss,metric_loss,ebm_loss,rl_loss}_compiled.py`
+green against the retired registry. The AMX half remains not applicable (no
+fleet hardware; capability-gated as before).
+
 
 Cross-backend sync `APPLE-RUNTIME-SINGLE-IMAGE-2026-08-19` — **Apple runtime
 loading; x86 outcome: not applicable.** The single-image slice fixes duplicate loading of the Apple GPU runtime.

@@ -9,15 +9,39 @@ last_updated: 2026-08-20
 # Apple compiler, exact-device, and performance plan
 
 Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
-numerical policy; Apple outcome: follow-up required (M1 Max).** PR #600
-retires the ODE-family pointwise hand rules behind the `DerivativeContract`
-datum (dtype-preserving reference rules; unified log/sqrt boundary guard —
-see the rocm entry for the full contract statement). Expected impact:
-parity-neutral for the GA/EBM native-execution smoke and the value-lane
-backward comparisons (both sides read the same updated reference; the MSL
-kernels are fp32 and the reference now stays fp32 alongside them) — but the
-expectation needs the Mac's run: execute the Apple-marked autodiff/GA
-gradient parity tests there and record the outcome under this sync key.
+numerical policy; Apple outcome: parity validated (M1 Max), and neutral by
+construction — stronger than the expected reasoning.** PR #600 retires the 13
+ODE-family pointwise hand rules behind the `DerivativeContract` datum
+(dtype-preserving reference rules; unified log/sqrt boundary guard — see the
+rocm entry for the full contract statement). Verified on the M1 Max
+(2026-08-20), with a method note that corrects the sync note's premise:
+
+* **The retirement is not on the Apple execution path at all.** A per-file
+  probe that wraps the 13 ODE `_JVPS`/`_VJPS` registry entries and counts
+  invocations recorded **0 hits across all 165 Apple-marked files** — Apple's
+  native VJP lanes (normalization / flash_attn backward / EBM losses) compute
+  an analytic reference inline and run fp32 MSL kernels; they never dispatch
+  through the scalar-pointwise numpy registry the retirement touched. So the
+  note's "both sides read the same updated reference" is not what happens —
+  the Apple lane reads *neither* rule for these ops, and is invariant to the
+  swap by construction. The probe is not blind to a real call: the same probe
+  counts 4 VJP hits on an end-to-end `grad(tanh∘log∘sqrt∘exp)` and 62 on
+  `test_retired_pointwise.py` (falsifiability control).
+* **A/B over the whole Apple-marked suite is byte-identical.** All 165 files
+  were run per-file (one process each — the full-process marker run trips a
+  pre-existing segfault in the Apple `kv_cache_read` native path, unrelated to
+  this change and passing in isolation) under BOTH the derived production
+  registry and the retired #31 oracle re-registered. **1175 passed under each,
+  0 differences** in pass/fail counts across all 165 files.
+* **The contract changes were corroborated directly on-host anyway**, even
+  though the Apple lanes bypass them: in-domain **bit-parity, 0/13** value
+  divergence derived-vs-retired; the dtype fix reproduced — **10/13** retired
+  rules promote fp32→fp64 in forward mode while all 13 derived rules stay fp32
+  (the 3 that already matched are the tanh/sin/sigmoid hand rules the commit
+  named as dtype-preserving); the log/sqrt boundary adjoint identity
+  `⟨Jv,u⟩=⟨v,Jᵀu⟩` holds for the derived pair at `x<1e-12` and was violated by
+  the retired pair. This is the sense in which the change "moves the reference
+  TOWARD the fp32 native lanes", shown on the Mac rather than assumed.
 
 
 Cross-backend sync `APPLE-RUNTIME-SINGLE-IMAGE-2026-08-19` — **Apple runtime

@@ -1715,9 +1715,16 @@ private:
             mlir::Value primal = bwdBlock->getArgument(i);
             llvm::SmallVector<mlir::Value> dynamicSizes =
                 getDynamicTensorSizes(builder, fwd.getLoc(), primal, ranked);
+            // Carry the input's encoding onto the empty tensor. The backward
+            // function still declares the original (possibly encoded) input
+            // type as this slot's result, so an unencoded `tensor.empty` --
+            // and the `linalg.fill` derived from it -- would make func.return
+            // verification fail. The static-shape branch above preserves the
+            // encoding implicitly through the full-typed DenseElementsAttr;
+            // this overload defaults it to {}, so pass it explicitly.
             mlir::Value empty = mlir::tensor::EmptyOp::create(
                 builder, fwd.getLoc(), ranked.getShape(),
-                ranked.getElementType(), dynamicSizes);
+                ranked.getElementType(), dynamicSizes, ranked.getEncoding());
             mlir::Value scalarZero =
                 mlir::arith::ConstantOp::create(builder, fwd.getLoc(), z);
             zero = mlir::linalg::FillOp::create(builder, fwd.getLoc(),

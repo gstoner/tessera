@@ -102,6 +102,10 @@ version = lib.tessera_nvidia_mma_gemm_f16_aot_version
 version.restype = ctypes.c_int
 source_sha256 = lib.tessera_nvidia_mma_gemm_f16_aot_source_sha256
 source_sha256.restype = ctypes.c_char_p
+artifact_format = lib.tessera_nvidia_mma_gemm_f16_aot_format
+artifact_format.restype = ctypes.c_char_p
+cache_key = lib.tessera_nvidia_mma_gemm_f16_aot_cache_key
+cache_key.restype = ctypes.c_char_p
 rng = np.random.default_rng(20260730)
 a = rng.standard_normal((17, 31)).astype(np.float16)
 b = rng.standard_normal((31, 9)).astype(np.float16)
@@ -110,11 +114,18 @@ rc = fn(a.ctypes.data_as(ctypes.c_void_p), b.ctypes.data_as(ctypes.c_void_p),
         out.ctypes.data_as(ctypes.c_void_p), 17, 9, 31)
 print(json.dumps({"rc": rc, "status": status().decode(),
                   "version": version(), "source_sha256": source_sha256().decode(),
+                  "format": artifact_format().decode(),
+                  "cache_key": cache_key().decode(),
                   "output": out.tolist()}))
 """
 
 
-def _run_f16_cold_process(mode: str, *, artifact_dir: Path | None = None) -> dict:
+def _run_f16_cold_process(
+    mode: str,
+    *,
+    artifact_dir: Path | None = None,
+    artifact: Path | None = None,
+) -> dict:
     """Run one never-before-loaded production GEMM process for AOT/JIT proof."""
     library = next(path for path in _GEMM_LIBS if path.is_file())
     env = os.environ.copy()
@@ -125,6 +136,8 @@ def _run_f16_cold_process(mode: str, *, artifact_dir: Path | None = None) -> dic
     })
     if artifact_dir is not None:
         env["TESSERA_NVIDIA_AOT_ARTIFACT_DIR"] = str(artifact_dir)
+    if artifact is not None:
+        env["TESSERA_NVIDIA_AOT_ARTIFACT"] = str(artifact)
     result = subprocess.run(
         [sys.executable, "-c", _F16_COLD_PROCESS], env=env,
         check=False, capture_output=True, text=True, timeout=120)
@@ -197,10 +210,14 @@ def test_sm120_f16_aot_and_nvrtc_fallback_are_cold_process_equivalent(tmp_path):
         pytest.skip("SM120 AOT artifact is incompatible with this CUDA host")
     assert aot["rc"] == jit["rc"] == missing["rc"] == 0
     assert aot["status"] == "aot"
+    assert aot["format"] in {"fatbin", "cubin"}
     assert jit["status"] == "nvrtc_disabled"
     assert missing["status"] == "nvrtc_missing"
+    assert jit["format"] == missing["format"] == "none"
     assert aot["version"] == jit["version"] == missing["version"] == 1
     assert aot["source_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+    assert f":{aot['source_sha256']}:" in aot["cache_key"]
+    assert aot["cache_key"].endswith(f":{aot['format']}")
     np.testing.assert_allclose(aot["output"], jit["output"], rtol=0, atol=1e-5)
     np.testing.assert_allclose(aot["output"], missing["output"], rtol=0, atol=1e-5)
 
@@ -209,6 +226,42 @@ def test_sm120_f16_aot_require_rejects_missing_artifact(tmp_path):
     result = _run_f16_cold_process("require", artifact_dir=tmp_path)
     assert result["rc"] == 2
     assert result["status"] == "required_unavailable"
+
+
+def test_sm120_f16_aot_stale_image_falls_back_to_nvrtc(tmp_path):
+    """A loadable image whose embedded source identity is stale is never used."""
+    current = _run_f16_cold_process("require")
+    if current["rc"] == 2:
+        pytest.skip("SM120 AOT artifact is incompatible with this CUDA host")
+    library = next(path for path in _GEMM_LIBS if path.is_file())
+    source_artifact = library.parent / (
+        f"tessera_nvidia_mma_f16_sm120_v1.{current['format']}")
+    image = source_artifact.read_bytes()
+    identity = current["source_sha256"].encode()
+    replacement = (b"0" if identity[:1] != b"0" else b"1") + identity[1:]
+    assert image.count(identity) >= 1, "AOT image must embed its canonical source identity"
+    stale = tmp_path / source_artifact.name
+    stale.write_bytes(image.replace(identity, replacement, 1))
+
+    result = _run_f16_cold_process("auto", artifact=stale)
+    fallback = _run_f16_cold_process("disable")
+    assert result["rc"] == fallback["rc"] == 0
+    assert result["status"] == "nvrtc_stale"
+    assert result["format"] == "none"
+    np.testing.assert_allclose(result["output"], fallback["output"], rtol=0, atol=1e-5)
+
+
+def test_sm120_f16_aot_cache_key_distinguishes_packaged_formats():
+    library = next(path for path in _GEMM_LIBS if path.is_file())
+    results = {
+        suffix: _run_f16_cold_process(
+            "require", artifact=library.parent / f"tessera_nvidia_mma_f16_sm120_v1.{suffix}")
+        for suffix in ("fatbin", "cubin")
+    }
+    if any(result["rc"] == 2 for result in results.values()):
+        pytest.skip("SM120 AOT artifacts are incompatible with this CUDA host")
+    assert {result["format"] for result in results.values()} == {"fatbin", "cubin"}
+    assert len({result["cache_key"] for result in results.values()}) == 2
 
 
 @pytest.mark.parametrize("dt", _DTYPES)

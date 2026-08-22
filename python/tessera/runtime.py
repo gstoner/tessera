@@ -18498,23 +18498,23 @@ def _nvidia_fft_c2c_rows(rows: Any, inverse: bool, np: Any) -> Any:
         if lib is None:
             raise RuntimeError("libtessera_nvidia_fft.so not loadable")
         plan = ctypes.c_void_p()
-        workspace_bytes = ctypes.c_size_t()
+        workspace_size = ctypes.c_size_t()
         if lib.tessera_nvidia_fft_plan_create_c2c_f32(
-            batch, length, ctypes.byref(plan), ctypes.byref(workspace_bytes)) != 0:
+            batch, length, ctypes.byref(plan), ctypes.byref(workspace_size)) != 0:
             raise RuntimeError("NVIDIA FFT plan creation failed")
         workspace = ctypes.c_void_p()
         if lib.tessera_nvidia_fft_workspace_alloc(
-            workspace_bytes.value, ctypes.byref(workspace)) != 0:
+            workspace_size.value, ctypes.byref(workspace)) != 0:
             lib.tessera_nvidia_fft_plan_destroy(plan)
             raise RuntimeError("NVIDIA FFT workspace allocation failed")
-        package = (lib, plan, workspace, int(workspace_bytes.value))
+        package = (lib, plan, workspace, int(workspace_size.value))
         _nvidia_fft_plans[key] = package
-    lib, plan, workspace, workspace_bytes = package
+    lib, plan, workspace, workspace_byte_count = package
     output = np.empty_like(values)
     rc = lib.tessera_nvidia_fft_execute_c2c_f32(
         plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
         output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        workspace, ctypes.c_size_t(workspace_bytes), ctypes.c_int(bool(inverse)))
+        workspace, ctypes.c_size_t(workspace_byte_count), ctypes.c_int(bool(inverse)))
     if rc != 0:
         raise RuntimeError(f"NVIDIA FFT execution failed rc={rc}")
     return output
@@ -18528,7 +18528,12 @@ def _nvidia_fft_real_rows(rows: Any, inverse: bool, logical_n: int | None,
     if values.ndim != 2 or any(int(dim) <= 0 for dim in values.shape):
         raise ValueError("NVIDIA real FFT requires non-empty rank-2 rows")
     batch = int(values.shape[0])
-    length = int(logical_n) if inverse else int(values.shape[1])
+    if inverse:
+        if logical_n is None:
+            raise ValueError("NVIDIA C2R requires a logical output length")
+        length = int(logical_n)
+    else:
+        length = int(values.shape[1])
     if length <= 0 or (inverse and int(values.shape[1]) != length // 2 + 1):
         raise ValueError("NVIDIA C2R input does not match its logical length")
     key = (kind, batch, length)
@@ -18537,20 +18542,20 @@ def _nvidia_fft_real_rows(rows: Any, inverse: bool, logical_n: int | None,
         lib = _load_nvidia_fft_runtime()
         if lib is None:
             raise RuntimeError("libtessera_nvidia_fft.so not loadable")
-        plan, workspace_bytes = ctypes.c_void_p(), ctypes.c_size_t()
+        plan, workspace_size = ctypes.c_void_p(), ctypes.c_size_t()
         create = (lib.tessera_nvidia_fft_plan_create_c2r_f32 if inverse else
                   lib.tessera_nvidia_fft_plan_create_r2c_f32)
         if create(batch, length, ctypes.byref(plan),
-                  ctypes.byref(workspace_bytes)) != 0:
+                  ctypes.byref(workspace_size)) != 0:
             raise RuntimeError(f"NVIDIA {kind.upper()} plan creation failed")
         workspace = ctypes.c_void_p()
         if lib.tessera_nvidia_fft_workspace_alloc(
-                workspace_bytes.value, ctypes.byref(workspace)) != 0:
+                workspace_size.value, ctypes.byref(workspace)) != 0:
             lib.tessera_nvidia_fft_plan_destroy(plan)
             raise RuntimeError("NVIDIA FFT workspace allocation failed")
-        package = (lib, plan, workspace, int(workspace_bytes.value))
+        package = (lib, plan, workspace, int(workspace_size.value))
         _nvidia_fft_plans[key] = package
-    lib, plan, workspace, workspace_bytes = package
+    lib, plan, workspace, workspace_byte_count = package
     output = (np.empty((batch, length), np.float32) if inverse else
               np.empty((batch, length // 2 + 1), np.complex64))
     execute = (lib.tessera_nvidia_fft_execute_c2r_f32 if inverse else
@@ -18558,7 +18563,7 @@ def _nvidia_fft_real_rows(rows: Any, inverse: bool, logical_n: int | None,
     rc = execute(
         plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
         output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        workspace, ctypes.c_size_t(workspace_bytes))
+        workspace, ctypes.c_size_t(workspace_byte_count))
     if rc != 0:
         raise RuntimeError(f"NVIDIA {kind.upper()} execution failed rc={rc}")
     return output

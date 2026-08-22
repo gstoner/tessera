@@ -91,7 +91,7 @@ void wgmma_bf16_ptx_kernel(const __nv_bfloat16* __restrict__ A,
             const __nv_bfloat16* src = B0 + c;
             __nv_bfloat16*       dst = Bs + c*TK;
             #pragma unroll
-            for (int r=0;r<TK;r++) dst[r] = src + r*ldb [0];
+            for (int r=0;r<TK;r++) dst[r] = src[r * ldb];
         }
         __syncthreads();
     }

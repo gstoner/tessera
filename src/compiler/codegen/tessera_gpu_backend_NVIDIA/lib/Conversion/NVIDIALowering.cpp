@@ -10,6 +10,8 @@
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/SCF/Transforms/Patterns.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -19,6 +21,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 #include <optional>
 
@@ -3133,32 +3136,20 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
   auto memory = view->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>(
       "tile.memory");
   auto layout = view->getAttrOfType<tessera::tile::TileLayoutAttr>("tile.layout");
-  if (memory && memory.getLeadingDim() == 0) {
-    op->emitError("sm_120 fragment materialization does not yet support an "
-                  "SSA-supplied dynamic leading dimension");
-    return failure();
-  }
-  // The BOUNDED view is valid shared Tile IR (ViewOp::verify accepts 3 or 5
-  // pointer-backed operands), and this materializer cannot honour it: it emits
-  // an unguarded load, so silently ignoring (rowBound, colBound) would read
-  // past the edge of a ragged matrix. Decision #21 -- name the op and the
-  // target rather than folding it into the generic arity message, which would
-  // read as "malformed IR" for IR that is in fact well-formed and simply
-  // unsupported here.
-  //
-  // Recorded as a sibling outcome of the ROCm masking work (PR #510 review):
-  // ROCm masks bounded views, NVIDIA refuses them, and until this materializer
-  // grows the same masking a portable producer must emit the 3-operand form.
-  if (memory && layout && view.getInputs().size() == 5) {
-    op->emitError("NVFRAGMENT_BOUNDED_VIEW_UNSUPPORTED: this fragment "
-                  "materializer emits an unguarded load and cannot mask a "
-                  "bounded tile.view (base, rowOrigin, colOrigin, rowBound, "
-                  "colBound); ROCm supports it, NVIDIA does not yet");
-    return failure();
-  }
-  if (!memory || !layout || view.getInputs().size() != 3) {
+  const bool dynamicLeadingDim = memory && memory.getLeadingDim() == 0;
+  const bool precomputedLinearBase = view->hasAttr("tile.linear_base");
+  const size_t linearBaseOffset = precomputedLinearBase ? 1 : 0;
+  const size_t viewInputs = view.getInputs().size();
+  const bool validViewArity =
+      dynamicLeadingDim
+          ? (viewInputs == 4 + linearBaseOffset ||
+             viewInputs == 6 + linearBaseOffset)
+          : (viewInputs == 3 + linearBaseOffset ||
+             viewInputs == 5 + linearBaseOffset);
+  if (!memory || !layout || !validViewArity) {
     op->emitError("fragment_pack requires pointer-backed tile.view with "
-                  "base, row origin, and column origin");
+                  "base, row/column origins, optional bounds, and a dynamic "
+                  "leading dimension only when tile.memory leading_dim is zero");
     return failure();
   }
 
@@ -3175,12 +3166,18 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
     return failure();
   }
 
+  const size_t originOffset = 1 + linearBaseOffset;
+  const bool haveBounds = dynamicLeadingDim
+      ? viewInputs == 6 + linearBaseOffset
+      : viewInputs == 5 + linearBaseOffset;
   Value base = view.getInputs()[0];
-  Value rowOrigin = view.getInputs()[1];
-  Value colOrigin = view.getInputs()[2];
+  Value rowOrigin = view.getInputs()[originOffset];
+  Value colOrigin = view.getInputs()[originOffset + 1];
   auto pointerType = dyn_cast<LLVM::LLVMPointerType>(base.getType());
   if (!pointerType ||
-      !rowOrigin.getType().isInteger(64) || !colOrigin.getType().isInteger(64)) {
+      !rowOrigin.getType().isInteger(64) || !colOrigin.getType().isInteger(64) ||
+      (precomputedLinearBase &&
+       !view.getInputs()[1].getType().isInteger(64))) {
     op->emitError("pointer-backed tile.view requires !llvm.ptr base and "
                   "i64 row/column origins");
     return failure();
@@ -3238,7 +3235,21 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
     columnsPerRegister = 8;
     break;
   }
-  Value leadingDim = i64Constant(builder, loc, memory.getLeadingDim());
+  Value leadingDim = dynamicLeadingDim
+      ? view.getInputs().back()
+      : i64Constant(builder, loc, memory.getLeadingDim());
+  Value linearBase = precomputedLinearBase ? view.getInputs()[1] : Value();
+  Value rowBound;
+  Value colBound;
+  if (haveBounds) {
+    rowBound = view.getInputs()[originOffset + 2];
+    colBound = view.getInputs()[originOffset + 3];
+    if (!rowBound.getType().isInteger(64) ||
+        !colBound.getType().isInteger(64)) {
+      op->emitError("bounded tile.view requires i64 row and column bounds");
+      return failure();
+    }
+  }
   Value eight = i64Constant(builder, loc, 8);
   Value registerColumn = mulI64(
       builder, loc, tig, i64Constant(builder, loc, columnsPerRegister));
@@ -3262,11 +3273,14 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
 
   SmallVector<Value> fragments;
   for (auto [row, col] : coords) {
-    row = addI64(builder, loc, rowOrigin, row);
-    col = addI64(builder, loc, colOrigin, col);
+    Value relativeRow = row;
+    Value relativeCol = col;
+    row = addI64(builder, loc, rowOrigin, relativeRow);
+    col = addI64(builder, loc, colOrigin, relativeCol);
     if (physical->packing == Sm120InputPacking::PackedX8E2M1) {
       Value two = i64Constant(builder, loc, 2);
-      if (memory.getLeadingDim() != 32) {
+      if (dynamicLeadingDim || haveBounds || precomputedLinearBase ||
+          memory.getLeadingDim() != 32) {
         op->emitError("NVFP4 fragment storage requires a nibble-packed 32-byte leading dimension");
         return failure();
       }
@@ -3275,12 +3289,95 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
       else
         row = arith::DivUIOp::create(builder, loc, row, two);
     }
-    Value linear = memory.getOrder() == "row_major"
-        ? addI64(builder, loc, mulI64(builder, loc, row, leadingDim), col)
-        : addI64(builder, loc, mulI64(builder, loc, col, leadingDim), row);
-    Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), inputTy, base,
-                                    ValueRange{linear});
-    Value fragment = LLVM::LoadOp::create(builder, loc, loadTy, ptr, alignment);
+    Value linear = precomputedLinearBase
+        ? addI64(builder, loc, linearBase,
+                 memory.getOrder() == "row_major"
+                     ? addI64(builder, loc,
+                              mulI64(builder, loc, relativeRow, leadingDim),
+                              relativeCol)
+                     : addI64(builder, loc,
+                              mulI64(builder, loc, relativeCol, leadingDim),
+                              relativeRow))
+        : memory.getOrder() == "row_major"
+              ? addI64(builder, loc, mulI64(builder, loc, row, leadingDim), col)
+              : addI64(builder, loc, mulI64(builder, loc, col, leadingDim), row);
+    Value fragment;
+    if (haveBounds && !isa<VectorType>(loadTy)) {
+      // Scalar f32/f64 fragments have one logical element per register. Keep
+      // the same safe-address-before-load rule as the vector path so a bounded
+      // view can never fault even when the selected element is outside the
+      // ragged edge.
+      Value inBounds = arith::AndIOp::create(
+          builder, loc,
+          arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
+                                row, rowBound),
+          arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
+                                col, colBound));
+      Value safeLinear = arith::SelectOp::create(
+          builder, loc, inBounds, linear, i64Constant(builder, loc, 0));
+      Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), inputTy,
+                                      base, ValueRange{safeLinear});
+      Value element = LLVM::LoadOp::create(builder, loc, inputTy, ptr, alignment);
+      Value zeroElement = arith::ConstantOp::create(
+          builder, loc, inputTy, builder.getZeroAttr(inputTy));
+      fragment = arith::SelectOp::create(builder, loc, inBounds, element,
+                                         zeroElement);
+    } else if (haveBounds) {
+      auto vectorTy = cast<VectorType>(loadTy);
+      Value zero = arith::ConstantOp::create(
+          builder, loc, vectorTy, builder.getZeroAttr(vectorTy));
+      fragment = zero;
+      for (int64_t lane = 0; lane < columnsPerRegister; ++lane) {
+        Value laneValue = i64Constant(builder, loc, lane);
+        Value logicalRow = role.getValue() == "a"
+            ? row
+            : addI64(builder, loc, row, laneValue);
+        Value logicalCol = role.getValue() == "a"
+            ? addI64(builder, loc, col, laneValue)
+            : col;
+        Value inBounds = arith::AndIOp::create(
+            builder, loc,
+            arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
+                                   logicalRow, rowBound),
+            arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
+                                   logicalCol, colBound));
+        Value elementLinear = precomputedLinearBase
+            ? addI64(builder, loc, linearBase,
+                     memory.getOrder() == "row_major"
+                         ? addI64(builder, loc,
+                                  mulI64(builder, loc, relativeRow, leadingDim),
+                                  addI64(builder, loc, relativeCol, laneValue))
+                         : addI64(builder, loc,
+                                  mulI64(builder, loc,
+                                        addI64(builder, loc, relativeCol, laneValue),
+                                        leadingDim),
+                                  relativeRow))
+            : memory.getOrder() == "row_major"
+                  ? addI64(builder, loc,
+                           mulI64(builder, loc, logicalRow, leadingDim),
+                           logicalCol)
+                  : addI64(builder, loc,
+                           mulI64(builder, loc, logicalCol, leadingDim),
+                           logicalRow);
+        Value safeLinear = arith::SelectOp::create(
+            builder, loc, inBounds, elementLinear, i64Constant(builder, loc, 0));
+        Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), inputTy,
+                                        base, ValueRange{safeLinear});
+        Value element = LLVM::LoadOp::create(builder, loc, inputTy, ptr, alignment);
+        Value zeroElement = arith::ConstantOp::create(
+            builder, loc, inputTy, builder.getZeroAttr(inputTy));
+        element = arith::SelectOp::create(builder, loc, inBounds, element,
+                                          zeroElement);
+        Value laneIndex = arith::ConstantIntOp::create(builder, loc, lane, 64);
+        fragment = LLVM::InsertElementOp::create(
+            builder, loc, cast<VectorType>(loadTy), fragment, element,
+            laneIndex);
+      }
+    } else {
+      Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), inputTy, base,
+                                      ValueRange{linear});
+      fragment = LLVM::LoadOp::create(builder, loc, loadTy, ptr, alignment);
+    }
     if (dtype != "f16" && dtype != "f64")
       fragment = LLVM::BitcastOp::create(
           builder, loc, builder.getI32Type(), fragment);
@@ -3374,7 +3471,7 @@ static FailureOr<Value> materializeSm120NVFP4ScalePack(
 }
 
 static LogicalResult materializeSm120AccumulatorStore(
-    Operation *mmaTarget, tessera::tile::FragmentUnpackOp unpack,
+    Value accumulator, tessera::tile::FragmentUnpackOp unpack,
     tessera::tile::StoreOp store, OpBuilder &builder, Value gid,
     Value twoTig) {
   Operation *op = store.getOperation();
@@ -3425,7 +3522,6 @@ static LogicalResult materializeSm120AccumulatorStore(
       {addI64(builder, loc, gid, eight),
        addI64(builder, loc, twoTig, one)}};
   Value leadingDim = i64Constant(builder, loc, memory.getLeadingDim());
-  Value result = mmaTarget->getResult(0);
   for (auto [index, coord] : llvm::enumerate(coords)) {
     Value row = addI64(builder, loc, rowOrigin, coord.first);
     Value col = addI64(builder, loc, colOrigin, coord.second);
@@ -3434,10 +3530,326 @@ static LogicalResult materializeSm120AccumulatorStore(
     Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), accumulatorTy, base,
                                     ValueRange{linear});
     Value scalar = LLVM::ExtractValueOp::create(
-        builder, loc, accumulatorTy, result,
+        builder, loc, accumulatorTy, accumulator,
         ArrayRef<int64_t>{static_cast<int64_t>(index)});
     LLVM::StoreOp::create(builder, loc, scalar, ptr, /*alignment=*/4);
   }
+  return success();
+}
+
+// W1.1 step 2b -- physical representation of one typed Tile fragment on
+// consumer Blackwell. A fragment remains one SSA value by using an LLVM
+// literal struct around its per-lane registers. That 1:1 representation lets
+// MLIR's structural SCF conversion change a loop iter_arg without a custom
+// loop rewrite, so the non-zero accumulator survives every K panel.
+static std::optional<Type>
+sm120PhysicalFragmentType(tessera::tile::FragmentType fragment) {
+  if (!fragment || fragment.isUnknown() || fragment.getM() != 16 ||
+      fragment.getN() != 8)
+    return std::nullopt;
+  MLIRContext *ctx = fragment.getContext();
+  StringRef role = fragment.getRole();
+  StringRef elem = fragment.getElem();
+  StringRef acc = fragment.getAcc();
+  if (role == "scale_a" || role == "scale_b")
+    return IntegerType::get(ctx, 32);
+
+  Type fieldType;
+  unsigned fields = 0;
+  if (role == "acc") {
+    if (acc == "f32" && elem == "f32") {
+      fieldType = Float32Type::get(ctx);
+      fields = 4;
+    } else if (acc == "f16" && elem == "f16") {
+      fieldType = VectorType::get({2}, Float16Type::get(ctx));
+      fields = 2;
+    } else if ((acc == "s32" || acc == "int32") &&
+               (elem == "s32" || elem == "int32")) {
+      fieldType = IntegerType::get(ctx, 32);
+      fields = 4;
+    }
+  } else if (role == "a" || role == "b") {
+    fields = role == "a" ? 4 : 2;
+    if (elem == "f16" && fragment.getK() == 16)
+      fieldType = VectorType::get({2}, Float16Type::get(ctx));
+    else if ((elem == "bf16" && fragment.getK() == 16) ||
+             (elem == "tf32" && fragment.getK() == 8) ||
+             ((elem == "e4m3" || elem == "e5m2" || elem == "s8" ||
+               elem == "int8") && fragment.getK() == 32) ||
+             (elem == "nvfp4" && fragment.getK() == 64))
+      fieldType = IntegerType::get(ctx, 32);
+  }
+  if (!fieldType || fields == 0)
+    return std::nullopt;
+  SmallVector<Type> body(fields, fieldType);
+  return LLVM::LLVMStructType::getLiteral(ctx, body);
+}
+
+static Value packSm120FragmentRegisters(ConversionPatternRewriter &rewriter,
+                                        Location loc, Type resultType,
+                                        ValueRange registers) {
+  auto structType = cast<LLVM::LLVMStructType>(resultType);
+  Value packed = LLVM::UndefOp::create(rewriter, loc, structType);
+  for (auto [index, value] : llvm::enumerate(registers))
+    packed = LLVM::InsertValueOp::create(
+        rewriter, loc, structType, packed, value,
+        ArrayRef<int64_t>{static_cast<int64_t>(index)});
+  return packed;
+}
+
+static SmallVector<Value>
+unpackSm120FragmentRegisters(ConversionPatternRewriter &rewriter, Location loc,
+                             Value fragment) {
+  auto structType = cast<LLVM::LLVMStructType>(fragment.getType());
+  SmallVector<Value> registers;
+  for (auto [index, type] : llvm::enumerate(structType.getBody()))
+    registers.push_back(LLVM::ExtractValueOp::create(
+        rewriter, loc, type, fragment,
+        ArrayRef<int64_t>{static_cast<int64_t>(index)}));
+  return registers;
+}
+
+struct ConvertSm120FragmentPack
+    : public OpConversionPattern<tessera::tile::FragmentPackOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      tessera::tile::FragmentPackOp op, OpAdaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    auto fragment = dyn_cast<tessera::tile::FragmentType>(op.getResult().getType());
+    Type converted = getTypeConverter()->convertType(fragment);
+    if (!converted)
+      return rewriter.notifyMatchFailure(op, "unsupported SM120 fragment type");
+    StringRef role = fragment.getRole();
+    if (role == "scale_a" || role == "scale_b")
+      return rewriter.notifyMatchFailure(
+          op, "block-scaled fragment conversion is handled by the existing straight-line path");
+    Location loc = op.getLoc();
+    Value tid = NVVM::ThreadIdXOp::create(rewriter, loc, rewriter.getI32Type());
+    Value lane = arith::AndIOp::create(
+        rewriter, loc, tid,
+        arith::ConstantIntOp::create(rewriter, loc, 31, 32));
+    Value gid32 = arith::ShRUIOp::create(
+        rewriter, loc, lane,
+        arith::ConstantIntOp::create(rewriter, loc, 2, 32));
+    Value tig32 = arith::AndIOp::create(
+        rewriter, loc, lane,
+        arith::ConstantIntOp::create(rewriter, loc, 3, 32));
+    Value gid = arith::ExtUIOp::create(rewriter, loc, rewriter.getI64Type(), gid32);
+    Value tig = arith::ExtUIOp::create(rewriter, loc, rewriter.getI64Type(), tig32);
+    FailureOr<SmallVector<Value>> registers =
+        materializeSm120Mma16Pack(op, rewriter, gid, tig);
+    if (failed(registers))
+      return failure();
+    rewriter.replaceOp(
+        op, packSm120FragmentRegisters(rewriter, loc, converted, *registers));
+    return success();
+  }
+};
+
+struct ConvertSm120FragmentZero
+    : public OpConversionPattern<tessera::tile::FragmentZeroOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      tessera::tile::FragmentZeroOp op, OpAdaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    Type converted = getTypeConverter()->convertType(op.getResult().getType());
+    auto structType = dyn_cast_or_null<LLVM::LLVMStructType>(converted);
+    if (!structType)
+      return rewriter.notifyMatchFailure(op, "unsupported SM120 accumulator type");
+    SmallVector<Value> zeros;
+    for (Type type : structType.getBody())
+      zeros.push_back(arith::ConstantOp::create(
+          rewriter, op.getLoc(), type, rewriter.getZeroAttr(type)));
+    rewriter.replaceOp(
+        op, packSm120FragmentRegisters(rewriter, op.getLoc(), structType, zeros));
+    return success();
+  }
+};
+
+struct ConvertSm120TypedMMA
+    : public OpConversionPattern<tessera::tile::MMAOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      tessera::tile::MMAOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Value> data;
+    for (auto [original, converted] :
+         llvm::zip(op->getOperands(), adaptor.getOperands()))
+      if (!isa<tessera::tile::AsyncTokenType>(original.getType()))
+        data.push_back(converted);
+    if (data.size() != 3 || op->getNumResults() != 1)
+      return rewriter.notifyMatchFailure(
+          op, "typed SM120 MMA requires A, B, accumulator -> one fragment");
+    auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+    auto physical = selectSm120Fragment(desc);
+    if (!physical || physical->packing == Sm120InputPacking::PackedX8E2M1)
+      return rewriter.notifyMatchFailure(
+          op, "typed loop conversion requires a non-block-scaled SM120 MMA");
+    auto a = unpackSm120FragmentRegisters(rewriter, op.getLoc(), data[0]);
+    auto b = unpackSm120FragmentRegisters(rewriter, op.getLoc(), data[1]);
+    auto c = unpackSm120FragmentRegisters(rewriter, op.getLoc(), data[2]);
+    SmallVector<Value> operands(a);
+    operands.append(b);
+    operands.append(c);
+    Type resultType =
+        getTypeConverter()->convertType(op->getResult(0).getType());
+    SmallVector<NamedAttribute> attrs = {
+        rewriter.getNamedAttr("arch", rewriter.getStringAttr("sm_120")),
+        rewriter.getNamedAttr(
+            "shape", rewriter.getStringAttr(
+                         ("m16n8k" + Twine(desc.getK())).str())),
+        rewriter.getNamedAttr("dtype_ab",
+                              rewriter.getStringAttr(desc.getAType())),
+        rewriter.getNamedAttr("dtype_c",
+                              rewriter.getStringAttr(desc.getAccType())),
+        rewriter.getNamedAttr(
+            "instruction_family",
+            rewriter.getStringAttr(physical->instructionFamily)),
+        rewriter.getNamedAttr(
+            "a_registers_per_lane",
+            rewriter.getI32IntegerAttr(physical->aRegistersPerLane)),
+        rewriter.getNamedAttr(
+            "b_registers_per_lane",
+            rewriter.getI32IntegerAttr(physical->bRegistersPerLane)),
+        rewriter.getNamedAttr(
+            "accumulator_registers_per_lane",
+            rewriter.getI32IntegerAttr(physical->accumulatorRegistersPerLane)),
+        rewriter.getNamedAttr("block_scaled", rewriter.getBoolAttr(false))};
+    Operation *target = createContractOp(
+        rewriter, op.getLoc(), "tessera_nvidia.mma_sync", operands,
+        TypeRange{resultType}, attrs);
+    rewriter.replaceOp(op, target->getResults());
+    return success();
+  }
+};
+
+struct ConvertSm120FragmentUnpack
+    : public OpConversionPattern<tessera::tile::FragmentUnpackOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      tessera::tile::FragmentUnpackOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    if (!op.getResult().hasOneUse())
+      return rewriter.notifyMatchFailure(op, "fragment unpack must feed one store");
+    auto store = dyn_cast<tessera::tile::StoreOp>(*op.getResult().getUsers().begin());
+    if (!store)
+      return rewriter.notifyMatchFailure(op, "fragment unpack must feed tile.store");
+    Location loc = op.getLoc();
+    Value tid = NVVM::ThreadIdXOp::create(rewriter, loc, rewriter.getI32Type());
+    Value lane = arith::AndIOp::create(
+        rewriter, loc, tid,
+        arith::ConstantIntOp::create(rewriter, loc, 31, 32));
+    Value gid32 = arith::ShRUIOp::create(
+        rewriter, loc, lane,
+        arith::ConstantIntOp::create(rewriter, loc, 2, 32));
+    Value tig32 = arith::AndIOp::create(
+        rewriter, loc, lane,
+        arith::ConstantIntOp::create(rewriter, loc, 3, 32));
+    Value twoTig32 = arith::MulIOp::create(
+        rewriter, loc, tig32,
+        arith::ConstantIntOp::create(rewriter, loc, 2, 32));
+    Value gid = arith::ExtUIOp::create(rewriter, loc, rewriter.getI64Type(), gid32);
+    Value twoTig = arith::ExtUIOp::create(
+        rewriter, loc, rewriter.getI64Type(), twoTig32);
+    if (failed(materializeSm120AccumulatorStore(
+            adaptor.getInputs().front(), op, store, rewriter, gid, twoTig)))
+      return failure();
+    rewriter.eraseOp(store);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+static LogicalResult lowerTypedSm120Fragments(ModuleOp module) {
+  MLIRContext *ctx = module.getContext();
+  TypeConverter converter;
+  converter.addConversion([](Type type) { return type; });
+  converter.addConversion(
+      [](tessera::tile::FragmentType fragment) -> std::optional<Type> {
+        return sm120PhysicalFragmentType(fragment);
+      });
+
+  ConversionTarget target(*ctx);
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
+  // Logical NVFP4 scale fragments are consumed by the existing block-scaled
+  // straight-line materializer below; they are not register-valued MMA
+  // fragments and therefore must remain legal in this structural conversion.
+  target.addIllegalOp<tessera::tile::FragmentZeroOp,
+                      tessera::tile::FragmentUnpackOp>();
+  target.addDynamicallyLegalOp<tessera::tile::FragmentZeroOp>(
+      [](tessera::tile::FragmentZeroOp op) {
+        auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+        auto physical = desc ? selectSm120Fragment(desc)
+                              : std::optional<Sm120FragmentDescriptor>();
+        return physical &&
+               physical->packing == Sm120InputPacking::PackedX8E2M1;
+      });
+  target.addDynamicallyLegalOp<tessera::tile::FragmentUnpackOp>(
+      [](tessera::tile::FragmentUnpackOp op) {
+        if (op->getNumOperands() != 1)
+          return false;
+        auto mma = op->getOperand(0).getDefiningOp<tessera::tile::MMAOp>();
+        if (!mma)
+          return false;
+        auto desc = mma->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+        auto physical = desc ? selectSm120Fragment(desc)
+                              : std::optional<Sm120FragmentDescriptor>();
+        return physical &&
+               physical->packing == Sm120InputPacking::PackedX8E2M1;
+      });
+  target.addDynamicallyLegalOp<tessera::tile::FragmentPackOp>(
+      [](tessera::tile::FragmentPackOp op) {
+        auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+        auto physical = desc ? selectSm120Fragment(desc)
+                              : std::optional<Sm120FragmentDescriptor>();
+        return physical &&
+               physical->packing == Sm120InputPacking::PackedX8E2M1;
+      });
+  // Typed fragment MMA must be rewritten by ConvertSm120TypedMMA after the
+  // surrounding SCF regions have undergone structural type conversion.  The
+  // old predicate used only TypeConverter::isLegal(op), which treats a
+  // convertible FragmentType as legal and therefore let the operation survive
+  // with a fragment-typed loop block argument.  That made the straight-line
+  // fallback appear healthy while loop-carried accumulators failed closed (or,
+  // worse, were eligible for a zero-C fallback).  Keep untyped compatibility
+  // MMA legal, but force every operation carrying a fragment operand/result
+  // through the typed producer pattern.
+  target.addDynamicallyLegalOp<tessera::tile::MMAOp>(
+      [&](tessera::tile::MMAOp op) {
+        auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+        if (desc) {
+          auto physical = selectSm120Fragment(desc);
+          if (physical &&
+              physical->packing == Sm120InputPacking::PackedX8E2M1)
+            return true; // handled by the block-scaled path below
+        }
+        bool typed = op.getNumResults() == 1 &&
+                     isa<tessera::tile::FragmentType>(op.getResult(0).getType());
+        for (Value operand : op->getOperands())
+          typed |= isa<tessera::tile::FragmentType>(operand.getType());
+        return !typed;
+      });
+
+  RewritePatternSet patterns(ctx);
+  patterns.add<ConvertSm120FragmentPack, ConvertSm120FragmentZero,
+               ConvertSm120TypedMMA, ConvertSm120FragmentUnpack>(converter,
+                                                                 ctx);
+  scf::populateSCFStructuralTypeConversionsAndLegality(converter, patterns,
+                                                       target);
+  if (failed(applyPartialConversion(module, target, std::move(patterns))))
+    return failure();
+
+  SmallVector<tessera::tile::ViewOp> deadViews;
+  module.walk([&](tessera::tile::ViewOp view) {
+    if (view.getResult().use_empty())
+      deadViews.push_back(view);
+  });
+  for (auto view : deadViews)
+    view.erase();
   return success();
 }
 
@@ -4147,6 +4559,12 @@ struct LowerTileToNVIDIAPass
     module->setAttr("tessera.nvidia.arch",
                     moduleBuilder.getStringAttr(archStringForSM(smVersion)));
 
+    if (smVersion >= kConsumerBlackwellSM &&
+        failed(lowerTypedSm120Fragments(module))) {
+      signalPassFailure();
+      return;
+    }
+
     SmallVector<Operation *> worklist;
     module.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
@@ -4160,6 +4578,7 @@ struct LowerTileToNVIDIAPass
                tessera::tile::PackedLoadOp>()) ||
           name == "tile.attention_kernel" ||
           name == "tile.attention_backward_kernel" ||
+          name == "tile.training_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
           name == "tile.paged_attention_kernel" ||
           name == "tile.replay_ssm_decode_kernel" ||
@@ -4328,6 +4747,45 @@ struct LowerTileToNVIDIAPass
           signalPassFailure();
           return;
         }
+        continue;
+      }
+
+      if (isTileOp(op, "tile.training_kernel")) {
+        if (smVersion < kConsumerBlackwellSM) {
+          op->emitError("tile.training_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        auto family = op->getAttrOfType<StringAttr>("family");
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        auto lineage = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+        if (!family || !storage || storage.getValue() != "f32" || !lineage ||
+            lineage.getValue().size() != 64) {
+          op->emitError("SM120 training kernel requires f32 storage and a "
+                        "64-character tessera.schedule_hash state-lineage digest");
+          signalPassFailure();
+          return;
+        }
+        if (family.getValue() != "lion_vjp" &&
+            family.getValue() != "adafactor_vjp" &&
+            family.getValue() != "optimizer_vjp" &&
+            family.getValue() != "sequence_mixer_backward") {
+          op->emitError("SM120 training kernel has an unsupported state-lineage family");
+          signalPassFailure();
+          return;
+        }
+        SmallVector<NamedAttribute> trainingAttrs;
+        for (NamedAttribute attr : op->getAttrs())
+          if (attr.getName() != "arch" &&
+              attr.getName() != "state_lineage_digest")
+            trainingAttrs.push_back(attr);
+        trainingAttrs.push_back(builder.getNamedAttr(
+            "state_lineage_digest", builder.getStringAttr(lineage.getValue())));
+        trainingAttrs.push_back(builder.getNamedAttr(
+            "arch", builder.getStringAttr(archStringForSM(smVersion))));
+        createContractOp(builder, loc, "tessera_nvidia.training_kernel",
+                         op->getOperands(), TypeRange{}, trainingAttrs);
+        op->erase();
         continue;
       }
 
@@ -4580,7 +5038,7 @@ struct LowerTileToNVIDIAPass
               TypeRange{resultTy}, mmaAttrs);
           if (hasOutputStore &&
               failed(materializeSm120AccumulatorStore(
-                  target, unpack, store, builder, gid, twoTig))) {
+                  target->getResult(0), unpack, store, builder, gid, twoTig))) {
             signalPassFailure();
             return;
           }
@@ -4857,6 +5315,8 @@ static StringRef markerForTargetOp(StringRef opName) {
     return "llvm.nvvm.tmem.store.contract";
   if (opName == "tessera_nvidia.cuda_kernel")
     return "llvm.nvvm.cuda.kernel.contract";
+  if (opName == "tessera_nvidia.training_kernel")
+    return "llvm.nvvm.cuda.training.kernel.contract";
   if (opName.starts_with("tessera_nvidia.control_"))
     return "llvm.nvvm.cuda.control.contract";
   return "llvm.nvvm.tessera.nvidia.diagnostic.contract";

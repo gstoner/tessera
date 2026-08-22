@@ -207,6 +207,23 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             32,
             64,
         )
+    elif target == "nvidia_sm120" and (a_dtype, b_dtype, output_dtype) == (
+        "fp16",
+        "fp16",
+        "fp32",
+    ):
+        # SM120 consumes the same canonical Schedule/Tile boundary as the
+        # other native backends.  The NVIDIA package owns the physical
+        # m16n8k16 MMA lowering; this contract records only the shared launch
+        # envelope and keeps the schedule decision content-addressed.
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "nvidia_sm120",
+            "sm_120",
+            "f16",
+            "f32",
+            128,
+            128,
+        )
     elif target == "apple_gpu" and (a_dtype, b_dtype, output_dtype) == (
         "fp32",
         "fp32",

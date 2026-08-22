@@ -9469,6 +9469,9 @@ def _execute_nvidia_lion_backward(artifact: RuntimeArtifact, args: Any) -> Any:
     import numpy as np
 
     metadata = artifact.metadata or {}
+    if metadata.get("native_vjp_package"):
+        from .compiler.native_lion_vjp import validate_native_lion_vjp_runtime_metadata
+        validate_native_lion_vjp_runtime_metadata(metadata)
     ops = list(metadata.get("ops") or [])
     if len(ops) != 1 or str(ops[0].get("op_name", "")) != "tessera.lion":
         raise ValueError("nvidia_lion_bwd_compiled requires one tessera.lion op")

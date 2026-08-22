@@ -507,6 +507,7 @@ def compile_graph_module(
     if bool(options.get("package_native", False)) and target_kind in {
         "x86",
         "rocm_gfx1151",
+        "nvidia_sm120",
     }:
         from . import scheduled_matmul
 
@@ -522,7 +523,10 @@ def compile_graph_module(
                 )
             )
             graph_text = scheduled_depth_attention_artifact.graph_ir
-        elif scheduled_matmul.supports_scheduled_matmul(module, target=target_kind):
+        elif (
+            (target_kind != "nvidia_sm120" or scheduled_matmul.find_tessera_opt() is not None)
+            and scheduled_matmul.supports_scheduled_matmul(module, target=target_kind)
+        ):
             scheduled_matmul_artifact = scheduled_matmul.lower_scheduled_matmul(
                 module,
                 target=target_kind,
@@ -747,11 +751,21 @@ def compile_graph_module(
         )
         package_start = time.perf_counter()
         package_kind = nvidia_native.native_package_kind(module)
-        nvidia_package = nvidia_native.package_native(
-            module,
-            pipeline_name=producer,
-            options=options,
-        )
+        if scheduled_matmul_artifact is not None:
+            # Consume the shared Schedule -> launch-Tile artifact directly;
+            # this keeps NVIDIA's physical lowering while removing the second
+            # Graph-local schedule classification.
+            nvidia_package = nvidia_native.package_scheduled_matmul(
+                module,
+                scheduled_matmul_artifact,
+                pipeline_name=producer,
+            )
+        else:
+            nvidia_package = nvidia_native.package_native(
+                module,
+                pipeline_name=producer,
+                options=options,
+            )
         package_dtype = nvidia_package.descriptor.buffers[0].dtype
         tile, target_artifact, backend_artifact = _package_artifacts(
             graph,

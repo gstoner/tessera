@@ -90,7 +90,7 @@ class NativeStatefulVJPPackage:
         return str(self.contract["artifact_hash"])
 
     def validate(self) -> None:
-        if self.target not in {"x86", "rocm"}:
+        if self.target not in {"x86", "rocm", "nvidia_sm120"}:
             raise ValueError("stateful native VJP has no physical target owner")
         if _digest(self.source_graph_ir) != self.source_graph_ir_digest:
             raise ValueError("stateful native VJP source Graph digest is stale")
@@ -100,7 +100,7 @@ class NativeStatefulVJPPackage:
         ]:
             raise ValueError("stateful native VJP frontend owner is stale")
         self.scheduled.validate()
-        expected = "x86" if self.target == "x86" else "rocm_gfx1151"
+        expected = {"x86": "x86", "rocm": "rocm_gfx1151", "nvidia_sm120": "nvidia_sm120"}[self.target]
         if self.scheduled.target != expected:
             raise ValueError("stateful native VJP Schedule target is stale")
         if not self.argument_names or len(set(self.argument_names)) != len(
@@ -110,7 +110,7 @@ class NativeStatefulVJPPackage:
 
     def runtime_metadata(self) -> dict[str, Any]:
         self.validate()
-        execution_mode = "cpu_avx512" if self.target == "x86" else "hip_runtime"
+        execution_mode = {"x86": "cpu_avx512", "rocm": "hip_runtime", "nvidia_sm120": "cuda_driver"}[self.target]
         metadata = {
             "target": self.target,
             "compiler_path": self.compiler_path,
@@ -139,7 +139,7 @@ def _require_common(
 ) -> NonReexecutingFrontendCertificate:
     if not source_graph_ir:
         raise ValueError("stateful native VJP requires tracer-owned source Graph IR")
-    if target not in {"x86", "rocm"}:
+    if target not in {"x86", "rocm", "nvidia_sm120"}:
         raise ValueError(f"stateful native VJP has no Target consumer for {target!r}")
     if not isinstance(frontend_certificate, NonReexecutingFrontendCertificate):
         raise ValueError("stateful native VJP requires non-reexecuting frontend proof")
@@ -188,7 +188,7 @@ def build_native_adafactor_vjp_package(
     if dtypes != {"float32"}:
         raise ValueError("Adafactor native VJP currently requires f32 storage")
     scheduled = lower_scheduled_adafactor_vjp(
-        target="x86" if target == "x86" else "rocm_gfx1151",
+        target={"x86": "x86", "rocm": "rocm_gfx1151", "nvidia_sm120": "nvidia_sm120"}[target],
         parameter_shape=parameter_shape,
         topology=topology,
         kwargs=dict(source.kwargs),
@@ -234,7 +234,7 @@ def build_native_optimizer_vjp_package(
     if {str(getattr(value, "dtype", "")) for value in values} != {"float32"}:
         raise ValueError(f"{optimizer} native VJP currently requires f32 storage")
     scheduled = lower_scheduled_optimizer_vjp(
-        target="x86" if target == "x86" else "rocm_gfx1151",
+        target={"x86": "x86", "rocm": "rocm_gfx1151", "nvidia_sm120": "nvidia_sm120"}[target],
         optimizer=optimizer, shape=shapes[0], kwargs=dict(source.kwargs))
     cotangent_names = {
         "sgd": ("dy",),
@@ -297,7 +297,7 @@ def build_native_sequence_mixer_vjp_package(
     if dtypes != {"float32"}:
         raise ValueError("sequence-mixer native VJP currently requires f32 storage")
     scheduled = lower_scheduled_sequence_mixer_backward(
-        target="x86" if target == "x86" else "rocm_gfx1151",
+        target={"x86": "x86", "rocm": "rocm_gfx1151", "nvidia_sm120": "nvidia_sm120"}[target],
         family=family,
         q_shape=q_shape,
         v_shape=v_shape,
@@ -352,7 +352,7 @@ def validate_native_stateful_vjp_runtime_metadata(metadata: Mapping[str, Any]) -
     ]:
         raise ValueError("stateful native VJP argument ABI is stale")
     graph_consumer = str(body.get("graph_consumer", ""))
-    physical_target = "x86" if target == "x86" else "rocm_gfx1151"
+    physical_target = {"x86": "x86", "rocm": "rocm_gfx1151", "nvidia_sm120": "nvidia_sm120"}[target]
     if graph_consumer == "tessera.adafactor":
         validate_scheduled_adafactor_vjp_metadata(
             scheduled,

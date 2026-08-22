@@ -70,8 +70,8 @@ def build_lion_vjp_state_contract(
     adjoint and therefore has no hidden in-place update.
     """
 
-    if target not in {"x86", "rocm_gfx1151"}:
-        raise ValueError("Lion VJP state lineage supports x86 and rocm_gfx1151")
+    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
+        raise ValueError("Lion VJP state lineage supports x86, rocm_gfx1151, and nvidia_sm120")
     normalized_shape = tuple(int(dim) for dim in shape)
     if not normalized_shape or any(dim <= 0 for dim in normalized_shape):
         raise ValueError("Lion VJP state lineage requires a positive static shape")
@@ -130,7 +130,7 @@ def build_lion_vjp_state_contract(
         "family": "lion_vjp",
         "phase": "backward",
         "target": target,
-        "architecture": "zen5-avx512" if target == "x86" else "gfx1151",
+        "architecture": {"x86": "zen5-avx512", "rocm_gfx1151": "gfx1151", "nvidia_sm120": "sm_120"}[target],
         "numeric": numeric,
         "inputs": inputs,
         "outputs": outputs,
@@ -151,8 +151,8 @@ def build_adafactor_vjp_state_contract(
     topology: str,
     kwargs: Mapping[str, Any],
 ) -> dict[str, Any]:
-    if target not in {"x86", "rocm_gfx1151"}:
-        raise ValueError("Adafactor VJP lineage supports x86 and rocm_gfx1151")
+    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
+        raise ValueError("Adafactor VJP lineage supports x86, rocm_gfx1151, and nvidia_sm120")
     shape = tuple(int(dim) for dim in parameter_shape)
     if any(dim <= 0 for dim in shape) or topology not in {"factored", "full"}:
         raise ValueError("Adafactor VJP requires positive static shape and topology")
@@ -269,7 +269,7 @@ def build_optimizer_vjp_state_contract(
     *, target: str, optimizer: str, shape: Sequence[int], kwargs: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Bind optimizer state/cotangents to one non-reexecuting physical VJP."""
-    if target not in {"x86", "rocm_gfx1151"}:
+    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
         raise ValueError("optimizer VJP lineage has no physical target owner")
     if optimizer not in _OPTIMIZER_ABI or (
         target == "x86" and optimizer in {"adam", "adamw"}
@@ -510,7 +510,7 @@ def lower_scheduled_lion_vjp(
     result_types = ", ".join([tensor_type] * 3)
     schedule_ir = f'''module attributes {{tessera.target = "{compiler_target}", tessera.arch = "{architecture}"}} {{
   func.func @tessera_lion_vjp({args}) -> ({result_types}) {{
-    %grads:3 = schedule.lion_vjp {inputs} {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", learning_rate = {float(numeric["lr"]):.9g} : f32, beta2 = {float(numeric["beta2"]):.9g} : f32, weight_decay = {float(numeric["weight_decay"]):.9g} : f32, derivative_policy = "stop_gradient_through_sign", mutation_mode = "{mutation["mode"]}", alias_policy = "{mutation["alias_policy"]}", state_transition = "{mutation["state_transition"]}", ordered_writes = array<i64: 0, 1, 2>, workgroup_size = {256 if target == "rocm_gfx1151" else 1} : i64}} : {input_types} -> {result_types}
+    %grads:3 = schedule.lion_vjp {inputs} {{artifact_hash = "{digest}", lineage_payload = {json.dumps(payload)}, arch = "{architecture}", learning_rate = {float(numeric["lr"]):.9e} : f32, beta2 = {float(numeric["beta2"]):.9e} : f32, weight_decay = {float(numeric["weight_decay"]):.9e} : f32, derivative_policy = "stop_gradient_through_sign", mutation_mode = "{mutation["mode"]}", alias_policy = "{mutation["alias_policy"]}", state_transition = "{mutation["state_transition"]}", ordered_writes = array<i64: 0, 1, 2>, workgroup_size = {256 if target == "rocm_gfx1151" else 1} : i64}} : {input_types} -> {result_types}
     schedule.artifact {{hash = "{digest}", arch = "{architecture}", shape_key = "family=lion_vjp;shape={'x'.join(map(str, normalized_shape))};storage=f32", numeric_policy = "f32;stop_gradient_through_sign;functional_no_alias"}}
     return %grads#0, %grads#1, %grads#2 : {result_types}
   }}
@@ -763,8 +763,8 @@ def build_sequence_mixer_backward_state_contract(
 ) -> dict[str, Any]:
     """Describe the bounded physical DeltaNet backward buffer program."""
 
-    if target not in {"x86", "rocm_gfx1151"}:
-        raise ValueError("sequence-mixer lineage supports x86 and rocm_gfx1151")
+    if target not in {"x86", "rocm_gfx1151", "nvidia_sm120"}:
+        raise ValueError("sequence-mixer lineage supports x86, rocm_gfx1151, and nvidia_sm120")
     if family not in {
         "gated_deltanet",
         "kimi_delta_attention",

@@ -910,6 +910,9 @@ class TargetIRVerifier:
             self._require(op, diagnostics, "arch", "shape", "accum", "cta_group")
         elif op.op_name == "tessera_nvidia.cuda_kernel":
             self._require(op, diagnostics, "arch", "kernel", "status")
+        elif op.op_name == "tessera_nvidia.training_kernel":
+            self._require(op, diagnostics, "family", "storage", "arch",
+                          "state_lineage_digest")
 
     def _require(self, op: TargetOp, diagnostics: list[TargetIRDiagnostic], *attrs: str) -> None:
         missing = [attr for attr in attrs if attr not in op.attrs]

@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping, cast
 
@@ -2199,6 +2200,52 @@ def package_matmul(
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
 
 
+def package_scheduled_matmul(
+    module: GraphIRModule,
+    artifact: Any,
+    *,
+    pipeline_name: str,
+) -> NVIDIANativePackage:
+    """Consume the canonical Schedule -> launch-Tile matmul artifact.
+
+    Descriptor shape/buffer validation remains shared with ``package_matmul``;
+    the native image is compiled from the artifact's Tile IR, so NVIDIA no
+    longer re-emits a second vendor-local schedule for this path.
+    """
+    artifact.validate()
+    base = package_matmul(module, pipeline_name=pipeline_name, schedule="shared")
+    entry = artifact.function_name
+    lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = (
+        _compile_tile_ir(artifact.tile_ir, entry)
+    )
+    image = replace(
+        base.image,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, base.descriptor.abi_id),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+        resource_record=ResourceRecord(
+            provenance="canonical scheduled Tile IR; ptxas --arch=sm_120a -v",
+            metrics=metrics,
+        ),
+    )
+    descriptor = replace(
+        base.descriptor,
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        provenance={
+            **base.descriptor.provenance,
+            "route": "canonical_scheduled_tile_consumer",
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return NVIDIANativePackage(artifact.tile_ir, lowered, ptx, image, descriptor)
+
+
 def package_f16_matmul(
     module: GraphIRModule,
     *,
@@ -3537,6 +3584,7 @@ __all__ = [
     "package_f16_matmul",
     "package_f16_softmax",
     "package_matmul",
+    "package_scheduled_matmul",
     "package_mx_matmul",
     "package_reduction",
     "package_norm",

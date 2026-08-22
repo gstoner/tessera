@@ -1150,23 +1150,6 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
         sprint="W1.1",
     ),
-    DiagnosticCode(
-        code="NVFRAGMENT_BOUNDED_VIEW_UNSUPPORTED",
-        pass_origin="NVIDIALowering",
-        severity="error",
-        summary=(
-            "The NVIDIA fragment materializer emits an unguarded load and "
-            "cannot mask a bounded tile.view, so it refuses one rather than "
-            "ignoring the bounds and reading past the edge of a ragged matrix. "
-            "ROCm masks bounded views; NVIDIA does not yet."
-        ),
-        fix_hint=(
-            "Emit the 3-operand tile.view for NVIDIA until this materializer "
-            "grows masking, or lower through ROCm."
-        ),
-        spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
-        sprint="W1.1",
-    ),
 
     # ── W1.1 step 2b (guard) — NVIDIA WGMMA accumulator ────────────────────
     DiagnosticCode(

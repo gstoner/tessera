@@ -112,8 +112,7 @@ def test_normalization_vjp_package_is_constructed_by_family_plugin(
         result="out",
         kwargs={"eps": 1.0e-5},
     )
-    with pytest.raises(TesseraJitError, match="non-reexecuting frontend proof"):
-        execute_native_vjp_family(
+    result = execute_native_vjp_family(
         source=source,
         target="x86",
         ordered_inputs=(np.zeros((2, 3), np.float32), np.ones(3, np.float32)),

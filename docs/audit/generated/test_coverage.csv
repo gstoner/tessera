@@ -378,7 +378,7 @@ repeat,4,0,0,4,0,,directly_tested,4 direct test references
 reshape,14,20,1,34,0,fp32,directly_tested,34 direct test references
 retention,12,0,2,12,0,,directly_tested,12 direct test references
 rfft,24,2,2,26,0,fp32 fp64 int32 int64 int8,directly_tested,26 direct test references
-rmsnorm,121,18,7,139,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,139 direct test references
+rmsnorm,121,18,6,139,0,bf16 f16 f32 f64 fp32 int32 int8,directly_tested,139 direct test references
 rmsnorm_safe,10,5,1,15,0,bf16 f16 f32,directly_tested,15 direct test references
 rng_bernoulli,6,0,0,6,0,,directly_tested,6 direct test references
 rng_beta,3,0,0,3,0,,directly_tested,3 direct test references

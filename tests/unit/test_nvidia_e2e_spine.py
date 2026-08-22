@@ -184,6 +184,11 @@ def test_canonical_sm120_selector_defaults_to_native_descriptor(monkeypatch) -> 
     monkeypatch.setattr(
         "tessera.compiler.nvidia_native._compile_tile_ir", fake_compile
     )
+    # This unit exercises the descriptor fallback; the production scheduled
+    # route is covered separately with an explicitly rebuilt tessera-opt.
+    monkeypatch.setattr(
+        "tessera.compiler.scheduled_matmul.find_tessera_opt", lambda: None
+    )
 
     module = _matmul_module()
     assert supports_native_package(module)

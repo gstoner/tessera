@@ -523,7 +523,10 @@ def compile_graph_module(
                 )
             )
             graph_text = scheduled_depth_attention_artifact.graph_ir
-        elif scheduled_matmul.supports_scheduled_matmul(module, target=target_kind):
+        elif (
+            scheduled_matmul.find_tessera_opt() is not None
+            and scheduled_matmul.supports_scheduled_matmul(module, target=target_kind)
+        ):
             scheduled_matmul_artifact = scheduled_matmul.lower_scheduled_matmul(
                 module,
                 target=target_kind,

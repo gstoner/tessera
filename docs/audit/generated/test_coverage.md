@@ -24,7 +24,7 @@ Generated from `python/tessera/compiler/test_coverage_audit.py`.  Don't edit by 
 | `mul` |  143 |   41 |  184 |  11 | `bf16`, `f16`, `f32`, `f64` … |
 | `relu` |  132 |   37 |  169 |  11 | `bf16`, `f16`, `f32`, `f64` … |
 | `reduce` |  135 |   17 |  152 |  11 | `bf16`, `f16`, `f32`, `f64` … |
-| `rmsnorm` |  121 |   18 |  139 |   6 | `bf16`, `f16`, `f32`, `f64` … |
+| `rmsnorm` |  121 |   18 |  139 |   7 | `bf16`, `f16`, `f32`, `f64` … |
 | `silu` |   91 |    8 |   99 |   6 | `bf16`, `f16`, `f32`, `f64` … |
 | `layer_norm` |   74 |   16 |   90 |   3 | `bf16`, `f16`, `f32`, `fp16` … |
 | `cast` |   25 |   61 |   86 |   1 | `bf16`, `fp16`, `fp32`, `int8` |

@@ -8,6 +8,18 @@ last_updated: 2026-08-22
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
+runtime package hardened and exact-device validated on SuperBear.** The f16
+SM120 peer now ships both versioned fatbin and cubin images plus a generated
+package manifest. Each image embeds artifact-version, physical-ABI-version,
+and canonical-source SHA metadata; the loader verifies those device globals
+before admitting the kernel, binds the selected format into its cache key, and
+uses identical-source NVRTC for missing, corrupt, incompatible, or stale
+images. Forced fatbin, forced cubin, stale-image fallback, missing-image
+fallback, and cache-key separation pass on RTX 5070 CC 12.0. This adds only
+NVIDIA C-ABI inspection symbols; no shared IR, operation, dtype, numerical
+policy, or sibling physical package changes.
+
 Cross-backend sync `NVIDIA-FFT-WORKSPACE-1-2026-08-22` — **canonical CUDA
 FFT/workspace ABI and first C2C consumers exact-device validated on SuperBear.**
 `libtessera_nvidia_fft.so` exports the versioned
@@ -58,6 +70,9 @@ digamma primals mirror the canonical forwards bit-for-bit). Run the
 CUDA-marked autodiff/loss parity tests on NR2 Pro and record here — one
 NR2 Pro session can now close all three open keys (this one,
 AD-RETIRE-1-POINTWISE-2026-08-20, AD-RETIRE-2-2026-08-20).
+Supplemental SuperBear evidence (2026-08-22): the complete CUDA training /
+loss-autodiff package lane passed 55/55 on RTX 5070 CC 12.0. This is useful
+independent SM120 parity evidence but does not close the NR2 Pro-owned row.
 
 
 Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
@@ -67,6 +82,8 @@ change as the rocm entry. Expected parity-neutral for the same reason as
 read the same updated reference; dtype preserved); run the CUDA-marked
 autodiff/loss parity tests on NR2 Pro and record here. Note this key AND the
 still-open AD-RETIRE-1 key can be closed by one NR2 Pro session.
+The same 55/55 SuperBear supplemental run above is green; NR2 Pro confirmation
+remains required by the owning-host declaration.
 
 
 Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference
@@ -81,6 +98,8 @@ CUDA-marked autodiff/loss parity tests on NR2 Pro and record the outcome
 under this sync key. Boundary inputs below 1e-12 are outside every sampled
 parity envelope; the dtype change moves the reference TOWARD the fp32 native
 lanes, not away.
+The same 55/55 SuperBear supplemental run above is green; NR2 Pro confirmation
+remains required by the owning-host declaration.
 
 
 Cross-backend sync `APPLE-RUNTIME-SINGLE-IMAGE-2026-08-19` — **Apple runtime
@@ -1110,6 +1129,18 @@ deltas on the NR2 Pro. Until then the axis is **carried, not selected**. T1 can
 score the order symbolically, but it has not earned an sm_120 raster retain
 verdict and cannot promote a choice.
 
+**SuperBear timing packet (2026-08-22): row-major retained.** Seven repeated
+CUDA-event medians across square, rectangular, and ragged buckets swept
+row-major, column-major, grouped-M, and grouped-N at groups 2/4/8. The three
+per-shape winners disagreed and improved over row-major by only 0.81%, 1.96%,
+and 1.21%, below the recorded 3% promotion floor. The committed packet is
+[`nvidia_sm120_superbear_raster_2026_08_22.json`](../../../../benchmarks/baselines/nvidia_sm120_superbear_raster_2026_08_22.json).
+Nsight Compute 2026.2.1 reached the exact kernel but the host driver denied
+performance-counter access with `ERR_NVGPUCTRPERM`; the packet records that
+blocker and carries no fabricated L2 value. This closes SuperBear's measured
+selector decision (retain row-major) but leaves the NR2 Pro timing + L2 packet
+open under the owning-host rule.
+
 ## NVIDIA-AOT-1: decide whether NVRTC needs a precompiled peer — complete
 
 Cross-backend sync `APPLE-AOT-METALLIB-2026-07-28` — **follow-up required**.
@@ -1160,6 +1191,16 @@ fallback are numerically equivalent on ragged `17x31x9` f16 GEMM; the version
 and canonical-source SHA are queried from the shipped C ABI. This is NVIDIA
 runtime packaging only: no shared IR/ABI, selector, Apple, or ROCm contract
 changed, so sibling backend plan changes are not applicable.
+
+**Product hardening (2026-08-22).** The native package now carries both
+`tessera_nvidia_mma_f16_sm120_v1.fatbin` and `.cubin` plus a generated manifest.
+Both images embed artifact/ABI versions and the canonical-source SHA. Admission
+reads and compares those globals before resolving `gemm`; a loadable but stale
+image therefore reports `nvrtc_stale` and takes NVRTC in auto mode, while
+`require` remains fail-closed. Format and source identity are part of the
+runtime cache key. Exact SuperBear tests execute forced fatbin and cubin,
+distinguish their keys, mutate an embedded SHA in an otherwise loadable image,
+and prove the stale route numerically equals the fallback.
 
 Cross-backend sync `TESSERA-OPT-CAPABILITY-SKIP-2026-07-27` moves the last 43
 self-resolving test files onto the shared `tests/_support/compiler_tool.py`

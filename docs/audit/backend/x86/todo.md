@@ -9,6 +9,11 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
+fatbin/cubin runtime admission; x86 outcome: not applicable.** CUDA image
+metadata, driver admission, and NVRTC fallback transfer no x86 shared object,
+cache identity, physical schedule, AVX-512/AMX ABI, or exact-host evidence.
+
 Cross-backend sync `NVIDIA-FFT-WORKSPACE-1-2026-08-22` — **NVIDIA cuFFT
 foundation landed; x86 outcome: parity validated/no physical change.** The CUDA
 package's reusable-plan and explicit-workspace contract transfers no cuFFT

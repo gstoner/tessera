@@ -7,6 +7,12 @@ scope: ROCm backend implementation and exact-device proof
 
 # ROCm backend TODO
 
+Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
+fatbin/cubin runtime admission; ROCm outcome: not applicable.** The embedded
+CUDA artifact/ABI/source identity and NVRTC fallback transfer no HSACO, HIP
+loader, cache key, physical schedule, or gfx1151 evidence. ROCm packaging is
+unchanged.
+
 Cross-backend sync `NVIDIA-FFT-WORKSPACE-1-2026-08-22` — **NVIDIA cuFFT
 foundation landed; ROCm outcome: parity validated/no physical change.** The
 versioned explicit-workspace discipline matches ROCm's package ownership model,

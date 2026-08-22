@@ -8,6 +8,12 @@ last_updated: 2026-08-22
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
+fatbin/cubin runtime admission; Apple outcome: not applicable.** Embedded CUDA
+image metadata, CUDA-driver compatibility checks, NVRTC fallback, and NVIDIA
+C-ABI cache-key inspection transfer no metallib, Metal ABI, selector, or Mac
+evidence. Apple's architecture-owned AOT package remains unchanged.
+
 Cross-backend sync `NVIDIA-FFT-WORKSPACE-1-2026-08-22` — **NVIDIA-owned cuFFT
 ABI; Apple outcome: not applicable.** The reusable cuFFT plan and explicit CUDA
 device-workspace lifecycle transfer no Metal/MPSGraph code, plan, workspace, or

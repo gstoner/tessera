@@ -174,7 +174,10 @@ extern "C" __global__ void gemm(const unsigned char* A,
 
 constexpr char kSm120F16AotArtifactName[] =
     "tessera_nvidia_mma_f16_sm120_v1.cubin";
+constexpr char kSm120F16AotFatbinName[] =
+    "tessera_nvidia_mma_f16_sm120_v1.fatbin";
 constexpr int kSm120F16AotVersion = 1;
+constexpr int kSm120F16AotAbiVersion = 1;
 constexpr int kSm120F16AotMinDriver = 13000;
 
 std::once_flag g_ctx_once;
@@ -230,6 +233,7 @@ enum class AotState {
   kNvrtcDisabled,
   kNvrtcIncompatible,
   kNvrtcMissing,
+  kNvrtcStale,
   kNvrtcLoadFailed,
   kRequiredUnavailable,
 };
@@ -248,6 +252,7 @@ const char* aotStateName(AotState state) {
     case AotState::kNvrtcDisabled: return "nvrtc_disabled";
     case AotState::kNvrtcIncompatible: return "nvrtc_incompatible";
     case AotState::kNvrtcMissing: return "nvrtc_missing";
+    case AotState::kNvrtcStale: return "nvrtc_stale";
     case AotState::kNvrtcLoadFailed: return "nvrtc_load_failed";
     case AotState::kRequiredUnavailable: return "required_unavailable";
   }
@@ -268,23 +273,50 @@ bool sm120F16AotCompatible() {
   return maj == 12 && min == 0 && driver >= kSm120F16AotMinDriver;
 }
 
-std::string sm120F16AotArtifactPath() {
-  if (const char* dir = std::getenv("TESSERA_NVIDIA_AOT_ARTIFACT_DIR"))
-    return std::string(dir) + "/" + kSm120F16AotArtifactName;
+enum class AotFormat { kNone, kFatbin, kCubin };
+
+const char* aotFormatName(AotFormat format) {
+  switch (format) {
+    case AotFormat::kNone: return "none";
+    case AotFormat::kFatbin: return "fatbin";
+    case AotFormat::kCubin: return "cubin";
+  }
+  return "none";
+}
+
+std::string sm120F16AotPackageDir() {
 #if defined(__linux__) || defined(__APPLE__)
   Dl_info info{};
-  if (dladdr(reinterpret_cast<const void*>(&sm120F16AotArtifactPath), &info) &&
+  if (dladdr(reinterpret_cast<const void*>(&sm120F16AotPackageDir), &info) &&
       info.dli_fname) {
     std::string image(info.dli_fname);
     const size_t slash = image.find_last_of('/');
-    if (slash != std::string::npos)
-      return image.substr(0, slash + 1) + kSm120F16AotArtifactName;
+    if (slash != std::string::npos) return image.substr(0, slash);
   }
 #endif
-  return kSm120F16AotArtifactName;
+  return ".";
 }
 
-bool loadBinary(const std::string& path, std::vector<char>* bytes) {
+struct AotCandidate {
+  std::string path;
+  AotFormat format;
+};
+
+std::vector<AotCandidate> sm120F16AotCandidates() {
+  if (const char* exact = std::getenv("TESSERA_NVIDIA_AOT_ARTIFACT")) {
+    const std::string path(exact);
+    const bool fatbin = path.size() >= 7 &&
+                        path.compare(path.size() - 7, 7, ".fatbin") == 0;
+    return {{path, fatbin ? AotFormat::kFatbin : AotFormat::kCubin}};
+  }
+  const char* configured = std::getenv("TESSERA_NVIDIA_AOT_ARTIFACT_DIR");
+  const std::string dir = configured ? configured : sm120F16AotPackageDir();
+  return {{dir + "/" + kSm120F16AotFatbinName, AotFormat::kFatbin},
+          {dir + "/" + kSm120F16AotArtifactName, AotFormat::kCubin}};
+}
+
+bool loadBinary(const AotCandidate& candidate, std::vector<char>* bytes) {
+  const std::string& path = candidate.path;
   std::ifstream input(path, std::ios::binary | std::ios::ate);
   if (!input) return false;
   const std::streamsize size = input.tellg();
@@ -292,10 +324,50 @@ bool loadBinary(const std::string& path, std::vector<char>* bytes) {
   input.seekg(0, std::ios::beg);
   bytes->resize(static_cast<size_t>(size));
   if (!input.read(bytes->data(), size)) return false;
-  // All CUDA cubins are ELF images.  Reject accidental sidecars or corrupt
-  // payloads before passing arbitrary data to the CUDA driver.
-  return (*bytes)[0] == '\x7f' && (*bytes)[1] == 'E' &&
-         (*bytes)[2] == 'L' && (*bytes)[3] == 'F';
+  if (candidate.format == AotFormat::kCubin) {
+    // CUDA cubins are ELF images.
+    return (*bytes)[0] == '\x7f' && (*bytes)[1] == 'E' &&
+           (*bytes)[2] == 'L' && (*bytes)[3] == 'F';
+  }
+  // nvcc's raw fatbin container uses 0xba55ed50; CUDA also exposes the
+  // embedded fatBinaryHeader form (0x466243b1). Accept only those two package
+  // signatures before asking the driver to load the image.
+  const unsigned char b0 = static_cast<unsigned char>((*bytes)[0]);
+  const unsigned char b1 = static_cast<unsigned char>((*bytes)[1]);
+  const unsigned char b2 = static_cast<unsigned char>((*bytes)[2]);
+  const unsigned char b3 = static_cast<unsigned char>((*bytes)[3]);
+  return (b0 == 0x50 && b1 == 0xed && b2 == 0x55 && b3 == 0xba) ||
+         (b0 == 0xb1 && b1 == 0x43 && b2 == 0x62 && b3 == 0x46);
+}
+
+bool moduleIntEquals(CUmodule module, const char* symbol, int expected) {
+  CUdeviceptr ptr = 0;
+  size_t bytes = 0;
+  int actual = 0;
+  return cuModuleGetGlobal(&ptr, &bytes, module, symbol) == CUDA_SUCCESS &&
+         bytes == sizeof(actual) &&
+         cuMemcpyDtoH(&actual, ptr, sizeof(actual)) == CUDA_SUCCESS &&
+         actual == expected;
+}
+
+bool moduleSourceMatches(CUmodule module) {
+  CUdeviceptr ptr = 0;
+  size_t bytes = 0;
+  if (cuModuleGetGlobal(&ptr, &bytes, module, "tessera_aot_source_sha256") !=
+          CUDA_SUCCESS ||
+      bytes != std::strlen(kSm120F16AotSourceSha256) + 1)
+    return false;
+  std::vector<char> actual(bytes);
+  return cuMemcpyDtoH(actual.data(), ptr, bytes) == CUDA_SUCCESS &&
+         std::strcmp(actual.data(), kSm120F16AotSourceSha256) == 0;
+}
+
+bool moduleMetadataMatches(CUmodule module) {
+  return moduleIntEquals(module, "tessera_aot_artifact_version",
+                         kSm120F16AotVersion) &&
+         moduleIntEquals(module, "tessera_aot_abi_version",
+                         kSm120F16AotAbiVersion) &&
+         moduleSourceMatches(module);
 }
 
 // Per-dtype kernel cache.  A loaded module remains owned by the cache for the
@@ -306,6 +378,7 @@ struct Kernel {
   CUfunction fn = nullptr;
   CUmodule module = nullptr;
   AotState aot_state = AotState::kUninitialized;
+  AotFormat aot_format = AotFormat::kNone;
 };
 Kernel g_k16bf, g_k16f, g_ktf32, g_ke4, g_ke5, g_knvfp4;
 
@@ -318,23 +391,34 @@ CUfunction getF16Kernel() {
   std::call_once(g_k16f.once, [] {
     const AotMode mode = aotMode();
     if (mode != AotMode::kDisable && sm120F16AotCompatible()) {
-      std::vector<char> image;
-      if (loadBinary(sm120F16AotArtifactPath(), &image)) {
+      bool stale = false;
+      bool load_failed = false;
+      for (const AotCandidate& candidate : sm120F16AotCandidates()) {
+        std::vector<char> image;
+        if (!loadBinary(candidate, &image)) continue;
         CUmodule module = nullptr;
         CUfunction function = nullptr;
-        if (cuModuleLoadData(&module, image.data()) == CUDA_SUCCESS &&
-            cuModuleGetFunction(&function, module, "gemm") == CUDA_SUCCESS) {
-          g_k16f.module = module;
-          g_k16f.fn = function;
-          g_k16f.ok = true;
-          g_k16f.aot_state = AotState::kAot;
-          return;
+        if (cuModuleLoadData(&module, image.data()) == CUDA_SUCCESS) {
+          if (!moduleMetadataMatches(module)) {
+            stale = true;
+            cuModuleUnload(module);
+            continue;
+          }
+          if (cuModuleGetFunction(&function, module, "gemm") == CUDA_SUCCESS) {
+            g_k16f.module = module;
+            g_k16f.fn = function;
+            g_k16f.ok = true;
+            g_k16f.aot_state = AotState::kAot;
+            g_k16f.aot_format = candidate.format;
+            return;
+          }
         }
         if (module) cuModuleUnload(module);
-        g_k16f.aot_state = AotState::kNvrtcLoadFailed;
-      } else {
-        g_k16f.aot_state = AotState::kNvrtcMissing;
+        load_failed = true;
       }
+      g_k16f.aot_state = stale ? AotState::kNvrtcStale
+                               : (load_failed ? AotState::kNvrtcLoadFailed
+                                              : AotState::kNvrtcMissing);
     } else if (mode == AotMode::kDisable) {
       g_k16f.aot_state = AotState::kNvrtcDisabled;
     } else {
@@ -513,6 +597,21 @@ int tessera_nvidia_mma_gemm_f16_aot_version() {
 
 const char* tessera_nvidia_mma_gemm_f16_aot_source_sha256() {
   return kSm120F16AotSourceSha256;
+}
+
+const char* tessera_nvidia_mma_gemm_f16_aot_format() {
+  return aotFormatName(g_k16f.aot_format);
+}
+
+const char* tessera_nvidia_mma_gemm_f16_aot_cache_key() {
+  std::call_once(g_ctx_once, initCtxOnce);
+  if (g_ctx_ok) (void)getF16Kernel();
+  static const std::string key =
+      std::string("tessera_nvidia_mma_f16_sm120:v") +
+      std::to_string(kSm120F16AotVersion) + ":abi" +
+      std::to_string(kSm120F16AotAbiVersion) + ":" +
+      kSm120F16AotSourceSha256 + ":" + aotFormatName(g_k16f.aot_format);
+  return key.c_str();
 }
 
 int tessera_nvidia_device_alloc(void** out, size_t bytes) {

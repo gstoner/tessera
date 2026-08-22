@@ -61,3 +61,38 @@ def test_raster_counter_parser_requires_both_selector_metrics():
     ]
     counters = raster.parse_ncu_counters("==PROF== status\n" + header + "\n".join(rows) + "\n")
     assert counters == {"l2_sector_hit_rate_pct": 97.5, "dram_bytes": 31458288.0}
+
+
+def test_raster_sweep_expands_both_grouped_axes_and_groups():
+    path = Path(__file__).parents[2] / "benchmarks/nvidia/record_raster_packet.py"
+    spec = importlib.util.spec_from_file_location("nvidia_raster_candidates", path)
+    assert spec and spec.loader
+    raster = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(raster)
+    assert raster._candidate_pairs(raster._ORDERS, (2, 4, 8)) == [
+        ("row_major", 1), ("column_major", 1),
+        ("grouped_m", 2), ("grouped_m", 4), ("grouped_m", 8),
+        ("grouped_n", 2), ("grouped_n", 4), ("grouped_n", 8),
+    ]
+
+
+def test_raster_selector_requires_stable_timing_and_counter_evidence():
+    path = Path(__file__).parents[2] / "benchmarks/nvidia/record_raster_packet.py"
+    spec = importlib.util.spec_from_file_location("nvidia_raster_selector", path)
+    assert spec and spec.loader
+    raster = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(raster)
+    rows = []
+    for shape in ([512, 512, 512], [127, 259, 63]):
+        rows.extend([
+            {"shape": shape, "raster_order": "row_major", "raster_group": 1,
+             "device_median_ms": 1.0},
+            {"shape": shape, "raster_order": "grouped_n", "raster_group": 4,
+             "device_median_ms": .9},
+        ])
+    assert raster._selector_decision(rows)["selected"] == "row_major:1"
+    for row in rows:
+        row["ncu"] = {"l2_sector_hit_rate_pct": 90.0, "dram_bytes": 1024.0}
+    decision = raster._selector_decision(rows)
+    assert decision["selected"] == "grouped_n:4"
+    assert decision["changed"] is True

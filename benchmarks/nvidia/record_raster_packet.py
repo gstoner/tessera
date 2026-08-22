@@ -16,6 +16,7 @@ import subprocess
 import time
 from pathlib import Path
 import sys
+from typing import Any
 
 import numpy as np
 
@@ -26,7 +27,15 @@ _NCU_METRICS = (
     "lts__t_sector_hit_rate.pct",
     "dram__bytes.sum",
 )
-_VARIANTS = {"row_major": 1, "grouped_m": 4}
+_ORDERS = ("row_major", "column_major", "grouped_m", "grouped_n")
+_GROUPED_ORDERS = {"grouped_m", "grouped_n"}
+
+
+def _candidate_pairs(orders: list[str] | tuple[str, ...],
+                     groups: list[int] | tuple[int, ...]) -> list[tuple[str, int]]:
+    return [(order, group)
+            for order in orders
+            for group in (groups if order in _GROUPED_ORDERS else (1,))]
 
 
 def _shape(text: str) -> tuple[int, int, int]:
@@ -100,30 +109,67 @@ def _ncu_report_counters(report: Path, *, ncu_bin: str) -> dict[str, float]:
     return parse_ncu_counters(completed.stdout)
 
 
-def _ncu_report_spec(text: str) -> tuple[tuple[int, int, int], str, Path]:
-    """Parse ``MxNxK/variant=/path/to/report.ncu-rep`` exactly once."""
+def _ncu_report_spec(text: str) -> tuple[tuple[int, int, int], str, int, Path]:
+    """Parse ``MxNxK/order/group=/path/to/report.ncu-rep`` exactly once."""
     try:
         key, raw_path = text.split("=", 1)
-        raw_shape, variant = key.split("/", 1)
-        if variant not in _VARIANTS:
-            raise ValueError(f"unknown variant {variant!r}")
-        return _shape(raw_shape), variant, Path(raw_path)
+        raw_shape, order, raw_group = key.split("/", 2)
+        group = int(raw_group)
+        if order not in _ORDERS or group < 1:
+            raise ValueError(f"unknown raster candidate {order!r}/{group}")
+        if order not in _GROUPED_ORDERS and group != 1:
+            raise ValueError(f"{order} requires group 1")
+        return _shape(raw_shape), order, group, Path(raw_path)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(
-            "NCU reports must be MxNxK/row_major|grouped_m=/path/report.ncu-rep") from exc
+            "NCU reports must be MxNxK/order/group=/path/report.ncu-rep") from exc
+
+
+def _selector_decision(rows: list[dict[str, Any]]) -> dict[str, object]:
+    """Make a conservative measured decision; absent counter proof retains row-major."""
+    by_shape: dict[tuple[int, int, int], list[dict[str, Any]]] = {}
+    for row in rows:
+        by_shape.setdefault(tuple(row["shape"]), []).append(row)
+    winners: list[str] = []
+    improvements: list[float] = []
+    for shape_rows in by_shape.values():
+        incumbent = next(row for row in shape_rows
+                         if row["raster_order"] == "row_major")
+        winner = min(shape_rows, key=lambda row: float(row["device_median_ms"]))
+        winners.append(f"{winner['raster_order']}:{winner['raster_group']}")
+        improvements.append(
+            (float(incumbent["device_median_ms"]) - float(winner["device_median_ms"]))
+            / float(incumbent["device_median_ms"]))
+    consensus = winners[0] if winners and len(set(winners)) == 1 else None
+    counter_rows = [row for row in rows if "ncu" in row]
+    promote = bool(consensus and not consensus.startswith("row_major:") and
+                   min(improvements) >= .03 and counter_rows)
+    return {
+        "selected": consensus if promote else "row_major:1",
+        "changed": promote,
+        "reason": ("stable >=3% device-event winner with attached NCU evidence"
+                   if promote else
+                   "retain row-major: no stable >=3% all-shape winner with NCU evidence"),
+        "per_shape_winners": winners,
+        "per_shape_improvement_vs_row_major": improvements,
+        "ncu_rows": len(counter_rows),
+    }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--shapes", nargs="+", type=_shape,
                         default=((512, 512, 512), (128, 256, 64), (127, 259, 63)))
-    parser.add_argument("--variants", nargs="+", choices=tuple(_VARIANTS),
-                        default=tuple(_VARIANTS))
-    parser.add_argument("--runs", type=int, default=2)
+    parser.add_argument("--variants", nargs="+", choices=_ORDERS,
+                        default=_ORDERS)
+    parser.add_argument("--groups", nargs="+", type=int, default=(2, 4, 8))
+    parser.add_argument("--runs", type=int, default=7)
     parser.add_argument("--reps", type=int, default=200)
     parser.add_argument("--warmup", type=int, default=20)
     parser.add_argument("--ncu-report", action="append", type=_ncu_report_spec,
-                        help="attach completed MxNxK/variant=report.ncu-rep evidence")
+                        help="attach completed MxNxK/order/group=report.ncu-rep evidence")
+    parser.add_argument("--ncu-unavailable-reason",
+                        help="record why exact counter evidence could not be collected")
     parser.add_argument("--ncu-bin", default="/usr/local/cuda/bin/ncu")
     parser.add_argument("--profile-only", action="store_true",
                         help=argparse.SUPPRESS)
@@ -133,13 +179,16 @@ def main() -> int:
         parser.error("--output is required unless --profile-only is set")
     if not args.profile_only and (args.runs < 2 or args.reps < 1 or args.warmup < 0):
         raise ValueError("requires at least two runs, positive reps, and nonnegative warmup")
-    if args.profile_only and (len(args.shapes) != 1 or len(args.variants) != 1):
-        raise ValueError("--profile-only requires exactly one shape and one variant")
-    reports: dict[tuple[tuple[int, int, int], str], Path] = {}
-    for shape, variant, report in args.ncu_report or ():
-        key = (shape, variant)
+    if min(args.groups) < 1:
+        raise ValueError("raster groups must be positive")
+    candidates = _candidate_pairs(args.variants, args.groups)
+    if args.profile_only and (len(args.shapes) != 1 or len(candidates) != 1):
+        raise ValueError("--profile-only requires exactly one shape/order/group candidate")
+    reports: dict[tuple[tuple[int, int, int], str, int], Path] = {}
+    for shape, order, group, report in args.ncu_report or ():
+        key = (shape, order, group)
         if key in reports:
-            raise ValueError(f"duplicate NCU report for {shape}/{variant}")
+            raise ValueError(f"duplicate NCU report for {shape}/{order}/{group}")
         if not report.is_file():
             raise ValueError(f"NCU report does not exist: {report}")
         reports[key] = report
@@ -147,7 +196,7 @@ def main() -> int:
     from tessera.compiler.emit.nvidia_cuda import _mma_fused_device_fn, _mma_fused_fn, _ptr
 
     rng = np.random.default_rng(20260730)
-    rows: list[dict[str, object]] = []
+    rows: list[dict[str, Any]] = []
     for m, n, k in args.shapes:
         a = np.ascontiguousarray((rng.normal(size=(m, k)) * .1).astype(np.float16))
         b = np.ascontiguousarray((rng.normal(size=(k, n)) * .1).astype(np.float16))
@@ -157,8 +206,7 @@ def main() -> int:
             # array lifetime is intentionally not part of this recorder's contract.
             expected = (np.asarray(a, np.float32) @ np.asarray(b, np.float32)).copy()
             expected.setflags(write=False)
-        for order in args.variants:
-            group = _VARIANTS[order]
+        for order, group in candidates:
             out = np.empty((m, n), np.float32)
             run = _mma_fused_fn(False, None, "f16", raster_order=order, raster_group=group)
             if run(_ptr(a), _ptr(b), None, _ptr(out), m, n, k) != 1:
@@ -188,13 +236,13 @@ def main() -> int:
                 if run(_ptr(a), _ptr(b), None, _ptr(out), m, n, k) != 1:
                     raise RuntimeError(f"{order}/{group} end-to-end execution failed")
                 e2e_ms.append((time.perf_counter_ns() - start) / 1e6)
-            row: dict[str, object] = {"shape": [m, n, k], "raster_order": order,
+            row: dict[str, Any] = {"shape": [m, n, k], "raster_order": order,
                 "raster_group": group, "device_ms": device_ms,
                 "device_median_ms": statistics.median(device_ms),
                 "end_to_end_ms": e2e_ms,
                 "end_to_end_median_ms": statistics.median(e2e_ms),
                 "correctness": "matches_f32_oracle", "max_abs_error": max_error}
-            report = reports.get(((m, n, k), order))
+            report = reports.get(((m, n, k), order, group))
             if report is not None:
                 row["ncu"] = _ncu_report_counters(report, ncu_bin=args.ncu_bin)
                 row["ncu_report"] = report.name
@@ -202,10 +250,15 @@ def main() -> int:
     if args.profile_only:
         return 0
     assert args.output is not None
-    args.output.write_text(json.dumps({"schema": "tessera.nvidia.raster.v2",
-        "device": "nvidia:sm_120", "runs": args.runs, "reps": args.reps,
+    device = subprocess.run([
+        "nvidia-smi", "--query-gpu=name,uuid,compute_cap,driver_version",
+        "--format=csv,noheader"], check=True, capture_output=True, text=True).stdout.strip()
+    args.output.write_text(json.dumps({"schema": "tessera.nvidia.raster.v3",
+        "device": device, "runs": args.runs, "reps": args.reps,
         "warmup": args.warmup, "ncu_kernel_only": bool(reports),
-        "ncu_metrics": list(_NCU_METRICS) if reports else [], "rows": rows}, indent=2) + "\n")
+        "ncu_metrics": list(_NCU_METRICS) if reports else [],
+        "ncu_unavailable_reason": args.ncu_unavailable_reason,
+        "selector_decision": _selector_decision(rows), "rows": rows}, indent=2) + "\n")
     return 0
 
 

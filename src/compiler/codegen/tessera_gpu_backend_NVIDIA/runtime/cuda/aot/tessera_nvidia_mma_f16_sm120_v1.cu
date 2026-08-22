@@ -3,6 +3,28 @@
 // CMake compiles this exact file to the adjacent versioned cubin and embeds the
 // same text in libtessera_nvidia_gemm.so for its NVRTC fallback.  Keep the
 // entry name and physical ABI in lockstep with tessera_nvidia_mma_gemm_f16.
+#ifndef TESSERA_AOT_ARTIFACT_VERSION
+#define TESSERA_AOT_ARTIFACT_VERSION 0
+#endif
+#ifndef TESSERA_AOT_ABI_VERSION
+#define TESSERA_AOT_ABI_VERSION 0
+#endif
+#ifndef TESSERA_AOT_SOURCE_SHA256
+#define TESSERA_AOT_SOURCE_SHA256 "unbound"
+#endif
+
+// Package metadata is part of the device image rather than a sidecar-only
+// promise.  The runtime reads these globals before accepting a cubin/fatbin,
+// so a loadable artifact built from an older canonical source fails closed and
+// takes the identical-source NVRTC path.
+extern "C" {
+__device__ __constant__ int tessera_aot_artifact_version =
+    TESSERA_AOT_ARTIFACT_VERSION;
+__device__ __constant__ int tessera_aot_abi_version = TESSERA_AOT_ABI_VERSION;
+__device__ __constant__ char tessera_aot_source_sha256[] =
+    TESSERA_AOT_SOURCE_SHA256;
+}
+
 extern "C" __global__ void gemm(const unsigned short* A, const unsigned short* B,
                                  float* D, int M, int N, int K) {
   int mt=blockIdx.x*16, nt=blockIdx.y*8, lane=threadIdx.x, gid=lane>>2, tig=lane&3;

@@ -95,7 +95,9 @@ class NativeSpectralVJPPackage:
             "compiler_path": path,
             "executable": True,
             "execution_kind": "native_cpu" if self.target == "x86" else "native_gpu",
-            "execution_mode": "cpu_avx512" if self.target == "x86" else "hip_runtime",
+            "execution_mode": ("cpu_avx512" if self.target == "x86" else
+                               "cuda_runtime" if self.target == "nvidia_sm120" else
+                               "hip_runtime"),
             "arg_names": ["dy", *self.input_names],
             "output_names": list(self.output_names),
             "native_spectral_vjp": self.contract(),
@@ -146,7 +148,7 @@ def build_native_spectral_vjp_package(
     bare = source.op_name.removeprefix("tessera.")
     if bare not in {"spectral_filter", "spectral_conv"}:
         raise ValueError(f"unsupported compound spectral VJP {bare!r}")
-    if target not in {"x86", "rocm"}:
+    if target not in {"x86", "rocm", "nvidia_sm120"}:
         raise ValueError(f"native compound spectral VJP has no {target!r} package")
     if len(ordered_inputs) != 2 or len(arg_names) != 2:
         raise ValueError("compound spectral VJP requires exactly two forward operands")
@@ -184,7 +186,8 @@ def build_native_spectral_vjp_package(
         layout = "half_spectrum_nyquist_explicit"
     input_types = tuple(_tensor_type(value) for value in (dy, *arrays))
     output_types = tuple(_tensor_type(value) for value in arrays)
-    arch = "zen5-avx512" if target == "x86" else "gfx1151"
+    arch = ("zen5-avx512" if target == "x86" else
+            "sm120" if target == "nvidia_sm120" else "gfx1151")
     kind = f"tessera.{bare}"
     source_digest = hashlib.sha256(source_graph_ir.encode()).hexdigest()
     schedule_hash = _spectral_schedule_hash(
@@ -422,10 +425,38 @@ def execute_rocm_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequence
     return tuple(outputs)
 
 
+def execute_nvidia_native_spectral_vjp(metadata: Mapping[str, Any], args: Sequence[Any]):
+    """Analytic reverse products whose convolution transforms execute via cuFFT."""
+    import numpy as np
+    from tessera import runtime
+
+    contract = metadata.get("native_spectral_vjp")
+    if not isinstance(contract, Mapping):
+        raise ValueError("NVIDIA spectral VJP executor requires a package contract")
+    validate_native_spectral_vjp_contract(contract)
+    dy, x, parameter = (np.ascontiguousarray(np.asarray(value)) for value in args)
+    if contract["kind"] == "tessera.spectral_filter":
+        return ((dy * np.conj(parameter)).astype(np.complex64),
+                (dy * np.conj(x)).astype(np.complex64))
+
+    def convolution(lhs: Any, rhs: Any) -> Any:
+        return runtime._spectral_composite(
+            "tessera.spectral_conv", [lhs, rhs], {}, runtime._nvidia_fftexec, np
+        )
+
+    x_length, parameter_length = int(x.shape[-1]), int(parameter.shape[-1])
+    dx_full = convolution(dy.astype(np.float32), np.flip(parameter, axis=-1).copy())
+    dp_full = convolution(dy.astype(np.float32), np.flip(x, axis=-1).copy())
+    dx = dx_full[..., parameter_length - 1:parameter_length - 1 + x_length]
+    dp = dp_full[..., x_length - 1:x_length - 1 + parameter_length]
+    return dx.astype(np.float32), dp.astype(np.float32)
+
+
 __all__ = [
     "NativeSpectralVJPPackage",
     "build_native_spectral_vjp_package",
     "compile_rocm_native_spectral_vjp",
+    "execute_nvidia_native_spectral_vjp",
     "execute_rocm_native_spectral_vjp",
     "execute_x86_native_spectral_vjp",
     "validate_native_spectral_vjp_contract",

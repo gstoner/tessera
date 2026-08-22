@@ -265,6 +265,7 @@ def _tessera_opt_candidates() -> tuple[Path, ...]:
             "build-llvm23/tools/tessera-opt/tessera-opt",
             "build/tools/tessera-opt/tessera-opt",
             "build-nvidia/tools/tessera-opt/tessera-opt",
+            "build-nvidia-cuda/tools/tessera-opt/tessera-opt",
         )
     )
     return tuple(dict.fromkeys(candidates))

@@ -120,6 +120,23 @@ static Value createLogicalRole(OpBuilder &b, Location loc, StringRef name,
   return b.create(state)->getResult(0);
 }
 
+static Value createBarrierAtBirth(OpBuilder &b, Location loc,
+                                  StringRef pipelineId) {
+  std::string producerRoleName = (pipelineId + ".producer").str();
+  std::string consumerRoleName = (pipelineId + ".consumer").str();
+  Value producerRole = createLogicalRole(
+      b, loc, producerRoleName, "producer", {StringRef("async_copy")});
+  Value consumerRole = createLogicalRole(
+      b, loc, consumerRoleName, "consumer", {StringRef("mma")});
+  OperationState barrierSt(loc, tile::MBarrierInitOp::getOperationName());
+  barrierSt.addOperands({producerRole, consumerRole});
+  barrierSt.addAttribute("slots", b.getI64IntegerAttr(1));
+  barrierSt.addAttribute("phase_bits", b.getI64IntegerAttr(2));
+  barrierSt.addAttribute("tile.pipeline", b.getStringAttr(pipelineId));
+  barrierSt.addTypes(tile::MBarrierType::get(b.getContext()));
+  return b.create(barrierSt)->getResult(0);
+}
+
 static Value createPipelineState(OpBuilder &b, Location loc, Value logicalRole,
                                  StringRef role, int64_t phase) {
   OperationState state(loc, "tile.pipeline_init");
@@ -254,8 +271,12 @@ struct WarpSpecializationPass
         if (loop->hasAttr("tessera.streaming_attention"))
           hasStreamingAttention = true;
       });
-      if (hasStreamingAttention)
+      if (hasStreamingAttention) {
+        b.setInsertionPointToStart(&entryBlock);
+        std::string pipelineId = ("warpspec." + Twine(regionIndex++)).str();
+        createBarrierAtBirth(b, loc, pipelineId);
         continue;
+      }
 
       SmallVector<Operation *> producerOps, consumerOps, otherOps;
       for (Operation &op : entryBlock) {
@@ -268,8 +289,21 @@ struct WarpSpecializationPass
         else
           otherOps.push_back(&op);
       }
-      if (producerOps.empty() || consumerOps.empty())
+      if (producerOps.empty() || consumerOps.empty()) {
+        bool hasAsyncProducer = false;
+        regionOp->walk([&](Operation *op) {
+          StringRef name = op->getName().getStringRef();
+          hasAsyncProducer |= name == "tile.async_copy" ||
+                              name == "tile.tma.copy_async";
+        });
+        if (hasAsyncProducer) {
+          b.setInsertionPointToStart(&entryBlock);
+          std::string pipelineId =
+              ("warpspec." + Twine(regionIndex++)).str();
+          createBarrierAtBirth(b, loc, pipelineId);
+        }
         continue;
+      }
 
       // One pipeline id per specialized region, shared by its producer +
       // consumer so C3 pairs them.
@@ -348,14 +382,10 @@ struct WarpSpecializationPass
 
       // ── Producer warp region (yields prodCross) ───────────────────────────
       b.setInsertionPointToStart(&entryBlock);
-      std::string producerRoleName = pipelineId + ".producer";
-      std::string consumerRoleName = pipelineId + ".consumer";
-      Value producerRole = createLogicalRole(
-          b, loc, producerRoleName, "producer",
-          {StringRef("async_copy")});
-      Value consumerRole = createLogicalRole(
-          b, loc, consumerRoleName, "consumer",
-          {StringRef("mma")});
+      Value barrier = createBarrierAtBirth(b, loc, pipelineId);
+      auto barrierInit = barrier.getDefiningOp<tile::MBarrierInitOp>();
+      Value producerRole = barrierInit.getRoles()[0];
+      Value consumerRole = barrierInit.getRoles()[1];
       OperationState prodSt(loc, "schedule.warp");
       prodSt.addAttribute("role", b.getStringAttr("producer"));
       prodSt.addRegion();
@@ -474,13 +504,36 @@ struct WarpSpecializationPass
       if (Operation *term = entryBlock.getTerminator()) {
         b.setInsertionPoint(term);
         b.create(OperationState(loc, "tile.cta_sync"));
-        for (Value buffer : regionBuffers) {
+      for (Value buffer : regionBuffers) {
           OperationState freeSt(loc, tile::DeallocOp::getOperationName());
           freeSt.addOperands(buffer);
           b.create(freeSt);
         }
       }
     }
+
+    // Some canonical Graph→Tile paths intentionally flatten a single-device
+    // mesh region before this pass. Give that typed producer path the same
+    // role/barrier birth contract at function entry.
+    mod.walk([&](func::FuncOp func) {
+      if (func.isExternal() || func.getBody().empty())
+        return;
+      Block &entry = func.getBody().front();
+      bool hasFlatProducer = false;
+      bool hasFlatConsumer = false;
+      bool hasBornBarrier = false;
+      for (Operation &op : entry) {
+        hasFlatProducer |= op.getName().getStringRef() == "tile.async_copy";
+        hasFlatConsumer |= op.getName().getStringRef() == "tile.mma";
+        if (auto init = dyn_cast<tile::MBarrierInitOp>(&op))
+          hasBornBarrier |= !init.getRoles().empty();
+      }
+      if (!hasFlatProducer || !hasFlatConsumer || hasBornBarrier)
+        return;
+      b.setInsertionPointToStart(&entry);
+      std::string pipelineId = ("warpspec." + Twine(regionIndex++)).str();
+      createBarrierAtBirth(b, func.getLoc(), pipelineId);
+    });
   }
 };
 

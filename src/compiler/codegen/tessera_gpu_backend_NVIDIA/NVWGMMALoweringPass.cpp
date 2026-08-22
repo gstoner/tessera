@@ -75,8 +75,11 @@ struct LowerTileMMA : public RewritePattern {
     if (op->getNumOperands() < 2)
       return failure();
 
-    Value A = op->getOperand(0);
-    Value B = op->getOperand(1);
+    SmallVector<Value> data = tessera::tile::dataOperands(op);
+    if (data.size() < 2 || data.size() > 3)
+      return failure();
+    Value A = data[0];
+    ValueRange callOperands(data);
     Location loc = op->getLoc();
     Type resType = op->getResults().empty() ? A.getType()
                                              : op->getResult(0).getType();
@@ -101,9 +104,9 @@ struct LowerTileMMA : public RewritePattern {
       }
 
       auto module = op->getParentOfType<ModuleOp>();
-      auto fn = getOrDeclareBackendCall(module, callee, resType, ValueRange{A, B},
+      auto fn = getOrDeclareBackendCall(module, callee, resType, callOperands,
                                         rewriter);
-      auto call = rewriter.create<func::CallOp>(loc, fn, ValueRange{A, B});
+      auto call = rewriter.create<func::CallOp>(loc, fn, callOperands);
       call->setAttr("tessera.nvidia.shape", rewriter.getStringAttr("m64n64k16"));
       call->setAttr("tessera.nvidia.dtype_ab", rewriter.getStringAttr(dtypeAB));
       call->setAttr("tessera.nvidia.dtype_c", rewriter.getStringAttr("f32"));
@@ -112,8 +115,8 @@ struct LowerTileMMA : public RewritePattern {
       // ── WMMA fallback (SM 70–89) ─────────────────────────────────────────
       auto module = op->getParentOfType<ModuleOp>();
       auto fn = getOrDeclareBackendCall(module, "tessera_nvidia_wmma_mma_sync_bf16_m16n16k16",
-                                        resType, ValueRange{A, B}, rewriter);
-      auto call = rewriter.create<func::CallOp>(loc, fn, ValueRange{A, B});
+                                        resType, callOperands, rewriter);
+      auto call = rewriter.create<func::CallOp>(loc, fn, callOperands);
       call->setAttr("tessera.nvidia.shape", rewriter.getStringAttr("m16n16k16"));
       call->setAttr("tessera.nvidia.dtype_ab", rewriter.getStringAttr("bf16"));
       rewriter.replaceOp(op, call.getResults());
@@ -153,18 +156,13 @@ struct NVWGMMALoweringPass
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
 
-    // Decision #21 — refuse an mma this pass would silently mis-compile.
+    // Decision #21 — refuse an mma this compatibility pass cannot represent.
     //
-    // The WGMMA path below builds `ValueRange{A, B}`. It NEVER passes a third
-    // (accumulator) operand, hardcodes `m64n64k16` regardless of the real
-    // instruction shape, and infers the dtype through `dyn_cast<ShapedType>`,
-    // which a `!tile.fragment` is not -- so it silently defaults to bf16.
-    //
-    // For a two-operand `tile.mma` that is correct, and is what every existing
-    // fixture emits (`nvwgmma_lowering.mlir` checks exactly that call). For an
-    // mma that HAS an accumulator, the accumulator was discarded: a K-loop
-    // recomputed A x B from nothing each step and the GEMM returned the last
-    // partial product -- rc=0, no diagnostic, a wrong number.
+    // A/B/C are now threaded through the opaque backend-call boundary. More
+    // than three data operands belongs to an architecture-specific extended
+    // MMA contract (for example block scales), which this legacy pass cannot
+    // encode. Control tokens are filtered by dataOperands and remain owned by
+    // the synchronization pipeline.
     //
     // Measured on merged main, this is NOT specific to the typed fragment form:
     // a legacy bare `tile.mma(A, B, C)` -- precisely what
@@ -188,14 +186,12 @@ struct NVWGMMALoweringPass
     getOperation()->walk([&](Operation *op) {
       if (op->getName().getStringRef() != "tile.mma")
         return;
-      if (tessera::tile::dataOperands(op).size() <= 2)
+      if (tessera::tile::dataOperands(op).size() <= 3)
         return;
       op->emitError(
-          "NVWGMMA_ACCUMULATOR_DROPPED: this pass lowers tile.mma to a "
-          "two-operand WGMMA call and cannot carry an accumulator, so it would "
-          "discard one that is present. Refusing rather than emitting a kernel "
-          "that silently returns a partial product (W1.1 step 2b threads the "
-          "accumulator).");
+          "NVWGMMA_ACCUMULATOR_DROPPED: this legacy pass supports A/B and an "
+          "optional accumulator, but cannot represent additional data "
+          "operands. Refusing instead of dropping an extended MMA operand.");
       refused = true;
     });
     if (refused)

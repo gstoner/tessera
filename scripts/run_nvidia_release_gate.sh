@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NVIDIA-TEST-7: local exact-device proof gate for the RTX 5070 Ti (sm_120).
+# NVIDIA-TEST-7: local exact-device proof gate for an exact SM120 CUDA host.
 #
 # Keeps CPU, compiler-artifact, device-correctness, and serial-performance
 # evidence separate. Reports are retained locally; this project intentionally
@@ -114,16 +114,20 @@ fi
 {
   nvidia-smi --query-gpu=name,uuid,compute_cap,driver_version,memory.total,clocks.current.graphics,clocks.current.memory,pstate,power.draw,power.limit --format=csv,noheader
   nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader
+  lscpu
+  free -h
   "$CUDA_BIN/nvcc" --version
   "$CUDA_BIN/ptxas" --version
   "$PYTHON" --version
   git rev-parse HEAD
 } >"$REPORT_DIR/machine-identity.txt"
+GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n 1)"
+GPU_CC="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -n 1)"
 cat >"$REPORT_DIR/README.md" <<EOF
 # NVIDIA exact-device proof bundle
 
 Commit: $(git rev-parse HEAD)
-Target: RTX 5070 Ti / sm_120
+Target: $GPU_NAME / compute capability $GPU_CC / sm_120a
 Layer: $LAYER
 
 This directory is one local WSL exact-device proof bundle. Attach or summarize
@@ -145,7 +149,8 @@ if [ "$LAYER" != cpu ]; then
     -DMLIR_DIR="$MLIR_DIR" \
     -DLLVM_EXTERNAL_LIT="$LLVM_LIT"
   PATH="$CUDA_BIN:$PATH" ninja -C "$BUILD_DIR" tessera-opt tessera-nvidia-opt \
-    tessera_nvidia_gemm tessera_runtime check-tessera-nvidia
+    tessera_nvidia_gemm tessera_nvidia_ptx_launch tessera_runtime \
+    check-tessera-nvidia
 fi
 
 export PATH="$CUDA_BIN:$PATH"

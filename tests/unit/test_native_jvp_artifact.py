@@ -81,7 +81,7 @@ def test_family_plugins_declare_the_complete_compiler_spine():
             assert declaration.migration_state == "compatibility"
             assert declaration.schedule_consumer is None
             assert declaration.tile_consumer is None
-        assert set(declaration.target_consumers) == {"x86", "rocm"}
+        assert {"x86", "rocm"}.issubset(declaration.target_consumers)
 
 
 def test_graph_float_attributes_use_mlir_scientific_syntax():
@@ -166,6 +166,7 @@ def test_native_jvp_families_have_one_explicit_plugin_owner():
     assert owners["dct"] == "_plan_dct"
     assert owners["spectral_conv"] == "_plan_compound_spectral"
     assert owners["layer_norm"] == "_plan_normalization"
+    assert owners["dropout"] == "_plan_philox_dropout"
     assert len(owners) == len(set(owners))
 
 

@@ -23,7 +23,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Graph IR registration` | closed | 349 | 349 | 0 | not_applicable=32, registered=317 | Keep this layer drift-gated through support_table.csv. |
 | `Schedule IR` | closed | 349 | 349 | 0 | complete=347, not_applicable=2 | Keep this layer drift-gated through support_table.csv. |
 | `Tile IR` | mixed | 333 | 349 | 16 | complete=4, fused=296, no_kernel_required=7, not_applicable=26, partial=16 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
-| `Target IR native/fused codegen` | mixed | 329 | 349 | 20 | device_verified_abi=13, device_verified_jit=210, fused=72, no_kernel_required=8, not_applicable=26, reference=20 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
+| `Target IR native/fused codegen` | mixed | 329 | 349 | 20 | device_verified_abi=27, device_verified_jit=196, fused=72, no_kernel_required=8, not_applicable=26, reference=20 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
 | `Runtime dispatch readiness` | closed | 349 | 349 | 0 | fused=6, ready=343 | Keep this layer drift-gated through support_table.csv. |
 | `Benchmark evidence` | mixed | 99 | 349 | 250 | benchmarked=99, none=250 | Attach benchmarks to native/hardware-promoted rows first. |
 
@@ -43,8 +43,8 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 |---|---|---:|---:|---:|---|---|
 | `Verifier coverage` | closed | 236 | 236 | 0 | real=236 | No action unless this row reopens. |
 | `Direct test evidence` | mixed | 401 | 515 | 114 | covered_by_family=26, directly_tested=408, hardware_gated=4, structural_only=77 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
-| `Runtime execution matrix` | closed | 242 | 242 | 0 | apple_cpu=2, apple_gpu=24, cpu=5, nvidia_sm120=32, rocm=92, x86=87 | Add rows only when a launch path actually executes. |
-| `Runtime ABI symbols` | mixed | 536 | 850 | 314 | apple=689, nvidia=7, rocm=13, x86=141 | Reduce stub-only ABI rows where a backend claims native execution. |
+| `Runtime execution matrix` | closed | 247 | 247 | 0 | apple_cpu=2, apple_gpu=24, cpu=5, nvidia_sm120=37, rocm=92, x86=87 | Add rows only when a launch path actually executes. |
+| `Runtime ABI symbols` | mixed | 537 | 851 | 314 | apple=689, nvidia=8, rocm=13, x86=141 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 31 | 58 | 27 | archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
 ## Code Generation Pathways
@@ -59,7 +59,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `NVIDIA SM80` | open | 0 | 72 | 72 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=72, other=0, missing_target_row=443; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
 | `NVIDIA SM90` | open | 0 | 104 | 104 | manifest: exact_verified=0, implementation_present=0, reference=2, artifact_or_planned=102, other=0, missing_target_row=411; runtime_paths: executable=0/0 (no runtime rows) | Keep compile/artifact evidence separate from SM120 exact-device execution. |
 | `NVIDIA SM100` | open | 0 | 72 | 72 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=72, other=0, missing_target_row=443; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
-| `NVIDIA SM120` | mixed | 31 | 96 | 65 | manifest: exact_verified=31, implementation_present=0, reference=0, artifact_or_planned=65, other=0, missing_target_row=419; runtime_paths: executable=32/32 (nvidia_sm120=32) | Promote artifact rows with SM120 execute-and-compare evidence. |
+| `NVIDIA SM120` | mixed | 40 | 105 | 65 | manifest: exact_verified=40, implementation_present=0, reference=0, artifact_or_planned=65, other=0, missing_target_row=410; runtime_paths: executable=37/37 (nvidia_sm120=37) | Promote artifact rows with SM120 execute-and-compare evidence. |
 
 ## Open Work Summary
 
@@ -69,7 +69,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Direct test evidence` | mixed | 114 | covered_by_family=26, directly_tested=408, hardware_gated=4, structural_only=77 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. | `docs/audit/generated/test_coverage.csv` |
 | `CUDA target-map native promotion` | open | 41 | artifact_only=41 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/nvidia_sm90_target_map.csv` |
 | `Audited repo surfaces` | mixed | 27 | archived=4, compile_only=12, runnable=31, runnable_optional=1, scaffold=10 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
-| `Target IR native/fused codegen` | mixed | 20 | device_verified_abi=13, device_verified_jit=210, fused=72, no_kernel_required=8, not_applicable=26, reference=20 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
+| `Target IR native/fused codegen` | mixed | 20 | device_verified_abi=27, device_verified_jit=196, fused=72, no_kernel_required=8, not_applicable=26, reference=20 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
 | `ROCm target-map native promotion` | mixed | 11 | artifact_only=11, device_verified_abi=2, device_verified_jit=34 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
 
 ## Dashboard Map

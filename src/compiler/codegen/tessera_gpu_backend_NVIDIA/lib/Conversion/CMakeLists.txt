@@ -1,6 +1,7 @@
 add_mlir_library(TesseraNVIDIAConversion
   NVIDIALowering.cpp
   NVIDIADynamicShared.cpp
+  GenerateNVIDIAPhiloxKernel.cpp
 
   LINK_LIBS PUBLIC
     TesseraIR
@@ -13,6 +14,7 @@ add_mlir_library(TesseraNVIDIAConversion
     MLIRIR
     MLIRLLVMDialect
     MLIRMathDialect
+    MLIRMemRefDialect
     MLIRNVVMDialect
     MLIRPass
     MLIRSCFDialect

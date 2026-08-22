@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-08-21
+last_updated: 2026-08-22
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,19 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 ---
 
 # x86 backend TODO
+
+Cross-backend sync `NVIDIA-FFT-WORKSPACE-1-2026-08-22` — **NVIDIA cuFFT
+foundation landed; x86 outcome: parity validated/no physical change.** The CUDA
+package's reusable-plan and explicit-workspace contract transfers no cuFFT
+handle, device workspace, schedule, or RTX evidence to AVX-512. x86 retains its
+architecture-owned FFT package and bounded digest-keyed workspace.
+
+Cross-backend sync `NVIDIA-RNG-PHILOX-CORE-2026-08-21` — **NVIDIA parity
+exact-device validated; x86 outcome: parity validated/no physical change.** The CUDA backend's
+new typed four-mode directive consumes the shared explicit Philox4x32-10
+key/counter identity. x86 retains its architecture-owned distribution package,
+runtime ABI, and exact-host evidence; no AVX-512 image, schedule, or evidence
+transfers to sm_120.
 
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
 `tessera_jit` pipeline change; x86 outcome: parity validated (AVX-512
@@ -1877,3 +1890,23 @@ backend.
 explicitly (`tessera_x86.abi_call`, Decision #19), which makes it the natural
 place to prototype how a LAPACK-backed matrix-function lane should be
 represented in Target IR without hiding the delegation.
+
+## Cross-backend sync `NVIDIA-BARRIER-AT-BIRTH-2026-08-21`
+
+**Not applicable to x86 physical lowering.** The shared role-bearing Tile
+contract remains compatible, while barrier binding and local TMA slots are
+CUDA-owned. No CPU schedule, runtime ABI, or x86 evidence state changes.
+
+## Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-21`
+
+**NVIDIA-only conformance closure.** NVIDIA's Target-value restriction and
+registered-dialect test leave the x86 ABI/call vocabulary and AVX-512 evidence
+unchanged.
+
+
+## Cross-backend sync `NVIDIA-SPECTRAL-PHILOX-JVP-2026-08-22`
+
+**Outcome: parity already validated; no x86 physical change.** NVIDIA joined the
+existing shared spectral and native-product contracts with CUDA-owned cuFFT and
+Philox consumers. x86 retains its AVX-512 spectral/Philox packages and evidence;
+no CUDA workspace or physical schedule is shared.

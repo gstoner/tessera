@@ -45,7 +45,7 @@ class NativeJVPPluginDeclaration:
             or not self.tile_consumer.startswith("tile.")
         ):
             raise ValueError("canonical native JVP plugins require Schedule and Tile consumers")
-        if set(self.target_consumers) != {"x86", "rocm"} or any(
+        if not {"x86", "rocm"}.issubset(self.target_consumers) or any(
             not value for value in self.target_consumers.values()
         ):
             raise ValueError("native JVP declaration requires x86 and ROCm Target consumers")
@@ -193,6 +193,39 @@ def _execution(target: str, execution_mode: str) -> dict[str, Any]:
         "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
         "execution_mode": execution_mode,
     }
+
+
+@register_native_jvp_plugin(
+    "dropout", family="philox_dropout",
+    schedule_consumer="schedule.rng_program", tile_consumer="tile.rng_kernel",
+    target_consumers={"x86": "x86.avx512_philox_dropout",
+                      "rocm": "rocm.gfx1151_philox_dropout",
+                      "nvidia_sm120": "nvidia.sm120_philox_dropout"},
+)
+def _plan_philox_dropout(*, source: Any, primal_inputs: Sequence[Any],
+                         wrt_indices: tuple[int, ...], target: str,
+                         execution_mode: str, **_: Any) -> NativeJVPFamilyPlan:
+    if target != "nvidia_sm120":
+        raise ValueError("compiler-JVP Philox packaging currently requires sm120")
+    if len(primal_inputs) != 1 or wrt_indices != (0,):
+        raise ValueError("Philox dropout JVP requires one active data input")
+    kwargs = dict(source.kwargs)
+    if bool(kwargs.get("training", True)) and float(kwargs.get("p", 0.5)) > 0.0:
+        if kwargs.get("seed") is None and kwargs.get("key") is None:
+            raise ValueError("Philox dropout JVP requires an explicit key/seed")
+    child = {
+        **_execution(target, execution_mode),
+        "compiler_path": "nvidia_rng_compiled", "arg_names": ["x"],
+        "ops": [{"op_name": "tessera.dropout", "result": "o",
+                 "operands": ["x"], "kwargs": kwargs}],
+    }
+    # Both children carry the identical key/counter attributes. The compiler's
+    # DropoutOp tangent rule clones the seeded op, so the mask is replayed—not
+    # resampled—for the tangent input.
+    return NativeJVPFamilyPlan("philox_dropout", (
+        _step("primal", child, ("primal_0",)),
+        _step("tangent", child, ("tangent_0",)),
+    ))
 
 
 @register_native_jvp_plugin(
@@ -409,6 +442,10 @@ def plan_native_jvp_family(
             "the compiler IR transform remains available"
         )
     declaration, planner = entry
+    if target not in declaration.target_consumers:
+        raise ValueError(
+            f"native {target} JVP has no Target consumer for {bare!r}"
+        )
     plan = planner(
         source=source,
         primal_inputs=primal_inputs,

@@ -1,5 +1,9 @@
 // RUN: not %tnv --lower-tile-to-nvidia='sm=120' %s 2>&1 | FileCheck %s
 
+!fa = !tile.fragment<m = 16, n = 8, k = 16, elem = "f16", acc = "f16", role = "a", layout = "row_major", family = "auto">
+!fb = !tile.fragment<m = 16, n = 8, k = 16, elem = "f16", acc = "f16", role = "b", layout = "col_major", family = "auto">
+!fc = !tile.fragment<m = 16, n = 8, k = 16, elem = "f16", acc = "f16", role = "acc", layout = "row_major", family = "auto">
+
 module {
   func.func @reject_wrong_b_order(%a_ptr: !llvm.ptr, %b_ptr: !llvm.ptr,
                                   %zero: i64) {
@@ -14,18 +18,18 @@ module {
     %a = tile.fragment_pack %a_tile {
       role = "a",
       mma = #tile.mma_desc<family = "auto", m = 16, n = 8, k = 16, a = "f16", b = "f16", acc = "f16", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-    } : (!tile.tile) -> !tile.fragment
+    } : (!tile.tile) -> !fa
     %b = tile.fragment_pack %b_tile {
       role = "b",
       mma = #tile.mma_desc<family = "auto", m = 16, n = 8, k = 16, a = "f16", b = "f16", acc = "f16", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-    } : (!tile.tile) -> !tile.fragment
+    } : (!tile.tile) -> !fb
     %c = tile.fragment_zero {
       role = "acc",
       mma = #tile.mma_desc<family = "auto", m = 16, n = 8, k = 16, a = "f16", b = "f16", acc = "f16", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-    } : !tile.fragment
+    } : !fc
     %d = tile.mma %a, %b, %c {
       mma = #tile.mma_desc<family = "auto", m = 16, n = 8, k = 16, a = "f16", b = "f16", acc = "f16", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-    } : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
+    } : (!fa, !fb, !fc) -> !fc
     return
   }
 }

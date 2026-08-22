@@ -628,9 +628,9 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="NVWGMMALoweringPass",
         summary=(
             "Lowers tile.mma to a tessera_nvidia_wgmma_mma_async runtime call "
-            "(SM>=90) or the WMMA path below it. Refuses an mma carrying an "
-            "accumulator: the call is two-operand, so it would silently "
-            "discard one and return a partial product."
+            "(SM>=90) or the WMMA path below it. Threads an optional third "
+            "accumulator data operand and refuses extended data-operand forms "
+            "that this compatibility boundary cannot represent."
         ),
         input_dialects=("tile", "func"),
         output_dialects=("func", "tile"),

@@ -23,6 +23,12 @@
 // Both copies are auto-minted a token; the producer warp yields the two tiles
 // plus the two tokens, and the consumer mma reads all four producer-warp results
 // — the data edges (#0,#1) and the synthesized token edges (#2,#3).
+// WARP: %[[PROLE:.*]] = tile.role
+// WARP-SAME: kind = "producer"
+// WARP: %[[CROLE:.*]] = tile.role
+// WARP-SAME: kind = "consumer"
+// WARP: %[[MBAR:.*]] = tile.mbarrier.init with %[[PROLE]], %[[CROLE]]
+// WARP-SAME: tile.pipeline = "warpspec.0"
 // WARP: %[[SMEMA:.*]] = tile.alloc
 // WARP-SAME: space = "smem"
 // WARP: %[[SMEMB:.*]] = tile.alloc

@@ -1,8 +1,8 @@
 // RUN: %tnv --allow-unregistered-dialect --lower-tile-to-nvidia='sm=100' %s | FileCheck %s
 
 module {
-  func.func @kernel(%a: f32, %b: f32) {
-    %m = "tile.mma"(%a, %b) : (f32, f32) -> f32
+  func.func @kernel(%a: tensor<16x16xf32>, %b: tensor<16x16xf32>) {
+    %m = "tile.mma"(%a, %b) : (tensor<16x16xf32>, tensor<16x16xf32>) -> tensor<16x16xf32>
     return
   }
 }

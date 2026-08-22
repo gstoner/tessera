@@ -11,11 +11,18 @@
 
 // The per-slot descriptor carries a tma barrier with the transaction byte
 // count (64*64*2 = 8192) and a slot id.
-// CHECK: %[[MBAR:.*]] = tile.mbarrier.init
-// CHECK-SAME: !tile.mbarrier
+// The barrier is born beside the canonical role declarations and the later TMA
+// pass reuses that exact SSA value.
 // CHECK: %[[DESC:.*]] = tile.tma.descriptor
 // CHECK-SAME: tile.barrier = #tile.barrier<kind = "tma", expect = 8192>
 // CHECK-SAME: tile.barrier_id = "mbar.0"
+// CHECK: %[[PRODUCER:.*]] = tile.role
+// CHECK-SAME: kind = "producer"
+// CHECK: %[[CONSUMER:.*]] = tile.role
+// CHECK-SAME: kind = "consumer"
+// CHECK: %[[MBAR:.*]] = tile.mbarrier.init with %[[PRODUCER]], %[[CONSUMER]]
+// CHECK-SAME: tile.pipeline = "warpspec.0"
+// CHECK-SAME: !tile.mbarrier
 // The copy_async carries the descriptor and barrier through SSA and returns the
 // explicit completion token consumed by the typed wait.
 // CHECK: %[[COPY:.*]]:2 = tile.tma.copy_async %[[DESC]], %[[MBAR]]

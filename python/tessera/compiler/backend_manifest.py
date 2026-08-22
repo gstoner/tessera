@@ -1411,6 +1411,33 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "runtime_execution_matrix."
         ),
     },
+    **{
+        op: {
+            "runtime_symbol": symbol,
+            "dtypes": ("fp32",),
+            "feature_flags": ("cuda", "philox", "stateless_rng"),
+            "shape_envelope": (
+                "arbitrary nonnegative element count; explicit 64-bit key and "
+                "counter; contiguous f32 output (and contiguous f32 input for "
+                "training dropout)"
+            ),
+            "notes": (
+                "Typed tessera_nvidia.philox four-mode package backed by "
+                "libtessera_nvidia_rng.so. Key/counter state is explicit; no "
+                "hidden generator or workspace. Uniform words and range scaling "
+                "are bit-exact against tessera.rng_device; Box-Muller normal is "
+                "f32-transcendental tolerance bounded; dropout replays the exact "
+                "uniform mask. Proven on SuperBear RTX 5070, CC 12.0, CUDA 13.3."
+            ),
+        }
+        for op, symbol in {
+            "rng_uniform": "tessera_nvidia_philox_uniform_range_f32",
+            "rng_normal": "tessera_nvidia_philox_normal_f32",
+            "rng_philox_uniform": "tessera_nvidia_philox_uniform_range_f32",
+            "rng_philox_normal": "tessera_nvidia_philox_normal_f32",
+            "dropout": "tessera_nvidia_philox_dropout_f32",
+        }.items()
+    },
 }
 
 
@@ -2483,6 +2510,36 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "rocm_wmma symbol vs the rocm_compiled lane)."
         ),
     },
+    **{
+        op: {
+            "runtime_symbol": symbol,
+            "dtypes": ("fp32",),
+            "feature_flags": ("cuda", "cufft", "explicit_workspace"),
+            "shape_envelope": "non-empty real/complex tensor; arbitrary positive "
+                "transform length and axis; batched C2C/R2C/C2R plan",
+            "notes": "Canonical tessera.nvidia.cuda_fft_workspace.v2 package; "
+                "reusable cuFFT plans, caller-owned workspace, and on-device "
+                "inverse normalization, proven on SuperBear RTX 5070.",
+        }
+        for op, symbol in {
+            "fft": "tessera_nvidia_fft_execute_c2c_f32",
+            "ifft": "tessera_nvidia_fft_execute_c2c_f32",
+            "rfft": "tessera_nvidia_fft_execute_r2c_f32",
+            "irfft": "tessera_nvidia_fft_execute_c2r_f32",
+        }.items()
+    },
+    **{
+        op: {
+            "runtime_symbol": "tessera_nvidia_fft_package_abi",
+            "dtypes": ("fp32",),
+            "feature_flags": ("cuda", "cufft", "spectral_composite"),
+            "shape_envelope": "canonical compound spectral float32/complex64 "
+                "envelope with explicit host framing orchestration",
+            "notes": "NVIDIA-owned compound consumer over CUDA FFT/workspace v2; "
+                "exact-device numerical proof on SuperBear.",
+        }
+        for op in ("dct", "stft", "istft", "spectral_conv", "spectral_filter")
+    },
 }
 
 # Compiler-emitted CUDA lanes with direct execute/compare proof but no shipped
@@ -3254,6 +3311,17 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # numpy/ml_dtypes reference. Skip-clean when no NVIDIA GPU / NVRTC. The
     # numerical-proof half of the nvidia_sm120 matmul `device_verified_abi` row.
     ("matmul", "nvidia_sm120"): "tests/device/nvidia/test_mma_runtime_symbol.py",
+    **{
+        (op, "nvidia_sm120"): "tests/device/nvidia/test_rng_compiled.py"
+        for op in (
+            "rng_uniform", "rng_normal", "rng_philox_uniform",
+            "rng_philox_normal", "dropout")
+    },
+    **{
+        (op, "nvidia_sm120"): "tests/device/nvidia/test_fft_workspace.py"
+        for op in ("fft", "ifft", "rfft", "irfft", "dct", "stft", "istft",
+                   "spectral_conv", "spectral_filter")
+    },
     ("gated_deltanet", "nvidia_sm120"): "tests/device/nvidia/test_training_autodiff_native.py",
     ("fused_epilogue", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
     ("relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",

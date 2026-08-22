@@ -14380,6 +14380,14 @@ def _execute_x86_compiled_spectral_backward(
     return execute_x86_native_spectral_vjp(artifact.metadata or {}, args)
 
 
+def _execute_nvidia_compiled_spectral_backward(
+    artifact: RuntimeArtifact, args: Any
+) -> Any:
+    from .compiler.native_spectral_vjp import execute_nvidia_native_spectral_vjp
+
+    return execute_nvidia_native_spectral_vjp(artifact.metadata or {}, args)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Sparse linear algebra (S-series `sparse`) — GENUINELY sparse kernels (iterate
 # the nonzero structure, not densify-then-GEMM). spmm_csr/coo = row-wise SpMM;
@@ -18282,6 +18290,365 @@ def _execute_rocm_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
             "normal", seed, counter, n, float(kwargs.get("mean", 0.0)),
             _rng_float_kwarg(kwargs, "std", 1.0, alias="stddev"))
     return output.reshape(shape)
+
+
+_nvidia_rng_runtime: ctypes.CDLL | None = None
+
+
+def _nvidia_rng_lib_path() -> Optional[Path]:
+    env = os.environ.get("TESSERA_NVIDIA_RNG_LIB")
+    root = Path(__file__).resolve().parents[2]
+    candidates = ([Path(env)] if env else []) + [
+        root / "build-nvidia-cuda/src/compiler/codegen/"
+        "tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_rng.so",
+        root / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/"
+        "runtime/cuda/libtessera_nvidia_rng.so",
+    ]
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def _load_nvidia_rng_runtime() -> ctypes.CDLL | None:
+    global _nvidia_rng_runtime
+    if _nvidia_rng_runtime is not None:
+        return _nvidia_rng_runtime
+    path = _nvidia_rng_lib_path()
+    if path is None:
+        return None
+    try:
+        lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_GLOBAL)
+    except OSError:
+        return None
+    u64 = ctypes.c_uint64
+    i64 = ctypes.c_int64
+    f32 = ctypes.c_float
+    p_f32 = ctypes.POINTER(f32)
+    signatures = {
+        "tessera_nvidia_philox_uniform_f32": [u64, u64, i64, p_f32],
+        "tessera_nvidia_philox_uniform_range_f32":
+            [u64, u64, i64, f32, f32, p_f32],
+        "tessera_nvidia_philox_normal_f32":
+            [u64, u64, i64, f32, f32, p_f32],
+        "tessera_nvidia_philox_dropout_f32":
+            [p_f32, u64, u64, i64, f32, p_f32],
+    }
+    for symbol, arguments in signatures.items():
+        function = getattr(lib, symbol, None)
+        if function is None:
+            return None
+        function.argtypes = arguments
+        function.restype = ctypes.c_int
+    _nvidia_rng_runtime = lib
+    return lib
+
+
+def _nvidia_philox_uniform(seed: int, counter_base: int, n: int) -> Any:
+    import numpy as np
+
+    lib = _load_nvidia_rng_runtime()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_rng.so not loadable")
+    output = np.empty(int(n), np.float32)
+    rc = lib.tessera_nvidia_philox_uniform_f32(
+        ctypes.c_uint64(int(seed) & 0xFFFFFFFFFFFFFFFF),
+        ctypes.c_uint64(int(counter_base) & 0xFFFFFFFFFFFFFFFF),
+        ctypes.c_int64(int(n)),
+        output.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+    )
+    if rc != 0:
+        raise RuntimeError(f"NVIDIA Philox uniform launch failed rc={rc}")
+    return output
+
+
+def _execute_nvidia_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
+    """SuperBear CUDA execution for the typed four-mode Philox package."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1:
+        raise ValueError("nvidia_rng_compiled expects exactly one operation")
+    op = ops[0]
+    op_name = str(op.get("op_name", ""))
+    if op_name not in {"tessera.rng_uniform", "tessera.rng_normal",
+                       "tessera.rng_philox_uniform", "tessera.rng_philox_normal",
+                       "tessera.dropout"}:
+        return _execute_rng(artifact, args, _nvidia_philox_uniform,
+                            "nvidia_rng_compiled")
+    lib = _load_nvidia_rng_runtime()
+    if lib is None:
+        raise RuntimeError("libtessera_nvidia_rng.so not loadable")
+    kwargs = dict(op.get("kwargs") or {})
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    operands = [_as_numpy(values[str(name)]) for name in op.get("operands", [])]
+    seed = int(kwargs.get("seed", 0))
+    counter = int(kwargs.get("counter_base", 0))
+    if op_name in {"tessera.rng_philox_uniform", "tessera.rng_philox_normal"}:
+        key = np.asarray(operands[0], dtype=np.uint64).reshape(-1)
+        ctr = np.asarray(operands[1], dtype=np.uint64).reshape(-1)
+        if key.size != 2 or ctr.size != 1:
+            raise ValueError(f"{op_name} requires key[2] and counter[1]")
+        seed, counter = int(key[0]) ^ int(key[1]), int(ctr[0])
+    seed_arg = ctypes.c_uint64(seed & 0xFFFFFFFFFFFFFFFF)
+    counter_arg = ctypes.c_uint64(counter & 0xFFFFFFFFFFFFFFFF)
+    if op_name == "tessera.dropout":
+        input_value = np.ascontiguousarray(operands[0], np.float32)
+        if not bool(kwargs.get("training", True)):
+            return input_value.copy()
+        output = np.empty_like(input_value)
+        rc = lib.tessera_nvidia_philox_dropout_f32(
+            input_value.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            seed_arg, counter_arg, ctypes.c_int64(input_value.size),
+            ctypes.c_float(float(kwargs.get("p", 0.5))),
+            output.ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
+        if rc != 0:
+            raise RuntimeError(f"NVIDIA Philox dropout launch failed rc={rc}")
+        return output
+    shape = tuple(int(d) for d in kwargs.get("shape", ()))
+    count = int(np.prod(shape)) if shape else 1
+    output = np.empty(count, np.float32)
+    if op_name in {"tessera.rng_uniform", "tessera.rng_philox_uniform"}:
+        function = lib.tessera_nvidia_philox_uniform_range_f32
+        parameters = (
+            ctypes.c_float(_rng_float_kwarg(kwargs, "lo", 0.0, alias="low")),
+            ctypes.c_float(_rng_float_kwarg(kwargs, "hi", 1.0, alias="high")),
+        )
+    else:
+        function = lib.tessera_nvidia_philox_normal_f32
+        parameters = (
+            ctypes.c_float(float(kwargs.get("mean", 0.0))),
+            ctypes.c_float(_rng_float_kwarg(kwargs, "std", 1.0, alias="stddev")),
+        )
+    rc = function(seed_arg, counter_arg, ctypes.c_int64(count), *parameters,
+                  output.ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
+    if rc != 0:
+        raise RuntimeError(f"NVIDIA Philox distribution launch failed rc={rc}")
+    return output.reshape(shape)
+
+
+_nvidia_fft_runtime: ctypes.CDLL | None = None
+_nvidia_fft_plans: dict[tuple[str, int, int], tuple[Any, Any, Any, int]] = {}
+
+
+def _load_nvidia_fft_runtime() -> ctypes.CDLL | None:
+    global _nvidia_fft_runtime
+    if _nvidia_fft_runtime is not None:
+        return _nvidia_fft_runtime
+    env = os.environ.get("TESSERA_NVIDIA_FFT_LIB")
+    root = Path(__file__).resolve().parents[2]
+    candidates = ([Path(env)] if env else []) + [
+        root / "build-nvidia-cuda/src/compiler/codegen/"
+        "tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_fft.so",
+        root / "build/src/compiler/codegen/tessera_gpu_backend_NVIDIA/"
+        "runtime/cuda/libtessera_nvidia_fft.so",
+    ]
+    path = next((candidate for candidate in candidates if candidate.is_file()), None)
+    if path is None:
+        return None
+    try:
+        lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_GLOBAL)
+    except OSError:
+        return None
+    lib.tessera_nvidia_fft_package_abi.argtypes = []
+    lib.tessera_nvidia_fft_package_abi.restype = ctypes.c_char_p
+    lib.tessera_nvidia_fft_plan_create_c2c_f32.argtypes = [
+        ctypes.c_int64, ctypes.c_int64, ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_size_t)]
+    lib.tessera_nvidia_fft_plan_create_c2c_f32.restype = ctypes.c_int
+    for name in ("tessera_nvidia_fft_plan_create_r2c_f32",
+                 "tessera_nvidia_fft_plan_create_c2r_f32"):
+        symbol = getattr(lib, name)
+        symbol.argtypes = [ctypes.c_int64, ctypes.c_int64,
+                           ctypes.POINTER(ctypes.c_void_p),
+                           ctypes.POINTER(ctypes.c_size_t)]
+        symbol.restype = ctypes.c_int
+    lib.tessera_nvidia_fft_plan_destroy.argtypes = [ctypes.c_void_p]
+    lib.tessera_nvidia_fft_plan_destroy.restype = ctypes.c_int
+    lib.tessera_nvidia_fft_workspace_alloc.argtypes = [
+        ctypes.c_size_t, ctypes.POINTER(ctypes.c_void_p)]
+    lib.tessera_nvidia_fft_workspace_alloc.restype = ctypes.c_int
+    lib.tessera_nvidia_fft_workspace_free.argtypes = [ctypes.c_void_p]
+    lib.tessera_nvidia_fft_workspace_free.restype = ctypes.c_int
+    lib.tessera_nvidia_fft_execute_c2c_f32.argtypes = [
+        ctypes.c_void_p, ctypes.POINTER(ctypes.c_float),
+        ctypes.POINTER(ctypes.c_float), ctypes.c_void_p, ctypes.c_size_t,
+        ctypes.c_int]
+    lib.tessera_nvidia_fft_execute_c2c_f32.restype = ctypes.c_int
+    for name in ("tessera_nvidia_fft_execute_r2c_f32",
+                 "tessera_nvidia_fft_execute_c2r_f32"):
+        symbol = getattr(lib, name)
+        symbol.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_float),
+                           ctypes.POINTER(ctypes.c_float), ctypes.c_void_p,
+                           ctypes.c_size_t]
+        symbol.restype = ctypes.c_int
+    if lib.tessera_nvidia_fft_package_abi() != b"tessera.nvidia.cuda_fft_workspace.v2":
+        return None
+    _nvidia_fft_runtime = lib
+    return lib
+
+
+def _nvidia_fft_c2c_rows(rows: Any, inverse: bool, np: Any) -> Any:
+    values = np.ascontiguousarray(rows, dtype=np.complex64)
+    if values.ndim != 2 or any(int(dim) <= 0 for dim in values.shape):
+        raise ValueError("NVIDIA FFT requires non-empty rank-2 complex64 rows")
+    batch, length = (int(dim) for dim in values.shape)
+    key = ("c2c", batch, length)
+    package = _nvidia_fft_plans.get(key)
+    if package is None:
+        lib = _load_nvidia_fft_runtime()
+        if lib is None:
+            raise RuntimeError("libtessera_nvidia_fft.so not loadable")
+        plan = ctypes.c_void_p()
+        workspace_bytes = ctypes.c_size_t()
+        if lib.tessera_nvidia_fft_plan_create_c2c_f32(
+            batch, length, ctypes.byref(plan), ctypes.byref(workspace_bytes)) != 0:
+            raise RuntimeError("NVIDIA FFT plan creation failed")
+        workspace = ctypes.c_void_p()
+        if lib.tessera_nvidia_fft_workspace_alloc(
+            workspace_bytes.value, ctypes.byref(workspace)) != 0:
+            lib.tessera_nvidia_fft_plan_destroy(plan)
+            raise RuntimeError("NVIDIA FFT workspace allocation failed")
+        package = (lib, plan, workspace, int(workspace_bytes.value))
+        _nvidia_fft_plans[key] = package
+    lib, plan, workspace, workspace_bytes = package
+    output = np.empty_like(values)
+    rc = lib.tessera_nvidia_fft_execute_c2c_f32(
+        plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        workspace, ctypes.c_size_t(workspace_bytes), ctypes.c_int(bool(inverse)))
+    if rc != 0:
+        raise RuntimeError(f"NVIDIA FFT execution failed rc={rc}")
+    return output
+
+
+def _nvidia_fft_real_rows(rows: Any, inverse: bool, logical_n: int | None,
+                          np: Any) -> Any:
+    kind = "c2r" if inverse else "r2c"
+    dtype = np.complex64 if inverse else np.float32
+    values = np.ascontiguousarray(rows, dtype=dtype)
+    if values.ndim != 2 or any(int(dim) <= 0 for dim in values.shape):
+        raise ValueError("NVIDIA real FFT requires non-empty rank-2 rows")
+    batch = int(values.shape[0])
+    length = int(logical_n) if inverse else int(values.shape[1])
+    if length <= 0 or (inverse and int(values.shape[1]) != length // 2 + 1):
+        raise ValueError("NVIDIA C2R input does not match its logical length")
+    key = (kind, batch, length)
+    package = _nvidia_fft_plans.get(key)
+    if package is None:
+        lib = _load_nvidia_fft_runtime()
+        if lib is None:
+            raise RuntimeError("libtessera_nvidia_fft.so not loadable")
+        plan, workspace_bytes = ctypes.c_void_p(), ctypes.c_size_t()
+        create = (lib.tessera_nvidia_fft_plan_create_c2r_f32 if inverse else
+                  lib.tessera_nvidia_fft_plan_create_r2c_f32)
+        if create(batch, length, ctypes.byref(plan),
+                  ctypes.byref(workspace_bytes)) != 0:
+            raise RuntimeError(f"NVIDIA {kind.upper()} plan creation failed")
+        workspace = ctypes.c_void_p()
+        if lib.tessera_nvidia_fft_workspace_alloc(
+                workspace_bytes.value, ctypes.byref(workspace)) != 0:
+            lib.tessera_nvidia_fft_plan_destroy(plan)
+            raise RuntimeError("NVIDIA FFT workspace allocation failed")
+        package = (lib, plan, workspace, int(workspace_bytes.value))
+        _nvidia_fft_plans[key] = package
+    lib, plan, workspace, workspace_bytes = package
+    output = (np.empty((batch, length), np.float32) if inverse else
+              np.empty((batch, length // 2 + 1), np.complex64))
+    execute = (lib.tessera_nvidia_fft_execute_c2r_f32 if inverse else
+               lib.tessera_nvidia_fft_execute_r2c_f32)
+    rc = execute(
+        plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        workspace, ctypes.c_size_t(workspace_bytes))
+    if rc != 0:
+        raise RuntimeError(f"NVIDIA {kind.upper()} execution failed rc={rc}")
+    return output
+
+
+def _execute_nvidia_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Canonical CUDA FFT/workspace consumers: C2C, R2C, and C2R."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    ops = list(metadata.get("ops") or [])
+    if len(ops) != 1 or str(ops[0].get("op_name", "")) not in {
+        "tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft"}:
+        raise ValueError("nvidia_fft_compiled supports one FFT-family operation")
+    op = ops[0]
+    operand_names = [str(name) for name in op.get("operands", [])]
+    if len(operand_names) != 1:
+        raise ValueError("NVIDIA FFT requires one input")
+    values = _bind_launch_args(args, list(metadata.get("arg_names") or []))
+    op_name = str(op["op_name"])
+    value = np.asarray(values[operand_names[0]], dtype=(
+        np.complex64 if op_name != "tessera.rfft" else np.float32))
+    kwargs = dict(op.get("kwargs") or {})
+    axis = int(kwargs.get("axis", -1))
+    if axis < 0:
+        axis += value.ndim
+    if axis < 0 or axis >= value.ndim:
+        raise ValueError("NVIDIA FFT axis is out of range")
+    requested = kwargs.get("n")
+    if requested is not None and op_name != "tessera.irfft":
+        target_length = int(requested)
+        if target_length <= 0:
+            raise ValueError("NVIDIA FFT length must be positive")
+        if target_length != value.shape[axis]:
+            shape = list(value.shape)
+            shape[axis] = target_length
+            resized = np.zeros(shape, value.dtype)
+            count = min(int(value.shape[axis]), target_length)
+            source_slice = [slice(None)] * value.ndim
+            target_slice = [slice(None)] * value.ndim
+            source_slice[axis] = slice(0, count)
+            target_slice[axis] = slice(0, count)
+            resized[tuple(target_slice)] = value[tuple(source_slice)]
+            value = resized
+    moved = np.moveaxis(value, axis, -1)
+    rows = np.ascontiguousarray(moved).reshape(-1, moved.shape[-1])
+    if op_name in {"tessera.fft", "tessera.ifft"}:
+        transformed = _nvidia_fft_c2c_rows(
+            rows, op_name == "tessera.ifft", np)
+    elif op_name == "tessera.rfft":
+        transformed = _nvidia_fft_real_rows(rows, False, None, np)
+    else:
+        logical_n = int(kwargs.get("n") or (2 * (int(rows.shape[-1]) - 1)))
+        transformed = _nvidia_fft_real_rows(rows, True, logical_n, np)
+    output_shape = (*moved.shape[:-1], transformed.shape[-1])
+    restored = transformed.reshape(output_shape)
+    return np.moveaxis(restored, -1, axis)
+
+
+def _nvidia_fftexec(sub_op: str, x: Any, sub_kwargs: dict) -> Any:
+    artifact = RuntimeArtifact(metadata={
+        "target": "nvidia_sm120", "compiler_path": "nvidia_fft_compiled",
+        "arg_names": ["x"], "output_name": "o",
+        "ops": [{"op_name": sub_op, "result": "o", "operands": ["x"],
+                 "kwargs": dict(sub_kwargs)}],
+    })
+    return _execute_nvidia_compiled_fft(artifact, (x,))
+
+
+def _execute_nvidia_compiled_spectral(artifact: RuntimeArtifact, args: Any) -> Any:
+    """CUDA spectral composites with framing orchestration over native cuFFT."""
+    import numpy as np
+
+    metadata = artifact.metadata or {}
+    arg_names = list(metadata.get("arg_names") or [])
+    values = _bind_launch_args(args, arg_names)
+    operands = [np.asarray(_as_numpy(values[name])) for name in arg_names]
+    contract = metadata.get("scheduled_spectral")
+    if isinstance(contract, dict):
+        op_name = str(contract.get("op_name", ""))
+        kwargs = dict(contract)
+    else:
+        ops = list(metadata.get("ops") or [])
+        if len(ops) != 1:
+            raise ValueError("NVIDIA spectral package requires one operation")
+        op_name = str(ops[0].get("op_name", ""))
+        kwargs = dict(ops[0].get("kwargs") or {})
+    if op_name not in _SPECTRAL_COMPOSITE_OPS:
+        raise ValueError(f"unsupported NVIDIA spectral consumer {op_name!r}")
+    return _spectral_composite(op_name, operands, kwargs, _nvidia_fftexec, np)
 
 
 # Strided-copy / 0-move lane (P4) — pad / cat / roll / flip / tile / repeat /
@@ -30125,6 +30492,11 @@ def _executor_table():
         "nvidia_training_loss_adamw_compiled": _execute_nvidia_training_fused,
         "nvidia_local_collective_compiled": _execute_nvidia_local_collective,
         "nvidia_fpquant_compiled": _execute_nvidia_fpquant,
+        "nvidia_rng_compiled": _execute_nvidia_compiled_rng,
+        "nvidia_fft_compiled": _execute_nvidia_compiled_fft,
+        "nvidia_spectral_compiled": _execute_nvidia_compiled_spectral,
+        "nvidia_sm120_jvp_compiled": _execute_native_jvp,
+        "nvidia_sm120_spectral_backward_compiled": _execute_nvidia_compiled_spectral_backward,
         "nvidia_flash_attn_compiled": _execute_nvidia_flash_attn_compiled,
         "nvidia_flash_attn_bwd_compiled": _execute_nvidia_flash_attn_bwd_compiled,
         "nvidia_linear_attn_compiled": _execute_nvidia_linear_attn_compiled,

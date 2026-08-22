@@ -52,26 +52,26 @@ and selected exact targets.
 | `layer_norm` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_abi: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | - | - | - |
 | `rmsnorm` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_abi: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | - | - | - |
 | `qkv_projection` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | - | artifact_only: fp32 | device_verified_jit: bf16,fp16 | - | - | - |
-| `dropout` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
-| `rng_normal` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
-| `rng_philox_normal` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | - | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
-| `rng_philox_uniform` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | - | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
-| `rng_uniform` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
+| `dropout` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
+| `rng_normal` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
+| `rng_philox_normal` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | - | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
+| `rng_philox_uniform` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | - | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
+| `rng_uniform` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
 | `rope` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_abi: bf16,fp16,fp32 | artifact_only: fp32 | device_verified_jit: bf16,fp16,fp32 | - | - | - |
 | `segment_reduce` | bf16,fp32 | fp32 | registered / complete / planned | legal_only: bf16,fp32 | - | - | - | - | - | direct_test,physical,tile |
 | `bsmm` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
 | `sddmm` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
 | `spmm_coo` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
 | `spmm_csr` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
-| `dct` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
-| `fft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
-| `ifft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
-| `irfft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
-| `istft` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
-| `rfft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
-| `spectral_conv` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
-| `spectral_filter` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | - | device_verified_jit: complex64,fp32 | - | - | - |
-| `stft` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
+| `dct` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | device_verified_abi: complex64,fp32 | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
+| `fft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | device_verified_abi: complex64,fp32 | device_verified_jit: complex64,fp32 | - | - | - |
+| `ifft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | device_verified_abi: complex64,fp32 | device_verified_jit: complex64,fp32 | - | - | - |
+| `irfft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | device_verified_abi: complex64,fp32 | device_verified_jit: complex64,fp32 | - | - | - |
+| `istft` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | device_verified_abi: complex64,fp32 | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
+| `rfft` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | device_verified_abi: complex64,fp32 | device_verified_jit: complex64,fp32 | - | - | - |
+| `spectral_conv` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | device_verified_abi: complex64,fp32 | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
+| `spectral_filter` | complex64→fp32x2_interleaved,fp32 | fp32 | registered / complete / fused | device_verified_jit: complex64,fp32 | - | device_verified_abi: complex64,fp32 | device_verified_jit: complex64,fp32 | - | - | - |
+| `stft` | bf16,complex64→fp32x2_interleaved,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: bf16,complex64,fp16,fp32 | - | device_verified_abi: complex64,fp32 | device_verified_jit: bf16,complex64,fp16,fp32 | - | - | - |
 | `softmax` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_abi: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | - | - | - |
 | `conv2d` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_abi: bf16,fp16,fp32 | device_verified_jit: fp32 | device_verified_jit: bf16,fp16 | - | - | - |
 | `conv3d` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | - | - | device_verified_jit: bf16,fp16 | - | - | - |

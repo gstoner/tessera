@@ -52,11 +52,11 @@ and selected exact targets.
 | `layer_norm` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_abi: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | - | - | - |
 | `rmsnorm` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_abi: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | device_verified_jit: bf16,fp16,fp32 | - | - | - |
 | `qkv_projection` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | - | artifact_only: fp32 | device_verified_jit: bf16,fp16 | - | - | - |
-| `dropout` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
-| `rng_normal` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
-| `rng_philox_normal` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | - | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
-| `rng_philox_uniform` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | - | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
-| `rng_uniform` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_abi: fp32 | - | - | direct_test,physical,tile |
+| `dropout` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | device_verified_abi: fp32 | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
+| `rng_normal` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | device_verified_abi: fp32 | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
+| `rng_philox_normal` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | - | device_verified_abi: fp32 | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
+| `rng_philox_uniform` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | - | device_verified_abi: fp32 | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
+| `rng_uniform` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | device_verified_abi: fp32 | device_verified_jit: fp32 | - | - | direct_test,physical,tile |
 | `rope` | bf16,fp16,fp32 | fp32 | registered / complete / fused | device_verified_jit: fp32 | device_verified_abi: bf16,fp16,fp32 | artifact_only: fp32 | device_verified_jit: bf16,fp16,fp32 | - | - | - |
 | `segment_reduce` | bf16,fp32 | fp32 | registered / complete / planned | legal_only: bf16,fp32 | - | - | - | - | - | direct_test,physical,tile |
 | `bsmm` | bf16,fp32 | fp32 | registered / complete / planned | device_verified_jit: fp32 | device_verified_jit: fp32 | - | device_verified_jit: fp32 | - | - | direct_test,physical,tile |

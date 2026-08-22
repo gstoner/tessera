@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""check_consistency.py — the anti-Table-V gate (plan §C1, §4 Phase 4).
+
+Reads the single source of truth ``results.jsonl`` (and optionally
+``counters.jsonl``) and FAILS (exit 1) if any internal inconsistency exists. This
+is the mechanized form of the hand-audit that found the paper's Table V
+contradiction: TOPS must equal 2N^3/latency, reconstructed speedups must match,
+AI ratios must track byte ratios, and no (kernel, dtype, N) may appear with two
+different durations. Report generation is blocked on a red gate.
+
+Usage:  python3 check_consistency.py results.jsonl [counters.jsonl]
+Self-test:  python3 check_consistency.py --selftest
+"""
+from __future__ import annotations
+import json
+import sys
+from collections import defaultdict
+
+TOPS_TOL = 0.005      # 0.5% — TOPS vs 2N^3/latency
+SPEEDUP_TOL = 0.01    # 1%
+AI_TOL = 0.02         # 2% — cross-precision AI doubling
+DUR_XCHECK_TOL = 0.15 # 15% — ncu duration vs event median (profiling overhead)
+
+BYTES_PER_ELEM = {"fp16": 2, "bf16": 2, "int8": 1, "int4": 0.5,
+                  "fp8": 1, "nvfp4": 0.5, "fp4_e2m1": 0.5, "fp32": 4}
+
+
+def _fail(errs: list[str], msg: str) -> None:
+    errs.append(msg)
+
+
+def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
+    errs: list[str] = []
+    if not rows:
+        return ["results.jsonl is empty"]
+
+    # 1) TOPS == 2 N^3 / latency  (square GEMM assumed via shape MxNxK == N^3)
+    for r in rows:
+        n = r.get("n") or r.get("shape", [None])[0]
+        lat = r.get("latency_ms")
+        tops = r.get("tflops")
+        if n is None or lat in (None, 0) or tops is None:
+            _fail(errs, f"row missing n/latency/tflops: {r.get('kernel')}@{n}")
+            continue
+        expect = (2 * n ** 3) / (lat / 1e3) / 1e12
+        if abs(expect - tops) / max(expect, 1e-12) > TOPS_TOL:
+            _fail(errs, f"TOPS mismatch {r['kernel']}@{n}: "
+                        f"reported {tops:.4f} vs 2N^3/lat {expect:.4f}")
+
+    # 2) No (kernel, dtype, n) appears with two different latencies — the exact
+    #    failure mode of Table V (fp16_wmma at two contradictory values).
+    seen: dict[tuple, float] = {}
+    for r in rows:
+        n = r.get("n") or r.get("shape", [None])[0]
+        key = (r["kernel"], r.get("dtype"), n)
+        lat = r.get("latency_ms")
+        if key in seen and abs(seen[key] - lat) / max(seen[key], 1e-12) > 0.02:
+            _fail(errs, f"duplicate {key} with conflicting latency "
+                        f"{seen[key]} vs {lat}")
+        seen.setdefault(key, lat)
+
+    # 3) reported same-precision speedups reconstruct from latencies
+    #    (a row may carry speedup_vs_wmma; verify against the baseline latency)
+    by_dt_n_kernel = {(r.get("dtype"), r.get("n") or r.get("shape", [None])[0],
+                       r["kernel"]): r for r in rows}
+    for r in rows:
+        sp = r.get("speedup_vs_wmma")
+        if sp is None:
+            continue
+        n = r.get("n") or r.get("shape", [None])[0]
+        base = by_dt_n_kernel.get((r.get("dtype"), n, f"{r.get('dtype')}_wmma"))
+        if base is None:
+            continue
+        expect = base["latency_ms"] / r["latency_ms"]
+        if abs(expect - sp) / max(expect, 1e-12) > SPEEDUP_TOL:
+            _fail(errs, f"speedup mismatch {r['kernel']}@{n}: "
+                        f"reported {sp:.3f} vs latency ratio {expect:.3f}")
+
+    # 4) AI doubling: for a fixed kernel-role and n, theoretical AI must scale
+    #    inversely with bytes/elem across precisions.
+    ai_by = defaultdict(dict)  # (role,n) -> {dtype: ai_theoretical}
+    for r in rows:
+        ai = r.get("ai_theoretical")
+        if ai is None:
+            continue
+        n = r.get("n") or r.get("shape", [None])[0]
+        ai_by[(r.get("role", "opt"), n)][r.get("dtype")] = ai
+    for (_role, _n), d in ai_by.items():
+        if "fp16" in d and "int8" in d:
+            if abs(d["int8"] / d["fp16"] - 2.0) > AI_TOL:
+                _fail(errs, f"AI ratio int8/fp16 != 2 at n={_n}: {d['int8']/d['fp16']:.3f}")
+        if "int8" in d and "int4" in d:
+            if abs(d["int4"] / d["int8"] - 2.0) > AI_TOL:
+                _fail(errs, f"AI ratio int4/int8 != 2 at n={_n}: {d['int4']/d['int8']:.3f}")
+
+    # 5) cross-check ncu durations against event medians (C2) — mismatch reported,
+    #    never silently used.
+    if counters:
+        med = {(r["kernel"], r.get("dtype"), r.get("n") or r.get("shape", [None])[0]):
+               r["latency_ms"] for r in rows}
+        for c in counters:
+            n = c.get("n") or c.get("shape", [None])[0]
+            k = (c.get("kernel"), c.get("dtype"), n)
+            ncu_ms = c.get("ncu_duration_ms")
+            if k in med and ncu_ms:
+                rel = abs(ncu_ms - med[k]) / max(med[k], 1e-12)
+                if rel > DUR_XCHECK_TOL:
+                    _fail(errs, f"ncu vs event duration divergence {k}: "
+                                f"ncu {ncu_ms} vs event {med[k]} ({rel*100:.0f}%)")
+
+    # 6) CoV honesty (C7): every row must carry cov and clocks_locked
+    for r in rows:
+        if "cov" not in r or "clocks_locked" not in r:
+            _fail(errs, f"row missing cov/clocks_locked (C7): {r.get('kernel')}")
+    return errs
+
+
+def _selftest() -> int:
+    good = [
+        {"kernel": "fp16_wmma", "dtype": "fp16", "n": 2048, "latency_ms": 11.85,
+         "tflops": (2*2048**3)/(11.85/1e3)/1e12, "ai_theoretical": 2.73,
+         "cov": 0.01, "clocks_locked": False, "role": "opt"},
+        {"kernel": "int8_wmma", "dtype": "int8", "n": 2048, "latency_ms": 8.55,
+         "tflops": (2*2048**3)/(8.55/1e3)/1e12, "ai_theoretical": 5.46,
+         "cov": 0.01, "clocks_locked": False, "role": "opt"},
+        {"kernel": "int8_ptx_mma_k32", "dtype": "int8", "n": 2048, "latency_ms": 5.41,
+         "tflops": (2*2048**3)/(5.41/1e3)/1e12, "speedup_vs_wmma": 8.55/5.41,
+         "cov": 0.01, "clocks_locked": False, "role": "opt"},
+    ]
+    assert check(good) == [], check(good)
+    # inject the Table-V bug: same key, contradictory latency
+    bad = good + [{"kernel": "fp16_wmma", "dtype": "fp16", "n": 2048,
+                   "latency_ms": 680.1, "tflops": (2*2048**3)/(680.1/1e3)/1e12,
+                   "cov": 0.01, "clocks_locked": False, "role": "opt"}]
+    errs = check(bad)
+    assert any("conflicting latency" in e for e in errs), errs
+    # inject a TOPS lie
+    bad2 = [{"kernel": "x", "dtype": "fp16", "n": 1024, "latency_ms": 1.0,
+             "tflops": 999.0, "cov": 0.0, "clocks_locked": True}]
+    assert any("TOPS mismatch" in e for e in check(bad2))
+    print("selftest OK")
+    return 0
+
+
+def main() -> int:
+    if "--selftest" in sys.argv:
+        return _selftest()
+    if len(sys.argv) < 2:
+        print(__doc__); return 2
+    rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+    counters = None
+    if len(sys.argv) > 2:
+        counters = [json.loads(l) for l in open(sys.argv[2]) if l.strip()]
+    errs = check(rows, counters)
+    if errs:
+        print("CONSISTENCY GATE: RED", file=sys.stderr)
+        for e in errs:
+            print("  - " + e, file=sys.stderr)
+        return 1
+    print("CONSISTENCY GATE: GREEN")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

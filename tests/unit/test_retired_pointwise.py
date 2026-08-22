@@ -79,12 +79,13 @@ def test_derived_pair_matches_displaced_oracle_in_domain(name):
     # are intentionally equivalent but can differ at machine precision across
     # libm/NumPy versions; multiplication by ``dx`` can amplify that to several
     # result ULPs. Keep every other retiree on the original tighter bound.
-    tangent_rtol = 8 * np.finfo(np.float64).eps if name == "lgamma" else 1e-15
-    np.testing.assert_allclose(t_new, t_old, rtol=tangent_rtol, atol=0)
+    derivative_rtol = (
+        8 * np.finfo(np.float64).eps if name == "lgamma" else 1e-15)
+    np.testing.assert_allclose(t_new, t_old, rtol=derivative_rtol, atol=0)
 
     (g_new,) = _VJPS[name](dout, x, **kwargs)
     (g_old,) = old_vjp(dout, x, **kwargs)
-    np.testing.assert_allclose(g_new, g_old, rtol=1e-15, atol=0)
+    np.testing.assert_allclose(g_new, g_old, rtol=derivative_rtol, atol=0)
 
 
 def test_differential_has_teeth():

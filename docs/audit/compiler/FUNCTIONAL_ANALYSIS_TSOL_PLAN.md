@@ -1,6 +1,7 @@
 ---
 last_updated: 2026-08-22
-audit_role: scoped_plan
+audit_role: plan
+plan_state: open
 ---
 
 # Functional-Analysis Operator Contracts for TSOL — Architected Plan
@@ -556,9 +557,10 @@ FA-2 deliverable, so they do not serialize behind it. FA-5 waits on FA-3
 (it re-expresses `spectral_filter`, whose multiplier contract FA-3 owns)
 and FA-4 (its `matrix_exp` is M4's reference path) — not on FA-6. FA-4
 coordinates with (does not preempt) the sequence-mixer engineering plan.
-Alongside FA-1, register this plan in the `docs/audit/compiler/README.md`
-scoped-plan index (the README routes all scoped plans; an unrouted plan is
-an unconsumed declaration in the Decision #29 sense).
+This plan is registered in the `docs/audit/compiler/README.md` scoped-plan
+index (done at landing — the README routes all scoped plans, and the
+`test_compiler_index_routes_every_live_document` gate enforces it from the
+moment the file exists, so registration could not defer to FA-1).
 
 ### FA-1 — `error_contract` axis + Lipschitz/norm tables (foundation)
 

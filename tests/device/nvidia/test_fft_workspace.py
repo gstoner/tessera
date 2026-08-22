@@ -60,13 +60,27 @@ def test_forward_and_normalized_inverse_match_numpy(batch, length):
 
 def test_plan_and_workspace_are_reused_by_shape():
     runtime, _ = _runtime_or_skip()
-    runtime._nvidia_fft_plans.clear()
+    runtime._clear_nvidia_fft_plan_cache()
     x = np.arange(96, dtype=np.float32).reshape(3, 32).astype(np.complex64)
     first = runtime._nvidia_fft_c2c_rows(x, False, np)
     package = runtime._nvidia_fft_plans[("c2c", 3, 32)]
     second = runtime._nvidia_fft_c2c_rows(x, False, np)
     assert runtime._nvidia_fft_plans[("c2c", 3, 32)] is package
     np.testing.assert_array_equal(first, second)
+
+
+def test_plan_cache_is_bounded_and_releases_evicted_shapes(monkeypatch):
+    runtime, _ = _runtime_or_skip()
+    runtime._clear_nvidia_fft_plan_cache()
+    monkeypatch.setattr(runtime, "_NVIDIA_FFT_PLAN_CACHE_LIMIT", 2)
+    try:
+        for length in (8, 16, 32):
+            runtime._nvidia_fft_c2c_rows(
+                np.ones((1, length), dtype=np.complex64), False, np)
+        assert len(runtime._nvidia_fft_plans) == 2
+        assert ("c2c", 1, 8) not in runtime._nvidia_fft_plans
+    finally:
+        runtime._clear_nvidia_fft_plan_cache()
 
 
 def test_fft_consumer_handles_nonleading_axis_and_padding():
@@ -121,8 +135,86 @@ def test_real_fft_runtime_consumer(op_name, length):
         "ops": [{"op_name": op_name, "result": "output", "operands": ["x"],
                  "kwargs": {"axis": -1, "n": length}}],
     })
-    actual = runtime.launch(artifact, (x,))["output"]
+    result = runtime.launch(artifact, (x,))
+    assert result["ok"] is True, result.get("reason")
+    actual = result["output"]
     np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=2e-5)
+
+
+@pytest.mark.parametrize("op_name", (
+    "tessera.fft", "tessera.ifft", "tessera.rfft", "tessera.irfft"))
+@pytest.mark.parametrize("normalization", ("forward", "ortho"))
+def test_fft_runtime_honors_normalization_modes(op_name, normalization):
+    runtime, _ = _runtime_or_skip()
+    length = 18
+    rng = np.random.default_rng(length)
+    if op_name == "tessera.rfft":
+        x = rng.standard_normal((2, length)).astype(np.float32)
+        expected = np.fft.rfft(x, axis=-1, norm=normalization).astype(np.complex64)
+    elif op_name == "tessera.irfft":
+        x = (rng.standard_normal((2, length // 2 + 1)) +
+             1j * rng.standard_normal((2, length // 2 + 1))).astype(np.complex64)
+        expected = np.fft.irfft(
+            x, n=length, axis=-1, norm=normalization).astype(np.float32)
+    else:
+        x = (rng.standard_normal((2, length)) +
+             1j * rng.standard_normal((2, length))).astype(np.complex64)
+        transform = np.fft.ifft if op_name == "tessera.ifft" else np.fft.fft
+        expected = transform(x, axis=-1, norm=normalization).astype(np.complex64)
+    artifact = runtime.RuntimeArtifact(metadata={
+        "target": "nvidia_sm120", "compiler_path": "nvidia_fft_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": ["x"], "output_name": "output",
+        "ops": [{"op_name": op_name, "result": "output", "operands": ["x"],
+                 "kwargs": {"axis": -1, "n": length,
+                            "normalization": normalization}}],
+    })
+    result = runtime.launch(artifact, (x,))
+    assert result["ok"] is True, result.get("reason")
+    actual = result["output"]
+    np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=2e-5)
+
+
+def test_normalized_spectral_convolution_matches_numpy():
+    runtime, _ = _runtime_or_skip()
+    rng = np.random.default_rng(83)
+    x = rng.standard_normal(11).astype(np.float32)
+    w = rng.standard_normal(5).astype(np.float32)
+    for normalization in ("forward", "ortho"):
+        artifact = runtime.RuntimeArtifact(metadata={
+            "target": "nvidia_sm120",
+            "compiler_path": "nvidia_spectral_compiled",
+            "executable": True, "execution_kind": "native_gpu",
+            "arg_names": ["x", "w"],
+            "ops": [{"op_name": "tessera.spectral_conv", "result": "output",
+                     "operands": ["x", "w"],
+                     "kwargs": {"normalization": normalization}}],
+        })
+        result = runtime.launch(artifact, (x, w))
+        assert result["ok"] is True, result.get("reason")
+        actual = np.asarray(result["output"])
+        n = x.size + w.size - 1
+        nfft = 1 << int(np.ceil(np.log2(n)))
+        expected = np.fft.irfft(
+            np.fft.rfft(x, nfft, norm=normalization) *
+            np.fft.rfft(w, nfft, norm=normalization),
+            nfft, norm=normalization)[:n].astype(np.float32)
+        np.testing.assert_allclose(actual, expected, rtol=2e-5, atol=2e-5)
+
+
+def test_fft_runtime_rejects_unknown_normalization():
+    runtime, _ = _runtime_or_skip()
+    x = np.ones((1, 8), dtype=np.complex64)
+    artifact = runtime.RuntimeArtifact(metadata={
+        "target": "nvidia_sm120", "compiler_path": "nvidia_fft_compiled",
+        "executable": True, "execution_kind": "native_gpu",
+        "arg_names": ["x"], "output_name": "output",
+        "ops": [{"op_name": "tessera.fft", "result": "output",
+                 "operands": ["x"], "kwargs": {"normalization": "invalid"}}],
+    })
+    result = runtime.launch(artifact, (x,))
+    assert result["ok"] is False
+    assert "normalization must be backward, forward, or ortho" in result["reason"]
 
 
 @pytest.mark.parametrize("op_name", ("tessera.dct", "tessera.stft",

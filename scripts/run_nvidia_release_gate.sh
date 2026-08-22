@@ -149,8 +149,8 @@ if [ "$LAYER" != cpu ]; then
     -DMLIR_DIR="$MLIR_DIR" \
     -DLLVM_EXTERNAL_LIT="$LLVM_LIT"
   PATH="$CUDA_BIN:$PATH" ninja -C "$BUILD_DIR" tessera-opt tessera-nvidia-opt \
-    tessera_nvidia_gemm tessera_nvidia_ptx_launch tessera_runtime \
-    check-tessera-nvidia
+    tessera_nvidia_gemm tessera_nvidia_rng tessera_nvidia_fft \
+    tessera_nvidia_ptx_launch tessera_runtime check-tessera-nvidia
 fi
 
 export PATH="$CUDA_BIN:$PATH"

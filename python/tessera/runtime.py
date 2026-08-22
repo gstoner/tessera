@@ -22,6 +22,7 @@ Usage::
 
 from __future__ import annotations
 
+import atexit
 import collections
 import ctypes
 import ctypes.util
@@ -14159,6 +14160,11 @@ _SPECTRAL_COMPOSITE_OPS = (
 def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any, np: Any) -> Any:
     """Composite spectral op over the device FFT lane. ``fftexec(sub_op, x,
     sub_kwargs)`` runs fft/ifft/rfft/irfft on the device."""
+    normalization = str(
+        kwargs.get("normalization") or kwargs.get("norm", "backward"))
+    if normalization not in {"backward", "forward", "ortho"}:
+        raise ValueError("spectral normalization must be backward, forward, or ortho")
+
     if op_name == "tessera.spectral_filter":  # pointwise cmul
         return (np.asarray(operands[0]) * np.asarray(operands[1])).astype(np.complex64)
 
@@ -14170,7 +14176,8 @@ def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any
         ax = axis if axis >= 0 else x.ndim + axis
         n = int(x.shape[ax])
         y = np.concatenate([x, np.flip(x, axis=ax)], axis=ax).astype(np.complex64)
-        spec = np.asarray(fftexec("tessera.fft", y, {"axis": ax}))
+        spec = np.asarray(fftexec(
+            "tessera.fft", y, {"axis": ax, "normalization": normalization}))
         sl = [slice(None)] * spec.ndim
         sl[ax] = slice(0, n)
         phase_shape = [1] * spec.ndim
@@ -14189,9 +14196,13 @@ def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any
         xp[..., : x.shape[-1]] = x
         wp = np.zeros(w.shape[:-1] + (nfft,), np.float32)
         wp[..., : w.shape[-1]] = w
-        xf = np.asarray(fftexec("tessera.rfft", xp, {"axis": -1}))
-        wf = np.asarray(fftexec("tessera.rfft", wp, {"axis": -1}))
-        y = fftexec("tessera.irfft", (xf * wf).astype(np.complex64), {"axis": -1, "n": nfft})
+        xf = np.asarray(fftexec(
+            "tessera.rfft", xp, {"axis": -1, "normalization": normalization}))
+        wf = np.asarray(fftexec(
+            "tessera.rfft", wp, {"axis": -1, "normalization": normalization}))
+        y = fftexec(
+            "tessera.irfft", (xf * wf).astype(np.complex64),
+            {"axis": -1, "n": nfft, "normalization": normalization})
         return np.asarray(y, np.float32)[..., :n]
 
     if op_name == "tessera.stft":  # framed windowed rfft
@@ -14201,7 +14212,9 @@ def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any
         wl = int(win.shape[-1])
         starts = list(range(0, max(1, int(x.shape[-1]) - wl + 1), hop))
         frames = np.stack([x[..., s : s + wl] * win for s in starts], axis=-2)
-        return np.asarray(fftexec("tessera.rfft", frames.astype(np.float32), {"axis": -1})).astype(np.complex64)
+        return np.asarray(fftexec(
+            "tessera.rfft", frames.astype(np.float32),
+            {"axis": -1, "normalization": normalization})).astype(np.complex64)
 
     # tessera.istft — overlap-add of windowed irfft frames
     xf = np.asarray(operands[0])
@@ -14209,7 +14222,9 @@ def _spectral_composite(op_name: str, operands: list, kwargs: dict, fftexec: Any
     hop = int(kwargs["hop"])
     fl = int(win.shape[-1])
     nf = int(xf.shape[-2])
-    frames = np.asarray(fftexec("tessera.irfft", xf.astype(np.complex64), {"axis": -1, "n": fl}))
+    frames = np.asarray(fftexec(
+        "tessera.irfft", xf.astype(np.complex64),
+        {"axis": -1, "n": fl, "normalization": normalization}))
     out = np.zeros(xf.shape[:-2] + ((nf - 1) * hop + fl,), np.float64)
     weight = np.zeros_like(out)
     for idx in range(nf):
@@ -18426,7 +18441,43 @@ def _execute_nvidia_compiled_rng(artifact: RuntimeArtifact, args: Any) -> Any:
 
 
 _nvidia_fft_runtime: ctypes.CDLL | None = None
-_nvidia_fft_plans: dict[tuple[str, int, int], tuple[Any, Any, Any, int]] = {}
+_NVIDIA_FFT_PLAN_CACHE_LIMIT = 16
+_nvidia_fft_plans: collections.OrderedDict[
+    tuple[str, int, int], tuple[Any, Any, Any, int]
+] = collections.OrderedDict()
+_nvidia_fft_plan_lock = threading.RLock()
+
+
+def _release_nvidia_fft_plan_package(package: tuple[Any, Any, Any, int]) -> None:
+    lib, plan, workspace, _ = package
+    # Attempt both releases even if one native destructor reports an error.
+    # Cleanup is best-effort during eviction and interpreter shutdown.
+    try:
+        if workspace:
+            lib.tessera_nvidia_fft_workspace_free(workspace)
+    finally:
+        if plan:
+            lib.tessera_nvidia_fft_plan_destroy(plan)
+
+
+def _clear_nvidia_fft_plan_cache() -> None:
+    with _nvidia_fft_plan_lock:
+        packages = tuple(_nvidia_fft_plans.values())
+        _nvidia_fft_plans.clear()
+        for package in packages:
+            _release_nvidia_fft_plan_package(package)
+
+
+def _cache_nvidia_fft_plan(
+    key: tuple[str, int, int], package: tuple[Any, Any, Any, int]
+) -> None:
+    while len(_nvidia_fft_plans) >= _NVIDIA_FFT_PLAN_CACHE_LIMIT:
+        _, stale = _nvidia_fft_plans.popitem(last=False)
+        _release_nvidia_fft_plan_package(stale)
+    _nvidia_fft_plans[key] = package
+
+
+atexit.register(_clear_nvidia_fft_plan_cache)
 
 
 def _load_nvidia_fft_runtime() -> ctypes.CDLL | None:
@@ -18492,29 +18543,33 @@ def _nvidia_fft_c2c_rows(rows: Any, inverse: bool, np: Any) -> Any:
         raise ValueError("NVIDIA FFT requires non-empty rank-2 complex64 rows")
     batch, length = (int(dim) for dim in values.shape)
     key = ("c2c", batch, length)
-    package = _nvidia_fft_plans.get(key)
-    if package is None:
-        lib = _load_nvidia_fft_runtime()
-        if lib is None:
-            raise RuntimeError("libtessera_nvidia_fft.so not loadable")
-        plan = ctypes.c_void_p()
-        workspace_size = ctypes.c_size_t()
-        if lib.tessera_nvidia_fft_plan_create_c2c_f32(
-            batch, length, ctypes.byref(plan), ctypes.byref(workspace_size)) != 0:
-            raise RuntimeError("NVIDIA FFT plan creation failed")
-        workspace = ctypes.c_void_p()
-        if lib.tessera_nvidia_fft_workspace_alloc(
-            workspace_size.value, ctypes.byref(workspace)) != 0:
-            lib.tessera_nvidia_fft_plan_destroy(plan)
-            raise RuntimeError("NVIDIA FFT workspace allocation failed")
-        package = (lib, plan, workspace, int(workspace_size.value))
-        _nvidia_fft_plans[key] = package
-    lib, plan, workspace, workspace_byte_count = package
-    output = np.empty_like(values)
-    rc = lib.tessera_nvidia_fft_execute_c2c_f32(
-        plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        workspace, ctypes.c_size_t(workspace_byte_count), ctypes.c_int(bool(inverse)))
+    with _nvidia_fft_plan_lock:
+        package = _nvidia_fft_plans.get(key)
+        if package is None:
+            lib = _load_nvidia_fft_runtime()
+            if lib is None:
+                raise RuntimeError("libtessera_nvidia_fft.so not loadable")
+            plan = ctypes.c_void_p()
+            workspace_size = ctypes.c_size_t()
+            if lib.tessera_nvidia_fft_plan_create_c2c_f32(
+                batch, length, ctypes.byref(plan), ctypes.byref(workspace_size)) != 0:
+                raise RuntimeError("NVIDIA FFT plan creation failed")
+            workspace = ctypes.c_void_p()
+            if lib.tessera_nvidia_fft_workspace_alloc(
+                workspace_size.value, ctypes.byref(workspace)) != 0:
+                lib.tessera_nvidia_fft_plan_destroy(plan)
+                raise RuntimeError("NVIDIA FFT workspace allocation failed")
+            package = (lib, plan, workspace, int(workspace_size.value))
+            _cache_nvidia_fft_plan(key, package)
+        else:
+            _nvidia_fft_plans.move_to_end(key)
+        lib, plan, workspace, workspace_byte_count = package
+        output = np.empty_like(values)
+        rc = lib.tessera_nvidia_fft_execute_c2c_f32(
+            plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            workspace, ctypes.c_size_t(workspace_byte_count),
+            ctypes.c_int(bool(inverse)))
     if rc != 0:
         raise RuntimeError(f"NVIDIA FFT execution failed rc={rc}")
     return output
@@ -18537,33 +18592,36 @@ def _nvidia_fft_real_rows(rows: Any, inverse: bool, logical_n: int | None,
     if length <= 0 or (inverse and int(values.shape[1]) != length // 2 + 1):
         raise ValueError("NVIDIA C2R input does not match its logical length")
     key = (kind, batch, length)
-    package = _nvidia_fft_plans.get(key)
-    if package is None:
-        lib = _load_nvidia_fft_runtime()
-        if lib is None:
-            raise RuntimeError("libtessera_nvidia_fft.so not loadable")
-        plan, workspace_size = ctypes.c_void_p(), ctypes.c_size_t()
-        create = (lib.tessera_nvidia_fft_plan_create_c2r_f32 if inverse else
-                  lib.tessera_nvidia_fft_plan_create_r2c_f32)
-        if create(batch, length, ctypes.byref(plan),
-                  ctypes.byref(workspace_size)) != 0:
-            raise RuntimeError(f"NVIDIA {kind.upper()} plan creation failed")
-        workspace = ctypes.c_void_p()
-        if lib.tessera_nvidia_fft_workspace_alloc(
-                workspace_size.value, ctypes.byref(workspace)) != 0:
-            lib.tessera_nvidia_fft_plan_destroy(plan)
-            raise RuntimeError("NVIDIA FFT workspace allocation failed")
-        package = (lib, plan, workspace, int(workspace_size.value))
-        _nvidia_fft_plans[key] = package
-    lib, plan, workspace, workspace_byte_count = package
-    output = (np.empty((batch, length), np.float32) if inverse else
-              np.empty((batch, length // 2 + 1), np.complex64))
-    execute = (lib.tessera_nvidia_fft_execute_c2r_f32 if inverse else
-               lib.tessera_nvidia_fft_execute_r2c_f32)
-    rc = execute(
-        plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-        workspace, ctypes.c_size_t(workspace_byte_count))
+    with _nvidia_fft_plan_lock:
+        package = _nvidia_fft_plans.get(key)
+        if package is None:
+            lib = _load_nvidia_fft_runtime()
+            if lib is None:
+                raise RuntimeError("libtessera_nvidia_fft.so not loadable")
+            plan, workspace_size = ctypes.c_void_p(), ctypes.c_size_t()
+            create = (lib.tessera_nvidia_fft_plan_create_c2r_f32 if inverse else
+                      lib.tessera_nvidia_fft_plan_create_r2c_f32)
+            if create(batch, length, ctypes.byref(plan),
+                      ctypes.byref(workspace_size)) != 0:
+                raise RuntimeError(f"NVIDIA {kind.upper()} plan creation failed")
+            workspace = ctypes.c_void_p()
+            if lib.tessera_nvidia_fft_workspace_alloc(
+                    workspace_size.value, ctypes.byref(workspace)) != 0:
+                lib.tessera_nvidia_fft_plan_destroy(plan)
+                raise RuntimeError("NVIDIA FFT workspace allocation failed")
+            package = (lib, plan, workspace, int(workspace_size.value))
+            _cache_nvidia_fft_plan(key, package)
+        else:
+            _nvidia_fft_plans.move_to_end(key)
+        lib, plan, workspace, workspace_byte_count = package
+        output = (np.empty((batch, length), np.float32) if inverse else
+                  np.empty((batch, length // 2 + 1), np.complex64))
+        execute = (lib.tessera_nvidia_fft_execute_c2r_f32 if inverse else
+                   lib.tessera_nvidia_fft_execute_r2c_f32)
+        rc = execute(
+            plan, values.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            output.view(np.float32).ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+            workspace, ctypes.c_size_t(workspace_byte_count))
     if rc != 0:
         raise RuntimeError(f"NVIDIA {kind.upper()} execution failed rc={rc}")
     return output
@@ -18587,6 +18645,10 @@ def _execute_nvidia_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     value = np.asarray(values[operand_names[0]], dtype=(
         np.complex64 if op_name != "tessera.rfft" else np.float32))
     kwargs = dict(op.get("kwargs") or {})
+    normalization = str(
+        kwargs.get("normalization") or kwargs.get("norm", "backward"))
+    if normalization not in {"backward", "forward", "ortho"}:
+        raise ValueError("NVIDIA FFT normalization must be backward, forward, or ortho")
     axis = int(kwargs.get("axis", -1))
     if axis < 0:
         axis += value.ndim
@@ -18618,6 +18680,19 @@ def _execute_nvidia_compiled_fft(artifact: RuntimeArtifact, args: Any) -> Any:
     else:
         logical_n = int(kwargs.get("n") or (2 * (int(rows.shape[-1]) - 1)))
         transformed = _nvidia_fft_real_rows(rows, True, logical_n, np)
+    inverse = op_name in {"tessera.ifft", "tessera.irfft"}
+    logical_length = int(transformed.shape[-1]) if inverse else int(rows.shape[-1])
+    native_scale = (
+        float(logical_length) if normalization == "forward" and inverse
+        else 1.0 / float(logical_length) if normalization == "forward"
+        else math.sqrt(float(logical_length)) if normalization == "ortho" and inverse
+        else 1.0 / math.sqrt(float(logical_length)) if normalization == "ortho"
+        else 1.0
+    )
+    if native_scale != 1.0:
+        scalar = (np.float32(native_scale) if transformed.dtype.kind == "f"
+                  else np.complex64(native_scale))
+        transformed = transformed * scalar
     output_shape = (*moved.shape[:-1], transformed.shape[-1])
     restored = transformed.reshape(output_shape)
     return np.moveaxis(restored, -1, axis)

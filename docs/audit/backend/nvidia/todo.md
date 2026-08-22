@@ -1132,14 +1132,16 @@ verdict and cannot promote a choice.
 **SuperBear timing packet (2026-08-22): row-major retained.** Seven repeated
 CUDA-event medians across square, rectangular, and ragged buckets swept
 row-major, column-major, grouped-M, and grouped-N at groups 2/4/8. The three
-per-shape winners disagreed and improved over row-major by only 0.81%, 1.96%,
-and 1.21%, below the recorded 3% promotion floor. The committed packet is
+per-shape winners disagreed (column-major, grouped-N/2, grouped-N/2) and
+improved over row-major by 0.57%, 3.42%, and 2.54%; only one bucket crossed the
+recorded 3% promotion floor. The committed packet is
 [`nvidia_sm120_superbear_raster_2026_08_22.json`](../../../../benchmarks/baselines/nvidia_sm120_superbear_raster_2026_08_22.json).
-Nsight Compute 2026.2.1 reached the exact kernel but the host driver denied
-performance-counter access with `ERR_NVGPUCTRPERM`; the packet records that
-blocker and carries no fabricated L2 value. This closes SuperBear's measured
-selector decision (retain row-major) but leaves the NR2 Pro timing + L2 packet
-open under the owning-host rule.
+Nsight Compute 2026.2.1 captured the exact 512x512x512 kernel: row-major was
+96.65% L2 / 1,305,600 DRAM bytes, column-major 96.81% / 1,298,944,
+grouped-M/8 94.08% / 1,054,720, and grouped-N/8 95.85% / 1,054,976. The lower
+grouped traffic did not produce a stable all-shape timing winner, so the
+selector remains row-major. This closes SuperBear's measured timing + counter
+decision but leaves the NR2 Pro packet open under the owning-host rule.
 
 ## NVIDIA-AOT-1: decide whether NVRTC needs a precompiled peer — complete
 

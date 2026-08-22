@@ -281,6 +281,8 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
   // vocabulary is portable, but gfx1200/gfx1250 must supply their own exact-
   // device schedule and instruction-family profile rather than inheriting it.
   bool rocm = schedule.arch.contains("gfx1151");
+  bool nvidia_sm120 = schedule.target == "nvidia_sm120" &&
+                      (schedule.arch.empty() || schedule.arch.contains("sm_120"));
   // Apple GPU has no rank-2 f32 cooperative-matrix GEMM: the shared launch
   // contract is consumed as a batch-1 MPS BMM (apple_gpu_bmm_f32_batch1).  The
   // macro-tile below is a logical default only; the MPS route owns its own
@@ -326,6 +328,23 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
     schedule.macroTileN = 64;
     if (schedule.arch.empty())
       schedule.arch = "gfx1151";
+    return schedule;
+  }
+  if (nvidia_sm120 && lhsElement.isF16() && rhsElement.isF16() &&
+      outElement.isF32()) {
+    // Consumer Blackwell's owned MMA contract is warp-level m16n8k16 with
+    // fp16 storage and fp32 accumulation.  The macro tile remains a launch
+    // envelope; Tile/Target lowering owns fragment packing and repetition.
+    schedule.storage = "f16";
+    schedule.accum = "f32";
+    schedule.tileM = 16;
+    schedule.tileN = 8;
+    schedule.tileK = 16;
+    schedule.macroTileM = 128;
+    schedule.macroTileN = 128;
+    schedule.warps = 1;
+    if (schedule.arch.empty())
+      schedule.arch = "sm_120";
     return schedule;
   }
   return failure();

@@ -55,6 +55,9 @@ if(TESSERA_ENABLE_CUDA)
   # depend on PTX that ptxas correctly rejects for that target.
   if(NOT TESSERA_CUDA_ARCH MATCHES "sm_120")
     target_sources(tessera_gpu_backend PRIVATE src/kernels/wgmma_bf16_inline_ptx.cu)
+    target_compile_definitions(tessera_gpu_backend PRIVATE TESSERA_WGMMA_PTX_AVAILABLE=1)
+  else()
+    target_compile_definitions(tessera_gpu_backend PRIVATE TESSERA_WGMMA_PTX_AVAILABLE=0)
   endif()
 
   target_include_directories(tessera_gpu_backend PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

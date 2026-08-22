@@ -3,6 +3,16 @@
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
 #include <memory>
+#include <cstdio>
+
+// CUDA launchers are defined at global scope by the .cu translation units.
+void launch_wmma_fp16_gemm(const __half*, const __half*, float*, int, int, int,
+                           float, float, cudaStream_t);
+void launch_wmma_bf16_gemm(const __nv_bfloat16*, const __nv_bfloat16*, float*,
+                           int, int, int, float, float, cudaStream_t);
+extern "C" void launch_imma_int8(const int8_t*, const int8_t*, int32_t*,
+                                  int, int, int, int, int, int, int,
+                                  cudaStream_t);
 
 namespace tessera { namespace gpu {
 
@@ -22,17 +32,13 @@ int  TesseraGpuBackend::smVersion() const noexcept {
     return I->ctx.sm;
 }
 
-// Kernels (symbols defined in .cu files)
-void launch_wmma_fp16_gemm(const __half*, const __half*, float*, int,int,int, float,float, cudaStream_t);
-void launch_wmma_bf16_gemm(const __nv_bfloat16*, const __nv_bfloat16*, float*, int,int,int, float,float, cudaStream_t);
-
 void TesseraGpuBackend::wmma_gemm_fp16(const __half* A, const __half* B, float* C,
                                        int M, int N, int K, float alpha, float beta) {
-    launch_wmma_fp16_gemm(A,B,C,M,N,K,alpha,beta,0);
+    ::launch_wmma_fp16_gemm(A,B,C,M,N,K,alpha,beta,0);
 }
 void TesseraGpuBackend::wmma_gemm_bf16(const __nv_bfloat16* A, const __nv_bfloat16* B, float* C,
                                        int M, int N, int K, float alpha, float beta) {
-    launch_wmma_bf16_gemm(A,B,C,M,N,K,alpha,beta,0);
+    ::launch_wmma_bf16_gemm(A,B,C,M,N,K,alpha,beta,0);
 }
 
 extern "C" {
@@ -61,18 +67,24 @@ void tessera_gpu_wmma_gemm_bf16(const __nv_bfloat16* A, const __nv_bfloat16* B, 
 }} // namespace
 
 
-// New launchers
+#if TESSERA_WGMMA_PTX_AVAILABLE
+// Hopper-only demo launcher.
 void launch_wgmma_bf16_ptx(const __nv_bfloat16*, const __nv_bfloat16*, float*,
                            int,int,int,int,int,int,float,float,const void*,const void*, cudaStream_t);
-void launch_imma_int8(const int8_t*, const int8_t*, int32_t*,
-                      int,int,int,int,int,int,int, cudaStream_t);
-
+#endif
 // Convenience C wrappers
 extern "C" void tessera_gpu_wgmma_bf16(const __nv_bfloat16* A, const __nv_bfloat16* B, float* C,
                                        int M, int N, int K, int lda, int ldb, int ldc,
                                        float alpha, float beta,
                                        const void* tma_desc_A, const void* tma_desc_B) {
+#if TESSERA_WGMMA_PTX_AVAILABLE
     launch_wgmma_bf16_ptx(A,B,C,M,N,K,lda,ldb,ldc,alpha,beta,tma_desc_A,tma_desc_B,0);
+#else
+    (void)A; (void)B; (void)C; (void)M; (void)N; (void)K;
+    (void)lda; (void)ldb; (void)ldc; (void)alpha; (void)beta;
+    (void)tma_desc_A; (void)tma_desc_B;
+    std::fputs("tessera_gpu_wgmma_bf16 is unavailable on SM120; use the MMA sync path\n", stderr);
+#endif
 }
 
 extern "C" void tessera_gpu_imma_int8(const int8_t* A, const int8_t* B, int32_t* C,

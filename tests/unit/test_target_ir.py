@@ -55,6 +55,19 @@ def test_target_ir_verifier_rejects_missing_backend_contract_attrs():
         module.to_mlir()
 
 
+def test_target_ir_verifier_requires_nvidia_training_lineage_contract():
+    module = TargetIRModule(
+        attrs={"tessera.ir.level": "target", "target": "nvidia_sm120"},
+        functions=[TargetFunction(
+            "bad_training", target="nvidia_sm120",
+            body=[TargetOp("tessera_nvidia.training_kernel", {"arch": "sm_120"})],
+        )],
+    )
+    result = module.verify()
+    assert not result.ok
+    assert "TARGET_IR_MISSING_ATTR" in result.format()
+
+
 def test_lower_tile_to_rocm_target_ir_maps_mma_to_mfma_dma_wait():
     tile = TileIRModule(functions=[
         TileFunction(

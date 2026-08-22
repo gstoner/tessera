@@ -70,7 +70,7 @@ class NativeLionVJPPackage:
         return str(self.contract["artifact_hash"])
 
     def validate(self) -> None:
-        if self.target not in {"x86", "rocm"}:
+        if self.target not in {"x86", "rocm", "nvidia_sm120"}:
             raise ValueError("native Lion VJP has no physical target owner")
         if _digest(self.source_graph_ir) != self.source_graph_ir_digest:
             raise ValueError("native Lion VJP source Graph digest is stale")
@@ -80,7 +80,7 @@ class NativeLionVJPPackage:
         ]:
             raise ValueError("native Lion VJP frontend owner is stale")
         self.scheduled.validate()
-        expected = "x86" if self.target == "x86" else "rocm_gfx1151"
+        expected = {"x86": "x86", "rocm": "rocm_gfx1151", "nvidia_sm120": "nvidia_sm120"}[self.target]
         if self.scheduled.target != expected:
             raise ValueError("native Lion VJP Schedule target is stale")
         if len(self.argument_names) != 3 or len(set(self.argument_names)) != 3:
@@ -89,7 +89,7 @@ class NativeLionVJPPackage:
     def runtime_metadata(self) -> dict[str, Any]:
         """Serialize the physical package while deliberately omitting Graph IR."""
         self.validate()
-        execution_mode = "cpu_avx512" if self.target == "x86" else "hip_runtime"
+        execution_mode = {"x86": "cpu_avx512", "rocm": "hip_runtime", "nvidia_sm120": "cuda_driver"}[self.target]
         path = f"{self.target}_lion_bwd_compiled"
         return {
             "target": self.target,
@@ -114,7 +114,7 @@ class NativeLionVJPPackage:
 
 def validate_native_lion_vjp_runtime_metadata(metadata: Mapping[str, Any]) -> None:
     """Reject stale lineage before either architecture launches native code."""
-    if "source_graph_ir" in metadata or "ops" in metadata:
+    if "source_graph_ir" in metadata:
         raise ValueError("native Lion runtime must not receive source Graph IR")
     contract = dict(metadata.get("native_vjp_package") or {})
     body = dict(contract)
@@ -145,10 +145,17 @@ def validate_native_lion_vjp_runtime_metadata(metadata: Mapping[str, Any]) -> No
         "dmoment_out",
     ]:
         raise ValueError("native Lion VJP argument ABI is stale")
+    descriptor = dict(metadata.get("nvidia_training_descriptor") or {})
+    if target == "nvidia_sm120" and (
+        descriptor.get("schema") != "tessera.cuda.training_descriptor.v1"
+        or descriptor.get("state_lineage_digest") != body.get("state_lineage_digest")
+        or descriptor.get("tile_program_digest") != body.get("tile_program_digest")
+    ):
+        raise ValueError("native Lion CUDA training descriptor is stale")
     shape = tuple(int(dim) for dim in scheduled.get("shape", ()))
     validate_scheduled_lion_vjp_metadata(
         scheduled,
-        target="x86" if target == "x86" else "rocm_gfx1151",
+        target={"x86": "x86", "rocm": "rocm_gfx1151", "nvidia_sm120": "nvidia_sm120"}[target],
         shape=shape,
         state_contract=state_contract,
     )
@@ -168,7 +175,7 @@ def build_native_lion_vjp_package(
         raise ValueError("native Lion VJP requires tracer-owned source Graph IR")
     if source.op_name != "tessera.lion":
         raise ValueError("native Lion VJP requires one tessera.lion Graph op")
-    if target not in {"x86", "rocm"}:
+    if target not in {"x86", "rocm", "nvidia_sm120"}:
         raise ValueError(f"native Lion VJP has no Target consumer for {target!r}")
     if len(ordered_inputs) != 3 or len(arg_names) != 3:
         raise ValueError("native Lion VJP requires parameter, gradient, and moment")
@@ -187,7 +194,7 @@ def build_native_lion_vjp_package(
     if not isinstance(frontend_certificate, NonReexecutingFrontendCertificate):
         raise ValueError("native Lion VJP requires non-reexecuting frontend proof")
     scheduled = lower_scheduled_lion_vjp(
-        target="x86" if target == "x86" else "rocm_gfx1151",
+        target={"x86": "x86", "rocm": "rocm_gfx1151", "nvidia_sm120": "nvidia_sm120"}[target],
         shape=shapes[0],
         kwargs=dict(source.kwargs),
     )

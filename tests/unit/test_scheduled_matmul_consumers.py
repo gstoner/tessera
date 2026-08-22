@@ -20,7 +20,9 @@ def _module(
 ) -> GraphIRModule:
     m, k, n = shape
     dtype, element = (
-        ("fp16", "f16") if target in ("rocm", "apple_gpu_f16") else ("fp32", "f32")
+        ("fp16", "f16")
+        if target in ("rocm", "apple_gpu_f16", "nvidia_sm120")
+        else ("fp32", "f32")
     )
     a = IRType(f"tensor<{m}x{k}x{element}>", (str(m), str(k)), dtype)
     b = IRType(f"tensor<{k}x{n}x{element}>", (str(k), str(n)), dtype)
@@ -52,6 +54,7 @@ _ARTIFACT_CONTRACT = {
     "rocm": ("rocm", "gfx1151", "fp16", "f16", 32, 64),
     "apple_gpu": ("apple_gpu", "apple7", "fp32", "f32", 16, 16),
     "apple_gpu_f16": ("apple_gpu", "apple7", "fp16", "f16", 32, 32),
+    "nvidia_sm120": ("nvidia_sm120", "sm_120", "fp16", "f16", 128, 128),
 }
 
 
@@ -104,6 +107,17 @@ def _artifact(*, target: str) -> ScheduledMatmulArtifact:
         macro_tile_n=macro_tile_n,
         schedule_digest=digest,
     )
+
+
+def test_nvidia_sm120_uses_shared_scheduled_matmul_contract() -> None:
+    module = _module(target="nvidia_sm120")
+    assert scheduled_matmul.supports_scheduled_matmul(
+        module, target="nvidia_sm120"
+    )
+    artifact = _artifact(target="nvidia_sm120")
+    assert artifact.target == "nvidia_sm120"
+    assert artifact.architecture == "sm_120"
+    artifact.validate()
 
 
 def test_scheduled_artifact_rejects_graph_reentry() -> None:

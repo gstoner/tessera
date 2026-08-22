@@ -5,6 +5,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
+
+from tessera._jit_boundary import TesseraJitError
 
 from tessera.compiler.jit import JitFn
 from tessera.compiler.native_vjp_plugins import (
@@ -109,7 +112,8 @@ def test_normalization_vjp_package_is_constructed_by_family_plugin(
         result="out",
         kwargs={"eps": 1.0e-5},
     )
-    result = execute_native_vjp_family(
+    with pytest.raises(TesseraJitError, match="non-reexecuting frontend proof"):
+        execute_native_vjp_family(
         source=source,
         target="x86",
         ordered_inputs=(np.zeros((2, 3), np.float32), np.ones(3, np.float32)),
@@ -204,20 +208,17 @@ def test_nvidia_lion_package_is_constructed_by_family_plugin(monkeypatch) -> Non
     source = SimpleNamespace(
         op_name="tessera.lion", result="out", kwargs={"beta1": 0.9}
     )
-    result = execute_native_vjp_family(
-        source=source,
-        target="nvidia_sm120",
-        ordered_inputs=tuple(np.ones(4, np.float32) for _ in range(3)),
-        arg_names=("param", "grad", "moment"),
-        out_cotangents=tuple(np.ones(4, np.float32) for _ in range(2)),
-        wrt_names=("param", "moment"),
-        source_graph_ir="module { /* tracer authority */ }",
-    )
-    assert result is not None
-    assert result.execution["implementation"] == "family_plugin"
-    assert result.execution["target_consumer"] == "nvidia.sm120_lion_backward"
-    assert captured["metadata"]["compiler_path"] == "nvidia_lion_bwd_compiled"
-    assert len(captured["values"]) == 5
+    with pytest.raises(TesseraJitError, match="non-reexecuting frontend proof"):
+        execute_native_vjp_family(
+            source=source,
+            target="nvidia_sm120",
+            ordered_inputs=tuple(np.ones(4, np.float32) for _ in range(3)),
+            arg_names=("param", "grad", "moment"),
+            out_cotangents=tuple(np.ones(4, np.float32) for _ in range(2)),
+            wrt_names=("param", "moment"),
+            source_graph_ir="module { /* tracer authority */ }",
+        )
+    assert captured == {}
 
 
 def test_spectral_vjp_package_binds_source_schedule_and_tile_lineage() -> None:

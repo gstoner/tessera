@@ -355,29 +355,41 @@ def _execute_lion(
                 "NVIDIA Lion backward requires parameter and moment cotangents"
             )
         cotangent_names = ["dparam_out", "dmoment_out"]
+        from .native_lion_vjp import build_native_lion_vjp_package
+
+        if not source_graph_ir:
+            raise TesseraJitError("NVIDIA Lion VJP requires tracer-owned source Graph IR")
+        try:
+            package = build_native_lion_vjp_package(
+                source_graph_ir=source_graph_ir, source=source, target=target,
+                ordered_inputs=ordered_inputs, arg_names=arg_names,
+                out_cotangents=cotangents,
+                frontend_certificate=frontend_certificate,
+            )
+        except (RuntimeError, TypeError, ValueError) as exc:
+            raise TesseraJitError(str(exc)) from exc
         path = "nvidia_lion_bwd_compiled"
+        metadata = package.runtime_metadata()
+        metadata.update({
+            "native_vjp_family": declaration.family,
+            "native_vjp_schedule_consumer": declaration.schedule_consumer,
+            "native_vjp_tile_consumer": declaration.tile_consumer,
+            "native_vjp_target_consumer": declaration.target_consumers[target],
+            # This is a Target ABI descriptor, not source Graph IR.  The
+            # executor uses the bounded native kernel descriptor below.
+            "nvidia_training_descriptor": {
+                "schema": "tessera.cuda.training_descriptor.v1",
+                "family": declaration.family,
+                "state_lineage_digest": package.contract["state_lineage_digest"],
+                "tile_program_digest": package.tile_program_digest,
+            },
+            "ops": [{
+                "op_name": source.op_name, "result": source.result,
+                "operands": list(arg_names), "kwargs": dict(source.kwargs),
+            }],
+        })
         result = launch(
-            RuntimeArtifact(metadata={
-                "target": target,
-                "compiler_path": path,
-                "executable": True,
-                "execution_kind": "native_gpu",
-                "execution_mode": "cuda_driver",
-                "autodiff_phase": "backward",
-                "native_vjp_family": declaration.family,
-                "native_vjp_schedule_consumer": declaration.schedule_consumer,
-                "native_vjp_tile_consumer": declaration.tile_consumer,
-                "native_vjp_target_consumer": declaration.target_consumers[target],
-                "out_cotangents": cotangent_names,
-                "arg_names": [*arg_names, *cotangent_names],
-                "output_names": [f"d_{name}" for name in arg_names],
-                "ops": [{
-                    "op_name": source.op_name,
-                    "result": source.result,
-                    "operands": list(arg_names),
-                    "kwargs": dict(source.kwargs),
-                }],
-            }),
+            RuntimeArtifact(metadata=metadata),
             tuple(
                 np.ascontiguousarray(np.asarray(value), dtype=np.float32)
                 for value in (*ordered_inputs, *cotangents)
@@ -408,6 +420,12 @@ def _execute_lion(
                 "schedule_consumer": declaration.schedule_consumer,
                 "tile_consumer": declaration.tile_consumer,
                 "target_consumer": declaration.target_consumers[target],
+                "source_graph_ir_digest": package.source_graph_ir_digest,
+                "frontend_certificate_digest": package.frontend_certificate.digest,
+                "schedule_artifact_hash": package.scheduled.schedule_digest,
+                "state_lineage_digest": package.contract["state_lineage_digest"],
+                "tile_program_digest": package.tile_program_digest,
+                "artifact_hash": package.artifact_hash,
                 "frontend_authority": "tracer",
                 "proof_mode": "structural_non_reexecuting",
             },

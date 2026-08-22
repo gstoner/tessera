@@ -36,6 +36,7 @@ if(TESSERA_BUILD_TESTS)
 endif()
 
 if(TESSERA_ENABLE_CUDA)
+  find_package(CUDAToolkit REQUIRED)
   set(CMAKE_CUDA_ARCHITECTURES OFF)
 
   add_library(tessera_gpu_backend
@@ -44,11 +45,20 @@ if(TESSERA_ENABLE_CUDA)
     src/kernels/wmma_gemm_fp16.cu
     src/kernels/wmma_gemm_bf16.cu
     src/kernels/wmma_bf16_pipeline.cu
-    src/kernels/wgmma_bf16_inline_ptx.cu
+    src/kernels/mbarrier_smoke.cu
+    src/kernels/tma_smoke.cu
     src/kernels/imma_gemm_int8.cu
   )
 
+  # The inline WGMMA demo encodes Hopper-era instructions and is not a
+  # Blackwell implementation.  Do not make SM120 barrier/runtime validation
+  # depend on PTX that ptxas correctly rejects for that target.
+  if(NOT TESSERA_CUDA_ARCH MATCHES "sm_120")
+    target_sources(tessera_gpu_backend PRIVATE src/kernels/wgmma_bf16_inline_ptx.cu)
+  endif()
+
   target_include_directories(tessera_gpu_backend PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  target_link_libraries(tessera_gpu_backend PUBLIC CUDA::cudart CUDA::cuda_driver)
   target_compile_definitions(tessera_gpu_backend PUBLIC
     TESSERA_CUDA_ARCH_STR="${TESSERA_CUDA_ARCH}"
   )
@@ -79,6 +89,14 @@ if(TESSERA_ENABLE_CUDA)
     add_executable(test_wgmma_tile_ir tests/test_wgmma_tile_ir.cu)
     target_link_libraries(test_wgmma_tile_ir PRIVATE tessera_gpu_backend)
     target_compile_options(test_wgmma_tile_ir PRIVATE -arch=${TESSERA_CUDA_ARCH})
+
+    add_executable(test_mbarrier_smoke tests/test_mbarrier_smoke.cu)
+    target_link_libraries(test_mbarrier_smoke PRIVATE tessera_gpu_backend)
+    target_compile_options(test_mbarrier_smoke PRIVATE -arch=${TESSERA_CUDA_ARCH})
+
+    add_executable(test_tma_smoke tests/test_tma_smoke.cu)
+    target_link_libraries(test_tma_smoke PRIVATE tessera_gpu_backend)
+    target_compile_options(test_tma_smoke PRIVATE -arch=${TESSERA_CUDA_ARCH})
   endif()
 
   if(TESSERA_BUILD_GPU_BENCH)

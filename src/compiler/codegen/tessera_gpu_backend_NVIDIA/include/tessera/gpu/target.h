@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <cstddef>
+#include <cuda_fp16.h>
+#include <cuda_bf16.h>
 
 namespace tessera { namespace gpu {
 

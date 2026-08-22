@@ -143,6 +143,9 @@ def NVIDIA_TmemStoreOp : TesseraNVIDIA_Op<"tmem_store"> {
 def NVIDIA_CudaKernelOp : TesseraNVIDIA_Op<"cuda_kernel"> {
   let summary = "Generic CUDA kernel artifact contract";
 }
+def NVIDIA_TrainingKernelOp : TesseraNVIDIA_Op<"training_kernel"> {
+  let summary = "SM120 state-lineage training kernel artifact contract";
+}
 
 def NVIDIA_PhiloxModeAttr
     : NVIDIA_EnumStrAttr<[

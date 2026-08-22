@@ -17,7 +17,7 @@ CudaContext::CudaContext() {
     cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, dev);
     cuDeviceGetAttribute(&minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, dev);
     sm = major*10 + minor;
-    cuCtxCreate(&ctx, 0, dev);
+    cuCtxCreate(&ctx, nullptr, 0, dev);
 }
 
 CudaContext::~CudaContext() {
@@ -42,7 +42,7 @@ std::string tessera::gpu::cuErrStr(CUresult r) {
 
 CUfunction tessera::gpu::getKernel(CudaModule& m, const char* name) {
     CUfunction f=nullptr;
-    checkCu(cuModuleGetFunction(f, m.mod, name), "cuModuleGetFunction");
+    checkCu(cuModuleGetFunction(&f, m.mod, name), "cuModuleGetFunction");
     return f;
 }
 

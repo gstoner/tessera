@@ -105,7 +105,10 @@ def _write_dtype_fixture(work: Path, *, entry: str, dtype: str, k: int,
                          accumulator: str) -> Path:
     """Create the same layout-bearing Tile kernel for a physical MMA dtype."""
     fixture = work / f"{entry}.mlir"
-    text = f'''module {{
+    text = f'''!fa = !tile.fragment<m = 16, n = 8, k = {k}, elem = "{dtype}", acc = "{accumulator}", role = "a", layout = "row_major", family = "mma_sync">
+!fb = !tile.fragment<m = 16, n = 8, k = {k}, elem = "{dtype}", acc = "{accumulator}", role = "b", layout = "col_major", family = "mma_sync">
+!fc = !tile.fragment<m = 16, n = 8, k = {k}, elem = "{accumulator}", acc = "{accumulator}", role = "acc", layout = "row_major", family = "mma_sync">
+module {{
   llvm.func @{entry}(%a_ptr: !llvm.ptr, %b_ptr: !llvm.ptr,
                      %d_ptr: !llvm.ptr, %zero: i64) attributes {{nvvm.kernel}} {{
     %a_tile = tile.view %a_ptr, %zero, %zero {{
@@ -116,14 +119,14 @@ def _write_dtype_fixture(work: Path, *, entry: str, dtype: str, k: int,
       tile.layout = #tile.layout<shard = [{k}, 8] : [8, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
       tile.memory = #tile.memory_layout<space = "gmem", order = "col_major", leading_dim = {k}>
     }} : (!llvm.ptr, i64, i64) -> !tile.tile
-    %a = tile.fragment_pack %a_tile {{role = "a", mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : (!tile.tile) -> !tile.fragment
-    %b = tile.fragment_pack %b_tile {{role = "b", mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : (!tile.tile) -> !tile.fragment
-    %c = tile.fragment_zero {{role = "acc", mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : !tile.fragment
-    %d = tile.mma %a, %b, %c {{mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : (!tile.fragment, !tile.fragment, !tile.fragment) -> !tile.fragment
+    %a = tile.fragment_pack %a_tile {{role = "a", mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : (!tile.tile) -> !fa
+    %b = tile.fragment_pack %b_tile {{role = "b", mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : (!tile.tile) -> !fb
+    %c = tile.fragment_zero {{role = "acc", mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : !fc
+    %d = tile.mma %a, %b, %c {{mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>}} : (!fa, !fb, !fc) -> !fc
     %out = tile.fragment_unpack %d {{
       tile.layout = #tile.layout<shard = [16, 8] : [8, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
       mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {k}, a = "{dtype}", b = "{dtype}", acc = "{accumulator}", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>
-    }} : (!tile.fragment) -> !tile.tile
+    }} : (!fc) -> !tile.tile
     "tile.store"(%out, %d_ptr, %zero, %zero) {{
       tile.layout = #tile.layout<shard = [16, 8] : [8, 1] on ["laneid", "reg"], replica = [] : [] on [], offset = 0>,
       tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 8>

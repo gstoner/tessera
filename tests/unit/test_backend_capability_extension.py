@@ -208,10 +208,18 @@ _ROCM_HARDWARE_VERIFIED_OPS = frozenset({"matmul", "gemm", "flash_attn"})
 # ``execute_compare_fixture`` that numerically validates it (and skips clean — no
 # false pass — on a host without an NVIDIA GPU / NVRTC). The fixture only
 # *executes* on the sm_120 box; the manifest claim rests on that on-silicon run.
-#   - matmul (2026-06-24): libtessera_nvidia_gemm.so warp-level mma.sync GEMM
-#     (tessera_nvidia_mma_gemm_{bf16,f16,tf32,e4m3,e5m2}) — the first NVIDIA op to
-#     execute natively on silicon here.
-_NVIDIA_HARDWARE_VERIFIED_OPS = frozenset({"matmul"})
+#   - matmul (2026-06-24): libtessera_nvidia_gemm.so warp-level mma.sync GEMM.
+#   - Philox/key-counter RNG and dropout: libtessera_nvidia_rng.so, bit-exact or
+#     tolerance-bounded against tessera.rng_device on SuperBear.
+#   - FFT and compound spectral consumers: libtessera_nvidia_fft.so, checked
+#     against NumPy through the CUDA FFT/workspace v2 ABI on SuperBear.
+_NVIDIA_HARDWARE_VERIFIED_OPS = frozenset({
+    "matmul",
+    "rng_uniform", "rng_normal", "rng_philox_uniform", "rng_philox_normal",
+    "dropout",
+    "fft", "ifft", "rfft", "irfft", "dct", "stft", "istft",
+    "spectral_conv", "spectral_filter",
+})
 
 
 def _hardware_verified_claim_is_allowed(op: str, e: BackendKernelEntry) -> bool:

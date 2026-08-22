@@ -1411,33 +1411,6 @@ _ROCM_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "runtime_execution_matrix."
         ),
     },
-    **{
-        op: {
-            "runtime_symbol": symbol,
-            "dtypes": ("fp32",),
-            "feature_flags": ("cuda", "philox", "stateless_rng"),
-            "shape_envelope": (
-                "arbitrary nonnegative element count; explicit 64-bit key and "
-                "counter; contiguous f32 output (and contiguous f32 input for "
-                "training dropout)"
-            ),
-            "notes": (
-                "Typed tessera_nvidia.philox four-mode package backed by "
-                "libtessera_nvidia_rng.so. Key/counter state is explicit; no "
-                "hidden generator or workspace. Uniform words and range scaling "
-                "are bit-exact against tessera.rng_device; Box-Muller normal is "
-                "f32-transcendental tolerance bounded; dropout replays the exact "
-                "uniform mask. Proven on SuperBear RTX 5070, CC 12.0, CUDA 13.3."
-            ),
-        }
-        for op, symbol in {
-            "rng_uniform": "tessera_nvidia_philox_uniform_range_f32",
-            "rng_normal": "tessera_nvidia_philox_normal_f32",
-            "rng_philox_uniform": "tessera_nvidia_philox_uniform_range_f32",
-            "rng_philox_normal": "tessera_nvidia_philox_normal_f32",
-            "dropout": "tessera_nvidia_philox_dropout_f32",
-        }.items()
-    },
 }
 
 
@@ -2509,6 +2482,33 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
             "runtime dispatch / execution_matrix row is the follow-up (cf. ROCm's "
             "rocm_wmma symbol vs the rocm_compiled lane)."
         ),
+    },
+    **{
+        op: {
+            "runtime_symbol": symbol,
+            "dtypes": ("fp32",),
+            "feature_flags": ("cuda", "philox", "stateless_rng"),
+            "shape_envelope": (
+                "arbitrary nonnegative element count; explicit 64-bit key and "
+                "counter; contiguous f32 output (and contiguous f32 input for "
+                "training dropout)"
+            ),
+            "notes": (
+                "Typed tessera_nvidia.philox four-mode package backed by "
+                "libtessera_nvidia_rng.so. Key/counter state is explicit; no "
+                "hidden generator or workspace. Uniform words and range scaling "
+                "are bit-exact against tessera.rng_device; Box-Muller normal is "
+                "f32-transcendental tolerance bounded; dropout replays the exact "
+                "uniform mask. Proven on SuperBear RTX 5070, CC 12.0, CUDA 13.3."
+            ),
+        }
+        for op, symbol in {
+            "rng_uniform": "tessera_nvidia_philox_uniform_range_f32",
+            "rng_normal": "tessera_nvidia_philox_normal_f32",
+            "rng_philox_uniform": "tessera_nvidia_philox_uniform_range_f32",
+            "rng_philox_normal": "tessera_nvidia_philox_normal_f32",
+            "dropout": "tessera_nvidia_philox_dropout_f32",
+        }.items()
     },
     **{
         op: {

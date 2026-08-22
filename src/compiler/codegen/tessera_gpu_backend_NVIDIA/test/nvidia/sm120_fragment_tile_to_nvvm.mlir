@@ -1,8 +1,8 @@
-// RUN: %tnv --allow-unregistered-dialect --lower-tile-to-nvidia='sm=120' --lower-tessera-nvidia-to-nvvm %s | FileCheck %s
+// RUN: %tnv --lower-tessera-nvidia-to-nvvm %s | FileCheck %s
 //
-// Canonical fragment-form Tile MMA feeds the real NVVM intrinsic. Scalar Tile
-// MMA remains the conservative marker path; this fixture proves the explicit
-// A[4]/B[2]/C[2] handoff does not need a second target-IR representation.
+// The physical A[4]/B[2]/C[2] register ABI belongs to NVIDIA Target IR; Tile
+// uses parameterized !tile.fragment values instead of exposing this vector
+// representation directly.
 
 module {
   func.func @fragment_tile(
@@ -10,7 +10,8 @@ module {
       %b0: vector<2xf16>, %b1: vector<2xf16>,
       %c0: vector<2xf16>, %c1: vector<2xf16>)
         -> !llvm.struct<(vector<2xf16>, vector<2xf16>)> {
-    %d = "tile.mma"(%a0, %a1, %a2, %a3, %b0, %b1, %c0, %c1)
+    %d = tessera_nvidia.mma_sync %a0, %a1, %a2, %a3, %b0, %b1, %c0, %c1
+        {arch = "sm_120", shape = "m16n8k16", dtype_ab = "f16", dtype_c = "f16"}
         : (vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16>,
            vector<2xf16>, vector<2xf16>, vector<2xf16>, vector<2xf16>)
           -> !llvm.struct<(vector<2xf16>, vector<2xf16>)>

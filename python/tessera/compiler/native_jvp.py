@@ -20,6 +20,7 @@ _SCHEMA = "tessera.native_jvp.v3"
 _TARGET_ARCHITECTURES = {
     "x86": "zen5_avx512",
     "rocm": "gfx1151",
+    "nvidia_sm120": "sm120",
 }
 
 
@@ -105,7 +106,9 @@ class NativeJVPArtifact:
             "compiler_path": f"{target}_jvp_compiled",
             "executable": True,
             "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
-            "execution_mode": "cpu_avx512" if target == "x86" else "hip_runtime",
+            "execution_mode": ("cpu_avx512" if target == "x86" else
+                               "cuda_runtime" if target == "nvidia_sm120" else
+                               "hip_runtime"),
             "autodiff_phase": "forward",
             "native_jvp": dict(self.contract),
         }
@@ -133,7 +136,7 @@ def build_native_jvp_artifact(
     expected = _TARGET_ARCHITECTURES.get(target)
     if expected is None or architecture != expected:
         raise ValueError(
-            "native JVP packages support only zen5_avx512 and gfx1151; "
+            "native JVP packages support only zen5_avx512, gfx1151, and sm120; "
             "gfx1200/gfx1250 and other unmeasured architectures fail closed"
         )
     if not source_graph_ir or 'tessera.frontend.authority = "tracer"' not in source_graph_ir:

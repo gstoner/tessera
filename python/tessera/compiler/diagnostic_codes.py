@@ -1174,18 +1174,15 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         pass_origin="NVWGMMALoweringPass",
         severity="error",
         summary=(
-            "NVWGMMALoweringPass lowers tile.mma to a two-operand WGMMA call "
-            "and cannot carry an accumulator. It previously discarded one that "
-            "was present: a K-loop recomputed A x B from nothing each step and "
-            "the GEMM returned the last partial product, with rc=0 and no "
-            "diagnostic. Not specific to the typed fragment form -- a legacy "
-            "bare tile.mma(A, B, C), what LowerKReductionAddToTileMMA emits for "
-            "the canonical K-step, was dropped identically."
+            "NVWGMMALoweringPass accepts A/B and an optional accumulator but "
+            "cannot represent additional architecture-specific data operands. "
+            "It refuses those extended forms instead of silently dropping an "
+            "operand at the opaque backend-call boundary."
         ),
         fix_hint=(
-            "Until W1.1 step 2b threads the accumulator, keep the accumulation "
-            "outside tile.mma on this path, or target a backend that carries it "
-            "(ROCm already fails closed at this seam)."
+            "Use the architecture-owned NVIDIA lowering for extended MMA forms "
+            "such as block-scaled operands; the legacy pass supports only "
+            "A/B/C."
         ),
         spec="docs/audit/compiler/W1_1_TYPING_DESIGN.md",
         sprint="W1.1",

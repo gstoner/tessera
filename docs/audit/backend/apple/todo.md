@@ -3,10 +3,23 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-21
+last_updated: 2026-08-22
 ---
 
 # Apple compiler, exact-device, and performance plan
+
+Cross-backend sync `NVIDIA-FFT-WORKSPACE-1-2026-08-22` — **NVIDIA-owned cuFFT
+ABI; Apple outcome: not applicable.** The reusable cuFFT plan and explicit CUDA
+device-workspace lifecycle transfer no Metal/MPSGraph code, plan, workspace, or
+evidence. Apple's spectral package retains its architecture-owned lifecycle and
+Mac proof requirements.
+
+Cross-backend sync `NVIDIA-RNG-PHILOX-CORE-2026-08-21` — **NVIDIA-owned
+Target/runtime addition exact-device validated; Apple outcome: not applicable.** The typed four-mode
+`tessera_nvidia.philox` directive and GPU kernel generator are confined to the
+CUDA backend. They reuse the shared explicit key/counter semantics but transfer
+no Metal code, schedule, ABI, or evidence. Apple's existing Philox alignment
+and exact-Mac proof obligations are unchanged.
 
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
 `tessera_jit` pipeline change; Apple outcome: follow-up required
@@ -4406,3 +4419,25 @@ backend.
 reference here, so an "Apple lane" for this family would mean routing through
 the existing CPU shim rather than writing MSL — the GPU question is separate and
 not opened by this PR.
+
+## Cross-backend sync `NVIDIA-BARRIER-AT-BIRTH-2026-08-21`
+
+**Not applicable to Apple physical lowering.** The shared role-bearing Tile
+barrier birth contract was exercised by NVIDIA WarpSpecialization/TMA. Apple
+does not consume TMA/mbarrier or CUDA schedule mechanics; no Metal schedule or
+device-evidence state changes.
+
+## Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-21`
+
+**NVIDIA-only conformance closure.** NVIDIA tightened its Target IR value
+envelope and exercised its registered dialect. Apple Target IR, Metal ABI, and
+exact-device evidence are unchanged.
+
+
+## Cross-backend sync `NVIDIA-SPECTRAL-PHILOX-JVP-2026-08-22`
+
+**Outcome: not applicable; NVIDIA-only physical packages.** The shared spectral
+and compiler-autodiff semantics are unchanged. CUDA added its own cuFFT
+C2C/R2C/C2R ABI, compound consumers, spectral VJP executor, and seeded Philox
+JVP child binding. Apple retains its architecture-owned FFT/RNG implementations
+and evidence; no Metal schedule or device state transfers.

@@ -6,8 +6,8 @@
 // tests/unit/test_target_ir.py::test_lower_tile_to_nvidia_sm120_target_ir_maps_mma_to_warp_level_mma_sync.
 
 module {
-  func.func @kernel(%a: f32, %b: f32) {
-    %m = "tile.mma"(%a, %b) : (f32, f32) -> f32
+  func.func @kernel(%a: tensor<16x16xf32>, %b: tensor<16x16xf32>) {
+    %m = "tile.mma"(%a, %b) : (tensor<16x16xf32>, tensor<16x16xf32>) -> tensor<16x16xf32>
     return
   }
 }

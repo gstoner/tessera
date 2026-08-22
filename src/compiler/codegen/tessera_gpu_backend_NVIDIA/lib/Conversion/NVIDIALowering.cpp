@@ -7,6 +7,8 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
+#include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -5190,6 +5192,7 @@ void registerTesseraNVIDIABackendPasses() {
   registerPass([]() { return createLowerTileToNVIDIAPass(kHopperSM); });
   registerPass([]() { return createLowerNVIDIAToNVVMPass(); });
   registerPass([]() { return createNVIDIADynamicSharedPass(); });
+  registerPass([]() { return createGenerateNVIDIAPhiloxKernelPass(); });
 
   PassPipelineRegistration<> nvidiaPipeline(
       "tessera-lower-to-nvidia",
@@ -5221,6 +5224,7 @@ void registerTesseraNVIDIABackendPasses() {
 
 void registerTesseraNVIDIABackendDialects(DialectRegistry &registry) {
   registry.insert<arith::ArithDialect, func::FuncDialect, gpu::GPUDialect,
+                  math::MathDialect, memref::MemRefDialect, scf::SCFDialect,
                   LLVM::LLVMDialect, NVVM::NVVMDialect,
                   tessera::nvidia::TesseraNVIDIADialect,
                   tessera::tile::TesseraTileDialect>();

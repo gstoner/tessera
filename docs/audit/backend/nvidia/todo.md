@@ -3,10 +3,43 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-08-21
+last_updated: 2026-08-22
 ---
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
+
+Cross-backend sync `NVIDIA-FFT-WORKSPACE-1-2026-08-22` — **canonical CUDA
+FFT/workspace ABI and first C2C consumers exact-device validated on SuperBear.**
+`libtessera_nvidia_fft.so` exports the versioned
+`tessera.nvidia.cuda_fft_workspace.v2` contract (superseded and extended by the
+sync record below): reusable opaque cuFFT plans,
+automatic allocation disabled, exact workspace-byte reporting, explicit
+caller-owned device workspace allocation/free, and normalized inverse
+execution. `nvidia_fft_compiled` consumes the contract for complex64-logical /
+interleaved-f32 physical `fft` and `ifft`, including arbitrary positive length,
+nonleading axes, and explicit pad/truncate `n`. SuperBear RTX 5070 (CC 12.0,
+CUDA 13.3) exact-device proof is 7/7 across radix lengths 4/16, mixed length
+100, prime length 257, forward/inverse comparison with NumPy, undersized
+workspace rejection, and plan/workspace reuse. The initially deferred real,
+compound, and autodiff consumers are promoted in
+`NVIDIA-SPECTRAL-PHILOX-JVP-2026-08-22` below.
+
+Cross-backend sync `NVIDIA-RNG-PHILOX-CORE-2026-08-21` — **typed NVIDIA
+stateless compiler/runtime package exact-device validated on SuperBear.**
+`tessera_nvidia.philox` is a registered Target IR directive with
+closed `uniform_core`, `uniform_range`, `normal`, and `dropout` modes.
+`--generate-nvidia-philox-kernel` consumes
+the explicit `(seed_lo, seed_hi, counter_lo, counter_hi)` ABI and emits a
+Philox4x32-10 `gpu.func` whose threads own disjoint 128-bit counter blocks. The
+NVIDIA lit suite proves directive typing, fail-closed mode rejection, constants,
+launch-index construction, four bounds-checked core stores, range scaling,
+Box–Muller normal transforms, and dropout replay (51/51 host-free tests). This
+is paired with the shipped `libtessera_nvidia_rng.so` four-symbol ABI and the
+registered `nvidia_rng_compiled` executor/manifest row. SuperBear RTX 5070
+(CC 12.0, CUDA 13.3) proof is 10/10: uniform core and range are bit-exact for
+zero/ragged/large counts and explicit keys/counters, normal is tolerance- and
+statistics-bounded, dropout replays the exact mask, and determinism/counter
+separation hold. Compiler-JVP integration remains required.
 
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
 `tessera_jit` pipeline change; NVIDIA outcome: not applicable.**
@@ -268,9 +301,14 @@ and GQA fold transfer no CUDA layout or raster decision. SO-1 now owns the
 content-addressed action/edge/role/residency value; SO-2 registers symbolic
 producer/consumer roles on Tile mbarriers and proves the Hopper split with the
 same rule as AMD ping-pong. Shared loop-carried role provenance and role-bearing
-pipeline state are implemented, but NVIDIA still owns barrier-at-birth emission
-and deletion of the legacy WarpSpec ancestor-role marker. No PTX, raster output,
-selector, or SM120 evidence changed.
+pipeline state are implemented. Barrier-at-birth now lands on the canonical
+typed producer path: WarpSpecialization creates the role-bearing barrier beside
+the roles, AsyncCopyLowering binds that exact SSA value to copies and waits,
+and NVTMA assigns region-local slots without synthesizing a function-global
+barrier. Nested streaming and flattened single-device paths are both covered;
+multi-region isolation is regression-tested. Deletion of the remaining legacy
+WarpSpec ancestry assumptions and exact-device SM120 proof remain open. No
+raster output or selector evidence changed.
 
 Cross-backend sync `ATTN-BWD-ARCH-2026-08-16` — **no NVIDIA result transfers.**
 ROCm's canonical split backward program was re-audited and x86 gained a
@@ -514,11 +552,12 @@ collectives are barriers. Existing typed CUDA token lowering is unchanged;
 SM120 needs independent executable overlap and exact-device proof.
 
 Cross-backend sync `AD-STOCHASTIC-RNG-1-2026-08-10` — **shared stochastic JVP
-contract available; CUDA follow-up required.** Explicit key/counter Graph ops,
+contract available; CUDA core consumption started.** Explicit key/counter Graph ops,
 estimator provenance, dropout replay, fixed-key EGGROLL JVP, and derivative
-proof obligations are target-independent. x86 and gfx1151 distribution kernels
-do not transfer to CUDA; SM120 needs its own Philox distribution consumer,
-compiler-JVP package, and exact-device proof.
+proof obligations are target-independent. The typed NVIDIA generator and its
+four native modes now consume the explicit key/counter ABI, but x86 and gfx1151
+runtime evidence still does not transfer to CUDA; SM120 needs compiler-JVP
+packaging, runtime launch, and exact-device proof.
 
 Cross-backend sync `AD-FWD-PRODUCT-2-2026-08-10` — **public JVP ABI landed;
 CUDA execution remains follow-up required.** Forward/JVP requests now carry
@@ -897,22 +936,24 @@ sm90 / sm100 / sm120, plain and probe-annotated** — it had been SKIPPING every
 run since PR #490. The contract test now discovers either build, so NVIDIA is
 no longer silently unmeasured.
 
-Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **follow-up required, NOT validated on NVIDIA.**
+Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-02` — **NVIDIA host-free
+conformance validated (2026-08-21); exact-device execution remains separate.**
 W0.9 added a real parse + dialect-load + verifier gate over every Target-IR
 emitter, and it found that no Python-emitted Target IR was valid MLIR
 (undialect-prefixed module attributes, an invented `<dialect>.func` container,
 ops emitted with signatures their ODS rejects, and several undeclared op names).
 Those defects were fixed and verified for `cpu`, `x86`, `rocm`, and `apple`.
-**NVIDIA was skipped, deliberately and visibly**: `tessera_nvidia` is not
-compiled into the default build, and failing it would have measured the build
-config rather than the emitter. The shared fixes (module-attribute prefixing,
-`func.func` container) apply to the NVIDIA lane too, but its dialect-specific
-surface is unchecked — `TesseraNVIDIADialect.td` still carries 3 `AnyType` and
-3 `Variadic<AnyType>` slots, and it may have the same undeclared-op class
-(`tessera_nvidia.profiler_probe` in particular was not declared).
-**Owning follow-up:** run `tests/unit/test_target_ir_contract.py` on a build
-with `-DTESSERA_BUILD_NVIDIA_BACKEND=ON`; the gate skips rather than passes
-today, so a green run there is not yet evidence.
+The test harness now discovers this workspace's NVIDIA-enabled
+`build-nvidia-cuda/` compiler rather than silently skipping it. Its real MLIR
+parse/load/ODS lane passes for sm90, sm100, and sm120, including probe-annotated
+multi-op IR and committed NVIDIA goldens. `tessera_nvidia.profiler_probe` and
+the Python wrapper/call surface are registered. The former unrestricted
+`AnyType` envelope is now a Target-value union: tensor/memref data, scalar or
+vector fragments, and LLVM pointer/aggregate ABI values. A negative NVIDIA lit
+fixture proves `!tile.async_token` cannot enter an MMA Target IR op. Validation:
+NVIDIA lit 48/48 and `test_target_ir_contract.py` 28 passed; the 10 skips are
+only Apple/ROCm dialects absent from this build. This is compiler conformance,
+not SM120 execution evidence.
 
 Cross-backend sync `CORE-ATTENTION-TRAINING-X86-2026-07-30` — **follow-up
 required, no NVIDIA contract change.** X86 adopted the shared rank-4 forward
@@ -3193,8 +3234,12 @@ NVTMADescriptorPass), and `--tessera-tile-dataflow-legality` runs in every
 NVIDIA pipeline after the post-NVTMA legality blocks. Host-free evidence:
 full lit 324/0 including the pipeline-alias and NVTMA fixtures. **Open on
 this queue:** sm_120-host revalidation of the NVTMA pipelines and any
-SM90/Hopper device proof (Phase G/H); the barrier-at-birth emission
-restructure is the tracked follow-on (compiler_enhancement.md §5.2.1).
+SM90/Hopper device proof (Phase G/H). The barrier-at-birth compiler restructure
+is host-free parity validated by the complete Phase 3 IR lane (24 supported
+tests passed, 7 unsupported), including the named NVIDIA pipeline, streaming
+FlashAttention, tokenless retire-all compatibility, and distinct barriers with
+local slot zero across two schedule regions. Exact-device evidence is still
+required before closing the hardware rows.
 
 ## REF-TIER-OPS-2026-08-15 — reference-tier op registration assessment (PR #568)
 
@@ -3370,3 +3415,28 @@ backend.
 open design question is whether they enter through Target IR as `abi_call`-style
 delegated work (Decision #19's x86 precedent) so the arbiter can still tell
 compiler-generated work from delegated work.
+
+
+## Cross-backend sync `NVIDIA-SPECTRAL-PHILOX-JVP-2026-08-22`
+
+**Owning work:** native spectral sequencing and Philox compiler-JVP integration.
+**Outcome: landed and exact-device validated on SuperBear RTX 5070 (sm120).**
+
+The canonical CUDA FFT/workspace ABI is now v2 and owns reusable typed C2C,
+R2C, and C2R cuFFT plans with automatic allocation disabled, exact caller-owned
+workspace bounds, and on-device inverse normalization. Native `rfft`/`irfft`
+cover odd, even, mixed, and prime lengths. DCT-II, STFT, ISTFT, spectral
+convolution, and spectral filtering consume this package; framing, windowing,
+pointwise work, and overlap-add remain explicit host orchestration and are not
+reported as fused CUDA kernels.
+
+The compound spectral reverse package now has an SM120 consumer. Real spectral
+convolution VJPs use CUDA R2C/C2R and match direct correlation; the complex
+spectral-filter adjoint is exact-package validated. Public NVIDIA Graph IR
+`complex64` storage remains planned-gated, so filter VJP is artifact-level
+physical evidence rather than a public Graph execution claim.
+
+Compiler JVP packaging now admits exact `nvidia_sm120`. Seeded dropout binds
+both primal and tangent children to the identical Philox key/counter attributes,
+proving mask replay rather than resampling; unseeded training JVP fails closed.
+Exact-device evidence: 22 tests in the three NVIDIA fixtures.

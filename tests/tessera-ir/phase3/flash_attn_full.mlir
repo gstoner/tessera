@@ -44,8 +44,8 @@
 // op sequence in emitted order.
 // CHECK:          func.func @flash_attn_fwd
 // CHECK-SAME:     nvvm.kernel
-// CHECK:          tile.mbarrier.init
 // CHECK:          tile.tma.descriptor
+// CHECK:          tile.mbarrier.init
 // CHECK:          tile.mbarrier.arrive_expect_tx
 // CHECK:          tile.mbarrier.try_wait
 // CHECK:          scf.for

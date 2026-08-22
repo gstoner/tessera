@@ -192,23 +192,21 @@ struct NVFlashAttnKernelEmitterPass
         attachLaunchBounds(funcOp, warpsPerCTA, smVersion);
 
       // Step 3: insert mbarrier arrive/wait around TMA copy ops.
-      // For each canonical tile.tma.descriptor, emit arrive-expect-tx
-      // immediately after the descriptor setup and try-wait before consumer.
-      tile::MBarrierInitOp barrierInit;
-      funcOp.walk([&](tile::MBarrierInitOp op) {
-        if (!barrierInit)
-          barrierInit = op;
+      // Hoisted descriptors cannot use a barrier born in a nested schedule
+      // region. Emit each arrive/try-wait beside its copy, using the barrier
+      // already bound through SSA by the typed producer path.
+      funcOp.walk([&](tile::TMACopyAsyncOp copy) {
+        if (!copy.getBarrier())
+          return;
+        auto descriptor =
+            copy.getDescriptor().getDefiningOp<tile::TMADescriptorOp>();
+        if (!descriptor || !descriptor.getSlot() || !descriptor.getExpectTx())
+          return;
+        b.setInsertionPoint(copy);
+        emitMbarrierArriveWait(
+            b, copy.getLoc(), copy.getBarrier(), *descriptor.getSlot(),
+            *descriptor.getExpectTx(), /*isTMA=*/true);
       });
-      if (barrierInit) {
-        funcOp.walk([&](tile::TMADescriptorOp op) {
-          if (!op.getSlot() || !op.getExpectTx())
-            return;
-          b.setInsertionPointAfter(op);
-          emitMbarrierArriveWait(
-              b, op.getLoc(), barrierInit.getBarrier(),
-              *op.getSlot(), *op.getExpectTx(), /*isTMA=*/true);
-        });
-      }
 
       // Step 4: attach shared memory size annotation for CUDARuntime.
       // SMEM = 2 * (tile_q + tile_kv) * d_k * sizeof(bf16) rounded to 128B.

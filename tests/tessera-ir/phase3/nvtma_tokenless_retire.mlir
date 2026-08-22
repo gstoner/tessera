@@ -14,8 +14,14 @@
 //     barrier-only wait would be rejected as TILE_WAIT_GATES_ON_NOTHING.
 
 func.func @gemm_kernel(%src: tensor<64x64xbf16>) {
-  "tile.async_copy"(%src) {tile_rows = 64 : i64, tile_cols = 64 : i64} : (tensor<64x64xbf16>) -> tensor<64x64xbf16>
-  "tile.wait_async"() : () -> ()
+  "schedule.mesh.region"() ({
+    %producer = tile.role {name = "legacy.producer", kind = "producer", members = ["async_copy"]} : !tile.role
+    %consumer = tile.role {name = "legacy.consumer", kind = "consumer", members = ["mma"]} : !tile.role
+    %born = tile.mbarrier.init with %producer, %consumer {slots = 1 : i64, phase_bits = 2 : i64, tile.pipeline = "legacy.0"} : !tile.mbarrier
+    "tile.async_copy"(%src) {tile_rows = 64 : i64, tile_cols = 64 : i64} : (tensor<64x64xbf16>) -> tensor<64x64xbf16>
+    "tile.wait_async"() : () -> ()
+    "schedule.yield"() : () -> ()
+  }) {mesh = @mesh0, axis = "tp"} : () -> ()
   return
 }
 

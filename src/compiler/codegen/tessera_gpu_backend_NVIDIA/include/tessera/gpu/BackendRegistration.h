@@ -9,6 +9,7 @@ namespace tessera {
 std::unique_ptr<mlir::Pass> createLowerTileToNVIDIAPass(int sm = 90);
 std::unique_ptr<mlir::Pass> createLowerNVIDIAToNVVMPass();
 std::unique_ptr<mlir::Pass> createNVIDIADynamicSharedPass();
+std::unique_ptr<mlir::Pass> createGenerateNVIDIAPhiloxKernelPass();
 void buildTesseraNVIDIABackendPipeline(mlir::OpPassManager &pm);
 void buildTesseraHopperBackendPipeline(mlir::OpPassManager &pm);
 void buildTesseraBlackwellBackendPipeline(mlir::OpPassManager &pm);

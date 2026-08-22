@@ -1322,7 +1322,18 @@ class JitFn:
         tangent_values = tangents if isinstance(tangents, (tuple, list)) else (tangents,)
         if len(tangent_values) != len(request.wrt_indices):
             raise TesseraJitError("native_jvp requires one tangent per active input")
-        self.frontend_differential(*args, **kwargs)
+        traced_module = self._traced_autodiff_module(args, kwargs)
+        graph_ops = [op for fn in traced_module.functions for op in fn.body]
+        permitted_effect_ops: tuple[str, ...] = ()
+        if len(graph_ops) == 1 and graph_ops[0].op_name == "tessera.dropout":
+            dropout = graph_ops[0]
+            if (not bool(dropout.kwargs.get("training", True)) or
+                    float(dropout.kwargs.get("p", 0.5)) == 0.0 or
+                    dropout.kwargs.get("seed") is not None):
+                permitted_effect_ops = ("tessera.dropout",)
+        self.frontend_differential(
+            *args, _permitted_effect_ops=permitted_effect_ops, **kwargs
+        )
         primal_inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
         tangent_inputs = {
             index: np.ascontiguousarray(np.asarray(value))
@@ -1331,14 +1342,14 @@ class JitFn:
         for index, tangent in tangent_inputs.items():
             if index >= len(primal_inputs) or primal_inputs[index].shape != tangent.shape:
                 raise TesseraJitError("native JVP primal and tangent shapes must match")
-        traced_module = self._traced_autodiff_module(args, kwargs)
-        graph_ops = [op for fn in traced_module.functions for op in fn.body]
         if len(graph_ops) != 1:
             raise TesseraJitError("native JVP currently requires a single Graph operation")
         source = graph_ops[0]
         target = normalize_target_kind(self.target)
-        if target not in {"x86", "rocm"}:
-            raise TesseraJitError("native JVP is currently packaged for x86 and ROCm only")
+        if target not in {"x86", "rocm", "nvidia_sm120"}:
+            raise TesseraJitError(
+                "native JVP is currently packaged for x86, ROCm, and exact sm120 only"
+            )
         architecture = "zen5_avx512"
         execution_mode = "cpu_avx512"
         if target == "rocm":
@@ -1350,6 +1361,9 @@ class JitFn:
                 )
             architecture = "gfx1151"
             execution_mode = "hip_runtime"
+        elif target == "nvidia_sm120":
+            architecture = "sm120"
+            execution_mode = "cuda_runtime"
 
         launch_names = tuple(f"primal_{index}" for index in range(len(primal_inputs))) + tuple(
             f"tangent_{index}" for index in request.wrt_indices
@@ -1400,7 +1414,9 @@ class JitFn:
             "compiler_path": f"{target}_jvp_compiled",
             "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
             "execution_mode": execution_mode,
-            "evidence_target": "x86_avx512" if target == "x86" else "rocm_gfx1151",
+            "evidence_target": ("x86_avx512" if target == "x86" else
+                                "nvidia_sm120" if target == "nvidia_sm120" else
+                                "rocm_gfx1151"),
             "artifact_hash": package.artifact_hash,
             "paired_jvp_ir_digest": package.contract["paired_jvp_ir_digest"],
             "source_graph_ir_digest": package.contract["source_graph_ir_digest"],

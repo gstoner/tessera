@@ -1,11 +1,26 @@
 ---
-last_updated: 2026-08-21
+last_updated: 2026-08-22
 audit_role: plan
 plan_state: open
 scope: ROCm backend implementation and exact-device proof
 ---
 
 # ROCm backend TODO
+
+Cross-backend sync `NVIDIA-FFT-WORKSPACE-1-2026-08-22` — **NVIDIA cuFFT
+foundation landed; ROCm outcome: parity validated/no physical change.** The
+versioned explicit-workspace discipline matches ROCm's package ownership model,
+but no cuFFT plan, CUDA workspace, schedule, or SuperBear evidence transfers to
+gfx1151. ROCm retains its digest-bound Stockham/Bluestein plans and exact-device
+proof.
+
+Cross-backend sync `NVIDIA-RNG-PHILOX-CORE-2026-08-21` — **NVIDIA parity
+exact-device validated; ROCm outcome: parity validated/no physical change.** NVIDIA now has a
+typed four-mode directive and compiler generator using the same explicit
+Philox4x32-10 key/counter identity. ROCm retains its independent
+`tessera_rocm.philox` distribution generator, HIP runtime route, gfx1151
+packages, and exact-device evidence; none of those artifacts or schedules
+transfer to sm_120.
 
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
 `tessera_jit` pipeline change; ROCm outcome: not applicable (backend);
@@ -4191,3 +4206,25 @@ backend.
 **ROCm-specific note.** rocSOLVER covers `eigh`/`inv`/`solve`; the same
 delegated-vs-generated question as NVIDIA applies. gfx1151 is the box that could
 actually evaluate a lane, so any first proof belongs there.
+
+## Cross-backend sync `NVIDIA-BARRIER-AT-BIRTH-2026-08-21`
+
+**Parity assessed; NVIDIA-only physical follow-up.** The shared Schedule/Tile
+roles remain valid, but the new binding consumer is NVIDIA TMA/mbarrier. ROCm
+keeps its architecture-owned LDS/token synchronization and no gfx schedule or
+exact-device evidence transfers.
+
+## Cross-backend sync `TARGET-IR-CONFORMANCE-2026-08-21`
+
+**NVIDIA-only conformance closure.** NVIDIA's Target-value restriction and
+registered-dialect test do not alter ROCm's MFMA/ABI surface or gfx1151
+evidence. ROCm remains independently validated on its own build/device lanes.
+
+
+## Cross-backend sync `NVIDIA-SPECTRAL-PHILOX-JVP-2026-08-22`
+
+**Outcome: parity already validated; no ROCm physical change.** NVIDIA joined the
+existing shared spectral and native-product contracts with CUDA-owned cuFFT and
+Philox consumers. gfx1151 retains its Stockham/Bluestein, compound spectral,
+spectral backward, and Philox packages and exact-device evidence. No CUDA plan,
+workspace, or schedule is transferred to ROCm.

@@ -64,14 +64,16 @@ static void stampTmaBarrier(OpBuilder &b, Operation *op, int64_t slot,
               tile::TileBarrierAttr::get(b.getContext(), "tma", expectTx));
 }
 
-// Key for descriptor deduplication: (source SSA value, tile_rows, tile_cols).
+// Key for descriptor deduplication. Barrier identity is part of the key because
+// slot numbers are local to the role-bearing barrier born with each pipeline.
 struct DescriptorKey {
   Value src;
+  Value barrier;
   int64_t tileRows;
   int64_t tileCols;
 
   bool operator==(const DescriptorKey &o) const {
-    return src == o.src &&
+    return src == o.src && barrier == o.barrier &&
            tileRows == o.tileRows &&
            tileCols == o.tileCols;
   }
@@ -79,14 +81,15 @@ struct DescriptorKey {
 
 struct DescriptorKeyInfo : public llvm::DenseMapInfo<DescriptorKey> {
   static DescriptorKey getEmptyKey() {
-    return {Value(), -1, -1};
+    return {Value(), Value(), -1, -1};
   }
   static DescriptorKey getTombstoneKey() {
-    return {Value(), -2, -2};
+    return {Value(), Value(), -2, -2};
   }
   static unsigned getHashValue(const DescriptorKey &k) {
     return llvm::hash_combine(
         llvm::hash_value(k.src.getAsOpaquePointer()),
+        llvm::hash_value(k.barrier.getAsOpaquePointer()),
         llvm::hash_value(k.tileRows),
         llvm::hash_value(k.tileCols));
   }
@@ -94,6 +97,47 @@ struct DescriptorKeyInfo : public llvm::DenseMapInfo<DescriptorKey> {
     return a == b;
   }
 };
+
+static Operation *enclosingScheduleRegion(Operation *op) {
+  for (Operation *parent = op->getParentOp(); parent;
+       parent = parent->getParentOp())
+    if (parent->getName().getStringRef() == "schedule.mesh.region")
+      return parent;
+  return nullptr;
+}
+
+static FailureOr<Value> findBornBarrier(Operation *op) {
+  Operation *region = enclosingScheduleRegion(op);
+  if (!region || region->getNumRegions() != 1 || region->getRegion(0).empty()) {
+    auto func = op->getParentOfType<func::FuncOp>();
+    if (!func || func.getBody().empty())
+      return failure();
+    Value flat;
+    for (Operation &candidate : func.getBody().front()) {
+      auto init = dyn_cast<tile::MBarrierInitOp>(&candidate);
+      if (!init || init.getRoles().empty())
+        continue;
+      if (flat)
+        return failure();
+      flat = init.getBarrier();
+    }
+    if (!flat)
+      return failure();
+    return flat;
+  }
+  Value found;
+  for (Operation &candidate : region->getRegion(0).front()) {
+    auto init = dyn_cast<tile::MBarrierInitOp>(&candidate);
+    if (!init || init.getRoles().empty())
+      continue;
+    if (found)
+      return failure();
+    found = init.getBarrier();
+  }
+  if (!found)
+    return failure();
+  return found;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pass
@@ -130,27 +174,15 @@ struct NVTMADescriptorPass
     llvm::DenseMap<DescriptorKey, Value, DescriptorKeyInfo> canonMap;
     llvm::DenseMap<DescriptorKey, int64_t, DescriptorKeyInfo> slotMap;
     llvm::DenseMap<Value, int64_t> descriptorSlotMap;
-    int64_t nextSlot = 0;
+    llvm::DenseMap<Value, Value> descriptorBarrierMap;
+    llvm::DenseMap<Value, int64_t> nextSlotByBarrier;
 
     // Find insertion point: just before the first non-argument instruction.
     Block &entryBlock = funcOp.getBody().front();
     b.setInsertionPointToStart(&entryBlock);
 
-    // Emit mbarrier.init once for all unique descriptors.
-    // (Actual slot count filled in after dedup.)
-    tile::MBarrierInitOp mbarrierInitPlaceholder;
-    {
-      OperationState st(funcOp.getLoc(),
-                        tile::MBarrierInitOp::getOperationName());
-      st.addAttribute("slots", b.getI64IntegerAttr(1)); // valid placeholder
-      st.addAttribute("phase_bits", b.getI64IntegerAttr(2));
-      st.addTypes(tile::MBarrierType::get(ctx));
-      mbarrierInitPlaceholder =
-          cast<tile::MBarrierInitOp>(b.create(st));
-    }
-
     // Process each descriptor op.
-    Operation *lastPreamble = mbarrierInitPlaceholder;
+    Operation *lastPreamble = nullptr;
     for (tile::TMADescriptorOp desc : descOps) {
       Value src = desc.getSource();
       int64_t tileRows = desc.getTileRows();
@@ -164,11 +196,34 @@ struct NVTMADescriptorPass
         return;
       }
 
-      DescriptorKey key{src, tileRows, tileCols};
+      FailureOr<Value> barrier = failure();
+      for (Operation *user : desc.getDescriptor().getUsers()) {
+        auto copy = dyn_cast<tile::TMACopyAsyncOp>(user);
+        if (!copy || !copy.getBarrier())
+          continue;
+        if (succeeded(barrier) && *barrier != copy.getBarrier()) {
+          barrier = failure();
+          break;
+        }
+        barrier = copy.getBarrier();
+      }
+      if (failed(barrier))
+        barrier = findBornBarrier(desc);
+      if (failed(barrier)) {
+        desc.emitError(
+            "requires exactly one role-bearing barrier born with its typed "
+            "producer pipeline");
+        signalPassFailure();
+        return;
+      }
+      DescriptorKey key{src, *barrier, tileRows, tileCols};
       auto it = canonMap.find(key);
       if (it == canonMap.end()) {
         // Hoist one canonical typed descriptor to the preamble.
-        b.setInsertionPointAfter(lastPreamble);
+        if (lastPreamble)
+          b.setInsertionPointAfter(lastPreamble);
+        else
+          b.setInsertionPointToStart(&entryBlock);
         OperationState st(desc.getLoc(),
                           tile::TMADescriptorOp::getOperationName());
         st.addOperands({src});
@@ -177,37 +232,37 @@ struct NVTMADescriptorPass
         if (auto shape =
                 desc->getAttrOfType<DenseI64ArrayAttr>("source_shape"))
           st.addAttribute("source_shape", shape);
-        st.addAttribute("slot", b.getI64IntegerAttr(nextSlot));
+        int64_t slot = nextSlotByBarrier[*barrier]++;
+        st.addAttribute("slot", b.getI64IntegerAttr(slot));
         int64_t expectTx = tileRows * tileCols * 2;
         st.addAttribute("expect_tx", b.getI64IntegerAttr(expectTx));
         st.addTypes(tile::TMADescriptorType::get(ctx));
         auto setup = cast<tile::TMADescriptorOp>(b.create(st));
         lastPreamble = setup;
-        stampTmaBarrier(b, setup, nextSlot, expectTx);
+        stampTmaBarrier(b, setup, slot, expectTx);
         canonMap[key] = setup.getDescriptor();
-        slotMap[key] = nextSlot++;
+        slotMap[key] = slot;
         descriptorSlotMap[setup.getDescriptor()] = slotMap[key];
+        descriptorBarrierMap[setup.getDescriptor()] = *barrier;
         desc->replaceAllUsesWith(setup->getResults());
         desc.erase();
       } else {
         // Replace duplicate with the canonical value.
         descriptorSlotMap[it->second] = slotMap[key];
+        descriptorBarrierMap[it->second] = *barrier;
         desc->replaceAllUsesWith(ValueRange{it->second});
         desc.erase();
       }
     }
 
-    // Update mbarrier.init slot count now that we know the real number.
-    if (mbarrierInitPlaceholder) {
-      mbarrierInitPlaceholder->setAttr(
-          "slots", b.getI64IntegerAttr(nextSlot));
-    }
+    for (auto [barrier, slots] : nextSlotByBarrier)
+      barrier.getDefiningOp()->setAttr("slots", b.getI64IntegerAttr(slots));
 
     // Rebuild copies with an explicit SSA mbarrier operand. The descriptor,
     // barrier, async token, and staged value now form one def-use chain.
     SmallVector<tile::TMACopyAsyncOp> copies;
     funcOp.walk([&](tile::TMACopyAsyncOp op) { copies.push_back(op); });
-    SmallVector<Value> completionTokens;
+    llvm::DenseMap<Value, SmallVector<Value>> completionTokensByBarrier;
     for (tile::TMACopyAsyncOp copy : copies) {
       Value descriptor = copy.getDescriptor();
       auto slotIt = descriptorSlotMap.find(descriptor);
@@ -218,8 +273,8 @@ struct NVTMADescriptorPass
       }
       auto setup = descriptor.getDefiningOp<tile::TMADescriptorOp>();
       int64_t expectTx = setup.getExpectTx().value_or(0);
-      SmallVector<Value> operands = {
-          descriptor, mbarrierInitPlaceholder.getBarrier()};
+      Value barrier = descriptorBarrierMap.lookup(descriptor);
+      SmallVector<Value> operands = {descriptor, barrier};
       operands.append(copy.getDependencies().begin(),
                       copy.getDependencies().end());
       SmallVector<NamedAttribute> attrs;
@@ -251,7 +306,7 @@ struct NVTMADescriptorPass
       stampTmaBarrier(b, replacement, slotIt->second, expectTx);
       for (Value result : replacement->getResults())
         if (isa<tile::AsyncTokenType>(result.getType()))
-          completionTokens.push_back(result);
+          completionTokensByBarrier[barrier].push_back(result);
       copy->replaceAllUsesWith(replacement->getResults());
       copy.erase();
     }
@@ -259,13 +314,22 @@ struct NVTMADescriptorPass
     SmallVector<tile::MBarrierWaitOp> waits;
     funcOp.walk([&](tile::MBarrierWaitOp op) { waits.push_back(op); });
     for (tile::MBarrierWaitOp wait : waits) {
-      if (wait.getBarrier())
-        continue;
-      SmallVector<Value> operands = {mbarrierInitPlaceholder.getBarrier()};
+      FailureOr<Value> barrier = wait.getBarrier()
+                                     ? FailureOr<Value>(wait.getBarrier())
+                                     : findBornBarrier(wait);
+      if (failed(barrier)) {
+        wait.emitError(
+            "requires exactly one role-bearing barrier born with its typed "
+            "producer pipeline");
+        signalPassFailure();
+        return;
+      }
+      SmallVector<Value> operands = {*barrier};
       SmallVector<Value> dependencies(wait.getDependencies().begin(),
                                       wait.getDependencies().end());
       if (dependencies.empty())
-        dependencies.append(completionTokens.begin(), completionTokens.end());
+        dependencies.append(completionTokensByBarrier[*barrier].begin(),
+                            completionTokensByBarrier[*barrier].end());
       operands.append(dependencies);
       SmallVector<NamedAttribute> attrs;
       // Drop tile.retire_all ONLY when the marker's "everything outstanding"

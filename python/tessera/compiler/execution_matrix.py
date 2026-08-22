@@ -1092,6 +1092,18 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
                             "(NVRTC-compiled for the device arch; f16/bf16/"
                             "fp32(tf32-math) storage, f32 accumulate)",
+    "nvidia_rng_compiled": "NVIDIA GPU (consumer Blackwell sm_120) typed "
+                            "stateless Philox4x32-10 uniform, normal, and "
+                            "dropout package with explicit key/counter ABI",
+    "nvidia_fft_compiled": "NVIDIA GPU (consumer Blackwell sm_120) canonical "
+                            "C2C/R2C/C2R cuFFT package with reusable plans and "
+                            "explicit caller-owned device workspace",
+    "nvidia_spectral_compiled": "NVIDIA GPU compound DCT/STFT/ISTFT/convolution/"
+                            "filter consumers over the canonical CUDA FFT ABI",
+    "nvidia_sm120_jvp_compiled": "Exact-SM120 content-addressed compiler JVP "
+                            "package, including deterministic Philox mask replay",
+    "nvidia_sm120_spectral_backward_compiled": "Exact-SM120 compound spectral "
+                            "VJP package over the canonical CUDA FFT ABI",
     "nvidia_matmul_relu_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
                             "compiler-emitted mma.sync GEMM with ReLU in the "
                             "canonical accumulator epilogue; f16/bf16 storage "
@@ -3618,6 +3630,66 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "f16/bf16/fp32(tf32-math) storage, f32 accumulate). Directly "
                "selectable by stamping compiler_path=\"nvidia_mma\".",
         execution_mode="cuda_runtime"),
+    ("nvidia_sm120", "nvidia_rng_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_rng_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_rng_compiled", runtime_status="success",
+        reason="Typed NVIDIA Philox4x32-10 package executes uniform core/range, "
+               "Box-Muller normal, and dropout through the shipped "
+               "libtessera_nvidia_rng.so ABI. Key/counter state is explicit; "
+               "uniform is bit exact and normal is f32-transcendental bounded.",
+        execution_mode="cuda_runtime", direction="forward", op_family="rng",
+        device_proof="device_verified_abi", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_rng_compiled.py",
+        proof_build="cuda13.3+sm120+RTX5070"),
+    ("nvidia_sm120", "nvidia_fft_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_fft_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_fft_compiled", runtime_status="success",
+        reason="Canonical CUDA FFT/workspace v2 package executes C2C/R2C/C2R "
+               "FFT/IFFT/RFFT/IRFFT through reusable cuFFT plans with auto-allocation "
+               "disabled and explicit caller-owned device workspace.",
+        execution_mode="cuda_runtime", direction="forward", op_family="fft",
+        device_proof="device_verified_abi", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_fft_workspace.py",
+        proof_build="cuda13.3+cufft+sm120+RTX5070"),
+    ("nvidia_sm120", "nvidia_spectral_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_spectral_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_spectral_compiled", runtime_status="success",
+        reason="DCT-II, STFT, ISTFT, spectral convolution, and spectral filter "
+               "consume the canonical CUDA FFT/workspace v2 package; framing, "
+               "windowing, pointwise products, and overlap-add are explicit host "
+               "orchestration around native cuFFT transforms.",
+        execution_mode="cuda_runtime", direction="forward", op_family="spectral",
+        device_proof="device_verified_abi", evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_fft_workspace.py",
+        proof_build="cuda13.3+cufft+sm120+RTX5070"),
+    ("nvidia_sm120", "nvidia_sm120_jvp_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_sm120_jvp_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_sm120_jvp_compiled", runtime_status="success",
+        reason="Content-addressed SM120 forward-product package executes typed "
+               "CUDA children in compiler-fixed order; Philox dropout clones the "
+               "same explicit key/counter into primal and tangent children.",
+        execution_mode="cuda_runtime", direction="forward",
+        op_family="philox_dropout", device_proof="device_verified_abi",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_philox_jvp.py",
+        proof_build="cuda13.3+sm120+RTX5070"),
+    ("nvidia_sm120", "nvidia_sm120_spectral_backward_compiled"): ExecutionRow(
+        target="nvidia_sm120",
+        compiler_path="nvidia_sm120_spectral_backward_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="nvidia_sm120_spectral_backward_compiled",
+        runtime_status="success",
+        reason="Content-addressed spectral filter/convolution VJP; convolution "
+               "gradients consume native CUDA R2C/C2R transforms.",
+        execution_mode="cuda_runtime", direction="backward",
+        op_family="spectral_backward", device_proof="device_verified_abi",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_spectral_autodiff.py",
+        proof_build="cuda13.3+cufft+sm120+RTX5070"),
     ("nvidia_sm120", "nvidia_matmul_relu_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_matmul_relu_compiled",
         execution_kind="native_gpu", executable=True,

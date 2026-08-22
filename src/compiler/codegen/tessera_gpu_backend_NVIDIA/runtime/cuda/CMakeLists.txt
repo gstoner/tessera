@@ -78,6 +78,22 @@ if(TESSERA_ENABLE_CUDA)
     message(STATUS "tessera_nvidia_gemm: using CUDA include ${_tessera_cuda_prefix}/include (CUDAToolkit not found)")
   endif()
 
+  # Stateless Philox/key-counter package. This is a separate ABI from GEMM so
+  # RNG consumers do not acquire MMA/NVRTC state or workspace implicitly.
+  add_library(tessera_nvidia_rng SHARED tessera_nvidia_rng.cu)
+  target_link_libraries(tessera_nvidia_rng PUBLIC CUDA::cudart)
+  set_target_properties(tessera_nvidia_rng PROPERTIES
+    CUDA_ARCHITECTURES 120
+    CUDA_STANDARD 17
+    CUDA_STANDARD_REQUIRED ON)
+
+  add_library(tessera_nvidia_fft SHARED tessera_nvidia_fft.cu)
+  target_link_libraries(tessera_nvidia_fft PUBLIC CUDA::cudart CUDA::cufft)
+  set_target_properties(tessera_nvidia_fft PROPERTIES
+    CUDA_ARCHITECTURES 120
+    CUDA_STANDARD 17
+    CUDA_STANDARD_REQUIRED ON)
+
   # C2-tail PTX launch bridge (COMPILER_REFACTOR_PLAN) — the emit-path launcher,
   # counterpart to apple_gpu_runtime.mm. Driver API only (JITs the emitted PTX;
   # no NVRTC device pass). References the core-runtime tsrRegisterGpuLauncher seam

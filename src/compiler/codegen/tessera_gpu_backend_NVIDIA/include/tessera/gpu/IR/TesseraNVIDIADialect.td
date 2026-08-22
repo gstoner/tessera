@@ -9,6 +9,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/CommonAttrConstraints.td"
+include "mlir/Dialect/LLVMIR/LLVMOpBase.td"
 
 def TesseraNVIDIADialect : Dialect {
   let name = "tessera_nvidia";
@@ -36,17 +37,28 @@ def TesseraNVIDIADialect : Dialect {
   // reference dialect (TesseraAppleOps.td).
 }
 
-// v1 typed contract. Each op carries the region's values as variadic operands
-// and yields variadic results; the specialization metadata (arch / shape /
-// dtype / warpgroup / …) rides as optional attributes. The attribute set is the
-// union the lowering can emit — an op ignores those it does not use — which
-// types the previously-extensible dialect while tolerating the per-SM-branch
-// attribute combinations `LowerTileToNVIDIA` produces. Ops carry no side-effect
-// trait so generic DCE never drops a marker whose result is unused.
+// Target values crossing the NVIDIA boundary are data buffers, scalar/vector
+// fragments, or LLVM ABI values. This deliberately excludes arbitrary dialect
+// types (for example async tokens and symbol-like handles): synchronization is
+// represented by registered TMA/mbarrier ops and scalar controls are attributes.
+// The union covers every physical ABI emitted today, including LLVM aggregate
+// accumulator returns from warp-level MMA.
+def NVIDIA_TargetValue : AnyTypeOf<[
+    AnyRankedTensor, AnyUnrankedTensor, AnyMemRef, AnyVectorOfAnyRank,
+    AnyInteger, AnyFloat, LLVM_AnyPointer, LLVM_AnyStruct
+  ], "a NVIDIA data buffer, scalar/vector fragment, or LLVM ABI value">;
+
+// v1 typed contract. Each op carries the region's supported target values as
+// variadic operands and yields supported target values; the specialization
+// metadata (arch / shape / dtype / warpgroup / …) rides as optional attributes.
+// The attribute set is the union the lowering can emit — an op ignores those it
+// does not use — which tolerates the per-SM-branch combinations
+// `LowerTileToNVIDIA` produces. Ops carry no side-effect trait so generic DCE
+// never drops a marker whose result is unused.
 class TesseraNVIDIA_Op<string mnemonic, list<Trait> traits = []> :
     Op<TesseraNVIDIADialect, mnemonic, traits> {
   let arguments = (ins
-      Variadic<AnyType>:$inputs,
+      Variadic<NVIDIA_TargetValue>:$inputs,
       OptionalAttr<StrAttr>:$arch,
       OptionalAttr<StrAttr>:$source,
       OptionalAttr<StrAttr>:$shape,
@@ -63,7 +75,7 @@ class TesseraNVIDIA_Op<string mnemonic, list<Trait> traits = []> :
       OptionalAttr<I64Attr>:$cta_group,
       OptionalAttr<I64Attr>:$columns,
       OptionalAttr<I64Attr>:$bytes);
-  let results = (outs Variadic<AnyType>:$outputs);
+  let results = (outs Variadic<NVIDIA_TargetValue>:$outputs);
   let assemblyFormat = [{
     $inputs attr-dict `:` functional-type($inputs, $outputs)
   }];
@@ -132,6 +144,21 @@ def NVIDIA_CudaKernelOp : TesseraNVIDIA_Op<"cuda_kernel"> {
   let summary = "Generic CUDA kernel artifact contract";
 }
 
+def NVIDIA_PhiloxModeAttr
+    : NVIDIA_EnumStrAttr<[
+        "uniform_core", "uniform_range", "normal", "dropout"],
+        "supported NVIDIA Philox generation mode">;
+
+// Stateless key/counter RNG directive. The generator deliberately begins at
+// the uniform core: distribution transforms are separate native consumers so
+// their numerical policies cannot silently alter the canonical bit stream.
+def NVIDIA_PhiloxOp : Op<TesseraNVIDIADialect, "philox"> {
+  let summary = "Stateless Philox4x32-10 CUDA kernel generation directive";
+  let arguments = (ins StrAttr:$name, NVIDIA_PhiloxModeAttr:$mode);
+  let results = (outs);
+  let assemblyFormat = "attr-dict";
+}
+
 // Typed CUDA Math API execution contract. Portable casts/bitcasts are
 // normalized before this boundary where possible; CUDA-only funnel, packed
 // dot, byte-lane SIMD, saturation, and predicate-result semantics remain
@@ -140,7 +167,7 @@ def NVIDIA_CudaKernelOp : TesseraNVIDIA_Op<"cuda_kernel"> {
 def NVIDIA_CudaMathKernelOp : Op<TesseraNVIDIADialect, "cuda_math_kernel"> {
   let summary = "Typed NVIDIA CUDA integer, bitcast, and packed-SIMD kernel";
   let arguments = (ins
-      Variadic<AnyType>:$inputs,
+      Variadic<NVIDIA_TargetValue>:$inputs,
       NVIDIA_CudaMathKindAttr:$kind,
       StrAttr:$input_storage,
       StrAttr:$output_storage,

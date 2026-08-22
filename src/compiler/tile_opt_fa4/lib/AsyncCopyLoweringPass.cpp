@@ -60,18 +60,23 @@ static Operation *emitTMADescriptor(OpBuilder &b, Location loc, Value src,
 static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
                                     Value descriptor, int64_t mbarrierSlot,
                                     Type resultType, Type tokenType,
+                                    Value barrier, int64_t expectTx,
                                     ValueRange coordinates,
                                     ValueRange dependencies) {
   OperationState st(loc, tessera::tile::TMACopyAsyncOp::getOperationName());
   st.addOperands({descriptor});
+  if (barrier)
+    st.addOperands(barrier);
   st.addOperands(coordinates);
   st.addOperands(dependencies);
   st.addAttribute("mbarrier_slot", b.getI64IntegerAttr(mbarrierSlot));
+  if (barrier)
+    st.addAttribute("expect_tx", b.getI64IntegerAttr(expectTx));
   st.addAttribute(
       "operandSegmentSizes",
       b.getDenseI32ArrayAttr(
-          {1, 0, static_cast<int32_t>(coordinates.size() +
-                                     dependencies.size())}));
+          {1, barrier ? 1 : 0, static_cast<int32_t>(coordinates.size() +
+                                                   dependencies.size())}));
   st.addAttribute("coordinate_count",
                   b.getI64IntegerAttr(coordinates.size()));
   // Produce the loaded tile so it can replace the original tile.async_copy
@@ -85,7 +90,7 @@ static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
   // ROCm token edge (Phase C-NV). The mbarrier still carries the byte count.
   if (tokenType)
     st.addTypes(tokenType);
-  else
+  else if (!barrier)
     // Legacy tokenless lane: the copy's completion mechanism is the mbarrier
     // NVTMADescriptorPass retrofits AFTER this pass. Declare that pending
     // assignment explicitly so the intermediate IR is not a copy that "gates
@@ -93,6 +98,42 @@ static Operation *emitTMACopyAsync(OpBuilder &b, Location loc,
     // descriptor pass strips the marker when it binds the real SSA barrier.
     st.addAttribute("tile.pending_mbarrier", b.getUnitAttr());
   return b.create(st);
+}
+
+static Value findBornBarrier(Operation *op) {
+  Operation *scheduleRegion = nullptr;
+  for (Operation *parent = op->getParentOp(); parent;
+       parent = parent->getParentOp())
+    if (parent->getName().getStringRef() == "schedule.mesh.region") {
+      scheduleRegion = parent;
+      break;
+    }
+  if (!scheduleRegion || scheduleRegion->getNumRegions() != 1 ||
+      scheduleRegion->getRegion(0).empty()) {
+    auto func = op->getParentOfType<func::FuncOp>();
+    if (!func || func.getBody().empty())
+      return {};
+    Value flat;
+    for (Operation &candidate : func.getBody().front()) {
+      auto init = dyn_cast<tessera::tile::MBarrierInitOp>(&candidate);
+      if (!init || init.getRoles().empty())
+        continue;
+      if (flat)
+        return {};
+      flat = init.getBarrier();
+    }
+    return flat;
+  }
+  Value found;
+  for (Operation &candidate : scheduleRegion->getRegion(0).front()) {
+    auto init = dyn_cast<tessera::tile::MBarrierInitOp>(&candidate);
+    if (!init || init.getRoles().empty())
+      continue;
+    if (found)
+      return {};
+    found = init.getBarrier();
+  }
+  return found;
 }
 
 // Recover the physical tensor-map base and block coordinates from value-level
@@ -196,6 +237,8 @@ struct LowerAsyncCopyTMA : public RewritePattern {
         tileTy = op->getResult(0).getType();
       Operation *copyOp = emitTMACopyAsync(rewriter, loc, desc->getResult(0),
                                            /*slot=*/0, tileTy, tokenTy,
+                                           findBornBarrier(op),
+                                           tileRows * tileCols * 2,
                                            coordinates,
                                            op->getOperands().drop_front());
       if (op->getNumResults())
@@ -238,7 +281,10 @@ struct LowerWaitAsync : public RewritePattern {
                                 PatternRewriter &rewriter) const override {
     Location loc = op->getLoc();
     if (smVersion >= 90) {
+      Value barrier = findBornBarrier(op);
       OperationState st(loc, tessera::tile::MBarrierWaitOp::getOperationName());
+      if (barrier)
+        st.addOperands(barrier);
       st.addOperands(op->getOperands());
       st.addAttribute("slot", rewriter.getI64IntegerAttr(0));
       // Segments: (barrier, token, dependencies) — barrier and the mbarrier
@@ -247,7 +293,8 @@ struct LowerWaitAsync : public RewritePattern {
       st.addAttribute(
           "operandSegmentSizes",
           rewriter.getDenseI32ArrayAttr(
-              {0, 0, static_cast<int32_t>(op->getNumOperands())}));
+              {barrier ? 1 : 0, 0,
+               static_cast<int32_t>(op->getNumOperands())}));
       // A keyless tile.wait_async means "retire everything outstanding" (the
       // declared legacy contract). Carry that meaning as an explicit marker
       // instead of an indistinguishable bare wait — the verifier fails closed

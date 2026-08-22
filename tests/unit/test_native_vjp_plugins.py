@@ -45,7 +45,9 @@ def test_compound_spectral_vjp_declares_only_proven_targets() -> None:
         assert declaration.family == "spectral_backward"
         assert declaration.schedule_consumer == "schedule.spectral_backward"
         assert declaration.tile_consumer == "tile.spectral_backward_kernel"
-        assert set(declaration.target_consumers) == {"x86", "rocm"}
+        assert set(declaration.target_consumers) == {
+            "x86", "rocm", "nvidia_sm120"
+        }
 
 
 def test_attention_vjp_declares_only_canonical_rank4_consumers() -> None:

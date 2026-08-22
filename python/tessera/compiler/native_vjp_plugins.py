@@ -218,6 +218,7 @@ def _execute_normalization(
     target_consumers={
         "x86": "x86.avx512_spectral_backward",
         "rocm": "rocm.gfx1151_spectral_backward",
+        "nvidia_sm120": "nvidia.sm120_spectral_backward",
     },
 )
 def _execute_compound_spectral(
@@ -269,7 +270,9 @@ def _execute_compound_spectral(
         RuntimeArtifact(metadata=package.runtime_metadata()),
         tuple([cotangents[0], *ordered_inputs]),
     )
-    expected_mode = "cpu_avx512" if target == "x86" else "hip_runtime"
+    expected_mode = ("cpu_avx512" if target == "x86" else
+                     "cuda_runtime" if target == "nvidia_sm120" else
+                     "hip_runtime")
     if not result.get("ok") or result.get("execution_mode") != expected_mode:
         raise TesseraJitError(
             f"verified {target} compound spectral backward launch failed: "
@@ -289,7 +292,9 @@ def _execute_compound_spectral(
             "compiler_path": f"{target}_spectral_backward_compiled",
             "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
             "execution_mode": expected_mode,
-            "evidence_target": "x86_avx512" if target == "x86" else "rocm_gfx1151",
+            "evidence_target": ("x86_avx512" if target == "x86" else
+                                "nvidia_sm120" if target == "nvidia_sm120" else
+                                "rocm_gfx1151"),
             "implementation": "family_plugin",
             "residual_policy": "save_inputs",
             "family": declaration.family,

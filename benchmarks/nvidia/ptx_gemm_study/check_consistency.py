@@ -29,18 +29,42 @@ def _fail(errs: list[str], msg: str) -> None:
     errs.append(msg)
 
 
+#: statuses that mean the row was disqualified before/at timing — it carries no
+#: latency/tflops on purpose and must be EXCLUDED from the numeric checks (else a
+#: correctly-rejected kernel or the supported NO_INT4=1 fallback turns Phase 4
+#: red and blocks the report for the valid candidates). Their metadata is still
+#: validated.
+DISQUALIFIED = {"WRONG", "EXEC_FAIL", "COMPILED_OUT", "SKIPPED_BY_PROBE"}
+
+
+def _measured(r: dict) -> bool:
+    """A row that carries a real measurement: non-null latency and not flagged
+    as disqualified. Only these rows feed the quantitative gate."""
+    return r.get("latency_ms") is not None and r.get("status", "OK") not in DISQUALIFIED
+
+
 def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
     errs: list[str] = []
     if not rows:
         return ["results.jsonl is empty"]
 
-    # 1) TOPS == 2 N^3 / latency  (square GEMM assumed via shape MxNxK == N^3)
+    measured = [r for r in rows if _measured(r)]
+
+    # A disqualified row must not smuggle in a latency/tflops (that would be a
+    # contradiction, not a clean rejection).
     for r in rows:
+        if r.get("status") in DISQUALIFIED and (
+                r.get("latency_ms") is not None or r.get("tflops") is not None):
+            _fail(errs, f"{r.get('status')} row carries latency/tflops "
+                        f"(should be null): {r.get('kernel')}")
+
+    # 1) TOPS == 2 N^3 / latency  (square GEMM assumed via shape MxNxK == N^3)
+    for r in measured:
         n = r.get("n") or r.get("shape", [None])[0]
         lat = r.get("latency_ms")
         tops = r.get("tflops")
         if n is None or lat in (None, 0) or tops is None:
-            _fail(errs, f"row missing n/latency/tflops: {r.get('kernel')}@{n}")
+            _fail(errs, f"measured row missing n/latency/tflops: {r.get('kernel')}@{n}")
             continue
         expect = (2 * n ** 3) / (lat / 1e3) / 1e12
         if abs(expect - tops) / max(expect, 1e-12) > TOPS_TOL:
@@ -50,7 +74,7 @@ def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
     # 2) No (kernel, dtype, n) appears with two different latencies — the exact
     #    failure mode of Table V (fp16_wmma at two contradictory values).
     seen: dict[tuple, float] = {}
-    for r in rows:
+    for r in measured:
         n = r.get("n") or r.get("shape", [None])[0]
         key = (r["kernel"], r.get("dtype"), n)
         lat = r.get("latency_ms")
@@ -62,8 +86,8 @@ def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
     # 3) reported same-precision speedups reconstruct from latencies
     #    (a row may carry speedup_vs_wmma; verify against the baseline latency)
     by_dt_n_kernel = {(r.get("dtype"), r.get("n") or r.get("shape", [None])[0],
-                       r["kernel"]): r for r in rows}
-    for r in rows:
+                       r["kernel"]): r for r in measured}
+    for r in measured:
         sp = r.get("speedup_vs_wmma")
         if sp is None:
             continue
@@ -97,7 +121,7 @@ def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
     #    never silently used.
     if counters:
         med = {(r["kernel"], r.get("dtype"), r.get("n") or r.get("shape", [None])[0]):
-               r["latency_ms"] for r in rows}
+               r["latency_ms"] for r in measured}
         for c in counters:
             n = c.get("n") or c.get("shape", [None])[0]
             k = (c.get("kernel"), c.get("dtype"), n)
@@ -128,6 +152,20 @@ def _selftest() -> int:
          "cov": 0.01, "clocks_locked": False, "role": "opt"},
     ]
     assert check(good) == [], check(good)
+    # disqualified rows (null latency) must NOT turn the gate red
+    with_skips = good + [
+        {"kernel": "int4_ptx_mma_k64", "dtype": "int4", "n": 2048,
+         "latency_ms": None, "tflops": None, "cov": None, "clocks_locked": False,
+         "status": "SKIPPED_BY_PROBE", "ai_theoretical": 10.92},
+        {"kernel": "int4_wmma", "dtype": "int4", "n": 2048, "latency_ms": None,
+         "tflops": None, "cov": None, "clocks_locked": False, "status": "COMPILED_OUT"},
+    ]
+    assert check(with_skips) == [], check(with_skips)
+    # but a disqualified row that smuggles in a latency IS an error
+    bad_skip = good + [{"kernel": "x", "dtype": "int4", "n": 512, "latency_ms": 1.0,
+                        "tflops": 1.0, "cov": 0.0, "clocks_locked": False,
+                        "status": "EXEC_FAIL"}]
+    assert any("carries latency" in e for e in check(bad_skip)), check(bad_skip)
     # inject the Table-V bug: same key, contradictory latency
     bad = good + [{"kernel": "fp16_wmma", "dtype": "fp16", "n": 2048,
                    "latency_ms": 680.1, "tflops": (2*2048**3)/(680.1/1e3)/1e12,

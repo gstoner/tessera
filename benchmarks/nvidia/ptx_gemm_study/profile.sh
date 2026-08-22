@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 # profile.sh — Phase 3 counter collection (plan §4, §7). SEPARATE from timing.
 # Targeted metric set (NOT --set full, which inflated the paper's Table V). Emits
-# counters.jsonl. Metric names are CANDIDATES — resolve them on-box first:
+# counters.jsonl keyed by (kernel, dtype, N) so the cross-check in
+# check_consistency.py can match event timings. Metric names are CANDIDATES —
+# resolve them on-box first:
 #   ncu --query-metrics | grep -E 'dram__cycles_active|lts__t_sector_hit'
 #
 # WSL2 prerequisite: GPU performance counters must be enabled on the Windows host
 # (NVIDIA Control Panel -> Developer -> Manage GPU Performance Counters ->
 # "Allow access to all users"), else ncu fails with ERR_NVGPUCTRPERM.
+#
+# Args: profile.sh [BENCH] [SIZES_CSV] [OUT] [ENABLE]
+#   ENABLE is passed through to bench so a probe-rejected family is never launched
+#   under the profiler either (fail-closed, plan §Phase 0).
 set -euo pipefail
 
 BENCH=${1:-./bench}
 SIZES=${2:-512,1024,2048,4096,8192}
 OUT=${3:-counters.jsonl}
+ENABLE=${4:-ALL}
 
 METRICS=$(cat <<'EOF'
 gpu__time_duration.sum
@@ -36,48 +43,26 @@ if ! ncu --query-metrics >/dev/null 2>&1; then
 fi
 
 : > "$OUT"
-# One kernel replay per launch; --launch-count keeps replays bounded. Parse the
-# CSV ncu emits into JSONL. (Kept as a documented pipeline; the parser maps the
-# raw metric names to the short keys analyze.py/check_consistency.py expect.)
-ncu --metrics "$METRIC_CSV" --csv --target-processes all \
-    --log-file ncu_raw.csv \
-    "$BENCH" --sizes "$SIZES" --iters 1 --warmup 0 >/dev/null 2>&1 || true
+FAIL=0
+# One ncu invocation PER SIZE so the same-named kernel launched at each N is not
+# collapsed — N comes from the loop, not from a fragile demangled-name parse.
+for n in $(echo "$SIZES" | tr ',' ' '); do
+  RAW="ncu_raw_${n}.csv"
+  rm -f "$RAW"                       # never parse a previous run's file
+  if ! ncu --metrics "$METRIC_CSV" --csv --target-processes all --log-file "$RAW" \
+       "$BENCH" --sizes "$n" --iters 1 --warmup 0 --enable "$ENABLE" >/dev/null 2>&1; then
+    echo "ERROR: ncu failed for N=$n (version-dependent metric? profiling denied?)" >&2
+    FAIL=1; continue
+  fi
+  if [ ! -s "$RAW" ]; then
+    echo "ERROR: ncu produced no output for N=$n" >&2; FAIL=1; continue
+  fi
+  python3 parse_ncu.py "$RAW" "$n" >> "$OUT" || { echo "parse failed N=$n" >&2; FAIL=1; }
+done
 
-python3 - "$OUT" <<'PY'
-import csv, json, sys, re
-out = sys.argv[1]
-KEYMAP = {
- "dram__cycles_active.avg": "dram_cycles_active",
- "dram__throughput.avg.pct_of_peak_sustained_elapsed": "dram_throughput_pct",
- "lts__t_sector_hit_rate.pct": "l2_hit_pct",
- "l1tex__t_sector_hit_rate.pct": "l1tex_hit_pct",
- "l1tex__average_t_sectors_per_request_pipe_lsu_mem_global_op_ld.ratio": "sectors_per_req",
- "smsp__thread_inst_executed_per_inst_executed.ratio": "active_threads_per_warp",
- "smsp__sass_branch_targets_threads_divergent.sum": "divergent_branches",
- "smsp__inst_executed.sum": "inst_executed",
- "sm__warps_active.avg.pct_of_peak_sustained_active": "occupancy_pct",
- "gpu__time_duration.sum": "ncu_duration_ms",
-}
-rows = {}
-try:
-    with open("ncu_raw.csv") as f:
-        # ncu csv has a preamble; find the header line with 'Kernel Name'
-        lines = [l for l in f if l.strip()]
-    hdr_i = next(i for i,l in enumerate(lines) if "Metric Name" in l)
-    rdr = csv.DictReader(lines[hdr_i:])
-    for r in rdr:
-        kn = r.get("Kernel Name","")
-        m = r.get("Metric Name",""); v = r.get("Metric Value","")
-        key = (kn,)  # NOTE: on-box, also parse the grid/N from demangled name
-        rows.setdefault(key, {"kernel": kn})
-        if m in KEYMAP:
-            try: val=float(str(v).replace(",",""))
-            except ValueError: val=v
-            if KEYMAP[m]=="ncu_duration_ms": val=val/1e6  # ns->ms if reported in ns
-            rows[key][KEYMAP[m]] = val
-    with open(out,"w") as w:
-        for v in rows.values(): w.write(json.dumps(v)+"\n")
-    print(f"wrote {out} ({len(rows)} kernels)")
-except (StopIteration, FileNotFoundError) as e:
-    print(f"WARN: could not parse ncu_raw.csv ({e}); inspect it manually", file=sys.stderr)
-PY
+if [ "$FAIL" != 0 ]; then
+  echo "Phase 3 FAILED — counters.jsonl is incomplete; do NOT trust the counter" >&2
+  echo "columns of REPORT.md for the missing sizes." >&2
+  exit 1
+fi
+echo "wrote $OUT"

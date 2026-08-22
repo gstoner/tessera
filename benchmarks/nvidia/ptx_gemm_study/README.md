@@ -31,7 +31,8 @@ Outputs: `capability_matrix.json`, `results.jsonl`, `counters.jsonl`, `REPORT.md
 |---|---|
 | `probe.cu` | **Phase 0** capability + numeric probe. Decides native `s4` on sm_120. |
 | `bench.cu` | **Phase 1+2** correctness-then-timing. CUDA events only. → `results.jsonl` |
-| `profile.sh` | **Phase 3** targeted `ncu` counters (separate pass). → `counters.jsonl` |
+| `profile.sh` | **Phase 3** targeted `ncu`, one pass per N (separate from timing). → `counters.jsonl` |
+| `parse_ncu.py` | maps each ncu CSV → JSONL keyed by (kernel, dtype, N), matching `results.jsonl` |
 | `check_consistency.py` | **Phase 4** gate — the anti-Table-V guard. `--selftest` runs offline. |
 | `analyze.py` | **Phase 4** report generator (all numbers derived). → `REPORT.md` |
 | `run.sh` | end-to-end, INT4-first ordering, gate blocks the report |

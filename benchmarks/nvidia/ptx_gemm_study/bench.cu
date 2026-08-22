@@ -114,16 +114,31 @@ __global__ void int4_native_k64(const uint32_t* A,const uint32_t* B,int32_t* C,
 }
 #endif
 
+// ----------------------------- probe gating ---------------------------------
+// Fail-closed contract (plan §Phase 0): a family is timed ONLY if it is in the
+// --enable set that run.sh derives from capability_matrix.json. This is what
+// keeps an exec_fail (illegal-instruction) variant from ever being launched
+// here — launching it would sticky-corrupt the CUDA context and abort the rest
+// of the run, discarding already-valid rows (e.g. FP16). Default "ALL" is for
+// standalone use; run.sh always passes an explicit set.
+static std::string g_enable="ALL";
+static bool enabled(const char* fam){
+  return g_enable=="ALL" || g_enable.find(fam)!=std::string::npos;
+}
+
 // ----------------------------- JSONL emit -----------------------------------
 static const char* g_dev="?"; static const char* g_ver="study-0.1";
 static void emit_row(const char*kernel,const char*dtype,int n,const Stat*st,
                      double tflops,double ai_theo,const char*status,int locked){
-  printf("{\"kernel\":\"%s\",\"dtype\":\"%s\",\"op\":\"gemm\",\"n\":%d,",kernel,dtype,n);
+  // Decision #12 canonical fields: backend, op, shape, dtype, latency_ms,
+  // tflops, memory_bw_gb_s, device, tessera_version (+ study-specific extras).
+  printf("{\"backend\":\"nvidia\",\"kernel\":\"%s\",\"dtype\":\"%s\",\"op\":\"gemm\",\"n\":%d,",
+         kernel,dtype,n);
   printf("\"shape\":[%d,%d,%d],",n,n,n);
   if(st) printf("\"latency_ms\":%.6f,\"p05_ms\":%.6f,\"p95_ms\":%.6f,\"cov\":%.5f,\"tflops\":%.6f,",
                 st->median_ms,st->p05,st->p95,st->cov,tflops);
   else   printf("\"latency_ms\":null,\"cov\":null,\"tflops\":null,");
-  printf("\"ai_theoretical\":%.4f,\"memory_bw_gbps\":null,\"device\":\"%s\",",ai_theo,g_dev);
+  printf("\"ai_theoretical\":%.4f,\"memory_bw_gb_s\":null,\"device\":\"%s\",",ai_theo,g_dev);
   printf("\"tessera_version\":\"%s\",\"clocks_locked\":%s,\"status\":\"%s\"}\n",
          g_ver, locked?"true":"false", status);
 }
@@ -142,6 +157,7 @@ int main(int argc,char**argv){
     if(!strcmp(argv[i],"--iters"))iters=atoi(argv[++i]);
     else if(!strcmp(argv[i],"--warmup"))warmup=atoi(argv[++i]);
     else if(!strcmp(argv[i],"--clocks-locked"))locked=1;
+    else if(!strcmp(argv[i],"--enable"))g_enable=argv[++i];
     else if(!strcmp(argv[i],"--sizes")){sizes.clear();char*t=strtok(argv[++i],",");
       while(t){sizes.push_back(atoi(t));t=strtok(nullptr,",");}}
   }
@@ -152,7 +168,9 @@ int main(int argc,char**argv){
   for(int n:sizes){
     int M=n,N=n,K=n;
     // ---- FP16 WMMA baseline (validate then time) ----
-    {
+    if(!enabled("fp16_wmma")){
+      emit_row("fp16_wmma","fp16",n,nullptr,0,ai_theo("fp16",n),"SKIPPED_BY_PROBE",locked);
+    } else {
       std::vector<float> Af(M*K),Bf(N*K),Cref(M*N);
       for(auto&x:Af)x=(rand()%7-3)*0.5f; for(auto&x:Bf)x=(rand()%7-3)*0.5f;
       for(int m=0;m<M;m++)for(int nn=0;nn<N;nn++){float s=0;for(int k=0;k<K;k++)s+=Af[m*K+k]*Bf[nn*K+k];Cref[m*N+nn]=s;}
@@ -173,8 +191,14 @@ int main(int argc,char**argv){
       cudaFree(dA);cudaFree(dB);cudaFree(dC);
     }
     // ---- INT4 native (pivotal): validate then time ----
+    // Fail-closed: only launched if run.sh put int4_ptx_mma_k64 in --enable,
+    // i.e. Phase 0 reported native_ok. This prevents an exec_fail (illegal
+    // instruction) variant from sticky-corrupting the context and aborting the
+    // remaining sizes (which would discard already-valid FP16 rows).
 #ifndef NO_INT4_MMA
-    {
+    if(!enabled("int4_ptx_mma_k64")){
+      emit_row("int4_ptx_mma_k64","int4",n,nullptr,0,ai_theo("int4",n),"SKIPPED_BY_PROBE",locked);
+    } else {
       std::vector<int>Ai(M*K),Bi(N*K),Cref(M*N);
       for(auto&x:Ai)x=rand()%7-4; for(auto&x:Bi)x=rand()%7-4;
       for(int m=0;m<M;m++)for(int nn=0;nn<N;nn++){int s=0;for(int k=0;k<K;k++)s+=Ai[m*K+k]*Bi[nn*K+k];Cref[m*N+nn]=s;}

@@ -38,6 +38,23 @@ def _candidate_pairs(orders: list[str] | tuple[str, ...],
             for group in (groups if order in _GROUPED_ORDERS else (1,))]
 
 
+def _validate_candidate_set(
+    shapes: list[tuple[int, int, int]] | tuple[tuple[int, int, int], ...],
+    candidates: list[tuple[str, int]],
+    *,
+    profile_only: bool,
+) -> None:
+    """Reject invalid recording sets before importing or launching CUDA."""
+    if profile_only:
+        if len(shapes) != 1 or len(candidates) != 1:
+            raise ValueError(
+                "--profile-only requires exactly one shape/order/group candidate")
+        return
+    if ("row_major", 1) not in candidates:
+        raise ValueError(
+            "normal raster sweeps require the row_major/1 incumbent")
+
+
 def _shape(text: str) -> tuple[int, int, int]:
     parts = tuple(int(x) for x in text.split("x"))
     if len(parts) != 3 or min(parts) < 1:
@@ -132,18 +149,28 @@ def _selector_decision(rows: list[dict[str, Any]]) -> dict[str, object]:
         by_shape.setdefault(tuple(row["shape"]), []).append(row)
     winners: list[str] = []
     improvements: list[float] = []
+    counter_coverage_complete = bool(by_shape)
     for shape_rows in by_shape.values():
-        incumbent = next(row for row in shape_rows
-                         if row["raster_order"] == "row_major")
+        incumbent = next((row for row in shape_rows
+                          if row["raster_order"] == "row_major"), None)
+        if incumbent is None:
+            raise ValueError(
+                f"selector rows require a row_major incumbent for shape "
+                f"{tuple(shape_rows[0]['shape'])}")
         winner = min(shape_rows, key=lambda row: float(row["device_median_ms"]))
         winners.append(f"{winner['raster_order']}:{winner['raster_group']}")
         improvements.append(
             (float(incumbent["device_median_ms"]) - float(winner["device_median_ms"]))
             / float(incumbent["device_median_ms"]))
+        counter_coverage_complete = (
+            counter_coverage_complete
+            and "ncu" in incumbent
+            and "ncu" in winner
+        )
     consensus = winners[0] if winners and len(set(winners)) == 1 else None
     counter_rows = [row for row in rows if "ncu" in row]
     promote = bool(consensus and not consensus.startswith("row_major:") and
-                   min(improvements) >= .03 and counter_rows)
+                   min(improvements) >= .03 and counter_coverage_complete)
     return {
         "selected": consensus if promote else "row_major:1",
         "changed": promote,
@@ -182,8 +209,7 @@ def main() -> int:
     if min(args.groups) < 1:
         raise ValueError("raster groups must be positive")
     candidates = _candidate_pairs(args.variants, args.groups)
-    if args.profile_only and (len(args.shapes) != 1 or len(candidates) != 1):
-        raise ValueError("--profile-only requires exactly one shape/order/group candidate")
+    _validate_candidate_set(args.shapes, candidates, profile_only=args.profile_only)
     reports: dict[tuple[tuple[int, int, int], str, int], Path] = {}
     for shape, order, group, report in args.ncu_report or ():
         key = (shape, order, group)

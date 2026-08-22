@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 PATH = Path(__file__).parents[2] / "benchmarks/nvidia/parse_ncu_resources.py"
 SPEC = importlib.util.spec_from_file_location("nvidia_ncu_resources", PATH)
@@ -91,8 +93,41 @@ def test_raster_selector_requires_stable_timing_and_counter_evidence():
              "device_median_ms": .9},
         ])
     assert raster._selector_decision(rows)["selected"] == "row_major:1"
+    # Partial evidence is fail-closed even when it covers every incumbent and
+    # one winning candidate. Promotion requires the pair for every shape.
+    for row in rows:
+        if row["raster_order"] == "row_major" or row["shape"] == [512, 512, 512]:
+            row["ncu"] = {"l2_sector_hit_rate_pct": 90.0, "dram_bytes": 1024.0}
+    assert raster._selector_decision(rows)["selected"] == "row_major:1"
     for row in rows:
         row["ncu"] = {"l2_sector_hit_rate_pct": 90.0, "dram_bytes": 1024.0}
     decision = raster._selector_decision(rows)
     assert decision["selected"] == "grouped_n:4"
     assert decision["changed"] is True
+
+
+def test_raster_normal_sweep_requires_row_major_before_execution():
+    path = Path(__file__).parents[2] / "benchmarks/nvidia/record_raster_packet.py"
+    spec = importlib.util.spec_from_file_location("nvidia_raster_validation", path)
+    assert spec and spec.loader
+    raster = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(raster)
+    candidates = raster._candidate_pairs(("grouped_m",), (4,))
+    with pytest.raises(ValueError, match="require the row_major/1 incumbent"):
+        raster._validate_candidate_set(
+            ((512, 512, 512),), candidates, profile_only=False)
+
+
+def test_raster_selector_reports_missing_incumbent_explicitly():
+    path = Path(__file__).parents[2] / "benchmarks/nvidia/record_raster_packet.py"
+    spec = importlib.util.spec_from_file_location("nvidia_raster_missing_incumbent", path)
+    assert spec and spec.loader
+    raster = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(raster)
+    with pytest.raises(ValueError, match="row_major incumbent"):
+        raster._selector_decision([{
+            "shape": [512, 512, 512],
+            "raster_order": "grouped_m",
+            "raster_group": 4,
+            "device_median_ms": 0.9,
+        }])

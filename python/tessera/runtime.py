@@ -6232,12 +6232,18 @@ def _tessera_opt_path() -> Optional[Path]:
 _rocm_toolkit_root_cache: Any = False  # False = unprobed; None/Path after
 
 
+#: Directories, relative to a ROCm toolkit root, that can hold its LLVM tools.
+#: Ordered longest-first so stripping one off a discovered tool path yields the
+#: toolkit root itself rather than an inner directory.
+_ROCM_TOOL_RELDIRS = ("lib/llvm/bin", "llvm/bin", "bin")
+
+
 def _rocm_lld_under(root: Path) -> Optional[Path]:
     """Return the ``ld.lld`` the ROCDL serializer would use under a toolkit root,
     or ``None``. TheRock (``/opt/rocm/core``) ships it at ``llvm/bin`` and mirrors
     it at ``lib/llvm/bin``; a classic install keeps it at ``llvm/bin``."""
-    for rel in ("llvm/bin/ld.lld", "lib/llvm/bin/ld.lld", "bin/ld.lld"):
-        cand = root / rel
+    for rel in _ROCM_TOOL_RELDIRS:
+        cand = root / rel / "ld.lld"
         try:
             if cand.is_file():
                 return cand
@@ -6270,10 +6276,19 @@ def _rocm_toolkit_root() -> Optional[Path]:
     candidates += [Path("/opt/rocm/core"), Path("/opt/rocm")]
     for tool in ("ld.lld", "amdgpu-arch", "amdclang"):
         found = shutil.which(tool)
-        if found:
-            # <root>/{llvm,lib/llvm}/bin/<tool> or <root>/bin/<tool>
-            parents = Path(found).resolve().parents
-            candidates += list(parents[2:4] if len(parents) > 3 else parents[2:3])
+        if not found:
+            continue
+        # Strip the tool's own directory suffix to get the toolkit ROOT. Walking
+        # `parents` by index cannot do this: the tool sits three levels down for
+        # <root>/lib/llvm/bin but only one for <root>/bin, so a fixed slice
+        # either skips the root or returns an inner directory as ROCM_PATH.
+        # Longest suffix first, so <root>/lib/llvm/bin yields <root>, not <root>/lib.
+        tool_dir = Path(found).resolve().parent
+        for rel in _ROCM_TOOL_RELDIRS:
+            suffix = Path(rel).parts
+            if tool_dir.parts[-len(suffix):] == suffix:
+                candidates.append(Path(*tool_dir.parts[: -len(suffix)]))
+                break
     for root in candidates:
         try:
             if root.is_dir() and _rocm_lld_under(root) is not None:
@@ -6605,11 +6620,35 @@ def _pack_signed_int4(values):
     return np.ascontiguousarray(packed).view(np.int8)
 
 
+def _load_hip_from_toolkit() -> ctypes.CDLL | None:
+    """Load ``libamdhip64`` from the detected ROCm toolkit by absolute path.
+
+    Fallback for when the bare soname does not resolve: a non-interactive shell
+    has no ``LD_LIBRARY_PATH``, and ``ldconfig`` may know only a stale ROCm
+    (e.g. ``libamdhip64.so.5``) — so the plain name either fails outright or
+    resolves to the WRONG ROCm (root-caused 2026-08-23). Loading from the same
+    toolkit whose ``ld.lld`` built the hsaco keeps the runtime and the code
+    object on one ROCm. ``None`` when no toolkit or no library is found."""
+    root = _rocm_toolkit_root()
+    if root is None:
+        return None
+    for rel in ("lib/libamdhip64.so", "lib/libamdhip64.so.7"):
+        cand = root / rel
+        try:
+            if not cand.is_file():
+                continue
+            return ctypes.CDLL(str(cand), mode=ctypes.RTLD_LOCAL)
+        except OSError:
+            continue
+    return None
+
+
 def _load_hip_for_launch() -> ctypes.CDLL | None:
     """Load libamdhip64 with the module-launch ABI bound (cached)."""
     global _rocm_hip_launch_lib
     if _rocm_hip_launch_lib is not None:
         return _rocm_hip_launch_lib
+    hip: ctypes.CDLL | None
     try:
         # Calls go through this handle; generated modules do not require HIP's
         # host symbols to be promoted process-wide. RTLD_GLOBAL promotion after
@@ -6617,24 +6656,9 @@ def _load_hip_for_launch() -> ctypes.CDLL | None:
         # double-free reproduced by the compiled GEMM tests.
         hip = ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_LOCAL)
     except OSError:
-        # A non-interactive shell has no LD_LIBRARY_PATH, and ldconfig may only
-        # know a stale ROCm (e.g. libamdhip64.so.5) — so the bare soname either
-        # fails to resolve or resolves to the WRONG ROCm. Fall back to the
-        # detected toolkit's own libamdhip64 by absolute path (root-caused
-        # 2026-08-23), matching the toolkit whose ld.lld built the hsaco.
-        hip = None
-        root = _rocm_toolkit_root()
-        if root is not None:
-            for rel in ("lib/libamdhip64.so", "lib/libamdhip64.so.7"):
-                cand = root / rel
-                if cand.is_file():
-                    try:
-                        hip = ctypes.CDLL(str(cand), mode=ctypes.RTLD_LOCAL)
-                        break
-                    except OSError:
-                        hip = None
-        if hip is None:
-            return None
+        hip = _load_hip_from_toolkit()
+    if hip is None:
+        return None
     hip.hipInit.argtypes = [ctypes.c_uint]
     hip.hipMalloc.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
     hip.hipFree.argtypes = [ctypes.c_void_p]

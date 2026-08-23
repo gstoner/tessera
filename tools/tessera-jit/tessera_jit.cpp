@@ -534,8 +534,20 @@ static void demoteLargeFullTileTransfers(ModuleOp module) {
     if (!r.getPermutationMap().isIdentity() ||
         !w.getPermutationMap().isIdentity())
       continue;
-    if (llvm::any_of(r.getInBoundsValues(), [](bool b) { return !b; }) ||
-        llvm::any_of(w.getInBoundsValues(), [](bool b) { return !b; }))
+    // A masked transfer suppresses lanes the insert_slice form would copy
+    // — never demote those. And require in_bounds to be EXPLICIT for every
+    // dimension and all-true: an absent in_bounds yields an empty
+    // getInBoundsValues(), which a bare any_of(!b) accepts vacuously
+    // without proving anything about the write.
+    if (r.getMask() || w.getMask())
+      continue;
+    auto allExplicitlyInBounds = [](auto op, int64_t rank) {
+      SmallVector<bool> ib = op.getInBoundsValues();
+      return static_cast<int64_t>(ib.size()) == rank &&
+             llvm::all_of(ib, [](bool b) { return b; });
+    };
+    if (!allExplicitlyInBounds(r, vecTy.getRank()) ||
+        !allExplicitlyInBounds(w, vecTy.getRank()))
       continue;
     bool zeroReadIdx = llvm::all_of(r.getIndices(), [](Value v) {
       auto c = v.getDefiningOp<arith::ConstantIndexOp>();

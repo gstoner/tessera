@@ -28,15 +28,16 @@ runtime ABI, and exact-host evidence; no AVX-512 image, schedule, or evidence
 transfers to sm_120.
 
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
-`tessera_jit` pipeline change; x86 outcome: parity validated (AVX-512
-host).** `convert-elementwise-to-linalg` joined the pipeline after
-`tessera-to-linalg` (tensor-typed elementwise arith/math — e.g. the
-paired autodiff cotangent accumulation — has no bufferization interface
-and previously failed one-shot-bufferize; the rewrite is additive:
-previously-working modules contained no such ops, since they would have
-failed). Validated on this host: the W4 state-machine rows plus the
-shared JIT regression lanes (native-cpu-jit, production phase 1/3 — 42
-tests) against the extended pipeline.
+`tessera_jit` pipeline change; x86 outcome: core state-machine evidence
+retained, widened-family follow-up required (AVX-512 host).** The original
+AVX-512 rows prove native forward/backward execution for the add/cmp/select
+state-machine vocabulary.  The follow-up found that MLIR's
+`convert-elementwise-to-linalg` pass had been nested at the wrong scope; it is
+now a module pass with a residual tensor-elementwise legality gate.  M1 Max
+host execution proves the wider arithmetic/math family, dynamic shapes, and a
+generated forward JVP, but that evidence does not transfer to AVX-512.  Repeat
+`test_jit_tensor_elementwise_totality.py` plus the existing state-machine and
+native-JIT packet on the x86 host to close the widened claim.
 
 
 Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 x86 outcome:

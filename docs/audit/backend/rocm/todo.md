@@ -30,9 +30,13 @@ transfer to sm_120.
 
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
 `tessera_jit` pipeline change; ROCm outcome: not applicable (backend);
-host lane validated.** The ROCm device paths (tessera-rocm-executable /
-hsaco lanes) do not consume `tessera_jit`. The host-CPU JIT lane on this
-box IS the x86 lane, validated under the x86 entry on this same host.
+host lane follow-up required.** The ROCm device paths
+(`tessera-rocm-executable` / hsaco lanes) do not consume `tessera_jit`; their
+state-machine path independently scalarizes tensor slots before emitting GPU
+arith and retains its gfx1151 exact-device proof below.  The host-CPU JIT lane
+on this box is the x86 lane: its original add/cmp/select state-machine evidence
+remains valid, while the newly widened arithmetic/math totality matrix still
+needs the x86-host rerun recorded in that plan.
 
 
 Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 exact-device

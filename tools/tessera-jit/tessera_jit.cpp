@@ -326,6 +326,36 @@ static LogicalResult lowerVectorOps(ModuleOp module) {
   return applyPatternsGreedily(module, std::move(patterns));
 }
 
+// One-shot bufferization cannot consume tensor-valued pointwise operations
+// directly. The module-scoped elementwise-to-linalg pass above is intended to
+// close that entire mathematical family (arith add/sub/mul/div, comparisons,
+// select, min/max, casts, and tensor math), including operations nested in
+// control flow. Keep an explicit postcondition here so a newly introduced or
+// newly unsupported elementwise op fails at the owning boundary, before the
+// much less actionable generic bufferization diagnostic.
+static LogicalResult rejectResidualTensorElementwiseOps(ModuleOp module) {
+  Operation *residual = nullptr;
+  module.walk([&](Operation *op) {
+    if (!op->hasTrait<OpTrait::Elementwise>())
+      return WalkResult::advance();
+    if (!llvm::any_of(op->getResultTypes(),
+                      [](Type type) { return isa<RankedTensorType>(type); }))
+      return WalkResult::advance();
+    residual = op;
+    return WalkResult::interrupt();
+  });
+  if (!residual)
+    return success();
+
+  std::string message =
+      "tessera_jit: unsupported residual tensor elementwise operation '" +
+      residual->getName().getStringRef().str() +
+      "' after elementwise-to-linalg conversion";
+  setError(message);
+  residual->emitError(message);
+  return failure();
+}
+
 LogicalResult buildAndRunPipeline(ModuleOp module) {
   // Stage 1a: tessera → linalg (tensors).
   PassManager pm1a(module->getContext());
@@ -341,8 +371,15 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   // cotangent accumulation `arith.addf : tensor<...>`) have no bufferization
   // interface of their own; rewrite them to linalg.generic first so
   // one-shot-bufferize can consume them (W4 x86 state-machine row).
-  pm1a.nest<func::FuncOp>().addPass(createConvertElementwiseToLinalgPass());
+  // This is a module pass (it rewrites elementwise ops in nested control-flow
+  // regions too), so adding it under func silently prevents it from running.
+  // In particular, paired state-machine backward functions carry tensor
+  // arith.addf and arith.select under scf.if/scf.for; both must become
+  // linalg.generic before one-shot bufferization.
+  pm1a.addPass(createConvertElementwiseToLinalgPass());
   if (failed(pm1a.run(module)))
+    return failure();
+  if (failed(rejectResidualTensorElementwiseOps(module)))
     return failure();
 
   // Stage 1b (opt-in): tile + vectorize on tensors, before bufferization. Only
@@ -404,9 +441,12 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   auto fmFast = arith::FastMathFlagsAttr::get(module.getContext(),
                                               arith::FastMathFlags::fast);
   module.walk([&](Operation *op) {
+    // Do not stamp maximum/minimum/maxnum/minnum: unlike GEMM arithmetic,
+    // their NaN-propagation and signed-zero choice is the operation contract.
+    // Adding nnan/nsz here would make maximum/minimum indistinguishable from
+    // maxnum/minnum and permit the sign of a zero result to change.
     if (isa<arith::AddFOp, arith::SubFOp, arith::MulFOp, arith::DivFOp,
-            arith::MaximumFOp, arith::MinimumFOp, arith::MaxNumFOp,
-            arith::MinNumFOp, arith::NegFOp>(op))
+            arith::NegFOp>(op))
       op->setAttr("fastmath", fmFast);
   });
 
@@ -448,6 +488,7 @@ const char *tessera_jit_last_error(void) { return g_lastError.c_str(); }
 // emission and has DPS applied when its sole result is a memref. Returns an
 // opaque handle on success, nullptr on failure (see tessera_jit_last_error()).
 void *tessera_jit_compile(const char *mlir_text) {
+  g_lastError.clear();
   ensureNativeTargetInit();
   auto jm = std::make_unique<JitModule>();
 
@@ -494,7 +535,8 @@ void *tessera_jit_compile(const char *mlir_text) {
   markCInterface(*jm->module);
 
   if (failed(buildAndRunPipeline(*jm->module))) {
-    setError("tessera_jit: lowering pipeline failed");
+    if (g_lastError.empty())
+      setError("tessera_jit: lowering pipeline failed");
     return nullptr;
   }
 

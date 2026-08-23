@@ -57,8 +57,10 @@ Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
 `tessera_jit` pipeline change; NVIDIA outcome: not applicable.**
 `tessera_jit` is the host-CPU JIT lane; the NVIDIA backend's device
 paths (NVRTC / tessera-opt pipelines) do not consume it, and NR2 Pro's
-host-CPU lane is the same x86 lane the x86 entry validates. No
-NVIDIA-owned surface compiles through the changed pipeline.
+host-CPU lane is the x86 follow-up recorded in the x86 plan. No
+NVIDIA-owned surface compiles through the changed pipeline; the module-scope
+correction and residual legality gate therefore change no CUDA IR, kernel,
+runtime ABI, or exact-device claim.
 
 
 Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference

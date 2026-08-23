@@ -47,6 +47,7 @@
 #include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Tensor/Transforms/SubsetInsertionOpInterfaceImpl.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
@@ -91,6 +92,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -113,11 +116,168 @@ std::atomic<int64_t> g_compiles{0};
 
 void setError(const std::string &msg) { g_lastError = msg; }
 
+// Boundary signature captured at compile time (RUNTIME_ABI_SPEC §12.6).
+// The lowered module no longer carries tensor types, so the shapes each
+// function was compiled against are recorded here, from the parsed module,
+// before the pipeline runs. `tessera_jit_invoke` validates descriptors
+// against this before dispatch: an argument-count or static-extent mismatch
+// is a caller bug that would otherwise read/write out of bounds inside the
+// generated code (the identity-layout ABI bakes static extents into the
+// indexing math — the descriptor's sizes are NOT consulted for them).
+struct ArgSig {
+  bool isRankedTensor = false;
+  SmallVector<int64_t> dims;  // ShapedType::kDynamic for '?'
+  std::string typeText;       // element type for tensors, full type otherwise
+};
+
+struct FuncSig {
+  // c-iface argument order after the DPS rewrite: inputs..., results... .
+  SmallVector<ArgSig> cifaceArgs;
+  unsigned numInputs = 0;
+  unsigned numResults = 0;
+  // All results are ranked tensors (or there are none) — the only shape the
+  // DPS rewrite + void-return ffi dispatch in tessera_jit_invoke supports.
+  bool dpsCompatible = true;
+  std::string rendered;  // "in;in|out" — see renderSignatures()
+};
+
 struct JitModule {
   std::unique_ptr<MLIRContext> ctx;
   OwningOpRef<ModuleOp> module;
   std::unique_ptr<ExecutionEngine> engine;
+  llvm::StringMap<FuncSig> signatures;
 };
+
+// Capture every non-external function's boundary signature from the parsed
+// (pre-lowering) module. Must run before the pipeline: bufferization/DPS
+// erase the tensor-level function type.
+void captureSignatures(ModuleOp module, llvm::StringMap<FuncSig> &sigs) {
+  for (auto fn : module.getOps<func::FuncOp>()) {
+    if (fn.isExternal())
+      continue;
+    FuncSig sig;
+    sig.numInputs = fn.getNumArguments();
+    sig.numResults = fn.getNumResults();
+    sig.dpsCompatible = llvm::all_of(fn.getResultTypes(), [](Type t) {
+      return isa<RankedTensorType>(t);
+    });
+    auto addArg = [&](Type t) {
+      ArgSig a;
+      llvm::raw_string_ostream os(a.typeText);
+      if (auto rt = dyn_cast<RankedTensorType>(t)) {
+        a.isRankedTensor = true;
+        a.dims.assign(rt.getShape().begin(), rt.getShape().end());
+        os << rt.getElementType();
+      } else {
+        os << t;
+      }
+      sig.cifaceArgs.push_back(std::move(a));
+    };
+    for (Type t : fn.getArgumentTypes())
+      addArg(t);
+    if (sig.dpsCompatible)
+      for (Type t : fn.getResultTypes())
+        addArg(t);
+    // Rendered form for the tessera_jit_signature ABI:
+    //   inputs ';'-joined, '|', results ';'-joined
+    // with each ranked tensor as tensor<AxBx...xELEM> ('?' for dynamic) and
+    // any other type verbatim. ';' cannot appear in these type spellings.
+    std::string txt;
+    llvm::raw_string_ostream os(txt);
+    auto render = [&](const ArgSig &a) {
+      if (!a.isRankedTensor) {
+        os << a.typeText;
+        return;
+      }
+      os << "tensor<";
+      for (int64_t d : a.dims) {
+        if (ShapedType::isDynamic(d))
+          os << "?";
+        else
+          os << d;
+        os << "x";
+      }
+      os << a.typeText << ">";
+    };
+    for (unsigned i = 0; i < sig.numInputs; ++i) {
+      if (i)
+        os << ";";
+      render(sig.cifaceArgs[i]);
+    }
+    os << "|";
+    if (!sig.dpsCompatible) {
+      // Function has non-tensor results: the DPS rewrite leaves it returning
+      // values, which the void-return invoke dispatch cannot call. Mark it so
+      // the Python layer fails closed instead of mis-parsing "no results".
+      os << "!nondps";
+    } else {
+      for (unsigned i = sig.numInputs; i < sig.cifaceArgs.size(); ++i) {
+        if (i != sig.numInputs)
+          os << ";";
+        render(sig.cifaceArgs[i]);
+      }
+    }
+    sig.rendered = std::move(txt);
+    sigs[fn.getSymName()] = std::move(sig);
+  }
+}
+
+// In-process implementation of the `memrefCopy` C runner-utils helper
+// (CRunnerUtils ABI: elemSize + two unranked-memref pointers, each
+// {rank, descriptor*} with descriptor {allocated, aligned, offset,
+// sizes[rank], strides[rank]}). Generic strided element-wise copy; the
+// source authority is mlir/lib/ExecutionEngine/CRunnerUtils.cpp. Kept here
+// so the engine never loads libmlir_c_runner_utils.so — see the
+// registerSymbols call in tessera_jit_compile for why that dlopen is
+// process-fatal alongside HIP.
+struct TesseraUnrankedMemRef {
+  int64_t rank;
+  void *descriptor;
+};
+
+void tesseraMemrefCopy(int64_t elemSize, TesseraUnrankedMemRef *srcU,
+                       TesseraUnrankedMemRef *dstU) {
+  struct DescHead {
+    char *allocated;
+    char *aligned;
+    int64_t offset;
+    // int64_t sizes[rank]; int64_t strides[rank];
+  };
+  const int64_t rank = srcU->rank;
+  auto *src = static_cast<DescHead *>(srcU->descriptor);
+  auto *dst = static_cast<DescHead *>(dstU->descriptor);
+  const int64_t *srcSizes = reinterpret_cast<const int64_t *>(src + 1);
+  const int64_t *srcStrides = srcSizes + rank;
+  const int64_t *dstSizes = reinterpret_cast<const int64_t *>(dst + 1);
+  const int64_t *dstStrides = dstSizes + rank;
+  (void)dstSizes;  // shapes must match; iteration uses the source's.
+  char *srcBase = src->aligned + src->offset * elemSize;
+  char *dstBase = dst->aligned + dst->offset * elemSize;
+  if (rank == 0) {
+    std::memcpy(dstBase, srcBase, static_cast<size_t>(elemSize));
+    return;
+  }
+  int64_t total = 1;
+  for (int64_t r = 0; r < rank; ++r)
+    total *= srcSizes[r];
+  if (total == 0)
+    return;
+  SmallVector<int64_t, 6> idx(static_cast<size_t>(rank), 0);
+  for (int64_t e = 0; e < total; ++e) {
+    int64_t srcOff = 0, dstOff = 0;
+    for (int64_t r = 0; r < rank; ++r) {
+      srcOff += idx[static_cast<size_t>(r)] * srcStrides[r];
+      dstOff += idx[static_cast<size_t>(r)] * dstStrides[r];
+    }
+    std::memcpy(dstBase + dstOff * elemSize, srcBase + srcOff * elemSize,
+                static_cast<size_t>(elemSize));
+    for (int64_t r = rank - 1; r >= 0; --r) {
+      if (++idx[static_cast<size_t>(r)] < srcSizes[r])
+        break;
+      idx[static_cast<size_t>(r)] = 0;
+    }
+  }
+}
 
 void ensureNativeTargetInit() {
   static std::once_flag once;
@@ -212,11 +372,75 @@ void markCInterface(ModuleOp module) {
 // mlir-opt). Runs on TENSORS before bufferization. Best-effort: a transform
 // failure leaves the matmul as linalg → the scalar loop lowering (always
 // correct).
-static const char *kTileVectorizeTransform = R"MLIR(
+// Cache-level blocking above the register tiles (2026-08-23 perf loop).
+// The original single-level [8,16,16] register tiling re-streams the B
+// panels from L3/DRAM once the matrices outgrow L2 — measured 106.6
+// GFLOP/s at n=256 decaying to 44.4 at n=1024 on Zen 5 (48 KB L1D, 1 MB
+// L2, single-threaded lane). An outer tile_using_for keeps an
+// (MC x KC) A-block + (KC x NC) B-block + (MC x NC) C-block L2-resident
+// while the register kernel walks them. Sizes are tunable via
+// TESSERA_JIT_CACHE_TILES="MC,NC,KC" (0,0,0 disables the outer level);
+// the default was picked by an on-host sweep. The two-level script can
+// fail where the single-level one succeeds (non-divisible extents make
+// the second tiling's slices dynamic), so tileAndVectorizeLinalg tries
+// two-level first and falls back to the single-level script, then to
+// scalar — never a compile failure.
+struct CacheTileSizes {
+  int64_t mc, nc, kc;
+  // tile_using_for treats a 0 tile size as "leave this dim untiled", so any
+  // nonzero component makes an outer level meaningful (K-only / MN-only
+  // blocking are valid configs).
+  bool enabled() const { return mc > 0 || nc > 0 || kc > 0; }
+};
+
+static CacheTileSizes cacheTileSizes() {
+  // Default picked by on-host sweep (Strix Halo / Zen 5, 2026-08-23), full
+  // matrix in the x86 todo under JIT-CACHE-BLOCK-2026-08-23. K-only
+  // chunking at the register k-tile (16) won decisively: it hoists the
+  // k-chunk loop outermost, so a (16 x N) B row-panel stays cache-resident
+  // across the whole (i,j) tile sweep — measured 161/144/139 GFLOP/s at
+  // n=512/1024/2048 vs 77/45/43 single-level, flat instead of decaying.
+  // Tiling M or N at the cache level made things WORSE (~18-35 GFLOP/s):
+  // the strided cache-tile views defeat the inner kernel's vector loads.
+  CacheTileSizes t{0, 0, 16};
+  if (const char *e = ::getenv("TESSERA_JIT_CACHE_TILES")) {
+    long long mc = 0, nc = 0, kc = 0;
+    if (std::sscanf(e, "%lld,%lld,%lld", &mc, &nc, &kc) == 3) {
+      t.mc = mc;
+      t.nc = nc;
+      t.kc = kc;
+    }
+  }
+  return t;
+}
+
+static std::string tileVectorizeTransform(bool withCacheLevel) {
+  CacheTileSizes ct = cacheTileSizes();
+  std::string cacheStage;
+  std::string regSource = "%mm";
+  if (withCacheLevel && ct.enabled()) {
+    // tile_using_for produces one loop result per NONZERO tile size; the
+    // result list must match or the transform module fails to verify (and
+    // the lane silently falls back to single-level).
+    int nLoops = (ct.mc > 0) + (ct.nc > 0) + (ct.kc > 0);
+    std::string results = "%mmc";
+    std::string types = "!transform.any_op";
+    for (int i = 0; i < nLoops; ++i) {
+      results += ", %cl" + std::to_string(i);
+      types += ", !transform.any_op";
+    }
+    cacheStage = "    " + results +
+                 " = transform.structured.tile_using_for %mm tile_sizes [" +
+                 std::to_string(ct.mc) + ", " + std::to_string(ct.nc) + ", " +
+                 std::to_string(ct.kc) + "]\n        : (!transform.any_op) -> (" +
+                 types + ")\n";
+    regSource = "%mmc";
+  }
+  return std::string(R"MLIR(
 module attributes {transform.with_named_sequence} {
   transform.named_sequence @__transform_main(%arg0: !transform.any_op {transform.readonly}) {
     %mm = transform.structured.match ops{["linalg.matmul"]} in %arg0 : (!transform.any_op) -> !transform.any_op
-    %tiled, %l0, %l1, %l2 = transform.structured.tile_using_for %mm tile_sizes [8, 16, 16]
+)MLIR") + cacheStage + std::string("    %tiled, %l0, %l1, %l2 = transform.structured.tile_using_for ") + regSource + std::string(R"MLIR( tile_sizes [8, 16, 16]
         : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
     // ALSO tile the 2-D elementwise/fill ops (the matmul-output `add` + the C
     // init) — otherwise vectorize_children materializes a giant vector<MxN> for
@@ -234,7 +458,8 @@ module attributes {transform.with_named_sequence} {
     transform.yield
   }
 }
-)MLIR";
+)MLIR");
+}
 
 // Engage the lane only when every linalg op's static dims are within this bound.
 // The earlier large-N runtime crash was the untiled elementwise ops blowing up
@@ -248,19 +473,19 @@ static int64_t vectorizeMaxDim() {
   return 2048;
 }
 
-static bool vectorizeLaneSupportedByToolchain() {
-  // MLIR 23's transform-vectorized tensor IR aborts inside one-shot
-  // bufferization while querying SubsetInsertionOpInterface instead of
-  // returning pass failure. Keep the opt-in request crash-free by using the
-  // scalar JIT pipeline on that toolchain. LLVM 23 remains the proven
-  // vectorized lane; newer releases are allowed to exercise the compatibility
-  // test rather than inheriting an unbounded version gate.
-#if LLVM_VERSION_MAJOR == 23
-  return false;
-#else
-  return true;
-#endif
-}
+// The LLVM_VERSION_MAJOR == 23 carve-out that used to live here (recorded
+// reason: "one-shot bufferization aborts while querying
+// SubsetInsertionOpInterface on the transform-vectorized tensor IR") was
+// removed 2026-08-23: the abort no longer reproduces on LLVM 23 on this
+// codebase — verified on the AVX-512 host across the full JIT packet and the
+// matmul(+add) program family, with the tensor SubsetOpInterface external
+// models now registered at engine setup (their absence is MLIR's
+// abort-not-failure path when bufferization queries an insert_slice). Note
+// the gate had never been re-checked against a real vectorized run: every
+// fleet box is LLVM 23, so the gate itself kept the vectorized path
+// unexercised everywhere (the Decision #19 standing-lesson pattern). The
+// lane is additionally fail-safe now: the transform runs on a clone and any
+// failure falls back to the scalar pipeline (see stage 1b).
 
 static bool withinVectorizeEnvelope(ModuleOp module) {
   int64_t maxDim = vectorizeMaxDim();
@@ -276,12 +501,74 @@ static bool withinVectorizeEnvelope(ModuleOp module) {
   return ok;
 }
 
-static LogicalResult tileAndVectorizeLinalg(ModuleOp module) {
+// Undo the vectorizer's whole-tile rewrite of the CACHE-LEVEL
+// tensor.insert_slice. vectorize_children_and_apply_patterns unconditionally
+// vectorizes insert_slice into a full-tile transfer_read + transfer_write
+// pair; at the (MC x NC) cache-tile size that materializes a 64 KB
+// vector<128x128xf32> SSA value, which ConvertVectorToSCF stages through an
+// `array<128 x vector<128xf32>>` alloca inside the outer loops — the
+// two-level lane crashed at n>=512 on the resulting stack growth, and even
+// when it survives, the pair forces a real per-iteration tile copy that
+// tensor.insert_slice + one-shot-bufferize would have made a no-op
+// (in-place). Restore the insert_slice form for any full-tile pair at or
+// above 8 KB; the register-level 8x16 pairs (512 B) stay vectorized, where
+// they fold with the inner kernel's transfers.
+static void demoteLargeFullTileTransfers(ModuleOp module) {
+  SmallVector<vector::TransferWriteOp> writes;
+  module.walk([&](vector::TransferWriteOp w) { writes.push_back(w); });
+  for (vector::TransferWriteOp w : writes) {
+    auto r = w.getVector().getDefiningOp<vector::TransferReadOp>();
+    if (!r || !r->hasOneUse())
+      continue;
+    auto srcTy = dyn_cast<RankedTensorType>(r.getBase().getType());
+    auto dstTy = dyn_cast<RankedTensorType>(w.getBase().getType());
+    if (!srcTy || !dstTy || !srcTy.hasStaticShape())
+      continue;
+    VectorType vecTy = r.getVectorType();
+    if (vecTy.getShape() != srcTy.getShape())
+      continue;
+    int64_t bytes =
+        vecTy.getNumElements() * vecTy.getElementTypeBitWidth() / 8;
+    if (bytes < 8192)
+      continue;
+    if (!r.getPermutationMap().isIdentity() ||
+        !w.getPermutationMap().isIdentity())
+      continue;
+    if (llvm::any_of(r.getInBoundsValues(), [](bool b) { return !b; }) ||
+        llvm::any_of(w.getInBoundsValues(), [](bool b) { return !b; }))
+      continue;
+    bool zeroReadIdx = llvm::all_of(r.getIndices(), [](Value v) {
+      auto c = v.getDefiningOp<arith::ConstantIndexOp>();
+      return c && c.value() == 0;
+    });
+    if (!zeroReadIdx)
+      continue;
+    OpBuilder b(w);
+    SmallVector<OpFoldResult> offsets, sizes, strides;
+    for (Value idx : w.getIndices())
+      offsets.push_back(idx);
+    for (int64_t d : srcTy.getShape()) {
+      sizes.push_back(b.getIndexAttr(d));
+      strides.push_back(b.getIndexAttr(1));
+    }
+    // strides was filled once per dim above alongside sizes.
+    auto ins = tensor::InsertSliceOp::create(
+        b, w.getLoc(), r.getBase(), w.getBase(), offsets, sizes, strides);
+    w.getOperation()->replaceAllUsesWith(
+        ValueRange{ins.getResult()});
+    w.erase();
+    if (r->use_empty())
+      r->erase();
+  }
+}
+
+static LogicalResult tileAndVectorizeLinalg(ModuleOp module,
+                                            bool withCacheLevel) {
   MLIRContext *ctx = module.getContext();
   // Parse the transform sequence in the payload's context (so the transform
   // dialect + extensions resolve against the same registry).
-  OwningOpRef<ModuleOp> transformModule =
-      parseSourceString<ModuleOp>(kTileVectorizeTransform, ctx);
+  OwningOpRef<ModuleOp> transformModule = parseSourceString<ModuleOp>(
+      tileVectorizeTransform(withCacheLevel), ctx);
   if (!transformModule)
     return failure();
   Operation *transformRoot =
@@ -382,14 +669,43 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   if (failed(rejectResidualTensorElementwiseOps(module)))
     return failure();
 
-  // Stage 1b (opt-in): tile + vectorize on tensors, before bufferization. Only
-  // within the safe size envelope — larger programs stay on the scalar lane.
+  // Stage 1b (opt-in): tile + vectorize on tensors, before bufferization.
+  // Engages only for modules that contain a linalg.matmul (this is the GEMM
+  // lane; the transform script's tile_using_for errors on an empty matmul
+  // match, which used to FAIL the whole compile for every non-matmul module
+  // when the env var was set — measured 114 packet failures). Best-effort by
+  // construction: the transform runs on a CLONE, and only a fully successful
+  // transform replaces the module — any failure (unsupported op mix, dynamic
+  // shapes the vectorizer rejects, …) falls back to the always-correct
+  // scalar pipeline instead of failing or leaving half-transformed IR.
   bool vectorized = false;
-  if (vectorizeLaneSupportedByToolchain() && ::getenv("TESSERA_JIT_VECTORIZE") &&
-      withinVectorizeEnvelope(module)) {
-    if (failed(tileAndVectorizeLinalg(module)))
-      return failure();
-    vectorized = true;
+  if (::getenv("TESSERA_JIT_VECTORIZE") && withinVectorizeEnvelope(module)) {
+    bool hasMatmul = false;
+    module.walk([&](linalg::MatmulOp) { hasMatmul = true; });
+    if (hasMatmul) {
+      // Two-level (cache + register) first; where its second tiling cannot
+      // apply (non-divisible extents produce dynamic slices the vectorizer
+      // rejects), retry with register tiles only — yesterday's behavior.
+      for (bool withCacheLevel : {true, false}) {
+        OwningOpRef<ModuleOp> candidate(cast<ModuleOp>(module->clone()));
+        if (failed(tileAndVectorizeLinalg(*candidate, withCacheLevel)))
+          continue;
+        // Acceptance check: vectorize_children_and_apply_patterns succeeds
+        // even when it vectorized NOTHING (it only fails on catastrophic
+        // pattern breakage), so a config whose tiling produced dynamic
+        // slices (e.g. a non-dividing KC) "succeeds" with the matmul left
+        // as scalar linalg — measured ~1 GFLOP/s. A candidate counts only
+        // if no linalg.matmul survived.
+        bool residualMatmul = false;
+        candidate->walk([&](linalg::MatmulOp) { residualMatmul = true; });
+        if (residualMatmul)
+          continue;
+        demoteLargeFullTileTransfers(*candidate);
+        module.getBodyRegion().takeBody(candidate->getBodyRegion());
+        vectorized = true;
+        break;
+      }
+    }
   }
 
   // Stage 1c: tensor.empty → alloc_tensor, then one-shot bufferize.
@@ -435,19 +751,27 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   // vectorize the matmul/reduction inner loop. A float reduction (`acc += a*b`)
   // is NOT auto-vectorized without `reassoc` — reordering the additions changes
   // the result — so the loops stayed scalar (~2 GFLOP/s, ~50x off Accelerate).
-  // Tessera's GEMM is fast-math by contract (f32 accumulate, rtol≈1e-4), so
-  // `fast` is the intended numerics; it's the difference between a scalar and a
-  // SIMD inner loop on NEON.
-  auto fmFast = arith::FastMathFlagsAttr::get(module.getContext(),
-                                              arith::FastMathFlags::fast);
+  //
+  // Narrowed 2026-08-23 (x86 math-correctness audit): `fast` also carried
+  // nnan|ninf|nsz|arcp|afn, which are SEMANTIC bits, and the stamp applies to
+  // every float op in the module — including user-visible elementwise lanes
+  // with IEEE expectations, not just the GEMM reduction body. Two measured
+  // consequences on AVX-512: `arcp` rewrote elementwise x/y into
+  // x*(1/y) (1-ulp divergence from correctly-rounded division vs numpy), and
+  // nnan/ninf made NaN/Inf inputs (e.g. -inf attention-mask biases) poison —
+  // latent today, legal to break tomorrow. reassoc|contract is exactly what
+  // reduction vectorization + FMA formation need; GEMM throughput is
+  // unchanged (measured 256/512 f32 on Strix Halo, scalar lane) and the
+  // accumulation-order tolerance (rtol≈1e-4) is still the GEMM contract.
+  auto fmVec = arith::FastMathFlagsAttr::get(
+      module.getContext(),
+      arith::FastMathFlags::reassoc | arith::FastMathFlags::contract);
   module.walk([&](Operation *op) {
     // Do not stamp maximum/minimum/maxnum/minnum: unlike GEMM arithmetic,
     // their NaN-propagation and signed-zero choice is the operation contract.
-    // Adding nnan/nsz here would make maximum/minimum indistinguishable from
-    // maxnum/minnum and permit the sign of a zero result to change.
     if (isa<arith::AddFOp, arith::SubFOp, arith::MulFOp, arith::DivFOp,
             arith::NegFOp>(op))
-      op->setAttr("fastmath", fmFast);
+      op->setAttr("fastmath", fmVec);
   });
 
   // Stage 2b: memref/loops/vector → LLVM dialect.
@@ -463,7 +787,20 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   pm2.addPass(memref::createExpandStridedMetadataPass());
   // Remaining vector.transfer ops (broadcast/permutation forms the pattern
   // lowering left) → scf loops + simple loads.
-  pm2.addPass(createConvertVectorToSCFPass());
+  {
+    // full-unroll: lower each (small, <8KB — see demoteLargeFullTileTransfers)
+    // n-D transfer into unrolled rank-1 transfers on vector values instead of
+    // staging through a memref.alloca. The staging allocas land INSIDE the
+    // loop nest (scf.for is not an AutomaticAllocationScope), so after
+    // scf-to-cf they become per-iteration llvm.alloca — the two-level cache
+    // tiling executed ~65k inner iterations at n=512 and overflowed the 8 MB
+    // stack at INVOKE time (the single-level lane had the same leak below
+    // crash threshold). Unrolled form also avoids the alloca round-trip on
+    // the strided cache-tile views, which was the 106 -> 23 GFLOP/s cliff.
+    VectorTransferToSCFOptions vopts;
+    vopts.enableFullUnroll(true);
+    pm2.addPass(createConvertVectorToSCFPass(vopts));
+  }
   pm2.addPass(createLowerAffinePass());  // VectorToSCF emits affine.apply/min
   pm2.addPass(createConvertVectorToLLVMPass());
   // Vectorization emits `ub.poison` for padding lanes → lower to LLVM poison.
@@ -512,6 +849,13 @@ void *tessera_jit_compile(const char *mlir_text) {
   vector::registerBufferizableOpInterfaceExternalModels(registry);
   bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
       registry);
+  // SubsetOpInterface external models on tensor.insert_slice & friends —
+  // one-shot-bufferize queries SubsetInsertionOpInterface on the
+  // tile+vectorize lane's tensor IR, and an unregistered model is a hard
+  // abort (not a pass failure). This missing registration was the actual
+  // cause of the "MLIR 23 aborts in one-shot bufferization" toolchain gate
+  // on the vectorize lane (root-caused 2026-08-23).
+  tensor::registerSubsetOpInterfaceExternalModels(registry);
   // Transform-dialect extension: the linalg/structured transform ops
   // (transform.structured.tile_using_for / vectorize / match) used by the opt-in
   // linalg→vector lane.
@@ -531,6 +875,10 @@ void *tessera_jit_compile(const char *mlir_text) {
     setError("tessera_jit: failed to parse MLIR module");
     return nullptr;
   }
+
+  // Record boundary signatures from the tensor-level module — the pipeline
+  // below erases them, and invoke validation needs them (§12.6).
+  captureSignatures(*jm->module, jm->signatures);
 
   markCInterface(*jm->module);
 
@@ -568,32 +916,55 @@ void *tessera_jit_compile(const char *mlir_text) {
                                                           /*sizeLevel=*/0,
                                                           /*targetMachine=*/hostTM.get());
   opts.transformer = optimizingTransformer;
-  // The opt-in vectorize lane's DPS out-param copy can lower memref.copy to the
-  // generic `memrefCopy` runtime helper (between different-layout memrefs). Load
-  // MLIR's C runner utils so that symbol resolves. Default to the Homebrew LLVM
-  // path (the build pin); overridable via TESSERA_MLIR_RUNNER_UTILS. Only loaded
-  // when the lane is on, so normal compiles are unaffected.
-  static const std::string kRunnerUtils = [] {
-    if (const char *e = ::getenv("TESSERA_MLIR_RUNNER_UTILS"))
-      return std::string(e);
-    return std::string("/opt/homebrew/llvm-23.1.0-rc1/lib/libmlir_c_runner_utils.dylib");
-  }();
-  SmallVector<StringRef> sharedLibs;
-  if (::getenv("TESSERA_JIT_VECTORIZE"))
-    sharedLibs.push_back(kRunnerUtils);
-  opts.sharedLibPaths = sharedLibs;
   auto expectedEngine = ExecutionEngine::create(*jm->module, opts);
   if (!expectedEngine) {
     setError("tessera_jit: ExecutionEngine::create failed");
     return nullptr;
   }
   jm->engine = std::move(*expectedEngine);
+  // The vectorize lane's DPS out-param copy can lower memref.copy to the
+  // generic `memrefCopy` runtime helper (between different-layout memrefs).
+  // Resolve it to the IN-PROCESS implementation below instead of dlopening
+  // libmlir_c_runner_utils: that shared library links the DYNAMIC
+  // libLLVM.so, and loading it beside this library's statically linked
+  // LLVM made a later dlopen of libamdhip64 (whose comgr embeds a third
+  // LLVM) segfault in constructor/interposition cross-talk — the ROCm
+  // state-machine tests died the moment they loaded HIP after a vectorized
+  // compile (root-caused 2026-08-23). Registered unconditionally: it is
+  // dead weight when no module references it, and removes the old
+  // Homebrew-pathed TESSERA_MLIR_RUNNER_UTILS dlopen entirely.
+  jm->engine->registerSymbols(
+      [](llvm::orc::MangleAndInterner interner) {
+        llvm::orc::SymbolMap map;
+        map[interner("memrefCopy")] = {
+            llvm::orc::ExecutorAddr::fromPtr(&tesseraMemrefCopy),
+            llvm::JITSymbolFlags::Exported};
+        return map;
+      });
   g_compiles.fetch_add(1, std::memory_order_relaxed);
   return jm.release();
 }
 
 int64_t tessera_jit_compile_count(void) {
   return g_compiles.load(std::memory_order_relaxed);
+}
+
+// Boundary signature query (§12.6): returns the signature the named function
+// was compiled against, as `inputs|results` with ';'-separated MLIR types
+// (dynamic extents spelled '?'; a non-DPS-callable function renders its
+// results section as `!nondps`). Returns nullptr when the handle is invalid
+// or the function does not exist in the compiled module. The returned pointer
+// is valid until the next tessera_jit_* call on this thread.
+const char *tessera_jit_signature(void *handle, const char *name) {
+  thread_local std::string storage;
+  auto *jm = static_cast<JitModule *>(handle);
+  if (!jm || !name)
+    return nullptr;
+  auto it = jm->signatures.find(name);
+  if (it == jm->signatures.end())
+    return nullptr;
+  storage = it->second.rendered;
+  return storage.c_str();
 }
 
 // Generic invoke: dispatch any compiled function by name. Looks up
@@ -614,6 +985,61 @@ int tessera_jit_invoke(void *handle, const char *name, void **packed_args,
     setError("tessera_jit: null/invalid handle");
     return 1;
   }
+
+  // Boundary validation (§12.6): the generated code bakes static extents into
+  // its indexing math and never consults the descriptor's sizes for them, so
+  // an arity or extent mismatch here is guaranteed out-of-bounds access —
+  // fail closed before dispatch. The Python layer performs the richer check
+  // (rank + dtype); this is the memory-safety backstop for ALL callers.
+  auto sigIt = jm->signatures.find(name);
+  if (sigIt != jm->signatures.end()) {
+    const FuncSig &sig = sigIt->second;
+    if (!sig.dpsCompatible) {
+      setError(std::string("tessera_jit: function '") + name +
+               "' has non-tensor results; not callable through the DPS "
+               "void-return invoke ABI");
+      return 1;
+    }
+    if (static_cast<size_t>(nargs) != sig.cifaceArgs.size()) {
+      setError(std::string("tessera_jit: function '") + name + "' expects " +
+               std::to_string(sig.cifaceArgs.size()) +
+               " arguments (inputs + DPS outs), got " + std::to_string(nargs));
+      return 1;
+    }
+    for (int i = 0; i < nargs; ++i) {
+      const ArgSig &a = sig.cifaceArgs[static_cast<size_t>(i)];
+      if (!a.isRankedTensor)
+        continue;
+      if (!packed_args[i]) {
+        setError(std::string("tessera_jit: function '") + name + "' argument " +
+                 std::to_string(i) + " is null");
+        return 1;
+      }
+      // Standard memref descriptor: {T* allocated; T* aligned; i64 offset;
+      // i64 sizes[rank]; i64 strides[rank]}. Rank comes from the compiled
+      // signature; the Python layer guarantees the caller built a descriptor
+      // of that rank (a foreign caller passing a lower-rank descriptor gets a
+      // detectable size mismatch rather than an out-of-bounds kernel write).
+      const auto *sizes = reinterpret_cast<const int64_t *>(
+          static_cast<const char *>(packed_args[i]) + 2 * sizeof(void *) +
+          sizeof(int64_t));
+      for (size_t r = 0; r < a.dims.size(); ++r) {
+        int64_t expected = a.dims[r];
+        if (ShapedType::isDynamic(expected))
+          continue;
+        if (sizes[r] != expected) {
+          setError(std::string("tessera_jit: function '") + name +
+                   "' argument " + std::to_string(i) + " dim " +
+                   std::to_string(r) + " expects extent " +
+                   std::to_string(expected) + ", got " +
+                   std::to_string(sizes[r]) +
+                   " (compiled signature: " + sig.rendered + ")");
+          return 1;
+        }
+      }
+    }
+  }
+
   std::string sym = std::string("_mlir_ciface_") + name;
   auto expectedFn = jm->engine->lookup(sym);
   if (!expectedFn) {

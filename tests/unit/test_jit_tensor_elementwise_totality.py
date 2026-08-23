@@ -70,15 +70,23 @@ def test_tensor_binary_arithmetic_family_executes_natively(op, oracle):
 
 
 @pytest.mark.parametrize(
-    ("op", "oracle"),
+    ("op", "oracle", "tie_signbit"),
     [
-        ("maximumf", np.maximum),
-        ("minimumf", np.minimum),
-        ("maxnumf", np.fmax),
-        ("minnumf", np.fmin),
+        # Signed-zero expectations come from the arith contract, NOT the
+        # numpy oracle: numpy's +/-0 tie resolution is host-dependent (SSE
+        # returns the second operand, NEON orders the zeros), so an oracle
+        # signbit assertion encodes the test host's ISA. arith.maximumf /
+        # minimumf order signed zeros (-0.0 < +0.0); the *num variants leave
+        # a +/-0 tie unspecified ("either of them"), so no sign is asserted.
+        ("maximumf", np.maximum, False),
+        ("minimumf", np.minimum, True),
+        ("maxnumf", np.fmax, None),
+        ("minnumf", np.fmin, None),
     ],
 )
-def test_tensor_minmax_preserves_nan_and_signed_zero_semantics(op, oracle):
+def test_tensor_minmax_preserves_nan_and_signed_zero_semantics(
+    op, oracle, tie_signbit
+):
     handle = jb.compile_module(_binary_module(op))
     a = np.array([np.nan, 1.0, 0.0, -0.0, -3.0, 7.0, 2.0], dtype=np.float32)
     b = np.array([2.0, np.nan, -0.0, 0.0, 4.0, -8.0, 2.0], dtype=np.float32)
@@ -90,7 +98,51 @@ def test_tensor_minmax_preserves_nan_and_signed_zero_semantics(op, oracle):
     finite = ~np.isnan(expected)
     np.testing.assert_array_equal(out[finite], expected[finite])
     zero = finite & (expected == 0.0)
-    np.testing.assert_array_equal(np.signbit(out[zero]), np.signbit(expected[zero]))
+    if tie_signbit is not None:
+        np.testing.assert_array_equal(
+            np.signbit(out[zero]),
+            np.full(int(np.count_nonzero(zero)), tie_signbit),
+        )
+
+
+@pytest.mark.parametrize(
+    ("op", "oracle"),
+    [
+        ("addf", np.add),
+        ("subf", np.subtract),
+        ("mulf", np.multiply),
+        ("divf", np.divide),
+    ],
+)
+def test_tensor_arithmetic_propagates_nan_and_inf_bit_exactly(op, oracle):
+    """IEEE special values survive the executed path bit-exactly.
+
+    Pins the 2026-08-23 fastmath narrowing: the pipeline may stamp only
+    reassoc|contract (vectorization licenses), never nnan/ninf/arcp/afn —
+    `fast` made NaN/Inf poison and rewrote x/y into x*(1/y) (measured 1-ulp
+    divergence on AVX-512)."""
+    handle = jb.compile_module(_binary_module(op))
+    inf = np.float32(np.inf)
+    big = np.float32(1e38)
+    a = np.array([np.nan, inf, -inf, 1.0, -inf, 0.0, big], dtype=np.float32)
+    b = np.array([1.0, 1.0, inf, np.nan, -inf, -inf, big], dtype=np.float32)
+    out = np.empty_like(a)
+    jb.invoke(handle, "pointwise", [a, b], out)
+    with np.errstate(all="ignore"):
+        expected = oracle(a, b)
+    np.testing.assert_array_equal(out.view(np.uint32), expected.view(np.uint32))
+
+
+def test_tensor_division_is_correctly_rounded():
+    """Elementwise x/y must be IEEE correctly-rounded (bit-exact vs numpy),
+    not mul-by-reciprocal (the `arcp` rewrite the old `fast` stamp licensed)."""
+    handle = jb.compile_module(_binary_module("divf", dynamic=True))
+    rng = np.random.default_rng(0)
+    a = rng.uniform(0.1, 10.0, 4096).astype(np.float32)
+    b = rng.uniform(0.1, 10.0, 4096).astype(np.float32)
+    out = np.empty_like(a)
+    jb.invoke(handle, "pointwise", [a, b], out)
+    np.testing.assert_array_equal(out.view(np.uint32), (a / b).view(np.uint32))
 
 
 @pytest.mark.parametrize(

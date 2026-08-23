@@ -25,6 +25,7 @@ from __future__ import annotations
 import ctypes
 import glob
 import os
+import re
 import sys
 from typing import Any, Sequence
 
@@ -139,6 +140,14 @@ def _load() -> ctypes.CDLL:
     lib.tessera_jit_invocation_count.argtypes = []
     lib.tessera_jit_compile_count.restype = ctypes.c_int64
     lib.tessera_jit_compile_count.argtypes = []
+    # Boundary signature query (§12.6). Bound tolerantly: an older
+    # libtessera_jit predates it, and invoke() then skips the Python-side
+    # validation (the C-side backstop is equally absent there — rebuild).
+    try:
+        lib.tessera_jit_signature.restype = ctypes.c_char_p
+        lib.tessera_jit_signature.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    except AttributeError:  # pragma: no cover - stale library
+        pass
     _LIB = lib
     return lib
 
@@ -322,6 +331,15 @@ def _raw_compile(mlir_text: str) -> int:
     return handle
 
 
+def _destroy_native(handle: int) -> None:
+    """Destroy a native engine AND purge its cached signatures — a freed
+    handle's address can be reused by a later compile, so stale signature
+    cache entries keyed on it would validate against the wrong module."""
+    for key in [k for k in _SIGNATURE_CACHE if k[0] == handle]:
+        del _SIGNATURE_CACHE[key]
+    _load().tessera_jit_destroy(handle)
+
+
 def _evict_lru_locked() -> list[int]:
     """Evict idle LRU engines; leased engines retire after ``destroy``."""
 
@@ -365,9 +383,9 @@ def compile_module(mlir_text: str) -> int:
             retired = _evict_lru_locked()
             existing = handle
     if existing != handle:
-        _load().tessera_jit_destroy(handle)
+        _destroy_native(handle)
     for retired_handle in retired:
-        _load().tessera_jit_destroy(retired_handle)
+        _destroy_native(retired_handle)
     return existing
 
 
@@ -389,7 +407,7 @@ def destroy(handle: int) -> None:
             _EVICTED_HANDLES.remove(handle)
             retired = True
     if retired or handle not in _HANDLE_LEASES:
-        _load().tessera_jit_destroy(handle)
+        _destroy_native(handle)
 
 
 def set_cache_enabled(enabled: bool) -> None:
@@ -413,9 +431,8 @@ def clear_cache() -> None:
         for handle in retired:
             _HANDLE_LEASES.pop(handle, None)
             _EVICTED_HANDLES.discard(handle)
-    lib = _load()
     for h in retired:
-        lib.tessera_jit_destroy(h)
+        _destroy_native(h)
 
 
 @atexit.register
@@ -424,6 +441,93 @@ def _free_cache_at_exit() -> None:  # pragma: no cover - process teardown
         clear_cache()
     except Exception:
         pass
+
+
+# ── Boundary signature validation (§12.6) ───────────────────────────────────
+#
+# The compiled code bakes static extents into its indexing math (identity
+# layout, §12.4) and never consults the descriptor's runtime sizes for them,
+# so an array whose shape disagrees with the compiled signature is guaranteed
+# out-of-bounds access — historically a silent heap corruption. invoke() now
+# validates arity, rank, static extents, and element dtype against the
+# signature recorded at compile time, and fails closed with an actionable
+# error. Cached per (handle, symbol): a handle's signatures are immutable.
+
+_SIGNATURE_CACHE: dict[tuple[int, str], tuple[list, list] | None] = {}
+
+# tensor<7x?xf32> → ((7, None), "f32"); any other type → (None, spelling).
+_TENSOR_RE = re.compile(r"^tensor<((?:(?:\d+|\?)x)*)([^x>]+)>$")
+
+
+def _parse_sig_type(spelling: str):
+    m = _TENSOR_RE.match(spelling)
+    if not m:
+        return None, spelling
+    dims_txt, elem = m.groups()
+    dims = tuple(
+        None if d == "?" else int(d) for d in dims_txt.split("x") if d
+    )
+    return dims, elem
+
+
+def _function_signature(handle: int, symbol: str):
+    """Return ``(input_types, result_types)`` for a compiled function, where
+    each entry is ``(dims | None, type_spelling)`` — ``dims`` is a tuple with
+    ``None`` for dynamic extents, or ``None`` for a non-tensor argument.
+    Returns ``None`` when the loaded library predates the signature ABI."""
+    key = (handle, symbol)
+    if key in _SIGNATURE_CACHE:
+        return _SIGNATURE_CACHE[key]
+    lib = _load()
+    if not hasattr(lib, "tessera_jit_signature"):  # pragma: no cover - stale lib
+        return None
+    raw = lib.tessera_jit_signature(handle, symbol.encode("utf-8"))
+    if raw is None:
+        raise TesseraJitError(
+            f"unknown function '{symbol}' in compiled module (no signature recorded)"
+        )
+    ins_txt, _, outs_txt = raw.decode("utf-8").partition("|")
+    if outs_txt == "!nondps":
+        raise TesseraJitError(
+            f"function '{symbol}' has non-tensor results; not callable through "
+            "the DPS void-return invoke ABI"
+        )
+    ins = [_parse_sig_type(t) for t in ins_txt.split(";") if t]
+    outs = [_parse_sig_type(t) for t in outs_txt.split(";") if t]
+    sig = (ins, outs)
+    _SIGNATURE_CACHE[key] = sig
+    return sig
+
+
+def _check_array_against_sig(role: str, index: int, arr: np.ndarray, entry) -> None:
+    dims, elem = entry
+    if dims is None:
+        raise TesseraJitError(
+            f"{role} {index} is compiled as non-tensor type '{elem}'; "
+            "an ndarray cannot be passed here"
+        )
+    if arr.ndim != len(dims):
+        raise TesseraJitError(
+            f"{role} {index} rank mismatch: compiled for rank {len(dims)} "
+            f"({_render_dims(dims)}x{elem}), got rank {arr.ndim} array {arr.shape}"
+        )
+    for r, expected in enumerate(dims):
+        if expected is not None and arr.shape[r] != expected:
+            raise TesseraJitError(
+                f"{role} {index} shape mismatch: compiled for "
+                f"tensor<{_render_dims(dims)}x{elem}>, got {arr.shape} "
+                f"(dim {r}: expected {expected}, got {arr.shape[r]})"
+            )
+    _tag, _ct, mlir = _dtype_entry(arr)
+    if mlir != elem:
+        raise TesseraJitError(
+            f"{role} {index} dtype mismatch: compiled for element type "
+            f"'{elem}', got array dtype {arr.dtype} ('{mlir}')"
+        )
+
+
+def _render_dims(dims) -> str:
+    return "x".join("?" if d is None else str(d) for d in dims)
 
 
 def invoke(
@@ -437,11 +541,32 @@ def invoke(
     ``arrays`` is the list of *input* arrays (c-iface order). ``out`` is the
     caller-allocated destination — a single ndarray, or a list/tuple of them for
     a multi-result function (DPS out-params in result order, §12.3). Each buffer's
-    dtype is read from the array itself. Raises :class:`TesseraJitError` on any
-    failure — never silently falls back.
+    dtype is read from the array itself. Every buffer is validated against the
+    signature the function was compiled with (arity, rank, static extents,
+    element dtype — §12.6) before dispatch. Raises :class:`TesseraJitError` on
+    any failure — never silently falls back.
     """
     lib = _load()
     outs = list(out) if isinstance(out, (list, tuple)) else [out]
+
+    sig = _function_signature(handle, symbol)
+    if sig is not None:
+        ins_sig, outs_sig = sig
+        if len(arrays) != len(ins_sig):
+            raise TesseraJitError(
+                f"function '{symbol}' expects {len(ins_sig)} input(s), "
+                f"got {len(arrays)}"
+            )
+        if len(outs) != len(outs_sig):
+            raise TesseraJitError(
+                f"function '{symbol}' expects {len(outs_sig)} output "
+                f"buffer(s) (DPS out-params), got {len(outs)}"
+            )
+        for i, (arr, entry) in enumerate(zip(arrays, ins_sig)):
+            _check_array_against_sig("input", i, np.asarray(arr), entry)
+        for i, (arr, entry) in enumerate(zip(outs, outs_sig)):
+            _check_array_against_sig("output", i, np.asarray(arr), entry)
+
     descs = [_make_descriptor(a) for a in (*arrays, *outs)]
     packed, _keepalive = _build_packed_args(descs)
     rc = lib.tessera_jit_invoke(handle, symbol.encode("utf-8"), packed, len(descs))

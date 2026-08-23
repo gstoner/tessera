@@ -27,17 +27,126 @@ key/counter identity. x86 retains its architecture-owned distribution package,
 runtime ABI, and exact-host evidence; no AVX-512 image, schedule, or evidence
 transfers to sm_120.
 
+Cross-backend sync `JIT-CACHE-BLOCK-2026-08-23` — **vectorize-lane
+cache blocking landed: flat ~139-161 GFLOP/s across n=512-2048 (was
+77/45/43 decaying), plus two structural fixes the loop surfaced.**
+Sweep result (Strix Halo/Zen 5, env `TESSERA_JIT_CACHE_TILES`): tiling
+M or N at the cache level made things WORSE (18-35 GFLOP/s — strided
+cache-tile views defeat the inner kernel's vector loads); K-only
+chunking won, and shrinking KC to the register k-tile (16) won
+outright — 161/144/139 at 512/1024/2048. That config is really a loop
+interchange: the k-chunk loop hoists outermost so a (16 x N) B
+row-panel stays cache-resident across the whole (i,j) sweep. Pinned as
+the default `{0,0,16}`. Structural fixes: **(1)**
+`ConvertVectorToSCF` staged transfers through `memref.alloca`s INSIDE
+the loop nest (scf.for is no AutomaticAllocationScope) — per-iteration
+`llvm.alloca` overflowed the stack at invoke under two-level tiling
+(~65k inner iterations at n=512) and was silently costing the
+single-level lane too; switched to `full-unroll`, which alone lifted
+single-level n=512 from 69 to 94.5 GFLOP/s. **(2)** The vectorizer
+unconditionally rewrites the cache-level `tensor.insert_slice` into a
+whole-tile transfer pair (64 KB vector SSA values); a
+`demoteLargeFullTileTransfers` rewrite restores insert_slice form for
+pairs ≥8 KB so bufferization makes them in-place. **(3)** Acceptance
+check: `vectorize_children` "succeeds" having vectorized nothing (a
+non-dividing KC left the matmul as scalar loops at ~1 GFLOP/s); a
+candidate now counts only if no `linalg.matmul` survived, else the
+chain falls back (two-level → single-level → scalar). Correctness:
+odd/rectangular shapes (130x257x64, 257³, 1000³) verified; full packet
+green with the lane on and off; HIP dlopen coexistence retained.
+
+
+Cross-backend sync `JIT-VECTORIZE-UNGATED-2026-08-23` — **the
+`TESSERA_JIT_VECTORIZE` GEMM lane now actually vectorizes on LLVM 23:
+3.4 → 106.6 GFLOP/s at n=256 (AVX-512 host; 69.0 at 512, 44.4 at 1024,
+correctness within the reassoc GEMM tolerance).** Deep-loop findings,
+each with a control: **(1) the LLVM-23 scalar carve-out was closed on a
+wrong root cause and had never been re-checked** — every fleet box is
+LLVM 23 and the compat test was Darwin-gated, so the gate itself kept
+the vectorized path unexercised everywhere (the Decision #19
+standing-lesson pattern); the recorded bufferization abort no longer
+reproduces (verified with the registration absent — the gate removal,
+not the registration, unblocked the lane). The tensor
+SubsetOpInterface external models are now registered at engine setup
+regardless (their absence is MLIR's abort-not-failure path when
+bufferization queries an insert_slice). **(2) With the env var set,
+every non-matmul module failed to compile** (the transform's empty
+matmul match hard-failed stage 1b — measured 114 packet failures). The
+lane now engages only for matmul-bearing modules, transforms a CLONE,
+and swaps it in only on full success — any transform failure falls
+back to the always-correct scalar pipeline. Pinned by
+`test_vectorize_env_does_not_break_non_matmul_modules`. **(3) The
+lane's `libmlir_c_runner_utils` dlopen was process-fatal beside HIP:**
+that library links the dynamic `libLLVM.so`, and loading it alongside
+libtessera_jit's static LLVM made a later `dlopen("libamdhip64.so")`
+(comgr embeds a third LLVM) segfault — the ROCm state-machine tests
+died the moment they loaded HIP after a vectorized compile (staged
+probe: compile/invoke/heap all clean, dlopen fatal; runner-utils + HIP
+without tessera_jit coexist fine). Fixed by implementing `memrefCopy`
+in-process and registering it via ORC `registerSymbols`; the engine no
+longer dlopens anything, which also deletes the hardcoded Homebrew
+path. Full packet green with the lane ON and OFF (incl. the ROCm
+state-machine suite + HIP loads). Mac note: the un-gating affects
+Darwin too (also LLVM 23) — the vectorized path there is UNPROVEN
+until the Darwin compat test is re-run on the M1 Max (recorded in the
+apple plan). Follow-on opportunity: throughput falls with size (106 →
+44 GFLOP/s at 1024) — no cache-level blocking above the 8x16x16
+register tiles yet.
+
+
+Cross-backend sync `JIT-MATH-AUDIT-2026-08-23` — **x86 host-JIT boundary
+hardening + math-correctness pass: CLOSED (AVX-512 host).** Two defects
+fixed, both measured on this host. **(1) `jb.invoke` boundary now fails
+closed on signature mismatch.** The identity-layout ABI bakes static
+extents into the generated indexing math, so a wrong-shape buffer was
+guaranteed out-of-bounds (reproduced: a 2-element array against a
+`tensor<7xf32>` module corrupted the heap and aborted in
+`malloc_consolidate`). `tessera_jit` now records each function's
+tensor-level signature at compile time (new `tessera_jit_signature` ABI),
+`tessera_jit_invoke` validates arity + static extents from the
+descriptors (memory-safety backstop for any caller), and Python
+`invoke()` validates arity/rank/extents/dtype with actionable errors;
+dynamic extents stay unconstrained.
+`tests/unit/test_jit_invoke_signature_guard.py` (12 tests) pins both
+layers, including the heap-corruption repro. **(2) The pipeline's
+blanket `fastmath<fast>` stamp is narrowed to `reassoc|contract`.**
+`fast` (nnan|ninf|nsz|arcp|afn) applied to every float add/sub/mul/div/neg
+in the module: `arcp` measurably rewrote elementwise x/y into x*(1/y)
+(1-ulp divergence vs correctly-rounded division), and nnan/ninf made
+NaN/Inf inputs (e.g. -inf attention-mask biases) poison — latent on this
+toolchain, legal to break. With reassoc|contract, division is bit-exact
+vs numpy, NaN/Inf propagate bit-exactly through all four ops, and GEMM
+throughput is retained (n=256 scalar lane: fast 3.34, narrowed 3.45,
+no-fastmath control 2.7-2.8 GFLOP/s; n=512 was not comparable — WSL2
+process-level timing variance swamped it). New regression tests pin
+NaN/Inf propagation and correctly-rounded division in
+`test_jit_tensor_elementwise_totality.py`. Full packet after both
+changes: 219 passed (Darwin-only lanes skipped). Cross-target note: the
+gfx1151 binary lane's signed-zero tie semantics deliberately differ —
+see the rocm entry under this key.
+
+
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
-`tessera_jit` pipeline change; x86 outcome: core state-machine evidence
-retained, widened-family follow-up required (AVX-512 host).** The original
-AVX-512 rows prove native forward/backward execution for the add/cmp/select
-state-machine vocabulary.  The follow-up found that MLIR's
-`convert-elementwise-to-linalg` pass had been nested at the wrong scope; it is
-now a module pass with a residual tensor-elementwise legality gate.  M1 Max
-host execution proves the wider arithmetic/math family, dynamic shapes, and a
-generated forward JVP, but that evidence does not transfer to AVX-512.  Repeat
-`test_jit_tensor_elementwise_totality.py` plus the existing state-machine and
-native-JIT packet on the x86 host to close the widened claim.
+`tessera_jit` pipeline change; x86 outcome: parity validated, widened
+family included (AVX-512 host, 2026-08-23).** `tessera_jit` rebuilt on the
+Strix Halo box against the module-scope `convert-elementwise-to-linalg` +
+residual legality gate; the widened packet passed:
+`test_jit_tensor_elementwise_totality.py` **22/22**, native CPU JIT +
+production phase 1/3 lanes **182 passed** (all 160 skips are Darwin-only
+Apple/MTL4 lanes, correctly unevaluable on this host), and the paired
+state machines re-ran green (x86 3/3 native; the sibling gfx1151 rows
+5/5 exact-device, recorded in the rocm plan).  The rerun surfaced one
+defect — in the test, not the lane: the totality suite's signed-zero
+min/max assertions used numpy as oracle, whose ±0 tie resolution is
+host-dependent (SSE returns the second operand; NEON orders the zeros),
+so the assertion encoded the test host's ISA and failed 4 cases here
+while passing on M1 Max.  Probed on this host, the JIT is
+contract-correct per the arith ODS: `maximumf`/`minimumf` order signed
+zeros (ties → +0.0 / −0.0), and `maxnumf`/`minnumf` ties are "either of
+them".  The test now keys signed-zero expectations off the arith
+contract (num-variant tie signs unasserted, as the contract specifies
+neither); NaN propagation and finite-value checks keep the numpy oracle,
+which is host-stable for those.
 
 
 Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 x86 outcome:

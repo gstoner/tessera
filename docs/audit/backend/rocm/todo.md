@@ -39,6 +39,20 @@ remains valid, while the newly widened arithmetic/math totality matrix still
 needs the x86-host rerun recorded in that plan.
 
 
+Cross-backend sync `JIT-VECTORIZE-UNGATED-2026-08-23` /
+`JIT-CACHE-BLOCK-2026-08-23` / `JIT-MATH-AUDIT-2026-08-23` — **shared
+`tessera_jit` boundary/pipeline changes; ROCm outcome: not applicable
+(backend); HIP-coexistence hazard fixed and pinned on this box.** The
+x86 plan owns these keys; the ROCm device paths do not consume
+`tessera_jit`. The directly ROCm-relevant part: the vectorize lane's
+old `libmlir_c_runner_utils` dlopen linked a second (dynamic) libLLVM
+into the process and made a later `dlopen("libamdhip64.so")` segfault —
+the gfx1151 state-machine tests died the moment they loaded HIP after
+a vectorized compile. `memrefCopy` is now registered in-process; the
+full packet including `test_rocm_state_machine_exec.py` (5/5
+exact-device) passes with the vectorize lane both on and off, and a
+probe pins vectorized-compile → heap-stress → HIP dlopen coexistence.
+
 Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 exact-device
 irreducible-state-machine row: VALIDATED (gfx1151).** New
 `--generate-rocm-state-machine-kernel` (ROCm backend) lowers any

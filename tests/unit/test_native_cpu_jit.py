@@ -341,44 +341,23 @@ def test_unsupported_op_falls_back_without_jit():
 
 
 # ── opt-in linalg→vector GEMM lane (TESSERA_JIT_VECTORIZE) ────────────────────
-def _runner_utils_path() -> str:
-    """Locate `libmlir_c_runner_utils`, honouring the env override first.
-
-    The single hardcoded `/opt/homebrew/opt/llvm@23/` is wrong on a host whose
-    LLVM 23 is a manual install (there is no `llvm@23` Homebrew formula), so the
-    lane reported "unavailable" with the dylib sitting right there. Probe the
-    known LLVM 23 roots instead of asserting one."""
-    if configured := os.environ.get("TESSERA_MLIR_C_RUNNER_UTILS"):
-        return configured
-    for root in ("/opt/homebrew/llvm-23.1.0-rc1", "/opt/homebrew/opt/llvm@23",
-                 "/usr/lib/llvm-23"):
-        candidate = f"{root}/lib/libmlir_c_runner_utils.dylib"
-        if os.path.exists(candidate):
-            return candidate
-        candidate = f"{root}/lib/libmlir_c_runner_utils.so"
-        if os.path.exists(candidate):
-            return candidate
-    return "/opt/homebrew/llvm-23.1.0-rc1/lib/libmlir_c_runner_utils.dylib"
-
-
-_RUNNER_UTILS = _runner_utils_path()
-
-
 @pytest.mark.integration
 @pytest.mark.compiler_tool
 @pytest.mark.compiler_cpu
 def test_vectorize_lane_correct_in_and_out_of_envelope(monkeypatch):
-    from tests._support.apple import require_darwin_host
-
-    require_darwin_host()
-    assert os.path.exists(_RUNNER_UTILS), "MLIR C runner utils dylib is unavailable"
-    # The opt-in transform-interpreter tile+vectorize lane: within the size
-    # envelope (default <=2048) a supported MLIR toolchain register-tiles and
-    # vectorizes the matmul. MLIR 23 deliberately uses the scalar JIT pipeline
-    # because its one-shot bufferizer aborts on the transformed tensor IR.
-    # Either way, in- and out-of-envelope requests must be correct and
-    # crash-free. To exercise the out-of-envelope guard without
-    # compiling a giant matmul, we pin a tiny MAXDIM and check a size just past it.
+    # The opt-in transform-interpreter tile+vectorize lane. Host-agnostic
+    # since 2026-08-23: the LLVM-23 scalar carve-out was removed (the
+    # recorded bufferization abort no longer reproduces and had never been
+    # re-checked against a real vectorized run — every fleet box is LLVM 23,
+    # so the gate kept the vectorized path unexercised everywhere), and the
+    # lane no longer dlopens libmlir_c_runner_utils (memrefCopy is
+    # registered in-process; the dlopen pulled a second, dynamic libLLVM
+    # into the process and made a later libamdhip64 load segfault). The
+    # lane engages only for modules containing a matmul, transforms a clone,
+    # and falls back to the scalar pipeline on any transform failure — so
+    # in- and out-of-envelope requests must be correct and crash-free, and
+    # non-matmul modules are unaffected. Measured on the AVX-512 host:
+    # ~3.4 -> ~107 GFLOP/s at 256; see x86 todo JIT-MATH-AUDIT-2026-08-23.
     monkeypatch.setenv("TESSERA_JIT_VECTORIZE", "1")
 
     def prog(a, b, c):
@@ -408,3 +387,16 @@ def test_vectorize_lane_correct_in_and_out_of_envelope(monkeypatch):
     out = np.asarray(fn2(a, b, c))
     assert jb.invocation_count() == n0 + 1, "out-of-envelope must still run the jit"
     np.testing.assert_allclose(out, a @ b + c, rtol=1e-3, atol=1e-3)
+
+
+def test_vectorize_env_does_not_break_non_matmul_modules(monkeypatch):
+    """With the lane opt-in set, a module with no matmul must compile and run
+    through the scalar pipeline (the transform's empty matmul match used to
+    fail the whole compile — measured 114 packet failures)."""
+    monkeypatch.setenv("TESSERA_JIT_VECTORIZE", "1")
+    a = _f32(3, 5)
+    b = _f32(3, 5)
+    n0 = jb.invocation_count()
+    out = jb.jit_add(a, b)
+    assert jb.invocation_count() == n0 + 1
+    np.testing.assert_array_equal(out, a + b)

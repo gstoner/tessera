@@ -63,6 +63,18 @@ correction and residual legality gate therefore change no CUDA IR, kernel,
 runtime ABI, or exact-device claim.
 
 
+Cross-backend sync `JIT-VECTORIZE-UNGATED-2026-08-23` /
+`JIT-CACHE-BLOCK-2026-08-23` / `JIT-MATH-AUDIT-2026-08-23` — **shared
+`tessera_jit` boundary/pipeline changes; NVIDIA outcome: not
+applicable.** The x86 plan owns these keys. `tessera_jit` is the
+host-CPU JIT lane; the NVIDIA device paths (NVRTC / tessera-opt
+pipelines) do not consume it, and NR2 Pro's host-CPU lane is the same
+x86 lane those keys validate — though on a different x86
+microarchitecture, so if NR2 Pro's host lane is ever cited as
+evidence, rerun the signature-guard + totality + vectorize packet
+there rather than transferring the Strix Halo result. No CUDA IR,
+kernel, runtime ABI, or exact-device claim changes.
+
 Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
 numerical policy, wave 3; NVIDIA outcome: follow-up required (sm_120).**
 Same contract change as the rocm entry. Expected parity-neutral for the

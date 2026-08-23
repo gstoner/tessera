@@ -27,6 +27,25 @@ CUDA backend. They reuse the shared explicit key/counter semantics but transfer
 no Metal code, schedule, ABI, or evidence. Apple's existing Philox alignment
 and exact-Mac proof obligations are unchanged.
 
+Cross-backend sync `JIT-VECTORIZE-UNGATED-2026-08-23` /
+`JIT-CACHE-BLOCK-2026-08-23` / `JIT-MATH-AUDIT-2026-08-23` — **shared
+`tessera_jit` boundary/pipeline changes; Apple outcome: follow-up
+required (M1 Max); no Darwin evidence exists.** The x86 plan owns these
+keys. Four changes reach the Mac's `@jit(target="cpu")` lane directly:
+(1) the invoke signature guard (new `tessera_jit_signature` ABI +
+fail-closed shape/dtype/arity validation); (2) the fastmath narrowing
+to reassoc|contract (the old `fast` stamp was NEON-relevant too — the
+original stamp rationale was measured on M1); (3) the vectorize lane
+un-gating — the Mac is also LLVM 23, so the previously-Darwin-gated
+compat test in `test_native_cpu_jit.py` (now host-agnostic) will
+exercise the actually-vectorized path there for the first time; and
+(4) the removal of the `libmlir_c_runner_utils` dlopen (which used a
+hardcoded Homebrew path on the Mac) in favor of the in-process
+`memrefCopy`. Rebuild `tessera_jit` on the M1 Max and run the
+signature-guard, totality, native-CPU-JIT, and vectorize tests there —
+AVX-512-host evidence transfers for none of this; NEON codegen through
+the same MLIR pipeline is expected-portable but unproven.
+
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
 `tessera_jit` pipeline change; Apple outcome: parity validated (M1 Max).**
 The fresh `build-apple` JIT now runs MLIR's

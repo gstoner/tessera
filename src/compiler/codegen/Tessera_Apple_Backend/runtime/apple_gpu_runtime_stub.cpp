@@ -2090,6 +2090,35 @@ static inline bool stub_binary_opcode_supported(int32_t op) {
 // branch instead of its numpy fallback, so a wrong value came back as if it
 // had been computed (Decision #21 — a lowering the backend cannot carry must
 // diagnose, never silently fall through).
+// IEEE-754-2019 maximum/minimum, mirroring apple_gpu_runtime.mm's
+// mpsg_ieee_minmax / ts_host_ieee_binop_f32 (a separate TU, so the helper is
+// duplicated, not shared). A bare `x > y ? x : y` here would suppress a
+// left-operand NaN (`NaN > y` is false) and return the second operand on a +/-0
+// tie — reintroducing exactly the maxNum/minNum divergence on the portable
+// (non-Darwin) route, which the fleet contract requires to match every other
+// route (IEEE-MINMAX-CONTRACT-2026-08-23). Same AND/OR tie blend: equal values
+// are bit-identical unless they are +0/-0, so AND gives +0 and OR gives -0. NaN
+// test is on the bit pattern, consistent with the rest of the family.
+static inline bool stub_is_nan_f32(float x) {
+  uint32_t u;
+  std::memcpy(&u, &x, sizeof(u));
+  return (u & 0x7fffffffu) > 0x7f800000u;
+}
+static inline float stub_ieee_binop_f32(float a, float b, bool is_max) {
+  if (stub_is_nan_f32(a)) return a;
+  if (stub_is_nan_f32(b)) return b;
+  if (a == b) {  // only differs from a/b for the +/-0 tie
+    uint32_t ua, ub;
+    std::memcpy(&ua, &a, sizeof(ua));
+    std::memcpy(&ub, &b, sizeof(ub));
+    uint32_t r = is_max ? (ua & ub) : (ua | ub);
+    float o;
+    std::memcpy(&o, &r, sizeof(o));
+    return o;
+  }
+  return is_max ? (a > b ? a : b) : (a < b ? a : b);
+}
+
 extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a,
                                                       const float* b, float* out,
                                                       int64_t n) {
@@ -2112,8 +2141,10 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a
       case 1: out[i] = x - y; break;
       case 2: out[i] = x * y; break;
       case 3: out[i] = x / y; break;
-      case 4: out[i] = x > y ? x : y; break;
-      case 5: out[i] = x < y ? x : y; break;
+      // IEEE-754-2019, matching the real runtime (mpsg_ieee_minmax) — NOT a bare
+      // ternary, which suppresses NaN and picks the second signed zero.
+      case 4: out[i] = stub_ieee_binop_f32(x, y, /*is_max=*/true); break;
+      case 5: out[i] = stub_ieee_binop_f32(x, y, /*is_max=*/false); break;
       case 6: out[i] = x * (y / (1.0f + std::exp(-y))); break;
       case 7: out[i] = std::pow(x, y); break;
       case 8: out[i] = std::atan2(x, y); break;
@@ -2154,6 +2185,22 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float* a
         break;
     }
   }
+}
+// Parity twin of the real runtime's tessera_apple_gpu_mpsgraph_binary_f32_host
+// (test_apple_runtime_stub_parity requires every .mm C-ABI symbol to have a
+// stub counterpart). On the stub there is no Metal, so the "host recovery"
+// path and the normal path are the same computation — delegate to the already
+// defined binary_f32 rather than duplicate the opcode switch (whose singular
+// location the structural opcode tests slice by name). A direct caller
+// therefore gets the same IEEE-754-2019 min/max (stub_ieee_binop_f32) as every
+// other route. Placed AFTER binary_f32 so neither source slicer in
+// test_apple_gpu_binary_opcodes sees an earlier binary_f32( match.
+extern "C" void tessera_apple_gpu_mpsgraph_binary_f32_host(int32_t op,
+                                                           const float* a,
+                                                           const float* b,
+                                                           float* out,
+                                                           int64_t n) {
+  tessera_apple_gpu_mpsgraph_binary_f32(op, a, b, out, n);
 }
 extern "C" int32_t tessera_apple_gpu_mpsgraph_binary_f32_status(
     int32_t, const float*, const float*, float*, int64_t) { return 0; }

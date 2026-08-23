@@ -115,6 +115,36 @@ def test_dispatch_route_orders_ties_and_propagates_nan(op_name, tie_sign):
         np.isnan(out), np.isnan(_A) | np.isnan(_B))
 
 
+# ── C-ABI host recovery path (fires when Metal dispatch fails) ──────────────
+@pytest.mark.parametrize("op,name,ref", [
+    (4, "maximum", IM.ieee_maximum),
+    (5, "minimum", IM.ieee_minimum),
+])
+def test_c_abi_host_fallback_matches_device_contract(op, name, ref):
+    """The f32 binary lane's host recovery path (used when the on-device status
+    call fails, and by any direct C-ABI caller that lands there) must carry the
+    same IEEE-754-2019 min/max contract as the graph node — a bare ``x > y``
+    ternary there would suppress a left-operand NaN and pick the second signed
+    zero. Exercised through the exported ``..._binary_f32_host`` symbol, which
+    IS that recovery path factored out, so this holds without forcing a Metal
+    failure (which a working device cannot do)."""
+    sym = _require("tessera_apple_gpu_mpsgraph_binary_f32_host")
+    a = np.ascontiguousarray(_A)
+    b = np.ascontiguousarray(_B)
+    out = np.empty(a.size, np.float32)
+    sym(ctypes.c_int32(op), a.ctypes.data_as(_CF), b.ctypes.data_as(_CF),
+        out.ctypes.data_as(_CF), ctypes.c_int64(a.size))
+
+    want = np.asarray(ref(_A, _B), np.float32)
+    bad = [
+        f"host {name}({_A[i]!s}, {_B[i]!s}) = {out[i]!s} [{_bits(out)[i]:08x}] "
+        f"want {want[i]!s} [{_bits(want)[i]:08x}]"
+        for i in range(a.size)
+        if _bits(out)[i] != _bits(want)[i]
+    ]
+    assert not bad, "host fallback disagrees with the IEEE contract:\n" + "\n".join(bad)
+
+
 # ── scatter min/max reduce: the reduction result IS the output ──────────────
 @pytest.mark.parametrize("mode,name,ref", [
     (2, "min", IM.ieee_minimum),

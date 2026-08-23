@@ -103,6 +103,29 @@ def test_binary_max_min_nan_propagating():
         np.asarray(mn["output"]).astype(np.float32), np.minimum(a, b))
 
 
+def test_binary_max_min_signed_zero_ties_are_ieee_ordered():
+    """Pins the fleet-wide IEEE-754-2019 contract (decision 2026-08-23):
+    signed zeros are ordered — maximum tie -> +0.0, minimum tie -> -0.0 —
+    matching arith.maximumf/minimumf and the x86 CPU JIT lane
+    (test_jit_tensor_elementwise_totality.py). The emitter previously
+    wrapped the op in `select(a == b, b, ...)` to emulate numpy-on-x86
+    (second operand wins); numpy's tie sign is an ISA accident (SSE vs
+    NEON), not a portable contract, so it is NOT a valid oracle here —
+    expectations are explicit."""
+    rt = _binary_or_skip()
+    a = np.array([0.0, -0.0, 5.0], np.float32)
+    b = np.array([-0.0, 0.0, 5.0], np.float32)
+    expected_signbit = {"tessera.maximum": False, "tessera.minimum": True}
+    for op, tie_sign in expected_signbit.items():
+        res = rt.launch(_artifact(rt, op), (a, b))
+        assert res["ok"] is True, res.get("reason")
+        out = np.asarray(res["output"]).astype(np.float32)
+        np.testing.assert_array_equal(
+            out == 0.0, np.array([True, True, False]))
+        np.testing.assert_array_equal(
+            np.signbit(out[:2]), np.array([tie_sign, tie_sign]))
+
+
 @pytest.mark.parametrize("op_name,reference", [
     ("tessera.pow", np.power),
     ("tessera.mod", np.mod),
@@ -130,19 +153,25 @@ def test_binary_difficult_domain_contract(op_name, reference):
     np.testing.assert_array_equal(np.signbit(out[zeros]), np.signbit(expected[zeros]))
 
 
-@pytest.mark.parametrize("op_name,reference", [
-    ("tessera.maximum", np.maximum), ("tessera.minimum", np.minimum),
+@pytest.mark.parametrize("op_name,tie_sign", [
+    ("tessera.maximum", False), ("tessera.minimum", True),
 ])
-def test_binary_minmax_signed_zero_contract(op_name, reference):
+def test_binary_minmax_signed_zero_contract(op_name, tie_sign):
+    # Explicit IEEE-754-2019 expectations, NOT a numpy oracle: numpy's ±0
+    # tie sign is ISA-dependent (SSE second operand, NEON IEEE), so it only
+    # agreed with the old numpy-emulating kernel on x86 hosts. Contract
+    # (fleet decision 2026-08-23): max tie -> +0.0, min tie -> -0.0;
+    # same-sign ties keep their sign; NaN propagates.
     rt = _binary_or_skip()
     a = np.array([0.0, -0.0, 0.0, -0.0, np.nan, 1.0], np.float32)
     b = np.array([-0.0, 0.0, 0.0, -0.0, 1.0, np.nan], np.float32)
     result = rt.launch(_artifact(rt, op_name), (a, b))
     assert result["ok"] is True, result.get("reason")
     out = np.asarray(result["output"], np.float32)
-    expected = reference(a, b).astype(np.float32)
-    np.testing.assert_array_equal(np.isnan(out), np.isnan(expected))
-    np.testing.assert_array_equal(np.signbit(out[:4]), np.signbit(expected[:4]))
+    np.testing.assert_array_equal(
+        np.isnan(out), [False, False, False, False, True, True])
+    np.testing.assert_array_equal(
+        np.signbit(out[:4]), [tie_sign, tie_sign, False, True])
 
 
 def test_binary_shape_mismatch_rejected():

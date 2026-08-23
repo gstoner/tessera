@@ -5,7 +5,7 @@ here we only run ``generate-rocm-softmax-kernel`` (+ ROCDL lowering) via
 tessera-opt and check structure, so CI without a GPU still gates the codegen:
 
   * the kernel signature is (X, O : memref, M, K : index);
-  * it emits the reduction math (math.exp + arith.maximumf for the row max);
+  * it emits the reduction math (math.exp + arith.maxnumf for the row max);
   * f16/bf16 round-trip through f32 (arith.extf / arith.truncf);
   * an unknown dtype is a named error;
   * it lowers cleanly to ROCDL (no WMMA path needed).
@@ -45,7 +45,11 @@ def test_signature_and_reduction_math():
     args = [a.strip() for a in m.group(1).split(",") if a.strip()]
     assert len(args) == 4, f"expected (X, O, M, K), got {args}"
     assert "math.exp" in ir            # the exp pass
-    assert "arith.maximumf" in ir      # the row-max reduction
+    # maxnumf, not maximumf: end-to-end unobservable in softmax (NaN rows
+    # still poison via exp/sum/divide) and a bare v_max pre-gfx12 — see
+    # GenerateROCMSoftmaxKernel.cpp (JIT-MATH-AUDIT-2026-08-23).
+    assert "arith.maxnumf" in ir       # the row-max reduction
+    assert "arith.maximumf" not in ir  # would cost a NaN fixup per combine
     assert "arith.divf" in ir          # the final normalize
     # f32 storage: no extend/truncate round-trip.
     assert "arith.extf" not in ir and "arith.truncf" not in ir

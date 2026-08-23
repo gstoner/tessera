@@ -78,6 +78,31 @@ def test_x86_binary_max_min_nan_propagating():
         np.asarray(mn["output"]).astype(np.float32), np.minimum(a, b))
 
 
+def test_x86_binary_max_min_signed_zero_ties_are_ieee_ordered():
+    """Fleet-wide IEEE-754-2019 contract (decision 2026-08-23): signed
+    zeros order, so maximum tie -> +0.0, minimum tie -> -0.0. Explicit
+    expectations, NOT a numpy oracle (numpy's tie sign is ISA-dependent).
+    n=19 exercises BOTH the AVX-512 body (16 lanes) and the scalar tail,
+    which had independent second-operand-tie implementations."""
+    rt = _x86_or_skip()
+    n = 19
+    a = np.zeros(n, np.float32)
+    b = np.zeros(n, np.float32)
+    a[1::2] = -0.0  # alternate tie orientations through body and tail
+    b[0::2] = -0.0
+    a[8] = 5.0
+    b[8] = 5.0
+    for op, tie_sign in (("tessera.maximum", False), ("tessera.minimum", True)):
+        res = rt.launch(_artifact(rt, op), (a, b))
+        assert res["ok"] is True, res.get("reason")
+        out = np.asarray(res["output"]).astype(np.float32)
+        zeros = np.arange(n) != 8
+        np.testing.assert_array_equal(out[zeros] == 0.0, True)
+        np.testing.assert_array_equal(
+            np.signbit(out[zeros]), np.full(n - 1, tie_sign))
+        assert out[8] == 5.0
+
+
 def test_x86_binary_shape_mismatch_rejected():
     from tessera import runtime as rt
     a = np.zeros((4, 8), np.float32)

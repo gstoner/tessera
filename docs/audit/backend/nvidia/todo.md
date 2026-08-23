@@ -53,6 +53,37 @@ zero/ragged/large counts and explicit keys/counters, normal is tolerance- and
 statistics-bounded, dropout replays the exact mask, and determinism/counter
 separation hold. Compiler-JVP integration remains required.
 
+Cross-backend sync `IEEE-MINMAX-CONTRACT-2026-08-23` — **NVIDIA
+outcome: assessed, exact-device tie probe required (NR2 Pro).** The
+fleet-wide IEEE-754-2019 ±0-tie contract for tessera.maximum/minimum
+(rocm plan owns the key). Survey of the NVIDIA emitters: reductions and
+elementwise max/min emit NaN-propagating `arith.maximumf` (no
+numpy-emulating tie wrapper exists here, unlike the old ROCm binary
+kernel), and `maxnumf`/`fmaxf` appear only in the Philox uniform floor
+(`GenerateNVIDIAPhiloxKernel.cpp`, `tessera_nvidia_rng.cu`), whose
+input cannot be NaN — the accepted pattern. So NVIDIA is expected
+IEEE-conformant by construction, but the ±0 tie behavior of the
+maximumf lowering on sm_120 is a hardware claim: run signed-zero tie +
+NaN probes on the RTX 5070 Ti (mirror
+`test_binary_max_min_signed_zero_ties_are_ieee_ordered`) before
+recording parity. No evidence transfers from gfx1151 or the AVX-512
+host.
+
+
+Cross-backend sync `JIT-MATH-AUDIT-FIXES-2026-08-23` — **NVIDIA
+outcome: assessed, no defective pattern found; adafactor_vjp NaN
+follow-up open (NR2 Pro).** The NaN-laundering eps-floor defect fixed
+on ROCm/x86 (rocm plan owns the key) was searched for in the NVIDIA
+backend: no `maxnumf(statistic, eps)` floors exist in the C++ emitters
+(the only maxnum is the Philox floor, input cannot be NaN). The sm_120
+`adafactor_vjp`/`optimizer_vjp` training families route through
+`tessera_nvidia.training_kernel`; when their update bodies are next
+touched, add the NaN-gradient reference test on the device (mirror
+`test_adafactor_factored_nan_gradient_propagates_like_reference`). The
+softmax running-max maxnumf optimization is ROCm-kernel-only; NVIDIA's
+softmax/attention paths were not changed.
+
+
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
 `tessera_jit` pipeline change; NVIDIA outcome: not applicable.**
 `tessera_jit` is the host-CPU JIT lane; the NVIDIA backend's device

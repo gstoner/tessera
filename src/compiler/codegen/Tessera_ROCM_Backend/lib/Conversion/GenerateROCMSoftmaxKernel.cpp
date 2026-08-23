@@ -91,8 +91,17 @@ void emitSoftmaxBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy)
   // thread combines the partials to the broadcast total. `red` is reused per
   // pass, so barriers bracket its read. `isMax` selects max vs add.
   auto warpReduce = [&](Value acc, bool isMax) -> Value {
+    // maxnumf, not maximumf: the running max only feeds exp(x - m), where the
+    // choice is end-to-end unobservable — a NaN entry still poisons the whole
+    // row through exp/sum/divide whichever op seeds m, a ±0 tie in m cannot
+    // change any exp(x - m), and the -inf seed keeps the all-NaN row on the
+    // same path (proven bit-exact on gfx1151, JIT-MATH-AUDIT-2026-08-23).
+    // Pre-gfx12, maxnumf is a bare v_max_f32 while maximumf costs an extra
+    // v_cmp_o + v_cndmask NaN fixup per combine in this reduce tree. The
+    // reduce kernel (GenerateROCMReduceKernel) must KEEP maximumf: its
+    // reduction result is the output, so NaN must propagate there.
     auto comb = [&](Value a, Value c) -> Value {
-      return isMax ? b.create<arith::MaximumFOp>(loc, a, c).getResult()
+      return isMax ? b.create<arith::MaxNumFOp>(loc, a, c).getResult()
                    : b.create<arith::AddFOp>(loc, a, c).getResult();
     };
     for (int64_t off = SG / 2; off > 0; off >>= 1) {
@@ -126,7 +135,7 @@ void emitSoftmaxBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy)
     Value acc = lp.getRegionIterArgs()[0];
     Value v = loadF32(b.create<arith::AddIOp>(loc, base, c));
     b.create<scf::YieldOp>(
-        loc, ValueRange{b.create<arith::MaximumFOp>(loc, acc, v)});
+        loc, ValueRange{b.create<arith::MaxNumFOp>(loc, acc, v)});
     localMax = lp.getResult(0);
   }
   Value rmax = warpReduce(localMax, /*isMax=*/true);

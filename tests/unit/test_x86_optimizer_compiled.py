@@ -235,6 +235,45 @@ def test_adafactor_factored_forward_and_backward():
     np.testing.assert_allclose(dcol, expected[2]["v"]["col"], rtol=3e-4, atol=3e-5)
 
 
+def test_adafactor_factored_nan_gradient_propagates_like_reference():
+    """A NaN gradient must poison every update sharing its row/col statistic,
+    exactly as the reference does (np.maximum floors propagate NaN). The old
+    fmax floors laundered the NaN statistic into eps, giving finite-but-wrong
+    updates to the rest of the row/col (JIT-MATH-AUDIT-2026-08-23)."""
+    rt = _rt_or_skip()
+    rng = np.random.default_rng(11)
+    p = rng.standard_normal(SHAPE).astype(np.float32)
+    g = (0.2 * rng.standard_normal(SHAPE)).astype(np.float32)
+    g[1, 2] = np.nan
+    row = rng.uniform(0.1, 0.3, SHAPE[:-1]).astype(np.float32)
+    col = rng.uniform(0.1, 0.3, SHAPE[-1]).astype(np.float32)
+    forward = rt.launch(
+        _adafactor_artifact(rt, backward=False, factored=True, shape=SHAPE),
+        (p, g, row, col),
+    )
+    assert forward["ok"] is True, forward.get("reason")
+    expected_p, expected_state = optim.adafactor(
+        p, g, {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+        lr=1e-2, beta2=0.9, eps=1e-6,
+    )
+    actual_p, actual_row, actual_col = (
+        np.asarray(value) for value in forward["output"]
+    )
+    # The poisoned statistics themselves.
+    np.testing.assert_array_equal(
+        np.isnan(actual_row), np.isnan(np.asarray(expected_state["v"]["row"])))
+    np.testing.assert_array_equal(
+        np.isnan(actual_col), np.isnan(np.asarray(expected_state["v"]["col"])))
+    # NaN pattern of the update matches the reference: full row 1 and full
+    # col 2 are NaN, everything else finite and equal.
+    expected_p = np.asarray(expected_p)
+    np.testing.assert_array_equal(np.isnan(actual_p), np.isnan(expected_p))
+    assert np.isnan(actual_p[1, :]).all() and np.isnan(actual_p[:, 2]).all()
+    fin = ~np.isnan(expected_p)
+    np.testing.assert_allclose(
+        actual_p[fin], expected_p[fin], rtol=2e-5, atol=2e-5)
+
+
 def test_adafactor_full_forward_and_backward():
     rt = _rt_or_skip()
     rng = np.random.default_rng(10)

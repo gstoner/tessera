@@ -28,7 +28,7 @@ module {
 // GENERATED: gpu.func @tessera_tile_softmax_f32
 // GENERATED-SAME: memref<?xf32>
 // GENERATED: gpu.block_id x
-// GENERATED: arith.maximumf
+// GENERATED: arith.maxnumf
 // GENERATED: math.exp
 // GENERATED: arith.divf
 

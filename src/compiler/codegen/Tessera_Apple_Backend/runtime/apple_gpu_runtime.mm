@@ -19071,6 +19071,36 @@ extern "C" void tessera_apple_gpu_mpsgraph_unary_f16(int32_t op,
   std::memcpy(out, x, (size_t)n * 2);
 }
 
+// IEEE-754-2019 maximum/minimum on the HOST, for the C-ABI binary fallback
+// below. When MPSGraph construction or Metal dispatch fails, the f32 entry point
+// recovers on the CPU; a bare `x > y ? x : y` there would suppress a
+// left-operand NaN (`NaN > y` is false) and return the second operand on a +/-0
+// tie — reintroducing, on the recovery path and for any direct C-ABI caller,
+// exactly the maxNum/minNum divergence mpsg_ieee_minmax removed from the graph
+// node. Same contract, same AND/OR tie blend as the MSL ts_ieee_*_f32 helpers
+// and the x86 AVX-512 vector body, so every route agrees by construction. NaN
+// test is on the bit pattern (a self-comparison can be folded under fast math).
+static inline bool ts_host_is_nan_f32(float x) {
+  uint32_t u;
+  std::memcpy(&u, &x, sizeof(u));
+  return (u & 0x7fffffffu) > 0x7f800000u;
+}
+static inline float ts_host_ieee_binop_f32(float a, float b, bool is_max) {
+  if (ts_host_is_nan_f32(a)) return a;
+  if (ts_host_is_nan_f32(b)) return b;
+  if (a == b) {  // only differs from a/b for the +/-0 tie
+    uint32_t ua, ub;
+    std::memcpy(&ua, &a, sizeof(ua));
+    std::memcpy(&ub, &b, sizeof(ub));
+    uint32_t r = is_max ? (ua & ub) : (ua | ub);
+    float out;
+    std::memcpy(&out, &r, sizeof(out));
+    return out;
+  }
+  if (is_max) return a > b ? a : b;
+  return a < b ? a : b;
+}
+
 // ---- C ABI: binary ----------------------------------------------------------
 extern "C" int32_t tessera_apple_gpu_mpsgraph_binary_f32_status(
     int32_t op, const float *a, const float *b, float *out, int64_t n) {
@@ -19079,10 +19109,18 @@ extern "C" int32_t tessera_apple_gpu_mpsgraph_binary_f32_status(
       ctx, op, a, b, out, n, MPSDataTypeFloat32, 4)) ? 1 : 0;
 }
 
-extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float *a,
-                                                      const float *b, float *out,
-                                                      int64_t n) {
-  if (tessera_apple_gpu_mpsgraph_binary_f32_status(op, a, b, out, n)) return;
+// The host recovery path for the f32 binary lane, factored out and exported so
+// it can be differentially tested against the device path WITHOUT a working
+// Metal device (there is no other way to reach it — the void entry point below
+// runs it only when the on-device status call fails). Its min/max cases carry
+// the IEEE-754-2019 contract (mpsg_ieee_minmax / ts_host_ieee_binop_f32), so a
+// direct C-ABI caller that lands here — or a runtime recovering from a Metal
+// failure — sees the same NaN propagation and signed-zero ordering as the graph.
+extern "C" void tessera_apple_gpu_mpsgraph_binary_f32_host(int32_t op,
+                                                           const float *a,
+                                                           const float *b,
+                                                           float *out,
+                                                           int64_t n) {
   for (int64_t i = 0; i < n; ++i) {
     float x = a[i], y = b[i];
     switch (op) {
@@ -19090,8 +19128,10 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float *a
       case 1: out[i] = x - y; break;
       case 2: out[i] = x * y; break;
       case 3: out[i] = x / y; break;
-      case 4: out[i] = x > y ? x : y; break;
-      case 5: out[i] = x < y ? x : y; break;
+      // IEEE-754-2019, matching mpsg_ieee_minmax (the device path) — NOT a bare
+      // ternary, which would suppress NaN and pick the second signed zero.
+      case 4: out[i] = ts_host_ieee_binop_f32(x, y, /*is_max=*/true); break;
+      case 5: out[i] = ts_host_ieee_binop_f32(x, y, /*is_max=*/false); break;
       case 6: out[i] = x * (y / (1.0f + std::exp(-y))); break;
       case 7: out[i] = std::pow(x, y); break;
       case 8: out[i] = std::atan2(x, y); break;
@@ -19112,6 +19152,13 @@ extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float *a
       default: out[i] = x; break;
     }
   }
+}
+
+extern "C" void tessera_apple_gpu_mpsgraph_binary_f32(int32_t op, const float *a,
+                                                      const float *b, float *out,
+                                                      int64_t n) {
+  if (tessera_apple_gpu_mpsgraph_binary_f32_status(op, a, b, out, n)) return;
+  tessera_apple_gpu_mpsgraph_binary_f32_host(op, a, b, out, n);
 }
 
 //===---------------------------------------------------------------------===//

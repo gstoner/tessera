@@ -1109,6 +1109,22 @@ both max and min, bit-level.
 `min` 6.32 ms against `add` 6.39 ms / `mul` 6.48 ms. The lane is
 transfer/bandwidth-bound, so the extra selects are free.
 
+**Follow-up from #617 review (chatgpt-codex-connector, P2) — the C-ABI host
+recovery path was aligned too.** `mpsg_ieee_minmax` fixed the *graph* node, but
+`tessera_apple_gpu_mpsgraph_binary_f32` also has a CPU fallback that fires when
+MPSGraph construction or Metal dispatch fails — and that any direct C-ABI caller
+lands on. It still used `x > y ? x : y` / `x < y ? x : y`, which suppress a
+left-operand NaN and pick the second signed zero, reintroducing exactly the
+divergence on the recovery path. Fixed with a host helper
+`ts_host_ieee_binop_f32` carrying the same AND/OR tie blend. The fallback switch
+is now factored into an exported `tessera_apple_gpu_mpsgraph_binary_f32_host`
+symbol — the void entry point calls it on `!ctx.ok` — so it is
+**differentially testable without a Metal device** (a working device cannot be
+forced to fail). New test `test_c_abi_host_fallback_matches_device_contract`
+proven red on the bare ternary, green on the helper; the device suite is now
+**9 tests**. bf16 upcasts through this f32 path so it is covered; f16 memcpy's on
+fallback (Python upcasts), so it carries no host min/max.
+
 ### Finding 3 — `scatter_f32` min/max reduce laundered NaN *(fixed)*
 
 Modes 2/3 of the scatter kernel used MSL `min`/`max`, so a NaN in either the

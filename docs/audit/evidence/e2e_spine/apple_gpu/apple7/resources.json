@@ -48,7 +48,7 @@
       },
       "source_fingerprint": {
         "state": "measured",
-        "value": "sha256:4de6ab5b50ad6bc6412b1c45c12e553d69e418acfa26db9a9bb88b98ebe7996e"
+        "value": "sha256:301611026f7295cfa09dcf7647af5d9389179558617c5747b6f5b7eece81ecee"
       },
       "spill_count": {
         "state": "no_public_api",

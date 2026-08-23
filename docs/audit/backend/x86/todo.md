@@ -16,6 +16,15 @@ object, so there is no hsaco-equivalent artifact to serialize and no analogous
 blind spot: the x86 Target IR is already exercised in CI by the lit lane
 (`TESSERA_BUILD_X86_BACKEND=ON`). No AMX/AVX-512 evidence is involved.
 
+Cross-backend sync `CI-BACKEND-CAPABILITY-SKIP-2026-08-23` — **Apple-owned
+pytest capability gate; x86 outcome: not applicable by design.**
+x86 deliberately cannot use a `--help` probe: the x86 executable pass is
+**always** registered so it fails closed with a rebuild diagnostic, which is
+exactly why `tests/tessera-ir/lit.cfg.py:137` probes the dialect directly with a
+`!tessera_x86.tile` load-time fixture instead. That mechanism also guards the
+assertions-enabled registration regression behind Decision #19, so it is
+intentionally kept, not replaced. No AMX/AVX-512 evidence is involved.
+
 
 Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
 fatbin/cubin runtime admission; x86 outcome: not applicable.** CUDA image

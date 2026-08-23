@@ -17,6 +17,45 @@ GPU-less hosted-runner equivalent of the `ld.lld` serialization proof. Apple
 lit fixtures already gate on the `tessera-apple-backend` feature. No `.metallib`,
 MSL, or M-series evidence transfers.
 
+`CI-BACKEND-CAPABILITY-SKIP-2026-08-23` — **Apple-owned; pytest fixtures now
+skip when `tessera-opt` lacks the Apple backend. Landed.**
+`tessera-opt` registers the Apple pipelines only under
+`-DTESSERA_BUILD_APPLE_BACKEND=ON`. The lit suite already derived a
+`tessera-apple-backend` feature by probing `tessera-opt --help`
+(`tests/tessera-ir/lit.cfg.py:129`), but the **pytest** fixtures had no
+equivalent: their only guard asked whether the binary exists, not whether it
+carries the backend. On the ROCm/x86 boxes that produced **57 failures** in a
+full sweep — `Unknown command line argument '-tessera-lower-to-apple_cpu-full'`
+and the `--pass-pipeline` parser's equivalent — noise that says nothing about
+Apple and hides real signal (this is how the ROCm serializer outage in #619 went
+unnoticed). `tests/_support/apple.py::skip_if_apple_pipeline_unregistered()`
+brings pytest in line with what lit already did.
+
+Narrow by construction, so it cannot mask a defect: it fires only on the two
+"pipeline not registered" signatures, only when the probed binary genuinely
+lacks the backend (if it HAS it, an unregistered pipeline stays a loud
+registration regression), and never on a nonzero exit for any other reason. The
+probe takes the **invoked** tool path — the fixtures disagree on how they find
+`tessera-opt` (`TESSERA_OPT` vs `TESSERA_OPT_PATH`, different default build
+dirs), so resolving independently could inspect a different build than the one
+that failed (#620 review).
+
+Evidence (Strix Halo, Apple backend absent): probe returns False for the Apple
+pipeline and True for `tessera-lower-to-x86` on the same binary, and gives
+different answers for two different binaries, so a False is real signal;
+CMakeCache agrees independently of `--help`; **with the probe forced True the
+fixtures FAIL rather than skip**, which is the property that keeps this from
+silently disabling the Apple suite on the Mac. Sweep 59 → 17 failures.
+
+**Open / not closed by this item:** the remaining 17 (all
+`tests/unit/test_apple_value_target_ir.py`) fail through the Python front door
+(`KeyError: 'compiler_path'`, `target_ir_artifact` vs `value_target_ir`) and a
+`--help` introspection assertion, not through a pipeline invocation. Guarding
+those needs an Apple build to confirm they still RUN; the ROCm box cannot build
+the Apple backend, so a guard written there could mask a real regression.
+**Requires a Mac run** — exact-device Apple evidence is unchanged by this item
+and none is claimed.
+
 
 Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
 fatbin/cubin runtime admission; Apple outcome: not applicable.** Embedded CUDA

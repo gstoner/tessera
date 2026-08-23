@@ -19,6 +19,14 @@ toolkit rather than a stock `lld`. No PTX, cubin, sm_120 schedule, or
 exact-device evidence transfers from gfx1151; nothing in the NVIDIA queue
 changes.
 
+Cross-backend sync `CI-BACKEND-CAPABILITY-SKIP-2026-08-23` — **Apple-owned
+pytest capability gate; NVIDIA outcome: not applicable / no exposure measured.**
+Measured 2026-08-23 on a host with `TESSERA_BUILD_NVIDIA_BACKEND:BOOL=OFF`:
+`pytest -k nvidia -m "not slow"` reports **496 passed, 14 skipped, 0 failed**, so
+the NVIDIA fixtures do not fail-instead-of-skip when their backend is absent and
+need no equivalent guard. No sm_120 artifact, cubin, or exact-device evidence is
+involved.
+
 
 Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
 runtime package hardened and exact-device validated on SuperBear.** The f16

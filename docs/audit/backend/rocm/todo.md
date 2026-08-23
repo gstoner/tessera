@@ -58,6 +58,14 @@ uses. Its blocker (the lean-driver conflict in `tessera-opt` on a HIP-less host)
 is untouched here. What this item does change is the premise that ROCm CI
 coverage requires a HIP host: it does not, for the compile-time half.
 
+Cross-backend sync `CI-BACKEND-CAPABILITY-SKIP-2026-08-23` — **Apple-owned
+pytest capability gate; ROCm outcome: parity validated / no change required.**
+ROCm already has both halves of this: `tests/tessera-ir/lit.cfg.py:126` derives
+`tessera-rocm-backend` from the same `tessera-opt --help` probe, and the ROCm
+pytest fixtures gate on `_tessera_opt_path()` / `_rocm_wmma_runtime_available()`.
+No HSACO, HIP loader, schedule, or gfx1151 evidence transfers; ROCm test
+behaviour is unchanged.
+
 
 Cross-backend sync `NVIDIA-AOT-PACKAGE-V1-HARDEN-2026-08-22` — **NVIDIA-owned
 fatbin/cubin runtime admission; ROCm outcome: not applicable.** The embedded

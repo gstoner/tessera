@@ -35,6 +35,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from tests._support.apple import skip_if_apple_pipeline_unregistered
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _OPT_DEFAULT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
@@ -66,6 +67,7 @@ def _lower(target_pipeline: str) -> str:
     proc = subprocess.run(
         [_OPT, "-", f"-{target_pipeline}", "--allow-unregistered-dialect"],
         input=_TILE_CHOLESKY, capture_output=True, text=True, timeout=60)
+    skip_if_apple_pipeline_unregistered(proc, _OPT)
     assert proc.returncode == 0, proc.stderr
     return proc.stdout
 

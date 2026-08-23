@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from tests._support.apple import skip_if_apple_pipeline_unregistered
 
 REPO = Path(__file__).resolve().parents[2]
 PASS_SRC = (REPO / "src" / "compiler" / "codegen" / "Tessera_Apple_Backend" /
@@ -83,6 +84,7 @@ def test_descriptor_vs_rediscovered_source_tag(tmp_path):
          "--pass-pipeline=builtin.module(tessera-lower-to-apple_gpu-runtime)",
          "--allow-unregistered-dialect"],
         capture_output=True, text=True, timeout=60)
+    skip_if_apple_pipeline_unregistered(out, _OPT)
     assert out.returncode == 0, out.stderr
     text = out.stdout
     # Both functions fuse to the same kernel ...

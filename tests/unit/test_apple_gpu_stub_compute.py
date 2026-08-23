@@ -98,6 +98,43 @@ def test_stub_bmm_f16_computes(stub_lib):
     assert _rel(O.astype(np.float32), np.matmul(A.astype(np.float64), Bm.astype(np.float64))) < 1e-2
 
 
+def test_stub_binary_f32_minmax_is_ieee(stub_lib):
+    """The portable stub's `tessera_apple_gpu_mpsgraph_binary_f32` min/max
+    (opcodes 4/5) must carry the IEEE-754-2019 contract, bit-for-bit, like the
+    Metal runtime — NaN propagating, `max` tie -> +0, `min` tie -> -0. This is
+    the non-Darwin route the `hardware_apple_gpu` device suite skips, so it is
+    covered here (the stub compiles on any host via the __APPLE__ wrapper). numpy
+    is NOT a valid tie oracle, so the expectation comes from the shared
+    reference in tessera/_ieee_minmax.py."""
+    from tessera._ieee_minmax import ieee_maximum, ieee_minimum
+
+    fn = stub_lib.tessera_apple_gpu_mpsgraph_binary_f32
+    fn.argtypes = [_I32, _FP, _FP, _FP, ctypes.c_int64]
+    fn.restype = None
+
+    nan, inf = np.float32("nan"), np.float32("inf")
+    pz, nz = np.float32(0.0), np.float32(-0.0)
+    a = np.array([pz, nz, pz, nz, nan, 1.0, nan, nan, -inf, inf, 2.0, nan], np.float32)
+    b = np.array([nz, pz, pz, nz, 1.0, nan, nan, -inf, nan, nan, 3.0, pz], np.float32)
+
+    def bits(x):
+        return np.ascontiguousarray(x, np.float32).view(np.uint32)
+
+    for op, ref in ((4, ieee_maximum), (5, ieee_minimum)):
+        ac = np.ascontiguousarray(a)
+        bc = np.ascontiguousarray(b)
+        out = np.empty(a.size, np.float32)
+        fn(_I32(op), ac.ctypes.data_as(_FP), bc.ctypes.data_as(_FP),
+           out.ctypes.data_as(_FP), ctypes.c_int64(a.size))
+        want = np.asarray(ref(a, b), np.float32)
+        bad = [
+            f"op{op}({a[i]!s},{b[i]!s})={out[i]!s}[{bits(out)[i]:08x}] "
+            f"want {want[i]!s}[{bits(want)[i]:08x}]"
+            for i in range(a.size) if bits(out)[i] != bits(want)[i]
+        ]
+        assert not bad, "stub binary min/max is not IEEE:\n" + "\n".join(bad)
+
+
 def test_stub_bsmm_f16_computes(stub_lib):
     # Regression: this stub used to zero-fill despite the f32 bsmm reference
     # existing right beside it.

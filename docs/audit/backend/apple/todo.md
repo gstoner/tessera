@@ -20,6 +20,33 @@ device-workspace lifecycle transfer no Metal/MPSGraph code, plan, workspace, or
 evidence. Apple's spectral package retains its architecture-owned lifecycle and
 Mac proof requirements.
 
+Cross-backend sync `JIT-MATH-AUDIT-2026-08-23` — **Apple outcome:
+two follow-ups required (M1 Max); no Apple evidence exists for either.**
+The x86/ROCm math-correctness loops (see those plans under this key)
+produced changes whose Apple siblings are unaudited: **(1) NaN
+laundering in optimizer eps floors** — ROCm's Adafactor kernels and the
+x86 AVX-512 shim both floored second-moment statistics with
+NaN-suppressing max (`maxnumf` / `std::fmax`), silently converting a
+NaN statistic into eps while the optim.py reference (`np.maximum`)
+propagates it; both are fixed with exact-device NaN-propagation tests.
+The hand-written MSL optimizer kernels in `apple_gpu_runtime.mm` (and
+any `fmax`-style eps floors in the softmax/norm MSL) need the same
+audit on the Mac — MSL `fmax` is also NaN-suppressing. **(2) The
+`TESSERA_JIT_VECTORIZE` lane was un-gated on LLVM 23** and its
+runner-utils dlopen removed (x86 plan, `JIT-VECTORIZE-UNGATED` key);
+the Mac is also LLVM 23, so the Darwin vectorize compat test in
+`test_native_cpu_jit.py` will now exercise the actually-vectorized
+path for the first time there. AVX-512-host proof does not transfer:
+run the native CPU JIT packet + that test on the M1 Max before
+claiming the vectorized lane on Apple. Also note the softmax
+`maximumf → maxnumf` running-max switch is ROCm-kernel-only and does
+not touch Apple's MSL softmax. **(3)** The ±0 tie contract for
+`tessera.maximum`/`minimum` is now IEEE-754-2019 fleet-wide
+(`IEEE-MINMAX-CONTRACT-2026-08-23` in the rocm plan): gfx1151 and the
+x86 shim are fixed and pinned; the Apple MSL binary max/min kernels
+(MSL `fmax`/`fmin` are NaN-suppressing AND tie-order unspecified) need
+the same audit + explicit-expectation tie tests on the Mac.
+
 Cross-backend sync `NVIDIA-RNG-PHILOX-CORE-2026-08-21` — **NVIDIA-owned
 Target/runtime addition exact-device validated; Apple outcome: not applicable.** The typed four-mode
 `tessera_nvidia.philox` directive and GPU kernel generator are confined to the

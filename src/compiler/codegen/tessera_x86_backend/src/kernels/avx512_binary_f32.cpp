@@ -49,11 +49,15 @@ inline float scalar_binary(float a, float b, int kind) {
     case kMul: return a * b;
     case kMod: return a - std::floor(a / b) * b;
     case kFloorDiv: return std::floor(a / b);
-    case kMax:  // NaN-propagating (numpy.maximum), not fmax
+    case kMax:  // IEEE-754-2019 maximum: NaN propagates, -0.0 < +0.0
         if (std::isnan(a) || std::isnan(b)) return std::nanf("");
+        // Ordered tie: +0.0 wins for max (fleet contract 2026-08-23; a
+        // plain a > b ? a : b returned the SECOND operand on a +/-0 tie).
+        if (a == b) return std::signbit(a) ? b : a;
         return a > b ? a : b;
-    case kMin:
+    case kMin:  // IEEE-754-2019 minimum: NaN propagates, tie -> -0.0
         if (std::isnan(a) || std::isnan(b)) return std::nanf("");
+        if (a == b) return std::signbit(a) ? a : b;
         return a < b ? a : b;
     default: return a;
     }
@@ -91,14 +95,28 @@ extern "C" void tessera_x86_avx512_binary_f32(const float* A, const float* B,
             break;
         }
         case kMax: {
-            // NaN-propagating: where (a or b) is unordered (NaN), force NaN.
+            // IEEE-754-2019 maximum (fleet contract 2026-08-23): NaN
+            // propagates, and signed zeros order (-0.0 < +0.0). vmaxps
+            // returns the SECOND operand on an ordered tie, so ties are
+            // fixed to the bitwise AND of the operands: +0 wins for max,
+            // and identical non-zero bits are unchanged. (OR for min.)
             __mmask16 un = _mm512_cmp_ps_mask(a, b, _CMP_UNORD_Q);
-            y = _mm512_mask_blend_ps(un, _mm512_max_ps(a, b), qnan);
+            __mmask16 eq = _mm512_cmp_ps_mask(a, b, _CMP_EQ_OQ);
+            __m512 m = _mm512_max_ps(a, b);
+            __m512 zfix = _mm512_castsi512_ps(_mm512_and_si512(
+                _mm512_castps_si512(a), _mm512_castps_si512(b)));
+            m = _mm512_mask_blend_ps(eq, m, zfix);
+            y = _mm512_mask_blend_ps(un, m, qnan);
             break;
         }
         case kMin: {
             __mmask16 un = _mm512_cmp_ps_mask(a, b, _CMP_UNORD_Q);
-            y = _mm512_mask_blend_ps(un, _mm512_min_ps(a, b), qnan);
+            __mmask16 eq = _mm512_cmp_ps_mask(a, b, _CMP_EQ_OQ);
+            __m512 m = _mm512_min_ps(a, b);
+            __m512 zfix = _mm512_castsi512_ps(_mm512_or_si512(
+                _mm512_castps_si512(a), _mm512_castps_si512(b)));
+            m = _mm512_mask_blend_ps(eq, m, zfix);
+            y = _mm512_mask_blend_ps(un, m, qnan);
             break;
         }
         default: y = a; break;

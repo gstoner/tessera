@@ -28,15 +28,100 @@ Philox4x32-10 key/counter identity. ROCm retains its independent
 packages, and exact-device evidence; none of those artifacts or schedules
 transfer to sm_120.
 
+Cross-backend sync `IEEE-MINMAX-CONTRACT-2026-08-23` — **the ±0 tie
+contract decision is CLOSED: IEEE-754-2019 fleet-wide (owner decision
+2026-08-23), exact-device validated on gfx1151 + AVX-512 host.**
+`tessera.maximum`/`minimum` now order signed zeros everywhere (max tie
+→ +0.0, min tie → −0.0), NaN propagating — the semantics
+`arith.maximumf`/`minimumf` already carry. gfx1151: the numpy-emulating
+`select(a==b, b, …)` wrapper in `GenerateROCMBinaryKernel.cpp` is
+DELETED — probing bare maximumf/minimumf on device showed LLVM's
+AMDGPU expansion is already fully IEEE (its ±0 fixup had been dead code
+under the wrapper), so the fix removes a cmp+select per element. x86
+shim (`avx512_binary_f32.cpp`): both the scalar tail (`a > b ? a : b`)
+and the vector body (`vmaxps`) returned the second operand on ties;
+fixed via signbit select (scalar) and a bitwise AND/OR tie blend
+(vector). Rationale recorded in the tests: numpy is NOT a valid tie
+oracle (SSE second-operand vs NEON IEEE — numpy disagrees with itself
+across hosts). Pinned by
+`test_binary_max_min_signed_zero_ties_are_ieee_ordered` +
+`test_binary_minmax_signed_zero_contract` (gfx1151, explicit
+expectations) and the x86 sibling
+(`test_x86_binary_max_min_signed_zero_ties_are_ieee_ordered`, n=19
+covering vector body + scalar tail); the CPU JIT lane was already
+IEEE (totality suite). Apple MSL binary max/min is unaudited for the
+same contract — recorded in the apple plan.
+
+
+Cross-backend sync `JIT-MATH-AUDIT-FIXES-2026-08-23` — **both audit
+notes from the entry below are now CLOSED as code changes, exact-device
+validated on gfx1151.** **(a) Softmax running max switched
+`maximumf` → `maxnumf`** (`GenerateROCMSoftmaxKernel.cpp`, both the
+local strided loop and the warp-shuffle combine): end-to-end
+unobservable — proven by bit-comparing device outputs before/after
+across a 7-row special-value matrix (NaN rows, all-NaN, ±inf, -inf
+masks, fully-masked, ±0 ties) for `softmax` and `softmax_safe`: NaN
+patterns identical, finite values bit-exact — while the ISA drops all
+13 `v_cmp_o_f32` + 13 of 15 `v_cndmask` NaN-fixups from the row-max
+tree (~26 VALU ops, hsaco 5512 → 5256 B). The reduce kernel KEEPS
+`maximumf` (its reduction result is the output; NaN must propagate).
+**(b) Adafactor eps/tiny floors switched `maxnumf` → `maximumf`** (18
+sites in `GenerateROCMOptimizerKernel.cpp`): the reference floors are
+`np.maximum` (optim.py), so a NaN second-moment statistic must surface
+as NaN in every update it feeds — maxnumf silently laundered it into
+eps, giving finite-but-wrong updates to every parameter sharing the
+poisoned row/col. New exact-device test
+(`test_adafactor_factored_nan_gradient_propagates_like_reference`)
+proves a NaN gradient poisons the full row+col exactly as the
+reference does; the identical defect existed in the x86 AVX-512 shim
+(`std::fmax` → NaN-propagating floor helper, same test added there;
+the x86 rerun also caught a pre-existing crash-shaped hazard: see the
+x86 plan). The Philox `maxnumf(u1, floor)` clamp is intentionally kept
+— Philox uniforms cannot be NaN, and maxnumf is a bare v_max. Apple
+siblings (MSL optimizer/softmax kernels) are unaudited for the same
+patterns — recorded in the apple plan. Gates: optimizer/softmax/
+binary/reduce compiled suites + `check-tessera-rocm` 63/63 green.
+
+
+Cross-backend sync `JIT-MATH-AUDIT-2026-08-23` — **gfx1151 exact-device
+math-correctness probes: special-value semantics verified; one deliberate
+cross-target divergence recorded (no code change).** Probed on this box
+through the compiled lanes: **reduce max/min** propagate NaN and handle
+-inf bit-exactly vs numpy; **softmax** handles -inf mask entries (masked
+→ 0, fully-masked row → NaN, matching the naive reference); **binary
+maximum/minimum** propagate NaN (pre-existing test) and, newly pinned
+(`test_binary_max_min_signed_zero_tie_returns_second_operand`), return
+the SECOND operand on a ±0 ordered tie — a deliberate emitter choice
+(`GenerateROCMBinaryKernel.cpp` wraps maximumf/minimumf in
+`select(a==b, b, …)` to emulate numpy-on-x86/SSE). That diverges from the
+arith.maximumf/minimumf IEEE tie ordering the x86 CPU JIT lane executes
+(max tie → +0, min tie → −0; pinned in the totality suite). **Open
+decision:** `tessera.maximum/minimum` ±0-tie semantics should be one
+recorded contract across targets (Decision #21a); both pins name each
+other so either resolution is a visible two-sided change. Two audit
+notes, no action taken: (a) flash-attn fwd/bwd running max uses
+`maxnumf` (NaN-suppressing) while the softmax kernel uses `maximumf`
+(NaN-propagating) — end-to-end results agree because exp(NaN) still
+propagates, and maxnumf is cheaper pre-gfx12 (bare v_max, no NaN fixup);
+switching softmax's running max to maxnumf is a small verified-equivalent
+optimization candidate. (b) `GenerateROCMOptimizerKernel.cpp` eps-clamps
+via `maxnumf(x, eps)`, which launders a NaN input into eps rather than
+propagating it — if NaN gradients should surface, that wants
+`maximumf` or an explicit isnan gate.
+
+
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
 `tessera_jit` pipeline change; ROCm outcome: not applicable (backend);
-host lane follow-up required.** The ROCm device paths
+host lane validated (2026-08-23).** The ROCm device paths
 (`tessera-rocm-executable` / hsaco lanes) do not consume `tessera_jit`; their
 state-machine path independently scalarizes tensor slots before emitting GPU
-arith and retains its gfx1151 exact-device proof below.  The host-CPU JIT lane
-on this box is the x86 lane: its original add/cmp/select state-machine evidence
-remains valid, while the newly widened arithmetic/math totality matrix still
-needs the x86-host rerun recorded in that plan.
+arith and retains its gfx1151 exact-device proof below — re-confirmed in the
+same session: `test_rocm_state_machine_exec.py` **5/5** on gfx1151.  The
+host-CPU JIT lane on this box is the x86 lane; its widened
+arithmetic/math totality rerun closed on this host (22/22 + 182-test
+packet) — details, and the host-dependent numpy signed-zero oracle
+defect the rerun caught, are recorded in the x86 plan's entry for this
+key.
 
 
 Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 exact-device

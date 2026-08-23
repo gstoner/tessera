@@ -26,6 +26,15 @@ constexpr int kSgd = 0, kMomentum = 1, kAdam = 2, kAdamW = 3, kLion = 4,
               kNesterov = 5;
 
 inline float signf(float x) { return (x > 0.0f) - (x < 0.0f); }
+
+// NaN-propagating floor for the Adafactor eps/tiny guards. The reference
+// floors are np.maximum (optim.py _adafactor_update_from_state), which
+// propagates NaN; std::fmax suppresses it, silently laundering a NaN
+// statistic into eps and giving finite-but-wrong updates to every other
+// parameter sharing the poisoned row/col (JIT-MATH-AUDIT-2026-08-23).
+inline float floorPropagatingNan(float x, float lo) {
+    return std::isnan(x) ? x : std::fmax(x, lo);
+}
 }  // namespace
 
 extern "C" void tessera_x86_reference_optimizer_f32(
@@ -232,13 +241,13 @@ extern "C" void tessera_x86_avx512_adafactor_factored_f32(
     float row_mean = 0.0f;
     for (int64_t r = 0; r < rows; ++r) row_mean += new_row[r];
     row_mean /= static_cast<float>(rows);
-    const float safe_mean = std::fmax(row_mean, eps);
+    const float safe_mean = floorPropagatingNan(row_mean, eps);
     for (int64_t r = 0; r < rows; ++r) {
-        const float safe_row = std::fmax(new_row[r], eps);
+        const float safe_row = floorPropagatingNan(new_row[r], eps);
         for (int64_t c = 0; c < cols; ++c) {
             const int64_t i = r * cols + c;
             const float scale =
-                safe_row * std::fmax(new_col[c], eps) / safe_mean;
+                safe_row * floorPropagatingNan(new_col[c], eps) / safe_mean;
             const float denom = std::sqrt(scale) + eps;
             output[i] = parameter[i] - lr * gradient[i] / denom;
         }
@@ -256,7 +265,7 @@ extern "C" void tessera_x86_avx512_adafactor_full_f32(
             beta2 * old_moment[i] + one_minus_beta2 * g * g;
         new_moment[i] = moment;
         output[i] =
-            parameter[i] - lr * g / (std::sqrt(std::fmax(moment, eps)) + eps);
+            parameter[i] - lr * g / (std::sqrt(floorPropagatingNan(moment, eps)) + eps);
     }
 }
 
@@ -291,18 +300,18 @@ extern "C" void tessera_x86_avx512_adafactor_factored_bwd_f32(
     float mean = 0.0f;
     for (int64_t r = 0; r < rows; ++r) mean += row[r];
     mean /= static_cast<float>(rows);
-    const float safe_mean = std::fmax(mean, eps);
+    const float safe_mean = floorPropagatingNan(mean, eps);
     float dmean = 0.0f;
     for (int64_t r = 0; r < rows; ++r) {
-        const float safe_row = std::fmax(row[r], eps);
+        const float safe_row = floorPropagatingNan(row[r], eps);
         for (int64_t c = 0; c < cols; ++c) {
             const int64_t i = r * cols + c;
-            const float safe_col = std::fmax(col[c], eps);
+            const float safe_col = floorPropagatingNan(col[c], eps);
             const float scale = safe_row * safe_col / safe_mean;
             const float root = std::sqrt(scale);
             const float denom = root + eps;
             const float ds = lr * cotangent[i] * gradient[i]
-                           / (2.0f * std::fmax(root, 1.0e-30f)
+                           / (2.0f * floorPropagatingNan(root, 1.0e-30f)
                               * denom * denom);
             drow[r] += ds * safe_col / safe_mean;
             dcol[c] += ds * safe_row / safe_mean;
@@ -321,11 +330,11 @@ extern "C" void tessera_x86_avx512_adafactor_factored_bwd_f32(
         d_old_col[c] = beta2 * dcol[c];
     }
     for (int64_t r = 0; r < rows; ++r) {
-        const float safe_row = std::fmax(row[r], eps);
+        const float safe_row = floorPropagatingNan(row[r], eps);
         for (int64_t c = 0; c < cols; ++c) {
             const int64_t i = r * cols + c;
             const float scale =
-                safe_row * std::fmax(col[c], eps) / safe_mean;
+                safe_row * floorPropagatingNan(col[c], eps) / safe_mean;
             const float denom = std::sqrt(scale) + eps;
             const float state =
                 drow[r] / static_cast<float>(cols)
@@ -350,12 +359,12 @@ extern "C" void tessera_x86_avx512_adafactor_full_bwd_f32(
         const float g = gradient[i];
         const float moment =
             beta2 * old_moment[i] + one_minus_beta2 * g * g;
-        const float root = std::sqrt(std::fmax(moment, eps));
+        const float root = std::sqrt(floorPropagatingNan(moment, eps));
         const float denom = root + eps;
         const float dm =
             moment > eps
                 ? lr * cotangent[i] * g
-                      / (2.0f * std::fmax(root, 1.0e-30f)
+                      / (2.0f * floorPropagatingNan(root, 1.0e-30f)
                          * denom * denom)
                 : 0.0f;
         dparam[i] = cotangent[i];

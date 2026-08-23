@@ -155,9 +155,15 @@ static void emitAdafactorUpdateBody(OpBuilder &b, Location loc,
   Value zeroIndex = b.create<arith::ConstantIndexOp>(loc, 0);
   Value meanValue =
       b.create<memref::LoadOp>(loc, mean, ValueRange{zeroIndex});
-  Value safeRow = b.create<arith::MaxNumFOp>(loc, rowValue, eps);
-  Value safeCol = b.create<arith::MaxNumFOp>(loc, colValue, eps);
-  Value safeMean = b.create<arith::MaxNumFOp>(loc, meanValue, eps);
+  // maximumf (NaN-propagating), not maxnumf: the reference floors are
+  // np.maximum (optim.py _adafactor_update_from_state), so a NaN statistic
+  // must surface as NaN in every update it feeds — maxnumf silently
+  // laundered it into eps, giving finite-but-wrong updates to every other
+  // parameter sharing the poisoned row/col (JIT-MATH-AUDIT-2026-08-23).
+  // Same rule for every eps/tiny floor in this file.
+  Value safeRow = b.create<arith::MaximumFOp>(loc, rowValue, eps);
+  Value safeCol = b.create<arith::MaximumFOp>(loc, colValue, eps);
+  Value safeMean = b.create<arith::MaximumFOp>(loc, meanValue, eps);
   Value scale = b.create<arith::DivFOp>(
       loc, b.create<arith::MulFOp>(loc, safeRow, safeCol), safeMean);
   Value denominator = b.create<arith::AddFOp>(
@@ -203,7 +209,7 @@ static void emitAdafactorFullBody(OpBuilder &b, Location loc,
       b.create<arith::MulFOp>(
           loc, b.create<arith::SubFOp>(loc, one, beta2),
           b.create<arith::MulFOp>(loc, g, g)));
-  Value safeMoment = b.create<arith::MaxNumFOp>(loc, moment, eps);
+  Value safeMoment = b.create<arith::MaximumFOp>(loc, moment, eps);
   Value denominator = b.create<arith::AddFOp>(
       loc, b.create<math::SqrtOp>(loc, safeMoment), eps);
   Value updated = b.create<arith::SubFOp>(
@@ -226,13 +232,13 @@ static Value emitAdafactorDScale(OpBuilder &b, Location loc, Value gradient,
       loc, f32, b.getF32FloatAttr(1.0e-30f));
   Value two = b.create<arith::ConstantOp>(
       loc, f32, b.getF32FloatAttr(2.0f));
-  Value safeRow = b.create<arith::MaxNumFOp>(loc, row, eps);
-  Value safeCol = b.create<arith::MaxNumFOp>(loc, col, eps);
-  Value safeMean = b.create<arith::MaxNumFOp>(loc, mean, eps);
+  Value safeRow = b.create<arith::MaximumFOp>(loc, row, eps);
+  Value safeCol = b.create<arith::MaximumFOp>(loc, col, eps);
+  Value safeMean = b.create<arith::MaximumFOp>(loc, mean, eps);
   Value scale = b.create<arith::DivFOp>(
       loc, b.create<arith::MulFOp>(loc, safeRow, safeCol), safeMean);
   Value root = b.create<math::SqrtOp>(loc, scale);
-  Value safeRoot = b.create<arith::MaxNumFOp>(loc, root, tiny);
+  Value safeRoot = b.create<arith::MaximumFOp>(loc, root, tiny);
   Value denominator = b.create<arith::AddFOp>(loc, root, eps);
   Value denominatorSquared =
       b.create<arith::MulFOp>(loc, denominator, denominator);
@@ -278,9 +284,9 @@ static void emitAdafactorBackwardMeanBody(OpBuilder &b, Location loc,
   Value cv = b.create<memref::LoadOp>(loc, col, ValueRange{colIndex});
   Value mv = b.create<memref::LoadOp>(loc, mean, ValueRange{zeroIndex});
   Value ds = emitAdafactorDScale(b, loc, g, dy, rv, cv, mv, lr, eps);
-  Value safeRow = b.create<arith::MaxNumFOp>(loc, rv, eps);
-  Value safeCol = b.create<arith::MaxNumFOp>(loc, cv, eps);
-  Value safeMean = b.create<arith::MaxNumFOp>(loc, mv, eps);
+  Value safeRow = b.create<arith::MaximumFOp>(loc, rv, eps);
+  Value safeCol = b.create<arith::MaximumFOp>(loc, cv, eps);
+  Value safeMean = b.create<arith::MaximumFOp>(loc, mv, eps);
   Value numerator = b.create<arith::MulFOp>(
       loc, ds, b.create<arith::MulFOp>(loc, safeRow, safeCol));
   Value contribution = b.create<arith::DivFOp>(
@@ -338,9 +344,9 @@ static void emitAdafactorBackwardMomentBody(OpBuilder &b, Location loc,
   Value cv = b.create<memref::LoadOp>(loc, col, ValueRange{colIndex});
   Value mv = b.create<memref::LoadOp>(loc, mean, ValueRange{zeroIndex});
   Value ds = emitAdafactorDScale(b, loc, g, dy, rv, cv, mv, lr, eps);
-  Value safeOther = b.create<arith::MaxNumFOp>(
+  Value safeOther = b.create<arith::MaximumFOp>(
       loc, rows ? cv : rv, eps);
-  Value safeMean = b.create<arith::MaxNumFOp>(loc, mv, eps);
+  Value safeMean = b.create<arith::MaximumFOp>(loc, mv, eps);
   Value contribution = b.create<arith::DivFOp>(
       loc, b.create<arith::MulFOp>(loc, ds, safeOther), safeMean);
   Value next = b.create<arith::AddFOp>(
@@ -403,9 +409,9 @@ static void emitAdafactorBackwardFinalizeBody(OpBuilder &b, Location loc,
   Value cv = b.create<memref::LoadOp>(loc, col, ValueRange{colIndex});
   Value zeroIndex = b.create<arith::ConstantIndexOp>(loc, 0);
   Value mv = b.create<memref::LoadOp>(loc, mean, ValueRange{zeroIndex});
-  Value safeRow = b.create<arith::MaxNumFOp>(loc, rv, eps);
-  Value safeCol = b.create<arith::MaxNumFOp>(loc, cv, eps);
-  Value safeMean = b.create<arith::MaxNumFOp>(loc, mv, eps);
+  Value safeRow = b.create<arith::MaximumFOp>(loc, rv, eps);
+  Value safeCol = b.create<arith::MaximumFOp>(loc, cv, eps);
+  Value safeMean = b.create<arith::MaximumFOp>(loc, mv, eps);
   Value root = b.create<math::SqrtOp>(
       loc, b.create<arith::DivFOp>(
                loc, b.create<arith::MulFOp>(loc, safeRow, safeCol), safeMean));
@@ -466,7 +472,7 @@ static void emitAdafactorFullBackwardBody(OpBuilder &b, Location loc,
       b.create<arith::MulFOp>(
           loc, b.create<arith::SubFOp>(loc, one, beta2),
           b.create<arith::MulFOp>(loc, g, g)));
-  Value safeMoment = b.create<arith::MaxNumFOp>(loc, moment, eps);
+  Value safeMoment = b.create<arith::MaximumFOp>(loc, moment, eps);
   Value root = b.create<math::SqrtOp>(loc, safeMoment);
   Value denominator = b.create<arith::AddFOp>(loc, root, eps);
   Value direct = b.create<arith::DivFOp>(
@@ -485,7 +491,7 @@ static void emitAdafactorFullBackwardBody(OpBuilder &b, Location loc,
           loc, b.create<arith::ConstantOp>(
                    loc, f32, b.getF32FloatAttr(2.0f)),
           b.create<arith::MulFOp>(
-              loc, b.create<arith::MaxNumFOp>(loc, root, tiny),
+              loc, b.create<arith::MaximumFOp>(loc, root, tiny),
               denominatorSquared)));
   Value dm = b.create<arith::SelectOp>(loc, active, derivative, zero);
   Value dg = b.create<arith::AddFOp>(

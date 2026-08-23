@@ -72,16 +72,18 @@ void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     y = b.create<math::PowFOp>(loc, a, bb);
     break;
   case Bin::Maximum:
-    // NumPy's maximum/minimum return the second operand on an ordered tie,
-    // which makes signed-zero behavior operand-order-sensitive.
-    y = b.create<arith::SelectOp>(
-        loc, b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OEQ, a, bb),
-        bb, b.create<arith::MaximumFOp>(loc, a, bb));
+    // IEEE-754-2019 contract, fleet-wide decision 2026-08-23: NaN
+    // propagates and signed zeros are ordered (max tie -> +0.0, min tie
+    // -> -0.0) — exactly arith.maximumf/minimumf's own semantics, so emit
+    // them bare. The numpy-emulating `select(a==b, b, ...)` wrapper that
+    // used to sit here returned the SECOND operand on a ±0 tie; numpy's
+    // tie sign is an ISA accident (SSE second operand, NEON IEEE), not a
+    // portable contract. The x86 CPU JIT lane pins the same semantics in
+    // test_jit_tensor_elementwise_totality.py.
+    y = b.create<arith::MaximumFOp>(loc, a, bb);
     break;
   case Bin::Minimum:
-    y = b.create<arith::SelectOp>(
-        loc, b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OEQ, a, bb),
-        bb, b.create<arith::MinimumFOp>(loc, a, bb));
+    y = b.create<arith::MinimumFOp>(loc, a, bb);
     break;
   case Bin::Add:
     y = b.create<arith::AddFOp>(loc, a, bb);

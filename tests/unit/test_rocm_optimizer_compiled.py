@@ -171,6 +171,52 @@ def test_adafactor_factored_multistep():
         p = p_new
 
 
+def test_adafactor_factored_nan_gradient_propagates_like_reference():
+    """gfx1151: a NaN gradient must poison every update sharing its row/col
+    statistic, exactly as the reference does (np.maximum floors propagate
+    NaN). The old maxnumf floors laundered the NaN statistic into eps,
+    giving finite-but-wrong updates to the rest of the poisoned row/col
+    (JIT-MATH-AUDIT-2026-08-23)."""
+    rt = _rocm_or_skip()
+    rng = np.random.default_rng(13)
+    p = rng.standard_normal(SHAPE).astype(np.float32)
+    g = (0.2 * rng.standard_normal(SHAPE)).astype(np.float32)
+    g[1, 2] = np.nan
+    row = rng.uniform(0.1, 0.3, SHAPE[:-1]).astype(np.float32)
+    col = rng.uniform(0.1, 0.3, SHAPE[-1]).astype(np.float32)
+    artifact = rt.RuntimeArtifact(metadata={
+        "target": "rocm",
+        "compiler_path": "rocm_adafactor_compiled",
+        "executable": True,
+        "execution_kind": "native_gpu",
+        "arg_names": ["p", "g", "row", "col"],
+        "output_name": "o",
+        "ops": [{
+            "op_name": "tessera.adafactor",
+            "result": "o",
+            "operands": ["p", "g", "row", "col"],
+            "kwargs": {"lr": 1e-2, "beta2": 0.9, "eps": 1e-6},
+        }],
+    })
+    result = rt.launch(artifact, (p, g, row, col))
+    assert result["ok"] is True, result.get("reason")
+    p_new, row_new, col_new = (
+        np.asarray(value) for value in result["output"])
+    p_ref, state = optim.adafactor(
+        p, g, {"v": {"row": row, "col": col, "factored": True}, "step": 1},
+        lr=1e-2, beta2=0.9, eps=1e-6,
+    )
+    p_ref = np.asarray(p_ref)
+    np.testing.assert_array_equal(
+        np.isnan(row_new), np.isnan(np.asarray(state["v"]["row"])))
+    np.testing.assert_array_equal(
+        np.isnan(col_new), np.isnan(np.asarray(state["v"]["col"])))
+    np.testing.assert_array_equal(np.isnan(p_new), np.isnan(p_ref))
+    assert np.isnan(p_new[1, :]).all() and np.isnan(p_new[:, 2]).all()
+    fin = ~np.isnan(p_ref)
+    np.testing.assert_allclose(p_new[fin], p_ref[fin], atol=2e-5)
+
+
 def test_adafactor_full_moment_vector_multistep():
     rt = _rocm_or_skip()
     rng = np.random.default_rng(13)

@@ -28,31 +28,44 @@ no Metal code, schedule, ABI, or evidence. Apple's existing Philox alignment
 and exact-Mac proof obligations are unchanged.
 
 Cross-backend sync `JIT-ELEMENTWISE-LINALG-2026-08-21` — **shared
-`tessera_jit` pipeline change; Apple outcome: follow-up required
-(M1 Max).** `_jit_boundary.py` loads `libtessera_jit` on Darwin too, so
-the Mac's `@jit(target="cpu")` lane compiles through the extended
-pipeline (`convert-elementwise-to-linalg` after `tessera-to-linalg`).
-Expected parity-neutral by construction — the new pass only rewrites
-tensor-typed elementwise arith/math that previously FAILED bufferization,
-so no previously-working module changes path — but per the claim rules
-that is an expectation, not Apple evidence: rebuild `tessera_jit` on the
-Mac and run `test_native_cpu_jit.py` + the production JIT phase lanes
-there, then record the outcome here.
+`tessera_jit` pipeline change; Apple outcome: parity validated (M1 Max).**
+The fresh `build-apple` JIT now runs MLIR's
+`convert-elementwise-to-linalg` at module scope, so nested control flow and
+generated AD tensor arithmetic share the same pointwise index-space lowering;
+an explicit postcondition rejects any residual tensor-valued elementwise op
+before bufferization.  The native CPU packet (native CPU JIT, production phase
+1/3, paired state machine, and the new arithmetic/math totality matrix) passed
+**70/70**.  Coverage includes add/sub/mul/div, min/max and NaN-number variants,
+cmp/neg/select, scalar-condition whole-tensor select, six tensor math ops,
+dynamic extents, and an executed compiler-generated forward JVP.  The separate
+exact-Metal cross-target packet passed **12/12** using the fresh CPU JIT as its
+oracle.  This is Apple CPU-JIT closure plus Metal parity evidence; it does not
+transfer an x86 or GPU-device implementation through `tessera_jit`.
 
 
 Cross-backend sync `AD-DATUM-POLYGAMMA-2026-08-21` — **autodiff reference
-numerical policy, wave 3; Apple outcome: follow-up required (M1 Max).**
-Same contract change as the rocm entry. Repeat the AD-RETIRE follow-up
-run (PR #602's recipe: GA/EBM smoke + value-lane backward comparisons)
-on the Mac against the wave-3 registry; can share a session with the
-still-open AD-RETIRE-2-2026-08-20 Apple follow-up.
+numerical policy, wave 3; Apple outcome: parity validated (M1 Max).** The
+lgamma/digamma datum-derived pairs and the RMSNorm gamma envelope are covered
+by the switched-registry retirement/datum tests (**51 passed**).  On the exact
+Apple GPU route, a fresh owned `libTesseraAppleRuntime.dylib` passed the
+GA/EBM native-lane and value-lane backward follow-up: `test_apple_gpu_ebm_lane`,
+`test_apple_gpu_clifford_lane`, `test_scheduled_attention_backward_consumers`,
+and `test_apple_flash_attn_backward` reported **37 passed, 23 deselected**
+under `hardware_apple_gpu`.  The latter is execution evidence for the native
+consumers, not a claim that an Apple kernel evaluates the scalar polygamma
+reference directly; as in AD-RETIRE-1, those lanes use their own analytic
+references and fp32 MSL routes.
 
 
 Cross-backend sync `AD-RETIRE-2-2026-08-20` — **autodiff reference numerical
-policy, wave 2; Apple outcome: follow-up required (M1 Max).** Same contract
-change as the rocm entry. The AD-RETIRE-1 key's Apple follow-up landed as
-PR #602; this wave needs the same run repeated on the Mac (GA/EBM smoke +
-value-lane backward comparisons) against the wave-2 registry.
+policy, wave 2; Apple outcome: parity validated (M1 Max).** The structured
+softmax/logsumexp/RMSNorm-core jet-derived pairs and the six datum-grown scalar
+rules pass the switched-registry retirement tests (**51 passed**, shared with
+the wave-3 closure).  The fresh-runtime GA/EBM and value-lane backward packet
+recorded above also passed **37/37** selected exact-Metal tests.  This closes
+the Apple follow-up without transferring ROCm or x86 evidence; the device lanes
+remain analytically referenced and execute their architecture-owned fp32 MSL
+implementations.
 
 
 Cross-backend sync `AD-RETIRE-1-POINTWISE-2026-08-20` — **autodiff reference

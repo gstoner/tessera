@@ -16,11 +16,16 @@ import sys
 # CUDA function symbol substring -> (study kernel name, dtype). Extend as bench.cu
 # grows (int8_ptx_mma_k32, int4_wmma, cublasLt, ...).
 SYMBOL_MAP = [
+    ("wmma_fp16_int4_emulated", ("int4_wmma_preexpanded_fp16", "int4")),
     ("wmma_fp16",       ("fp16_wmma", "fp16")),
+    ("int4_native_k64_3stage", ("int4_ptx_3stage", "int4")),
     ("int4_native_k64", ("int4_ptx_mma_k64", "int4")),
-    ("int8_wmma",       ("int8_wmma", "int8")),
-    ("int8_ptx_k32",    ("int8_ptx_mma_k32", "int8")),
-    ("int4_wmma",       ("int4_wmma", "int4")),
+    ("int8_native_k32", ("int8_ptx_mma_k32", "int8")),
+    ("nvjet_sm120_bii", ("cublaslt_int8", "int8")),
+    # cuBLASLt's internal kernel names are toolkit-specific.  This signature is
+    # emitted by CUDA 13.3 on SM120; retain it as an explicit parser contract.
+    ("nvjet_sm120",     ("cublaslt_fp16", "fp16")),
+    ("cutlass_80_tensorop_s16816gemm_f16", ("cublaslt_fp16", "fp16")),
 ]
 
 KEYMAP = {
@@ -59,7 +64,8 @@ def main() -> int:
         m, v = r.get("Metric Name", ""), r.get("Metric Value", "")
         name, dt = classify(sym)
         key = name
-        rows.setdefault(key, {"kernel": name, "dtype": dt, "n": n})
+        rows.setdefault(key, {"kernel": name, "dtype": dt, "n": n,
+                              "profiling_scope": "main_kernel"})
         if m in KEYMAP:
             try:
                 val = float(str(v).replace(",", ""))

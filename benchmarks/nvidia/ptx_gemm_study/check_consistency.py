@@ -100,10 +100,12 @@ def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
             _fail(errs, f"speedup mismatch {r['kernel']}@{n}: "
                         f"reported {sp:.3f} vs latency ratio {expect:.3f}")
 
-    # 4) AI doubling: for a fixed kernel-role and n, theoretical AI must scale
-    #    inversely with bytes/elem across precisions.
+    # 4) AI scaling: operand bytes shrink by precision, but the output store is
+    #    always four bytes here (f32/s32).  Therefore it is *not* a literal 2x
+    #    doubling: AI(bpe) = 2N / (2*bpe + 4).  This catches a real accounting
+    #    drift without falsely rejecting the correct output-inclusive model.
     ai_by = defaultdict(dict)  # (role,n) -> {dtype: ai_theoretical}
-    for r in rows:
+    for r in measured:
         ai = r.get("ai_theoretical")
         if ai is None:
             continue
@@ -111,11 +113,13 @@ def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
         ai_by[(r.get("role", "opt"), n)][r.get("dtype")] = ai
     for (_role, _n), d in ai_by.items():
         if "fp16" in d and "int8" in d:
-            if abs(d["int8"] / d["fp16"] - 2.0) > AI_TOL:
-                _fail(errs, f"AI ratio int8/fp16 != 2 at n={_n}: {d['int8']/d['fp16']:.3f}")
+            expect = (2 * BYTES_PER_ELEM["fp16"] + 4) / (2 * BYTES_PER_ELEM["int8"] + 4)
+            if abs(d["int8"] / d["fp16"] - expect) > AI_TOL:
+                _fail(errs, f"AI ratio int8/fp16 != {expect:.3f} at n={_n}: {d['int8']/d['fp16']:.3f}")
         if "int8" in d and "int4" in d:
-            if abs(d["int4"] / d["int8"] - 2.0) > AI_TOL:
-                _fail(errs, f"AI ratio int4/int8 != 2 at n={_n}: {d['int4']/d['int8']:.3f}")
+            expect = (2 * BYTES_PER_ELEM["int8"] + 4) / (2 * BYTES_PER_ELEM["int4"] + 4)
+            if abs(d["int4"] / d["int8"] - expect) > AI_TOL:
+                _fail(errs, f"AI ratio int4/int8 != {expect:.3f} at n={_n}: {d['int4']/d['int8']:.3f}")
 
     # 5) cross-check ncu durations against event medians (C2) — mismatch reported,
     #    never silently used.
@@ -126,7 +130,12 @@ def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
             n = c.get("n") or c.get("shape", [None])[0]
             k = (c.get("kernel"), c.get("dtype"), n)
             ncu_ms = c.get("ncu_duration_ms")
-            if k in med and ncu_ms:
+            timing_scope = next((r.get("timing_scope", "kernel") for r in measured
+                                 if (r["kernel"], r.get("dtype"), r.get("n") or r.get("shape", [None])[0]) == k), None)
+            # NCU reports a library's selected internal kernel; CUDA events
+            # measure its public call.  The two scopes are recorded together
+            # but intentionally not compared as if they were one duration.
+            if k in med and ncu_ms and timing_scope == "kernel":
                 rel = abs(ncu_ms - med[k]) / max(med[k], 1e-12)
                 if rel > DUR_XCHECK_TOL:
                     _fail(errs, f"ncu vs event duration divergence {k}: "
@@ -142,10 +151,10 @@ def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
 def _selftest() -> int:
     good = [
         {"kernel": "fp16_wmma", "dtype": "fp16", "n": 2048, "latency_ms": 11.85,
-         "tflops": (2*2048**3)/(11.85/1e3)/1e12, "ai_theoretical": 2.73,
+         "tflops": (2*2048**3)/(11.85/1e3)/1e12, "ai_theoretical": 512.0,
          "cov": 0.01, "clocks_locked": False, "role": "opt"},
         {"kernel": "int8_wmma", "dtype": "int8", "n": 2048, "latency_ms": 8.55,
-         "tflops": (2*2048**3)/(8.55/1e3)/1e12, "ai_theoretical": 5.46,
+         "tflops": (2*2048**3)/(8.55/1e3)/1e12, "ai_theoretical": 682.6666667,
          "cov": 0.01, "clocks_locked": False, "role": "opt"},
         {"kernel": "int8_ptx_mma_k32", "dtype": "int8", "n": 2048, "latency_ms": 5.41,
          "tflops": (2*2048**3)/(5.41/1e3)/1e12, "speedup_vs_wmma": 8.55/5.41,

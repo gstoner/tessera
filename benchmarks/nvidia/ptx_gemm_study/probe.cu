@@ -24,6 +24,8 @@
 #include <vector>
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
+#include <cuda_bf16.h>
+#include <cuda_fp8.h>
 
 #define CK(x) do { cudaError_t e=(x); if(e!=cudaSuccess){ \
   fprintf(stderr,"CUDA error %s at %s:%d\n",cudaGetErrorString(e),__FILE__,__LINE__); \
@@ -52,14 +54,17 @@ __global__ void mma_fp16_m16n8k16(const __half* A, const __half* B, float* C) {
   uint32_t a[4], b[2]; float c[4] = {0,0,0,0};
   const uint32_t* A32 = reinterpret_cast<const uint32_t*>(A);
   const uint32_t* B32 = reinterpret_cast<const uint32_t*>(B);
-  // A: row = lane%16 ... two k-groups; see ISA. Kept explicit for validation.
+  // PTX m16n8 accumulator ownership: group ID is the output row pair and
+  // B-column; thread-in-group selects the K sub-fragment.  B is supplied in
+  // its documented column-major physical form, hence each .b32 packs two
+  // consecutive K values of one output column.
   int gr = lane >> 2, tc = lane & 3;
   a[0] = A32[(gr)      *8 + tc];
   a[1] = A32[(gr+8)    *8 + tc];
   a[2] = A32[(gr)      *8 + tc + 4];
   a[3] = A32[(gr+8)    *8 + tc + 4];
-  b[0] = B32[(tc)      *4 + gr%4]; // placeholder col-major mapping; CPU cmp gates
-  b[1] = B32[(tc+4)    *4 + gr%4];
+  b[0] = B32[gr * 8 + tc];
+  b[1] = B32[gr * 8 + tc + 4];
   asm volatile(
     "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 "
     "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};"
@@ -68,6 +73,48 @@ __global__ void mma_fp16_m16n8k16(const __half* A, const __half* B, float* C) {
   // store per-lane accumulator (row = gr + 8*(i/2), col = 2*tc + i%2)
   for (int i=0;i<4;i++){ int row = gr + 8*(i/2); int col = 2*tc + (i%2); C[row*8+col]=c[i]; }
 }
+
+// ======================= BF16 m16n8k16 =====================================
+// BF16 has the same physical fragment map as FP16: two adjacent 16-bit values
+// in each A/B .b32 register and four f32 accumulator registers per lane.
+__global__ void mma_bf16_m16n8k16(const __nv_bfloat16* A,
+                                  const __nv_bfloat16* B, float* C) {
+  int lane = threadIdx.x & 31;
+  const uint32_t* A32 = reinterpret_cast<const uint32_t*>(A);
+  const uint32_t* B32 = reinterpret_cast<const uint32_t*>(B);
+  int gr = lane >> 2, tc = lane & 3;
+  uint32_t a0=A32[gr*8+tc], a1=A32[(gr+8)*8+tc];
+  uint32_t a2=A32[gr*8+tc+4], a3=A32[(gr+8)*8+tc+4];
+  uint32_t b0=B32[gr*8+tc], b1=B32[gr*8+tc+4];
+  float c[4]={0,0,0,0};
+  asm volatile(
+    "mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 "
+    "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};"
+    : "+f"(c[0]),"+f"(c[1]),"+f"(c[2]),"+f"(c[3])
+    : "r"(a0),"r"(a1),"r"(a2),"r"(a3),"r"(b0),"r"(b1));
+  for(int i=0;i<4;i++){ int row=gr+8*(i/2), col=2*tc+(i%2); C[row*8+col]=c[i]; }
+}
+
+// ======================= FP8 m16n8k32 ======================================
+// E4M3/E5M2 use four packed bytes in every .b32 operand register.  Their lane
+// coordinates are the same canonical m16n8 K32 map used by INT8.
+#define DEFINE_FP8_MMA(NAME, TYPE) \
+__global__ void NAME(const uint8_t* A, const uint8_t* B, float* C) { \
+  int lane=threadIdx.x&31, gr=lane>>2, tc=lane&3; \
+  const uint32_t* A32=reinterpret_cast<const uint32_t*>(A); \
+  const uint32_t* B32=reinterpret_cast<const uint32_t*>(B); \
+  uint32_t a0=A32[gr*8+tc],a1=A32[(gr+8)*8+tc]; \
+  uint32_t a2=A32[gr*8+tc+4],a3=A32[(gr+8)*8+tc+4]; \
+  uint32_t b0=B32[gr*8+tc],b1=B32[gr*8+tc+4]; float c[4]={0,0,0,0}; \
+  asm volatile("mma.sync.aligned.m16n8k32.row.col.f32." TYPE "." TYPE ".f32 " \
+    "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};" \
+    : "+f"(c[0]),"+f"(c[1]),"+f"(c[2]),"+f"(c[3]) \
+    : "r"(a0),"r"(a1),"r"(a2),"r"(a3),"r"(b0),"r"(b1)); \
+  for(int i=0;i<4;i++){int row=gr+8*(i/2),col=2*tc+(i%2);C[row*8+col]=c[i];} \
+}
+DEFINE_FP8_MMA(mma_fp8_e4m3_m16n8k32, "e4m3")
+DEFINE_FP8_MMA(mma_fp8_e5m2_m16n8k32, "e5m2")
+#undef DEFINE_FP8_MMA
 
 // ======================= INT8 m16n8k32 ======================================
 __global__ void mma_int8_m16n8k32(const int8_t* A, const int8_t* B, int32_t* C) {
@@ -78,7 +125,7 @@ __global__ void mma_int8_m16n8k32(const int8_t* A, const int8_t* B, int32_t* C) 
   int gr = lane >> 2, tc = lane & 3;
   a[0]=A32[gr*8+tc];   a[1]=A32[(gr+8)*8+tc];
   a[2]=A32[gr*8+tc+4]; a[3]=A32[(gr+8)*8+tc+4];
-  b[0]=B32[tc*4+gr%4]; b[1]=B32[(tc+4)*4+gr%4];
+  b[0]=B32[gr*8+tc]; b[1]=B32[gr*8+tc+4];
   asm volatile(
     "mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32 "
     "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};"
@@ -98,7 +145,7 @@ __global__ void mma_int4_m16n8k64(const uint32_t* A, const uint32_t* B, int32_t*
   int gr = lane >> 2, tc = lane & 3;
   a[0]=A[gr*8+tc];   a[1]=A[(gr+8)*8+tc];
   a[2]=A[gr*8+tc+4]; a[3]=A[(gr+8)*8+tc+4];
-  b[0]=B[tc*4+gr%4]; b[1]=B[(tc+4)*4+gr%4];
+  b[0]=B[gr*8+tc]; b[1]=B[gr*8+tc+4];
   asm volatile(
     "mma.sync.aligned.m16n8k64.row.col.s32.s4.s4.s32 "
     "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};"
@@ -151,6 +198,59 @@ int main(){
     emit("fp16_m16n8k16","mma.sync.m16n8k16.f32.f16.f16.f32",
          ok?(err<1e-1?"native_ok":"ran_wrong_layout"):"exec_fail",err);
     cudaFree(dA);cudaFree(dB);cudaFree(dC);
+  }
+
+  // ---- INT8 ----
+  // ---- BF16 ----
+  {
+    int M=16,N=8,K=16; std::vector<float> Af(M*K),Bf(N*K),Cref(M*N);
+    for(auto&x:Af)x=(rand()%7-3); for(auto&x:Bf)x=(rand()%7-3);
+    cpu_gemm_f(Af,Bf,Cref,M,N,K);
+    std::vector<__nv_bfloat16> Ab(M*K),Bb(N*K);
+    for(int i=0;i<M*K;i++)Ab[i]=__float2bfloat16(Af[i]);
+    for(int i=0;i<N*K;i++)Bb[i]=__float2bfloat16(Bf[i]);
+    __nv_bfloat16*dA,*dB; float*dC; CK(cudaMalloc(&dA,Ab.size()*sizeof(*dA)));CK(cudaMalloc(&dB,Bb.size()*sizeof(*dB)));CK(cudaMalloc(&dC,M*N*4));
+    CK(cudaMemcpy(dA,Ab.data(),Ab.size()*sizeof(*dA),cudaMemcpyHostToDevice));
+    CK(cudaMemcpy(dB,Bb.data(),Bb.size()*sizeof(*dB),cudaMemcpyHostToDevice));
+    mma_bf16_m16n8k16<<<1,32>>>(dA,dB,dC);
+    bool ok=launch_ok("bf16"); std::vector<float>Cg(M*N); double err=1e9;
+    if(ok){CK(cudaMemcpy(Cg.data(),dC,M*N*4,cudaMemcpyDeviceToHost));err=0;
+      for(int i=0;i<M*N;i++)err=fmax(err,fabs(Cg[i]-Cref[i]));}
+    emit("bf16_m16n8k16","mma.sync.m16n8k16.f32.bf16.bf16.f32",
+         ok?(err<1e-1?"native_ok":"ran_wrong_layout"):"exec_fail",err);
+    cudaFree(dA);cudaFree(dB);cudaFree(dC);
+  }
+
+  // ---- FP8 E4M3 / E5M2 ----
+  // Small integer inputs are exactly representable by both formats, so an exact
+  // integer-valued f32 reference catches fragment/packing errors independently
+  // of FP8 quantization tolerance.
+  {
+    static_assert(sizeof(__nv_fp8_e4m3)==1 && sizeof(__nv_fp8_e5m2)==1,
+                  "FP8 storage must be byte-addressable");
+    int M=16,N=8,K=32; std::vector<float> Af(M*K),Bf(N*K),Cref(M*N);
+    for(auto&x:Af)x=(rand()%7-3); for(auto&x:Bf)x=(rand()%7-3);
+    cpu_gemm_f(Af,Bf,Cref,M,N,K);
+    auto run_fp8=[&](const char* name,const char* ptx,auto convert,auto kernel){
+      std::vector<uint8_t> Ab(M*K),Bb(N*K);
+      for(int i=0;i<M*K;i++)Ab[i]=convert(Af[i]);
+      for(int i=0;i<N*K;i++)Bb[i]=convert(Bf[i]);
+      uint8_t*dA,*dB; float*dC; CK(cudaMalloc(&dA,Ab.size()));CK(cudaMalloc(&dB,Bb.size()));CK(cudaMalloc(&dC,M*N*4));
+      CK(cudaMemcpy(dA,Ab.data(),Ab.size(),cudaMemcpyHostToDevice));
+      CK(cudaMemcpy(dB,Bb.data(),Bb.size(),cudaMemcpyHostToDevice));
+      kernel<<<1,32>>>(dA,dB,dC);
+      bool ok=launch_ok(name); std::vector<float>Cg(M*N); double err=1e9;
+      if(ok){CK(cudaMemcpy(Cg.data(),dC,M*N*4,cudaMemcpyDeviceToHost));err=0;
+        for(int i=0;i<M*N;i++)err=fmax(err,fabs(Cg[i]-Cref[i]));}
+      emit(name,ptx,ok?(err<1e-3?"native_ok":"ran_wrong_layout"):"exec_fail",err);
+      cudaFree(dA);cudaFree(dB);cudaFree(dC);
+    };
+    run_fp8("fp8_e4m3_m16n8k32","mma.sync.m16n8k32.f32.e4m3.e4m3.f32",
+            [](float x){ return static_cast<uint8_t>(__nv_fp8_e4m3(x).__x); },
+            mma_fp8_e4m3_m16n8k32);
+    run_fp8("fp8_e5m2_m16n8k32","mma.sync.m16n8k32.f32.e5m2.e5m2.f32",
+            [](float x){ return static_cast<uint8_t>(__nv_fp8_e5m2(x).__x); },
+            mma_fp8_e5m2_m16n8k32);
   }
 
   // ---- INT8 ----

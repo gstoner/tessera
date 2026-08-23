@@ -9,7 +9,7 @@ ifdef NO_INT4
 FLAGS  += -DNO_INT4_MMA
 endif
 
-all: probe bench
+all: probe bench stage_probe
 
 probe: probe.cu
 	$(NVCC) $(FLAGS) -o $@ $<
@@ -17,8 +17,11 @@ probe: probe.cu
 bench: bench.cu
 	$(NVCC) $(FLAGS) -o $@ $< -lcublasLt
 
+stage_probe: stage_probe.cu
+	$(NVCC) $(FLAGS) -o $@ $<
+
 clean:
-	rm -f probe bench
+	rm -f probe bench stage_probe
 
 # convenience: prove the toolchain accepts the arch before anything else
 archcheck:

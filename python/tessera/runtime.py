@@ -41934,13 +41934,17 @@ def _apple_gpu_dispatch_unary(op_name: str, operands: list[Any], np: Any) -> Any
 
 def _apple_gpu_binary_numpy(op_name: str, a: Any, b: Any, np: Any) -> Any:
     """Host reference matching apple_gpu_runtime.mm mpsg_binary_node."""
+    from . import _ieee_minmax
+
     return {
         "tessera.add": lambda x, y: x + y,
         "tessera.sub": lambda x, y: x - y,
         "tessera.mul": lambda x, y: x * y,
         "tessera.div": lambda x, y: x / y,
-        "tessera.maximum": np.maximum,
-        "tessera.minimum": np.minimum,
+        # IEEE tie ordering on every route — np.maximum's ±0 tie sign is
+        # host-ISA-dependent (see tessera._ieee_minmax).
+        "tessera.maximum": _ieee_minmax.ieee_maximum,
+        "tessera.minimum": _ieee_minmax.ieee_minimum,
         "tessera.pow": np.power,
         "tessera.atan2": np.arctan2,
         "tessera.mod": lambda x, y: x - y * np.floor(x / y),

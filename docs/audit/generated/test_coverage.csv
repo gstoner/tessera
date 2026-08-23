@@ -2,7 +2,7 @@ op,python_refs,lit_refs,negative_refs,total_refs,is_thinly_tested,dtype_variants
 abs,6,0,1,6,0,bf16 f32,directly_tested,6 direct test references
 absolute,6,0,0,6,0,bf16 f32 fp16 fp32,directly_tested,6 direct test references
 acos,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
-adafactor,18,0,0,18,0,fp32 fp64,directly_tested,18 direct test references
+adafactor,21,0,0,21,0,fp32 fp64,directly_tested,21 direct test references
 adam,22,5,1,27,0,bf16 f16 fp16 fp32 fp64 fp8_e4m3,directly_tested,27 direct test references
 adamw,16,5,0,21,0,fp32 fp64,directly_tested,21 direct test references
 adaptive_pool,7,0,0,7,0,fp32,directly_tested,7 direct test references
@@ -290,7 +290,7 @@ matmul,483,277,23,760,0,bf16 f16 f32 f64 fp16 fp32 fp4_e2m1 fp64 fp6_e2m3 fp6_e3
 matrix_power,1,0,0,1,1,fp32,structural_only,unclassified — defaults to structural_only
 max,9,0,2,9,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,9 direct test references
 max_pool,6,0,0,6,0,,directly_tested,6 direct test references
-maximum,11,0,2,11,0,bf16 f32 fp16 fp32,directly_tested,11 direct test references
+maximum,14,0,1,14,0,bf16 f32 fp16 fp32,directly_tested,14 direct test references
 mean,23,0,2,23,0,bf16 f16 f32 fp16 fp32 int32 int64,directly_tested,23 direct test references
 memory_evict,5,0,1,5,0,,directly_tested,5 direct test references
 memory_index_score,9,0,1,9,0,,directly_tested,9 direct test references
@@ -300,7 +300,7 @@ memory_read,26,0,1,26,0,fp16,directly_tested,26 direct test references
 memory_write,6,0,0,6,0,,directly_tested,6 direct test references
 min,3,0,0,3,0,bf16 f32,directly_tested,3 direct test references
 min_pool,5,0,0,5,0,fp32,directly_tested,5 direct test references
-minimum,12,0,2,12,0,bf16 f32 fp16 fp32,directly_tested,12 direct test references
+minimum,15,0,1,15,0,bf16 f32 fp16 fp32,directly_tested,15 direct test references
 mla_decode,5,0,0,5,0,,directly_tested,5 direct test references
 mla_decode_fused,11,9,0,20,0,,directly_tested,20 direct test references
 mobius,4,0,0,4,0,,directly_tested,4 direct test references

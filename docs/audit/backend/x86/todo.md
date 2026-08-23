@@ -40,6 +40,35 @@ generated forward JVP, but that evidence does not transfer to AVX-512.  Repeat
 native-JIT packet on the x86 host to close the widened claim.
 
 
+Cross-backend sync `IEEE-MINMAX-CONTRACT-2026-08-23` — **x86 outcome:
+VALIDATED (AVX-512 host).** The fleet-wide IEEE-754-2019 ±0-tie
+decision (rocm plan owns the key) lands here in three routes: the
+AVX-512 binary shim (`avx512_binary_f32.cpp` — scalar tail was
+`a > b ? a : b`, vector body `vmaxps`, both second-operand-on-tie; now
+signbit-select / bitwise AND-OR tie blend), and the two
+backend-neutral numpy routes the codex review caught as still
+route-dependent: the eager op namespace (`__init__.py` maximum/minimum)
+and the Apple-lane numpy fallback (`_apple_gpu_binary_numpy`) now share
+one reference implementation (`tessera/_ieee_minmax.py`, Decision #31)
+instead of delegating to np.maximum/np.minimum, whose tie sign is
+host-ISA-dependent (SSE second operand, NEON IEEE). Pinned by
+`test_x86_binary_max_min_signed_zero_ties_are_ieee_ordered` (n=19:
+vector body + scalar tail) and the route-consistency tests in
+`test_ieee_minmax_reference.py`.
+
+
+Cross-backend sync `JIT-MATH-AUDIT-FIXES-2026-08-23` — **x86 outcome:
+VALIDATED (AVX-512 host).** The Adafactor NaN-floor fix (rocm plan owns
+the key): the AVX-512 optimizer shim floored second-moment statistics
+with `std::fmax` (NaN-suppressing), laundering a NaN statistic into eps
+— identical to the ROCm maxnumf defect. All 13 floors now go through a
+NaN-propagating helper; exact-host test
+(`test_adafactor_factored_nan_gradient_propagates_like_reference`)
+proves a NaN gradient poisons the full row+col exactly as the optim.py
+reference does. The softmax maxnumf change is ROCm-kernel-only — no
+x86 surface compiles through it.
+
+
 Cross-backend sync `W4-SM-ROCM-2026-08-21` — **W4-PRODUCT-1 x86 outcome:
 VALIDATED (AVX-512 host, 2026-08-21).** The sibling row landed: the same
 paired `bounded_state_machine_v1` functions (forward + recompute_all

@@ -4259,10 +4259,14 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return np.trunc(_unwrap(x))
 
     def minimum(x, y):
-        return np.minimum(_unwrap(x), _unwrap(y))
+        # IEEE-754-2019 tie ordering (min tie -> -0.0), not np.minimum:
+        # numpy's ±0 tie sign is host-ISA-dependent — see _ieee_minmax.
+        from ._ieee_minmax import ieee_minimum
+        return ieee_minimum(_unwrap(x), _unwrap(y))
 
     def maximum(x, y):
-        return np.maximum(_unwrap(x), _unwrap(y))
+        from ._ieee_minmax import ieee_maximum
+        return ieee_maximum(_unwrap(x), _unwrap(y))
 
     def isnan(x):
         return np.isnan(_unwrap(x))

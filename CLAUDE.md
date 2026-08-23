@@ -562,6 +562,40 @@ ninja -C build check-tessera-rocm                # the ROCm backend suite
 bash scripts/validate.sh                         # CPU validation spine
 ```
 
+**On the ROCm box, source the toolkit env before pytest — a bare sweep is not a
+valid ROCm result.** TheRock installs under `/opt/rocm/core` but exports
+`ROCM_PATH` / `PATH` / `LD_LIBRARY_PATH` only from an *interactive* `.bashrc`,
+which an `ssh <host> <cmd>`, a CI step, or a bare `pytest` never sources:
+
+```bash
+source .venv/bin/activate && source scripts/_rocm_env.sh
+PYTHONPATH=python python -m pytest tests/unit/ -q -m "not slow"
+```
+
+`scripts/_rocm_env.sh` detects the toolkit by capability (does this root have
+`ld.lld`?), respects an already-exported `ROCM_PATH`, and is a **silent no-op on
+a host with no ROCm** — it never fabricates a device, so Mac/NVIDIA boxes still
+skip those lanes honestly (Decision #26). `scripts/validate.sh` sources it
+automatically.
+
+Skipping it produces two failures that look like compiler bugs but are neither
+(root-caused 2026-08-23):
+
+| Symptom | Real cause |
+|---|---|
+| Every compiled ROCm lane fails at hsaco serialization with `error: lld invocation failed` | MLIR's ROCDL `gpu-module-to-binary` finds `ld.lld` through `ROCM_PATH`. Unset ⇒ no linker. This alone accounted for ~1531 of a 1591-failure bare sweep. |
+| A concentrated device sweep **segfaults** partway through | `libamdhip64`'s transitive deps (comgr/hsa) resolve via the loader; `ldconfig` on that box knows only a stale ROCm 5, so without `LD_LIBRARY_PATH` they bind against the wrong ROCm. |
+
+**Why a shell script and not a pytest `conftest` hook:** glibc reads
+`LD_LIBRARY_PATH` **only at process startup**. A conftest that sets
+`os.environ` cannot repair its own already-running process — and re-exec'ing
+from inside pytest silently loses the output stream (verified: the run reports
+nothing and exits 0). The env must exist *before* the interpreter starts.
+The Python side is still defended independently: `runtime.py` and
+`compiler/rocm_native.py` pass a detected `ROCM_PATH` to every `tessera-opt`
+serializer subprocess, so the *compiled lanes* work even from a bare shell; the
+script is what the in-process HIP device tests additionally need.
+
 **Build all targets before pushing, not one.** `ninja -C build tessera-opt`
 links `MLIROptLib`'s broad dependency set and will hide a missing link library
 that the standalone `tessera-rocm-opt` — which the local ROCm gate builds —

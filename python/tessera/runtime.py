@@ -6229,6 +6229,99 @@ def _tessera_opt_path() -> Optional[Path]:
     return p if p.is_file() else None
 
 
+_rocm_toolkit_root_cache: Any = False  # False = unprobed; None/Path after
+
+
+#: Directories, relative to a ROCm toolkit root, that can hold its LLVM tools.
+#: Ordered longest-first so stripping one off a discovered tool path yields the
+#: toolkit root itself rather than an inner directory.
+_ROCM_TOOL_RELDIRS = ("lib/llvm/bin", "llvm/bin", "bin")
+
+
+def _rocm_lld_under(root: Path) -> Optional[Path]:
+    """Return the ``ld.lld`` the ROCDL serializer would use under a toolkit root,
+    or ``None``. TheRock (``/opt/rocm/core``) ships it at ``llvm/bin`` and mirrors
+    it at ``lib/llvm/bin``; a classic install keeps it at ``llvm/bin``."""
+    for rel in _ROCM_TOOL_RELDIRS:
+        cand = root / rel / "ld.lld"
+        try:
+            if cand.is_file():
+                return cand
+        except OSError:
+            continue
+    return None
+
+
+def _rocm_toolkit_root() -> Optional[Path]:
+    """Locate the ROCm toolkit root that holds ``ld.lld`` (cached; never raises).
+
+    MLIR's ROCDL ``gpu-module-to-binary`` serializer finds ``ld.lld`` through the
+    ``ROCM_PATH`` environment variable. A non-interactive shell (an ``ssh``
+    command, a bare ``pytest``) never sources the interactive ``.bashrc`` that
+    exports it, so the serializer cannot find lld and fails the whole compiled
+    lane with ``"lld invocation failed"`` (root-caused 2026-08-23). Detect the
+    toolkit ourselves so the lane does not depend on inherited shell state:
+    ``ROCM_PATH``/``HIP_PATH`` win, then the packaged locations, then a toolkit
+    derived from an ``ld.lld``/``amdgpu-arch`` already on ``PATH``. ``None`` when
+    no toolkit with a usable ``ld.lld`` exists."""
+    global _rocm_toolkit_root_cache
+    if _rocm_toolkit_root_cache is not False:
+        return _rocm_toolkit_root_cache
+    _rocm_toolkit_root_cache = None
+    candidates: list[Path] = []
+    for name in ("ROCM_PATH", "HIP_PATH"):
+        val = os.environ.get(name)
+        if val:
+            candidates.append(Path(val))
+    candidates += [Path("/opt/rocm/core"), Path("/opt/rocm")]
+    for tool in ("ld.lld", "amdgpu-arch", "amdclang"):
+        found = shutil.which(tool)
+        if not found:
+            continue
+        # Strip the tool's own directory suffix to get the toolkit ROOT. Walking
+        # `parents` by index cannot do this: the tool sits three levels down for
+        # <root>/lib/llvm/bin but only one for <root>/bin, so a fixed slice
+        # either skips the root or returns an inner directory as ROCM_PATH.
+        # Longest suffix first, so <root>/lib/llvm/bin yields <root>, not <root>/lib.
+        tool_dir = Path(found).resolve().parent
+        for rel in _ROCM_TOOL_RELDIRS:
+            suffix = Path(rel).parts
+            if tool_dir.parts[-len(suffix):] == suffix:
+                candidates.append(Path(*tool_dir.parts[: -len(suffix)]))
+                break
+    for root in candidates:
+        try:
+            if root.is_dir() and _rocm_lld_under(root) is not None:
+                _rocm_toolkit_root_cache = root
+                return root
+        except OSError:
+            continue
+    return None
+
+
+def _rocm_serializer_env() -> Optional[dict[str, str]]:
+    """Environment for the ``tessera-opt`` ROCm serializer subprocess.
+
+    Returns ``None`` (inherit the current environment unchanged) when
+    ``ROCM_PATH`` already points at a usable toolkit; otherwise a copy of
+    ``os.environ`` with ``ROCM_PATH`` and ``PATH`` pointed at the detected
+    toolkit so the ROCDL ``ld.lld`` link succeeds without an interactive shell.
+    Returns ``None`` when no toolkit is found, so the serializer still fails with
+    its own real diagnostic rather than a silently wrong one (Decision #21)."""
+    existing = os.environ.get("ROCM_PATH")
+    if existing and _rocm_lld_under(Path(existing)) is not None:
+        return None
+    root = _rocm_toolkit_root()
+    if root is None:
+        return None
+    env = os.environ.copy()
+    env["ROCM_PATH"] = str(root)
+    lld = _rocm_lld_under(root)
+    if lld is not None:
+        env["PATH"] = os.pathsep.join([str(lld.parent), env.get("PATH", "")])
+    return env
+
+
 def _rocm_chip() -> str:
     return os.environ.get("TESSERA_ROCM_CHIP", "gfx1151")
 
@@ -6405,7 +6498,7 @@ def _build_compiled_gemm_hsaco(
     ).pass_pipeline()
     import subprocess
 
-    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True, env=_rocm_serializer_env())
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
         _rocm_compiled_failed(
             "tessera-opt did not serialize the compiled GEMM in-process "
@@ -6487,6 +6580,7 @@ def _build_canonical_gemm_hsaco(
         input=source,
         capture_output=True,
         text=True,
+        env=_rocm_serializer_env(),
     )
     if result.returncode != 0 or "gpu.binary" not in result.stdout:
         _rocm_compiled_failed(f"canonical M/N/K ROCm GEMM did not serialize: {result.stderr[:400]}")
@@ -6526,11 +6620,35 @@ def _pack_signed_int4(values):
     return np.ascontiguousarray(packed).view(np.int8)
 
 
+def _load_hip_from_toolkit() -> ctypes.CDLL | None:
+    """Load ``libamdhip64`` from the detected ROCm toolkit by absolute path.
+
+    Fallback for when the bare soname does not resolve: a non-interactive shell
+    has no ``LD_LIBRARY_PATH``, and ``ldconfig`` may know only a stale ROCm
+    (e.g. ``libamdhip64.so.5``) — so the plain name either fails outright or
+    resolves to the WRONG ROCm (root-caused 2026-08-23). Loading from the same
+    toolkit whose ``ld.lld`` built the hsaco keeps the runtime and the code
+    object on one ROCm. ``None`` when no toolkit or no library is found."""
+    root = _rocm_toolkit_root()
+    if root is None:
+        return None
+    for rel in ("lib/libamdhip64.so", "lib/libamdhip64.so.7"):
+        cand = root / rel
+        try:
+            if not cand.is_file():
+                continue
+            return ctypes.CDLL(str(cand), mode=ctypes.RTLD_LOCAL)
+        except OSError:
+            continue
+    return None
+
+
 def _load_hip_for_launch() -> ctypes.CDLL | None:
     """Load libamdhip64 with the module-launch ABI bound (cached)."""
     global _rocm_hip_launch_lib
     if _rocm_hip_launch_lib is not None:
         return _rocm_hip_launch_lib
+    hip: ctypes.CDLL | None
     try:
         # Calls go through this handle; generated modules do not require HIP's
         # host symbols to be promoted process-wide. RTLD_GLOBAL promotion after
@@ -6538,6 +6656,8 @@ def _load_hip_for_launch() -> ctypes.CDLL | None:
         # double-free reproduced by the compiled GEMM tests.
         hip = ctypes.CDLL("libamdhip64.so", mode=ctypes.RTLD_LOCAL)
     except OSError:
+        hip = _load_hip_from_toolkit()
+    if hip is None:
         return None
     hip.hipInit.argtypes = [ctypes.c_uint]
     hip.hipMalloc.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
@@ -7214,7 +7334,7 @@ def _build_compiled_flash_attn_hsaco(
     ).pass_pipeline()
     import subprocess
 
-    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True, env=_rocm_serializer_env())
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
         _rocm_compiled_failed(
             f"tessera-opt did not serialize the compiled flash_attn in-process (rc={r.returncode}): {r.stderr[:400]}"
@@ -7543,7 +7663,7 @@ def _build_compiled_flash_attn_bwd_hsaco(
     ).pass_pipeline()
     import subprocess
 
-    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True, env=_rocm_serializer_env())
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
         _rocm_compiled_failed(
             "tessera-opt did not serialize the compiled flash_attn backward "
@@ -10222,7 +10342,7 @@ def _build_compiled_softmax_hsaco(dtype: str = "f32") -> bytes:
     ).pass_pipeline()
     import subprocess
 
-    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True)
+    r = subprocess.run([str(opt), "-", f"--pass-pipeline={pipeline}"], input=directive, capture_output=True, text=True, env=_rocm_serializer_env())
     if r.returncode != 0 or "gpu.binary" not in r.stdout:
         _rocm_compiled_failed(
             f"tessera-opt did not serialize the compiled softmax in-process (rc={r.returncode}): {r.stderr[:400]}"
@@ -21855,6 +21975,7 @@ def _build_rocm_family_hsaco(family: str, directive: str, cache: dict, key: tupl
         input=directive,
         capture_output=True,
         text=True,
+        env=_rocm_serializer_env(),
     )
     if result.returncode != 0 or "gpu.binary" not in result.stdout:
         _rocm_compiled_failed(

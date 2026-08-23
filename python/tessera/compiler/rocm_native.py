@@ -314,6 +314,31 @@ def _version_fingerprint(tool: Path) -> str:
     return hashlib.sha256((text or str(tool)).encode()).hexdigest()
 
 
+def _serializer_env() -> dict[str, str] | None:
+    """Environment for the tessera-opt ROCm serializer subprocess.
+
+    MLIR's ROCDL ``gpu-module-to-binary`` finds ``ld.lld`` through ``ROCM_PATH``.
+    A non-interactive shell (ssh, a bare ``pytest``) never sources the
+    interactive ``.bashrc`` that exports it, so the serializer fails the native
+    packaging with ``"lld invocation failed"`` (root-caused 2026-08-23). We
+    already resolve the toolkit via :func:`_rocm_path`; propagate it as
+    ``ROCM_PATH`` (and put its ``ld.lld`` on ``PATH``) so the link succeeds
+    without inherited shell state. Returns ``None`` (inherit unchanged) when
+    ``ROCM_PATH`` is already exported.
+    """
+    if os.environ.get("ROCM_PATH"):
+        return None
+    root = _rocm_path()
+    env = os.environ.copy()
+    env["ROCM_PATH"] = str(root)
+    for rel in ("llvm/bin", "lib/llvm/bin"):
+        lld_dir = root / rel
+        if (lld_dir / "ld.lld").is_file():
+            env["PATH"] = os.pathsep.join([str(lld_dir), env.get("PATH", "")])
+            break
+    return env
+
+
 def _run_opt(tool: Path, source: str, pipeline: str) -> str:
     result = subprocess.run(
         [str(tool), "-", f"--pass-pipeline={pipeline}"],
@@ -321,6 +346,7 @@ def _run_opt(tool: Path, source: str, pipeline: str) -> str:
         capture_output=True,
         text=True,
         check=False,
+        env=_serializer_env(),
     )
     if result.returncode:
         raise RuntimeError(

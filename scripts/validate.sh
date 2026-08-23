@@ -27,6 +27,15 @@ RUNTIME_REPORT="$TMP_ROOT/tessera_runtime_smoke.json"
 
 cd "$ROOT"
 
+# Provision a detected ROCm toolkit (ROCM_PATH / PATH / LD_LIBRARY_PATH) before
+# anything launches python. Sourced, not exported by a conftest, because glibc
+# reads LD_LIBRARY_PATH only at process startup — see scripts/_rocm_env.sh for
+# why a bare non-interactive run otherwise fails every compiled ROCm lane with
+# "lld invocation failed" and can segfault a concentrated device sweep.
+# Silent no-op on hosts with no ROCm install (Mac / NVIDIA boxes).
+# shellcheck source=scripts/_rocm_env.sh
+source "$ROOT/scripts/_rocm_env.sh"
+
 echo "==> Environment bootstrap"
 "$PYTHON" scripts/validation_env.py
 

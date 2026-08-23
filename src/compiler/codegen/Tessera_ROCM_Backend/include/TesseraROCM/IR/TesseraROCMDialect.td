@@ -168,7 +168,8 @@ def ROCM_SpectralBackwardKindAttr
     : ROCM_EnumStrAttr<["tessera.spectral_filter", "tessera.spectral_conv"],
                        "ROCm compound spectral backward kind">;
 def ROCM_ActivationKindAttr
-    : ROCM_EnumStrAttr<["gelu", "silu", "relu"], "ROCm activation kind">;
+    : ROCM_EnumStrAttr<["gelu", "silu", "relu"],
+                       "ROCm activation kind: 'gelu', 'silu', or 'relu'">;
 def ROCM_NormKindAttr
     : ROCM_EnumStrAttr<["rmsnorm", "layer_norm"], "ROCm normalization kind">;
 def ROCM_Int4PackKindAttr

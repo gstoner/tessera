@@ -57,9 +57,19 @@ def test_activation_emits_its_math(kind, op):
 
 
 def test_activation_unknown_kind_named_error():
+    # An unknown kind is now rejected by the ODS attribute constraint
+    # (ROCM_ActivationKindAttr) rather than by a check in the pass body -- that
+    # is Decision #21a's "EnumAttr over unvalidated StrAttr" applied, so the op
+    # never reaches the generator. Decision #21 still requires the diagnostic to
+    # be actionable, so assert what a reader needs: the offending op and the
+    # legal set. Asserting the whole sentence would just re-encode MLIR's
+    # verifier wording.
     r = _opt(_act("mish"), "--generate-rocm-activation-kernel")
     assert r.returncode != 0
-    assert "kind must be gelu, silu, or relu" in r.stderr
+    assert "tessera_rocm.activation" in r.stderr
+    assert "kind" in r.stderr
+    for legal in ("gelu", "silu", "relu"):
+        assert legal in r.stderr, f"diagnostic must name the legal kind {legal!r}"
 
 
 def test_rope_signature_and_trig():

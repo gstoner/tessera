@@ -6,6 +6,10 @@ for a test that claims native Apple execution.
 """
 from __future__ import annotations
 
+import functools
+import subprocess
+from pathlib import Path
+
 import subprocess
 import sys
 from typing import Any, Mapping
@@ -175,3 +179,118 @@ def assert_native_apple_jit(compiled: Any) -> None:
     assert getattr(compiled, "execution_kind", None) == "native_gpu"
     metadata = compiled.runtime_artifact().metadata
     assert metadata.get("execution_mode") == "metal_runtime"
+
+
+# --- Apple backend compiled into tessera-opt -------------------------------
+#
+# `tessera-opt` only registers the Apple pipelines when it was configured with
+# -DTESSERA_BUILD_APPLE_BACKEND=ON (compile-time `TESSERA_HAVE_APPLE_BACKEND`).
+# The ROCm / x86 fleet boxes build it OFF, so on those hosts the Apple tests
+# used to FAIL on `Unknown command line argument
+# '-tessera-lower-to-apple_cpu-full'` -- 57 red in a full sweep that say nothing
+# about Apple and drown out real signal. A capability the host does not have
+# must SKIP, not fail (the same rule CLAUDE.md applies to a missing device).
+#
+# The gate is the existing `tessera-opt not built` guard's missing other half:
+# that one asks whether the binary exists, this one asks whether the binary has
+# the Apple backend in it.
+
+#: A pipeline registered only under `TESSERA_HAVE_APPLE_BACKEND`. Matched by
+#: exact flag name -- a bare "apple" substring would match LLVM's own
+#: `=apple` NEON asm flavour in --help and report a false positive.
+_APPLE_PROBE_PIPELINE = "tessera-lower-to-apple_cpu"
+
+
+@functools.cache
+def tessera_opt_registers(flag: str) -> bool:
+    """True iff this build's ``tessera-opt`` registers ``flag``.
+
+    Reads ``--help`` rather than running the pipeline, so the probe cannot be
+    confused by an unrelated pipeline failure. Returns False (never raises) when
+    the binary is missing or unrunnable."""
+    from tests._support.compiler_tool import tessera_opt_path
+
+    opt = tessera_opt_path()
+    if opt is None:
+        return False
+    try:
+        out = subprocess.run([str(opt), "--help"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return flag in (out.stdout + out.stderr)
+
+
+def apple_backend_in_tessera_opt() -> bool:
+    """True iff ``tessera-opt`` was built with the Apple backend."""
+    return tessera_opt_registers(_APPLE_PROBE_PIPELINE)
+
+
+def apple_backend_configured_in_build() -> bool:
+    """True iff the build tree's CMake cache says the Apple backend is ON.
+
+    Deliberately independent of :func:`apple_backend_in_tessera_opt` -- it reads
+    the cache, not ``--help`` -- so the two can be cross-checked. A guard that
+    silently skips a suite it should have run is worse than the loud failure it
+    replaced, and this is what makes that detectable."""
+    from tests._support.compiler_tool import tessera_opt_path
+
+    opt = tessera_opt_path()
+    if opt is None:
+        return False
+    for parent in Path(opt).resolve().parents:
+        cache = parent / "CMakeCache.txt"
+        if cache.is_file():
+            try:
+                text = cache.read_text(errors="ignore")
+            except OSError:
+                return False
+            return "TESSERA_BUILD_APPLE_BACKEND:BOOL=ON" in text
+    return False
+
+
+def require_apple_backend_in_tessera_opt() -> None:
+    """Skip unless ``tessera-opt`` carries the Apple backend."""
+    import pytest
+
+    if not apple_backend_in_tessera_opt():
+        pytest.skip(
+            "tessera-opt was built without the Apple backend "
+            "(configure -DTESSERA_BUILD_APPLE_BACKEND=ON to run these)"
+        )
+
+
+def skip_if_apple_pipeline_unregistered(proc: Any) -> None:
+    """Skip when ``tessera-opt`` rejected an Apple pipeline it was never built with.
+
+    Call right after invoking the pipeline, before asserting on the result.
+
+    A build configured with -DTESSERA_BUILD_APPLE_BACKEND=OFF does not register
+    the Apple pipelines at all, so on the ROCm / x86 boxes these fixtures used to
+    fail on a missing CLI flag -- 57 red in a full sweep that say nothing about
+    Apple. A capability the build lacks must skip, not fail.
+
+    Deliberately narrow in three ways, so it cannot hide a real defect:
+      * only fires on the two "this pipeline is not registered" signatures, one
+        per invocation form (``-flag`` and ``--pass-pipeline=``);
+      * only when the Apple backend is genuinely absent -- if it IS built, an
+        unregistered pipeline is a registration regression and stays loud;
+      * never touches a nonzero exit for any other reason, so the negative
+        fixtures that expect a rejection still assert their own diagnostics.
+    """
+    import pytest
+
+    if getattr(proc, "returncode", 0) == 0:
+        return
+    stderr = getattr(proc, "stderr", "") or ""
+    unregistered = (
+        "Unknown command line argument" in stderr
+        or "does not refer to a registered pass or pass pipeline" in stderr
+    )
+    if not unregistered:
+        return
+    if apple_backend_in_tessera_opt():
+        return
+    pytest.skip(
+        "tessera-opt was built without the Apple backend "
+        "(configure -DTESSERA_BUILD_APPLE_BACKEND=ON to run this)"
+    )

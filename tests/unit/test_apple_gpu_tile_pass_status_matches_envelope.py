@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from tessera.compiler import driver
+from tests._support.apple import skip_if_apple_pipeline_unregistered
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT = REPO_ROOT / "build" / "tools" / "tessera-opt" / "tessera-opt"
@@ -60,6 +61,7 @@ def _lower_and_parse(sources: list[str]) -> dict[str, str]:
     proc = subprocess.run(
         [_OPT, "-", "-tessera-lower-to-apple_gpu", "--allow-unregistered-dialect"],
         input="\n".join(lines), capture_output=True, text=True, timeout=60)
+    skip_if_apple_pipeline_unregistered(proc)
     assert proc.returncode == 0, proc.stderr
     # Each metal_kernel op carries source + status in its (alphabetically sorted)
     # attr dict; source < status, so a per-op non-greedy match pairs them.

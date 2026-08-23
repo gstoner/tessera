@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from tests._support.apple import skip_if_apple_pipeline_unregistered
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _OPT_DEFAULT = REPO_ROOT / "build-apple" / "tools" / "tessera-opt" / "tessera-opt"
@@ -82,9 +83,11 @@ _CPU_LINALG_OPS = ("cholesky", "tri_solve", "cholesky_solve", "lu", "qr", "svd")
 
 
 def _run(pipeline: str, body: str) -> subprocess.CompletedProcess:
-    return subprocess.run(
+    proc = subprocess.run(
         [_OPT, f"-{pipeline}", "-"],
         input=body, capture_output=True, text=True, timeout=60)
+    skip_if_apple_pipeline_unregistered(proc)
+    return proc
 
 
 # The value-mode module must contain none of: the poison/empty husks, any

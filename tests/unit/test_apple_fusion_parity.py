@@ -24,6 +24,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from tests._support.apple import skip_if_apple_pipeline_unregistered
 
 REPO = Path(__file__).resolve().parents[2]
 _CANDIDATES = (
@@ -100,6 +101,7 @@ def test_stamped_chain_lowers_as_descriptor(tmp_path, case_id, fixture, epilogue
          "--pass-pipeline=builtin.module(tessera-lower-to-apple_gpu-runtime)",
          "--allow-unregistered-dialect"],
         capture_output=True, text=True, timeout=60)
+    skip_if_apple_pipeline_unregistered(out)
     assert out.returncode == 0, out.stderr
     text = out.stdout
     # It fused (a descriptor was emitted) and the compiler intent drove it.

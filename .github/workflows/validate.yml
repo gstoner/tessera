@@ -206,6 +206,113 @@ jobs:
   # fails.  When MLIR 23 lands in the runner image, drop the install
   # guard.
   # ────────────────────────────────────────────────────────────────────
+  # ────────────────────────────────────────────────────────────────────
+  # ROCm hsaco serialization  (host-free — no GPU, no ROCm install)
+  #
+  # Closes the gap that let PR #619 happen: every compiled ROCm lane was
+  # failing at hsaco serialization with `lld invocation failed` and nothing
+  # noticed, because the only automated ROCm coverage is `check-tessera-rocm`,
+  # which CI does not run.
+  #
+  # That outage never needed a GPU to detect. Emitting an hsaco is COMPILE-time
+  # work -- MLIR's ROCDL `gpu-module-to-binary` runs `ld.lld` on the host and
+  # never touches a device. Measured 2026-08-23: a HIP-less `tessera-rocm-opt`
+  # serializes a real AMDGPU ELF against nothing but stock `lld-23`.
+  #
+  # Two things make this buildable here where `tessera-opt` is not:
+  #   * `tessera-rocm-opt` is a SEPARATE executable, so it sidesteps the lean
+  #     artifact driver that `TESSERA_BUILD_ROCM_BACKEND=ON` forces on
+  #     `tessera-opt` (see the comment in the lit lane, and
+  #     CI-LIT-BACKEND-DIALECTS-2026-08-12);
+  #   * the ROCm backend's CMake has no HIP dependency.
+  #
+  # `lld-23` is required and is NOT part of the lit lane's install set.
+  #
+  # Coverage boundary, stated so this lane is not read as more than it is: it
+  # proves the lane still PRODUCES a code object. It does not prove the object
+  # runs or computes the right answer -- execution evidence needs the real
+  # gfx1151 device and stays on that box (repo Decision #26). Kernels calling
+  # AMD's OCML (e.g. `gelu` -> `__ocml_tanh_f32`) additionally need
+  # `<ROCM_PATH>/amdgcn/bitcode`, which a stock runner lacks; that case is a
+  # skip here, not a silent pass.
+  # ────────────────────────────────────────────────────────────────────
+  rocm-serialize:
+    name: rocm hsaco serialization (host-free — opt-in)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Same gating as the lit lane: keeps the per-PR critical path fast while
+    # still gating main. Add the `lit-smoke` label to run it on a PR. To make
+    # it gate every PR instead, drop this `if:`.
+    if: >-
+      (github.event_name == 'workflow_dispatch')
+      || (github.event_name == 'pull_request'
+          && contains(github.event.pull_request.labels.*.name, 'lit-smoke'))
+      || (github.event_name == 'push'
+          && (github.ref == 'refs/heads/main'
+              || github.ref == 'refs/heads/master'))
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps + LLVM/MLIR 23 + lld
+        id: deps
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources 2>/dev/null || true
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build wget gnupg
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add - || true
+          codename="$(lsb_release -cs)"
+          echo "deb http://apt.llvm.org/${codename}/ llvm-toolchain-${codename}-23 main" \
+            | sudo tee /etc/apt/sources.list.d/llvm23.list
+          sudo apt-get update || true
+          # lld-23 is the linker MLIR's ROCDL serializer shells out to. It is
+          # NOT in the lit lane's set; without it this lane can only reproduce
+          # the very failure it exists to catch.
+          sudo apt-get install -y --no-install-recommends \
+            llvm-23-dev mlir-23-tools libmlir-23-dev clang-23 lld-23 \
+            || echo "::warning ::LLVM/MLIR 23 apt install failed (no ${codename}-23 repo yet)"
+          if [ -f /usr/lib/llvm-23/lib/cmake/mlir/MLIRConfig.cmake ] \
+             && [ -x /usr/lib/llvm-23/bin/ld.lld ]; then
+            echo "mlir=true" >> "$GITHUB_OUTPUT"
+            python -m pip install --upgrade pip
+            python -m pip install -e . --no-deps
+            # shellcheck disable=SC2086
+            python -m pip install $TESSERA_CI_PY_DEPS
+          else
+            echo "mlir=false" >> "$GITHUB_OUTPUT"
+            echo "::warning ::MLIR 23 or lld-23 absent — skipping the ROCm serialization lane"
+          fi
+
+      - name: Build tessera-rocm-opt (HIP-less)
+        if: steps.deps.outputs.mlir == 'true'
+        run: |
+          # A build dir of its own: ROCM_BACKEND=ON is incompatible with the
+          # lit lane's core+x86 `tessera-opt` (it forces the lean driver), and
+          # `tessera-rocm-opt` needs neither.
+          cmake -S . -B build-rocm-ci \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DTESSERA_BUILD_ROCM_BACKEND=ON \
+            -DTESSERA_ENABLE_HIP=OFF \
+            -DTESSERA_ENABLE_CUDA=OFF \
+            -DMLIR_DIR=/usr/lib/llvm-23/lib/cmake/mlir \
+            -DLLVM_DIR=/usr/lib/llvm-23/lib/cmake/llvm
+          cmake --build build-rocm-ci --target tessera-rocm-opt
+
+      - name: Prove the ROCm lane still emits an hsaco
+        if: steps.deps.outputs.mlir == 'true'
+        env:
+          PYTHONPATH: python
+        run: |
+          python -m pytest tests/unit/test_rocm_hsaco_serialization.py -v
+
   lit:
     name: lit (MLIR FileCheck — opt-in)
     runs-on: ubuntu-latest

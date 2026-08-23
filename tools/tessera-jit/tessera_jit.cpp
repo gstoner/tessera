@@ -39,6 +39,7 @@
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Linalg/Transforms/SubsetInsertionOpInterfaceImpl.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
@@ -48,6 +49,7 @@
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/Transforms/SubsetInsertionOpInterfaceImpl.h"
+#include "mlir/Dialect/Vector/Transforms/SubsetOpInterfaceImpl.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
@@ -867,7 +869,25 @@ void *tessera_jit_compile(const char *mlir_text) {
   // abort (not a pass failure). This missing registration was the actual
   // cause of the "MLIR 23 aborts in one-shot bufferization" toolchain gate
   // on the vectorize lane (root-caused 2026-08-23).
+  //
+  // All THREE dialects that promise the interface must be registered, not
+  // just tensor. The vectorize lane's own output is `vector.transfer_write`
+  // into a tensor, and `vector` promises SubsetInsertionOpInterface for it;
+  // `linalg.copy` carries the same promise. Registering only tensor left the
+  // vector promise unresolved, which is a `report_fatal_error` — NOT a
+  // recoverable pass failure, so the lane's transform-failure fallback cannot
+  // catch it and the whole process aborts.
+  //
+  // Why the x86 host did not see it (Decision #19's standing lesson, again):
+  // the promise check is `#ifndef NDEBUG` (mlir/IR/OpDefinition.h
+  // getInterfaceFor). The Ubuntu box's apt.llvm.org LLVM 23 is an NDEBUG
+  // build, so it silently skipped the check and merely lost the interface
+  // (conservative extra copies); the Mac's assertions-enabled LLVM 23
+  // aborted on the first vectorized compile. An NDEBUG host cannot falsify
+  // an unresolved-promise claim.
   tensor::registerSubsetOpInterfaceExternalModels(registry);
+  linalg::registerSubsetOpInterfaceExternalModels(registry);
+  vector::registerSubsetOpInterfaceExternalModels(registry);
   // Transform-dialect extension: the linalg/structured transform ops
   // (transform.structured.tile_using_for / vectorize / match) used by the opt-in
   // linalg→vector lane.

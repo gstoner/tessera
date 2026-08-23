@@ -3,7 +3,7 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-08-22
+last_updated: 2026-08-23
 ---
 
 # Apple compiler, exact-device, and performance plan
@@ -20,8 +20,18 @@ device-workspace lifecycle transfer no Metal/MPSGraph code, plan, workspace, or
 evidence. Apple's spectral package retains its architecture-owned lifecycle and
 Mac proof requirements.
 
-Cross-backend sync `JIT-MATH-AUDIT-2026-08-23` — **Apple outcome:
-two follow-ups required (M1 Max); no Apple evidence exists for either.**
+Cross-backend sync `JIT-MATH-AUDIT-2026-08-23` — **Apple outcome: CLOSED
+on the M1 Max 2026-08-23; both follow-ups audited exact-device, with three
+contract violations found and fixed and one recorded open.** The original
+statement of the follow-ups is kept below; the measured outcomes are in
+`APPLE-MINMAX-1` and `APPLE-VECTORIZE-1`. Summary: the optimizer eps-floor
+pattern does **not** exist on Apple (no `max(stat, eps)` anywhere in the
+runtime — every eps is additive), but the same NaN-suppressing-`max` family
+was found in three other places; the ±0 tie contract was violated on device
+and is now fixed and pinned; and the vectorize lane aborted on Darwin on the
+first compile until a missing dialect-extension registration was fixed.
+
+Original follow-up statement (2026-08-23, pre-audit):
 The x86/ROCm math-correctness loops (see those plans under this key)
 produced changes whose Apple siblings are unaudited: **(1) NaN
 laundering in optimizer eps floors** — ROCm's Adafactor kernels and the
@@ -56,8 +66,10 @@ and exact-Mac proof obligations are unchanged.
 
 Cross-backend sync `JIT-VECTORIZE-UNGATED-2026-08-23` /
 `JIT-CACHE-BLOCK-2026-08-23` / `JIT-MATH-AUDIT-2026-08-23` — **shared
-`tessera_jit` boundary/pipeline changes; Apple outcome: follow-up
-required (M1 Max); no Darwin evidence exists.** The x86 plan owns these
+`tessera_jit` boundary/pipeline changes; Apple outcome: CLOSED (M1 Max,
+2026-08-23) — see `APPLE-VECTORIZE-1`. The lane aborted the process on the
+first vectorized compile here; fixed in the shared `tools/tessera-jit`, then
+measured 1.8 → 53.7 GFLOP/s at n=256.** Original statement: The x86 plan owns these
 keys. Four changes reach the Mac's `@jit(target="cpu")` lane directly:
 (1) the invoke signature guard (new `tessera_jit_signature` ABI +
 fail-closed shape/dtype/arity validation); (2) the fastmath narrowing
@@ -1030,6 +1042,240 @@ tensor backward attention loops and closed its Lion/Adafactor physical
 adjoints. Zen 5 ABI, schedule, LSE policy, and timing do not transfer. Apple
 retains its rank-4 forward, shared backward-loop/modifier, LSE-policy, and
 optimizer/backward-materializer items.
+
+## APPLE-MINMAX-1: IEEE-754-2019 min/max + NaN-suppressing-`max` audit *(closed 2026-08-23, M1 Max)*
+
+Closes `JIT-MATH-AUDIT-2026-08-23` items (1) and (3) for Apple. Everything
+below was **measured bit-exactly on the M1 Max**, not inferred; the fixes are
+pinned by `tests/unit/test_apple_gpu_ieee_minmax_device.py` (7 tests,
+`hardware_apple_gpu`), which was confirmed **red on the pre-fix dylib and green
+on the post-fix dylib** by rebuilding both ways.
+
+### The premise in the sync record was wrong in a useful way
+
+The record said "the Apple **MSL** binary max/min kernels". There are none:
+`tessera.maximum`/`minimum` reach the GPU through **MPSGraph**
+(`mpsg_binary_node` cases 4/5), which is the single route for f32/f16/bf16 and
+for the encoded device-buffer lane. The audit target was the MPSGraph op, not a
+hand-written kernel — and it was non-conforming.
+
+### Grounding (Decision #27 — on-machine headers, not recollection)
+
+`metal_math` in the installed Metal toolchain defines `max(float,float)` and
+`fmax(float,float)` as **the same `__metal_fmax` intrinsic**. MSL `max`/`min` on
+floats are therefore never a `>` comparison: they are maxNum/minNum, NaN is
+suppressed, and they take `__METAL_FAST_MATH__` — which is on, since
+`MTLCompileOptions` defaults to the fast math mode (`MTLLibrary.h`). That is why
+every NaN test in the new MSL code is on the **bit pattern**
+(`(as_type<uint>(x) & 0x7fffffffu) > 0x7f800000u`) and not `x != x`: fast math
+lets the compiler assume no NaNs and fold a self-comparison away.
+
+### Finding 1 — the optimizer eps-floor pattern does not exist here *(no change)*
+
+ROCm's Adafactor kernels and the x86 AVX-512 shim floored second-moment
+statistics with a NaN-suppressing `max`. **Apple has no such floor.** The
+hand-written `optimizer_f32` MSL kernel covers sgd/momentum/adam/adamw/lion and
+every eps is **additive** (`sqrt(nv/b2c) + eps`); so is every norm/softmax eps
+in the runtime (`1/sqrt(sumsq/N + eps)`, `1/sqrt(var + eps)`, `1/sqrt(ms + eps)`).
+There is **no Apple Adafactor device kernel at all** — that op is x86/ROCm only.
+Nothing to fix; recorded so the next reader does not re-audit it.
+
+### Finding 2 — `tessera.maximum`/`minimum` violated the fleet contract *(fixed)*
+
+MPSGraph's `maximumWithPrimaryTensor`/`minimumWithPrimaryTensor` are
+maxNum/minNum. Measured over a 12-row special-value matrix, **7 rows disagreed**
+with `IEEE-MINMAX-CONTRACT-2026-08-23` for each of max and min:
+
+| a | b | device (pre-fix) | contract |
+|---|---|---|---|
+| `+0` | `-0` | `-0` | `+0` (max) |
+| `-0` | `+0` | `+0` | `-0` (min) |
+| `NaN` | `1.0` | `1.0` | `NaN` |
+| `NaN` | `-inf` | `-inf` | `NaN` |
+| `inf` | `NaN` | `inf` | `NaN` |
+
+i.e. NaN suppressed in both directions, and a ±0 tie resolved to the **second
+operand** — the same tie bug the x86 `vmaxps` body had. Fixed with
+`mpsg_ieee_minmax` in `apple_gpu_runtime.mm`: bitwise-AND tie blend for max,
+bitwise-OR for min (equal values are bit-identical unless they are ±0, so the
+blend is the identity everywhere else — **the same blend the x86 AVX-512 vector
+body uses, so the two backends now agree by construction**), then select the NaN
+*operand* (not a fresh constant) so the payload survives, `a` winning when both
+are NaN — matching `np.maximum`, which is what the shared host reference
+`tessera/_ieee_minmax.py` is built on. Post-fix: **0 of 12 rows disagree**, for
+both max and min, bit-level.
+
+**Cost: none measurable.** 4.2M-element f32 lane, 30 reps: `max` 6.45 ms /
+`min` 6.32 ms against `add` 6.39 ms / `mul` 6.48 ms. The lane is
+transfer/bandwidth-bound, so the extra selects are free.
+
+### Finding 3 — `scatter_f32` min/max reduce laundered NaN *(fixed)*
+
+Modes 2/3 of the scatter kernel used MSL `min`/`max`, so a NaN in either the
+seed or the scattered value vanished, and a ±0 tie went to the second operand.
+This reduce's **result is the output** — the same reason ROCm deliberately kept
+its reduce kernel NaN-propagating — while the reference is `np.minimum.at` /
+`np.maximum.at`, which propagate. Fixed with `ts_ieee_min_f32`/`ts_ieee_max_f32`
+MSL helpers (bit-pattern NaN test, AND/OR tie blend).
+
+### Finding 4 — the Cl(3,0) norm laundered NaN *(fixed)*
+
+`sqrt(max(0.0f, s))` over the sum of squares: `max` is fmax, so a NaN component
+produced a **zero norm** instead of NaN. The C++ host reference had the same
+defect via `std::max(0.0f, s)` (`0 < NaN` is false → returns 0), so the two
+agreed with each other and disagreed with `ga.ops.norm`, whose reference is
+`np.sqrt(np.clip(<a,a>, 0, None))` — and `np.clip` propagates. Both are now a
+NaN-propagating non-negative clamp. The clamp exists to absorb tiny negative
+rounding in a sum of squares; NaN is not that.
+
+### Open, recorded, deliberately NOT fixed: `relu(NaN)`
+
+Measured: the Apple GPU unary lane returns `relu(NaN) = 0`; the reference
+(`np.maximum(0.0, x)`) returns `NaN`. This is the same NaN-suppression family
+but a **different op with its own contract**, and it sits on the hottest
+elementwise path in the backend — wrapping it is a scope and performance
+decision, not a bug fix to slip into a min/max PR. **The same question is open
+on ROCm and x86**, whose relu lanes are equally unaudited for this; nothing here
+establishes their behavior. Whoever picks this up should decide the `relu` NaN
+contract fleet-wide first, the way `IEEE-MINMAX-CONTRACT-2026-08-23` decided
+min/max, and then fix all three backends against it.
+
+### Also open, recorded, not fixed: max/min inside the fused RL loss graphs
+
+`mpsg_run_ppo_policy_loss_f32` and its GRPO sibling call
+`maximumWithPrimaryTensor`/`minimumWithPrimaryTensor` **directly** rather than
+through `mpsg_binary_node`, so they did not pick up the IEEE wrapper: the ratio
+clip (`max(ratio, 1-eps)` then `min(·, 1+eps)`) and the PPO surrogate
+`min(s1, s2)`. The `rl.py` references are `np.minimum`/`np.maximum`, which
+propagate NaN, so a NaN-valued advantage or log-prob ratio diverges. Left alone
+deliberately: these sit inside fused loss graphs with their own numeric parity
+tests, and NaN inputs to a loss are a degenerate case that deserves its own
+decision rather than a one-line swap smuggled into a min/max PR. The swap
+itself is mechanical if that decision goes the obvious way — `mpsg_ieee_minmax`
+is already in the file and takes the same operands.
+
+### Evidence
+
+Apple GPU device sweep, `-m "hardware_apple_gpu and not slow"`, same command
+before and after the fix: **18 failed / 1135 passed → 11 failed / 1142 passed**
+— the delta is exactly the 7 new tests. The 11 remaining failures are
+pre-existing and untouched by this work (spectral composites, the strict retune
+ledger, 8 `production_jit_phase3_while` cases, delta-erase routing). Separately,
+`test_conformance_evaluator.py::test_complete_cells_are_evaluator_corroborated_on_darwin`
+**segfaults in the full sweep and passes in isolation** — proven pre-existing by
+reproducing it identically on the unmodified dylib, and deselected in both runs
+above so the comparison is like-for-like. It is not caused by this change and is
+not fixed by it.
+
+Editing `apple_gpu_runtime.mm` changes its sha256, so the sealed E2E-SPINE-3
+packet (`docs/audit/evidence/e2e_spine/apple_gpu/apple7`) had to be
+**re-recorded, not hash-bumped** — `test_e2e_fleet.py` deliberately fails when
+the fingerprint no longer matches the source. Re-recorded with a real device
+run via `benchmarks/e2e_spine/record_apple_packet.py --lane apple_gpu`; the
+packet keeps its **`device_event`** timing domain (not the degraded
+`kernel_wall` fallback), i.e. a genuine measurement. After the reseal:
+`test_apple_backend_roadmap.py` + `test_e2e_fleet.py` **83/83**, and
+`check_generated_docs.sh` back in sync (`e2e_fleet` + `test_coverage`
+regenerated). A full-Mac `pytest -m "not slow"` sweep is **32 failed / 15452
+passed**; re-running exactly those 32 in isolation leaves **26**, every one
+pre-existing and untouched by this work — ROCm/NVIDIA lanes that cannot execute
+on a Mac, the x86-backend-absent packaging test, a `.claude/worktrees` scan
+artifact, the 11 Apple failures listed above, and five perf-baseline bounds that
+only trip under full-sweep contention (they pass in isolation).
+
+## APPLE-VECTORIZE-1: the `TESSERA_JIT_VECTORIZE` lane on Darwin *(closed 2026-08-23, M1 Max)*
+
+Closes `JIT-VECTORIZE-UNGATED-2026-08-23` and `JIT-MATH-AUDIT-2026-08-23` item
+(2) for Apple. First-ever Darwin run of the vectorized lane, via the
+now host-agnostic compat test.
+
+### It aborted the process on the first compile
+
+`test_vectorize_lane_correct_in_and_out_of_envelope` did not fail — it took the
+interpreter down:
+
+```
+LLVM ERROR: checking for an interface (`mlir::SubsetInsertionOpInterface`) that
+was promised by dialect 'vector' but never implemented. This is generally an
+indication that the dialect extension implementing the interface was never
+registered.
+```
+
+`tools/tessera-jit` registered `tensor::registerSubsetOpInterfaceExternalModels`
+but not the `vector` or `linalg` ones. The vectorize lane's own output is
+`vector.transfer_write` into a tensor, and `vector` promises the interface for
+it. Because MLIR raises this as `report_fatal_error`, the lane's
+transform-failure fallback — which is designed to catch exactly this class of
+problem — **cannot** catch it. All three are now registered.
+
+### Why the AVX-512 host said the opposite, and why that was predictable
+
+The x86 record for `JIT-VECTORIZE-UNGATED-2026-08-23` states "the recorded
+bufferization abort no longer reproduces (verified with the registration
+absent)". That was true **on that host and unfalsifiable there**: the promise
+check is `#ifndef NDEBUG` (`mlir/IR/OpDefinition.h`, `getInterfaceFor`), the
+Ubuntu box's apt.llvm.org LLVM 23 is an NDEBUG build, and the Mac's manually
+installed LLVM 23.1.0-rc1 has assertions **on**. On the NDEBUG host the
+unregistered interface was silently lost (bufferization falls back to the
+conservative answer — extra copies, still correct); here it is a hard abort.
+
+This is **Decision #19's standing lesson with the polarity flipped**: there, a
+host that *had* AVX-512 could not falsify a host-portability claim; here, a host
+that *lacked* assertions could not falsify an unresolved-promise claim.
+
+**Both halves are now measured, not inferred** (cross-host run 2026-08-23, with
+owner-provided access to the other two boxes):
+
+| box | `llvm-config --assertion-mode` | pre-fix `test_native_cpu_jit.py` |
+|---|---|---|
+| M1 Max (LLVM 23.1.0-rc1, manual install) | **ON** | aborts the interpreter |
+| Strix Halo (apt.llvm.org LLVM 23.0.0) | OFF | 27/27 pass |
+| The-Super-Bear (LLVM 23.1.0) | OFF | not run — see below |
+
+The Strix Halo row is the control: same commit, clean tree, the *unmodified*
+tensor-only registration, and the lane passes — the defect is genuinely
+invisible there. *The Mac is the only assertions-enabled LLVM in the fleet, so
+it is the only box that can falsify an MLIR contract claim.* Any "this MLIR
+abort no longer reproduces" conclusion reached on either Linux box is
+provisional until it is re-run here. The x86 record has been amended in place
+accordingly.
+
+**The fix was then validated on the box that owns the file.** With the patch
+applied on the Strix Halo box: `tessera_jit` rebuilds clean and the same
+five-suite packet is **73/73** there. An alternating A/B of the two shared
+libraries at n=512, three reps each, is **indistinguishable** — 60.0 / 67.6 /
+74.2 GFLOP/s pre-fix against 75.7 / 86.9 / 55.3 GFLOP/s post-fix; the host's
+run-to-run variance swamps any effect, so **no performance change is claimed in
+either direction** (a single-shot pair earlier looked like a 24% regression and
+did not survive repetition). Registering the models removes a
+conservative-copy path in principle; that did not show up above the noise.
+
+**The-Super-Bear (CUDA sm_120) was deliberately not tested.** Its checkout is
+two merges behind (`4f1ee4d`) and carries untracked work under
+`benchmarks/nvidia/ptx_gemm_study/`; pulling or patching it would have put
+someone else's in-progress work at risk for a CPU-lane change. Its
+assertion-mode reading above is non-invasive and is the only claim taken from
+it. The shared `tessera_jit` change is expected-portable there for the same
+reason it is on Strix Halo, but that is unproven.
+
+### Result
+
+The whole shared CPU-JIT packet is green on Darwin: `test_native_cpu_jit.py`
+**27/27**, and with the signature-guard, elementwise-totality,
+boundary-discovery and native-required suites **73/73**. The lane genuinely
+vectorizes through NEON — measured with the transform on vs. off:
+
+| n | scalar | vectorized |
+|---|---|---|
+| 128 | 2.20 GFLOP/s | 27.44 GFLOP/s |
+| 256 | 1.81 GFLOP/s | 53.73 GFLOP/s |
+| 384 | 1.75 GFLOP/s | 59.77 GFLOP/s |
+
+The x86 host measured 3.4 → 106.6 GFLOP/s at 256; **that number does not
+transfer and is not claimed here** — different ISA, different core, different
+tile fit. What transfers is the shape of the result: the lane is real on both,
+and throughput still falls with size on both, so the missing cache-level
+blocking above the register tiles is a shared follow-on, not an x86 one.
 
 ## APPLE-SPINE-1: reconcile retained compiler lanes after canonical selection
 

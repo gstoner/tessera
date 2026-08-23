@@ -13390,7 +13390,10 @@ inline void reference_clifford_norm_cl30_f32(const float* A, float* C, int32_t b
     const float* a = A + i * 8;
     float s = 0.0f;
     for (int k = 0; k < 8; ++k) s += a[k] * a[k];
-    C[i] = std::sqrt(std::max(0.0f, s));
+    // NaN-propagating non-negative clamp. `std::max(0.0f, s)` returns 0 for a
+    // NaN sum of squares (0 < NaN is false), laundering a NaN component into a
+    // zero norm; ga.ops.norm's reference is np.clip, which propagates NaN.
+    C[i] = std::sqrt(s > 0.0f ? s : (s == s ? 0.0f : s));
   }
 }
 
@@ -13572,7 +13575,14 @@ kernel void clifford_norm_cl30_f32(
     s += A[off+2]*A[off+2]; s += A[off+3]*A[off+3];
     s += A[off+4]*A[off+4]; s += A[off+5]*A[off+5];
     s += A[off+6]*A[off+6]; s += A[off+7]*A[off+7];
-    C[gid] = sqrt(max(0.0f, s));
+    // NaN-propagating non-negative clamp — MSL `max` is fmax (NaN-suppressing),
+    // which turned a NaN component into a zero norm. Reference: np.clip.
+    // Bit-pattern NaN test: these kernels compile under fast math, where a
+    // `s == s` self-comparison may be folded away.
+    C[gid] = sqrt(s > 0.0f ? s
+                          : (((as_type<uint>(s) & 0x7fffffffu) > 0x7f800000u)
+                                 ? s
+                                 : 0.0f));
 }
 )MSL";
 
@@ -15389,6 +15399,34 @@ extern "C" int32_t tessera_apple_gpu_optimizer_f32(
 static NSString *const kScatterF32Source = @R"MSL(
 #include <metal_stdlib>
 using namespace metal;
+// IEEE-754-2019 `maximum`/`minimum` in MSL. `max`/`min` on floats are NOT a
+// `>` comparison — metal_math defines both `max(float,float)` and
+// `fmax(float,float)` as the same `__metal_fmax` intrinsic, i.e. maxNum: NaN is
+// SUPPRESSED and the +/-0 tie sign is unspecified. Measured on an M1 Max
+// (2026-08-23) the scatter min/max reduce laundered NaN in both directions and
+// resolved a +/-0 tie to the second operand. This reduce's result IS the
+// output, so NaN must propagate (the same call ROCm's reduce kernel makes).
+//
+// The NaN test is on the BIT PATTERN, not `x != x`: these kernels compile under
+// the default MTLMathMode (fast), which lets the compiler assume no NaNs and
+// fold a `x != x` self-comparison away. Integer work cannot be folded like that.
+// Tie blend: equal values are bit-identical unless they are +0/-0, so AND gives
+// +0 and OR gives -0 — the same blend the x86 AVX-512 vector body uses.
+static inline bool ts_is_nan_f32(float x) {
+  return (as_type<uint>(x) & 0x7fffffffu) > 0x7f800000u;
+}
+static inline float ts_ieee_max_f32(float a, float b) {
+  if (ts_is_nan_f32(a)) return a;
+  if (ts_is_nan_f32(b)) return b;
+  if (a == b) return as_type<float>(as_type<uint>(a) & as_type<uint>(b));
+  return a > b ? a : b;
+}
+static inline float ts_ieee_min_f32(float a, float b) {
+  if (ts_is_nan_f32(a)) return a;
+  if (ts_is_nan_f32(b)) return b;
+  if (a == b) return as_type<float>(as_type<uint>(a) | as_type<uint>(b));
+  return a < b ? a : b;
+}
 kernel void scatter_f32(device float *out [[buffer(0)]],
                         device const float *src [[buffer(1)]],
                         device const long *idx [[buffer(2)]],
@@ -15407,8 +15445,8 @@ kernel void scatter_f32(device float *out [[buffer(0)]],
       const float value = src[uint(r) * uint(row_len) + uint(c)];
       if (mode == 0) out[o] = value;
       else if (mode == 1) out[o] += value;
-      else if (mode == 2) out[o] = min(out[o], value);
-      else out[o] = max(out[o], value);
+      else if (mode == 2) out[o] = ts_ieee_min_f32(out[o], value);
+      else out[o] = ts_ieee_max_f32(out[o], value);
     }
   }
 }
@@ -17015,6 +17053,59 @@ static MPSGraphTensor *mpsg_unary_node(MPSGraph *g, MPSGraphTensor *x, int op) {
   }
 }
 
+// IEEE-754-2019 ``maximum``/``minimum`` over the MPSGraph lane.
+//
+// MPSGraph's own ``maximumWithPrimaryTensor``/``minimumWithPrimaryTensor`` are
+// maxNum/minNum. Measured bit-exactly on an M1 Max (2026-08-23) they
+//   * SUPPRESS NaN — max(NaN, 1) -> 1, and max(NaN, -inf) -> -inf, and
+//   * resolve a +/-0 tie by returning the SECOND operand — max(+0, -0) -> -0,
+//     min(-0, +0) -> +0.
+// Both violate the fleet contract (rocm plan key IEEE-MINMAX-CONTRACT-2026-08-23,
+// owner decision 2026-08-23): ``tessera.maximum``/``minimum`` propagate NaN and
+// ORDER signed zeros (max tie -> +0, min tie -> -0) on every execution route.
+// gfx1151 and the x86 AVX-512 shim are already fixed and pinned; this closes
+// Apple. 7 of 12 special-value rows disagreed before this wrapper.
+//
+// Tie blend: ``a == b`` is false for NaN and true only for equal values, which
+// are bit-identical unless they are +0 and -0. So a bitwise AND of the two
+// patterns is +0 on a signed-zero tie and the identity on every other equal
+// pair; bitwise OR is -0. This is the same tie blend the x86 AVX-512 vector
+// body uses, so the two backends agree by construction rather than by luck.
+//
+// NaN: select the NaN OPERAND, not a fresh quiet-NaN constant, so the payload
+// survives; ``a`` wins when both are NaN. That matches ``np.maximum``, which is
+// what the shared host reference (``tessera/_ieee_minmax.py``) is built on, so
+// the device and the numpy fallback lane are bit-identical.
+static MPSGraphTensor *mpsg_ieee_minmax(MPSGraph *g, MPSGraphTensor *a,
+                                        MPSGraphTensor *b, bool isMax) {
+  MPSGraphTensor *base =
+      isMax ? [g maximumWithPrimaryTensor:a secondaryTensor:b name:nil]
+            : [g minimumWithPrimaryTensor:a secondaryTensor:b name:nil];
+  MPSGraphTensor *ai =
+      [g reinterpretCastTensor:a toType:MPSDataTypeInt32 name:nil];
+  MPSGraphTensor *bi =
+      [g reinterpretCastTensor:b toType:MPSDataTypeInt32 name:nil];
+  MPSGraphTensor *blend =
+      isMax ? [g bitwiseANDWithPrimaryTensor:ai secondaryTensor:bi name:nil]
+            : [g bitwiseORWithPrimaryTensor:ai secondaryTensor:bi name:nil];
+  MPSGraphTensor *blendF =
+      [g reinterpretCastTensor:blend toType:MPSDataTypeFloat32 name:nil];
+  MPSGraphTensor *tie = [g equalWithPrimaryTensor:a secondaryTensor:b name:nil];
+  MPSGraphTensor *y = [g selectWithPredicateTensor:tie
+                               truePredicateTensor:blendF
+                              falsePredicateTensor:base
+                                              name:nil];
+  y = [g selectWithPredicateTensor:[g isNaNWithTensor:b name:nil]
+                truePredicateTensor:b
+               falsePredicateTensor:y
+                               name:nil];
+  y = [g selectWithPredicateTensor:[g isNaNWithTensor:a name:nil]
+                truePredicateTensor:a
+               falsePredicateTensor:y
+                               name:nil];
+  return y;
+}
+
 static MPSGraphTensor *mpsg_binary_node(MPSGraph *g, MPSGraphTensor *a,
                                         MPSGraphTensor *b, int op) {
   switch (op) {
@@ -17022,8 +17113,10 @@ static MPSGraphTensor *mpsg_binary_node(MPSGraph *g, MPSGraphTensor *a,
     case 1: return [g subtractionWithPrimaryTensor:a secondaryTensor:b name:nil];
     case 2: return [g multiplicationWithPrimaryTensor:a secondaryTensor:b name:nil];
     case 3: return [g divisionWithPrimaryTensor:a secondaryTensor:b name:nil];
-    case 4: return [g maximumWithPrimaryTensor:a secondaryTensor:b name:nil];
-    case 5: return [g minimumWithPrimaryTensor:a secondaryTensor:b name:nil];
+    // IEEE-754-2019 semantics, NOT MPSGraph's maxNum/minNum — see
+    // mpsg_ieee_minmax above.
+    case 4: return mpsg_ieee_minmax(g, a, b, /*isMax=*/true);
+    case 5: return mpsg_ieee_minmax(g, a, b, /*isMax=*/false);
     case 6: {  // silu_mul = a * silu(b) = a * b * sigmoid(b)
       MPSGraphTensor *s = [g sigmoidWithTensor:b name:nil];
       MPSGraphTensor *sb = [g multiplicationWithPrimaryTensor:b secondaryTensor:s name:nil];

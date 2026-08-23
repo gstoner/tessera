@@ -29,12 +29,13 @@ sys.stderr.write(f"device={m['device']} cc={m['cc']} l2={m['l2_bytes']}\n")
 status = {v["variant"]: v["status"] for v in m["variants"]}
 for v in m["variants"]:
     sys.stderr.write(f"  {v['variant']:20s} {v['status']:16s} err={v['max_abs_err']}\n")
-# families independent of the mma.sync probe (reliable WMMA / library paths)
-enabled = ["fp16_wmma", "cublaslt_fp16", "cublaslt_int8"]
+# Families independent of the mma.sync probe.  The pre-expanded INT4 baseline
+# uses FP16 WMMA only, so it remains available even if native s4 is unavailable.
+enabled = ["fp16_wmma", "cublaslt_fp16", "cublaslt_int8", "int4_wmma_preexpanded_fp16"]
 # probe-gated mma.sync families: variant -> study kernel name
 GATED = {
     "int8_m16n8k32": "int8_ptx_mma_k32",
-    "int4_m16n8k64": "int4_ptx_mma_k64,int4_wmma_preexpanded_fp16,int4_ptx_3stage",
+    "int4_m16n8k64": "int4_ptx_mma_k64,int4_ptx_3stage",
 }
 for var, fam in GATED.items():
     if status.get(var) == "native_ok":

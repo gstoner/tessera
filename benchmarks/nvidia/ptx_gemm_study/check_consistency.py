@@ -104,14 +104,16 @@ def check(rows: list[dict], counters: list[dict] | None = None) -> list[str]:
     #    always four bytes here (f32/s32).  Therefore it is *not* a literal 2x
     #    doubling: AI(bpe) = 2N / (2*bpe + 4).  This catches a real accounting
     #    drift without falsely rejecting the correct output-inclusive model.
-    ai_by = defaultdict(dict)  # (role,n) -> {dtype: ai_theoretical}
+    # Representation is part of the memory contract.  In particular, the
+    # pre-expanded FP16 INT4 baseline must not be compared as packed INT4.
+    ai_by = defaultdict(dict)  # (role,representation,n) -> {dtype: ai_theoretical}
     for r in measured:
         ai = r.get("ai_theoretical")
         if ai is None:
             continue
         n = r.get("n") or r.get("shape", [None])[0]
-        ai_by[(r.get("role", "opt"), n)][r.get("dtype")] = ai
-    for (_role, _n), d in ai_by.items():
+        ai_by[(r.get("role", "opt"), r.get("representation", "native"), n)][r.get("dtype")] = ai
+    for (_role, _representation, _n), d in ai_by.items():
         if "fp16" in d and "int8" in d:
             expect = (2 * BYTES_PER_ELEM["fp16"] + 4) / (2 * BYTES_PER_ELEM["int8"] + 4)
             if abs(d["int8"] / d["fp16"] - expect) > AI_TOL:
@@ -161,6 +163,17 @@ def _selftest() -> int:
          "cov": 0.01, "clocks_locked": False, "role": "opt"},
     ]
     assert check(good) == [], check(good)
+    # A pre-expanded FP16 baseline is logically INT4 but has FP16 operand
+    # traffic.  It must remain outside packed-INT4 AI comparisons.
+    representation_split = good + [
+        {"kernel": "int4_ptx_mma_k64", "dtype": "int4", "n": 2048, "latency_ms": 6.4,
+         "tflops": (2*2048**3)/(6.4/1e3)/1e12, "ai_theoretical": 819.2,
+         "cov": 0.01, "clocks_locked": False, "role": "opt", "representation": "native"},
+        {"kernel": "int4_wmma_preexpanded_fp16", "dtype": "int4", "n": 2048, "latency_ms": 11.0,
+         "tflops": (2*2048**3)/(11.0/1e3)/1e12, "ai_theoretical": 512.0,
+         "cov": 0.01, "clocks_locked": False, "role": "opt", "representation": "preexpanded_fp16"},
+    ]
+    assert check(representation_split) == [], check(representation_split)
     # disqualified rows (null latency) must NOT turn the gate red
     with_skips = good + [
         {"kernel": "int4_ptx_mma_k64", "dtype": "int4", "n": 2048,

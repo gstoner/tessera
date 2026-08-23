@@ -244,7 +244,10 @@ __device__ __forceinline__ void cp_async_16(void* dst,const void* src){
   asm volatile("cp.async.ca.shared.global [%0], [%1], 16;"::"r"(smem),"l"(src));
 }
 __device__ __forceinline__ void cp_async_commit(){ asm volatile("cp.async.commit_group;"); }
-__device__ __forceinline__ void cp_async_wait_two(){ asm volatile("cp.async.wait_group 0;"); }
+// Leave the two newer groups in flight.  With three primed slots this waits
+// only for the oldest producer before its slot is consumed, preserving the
+// intended copy/compute overlap through the ring.
+__device__ __forceinline__ void cp_async_wait_two_pending(){ asm volatile("cp.async.wait_group 2;"); }
 
 __global__ void int4_native_k64_3stage(const uint32_t* A,const uint32_t* B,int32_t* C,
                                        int M,int N,int K){
@@ -267,7 +270,7 @@ __global__ void int4_native_k64_3stage(const uint32_t* A,const uint32_t* B,int32
   for(int t=0;t<primed;t++) copy_tile(t,t);
   int32_t c[4]={0,0,0,0};
   for(int tile=0;tile<tiles;tile++){
-    cp_async_wait_two(); __syncthreads();
+    cp_async_wait_two_pending(); __syncthreads();
     int slot=tile%3; uint32_t* s=stage[slot];
     uint32_t a0=s[gr*8+tcq],a1=s[(gr+8)*8+tcq];
     uint32_t a2=s[gr*8+tcq+4],a3=s[(gr+8)*8+tcq+4];
@@ -280,7 +283,6 @@ __global__ void int4_native_k64_3stage(const uint32_t* A,const uint32_t* B,int32
     __syncthreads();
     if(tile+3<tiles) copy_tile(tile+3,slot);
   }
-  cp_async_wait_two();
   for(int i=0;i<4;i++){int row=tr*16+gr+8*(i/2);int col=tc*8+2*tcq+(i%2);C[row*N+col]=c[i];}
 }
 #endif
@@ -422,6 +424,36 @@ int main(int argc,char**argv){
       g_timing_scope="kernel";
       cudaFree(dA);cudaFree(dB);cudaFree(dC);
     }
+    // ---- INT4 pre-expanded FP16 baseline (independent of native s4) ----
+    // Expansion and host-to-device copies happen before timing.  Its traffic
+    // contract is consequently FP16 operands plus an FP32 output, despite the
+    // logical INT4 input values; it is a compute-only comparison baseline.
+    if(!enabled("int4_wmma_preexpanded_fp16")) {
+      emit_row("int4_wmma_preexpanded_fp16","int4",n,nullptr,0,ai_theo("fp16",n),"SKIPPED_BY_PROBE",locked);
+    } else {
+      std::vector<int> Ai(M*K),Bi(N*K),Cref;
+      for(auto&x:Ai)x=rand()%7-4; for(auto&x:Bi)x=rand()%7-4;
+      if(exact_cpu){Cref.resize(M*N);for(int m=0;m<M;m++)for(int nn=0;nn<N;nn++){int s=0;for(int k=0;k<K;k++)s+=Ai[m*K+k]*Bi[nn*K+k];Cref[m*N+nn]=s;}}
+      std::vector<half> Ae(M*K),Be(N*K);
+      for(int i=0;i<M*K;i++)Ae[i]=__float2half((float)Ai[i]);
+      for(int i=0;i<N*K;i++)Be[i]=__float2half((float)Bi[i]);
+      half *dAe,*dBe; float*dCe;
+      CK(cudaMalloc(&dAe,Ae.size()*sizeof(half)));CK(cudaMalloc(&dBe,Be.size()*sizeof(half)));CK(cudaMalloc(&dCe,M*N*sizeof(float)));
+      CK(cudaMemcpy(dAe,Ae.data(),Ae.size()*sizeof(half),cudaMemcpyHostToDevice));
+      CK(cudaMemcpy(dBe,Be.data(),Be.size()*sizeof(half),cudaMemcpyHostToDevice));
+      int warps16=(M/16)*(N/16),threads16=256,blocks16=(warps16*32+threads16-1)/threads16;
+      auto LE=[&]{wmma_fp16_int4_emulated<<<blocks16,threads16>>>(dAe,dBe,dCe,M,N,K);};
+      LE(); cudaError_t exe=cudaDeviceSynchronize(); long maxee=1<<30;
+      std::vector<float> Cge(M*N);
+      if(exe==cudaSuccess){CK(cudaMemcpy(Cge.data(),dCe,M*N*sizeof(float),cudaMemcpyDeviceToHost));maxee=0;
+        maxee=exact_cpu?0:sampled_err_i_float(Cge,Ai,Bi,M,N,K);if(exact_cpu)for(int i=0;i<M*N;i++)maxee=std::max(maxee,(long)labs((long)llround(Cge[i])-Cref[i]));}
+      g_representation="preexpanded_fp16";
+      if(exe==cudaSuccess&&maxee==0){Stat st=time_kernel(LE,warmup,iters,batch);
+        emit_row("int4_wmma_preexpanded_fp16","int4",n,&st,tflops_of(n,st.median_ms),ai_theo("fp16",n),"OK",locked);}
+      else emit_row("int4_wmma_preexpanded_fp16","int4",n,nullptr,0,ai_theo("fp16",n),
+                    exe==cudaSuccess?"WRONG":"EXEC_FAIL",locked);
+      g_representation="native"; cudaFree(dAe);cudaFree(dBe);cudaFree(dCe);
+    }
     // ---- INT4 native (pivotal): validate then time ----
     // Fail-closed: only launched if run.sh put int4_ptx_mma_k64 in --enable,
     // i.e. Phase 0 reported native_ok. This prevents an exec_fail (illegal
@@ -450,31 +482,6 @@ int main(int argc,char**argv){
         emit_row("int4_ptx_mma_k64","int4",n,&st,tflops_of(n,st.median_ms),ai_theo("int4",n),"OK",locked);}
       else emit_row("int4_ptx_mma_k64","int4",n,nullptr,0,ai_theo("int4",n),
                     ex==cudaSuccess?"WRONG":"EXEC_FAIL",locked);
-
-      // Honest emulation baseline: expansion is completed before timing, so
-      // this is FP16 WMMA compute only, never an end-to-end packed-INT4 claim.
-      if(!enabled("int4_wmma_preexpanded_fp16")) {
-        emit_row("int4_wmma_preexpanded_fp16","int4",n,nullptr,0,ai_theo("int4",n),"SKIPPED_BY_PROBE",locked);
-      } else {
-        std::vector<half> Ae(M*K),Be(N*K);
-        for(int i=0;i<M*K;i++)Ae[i]=__float2half((float)Ai[i]);
-        for(int i=0;i<N*K;i++)Be[i]=__float2half((float)Bi[i]);
-        half *dAe,*dBe; CK(cudaMalloc(&dAe,Ae.size()*sizeof(half)));CK(cudaMalloc(&dBe,Be.size()*sizeof(half)));
-        CK(cudaMemcpy(dAe,Ae.data(),Ae.size()*sizeof(half),cudaMemcpyHostToDevice));
-        CK(cudaMemcpy(dBe,Be.data(),Be.size()*sizeof(half),cudaMemcpyHostToDevice));
-        int warps16=(M/16)*(N/16),threads16=256,blocks16=(warps16*32+threads16-1)/threads16;
-        auto LE=[&]{wmma_fp16_int4_emulated<<<blocks16,threads16>>>(dAe,dBe,(float*)dC,M,N,K);};
-        LE(); cudaError_t exe=cudaDeviceSynchronize(); long maxee=1<<30;
-        std::vector<float> Cge(M*N);
-        if(exe==cudaSuccess){CK(cudaMemcpy(Cge.data(),dC,M*N*4,cudaMemcpyDeviceToHost));maxee=0;
-          maxee=exact_cpu?0:sampled_err_i_float(Cge,Ai,Bi,M,N,K);if(exact_cpu)for(int i=0;i<M*N;i++)maxee=std::max(maxee,(long)labs((long)llround(Cge[i])-Cref[i]));}
-        g_representation="preexpanded_fp16";
-        if(exe==cudaSuccess&&maxee==0){Stat st=time_kernel(LE,warmup,iters,batch);
-          emit_row("int4_wmma_preexpanded_fp16","int4",n,&st,tflops_of(n,st.median_ms),ai_theo("int4",n),"OK",locked);}
-        else emit_row("int4_wmma_preexpanded_fp16","int4",n,nullptr,0,ai_theo("int4",n),
-                      exe==cudaSuccess?"WRONG":"EXEC_FAIL",locked);
-        g_representation="native"; cudaFree(dAe);cudaFree(dBe);
-      }
 
       // Three-stage cp.async candidate.  It is intentionally separately
       // validated: a green scalar INT4 kernel never grants this pipeline a

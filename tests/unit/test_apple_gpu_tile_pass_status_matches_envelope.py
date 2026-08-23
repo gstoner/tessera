@@ -61,7 +61,7 @@ def _lower_and_parse(sources: list[str]) -> dict[str, str]:
     proc = subprocess.run(
         [_OPT, "-", "-tessera-lower-to-apple_gpu", "--allow-unregistered-dialect"],
         input="\n".join(lines), capture_output=True, text=True, timeout=60)
-    skip_if_apple_pipeline_unregistered(proc)
+    skip_if_apple_pipeline_unregistered(proc, _OPT)
     assert proc.returncode == 0, proc.stderr
     # Each metal_kernel op carries source + status in its (alphabetically sorted)
     # attr dict; source < status, so a per-op non-greedy match pairs them.

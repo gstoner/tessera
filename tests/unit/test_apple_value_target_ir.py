@@ -86,7 +86,7 @@ def _run(pipeline: str, body: str) -> subprocess.CompletedProcess:
     proc = subprocess.run(
         [_OPT, f"-{pipeline}", "-"],
         input=body, capture_output=True, text=True, timeout=60)
-    skip_if_apple_pipeline_unregistered(proc)
+    skip_if_apple_pipeline_unregistered(proc, _OPT)
     return proc
 
 

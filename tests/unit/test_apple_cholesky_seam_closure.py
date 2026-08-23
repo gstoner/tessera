@@ -67,7 +67,7 @@ def _lower(target_pipeline: str) -> str:
     proc = subprocess.run(
         [_OPT, "-", f"-{target_pipeline}", "--allow-unregistered-dialect"],
         input=_TILE_CHOLESKY, capture_output=True, text=True, timeout=60)
-    skip_if_apple_pipeline_unregistered(proc)
+    skip_if_apple_pipeline_unregistered(proc, _OPT)
     assert proc.returncode == 0, proc.stderr
     return proc.stdout
 

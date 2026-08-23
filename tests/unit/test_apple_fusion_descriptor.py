@@ -84,7 +84,7 @@ def test_descriptor_vs_rediscovered_source_tag(tmp_path):
          "--pass-pipeline=builtin.module(tessera-lower-to-apple_gpu-runtime)",
          "--allow-unregistered-dialect"],
         capture_output=True, text=True, timeout=60)
-    skip_if_apple_pipeline_unregistered(out)
+    skip_if_apple_pipeline_unregistered(out, _OPT)
     assert out.returncode == 0, out.stderr
     text = out.stdout
     # Both functions fuse to the same kernel ...

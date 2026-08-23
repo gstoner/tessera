@@ -35,9 +35,10 @@ generated AD tensor arithmetic share the same pointwise index-space lowering;
 an explicit postcondition rejects any residual tensor-valued elementwise op
 before bufferization.  The native CPU packet (native CPU JIT, production phase
 1/3, paired state machine, and the new arithmetic/math totality matrix) passed
-**70/70**.  Coverage includes add/sub/mul/div, min/max and NaN-number variants,
-cmp/neg/select, scalar-condition whole-tensor select, six tensor math ops,
-dynamic extents, and an executed compiler-generated forward JVP.  The separate
+**74/74**.  Coverage includes add/sub/mul/div, min/max and NaN-number variants
+with bit-level NaN/signed-zero checks, cmp/neg/select, scalar-condition
+whole-tensor select, six tensor math ops, dynamic extents, and an executed
+compiler-generated forward JVP.  The separate
 exact-Metal cross-target packet passed **12/12** using the fresh CPU JIT as its
 oracle.  This is Apple CPU-JIT closure plus Metal parity evidence; it does not
 transfer an x86 or GPU-device implementation through `tessera_jit`.

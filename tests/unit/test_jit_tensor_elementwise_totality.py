@@ -72,6 +72,30 @@ def test_tensor_binary_arithmetic_family_executes_natively(op, oracle):
 @pytest.mark.parametrize(
     ("op", "oracle"),
     [
+        ("maximumf", np.maximum),
+        ("minimumf", np.minimum),
+        ("maxnumf", np.fmax),
+        ("minnumf", np.fmin),
+    ],
+)
+def test_tensor_minmax_preserves_nan_and_signed_zero_semantics(op, oracle):
+    handle = jb.compile_module(_binary_module(op))
+    a = np.array([np.nan, 1.0, 0.0, -0.0, -3.0, 7.0, 2.0], dtype=np.float32)
+    b = np.array([2.0, np.nan, -0.0, 0.0, 4.0, -8.0, 2.0], dtype=np.float32)
+    expected = oracle(a, b)
+    out = np.empty_like(a)
+    jb.invoke(handle, "pointwise", [a, b], out)
+
+    np.testing.assert_array_equal(np.isnan(out), np.isnan(expected))
+    finite = ~np.isnan(expected)
+    np.testing.assert_array_equal(out[finite], expected[finite])
+    zero = finite & (expected == 0.0)
+    np.testing.assert_array_equal(np.signbit(out[zero]), np.signbit(expected[zero]))
+
+
+@pytest.mark.parametrize(
+    ("op", "oracle"),
+    [
         ("exp", np.exp),
         ("log", np.log),
         ("sqrt", np.sqrt),

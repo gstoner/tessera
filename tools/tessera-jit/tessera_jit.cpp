@@ -441,9 +441,12 @@ LogicalResult buildAndRunPipeline(ModuleOp module) {
   auto fmFast = arith::FastMathFlagsAttr::get(module.getContext(),
                                               arith::FastMathFlags::fast);
   module.walk([&](Operation *op) {
+    // Do not stamp maximum/minimum/maxnum/minnum: unlike GEMM arithmetic,
+    // their NaN-propagation and signed-zero choice is the operation contract.
+    // Adding nnan/nsz here would make maximum/minimum indistinguishable from
+    // maxnum/minnum and permit the sign of a zero result to change.
     if (isa<arith::AddFOp, arith::SubFOp, arith::MulFOp, arith::DivFOp,
-            arith::MaximumFOp, arith::MinimumFOp, arith::MaxNumFOp,
-            arith::MinNumFOp, arith::NegFOp>(op))
+            arith::NegFOp>(op))
       op->setAttr("fastmath", fmFast);
   });
 

@@ -25,7 +25,7 @@ BRANCH_PROTECTION_DOC = REPO_ROOT / ".github" / "BRANCH_PROTECTION.md"
 
 # Required lanes (must all be inputs to the validate-required aggregator).
 REQUIRED_LANES = ("lint", "unit", "audit")
-OPTIONAL_LANES = ("lit", "sanitizer")
+OPTIONAL_LANES = ("lit", "sanitizer", "rocm-serialize")
 AGGREGATOR_JOB = "validate-required"
 
 

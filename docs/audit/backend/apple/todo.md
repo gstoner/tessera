@@ -8,6 +8,15 @@ last_updated: 2026-08-23
 
 # Apple compiler, exact-device, and performance plan
 
+Cross-backend sync `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **ROCm-owned host-free
+CI serialization lane; Apple outcome: not applicable.**
+Apple's device-code path cannot be exercised this way on a Linux runner: MSL →
+AIR → `.metallib` packaging shells out to `xcrun metal` / `xcrun metallib`
+(Decision #26a), which requires macOS and the Metal toolchain, so there is no
+GPU-less hosted-runner equivalent of the `ld.lld` serialization proof. Apple
+lit fixtures already gate on the `tessera-apple-backend` feature. No `.metallib`,
+MSL, or M-series evidence transfers.
+
 `CI-BACKEND-CAPABILITY-SKIP-2026-08-23` — **Apple-owned; pytest fixtures now
 skip when `tessera-opt` lacks the Apple backend. Landed.**
 `tessera-opt` registers the Apple pipelines only under

@@ -1,7 +1,7 @@
 # Branch protection — required CI checks
 
 Tessera's `Validate` workflow (`.github/workflows/validate.yml`) is
-split into 5 lanes plus one aggregator job. The aggregator
+split into 6 lanes plus one aggregator job. The aggregator
 (`validate-required`) is the single status check we wire into branch
 protection — it succeeds iff every required lane succeeds.
 
@@ -26,6 +26,7 @@ without expanding the aggregator log.
 |---------------------------------------------|--------------------------------------------------|
 | `lit (MLIR FileCheck — opt-in)`             | PR label `lit-smoke` · manual dispatch · push to main |
 | `sanitizer (asan / tsan / ubsan — opt-in)`  | PR label `sanitizer-smoke` · manual dispatch     |
+| `rocm hsaco serialization (host-free — opt-in)` | PR label `lit-smoke` · manual dispatch · push to main |
 
 Apply the labels from the PR's right-side sidebar.
 
@@ -64,6 +65,7 @@ policy.)
 | audit        | ~10s              | support_table drift + claim_lint + examples audit. |
 | lit          | ~10min if installed | LLVM/MLIR 23 install + tessera-opt build + lit. |
 | sanitizer    | ~15min per matrix | asan + tsan + ubsan run in parallel. |
+| rocm-serialize | ~15min if installed | LLVM/MLIR 23 + lld-23 install + HIP-less `tessera-rocm-opt` build + hsaco proof. |
 
 The standalone C++ runtime and collectives compile-check are intentionally
 local-only. Run `scripts/validate.sh` on the owning host; it builds and tests
@@ -80,6 +82,13 @@ ROCm backend changes. This is the ONLY automated coverage for
 not include that suite and `lit tests/tessera-ir/` runs a different one
 through a different driver, so skipping it lets a ROCm backend fixture
 regression reach main unnoticed.
+
+`rocm hsaco serialization` proves the compiled ROCm lane still emits an
+AMDGPU code object. It needs **no GPU and no ROCm install** — serialization
+is compile-time work that shells out to `ld.lld` — so it runs on a stock
+hosted runner and closes the blind spot that let PR #619's total serializer
+outage go unnoticed. It does NOT prove the object runs or is numerically
+correct; that evidence needs the real gfx1151 device.
 
 The lit + sanitizer lanes are intentionally off the critical path so a
 contributor doesn't have to wait 15+ minutes on every PR.

@@ -8,6 +8,17 @@ last_updated: 2026-08-23
 
 # NVIDIA compiler test-suite evaluation and rearchitecture
 
+Cross-backend sync `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **ROCm-owned host-free
+CI serialization lane; NVIDIA outcome: follow-up available, not required.**
+The transferable idea is the technique, not the artifact: device-code
+*serialization* is host work, so a GPU-less runner can prove the lane still
+emits an object. NVIDIA's analogue would be a cubin/fatbin emission proof, but
+it is **not** a drop-in — `runtime.py`'s NVIDIA device code is NVRTC-compiled at
+load with no cubin lane (Decision #26a), and CUDA codegen needs the CUDA
+toolkit rather than a stock `lld`. No PTX, cubin, sm_120 schedule, or
+exact-device evidence transfers from gfx1151; nothing in the NVIDIA queue
+changes.
+
 Cross-backend sync `CI-BACKEND-CAPABILITY-SKIP-2026-08-23` — **Apple-owned
 pytest capability gate; NVIDIA outcome: not applicable / no exposure measured.**
 Measured 2026-08-23 on a host with `TESSERA_BUILD_NVIDIA_BACKEND:BOOL=OFF`:

@@ -9,6 +9,13 @@ scope: x86 AVX-512 implementation/proof and AMX access planning
 
 # x86 backend TODO
 
+Cross-backend sync `ROCM-CI-HSACO-SERIALIZE-2026-08-23` — **ROCm-owned host-free
+CI serialization lane; x86 outcome: not applicable.**
+x86 emits host code through the LLVM/JIT path rather than a separate GPU code
+object, so there is no hsaco-equivalent artifact to serialize and no analogous
+blind spot: the x86 Target IR is already exercised in CI by the lit lane
+(`TESSERA_BUILD_X86_BACKEND=ON`). No AMX/AVX-512 evidence is involved.
+
 Cross-backend sync `CI-BACKEND-CAPABILITY-SKIP-2026-08-23` — **Apple-owned
 pytest capability gate; x86 outcome: not applicable by design.**
 x86 deliberately cannot use a `--help` probe: the x86 executable pass is
